@@ -258,3 +258,28 @@ def test_every_icon_points_at_a_symbol_the_page_has(client: TestClient) -> None:
     used = {u.get("href") for u in select(html, "#logs-lines svg use")}
     defined = {f"#{s.get('id')}" for s in select(html, "svg[data-icons] symbol")}
     assert used and used <= defined
+
+
+@pytest.mark.parametrize(
+    ("path", "width"),
+    [
+        ("/overseer/logs", "workspace"),
+        ("/overseer/deployments", "workspace"),
+        ("/overseer?view=map", "workspace"),
+        ("/overseer", "document"),
+        ("/overseer/settings", "document"),
+    ],
+)
+def test_operational_pages_take_the_whole_canvas(
+    client: TestClient, path: str, width: str
+) -> None:
+    """A workspace (the data is the page: Logs, Deployments, the Map) runs
+    to the gutters; a document (Overview, Settings) keeps its column."""
+    assert one(_html(client, path), "[data-width]").get("data-width") == width
+
+
+def test_the_log_list_fills_the_screen(client: TestClient) -> None:
+    """The list runs to the bottom of the window and scrolls inside it, so
+    the filters above stay put."""
+    scroller = one(_html(client, "/overseer/logs"), "#logs [data-scroll]")
+    assert "100vh" in scroller.get("class")

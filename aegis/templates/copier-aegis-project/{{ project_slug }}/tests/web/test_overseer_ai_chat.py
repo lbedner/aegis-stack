@@ -27,6 +27,11 @@ from app.services.system.models import ComponentStatus
 from tests.web.dom import one, select, text, triggers
 from tests.web.overseer import sign_in, status_with
 
+# An agent is a saved row: its drawer needs an AI persistence backend.
+persisted = pytest.mark.skipif(
+    not chat_surface.PERSISTED, reason="agents need an AI persistence backend"
+)
+
 PAGE = "/overseer/services/ai"
 CHAT = "/partials/overseer/ai/chat"
 # A realtime model a live call can run on.
@@ -233,6 +238,7 @@ def agent_drawer(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> TestCli
     return client
 
 
+@persisted
 def test_the_name_on_a_reply_opens_its_agent_in_the_drawer(client: TestClient) -> None:
     """The side drawer the Agents page edits in, not the centered modal."""
     name = one(client.get(f"{CHAT}/messages/c1/m2").text, "[data-assistant]")
@@ -240,6 +246,7 @@ def test_the_name_on_a_reply_opens_its_agent_in_the_drawer(client: TestClient) -
     assert name.get("hx-target") == "#drawer-body"
 
 
+@persisted
 def test_the_agent_drawer_shows_what_the_reply_used_above_the_editor(
     agent_drawer: TestClient,
 ) -> None:
@@ -251,6 +258,7 @@ def test_the_agent_drawer_shows_what_the_reply_used_above_the_editor(
     assert one(form, "input[name=stay]") is not None
 
 
+@persisted
 def test_raise_max_tokens_lands_on_that_field(agent_drawer: TestClient) -> None:
     html = agent_drawer.get(f"{CHAT}/messages/c1/m2/agent?focus=max_tokens").text
     assert one(html, "input[name=max_tokens]").get("autofocus") is not None
@@ -260,9 +268,13 @@ def test_a_cut_off_reply_offers_raise_and_continue(client: TestClient) -> None:
     message = asyncio.run(chat_surface.conversations(OVERSEER))[0].messages[1]
     message.metadata |= {"finish_reason": "length", "output_tokens": 1000}
     note = one(client.get(f"{CHAT}/messages/c1/m2").text, "[data-cut-off]")
-    raise_button = one(note, "button[data-raise]")
-    assert raise_button.get("hx-get") == f"{CHAT}/messages/c1/m2/agent?focus=max_tokens"
-    assert raise_button.get("hx-target") == "#drawer-body"
+    if chat_surface.PERSISTED:  # Raise opens the agent, a saved row
+        raise_button = one(note, "button[data-raise]")
+        assert (
+            raise_button.get("hx-get")
+            == f"{CHAT}/messages/c1/m2/agent?focus=max_tokens"
+        )
+        assert raise_button.get("hx-target") == "#drawer-body"
     resume = one(note, "button[data-continue]")
     assert resume.get("hx-post") == f"{CHAT}/turns"
     assert '"conversation_id": "c1"' in resume.get("hx-vals")

@@ -9,8 +9,6 @@ from datetime import UTC, datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.core.config import settings
 from app.core.formatting import (
     format_duration_ms,
@@ -22,6 +20,7 @@ from app.services.system import ui_scheduler
 from app.services.system.models import ComponentStatus
 
 from .filters import color_tone
+from .overseer_access import Db
 from .overseer_nav import SectionRequest, page_url
 from .rendering import page_number, pager, status_cell, with_query
 
@@ -60,7 +59,7 @@ def persistent() -> bool:
 
 async def load_executions(
     *,
-    db: AsyncSession,
+    db: Db,
     offset: int,
     limit: int,
     status: str | None,
@@ -80,7 +79,7 @@ async def load_executions(
     return rows, total
 
 
-async def load_job_stats(*, db: AsyncSession, job_ids: list[str]) -> dict[str, Any]:
+async def load_job_stats(*, db: Db, job_ids: list[str]) -> dict[str, Any]:
     """Each job's run stats from the execution history, in one query, on the
     request's own session."""
     return await task_manager().get_jobs_stats(job_ids, session=db)

@@ -1,11 +1,11 @@
 {# The Container section on any page with a container behind it
-   (overseer_container): the table (or, for a server outside Docker, what
+   (overseer_container): its cards (or, for a server outside Docker, what
    it is), then its charts drawn from what was sampled, all re-sent over SSE
    while it is open. #}
 {% from "components/macros/layout.html" import chart_panel %}
 {% from "components/macros/form.html" import range_form %}
 <div id="container" hx-ext="sse" sse-connect="{{ container_events }}">
-  <div sse-swap="container" hx-target="this">{% include "pages/overseer/_container_table.html" %}</div>
+  <div sse-swap="container" hx-target="this">{% include "pages/overseer/_container_cards.html" %}</div>
   {% if container_charts %}
   {# A chip re-requests the section over the new window; its stream follows. #}
   {{ range_form(container_windows, container_window, request.url.path, "#container", field="window", aria="Chart window", class="mt-4 flex justify-end") }}

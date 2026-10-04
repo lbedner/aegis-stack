@@ -20,7 +20,7 @@ SECTIONS = (
             "overview": "Overview",
             "schema": "Schema",
             "migrations": "Migrations",
-            "settings": "Settings",
+            "engine": "Engine",
             "activity": "Activity",
         },
     ),
@@ -40,7 +40,7 @@ async def section_context(
         context["tables"] = ui_database.tables(metadata)
     elif section == "migrations":
         context["migrations"] = ui_database.migrations(metadata)
-    elif section == "settings":
+    elif section == "engine":
         context["settings"] = ui_database.settings(metadata)
     elif section == "activity":
         context["activity"] = ui_database.activity(metadata)

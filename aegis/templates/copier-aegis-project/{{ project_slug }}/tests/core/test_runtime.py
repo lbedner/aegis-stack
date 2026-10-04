@@ -10,7 +10,13 @@ from datetime import datetime
 import pytest
 
 from app.core import runtime
-from app.core.runtime import ProcessRuntime, page_for, parse_log_line
+from app.core.runtime import (
+    ProcessRuntime,
+    RuntimeUnavailableError,
+    page_for,
+    parse_log_line,
+)
+from tests._fake_runtime import REDIS, SERVER, FakeRuntime, use_runtime
 
 
 @pytest.mark.parametrize(
@@ -134,3 +140,31 @@ class TestDiscovery:
             assert service.instances
         finally:
             runtime.set_runtime(None)
+
+
+async def test_restart_reaches_only_this_projects_containers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The proxy allows restarting any container on the host; the app only
+    asks for the ones its own services list."""
+    fake = use_runtime(monkeypatch, FakeRuntime(REDIS))
+    with pytest.raises(runtime.UnknownInstanceError):
+        await runtime.mine("someone-elses-db-1")
+    await runtime.restart(await runtime.mine(REDIS.name))
+    assert fake.restarted == [REDIS.name]
+
+
+async def test_without_a_deploy_target_nothing_restarts() -> None:
+    with pytest.raises(RuntimeUnavailableError):
+        await runtime.ProcessRuntime().restart("anything")
+
+
+async def test_it_knows_the_container_it_runs_in(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Docker names a container's host by its id: restarting that one ends
+    this process, and the request that asked."""
+    use_runtime(monkeypatch, FakeRuntime(SERVER, REDIS))
+    monkeypatch.setattr(runtime.socket, "gethostname", lambda: SERVER.id)
+    assert runtime.is_own(await runtime.mine(SERVER.name))
+    assert not runtime.is_own(await runtime.mine(REDIS.name))

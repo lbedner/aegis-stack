@@ -212,7 +212,7 @@ A transaction held longer than `DATABASE_SLOW_TRANSACTION_SECONDS` (2 seconds by
 
 On SQLite every write takes the database's one write lock and waits up to 30 seconds for it, so `database is locked` means some other transaction held the lock that long. The Activity tab names it: usually a session kept open across slow work (an LLM call, a provider request, a long stream). The fix stays local: close the session before the slow call, or commit sooner.
 
-Records live for an hour, in Redis when the stack has it (the webserver then shows what the worker and scheduler recorded too), otherwise in the process that recorded them. `DATABASE_SLOW_TRANSACTION_SECONDS=0` turns it off; it is also on the Overseer Settings page.
+Records live for an hour, in Redis when the stack has it (the webserver then shows what the worker and scheduler recorded too), otherwise in the process that recorded them. `DATABASE_SLOW_TRANSACTION_SECONDS=0` turns it off; it is also on the Database page's Settings section and Overseer > Settings. The engine's own parameters (PostgreSQL settings, SQLite PRAGMAs) are the page's **Engine** section.
 
 ## Testing
 

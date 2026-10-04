@@ -60,11 +60,6 @@ class TestNavigation:
     def test_unknown_section_is_404(self, client: TestClient) -> None:
         assert client.get("/overseer/patterns/nope").status_code == 404
 
-    def test_signed_out_goes_to_login(self, app: FastAPI) -> None:
-        with TestClient(app) as anonymous:
-            response = anonymous.get("/overseer/patterns", follow_redirects=False)
-        assert response.headers["location"] == "/overseer/login"
-
 
 class TestRoutePattern:
     def test_the_diagram_walks_a_request_through_with_counts(

@@ -1,0 +1,36 @@
+{# One card per instance behind the page (ui_runtime.containers), or why
+   there is nothing to show: the name, its state, uptime, restarts and image
+   in the header (and its Restart, which confirms first), then its live
+   figures as a fixed strip, so a value changing width moves nothing else
+   (CPU and memory in their tone past a threshold).
+   Rendered in the page and again for each SSE frame. #}
+{% from "components/macros/layout.html" import stats_strip %}
+{% from "pages/overseer/_glance_macros.html" import restart, state, uptime %}
+{% if container.pending %}
+{# data-pending keeps the bar along the top running until the cards land. #}
+<p role="status" data-pending class="text-sm text-aegis-muted">{{ container.note }}</p>
+{% elif container.note %}
+<p class="text-sm text-aegis-muted">{{ container.note }}</p>
+{% else %}
+<div class="space-y-4">
+  {% for row in container.rows %}
+  <section data-container="{{ row.name }}" class="space-y-2">
+    <header class="flex flex-wrap items-center gap-x-3 gap-y-1">
+      <h3 class="font-mono text-sm font-semibold text-aegis-text">{{ row.name }}</h3>
+      {{ state(row) }}
+      {% if row.health %}<span class="text-xs text-aegis-muted">{{ row.health }}</span>{% endif %}
+      {{ uptime(row) }}
+      {% if row.restarts != "-" %}<span class="text-xs text-aegis-muted">{{ row.restarts }} restarts</span>{% endif %}
+      <span class="text-xs text-aegis-muted font-mono truncate min-w-0">{{ row.image }}</span>
+      <span class="ml-auto">{{ restart(row) }}</span>
+    </header>
+    {{ stats_strip([
+      {"label": figure_names.cpu, "value": row.cpu, "tone": row.cpu_tone if row.cpu_tone != "ok"},
+      {"label": figure_names.memory, "value": row.memory_used, "caption": ("of " ~ row.memory_limit ~ " · " ~ row.memory_percent ~ "%") if row.memory_percent is not none else none, "tone": row.memory_tone if row.memory_tone != "ok"},
+      {"label": figure_names.network, "value": row.network_in ~ " in", "caption": row.network_out ~ " out"},
+      {"label": figure_names.disk, "value": row.disk_read ~ " read", "caption": row.disk_write ~ " write"},
+    ]) }}
+  </section>
+  {% endfor %}
+</div>
+{% endif %}

@@ -416,7 +416,7 @@
 
 {# One bordered strip of N cells (the Budget's month equation). Each cell
    is ``{"label", "value", "caption", "tone", "attrs"}``; ``attrs`` makes
-   it a door (hx-get) and ``tone`` colours the value. #}
+   it a door (hx-get) and ``tone`` (ok, warn, error) colours the value. #}
 {% macro stats_strip(cells, id=None, attrs="") %}
 {# ``lg:grid-cols-N`` is looked up, never interpolated: Tailwind emits
    the classes it can SEE in the markup, and a class built at render time
@@ -432,7 +432,7 @@
     <dt class="text-xxs text-aegis-muted caps flex items-center gap-1.5"><span class="truncate">{{ cell.label }}</span>
       {% if cell.explain %}<span aria-hidden="true" class="inline-flex shrink-0 w-3.5 h-3.5 rounded-full border border-current items-center justify-center text-xxs leading-none opacity-50 group-hover:opacity-100 transition-opacity">?</span>{% endif %}
     </dt>
-    <dd class="mt-1 text-2xl font-semibold tabular-nums {{ 'text-error' if cell.tone == 'error' else ('text-aegis-teal' if cell.tone == 'ok' else 'text-aegis-text') }}">{{ cell.value }}</dd>
+    <dd data-tone="{{ cell.tone or '' }}" class="mt-1 text-2xl font-semibold tabular-nums {{ {'error': 'text-error', 'warn': 'text-aegis-amber', 'ok': 'text-aegis-teal'}.get(cell.tone, 'text-aegis-text') }}">{{ cell.value }}</dd>
     {% if cell.caption %}<dd class="mt-1 text-xxs text-aegis-muted truncate">{{ cell.caption }}</dd>{% endif %}
   </div>
   {% endfor %}
@@ -476,6 +476,13 @@
 {% macro chip(label, active=False, href="", hx="", extra="") %}
 <a href="{{ href }}" {{ hx|safe }} {{ extra|safe }} {% if active %}aria-current="page"{% endif %}
    class="text-xs px-2 py-0.5 rounded border whitespace-nowrap transition-colors {{ 'border-aegis-teal bg-aegis-teal/10 text-aegis-text font-semibold' if active else 'border-aegis-border text-aegis-muted hover:border-aegis-muted hover:text-aegis-text' }}">{{ label }}</a>
+{% endmacro %}
+
+{# A line drawn small (``series.sparkline``'s points, in its box): a
+   queue's waiting jobs, a card's CPU. ``extra`` sizes it; ``tone`` (warn,
+   error) colours it, as a figure past its threshold. #}
+{% macro sparkline(points, extra="", tone="") %}
+<svg class="spark {{ extra }}" data-tone="{{ tone }}" viewBox="{{ spark_box }}" preserveAspectRatio="none" aria-hidden="true"><polyline points="{{ points }}" /></svg>
 {% endmacro %}
 
 {# Copy ``value`` to the clipboard and confirm with a toast. The value

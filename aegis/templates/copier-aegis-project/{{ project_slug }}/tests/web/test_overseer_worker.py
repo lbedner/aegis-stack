@@ -178,6 +178,7 @@ class TestSections:
             "Lifecycle",
             "Container",
             "Logs",
+            "Settings",
         ]
 
 
@@ -352,9 +353,6 @@ class TestQueuesStream:
         events = [f for f in frames if f.startswith("event:")]
         assert len(events) == 1
         assert events[0].startswith(f"event: {overseer_worker.QUEUES_EVENT}\n")
-
-    def test_needs_a_signed_in_user(self, client: TestClient) -> None:
-        assert client.get(overseer_worker.QUEUES_EVENTS).status_code == 401
 
 
 class TestTasks:

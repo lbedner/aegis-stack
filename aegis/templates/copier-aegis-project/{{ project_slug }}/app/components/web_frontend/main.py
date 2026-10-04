@@ -47,14 +47,8 @@ def create_web_frontend_app() -> APIRouter:
 
 
 def add_error_pages(app: FastAPI) -> None:
-    """The pages an exception renders instead of JSON: the Overseer's
-    "admins only" refusal. The Overseer ships with auth; without it there
-    is nothing to refuse."""
-    try:
-        from app.components.web_frontend.overseer_access import (
-            AdminOnlyError,
-            admin_only_page,
-        )
-    except ImportError:  # no auth service, so no Overseer
-        return
-    app.add_exception_handler(AdminOnlyError, admin_only_page)
+    """The pages an exception renders instead of JSON: Overseer's "admins
+    only" refusal, where the stack has auth (``overseer_access``)."""
+    from app.components.web_frontend.overseer_access import add_refusal_page
+
+    add_refusal_page(app)

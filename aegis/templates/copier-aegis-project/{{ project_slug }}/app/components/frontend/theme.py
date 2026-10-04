@@ -17,7 +17,7 @@ class DarkColorPalette:
     """Dark mode color palette - official design system colors."""
 
     # Core colors
-    BG_PRIMARY: str = "#090B0D"  # Main page background
+    BG_PRIMARY: str = "#000000"  # Main page background (black, as htmx's)
     BG_SECONDARY: str = "#111418"  # Card backgrounds
     BG_SELECTED: str = "#212530"  # Secondary/selected states
     BG_HOVER: str = "#1A1D24"  # Muted/hover backgrounds

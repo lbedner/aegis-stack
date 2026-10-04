@@ -1,0 +1,22 @@
+{# The glance's lines (overseer_container.glance): state, name,
+   uptime, CPU, memory as a share of its limit (amber, then red at the alert
+   threshold), Restart, and the way to the Container and Logs sections.
+   Nothing when there is no container to show; a quiet note while the
+   first reading is on its way. #}
+{% from "pages/overseer/_glance_macros.html" import actions, cpu, memory, state, uptime %}
+{% if glance.pending %}
+<p role="status" data-pending class="text-xs text-aegis-muted">{{ glance.note }}</p>
+{% elif not glance.note %}
+<div class="rounded-lg border border-aegis-border bg-aegis-card divide-y divide-aegis-border/60">
+  {% for row in glance.rows %}
+  <div data-glance="{{ row.name }}" class="flex flex-wrap items-center gap-x-6 gap-y-2 px-4 py-2.5 text-sm">
+    {{ state(row) }}
+    <span class="font-mono text-aegis-text">{{ row.name }}</span>
+    {{ uptime(row) }}
+    {{ cpu(row) }}
+    {{ memory(row) }}
+    <span class="ml-auto">{{ actions(row, glance_base) }}</span>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}

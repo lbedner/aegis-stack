@@ -15,14 +15,10 @@ from app.components.web_frontend import overseer_payment
 from app.components.web_frontend.filters import money_to_cents
 from app.components.web_frontend.rendering import dialog, go_to, toast_response
 from app.core.config import settings
-from app.models.user import User
-from app.services.auth.deps import get_optional_user
 from app.services.payment.catalog import get_catalog
 from app.services.payment.constants import PriceType, RefundReason
 from app.services.payment.deps import get_payment_service
 from app.services.payment.service import PaymentService
-
-from .overseer_auth import signed_in
 
 router = APIRouter(prefix=overseer_payment.PARTIALS)
 
@@ -37,11 +33,9 @@ def _provider_said(exc: stripe.StripeError) -> Response:
 async def drawer(
     request: Request,
     transaction_id: int,
-    user: User | None = Depends(get_optional_user),
     service: PaymentService = Depends(get_payment_service),
 ) -> Response:
     """One transaction in the drawer, with the refund form when it can be."""
-    signed_in(user)
     context = await overseer_payment.transaction_context(service, transaction_id)
     if context is None:
         raise HTTPException(status_code=404, detail="That transaction is gone.")
@@ -54,12 +48,10 @@ async def refund(
     amount: Annotated[str, Form()] = "",
     original: Annotated[int, Form()] = 0,
     reason: Annotated[str, Form()] = RefundReason.DEFAULT,
-    user: User | None = Depends(get_optional_user),
     service: PaymentService = Depends(get_payment_service),
 ) -> Response:
     """A partial refund below the original; the whole amount (or none
     given) is a full one."""
-    signed_in(user)
     cents = money_to_cents(amount)
     if cents is None or cents < 0 or reason not in RefundReason.ALL:
         return toast_response("The amount is dollars and cents, like 12.50.", "error")
@@ -86,9 +78,7 @@ async def refund(
 async def confirm_cancel(
     request: Request,
     subscription_id: int,
-    user: User | None = Depends(get_optional_user),
 ) -> Response:
-    signed_in(user)
     return dialog(
         request,
         "pages/overseer/_confirm.html",
@@ -104,10 +94,8 @@ async def confirm_cancel(
 @router.post("/subscriptions/{subscription_id}/cancel")
 async def cancel(
     subscription_id: int,
-    user: User | None = Depends(get_optional_user),
     service: PaymentService = Depends(get_payment_service),
 ) -> Response:
-    signed_in(user)
     try:
         done = await service.cancel_subscription(subscription_id)
     except stripe.StripeError as exc:
@@ -127,12 +115,10 @@ async def checkout(
     quantity: Annotated[int, Form()] = 1,
     success_url: Annotated[str, Form()] = "",
     cancel_url: Annotated[str, Form()] = "",
-    user: User | None = Depends(get_optional_user),
     service: PaymentService = Depends(get_payment_service),
 ) -> Response:
     """A checkout link for one catalog price. A recurring price is a
     subscription, which is always one seat."""
-    signed_in(user)
     entry = next((e for e in await get_catalog(service) if e.price_id == price), None)
     if entry is None:
         return toast_response("That price is not in the catalog.", "error")

@@ -119,3 +119,38 @@ async def test_a_view_reads_the_kept_reading_and_reads_itself_only_without_one(
     monkeypatch.setattr(series, "current", held)
     assert await series.reading(sampler) == {"redis": "table"}
     assert len(reads_made) == 2
+
+
+# A line drawn small (a queue's waiting jobs, a card's CPU): ``sparkline``.
+def test_the_waiting_line_spans_the_box() -> None:
+    points = series.sparkline([0, 10, 5])
+    assert points == "0.0,24.0 50.0,0.0 100.0,12.0"  # the 100 by 24 box
+
+
+def test_a_flat_or_single_line_sits_on_the_floor() -> None:
+    assert series.sparkline([0, 0]) == "0.0,24.0 100.0,24.0"
+    assert series.sparkline([]) == ""
+
+
+def test_a_steady_line_draws_the_same_however_long() -> None:
+    """An idle or steady queue must not change the page every sample."""
+    assert series.sparkline([0] * 3) == "0.0,24.0 100.0,24.0"
+    assert series.sparkline([7] * 2) == (series.sparkline([7] * 50))
+
+
+def test_a_long_line_draws_a_point_a_unit_keeping_its_peaks() -> None:
+    """Fifteen minutes is 900 ticks; the box is 100 wide, so each point is
+    the highest of its stretch, and a one-tick spike still shows."""
+    values = [1.0] * 900
+    values[450] = 9.0
+    points = series.sparkline(values).split()
+    assert len(points) == 100
+    assert sum(p.endswith(",0.0") for p in points) == 1  # the spike, at the top
+
+
+async def test_a_read_can_keep_only_the_series_it_draws() -> None:
+    """A card draws CPU and memory alone: ``ending`` reads just those series,
+    not every metric under the prefix."""
+    await series.record({"probe:a-1:cpu": 1.0, "probe:a-1:net_in": 9.0})
+    found = await series.read("probe:", 60, ending=(":cpu",))
+    assert list(found) == ["a-1:cpu"]

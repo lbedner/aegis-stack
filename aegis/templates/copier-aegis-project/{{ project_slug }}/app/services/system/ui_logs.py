@@ -169,15 +169,9 @@ def _shown(rows: list[_Row], query: Mapping[str, str]) -> list[dict[str, Any]]:
 async def _names(pages: Sequence[str]) -> tuple[list[tuple[str, str]], str | None]:
     """Each page's containers as ``(page, container)``, or why there are
     none (the first page's reason)."""
-    # One at a time: the first read takes the sampler's first sample, and the
-    # rest are served from it (read together, all but one would find none).
-    views = [await ui_runtime.containers(page) for page in pages]
-    names = [
-        (page, row["name"])
-        for page, view in zip(pages, views, strict=True)
-        for row in view["rows"]
-    ]
-    return names, None if names else next((v["note"] for v in views), None)
+    views = await ui_runtime.containers_of(list(pages))
+    names = [(page, row["name"]) for page in pages for row in views[page]["rows"]]
+    return names, None if names else next((v["note"] for v in views.values()), None)
 
 
 async def sources() -> list[dict[str, str]]:

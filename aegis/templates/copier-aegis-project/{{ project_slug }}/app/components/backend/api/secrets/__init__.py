@@ -1,1 +1,1 @@
-"""Admin API for the secrets component's store."""
+"""The API for the secrets component's store."""

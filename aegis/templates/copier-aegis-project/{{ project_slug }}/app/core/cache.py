@@ -257,15 +257,22 @@ class CacheService:
             self._store[key] = (kept, time.time() + keep_seconds)
 
     async def points_with_prefix(
-        self, prefix: str, *, since: float, index: str | None = None
+        self,
+        prefix: str,
+        *,
+        since: float,
+        index: str | None = None,
+        ending: tuple[str, ...] = (),
     ) -> dict[str, list[tuple[float, float]]]:
-        """Every time series whose key starts with ``prefix``, by key: its
-        points from ``since`` on, oldest first. With ``index`` (the set
-        ``append`` listed them in) Redis reads that set, not the keyspace."""
+        """Every time series whose key starts with ``prefix`` (and, given
+        ``ending``, ends with one of those), by key: its points from
+        ``since`` on, oldest first. With ``index`` (the set ``append``
+        listed them in) Redis reads that set, not the keyspace."""
         if self._redis is None:
             found = {
                 key: points[bisect_left(points, since, key=itemgetter(0)) :]
                 for key, points in self._live(prefix)
+                if not ending or key.endswith(ending)
             }
             return {key: points for key, points in found.items() if points}
         keys = (
@@ -277,6 +284,8 @@ class CacheService:
             if index is not None
             else await self._keys(prefix)
         )
+        if ending:
+            keys = [key for key in keys if key.decode().endswith(ending)]
         pipe = self._redis.pipeline(transaction=False)
         for key in keys:
             pipe.zrangebyscore(key, since, "+inf")

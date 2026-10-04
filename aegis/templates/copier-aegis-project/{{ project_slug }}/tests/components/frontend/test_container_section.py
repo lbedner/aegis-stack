@@ -2,8 +2,12 @@
 (``ui_runtime.containers``), added to every component modal that has a
 container behind it by ``BaseDetailPopup`` itself."""
 
+from unittest.mock import MagicMock
+
+import flet as ft
 import pytest
 
+from app.components.frontend.dashboard.modals import container_section
 from app.components.frontend.dashboard.modals.base_detail_popup import BaseDetailPopup
 from app.components.frontend.dashboard.modals.container_section import (
     ContainerSection,
@@ -54,9 +58,11 @@ async def test_the_range_chips_pick_the_window(
     asked: list[int] = []
     charts = ui_runtime.charts
 
-    async def charted(page: str, window: int = series.DEFAULT_WINDOW) -> object:
+    async def charted(
+        page: str, window: int = series.DEFAULT_WINDOW, *rest: object
+    ) -> object:
         asked.append(window)
-        return await charts(page, window)
+        return await charts(page, window, *rest)  # type: ignore[arg-type]
 
     monkeypatch.setattr(ui_runtime, "charts", charted)
     section = ContainerSection("redis")
@@ -84,8 +90,6 @@ def test_the_modal_reads_inside_the_watch() -> None:
 def test_a_tabbed_modal_gets_a_container_tab() -> None:
     """A popup whose body is a tab bar (not scrolled) takes the section as a
     tab, rather than below the tabs in a column that cannot scroll."""
-    import flet as ft
-
     from app.components.frontend.controls.tabs import PulseTabs
 
     tabs = PulseTabs(tabs=[ft.Tab(text="Overview", content=ft.Text("x"))])
@@ -100,6 +104,11 @@ async def test_a_chart_with_nothing_in_its_window_says_so(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     use_runtime(monkeypatch, FakeRuntime(REDIS))
+
+    async def nothing(*_: object, **__: object) -> dict[str, object]:
+        return {}
+
+    monkeypatch.setattr(series, "read", nothing)
     section = ContainerSection("redis")
     await section.load()
     assert not [c for c in walk(section) if isinstance(c, LineChartCard)]
@@ -130,8 +139,6 @@ def test_one_without_a_container_does_not() -> None:
 
 def test_an_events_chart_draws_dots_not_a_line() -> None:
     """A call is a moment: no line between two of them (``"style": "events"``)."""
-    import flet as ft
-
     data = {
         "labels": [1_000, 2_000],
         "series": [{"label": "qwen2.5:7b", "values": [8.0, 16.0]}],
@@ -147,3 +154,39 @@ def test_an_events_chart_draws_dots_not_a_line() -> None:
     (line, *_) = chart.data_series
     assert line.stroke_width == 0
     assert all(p.point for p in line.data_points)
+
+
+async def test_each_container_has_a_restart(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A Restart that confirms before it calls the API."""
+    use_runtime(monkeypatch, FakeRuntime(REDIS))
+    section = ContainerSection("redis")
+    await section.load()
+    assert _restarts(section)
+
+
+def _restarts(section: ContainerSection) -> list[ft.IconButton]:
+    """The rows' Restart buttons (a table cell drops its tooltip, so by icon)."""
+    return [
+        n
+        for n in walk(section)
+        if isinstance(n, ft.IconButton) and n.icon == ft.Icons.RESTART_ALT
+    ]
+
+
+async def test_restart_calls_the_api(monkeypatch: pytest.MonkeyPatch) -> None:
+    posted: list[str] = []
+
+    class Api:
+        async def post(self, url: str) -> dict[str, str]:
+            posted.append(url)
+            return {"restarted": REDIS.name}
+
+    monkeypatch.setattr(
+        container_section, "get_session_state", lambda page: MagicMock(api_client=Api())
+    )
+    page = MagicMock()
+    await container_section.restart(page, REDIS.name)
+    assert posted == [ui_runtime.RESTART_API.format(name=REDIS.name)]
+    page.open.assert_called_once()  # the snackbar saying it restarted

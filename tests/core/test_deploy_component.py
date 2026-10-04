@@ -34,10 +34,11 @@ def _compose(**overrides: Any) -> dict[str, Any]:
     return yaml.safe_load(rendered)
 
 
-def _allowed_get(proxy: dict[str, Any]) -> re.Pattern[str]:
-    """The proxy's GET allowlist, anchored the way the proxy anchors it."""
-    (flag,) = [a for a in proxy["command"] if a.startswith("-allowGET=")]
-    return re.compile(f"^{flag.removeprefix('-allowGET=')}$")
+def _allowed(proxy: dict[str, Any], verb: str = "GET") -> re.Pattern[str]:
+    """The proxy's allowlist for ``verb``, anchored the way the proxy
+    anchors it."""
+    (flag,) = [a for a in proxy["command"] if a.startswith(f"-allow{verb}=")]
+    return re.compile(f"^{flag.removeprefix(f'-allow{verb}=')}$")
 
 
 def test_deploy_is_an_optional_infrastructure_component() -> None:
@@ -105,7 +106,7 @@ def test_the_proxy_has_no_network_and_no_privileges() -> None:
 )
 def test_the_proxy_answers_the_reads(path: str) -> None:
     proxy = _compose(include_deploy=True)["services"]["socket-proxy"]
-    assert _allowed_get(proxy).match(path)
+    assert _allowed(proxy).match(path)
 
 
 @pytest.mark.parametrize(
@@ -127,13 +128,15 @@ def test_the_proxy_answers_the_reads(path: str) -> None:
 )
 def test_the_proxy_refuses_everything_else(path: str) -> None:
     proxy = _compose(include_deploy=True)["services"]["socket-proxy"]
-    assert not _allowed_get(proxy).match(path)
+    assert not _allowed(proxy).match(path)
 
 
-def test_the_first_cut_allows_no_writes() -> None:
+def test_reads_and_restart_are_all_it_allows() -> None:
+    """Every verb the proxy opens: reads, and POST for restart alone (see
+    ``test_the_one_write_it_allows_is_restarting_a_container``)."""
     proxy = _compose(include_deploy=True)["services"]["socket-proxy"]
     allows = [a.split("=", 1)[0] for a in proxy["command"] if a.startswith("-allow")]
-    assert set(allows) <= {"-allowGET", "-allowhealthcheck"}
+    assert set(allows) <= {"-allowGET", "-allowPOST", "-allowhealthcheck"}
 
 
 def test_every_app_container_reaches_the_proxy_socket() -> None:
@@ -262,3 +265,35 @@ def test_adding_deploy_copies_its_history_exactly_with_a_database(
         "app/components/deploy/models.py.jinja" in files
         or "app/components/deploy/models.py" in files
     ) is database
+
+
+def test_the_one_write_it_allows_is_restarting_a_container() -> None:
+    """Overseer's Restart, and nothing else that changes a container."""
+    proxy = _compose(include_deploy=True, deploy_target="compose", include_auth=True)[
+        "services"
+    ]["socket-proxy"]
+    post = _allowed(proxy, "POST")
+    assert post.match("/v1.47/containers/demo-redis-1/restart")
+    assert post.match("/containers/demo-redis-1/restart")
+    for refused in (
+        "/containers/demo-redis-1/stop",
+        "/containers/demo-redis-1/kill",
+        "/containers/demo-redis-1/exec",
+        "/containers/create",
+        "/containers/demo-redis-1/restart/x",
+        "/images/create",
+    ):
+        assert not post.match(refused), refused
+    assert not any(
+        a.startswith(("-allowDELETE=", "-allowPUT=")) for a in proxy["command"]
+    )
+
+
+def test_restart_is_allowed_with_or_without_auth() -> None:
+    """Auth makes Restart admin-only; without it Overseer is open, Restart
+    included, so the proxy allows it either way."""
+    for auth in (True, False):
+        proxy = _compose(include_deploy=True, include_auth=auth)["services"][
+            "socket-proxy"
+        ]
+        assert _allowed(proxy, "POST").match("/containers/demo-redis-1/restart")

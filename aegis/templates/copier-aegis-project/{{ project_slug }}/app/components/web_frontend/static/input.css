@@ -229,8 +229,22 @@
   .worker-outcome > [data-failed] { @apply h-full bg-aegis-error/70 transition-all duration-500; }
   .worker-share { @apply h-3 gap-0.5 bg-transparent; }
   .worker-share > span { @apply h-full rounded-sm border transition-all duration-500; }
-  .worker-spark { @apply h-7 w-48 shrink-0 overflow-visible text-aegis-teal sm:w-60; }
-  .worker-spark polyline { fill: none; stroke: currentColor; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+  .spark { @apply overflow-visible text-aegis-teal; }
+  /* An Overseer page's width (``data-width`` on _shell.html): a document
+     keeps a reading column, a workspace runs to the gutters. */
+  .overseer-page[data-width="document"] { @apply max-w-screen-xl mx-auto; }
+  /* A tone (``data-tone``: warn, error) colours what carries it: a live
+     figure past its threshold, its sparkline, a map connection; a map
+     node takes it on its border. */
+  :is(.tone, .spark, .map-link)[data-tone="warn"] { @apply text-aegis-amber; }
+  :is(.tone, .spark, .map-link)[data-tone="error"] { @apply text-aegis-error; }
+  .map-node { @apply border-aegis-border; }
+  .map-node[data-tone="warn"] { @apply border-aegis-amber/70; }
+  .map-node[data-tone="error"] { @apply border-aegis-error/70; }
+  /* A line drawn small or between nodes: one stroke, in its colour. */
+  :is(.spark polyline, .map-link) { fill: none; stroke: currentColor; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+  .map-link { @apply text-aegis-teal opacity-60; }
+  .map-link:is([data-tone="warn"], [data-tone="error"]) { @apply opacity-100; }
   .worker-swatch { @apply inline-block h-3 w-4 rounded-sm border border-aegis-border; }
   .keyspace__swatch[data-active="true"] { @apply text-aegis-teal; animation: keyspace-live 2.4s ease-in-out infinite; }
 }

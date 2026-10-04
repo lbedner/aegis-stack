@@ -9,11 +9,11 @@ from collections.abc import AsyncIterator, Mapping, Sequence
 from typing import Any
 
 from app.core import series
-from app.services.system import ui_logs, ui_runtime
+from app.services.system import ui_logs
 from app.services.system.models import ComponentStatus
 
 from .overseer_live import frame, heartbeat
-from .overseer_nav import NavItem, SectionRequest, page_url
+from .overseer_nav import NavItem, SectionRequest, runtime_page_url
 from .rendering import fragment, with_query
 
 SECTION = {"logs": "Logs"}
@@ -75,7 +75,7 @@ def _links(sources: list[dict[str, str]]) -> dict[str, dict[str, str]]:
     return {
         s["page"]: {
             "title": s["title"],
-            "url": page_url("components", ui_runtime.component_of(s["page"])),
+            "url": runtime_page_url(s["page"]),
         }
         for s in sources
     }

@@ -199,11 +199,16 @@ async def _keep_sampling(sampler: Sampler) -> None:
 
 
 async def read(
-    prefix: str, window: float, *, viewed: bool = False
+    prefix: str,
+    window: float,
+    *,
+    viewed: bool = False,
+    ending: tuple[str, ...] = (),
 ) -> dict[str, list[tuple[float, float]]]:
     """The last ``window`` seconds of every series under ``prefix``
-    (``"containers:redis:"``), by the rest of its name. ``viewed``: a view
-    is drawing it, so its sampler keeps full pace (``watch``)."""
+    (``"containers:redis:"``), by the rest of its name; given ``ending``,
+    only the names ending with one of those (``(":cpu",)``). ``viewed``: a
+    view is drawing it, so its sampler keeps full pace (``watch``)."""
     if viewed:
         await watch(prefix.split(":", 1)[0])
     start = PREFIX + prefix
@@ -211,6 +216,7 @@ async def read(
         start,
         since=time.time() - window,
         index=INDEX + prefix.split(":", 1)[0],
+        ending=ending,
     )
     return {key.removeprefix(start): points for key, points in sorted(found.items())}
 
@@ -270,3 +276,34 @@ def _bucketed(
             buckets.setdefault(at // step * step, []).append(value)
         bucketed[name] = [(at, sum(vs) / len(vs)) for at, vs in sorted(buckets.items())]
     return bucketed
+
+
+# Every sparkline's box (the ``sparkline`` macro's viewBox): drawn at any
+# size, since its stroke does not scale.
+SPARK_WIDTH, SPARK_HEIGHT = 100, 24
+
+
+def sparkline(values: list[float]) -> str:
+    """SVG polyline points for ``values`` across the sparkline box
+    (``SPARK_WIDTH`` by ``SPARK_HEIGHT``, the macro's viewBox), highest at
+    the top; a flat line sits on the floor. A line drawn small: a queue's
+    waiting jobs, a card's CPU. At most a point a unit of width, each the
+    highest of its stretch, so a spike still shows."""
+    width, height = SPARK_WIDTH, SPARK_HEIGHT
+    if not values:
+        return ""
+    if len(values) > width:
+        size = len(values) / width
+        values = [
+            max(values[int(i * size) : int((i + 1) * size)]) for i in range(width)
+        ]
+    if len(set(values)) == 1:
+        # Steady: one line, on the floor when empty, midway otherwise, so a
+        # quiet queue draws the same however many samples it has.
+        y = height if values[0] == 0 else height / 2
+        return f"0.0,{y:.1f} {width:.1f},{y:.1f}"
+    top = max(values)
+    step = width / (len(values) - 1)
+    return " ".join(
+        f"{i * step:.1f},{height - v / top * height:.1f}" for i, v in enumerate(values)
+    )

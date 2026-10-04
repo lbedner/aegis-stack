@@ -1,0 +1,50 @@
+{# The pieces a container's line is made of, shared by its card
+   (_container_cards.html), a page's glance (_glance_rows.html) and
+   Overseer's home (_overview_*.html). #}
+{% from "components/macros/form.html" import action %}
+{% from "components/macros/layout.html" import badge, progress %}
+
+{% macro state(row) -%}
+<span data-state>{{ badge(row.phase, row.tone) }}</span>
+{%- endmacro %}
+
+{% macro uptime(row) -%}
+<span class="text-xs text-aegis-muted">up {{ row.uptime }}</span>
+{%- endmacro %}
+
+{# Its Restart, which confirms first. #}
+{% macro restart(row) -%}
+{{ action("Restart", hx_dialog(row.restart_url), "warn") }}
+{%- endmacro %}
+
+{# A live figure past its threshold takes its tone (``tone`` in input.css):
+   amber from a warning, red at the alert. #}
+{% macro cpu(row) -%}
+<span class="tabular-nums"><span class="text-xxs caps text-aegis-muted mr-1.5">{{ figure_names.cpu }}</span><span class="tone" data-tone="{{ row.cpu_tone }}">{{ row.cpu }}</span></span>
+{%- endmacro %}
+
+{# Memory as a share of its limit: a bar and the percent, in its tone (the
+   host's memory check's rule); the amount where there is no limit. #}
+{% macro memory(row) -%}
+<span data-memory class="flex items-center gap-2 tabular-nums"><span class="text-xxs caps text-aegis-muted">{{ figure_names.memory }}</span>
+  {%- if row.memory_percent is not none %}
+  <span class="w-24">{{ progress(row.memory_percent / 100, row.memory_tone, figure_names.memory, "h-1.5") }}</span><span class="tone" data-tone="{{ row.memory_tone }}">{{ row.memory_percent }}%</span>
+  {%- else %}{{ row.memory_used }}{% endif %}</span>
+{%- endmacro %}
+
+{# Its CPU and memory, or, stopped, its state (where nothing else says it). #}
+{% macro figures(row) -%}
+{% if row.phase == "running" %}{{ cpu(row) }}{{ memory(row) }}{% else %}{{ state(row) }}{% endif %}
+{%- endmacro %}
+
+{# The way to a page's Container and Logs sections (``base``: its URL). #}
+{% macro links(base) -%}
+{% set link = "text-xs text-aegis-muted hover:text-aegis-teal" %}
+<a href="{{ base }}/container" {{ hx_replace(base ~ "/container", "#overseer-main") }} class="{{ link }}">Container</a>
+<a href="{{ base }}/logs" {{ hx_replace(base ~ "/logs", "#overseer-main") }} class="{{ link }}">Logs</a>
+{%- endmacro %}
+
+{# Its Restart (which confirms first), and the ``links``. #}
+{% macro actions(row, base) -%}
+<span class="flex items-center justify-end gap-4">{{ restart(row) }}{{ links(base) }}</span>
+{%- endmacro %}

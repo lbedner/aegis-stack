@@ -10,7 +10,6 @@ partial added later is gated without remembering to be.
 """
 
 from fastapi import FastAPI
-from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 import pytest
 
@@ -18,26 +17,12 @@ from app.components.web_frontend.overseer_access import PUBLIC
 from app.core.config import settings
 from app.models.user import User
 from app.services.auth.deps import get_optional_user, is_admin
-from tests.web.overseer import sign_in, status_with
-
-PREFIXES = ("/overseer", "/partials/overseer")
+from tests.web.overseer import overseer_calls, sign_in, status_with
 
 
 def _overseer_calls(app: FastAPI) -> list[tuple[str, str]]:
-    """Every (method, path) under the Overseer, path parameters filled in."""
-    calls = []
-    for route in app.routes:
-        if not isinstance(route, APIRoute) or not route.path.startswith(PREFIXES):
-            continue
-        if route.path in PUBLIC:
-            continue
-        path = route.path
-        for name in route.param_convertors:
-            path = path.replace("{" + name + ":path}", "x").replace(
-                "{" + name + "}", "1"
-            )
-        calls.extend((method, path) for method in sorted(route.methods))
-    return calls
+    """Every gated (method, path): all but the way in."""
+    return [(m, p) for m, p in overseer_calls(app) if p not in PUBLIC]
 
 
 @pytest.fixture
@@ -124,3 +109,13 @@ class TestWhoIsAdmin:
         monkeypatch.setattr(settings, "ADMIN_USER_EMAILS", [])
         assert is_admin(self._user(role="admin"))
         assert not is_admin(self._user(role="user"))
+
+
+def test_a_dialog_is_refused_not_sent_to_the_login(app: FastAPI) -> None:
+    """The Restart confirm is a fragment for a dialog: signed out it is 401,
+    never the login page swapped into the dialog."""
+    from app.components.web_frontend import overseer_container
+
+    url = overseer_container.RESTART.format(name="app-redis-1")
+    response = TestClient(app).get(url, follow_redirects=False)
+    assert response.status_code == 401

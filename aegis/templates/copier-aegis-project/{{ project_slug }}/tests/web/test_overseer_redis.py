@@ -217,9 +217,6 @@ class TestFamilyDetail:
     def test_unknown_family_is_404(self, signed_in: TestClient) -> None:
         assert signed_in.get(f"{overseer_redis.PARTIALS}/family/9").status_code == 404
 
-    def test_needs_a_signed_in_user(self, client: TestClient) -> None:
-        assert client.get(f"{overseer_redis.PARTIALS}/family/0").status_code == 401
-
 
 class TestKeyspaceStream:
     @pytest.mark.asyncio
@@ -236,9 +233,6 @@ class TestKeyspaceStream:
         events = [f for f in frames if f.startswith("event:")]
         assert len(events) == 1  # unchanged frames are not re-sent
         assert events[0].startswith(f"event: {overseer_redis.KEYSPACE_EVENT}\n")
-
-    def test_needs_a_signed_in_user(self, client: TestClient) -> None:
-        assert client.get(overseer_redis.KEYSPACE_EVENTS).status_code == 401
 
 
 class TestSlowQueries:

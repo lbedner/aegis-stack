@@ -117,16 +117,19 @@ def _figures(html: str) -> dict[str, str]:
 
 
 class TestSections:
-    def test_seven_sections_with_overview_first(self, postgres: TestClient) -> None:
+    def test_its_sections_with_overview_first(self, postgres: TestClient) -> None:
+        """The engine's own parameters (Engine), then the runtime sections, then
+        the app settings its code reads (Settings)."""
         html = _get(postgres)
         assert [text(a) for a in select(html, "#overseer-subnav nav a")] == [
             "Overview",
             "Schema",
             "Migrations",
-            "Settings",
+            "Engine",
             "Activity",
             "Container",
             "Logs",
+            "Settings",
         ]
         assert text(one(html, "#overseer-subnav h2")) == "Database"
         assert "PostgreSQL 16.4" in text(one(html, "#overseer-subnav"))
@@ -189,7 +192,7 @@ class TestSettings:
     def test_postgres_settings(self, postgres: TestClient) -> None:
         rows = {
             text(r.cssselect("td")[0]): text(r.cssselect("td")[1])
-            for r in select(_get(postgres, "settings"), "tbody tr")
+            for r in select(_get(postgres, "engine"), "tbody tr")
         }
         assert rows["max_connections"] == "100"
         assert rows["active_connections"] == "3"
@@ -198,7 +201,7 @@ class TestSettings:
     def test_sqlite_pragmas_read_as_words(self, sqlite: TestClient) -> None:
         rows = {
             text(r.cssselect("td")[0]): text(r.cssselect("td")[1])
-            for r in select(_get(sqlite, "settings"), "tbody tr")
+            for r in select(_get(sqlite, "engine"), "tbody tr")
         }
         assert rows["journal_mode"] == "WAL"
         assert rows["synchronous"] == "NORMAL"

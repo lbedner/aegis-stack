@@ -1,0 +1,11 @@
+{# Configurable settings by owner: Overseer > Settings shows every group
+   (settings/_overview.html includes this), a page whose code reads one
+   its own (``overseer_settings.owned_context``). With a writable store, a
+   setting not in .env opens the Secrets page's own dialog; a saved value
+   applies when the app restarts. #}
+{% from "pages/overseer/secrets/_macros.html" import backend_note, owner_tables with context %}
+<div id="settings" class="space-y-4">
+  {{ backend_note("settings", "Values saved here apply when the app restarts, in every process.", "save") }}
+  {% if groups %}{{ owner_tables("settings", groups) }}
+  {% else %}<p class="text-sm text-aegis-muted">No setting is marked <code class="font-mono">Configurable</code> yet.</p>{% endif %}
+</div>

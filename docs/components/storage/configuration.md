@@ -77,7 +77,7 @@ Only the S3 port is published, and the data lives in a named volume that survive
 
 The dashboard's storage card reports the backend in use, the endpoint, the bucket, whether it is reachable, and object counts when the documents service is present. A store that cannot be reached shows as unhealthy there rather than failing at the moment someone uploads a file.
 
-With the htmx frontend and auth, the Overseer's **Storage** page shows the app's bucket (object count, bytes stored, largest object, a size histogram and the connection) and a **Browse** section: every bucket the credentials can see, folder by folder, with download, upload into the open folder, and delete (one file from its row menu, or the checked ones at once). S3 has no folders; the browser draws the common prefixes a `/` delimiter returns, as every console does. The app's own bucket is read-only there: its keys are content hashes that database rows point at, so only the app writes it.
+With the htmx frontend, Overseer's **Storage** page shows the app's bucket (object count, bytes stored, largest object, a size histogram and the connection) and a **Browse** section: every bucket the credentials can see, folder by folder, with download, upload into the open folder, and delete (one file from its row menu, or the checked ones at once). S3 has no folders; the browser draws the common prefixes a `/` delimiter returns, as every console does. The app's own bucket is read-only there: its keys are content hashes that database rows point at, so only the app writes it.
 
 ## Next Steps
 

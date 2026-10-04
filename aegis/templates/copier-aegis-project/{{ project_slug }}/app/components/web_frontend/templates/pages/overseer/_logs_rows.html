@@ -12,7 +12,7 @@
 {% set _edge = {"warn": "border-l-aegis-amber", "error": "border-l-aegis-error"} %}
 {% for row in rows %}
 {% set tone = tones.get(row.level) %}
-<tr class="border-t border-aegis-border/60 align-top{% if tone == 'muted' %} opacity-60{% endif %}"{% if tone %} data-tone="{{ tone }}"{% endif %}>
+<tr class="border-t border-aegis-border/40 hover:bg-aegis-card align-top{% if tone == 'muted' %} opacity-60{% endif %}"{% if tone %} data-tone="{{ tone }}"{% endif %}>
   <td class="group/cell px-3 py-1.5 whitespace-nowrap text-aegis-muted font-mono border-l-2 {{ _edge.get(tone, 'border-l-transparent') }}">{{ row.at }}{{ copy_icon(row.at, _copy) }}</td>
   {% if links %}{% set service = links[row.page] %}
   <td class="px-3 py-1.5 whitespace-nowrap" data-service><span data-dot class="inline-block w-2 h-2 mr-1.5 rounded-full align-middle" style="background: var(--aegis-chart-{{ row.color + 1 }})"></span><a href="{{ service.url }}" {{ hx_replace(service.url, "#overseer-main") }} class="text-aegis-text hover:text-aegis-teal">{{ service.title }}</a></td>

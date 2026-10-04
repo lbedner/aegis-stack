@@ -9,10 +9,18 @@
 {# A section may say what it is for (``section_subtitle``) and put its own
    verbs in the header (``<folder>/_<section>_actions.html``). #}
 {% set subtitle = section_subtitle if section_subtitle is defined else (message if current == "overview" else none) %}
-{% call page_header(page.labels[current], subtitle) %}{% include "pages/overseer/" ~ page.folder ~ "/_" ~ current|replace("-", "_") ~ "_actions.html" ignore missing %}{% endcall %}
+{# A page of one section heads it with its own name: it has no sub-menu. #}
+{% call page_header(item.title if page.single else page.labels[current], subtitle) %}{% include "pages/overseer/" ~ page.folder ~ "/_" ~ current|replace("-", "_") ~ "_actions.html" ignore missing %}{% endcall %}
 {# A section every page may have (the Container section) falls back to one
    shared ``_<section>.html``. #}
 {% set partial = ["pages/overseer/" ~ page.folder ~ "/_" ~ current|replace("-", "_") ~ ".html", "pages/overseer/_" ~ current|replace("-", "_") ~ ".html"] %}
+{# The Overview's glance at the containers behind the page, kept live by its
+   own stream (overseer_container.glance). #}
+{% if glance is defined %}
+<div id="runtime-glance" class="mb-6" hx-ext="sse" sse-connect="{{ glance_events }}">
+  <div sse-swap="{{ glance_event }}" hx-target="this">{% include "pages/overseer/_glance_rows.html" %}</div>
+</div>
+{% endif %}
 {% if page.live and current == "overview" %}
 <div id="{{ page.folder }}-overview" sse-swap="{{ page.folder }}-overview" hx-target="this">{% include partial %}</div>
 {% else %}

@@ -30,9 +30,9 @@ async def _execute(
 
 
 async def _describe(
-    db: AsyncSession, payload: NotePayload, owner_user_id: int | None
-) -> list[ChangeDisplayRow]:
-    return [ChangeDisplayRow(label="Note", value=payload.text)]
+    db: AsyncSession, payloads: list[NotePayload], owner_user_id: int | None
+) -> list[list[ChangeDisplayRow]]:
+    return [[ChangeDisplayRow(label="Note", value=p.text)] for p in payloads]
 
 
 @contextmanager

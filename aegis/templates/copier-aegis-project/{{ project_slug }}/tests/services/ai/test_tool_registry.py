@@ -83,7 +83,7 @@ class TestResolution:
 
         warned = MagicMock()
         monkeypatch.setattr(tools_module.logger, "warning", warned)
-        register_tool("echo", _echo)
+        register_tool("echo", _echo, effect="read")
 
         resolved = resolve_tools(["echo", "missing-tool"])
 
@@ -109,15 +109,26 @@ class TestResolution:
 
 
 class TestEffect:
-    def test_effect_defaults_to_read(self) -> None:
+    def test_a_tool_that_declares_no_effect_is_treated_as_a_write(self) -> None:
+        """Default-deny: a write that forgets ``effect=`` must not run unseen
+        in code mode or reach an outside assistant as a read."""
         register_tool("echo", _echo)
 
         tool = get_tool("echo")
         assert tool is not None
-        assert tool.effect == "read"
+        assert tool.effect == "writes"
+        assert "echo" in native_write_tool_names()
+        assert mcp_servable(["echo"]) == []
+
+    def test_rebinding_cannot_change_a_tools_effect(self) -> None:
+        """A later import must not quietly turn ``propose`` into a read."""
+        register_tool("echo", _echo, effect="proposes")
+
+        with pytest.raises(ValueError, match="effect"):
+            register_tool("echo", _echo, effect="read", replace=True)
 
     def test_every_non_read_effect_stays_native(self) -> None:
-        register_tool("echo", _echo)
+        register_tool("echo", _echo, effect="read")
         register_tool("file_it", _echo, effect="proposes")
         register_tool("save_it", _echo, effect="writes")
 
@@ -126,7 +137,7 @@ class TestEffect:
         assert "echo" not in native
 
     def test_mcp_never_serves_a_write_whatever_the_grant_says(self) -> None:
-        register_tool("echo", _echo)
+        register_tool("echo", _echo, effect="read")
         register_tool("file_it", _echo, effect="proposes")
         register_tool("save_it", _echo, effect="writes")
 
@@ -135,8 +146,8 @@ class TestEffect:
 
 
 # Every tool the app registers, by the effect it must declare. A tool
-# registered from app code but missing here fails the test below, so a
-# new write cannot ship on the "read" default unnoticed.
+# registered from app code but missing here fails the test below, so each
+# new tool's effect is a decision, not the (write) default.
 EXPECTED_EFFECTS = {
     "context": "read",
     "record_reading": "writes",

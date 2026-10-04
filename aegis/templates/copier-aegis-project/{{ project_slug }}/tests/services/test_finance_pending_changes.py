@@ -11,6 +11,7 @@ from datetime import date
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.services import change_queue
 from app.services.change_queue import PendingChange
 from app.services.finance.service import FinanceService
 from tests.services._finance_factories import seed_account as _account
@@ -76,8 +77,7 @@ class TestProposeApproveReject:
     ) -> None:
         groceries, txn = await self._fixture(svc, async_db_session)
 
-        row = await svc.propose_change(
-            "transaction.categorize",
+        row = await change_queue.propose(svc.db, "transaction.categorize",
             {"transaction_id": txn.id, "category_id": groceries.id},
             owner_user_id=1,
             proposed_by_agent="finance-assistant",
@@ -93,13 +93,12 @@ class TestProposeApproveReject:
         self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         groceries, txn = await self._fixture(svc, async_db_session)
-        row = await svc.propose_change(
-            "transaction.categorize",
+        row = await change_queue.propose(svc.db, "transaction.categorize",
             {"transaction_id": txn.id, "category_id": groceries.id},
             owner_user_id=1,
         )
 
-        resolved = await svc.approve_change(row.id, owner_user_id=1)
+        resolved = await change_queue.approve(svc.db, row.id, owner_user_id=1)
 
         await async_db_session.refresh(txn)
         assert txn.category_id == groceries.id
@@ -111,13 +110,12 @@ class TestProposeApproveReject:
         self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         groceries, txn = await self._fixture(svc, async_db_session)
-        row = await svc.propose_change(
-            "transaction.categorize",
+        row = await change_queue.propose(svc.db, "transaction.categorize",
             {"transaction_id": txn.id, "category_id": groceries.id},
             owner_user_id=1,
         )
 
-        resolved = await svc.reject_change(row.id, owner_user_id=1)
+        resolved = await change_queue.reject(svc.db, row.id, owner_user_id=1)
 
         await async_db_session.refresh(txn)
         assert txn.category_id is None
@@ -129,7 +127,7 @@ class TestProposeApproveReject:
         self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         with pytest.raises(ValueError):
-            await svc.propose_change("ledger.set_on_fire", {}, owner_user_id=1)
+            await change_queue.propose(svc.db, "ledger.set_on_fire", {}, owner_user_id=1)
 
     @pytest.mark.asyncio
     async def test_a_malformed_payload_is_refused_at_propose(
@@ -138,12 +136,10 @@ class TestProposeApproveReject:
         """Fail at propose, not at approve: a card the user cannot safely
         approve should never exist."""
         with pytest.raises(ValueError):
-            await svc.propose_change(
-                "transaction.categorize", {"transaction_id": 1}, owner_user_id=1
+            await change_queue.propose(svc.db, "transaction.categorize", {"transaction_id": 1}, owner_user_id=1
             )
         with pytest.raises(ValueError):
-            await svc.propose_change(
-                "transaction.categorize",
+            await change_queue.propose(svc.db, "transaction.categorize",
                 {"transaction_id": 1, "category_id": 2, "amount": -999999},
                 owner_user_id=1,
             )
@@ -153,15 +149,14 @@ class TestProposeApproveReject:
         self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         groceries, txn = await self._fixture(svc, async_db_session)
-        row = await svc.propose_change(
-            "transaction.categorize",
+        row = await change_queue.propose(svc.db, "transaction.categorize",
             {"transaction_id": txn.id, "category_id": groceries.id},
             owner_user_id=1,
         )
-        await svc.reject_change(row.id, owner_user_id=1)
+        await change_queue.reject(svc.db, row.id, owner_user_id=1)
 
         with pytest.raises(ValueError):
-            await svc.approve_change(row.id, owner_user_id=1)
+            await change_queue.approve(svc.db, row.id, owner_user_id=1)
 
     @pytest.mark.asyncio
     async def test_a_failing_execution_stays_pending_with_the_error_recorded(
@@ -171,14 +166,13 @@ class TestProposeApproveReject:
         the row stays pending, the error is in the audit, the user can
         reject it with full information."""
         groceries, txn = await self._fixture(svc, async_db_session)
-        row = await svc.propose_change(
-            "transaction.categorize",
+        row = await change_queue.propose(svc.db, "transaction.categorize",
             {"transaction_id": 999_999, "category_id": groceries.id},
             owner_user_id=1,
         )
 
         with pytest.raises(Exception):
-            await svc.approve_change(row.id, owner_user_id=1)
+            await change_queue.approve(svc.db, row.id, owner_user_id=1)
 
         await async_db_session.refresh(row)
         assert row.status == "pending"
@@ -189,19 +183,17 @@ class TestProposeApproveReject:
         self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         groceries, txn = await self._fixture(svc, async_db_session)
-        first = await svc.propose_change(
-            "transaction.categorize",
+        first = await change_queue.propose(svc.db, "transaction.categorize",
             {"transaction_id": txn.id, "category_id": groceries.id},
             owner_user_id=1,
         )
-        second = await svc.propose_change(
-            "transaction.categorize",
+        second = await change_queue.propose(svc.db, "transaction.categorize",
             {"transaction_id": txn.id, "category_id": groceries.id},
             owner_user_id=1,
         )
-        await svc.reject_change(first.id, owner_user_id=1)
+        await change_queue.reject(svc.db, first.id, owner_user_id=1)
 
-        pending = await svc.list_pending_changes(owner_user_id=1)
+        pending = await change_queue.list_changes(svc.db, owner_user_id=1)
 
         assert [row.id for row in pending] == [second.id]
 
@@ -219,12 +211,11 @@ class TestCategorizeCardCopy:
         txn = await _txn(svc, account.id, -1_296, date(2026, 8, 21), name="Target")
         await svc.categorize_transaction(txn.id, shopping.id, owner_user_id=1)
 
-        row = await svc.propose_change(
-            "transaction.categorize",
+        row = await change_queue.propose(svc.db, "transaction.categorize",
             {"transaction_id": txn.id, "category_id": groceries.id},
             owner_user_id=1,
         )
-        display = {d.label: d.value for d in await svc.describe_pending_change(row)}
+        display = {d.label: d.value for d in await change_queue.describe_change(svc.db, row)}
 
         assert display["Category"] == "Shopping \u2192 Food & Dining:Groceries"
 
@@ -236,12 +227,11 @@ class TestCategorizeCardCopy:
         groceries = await _category(async_db_session, "Food & Dining:Groceries")
         txn = await _txn(svc, account.id, -897, date(2026, 6, 10), name="Deli")
 
-        row = await svc.propose_change(
-            "transaction.categorize",
+        row = await change_queue.propose(svc.db, "transaction.categorize",
             {"transaction_id": txn.id, "category_id": groceries.id},
             owner_user_id=1,
         )
-        display = {d.label: d.value for d in await svc.describe_pending_change(row)}
+        display = {d.label: d.value for d in await change_queue.describe_change(svc.db, row)}
 
         assert display["Category"] == "Uncategorized \u2192 Food & Dining:Groceries"
 
@@ -260,15 +250,14 @@ class TestResolutionFreezesTheRecord:
         groceries = await _category(async_db_session, "Food & Dining:Groceries")
         txn = await _txn(svc, account.id, -1_296, date(2026, 8, 21), name="Target")
         await svc.categorize_transaction(txn.id, shopping.id, owner_user_id=1)
-        row = await svc.propose_change(
-            "transaction.categorize",
+        row = await change_queue.propose(svc.db, "transaction.categorize",
             {"transaction_id": txn.id, "category_id": groceries.id},
             owner_user_id=1,
         )
 
-        resolved = await svc.approve_change(row.id, owner_user_id=1)
+        resolved = await change_queue.approve(svc.db, row.id, owner_user_id=1)
         display = {
-            d.label: d.value for d in await svc.describe_pending_change(resolved)
+            d.label: d.value for d in await change_queue.describe_change(svc.db, resolved)
         }
 
         assert display["Category"] == "Shopping \u2192 Food & Dining:Groceries"
@@ -282,17 +271,16 @@ class TestResolutionFreezesTheRecord:
         groceries = await _category(async_db_session, "Food & Dining:Groceries")
         txn = await _txn(svc, account.id, -1_296, date(2026, 8, 21), name="Target")
         await svc.categorize_transaction(txn.id, shopping.id, owner_user_id=1)
-        row = await svc.propose_change(
-            "transaction.categorize",
+        row = await change_queue.propose(svc.db, "transaction.categorize",
             {"transaction_id": txn.id, "category_id": groceries.id},
             owner_user_id=1,
         )
 
-        resolved = await svc.reject_change(row.id, owner_user_id=1)
+        resolved = await change_queue.reject(svc.db, row.id, owner_user_id=1)
         # the world moves after rejection - the card must not follow it
         await svc.categorize_transaction(txn.id, groceries.id, owner_user_id=1)
         display = {
-            d.label: d.value for d in await svc.describe_pending_change(resolved)
+            d.label: d.value for d in await change_queue.describe_change(svc.db, resolved)
         }
 
         assert display["Category"] == "Shopping \u2192 Food & Dining:Groceries"
@@ -313,8 +301,7 @@ class TestBatches:
             )
             for i in range(n)
         ]
-        rows = await svc.propose_many_changes(
-            "transaction.categorize",
+        rows = await change_queue.propose_many(svc.db, "transaction.categorize",
             [{"transaction_id": t.id, "category_id": groceries.id} for t in txns],
             owner_user_id=1,
             proposed_by_agent="finance-assistant",
@@ -341,8 +328,8 @@ class TestBatches:
         txns, groceries, rows = await self._many(svc, async_db_session)
         vetoed = rows[1]
 
-        summary = await svc.approve_batch(
-            rows[0].batch_id, owner_user_id=1, exclude_ids=[vetoed.id]
+        summary = await change_queue.approve_rows(
+            svc.db, rows, exclude_ids=[vetoed.id]
         )
 
         assert summary["approved"] == 2
@@ -360,7 +347,7 @@ class TestBatches:
     ) -> None:
         txns, _groceries, rows = await self._many(svc, async_db_session)
 
-        summary = await svc.reject_batch(rows[0].batch_id, owner_user_id=1)
+        summary = await change_queue.reject_rows(svc.db, rows)
 
         assert summary["rejected"] == 3
         for txn in txns:
@@ -381,7 +368,7 @@ class TestBatches:
         async_db_session.add(doomed)
         await async_db_session.flush()
 
-        summary = await svc.approve_batch(rows[0].batch_id, owner_user_id=1)
+        summary = await change_queue.approve_rows(svc.db, rows)
 
         assert summary["approved"] == 2
         assert summary["failed"] == 1
@@ -394,12 +381,10 @@ class TestBatches:
         self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         with pytest.raises(ValueError):
-            await svc.propose_many_changes(
-                "transaction.categorize", [], owner_user_id=1
+            await change_queue.propose_many(svc.db, "transaction.categorize", [], owner_user_id=1
             )
         with pytest.raises(ValueError):
-            await svc.propose_many_changes(
-                "transaction.categorize",
+            await change_queue.propose_many(svc.db, "transaction.categorize",
                 [{"transaction_id": i, "category_id": 1} for i in range(101)],
                 owner_user_id=1,
             )
@@ -435,15 +420,14 @@ class TestMatchExecutor:
     ) -> None:
         stream, txn = await self._fixture(svc, async_db_session)
 
-        row = await svc.propose_change(
-            "recurring.match",
+        row = await change_queue.propose(svc.db, "recurring.match",
             {"transaction_id": txn.id, "stream_id": stream.id},
             owner_user_id=1,
         )
         await async_db_session.refresh(txn)
         assert txn.recurring_stream_id is None  # proposing moved nothing
 
-        resolved = await svc.approve_change(row.id, owner_user_id=1)
+        resolved = await change_queue.approve(svc.db, row.id, owner_user_id=1)
 
         assert resolved.status == "approved"
         await async_db_session.refresh(txn)
@@ -460,12 +444,11 @@ class TestMatchExecutor:
         only half-describes is a leap of faith."""
         stream, txn = await self._fixture(svc, async_db_session)
 
-        row = await svc.propose_change(
-            "recurring.match",
+        row = await change_queue.propose(svc.db, "recurring.match",
             {"transaction_id": txn.id, "stream_id": stream.id},
             owner_user_id=1,
         )
-        display = {d.label: d.value for d in await svc.describe_pending_change(row)}
+        display = {d.label: d.value for d in await change_queue.describe_change(svc.db, row)}
 
         assert "$1,000.00" in display["Payment"]
         assert "Jul 31, 2026" in display["Payment"]
@@ -478,8 +461,7 @@ class TestMatchExecutor:
         stream, txn = await self._fixture(svc, async_db_session)
 
         with pytest.raises(ValueError):
-            await svc.propose_change(
-                "recurring.match",
+            await change_queue.propose(svc.db, "recurring.match",
                 {"transaction_id": txn.id, "stream_id": stream.id, "force": True},
                 owner_user_id=1,
             )
@@ -489,15 +471,14 @@ class TestMatchExecutor:
         self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         stream, txn = await self._fixture(svc, async_db_session)
-        row = await svc.propose_change(
-            "recurring.match",
+        row = await change_queue.propose(svc.db, "recurring.match",
             {"transaction_id": txn.id, "stream_id": stream.id},
             owner_user_id=1,
         )
         await svc.delete_recurring(stream.id, owner_user_id=1)
 
         with pytest.raises(Exception):
-            await svc.approve_change(row.id, owner_user_id=1)
+            await change_queue.approve(svc.db, row.id, owner_user_id=1)
 
         await async_db_session.refresh(row)
         assert row.status == "pending"
@@ -520,18 +501,16 @@ class TestAssignPayeeExecutor:
         one = await _txn(svc, account.id, -2_500, date(2026, 8, 3), name="ATM 881")
         two = await _txn(svc, account.id, -2_500, date(2026, 8, 17), name="ATM 882")
 
-        first = await svc.propose_change(
-            "transaction.assign_payee",
+        first = await change_queue.propose(svc.db, "transaction.assign_payee",
             {"transaction_id": one.id, "payee": "Hudson Valley Grounded"},
             owner_user_id=1,
         )
-        second = await svc.propose_change(
-            "transaction.assign_payee",
+        second = await change_queue.propose(svc.db, "transaction.assign_payee",
             {"transaction_id": two.id, "payee": "hudson valley grounded"},
             owner_user_id=1,
         )
-        await svc.approve_change(first.id, owner_user_id=1)
-        await svc.approve_change(second.id, owner_user_id=1)
+        await change_queue.approve(svc.db, first.id, owner_user_id=1)
+        await change_queue.approve(svc.db, second.id, owner_user_id=1)
 
         await async_db_session.refresh(one)
         await async_db_session.refresh(two)
@@ -549,8 +528,7 @@ class TestAssignPayeeExecutor:
         account = await _account(svc)
         txn = await _txn(svc, account.id, -2_500, date(2026, 8, 3), name="ATM 881")
 
-        await svc.propose_change(
-            "transaction.assign_payee",
+        await change_queue.propose(svc.db, "transaction.assign_payee",
             {"transaction_id": txn.id, "payee": "Hudson Valley Grounded"},
             owner_user_id=1,
         )
@@ -566,12 +544,11 @@ class TestAssignPayeeExecutor:
         account = await _account(svc)
         txn = await _txn(svc, account.id, -2_500, date(2026, 8, 3), name="ATM 881")
 
-        row = await svc.propose_change(
-            "transaction.assign_payee",
+        row = await change_queue.propose(svc.db, "transaction.assign_payee",
             {"transaction_id": txn.id, "payee": "Hudson Valley Grounded"},
             owner_user_id=1,
         )
-        display = {d.label: d.value for d in await svc.describe_pending_change(row)}
+        display = {d.label: d.value for d in await change_queue.describe_change(svc.db, row)}
 
         assert display["Payee"] == "Unassigned \u2192 Hudson Valley Grounded"
         assert "ATM 881" in display["Transaction"]
@@ -585,12 +562,11 @@ class TestAssignPayeeExecutor:
         old = await svc.create_merchant("Chase ATM", owner_user_id=1)
         await svc.assign_merchant([txn.id], old.id, owner_user_id=1)
 
-        row = await svc.propose_change(
-            "transaction.assign_payee",
+        row = await change_queue.propose(svc.db, "transaction.assign_payee",
             {"transaction_id": txn.id, "payee": "Hudson Valley Grounded"},
             owner_user_id=1,
         )
-        display = {d.label: d.value for d in await svc.describe_pending_change(row)}
+        display = {d.label: d.value for d in await change_queue.describe_change(svc.db, row)}
 
         assert display["Payee"] == "Chase ATM \u2192 Hudson Valley Grounded"
 
@@ -602,8 +578,7 @@ class TestAssignPayeeExecutor:
         txn = await _txn(svc, account.id, -2_500, date(2026, 8, 3), name="ATM 881")
 
         with pytest.raises(ValueError, match="payee"):
-            await svc.propose_change(
-                "transaction.assign_payee",
+            await change_queue.propose(svc.db, "transaction.assign_payee",
                 {"transaction_id": txn.id, "payee": "   "},
                 owner_user_id=1,
             )
@@ -614,15 +589,14 @@ class TestAssignPayeeExecutor:
     ) -> None:
         account = await _account(svc)
         txn = await _txn(svc, account.id, -2_500, date(2026, 8, 3), name="ATM 881")
-        row = await svc.propose_change(
-            "transaction.assign_payee",
+        row = await change_queue.propose(svc.db, "transaction.assign_payee",
             {"transaction_id": txn.id, "payee": "Hudson Valley Grounded"},
             owner_user_id=1,
         )
         await svc.soft_delete_transactions([txn.id], owner_user_id=1)
 
         with pytest.raises(ValueError, match="not found"):
-            await svc.approve_change(row.id, owner_user_id=1)
+            await change_queue.approve(svc.db, row.id, owner_user_id=1)
 
         refreshed = await async_db_session.get(PendingChange, row.id)
         assert refreshed is not None and refreshed.status == "pending"
@@ -649,8 +623,7 @@ class TestTagExecutors:
         )
 
         txn = await self._fixture(svc, async_db_session)
-        row = await svc.propose_change(
-            "transaction.tag",
+        row = await change_queue.propose(svc.db, "transaction.tag",
             {"transaction_id": txn.id, "tag": "Business"},
             owner_user_id=1,
         )
@@ -658,7 +631,7 @@ class TestTagExecutors:
             txn.id, []
         ) == []
 
-        await svc.approve_change(row.id, owner_user_id=1)
+        await change_queue.approve(svc.db, row.id, owner_user_id=1)
 
         tags = await transaction_tags(async_db_session, [txn.id])
         assert [t.name for t in tags[txn.id]] == ["Business"]
@@ -674,12 +647,11 @@ class TestTagExecutors:
 
         txn = await self._fixture(svc, async_db_session)
         for name in ("Business", "Travel"):
-            row = await svc.propose_change(
-                "transaction.tag",
+            row = await change_queue.propose(svc.db, "transaction.tag",
                 {"transaction_id": txn.id, "tag": name},
                 owner_user_id=1,
             )
-            await svc.approve_change(row.id, owner_user_id=1)
+            await change_queue.approve(svc.db, row.id, owner_user_id=1)
 
         tags = await transaction_tags(async_db_session, [txn.id])
         assert sorted(t.name for t in tags[txn.id]) == ["Business", "Travel"]
@@ -695,12 +667,11 @@ class TestTagExecutors:
         txn = await self._fixture(svc, async_db_session)
         await tag_transactions(async_db_session, [txn.id], "Travel", owner_user_id=1)
 
-        row = await svc.propose_change(
-            "transaction.tag",
+        row = await change_queue.propose(svc.db, "transaction.tag",
             {"transaction_id": txn.id, "tag": "Business"},
             owner_user_id=1,
         )
-        display = {d.label: d.value for d in await svc.describe_pending_change(row)}
+        display = {d.label: d.value for d in await change_queue.describe_change(svc.db, row)}
 
         assert display["Tags"] == "Travel \u2192 Business, Travel"
 
@@ -709,12 +680,11 @@ class TestTagExecutors:
         self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         txn = await self._fixture(svc, async_db_session)
-        row = await svc.propose_change(
-            "transaction.tag",
+        row = await change_queue.propose(svc.db, "transaction.tag",
             {"transaction_id": txn.id, "tag": "Business"},
             owner_user_id=1,
         )
-        display = {d.label: d.value for d in await svc.describe_pending_change(row)}
+        display = {d.label: d.value for d in await change_queue.describe_change(svc.db, row)}
         assert display["Tags"] == "none \u2192 Business"
 
     @pytest.mark.asyncio
@@ -730,12 +700,11 @@ class TestTagExecutors:
         await tag_transactions(async_db_session, [txn.id], "Business", owner_user_id=1)
         await tag_transactions(async_db_session, [txn.id], "Travel", owner_user_id=1)
 
-        row = await svc.propose_change(
-            "transaction.untag",
+        row = await change_queue.propose(svc.db, "transaction.untag",
             {"transaction_id": txn.id, "tag": "Business"},
             owner_user_id=1,
         )
-        await svc.approve_change(row.id, owner_user_id=1)
+        await change_queue.approve(svc.db, row.id, owner_user_id=1)
 
         tags = await transaction_tags(async_db_session, [txn.id])
         assert [t.name for t in tags[txn.id]] == ["Travel"]
@@ -745,14 +714,13 @@ class TestTagExecutors:
         self, svc: FinanceService, async_db_session: AsyncSession
     ) -> None:
         txn = await self._fixture(svc, async_db_session)
-        row = await svc.propose_change(
-            "transaction.untag",
+        row = await change_queue.propose(svc.db, "transaction.untag",
             {"transaction_id": txn.id, "tag": "Nonesuch"},
             owner_user_id=1,
         )
 
         with pytest.raises(Exception):
-            await svc.approve_change(row.id, owner_user_id=1)
+            await change_queue.approve(svc.db, row.id, owner_user_id=1)
 
         await async_db_session.refresh(row)
         assert row.status == "pending"
@@ -772,12 +740,11 @@ class TestTagExecutors:
         txn = await self._fixture(svc, async_db_session)
         await tag_transactions(async_db_session, [txn.id], "Business", owner_user_id=1)
 
-        row = await svc.propose_change(
-            "transaction.tag",
+        row = await change_queue.propose(svc.db, "transaction.tag",
             {"transaction_id": txn.id, "tag": "business"},
             owner_user_id=1,
         )
-        display = {d.label: d.value for d in await svc.describe_pending_change(row)}
+        display = {d.label: d.value for d in await change_queue.describe_change(svc.db, row)}
 
         assert display["Tags"] == "Business \u2192 Business"
 
@@ -792,12 +759,11 @@ class TestTagExecutors:
         txn = await self._fixture(svc, async_db_session)
         await tag_transactions(async_db_session, [txn.id], "Business", owner_user_id=1)
 
-        row = await svc.propose_change(
-            "transaction.untag",
+        row = await change_queue.propose(svc.db, "transaction.untag",
             {"transaction_id": txn.id, "tag": "BUSINESS!"},
             owner_user_id=1,
         )
-        display = {d.label: d.value for d in await svc.describe_pending_change(row)}
+        display = {d.label: d.value for d in await change_queue.describe_change(svc.db, row)}
 
         assert display["Tags"] == "Business \u2192 none"
 
@@ -815,8 +781,7 @@ class TestWithdraw:
         account = await _account(svc)
         groceries = await _category(session, "Food & Dining:Groceries")
         txn = await _txn(svc, account.id, -897, date(2026, 6, 10), name="Deli")
-        return await svc.propose_change(
-            "transaction.categorize",
+        return await change_queue.propose(svc.db, "transaction.categorize",
             {"transaction_id": txn.id, "category_id": groceries.id},
             owner_user_id=1,
             proposed_by_agent=agent,
@@ -874,8 +839,7 @@ class TestWithdraw:
         for day, agent in ((10, "finance-assistant"), (11, "other-agent"), (12, None)):
             txn = await _txn(svc, account.id, -897, date(2026, 6, day), name="Deli")
             filed.append(
-                await svc.propose_change(
-                    "transaction.categorize",
+                await change_queue.propose(svc.db, "transaction.categorize",
                     {"transaction_id": txn.id, "category_id": groceries.id},
                     owner_user_id=1,
                     proposed_by_agent=agent,
@@ -969,7 +933,7 @@ class TestWithdraw:
         from app.services import change_queue
 
         row = await self._proposed(svc, async_db_session, agent="finance-assistant")
-        await svc.reject_change(row.id, owner_user_id=1)
+        await change_queue.reject(svc.db, row.id, owner_user_id=1)
 
         with pytest.raises(ValueError, match="already rejected"):
             await change_queue.withdraw(
@@ -1034,3 +998,55 @@ class TestLegacyInvalidPayloads:
             async_db_session, row.id, agent_slug="finance-assistant", owner_user_id=1
         )
         assert withdrawn.status == "rejected"
+
+
+class TestCardsBatch:
+    """A queue of cards costs the same queries however many rows it holds:
+    each change type describes its rows together, never one per card."""
+
+    # Renders the queue twice on purpose (one row per type, then all), so
+    # each type's read repeats by construction rather than by a loop.
+    @pytest.mark.queryspy(allow_n_plus_one=True)
+    @pytest.mark.asyncio
+    async def test_a_full_queue_renders_without_a_query_per_card(
+        self, svc: FinanceService, async_db_session: AsyncSession
+    ) -> None:
+        from queryspy import record
+
+        account = await _account(svc)
+        groceries = await _category(async_db_session, "Food & Dining:Groceries")
+        stream = await _stream(
+            svc, name="Rent", expected_amount=1_000, next_expected_date=date(2026, 8, 1)
+        )
+        txns = [
+            await _txn(svc, account.id, -1_000 - i, date(2026, 8, 1 + i), name=f"S {i}")
+            for i in range(3)
+        ]
+        payloads = {
+            "transaction.categorize": {"category_id": groceries.id},
+            "transaction.assign_payee": {"payee": "Rent Co"},
+            "recurring.match": {"stream_id": stream.id},
+            "transaction.tag": {"tag": "home"},
+            "transaction.untag": {"tag": "home"},
+            "transaction.split": {
+                "parts": [{"amount": 500, "category_id": groceries.id}]
+            },
+        }
+        rows = []
+        for change_type, extra in payloads.items():
+            rows += await change_queue.propose_many(
+                svc.db,
+                change_type,
+                [{"transaction_id": t.id, **extra} for t in txns],
+                owner_user_id=1,
+            )
+        one_each = rows[:: len(txns)]
+
+        with record(capture_stacks=False) as few:
+            await change_queue.cards(svc.db, one_each)
+        with record(capture_stacks=False) as many:
+            cards = await change_queue.cards(svc.db, rows)
+
+        assert many.query_count == few.query_count
+        assert [c.id for c in cards] == [r.id for r in rows]
+        assert all(c.display for c in cards)

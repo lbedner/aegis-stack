@@ -1,9 +1,6 @@
-{% if include_finance or (include_ai and ai_backend != "memory") %}"""The propose/approve queue: writes as pending changes.
+{% if include_finance or (include_ai and ai_backend != "memory") %}"""The propose/approve queue's table (the rules live in ``queue``).
 
-Confirmation is structural: the sandbox's only write tool is ``propose``,
-and execution happens exclusively when the app user approves - no
-direct-write tool exists, so the model cannot skip it. Every resolution
-keeps its row: the queue IS the audit trail.
+Every resolution keeps its row: the queue IS the audit trail.
 
 The table started life as ``finance.finance_pending_change``; the
 revision that creates this one copies those rows over, ids included, so
@@ -18,9 +15,6 @@ from typing import Any
 from app.core.time import utcnow
 from sqlalchemy import JSON, CheckConstraint, Column, Index
 from sqlmodel import Field, SQLModel
-
-PENDING_CHANGE_STATUSES = ("pending", "approved", "rejected", "expired")
-
 
 class PendingChange(SQLModel, table=True):
     """One proposed mutation, from proposal through resolution.

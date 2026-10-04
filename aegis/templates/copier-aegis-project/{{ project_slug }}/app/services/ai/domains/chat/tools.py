@@ -15,7 +15,7 @@ Applications register their own domain tools at import time:
         \"\"\"Fetch an order summary.\"\"\"
         ...
 
-    register_tool("lookup_order", lookup_order)
+    register_tool("lookup_order", lookup_order, effect="read")
 
 A database row naming a tool with no registered callable is skipped with
 a warning, never an error: a stale row must not brick chat.
@@ -54,7 +54,7 @@ class RegisteredTool:
     name: str
     func: ToolFunc
     description: str | None = None
-    effect: ToolEffect = "read"
+    effect: ToolEffect = "writes"
 
 
 _registry: dict[str, RegisteredTool] = {}
@@ -65,17 +65,29 @@ def register_tool(
     func: ToolFunc,
     *,
     description: str | None = None,
-    effect: ToolEffect = "read",
+    effect: ToolEffect | None = None,
     replace: bool = False,
 ) -> None:
     """Register a callable under a tool name.
 
-    Raises ValueError on a duplicate name unless ``replace=True``, so two
-    modules can't silently fight over one name.
+    A tool that declares no ``effect`` is treated as ``writes``: default-deny,
+    so a write that forgets to say so stays a visible native call and never
+    reaches an outside assistant. Raises ValueError on a duplicate name
+    unless ``replace=True``, and a rebind may not change the effect, so a
+    later import can't quietly turn a proposal into a read.
     """
-    if not replace and name in _registry:
+    if effect is None:
+        logger.warning(f"Tool {name!r} declares no effect; treated as 'writes'")
+        effect = "writes"
+    existing = _registry.get(name)
+    if existing is not None and not replace:
         raise ValueError(
             f"Tool '{name}' is already registered; pass replace=True to rebind it"
+        )
+    if existing is not None and existing.effect != effect:
+        raise ValueError(
+            f"Tool '{name}' is registered as {existing.effect!r}; a rebind "
+            f"may not change its effect to {effect!r}"
         )
     _registry[name] = RegisteredTool(
         name=name, func=func, description=description, effect=effect

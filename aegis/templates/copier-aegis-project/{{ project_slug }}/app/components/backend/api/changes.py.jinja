@@ -1,9 +1,6 @@
-{% if include_finance or (include_ai and ai_backend != "memory") %}"""The propose/approve queue's HTTP surface (FW-05).
-
-Approval is the only execution path, and it lives here - behind the
-app user - never in a tool. A proposal that fails execution stays
-pending with its error in the payload the card renders. Every change
-type any service registered resolves through these routes.
+{% if include_finance or (include_ai and ai_backend != "memory") %}"""The propose/approve queue's HTTP surface (FW-05): approval behind
+the app user, never in a tool (the rules live in ``change_queue.queue``).
+Every change type any service registered resolves through these routes.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -18,6 +15,7 @@ from app.services.change_queue.schemas import (
     BatchResolveRequest,
     BatchResolveResponse,
     ChangeProposal,
+    PendingChangeCount,
     PendingChangeListResponse,
     PendingChangeResponse,
 )
@@ -60,8 +58,22 @@ async def list_changes(
     rows = await change_queue.list_changes(
         db, owner_user_id=owner_user_id, status=status_filter
     )
-    items = [await change_queue.card(db, row) for row in rows]
+    items = await change_queue.cards(db, rows)
     return PendingChangeListResponse(items=items, total=len(items))
+
+
+@router.get("/count", response_model=PendingChangeCount)
+async def count_changes(
+    status_filter: str = Query("pending", alias="status"),
+    db: AsyncSession = Depends(get_async_db),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> PendingChangeCount:
+    """The badge's number, without describing a card."""
+    return PendingChangeCount(
+        count=await change_queue.count_changes(
+            db, owner_user_id=owner_user_id, status=status_filter
+        )
+    )
 
 
 @router.get("/{change_id}", response_model=PendingChangeResponse)
@@ -77,7 +89,7 @@ async def approve_change(
     row: PendingChange = Depends(owned_change),
     db: AsyncSession = Depends(get_async_db),
 ) -> PendingChangeResponse:
-    """Execute the stored mutation - the one door a proposal has."""
+    """Execute the stored mutation."""
     try:
         await change_queue.approve_row(db, row)
     except ValueError as e:
@@ -123,7 +135,7 @@ async def get_batch(
 ) -> PendingChangeListResponse:
     """Every row of one batch, whatever its status - the batch card's
     refresh source."""
-    items = [await change_queue.card(db, row) for row in rows]
+    items = await change_queue.cards(db, rows)
     return PendingChangeListResponse(items=items, total=len(items))
 
 

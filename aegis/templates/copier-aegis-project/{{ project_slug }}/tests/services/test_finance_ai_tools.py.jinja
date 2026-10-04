@@ -13,6 +13,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.ai.domains.chat.tools import registered_tool_names
 import app.services.finance.ai_tools as ai_tools
+import app.services.finance.ai_write_tools as ai_write_tools
 from app.services.finance.domains.ledger.properties import set_property_metadata
 from app.services.finance.domains.planning.envelopes import create_envelope
 from app.services.finance.domains.planning.goals import set_goal_metadata
@@ -520,15 +521,6 @@ async def test_propose_is_the_only_write_and_moves_nothing(
 
 
 @pytest.mark.asyncio
-async def test_propose_registers_as_a_native_write_tool() -> None:
-    """Code mode must dispatch propose as a visible native call - a
-    write from inside the sandbox is invisible in the tool trail."""
-    from app.services.ai.domains.chat.tools import native_write_tool_names
-
-    assert "propose" in native_write_tool_names()
-
-
-@pytest.mark.asyncio
 async def test_pending_hands_the_model_a_line_per_row_not_a_table(
     svc: FinanceService, session: AsyncSession
 ) -> None:
@@ -753,15 +745,6 @@ async def test_pending_lists_cards_not_rows(
         i["pending_change_id"] for i in filed["items"]
     )
     assert card["summary"].count("State Farm Auto") == 1
-
-
-@pytest.mark.asyncio
-async def test_pending_is_a_visible_native_call() -> None:
-    """The listing is how a card is shown again: the UI rebuilds cards
-    from the trail's marker, and only a native call leaves one."""
-    from app.services.ai.domains.chat.tools import native_write_tool_names
-
-    assert "pending" in native_write_tool_names()
 
 
 @pytest.mark.asyncio
@@ -1021,4 +1004,34 @@ async def test_tags_tool_lists_the_directory_with_counts(
     assert {"name": "Business", "count": 2} in [
         {"name": t["name"], "count": t["count"]} for t in result["tags"]
     ]
+
+
+async def test_a_signed_in_turn_reads_only_its_owners_ledger(
+    svc: FinanceService, session: AsyncSession
+) -> None:
+    """A turn with an owner sees that owner's rows, never another
+    household's in the same install."""
+    from app.services.ai.domains.chat.user_memory import memory_user
+
+    today = current_date()
+    for owner, name in ((1, "Mine"), (2, "Theirs")):
+        account = await seed_account(svc, name=name, owner_user_id=owner)
+        await seed_txn(svc, account.id, -1_00, today, name=name, owner_user_id=owner)
+        await seed_stream(
+            svc,
+            name=f"{name} bill",
+            expected_amount=1_00,
+            next_expected_date=today,
+            owner_user_id=owner,
+        )
+    await session.commit()
+
+    with memory_user("1", owner_user_id=1):
+        ledger = await ai_tools.ledger(months=1, detail="transactions")
+        accounts = await ai_tools.accounts()
+        bills = await ai_write_tools.bills()
+
+    assert [t["payee"] for t in ledger["transactions"]] == ["Mine"]
+    assert [a["name"] for a in accounts["accounts"]] == ["Mine"]
+    assert [b["name"] for b in bills["bills"]] == ["Mine bill"]
 {% endif %}

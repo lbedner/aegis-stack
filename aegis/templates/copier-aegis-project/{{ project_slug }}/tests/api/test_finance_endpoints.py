@@ -22,6 +22,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.services.finance.models import FinanceCategory
 from app.services.finance.service import FinanceService
 from app.services.finance.utils import current_date
+from app.services import change_queue
 
 
 @pytest.mark.asyncio
@@ -3361,7 +3362,6 @@ async def test_a_withdrawn_row_tells_the_card_why(
     """The batch card refreshes from this endpoint, and it shows a
     withdrawal as the assistant taking its card back - so the row must
     carry the note, not just a bare "rejected"."""
-    from app.services import change_queue
 
     service = FinanceService(async_db_session)
     account = await service.create_manual_account(
@@ -3425,8 +3425,7 @@ async def test_batch_approve_with_a_veto(
         )
         for i in range(3)
     ]
-    rows = await service.propose_many_changes(
-        "transaction.categorize",
+    rows = await change_queue.propose_many(service.db, "transaction.categorize",
         [{"transaction_id": t.id, "category_id": category.id} for t in txns],
         owner_user_id=acting_owner_user_id,
     )
@@ -3470,10 +3469,13 @@ async def test_an_executor_crash_keeps_the_recorded_error(
     async def _boom(db, payload, owner_user_id):
         raise RuntimeError("secret internal detail")
 
-    async def _describe(db, payload, owner_user_id):
+    async def _describe(db, payloads, owner_user_id):
         from app.services.change_queue import ChangeDisplayRow
 
-        return [ChangeDisplayRow(label="Anything", value=str(payload.anything))]
+        return [
+            [ChangeDisplayRow(label="Anything", value=str(p.anything))]
+            for p in payloads
+        ]
 
     registry.register(
         registry.ChangeExecutor(

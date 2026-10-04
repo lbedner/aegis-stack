@@ -44,23 +44,36 @@ def card_url(marker: dict[str, Any]) -> str | None:
     return None
 
 
+async def _views(db: AsyncSession, rows: list[PendingChange]) -> list[dict[str, Any]]:
+    """Rows as their cards show them, described together."""
+    views = []
+    for row, card in zip(rows, await change_queue.cards(db, rows)):
+        label, tone = CARD_STATUS[change_queue.outcome_of(row)]
+        views.append(
+            card.model_dump()
+            | {
+                "display": [(line.label, line.value) for line in card.display],
+                "label": label,
+                "tone": tone,
+                "url": change_url(card.id),
+            }
+        )
+    return views
+
+
 async def _view(db: AsyncSession, row: PendingChange) -> dict[str, Any]:
-    """One row as its card shows it."""
-    card = await change_queue.card(db, row)
-    label, tone = CARD_STATUS[change_queue.outcome_of(row)]
-    return card.model_dump() | {
-        "display": [(line.label, line.value) for line in card.display],
-        "label": label,
-        "tone": tone,
-        "url": change_url(card.id),
-    }
+    (view,) = await _views(db, [row])
+    return view
 
 
 async def _batch_view(
     db: AsyncSession, batch_id: str, rows: list[PendingChange]
 ) -> dict[str, Any]:
+    return _batch_shape(batch_id, await _views(db, rows))
+
+
+def _batch_shape(batch_id: str, views: list[dict[str, Any]]) -> dict[str, Any]:
     """One batch as its card shows it: every row, one decision."""
-    views = [await _view(db, row) for row in rows]
     return {
         "batch_id": batch_id,
         "url": batch_url(batch_id),
@@ -109,12 +122,20 @@ async def review(
         )
         for row in reversed(batched):  # a batch reads in proposal order
             batches.setdefault(str(row.batch_id), []).append(row)
-    cards: list[dict[str, Any]] = []
+    groups: list[list[PendingChange]] = []
     for row in rows:
         if row.batch_id is None:
-            cards.append(await _view(db, row))
+            groups.append([row])
         elif row.batch_id in batches:
-            cards.append(await _batch_view(db, row.batch_id, batches.pop(row.batch_id)))
+            groups.append(batches.pop(row.batch_id))
+    # Every card on the page is described in one pass.
+    views = iter(await _views(db, [row for group in groups for row in group]))
+    cards = [
+        _batch_shape(str(group[0].batch_id), [next(views) for _ in group])
+        if group[0].batch_id
+        else next(views)
+        for group in groups
+    ]
     return templates.TemplateResponse(
         request, "partials/changes/review.html", {"cards": cards}
     )

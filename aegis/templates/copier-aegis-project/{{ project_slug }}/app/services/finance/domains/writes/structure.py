@@ -12,7 +12,8 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.services.change_queue.schemas import ChangeDisplayRow
 from app.services.finance.domains.detection.insights.formatting import format_usd
 from app.services.finance.domains.ledger import categories, splits
-from app.services.finance.domains.writes.display import txn_subject
+from app.services.finance.domains.writes.display import live_transactions, txn_subject
+from app.services.finance.models import FinanceTransaction
 from app.services.finance.schemas import SplitPart
 
 
@@ -51,25 +52,44 @@ async def match_execute(
 
 
 async def match_describe(
-    db: AsyncSession, payload: MatchPayload, owner_user_id: int | None
-) -> list[ChangeDisplayRow]:
-    from app.services.finance.domains.planning.recurring import streams
+    db: AsyncSession, payloads: list[MatchPayload], owner_user_id: int | None
+) -> list[list[ChangeDisplayRow]]:
+    from app.services.finance.domains.planning.recurring import queries
 
-    txn, subject = await txn_subject(db, payload.transaction_id, owner_user_id)
-    stream = await streams.get_recurring(db, payload.stream_id, owner_user_id)
-    # A match is a MOVE too: from whichever live bill holds the row now
-    # (usually none) to the proposed one, read from the row so the card
-    # shows the current truth.
-    before = "Unmatched"
-    if txn is not None and txn.recurring_stream_id is not None:
-        holder = await streams.get_recurring(db, txn.recurring_stream_id, owner_user_id)
-        if holder is not None:
-            before = holder.name
-    after = stream.name if stream is not None else f"bill {payload.stream_id} (missing)"
-    return [
-        ChangeDisplayRow(label="Payment", value=subject),
-        ChangeDisplayRow(label="Bill", value=f"{before} \u2192 {after}"),
-    ]
+    txns = await live_transactions(
+        db, [p.transaction_id for p in payloads], owner_user_id
+    )
+    bills = await queries.streams_by_ids(
+        db,
+        list(
+            {p.stream_id for p in payloads}
+            | {
+                t.recurring_stream_id
+                for t in txns.values()
+                if t.recurring_stream_id is not None
+            }
+        ),
+        owner_user_id=owner_user_id,
+    )
+    cards = []
+    for payload in payloads:
+        txn = txns.get(payload.transaction_id)
+        # A match is a MOVE too: from whichever live bill holds the row now
+        # (usually none) to the proposed one, read from the row so the card
+        # shows the current truth.
+        holder = bills.get(txn.recurring_stream_id) if txn and txn.recurring_stream_id else None
+        before = holder.name if holder is not None else "Unmatched"
+        stream = bills.get(payload.stream_id)
+        after = stream.name if stream is not None else f"bill {payload.stream_id} (missing)"
+        cards.append(
+            [
+                ChangeDisplayRow(
+                    label="Payment", value=txn_subject(txn, payload.transaction_id)
+                ),
+                ChangeDisplayRow(label="Bill", value=f"{before} \u2192 {after}"),
+            ]
+        )
+    return cards
 
 
 class SplitChangePayload(BaseModel):
@@ -112,13 +132,32 @@ async def split_execute(
 
 
 async def split_describe(
-    db: AsyncSession, payload: SplitChangePayload, owner_user_id: int | None
+    db: AsyncSession, payloads: list[SplitChangePayload], owner_user_id: int | None
+) -> list[list[ChangeDisplayRow]]:
+    txns = await live_transactions(
+        db, [p.transaction_id for p in payloads], owner_user_id
+    )
+    names = await categories.category_names(
+        db,
+        {
+            part.category_id
+            for p in payloads
+            for part in p.parts
+            if part.category_id is not None
+        }
+        | {t.category_id for t in txns.values() if t.category_id is not None},
+    )
+    return [
+        _split_card(p, txns.get(p.transaction_id), names) for p in payloads
+    ]
+
+
+def _split_card(
+    payload: SplitChangePayload,
+    txn: FinanceTransaction | None,
+    names: dict[int, str],
 ) -> list[ChangeDisplayRow]:
-    txn, subject = await txn_subject(db, payload.transaction_id, owner_user_id)
-    wanted = [p.category_id for p in payload.parts if p.category_id is not None]
-    if txn is not None and txn.category_id is not None:
-        wanted.append(txn.category_id)
-    names = await categories.category_names(db, wanted)
+    subject = txn_subject(txn, payload.transaction_id)
     # One card row PER LINE - the user reviews the itemization the way
     # it will land: category, amount, and what the amount covers.
     rows = [ChangeDisplayRow(label="Transaction", value=subject)]

@@ -31,7 +31,7 @@ def registered_lookup() -> Generator[str]:
         """Look up a value for a key."""
         return f"val-{key}"
 
-    register_tool("lookup", lookup)
+    register_tool("lookup", lookup, effect="read")
     yield "lookup"
     unregister_tool("lookup")
 
@@ -73,7 +73,7 @@ async def test_a_tool_runs_as_the_scopes_owner_and_conversation() -> None:
         seen.append((current_owner_user_id.get(), current_conversation_id.get()))
         return "ok"
 
-    register_tool("whose_turn", whose_turn)
+    register_tool("whose_turn", whose_turn, effect="read")
     try:
         scope = ChatScope(
             user_id="u7", surface="test", owner_user_id=7, conversation_id="c7"
@@ -97,7 +97,7 @@ async def test_a_proposal_reaches_the_caller_as_its_card() -> None:
         return {"pending_change_id": 41, "change_type": change_type, "title": "T"}
 
     real = get_tool("propose")
-    register_tool("propose", propose, replace=True)
+    register_tool("propose", propose, effect="proposes", replace=True)
     try:
         frames = await _turn("propose", ChatScope(user_id="u1", surface="test"))
     finally:

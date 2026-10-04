@@ -32,6 +32,7 @@ from app.services.finance.models import (
     FinanceTransfer,
     FinanceValuation,
 )
+from app.services.shared.queries import owner_clause
 from app.services.finance.seeds.demo_plan import (  # noqa: F401
     _DEFAULT_MONTHS,
     _SEED,
@@ -130,15 +131,11 @@ async def _delete_demo_rows(
     # transaction that is going: a proposal outliving its subject points at
     # nothing. The owner clause keeps one household's clear from taking
     # another's in a multi-user install.
-    owner_clause = (
-        PendingChange.owner_user_id.is_(None)
-        if owner_user_id is None
-        else PendingChange.owner_user_id == owner_user_id
-    )
+    mine = owner_clause(PendingChange.owner_user_id, owner_user_id)
     gone = set(txn_ids)
     proposal_ids = [
         p.id
-        for p in (await db.exec(select(PendingChange).where(owner_clause))).all()
+        for p in (await db.exec(select(PendingChange).where(mine))).all()
         if p.proposed_by_agent == "demo_seed"
         or (p.payload or {}).get("transaction_id") in gone
     ]

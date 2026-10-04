@@ -4,6 +4,7 @@ sense. The hub module ``executors`` registers these."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, field_validator
@@ -11,7 +12,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.change_queue.schemas import ChangeDisplayRow
 from app.services.finance.domains.ledger import categories, merchants, transactions
-from app.services.finance.domains.writes.display import txn_subject
+from app.services.finance.domains.writes.display import live_transactions, txn_subject
 from app.services.shared.queries import stored_owner
 
 
@@ -42,26 +43,37 @@ async def categorize_execute(
 
 
 async def categorize_describe(
-    db: AsyncSession, payload: CategorizePayload, owner_user_id: int | None
-) -> list[ChangeDisplayRow]:
-    txn, subject = await txn_subject(db, payload.transaction_id, owner_user_id)
-    wanted = [payload.category_id]
-    if txn is not None and txn.category_id is not None:
-        wanted.append(txn.category_id)
-    names = await categories.category_names(db, wanted)
-    # A recategorization is a MOVE: show what it moves FROM, resolved
-    # from the row at read time - if the category changed since the
-    # proposal, the card shows the current truth.
-    before = (
-        names.get(txn.category_id, "Uncategorized")
-        if txn is not None and txn.category_id is not None
-        else "Uncategorized"
+    db: AsyncSession, payloads: list[CategorizePayload], owner_user_id: int | None
+) -> list[list[ChangeDisplayRow]]:
+    txns = await live_transactions(
+        db, [p.transaction_id for p in payloads], owner_user_id
     )
-    after = names.get(payload.category_id, f"category {payload.category_id}")
-    return [
-        ChangeDisplayRow(label="Transaction", value=subject),
-        ChangeDisplayRow(label="Category", value=f"{before} \u2192 {after}"),
-    ]
+    names = await categories.category_names(
+        db,
+        {p.category_id for p in payloads}
+        | {t.category_id for t in txns.values() if t.category_id is not None},
+    )
+    cards = []
+    for payload in payloads:
+        txn = txns.get(payload.transaction_id)
+        # A recategorization is a MOVE: show what it moves FROM, resolved
+        # from the row at read time - if the category changed since the
+        # proposal, the card shows the current truth.
+        before = (
+            names.get(txn.category_id, "Uncategorized")
+            if txn is not None and txn.category_id is not None
+            else "Uncategorized"
+        )
+        after = names.get(payload.category_id, f"category {payload.category_id}")
+        cards.append(
+            [
+                ChangeDisplayRow(
+                    label="Transaction", value=txn_subject(txn, payload.transaction_id)
+                ),
+                ChangeDisplayRow(label="Category", value=f"{before} \u2192 {after}"),
+            ]
+        )
+    return cards
 
 
 class AssignPayeePayload(BaseModel):
@@ -101,20 +113,33 @@ async def assign_payee_execute(
 
 
 async def assign_payee_describe(
-    db: AsyncSession, payload: AssignPayeePayload, owner_user_id: int | None
-) -> list[ChangeDisplayRow]:
-    txn, subject = await txn_subject(db, payload.transaction_id, owner_user_id)
-    # An assignment is a MOVE like the rest: from the payee holding the
-    # row now (usually none), read at render time so the card shows the
-    # current truth.
-    before = "Unassigned"
-    if txn is not None and txn.merchant_id is not None:
-        names = await merchants.merchant_names(db, {txn.merchant_id})
-        before = names.get(txn.merchant_id, before)
-    return [
-        ChangeDisplayRow(label="Transaction", value=subject),
-        ChangeDisplayRow(label="Payee", value=f"{before} \u2192 {payload.payee}"),
-    ]
+    db: AsyncSession, payloads: list[AssignPayeePayload], owner_user_id: int | None
+) -> list[list[ChangeDisplayRow]]:
+    txns = await live_transactions(
+        db, [p.transaction_id for p in payloads], owner_user_id
+    )
+    held = {t.merchant_id for t in txns.values() if t.merchant_id is not None}
+    names = await merchants.merchant_names(db, held) if held else {}
+    cards = []
+    for payload in payloads:
+        txn = txns.get(payload.transaction_id)
+        # An assignment is a MOVE like the rest: from the payee holding the
+        # row now (usually none), read at render time so the card shows the
+        # current truth.
+        before = "Unassigned"
+        if txn is not None and txn.merchant_id is not None:
+            before = names.get(txn.merchant_id, before)
+        cards.append(
+            [
+                ChangeDisplayRow(
+                    label="Transaction", value=txn_subject(txn, payload.transaction_id)
+                ),
+                ChangeDisplayRow(
+                    label="Payee", value=f"{before} \u2192 {payload.payee}"
+                ),
+            ]
+        )
+    return cards
 
 
 class TagPayload(BaseModel):
@@ -129,9 +154,23 @@ class TagPayload(BaseModel):
     tag: str
 
 
-async def _tag_names(db: AsyncSession, transaction_id: int) -> list[str]:
-    current = await transactions.transaction_tags(db, [transaction_id])
-    return sorted(t.name for t in current.get(transaction_id, []))
+async def _tag_cards(
+    db: AsyncSession,
+    payloads: list[TagPayload],
+    owner_user_id: int | None,
+    predict: Callable[[list[str], str], list[str]],
+) -> list[list[ChangeDisplayRow]]:
+    """Tag and untag cards share everything but the predicted set: one
+    query for the transactions, one for their current tags."""
+    ids = [p.transaction_id for p in payloads]
+    txns = await live_transactions(db, ids, owner_user_id)
+    current = await transactions.transaction_tags(db, ids)
+    cards = []
+    for payload in payloads:
+        before = sorted(t.name for t in current.get(payload.transaction_id, []))
+        subject = txn_subject(txns.get(payload.transaction_id), payload.transaction_id)
+        cards.append(_tag_rows(subject, before, predict(before, payload.tag)))
+    return cards
 
 
 def _tag_rows(
@@ -160,22 +199,30 @@ async def tag_execute(
     return {"transaction_id": payload.transaction_id, "tag_id": tag.id}
 
 
-async def tag_describe(
-    db: AsyncSession, payload: TagPayload, owner_user_id: int | None
-) -> list[ChangeDisplayRow]:
+def _tagged(before: list[str], tag: str) -> list[str]:
     from app.services.finance.utils import normalize_payee
 
-    _txn, subject = await txn_subject(db, payload.transaction_id, owner_user_id)
-    before = await _tag_names(db, payload.transaction_id)
     # Predict with the executor's own rule: attach dedupes by normalized
     # name, so "business" against an existing "Business" changes nothing
     # - the card must not promise a duplicate that will never exist.
-    wanted = normalize_payee(payload.tag)
+    wanted = normalize_payee(tag)
     if any(normalize_payee(name) == wanted for name in before):
-        after = before
-    else:
-        after = sorted([*before, payload.tag.strip()])
-    return _tag_rows(subject, before, after)
+        return before
+    return sorted([*before, tag.strip()])
+
+
+def _untagged(before: list[str], tag: str) -> list[str]:
+    from app.services.finance.utils import normalize_payee
+
+    # Same normalization the executor resolves the tag with.
+    wanted = normalize_payee(tag)
+    return [n for n in before if normalize_payee(n) != wanted]
+
+
+async def tag_describe(
+    db: AsyncSession, payloads: list[TagPayload], owner_user_id: int | None
+) -> list[list[ChangeDisplayRow]]:
+    return await _tag_cards(db, payloads, owner_user_id, _tagged)
 
 
 async def untag_execute(
@@ -201,13 +248,6 @@ async def untag_execute(
 
 
 async def untag_describe(
-    db: AsyncSession, payload: TagPayload, owner_user_id: int | None
-) -> list[ChangeDisplayRow]:
-    from app.services.finance.utils import normalize_payee
-
-    _txn, subject = await txn_subject(db, payload.transaction_id, owner_user_id)
-    before = await _tag_names(db, payload.transaction_id)
-    # Same normalization the executor resolves the tag with.
-    wanted = normalize_payee(payload.tag)
-    after = [n for n in before if normalize_payee(n) != wanted]
-    return _tag_rows(subject, before, after)
+    db: AsyncSession, payloads: list[TagPayload], owner_user_id: int | None
+) -> list[list[ChangeDisplayRow]]:
+    return await _tag_cards(db, payloads, owner_user_id, _untagged)

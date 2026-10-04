@@ -146,4 +146,5 @@ register_tool(
     context,
     description="Report what is in your own context window this turn",
     replace=True,
+    effect="read",
 )

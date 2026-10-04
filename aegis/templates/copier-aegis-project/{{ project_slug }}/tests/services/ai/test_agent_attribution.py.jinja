@@ -296,7 +296,7 @@ class TestAgentGrantsReachTheApiChatPath:
             """Look up a value."""
             return f"val-{key}"
 
-        register_tool("lookup", lookup, replace=True)
+        register_tool("lookup", lookup, effect="read", replace=True)
         try:
             _stub_resolve(
                 monkeypatch,

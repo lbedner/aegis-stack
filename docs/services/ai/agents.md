@@ -70,7 +70,7 @@ async def lookup_order(order_id: str) -> str:
     """Fetch an order summary for the given order id."""
     ...
 
-register_tool("lookup_order", lookup_order)
+register_tool("lookup_order", lookup_order, effect="read")
 ```
 
 Then grant it to an agent by inserting a `tool` row named `lookup_order` and linking it via `agent_tool`. A row naming a tool with no registered callable is skipped with a warning, never an error: a stale grant degrades that one tool, not the agent.
@@ -91,8 +91,8 @@ async def execute(db, payload, owner_user_id) -> dict:
     ...  # the real mutation; runs only on approval
     return {"post_id": payload.post_id}
 
-async def describe(db, payload, owner_user_id) -> list[ChangeDisplayRow]:
-    return [ChangeDisplayRow(label="Publish at", value=payload.publish_at)]
+async def describe(db, payloads, owner_user_id) -> list[list[ChangeDisplayRow]]:
+    return [[ChangeDisplayRow(label="Publish at", value=p.publish_at)] for p in payloads]
 
 register(ChangeExecutor(
     change_type="post.reschedule",
@@ -103,9 +103,9 @@ register(ChangeExecutor(
 ))
 ```
 
-The payload model validates when the change is proposed and again when it is approved; `describe` renders the card from the database, never from the model's own words. Agents reach the queue through built-in tools: `propose` and `propose_many` (one card for a batch, with a per-row veto), and `pending`, `withdraw` and `withdraw_batch` for an agent's own open cards. The card's buttons call `/api/v1/changes` (`POST /changes/{id}/approve`, `/reject`, and the batch forms), and every resolution keeps its row as the audit trail.
+The payload model validates when the change is proposed and again when it is approved; `describe` renders the card from the database, never from the model's own words. It takes a list of payloads and returns one card body per payload, in order, so a page of cards can load what they show in one query instead of one per card. Agents reach the queue through built-in tools: `propose` and `propose_many` (one card for a batch, with a per-row veto), and `pending`, `withdraw` and `withdraw_batch` for an agent's own open cards. The card's buttons call `/api/v1/changes` (`POST /changes/{id}/approve`, `/reject`, and the batch forms), and every resolution keeps its row as the audit trail.
 
-A tool declares what a call does with `effect`: `read` (the default) changes nothing, `proposes` files a change the user approves before it lands, and `writes` changes state at once. Any tool that is not `read` stays a visible native call in code mode instead of running inside the sandbox, and only `read` and `proposes` tools can ever be served to an outside assistant:
+A tool declares what a call does with `effect`: `read` changes nothing, `proposes` files a change the user approves before it lands, and `writes` changes state at once. A tool that declares nothing is treated as `writes`, with a warning in the log, and re-registering a tool cannot change its effect. Any tool that is not `read` stays a visible native call in code mode instead of running inside the sandbox, and only `read` and `proposes` tools can ever be served to an outside assistant:
 
 ```python
 register_tool("save_note", save_note, effect="writes")

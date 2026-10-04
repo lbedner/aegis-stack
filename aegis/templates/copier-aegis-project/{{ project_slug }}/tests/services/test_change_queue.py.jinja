@@ -34,7 +34,11 @@ async def test_a_registered_type_proposes_without_executing(
     async_db_session: AsyncSession,
 ) -> None:
     row = await change_queue.propose(
-        async_db_session, NOTE, {"text": "hello"}, proposed_by_agent="helper"
+        async_db_session,
+        NOTE,
+        {"text": "hello"},
+        owner_user_id=None,
+        proposed_by_agent="helper",
     )
 
     assert isinstance(row, PendingChange)
@@ -89,7 +93,9 @@ async def test_a_malformed_payload_dies_at_the_door(
     async_db_session: AsyncSession,
 ) -> None:
     with pytest.raises(ValueError, match="invalid test.note payload"):
-        await change_queue.propose(async_db_session, NOTE, {"txt": "typo"})
+        await change_queue.propose(
+            async_db_session, NOTE, {"txt": "typo"}, owner_user_id=None
+        )
 
 
 @pytest.mark.asyncio
@@ -126,6 +132,31 @@ async def test_rejecting_in_the_ui_executes_nothing(
         "/api/v1/changes", params={"status": "rejected"}
     ).json()["items"]
     assert [c["id"] for c in trail] == [change["id"]]
+
+
+# Counts two statuses on purpose, so the count repeats by construction
+# rather than by a loop.
+@pytest.mark.queryspy(allow_n_plus_one=True)
+@pytest.mark.asyncio
+async def test_the_count_reads_no_cards(
+    authenticated_client: TestClient, acting_owner_user_id: int | None
+) -> None:
+    """A banner needs a number, not every card described to count them."""
+    ids = [
+        authenticated_client.post(
+            "/api/v1/changes", json={"change_type": NOTE, "payload": {"text": t}}
+        ).json()["id"]
+        for t in ("a", "b")
+    ]
+    authenticated_client.post(f"/api/v1/changes/{ids[0]}/reject")
+
+    pending = authenticated_client.get("/api/v1/changes/count")
+    rejected = authenticated_client.get(
+        "/api/v1/changes/count", params={"status": "rejected"}
+    )
+
+    assert pending.json() == {"count": 1}
+    assert rejected.json() == {"count": 1}
 
 
 @pytest.mark.parametrize(
@@ -188,7 +219,9 @@ async def test_the_chat_tool_proposes_a_registered_type(
     assert result["status"] == "pending"
     assert result["title"] == "Write a note"
     assert result["display"] == [{"label": "Note", "value": "from chat"}]
-    row = await change_queue.get_change(async_db_session, result["pending_change_id"])
+    row = await change_queue.get_change(
+        async_db_session, result["pending_change_id"], owner_user_id=None
+    )
     assert row is not None
     assert (row.proposed_by_agent, row.conversation_id) == ("helper", "conv-1")
     assert executed == []
@@ -197,6 +230,7 @@ async def test_the_chat_tool_proposes_a_registered_type(
         "propose_many",
         "pending",
         "withdraw",
+        "withdraw_batch",
     } <= native_write_tool_names()
 
 
@@ -237,7 +271,9 @@ async def test_a_chat_proposal_belongs_to_the_turns_owner(
     with memory_user("api-user", owner_user_id=other):
         theirs = await chat_tools.pending()
 
-    row = await change_queue.get_change(async_db_session, result["pending_change_id"])
+    row = await change_queue.get_change(
+        async_db_session, result["pending_change_id"], owner_user_id=None
+    )
     assert row is not None
     assert row.owner_user_id == acting_owner_user_id
     assert [c["pending_change_ids"] for c in mine["pending"]] == [[row.id]]
@@ -261,5 +297,32 @@ async def test_a_turn_without_an_owner_touches_no_cards(chat_tools: Any) -> None
     # Single-user: there is no one else to hide them from.
     assert theirs["pending"] == mine["pending"]
 {%- endif %}
+{%- endif %}
+{%- if include_auth %}
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        "propose",
+        "propose_many",
+        "approve",
+        "reject",
+        "withdraw",
+        "withdraw_batch",
+        "get_change",
+        "batch_rows",
+        "list_changes",
+    ],
+)
+def test_with_auth_every_queue_call_names_its_owner(call: str) -> None:
+    """owner_user_id=None reads every user's rows. Each public call
+    makes its caller say whose rows it means, so a new one (the MCP server,
+    a CLI command, a worker) cannot act on everyone's by forgetting."""
+    import inspect
+
+    owner = inspect.signature(getattr(change_queue, call)).parameters["owner_user_id"]
+
+    assert owner.default is inspect.Parameter.empty
 {%- endif %}
 {% endif %}

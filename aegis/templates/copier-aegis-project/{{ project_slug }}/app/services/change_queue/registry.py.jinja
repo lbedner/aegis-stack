@@ -34,9 +34,10 @@ class ChangeExecutor:
     """One kind of proposable mutation.
 
     ``execute`` runs the REAL service mutation and returns an audit
-    summary; ``describe`` resolves the payload's ids into the typed
-    card rows the confirmation surface renders - system truth from the
-    database, never model-authored copy. Rows are ``ChangeDisplayRow``
+    summary; ``describe`` resolves a LIST of payloads into one card
+    body each, in order - system truth from the database, never
+    model-authored copy. It takes the list so a queue of cards costs a
+    fixed number of queries, not a lookup per card. Rows are ``ChangeDisplayRow``
     end to end; they become plain dicts only at the freeze into the
     audit column and at the tool-result boundary.
     """
@@ -46,7 +47,8 @@ class ChangeExecutor:
     payload_model: type[BaseModel]
     execute: Callable[[AsyncSession, Any, int | None], Awaitable[dict[str, Any]]]
     describe: Callable[
-        [AsyncSession, Any, int | None], Awaitable[list[ChangeDisplayRow]]
+        [AsyncSession, list[Any], int | None],
+        Awaitable[list[list[ChangeDisplayRow]]],
     ]
     # When an agent should propose it; the payload's own fields (and their
     # ``Field(description=...)``) say what it holds.

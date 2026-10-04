@@ -5,7 +5,8 @@ name: Slow Suites
 # database runtime tests, plugin conformance - once a night and on demand,
 # so a lifecycle regression or a stale assertion is caught within a day
 # instead of at release time. The stack matrix owns
-# tests/cli/test_stack_validation.py; it is not repeated here.
+# tests/cli/test_stack_validation.py, and CI's ``generation`` jobs own
+# tests/cli/test_stack_generation.py; neither is repeated here.
 #
 # A Postgres service is provided so the postgres-marked runtime tests run
 # for real instead of skipping for want of localhost:5432.
@@ -65,3 +66,4 @@ jobs:
         run: >
           uv run pytest -m slow -n auto --dist=loadgroup -v --tb=short
           --ignore=tests/cli/test_stack_validation.py
+          --ignore=tests/cli/test_stack_generation.py

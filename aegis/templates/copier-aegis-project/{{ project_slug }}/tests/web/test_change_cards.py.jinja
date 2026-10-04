@@ -44,17 +44,25 @@ async def _propose_batch(
     return rows
 
 
-def test_a_card_shows_the_change_and_approving_swaps_it(
-    hx_user: TestClient,
-) -> None:
+# Each test makes the one request it is about: a test that shows a card and
+# then approves it reads the same row twice, which the N+1 gate counts.
+
+
+def test_a_card_shows_the_change_and_its_actions(hx_user: TestClient) -> None:
     change_id = _propose(hx_user, "hi")
 
     card = hx_user.get(f"/partials/changes/{change_id}")
+
     assert card.status_code == 200
     assert "Write a note" in card.text and "hi" in card.text
     assert f'hx-post="/partials/changes/{change_id}/approve"' in card.text
 
+
+def test_approving_runs_the_change_and_swaps_the_card(hx_user: TestClient) -> None:
+    change_id = _propose(hx_user, "hi")
+
     approved = hx_user.post(f"/partials/changes/{change_id}/approve")
+
     assert approved.status_code == 200
     assert "Approved" in text(one(approved.text, "[data-change]"))
     assert "/approve" not in approved.text
@@ -71,8 +79,13 @@ def test_rejecting_runs_nothing(hx_user: TestClient) -> None:
 {%- if include_auth %}
 
 
+@pytest.mark.parametrize(("method", "path"), [("get", ""), ("post", "/approve")])
 async def test_another_users_card_is_not_found(
-    hx_user: TestClient, async_db_session: AsyncSession, user_factory: Any
+    hx_user: TestClient,
+    async_db_session: AsyncSession,
+    user_factory: Any,
+    method: str,
+    path: str,
 ) -> None:
     other = await user_factory()
     row = await change_queue.propose(
@@ -80,11 +93,24 @@ async def test_another_users_card_is_not_found(
     )
     await async_db_session.commit()
 
-    for method, path in (("get", ""), ("post", "/approve")):
-        response = getattr(hx_user, method)(f"/partials/changes/{row.id}{path}")
-        assert response.status_code == 404
+    response = getattr(hx_user, method)(f"/partials/changes/{row.id}{path}")
+
+    assert response.status_code == 404
     assert executed == []
 {%- endif %}
+
+
+async def test_a_batch_card_offers_a_skip_per_waiting_row(
+    hx_user: TestClient,
+    async_db_session: AsyncSession,
+    acting_owner_user_id: int | None,
+) -> None:
+    rows = await _propose_batch(async_db_session, acting_owner_user_id, "keep", "veto")
+
+    card = hx_user.get(f"/partials/changes/batch/{rows[0].batch_id}")
+
+    assert "keep" in card.text and "veto" in card.text
+    assert len(select(card.text, "input[name=exclude_ids]")) == 2
 
 
 async def test_a_batch_approves_all_but_the_vetoed_rows(
@@ -94,10 +120,6 @@ async def test_a_batch_approves_all_but_the_vetoed_rows(
 ) -> None:
     rows = await _propose_batch(async_db_session, acting_owner_user_id, "keep", "veto")
     batch = rows[0].batch_id
-
-    card = hx_user.get(f"/partials/changes/batch/{batch}")
-    assert "keep" in card.text and "veto" in card.text
-    assert len(select(card.text, "input[name=exclude_ids]")) == 2
 
     resolved = hx_user.post(
         f"/partials/changes/batch/{batch}/approve",

@@ -54,6 +54,12 @@
 
 ### Fixed
 
+- **Approval cards read each row once.** A batch's approve and reject
+  resolve the rows already read (`change_queue.approve_rows` /
+  `reject_rows`, and `approve_row` / `reject_row` for one), where they read
+  every row a second time; the htmx card routes read a card or batch once;
+  `withdraw` no longer reads its row twice.
+
 - **Chat proposals are filed under the signed-in user.** On a stack with
   auth, `propose` and `propose_many` filed every card with no owner, so
   approving one answered 404. The turn's owner is now part of its identity:

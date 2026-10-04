@@ -10,10 +10,9 @@ from dataclasses import dataclass
 from hashlib import sha1
 from urllib.parse import quote
 
-from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.routing import BaseRoute
 
-from app.models.user import User
+from app.services.system import ui_runtime
 from app.services.system.health import last_system_status, registered_health_names
 from app.services.system.models import (
     ComponentStatus,
@@ -21,6 +20,8 @@ from app.services.system.models import (
     SystemStatus,
 )
 from app.services.system.ui import get_component_title
+
+from .overseer_access import Db, Viewer
 
 ORDER = {
     "components": (
@@ -59,8 +60,8 @@ def _shown(value: str | int | float | bool) -> str:
 class SectionRequest:
     """What a page section's context builder may read about the request."""
 
-    viewer: User
-    db: AsyncSession
+    viewer: Viewer  # None without auth
+    db: Db  # None without the database component
     query: Mapping[str, str]
     path: str
     # The app's routes, for pages that describe the app itself.
@@ -104,6 +105,12 @@ class NavItem:
         return f"status-{self.group}-{digest}"
 
 
+def registry_key(group: str, name: str) -> str:
+    """An entry's key in the one name registry: a component's own name, a
+    service's ``service_<name>`` (``get_component_title``)."""
+    return name if group == "components" else f"service_{name}"
+
+
 def page_url(group: str, name: str) -> str:
     """An installed entry's Overseer page."""
     return f"/overseer/{group}/{quote(name, safe='')}"
@@ -133,9 +140,7 @@ def build_navigation(status: SystemStatus | None) -> dict[str, list[NavItem]]:
                 NavItem(
                     group=group,
                     name=name,
-                    title=get_component_title(
-                        name if group == "components" else f"service_{name}"
-                    ),
+                    title=get_component_title(registry_key(group, name)),
                     url=page_url(group, name),
                     status=component.status.value,
                     component=component,
@@ -151,7 +156,18 @@ def find_item(
     return next((e for e in navigation.get(group, ()) if e.name == name), None)
 
 
+def current_navigation() -> dict[str, list[NavItem]]:
+    """The sidebar's entries as the latest health snapshot has them."""
+    return build_navigation(last_system_status())
+
+
 def find_installed(group: str, name: str) -> NavItem | None:
     """``find_item`` against the latest health snapshot, for routes that need
     one entry rather than the whole sidebar."""
-    return find_item(build_navigation(last_system_status()), group, name)
+    return find_item(current_navigation(), group, name)
+
+
+def runtime_page_url(page: str) -> str:
+    """The Overseer page a runtime page's containers show on (``redis`` is
+    the Cache component's)."""
+    return page_url("components", ui_runtime.component_of(page))

@@ -11,14 +11,12 @@ from fastapi.responses import HTMLResponse, Response
 from pydantic import ValidationError
 
 from app.components.web_frontend import overseer_blog
+from app.components.web_frontend.overseer_access import overseer_actor
 from app.components.web_frontend.rendering import dialog, go_to, toast_response
-from app.models.user import User
-from app.services.auth.deps import get_optional_user
 from app.services.blog.deps import get_blog_service
 from app.services.blog.schemas import BlogPostCreate, BlogPostUpdate, BlogTagCreate
 from app.services.blog.service import BlogService
-
-from .overseer_auth import signed_in
+from app.services.shared.deps import Actor
 
 router = APIRouter(prefix=overseer_blog.PARTIALS)
 
@@ -34,11 +32,9 @@ def _first_error(exc: ValidationError) -> str:
 async def drawer(
     request: Request,
     post: str,
-    user: User | None = Depends(get_optional_user),
     service: BlogService = Depends(get_blog_service),
 ) -> Response:
     """A post's editor in the drawer, or a new draft's for ``new``."""
-    signed_in(user)
     if post != overseer_blog.NEW and not post.isdigit():
         raise HTTPException(status_code=404)
     context = await overseer_blog.editor_context(
@@ -56,11 +52,10 @@ async def create_post(
     excerpt: Annotated[str, Form()] = "",
     slug: Annotated[str, Form()] = "",
     tags: Annotated[str, Form()] = "",
-    user: User | None = Depends(get_optional_user),
+    actor: Actor = Depends(overseer_actor),
     service: BlogService = Depends(get_blog_service),
 ) -> Response:
     """A new draft, then its editor."""
-    viewer = signed_in(user)
     try:
         payload = BlogPostCreate(
             title=title,
@@ -70,7 +65,7 @@ async def create_post(
             tag_slugs=overseer_blog.parse_tags(tags),
         )
         post = await service.create_post(
-            payload, author_id=viewer.id, author_name=viewer.full_name or viewer.email
+            payload, author_id=actor.id, author_name=actor.name
         )
     except ValidationError as exc:
         return toast_response(_first_error(exc), "error")
@@ -88,10 +83,8 @@ async def save_post(
     content: Annotated[str, Form()] = "",
     excerpt: Annotated[str, Form()] = "",
     tags: Annotated[str, Form()] = "",
-    user: User | None = Depends(get_optional_user),
     service: BlogService = Depends(get_blog_service),
 ) -> Response:
-    signed_in(user)
     try:
         payload = BlogPostUpdate(
             title=title,
@@ -113,12 +106,10 @@ async def save_post(
 async def move_post(
     post_id: int,
     action: str,
-    user: User | None = Depends(get_optional_user),
     service: BlogService = Depends(get_blog_service),
 ) -> Response:
     """Publish or archive. The button says what happened (``data-api-done``)
     and the page reloads where it was."""
-    signed_in(user)
     moves = {"publish": service.publish_post, "archive": service.archive_post}
     if action not in moves:
         raise HTTPException(status_code=404)
@@ -130,10 +121,8 @@ async def move_post(
 @router.post("/tags")
 async def create_tag(
     name: Annotated[str, Form()] = "",
-    user: User | None = Depends(get_optional_user),
     service: BlogService = Depends(get_blog_service),
 ) -> Response:
-    signed_in(user)
     try:
         tag = await service.create_tag(BlogTagCreate(name=name))
     except ValidationError as exc:
@@ -147,10 +136,8 @@ async def create_tag(
 async def confirm_delete_tag(
     request: Request,
     tag_id: int,
-    user: User | None = Depends(get_optional_user),
     service: BlogService = Depends(get_blog_service),
 ) -> Response:
-    signed_in(user)
     tag = next((t for t in await service.list_tags() if t.id == tag_id), None)
     if tag is None:
         raise HTTPException(status_code=404)
@@ -169,10 +156,8 @@ async def confirm_delete_tag(
 @router.delete("/tags/{tag_id}", status_code=204)
 async def delete_tag(
     tag_id: int,
-    user: User | None = Depends(get_optional_user),
     service: BlogService = Depends(get_blog_service),
 ) -> Response:
-    signed_in(user)
     if not await service.delete_tag(tag_id):
         raise HTTPException(status_code=404, detail="That tag is gone.")
     return Response(status_code=204)

@@ -21,6 +21,7 @@ from importlib import import_module
 import json
 import os
 import re
+import socket
 from typing import Protocol
 
 import psutil
@@ -51,6 +52,10 @@ _STAMPED = re.compile(r"^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d+))?Z ?(.*)$", 
 
 class RuntimeUnavailableError(RuntimeError):
     """The backend could not answer (no socket, proxy down, path refused)."""
+
+
+class UnknownInstanceError(LookupError):
+    """Not one of this app's containers: a write never reaches it."""
 
 
 @dataclass(frozen=True)
@@ -94,6 +99,7 @@ class Stats:
     network_tx: int = 0
     disk_read: int = 0
     disk_write: int = 0
+    cpus: int = 1  # what cpu_percent is out of: 100% a core
 
 
 @dataclass(frozen=True)
@@ -141,6 +147,8 @@ class Runtime(Protocol):
     async def disk(self) -> DiskUsage: ...
 
     async def host(self) -> Host: ...
+
+    async def restart(self, instance: str) -> None: ...
 
     async def aclose(self) -> None: ...
 
@@ -250,6 +258,7 @@ class ProcessRuntime:
                 memory_limit=psutil.virtual_memory().total,
                 network_rx=net.bytes_recv,
                 network_tx=net.bytes_sent,
+                cpus=psutil.cpu_count() or 1,
             )
 
         return await asyncio.to_thread(read)
@@ -277,6 +286,11 @@ class ProcessRuntime:
             docker_version=None,
             disk_total=disk.total,
             disk_free=disk.free,
+        )
+
+    async def restart(self, instance: str) -> None:
+        raise RuntimeUnavailableError(
+            "No deploy target: this process cannot restart a container."
         )
 
     async def aclose(self) -> None:
@@ -340,6 +354,32 @@ async def disk() -> DiskUsage:
 
 async def host() -> Host:
     return await get_runtime().host()
+
+
+async def mine(instance: str) -> Instance:
+    """This project's container named ``instance``; any other is refused
+    (``UnknownInstanceError``): the proxy allows writing to any container
+    on the host, so every write, and every confirm offering one, asks."""
+    found = next(
+        (i for s in await services() for i in s.instances if i.name == instance),
+        None,
+    )
+    if found is None:
+        raise UnknownInstanceError(f"{instance} is not one of this app's containers")
+    return found
+
+
+def is_own(instance: Instance) -> bool:
+    """Whether ``instance`` is the container this process runs in (Docker
+    names a container's host by its id): restarting it ends this process,
+    and the request that asked."""
+    return instance.id.startswith(socket.gethostname())
+
+
+async def restart(instance: Instance) -> None:
+    """Restart ``instance``, one of this app's own containers, as ``mine``
+    found it: the check comes first, so nothing restarts unchecked."""
+    await get_runtime().restart(instance.name)
 
 
 async def close() -> None:

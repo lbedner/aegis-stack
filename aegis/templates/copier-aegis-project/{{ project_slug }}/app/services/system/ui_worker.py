@@ -216,23 +216,6 @@ def drain(waiting: int, per_second: float | None, net: float | None) -> str:
     return f"drains in ~{round(seconds / 60)} min"
 
 
-def sparkline(values: list[int], width: float = 100, height: float = 24) -> str:
-    """SVG polyline points for ``values`` across a ``width`` by ``height``
-    box, highest at the top; a flat line sits on the floor."""
-    if not values:
-        return ""
-    if len(set(values)) == 1:
-        # Steady: one line, on the floor when empty, midway otherwise, so a
-        # quiet queue draws the same however many samples it has.
-        y = height if values[0] == 0 else height / 2
-        return f"0.0,{y:.1f} {width:.1f},{y:.1f}"
-    top = max(values)
-    step = width / (len(values) - 1)
-    return " ".join(
-        f"{i * step:.1f},{height - v / top * height:.1f}" for i, v in enumerate(values)
-    )
-
-
 # The queues as a sampler (``app.core.series``): the worker health check and
 # each worker process's report, read once a tick for every viewer, and each
 # queue's waiting and finished counts kept, so a view's trend is the same for

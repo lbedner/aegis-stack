@@ -77,7 +77,7 @@ class PulseColors:
     here; legacy styles keep using ``ColorPalette``.
     """
 
-    BG: str = "#090B0D"
+    BG: str = "#000000"  # the web frontend's dark page background
     CARD: str = "#111418"
     BORDER: str = "#272C36"
     TEXT: str = "#EEF1F4"

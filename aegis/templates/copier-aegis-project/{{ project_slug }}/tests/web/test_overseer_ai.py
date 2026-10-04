@@ -12,7 +12,11 @@ import pytest
 
 pytest.importorskip("app.services.ai", reason="no AI service in this stack")
 
-from app.components.web_frontend import overseer_ai_catalog, ranges  # noqa: E402
+from app.components.web_frontend import (  # noqa: E402
+    overseer_ai_catalog,
+    overseer_settings,
+    ranges,
+)
 from app.core.config import settings  # noqa: E402
 from app.services.ai.models import PROVIDERS  # noqa: E402
 from app.services.system.models import ComponentStatus  # noqa: E402
@@ -126,6 +130,8 @@ def test_sections(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> None:
         *voice,
         *catalog,
         "Providers",
+        # Its settings group, when this stack has one (a database backend or voice).
+        *(["Settings"] if overseer_settings.owns("service_ai") else []),
     ]
 
 

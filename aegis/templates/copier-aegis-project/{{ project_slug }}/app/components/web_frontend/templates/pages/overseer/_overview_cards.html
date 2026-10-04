@@ -1,0 +1,40 @@
+{# Overseer's home as cards (overseer_container.overview, ``?view=cards``):
+   a card a sidebar entry, in its order: its name (linking to its page),
+   status and health line; with containers, each one's CPU and memory, the
+   page's CPU and memory over the last 15 minutes (each line in its worst
+   container's tone), and the way to its
+   Container and Logs; without, a few of its health check's own figures and
+   where it runs. Rendered in the page and again for each frame. #}
+{% from "components/macros/layout.html" import badge, sparkline, stat_row %}
+{% from "pages/overseer/_glance_macros.html" import figures, links %}
+<div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+  {% for item in overview_stack %}
+  <section data-card="{{ item.key }}" class="rounded-lg border border-aegis-border bg-aegis-card p-4 space-y-3 min-w-0">
+    <header class="flex items-start justify-between gap-3">
+      <div class="min-w-0">
+        <a data-title href="{{ item.url }}" {{ hx_replace(item.url, "#overseer-main") }} class="font-semibold text-aegis-text hover:text-aegis-teal">{{ item.title }}</a>
+        <p class="text-xs text-aegis-muted truncate">{{ item.message }}</p>
+      </div>
+      {{ badge(item.status or "unknown", item.tone) }}
+    </header>
+    {% if item.glance %}
+    <div class="space-y-1.5 text-sm">
+      {% for row in item.glance.rows %}
+      <div class="flex items-center gap-4 min-w-0">
+        <span class="font-mono text-xs text-aegis-muted truncate flex-1">{{ row.name }}</span>
+        {{ figures(row) }}
+      </div>
+      {% endfor %}
+    </div>
+    <div class="grid grid-cols-2 gap-4">
+      <div data-spark="cpu"><p class="text-xxs caps text-aegis-muted">{{ figure_names.cpu }}, 15m</p>{{ sparkline(item.spark.cpu.points, "w-full h-6", item.spark.cpu.tone) }}</div>
+      <div data-spark="memory"><p class="text-xxs caps text-aegis-muted">{{ figure_names.memory }}, 15m</p>{{ sparkline(item.spark.memory.points, "w-full h-6", item.spark.memory.tone) }}</div>
+    </div>
+    <div class="flex items-center gap-4">{{ links(item.url) }}</div>
+    {% else %}
+    {% if item.facts %}{{ stat_row(item.facts) }}{% endif %}
+    {% if overview_host %}<p class="text-xs text-aegis-muted">in <span class="font-mono">{{ overview_host }}</span></p>{% endif %}
+    {% endif %}
+  </section>
+  {% endfor %}
+</div>

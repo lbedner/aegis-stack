@@ -382,6 +382,7 @@ class TestWebFrontendScaffolding:
                 "confirm",
                 "copy_button",
                 "copy_icon",
+                "sparkline",
                 "dialog",
                 "drawer",
                 "drawer_sync",
@@ -854,7 +855,8 @@ class TestAuthPages:
         off = _render("app/components/web_frontend/routes/pages.py.jinja", _ctx())
         assert "/login" not in off
         assert "api_login" not in off
-        assert "auth" not in off.lower()
+        assert "app.services.auth" not in off
+        assert "overseer_auth" not in off
         # ...but the landing page still works without auth.
         assert 'name="pages/landing.html"' in off
 
@@ -1068,8 +1070,9 @@ class TestGeneratedWebFrontendTests:
 
 def test_the_chat_surface_ships_with_ai_not_with_the_overseer() -> None:
     """An app mounts the chat surface on its own pages, with or without auth
-    (``ChatSurface``); only the Overseer's mount of it is auth's. Listed
-    under auth, an app without auth lost its whole chat on ``aegis update``."""
+    (``ChatSurface``), and so does Overseer, which never requires auth.
+    Listed under auth, an app without auth lost its whole chat on ``aegis
+    update``."""
     from aegis.core.services import SERVICES
 
     surface = {
@@ -1086,4 +1089,5 @@ def test_the_chat_surface_ships_with_ai_not_with_the_overseer() -> None:
     ai = set(SERVICES["ai"].files.extras["include_htmx"])
     assert surface & auth == set()
     assert surface <= ai
-    assert "app/components/web_frontend/overseer_ai_chat.py" in auth
+    assert "app/components/web_frontend/overseer_ai_chat.py" not in auth
+    assert "app/components/web_frontend/overseer_ai_chat.py" in ai

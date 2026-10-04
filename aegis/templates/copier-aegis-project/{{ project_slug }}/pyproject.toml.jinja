@@ -176,8 +176,8 @@ dependencies = [
 {%- if include_finance %}
     "ofxtools>=0.9.5,<2",
 {%- endif %}
-{%- if include_finance and (finance_plaid or finance_snaptrade) %}
-    "cryptography>=42.0.0,<51",  # AES-GCM at-rest encryption for provider credentials
+{%- if include_secrets or include_insights or (include_finance and (finance_plaid or finance_snaptrade)) %}
+    "cryptography>=42.0.0,<51",  # AES-GCM at-rest encryption (app.core.encryption)
 {%- endif %}
 {%- if include_finance and finance_snaptrade %}
     # Official client (signs every request with the partner HMAC). Ceiling is

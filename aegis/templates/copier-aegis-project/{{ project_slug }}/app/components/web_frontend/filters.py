@@ -4,7 +4,7 @@ Registered on the environment by ``rendering.py``. Amounts arrive from the
 finance service as integer minor units with a currency code.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from datetime import UTC, date, datetime
 import html
 import re
@@ -218,6 +218,15 @@ _TONE_BY_COLOR = {"green": "ok", "yellow": "warn", "red": "error"}
 def color_tone(color: str) -> str:
     """The badge tone (ok, warn, error, muted) for a semantic colour name."""
     return _TONE_BY_COLOR.get(color, "muted")
+
+
+_WORST_FIRST = ("error", "warn")
+
+
+def worst_tone(tones: Iterable[str]) -> str:
+    """The worst of ``tones``: error, then warn, else ok."""
+    found = set(tones)
+    return next((tone for tone in _WORST_FIRST if tone in found), "ok")
 
 
 def health_tone(state: str) -> str:

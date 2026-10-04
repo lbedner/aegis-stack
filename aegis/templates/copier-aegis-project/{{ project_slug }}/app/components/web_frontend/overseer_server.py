@@ -7,7 +7,7 @@ the sources behind their API routes, as of this request.
 
 from typing import Any
 
-from app.components.backend.api.load_test_api import list_recent_runs
+from app.components.backend.api.load_test_api import recent_runs
 from app.components.backend.api.traffic import get_traffic_sources
 from app.components.backend.middleware.performance import metrics_service
 from app.core.formatting import format_relative_time
@@ -79,7 +79,7 @@ def _traffic(snapshot: dict[str, Any]) -> dict[str, Any]:
 async def _load_test_runs() -> tuple[list[dict[str, Any]], bool]:
     """Recent runs, and whether the result store could be read."""
     try:
-        return await list_recent_runs(limit=50, _current_user=None), True
+        return await recent_runs(limit=50), True
     except Exception as exc:  # the store is optional; show why it is empty
         logger.warning("Overseer could not read load-test runs", error=str(exc))
         return [], False

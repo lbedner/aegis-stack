@@ -16,10 +16,10 @@ from typing import Any
 from app.services.ai.domains.llm import queries as llm_queries
 from app.services.ai.domains.spend import queries
 from app.services.ai.domains.spend.schemas import ActionSpend, ModelSpend, SpendLedger
-from app.services.auth.users import UserService
 
 from . import overseer_ai_costs_views as views
 from .chat_surface import HAS_VOICE
+from .overseer_access import user_names
 from .overseer_ai_common import section_url
 
 TABS = {
@@ -65,13 +65,6 @@ async def user_spend(
     db: Any, start: datetime, end: datetime
 ) -> dict[str | None, dict[str, ActionSpend]]:
     return await queries.spend_by_user_action(db, start, end)
-
-
-async def user_names(db: Any, ids: list[str]) -> dict[str, str]:
-    """``{ledger id: name}`` for the ids that are this app's users (the
-    ledger keeps ids as text; a chat's ``api-user`` is nobody's)."""
-    known = await UserService(db).get_users_by_ids([int(i) for i in ids if i.isdigit()])
-    return {str(uid): user.full_name or user.email for uid, user in known.items()}
 
 
 # --- Month and tab -------------------------------------------------------------

@@ -1,14 +1,16 @@
 """The streams of the runtime sections (Container, ``overseer_container``,
 and Logs, ``overseer_logs``) on every page with a container behind it, and
-of Overseer > Logs.
-Mounted by ``routes/pages.py`` behind the admin-only Overseer gate."""
+of Overseer > Logs; and a container row's Restart confirm.
+Mounted by ``routes/pages.py`` behind Overseer's gate (``overseer_access``)."""
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
 
 from app.components.web_frontend import overseer_container, overseer_logs
 from app.components.web_frontend.overseer_live import event_stream
+from app.components.web_frontend.rendering import dialog
 from app.core import runtime, series
+from app.services.system import ui_runtime
 
 router = APIRouter()
 
@@ -26,6 +28,13 @@ async def container_events(page: str, window: str | None = None) -> StreamingRes
     return event_stream(overseer_container.events(page, series.window_of(window)))
 
 
+@router.get(overseer_container.GLANCE_EVENTS, include_in_schema=False)
+async def glance_events(page: str) -> StreamingResponse:
+    """The glance above the page's Overview over SSE."""
+    _known(page)
+    return event_stream(overseer_container.glance_events(page))
+
+
 @router.get(overseer_logs.EVENTS, include_in_schema=False)
 async def logs_events(page: str, request: Request) -> StreamingResponse:
     """The page's new log lines over SSE, through its level and text
@@ -39,3 +48,30 @@ async def every_logs_events(request: Request) -> StreamingResponse:
     """Overseer > Logs' new lines over SSE, through its service, level and
     text filters."""
     return event_stream(overseer_logs.everything_events(request.query_params))
+
+
+@router.get(overseer_container.OVERVIEW_EVENTS, include_in_schema=False)
+async def overview_events(view: str | None = None) -> StreamingResponse:
+    """Overseer's home: every page's glance over SSE, in its view."""
+    return event_stream(overseer_container.overview_events(view))
+
+
+@router.get(overseer_container.RESTART, response_class=HTMLResponse)
+async def confirm_restart(request: Request, name: str) -> Response:
+    """Confirm restarting one of this app's containers; the button calls the
+    restart API, which audits it."""
+    try:
+        own = runtime.is_own(await runtime.mine(name))
+    except runtime.UnknownInstanceError:
+        raise HTTPException(status_code=404) from None
+    return dialog(
+        request,
+        "pages/overseer/_confirm.html",
+        title=ui_runtime.RESTART_TITLE,
+        body=ui_runtime.restart_confirm(name, own),
+        method="post",
+        url=ui_runtime.RESTART_API.format(name=name),
+        label="Restart",
+        tone="warn",
+        done=ui_runtime.restart_done(name, own),
+    )

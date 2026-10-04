@@ -21,6 +21,7 @@ from app.core.cache import get_cache
 from app.core.config import settings
 from app.core.db import get_async_session
 from app.core.secrets import Secret
+from tests._audit import Recorded
 
 # These tests write and read one row several times on purpose: a write
 # then a read is how invalidation and round trips are shown. Each read is
@@ -42,7 +43,9 @@ async def _rows() -> list[SecretRecord]:
 
 @pytest.fixture
 async def store(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[None]:
-    monkeypatch.setitem(settings.__dict__, "ENCRYPTION_KEY", "test-encryption-key-0123456789")
+    monkeypatch.setitem(
+        settings.__dict__, "ENCRYPTION_KEY", "test-encryption-key-0123456789"
+    )
     encryption._reset_cache()
     monkeypatch.setattr(secrets, "declared", lambda: DECLARED)
     secrets.set_store(None)
@@ -81,7 +84,9 @@ async def test_a_ciphertext_moved_to_another_name_will_not_decrypt(store: None) 
     await secrets.put("TEST_API_KEY", KEY, actor="ops")
     (row,) = await _rows()
     async with get_async_session() as db:
-        db.add(SecretRecord(name="TEST_FROM_EMAIL", ciphertext=row.ciphertext, hint="x"))
+        db.add(
+            SecretRecord(name="TEST_FROM_EMAIL", ciphertext=row.ciphertext, hint="x")
+        )
         await db.commit()
     with pytest.raises(secrets.SecretUnreadableError) as raised:
         await secrets.get("TEST_FROM_EMAIL")
@@ -158,18 +163,13 @@ async def test_status_reads_who_and_when_without_decrypting(
 async def test_every_write_is_audited_without_the_value(
     store: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    events: list[tuple[str, dict[str, Any]]] = []
-
-    class Recorder:
-        async def emit(self, event_type: str, **fields: Any) -> None:
-            events.append((event_type, fields))
-
-    monkeypatch.setattr(store_module, "get_audit", lambda: Recorder())
+    audit = Recorded()
+    monkeypatch.setattr(store_module, "get_audit", lambda: audit)
     await secrets.put("TEST_API_KEY", KEY, actor="ops@example.com")
     await secrets.delete("TEST_API_KEY", actor="ops@example.com")
-    assert [name for name, _ in events] == ["secrets.set", "secrets.deleted"]
-    assert all(KEY not in repr(fields) for _, fields in events)
-    assert events[0][1]["actor_email"] == "ops@example.com"
+    assert [e["event_type"] for e in audit.events] == ["secrets.set", "secrets.deleted"]
+    assert all(KEY not in repr(event) for event in audit.events)
+    assert audit.events[0]["actor_email"] == "ops@example.com"
 
 
 def test_the_table_has_its_own_migration() -> None:
@@ -192,7 +192,9 @@ async def test_health_counts_what_is_set_and_stored(store: None) -> None:
     assert status.metadata["stored"] == 1
 
 
-async def test_health_says_why_there_is_no_store(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_health_says_why_there_is_no_store(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from app.components.secrets.health import check_secrets_health
     from app.services.system.models import ComponentStatusType
 

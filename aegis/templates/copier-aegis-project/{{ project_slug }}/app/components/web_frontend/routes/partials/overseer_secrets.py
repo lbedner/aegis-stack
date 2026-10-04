@@ -1,6 +1,6 @@
 """The Overseer Secrets page's set dialog: paste a value, replace or remove
 a stored one; and the Test button, which asks the provider. Mounted by ``routes/pages.py`` at ``overseer_secrets.PARTIALS``
-behind the admin-only Overseer gate.
+behind Overseer's gate (``overseer_access``).
 
 Writes go through ``app.core.secrets``, whose refusals (set in ``.env``,
 a read-only store, a key the provider refuses) come back as the form's
@@ -14,12 +14,10 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 
 from app.components.web_frontend import overseer_secrets, overseer_settings
+from app.components.web_frontend.overseer_access import overseer_actor
 from app.components.web_frontend.rendering import dialog, dialog_done, toast_response
 from app.core import saved_settings, secrets
-from app.models.user import User
-from app.services.auth.deps import get_optional_user
-
-from .overseer_auth import signed_in
+from app.services.shared.deps import Actor
 
 router = APIRouter(prefix=overseer_secrets.PARTIALS)
 
@@ -56,11 +54,8 @@ async def _form(
 
 
 @router.get("/{name}", response_class=HTMLResponse)
-async def set_form(
-    request: Request, name: str, user: User | None = Depends(get_optional_user)
-) -> Response:
+async def set_form(request: Request, name: str) -> Response:
     """The set dialog, empty whatever is stored."""
-    signed_in(user)
     return await _form(request, name, [])
 
 
@@ -69,13 +64,12 @@ async def save(
     request: Request,
     name: str,
     value: Annotated[str, Form()] = "",
-    user: User | None = Depends(get_optional_user),
+    actor: Actor = Depends(overseer_actor),
 ) -> Response:
-    viewer = signed_in(user)
     if not value.strip():
         return await _form(request, name, ["Paste a value."], 422)
     try:
-        verdict = await secrets.put(name, value.strip(), actor=viewer.email)
+        verdict = await secrets.put(name, value.strip(), actor=actor.label)
     except (secrets.SecretsReadOnlyError, secrets.SecretRejectedError) as exc:
         return await _form(request, name, [str(exc)], 422)
     except secrets.UnknownSecretError:
@@ -90,11 +84,8 @@ async def save(
 
 
 @router.post("/{name}/test")
-async def check_key(
-    name: str, user: User | None = Depends(get_optional_user)
-) -> Response:
+async def check_key(name: str) -> Response:
     """Check the key in effect with its provider; the answer is a toast."""
-    signed_in(user)
     try:
         verdict = await secrets.test(name)
     except secrets.UnknownSecretError:
@@ -106,11 +97,10 @@ async def check_key(
 
 @router.post("/{name}/remove", response_class=HTMLResponse)
 async def remove(
-    request: Request, name: str, user: User | None = Depends(get_optional_user)
+    request: Request, name: str, actor: Actor = Depends(overseer_actor)
 ) -> Response:
-    viewer = signed_in(user)
     try:
-        await secrets.delete(name, actor=viewer.email)
+        await secrets.delete(name, actor=actor.label)
     except secrets.SecretsReadOnlyError as exc:
         return await _form(request, name, [str(exc)], 422)
     except secrets.UnknownSecretError:

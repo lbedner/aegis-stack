@@ -44,6 +44,9 @@ function money(value) {
   return `${value < 0 ? '-' : ''}$${abs}`;
 }
 
+// Formats whose axis steps in whole byte units.
+const BYTE_FORMATS = new Set(['bytes', 'bytes_per_second']);
+
 // The same units as format_bytes in app/core/formatting.py.
 function bytes(value) {
   if (value < 1024) return `${Math.trunc(value)} B`;
@@ -56,12 +59,14 @@ function bytes(value) {
 }
 
 // Axis ticks and tooltips: plain numbers unless the data says how to read
-// them (``"format": "money" | "percent" | "bytes" | "seconds"``), so a generic chart
+// them (``"format": "money" | "percent" | "bytes" | "bytes_per_second" |
+// "seconds"``), so a generic chart
 // never reads as dollars.
 function formatValue(value, format) {
   if (format === 'money') return money(value);
   if (format === 'percent') return `${Number(value).toFixed(1)}%`;
   if (format === 'bytes') return bytes(value);
+  if (format === 'bytes_per_second') return `${bytes(value)}/s`;
   if (format === 'seconds') return value < 10 ? `${Number(value).toFixed(1)} s` : `${Math.round(value)} s`;
   return Number(value).toLocaleString();
 }
@@ -86,10 +91,11 @@ function timeTicks(min, max) {
 }
 
 // A byte axis steps in round amounts of one unit (5 GB, 50 MB), not
-// whatever decimal step the raw byte count suggests.
+// whatever decimal step the raw byte count suggests; never under a whole
+// byte, or a quiet disk's 0.3 B/s labels every tick "0 B/s".
 function byteStep(max) {
   if (!(max > 0)) return undefined;
-  const unit = 1024 ** Math.min(Math.floor(Math.log(max) / Math.log(1024)), 4);
+  const unit = 1024 ** Math.max(0, Math.min(Math.floor(Math.log(max) / Math.log(1024)), 4));
   const step = [1, 2, 5, 10, 20, 50, 100, 200, 500].find((s) => max / unit / s <= 6) || 1000;
   return step * unit;
 }
@@ -142,6 +148,35 @@ function datasets(kind, data) {
     pointHoverBorderWidth: 2,
     pointHoverBackgroundColor: token('--b2'),
     pointHoverBorderColor: line(i),
+  })).concat(kind === 'line' ? guides(data) : []);
+}
+
+// Where warning and alert begin (``thresholds``: the host checks' rule,
+// from the server), as dashed lines across the window. Only those in reach
+// of the data: the axis takes in every line, and an alert at 640% (eight
+// cores) would flatten a 5% one. Out of the legend and the tooltip.
+const GUIDE_TONES = { warn: '--wa', error: '--er' };
+const GUIDE_REACH = 2; // drawn once the data is within half of it
+function shownThresholds(data) {
+  const top = highest(data) * GUIDE_REACH;
+  return timed(data) ? (data.thresholds || []).filter((t) => t.value <= top) : [];
+}
+function guideLine(data, threshold) {
+  const [min, max] = span(data);
+  return [{ x: min, y: threshold.value }, { x: max, y: threshold.value }];
+}
+function guides(data) {
+  return shownThresholds(data).map((threshold) => ({
+    guide: true,
+    label: '',
+    data: guideLine(data, threshold),
+    borderColor: token(GUIDE_TONES[threshold.tone], 0.8),
+    borderDash: [6, 4],
+    borderWidth: 1,
+    fill: false,
+    tension: 0,
+    pointRadius: 0,
+    pointHoverRadius: 0,
   }));
 }
 
@@ -200,7 +235,7 @@ function build(Chart, canvas) {
       ticks: {
         color: muted,
         callback: (v) => formatValue(v, data.format),
-        stepSize: data.format === 'bytes' ? byteStep(highest(data)) : undefined,
+        stepSize: BYTE_FORMATS.has(data.format) ? byteStep(highest(data)) : undefined,
       },
       grid: { color: grid },
     },
@@ -218,7 +253,7 @@ function build(Chart, canvas) {
         legend: {
           display: kind !== 'line' || data.series.length > 1,
           position: kind === 'doughnut' ? 'right' : 'top',
-          labels: { color: muted, boxWidth: 10 },
+          labels: { color: muted, boxWidth: 10, filter: (item, chart) => !chart.datasets[item.datasetIndex].guide },
         },
         tooltip: {
           backgroundColor: token('--b2'),
@@ -229,6 +264,7 @@ function build(Chart, canvas) {
           bodyFont: { weight: '600' },
           padding: 10,
           boxPadding: 4,
+          filter: (item) => !item.dataset.guide,
           callbacks: {
             title: (items) => (items.length && timed(data) ? clock(items[0].parsed.x) : items[0]?.label ?? ''),
             label: (ctx) => {
@@ -272,11 +308,15 @@ function refresh(Chart, script) {
   if (!chart) return false;
   const data = JSON.parse(script.textContent);
   showEmpty(canvas, data);
-  if (chart.data.datasets.length !== data.series.length) {
+  const shown = shownThresholds(data);
+  if (chart.data.datasets.length !== data.series.length + shown.length) {
     chart.data.datasets = datasets(canvas.dataset.chart, data);
   } else if (timed(data)) {
     data.series.forEach((series, i) => {
       slide(chart.data.datasets[i], values(data, series));
+    });
+    shown.forEach((threshold, j) => {
+      chart.data.datasets[data.series.length + j].data = guideLine(data, threshold);
     });
   } else {
     data.series.forEach((series, i) => {
@@ -289,7 +329,7 @@ function refresh(Chart, script) {
   } else {
     chart.data.labels = data.labels;
   }
-  if (data.format === 'bytes') chart.options.scales.y.ticks.stepSize = byteStep(highest(data));
+  if (BYTE_FORMATS.has(data.format)) chart.options.scales.y.ticks.stepSize = byteStep(highest(data));
   chart.update('none');
   return true;
 }

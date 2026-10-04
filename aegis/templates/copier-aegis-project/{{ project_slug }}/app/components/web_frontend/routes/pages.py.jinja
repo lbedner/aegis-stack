@@ -11,13 +11,28 @@ from urllib.parse import quote
 from app.components.backend.api.auth.router import login as api_login
 from app.components.backend.api.auth.router import register as api_register
 from app.components.backend.api.deps import login_rate_limit, register_rate_limit
-from app.components.web_frontend.overseer_nav import (
-    SectionRequest,
-    build_navigation,
-    find_item,
-)
-from app.components.web_frontend.overseer_sections import SECTIONED_PAGES, STANDALONE
 from app.components.web_frontend.routes.partials import overseer_auth as overseer_auth_partials
+from app.core.audit import AuditEmitter, get_audit
+from app.core.security import SESSION_COOKIE_NAME, clear_refresh_cookie, clear_session_cookie
+from app.models.user import User, UserCreate
+from app.services.auth.deps import get_refresh_service, get_user_service
+{%- if auth_level != "basic" %}
+from app.services.auth.deps import get_optional_user
+{%- endif %}
+{%- if include_auth_org %}
+from app.services.auth.deps import get_invite_service
+from app.services.auth.invites import InviteService
+{%- endif %}
+from app.services.auth.refresh_tokens import RefreshService
+from app.services.auth.service import session_id_of
+from app.services.auth.users import UserService
+from fastapi import Form, HTTPException
+from fastapi.responses import RedirectResponse
+from fastapi.security import OAuth2PasswordRequestForm
+{%- endif %}
+from app.components.web_frontend.overseer_access import overseer_gate
+from app.components.web_frontend.rendering import templates
+from app.components.web_frontend.routes import overseer as overseer_routes
 from app.components.web_frontend.routes.partials import overseer_runtime as overseer_runtime_partials
 from app.components.web_frontend.routes.partials import (
     overseer_scheduler as overseer_scheduler_partials,
@@ -65,50 +80,11 @@ from app.components.web_frontend.routes.partials import (
     overseer_inference as overseer_inference_partials,
 )
 {%- endif %}
-from app.components.web_frontend import (
-    overseer_connections,
-    overseer_redis,
-    overseer_secrets,
-    overseer_worker,
-)
-from app.components.web_frontend.overseer_events import health_events
-from app.components.web_frontend.overseer_access import overseer_gate
-from app.components.web_frontend.overseer_live import event_stream as _event_stream
-from app.components.web_frontend.rendering import render, templates
-from app.core.audit import AuditEmitter, get_audit
-from app.core.db import get_async_db
-from app.core.security import SESSION_COOKIE_NAME, clear_refresh_cookie, clear_session_cookie
-from app.models.user import User, UserCreate
-from app.services.auth.deps import (
-    get_optional_user,
-    get_refresh_service,
-    get_user_service,
-)
-{%- if include_auth_org %}
-from app.services.auth.deps import get_invite_service
-from app.services.auth.invites import InviteService
-{%- endif %}
-from app.services.auth.refresh_tokens import RefreshService
-from app.services.auth.service import session_id_of
-from app.services.auth.users import UserService
-from app.services.system.health import last_system_status
-from fastapi import APIRouter, Depends, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, Response, StreamingResponse
-from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.ext.asyncio import AsyncSession
-{%- else %}
-
-from app.components.web_frontend.rendering import templates
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
-{%- endif %}
 
-{%- if include_auth %}
-# Every Overseer page, stream and action is admin-only (overseer_access).
+# Every Overseer page, stream and action passes one gate (overseer_access).
 router = APIRouter(dependencies=[Depends(overseer_gate)])
-{%- else %}
-router = APIRouter()
-{%- endif %}
 
 
 @router.get("/", response_class=HTMLResponse, include_in_schema=False)
@@ -170,27 +146,14 @@ async def overseer_login_page(request: Request) -> HTMLResponse:
         request=request,
         name="pages/overseer/login.html",
     )
+{%- endif %}
 
 
-@router.get("/overseer", response_class=HTMLResponse, include_in_schema=False)
-async def overseer_page(
-    request: Request,
-    user: User | None = Depends(get_optional_user),
-) -> Response:
-    """The component and service overview."""
-    if user is None:
-        return RedirectResponse(url="/overseer/login", status_code=303)
-    status = last_system_status()
-    return render(
-        request,
-        name="pages/overseer/index.html",
-        context={"user": user, "navigation": build_navigation(status), "status": status},
-        page_layout="layouts/overseer.html",
-    )
-
-
-# Overseer pages' dialogs and forms (htmx fragments).
+# Overseer pages' dialogs and forms (htmx fragments), then its pages: a
+# partial's path wins over the pages' catch-all routes.
+{%- if include_auth %}
 router.include_router(overseer_auth_partials.router)
+{%- endif %}
 router.include_router(overseer_scheduler_partials.router)
 router.include_router(overseer_secrets_partials.router)
 router.include_router(overseer_redis_partials.router)
@@ -216,125 +179,8 @@ router.include_router(overseer_ai_chat_partials.router)
 {%- if include_inference %}
 router.include_router(overseer_inference_partials.router)
 {%- endif %}
-
-
-@router.get("/overseer/events", include_in_schema=False)
-async def overseer_events() -> StreamingResponse:
-    """One authenticated stream for all sidebar status indicators."""
-    return _event_stream(health_events())
-
-
-@router.get(overseer_redis.KEYSPACE_EVENTS, include_in_schema=False)
-async def overseer_redis_keyspace() -> StreamingResponse:
-    """The Redis page's keyspace map, while that page is open."""
-    return _event_stream(overseer_redis.keyspace_events())
-
-
-
-
-@router.get(overseer_worker.QUEUES_EVENTS, include_in_schema=False)
-async def overseer_worker_queues() -> StreamingResponse:
-    """The Worker page's queues, while that page is open."""
-    return _event_stream(overseer_worker.queues_events())
-
-
-@router.get(overseer_connections.EVENTS, include_in_schema=False)
-async def overseer_server_connections(
-    request: Request,
-) -> StreamingResponse:
-    """The Server page's connections table, filters and all, while it is open."""
-    return _event_stream(
-        overseer_connections.connections_events(dict(request.query_params))
-    )
-
-
-@router.get("/overseer/{group}", response_class=HTMLResponse, include_in_schema=False)
-async def overseer_standalone_page(
-    request: Request,
-    group: str,
-    user: User | None = Depends(get_optional_user),
-    db: AsyncSession = Depends(get_async_db),
-) -> Response:
-    """A page outside the health tree (``STANDALONE``). Secrets lives on the
-    component's own page when the stack has it."""
-    if group == "secrets" and overseer_secrets.has_component():
-        return RedirectResponse(url=overseer_secrets.COMPONENT_URL, status_code=303)
-    return await _standalone(request, group, "", user, db)
-
-
-async def _standalone(
-    request: Request, group: str, section: str, user: User | None, db: AsyncSession
-) -> Response:
-    """A ``STANDALONE`` page on one of its sections, its first by default."""
-    labels = list(SECTIONED_PAGES[(group, group)].labels)
-    if section and section not in labels[1:]:
-        raise HTTPException(status_code=404)
-    return await _overseer_detail(request, group, group, user, db, section or labels[0])
-
-
-@router.get("/overseer/{group}/{name}", response_class=HTMLResponse, include_in_schema=False)
-async def overseer_detail(
-    request: Request,
-    group: str,
-    name: str,
-    user: User | None = Depends(get_optional_user),
-    db: AsyncSession = Depends(get_async_db),
-) -> Response:
-    """A navigable status page for an installed component or service."""
-    if group in STANDALONE:
-        return await _standalone(request, group, name, user, db)
-    return await _overseer_detail(request, group, name, user, db)
-
-
-@router.get(
-    "/overseer/{group}/{name}/{section}",
-    response_class=HTMLResponse,
-    include_in_schema=False,
-)
-async def overseer_section(
-    request: Request,
-    group: str,
-    name: str,
-    section: str,
-    user: User | None = Depends(get_optional_user),
-    db: AsyncSession = Depends(get_async_db),
-) -> Response:
-    """One section of a page with a sub-menu; the first lives at the page's URL."""
-    page = SECTIONED_PAGES.get((group, name))
-    if page is None or section not in list(page.labels)[1:]:
-        raise HTTPException(status_code=404)
-    return await _overseer_detail(request, group, name, user, db, section)
-
-
-async def _overseer_detail(
-    request: Request,
-    group: str,
-    name: str,
-    user: User | None,
-    db: AsyncSession,
-    section: str = "overview",
-) -> Response:
-    """Render a page on the request's own session (``db``): a second one would
-    wait on SQLite's write lock and fail with "database is locked"."""
-    if user is None:
-        return RedirectResponse(url="/overseer/login", status_code=303)
-    status = last_system_status()
-    navigation = build_navigation(status)
-    item = STANDALONE.get(group) or find_item(navigation, group, name)
-    if item is None:
-        raise HTTPException(status_code=404)
-    context = {"user": user, "navigation": navigation, "status": status, "item": item}
-    if page := SECTIONED_PAGES.get((group, name)):
-        context |= {"page": page, "current": section}
-        context |= await page.context(
-            section, item.component, SectionRequest(user, db, request.query_params, request.url.path, request.app.routes, session_id_of(request.cookies.get(SESSION_COOKIE_NAME)))
-        )
-    return render(
-        request,
-        name="pages/overseer/detail.html",
-        context=context,
-        page_layout="layouts/overseer.html",
-    )
+router.include_router(overseer_routes.router)
+{%- if include_auth %}
 
 
 @router.post("/login", include_in_schema=False)

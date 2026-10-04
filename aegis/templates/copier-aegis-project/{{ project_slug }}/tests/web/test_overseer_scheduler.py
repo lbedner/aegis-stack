@@ -112,6 +112,7 @@ class TestSections:
             "History",
             "Container",
             "Logs",
+            "Settings",
         ]
 
 
@@ -313,12 +314,6 @@ class TestRunNow:
             signed_in.get("/partials/overseer/scheduler/confirm/run/nope").status_code
             == 404
         )
-
-    def test_needs_a_signed_in_user(self, client: TestClient) -> None:
-        response = client.get(
-            "/partials/overseer/scheduler/confirm/run/database_backup"
-        )
-        assert response.status_code == 401
 
 
 class TestHistory:

@@ -2,7 +2,7 @@
 
 Credentials are only part of what an app is configured with. The rest (a health threshold, how long an account stays locked, the scheduler's timezone) also lives in `.env`, and changing one means editing a file on the server.
 
-**Overseer > Settings** lists the settings marked for it, grouped by what reads them, each with its value, where it comes from (`.env`, the default, or saved here) and its default. With the secrets component installed, one that `.env` does not set can be saved from the page, the CLI or the API.
+**Overseer > Settings** lists the settings marked for it, grouped by the component or service that reads them: each its name and what it is, then its value, where that comes from (`.env`, the default, or saved here) and its default. The component's or service's own page has a **Settings** section with its group alone, so the Authentication page shows the lockout and token settings, the Database page its backups and slow transactions. With the secrets component installed, one that `.env` does not set can be saved from either place, the CLI or the API.
 
 A saved setting applies when the app restarts. Code reads settings through `settings.NAME`, and each process (webserver, scheduler, worker) loads the saved values as it starts. A value set in `.env` still wins and shows as read-only, the same rule as Secrets.
 
@@ -10,7 +10,7 @@ Without the secrets component, the page still lists every setting with its sourc
 
 ## Marking a setting
 
-Annotate a field of `Settings` (`app/core/config.py`) with `Configurable`, naming what reads it. The page groups settings by that name:
+Annotate a field of `Settings` (`app/core/config.py`) with `Configurable`, naming the component or service that reads it by its key: a component's own name (`database`, `worker`, `backend`), a service's `service_<name>` (`service_auth`, `service_payment`). The page groups settings by it, titled the way the sidebar titles that component, and that component's page shows the group too. A key with no page of its own (`health`) appears on Overseer > Settings alone:
 
 ```python
 from typing import Annotated
@@ -20,14 +20,14 @@ from app.core.configurable import Configurable
 
 class Settings(BaseSettings):
     # Before: CHECKOUT_RETRY_LIMIT: int = 3
-    CHECKOUT_RETRY_LIMIT: Annotated[int, Configurable("Payments")] = 3
+    CHECKOUT_RETRY_LIMIT: Annotated[int, Configurable("service_payment")] = 3
 ```
 
-Code that reads it does not change: `settings.CHECKOUT_RETRY_LIMIT` is still an `int`. An optional second argument fills the page's **What** column:
+Code that reads it does not change: `settings.CHECKOUT_RETRY_LIMIT` is still an `int`. The second argument says what it is, shown under its name (a test fails for a setting without one):
 
 ```python
     CHECKOUT_RETRY_LIMIT: Annotated[
-        int, Configurable("Payments", "Times a failed checkout is retried")
+        int, Configurable("service_payment", "Times a failed checkout is retried")
     ] = 3
 ```
 
@@ -46,7 +46,9 @@ For a plain type whose valid values are still a fixed list, name the list with `
 ```python
 from app.core.configurable import Configurable, timezones
 
-SCHEDULER_TIMEZONE: Annotated[str, Configurable("Scheduler", choices=timezones)] = "UTC"
+SCHEDULER_TIMEZONE: Annotated[
+    str, Configurable("scheduler", "Timezone scheduled jobs run in", choices=timezones)
+] = "UTC"
 ```
 
 `timezones` returns every IANA timezone name, so the scheduler's timezone is picked from the list (searchable in Flet) and `Mars/Olympus` is refused. Your own list works the same way: `choices=lambda: ["eu", "us", "apac"]`.
@@ -90,4 +92,4 @@ A setting is not a secret, so its value goes in as an argument and is shown whol
 
 ## From the API
 
-Settings use the secrets API: `GET /api/v1/secrets?setting=true` lists them (with `default`), and `PUT` / `DELETE /api/v1/secrets/{name}` save and remove a value. Like every secrets route, these are admin-only.
+Settings use the secrets API: `GET /api/v1/secrets?setting=true` lists them (with `default`), and `PUT` / `DELETE /api/v1/secrets/{name}` save and remove a value. Like every secrets route, these are admins only with the auth service and open without it.

@@ -112,3 +112,34 @@ def test_byte_axes_step_in_round_units() -> None:
     gb = 1024**3
     assert call(CHARTS_JS, f"c.byteStep({18.6 * gb})") == 5 * gb
     assert call(CHARTS_JS, f"c.byteStep({300 * 1024**2})") == 50 * 1024**2
+
+
+def test_a_byte_axis_under_one_byte_steps_by_one() -> None:
+    """A quiet disk (0.3 B/s): ticks at 0 and 1 B/s, not ten that all read
+    "0 B/s"."""
+    assert call(CHARTS_JS, "c.byteStep(0.3)") == 1
+
+
+GUIDE_REFRESH = (
+    TIME_REFRESH.replace(
+        "data: { datasets: [{ label: 'a', data: points }] }",
+        "data: { datasets: [{ label: 'a', data: points },"
+        " { guide: true, data: [{ x: 1000, y: 9 }, { x: 3000, y: 9 }] }] }",
+    )
+    .replace(
+        "window: [1500, 3500], points: 2 }",
+        "window: [1500, 3500], points: 2, thresholds: [{ value: 9, tone: 'warn' }] }",
+    )
+    .replace(
+        "console.log(JSON.stringify({ same_array",
+        "console.log(JSON.stringify({ guide: chart.data.datasets[1].data, same_array",
+    )
+)
+
+
+def test_a_threshold_spans_the_window_as_it_moves() -> None:
+    """A threshold is a level across the whole window: when the window
+    moves on, the guide follows, and the series still slide."""
+    found = run(GUIDE_REFRESH, CHARTS_JS=CHARTS_JS)
+    assert found["guide"] == [{"x": 1500, "y": 9}, {"x": 3500, "y": 9}]
+    assert found["same_array"] is True

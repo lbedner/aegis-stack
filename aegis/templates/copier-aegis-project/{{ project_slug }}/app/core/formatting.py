@@ -38,12 +38,14 @@ def format_bytes(size: int | float) -> str:
 
 def format_value(value: float, fmt: str | None) -> str:
     """A charted value as its chart reads it (``"percent"``, ``"bytes"``,
-    ``"money"``, plain otherwise): the twin of formatValue in charts.js,
+    ``"bytes_per_second"``, ``"money"``, plain otherwise): the twin of formatValue in charts.js,
     for the Flet charts drawing the same data."""
     if fmt == "percent":
         return format_percentage(value)
     if fmt == "bytes":
         return format_bytes(value)
+    if fmt == "bytes_per_second":
+        return f"{format_bytes(value)}/s"
     if fmt == "seconds":
         return f"{value:.1f} s" if value < 10 else f"{value:.0f} s"
     if fmt == "money":

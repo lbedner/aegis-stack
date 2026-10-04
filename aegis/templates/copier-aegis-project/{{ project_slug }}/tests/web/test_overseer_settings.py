@@ -103,3 +103,74 @@ def test_a_setting_with_choices_is_picked_from_a_list(
     picker = one(html, 'select[name="value"]')
     assert [o.get("value") for o in picker.findall(".//option")] == ["True", "False"]
     assert one(html, "option[selected]").get("value") == "True"
+
+
+def test_a_row_is_its_name_and_what_then_its_value_and_where(
+    client: tuple[TestClient, FakeStore],
+) -> None:
+    """Three columns, so nothing is pushed out of the card: the name with
+    what it is beneath, the value with where it comes from beneath, and
+    the row's Change. No column of dashes."""
+    html = _page(client)
+    table = next(t for t in select(html, "#settings table") if NAME in text(t))
+    assert [text(th) for th in select(table, "thead th")] == [
+        "Name",
+        "Value",
+        "Actions",
+    ]
+    row = next(
+        tr for tr in select(table, "tbody tr") if NAME in text(one(tr, "[data-name]"))
+    )
+    assert text(one(row, "[data-what]"))  # what it is, under the name
+    assert text(one(row, "[data-source]")) == "Default"
+    assert one(row, f'button[hx-get="{PARTIALS}/{NAME}"]') is not None
+
+
+def test_a_page_of_one_section_has_no_sub_menu(
+    client: tuple[TestClient, FakeStore],
+) -> None:
+    """A sub-menu holding a lone "Overview" is a column of nothing: the page
+    goes without, and heads its content with its own name."""
+    html = _page(client)
+    assert not select(html, "#overseer-subnav")
+    assert text(one(html, "#overseer-main h1")) == "Settings"
+
+
+def test_a_page_has_its_own_settings_too(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch, client: tuple[TestClient, FakeStore]
+) -> None:
+    """A page whose code reads a settings group has a Settings section with
+    just that group, the same rows and Change; Overseer > Settings keeps
+    every group."""
+    from app.services.system.models import ComponentStatus
+
+    # The Server page: every stack has it, and its traffic settings.
+    server = ComponentStatus(name="backend", message="ok", metadata={})
+    sign_in(app, monkeypatch, status_with(server))
+    page = client[0].get("/overseer/components/backend")
+    links = [text(a) for a in select(page.text, "#overseer-subnav nav a")]
+    assert links[-1] == "Settings"
+    html = client[0].get("/overseer/components/backend/settings").text
+    owners = [text(h) for h in select(html, "#settings [data-owner]")]
+    assert owners == ["Server"]
+    assert "Health" in [
+        text(h) for h in select(_page(client), "#settings [data-owner]")
+    ]
+
+
+def test_a_page_of_its_own_is_not_needed_for_its_settings(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch, client: tuple[TestClient, FakeStore]
+) -> None:
+    """A service with settings but no page of its own (a plugin's, say) still
+    gets them on its page: its status as the Overview, then Settings."""
+    from app.components.web_frontend import overseer_settings
+    from app.services.system.models import ComponentStatus
+
+    widgets = ComponentStatus(name="widgets", message="ok", metadata={})
+    sign_in(app, monkeypatch, status_with(services=[widgets]))
+    monkeypatch.setattr(overseer_settings, "owns", lambda key: key == "service_widgets")
+    page = client[0].get("/overseer/services/widgets")
+    assert page.status_code == 200
+    links = [text(a) for a in select(page.text, "#overseer-subnav nav a")]
+    assert links == ["Overview", "Settings"]
+    assert client[0].get("/overseer/services/widgets/settings").status_code == 200

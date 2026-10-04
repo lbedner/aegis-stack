@@ -18,7 +18,9 @@ from starlette.responses import Response
 
 from app.components.web_frontend.assets import COMPONENT_DIR, static_url
 from app.components.web_frontend.filters import FILTERS
+from app.core import series
 from app.core.config import settings
+from app.services.system import ui_runtime
 
 templates = Jinja2Templates(directory=str(COMPONENT_DIR / "templates"))
 
@@ -35,6 +37,11 @@ templates.env.globals["registration_enabled"] = settings.REGISTRATION_ENABLED
 templates.env.globals["email_flows_enabled"] = (
     settings.AUTH_ENABLED and settings.AUTH_LEVEL != "basic"
 )
+# A container's live figures by name (CPU, Memory...), as Flet and the
+# charts name them.
+templates.env.globals["figure_names"] = ui_runtime.FIGURES
+# Every sparkline's box, the one ``series.sparkline`` draws its points in.
+templates.env.globals["spark_box"] = f"0 0 {series.SPARK_WIDTH} {series.SPARK_HEIGHT}"
 templates.env.filters.update(FILTERS)
 
 

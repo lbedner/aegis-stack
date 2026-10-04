@@ -15,7 +15,6 @@ import flet as ft
 from app.components.frontend.controls.buttons import BaseIconButton
 from app.components.frontend.controls.dialog import StyledAlertDialog
 from app.components.frontend.controls.inputs import StyledTextField
-from app.components.frontend.controls.snack_bar import ErrorSnackBar
 from app.components.frontend.controls.text import SecondaryText
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.log import logger
@@ -23,6 +22,7 @@ from app.core.model_picker import model_label
 from app.core.sse import stream_sse_post
 
 from .attachments_ui import AttachmentsMixin, attachment_payload
+from .change_api import ChangeApi
 from .components import (
     PendingChangeBatchCard,
     PendingChangeCard,
@@ -75,6 +75,7 @@ class ChatPanel(AttachmentsMixin, HistoryMixin, ModelChipMixin, ft.Container):
         self._auto_scroll = True
         self._streaming = False
         self._history_dialog: StyledAlertDialog | None = None
+        self._changes = ChangeApi(self)
 
         self._transcript = ft.ListView(
             expand=True,
@@ -205,9 +206,9 @@ class ChatPanel(AttachmentsMixin, HistoryMixin, ModelChipMixin, ft.Container):
         """Re-read one card through the fetch its kind takes: a batch by
         its batch id, a lone change by its row id."""
         if isinstance(card, PendingChangeBatchCard):
-            await card.refresh_from(self._batch_fetch)
+            await card.refresh_from(self._changes.fetch_batch)
         elif isinstance(card, PendingChangeCard):
-            await card.refresh_from(self._change_fetch)
+            await card.refresh_from(self._changes.fetch)
 
     def did_mount(self) -> None:
         self._mount_attachments()
@@ -252,9 +253,9 @@ class ChatPanel(AttachmentsMixin, HistoryMixin, ModelChipMixin, ft.Container):
             if trace:
                 cards = components_from_trace(
                     trace,
-                    on_action=self._change_action,
-                    on_batch_action=self._batch_action,
-                    fetch_items=self._batch_fetch,
+                    on_action=self._changes.resolve,
+                    on_batch_action=self._changes.resolve_batch,
+                    fetch_items=self._changes.fetch_batch,
                 )
                 bubble.set_components(cards)
                 # Snapshot state is propose-time state: a resolution made
@@ -389,9 +390,9 @@ class ChatPanel(AttachmentsMixin, HistoryMixin, ModelChipMixin, ft.Container):
             if accumulator.tool_trace:
                 cards = components_from_trace(
                     accumulator.tool_trace,
-                    on_action=self._change_action,
-                    on_batch_action=self._batch_action,
-                    fetch_items=self._batch_fetch,
+                    on_action=self._changes.resolve,
+                    on_batch_action=self._changes.resolve_batch,
+                    fetch_items=self._changes.fetch_batch,
                 )
                 reply.set_components(cards)
                 self._track_cards(cards)
@@ -400,55 +401,6 @@ class ChatPanel(AttachmentsMixin, HistoryMixin, ModelChipMixin, ft.Container):
         self._send_button.update_state(disabled=False)
         if self.page:
             self._input.focus()
-
-    async def _batch_fetch(self, batch_id: str) -> list[dict[str, Any]] | None:
-        from app.components.frontend.state.session_state import get_session_state
-
-        api = get_session_state(self.page).api_client
-        response = await api.get(f"/api/v1/changes/batch/{batch_id}")
-        return response.get("items") if isinstance(response, dict) else None
-
-    async def _batch_action(
-        self, batch_id: str, action: str, exclude_ids: list[int]
-    ) -> dict[str, Any] | None:
-        from app.components.frontend.state.session_state import get_session_state
-
-        api = get_session_state(self.page).api_client
-        response = await api.post(
-            f"/api/v1/changes/batch/{batch_id}/{action}",
-            json={"exclude_ids": exclude_ids} if action == "approve" else None,
-        )
-        if not isinstance(response, dict):
-            ErrorSnackBar(api.last_error or "Could not resolve the batch.").launch(
-                self.page
-            )
-            return None
-        return response
-
-    async def _change_fetch(self, change_id: int) -> dict[str, Any] | None:
-        from app.components.frontend.state.session_state import get_session_state
-
-        api = get_session_state(self.page).api_client
-        response = await api.get(f"/api/v1/changes/{change_id}")
-        return response if isinstance(response, dict) else None
-
-    async def _change_action(
-        self, change_id: int, action: str
-    ) -> dict[str, Any] | None:
-        """Resolve one pending change and hand the card the queue's new
-        truth. The endpoint is the shared propose/approve queue's, which
-        resolves every service's change types; a stack without it simply
-        never renders a card that could call this."""
-        from app.components.frontend.state.session_state import get_session_state
-
-        api = get_session_state(self.page).api_client
-        response = await api.post(f"/api/v1/changes/{change_id}/{action}")
-        if not isinstance(response, dict):
-            ErrorSnackBar(api.last_error or "Could not resolve the change.").launch(
-                self.page
-            )
-            return None
-        return response
 
     # -- scroll behavior ---------------------------------------------------
 

@@ -676,6 +676,12 @@
     },
     {
       "kind": "repeated_statement",
+      "label": "SELECT ... FROM finance_recurring_stream WHERE finance_recurring_stream.id IN (__[POSTCOMPILE_id_1]) AND finance_recurring_stream.owner_user_id = :owner_user_id_1",
+      "file": "app/services/finance/domains/planning/recurring/queries.py",
+      "function": "streams_by_ids"
+    },
+    {
+      "kind": "repeated_statement",
       "label": "SELECT ... FROM finance_recurring_stream WHERE finance_recurring_stream.name = :name_1",
       "file": "tests/services/test_finance_query_batching.py",
       "function": "_confirmed_uncategorized_stream"
@@ -1372,9 +1378,15 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM pending_change WHERE pending_change.id = :id_1",
+      "label": "SELECT ... FROM pending_change WHERE pending_change.id = :id_1 AND pending_change.owner_user_id = :owner_user_id_1",
       "file": "app/services/change_queue/queries.py",
       "function": "get_change"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM pending_change WHERE pending_change.status = :status_1 AND pending_change.owner_user_id = :owner_user_id_1",
+      "file": "app/services/change_queue/queries.py",
+      "function": "count_changes"
     },
     {
       "kind": "repeated_statement",

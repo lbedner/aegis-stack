@@ -49,7 +49,7 @@ class TestRevisitRefreshesCards:
             assert change_id == 7
             return {**_CHANGE, "status": "approved"}
 
-        panel._change_fetch = fetch  # type: ignore[method-assign]
+        panel._changes.fetch = fetch  # type: ignore[method-assign]
         await panel._refresh_pending_cards()
 
         assert "Approved" in rendered(card)

@@ -189,7 +189,7 @@ class TestTheRegistryWrapsWhatItResolves:
         async def probe(_ctx: Any) -> str:
             return "probe"
 
-        register_tool("ledger_probe", probe, replace=True)
+        register_tool("ledger_probe", probe, effect="read", replace=True)
         try:
             resolved = resolve_tools(["ledger_probe"])
             assert len(resolved) == 1

@@ -16,8 +16,8 @@ from typing import Any
 import flet as ft
 
 from app.components.frontend.controls import SecondaryText
+from app.components.frontend.controls.chat.change_api import ChangeApi
 from app.components.frontend.controls.chat.components import render_component
-from app.components.frontend.controls.snack_bar import ErrorSnackBar
 from app.components.frontend.controls.text import H3Text
 from app.components.frontend.dashboard.modals.modal_sections import (
     EmptyStatePlaceholder,
@@ -37,6 +37,7 @@ class PendingChangesSection(ft.Container):
         super().__init__(visible=empty_message is not None)
         self.page = page
         self._empty_message = empty_message
+        self._changes = ChangeApi(self)
         # Cards flow as a wrapping grid: a queue tab has vertical room,
         # and a sideways scroll hides everything past the first card.
         self._cards = ft.Row(
@@ -100,14 +101,14 @@ class PendingChangesSection(ft.Container):
                     "title": batch_items[0].get("title"),
                     "items": batch_items,
                 },
-                on_action=self._resolve,
-                on_batch_action=self._resolve_batch,
-                fetch_items=self._fetch_batch,
+                on_action=self._changes.resolve,
+                on_batch_action=self._changes.resolve_batch,
+                fetch_items=self._changes.fetch_batch,
             )
             if card is not None:
                 controls.append(card)
         for item in singles:
-            card = render_component("pending_change", item, on_action=self._resolve)
+            card = render_component("pending_change", item, on_action=self._changes.resolve)
             if card is not None:
                 controls.append(card)
         if not controls and self._empty_message is not None:
@@ -118,42 +119,6 @@ class PendingChangesSection(ft.Container):
         )
         if self.page:
             self.update()
-
-    async def _resolve(self, change_id: int, action: str) -> dict[str, Any] | None:
-        from app.components.frontend.state.session_state import get_session_state
-
-        api = get_session_state(self.page).api_client
-        response = await api.post(f"/api/v1/changes/{change_id}/{action}")
-        if not isinstance(response, dict):
-            ErrorSnackBar(api.last_error or "Could not resolve the change.").launch(
-                self.page
-            )
-            return None
-        return response
-
-    async def _fetch_batch(self, batch_id: str) -> list[dict[str, Any]] | None:
-        from app.components.frontend.state.session_state import get_session_state
-
-        api = get_session_state(self.page).api_client
-        response = await api.get(f"/api/v1/changes/batch/{batch_id}")
-        return response.get("items") if isinstance(response, dict) else None
-
-    async def _resolve_batch(
-        self, batch_id: str, action: str, exclude_ids: list[int]
-    ) -> dict[str, Any] | None:
-        from app.components.frontend.state.session_state import get_session_state
-
-        api = get_session_state(self.page).api_client
-        response = await api.post(
-            f"/api/v1/changes/batch/{batch_id}/{action}",
-            json={"exclude_ids": exclude_ids} if action == "approve" else None,
-        )
-        if not isinstance(response, dict):
-            ErrorSnackBar(api.last_error or "Could not resolve the batch.").launch(
-                self.page
-            )
-            return None
-        return response
 
 
 def pending_banner_label(count: int) -> str:
@@ -210,6 +175,5 @@ class PendingChangesBanner(ft.Container):
         from app.components.frontend.state.session_state import get_session_state
 
         api = get_session_state(self.page).api_client
-        listing = await api.get("/api/v1/changes")
-        items = listing.get("items", []) if isinstance(listing, dict) else []
-        self.show_count(len(items))
+        counted = await api.get("/api/v1/changes/count")
+        self.show_count(counted.get("count", 0) if isinstance(counted, dict) else 0)

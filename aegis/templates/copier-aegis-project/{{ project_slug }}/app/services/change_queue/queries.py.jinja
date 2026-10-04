@@ -1,8 +1,10 @@
-{% if include_finance or (include_ai and ai_backend != "memory") %}"""Reads for the propose/approve queue."""
+{% if include_finance or (include_ai and ai_backend != "memory") %}{%- set OWNER = "owner_user_id: int | None" ~ ("" if include_auth else " = None") %}"""Reads for the propose/approve queue."""
 
 from __future__ import annotations
 
-from sqlmodel import col, select
+from datetime import datetime
+
+from sqlmodel import col, func, or_, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.change_queue.models import PendingChange
@@ -10,44 +12,50 @@ from app.services.shared.queries import owner_filters
 
 
 async def batch_rows(
-    db: AsyncSession, batch_id: str, *, owner_user_id: int | None = None
+    db: AsyncSession, batch_id: str, *, {{ OWNER }}
 ) -> list[PendingChange]:
     query = select(PendingChange).where(
-        PendingChange.batch_id == batch_id
-    )
-    query = query.where(
-        *owner_filters(PendingChange.owner_user_id, owner_user_id)
+        PendingChange.batch_id == batch_id,
+        *owner_filters(PendingChange.owner_user_id, owner_user_id),
     )
     return list((await db.exec(query.order_by(PendingChange.id))).all())  # type: ignore[arg-type]
 
 
 async def get_change(
-    db: AsyncSession, change_id: int, *, owner_user_id: int | None = None
+    db: AsyncSession, change_id: int, *, {{ OWNER }}
 ) -> PendingChange | None:
-    row = (
-        await db.exec(
-            select(PendingChange).where(PendingChange.id == change_id)
-        )
-    ).first()
-    if row is None:
-        return None
-    if owner_user_id is not None and row.owner_user_id != owner_user_id:
-        return None
-    return row
+    query = select(PendingChange).where(
+        PendingChange.id == change_id,
+        *owner_filters(PendingChange.owner_user_id, owner_user_id),
+    )
+    return (await db.exec(query)).first()
+
+
+async def count_changes(
+    db: AsyncSession, *, {{ OWNER }}, status: str = "pending"
+) -> int:
+    """How many rows are in ``status``, without reading them."""
+    query = select(func.count()).where(
+        PendingChange.status == status,
+        *owner_filters(PendingChange.owner_user_id, owner_user_id),
+    )
+    return (await db.exec(query)).one()
 
 
 async def list_changes(
     db: AsyncSession,
     *,
-    owner_user_id: int | None = None,
+    {{ OWNER }},
     status: str | None = "pending",
     proposed_by_agent: str | None = None,
     batch_ids: list[str] | None = None,
+    resolved_since: datetime | None = None,
 ) -> list[PendingChange]:
     """Newest first. ``status=None`` returns the full audit trail;
     ``proposed_by_agent`` narrows to one proposer's cards, which is how an
     agent sees its own open work before filing more; ``batch_ids`` to the
-    rows of those batches, read in one query."""
+    rows of those batches, read in one query; ``resolved_since`` drops
+    rows decided before it, so a recent-history read stays bounded."""
     query = select(PendingChange).order_by(
         PendingChange.id.desc()  # type: ignore[attr-defined]
     )
@@ -57,6 +65,13 @@ async def list_changes(
         query = query.where(PendingChange.proposed_by_agent == proposed_by_agent)
     if batch_ids is not None:
         query = query.where(col(PendingChange.batch_id).in_(batch_ids))
+    if resolved_since is not None:
+        query = query.where(
+            or_(
+                PendingChange.status == "pending",
+                col(PendingChange.resolved_at) >= resolved_since,
+            )
+        )
     query = query.where(
         *owner_filters(PendingChange.owner_user_id, owner_user_id)
     )

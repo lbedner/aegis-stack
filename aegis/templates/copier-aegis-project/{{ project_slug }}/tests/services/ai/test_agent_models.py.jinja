@@ -79,7 +79,9 @@ class TestAgentSeed:
             """Probe tool."""
             return "ok"
 
-        register_tool("cm_probe", probe, description="Probe tool", replace=True)
+        register_tool(
+            "cm_probe", probe, description="Probe tool", effect="read", replace=True
+        )
         try:
             counts = load_agent_fixtures(session)
             assert counts["tools"] >= 1
@@ -205,7 +207,7 @@ class TestAgentToolLink:
             """Greet someone by name."""
             return f"hi {name}"
 
-        register_tool("greet", greet)
+        register_tool("greet", greet, effect="read")
         try:
             load_agent_fixtures(session)
             agent = session.exec(

@@ -78,6 +78,10 @@ class PendingChangeListResponse(BaseModel):
     total: int
 
 
+class PendingChangeCount(BaseModel):
+    count: int
+
+
 class BatchResolveRequest(BaseModel):
     """POST body for batch approval: the vetoed row ids (rejected, not
     deferred - a veto is a decision)."""

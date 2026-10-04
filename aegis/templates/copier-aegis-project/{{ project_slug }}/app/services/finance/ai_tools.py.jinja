@@ -11,10 +11,9 @@ as ordinary tools.
 Returns are plain JSON-safe dicts (cents-integer money, ISO dates) so
 values traverse the sandbox boundary without model-object baggage.
 
-Owner scoping: tools read unscoped (``owner_user_id=None``), matching
-the single-tenant default-open posture of generated stacks. A
-multi-tenant deployment should thread its user context here before
-granting these tools to shared agents.
+Owner scoping: a tool reads the turn's owner (``current_owner_user_id``),
+so a signed-in turn sees only its own household; a turn without one
+(a single-tenant install) reads every row.
 """
 
 from datetime import date, timedelta
@@ -22,6 +21,7 @@ from typing import Any
 
 from app.services.finance.utils import current_date
 from app.core.db import get_async_session
+from app.services.ai.domains.chat.user_memory import current_owner_user_id
 from app.services.ai.domains.chat.tools import register_tool
 from app.services.finance.constants import UNCATEGORIZED_CATEGORY_NAMES
 from app.services.finance.domains.investments import queries as investment_queries
@@ -91,7 +91,9 @@ async def ledger(months: int = 12, detail: str = "monthly") -> dict[str, Any]:
     if detail == "monthly":
         span = max(1, min(int(months), 24))
         async with get_async_session() as session:
-            rows = await monthly_cashflow(session, months=span)
+            rows = await monthly_cashflow(
+                session, owner_user_id=current_owner_user_id.get(), months=span
+            )
         return {
             "months": [
                 {
@@ -111,6 +113,7 @@ async def ledger(months: int = 12, detail: str = "monthly") -> dict[str, Any]:
     async with get_async_session() as session:
         rows, total = await transactions_window_with_payees(
             session,
+            owner_user_id=current_owner_user_id.get(),
             from_date=from_date,
             limit=_TRANSACTIONS_ROW_CAP,
         )
@@ -120,7 +123,7 @@ async def ledger(months: int = 12, detail: str = "monthly") -> dict[str, Any]:
         )
         account_rows, _count = await accounts_page(
             session,
-            owner_user_id=None,
+            owner_user_id=current_owner_user_id.get(),
             include_hidden=True,
             page=1,
             page_size=500,
@@ -192,12 +195,14 @@ async def accounts() -> dict[str, Any]:
     async with get_async_session() as session:
         account_rows, _count = await accounts_page(
             session,
-            owner_user_id=None,
+            owner_user_id=current_owner_user_id.get(),
             include_hidden=True,
             page=1,
             page_size=500,
         )
-        holdings = await list_current_holdings(session)
+        holdings = await list_current_holdings(
+            session, owner_user_id=current_owner_user_id.get()
+        )
         account_ids = [account.id for account in account_rows]
         activity_totals = await account_transaction_totals(
             session, account_ids=account_ids
@@ -211,7 +216,9 @@ async def accounts() -> dict[str, Any]:
             for account in account_rows
             if account.account_type == PROPERTY_ACCOUNT_TYPE
         }
-        streams = await recurring_queries.active_streams(session)
+        streams = await recurring_queries.active_streams(
+            session, owner_user_id=current_owner_user_id.get()
+        )
 
     today = current_date()
     horizon = today + timedelta(days=_UPCOMING_WINDOW_DAYS)
@@ -414,18 +421,21 @@ register_tool(
     ledger,
     description="Cash flow: monthly rollups or individual transactions",
     replace=True,
+    effect="read",
 )
 register_tool(
     "accounts",
     accounts,
     description="All accounts with balances, holdings, envelopes and goals",
     replace=True,
+    effect="read",
 )
 register_tool(
     "quote",
     quote,
     description="Latest stored closing price for a ticker",
     replace=True,
+    effect="read",
 )
 
 # The id lookups proposals need live in their own module, and the

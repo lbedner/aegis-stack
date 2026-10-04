@@ -62,6 +62,19 @@ async def stream_by_id(
     return (await db.exec(query)).first()
 
 
+async def streams_by_ids(
+    db: AsyncSession, stream_ids: Sequence[int], *, owner_user_id: int | None = None
+) -> dict[int, FinanceRecurringStream]:
+    """``stream_by_id`` for many ids in one query, keyed by id."""
+    if not stream_ids:
+        return {}
+    query = select(FinanceRecurringStream).where(
+        FinanceRecurringStream.id.in_(stream_ids),
+        *owner_filters(FinanceRecurringStream.owner_user_id, owner_user_id),
+    )
+    return {row.id: row for row in (await db.exec(query)).all() if row.id is not None}
+
+
 async def transfer_flagged_stream_ids(
     db: AsyncSession, stream_ids: Sequence[int]
 ) -> set[int]:

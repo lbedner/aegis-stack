@@ -210,7 +210,7 @@ def registered_lookup() -> Generator[str]:
         """Look up a value for a key."""
         return f"val-{key}"
 
-    register_tool("lookup", lookup, replace=True)
+    register_tool("lookup", lookup, effect="read", replace=True)
     yield "lookup"
     unregister_tool("lookup")
 

@@ -29,6 +29,7 @@ from app.components.frontend.controls.text import LabelText, SecondaryText
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.chat_transcript import (
     CARD_STATUS,
+    CARD_TOOLS,
     card_markers,
     card_outcome,
 )
@@ -61,7 +62,7 @@ def _status_of(item: dict[str, Any]) -> tuple[str, str | None]:
     "no", it is the assistant taking its own proposal back, and the
     reason it gave is the one line worth reading.
     """
-    note = item.get("note") or (item.get("result") or {}).get("note")
+    note = item.get("note")
     status = card_outcome(str(item.get("status", "pending")), note)
     return status, str(note) if status == "withdrawn" else None
 
@@ -406,7 +407,7 @@ def components_from_trace(
     """
     cards: list[ft.Control] = []
     for entry in trace:
-        if entry.get("tool") not in ("propose", "propose_many", "pending"):
+        if entry.get("tool") not in CARD_TOOLS:
             continue
         for data in _card_data(entry):
             card = _card_for(

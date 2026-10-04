@@ -302,8 +302,8 @@ class TestWithdrawnOutcomeSummary:
         )
 
         items = [
-            {"id": 1, "status": "rejected", "result": {"note": "Withdrawn by x."}},
-            {"id": 2, "status": "rejected", "result": {"note": "Withdrawn by x."}},
+            {"id": 1, "status": "rejected", "note": "Withdrawn by x."},
+            {"id": 2, "status": "rejected", "note": "Withdrawn by x."},
             {"id": 3, "status": "rejected"},
         ]
         assert PendingChangeBatchCard._outcome_summary(items) == "1 rejected, 2 withdrawn"

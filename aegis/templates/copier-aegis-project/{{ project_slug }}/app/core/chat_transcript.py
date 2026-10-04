@@ -201,6 +201,10 @@ def card_outcome(status: str, note: Any) -> str:
     return status
 
 
+CARD_TOOLS = frozenset({"propose", "propose_many", "pending"})
+"""The queue tools whose results name approval cards."""
+
+
 def card_component(
     tool: str, content: Any
 ) -> dict[str, Any] | list[dict[str, Any]] | None:
@@ -213,7 +217,7 @@ def card_component(
     needs only identity (the queue is read for the rows), so identity rides
     here, under any cap. A ``pending`` listing carries one per card.
     """
-    if tool not in ("propose", "propose_many", "pending"):
+    if tool not in CARD_TOOLS:
         return None
     data: Any = content
     if isinstance(content, str):

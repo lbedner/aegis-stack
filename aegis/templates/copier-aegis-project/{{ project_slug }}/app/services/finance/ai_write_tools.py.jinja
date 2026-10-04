@@ -5,6 +5,7 @@ Split from ``ai_tools`` (the read surface): ``categories``, ``bills``,
 built from. Filing the proposal itself is the shared queue's job - the
 ``propose`` family lives in ``app.services.ai.domains.chat.change_tools``
 and files a card for any service's change type, finance's included.
+Lookups read the turn's owner, as the read surface does.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.core.db import get_async_session
+from app.services.ai.domains.chat.user_memory import current_owner_user_id
 from app.services.ai.domains.chat.tools import register_tool
 
 
@@ -24,7 +26,7 @@ async def categories() -> dict[str, Any]:
 
     async with get_async_session() as session:
         rows = await ledger_queries.all_categories(
-            session, owner_user_id=None, include_archived=False
+            session, owner_user_id=current_owner_user_id.get(), include_archived=False
         )
     return {
         "categories": [
@@ -52,7 +54,7 @@ async def bills() -> dict[str, Any]:
     from app.services.finance.domains.planning.recurring import queries
 
     async with get_async_session() as session:
-        rows = await queries.active_streams(session, owner_user_id=None)
+        rows = await queries.active_streams(session, owner_user_id=current_owner_user_id.get())
     return {
         "bills": [
             {
@@ -83,7 +85,7 @@ async def bill_candidates(stream_id: int) -> dict[str, Any]:
     )
 
     async with get_async_session() as session:
-        rows = await recurring_match_candidates(session, stream_id, owner_user_id=None)
+        rows = await recurring_match_candidates(session, stream_id, owner_user_id=current_owner_user_id.get())
     return {
         "stream_id": stream_id,
         "candidates": [
@@ -108,7 +110,7 @@ async def tags() -> dict[str, Any]:
     from app.services.finance.domains.ledger.transactions import list_tags
 
     async with get_async_session() as session:
-        rows = await list_tags(session, owner_user_id=None)
+        rows = await list_tags(session, owner_user_id=current_owner_user_id.get())
     return {"tags": [{"id": t.id, "name": t.name, "count": count} for t, count in rows]}
 
 
@@ -119,23 +121,27 @@ register_tool(
     categories,
     description="Assignable categories with the ids proposals need",
     replace=True,
+    effect="read",
 )
 register_tool(
     "bills",
     bills,
     description="Live bills and income streams with the ids matches need",
     replace=True,
+    effect="read",
 )
 register_tool(
     "bill_candidates",
     bill_candidates,
     description="Ranked unclaimed transactions that could be a bill's payment",
     replace=True,
+    effect="read",
 )
 register_tool(
     "tags",
     tags,
     description="The tag directory: names, ids and usage counts",
     replace=True,
+    effect="read",
 )
 {% endif %}

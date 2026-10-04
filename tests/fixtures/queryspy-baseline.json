@@ -286,12 +286,6 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM conversation ORDER BY conversation.updated_at DESC",
-      "file": "app/services/ai/domains/chat/queries.py",
-      "function": "conversations_with_messages"
-    },
-    {
-      "kind": "repeated_statement",
       "label": "SELECT ... FROM conversation WHERE conversation.id = :pk_1",
       "file": "app/services/ai/domains/chat/chat_kit/history.py",
       "function": "append_turn"
@@ -319,18 +313,6 @@
       "label": "SELECT ... FROM conversation_message WHERE conversation_message.conversation_id = :conversation_id_1",
       "file": "app/services/ai/domains/chat/queries.py",
       "function": "latest_message_timestamp"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM conversation_message WHERE conversation_message.conversation_id = :conversation_id_1 ORDER BY conversation_message.timestamp",
-      "file": "app/services/ai/domains/chat/queries.py",
-      "function": "messages_for_conversation"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM conversation_message WHERE conversation_message.conversation_id IN (__[POSTCOMPILE_primary_keys])",
-      "file": "app/services/ai/domains/chat/queries.py",
-      "function": "conversations_with_messages"
     },
     {
       "kind": "repeated_statement",
@@ -467,6 +449,12 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM finance_account WHERE finance_account.deleted_at IS NULL AND finance_account.owner_user_id = :owner_user_id_1",
+      "file": "app/services/finance/domains/ledger/queries/accounts.py",
+      "function": "accounts_page"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM finance_account WHERE finance_account.deleted_at IS NULL AND finance_account.owner_user_id = :owner_user_id_1",
       "file": "app/services/finance/domains/ledger/queries/networth.py",
       "function": "account_rollup"
     },
@@ -479,6 +467,12 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM finance_account WHERE finance_account.deleted_at IS NULL AND finance_account.owner_user_id = :owner_user_id_1 AND NOT finance_account.is_hidden ORDER BY finance_account.classification, finance_account.name LIMIT :param_1 OFFSET :param_2",
+      "file": "app/services/finance/domains/ledger/queries/accounts.py",
+      "function": "accounts_page"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM finance_account WHERE finance_account.deleted_at IS NULL AND finance_account.owner_user_id = :owner_user_id_1 ORDER BY finance_account.classification, finance_account.name LIMIT :param_1 OFFSET :param_2",
       "file": "app/services/finance/domains/ledger/queries/accounts.py",
       "function": "accounts_page"
     },
@@ -1032,6 +1026,12 @@
       "kind": "repeated_statement",
       "label": "SELECT ... FROM finance_recurring_stream WHERE finance_recurring_stream.id IN (__[POSTCOMPILE_id_1])",
       "file": "app/services/finance/domains/detection/queries.py",
+      "function": "streams_by_ids"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM finance_recurring_stream WHERE finance_recurring_stream.id IN (__[POSTCOMPILE_id_1]) AND finance_recurring_stream.owner_user_id = :owner_user_id_1",
+      "file": "app/services/finance/domains/planning/recurring/queries.py",
       "function": "streams_by_ids"
     },
     {
@@ -1852,12 +1852,6 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM large_language_model WHERE large_language_model.model_id = :model_id_1",
-      "file": "app/services/ai/domains/llm/queries.py",
-      "function": "llm_by_model_id"
-    },
-    {
-      "kind": "repeated_statement",
       "label": "SELECT ... FROM large_language_model WHERE large_language_model.model_id = :model_id_1 OR (large_language_model.model_id LIKE '%' || :model_id_2) ORDER BY CASE WHEN (large_language_model.model_id = :model_id_3) THEN :param_1 ELSE :param_2 END, large_language_model.model_id",
       "file": "app/services/ai/domains/llm/queries.py",
       "function": "latest_price_for_model"
@@ -1897,12 +1891,6 @@
       "label": "SELECT ... FROM llm_org WHERE llm_org.id IN (__[POSTCOMPILE_primary_keys])",
       "file": "tests/services/ai/test_llm_service.py",
       "function": "all"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM llm_org WHERE llm_org.name IN (__[POSTCOMPILE_name_1])",
-      "file": "app/services/ai/domains/llm/queries.py",
-      "function": "orgs_named"
     },
     {
       "kind": "repeated_statement",
@@ -2164,6 +2152,12 @@
     },
     {
       "kind": "repeated_statement",
+      "label": "SELECT ... FROM pending_change WHERE (pending_change.status = :status_1 OR pending_change.resolved_at >= :resolved_at_1) AND pending_change.owner_user_id = :owner_user_id_1 ORDER BY pending_change.id DESC",
+      "file": "app/services/change_queue/queries.py",
+      "function": "list_changes"
+    },
+    {
+      "kind": "repeated_statement",
       "label": "SELECT ... FROM pending_change WHERE pending_change.batch_id = :batch_id_1 AND pending_change.owner_user_id = :owner_user_id_1 ORDER BY pending_change.id",
       "file": "app/services/change_queue/queries.py",
       "function": "batch_rows"
@@ -2176,7 +2170,31 @@
     },
     {
       "kind": "repeated_statement",
+      "label": "SELECT ... FROM pending_change WHERE pending_change.id = :id_1 AND pending_change.owner_user_id = :owner_user_id_1",
+      "file": "app/services/change_queue/queries.py",
+      "function": "get_change"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM pending_change WHERE pending_change.status = :status_1",
+      "file": "app/services/change_queue/queries.py",
+      "function": "count_changes"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM pending_change WHERE pending_change.status = :status_1 AND pending_change.owner_user_id = :owner_user_id_1",
+      "file": "app/services/change_queue/queries.py",
+      "function": "count_changes"
+    },
+    {
+      "kind": "repeated_statement",
       "label": "SELECT ... FROM pending_change WHERE pending_change.status = :status_1 AND pending_change.owner_user_id = :owner_user_id_1 ORDER BY pending_change.id DESC",
+      "file": "app/services/change_queue/queries.py",
+      "function": "list_changes"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM pending_change WHERE pending_change.status = :status_1 OR pending_change.resolved_at >= :resolved_at_1 ORDER BY pending_change.id DESC",
       "file": "app/services/change_queue/queries.py",
       "function": "list_changes"
     },

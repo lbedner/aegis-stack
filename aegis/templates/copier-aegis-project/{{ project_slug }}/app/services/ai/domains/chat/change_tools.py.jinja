@@ -10,8 +10,11 @@ them as visible calls and MCP may serve them.
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from datetime import timedelta
 from typing import Any
+
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.db import get_async_session
 from app.core.time import utcnow
@@ -41,6 +44,28 @@ async def change_types() -> dict[str, Any]:
     return change_queue.change_type_contracts()
 
 
+async def _committed(
+    work: Callable[[AsyncSession], Awaitable[dict[str, Any]]],
+    *,
+    vocabulary: bool = False,
+) -> dict[str, Any]:
+    """Run ``work`` in one committed session. A refusal (a bad payload,
+    another agent's card, no signed-in user) is the tool's error result,
+    with the change-type contracts when the refusal was a proposal."""
+    from app.services import change_queue
+
+    async with get_async_session() as session:
+        try:
+            result = await work(session)
+            await session.commit()
+        except ValueError as e:
+            error: dict[str, Any] = {"error": str(e)}
+            if vocabulary:
+                error["change_types"] = change_queue.change_type_contracts()
+            return error
+    return result
+
+
 async def propose_many(
     change_type: str, payloads: list[dict[str, Any]]
 ) -> dict[str, Any]:
@@ -57,37 +82,30 @@ async def propose_many(
         current_conversation_id,
     )
 
-    async with get_async_session() as session:
-        try:
-            rows = await change_queue.propose_many(
-                session,
-                change_type,
-                payloads,
-                owner_user_id=_turn_owner(),
-                proposed_by_agent=current_agent_slug.get(),
-                conversation_id=current_conversation_id.get(),
-            )
-            # Tool results serialize into the model's context: typed cards
-            # become plain dicts at this boundary.
-            cards = [
-                (await change_queue.card(session, row)).model_dump(
-                    include={"id", "status", "display"}
-                )
-                for row in rows
-            ]
-            await session.commit()
-        except ValueError as e:
-            return {
-                "error": str(e),
-                "change_types": change_queue.change_type_contracts(),
-            }
-    return {
-        "batch_id": rows[0].batch_id,
-        "change_type": change_type,
-        "title": change_queue.executor_for(change_type).title,
-        "count": len(cards),
-        "items": [card | {"pending_change_id": card["id"]} for card in cards],
-    }
+    async def work(session: AsyncSession) -> dict[str, Any]:
+        rows = await change_queue.propose_many(
+            session,
+            change_type,
+            payloads,
+            owner_user_id=_turn_owner(),
+            proposed_by_agent=current_agent_slug.get(),
+            conversation_id=current_conversation_id.get(),
+        )
+        # Tool results serialize into the model's context: typed cards
+        # become plain dicts at this boundary.
+        cards = [
+            card.model_dump(include={"id", "status", "display"})
+            for card in await change_queue.cards(session, rows)
+        ]
+        return {
+            "batch_id": rows[0].batch_id,
+            "change_type": change_type,
+            "title": change_queue.executor_for(change_type).title,
+            "count": len(cards),
+            "items": [card | {"pending_change_id": card["id"]} for card in cards],
+        }
+
+    return await _committed(work, vocabulary=True)
 
 
 async def propose(change_type: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -108,26 +126,21 @@ async def propose(change_type: str, payload: dict[str, Any]) -> dict[str, Any]:
         current_conversation_id,
     )
 
-    async with get_async_session() as session:
-        try:
-            row = await change_queue.propose(
-                session,
-                change_type,
-                payload,
-                owner_user_id=_turn_owner(),
-                proposed_by_agent=current_agent_slug.get(),
-                conversation_id=current_conversation_id.get(),
-            )
-            card = await change_queue.card(session, row)
-            await session.commit()
-        except ValueError as e:
-            return {
-                "error": str(e),
-                "change_types": change_queue.change_type_contracts(),
-            }
-    return {"pending_change_id": card.id} | card.model_dump(
-        include={"change_type", "title", "status", "display"}
-    )
+    async def work(session: AsyncSession) -> dict[str, Any]:
+        row = await change_queue.propose(
+            session,
+            change_type,
+            payload,
+            owner_user_id=_turn_owner(),
+            proposed_by_agent=current_agent_slug.get(),
+            conversation_id=current_conversation_id.get(),
+        )
+        card = await change_queue.card(session, row)
+        return {"pending_change_id": card.id} | card.model_dump(
+            include={"change_type", "title", "status", "display"}
+        )
+
+    return await _committed(work, vocabulary=True)
 
 
 async def pending(about: str | None = None) -> dict[str, Any]:
@@ -162,17 +175,12 @@ async def pending(about: str | None = None) -> dict[str, Any]:
             owner_user_id=owner,
             status=None,
             proposed_by_agent=current_agent_slug.get(),
+            resolved_since=horizon,
         )
+        bodies = await change_queue.describe_changes(session, rows)
         cards: dict[str, dict[str, Any]] = {}
-        for row in rows:
-            if row.status != "pending" and (
-                row.resolved_at is None or row.resolved_at < horizon
-            ):
-                continue
-            line = " / ".join(
-                f"{ln.label}: {ln.value}"
-                for ln in await change_queue.describe_change(session, row)
-            )
+        for row, body in zip(rows, bodies):
+            line = " / ".join(f"{ln.label}: {ln.value}" for ln in body)
             card = cards.setdefault(
                 row.batch_id or f"row-{row.id}",
                 {
@@ -218,23 +226,21 @@ async def withdraw(pending_change_id: int, reason: str | None = None) -> dict[st
     from app.services import change_queue
     from app.services.ai.domains.chat.user_memory import current_agent_slug
 
-    async with get_async_session() as session:
-        try:
-            row = await change_queue.withdraw(
-                session,
-                pending_change_id,
-                agent_slug=current_agent_slug.get(),
-                owner_user_id=_turn_owner(),
-                reason=reason,
-            )
-            await session.commit()
-        except ValueError as e:
-            return {"error": str(e)}
-    return {
-        "pending_change_id": row.id,
-        "status": row.status,
-        "note": (row.result or {}).get("note"),
-    }
+    async def work(session: AsyncSession) -> dict[str, Any]:
+        row = await change_queue.withdraw(
+            session,
+            pending_change_id,
+            agent_slug=current_agent_slug.get(),
+            owner_user_id=_turn_owner(),
+            reason=reason,
+        )
+        return {
+            "pending_change_id": row.id,
+            "status": row.status,
+            "note": (row.result or {}).get("note"),
+        }
+
+    return await _committed(work)
 
 
 async def withdraw_batch(batch_id: str, reason: str | None = None) -> dict[str, Any]:
@@ -245,19 +251,17 @@ async def withdraw_batch(batch_id: str, reason: str | None = None) -> dict[str, 
     from app.services import change_queue
     from app.services.ai.domains.chat.user_memory import current_agent_slug
 
-    async with get_async_session() as session:
-        try:
-            withdrawn = await change_queue.withdraw_batch(
-                session,
-                batch_id,
-                agent_slug=current_agent_slug.get(),
-                owner_user_id=_turn_owner(),
-                reason=reason,
-            )
-            await session.commit()
-        except ValueError as e:
-            return {"error": str(e)}
-    return {"batch_id": batch_id, "withdrawn": withdrawn}
+    async def work(session: AsyncSession) -> dict[str, Any]:
+        withdrawn = await change_queue.withdraw_batch(
+            session,
+            batch_id,
+            agent_slug=current_agent_slug.get(),
+            owner_user_id=_turn_owner(),
+            reason=reason,
+        )
+        return {"batch_id": batch_id, "withdrawn": withdrawn}
+
+    return await _committed(work)
 
 
 # Built-in registration: importing this module makes the tools grantable
@@ -266,6 +270,7 @@ register_tool(
     "change_types",
     change_types,
     description="The change types you can propose, each with its payload's schema",
+    effect="read",
     replace=True,
 )
 register_tool(

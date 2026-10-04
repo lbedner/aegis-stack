@@ -111,6 +111,20 @@
 
 - **The chart island passes Biome.** Three `forEach` callbacks in
   `static/js/charts.js` returned a value (`useIterableCallbackReturn`).
+
+- **A signed-in chat turn reads only its own finances.** The finance
+  tools (`ledger`, `accounts`, `categories`, `bills`, `bill_candidates`,
+  `tags`) read every user's rows; they now read the turn's owner, and a
+  turn without one (an install without auth) still reads everything. The
+  `tags` lookup had read the no-auth bucket, so signed-in users saw none.
+
+- **Approval cards cost the same queries however many there are.** A
+  queue of cards looked up each card's transaction, category and tags on
+  its own. Change types now describe their cards together, so a list, a
+  batch, or "approve all" runs a fixed number of queries. The Overview
+  banner reads a count (`GET /api/v1/changes/count`) instead of every
+  card, and the `pending` tool reads only the last two weeks.
+
 - **A change that is not yours is a 404 on every route.** The JSON
   approve and reject answered 400 ("pending change not found") and the
   batch routes 200 with nothing done, where the htmx cards answered 404.
@@ -229,6 +243,19 @@
   closing links say `https://`.
 
 ### Changed
+
+- **A tool that declares no effect is treated as a write.** `register_tool`
+  without `effect=` logs a warning and registers `"writes"`, so it never
+  runs unseen inside code mode or reaches an MCP client; a rebind cannot
+  change a tool's effect. Every shipped tool declares its effect.
+
+- **The approval queue's calls name their owner in an auth build.**
+  `owner_user_id` has no default on `propose`, `approve`, `withdraw` and
+  the queue's reads, so a forgotten owner fails loudly instead of reaching
+  every user's cards. `approve_batch`, `reject_batch` and the finance
+  service's change-queue methods are gone; `approve_rows`, `reject_rows`
+  and the `change_queue` functions are the one path. A change type's
+  `describe` now takes a list of payloads and returns one card body each.
 
 - **Overseer > AI > Usage picks its window from the app's range chips.** The
   same `1d` to `All` row as every other time window (`ranges.py`), in the

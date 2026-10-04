@@ -58,12 +58,6 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM conversation ORDER BY conversation.updated_at DESC",
-      "file": "app/services/ai/domains/chat/queries.py",
-      "function": "conversations_with_messages"
-    },
-    {
-      "kind": "repeated_statement",
       "label": "SELECT ... FROM conversation WHERE conversation.id = :pk_1",
       "file": "app/services/ai/domains/chat/conversation.py",
       "function": "_save_to_db"
@@ -79,18 +73,6 @@
       "label": "SELECT ... FROM conversation_message",
       "file": "app/services/ai/domains/chat/queries.py",
       "function": "message_count"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM conversation_message WHERE conversation_message.conversation_id = :conversation_id_1 ORDER BY conversation_message.timestamp",
-      "file": "app/services/ai/domains/chat/queries.py",
-      "function": "messages_for_conversation"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM conversation_message WHERE conversation_message.conversation_id IN (__[POSTCOMPILE_primary_keys])",
-      "file": "app/services/ai/domains/chat/queries.py",
-      "function": "conversations_with_messages"
     },
     {
       "kind": "repeated_statement",
@@ -148,12 +130,6 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM llm_org WHERE llm_org.name IN (__[POSTCOMPILE_name_1])",
-      "file": "app/services/ai/domains/llm/queries.py",
-      "function": "orgs_named"
-    },
-    {
-      "kind": "repeated_statement",
       "label": "SELECT ... FROM llm_price",
       "file": "app/services/ai/domains/llm/etl/queries.py",
       "function": "all_rows"
@@ -199,6 +175,18 @@
       "label": "SELECT ... FROM memory_module WHERE memory_module.slug = :slug_1",
       "file": "app/services/ai/domains/chat/queries.py",
       "function": "memory_module_by_slug"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM pending_change WHERE pending_change.status = :status_1",
+      "file": "app/services/change_queue/queries.py",
+      "function": "count_changes"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM pending_change WHERE pending_change.status = :status_1 OR pending_change.resolved_at >= :resolved_at_1 ORDER BY pending_change.id DESC",
+      "file": "app/services/change_queue/queries.py",
+      "function": "list_changes"
     },
     {
       "kind": "repeated_statement",

@@ -2750,6 +2750,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="In Overseer: the Container section">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#restart" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Restart
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -5628,6 +5645,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="In Overseer: the Container section">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#restart" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Restart
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -5734,7 +5768,7 @@
 </span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>                                         +------------------+
 </span></code></pre></div>
 <ul>
-<li><strong>Read-only.</strong> The first cut answers <code>GET</code> for the container list, stats, logs, <code>/info</code> and <code>/system/df</code>. Every other path and every other method is refused, including the reads that would leak data: container inspect (<code>/containers/{id}/json</code> returns a container's whole environment, secrets included, for any container on the host), <code>/containers/{id}/export</code> and <code>/containers/{id}/archive</code>.</li>
+<li><strong>Reads, and one write.</strong> It answers <code>GET</code> for the container list, stats, logs, <code>/info</code> and <code>/system/df</code>. Every other path and every other method is refused, including the reads that would leak data: container inspect (<code>/containers/{id}/json</code> returns a container's whole environment, secrets included, for any container on the host), <code>/containers/{id}/export</code> and <code>/containers/{id}/archive</code>. The one write is <code>POST /containers/{name}/restart</code> (see Restart below).</li>
 <li><strong>No network.</strong> The proxy runs with <code>network_mode: none</code> and listens on a Unix socket in the <code>docker-proxy</code> volume, which the app containers mount. Nothing on the compose network can reach it.</li>
 <li><strong>No privileges.</strong> A read-only root filesystem, every Linux capability dropped, <code>no-new-privileges</code>. It runs as uid 0 only so it can open the host's socket on any host without knowing the host's <code>docker</code> group id.</li>
 <li><strong>Same in prod.</strong> The service carries both the <code>dev</code> and <code>prod</code> profiles; <code>aegis deploy</code> starts it with the rest of the stack.</li>
@@ -5743,8 +5777,9 @@
 <div class="language-yaml highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nt">command</span><span class="p">:</span>
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;-proxysocketendpoint=/var/run/docker-proxy/docker.sock&quot;</span>
 </span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&#39;-allowGET=(/v1\.[0-9]+)?/(containers/json|containers/[a-zA-Z0-9_.-]+/(stats|logs)|info|system/df)&#39;</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&#39;-allowPOST=(/v1\.[0-9]+)?/containers/[a-zA-Z0-9_.-]+/restart&#39;</span>
 </span></code></pre></div>
-<p>Write actions (restarting a container) will come as explicit additions to this allowlist, admin-only, confirmed and audited; nothing is writable today.</p>
+<p>A new write action is an explicit addition here, confirmed and audited, like Restart.</p>
 <h2 id="reading-it-from-the-app-appcoreruntime">Reading it from the app: <code>app.core.runtime</code></h2>
 <p>Every project has <code>app.core.runtime</code>, one async interface for what is running and how it is doing, the same pattern as <code>app.core.storage</code> and <code>app.core.secrets</code>. The backend follows the target:</p>
 <table>
@@ -5795,7 +5830,10 @@
 <li><strong>Build</strong> is the image's <code>org.opencontainers.image.revision</code> label. <code>aegis deploy</code> stamps <code>BUILD_ID</code> into the server's <code>.env</code>, compose passes it to the image build as a build arg, and the Dockerfile labels the image with it (<code>dev</code> locally). Without the label it falls back to the short image id.</li>
 </ul>
 <h2 id="in-overseer-the-container-section">In Overseer: the Container section</h2>
-<p>Every Overseer page with a container behind it (Server, Worker, Scheduler, Redis, Database on Postgres, Storage, Ingress, Inference) has a <strong>Container</strong> section, in Overseer's htmx pages and Flet modals alike. It shows one row per instance: state and health, CPU, memory used against its limit, network in and out, disk I/O, restarts, uptime, and the image with its build. It renders from the containers sampler's last reading (<code>app.core.series</code>), so it opens full, then refreshes every second while it is open, with CPU and memory charts over the last 15 minutes, 30 minutes or hour.</p>
+<p>Every Overseer page with a container behind it (Server, Worker, Scheduler, Redis, Database on Postgres, Storage, Ingress, Inference) has a <strong>Container</strong> section, in Overseer's htmx pages and Flet modals alike. It shows one card per instance: its name, state and health, uptime, restarts and the image with its build, then a fixed strip of CPU, memory used against its limit, network in and out, and disk read and write, so a figure changing width moves nothing else. It renders from the containers sampler's last reading (<code>app.core.series</code>), so it opens full, then refreshes every second while it is open, with charts over the last 15 minutes, 30 minutes or hour: CPU, memory, and network and disk I/O as bytes per second (the sampler keeps Docker's running totals; a chart reads the rate between readings, and drops the step where a restart reset them).</p>
+<p>The Scheduler and Cache pages also open with a glance above their Overview: a line per container with its state, uptime, CPU, memory as a share of its limit (amber, then red, by the host memory check's rule), its Restart, and the way to its Container and Logs sections.</p>
+<h3 id="restart">Restart</h3>
+<p>Each card has a <strong>Restart</strong>, in htmx and Flet alike. It asks first, then calls <code>POST /api/v1/runtime/containers/{name}/restart</code>: with the auth service only an admin may call it, and without auth anyone who reaches the app may, like the rest of Overseer. Every attempt is audited (<code>runtime.container_restart</code>: who, from which address, which container, and whether it restarted, was refused or failed). The app refuses any container its own services do not list, since the proxy would restart any container on the host; without a deploy target there is nothing to restart. Restarting the webserver Overseer itself runs on answers first and restarts after: the confirm says the page will drop, the audit records <code>restarting</code>, and the page reconnects when the server is back.</p>
 <p>Without the deploy component the backend is <code>none</code>: the section says so and points at <code>aegis add deploy</code> instead of showing the app's own process as if it were a container. A page with nothing running behind it (a SQLite database, which is a file) says that too, and a runtime that does not answer says why.</p>
 <h2 id="deploy-history">Deploy history</h2>
 <p>With a database, the component keeps a <code>deployment</code> table (in its own <code>deploy</code> schema on Postgres, like the scheduler's and secrets'): one row per build that went live. Two writers fill the same row, keyed by the build id:</p>

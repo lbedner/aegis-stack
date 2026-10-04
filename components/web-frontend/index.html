@@ -5680,18 +5680,20 @@ call the same services, so business logic is written once.</p>
 untouched at <code>/dashboard</code>, and a <code>web_frontend</code> entry in <code>/health</code>. Removal is
 symmetric: <code>aegis remove htmx</code> deletes the component tree and regenerates the
 shared files that referenced it.</p>
-<p>For the first server-rendered Overseer page, include basic auth:</p>
+<p>Overseer comes with it at <code>/overseer</code>: every component and service as a list,
+cards or a map of the stack, each linking to its own page. To sign in to it,
+and keep it to admins, add auth:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>aegis<span class="w"> </span>init<span class="w"> </span>my-app<span class="w"> </span>--components<span class="w"> </span>htmx<span class="w"> </span>--services<span class="w"> </span><span class="s1">&#39;auth[basic]&#39;</span>
 </span></code></pre></div>
-<p>Open <code>/overseer/login</code> to sign in. The form uses the shared auth and form
-macros and delegates to the existing auth endpoint. A successful sign-in
-opens the protected <code>/overseer</code> page, which is the starting point for the
-server-rendered dashboard.</p>
+<p>Then open <code>/overseer/login</code>. The form uses the shared auth and form macros and
+delegates to the existing auth endpoint.</p>
 <h3 id="who-can-open-the-overseer">Who can open the Overseer</h3>
 <p>The Overseer is operator access to the deployment: it shows its routes,
 source and live data, and runs user administration, scheduler jobs and model
-loads. So every Overseer page, live stream and action is open to admins only,
-not to every signed-in account. An admin is:</p>
+loads. Without the auth service it is open: whoever reaches the app may use
+it, its writes (Restart, Secrets) included, like any route a stack serves
+without auth. With auth, every Overseer page, live stream and action is open
+to admins only, not to every signed-in account. An admin is:</p>
 <ul>
 <li>an account whose email is in <code>ADMIN_USER_EMAILS</code>, or</li>
 <li>an account with the <code>admin</code> role, when the auth service runs at the RBAC
@@ -5706,8 +5708,10 @@ signing in: a request with no session resolves to the dev user, an admin.</p>
 account that is not an admin gets an "Admins only" page saying how to get in,
 and its fragments and streams answer 403. Signed out, Overseer pages redirect
 to <code>/overseer/login</code>. The check is one dependency on the pages router
-(<code>overseer_access.py</code>), and <code>tests/web/test_overseer_admin_gate.py</code> walks every
-Overseer route as a non-admin, so a new page cannot skip it. <code>require_admin</code>,
+(<code>overseer_access.py</code>, the one module that knows whether the stack has auth),
+and <code>tests/web/test_overseer_admin_gate.py</code> walks every Overseer route as a
+non-admin, so a new page cannot skip it; without auth,
+<code>tests/web/test_overseer_open.py</code> walks them signed out, and nothing refuses. <code>require_admin</code>,
 for API routes you protect yourself, uses the same definition (<code>is_admin</code>); the
 API's built-in operator routes keep their own checks.</p>
 <p>Basic auth has no email verification step. New registrations are ready

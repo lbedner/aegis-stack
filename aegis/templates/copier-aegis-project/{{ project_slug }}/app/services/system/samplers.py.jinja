@@ -1,18 +1,39 @@
 """What Overseer samples for its live charts (``app.core.series``). Adding
 one is an entry here: a name and an async read returning a ``Sample``
 (numbers by series name, and the reading whole for the views that show
-it); it runs every second while someone watches and every 15 seconds
-otherwise.
+it); it runs at its ``interval`` while someone watches and its
+``idle_interval`` otherwise.
 """
 
 {% if include_inference -%}
+from app.components.inference.sampler import HOST as INFERENCE_HOST
 from app.components.inference.sampler import SAMPLER as INFERENCE
 {% endif -%}
 from app.services.system import ui_runtime
+{%- if include_redis %}
+from app.services.system.redis_keys import KEYSPACE
+{%- endif %}
+{%- if include_worker %}
+from app.services.system.ui_worker import QUEUES
+{%- endif %}
 
 SAMPLERS = [
     ui_runtime.CONTAINERS,
 {%- if include_inference %}
     INFERENCE,
 {%- endif %}
+{%- if include_redis %}
+    KEYSPACE,
+{%- endif %}
+{%- if include_worker %}
+    QUEUES,
+{%- endif %}
 ]
+
+# Pages whose server can run outside Docker, by the component that owns it
+# (``ui_runtime.host_of``).
+HOSTS = {
+{%- if include_inference %}
+    "inference": INFERENCE_HOST,
+{%- endif %}
+}

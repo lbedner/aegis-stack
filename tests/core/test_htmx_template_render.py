@@ -352,6 +352,7 @@ class TestWebFrontendScaffolding:
             "form.html": {
                 "action",
                 "checkbox",
+                "checklist",
                 "date_input",
                 "field",
                 "money_input",
@@ -378,6 +379,7 @@ class TestWebFrontendScaffolding:
                 "code_block",
                 "confirm",
                 "copy_button",
+                "copy_icon",
                 "dialog",
                 "drawer",
                 "drawer_sync",

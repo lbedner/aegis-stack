@@ -7,6 +7,7 @@ This module is separate from ETL to ensure availability regardless of AI backend
 
 import asyncio
 from datetime import datetime
+from typing import Any
 
 import httpx
 from pydantic import BaseModel, ConfigDict, computed_field, field_validator
@@ -150,7 +151,11 @@ class OllamaClient:
 
     TIMEOUT = 2.0  # Local server responds in <100ms; 2s is generous
 
-    def __init__(self, base_url: str | None = None) -> None:
+    def __init__(
+        self,
+        base_url: str | None = None,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ) -> None:
         """Initialize the Ollama client.
 
         Args:
@@ -166,21 +171,22 @@ class OllamaClient:
             settings, "ollama_base_url_effective", OLLAMA_DEFAULT_URL
         )
         self.base_url = str(resolved).rstrip("/")
+        self._transport = transport  # tests answer through a MockTransport
 
-    async def fetch_version(self) -> str | None:
-        """Fetch Ollama server version.
+    def _client(self, timeout: float = TIMEOUT) -> httpx.AsyncClient:
+        """A client for one call or one status read (shared by its reads)."""
+        return httpx.AsyncClient(timeout=timeout, transport=self._transport)
 
-        Returns:
-            Version string or None if unavailable.
-        """
-        url = f"{self.base_url}/api/version"
+    async def _get(self, client: httpx.AsyncClient, path: str) -> Any:
+        """``path``'s JSON, or the HTTP error."""
+        response = await client.get(f"{self.base_url}{path}")
+        response.raise_for_status()
+        return response.json()
 
+    async def _version(self, client: httpx.AsyncClient) -> str | None:
         try:
-            async with httpx.AsyncClient(timeout=self.TIMEOUT) as client:
-                response = await client.get(url)
-                response.raise_for_status()
-                data = OllamaVersionResponse.model_validate(response.json())
-                return data.version
+            data = await self._get(client, "/api/version")
+            return OllamaVersionResponse.model_validate(data).version
         except Exception as e:
             logger.debug(f"Failed to fetch Ollama version: {e}")
             return None
@@ -195,13 +201,11 @@ class OllamaClient:
             httpx.HTTPError: If the request fails.
             httpx.ConnectError: If Ollama server is not running.
         """
-        url = f"{self.base_url}/api/tags"
-
         try:
-            async with httpx.AsyncClient(timeout=self.TIMEOUT) as client:
-                response = await client.get(url)
-                response.raise_for_status()
-                data = OllamaTagsResponse.model_validate(response.json())
+            async with self._client() as client:
+                data = OllamaTagsResponse.model_validate(
+                    await self._get(client, "/api/tags")
+                )
                 logger.debug(f"Fetched {len(data.models)} models from Ollama")
                 return data.models
         except httpx.ConnectError as e:
@@ -215,35 +219,11 @@ class OllamaClient:
             True if Ollama is available, False otherwise.
         """
         try:
-            async with httpx.AsyncClient(timeout=2.0) as client:
+            async with self._client() as client:
                 response = await client.get(f"{self.base_url}/api/tags")
                 return response.status_code == 200
         except Exception:
             return False
-
-    async def fetch_running_models(self) -> list[OllamaRunningModel]:
-        """Fetch currently running (loaded) models from Ollama.
-
-        Uses the /api/ps endpoint to get models currently in memory.
-
-        Returns:
-            List of OllamaRunningModel objects for loaded models.
-
-        Raises:
-            httpx.HTTPError: If the request fails.
-            httpx.ConnectError: If Ollama server is not running.
-        """
-        url = f"{self.base_url}/api/ps"
-
-        try:
-            async with httpx.AsyncClient(timeout=self.TIMEOUT) as client:
-                response = await client.get(url)
-                response.raise_for_status()
-                data = OllamaPsResponse.model_validate(response.json())
-                return data.models
-        except httpx.ConnectError as e:
-            logger.error(f"Cannot connect to Ollama at {self.base_url}: {e}")
-            raise
 
     async def load_model(self, model_name: str, keep_alive: str = "30m") -> bool:
         """Load a model into VRAM (warm it up).
@@ -261,7 +241,7 @@ class OllamaClient:
         url = f"{self.base_url}/api/generate"
 
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
+            async with self._client(60.0) as client:
                 response = await client.post(
                     url,
                     json={
@@ -299,7 +279,7 @@ class OllamaClient:
         url = f"{self.base_url}/api/generate"
 
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with self._client(30.0) as client:
                 response = await client.post(
                     url,
                     json={
@@ -332,22 +312,24 @@ class OllamaClient:
         return await self.unload_model(model_name)
 
     async def get_server_status(self) -> OllamaServerStatus:
-        """Get comprehensive Ollama server status.
+        """Get comprehensive Ollama server status, in one connection: the
+        installed models' ``/api/tags`` also answers whether the server is
+        there (a failed read is "unavailable"), then the version and the
+        running models together.
 
         Returns:
             OllamaServerStatus with availability, running models, and metrics.
         """
-        # Check availability first
-        available = await self.is_available()
-        if not available:
-            return OllamaServerStatus(available=False)
-
-        # Fetch all data in parallel
-        version, running_models, installed_models = await asyncio.gather(
-            self.fetch_version(),
-            self.fetch_running_models(),
-            self.fetch_models(),
-        )
+        async with self._client() as client:
+            try:
+                tags = await self._get(client, "/api/tags")
+            except (httpx.HTTPError, ValueError):
+                return OllamaServerStatus(available=False)
+            version, ps = await asyncio.gather(
+                self._version(client), self._get(client, "/api/ps")
+            )
+        installed_models = OllamaTagsResponse.model_validate(tags).models
+        running_models = OllamaPsResponse.model_validate(ps).models
 
         # Calculate total VRAM usage
         total_vram_gb = sum(m.size_vram_gb for m in running_models)

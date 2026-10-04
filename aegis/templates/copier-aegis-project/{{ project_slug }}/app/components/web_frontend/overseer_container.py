@@ -6,6 +6,7 @@ an SSE stream re-sends the table and each chart every tick while it is
 open."""
 
 import asyncio
+from collections.abc import Mapping
 from typing import Any
 
 from app.core import series
@@ -26,12 +27,12 @@ COLUMNS = [
 MACROS = "components/macros/layout.html"
 
 
-async def context(page: str, window: str | None = None) -> dict[str, Any]:
+async def context(page: str, query: Mapping[str, str]) -> dict[str, Any]:
     """The section's table and its charts over the chosen ``window`` as last
     sampled, so it opens full and never waits on the runtime (``PENDING``
     before the first sample), the range chips, and where it all refreshes
     from."""
-    seconds = series.window_of(window)
+    seconds = series.window_of(query.get("window"))
     table, charts = await asyncio.gather(
         ui_runtime.containers(page, wait=False), ui_runtime.charts(page, seconds)
     )

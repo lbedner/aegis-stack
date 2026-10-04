@@ -17,8 +17,8 @@ from app.components.deploy.docker import (
     BUILD_LABEL,
     DockerRuntime,
     parse_status,
-    split_frames,
 )
+from app.components.deploy.docker_logs import split_frames
 from app.core import runtime
 from app.core.runtime import RuntimeUnavailableError
 
@@ -247,6 +247,25 @@ async def test_stats_take_one_sample_and_cpu_from_the_last_read(
     assert second.cpu_percent == pytest.approx(40.0)
     assert soon_after.cpu_percent == pytest.approx(40.0)
     assert first.memory_used == 100_000_000
+
+
+async def test_the_backend_keeps_one_client(monkeypatch: pytest.MonkeyPatch) -> None:
+    """One connection pool to the proxy for every call, not a client (and a
+    socket connection) per call; closed when the app shuts down."""
+    made: list[int] = []
+
+    class Counted(httpx.AsyncClient):
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            made.append(1)
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setattr(docker.httpx, "AsyncClient", Counted)
+    runtime = _runtime()
+    await runtime.services()
+    await runtime.stats("a")
+    await runtime.logs("a")
+    assert len(made) == 1
+    await runtime.aclose()
 
 
 async def test_logs_parse_both_streams() -> None:

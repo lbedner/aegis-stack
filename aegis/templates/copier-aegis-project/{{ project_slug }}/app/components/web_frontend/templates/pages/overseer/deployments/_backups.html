@@ -1,0 +1,4 @@
+{# Overseer > Deployments > Backups: the scheduled database backups on the
+   backup volume, newest first, or why there are none. #}
+{% from "components/macros/table.html" import data_table %}
+<div id="deployments-backups">{{ data_table(backup_columns, backups.rows, empty=backups.note) }}</div>

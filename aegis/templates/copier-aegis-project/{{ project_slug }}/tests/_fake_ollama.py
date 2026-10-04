@@ -5,6 +5,8 @@ so it ships with the component, not with either frontend."""
 
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from app.components.inference.ollama import (
     OllamaClient,
     OllamaModel,
@@ -69,3 +71,14 @@ class FakeClient(OllamaClient):
     async def unload_model(self, model_name: str) -> bool:
         FakeClient.calls.append(("unload", model_name))
         return self.loaded
+
+
+def serve(
+    monkeypatch: pytest.MonkeyPatch, client: type[FakeClient] = FakeClient
+) -> None:
+    """Answer the inference sampler, the one reader of Ollama, with
+    ``client``, and start the activity tracker afresh."""
+    from app.components.inference import activity, sampler
+
+    monkeypatch.setattr(sampler, "OllamaClient", client)
+    monkeypatch.setattr(activity, "_tracker", activity.OllamaActivityTracker())

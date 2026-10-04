@@ -313,3 +313,20 @@ def safe_filename(name: str, fallback: str = "document") -> str:
     stray newline there is header injection, not a formatting nuisance.
     """
     return _UNSAFE_FILENAME.sub("", name).strip() or fallback
+
+
+def split_matches(text: str, query: str) -> list[tuple[str, bool]]:
+    """``text`` as runs, each marked True where it matches ``query`` (any
+    case): what a UI highlights for a search."""
+    if not query:
+        return [(text, False)]
+    runs: list[tuple[str, bool]] = []
+    at = 0
+    for match in re.finditer(re.escape(query), text, re.IGNORECASE):
+        if match.start() > at:
+            runs.append((text[at : match.start()], False))
+        runs.append((match.group(), True))
+        at = match.end()
+    if at < len(text):
+        runs.append((text[at:], False))
+    return runs or [(text, False)]

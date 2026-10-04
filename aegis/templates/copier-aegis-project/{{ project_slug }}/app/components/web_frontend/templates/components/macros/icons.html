@@ -1,6 +1,7 @@
-{# The chat's icons, one home each (heroicons outline, 24x24). ``sprite()``
-   is drawn once per chat surface; ``icon(name)`` points at it, so a control
-   repeated under every message does not repeat the path. The caller sets
+{# The controls' icons, one home each (heroicons outline, 24x24; the
+   sidebar's are ``sidebar_icon`` in layout.html). ``sprite()``
+   is drawn once a page (``base.html``); ``icon(name)`` points at it, so a
+   control repeated on every row or message does not repeat the path. The caller sets
    the size, the stroke width and the colour (currentColor). #}
 
 {% macro icon(name, class="w-4 h-4", stroke=1.5, attrs="") -%}

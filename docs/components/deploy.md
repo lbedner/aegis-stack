@@ -93,6 +93,28 @@ my-app deploy record --build a1b2c3d --by "Ada <ada@example.org>" --health passe
 
 What is live is always the running build (`BUILD_ID`), never the newest row. Without a database the component still reads containers and logs, and there is no history.
 
+## In Overseer: the Logs section
+
+The same pages have a **Logs** section after Container, in htmx and Flet alike (`app.services.system.ui_logs`). It reads the last 500 lines of every container behind the page, merged by time and newest first (oldest first on request), then adds new lines as the containers write them while it is open: Docker pushes them, so following polls nothing. A JSON line reads as its level, event and `key=value` fields; a plain line's level is read from a leading or bracketed tag (`INFO:`, `[warn]`). A traceback, plain or in a JSON line's `exception`, folds under the line it belongs to instead of filling the list.
+
+The filters stay in the address: the window (15m, 1h, 6h, 1d, or All from each container's start), a level (that level and worse; a line with no level is left out) and text, matched against the line and its traceback. Without the deploy component it says so, like Container. The Docker backend keeps one connection to the socket proxy for the app's life and closes it on shutdown.
+
+## In Overseer: Logs
+
+**Logs** in the sidebar (and the Logs button in the Flet header) shows every service's lines in one view: the same reading, filters and following as the Logs section, merged across every container, with each line naming its service and linking to its page. A Services filter narrows it to the ones ticked. Following can be paused, in this view and in each page's Logs section; a line written while paused is not added.
+
+## In Overseer: Deployments
+
+**Deployments** in the sidebar (and the Deployments button in the Flet header) shows what is live and where it runs, read-only:
+
+- **Running on**: the provider this server is on, with its location, server id and IP and a link to its console. The server reads it from its cloud's own metadata service (`169.254.169.254`, answered only on the server itself), once per process: Hetzner Cloud, DigitalOcean and AWS today. Nothing answering is **Local** before any deploy and **Self-hosted** after.
+- **Deploys to**: where this project deploys to, from `aegis deploy-provision`'s record in `.aegis/deploy.yml`. That file stays on the machine you deploy from (it is never synced to the server), so this shows where you run Overseer locally.
+- **Where it can run**: every provider `aegis` knows as a card, with what it can do there (Detect, Deploy, Provision) and the one in use marked. Picking a card shows the command to start with it and the token it reads from your environment.
+- **Now**: the live build (`BUILD_ID`, which `aegis deploy` stamps with the short commit, or `dev` before any deploy), its commit and whether it carried uncommitted changes, when the server went live (its container's start), and the last health check.
+- **Host**: the server's CPUs, memory, disk used and Docker version, through the socket proxy (this machine when there is no deploy target).
+- **History**: each build that went live, newest first, from the deploy history: when it went live, who deployed it and from where, its health check, the backup taken before it, and the build a rollback went back to. **Now** also names who deployed the live build. A build that adds the table runs before it is migrated: the page says the history cannot be read yet instead of failing.
+- **Backups**: the scheduled database backups on the backup volume, newest first, with size and age.
+
 ## Checking it
 
 With the stack up, from inside the webserver container:

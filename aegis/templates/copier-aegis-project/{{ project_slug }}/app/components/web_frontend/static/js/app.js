@@ -45,7 +45,7 @@ function copyText(text) {
   return ok ? Promise.resolve() : Promise.reject(new Error('copy refused'));
 }
 // The clipboard says nothing back, so the button does: one with a tick of
-// its own (the chat's) shows it for a beat; any other says so in a toast.
+// its own (``copy_icon``) shows it for a beat; any other says so in a toast.
 const COPIED_MS = 1200;
 function showCopied(button, on) {
   button.querySelector('[data-copy-idle]')?.classList.toggle('hidden', on);
@@ -66,6 +66,32 @@ document.addEventListener('click', (event) => {
     },
     () => toast('Could not copy - select the text instead', 'error'),
   );
+});
+
+// Any ``data-scroll-to`` button brings the element its selector names into
+// view (a list's first or last row), scrolling only what it must.
+document.addEventListener('click', (event) => {
+  const button = event.target.closest('[data-scroll-to]');
+  if (!button) return;
+  document.querySelector(button.dataset.scrollTo)
+    ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+});
+
+// The Overseer sidebar is never swapped (a link replaces only what is right
+// of it), so it keeps its scroll; its current mark moves here instead, to
+// the link whose page holds the address: the longest such link, so the
+// home link marks only the home page.
+function markCurrent(links, path) {
+  const holds = (href) => path === href || path.startsWith(href + '/');
+  const best = [...links].filter((link) => holds(link.getAttribute('href')))
+    .sort((a, b) => b.getAttribute('href').length - a.getAttribute('href').length)[0];
+  for (const link of links) {
+    if (link === best) link.setAttribute('aria-current', 'page');
+    else link.removeAttribute('aria-current');
+  }
+}
+document.body.addEventListener('htmx:pushedIntoHistory', () => {
+  markCurrent(document.querySelectorAll('#overseer-nav a[href]'), window.location.pathname);
 });
 
 // Server and network failures never swap (see the htmx-config
@@ -283,4 +309,4 @@ window.addEventListener('pageshow', () => {
 });
 
 // The dismissal rules, for the node tests (tests/web/test_app_js.py).
-if (typeof module !== 'undefined') module.exports = { outsideClick, dismiss, navigates };
+if (typeof module !== 'undefined') module.exports = { outsideClick, dismiss, navigates, markCurrent };

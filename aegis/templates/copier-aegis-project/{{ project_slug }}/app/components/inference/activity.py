@@ -11,8 +11,8 @@ Events arrive two ways:
 
 - ``record_loaded`` / ``record_unloaded``: explicit calls this app made
   through ``OllamaClient`` (the dashboard's Load/Unload buttons).
-- ``observe``: a diff of the running-model set taken on every health
-  poll. This is how idle evictions (``keep_alive`` expiry) and loads
+- ``observe``: a diff of the running-model set taken on every reading of
+  the inference sampler. This is how idle evictions (``keep_alive`` expiry) and loads
   triggered outside the app get noticed - Ollama has no event API, so
   polling is the only signal.
 """
@@ -141,8 +141,8 @@ class OllamaActivityTracker:
 
 
 # Module-level singleton: the dashboard frontend and the API run in the
-# same process, so both the health check (writer) and the modal (reader)
-# see the same instance.
+# same process, so both the inference sampler (writer) and the modal
+# (reader) see the same instance.
 _tracker: OllamaActivityTracker | None = None
 
 

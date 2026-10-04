@@ -88,7 +88,7 @@ def backup_dir() -> Path:
     return Path(settings.DATABASE_BACKUP_DIR)
 
 
-def _list_backups(directory: Path) -> list[Path]:
+def list_backups(directory: Path) -> list[Path]:
     """Every backup file in ``directory``, newest first, all formats."""
     files = [
         f
@@ -191,7 +191,7 @@ async def _cleanup_old_backups(
     try:
         # One retention window across every format -- keeping N of each
         # would double the footprint the setting is meant to bound.
-        backup_files = _list_backups(directory)
+        backup_files = list_backups(directory)
 
         # Remove old backups beyond keep_count
         old_backups = backup_files[keep_count:]

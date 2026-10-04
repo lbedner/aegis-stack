@@ -18,7 +18,7 @@ from app.components.web_frontend.overseer_nav import (
 )
 from app.components.web_frontend.overseer_sections import SECTIONED_PAGES, STANDALONE
 from app.components.web_frontend.routes.partials import overseer_auth as overseer_auth_partials
-from app.components.web_frontend.routes.partials import overseer_container as overseer_container_partials
+from app.components.web_frontend.routes.partials import overseer_runtime as overseer_runtime_partials
 from app.components.web_frontend.routes.partials import (
     overseer_scheduler as overseer_scheduler_partials,
 )
@@ -195,7 +195,7 @@ router.include_router(overseer_secrets_partials.router)
 router.include_router(overseer_redis_partials.router)
 router.include_router(overseer_storage_partials.router)
 router.include_router(overseer_server_partials.router)
-router.include_router(overseer_container_partials.router)
+router.include_router(overseer_runtime_partials.router)
 {%- if include_blog %}
 router.include_router(overseer_blog_partials.router)
 {%- endif %}
@@ -246,21 +246,6 @@ async def overseer_server_connections(
     )
 
 
-@router.get("/overseer/patterns", response_class=HTMLResponse, include_in_schema=False)
-@router.get("/overseer/patterns/{section}", response_class=HTMLResponse, include_in_schema=False)
-async def overseer_patterns_page(
-    request: Request,
-    section: str = "",
-    user: User | None = Depends(get_optional_user),
-    db: AsyncSession = Depends(get_async_db),
-) -> Response:
-    """How this app is built: its patterns, found in its own code."""
-    labels = list(SECTIONED_PAGES[("patterns", "patterns")].labels)
-    if section and section not in labels[1:]:
-        raise HTTPException(status_code=404)
-    return await _overseer_detail(request, "patterns", "patterns", user, db, section or labels[0])
-
-
 @router.get("/overseer/{group}", response_class=HTMLResponse, include_in_schema=False)
 async def overseer_standalone_page(
     request: Request,
@@ -272,7 +257,17 @@ async def overseer_standalone_page(
     component's own page when the stack has it."""
     if group == "secrets" and overseer_secrets.has_component():
         return RedirectResponse(url=overseer_secrets.COMPONENT_URL, status_code=303)
-    return await _overseer_detail(request, group, group, user, db)
+    return await _standalone(request, group, "", user, db)
+
+
+async def _standalone(
+    request: Request, group: str, section: str, user: User | None, db: AsyncSession
+) -> Response:
+    """A ``STANDALONE`` page on one of its sections, its first by default."""
+    labels = list(SECTIONED_PAGES[(group, group)].labels)
+    if section and section not in labels[1:]:
+        raise HTTPException(status_code=404)
+    return await _overseer_detail(request, group, group, user, db, section or labels[0])
 
 
 @router.get("/overseer/{group}/{name}", response_class=HTMLResponse, include_in_schema=False)
@@ -284,6 +279,8 @@ async def overseer_detail(
     db: AsyncSession = Depends(get_async_db),
 ) -> Response:
     """A navigable status page for an installed component or service."""
+    if group in STANDALONE:
+        return await _standalone(request, group, name, user, db)
     return await _overseer_detail(request, group, name, user, db)
 
 

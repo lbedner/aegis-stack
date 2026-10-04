@@ -10,8 +10,9 @@ import html
 import re
 from typing import Any
 
-from markupsafe import Markup
+from markupsafe import Markup, escape
 
+from app.core.formatting import split_matches
 from app.services.system.models import ComponentStatusType
 from app.services.system.ui import get_status_color_name
 
@@ -227,6 +228,15 @@ def health_tone(state: str) -> str:
         return "muted"
 
 
+def highlight(text: str, query: str | None) -> Markup:
+    """``text`` with every match of ``query`` in a ``<mark>``, the rest
+    escaped (``split_matches``)."""
+    return Markup("").join(
+        Markup("<mark>{}</mark>").format(run) if hit else escape(run)
+        for run, hit in split_matches(text, query or "")
+    )
+
+
 FILTERS: dict[str, Callable[..., str]] = {
     "money": money,
     "cents_to_input": cents_to_input,
@@ -236,4 +246,5 @@ FILTERS: dict[str, Callable[..., str]] = {
     "docstring": docstring,
     "health_tone": health_tone,
     "color_tone": color_tone,
+    "highlight": highlight,
 }

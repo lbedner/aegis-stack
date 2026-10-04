@@ -14,7 +14,7 @@ from app.components.inference import activity, sampler
 from app.components.inference.ollama import OllamaServerStatus
 from app.components.web_frontend import overseer_inference
 from app.services.system.models import ComponentStatus, ComponentStatusType
-from tests._fake_ollama import SERVING, FakeClient
+from tests._fake_ollama import SERVING, FakeClient, serve
 from tests.web.dom import chart_json, one, select, text
 from tests.web.overseer import sign_in, status_with
 
@@ -32,8 +32,7 @@ def signed_in(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> Generator[TestCl
     sign_in(app, monkeypatch, status_with(OLLAMA))
     FakeClient.status, FakeClient.loaded, FakeClient.calls = SERVING, True, []
     monkeypatch.setattr(overseer_inference, "OllamaClient", FakeClient)
-    monkeypatch.setattr(sampler, "OllamaClient", FakeClient)  # the one reader
-    monkeypatch.setattr(activity, "_tracker", activity.OllamaActivityTracker())
+    serve(monkeypatch)
     monkeypatch.setattr(overseer_inference, "_moving", {})
     monkeypatch.setattr(overseer_inference, "_failed", {})
     with TestClient(app) as client:
@@ -59,6 +58,7 @@ def test_sections_are_overview_models_and_activity(signed_in: TestClient) -> Non
         "Models",
         "Activity",
         "Container",
+        "Logs",
     ]
 
 

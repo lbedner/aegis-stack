@@ -9,7 +9,7 @@
    of a live turn.
 #}
 {% from "components/macros/icons.html" import icon %}
-{% from "components/macros/layout.html" import avatar %}
+{% from "components/macros/layout.html" import avatar, copy_icon %}
 
 {# The chat's buttons: outlined and quiet, so the conversation stays louder
    than the controls. ``tone`` primary is teal; ``size`` sm or xs. #}
@@ -18,17 +18,6 @@
 btn btn-outline {{ {"sm": "btn-sm", "xs": "btn-xs"}[size] }} {{ tones.get(tone, tones["default"]) }}
 {%- endmacro %}
 
-{# The copy button, one definition for both bubbles: ``text`` is what it
-   copies (an answer's markdown source, not its rendered HTML). app.js does
-   the copying; the icon becomes a tick and pops, then settles back, since
-   without it the button looks broken and gets pressed twice. ``extra``
-   carries the bubble's reveal rule. #}
-{% macro copy_button(text, extra="") %}
-<button type="button" data-copy="{{ text }}" aria-label="Copy" title="Copy" class="{{ extra }}">
-  {{ icon("copy", "w-3.5 h-3.5", 1.5, 'data-copy-idle') }}
-  {{ icon("check", "w-3.5 h-3.5 hidden", 2, 'data-copy-done') }}
-</button>
-{% endmacro %}
 
 {# What a voice control is doing, drawn from its data-state (voice.js only
    sets it): the resting icon (the caller) while idle; recording, a pulsing
@@ -70,7 +59,7 @@ btn btn-outline {{ {"sm": "btn-sm", "xs": "btn-xs"}[size] }} {{ tones.get(tone, 
               class="text-aegis-muted/70 hover:text-aegis-text transition-colors">
         {{ icon("replay", "w-3.5 h-3.5") }}
       </button>
-      {{ copy_button(text, "text-aegis-muted/70 hover:text-aegis-text transition-colors") }}
+      {{ copy_icon(text, "text-aegis-muted/70 hover:text-aegis-text transition-colors") }}
     </div>
     <span class="whitespace-pre-wrap" data-text>{{ text }}</span>
     {% if attachments %}
@@ -146,7 +135,7 @@ btn btn-outline {{ {"sm": "btn-sm", "xs": "btn-xs"}[size] }} {{ tones.get(tone, 
     <div class="mt-2 flex items-center gap-2 text-xxs text-aegis-muted">
       {% if message.model_icon %}<span data-model-icon class="inline-flex">{{ avatar(message.footer, message.model_icon, size="xs") }}</span>{% endif %}
       {% if message.footer %}<span data-footer>{{ message.footer }}</span>{% endif %}
-      {{ copy_button(message.content, "opacity-0 group-hover/bubble:opacity-100") }}
+      {{ copy_icon(message.content, "opacity-0 group-hover/bubble:opacity-100") }}
       {% if message.speech %}{{ speak_button(message.speech, "opacity-0 group-hover/bubble:opacity-100 focus:opacity-100 aria-pressed:opacity-100") }}{% endif %}
     </div>
   </div>

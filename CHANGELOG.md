@@ -47,6 +47,33 @@
   as dots rather than a line between them, and hovering anywhere over a
   chart shows every value at that moment.
 
+- **A Logs section on every Overseer page with a container behind it.**
+  After Container, in Overseer's htmx pages and Flet modals alike: every
+  container's lines merged by time, JSON lines read as level, event and
+  fields, plain lines' level read from their tag, tracebacks folded under
+  the line they belong to, filtered by window (15m to All), level and
+  text, with new lines appended as Docker writes them (followed, not
+  polled). Shared by both UIs (`ui_logs`).
+
+- **Overseer > Logs: every service's lines in one view.** A Logs entry in
+  the sidebar (a Logs button in the Flet header) merges every container's
+  lines by time, each naming its service and linking to its page, with a
+  Services filter beside the window, level, order and text ones. Following
+  can be paused here and in each page's Logs section, which also gains Top
+  and Bottom buttons and a copy button on every cell. Lines read newest
+  first by default.
+
+- **Overseer > Deployments.** A Deployments entry in the sidebar (a
+  Deployments button in the Flet header) shows where it runs (the cloud
+  provider, read from the server's own metadata service, with a link to its
+  console), where this project deploys to (from `.aegis/deploy.yml`), every
+  provider `aegis` knows as a card with what it can do there, the live build and its
+  commit, when the server went live, the last health check, the host's
+  CPUs, memory, disk and Docker version, each deploy from the deploy
+  history (who, from where, health, the backup before it, a rollback) with
+  who deployed the live build, and the scheduled database backups with
+  size and age. Read-only.
+
 - **A progress bar along the top while a page loads.** A link to another
   page, any htmx request, or a section still waiting on its live stream
   (the Container section's first read) runs a thin teal bar; quick requests
@@ -75,6 +102,29 @@
   `reject_rows`, and `approve_row` / `reject_row` for one), where they read
   every row a second time; the htmx card routes read a card or batch once;
   `withdraw` no longer reads its row twice.
+
+- **Overseer reads once for every viewer.** The Redis keyspace map and the
+  worker queues are samplers now, like the containers: one SCAN and one
+  worker health check a tick however many pages are open, and a queue's
+  trend no longer resets when a page reconnects. Ollama's status is one
+  connection and one `/api/tags` read instead of four of each; the
+  inference sampler notices model loads and evictions as it reads, so the
+  Activity tab keeps pace with the chart; and the Flet Ollama modal shows
+  the sampler's reading instead of polling Ollama itself.
+
+- **Copy buttons show on every Overseer page.** The icon sprite was only on
+  the chat, so a copy icon elsewhere (the Logs rows) drew nothing.
+
+- **The Overseer sidebar keeps its scroll.** Picking an entry low in the
+  sidebar redrew the sidebar and sent it back to the top; a sidebar link
+  now replaces only the page beside it.
+
+- **A select's caret sits inside its padding.** The filter dropdowns drew
+  the native caret flush against the border.
+
+- **The Docker runtime keeps one client.** Every read used to open its own
+  connection to the socket proxy; the backend now keeps one for the app's
+  life and closes it on shutdown.
 
 - **Chat proposals are filed under the signed-in user.** On a stack with
   auth, `propose` and `propose_many` filed every card with no owner, so

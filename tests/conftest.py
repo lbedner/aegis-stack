@@ -1,4 +1,6 @@
+import hashlib
 import os
+import re
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -47,6 +49,46 @@ def pytest_addoption(parser: Any) -> None:
         default=False,
         help="run slow tests (CLI integration tests with project generation)",
     )
+    parser.addoption(
+        "--shard",
+        default=None,
+        metavar="K/N",
+        help="run only the K-th of N parallel slices of the selected tests (CI)",
+    )
+
+
+def _parse_shard(spec: str) -> tuple[int, int]:
+    match = re.fullmatch(r"(\d+)/(\d+)", spec)
+    if not match or not 1 <= int(match[1]) <= int(match[2]):
+        raise pytest.UsageError(f"--shard expects K/N with 1 <= K <= N, got {spec!r}")
+    return int(match[1]), int(match[2])
+
+
+def _shard_key(item: Any) -> str:
+    """What has to run in one process: a stack's tests reuse its single
+    generation, and an ``xdist_group`` is pinned together on purpose.
+    Anything else splits by file."""
+    callspec = getattr(item, "callspec", None)
+    if callspec is not None and "combination" in callspec.params:
+        return f"stack:{callspec.params['combination'].name}"
+    group = item.get_closest_marker("xdist_group")
+    if group is not None:
+        return f"group:{group.args[0]}"
+    return item.nodeid.split("::")[0]
+
+
+def pytest_collection_modifyitems(config: Any, items: list[Any]) -> None:
+    """``--shard K/N``: keep the K-th of N slices, split by a stable hash."""
+    spec = config.getoption("--shard")
+    if not spec:
+        return
+    k, n = _parse_shard(spec)
+    keep, drop = [], []
+    for item in items:
+        digest = hashlib.sha1(_shard_key(item).encode()).hexdigest()
+        (keep if int(digest, 16) % n == k - 1 else drop).append(item)
+    items[:] = keep
+    config.hook.pytest_deselected(items=drop)
 
 
 @pytest.fixture

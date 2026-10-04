@@ -5519,6 +5519,10 @@ examples.</p>
    (the connections middleware adds it). The browser's own retry sends it back
    as <code>Last-Event-ID</code>, which is how Server &gt; Connections tells a reconnect from
    a new page opening the same stream.</li>
+<li>A stream that may go quiet for a while (followed log lines) is wrapped in
+   <code>overseer_live.heartbeat(frames)</code>, which sends an SSE comment every 15
+   seconds without a frame, ends the stream at the expiry above, and closes
+   its source when the browser leaves.</li>
 </ol>
 <p>The Overseer implementation is <code>app/components/web_frontend/overseer_events.py</code>.
 Its producer uses the existing cached <code>get_system_status()</code> result. Page
@@ -5572,6 +5576,14 @@ is served from the one reading, so ten open pages cost what one does.
 Something that happens rather than something polled is a point of its own:
 <code>series.record("llm:qwen2.5:7b:latency", 1.4)</code>, as every LLM call does when it
 finishes.</p>
+<p>What Overseer samples today: the containers behind each page, Ollama on the
+host (the Inference page, the Flet Ollama modal, and the model loads and
+evictions its Activity tab lists), the Redis keyspace map, and the worker
+queues (each queue's waiting and finished counts, so its rate and drain read
+the same for every viewer and survive a reconnect). A page whose server can
+run outside Docker registers its own note and charts beside its sampler
+(<code>samplers.HOSTS</code>, read through <code>ui_runtime.host_of</code>), so a stack without
+that component carries none of them.</p>
 <p><code>series.read(prefix, window)</code> gives a window back and <code>series.chart(...)</code>
 turns it into <code>chart_panel</code> data, one line per series on the times they
 share, the axis spanning the window up to now. A window longer than
@@ -5590,7 +5602,7 @@ one stream. The data's <code>"format"</code> (<code>percent</code>, <code>bytes<
 reads the same in the Flet charts (<code>LineChartCard.from_chart</code>).</p>
 <p>Overseer's Container section is the first user: CPU and memory per container
 over the last 15 minutes. A server outside Docker charts what it reports of
-itself instead (<code>ui_runtime.HOSTS</code>): Ollama on the host shows the memory each
+itself instead (<code>ui_runtime.host_of</code>): Ollama on the host shows the memory each
 loaded model holds (the inference sampler, which also serves the Inference
 page's Models table) and each call's tokens per second and latency.</p>
 

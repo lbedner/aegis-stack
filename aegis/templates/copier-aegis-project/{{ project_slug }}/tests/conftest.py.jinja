@@ -137,6 +137,21 @@ def _finance_calendar(
 # (uvicorn keeps one loop for the server's lifetime); only the
 # test suite needs this swap. Dict-mode keeps the same async API,
 # so call sites don't change.
+@pytest.fixture
+def clean_registry() -> Generator[None, None, None]:
+    """Unregister the tools a test registered, so cases stay independent.
+
+    Opt-in, never autouse: a module first imported during a test registers
+    its tools then, and unregistering them would leave the cached module's
+    tools missing for every later test."""
+    from app.core.tools import registered_tool_names, unregister_tool
+
+    before = set(registered_tool_names())
+    yield
+    for name in set(registered_tool_names()) - before:
+        unregister_tool(name)
+
+
 @pytest.fixture(autouse=True)
 def _fresh_system_status_cache():
     """No test sees another test's cached system-status walk."""

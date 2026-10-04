@@ -133,7 +133,7 @@ class TestTheAgentCanActuallyCallIt:
     def test_seeding_alone_registers_it(self) -> None:
         """The registry only holds tools whose module was imported, and
         seeding runs in processes that never build a chat agent."""
-        from app.services.ai.domains.chat.tools import registered_tool_names
+        from app.core.tools import registered_tool_names
 
         assert "context" in registered_tool_names()
 

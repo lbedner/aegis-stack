@@ -11,9 +11,9 @@ from dataclasses import dataclass
 from pydantic_ai.models.test import TestModel
 import pytest
 
+from app.core.tools import register_tool, unregister_tool
 from app.services.ai.domains.chat.agent_loader import AgentConfig, build_chat_agent
 from app.services.ai.domains.chat.chat_kit import ChatScope, DoneFrame
-from app.services.ai.domains.chat.tools import register_tool, unregister_tool
 
 
 @dataclass

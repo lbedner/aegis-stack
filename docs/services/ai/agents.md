@@ -61,10 +61,10 @@ Tools attach separately through the `tool` and `agent_tool` tables, and resolve 
 
 ## Tools
 
-The database decides WHICH tools an agent may call; Python decides WHAT each name executes. Register a tool once:
+The database decides WHICH tools an agent may call; Python decides WHAT each name executes. Register a tool once, from any service: the registry lives in core (`app.core.tools`), not in the AI service.
 
 ```python
-from app.services.ai.tools import register_tool
+from app.core.tools import register_tool
 
 async def lookup_order(order_id: str) -> str:
     """Fetch an order summary for the given order id."""

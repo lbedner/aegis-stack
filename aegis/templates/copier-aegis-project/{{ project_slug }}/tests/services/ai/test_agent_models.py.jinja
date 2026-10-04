@@ -1,20 +1,16 @@
 """Tests for the agent registry models and seed fixtures."""
 {% if ai_backend != "memory" %}
 
+import inspect
 import subprocess
 import sys
-
-import inspect
 
 import pytest
 from sqlmodel import Session, select
 
+from app.core.tools import register_tool, unregister_tool
 from app.services.ai.domains.chat.prompts import get_default_system_prompt
-from app.services.ai.domains.chat.tools import (
-    register_tool,
-    resolve_tools,
-    unregister_tool,
-)
+from app.services.ai.domains.chat.tools import resolve_tools
 from app.services.ai.fixtures.agent_fixtures import (
     DEFAULT_AGENT_SLUG,
     load_agent_fixtures,
@@ -170,7 +166,7 @@ class TestBuiltinToolRowsSeed:
         """
         script = (
             "from app.services.ai.fixtures import agent_fixtures\n"
-            "from app.services.ai.domains.chat.tools import registered_tool_names\n"
+            "from app.core.tools import registered_tool_names\n"
             "names = set(registered_tool_names())\n"
             "missing = {'save_memory', 'replace_memory'} - names\n"
             "assert not missing, f'unregistered: {sorted(missing)}'\n"

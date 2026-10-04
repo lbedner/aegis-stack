@@ -12,12 +12,9 @@ from typing import Any
 from pydantic_ai.models.test import TestModel
 import pytest
 
+from app.core.tools import register_tool, unregister_tool
 from app.services.ai.domains.chat.chat_kit import ChatScope, DoneFrame, ToolChatAgent
-from app.services.ai.domains.chat.tools import (
-    register_tool,
-    resolve_tools,
-    unregister_tool,
-)
+from app.services.ai.domains.chat.tools import resolve_tools
 
 
 @dataclass
@@ -89,8 +86,8 @@ async def test_a_tool_runs_as_the_scopes_owner_and_conversation() -> None:
 async def test_a_proposal_reaches_the_caller_as_its_card() -> None:
     """A ``propose`` result yields a ``CardFrame`` naming the card, so a kit
     runtime can store it with the turn and draw it from the queue."""
+    from app.core.tools import get_tool
     from app.services.ai.domains.chat.chat_kit import CardFrame
-    from app.services.ai.domains.chat.tools import get_tool
 
     async def propose(change_type: str) -> dict[str, object]:
         """File a change."""

@@ -24,8 +24,8 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.core.db import get_async_session
 from app.core.log import logger
 from app.core.time import utcnow
+from app.core.tools import register_tool
 from app.services.ai.domains.chat import queries
-from app.services.ai.domains.chat.tools import register_tool
 from app.services.ai.models.agents import AgentUserMemory
 
 MEMORY_CATEGORIES = (

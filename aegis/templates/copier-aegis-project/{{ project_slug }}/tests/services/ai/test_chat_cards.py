@@ -123,7 +123,7 @@ class TestTheTrail:
 
 
 def test_it_is_a_tool_an_agent_can_be_granted() -> None:
-    from app.services.ai.domains.chat.tools import get_tool
+    from app.core.tools import get_tool
 
     tool = get_tool("draw_card")
     # It shows what the script computed and changes nothing: a read, so it

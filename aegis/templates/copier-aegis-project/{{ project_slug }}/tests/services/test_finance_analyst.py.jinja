@@ -759,7 +759,7 @@ class TestFixtures:
 
         script = (
             "from app.services.ai import fixtures  # noqa: F401\n"
-            "from app.services.ai.domains.chat.tools import registered_tool_names\n"
+            "from app.core.tools import registered_tool_names\n"
             "from app.services.finance.domains.detection.analyst.seeds import (\n"
             "    FINANCE_CHAT_TOOL_NAMES,\n"
             ")\n"

@@ -18,7 +18,7 @@ from __future__ import annotations
 import contextvars
 from dataclasses import dataclass, field
 
-from app.services.ai.domains.chat.tools import register_tool
+from app.core.tools import register_tool
 
 # Tokens are model-specific; this is the same 4-chars-per-token rule the
 # history budget is computed with, so the two numbers stay comparable.

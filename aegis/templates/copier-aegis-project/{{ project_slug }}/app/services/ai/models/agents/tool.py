@@ -7,9 +7,8 @@ class Tool(SQLModel, table=True):
     """
     A registered tool an agent can call.
 
-    ``name`` keys into the Python tool registry; a row whose name has no
-    registered callable is skipped with a warning at load time, never an
-    error.
+    ``name`` keys into the tool registry (``app.core.tools``); resolution
+    rules live in ``resolve_tools``.
     """
 
     __tablename__ = "tool"

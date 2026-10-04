@@ -19,10 +19,9 @@ so a signed-in turn sees only its own household; a turn without one
 from datetime import date, timedelta
 from typing import Any
 
-from app.services.finance.utils import current_date
 from app.core.db import get_async_session
+from app.core.tools import register_tool
 from app.services.ai.domains.chat.user_memory import current_owner_user_id
-from app.services.ai.domains.chat.tools import register_tool
 from app.services.finance.constants import UNCATEGORIZED_CATEGORY_NAMES
 from app.services.finance.domains.investments import queries as investment_queries
 from app.services.finance.domains.investments.securities import (
@@ -55,6 +54,7 @@ from app.services.finance.domains.planning.goals import goal_metadata
 from app.services.finance.domains.planning.recurring import (
     queries as recurring_queries,
 )
+from app.services.finance.utils import current_date
 
 # Sized for years of a personal ledger (a few thousand rows/year); rows
 # land in the code-mode sandbox, not the model's context, so the cost of

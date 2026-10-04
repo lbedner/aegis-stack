@@ -12,14 +12,15 @@ from __future__ import annotations
 from typing import Any
 from uuid import uuid4
 
+from pydantic import ValidationError
+from sqlmodel.ext.asyncio.session import AsyncSession
+
 from app.core.chat_transcript import WITHDRAWN, card_outcome
 from app.core.time import utcnow
 from app.services.change_queue.models import PendingChange
 from app.services.change_queue.queries import batch_rows, get_change
 from app.services.change_queue.registry import executor_for
 from app.services.change_queue.schemas import ChangeDisplayRow, PendingChangeResponse
-from pydantic import ValidationError
-from sqlmodel.ext.asyncio.session import AsyncSession
 
 
 def _freeze(display: list[ChangeDisplayRow]) -> list[dict[str, str]]:
@@ -123,17 +124,30 @@ async def approve_batch(
     (which are rejected - a veto is a decision, not a deferral). One
     failing row stays pending with its error; the rest land.
     """
+    rows = await batch_rows(db, batch_id, owner_user_id=owner_user_id)
+    return await approve_rows(db, rows, exclude_ids=exclude_ids)
+
+
+async def approve_rows(
+    db: AsyncSession,
+    rows: list[PendingChange],
+    *,
+    exclude_ids: list[int] | None = None,
+) -> dict[str, Any]:
+    """``approve_batch`` over rows the caller already read: each still
+    pending row is approved, the vetoed ones rejected, without reading
+    any row again."""
     excluded = set(exclude_ids or [])
     approved = rejected = failed = 0
-    for row in await batch_rows(db, batch_id, owner_user_id=owner_user_id):
+    for row in rows:
         if row.status != "pending" or row.id is None:
             continue
         if row.id in excluded:
-            await reject(db, row.id, owner_user_id=owner_user_id, note="vetoed")
+            await reject_row(db, row, note="vetoed")
             rejected += 1
             continue
         try:
-            await approve(db, row.id, owner_user_id=owner_user_id)
+            await approve_row(db, row)
             approved += 1
         except Exception:
             failed += 1
@@ -146,13 +160,16 @@ async def reject_batch(
     *,
     owner_user_id: int | None = None,
 ) -> dict[str, Any]:
-    rejected = 0
-    for row in await batch_rows(db, batch_id, owner_user_id=owner_user_id):
-        if row.status != "pending" or row.id is None:
-            continue
-        await reject(db, row.id, owner_user_id=owner_user_id)
-        rejected += 1
-    return {"approved": 0, "rejected": rejected, "failed": 0}
+    rows = await batch_rows(db, batch_id, owner_user_id=owner_user_id)
+    return await reject_rows(db, rows)
+
+
+async def reject_rows(db: AsyncSession, rows: list[PendingChange]) -> dict[str, Any]:
+    """``reject_batch`` over rows the caller already read."""
+    pending = [row for row in rows if row.status == "pending"]
+    for row in pending:
+        await reject_row(db, row)
+    return {"approved": 0, "rejected": len(pending), "failed": 0}
 
 
 def _require_pending(row: PendingChange | None) -> PendingChange:
@@ -163,9 +180,7 @@ def _require_pending(row: PendingChange | None) -> PendingChange:
     return row
 
 
-async def _describe_row(
-    db: AsyncSession, row: PendingChange
-) -> list[ChangeDisplayRow]:
+async def _describe_row(db: AsyncSession, row: PendingChange) -> list[ChangeDisplayRow]:
     """The card body for a stored row, tolerant of tightened rules.
 
     Validation guards the DOOR (propose); a stored payload that no
@@ -186,7 +201,14 @@ async def approve(
     db: AsyncSession, change_id: int, *, owner_user_id: int | None = None
 ) -> PendingChange:
     """Execute the stored mutation. The one door a proposal has into the world."""
-    row = _require_pending(await get_change(db, change_id, owner_user_id=owner_user_id))
+    return await approve_row(
+        db, await get_change(db, change_id, owner_user_id=owner_user_id)
+    )
+
+
+async def approve_row(db: AsyncSession, row: PendingChange | None) -> PendingChange:
+    """``approve`` for a row the caller already read."""
+    row = _require_pending(row)
     executor = executor_for(row.change_type)
     model = executor.payload_model(**row.payload)
     # Snapshot the display BEFORE executing: after the mutation the
@@ -219,7 +241,16 @@ async def reject(
     owner_user_id: int | None = None,
     note: str | None = None,
 ) -> PendingChange:
-    row = _require_pending(await get_change(db, change_id, owner_user_id=owner_user_id))
+    return await reject_row(
+        db, await get_change(db, change_id, owner_user_id=owner_user_id), note=note
+    )
+
+
+async def reject_row(
+    db: AsyncSession, row: PendingChange | None, *, note: str | None = None
+) -> PendingChange:
+    """``reject`` for a row the caller already read."""
+    row = _require_pending(row)
     display = _freeze(await _describe_row(db, row))
     row.status = "rejected"
     row.result = {"display": display, **({"note": note} if note else {})}
@@ -244,12 +275,17 @@ async def withdraw(
     note: the audit trail keeps the mistake visible, the user just
     never has to clean it up by hand."""
     row = _require_pending(await get_change(db, change_id, owner_user_id=owner_user_id))
+    return await _withdraw_row(db, row, agent_slug=agent_slug, reason=reason)
+
+
+async def _withdraw_row(
+    db: AsyncSession, row: PendingChange, *, agent_slug: str | None, reason: str | None
+) -> PendingChange:
     if not agent_slug or row.proposed_by_agent != agent_slug:
         raise ValueError("only the proposing agent can withdraw a change")
-    return await reject(
+    return await reject_row(
         db,
-        change_id,
-        owner_user_id=owner_user_id,
+        row,
         # The reason rides on the card: a retracted proposal the user can
         # still see needs to say why, or it reads as the agent flailing.
         note=f"{WITHDRAWN} by {agent_slug}." + (f" {reason.strip()}" if reason else ""),
@@ -273,13 +309,7 @@ async def withdraw_batch(
     for row in await batch_rows(db, batch_id, owner_user_id=owner_user_id):
         if row.status != "pending" or row.id is None:
             continue
-        await withdraw(
-            db,
-            row.id,
-            agent_slug=agent_slug,
-            owner_user_id=owner_user_id,
-            reason=reason,
-        )
+        await _withdraw_row(db, row, agent_slug=agent_slug, reason=reason)
         withdrawn += 1
     return withdrawn
 

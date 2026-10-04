@@ -23,6 +23,8 @@ from app.services.change_queue.queries import (
 from app.services.change_queue.queue import (
     approve,
     approve_batch,
+    approve_row,
+    approve_rows,
     card,
     describe_change,
     outcome_of,
@@ -30,6 +32,8 @@ from app.services.change_queue.queue import (
     propose_many,
     reject,
     reject_batch,
+    reject_row,
+    reject_rows,
     withdraw,
     withdraw_batch,
 )
@@ -52,6 +56,8 @@ __all__ = [
     "PendingChange",
     "approve",
     "approve_batch",
+    "approve_row",
+    "approve_rows",
     "card",
     "batch_rows",
     "describe_change",
@@ -65,6 +71,8 @@ __all__ = [
     "registered_change_types",
     "reject",
     "reject_batch",
+    "reject_row",
+    "reject_rows",
     "withdraw",
     "withdraw_batch",
 ]

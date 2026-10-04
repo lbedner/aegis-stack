@@ -76,11 +76,13 @@ async def _row(db: AsyncSession, change_id: int, owner: int | None) -> PendingCh
     return row
 
 
-async def _batch(db: AsyncSession, batch_id: str, owner: int | None) -> dict[str, Any]:
+async def _batch_rows(
+    db: AsyncSession, batch_id: str, owner: int | None
+) -> list[PendingChange]:
     rows = await change_queue.batch_rows(db, batch_id, owner_user_id=owner)
     if not rows:
         raise HTTPException(status_code=404)
-    return await _batch_view(db, batch_id, rows)
+    return rows
 
 
 def _render(card: str, view: dict[str, Any]) -> HTMLResponse:
@@ -95,18 +97,19 @@ async def _resolve(
     owner: int | None,
     action: Callable[..., Awaitable[Any]],
 ) -> Response:
-    """Approve or reject, then show the card as it now stands. Another
-    user's card is still a 404; one already resolved shows as it is; a
-    failed run stays on the card as its error, recorded like the JSON
-    route records it."""
+    """Approve or reject, then show the card as it now stands. The card is
+    read once: another user's is a 404; one already resolved shows as it
+    is; a failed run stays on the card as its error, recorded like the
+    JSON route records it."""
+    row = await _row(db, change_id, owner)
     try:
-        await action(db, change_id, owner_user_id=owner)
+        await action(db, row)
     except ValueError:
-        pass  # not this user's, already resolved, or the run's own error
+        pass  # already resolved, or the run's own error
     except Exception:
         logger.exception(f"Resolving pending change {change_id} failed")
     await db.commit()
-    return _render("change_card", await _view(db, await _row(db, change_id, owner)))
+    return _render("change_card", await _view(db, row))
 
 
 @router.get("", response_class=HTMLResponse)
@@ -152,7 +155,7 @@ async def approve(
     db: AsyncSession = Depends(get_async_db),
     owner: int | None = Depends(get_owner_user_id),
 ) -> Response:
-    return await _resolve(db, change_id, owner, change_queue.approve)
+    return await _resolve(db, change_id, owner, change_queue.approve_row)
 
 
 @router.post("/{change_id}/reject", response_class=HTMLResponse)
@@ -161,7 +164,7 @@ async def reject(
     db: AsyncSession = Depends(get_async_db),
     owner: int | None = Depends(get_owner_user_id),
 ) -> Response:
-    return await _resolve(db, change_id, owner, change_queue.reject)
+    return await _resolve(db, change_id, owner, change_queue.reject_row)
 
 
 @router.get("/batch/{batch_id}", response_class=HTMLResponse)
@@ -170,7 +173,8 @@ async def show_batch(
     db: AsyncSession = Depends(get_async_db),
     owner: int | None = Depends(get_owner_user_id),
 ) -> Response:
-    return _render("batch_card", await _batch(db, batch_id, owner))
+    rows = await _batch_rows(db, batch_id, owner)
+    return _render("batch_card", await _batch_view(db, batch_id, rows))
 
 
 @router.post("/batch/{batch_id}/approve", response_class=HTMLResponse)
@@ -181,14 +185,14 @@ async def approve_batch(
     owner: int | None = Depends(get_owner_user_id),
 ) -> Response:
     """Approve the batch's waiting rows, rejecting the ones ticked to skip.
-    Another user's batch resolves nothing and is a 404."""
+    Another user's batch is a 404. The batch is read once: its rows are
+    resolved and re-shown as loaded."""
+    rows = await _batch_rows(db, batch_id, owner)
     form = await request.form()
     skipped = [int(v) for v in form.getlist("exclude_ids") if str(v).isdigit()]
-    await change_queue.approve_batch(
-        db, batch_id, owner_user_id=owner, exclude_ids=skipped
-    )
+    await change_queue.approve_rows(db, rows, exclude_ids=skipped)
     await db.commit()
-    return _render("batch_card", await _batch(db, batch_id, owner))
+    return _render("batch_card", await _batch_view(db, batch_id, rows))
 
 
 @router.post("/batch/{batch_id}/reject", response_class=HTMLResponse)
@@ -197,7 +201,8 @@ async def reject_batch(
     db: AsyncSession = Depends(get_async_db),
     owner: int | None = Depends(get_owner_user_id),
 ) -> Response:
-    await change_queue.reject_batch(db, batch_id, owner_user_id=owner)
+    rows = await _batch_rows(db, batch_id, owner)
+    await change_queue.reject_rows(db, rows)
     await db.commit()
-    return _render("batch_card", await _batch(db, batch_id, owner))
+    return _render("batch_card", await _batch_view(db, batch_id, rows))
 {% endif %}

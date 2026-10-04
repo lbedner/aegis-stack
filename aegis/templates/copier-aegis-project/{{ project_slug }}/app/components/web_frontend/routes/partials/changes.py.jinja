@@ -3,14 +3,14 @@
 A card renders the stored queue row through ``change_queue.card`` (the same
 builder the JSON routes in ``api/changes.py`` use), so what the user
 approves is what runs. Approving or rejecting swaps the card for its new
-state. Everything is scoped to the signed-in user by ``get_owner_user_id``:
-another user's card is a 404, never a card.
+state. Everything is scoped to the signed-in user: another user's card is
+a 404 (``change_queue.deps``), never a card.
 """
 
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, Response
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -20,6 +20,7 @@ from app.core.db import get_async_db
 from app.core.log import logger
 from app.services import change_queue
 from app.services.change_queue import PendingChange
+from app.services.change_queue.deps import owned_batch, owned_change
 from app.services.shared.deps import get_owner_user_id
 
 PATH = "/partials/changes"
@@ -69,22 +70,6 @@ async def _batch_view(
     }
 
 
-async def _row(db: AsyncSession, change_id: int, owner: int | None) -> PendingChange:
-    row = await change_queue.get_change(db, change_id, owner_user_id=owner)
-    if row is None:
-        raise HTTPException(status_code=404)
-    return row
-
-
-async def _batch_rows(
-    db: AsyncSession, batch_id: str, owner: int | None
-) -> list[PendingChange]:
-    rows = await change_queue.batch_rows(db, batch_id, owner_user_id=owner)
-    if not rows:
-        raise HTTPException(status_code=404)
-    return rows
-
-
 def _render(card: str, view: dict[str, Any]) -> HTMLResponse:
     """One card macro (``change_card``, ``batch_card``) as the response."""
     macros = templates.env.get_template("components/macros/changes.html").module
@@ -92,22 +77,17 @@ def _render(card: str, view: dict[str, Any]) -> HTMLResponse:
 
 
 async def _resolve(
-    db: AsyncSession,
-    change_id: int,
-    owner: int | None,
-    action: Callable[..., Awaitable[Any]],
+    db: AsyncSession, row: PendingChange, action: Callable[..., Awaitable[Any]]
 ) -> Response:
-    """Approve or reject, then show the card as it now stands. The card is
-    read once: another user's is a 404; one already resolved shows as it
-    is; a failed run stays on the card as its error, recorded like the
-    JSON route records it."""
-    row = await _row(db, change_id, owner)
+    """Approve or reject, then show the card as it now stands: one already
+    resolved shows as it is; a failed run stays on the card as its error,
+    recorded like the JSON route records it."""
     try:
         await action(db, row)
     except ValueError:
         pass  # already resolved, or the run's own error
     except Exception:
-        logger.exception(f"Resolving pending change {change_id} failed")
+        logger.exception(f"Resolving pending change {row.id} failed")
     await db.commit()
     return _render("change_card", await _view(db, row))
 
@@ -142,38 +122,34 @@ async def review(
 
 @router.get("/{change_id}", response_class=HTMLResponse)
 async def show(
-    change_id: int,
+    row: PendingChange = Depends(owned_change),
     db: AsyncSession = Depends(get_async_db),
-    owner: int | None = Depends(get_owner_user_id),
 ) -> Response:
-    return _render("change_card", await _view(db, await _row(db, change_id, owner)))
+    return _render("change_card", await _view(db, row))
 
 
 @router.post("/{change_id}/approve", response_class=HTMLResponse)
 async def approve(
-    change_id: int,
+    row: PendingChange = Depends(owned_change),
     db: AsyncSession = Depends(get_async_db),
-    owner: int | None = Depends(get_owner_user_id),
 ) -> Response:
-    return await _resolve(db, change_id, owner, change_queue.approve_row)
+    return await _resolve(db, row, change_queue.approve_row)
 
 
 @router.post("/{change_id}/reject", response_class=HTMLResponse)
 async def reject(
-    change_id: int,
+    row: PendingChange = Depends(owned_change),
     db: AsyncSession = Depends(get_async_db),
-    owner: int | None = Depends(get_owner_user_id),
 ) -> Response:
-    return await _resolve(db, change_id, owner, change_queue.reject_row)
+    return await _resolve(db, row, change_queue.reject_row)
 
 
 @router.get("/batch/{batch_id}", response_class=HTMLResponse)
 async def show_batch(
     batch_id: str,
+    rows: list[PendingChange] = Depends(owned_batch),
     db: AsyncSession = Depends(get_async_db),
-    owner: int | None = Depends(get_owner_user_id),
 ) -> Response:
-    rows = await _batch_rows(db, batch_id, owner)
     return _render("batch_card", await _batch_view(db, batch_id, rows))
 
 
@@ -181,13 +157,11 @@ async def show_batch(
 async def approve_batch(
     request: Request,
     batch_id: str,
+    rows: list[PendingChange] = Depends(owned_batch),
     db: AsyncSession = Depends(get_async_db),
-    owner: int | None = Depends(get_owner_user_id),
 ) -> Response:
-    """Approve the batch's waiting rows, rejecting the ones ticked to skip.
-    Another user's batch is a 404. The batch is read once: its rows are
-    resolved and re-shown as loaded."""
-    rows = await _batch_rows(db, batch_id, owner)
+    """Approve the batch's waiting rows, rejecting the ones ticked to skip;
+    the rows resolved are the rows re-shown."""
     form = await request.form()
     skipped = [int(v) for v in form.getlist("exclude_ids") if str(v).isdigit()]
     await change_queue.approve_rows(db, rows, exclude_ids=skipped)
@@ -198,10 +172,9 @@ async def approve_batch(
 @router.post("/batch/{batch_id}/reject", response_class=HTMLResponse)
 async def reject_batch(
     batch_id: str,
+    rows: list[PendingChange] = Depends(owned_batch),
     db: AsyncSession = Depends(get_async_db),
-    owner: int | None = Depends(get_owner_user_id),
 ) -> Response:
-    rows = await _batch_rows(db, batch_id, owner)
     await change_queue.reject_rows(db, rows)
     await db.commit()
     return _render("batch_card", await _batch_view(db, batch_id, rows))

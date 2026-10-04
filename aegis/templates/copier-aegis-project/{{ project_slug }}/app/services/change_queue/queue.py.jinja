@@ -12,15 +12,14 @@ from __future__ import annotations
 from typing import Any
 from uuid import uuid4
 
-from pydantic import ValidationError
-from sqlmodel.ext.asyncio.session import AsyncSession
-
 from app.core.chat_transcript import WITHDRAWN, card_outcome
 from app.core.time import utcnow
 from app.services.change_queue.models import PendingChange
 from app.services.change_queue.queries import batch_rows, get_change
 from app.services.change_queue.registry import executor_for
 from app.services.change_queue.schemas import ChangeDisplayRow, PendingChangeResponse
+from pydantic import ValidationError
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 
 def _freeze(display: list[ChangeDisplayRow]) -> list[dict[str, str]]:
@@ -139,9 +138,7 @@ async def approve_rows(
     any row again."""
     excluded = set(exclude_ids or [])
     approved = rejected = failed = 0
-    for row in rows:
-        if row.status != "pending" or row.id is None:
-            continue
+    for row in _pending(rows):
         if row.id in excluded:
             await reject_row(db, row, note="vetoed")
             rejected += 1
@@ -166,21 +163,32 @@ async def reject_batch(
 
 async def reject_rows(db: AsyncSession, rows: list[PendingChange]) -> dict[str, Any]:
     """``reject_batch`` over rows the caller already read."""
-    pending = [row for row in rows if row.status == "pending"]
+    pending = _pending(rows)
     for row in pending:
         await reject_row(db, row)
     return {"approved": 0, "rejected": len(pending), "failed": 0}
 
 
-def _require_pending(row: PendingChange | None) -> PendingChange:
+def found(row: PendingChange | None) -> PendingChange:
     if row is None:
         raise ValueError("pending change not found")
+    return row
+
+
+def _require_pending(row: PendingChange) -> PendingChange:
     if row.status != "pending":
         raise ValueError(f"change already {row.status}")
     return row
 
 
-async def _describe_row(db: AsyncSession, row: PendingChange) -> list[ChangeDisplayRow]:
+def _pending(rows: list[PendingChange]) -> list[PendingChange]:
+    """The rows still waiting for a decision; decided ones are left be."""
+    return [row for row in rows if row.status == "pending"]
+
+
+async def _describe_row(
+    db: AsyncSession, row: PendingChange
+) -> list[ChangeDisplayRow]:
     """The card body for a stored row, tolerant of tightened rules.
 
     Validation guards the DOOR (propose); a stored payload that no
@@ -202,11 +210,11 @@ async def approve(
 ) -> PendingChange:
     """Execute the stored mutation. The one door a proposal has into the world."""
     return await approve_row(
-        db, await get_change(db, change_id, owner_user_id=owner_user_id)
+        db, found(await get_change(db, change_id, owner_user_id=owner_user_id))
     )
 
 
-async def approve_row(db: AsyncSession, row: PendingChange | None) -> PendingChange:
+async def approve_row(db: AsyncSession, row: PendingChange) -> PendingChange:
     """``approve`` for a row the caller already read."""
     row = _require_pending(row)
     executor = executor_for(row.change_type)
@@ -242,12 +250,12 @@ async def reject(
     note: str | None = None,
 ) -> PendingChange:
     return await reject_row(
-        db, await get_change(db, change_id, owner_user_id=owner_user_id), note=note
+        db, found(await get_change(db, change_id, owner_user_id=owner_user_id)), note=note
     )
 
 
 async def reject_row(
-    db: AsyncSession, row: PendingChange | None, *, note: str | None = None
+    db: AsyncSession, row: PendingChange, *, note: str | None = None
 ) -> PendingChange:
     """``reject`` for a row the caller already read."""
     row = _require_pending(row)
@@ -274,7 +282,9 @@ async def withdraw(
     can never sweep another's cards, and it lands as a rejection with a
     note: the audit trail keeps the mistake visible, the user just
     never has to clean it up by hand."""
-    row = _require_pending(await get_change(db, change_id, owner_user_id=owner_user_id))
+    row = _require_pending(
+        found(await get_change(db, change_id, owner_user_id=owner_user_id))
+    )
     return await _withdraw_row(db, row, agent_slug=agent_slug, reason=reason)
 
 
@@ -305,13 +315,10 @@ async def withdraw_batch(
     racing the chat run's own connection, which is how SQLite reported
     "database is locked" halfway through a cleanup. Returns how many rows
     went; rows already decided are left as they are."""
-    withdrawn = 0
-    for row in await batch_rows(db, batch_id, owner_user_id=owner_user_id):
-        if row.status != "pending" or row.id is None:
-            continue
+    pending = _pending(await batch_rows(db, batch_id, owner_user_id=owner_user_id))
+    for row in pending:
         await _withdraw_row(db, row, agent_slug=agent_slug, reason=reason)
-        withdrawn += 1
-    return withdrawn
+    return len(pending)
 
 
 async def card(db: AsyncSession, row: PendingChange) -> PendingChangeResponse:

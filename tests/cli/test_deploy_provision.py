@@ -290,18 +290,34 @@ def apis(monkeypatch: pytest.MonkeyPatch) -> dict[str, FakeAPI]:
     monkeypatch.setattr(cmd, "wait_for_dns", lambda _h, _ip: True)
     monkeypatch.setattr(cmd, "_cloud_init_ok", lambda _ip: True)
     deployed: list[str | None] = []
+    # Each step appends to ``steps`` so a test can read the order.
+    steps: list[tuple[str, Any]] = []
     monkeypatch.setattr(
-        cmd, "deploy_command", lambda **kw: deployed.append(kw["project_path"])
+        cmd,
+        "enable_tls",
+        lambda root, name, email: steps.append(("tls", (root, name, email))),
     )
+    monkeypatch.setattr(
+        cmd,
+        "deploy_command",
+        lambda **kw: (
+            deployed.append(kw["project_path"]),
+            steps.append(("deploy", None)),
+        ),
+    )
+    fakes["steps"] = steps  # type: ignore[assignment]
     monkeypatch.setenv("HCLOUD_TOKEN", HCLOUD)
     monkeypatch.delenv("CLOUDFLARE_API_TOKEN", raising=False)
     fakes["deployed"] = deployed  # type: ignore[assignment]
     return fakes
 
 
+EMAIL = "ops@example.org"
+
+
 def _provision(project: Path, *extra: str, input: str = "y\n") -> Any:
     args = ["deploy-provision", "--project-path", str(project)]
-    args += ["--ssh-key", str(project / "id.pub"), *extra]
+    args += ["--ssh-key", str(project / "id.pub"), "--email", EMAIL, *extra]
     return RUNNER.invoke(app, args, input=input)
 
 
@@ -478,3 +494,89 @@ def test_destroy_without_record_fails(project: Path, apis: dict[str, FakeAPI]) -
     result = RUNNER.invoke(app, ["deploy-destroy", "--project-path", str(project)])
     assert result.exit_code == 1
     assert not apis[cmd.HETZNER_API].calls
+
+
+def _home_with_keys(tmp_path: Path, *names: str) -> Path:
+    home = tmp_path / "home"
+    (home / ".ssh").mkdir(parents=True)
+    for name in names:
+        (home / ".ssh" / name).write_text(PUBKEY + "\n")
+    return home
+
+
+def test_without_ssh_key_the_first_existing_key_is_used(
+    project: Path,
+    apis: dict[str, FakeAPI],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Only an RSA key on the machine: the default must not demand ed25519."""
+    monkeypatch.setenv("HOME", str(_home_with_keys(tmp_path, "id_rsa.pub")))
+    args = ["deploy-provision", "--project-path", str(project), "--email", EMAIL]
+
+    result = RUNNER.invoke(app, args, input="y\n")
+
+    assert result.exit_code == 0, result.output
+    uploaded = [
+        c for c in apis[cmd.HETZNER_API].calls if c[:2] == ("POST", "/ssh_keys")
+    ]
+    assert uploaded and uploaded[0][2]["public_key"] == PUBKEY
+
+
+def test_without_any_ssh_key_it_says_what_it_looked_for(
+    project: Path,
+    apis: dict[str, FakeAPI],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("HOME", str(_home_with_keys(tmp_path)))
+    args = ["deploy-provision", "--project-path", str(project)]
+
+    result = RUNNER.invoke(app, args, input="y\n")
+
+    assert result.exit_code == 1
+    assert "id_ed25519.pub" in result.output and "id_rsa.pub" in result.output
+    assert "--ssh-key" in result.output
+    assert not apis[cmd.HETZNER_API].calls
+
+
+def test_provision_turns_tls_on_for_the_name_before_deploying(
+    project: Path, apis: dict[str, FakeAPI]
+) -> None:
+    """A default project has no TLS at all; the name it gets must have it."""
+    result = _provision(project)
+
+    assert result.exit_code == 0, result.output
+    steps = apis["steps"]  # type: ignore[index]
+    assert steps == [
+        ("tls", (project, "203-0-113-7.sslip.io", EMAIL)),
+        ("deploy", None),
+    ]
+
+
+def test_without_an_email_nothing_is_created(
+    project: Path, apis: dict[str, FakeAPI]
+) -> None:
+    """Let's Encrypt refuses the generated placeholder address."""
+    args = ["deploy-provision", "--project-path", str(project)]
+    args += ["--ssh-key", str(project / "id.pub")]
+
+    result = RUNNER.invoke(app, args, input="y\n")
+
+    assert result.exit_code == 1
+    assert "--email" in result.output
+    assert not apis[cmd.HETZNER_API].calls
+
+
+def test_the_project_email_is_used_when_it_is_real(
+    project: Path, apis: dict[str, FakeAPI]
+) -> None:
+    (project / ".copier-answers.yml").write_text("author_email: me@real.dev\n")
+    args = ["deploy-provision", "--project-path", str(project)]
+    args += ["--ssh-key", str(project / "id.pub")]
+
+    result = RUNNER.invoke(app, args, input="y\n")
+
+    assert result.exit_code == 0, result.output
+    tls = [step for step in apis["steps"] if step[0] == "tls"]  # type: ignore[index]
+    assert tls[0][1][2] == "me@real.dev"

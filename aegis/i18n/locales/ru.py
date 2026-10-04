@@ -871,8 +871,10 @@ MESSAGES: dict[str, str] = {
         "~/.docker/cli-plugins/ на хосте развёртывания?"
     ),
     "deploy.rolling_complete": "Плавное развёртывание завершено!",
-    "deploy.app_running": "   Приложение работает по: http://{host}",
-    "deploy.overseer": "   Панель Overseer: http://{host}/dashboard/",
+    "deploy.app_running": "   Приложение работает по: {url}",
+    "deploy.overseer": "   Панель Overseer: {url}/dashboard/",
+    "deploy.overseer_allowlist": "   (Traefik пускает туда только частные сети: добавьте свой IP в ADMIN_IP_ALLOWLIST в .env и разверните заново)",
+    "deploy.record_failed": "   История развёртываний не записана: {error}",
     "deploy.view_logs": "   Просмотр логов: aegis deploy-logs",
     "deploy.check_status": "   Проверка статуса: aegis deploy-status",
     "deploy.backup_complete": "Бэкап завершён!",
@@ -1223,7 +1225,10 @@ MESSAGES: dict[str, str] = {
     "provision.help_opt_domain": (
         "Имя хоста, направляемое на сервер через Cloudflare (по умолчанию: имя sslip.io)"
     ),
-    "provision.help_opt_ssh_key": "Публичный ключ для root на новом сервере",
+    "provision.help_opt_ssh_key": "Публичный ключ для root на новом сервере (по умолчанию первый из ~/.ssh/id_ed25519.pub, id_ecdsa.pub, id_rsa.pub)",
+    "provision.no_ssh_key": "В {dir} не найден публичный SSH-ключ (искали {names}). Укажите ключ через --ssh-key.",
+    "provision.help_opt_email": "Адрес, на который Let's Encrypt регистрирует HTTPS-сертификат (по умолчанию author_email проекта)",
+    "provision.email_required": "Для HTTPS нужен адрес почты для Let's Encrypt, а author_email проекта всё ещё заглушка. Укажите адрес через --email.",
     "provision.unknown_provider": (
         "Неподдерживаемый провайдер: {provider}. Поддерживаются: {supported}"
     ),

@@ -625,13 +625,21 @@ aegis deploy-setup
 
 ### aegis deploy-provision
 
+!!! warning "Experimental Feature"
+    `deploy-provision` and `deploy-destroy` have run end to end against a live Hetzner account with an `sslip.io` name (server, HTTPS certificate, deploy, destroy). The `--domain` path through Cloudflare is tested only against a mocked API. Expect rough edges, and check your Hetzner console after a failed run.
+
 Create a server in your own Hetzner Cloud account and deploy to it. Shows the
 monthly price and asks before creating anything. The server boots with the
 project's `scripts/server-setup.sh` as cloud-init user-data, so it arrives with
 Docker and the firewall ready. Provisioning then waits for SSH and cloud-init,
 points a name at the server, waits for that name to resolve (so the first
-Let's Encrypt request does not fail), writes `.aegis/deploy.yml` and runs
-`aegis deploy`.
+Let's Encrypt request does not fail), turns HTTPS on for that name (the same
+change `aegis ingress-enable` makes, so a project generated without TLS gets
+it), writes `.aegis/deploy.yml` and runs `aegis deploy`.
+
+Let's Encrypt needs an email address: `--email`, or the project's
+`author_email` when it is not the generated placeholder. Without one the
+command stops before creating anything.
 
 Tokens are read from the environment at call time and never stored or printed
 (at most the last four characters are shown):
@@ -660,7 +668,8 @@ aegis deploy-provision [OPTIONS]
 - `--size TEXT`, Server type (default: `cx23`)
 - `--region TEXT`, Provider location (default: `nbg1`)
 - `--domain TEXT`, Hostname to point at the server through Cloudflare
-- `--ssh-key TEXT`, Public key installed for root (default: `~/.ssh/id_ed25519.pub`)
+- `--email TEXT`, Address Let's Encrypt registers the certificate to (default: the project's `author_email`)
+- `--ssh-key TEXT`, Public key installed for root (default: the first of `~/.ssh/id_ed25519.pub`, `id_ecdsa.pub`, `id_rsa.pub` that exists)
 - `--project-path TEXT`, Path to the project (default: current directory)
 - `--yes, -y`, Skip the price confirmation
 
@@ -723,7 +732,7 @@ aegis deploy-cd-setup --force  # rotate the deploy key
 
 ### aegis deploy
 
-Deploy the project to the configured server. Creates a backup, syncs files, builds Docker images, starts services, and runs a health check. Auto-rollback on failure.
+Deploy the project to the configured server. Creates a backup, syncs files, builds Docker images, starts services, and runs a health check (through HTTPS for the app's name when TLS is on). Auto-rollback on failure. With the deploy component and a database, it then records the deploy in the app's [deploy history](components/deploy.md#deploy-history): who deployed, from where, the health result, the backup and any rollback.
 
 **Usage:**
 ```bash

@@ -22,7 +22,11 @@ from ..constants import (
     WorkerBackends,
 )
 from .file_manifest import FileManifest
-from .migration_generator import SCHEDULER_MIGRATION, SECRETS_MIGRATION
+from .migration_generator import (
+    DEPLOY_MIGRATION,
+    SCHEDULER_MIGRATION,
+    SECRETS_MIGRATION,
+)
 from .option_spec import OptionMode, OptionSpec, parse_options
 from .plugins.spec import PluginKind, PluginSpec, ReadmeWiring
 
@@ -614,11 +618,26 @@ COMPONENTS: dict[str, ComponentSpec] = {
             ),
         ],
         marker_path="app/components/deploy",
+        # Deploy history; generated only with a database, see
+        # get_services_needing_migrations().
+        migrations=[DEPLOY_MIGRATION],
         files=FileManifest(
             primary=[
                 "app/components/deploy",
                 "tests/components/test_deploy_runtime.py",
             ],
+            # Deploy history: only with a database to keep it in. Keyed by
+            # the answer that gates it, so ``aegis add`` copies the group
+            # exactly when the project has one.
+            extras={
+                AnswerKeys.DATABASE: [
+                    "app/components/deploy/models.py",
+                    "app/components/deploy/history.py",
+                    "app/components/backend/startup/deploy_history.py",
+                    "app/cli/deploy_cli.py",
+                    "tests/components/test_deploy_history.py",
+                ],
+            },
         ),
     ),
 }

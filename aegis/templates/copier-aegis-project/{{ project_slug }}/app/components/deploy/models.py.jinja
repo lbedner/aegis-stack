@@ -1,0 +1,41 @@
+"""Deploy history's one table: a row per build that went live.
+{%- if database_engine == "postgres" %}
+
+Lives in its own ``deploy`` Postgres schema, apart from service tables.
+{%- endif %}
+"""
+
+from datetime import datetime
+
+from sqlalchemy import Column, DateTime, String
+from sqlmodel import Field, SQLModel
+
+from app.core.time import utcnow
+
+
+class Deployment(SQLModel, table=True):
+    """A build that went live (see ``history`` for who writes what)."""
+
+    __tablename__ = "deployment"
+{%- if database_engine == "postgres" %}
+    __table_args__ = {"schema": "deploy"}
+{%- endif %}
+
+    build_id: str = Field(sa_column=Column(String(64), primary_key=True))
+    started_at: datetime = Field(
+        default_factory=utcnow, sa_column=Column(DateTime, nullable=False)
+    )
+    finished_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=True)
+    )
+    deployed_by: str | None = Field(
+        default=None, sa_column=Column(String(320), nullable=True)
+    )
+    deployed_from: str | None = Field(
+        default=None, sa_column=Column(String(255), nullable=True)
+    )
+    health: str | None = Field(default=None, sa_column=Column(String(16), nullable=True))
+    backup: str | None = Field(default=None, sa_column=Column(String(64), nullable=True))
+    rolled_back_to: str | None = Field(
+        default=None, sa_column=Column(String(64), nullable=True)
+    )

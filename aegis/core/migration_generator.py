@@ -271,6 +271,17 @@ SECRETS_MIGRATION = ServiceMigrationSpec(
 )
 
 
+# The deploy component's history: one row per build that went live. Its own
+# Postgres schema like the scheduler's and secrets'; SQLite keeps it in the
+# one file. Ships only where the stack has a database.
+DEPLOY_MIGRATION = ServiceMigrationSpec(
+    service_name="deploy",
+    description="Deploy history: one row per build that went live",
+    schema="deploy",
+    stamp_signature=("table", "deploy.deployment"),
+)
+
+
 # Default registry-facing variant is the shared-mode shape. Per-user mode
 # rebuilds the spec at generation time via _build_insights_migration(True).
 
@@ -908,6 +919,15 @@ def get_services_needing_migrations(context: dict[str, Any]) -> list[str]:
     include_secrets = context.get(AnswerKeys.SECRETS)
     if include_secrets == "yes" or include_secrets is True:
         services.append("secrets")
+
+    # Deploy component: its history table, only where there is a database to
+    # keep it in (deploy without one still reads containers and logs).
+    include_deploy = context.get(AnswerKeys.DEPLOY)
+    include_database = context.get(AnswerKeys.DATABASE)
+    if (include_deploy == "yes" or include_deploy is True) and (
+        include_database == "yes" or include_database is True
+    ):
+        services.append("deploy")
 
     # Per-user vs shared insights is one folded migration — generation
     # picks the shape from the context flag (see ``generate_migration``).

@@ -104,7 +104,8 @@ dependencies = [
 {#- A plugin with migrations needs alembic, unless a plugin already names it. #}
 {%- set plugin_deps = _plugins | default([]) | map(attribute="pyproject_deps") | map("join", " ") | join(" ") %}
 {%- set plugin_needs_alembic = (_plugins | default([]) | selectattr("migrations") | list) and "alembic" not in plugin_deps %}
-{%- if include_auth or include_payment or include_insights or include_blog or include_documents or include_finance or (include_ai and ai_backend in ["sqlite", "postgres"]) or (include_scheduler and scheduler_backend != "memory") or plugin_needs_alembic %}
+{#- Mirrors get_services_needing_migrations; tests/core/test_alembic_dependency_matches_migrations.py holds the two together. #}
+{%- if include_auth or include_payment or include_insights or include_blog or include_documents or include_finance or (include_ai and ai_backend in ["sqlite", "postgres"]) or (include_scheduler and scheduler_backend != "memory") or include_secrets or (include_deploy and include_database) or plugin_needs_alembic %}
     "alembic==1.16.5",
 {%- endif %}
 {%- if include_documents %}

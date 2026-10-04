@@ -54,6 +54,10 @@ BUDGET: dict[str, int] = {
     # 457 lines of schemas in a package __init__; surfaced when ai/models gained
     # a third module. Debt recorded at size; the fix is a schemas module.
     "services/ai/models/__init__.py.jinja": 457,
+    # 404 lines of Docker runtime reading; surfaced when the deploy component
+    # gained deploy history (a third module). Debt recorded at size; the fix
+    # is splitting the socket client from the readers.
+    "components/deploy/docker.py": 404,
     "i18n/locales/en.py": 1339,
     "i18n/locales/zh.py": 1316,
     "i18n/locales/de.py": 1270,

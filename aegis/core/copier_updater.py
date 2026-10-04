@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 from aegis.config.defaults import GITHUB_REPO_URL, version_to_git_tag
 from aegis.constants import AnswerKeys, ComponentNames, StorageBackends
 from aegis.core.copier_manager import load_copier_answers
+from aegis.core.migration_generator import get_services_needing_migrations
 from aegis.core.post_gen_tasks import cleanup_components, run_post_generation_tasks
 from aegis.core.template_cleanup import cleanup_nested_project_directory
 from aegis.i18n import t
@@ -218,32 +219,14 @@ def update_with_copier_native(
 
         # Run post-generation tasks with explicit working directory control
         # This ensures consistent behavior with initial generation
-        include_auth = answers.get(AnswerKeys.AUTH, False)
+        # The same function init uses decides which tables need a revision; a
+        # hand-kept OR chain here had already lost secrets, finance and the
+        # change queue.
+        include_migrations = bool(get_services_needing_migrations(answers))
         include_ai = answers.get(AnswerKeys.AI, False)
-        include_insights = answers.get(AnswerKeys.INSIGHTS, False)
-        include_payment = answers.get(AnswerKeys.PAYMENT, False)
-        include_blog = answers.get(AnswerKeys.BLOG, False)
-        include_documents = answers.get(AnswerKeys.DOCUMENTS, False)
-        include_scheduler = answers.get(AnswerKeys.SCHEDULER, False)
         ai_backend = answers.get(AnswerKeys.AI_BACKEND, StorageBackends.MEMORY)
-        scheduler_backend = answers.get(
-            AnswerKeys.SCHEDULER_BACKEND, StorageBackends.MEMORY
-        )
-        ai_needs_migrations = include_ai and ai_backend != StorageBackends.MEMORY
-        scheduler_needs_migrations = (
-            include_scheduler and scheduler_backend == StorageBackends.POSTGRES
-        )
-        include_migrations = (
-            include_auth
-            or ai_needs_migrations
-            or include_insights
-            or include_payment
-            or include_blog
-            or include_documents
-            or scheduler_needs_migrations
-        )
-        # AI needs seeding when using persistence backend (same condition as migrations)
-        ai_needs_seeding = ai_needs_migrations
+        # AI needs seeding when using persistence backend
+        ai_needs_seeding = include_ai and ai_backend != StorageBackends.MEMORY
 
         # Run shared post-generation tasks
         run_post_generation_tasks(

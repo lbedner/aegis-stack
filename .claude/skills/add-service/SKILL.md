@@ -60,7 +60,11 @@ Registry (`ServiceSpec` is a thin alias of `PluginSpec` pinned to
 - `copier.yml` (repo root, not under `templates/`): add the `include_<name>`
   bool question, plus any per-service config questions gated with
   `when: "{{ include_<name> }}"` (model on `finance_plaid`). Extend
-  `_include_migrations` if the service owns tables.
+  `get_services_needing_migrations` (`aegis/core/migration_generator.py`) if
+  the service owns tables, and the two template mirrors of that rule
+  (`pyproject.toml.jinja`'s alembic dependency, `database_init.py.jinja`);
+  `tests/core/test_alembic_dependency_matches_migrations.py` fails until they
+  agree.
 - `aegis/core/<name>_service_parser.py`: only if the service takes bracket
   syntax like `<name>[option]` (model on `ai_service_parser.py`,
   `auth_service_parser.py`, `insights_service_parser.py`; blog and finance
@@ -240,7 +244,8 @@ Cross-cutting:
    `required_components`, `pyproject_deps`, `wiring=PluginWiring(...)`,
    `migrations=[...]`, and `files=FileManifest(primary=[...])`.
 5. Add the `include_<name>` question (and any config questions) to
-   `copier.yml`, gating `_include_migrations` if relevant. Thread the new
+   `copier.yml`; table-owning services go in `get_services_needing_migrations`
+   and its template mirrors (see above). Thread the new
    `AnswerKeys.<NAME>` through the generation/update plumbing:
    `template_generator.py`, `copier_manager.py`, `copier_updater.py`,
    `manual_updater.py`, and `commands/update.py` (see Files that change).

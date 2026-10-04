@@ -906,8 +906,10 @@ MESSAGES: dict[str, str] = {
         "~/.docker/cli-plugins/ en el host de despliegue?"
     ),
     "deploy.rolling_complete": "¡Despliegue continuo completado!",
-    "deploy.app_running": "   Aplicación corriendo en: http://{host}",
-    "deploy.overseer": "   Dashboard Overseer: http://{host}/dashboard/",
+    "deploy.app_running": "   Aplicación corriendo en: {url}",
+    "deploy.overseer": "   Dashboard Overseer: {url}/dashboard/",
+    "deploy.overseer_allowlist": "   (Traefik solo admite redes privadas: añade tu IP a ADMIN_IP_ALLOWLIST en .env y vuelve a desplegar para abrirlo)",
+    "deploy.record_failed": "   No se registró el historial de despliegue: {error}",
     "deploy.view_logs": "   Ver logs: aegis deploy-logs",
     "deploy.check_status": "   Verificar estado: aegis deploy-status",
     "deploy.backup_complete": "¡Respaldo completado!",
@@ -1260,9 +1262,10 @@ MESSAGES: dict[str, str] = {
     "provision.help_opt_domain": (
         "Nombre de host que apunta al servidor mediante Cloudflare (por defecto: un nombre sslip.io)"
     ),
-    "provision.help_opt_ssh_key": (
-        "Clave pública instalada para root en el nuevo servidor"
-    ),
+    "provision.help_opt_ssh_key": "Clave pública instalada para root en el nuevo servidor (por defecto: la primera de ~/.ssh/id_ed25519.pub, id_ecdsa.pub, id_rsa.pub)",
+    "provision.no_ssh_key": "No se encontró ninguna clave pública SSH en {dir} (se buscó {names}). Indica una con --ssh-key.",
+    "provision.help_opt_email": "Dirección con la que Let's Encrypt registra el certificado HTTPS (por defecto: el author_email del proyecto)",
+    "provision.email_required": "HTTPS necesita una dirección de correo para Let's Encrypt, y el author_email del proyecto sigue siendo el de ejemplo. Indica una con --email.",
     "provision.unknown_provider": (
         "Proveedor no soportado: {provider}. Soportados: {supported}"
     ),

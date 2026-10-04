@@ -23,6 +23,9 @@ x-app: &app
     # merges volume lists across override files by target path, so the
     # dev overlay's code mount adds to this rather than replacing it.
     - storage-data:/data/storage
+{%- if include_database and database_engine == "sqlite" %}
+    - ./data:/code/data
+{%- endif %}
 {%- if include_scheduler and include_database %}
     - backup-data:/var/backups/app
 {%- endif %}

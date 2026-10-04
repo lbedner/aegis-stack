@@ -516,10 +516,11 @@ def test_upload_env_stamps_the_build_id(
 
     assert len(remote) == 1
     command = remote[0]
-    # Replacing, not appending: a redeploy must not leave two BUILD_ID lines
-    # with the stale one winning depending on how the file is read.
-    assert "sed -i '/^BUILD_ID=/d'" in command
-    assert "BUILD_ID=" in command
+    # Replacing, not appending, on its own line: run for real against a file
+    # in tests/cli/test_deploy_record.py (the stamp's own test).
+    assert command == deploy_mod._stamp_build_id_command(
+        "/opt/app/.env", deploy_mod._build_id(tmp_path)
+    )
 
 
 def test_upload_env_stamps_even_without_a_local_env_file(

@@ -52,6 +52,16 @@
   (the Container section's first read) runs a thin teal bar; quick requests
   never show it.
 
+- **Deploy history.** With a database, the deploy component keeps a
+  `deployment` table (its own `deploy` schema on Postgres): one row per
+  build that went live. The app writes a
+  build's row when it first starts (every way code reaches the server,
+  CI included), and `aegis deploy` adds who deployed it, from where, the
+  health check, the backup and any rollback (its own and `aegis
+  deploy-rollback`'s), through a new `deploy record` command run in the
+  webserver container. Without a database the component
+  still reads containers and logs, with no history.
+
 ### Fixed
 
 - **A change that is not yours is a 404 on every route.** The JSON
@@ -95,11 +105,70 @@
   update raised a TypeError in the page's swap handlers (`app.js`, `chat.js`),
   which read a swap target that stream updates do not carry.
 
+- **`aegis deploy-provision` finds your SSH key.** `--ssh-key` defaulted to
+  `~/.ssh/id_ed25519.pub` and stopped on a machine with only an RSA key; it
+  now takes the first of `id_ed25519.pub`, `id_ecdsa.pub` and `id_rsa.pub`
+  that exists, and says where it looked when there is none. Found on the
+  first live run against Hetzner, which otherwise created, served over HTTP
+  and destroyed its server as designed.
+- **`aegis deploy` ends with links that answer.** It printed the bare IP
+  after provisioning gave the app a name, and an Overseer link that, behind
+  Traefik, only ever answers 403 until `ADMIN_IP_ALLOWLIST` includes your
+  address. It now prints the provisioned name and, until the env file it
+  ships sets `ADMIN_IP_ALLOWLIST`, how to open the Overseer. The rolling
+  deploy prints the same summary.
+
+- **A provisioned server answers over HTTPS.** TLS lives in Traefik's
+  static config and the prod compose labels, rendered only for projects
+  generated with `ingress_tls`, which is off by default: a provisioned
+  server answered on port 80 and nothing listened on 443. Once its name
+  resolves, `deploy-provision` now turns HTTPS on for that name through the
+  same step as `aegis ingress-enable` (now one shared function), and a
+  re-provisioned server's new name replaces the old one. It asks for
+  Let's Encrypt's address up front (`--email`, else a real `author_email`)
+  and stops before creating anything without one.
+- **A stack whose only table was the secrets component got no alembic.**
+  `pyproject.toml` decides alembic from its own copy of which features
+  ship a migration, and that copy lacked secrets: `migrate_gen` failed at
+  init on a database-and-secrets stack. It now lists secrets and deploy
+  history. Three more copies decided the same thing on their own:
+  `aegis update` (which then never wrote those tables' revisions), the
+  updater's migration-skill check, and Postgres startup's choice of alembic
+  over `create_all`. The Python ones now call
+  `get_services_needing_migrations`; the two template ones are held to it by
+  a test, and the unused `_include_migrations` in `copier.yml` is gone.
+- **A SQLite database survives `aegis deploy`.** Nothing mounted
+  `/code/data` on the server, so a SQLite stack's database lived inside the
+  container and every deploy (`down`, then `up --build`) started an empty
+  one. The app containers now mount the server's `data/`, which `aegis
+  deploy` already kept (rsync never deletes it) and backed up. Postgres
+  stacks were unaffected.
+- **`BUILD_ID` reaches the deployed app.** The generated `.env` ended
+  without a newline, so the `BUILD_ID=` line `aegis deploy` appended joined
+  the last line, a comment: every deployed app ran as `dev`, image label and
+  cache namespace included. The `.env` template ends with a newline, and the
+  stamp rewrites the line rather than appending it.
+- **`aegis init` no longer makes the bot the author of your commits.** It
+  wrote `Aegis Stack <noreply@aegis-stack.dev>` into each project's own git
+  config, so every later commit there carried it. It now sets that identity
+  only where git has none (a fresh CI machine).
+- **`aegis deploy`'s health check goes through HTTPS when TLS is on.** Port
+  80 redirects every request to HTTPS, and `curl` without `-L` counts the
+  redirect as a pass, so the check passed without reaching the app. It now
+  requests the app's own name over HTTPS, pinned to the server, and the
+  closing links say `https://`.
+
 ### Changed
 
 - **Overseer > AI > Usage picks its window from the app's range chips.** The
   same `1d` to `All` row as every other time window (`ranges.py`), in the
   address as `?days=30`, instead of its own `24h`, `7d`, `30d` and `All time`.
+
+- **`aegis deploy-provision` and `deploy-destroy` are marked experimental**
+  in the CLI reference. They have run end to end against a live Hetzner
+  account with an `sslip.io` name (server, HTTPS certificate, deploy,
+  destroy); the `--domain` path through Cloudflare is tested only against a
+  mocked API.
 
 ## [0.14.0] - 2026-10-02
 

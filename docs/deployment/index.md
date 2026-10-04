@@ -22,7 +22,19 @@ aegis deploy-setup
 aegis deploy
 ```
 
-Your application is now running at `http://your-server-ip`.
+Your application is now running at `http://your-server-ip`, or at the name `aegis deploy-provision` gave it. The Overseer at `/dashboard/` admits only private networks until you add your address to `ADMIN_IP_ALLOWLIST` (see [Ingress](../components/ingress.md)) and redeploy.
+
+## No server yet? Provision one
+
+!!! warning "Experimental Feature"
+    Run end to end against a live Hetzner account with an `sslip.io` name; the `--domain` path through Cloudflare is tested only against a mocked API.
+
+```bash
+export HCLOUD_TOKEN=...      # Hetzner Cloud API token, read & write
+aegis deploy-provision --email you@example.com
+```
+
+This replaces steps 1 and 2 above. It creates a server in your own Hetzner account (showing the monthly price first), points a name at it (`<ip>.sslip.io`, or yours with `--domain` and a Cloudflare token), turns on HTTPS for that name with Let's Encrypt, and runs `aegis deploy`. The server, the bill and the data stay yours. `aegis deploy-destroy` removes the server and its DNS record. All options: [`aegis deploy-provision`](../cli-reference.md#aegis-deploy-provision).
 
 ## Configuration
 
@@ -223,8 +235,9 @@ aegis deploy [OPTIONS]
 4. **Stops existing services** with `docker compose down`
 5. **Builds and starts services** with production compose overrides
 6. **Restarts Traefik** if the ingress component is present (ensures container re-discovery)
-7. **Runs health check** against `/health/` endpoint
+7. **Runs health check** against `/health/` endpoint (through HTTPS for the app's name when TLS is on)
 8. **Auto-rollback** if health check fails, restores the backup from step 1
+9. **Records the deploy** in the app's [deploy history](../components/deploy.md#deploy-history) when the project has the deploy component and a database: who deployed, from where, the health result, the backup and any rollback
 
 **Excluded from sync:**
 

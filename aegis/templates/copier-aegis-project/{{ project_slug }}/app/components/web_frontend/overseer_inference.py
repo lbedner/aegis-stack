@@ -152,8 +152,7 @@ async def _read_server() -> tuple[OllamaServerStatus, str]:
     """The server as the inference sampler last read it (once a tick for
     every viewer, kept at full pace while one looks), and where it was
     looked for; read here only before the first sample."""
-    found = await series.current(sampler.SAMPLER)
-    return found if found is not None else (await sampler.read()).latest
+    return await series.reading(sampler.SAMPLER)
 
 
 def _reach(server: OllamaServerStatus, base_url: str) -> dict[str, Any]:

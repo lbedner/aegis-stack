@@ -7,11 +7,15 @@ nobody is looking. A frame goes out only when the fragment changed.
 
 import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
+import contextlib
 import time
 
 from fastapi.responses import StreamingResponse
 
 MAX_STREAM_SECONDS = 300
+# A comment line this often keeps a quiet pushed stream (``heartbeat``) open,
+# and finds a closed tab.
+HEARTBEAT_SECONDS = 15.0
 
 
 def event_stream(events: AsyncIterator[str]) -> StreamingResponse:
@@ -68,6 +72,39 @@ def changed_frames(last: dict[str, str], payloads: dict[str, str]) -> list[str]:
         if last.get(event) == html:
             continue
         last[event] = html
-        data = html.strip().replace("\r", "").replace("\n", " ")
-        frames.append(f"event: {event}\ndata: {data}\n\n")
+        frames.append(frame(event, html))
     return frames
+
+
+def frame(event: str, html: str) -> str:
+    """One htmx SSE frame: ``html``, on one line, as ``event``."""
+    data = html.strip().replace("\r", "").replace("\n", " ")
+    return f"event: {event}\ndata: {data}\n\n"
+
+
+async def heartbeat(
+    frames: AsyncIterator[str], every: float = HEARTBEAT_SECONDS
+) -> AsyncIterator[str]:
+    """``frames`` (a stream something pushes, not one polled) with a comment
+    whenever none comes for ``every`` seconds, so a closed tab is noticed;
+    ended after ``MAX_STREAM_SECONDS`` like every other stream."""
+    deadline = time.monotonic() + MAX_STREAM_SECONDS
+    upcoming = asyncio.ensure_future(anext(frames))
+    try:
+        while time.monotonic() < deadline:
+            done, _ = await asyncio.wait({upcoming}, timeout=every)
+            if not done:
+                yield ": heartbeat\n\n"
+                continue
+            try:
+                yield upcoming.result()
+            except StopAsyncIteration:
+                return
+            upcoming = asyncio.ensure_future(anext(frames))
+    finally:
+        # The pending read is cancelled and finished before the stream is
+        # closed: an async generator cannot close mid-read.
+        upcoming.cancel()
+        with contextlib.suppress(asyncio.CancelledError, StopAsyncIteration):
+            await upcoming
+        await frames.aclose()  # type: ignore[attr-defined]

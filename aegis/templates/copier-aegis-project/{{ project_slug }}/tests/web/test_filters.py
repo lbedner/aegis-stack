@@ -11,7 +11,11 @@ from typing import Any
 
 import pytest
 
-from app.components.web_frontend.filters import cents_to_input, money_to_cents
+from app.components.web_frontend.filters import (
+    cents_to_input,
+    highlight,
+    money_to_cents,
+)
 from app.components.web_frontend.rendering import templates
 from tests.web.dom import select, text
 
@@ -254,3 +258,8 @@ class TestDocstringFacts:
     def test_the_rest_is_still_escaped(self) -> None:
         html = self._render("<b>``x``</b>")
         assert not select(html, "dd b") and "&lt;b&gt;" in html
+
+
+def test_highlight_marks_the_matches_and_escapes_the_rest() -> None:
+    html = str(highlight("<b>Write</b> failed", "write"))
+    assert html == "&lt;b&gt;<mark>Write</mark>&lt;/b&gt; failed"

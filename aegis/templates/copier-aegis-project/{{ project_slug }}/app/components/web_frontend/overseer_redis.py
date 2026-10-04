@@ -9,8 +9,8 @@ is pushed over its own SSE stream while the page is open.
 from collections.abc import AsyncIterator
 from typing import Any
 
+from app.core import series
 from app.core.formatting import format_span
-from app.core.log import logger
 from app.services.system import redis_keys, ui_redis
 from app.services.system.models import ComponentStatus
 from app.services.system.ui_database import display_url
@@ -29,18 +29,13 @@ PARTIALS = "/partials/overseer/redis"
 KEYSPACE_EVENTS = "/overseer/events/redis-keyspace"
 KEYSPACE_EVENT = "redis-keyspace"
 KEYSPACE_TEMPLATE = "pages/overseer/redis/_keyspace.html"
-# ponytail: each viewer's stream reads Redis on its own; share one reader
-# per process if many people watch this page at once.
 KEYSPACE_INTERVAL_SECONDS = 3.0
 
 
 async def load_keyspace() -> dict[str, Any]:
-    """The keyspace map, or what went wrong reading it."""
-    try:
-        return await redis_keys.read_keyspace()
-    except Exception as exc:  # noqa: BLE001 - shown in the card, logged here
-        logger.warning("Redis keyspace read failed", error=str(exc))
-        return {"error": str(exc), "families": [], "cells": [], "total": 0}
+    """The keyspace map, or what went wrong reading it (the keyspace
+    sampler's reading)."""
+    return await series.reading(redis_keys.KEYSPACE)
 
 
 async def load_peek(family: int) -> dict[str, Any] | None:

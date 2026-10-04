@@ -1,0 +1,51 @@
+{# Overseer > Deployments: where it runs (the provider this server is on,
+   and where this project deploys to when the provision record is here),
+   every provider aegis knows as a card (the one in use marked; a card's
+   command and token show when it is picked), the live build and the
+   host (overseer_deployments). #}
+{% from "components/macros/layout.html" import avatar, card, copy_button, facts %}
+{% macro where(title, place) %}
+{% call card(title) %}
+  <div class="flex items-center gap-3">
+    {{ avatar(place.name, place.logo, "lg") }}
+    <span class="text-sm font-semibold text-aegis-text">{{ place.name }}</span>
+    {% if place.console %}<a href="{{ place.console }}" target="_blank" rel="noopener" class="ml-auto text-xs text-aegis-muted hover:text-aegis-teal">Open console</a>{% endif %}
+  </div>
+  {{ facts(place.facts) }}
+{% endcall %}
+{% endmacro %}
+<div class="space-y-4">
+  <div class="grid gap-4 lg:grid-cols-2">
+    {{ where("Running on", running) }}
+    {% if target %}{{ where("Deploys to", target) }}{% endif %}
+  </div>
+  {% set picked = (providers|selectattr("current")|first or providers[0]).key %}
+  {% call card("Where it can run") %}
+  <div x-data="{ pick: '{{ picked }}' }" class="space-y-3">
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      {% for p in providers %}
+      <button type="button" data-provider="{{ p.key }}"{% if p.current %} data-current{% endif %}
+              x-on:click="pick = '{{ p.key }}'" x-bind:aria-pressed="pick === '{{ p.key }}'"
+              class="text-left rounded-lg border p-3 space-y-2 transition-colors {{ 'border-aegis-teal bg-aegis-teal/10' if p.current else 'border-aegis-border hover:border-aegis-muted' }}"
+              x-bind:class="pick === '{{ p.key }}' && 'ring-1 ring-aegis-teal/60'">
+        <span class="flex items-center gap-2">{{ avatar(p.name, p.logo, "lg") }}<span class="text-sm font-semibold text-aegis-text">{{ p.name }}</span></span>
+        {% if p.current %}<span class="block text-xxs caps text-aegis-teal">You're here</span>{% endif %}
+        <span class="flex flex-wrap gap-1">{% for verb in p.can %}<span class="text-xxs px-1.5 py-0.5 rounded border border-aegis-border text-aegis-muted">{{ verb }}</span>{% endfor %}</span>
+      </button>
+      {% endfor %}
+    </div>
+    {% for p in providers %}
+    <div data-provider-detail="{{ p.key }}" x-show="pick === '{{ p.key }}'"{% if p.key != picked %} x-cloak{% endif %} class="text-xs text-aegis-muted space-y-1">
+      <p class="flex items-center gap-2"><code class="font-mono text-aegis-text">{{ p.command }}</code>{{ copy_button(p.command) }}</p>
+      {% if p.token %}<p>Reads <code class="font-mono text-aegis-text">{{ p.token }}</code> from your environment; the token never leaves your machine.</p>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endcall %}
+  <div class="grid gap-4 lg:grid-cols-2">
+    {% call card("Now") %}{{ facts(now) }}{% endcall %}
+    {% call card("Host") %}
+      {% if host.note %}<p class="text-sm text-aegis-muted">{{ host.note }}</p>{% else %}{{ facts(host.facts) }}{% endif %}
+    {% endcall %}
+  </div>
+</div>

@@ -83,7 +83,7 @@ def _vendor_options(chosen: list[str], vendors: list[Any]) -> list[dict[str, Any
     listed += [SimpleNamespace(name=n, model_count=0) for n in chosen if n not in names]
     return [
         {
-            "name": v.name,
+            "value": v.name,
             "label": label(v.name),
             "count": v.model_count,
             "checked": v.name in chosen,
@@ -158,7 +158,6 @@ async def section_context(db: Any, query: Any) -> dict[str, Any]:
         ],
         "released": filters["released"],
         "vendor_options": _vendor_options(chosen, await catalog_vendors(db)),
-        "vendor_count": len(chosen),
         "rows": [
             {
                 "model": {

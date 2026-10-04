@@ -1,0 +1,32 @@
+{# Log lines as rows (ui_logs): the page renders them, and the Logs
+   stream sends each new batch to add. A warning or worse marks its row's
+   left edge in its tone, and a debug line steps back. A plain line's lead
+   (the time and level its columns already show) is dimmed; a JSON line's
+   fields follow its message as muted keys and their values; a traceback
+   folds under it; the search (``q``) is marked. Every cell shows a copy
+   button on hover, for what the cell shows. With ``links`` (Overseer >
+   Logs), a line names its service, in the service's own color, linking
+   to its page. #}
+{% from "components/macros/layout.html" import badge, copy_icon %}
+{% set _copy = "ml-1.5 align-middle text-aegis-muted hover:text-aegis-text opacity-0 group-hover/cell:opacity-100 focus:opacity-100" %}
+{% set _edge = {"warn": "border-l-aegis-amber", "error": "border-l-aegis-error"} %}
+{% for row in rows %}
+{% set tone = tones.get(row.level) %}
+<tr class="border-t border-aegis-border/60 align-top{% if tone == 'muted' %} opacity-60{% endif %}"{% if tone %} data-tone="{{ tone }}"{% endif %}>
+  <td class="group/cell px-3 py-1.5 whitespace-nowrap text-aegis-muted font-mono border-l-2 {{ _edge.get(tone, 'border-l-transparent') }}">{{ row.at }}{{ copy_icon(row.at, _copy) }}</td>
+  {% if links %}{% set service = links[row.page] %}
+  <td class="px-3 py-1.5 whitespace-nowrap" data-service><span data-dot class="inline-block w-2 h-2 mr-1.5 rounded-full align-middle" style="background: var(--aegis-chart-{{ row.color + 1 }})"></span><a href="{{ service.url }}" {{ hx_replace(service.url, "#overseer-main") }} class="text-aegis-text hover:text-aegis-teal">{{ service.title }}</a></td>
+  {% endif %}
+  <td class="group/cell px-3 py-1.5 whitespace-nowrap text-aegis-muted font-mono">{{ row.instance }}{{ copy_icon(row.instance, _copy) }}</td>
+  <td class="group/cell px-3 py-1.5 whitespace-nowrap" data-level>{% if row.level %}{{ badge(row.level, tone) }}{{ copy_icon(row.level, _copy) }}{% endif %}</td>
+  <td class="group/cell px-3 py-1.5 w-full font-mono break-all">
+    {% if row.prefix %}<span data-prefix class="text-aegis-muted/70">{{ row.prefix|highlight(q) }}</span>{% endif %}<span data-message class="text-aegis-text">{{ row.message|highlight(q) }}</span>{{ copy_icon(row.prefix ~ row.message, _copy) }}
+    {% for key, value in row.fields %}<span class="ml-2"><span data-field-key class="text-aegis-muted">{{ key }}=</span><span class="text-aegis-text">{{ value|highlight(q) }}</span></span>{% endfor %}
+    {% if row.trace %}
+    <details class="mt-1"><summary class="cursor-pointer text-aegis-muted">Traceback{{ copy_icon(row.trace, _copy) }}</summary>
+      <pre class="mt-1 whitespace-pre-wrap text-aegis-muted">{{ row.trace|highlight(q) }}</pre>
+    </details>
+    {% endif %}
+  </td>
+</tr>
+{% endfor %}

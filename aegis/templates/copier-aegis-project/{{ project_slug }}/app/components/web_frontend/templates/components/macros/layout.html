@@ -6,6 +6,7 @@
 #}
 {% from "components/macros/feedback.html" import empty_state %}
 {% from "components/macros/form.html" import action %}
+{% from "components/macros/icons.html" import icon %}
 
 
 {# Navigation icons share one outline style. Unknown plugin entries use the
@@ -16,6 +17,8 @@
   "patterns": "M4 4h6v6H4z M14 4h6v6h-6z M4 14h6v6H4z M17 14v6 M14 17h6",
   "secrets": "M15.5 7.5a3.5 3.5 0 1 1-4.95 3.18L3 18.25V21h2.75v-1.75h1.75V17.5h1.75l1.6-1.6A3.5 3.5 0 0 1 15.5 7.5Z M16.5 10.5h.01",
   "settings": "M4 6h16 M4 12h16 M4 18h16 M9 4v4 M15 10v4 M7 16v4",
+  "logs": "M4 5h16v14H4z M7 9h6 M7 12h10 M7 15h8",
+  "deployments": "M12 3l4 4h-3v7h-2V7H8l4-4z M4 14v5h16v-5",
   "backend": "M4 4h16v7H4z M4 13h16v7H4z M8 7.5h.01 M8 16.5h.01 M12 7.5h6 M12 16.5h6",
   "web_frontend": "M3 4h18v16H3z M3 9h18 M6 6.5h.01 M9 6.5h.01 M12 6.5h.01",
   "frontend": "M3 4h18v14H3z M8 21h8 M12 18v3",
@@ -475,6 +478,17 @@
 {# app.js copies it (the one copier, with the plain-http fallback). #}
 <button type="button" data-copy="{{ value }}"
         class="shrink-0 text-xxs caps px-2 py-0.5 rounded border border-aegis-border text-aegis-muted hover:text-aegis-text hover:border-aegis-muted transition-colors">{{ label }}</button>
+{% endmacro %}
+
+{# The same as an icon, for a copy that sits beside what it copies (a
+   chat bubble, a log cell): the icon becomes a tick and pops, then
+   settles back, since without it the button looks broken and gets
+   pressed twice. ``extra`` carries the caller's reveal rule. #}
+{% macro copy_icon(value, extra="") %}
+<button type="button" data-copy="{{ value }}" aria-label="Copy" title="Copy" class="{{ extra }}">
+  {{ icon("copy", "w-3.5 h-3.5", 1.5, 'data-copy-idle') }}
+  {{ icon("check", "w-3.5 h-3.5 hidden", 2, 'data-copy-done') }}
+</button>
 {% endmacro %}
 
 {# A block of source (SQL, Python) with a copy button. ``caption`` is a

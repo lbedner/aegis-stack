@@ -122,14 +122,14 @@ class SystemDashboard:
                     "function": "update_health_status",
                     "healthy_count": healthy_count,
                     "total_count": total_count,
-                }
+                },
             )
 
     async def update_component(self, name: str, status: ComponentStatus) -> None:
         """Apply one component's status without repainting the board.
 
         For a surface already holding a fresh reading - the Ollama modal
-        calls check_ollama_health() in-process. Goes through the same
+        reads the inference sampler in-process. Goes through the same
         registry as the refresh, so what is applied here is not rebuilt
         next cycle and a health check that disagrees still wins. The
         caller owns the page push, as with the refresh methods.
@@ -172,7 +172,7 @@ class SystemDashboard:
                     "error_type": type(e).__name__,
                     "function": "update_component_cards",
                     "component_count": len(components),
-                }
+                },
             )
 
     async def update_status_overview(
@@ -207,12 +207,10 @@ class SystemDashboard:
                     "error_type": type(e).__name__,
                     "function": "update_status_overview",
                     "component_count": len(components),
-                }
+                },
             )
 
-    async def update_diagram_view(
-        self, components: dict[str, ComponentStatus]
-    ) -> None:
+    async def update_diagram_view(self, components: dict[str, ComponentStatus]) -> None:
         """Safely update the diagram view."""
         if not self._is_page_connected():
             logger.debug("Page disconnected, skipping diagram view update")
@@ -237,7 +235,7 @@ class SystemDashboard:
                     "error_type": type(e).__name__,
                     "function": "update_diagram_view",
                     "component_count": len(components),
-                }
+                },
             )
 
     async def show_error_status(self) -> None:
@@ -268,5 +266,5 @@ class SystemDashboard:
                 extra={
                     "error_type": type(e).__name__,
                     "function": "show_error_status",
-                }
+                },
             )

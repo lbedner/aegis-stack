@@ -36,6 +36,8 @@ from app.core.runtime import (
 )
 from app.core.time import utcnow
 
+from .docker_logs import decode, is_multiplexed
+
 PROXY_SOCKET = "/var/run/docker-proxy/docker.sock"
 PROJECT_LABEL = "com.docker.compose.project"
 SERVICE_LABEL = "com.docker.compose.service"
@@ -44,7 +46,6 @@ BUILD_LABEL = "org.opencontainers.image.revision"
 TIMEOUT = httpx.Timeout(10.0)
 # ``/system/df`` sizes every layer and volume; it can take a while.
 DISK_TIMEOUT = httpx.Timeout(60.0)
-_STREAMS = {0: "stdin", 1: "stdout", 2: "stderr"}
 # Docker's humanized duration in the list's ``Status`` ("Up 5 hours").
 _UNIT_SECONDS = {
     "second": 1,
@@ -60,47 +61,6 @@ _UP = re.compile(
     r"|(\d+) (second|minute|hour|day|week|month|year)s?)"
 )
 _HEALTH = re.compile(r"\((?:health: )?(healthy|unhealthy|starting)\)")
-
-
-def split_frames(buffer: bytes) -> tuple[list[tuple[str, bytes]], bytes]:
-    """Docker's multiplexed log stream: an 8-byte header (stream, three
-    zero bytes, big-endian size) before each payload. Whole frames, and
-    whatever is left for the next read."""
-    frames: list[tuple[str, bytes]] = []
-    while len(buffer) >= 8:
-        size = int.from_bytes(buffer[4:8], "big")
-        if len(buffer) < 8 + size:
-            break
-        frames.append((_STREAMS.get(buffer[0], "stdout"), buffer[8 : 8 + size]))
-        buffer = buffer[8 + size :]
-    return frames, buffer
-
-
-def _multiplexed(head: bytes) -> bool:
-    """A container without a TTY multiplexes stdout and stderr; one with a
-    TTY (the workers set ``tty: true``) sends raw text."""
-    return len(head) >= 4 and head[0] in _STREAMS and head[1:4] == b"\0\0\0"
-
-
-def _decode(buffer: bytes, multiplexed: bool) -> tuple[list[LogLine], bytes]:
-    """Complete lines out of ``buffer``, and the bytes still incomplete.
-
-    ponytail: a line split across two multiplexed frames comes out as two
-    lines; Docker writes one frame per write, so this needs a writer that
-    flushes mid-line. Join per stream if it shows up.
-    """
-    if multiplexed:
-        frames, rest = split_frames(buffer)
-    else:
-        text, newline, rest = buffer.rpartition(b"\n")
-        frames = [("stdout", text)] if newline else []
-    lines = [
-        parse_log_line(line, stream)
-        for stream, payload in frames
-        for line in payload.decode(errors="replace").splitlines()
-        if line.strip()
-    ]
-    return lines, rest
 
 
 def parse_status(status: str) -> tuple[int | None, str | None]:
@@ -226,18 +186,32 @@ class DockerRuntime:
         # ponytail: per process and never pruned; a recreated container
         # leaves one stale entry behind.
         self._cpu: dict[str, _CpuBaseline] = {}
+        self._http: httpx.AsyncClient | None = None
 
-    def _client(self, timeout: httpx.Timeout = TIMEOUT) -> httpx.AsyncClient:
-        transport = self._transport or httpx.AsyncHTTPTransport(uds=self._socket)
-        return httpx.AsyncClient(
-            transport=transport, base_url="http://docker", timeout=timeout
-        )
+    def _client(self) -> httpx.AsyncClient:
+        """The one client every call shares: a connection pool to the proxy
+        socket, made on first use and closed by ``aclose`` at shutdown."""
+        if self._http is None:
+            transport = self._transport or httpx.AsyncHTTPTransport(uds=self._socket)
+            self._http = httpx.AsyncClient(
+                transport=transport, base_url="http://docker", timeout=TIMEOUT
+            )
+        return self._http
+
+    async def aclose(self) -> None:
+        if self._http is not None:
+            await self._http.aclose()
+            self._http = None
 
     async def _get(
-        self, client: httpx.AsyncClient, path: str, **params: str
+        self,
+        client: httpx.AsyncClient,
+        path: str,
+        timeout: httpx.Timeout = TIMEOUT,
+        **params: str,
     ) -> httpx.Response:
         try:
-            response = await client.get(path, params=params)
+            response = await client.get(path, params=params, timeout=timeout)
         except httpx.TransportError as error:
             raise RuntimeUnavailableError(
                 f"Docker socket proxy unreachable at {self._socket}: {error}"
@@ -271,9 +245,9 @@ class DockerRuntime:
         return self._project
 
     async def services(self) -> list[Service]:
-        async with self._client() as client:
-            project = await self._project_name(client)
-            listed = await self._list(client, {"label": [f"{PROJECT_LABEL}={project}"]})
+        client = self._client()
+        project = await self._project_name(client)
+        listed = await self._list(client, {"label": [f"{PROJECT_LABEL}={project}"]})
         grouped: dict[str, list[Instance]] = {}
         for summary in listed:
             instance = _instance(summary)
@@ -287,13 +261,12 @@ class DockerRuntime:
         """One sample, read at once (``one-shot``): Docker otherwise waits a
         second for a second one. CPU is measured against this container's
         previous read, or Docker's own previous sample when it sends one."""
-        async with self._client() as client:
-            response = await self._get(
-                client,
-                f"/containers/{instance}/stats",
-                stream="false",
-                **{"one-shot": "true"},
-            )
+        response = await self._get(
+            self._client(),
+            f"/containers/{instance}/stats",
+            stream="false",
+            **{"one-shot": "true"},
+        )
         data = response.json()
         docker_before = _cpu_reading(data.get("precpu_stats") or {})
         if docker_before[1]:
@@ -323,15 +296,14 @@ class DockerRuntime:
     async def logs(
         self, instance: str, tail: int = 200, since: datetime | None = None
     ) -> list[LogLine]:
-        async with self._client() as client:
-            response = await self._get(
-                client,
-                f"/containers/{instance}/logs",
-                **self._log_params(str(tail), since),
-            )
+        response = await self._get(
+            self._client(),
+            f"/containers/{instance}/logs",
+            **self._log_params(str(tail), since),
+        )
         body = response.content
-        multiplexed = _multiplexed(body)
-        lines, rest = _decode(body, multiplexed)
+        multiplexed = is_multiplexed(body)
+        lines, rest = decode(body, multiplexed)
         if rest.strip() and not multiplexed:
             lines.append(parse_log_line(rest.decode(errors="replace"), "stdout"))
         return lines
@@ -339,35 +311,36 @@ class DockerRuntime:
     async def follow(self, instance: str) -> AsyncIterator[LogLine]:
         """New lines as the container writes them, until the caller stops."""
         params = {**self._log_params("0"), "follow": "1"}
-        async with self._client(httpx.Timeout(10.0, read=None)) as client:
-            try:
-                async with client.stream(
-                    "GET", f"/containers/{instance}/logs", params=params
-                ) as response:
-                    if response.status_code != 200:
-                        raise RuntimeUnavailableError(
-                            f"Docker refused logs for {instance}: "
-                            f"{response.status_code}"
-                        )
-                    buffer, multiplexed = b"", None
-                    async for chunk in response.aiter_bytes():
-                        buffer += chunk
-                        if multiplexed is None:
-                            if len(buffer) < 4:
-                                continue
-                            multiplexed = _multiplexed(buffer)
-                        lines, buffer = _decode(buffer, multiplexed)
-                        for line in lines:
-                            yield line
-            except httpx.TransportError as error:
-                raise RuntimeUnavailableError(
-                    f"Docker socket proxy unreachable at {self._socket}: {error}"
-                ) from error
+        try:
+            async with self._client().stream(
+                "GET",
+                f"/containers/{instance}/logs",
+                params=params,
+                timeout=httpx.Timeout(10.0, read=None),
+            ) as response:
+                if response.status_code != 200:
+                    raise RuntimeUnavailableError(
+                        f"Docker refused logs for {instance}: {response.status_code}"
+                    )
+                buffer, multiplexed = b"", None
+                async for chunk in response.aiter_bytes():
+                    buffer += chunk
+                    if multiplexed is None:
+                        if len(buffer) < 4:
+                            continue
+                        multiplexed = is_multiplexed(buffer)
+                    lines, buffer = decode(buffer, multiplexed)
+                    for line in lines:
+                        yield line
+        except httpx.TransportError as error:
+            raise RuntimeUnavailableError(
+                f"Docker socket proxy unreachable at {self._socket}: {error}"
+            ) from error
 
     async def disk(self) -> DiskUsage:
-        async with self._client(DISK_TIMEOUT) as client:
-            project = await self._project_name(client)
-            data = (await self._get(client, "/system/df")).json()
+        client = self._client()
+        project = await self._project_name(client)
+        data = (await self._get(client, "/system/df", timeout=DISK_TIMEOUT)).json()
 
         def mine(labels: dict[str, str] | None) -> bool:
             return (labels or {}).get(PROJECT_LABEL) == project
@@ -387,8 +360,7 @@ class DockerRuntime:
     async def host(self) -> Host:
         """The Docker host. Disk is the filesystem this container's root
         sits on, which is the one Docker keeps its images and volumes on."""
-        async with self._client() as client:
-            info = (await self._get(client, "/info")).json()
+        info = (await self._get(self._client(), "/info")).json()
         usage = await asyncio.to_thread(psutil.disk_usage, "/")
         return Host(
             cpus=int(info.get("NCPU") or 1),

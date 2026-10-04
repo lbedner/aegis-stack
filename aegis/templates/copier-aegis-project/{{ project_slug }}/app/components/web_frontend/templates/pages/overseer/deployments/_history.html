@@ -1,0 +1,4 @@
+{# Overseer > Deployments > History: each build that went live, newest
+   first (deploy records), or why there are none. #}
+{% from "components/macros/table.html" import data_table %}
+<div id="deployments-history">{{ data_table(history_columns, history.rows, empty=history.note) }}</div>

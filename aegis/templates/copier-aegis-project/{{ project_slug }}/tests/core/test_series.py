@@ -99,3 +99,23 @@ def test_a_long_window_is_averaged_into_at_most_max_points() -> None:
     data = series.chart(found, label=str, max_points=10)
     assert data["labels"] == [t * 1000 for t in range(0, 40, 4)]
     assert data["series"][0]["values"] == [0.5] * 10
+
+
+async def test_a_view_reads_the_kept_reading_and_reads_itself_only_without_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``reading``: what every view of a sampler shows. The kept reading
+    when there is one (taking the first sample if there is none); a read of
+    its own only when another process holds this tick and nothing is kept."""
+    reads_made: list[float] = []
+    sampler = _sampler(reads_made, "viewed")
+    assert await series.reading(sampler) == {"redis": "table"}
+    assert await series.reading(sampler) == {"redis": "table"}
+    assert len(reads_made) == 1
+
+    async def held(sampler: Sampler, *, fill: bool = True) -> None:
+        return None
+
+    monkeypatch.setattr(series, "current", held)
+    assert await series.reading(sampler) == {"redis": "table"}
+    assert len(reads_made) == 2

@@ -40,7 +40,7 @@ def test_a_page_with_a_container_gets_the_section(client: TestClient) -> None:
             _html(client, "/overseer/components/cache"), "#overseer-subnav nav a"
         )
     ]
-    assert links[-1] == "Container"
+    assert links[-2:] == ["Container", "Logs"]
 
 
 def test_the_section_opens_without_waiting_on_the_runtime(

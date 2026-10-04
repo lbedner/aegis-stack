@@ -8,6 +8,7 @@
 #}
 {% from "components/macros/feedback.html" import toast_region %}
 {% from "components/macros/layout.html" import theme_toggle, dialog, drawer %}
+{% from "components/macros/icons.html" import sprite %}
 <!DOCTYPE html>
 <html lang="en" data-theme="aegis-dark">
 <head>
@@ -60,6 +61,8 @@
 <body class="min-h-screen bg-aegis-bg text-aegis-text {% block body_class %}{% endblock %}">
   {# The bar along the top while a page or an htmx request loads (app.js). #}
   <div id="page-progress" class="aegis-page-progress" aria-hidden="true"></div>
+  {# The icons ``icon()`` draws (a copy button, the chat's controls), once a page. #}
+  {{ sprite() }}
 
   {% block navbar %}
   <div class="max-w-screen-xl mx-auto px-6 lg:px-16 py-3 flex items-center justify-between border-b border-aegis-border">

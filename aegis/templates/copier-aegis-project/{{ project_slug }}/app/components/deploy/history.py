@@ -6,10 +6,11 @@ deploy``, CI, a deploy from the Overseer. The deployer adds what only it
 knows, who and from where, health, the backup and a rollback
 (``record_deploy``, behind the ``deploy record`` command). A row the deployer
 never touched has no ``finished_at``. What is live is the running
-``BUILD_ID``, never the newest row.
+``BUILD_ID``, never the newest row. Overseer reads it (``recent``, ``get``).
 """
 
 from sqlalchemy.exc import IntegrityError
+from sqlmodel import col, select
 
 from app.core.config import Settings, settings
 from app.core.db import get_async_session
@@ -57,3 +58,16 @@ async def record_deploy(
         row.finished_at = utcnow()
         db.add(row)
         await db.commit()
+
+
+async def recent(limit: int = 50) -> list[Deployment]:
+    """The last ``limit`` builds that went live, newest first."""
+    async with get_async_session() as db:
+        query = select(Deployment).order_by(col(Deployment.started_at).desc())
+        return list((await db.exec(query.limit(limit))).all())
+
+
+async def get(build_id: str) -> Deployment | None:
+    """``build_id``'s row, if it went live here."""
+    async with get_async_session() as db:
+        return await db.get(Deployment, build_id)

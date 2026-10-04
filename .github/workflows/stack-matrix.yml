@@ -44,31 +44,6 @@ env:
   UV_LINK_MODE: "copy"  # Avoid broken cache hardlinks (partial-install errors)
 
 jobs:
-  # Every combination generates, in one job. It runs beside the validation
-  # jobs, not in front of them: nothing passes between them (each validation
-  # generates its own stack), and as a gate it held every run back by its
-  # whole length (7-8 minutes by October 2026).
-  generation:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-          cache-dependency-glob: "uv.lock"
-
-      - name: Set up Python
-        run: uv python install 3.11
-
-      - name: Install dependencies
-        run: uv sync --all-extras
-
-      - name: Test all stack combinations generate
-        run: make test-stacks
-
   # Full validation (generate → uv sync → lint → typecheck → pytest), one
   # stack per runner. The list mirrors STACK_COMBINATIONS in
   # tests/cli/test_stack_generation.py — the guard job below fails if the

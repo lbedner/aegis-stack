@@ -139,6 +139,9 @@ Docs:
 ## Gates
 
 - `make check` (lint, typecheck, test) must pass.
+- A command that touches `aegis init` or project generation also needs
+  `make test-stacks`: `make check` no longer generates the stack matrix (CI
+  does, in its `generation` jobs).
 - `make cli-test` for a manual smoke: runs `python -m aegis --help` and
   confirms the CLI still loads with the new command registered.
 

@@ -33,7 +33,11 @@ from .test_utils import (
     validate_pyproject_dependencies,
 )
 
-pytestmark = pytest.mark.xdist_group("generated_stacks")
+# Slow: this file runs in CI's own ``generation`` jobs (sharded, in parallel
+# with ``test``) and locally as ``make test-stacks``. In the fast lane too it
+# ran twice per PR and, pinned to one xdist worker, set the length of
+# ``test`` (#1355).
+pytestmark = [pytest.mark.slow, pytest.mark.xdist_group("generated_stacks")]
 
 
 class StackCombination:
@@ -736,10 +740,19 @@ def test_component_dependency_resolution() -> None:
 
 
 @pytest.mark.integration
-def test_stack_generation_output_messages(get_generated_stack: Any) -> None:
-    """Test that CLI provides helpful output messages during generation."""
-    # Get the worker stack to check output messages
-    _, result = get_generated_stack("worker")
+@pytest.mark.parametrize(
+    "combination",
+    [c for c in STACK_COMBINATIONS if c.name == "worker"],
+    ids=lambda x: x.name,
+)
+def test_stack_generation_output_messages(
+    combination: StackCombination, get_generated_stack: Any
+) -> None:
+    """Test that CLI provides helpful output messages during generation.
+
+    Parametrized on its stack so ``--shard`` keeps it with that stack's other
+    tests, which generate it once."""
+    _, result = get_generated_stack(combination.name)
 
     assert result.success
 

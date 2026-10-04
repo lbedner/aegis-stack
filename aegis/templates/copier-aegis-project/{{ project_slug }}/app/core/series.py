@@ -126,6 +126,14 @@ async def current(sampler: Sampler, *, fill: bool = True) -> Any:
     return found
 
 
+async def reading(sampler: Sampler) -> Any:
+    """What a view of ``sampler`` shows: its kept reading (``current``), or,
+    when another process holds this tick and nothing is kept yet, a read of
+    its own."""
+    found = await current(sampler)
+    return found if found is not None else (await sampler.read()).latest
+
+
 async def record(values: dict[str, float]) -> None:
     """Points for something that happened (``{"llm:qwen3:latency": 1.4}``),
     with no sampler behind them; each name's first part names the index it

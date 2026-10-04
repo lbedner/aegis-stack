@@ -6,9 +6,11 @@ of the finished work. Colours are semantic names (green, blue, yellow, red,
 grey), which each frontend maps to its own theme.
 """
 
+import asyncio
 import math
 from typing import Any
 
+from app.core import series
 from app.services.system.models import ComponentStatus
 
 SUCCESS_RATE_HEALTHY = 95  # % - green
@@ -155,8 +157,8 @@ def pile(count: int, cells: int = 40) -> dict[str, int]:
     return {"lit": math.ceil(count / per_block), "per_block": per_block}
 
 
-# The live view's trends come from samples it keeps: (seconds, waiting, done).
-Sample = tuple[float, int, int]
+# A queue's trend, one point a reading: (seconds, waiting, done).
+TrendPoint = tuple[float, int, int]
 RATE_WINDOW_SECONDS = 30.0
 MIN_RATE_SPAN_SECONDS = 2.0
 # A net rate this close to zero is keeping pace, not draining or growing.
@@ -164,7 +166,9 @@ STEADY_NET_RATE = 0.2
 STEADY_SHARE = 0.1
 
 
-def rate(samples: list[Sample], window: float = RATE_WINDOW_SECONDS) -> float | None:
+def rate(
+    samples: list[TrendPoint], window: float = RATE_WINDOW_SECONDS
+) -> float | None:
     """Jobs finished per second over the last ``window`` seconds, or None
     until the samples span long enough to say."""
     if not samples:
@@ -177,7 +181,7 @@ def rate(samples: list[Sample], window: float = RATE_WINDOW_SECONDS) -> float | 
 
 
 def net_rate(
-    samples: list[Sample], window: float = RATE_WINDOW_SECONDS
+    samples: list[TrendPoint], window: float = RATE_WINDOW_SECONDS
 ) -> float | None:
     """How fast the backlog shrinks, in jobs per second: finishing minus
     arriving, read as the change in waiting. Negative while it grows."""
@@ -227,3 +231,71 @@ def sparkline(values: list[int], width: float = 100, height: float = 24) -> str:
     return " ".join(
         f"{i * step:.1f},{height - v / top * height:.1f}" for i, v in enumerate(values)
     )
+
+
+# The queues as a sampler (``app.core.series``): the worker health check and
+# each worker process's report, read once a tick for every viewer, and each
+# queue's waiting and finished counts kept, so a view's trend is the same for
+# everyone and survives a reconnect.
+QUEUES_SAMPLER = "worker-queues"
+TREND_SECONDS = 300  # how far back a queue's trend reads
+
+
+async def load_worker() -> ComponentStatus:
+    """A fresh read of every queue, from the worker health check."""
+    try:
+        from app.services.system.health_worker import check_worker_health
+    except ImportError:
+        return ComponentStatus(name="worker", message="No worker installed")
+    return await check_worker_health()
+
+
+async def load_runtime() -> list[dict[str, str]]:
+    """What each live worker process reports it is running with."""
+    try:
+        from app.components.worker.runtime import read_runtime
+    except ImportError:
+        return []
+    from app.services.system.redis_keys import redis_client
+
+    client = redis_client()
+    try:
+        return await read_runtime(client)
+    finally:
+        await client.aclose()
+
+
+def held(reports: list[dict[str, str]]) -> dict[str, int]:
+    """Jobs each queue's reporting processes may hold, summed."""
+    found: dict[str, int] = {}
+    for r in reports:
+        if r.get("concurrency", "").isdigit():
+            found[r["queue"]] = found.get(r["queue"], 0) + int(r["concurrency"])
+    return found
+
+
+async def read_queues() -> series.Sample:
+    """One reading: ``latest`` is the worker and its processes' reports."""
+    worker, reports = await asyncio.gather(load_worker(), load_runtime())
+    values: dict[str, float] = {}
+    for q in overview(worker)["queues"]:
+        values[f"{q['name']}:queued"] = q["queued"]
+        values[f"{q['name']}:done"] = q["completed"] + q["failed"]
+    return series.Sample(values, (worker, reports))
+
+
+# Unwatched, once a minute: enough for a trend to have points when a page
+# opens, without reading Redis every 15 seconds for nobody.
+QUEUES = series.Sampler(QUEUES_SAMPLER, read_queues, interval=3.0, idle_interval=60.0)
+
+
+def samples(
+    found: dict[str, list[tuple[float, float]]], queue: str
+) -> list[TrendPoint]:
+    """A queue's kept series (``series.read``) as trend samples."""
+    done = dict(found.get(f"{queue}:done", []))
+    return [
+        (at, int(waiting), int(done[at]))
+        for at, waiting in found.get(f"{queue}:queued", [])
+        if at in done
+    ]

@@ -167,6 +167,7 @@ EXAMPLES: dict[str, dict[str, str]] = {
               {{ chip("7d", href="#macro-chip") }}
             </div>""",
         "copy_button": """{{ copy_button("redis://localhost:6379/0") }}""",
+        "copy_icon": """<span class="group inline-flex items-center gap-1.5">redis://localhost:6379/0{{ copy_icon("redis://localhost:6379/0", "opacity-0 group-hover:opacity-100") }}</span>""",
         "code_block": """
             {{ code_block("SELECT id, email FROM user LIMIT 10;", caption="users.sql", lang="sql") }}""",
         "facts": """
@@ -216,6 +217,7 @@ EXAMPLES: dict[str, dict[str, str]] = {
             {{ password_input("password", placeholder="Password", required=False) }}""",
         "or_divider": "{{ or_divider() }}",
         "range_chips": """{{ range_chips([(1, "1d"), (7, "7d"), (30, "30d")], 7) }}""",
+        "checklist": """{{ checklist("example-services", "service", "Services", [{"value": "redis", "label": "Cache", "checked": True}, {"value": "worker", "label": "Worker", "checked": False, "count": 3}]) }}""",
         "range_form": """{{ range_form([(1, "1d"), (7, "7d"), (30, "30d")], 7, "/overseer", "#overseer-main") }}""",
         "action": """
             {% set on_click %}@click="$dispatch('toast', { text: 'Clicked', tone: 'ok' })"{% endset %}

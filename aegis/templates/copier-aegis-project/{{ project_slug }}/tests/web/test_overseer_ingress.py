@@ -129,6 +129,7 @@ def test_sections(client: TestClient) -> None:
         "Services",
         "Middlewares",
         "Container",
+        "Logs",
     ]
 
 

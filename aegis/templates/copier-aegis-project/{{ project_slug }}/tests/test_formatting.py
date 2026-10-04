@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from app.core.formatting import format_relative_time
+from app.core.formatting import format_relative_time, split_matches
 
 NOW = datetime(2026, 5, 19, 12, 0, 0, tzinfo=UTC)
 
@@ -172,3 +172,14 @@ def test_a_charted_value_reads_in_its_charts_format(
     from app.core.formatting import format_value
 
     assert format_value(value, fmt) == expected
+
+
+def test_split_matches_marks_every_match_whatever_its_case() -> None:
+    assert split_matches("Write failed, write again", "WRITE") == [
+        ("Write", True),
+        (" failed, ", False),
+        ("write", True),
+        (" again", False),
+    ]
+    assert split_matches("Write failed", "") == [("Write failed", False)]
+    assert split_matches("Write failed", "nothing") == [("Write failed", False)]

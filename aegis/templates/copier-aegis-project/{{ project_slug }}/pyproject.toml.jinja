@@ -35,6 +35,9 @@ dependencies = [
     "urllib3>=2.6.3,<3",
     # System monitoring
     "psutil==7.0.0",
+    # Reads .aegis/deploy.yml (where this project deploys to) and Hetzner's
+    # server metadata, both YAML.
+    "pyyaml>=6.0,<7",
     # The pastebox upload endpoint (pasted images) is multipart.
     "python-multipart==0.0.9",
 {%- if include_scheduler %}

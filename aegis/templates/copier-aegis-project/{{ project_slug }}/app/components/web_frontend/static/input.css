@@ -166,8 +166,23 @@
     @apply border-aegis-teal bg-aegis-teal/10 text-aegis-text font-semibold;
   }
 
-  /* The chat's copy button answers a click: a clipboard write leaves no
-     trace, so the icon becomes a tick and pops for a beat. */
+  /* A search's matches (the ``highlight`` filter): a quiet amber wash,
+     not the browser's yellow block. */
+  mark {
+    @apply bg-aegis-amber/25 text-inherit rounded-sm;
+  }
+
+  /* A native select draws its caret flush against its border; the house
+     select draws its own, inset like its text (the macro adds the room). */
+  .select-caret {
+    @apply appearance-none bg-no-repeat;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237E8A9A' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-position: right 0.625rem center;
+    background-size: 0.875rem;
+  }
+
+  /* A copy icon answers a click: a clipboard write leaves no trace, so
+     the icon becomes a tick and pops for a beat. */
   [data-copy] {
     @apply transition duration-200;
   }

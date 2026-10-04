@@ -12,9 +12,10 @@ import asyncio
 from typing import Any
 
 import flet as ft
+
 from app.components.frontend.controls.tabs import PulseTabs
-from app.core.log import logger
 from app.components.inference.activity import get_ollama_activity
+from app.core.log import logger
 from app.services.system.models import ComponentStatus
 
 from ...cards.card_utils import get_status_detail
@@ -167,7 +168,7 @@ class OllamaDetailDialog(BaseDetailPopup):
             await asyncio.sleep(POLL_INTERVAL_SECONDS)
 
     async def refresh_data(self, *, only_if_changed: bool = False) -> None:
-        """Refresh modal with fresh health data.
+        """Refresh the modal from the inference sampler's reading.
 
         Args:
             only_if_changed: Skip the tab rebuild when nothing the modal
@@ -175,9 +176,9 @@ class OllamaDetailDialog(BaseDetailPopup):
                 and hover state survive quiet ticks; the Load/Unload/Use
                 buttons use the default and always rebuild.
         """
-        from app.services.system.health import check_ollama_health
+        from app.components.inference.sampler import current_status
 
-        fresh_status = await check_ollama_health()
+        fresh_status = await current_status(fresh=not only_if_changed)
 
         snapshot = _data_snapshot(fresh_status)
         if only_if_changed and snapshot == self._snapshot:

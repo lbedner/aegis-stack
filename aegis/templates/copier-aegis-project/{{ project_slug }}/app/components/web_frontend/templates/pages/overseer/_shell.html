@@ -5,7 +5,7 @@
   <aside id="overseer-sidebar" aria-label="Overseer navigation"
          class="w-full md:w-64 lg:w-72 md:shrink-0 md:h-screen md:sticky md:top-0 md:z-30 md:transition-[width] border-b md:border-b-0 md:border-r border-aegis-border bg-aegis-bg flex flex-col">
     <div class="overseer-rail-row px-5 py-5 border-b border-aegis-border flex items-center justify-between gap-3">
-      <a href="/overseer" hx-get="/overseer" hx-target="#app-content" hx-swap="innerHTML" hx-push-url="true"
+      <a href="/overseer" {{ hx_replace("/overseer", "#overseer-main") }}
          title="Overseer" class="min-w-0 text-sm font-semibold text-aegis-text truncate">
         <span class="text-aegis-teal" aria-hidden="true">●</span>
         <span class="overseer-rail-hide">Overseer</span>
@@ -16,26 +16,37 @@
     </div>
     <nav id="overseer-nav" aria-label="Components and services"
          class="px-3 py-4 space-y-5 md:block md:flex-1 md:min-h-0 md:overflow-y-auto"
-         :class="mobileNav ? 'block' : 'hidden'">
+         :class="mobileNav ? 'block' : 'hidden'"
+         @click="if ($event.target.closest('a')) mobileNav = false">
       <div>
-        <a href="/overseer" title="Overview" hx-get="/overseer" hx-target="#app-content" hx-swap="innerHTML" hx-push-url="true"
+        <a href="/overseer" title="Overview" {{ hx_replace("/overseer", "#overseer-main") }}
            {% if item is not defined %}aria-current="page"{% endif %}
            class="overseer-rail-row nav-link py-2">
           {{ sidebar_icon("overview") }}<span class="overseer-rail-hide truncate">Overview</span>
         </a>
-        <a href="/overseer/patterns" title="Patterns" hx-get="/overseer/patterns" hx-target="#app-content" hx-swap="innerHTML" hx-push-url="true"
+        <a href="/overseer/patterns" title="Patterns" {{ hx_replace("/overseer/patterns", "#overseer-main") }}
            {% if item is defined and item.group == "patterns" %}aria-current="page"{% endif %}
            class="overseer-rail-row nav-link py-2">
           {{ sidebar_icon("patterns") }}<span class="overseer-rail-hide truncate">Patterns</span>
         </a>
+        <a href="/overseer/logs" title="Logs" {{ hx_replace("/overseer/logs", "#overseer-main") }}
+           {% if item is defined and item.group == "logs" %}aria-current="page"{% endif %}
+           class="overseer-rail-row nav-link py-2">
+          {{ sidebar_icon("logs") }}<span class="overseer-rail-hide truncate">Logs</span>
+        </a>
+        <a href="/overseer/deployments" title="Deployments" {{ hx_replace("/overseer/deployments", "#overseer-main") }}
+           {% if item is defined and item.group == "deployments" %}aria-current="page"{% endif %}
+           class="overseer-rail-row nav-link py-2">
+          {{ sidebar_icon("deployments") }}<span class="overseer-rail-hide truncate">Deployments</span>
+        </a>
         {% if secrets_page() == "/overseer/secrets" %}{# with the component, it lives under Components #}
-        <a href="/overseer/secrets" title="Secrets" hx-get="/overseer/secrets" hx-target="#app-content" hx-swap="innerHTML" hx-push-url="true"
+        <a href="/overseer/secrets" title="Secrets" {{ hx_replace("/overseer/secrets", "#overseer-main") }}
            {% if item is defined and item.group == "secrets" %}aria-current="page"{% endif %}
            class="overseer-rail-row nav-link py-2">
           {{ sidebar_icon("secrets") }}<span class="overseer-rail-hide truncate">Secrets</span>
         </a>
         {% endif %}
-        <a href="/overseer/settings" title="Settings" hx-get="/overseer/settings" hx-target="#app-content" hx-swap="innerHTML" hx-push-url="true"
+        <a href="/overseer/settings" title="Settings" {{ hx_replace("/overseer/settings", "#overseer-main") }}
            {% if item is defined and item.group == "settings" %}aria-current="page"{% endif %}
            class="overseer-rail-row nav-link py-2">
           {{ sidebar_icon("settings") }}<span class="overseer-rail-hide truncate">Settings</span>
@@ -48,7 +59,7 @@
         <ul class="space-y-0.5">
           {% for entry in navigation[group] %}
           {% set selected = item is defined and item.group == group and item.name == entry.name %}
-          <li><a href="{{ entry.url }}" title="{{ entry.title }}" hx-get="{{ entry.url }}" hx-target="#app-content" hx-swap="innerHTML" hx-push-url="true"
+          <li><a href="{{ entry.url }}" title="{{ entry.title }}" {{ hx_replace(entry.url, "#overseer-main") }}
                  {% if selected %}aria-current="page"{% endif %}
                  class="overseer-rail-row nav-link relative py-2">
             {{ sidebar_icon(entry.name) }}
@@ -83,7 +94,8 @@
     </div>
   </aside>
   {# Everything right of the main sidebar. A page's sub-menu and content
-     swap together as this one element, so the sidebar never re-renders. #}
+     swap together as this one element, so the sidebar never re-renders
+     (and keeps its scroll); app.js moves its current mark. #}
   <div id="overseer-main" class="min-w-0 flex-1 md:flex">
     {% block overseer_subnav %}{% endblock %}
     <div class="min-w-0 flex-1">

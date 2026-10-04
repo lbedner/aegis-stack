@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 import pytest
 
 from app.components.web_frontend import overseer_redis
+from app.services.system import redis_keys
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_title
 from tests.web.dom import none, one, select, text
@@ -129,6 +130,7 @@ class TestSections:
             "Slow queries",
             "Connections",
             "Container",
+            "Logs",
         ]
 
 
@@ -256,3 +258,34 @@ class TestConnections:
         assert "41" in facts
         row = one(html, "tbody tr")
         assert "172.18.0.4:5000" in text(row) and "zincrby" in text(row)
+
+
+class TestKeyspaceSampler:
+    """The keyspace is a sampler (``app.core.series``): one SCAN a tick for
+    every viewer, not one per open stream."""
+
+    @pytest.mark.asyncio
+    async def test_every_view_reads_one_scan(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        scans = []
+
+        async def read(cells: int = 42) -> dict[str, Any]:
+            scans.append(cells)
+            return KEYSPACE
+
+        monkeypatch.setattr(redis_keys, "read_keyspace", read)
+        first = await overseer_redis.load_keyspace()
+        second = await overseer_redis.load_keyspace()
+        assert first == second == KEYSPACE and len(scans) == 1
+
+    @pytest.mark.asyncio
+    async def test_a_failed_read_is_shown_not_raised(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        async def down(cells: int = 42) -> dict[str, Any]:
+            raise ConnectionError("Redis is not answering")
+
+        monkeypatch.setattr(redis_keys, "read_keyspace", down)
+        found = await overseer_redis.load_keyspace()
+        assert found["error"] == "Redis is not answering" and found["families"] == []

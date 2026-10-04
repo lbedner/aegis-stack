@@ -1,0 +1,40 @@
+{# Logs (overseer_logs): one page's Logs section, or Overseer > Logs over
+   every service (``logs_services`` to tick, ``logs_links`` for each line's
+   page). The window's lines, newest first unless the order says otherwise,
+   the filters that chose them, and new lines added over SSE at the newest
+   end while it is open, unless paused (a paused line is dropped). Oldest
+   first, the column-reverse scroller keeps that end in view as lines
+   arrive. #}
+{% from "components/macros/form.html" import action, checklist, range_chips, search_input, select %}
+{% set newest_first = logs_order == "desc" %}
+<div id="logs" class="space-y-3" x-data="{ paused: false }" x-on:htmx:sse-before-message="paused && $event.preventDefault()"{% if not logs.note %} hx-ext="sse" sse-connect="{{ logs_events }}"{% endif %}>
+  <form class="flex flex-wrap items-center gap-3" {{ hx_replace(request.url.path, "#logs") }}
+        hx-trigger="change, search, keyup changed delay:300ms from:input[name=q]">
+    {{ range_chips(logs_windows, logs_window, field="window", aria="Log window") }}
+    {% if logs_services is defined %}{{ checklist("logs-services", "service", "Services", logs_services) }}{% endif %}
+    {{ select("level", logs_levels, logs_level, blank="All levels") }}
+    {{ select("order", logs_orders, logs_order, blank=None) }}
+    {{ search_input("q", logs_q, placeholder="Search lines") }}
+    {% if not logs.note %}
+    <div class="ml-auto flex gap-1.5">
+      {{ action("Pause", "data-pause x-on:click=\"paused = !paused\" x-text=\"paused ? 'Resume' : 'Pause'\" x-bind:aria-pressed=\"paused\"") }}
+      {% if logs.lines %}
+      {{ action("Top", 'data-scroll-to="#logs-lines > tr:first-child"') }}
+      {{ action("Bottom", 'data-scroll-to="#logs-lines > tr:last-child"') }}
+      {% endif %}
+    </div>
+    {% endif %}
+  </form>
+  {% if logs.note %}
+  <p class="text-sm text-aegis-muted">{{ logs.note }}</p>
+  {% else %}
+  <div class="flex {{ 'flex-col' if newest_first else 'flex-col-reverse' }} max-h-[36rem] overflow-y-auto rounded-lg border border-aegis-border bg-aegis-card">
+    <table class="w-full text-xs">
+      <tbody id="logs-lines" sse-swap="logs-lines" hx-swap="{{ 'afterbegin' if newest_first else 'beforeend' }}">
+        {% with rows = logs.lines, tones = logs_tones, links = logs_links if logs_links is defined else none, q = logs_q %}{% include "pages/overseer/_logs_rows.html" %}{% endwith %}
+      </tbody>
+    </table>
+  </div>
+  {% if not logs.lines %}<p class="text-sm text-aegis-muted">No lines in this window yet; new ones appear as they are written.</p>{% endif %}
+  {% endif %}
+</div>

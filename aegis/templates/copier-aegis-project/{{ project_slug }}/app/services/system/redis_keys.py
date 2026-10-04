@@ -15,6 +15,7 @@ from typing import Any
 
 from app.core.config import settings
 from app.core.log import logger
+from app.core.series import Sample, Sampler
 
 # Modules that declare ``REDIS_KEYS``. Absent ones (a component this stack
 # does not have) are skipped.
@@ -161,7 +162,9 @@ def _databases(declared: list[KeyFamily]) -> list[int]:
     return sorted({int(getattr(settings, n)) for n in names if hasattr(settings, n)})
 
 
-def _client(db: int) -> Any:
+def redis_client(db: int = 0) -> Any:
+    """A Redis client for one read, with timeouts so a hung Redis cannot
+    stall a sampler."""
     import redis.asyncio as aioredis
 
     return aioredis.from_url(
@@ -222,7 +225,7 @@ async def read_keyspace(cells: int = 42) -> dict[str, Any]:
     unclaimed: list[str] = []
     stray_count, total, estimated = 0, 0, False
     for db in _databases(declared):
-        client = _client(db)
+        client = redis_client(db)
         try:
             size = int(await client.dbsize())
             keys = await _scan(client)
@@ -256,7 +259,7 @@ async def peek(index: int) -> dict[str, Any] | None:
     if not 0 <= index < len(declared):
         return None
     family = declared[index]
-    client = _client(int(getattr(settings, family.db, 0)))
+    client = redis_client(int(getattr(settings, family.db, 0)))
     try:
         keys = await _scan(client, family.pattern)
         probes = await _probe(client, [keys])
@@ -294,3 +297,21 @@ async def _read(client: Any, key: str) -> list[list[str]]:
     else:
         pairs = [(key, await client.get(key))]
     return [[shown(a), shown(b)] for a, b in pairs]
+
+
+async def sample_keyspace() -> Sample:
+    """The keyspace sampler's read: the map as ``latest`` (nothing is
+    charted), or what went wrong reading it."""
+    try:
+        found = await read_keyspace()
+    except Exception as exc:  # noqa: BLE001 - shown in the card, logged here
+        logger.warning("Redis keyspace read failed", error=str(exc))
+        found = {"error": str(exc), "families": [], "cells": [], "total": 0}
+    return Sample(latest=found)
+
+
+# One SCAN a tick for every viewer of the Redis page; unwatched, hourly,
+# since nothing charts it and the first view takes a sample of its own.
+KEYSPACE = Sampler(
+    "redis-keyspace", sample_keyspace, interval=3.0, idle_interval=3600.0
+)

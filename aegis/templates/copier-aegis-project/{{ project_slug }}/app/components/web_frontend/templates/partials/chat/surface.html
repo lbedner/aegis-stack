@@ -6,9 +6,8 @@
    conversation_id, picker (the catalog is there to pick from), voice (how
    a spoken turn is heard, or none), approvals (the change queue's
    review list's URL, or none). #}
-{% from "components/macros/icons.html" import icon, sprite %}
+{% from "components/macros/icons.html" import icon %}
 {% from "components/macros/chat.html" import button_classes, conversation_field, voice_states %}
-{{ sprite() }}
 <div id="chat" class="flex flex-col h-full"
      data-chat='{{ {"stream": stream_url, "defaults": turn_defaults, "path": chat_path}|tojson }}'>
   {% if approvals %}

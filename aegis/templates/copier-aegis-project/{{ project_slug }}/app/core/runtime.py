@@ -103,6 +103,9 @@ class LogLine:
     timestamp: datetime | None = None
     level: str | None = None
     event: str | None = None
+    # A JSON line's other fields, as text, and the traceback it carries.
+    fields: tuple[tuple[str, str], ...] = ()
+    trace: str | None = None
 
 
 @dataclass(frozen=True)
@@ -139,6 +142,8 @@ class Runtime(Protocol):
 
     async def host(self) -> Host: ...
 
+    async def aclose(self) -> None: ...
+
 
 def page_for(service: str) -> str | None:
     """The Overseer page a compose service belongs on, or None."""
@@ -153,16 +158,39 @@ def _stamp(value: str, fraction: str | None) -> datetime:
     return datetime.fromisoformat(value).replace(microsecond=micro)
 
 
+# A JSON line's keys read as its level, event, time and traceback; the rest
+# are its fields.
+_READ = {"level", "levelname", "event", "msg", "message", "timestamp"}
+_TRACES = ("exception", "exc_info")
+# A plain line's level: bracketed early on (``[info     ]``, ``[WARNING]``),
+# or leading it (``INFO:``, ``WARNING:root:``); a level word elsewhere in
+# the message is just a word.
+_TAGGED = re.compile(
+    r"^(?:.{0,60}?\[\s*|\s*)(debug|info|warn|warning|error|critical)\s*[\]:]",
+    re.IGNORECASE,
+)
+
+
+def _level(given: object, text: str) -> str | None:
+    """A JSON line's level, or the one a plain line is tagged with."""
+    if not given and (tagged := _TAGGED.match(text)):
+        given = tagged.group(1)
+    level = str(given).lower() if given else None
+    return "warning" if level == "warn" else level
+
+
 def parse_log_line(raw: str, stream: str) -> LogLine:
     """One log line: timestamp split off, colour codes stripped, and a JSON
-    object (the prod renderer) read for its level and event."""
+    object (the prod renderer) read for its level, event, other fields and
+    the traceback it carries."""
     timestamp = None
     match = _STAMPED.match(raw)
     if match:
         timestamp = _stamp(match.group(1), match.group(2))
         raw = match.group(3)
     text = _ANSI.sub("", raw).rstrip("\r\n")
-    level = event = None
+    level = event = trace = None
+    fields: tuple[tuple[str, str], ...] = ()
     if text.startswith("{"):
         try:
             record = json.loads(text)
@@ -171,12 +199,22 @@ def parse_log_line(raw: str, stream: str) -> LogLine:
         if isinstance(record, dict):
             level = record.get("level") or record.get("levelname")
             event = record.get("event") or record.get("msg") or record.get("message")
+            trace = next(
+                (record[k] for k in _TRACES if isinstance(record.get(k), str)), None
+            )
+            fields = tuple(
+                (key, value if isinstance(value, str) else json.dumps(value))
+                for key, value in record.items()
+                if key not in _READ and key not in _TRACES
+            )
     return LogLine(
         text=text,
         stream=stream,
         timestamp=timestamp,
-        level=str(level).lower() if level else None,
+        level=_level(level, text),
         event=str(event) if event is not None else None,
+        fields=fields,
+        trace=trace,
     )
 
 
@@ -241,6 +279,9 @@ class ProcessRuntime:
             disk_free=disk.free,
         )
 
+    async def aclose(self) -> None:
+        return None
+
 
 _runtime: Runtime | None = None
 
@@ -299,3 +340,10 @@ async def disk() -> DiskUsage:
 
 async def host() -> Host:
     return await get_runtime().host()
+
+
+async def close() -> None:
+    """Release the backend's connections, if one was discovered (the
+    shutdown hook)."""
+    if _runtime is not None:
+        await _runtime.aclose()

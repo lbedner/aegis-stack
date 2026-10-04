@@ -25,6 +25,10 @@ examples.
    (the connections middleware adds it). The browser's own retry sends it back
    as `Last-Event-ID`, which is how Server > Connections tells a reconnect from
    a new page opening the same stream.
+7. A stream that may go quiet for a while (followed log lines) is wrapped in
+   `overseer_live.heartbeat(frames)`, which sends an SSE comment every 15
+   seconds without a frame, ends the stream at the expiry above, and closes
+   its source when the browser leaves.
 
 The Overseer implementation is `app/components/web_frontend/overseer_events.py`.
 Its producer uses the existing cached `get_system_status()` result. Page
@@ -89,6 +93,15 @@ Something that happens rather than something polled is a point of its own:
 `series.record("llm:qwen2.5:7b:latency", 1.4)`, as every LLM call does when it
 finishes.
 
+What Overseer samples today: the containers behind each page, Ollama on the
+host (the Inference page, the Flet Ollama modal, and the model loads and
+evictions its Activity tab lists), the Redis keyspace map, and the worker
+queues (each queue's waiting and finished counts, so its rate and drain read
+the same for every viewer and survive a reconnect). A page whose server can
+run outside Docker registers its own note and charts beside its sampler
+(`samplers.HOSTS`, read through `ui_runtime.host_of`), so a stack without
+that component carries none of them.
+
 `series.read(prefix, window)` gives a window back and `series.chart(...)`
 turns it into `chart_panel` data, one line per series on the times they
 share, the axis spanning the window up to now. A window longer than
@@ -109,6 +122,6 @@ reads the same in the Flet charts (`LineChartCard.from_chart`).
 
 Overseer's Container section is the first user: CPU and memory per container
 over the last 15 minutes. A server outside Docker charts what it reports of
-itself instead (`ui_runtime.HOSTS`): Ollama on the host shows the memory each
+itself instead (`ui_runtime.host_of`): Ollama on the host shows the memory each
 loaded model holds (the inference sampler, which also serves the Inference
 page's Models table) and each call's tokens per second and latency.

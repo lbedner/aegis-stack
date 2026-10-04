@@ -13,6 +13,7 @@ background or at sync time and store the bytes.
 import asyncio
 import base64
 from collections.abc import Iterable
+from urllib.parse import urlencode
 
 import httpx
 
@@ -37,6 +38,17 @@ def domain_of(url: str | None) -> str | None:
     return host if ("." in host and " " not in host and len(host) > 3) else None
 
 
+def favicon_url(domain: str) -> str:
+    """The upstream's URL for ``domain``'s icon, for a page to load itself
+    (a short, fixed list of marks, like the hosting providers'), where a
+    long or user-made list is fetched and stored with ``fetch_icons``."""
+    return f"{UPSTREAM}?{urlencode(_params(domain))}"
+
+
+def _params(domain: str) -> dict[str, str | int]:
+    return {"sz": ICON_SIZE, "domain": domain}
+
+
 async def fetch_icons(
     domains: Iterable[str], *, transport: httpx.AsyncBaseTransport | None = None
 ) -> dict[str, str | None]:
@@ -49,9 +61,7 @@ async def fetch_icons(
     async def one(client: httpx.AsyncClient, domain: str) -> None:
         async with semaphore:
             try:
-                response = await client.get(
-                    UPSTREAM, params={"sz": ICON_SIZE, "domain": domain}
-                )
+                response = await client.get(UPSTREAM, params=_params(domain))
             except httpx.HTTPError:
                 return  # no network, a timeout: a miss for this domain
         if response.status_code == 200 and response.content:

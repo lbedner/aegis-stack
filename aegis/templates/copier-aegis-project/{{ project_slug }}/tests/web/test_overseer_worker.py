@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 import pytest
 
 from app.components.web_frontend import overseer_worker
+from app.services.system import ui_worker
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_title
 from tests.web.dom import none, one, select, text
@@ -144,14 +145,14 @@ def signed_in(
         seen["lifecycle"] = queue
         return LIFECYCLE
 
-    monkeypatch.setattr(overseer_worker, "load_worker", worker)
+    monkeypatch.setattr(ui_worker, "load_worker", worker)
     monkeypatch.setattr(overseer_worker, "load_tasks", tasks)
     monkeypatch.setattr(overseer_worker, "load_lifecycle", lifecycle)
 
     async def reports() -> list[dict[str, str]]:
         return RUNTIME
 
-    monkeypatch.setattr(overseer_worker, "load_runtime", reports)
+    monkeypatch.setattr(ui_worker, "load_runtime", reports)
     monkeypatch.setattr(overseer_worker, "misnamed_queues", lambda: [])
     with TestClient(app) as client:
         yield client
@@ -176,6 +177,7 @@ class TestSections:
             "Runtime",
             "Lifecycle",
             "Container",
+            "Logs",
         ]
 
 
@@ -212,7 +214,7 @@ class TestOverview:
         async def busy() -> ComponentStatus:
             return _worker(_queue("system", queued_jobs=342))
 
-        monkeypatch.setattr(overseer_worker, "load_worker", busy)
+        monkeypatch.setattr(ui_worker, "load_worker", busy)
         waiting = one(_get(signed_in), '[data-queue="system"] [data-waiting]')
         assert len(select(waiting, ".worker-pile [data-lit]")) == 38
         assert "1 block ≈ 9 jobs" in text(waiting)
@@ -281,7 +283,7 @@ class TestOverview:
                 message="Worker queues failed to import: system: No module named 'taskiq_redis'",
             )
 
-        monkeypatch.setattr(overseer_worker, "load_worker", broken)
+        monkeypatch.setattr(ui_worker, "load_worker", broken)
         problem = text(one(_get(signed_in), "#worker-queues [data-problem]"))
         assert "taskiq_redis" in problem
 
@@ -291,28 +293,45 @@ class TestOverview:
         async def idle() -> ComponentStatus:
             return ComponentStatus(name="worker", message="No active workers")
 
-        monkeypatch.setattr(overseer_worker, "load_worker", idle)
+        monkeypatch.setattr(ui_worker, "load_worker", idle)
         html = _get(signed_in)
         one(html, "#worker-queues [data-empty]")
         none(html, "#worker-queues [data-queue]")
 
 
 class TestTrends:
-    """The live stream remembers what it saw, for rate, drain and a line."""
+    """Rate, drain and a line, from the queues sampler's kept series: the
+    same for every viewer, and kept across a reconnect."""
 
-    def test_samples_become_a_rate_a_drain_and_a_line(self) -> None:
-        history: dict[str, Any] = {}
-        for now, waiting, done in ((0.0, 300, 100), (10.0, 276, 124), (20.0, 252, 148)):
-            view = {
-                "queues": [
-                    {"name": "q", "queued": waiting, "completed": done, "failed": 0}
-                ]
-            }
-            overseer_worker.add_trends(view, history, now)
-        q = view["queues"][0]
+    def test_kept_series_become_a_rate_a_drain_and_a_line(self) -> None:
+        view = {"queues": [{"name": "q", "queued": 252, "completed": 148, "failed": 0}]}
+        found = {
+            "q:queued": [(0.0, 300.0), (10.0, 276.0), (20.0, 252.0)],
+            "q:done": [(0.0, 100.0), (10.0, 124.0), (20.0, 148.0)],
+        }
+        q = overseer_worker.add_trends(view, found)["queues"][0]
         assert q["rate"] == 2.4
         assert q["drain"] == "drains in ~2 min"
         assert len(q["spark"].split()) == 3
+
+    @pytest.mark.asyncio
+    async def test_every_view_reads_one_health_check(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        checks = []
+
+        async def worker() -> ComponentStatus:
+            checks.append(1)
+            return WORKER
+
+        async def no_reports() -> list[Any]:
+            return []
+
+        monkeypatch.setattr(ui_worker, "load_worker", worker)
+        monkeypatch.setattr(ui_worker, "load_runtime", no_reports)
+        first = await overseer_worker.queues_view()
+        second = await overseer_worker.queues_view()
+        assert first["queues"] == second["queues"] and len(checks) == 1
 
 
 class TestQueuesStream:
@@ -326,8 +345,8 @@ class TestQueuesStream:
         async def no_reports() -> list[Any]:
             return []  # the workers' own reports live in Redis; none here
 
-        monkeypatch.setattr(overseer_worker, "load_worker", worker)
-        monkeypatch.setattr(overseer_worker, "load_runtime", no_reports)
+        monkeypatch.setattr(ui_worker, "load_worker", worker)
+        monkeypatch.setattr(ui_worker, "load_runtime", no_reports)
         monkeypatch.setattr(overseer_worker, "QUEUES_INTERVAL_SECONDS", 0)
         frames = [f async for f in overseer_worker.queues_events(max_frames=3)]
         events = [f for f in frames if f.startswith("event:")]
@@ -403,7 +422,7 @@ class TestRuntime:
         async def nothing() -> list[dict[str, str]]:
             return []
 
-        monkeypatch.setattr(overseer_worker, "load_runtime", nothing)
+        monkeypatch.setattr(ui_worker, "load_runtime", nothing)
         one(_get(signed_in, "runtime"), "[data-empty]")
 
 

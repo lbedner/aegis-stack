@@ -30,9 +30,9 @@ their tests touch. Two rules when adding a matrix row:
 
 ### CI shards: `--shard K/N`
 
-CI (`ci.yml`) runs the fast lane as two parallel jobs (`test 1/2`, `test 2/2`,
-gated by one `test` check) and stack generation as four (`generation 1/4`..`4/4`,
-gated by `generation`).
+CI (`ci.yml`) runs the fast lane as two parallel jobs (`test 1/2`, `test 2/2`)
+and stack generation as four (`generation 1/4`..`4/4`), all gated by the one
+required `test` check.
 `--shard K/N` (`tests/conftest.py`) keeps the K-th of N slices by a stable hash.
 What must share a process stays together: a stack's parametrized tests (keyed
 on the `combination` param, so each stack generates once) and every

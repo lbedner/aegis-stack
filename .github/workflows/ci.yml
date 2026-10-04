@@ -82,15 +82,18 @@ jobs:
     - name: Run tests
       run: uv run pytest -n auto --dist=loadgroup -v -m "not slow" --shard ${{ matrix.shard }}/2
 
-  # The required check is named ``test``: it passes only when every shard did,
-  # so sharding never changes what branch protection waits for.
+  # The required check is named ``test``: it passes only when every fast-lane
+  # shard AND every stack-generation shard did, so splitting the suite never
+  # changes what branch protection blocks on.
   test:
     if: always()
-    needs: test-shard
+    needs: [test-shard, generation-shard]
     runs-on: ubuntu-latest
     steps:
     - name: Every shard passed
-      run: test "${{ needs.test-shard.result }}" = success
+      run: |
+        test "${{ needs.test-shard.result }}" = success
+        test "${{ needs.generation-shard.result }}" = success
 
   # Every stack combination generates (tests/cli/test_stack_generation.py,
   # marked slow so the fast lane above skips it), in four shards. Here rather
@@ -123,15 +126,6 @@ jobs:
     
     - name: Test all stack combinations generate
       run: uv run pytest tests/cli/test_stack_generation.py -v --tb=short --shard ${{ matrix.shard }}/4
-
-  # One check named ``generation`` that passes only when every shard did.
-  generation:
-    if: always()
-    needs: generation-shard
-    runs-on: ubuntu-latest
-    steps:
-    - name: Every shard passed
-      run: test "${{ needs.generation-shard.result }}" = success
 
   test-uvx:
     runs-on: ubuntu-latest

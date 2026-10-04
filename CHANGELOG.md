@@ -9,6 +9,17 @@
 
 ### Added
 
+- **Change types carry their contract, and register themselves.** A
+  `ChangeExecutor` takes a `description` (when to propose it), and
+  `change_type_contracts()` returns every type's title, description and
+  payload JSON schema straight from its model. Agents read them through a
+  new `change_types` tool (granted to the finance analyst), and a refused
+  `propose` / `propose_many` returns them instead of bare names, so a
+  product no longer copies payload contracts into tool docstrings (#1414).
+  The queue imports every service's `change_types.py`
+  (`load_change_types`, like the model registry's `models`), so a project
+  registers its own types in its own service, never by editing
+  `change_queue/__init__.py`; finance's moved there (#1415).
 - **Approval cards in a chat-kit turn.** `ToolChatAgent.stream_turn` yields
   a `CardFrame` when a tool's result proposed or listed approval cards
   (`propose`, `propose_many`, `pending`): the cards' identities, for the
@@ -98,6 +109,8 @@
 
 ### Fixed
 
+- **The chart island passes Biome.** Three `forEach` callbacks in
+  `static/js/charts.js` returned a value (`useIterableCallbackReturn`).
 - **A change that is not yours is a 404 on every route.** The JSON
   approve and reject answered 400 ("pending change not found") and the
   batch routes 200 with nothing done, where the htmx cards answered 404.

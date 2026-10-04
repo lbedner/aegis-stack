@@ -150,6 +150,8 @@ EXPECTED_EFFECTS = {
     "bills": "read",
     "bill_candidates": "read",
     "tags": "read",
+    # Reads the change types' contracts; files nothing.
+    "change_types": "read",
     "propose": "proposes",
     "propose_many": "proposes",
     "pending": "proposes",

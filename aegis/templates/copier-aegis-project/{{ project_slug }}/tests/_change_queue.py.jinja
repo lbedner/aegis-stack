@@ -43,6 +43,7 @@ def note_type(change_type: str) -> Iterator[None]:
         ChangeExecutor(
             change_type=change_type,
             title="Write a note",
+            description="A note, for the tests.",
             payload_model=NotePayload,
             execute=_execute,
             describe=_describe,

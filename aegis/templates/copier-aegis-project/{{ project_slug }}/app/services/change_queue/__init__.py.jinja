@@ -10,8 +10,10 @@ service joins by registering its types at import:
     register(ChangeExecutor(change_type="post.reschedule", ...))
 
 An executor that is never imported does not exist to the queue, the
-same rule the tool registry lives by - so the registrants below are
-imported here, and every process that touches the queue knows them.
+same rule the tool registry lives by - so every service's
+``change_types`` module is imported here (``load_change_types``), and
+every process that touches the queue knows them. A project registers its
+own types in its own service's ``change_types.py``, never in this file.
 """
 
 from app.services.change_queue.models import PendingChange
@@ -39,16 +41,16 @@ from app.services.change_queue.queue import (
 )
 from app.services.change_queue.registry import (
     ChangeExecutor,
+    change_type_contracts,
     executor_for,
+    load_change_types,
     register,
     registered_change_types,
 )
 from app.services.change_queue.schemas import ChangeDisplayRow
-{%- if include_finance %}
 
-# Registrants, imported last: each imports ``register`` from this package.
-import app.services.finance.domains.writes  # noqa: E402,F401
-{%- endif %}
+# Registrants, loaded last: each imports ``register`` from this package.
+load_change_types()
 
 __all__ = [
     "ChangeDisplayRow",
@@ -60,6 +62,7 @@ __all__ = [
     "approve_rows",
     "card",
     "batch_rows",
+    "change_type_contracts",
     "describe_change",
     "executor_for",
     "get_change",

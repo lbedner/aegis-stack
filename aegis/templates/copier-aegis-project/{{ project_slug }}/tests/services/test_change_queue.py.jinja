@@ -6,6 +6,8 @@ chat card calls. That is the whole contract a new service relies on.
 """
 
 from collections.abc import Iterator
+from pathlib import Path
+import sys
 {%- if include_ai and ai_backend != "memory" %}
 from typing import Any
 {%- endif %}
@@ -39,6 +41,47 @@ async def test_a_registered_type_proposes_without_executing(
     assert row.status == "pending"
     assert executed == []
     assert NOTE in change_queue.registered_change_types()
+
+
+def test_each_type_carries_its_contract() -> None:
+    """What an agent reads to propose one (#1414): the title, when to use
+    it, and the payload's JSON schema, from the model itself."""
+    contract = change_queue.change_type_contracts()[NOTE]
+
+    assert contract["title"] == "Write a note"
+    assert contract["description"] == "A note, for the tests."
+    assert contract["schema"]["properties"]["text"]["type"] == "string"
+    assert contract["schema"]["required"] == ["text"]
+
+
+def test_a_services_change_types_module_registers_itself(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A service registers its types in ``app/services/<service>/change_types.py``
+    (#1415): the queue imports it, so nothing edits the queue's own files."""
+    import app.services as services
+    from app.services.change_queue import registry
+
+    service = tmp_path / "demo_service"
+    service.mkdir()
+    (service / "__init__.py").write_text("")
+    (service / "change_types.py").write_text(
+        "from app.services.change_queue.registry import ChangeExecutor, register\n"
+        "from tests._change_queue import NotePayload, _describe, _execute\n"
+        "register(ChangeExecutor(change_type='demo.note', title='Demo',"
+        " payload_model=NotePayload, execute=_execute, describe=_describe))\n"
+    )
+    monkeypatch.setattr(services, "__path__", [*services.__path__, str(tmp_path)])
+    try:
+        loaded = registry.load_change_types()
+
+        assert "app.services.demo_service.change_types" in loaded
+        assert "demo.note" in change_queue.registered_change_types()
+    finally:
+        registry._EXECUTORS.pop("demo.note", None)
+        for name in list(sys.modules):
+            if name.startswith("app.services.demo_service"):
+                del sys.modules[name]
 
 
 @pytest.mark.asyncio
@@ -155,6 +198,23 @@ async def test_the_chat_tool_proposes_a_registered_type(
         "pending",
         "withdraw",
     } <= native_write_tool_names()
+
+
+@pytest.mark.asyncio
+async def test_an_agent_reads_each_contract_from_its_model(
+    chat_tools: Any, acting_owner_user_id: int | None
+) -> None:
+    """The ``change_types`` tool hands the model every type's schema, and a
+    proposal that misses one says what the types are (#1414)."""
+    from app.services.ai.domains.chat.user_memory import memory_user
+
+    listed = await chat_tools.change_types()
+    with memory_user("1", owner_user_id=acting_owner_user_id):
+        refused = await chat_tools.propose("no.such.type", {})
+
+    assert listed[NOTE]["schema"]["required"] == ["text"]
+    assert "unknown change type" in refused["error"]
+    assert refused["change_types"][NOTE]["title"] == "Write a note"
 
 
 # Lists ``pending`` for two users on purpose, so its read repeats by

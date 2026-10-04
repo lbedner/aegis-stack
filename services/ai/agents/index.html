@@ -5865,8 +5865,8 @@
 </table>
 <p>Tools attach separately through the <code>tool</code> and <code>agent_tool</code> tables, and resolve at request time through the Python tool registry.</p>
 <h2 id="tools">Tools</h2>
-<p>The database decides WHICH tools an agent may call; Python decides WHAT each name executes. Register a tool once:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.ai.tools</span><span class="w"> </span><span class="kn">import</span> <span class="n">register_tool</span>
+<p>The database decides WHICH tools an agent may call; Python decides WHAT each name executes. Register a tool once, from any service: the registry lives in core (<code>app.core.tools</code>), not in the AI service.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.core.tools</span><span class="w"> </span><span class="kn">import</span> <span class="n">register_tool</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
 </span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">lookup_order</span><span class="p">(</span><span class="n">order_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 </span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Fetch an order summary for the given order id.&quot;&quot;&quot;</span>

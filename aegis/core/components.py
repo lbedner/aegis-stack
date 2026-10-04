@@ -332,6 +332,8 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 ".queryspy-baseline.json",
                 "tests/_queryspy_shape.py",
                 "tests/test_queryspy_shape.py",
+                # The one way a test hands the app's session openers its own.
+                "tests/_session.py",
             ],
         ),
     ),

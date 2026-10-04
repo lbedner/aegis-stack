@@ -120,6 +120,12 @@ bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-
        class="{{ _control_classes }} w-full mt-1">
 {% endmacro %}
 
+{% macro number_input(name, value=None, step=1, min=None, max=None) %}
+<input type="number" name="{{ name }}" value="{{ value if value is not none else '' }}" step="{{ step }}"
+       {% if min is not none %}min="{{ min }}"{% endif %} {% if max is not none %}max="{{ max }}"{% endif %}
+       class="{{ _control_classes }} w-full mt-1 tabular-nums">
+{% endmacro %}
+
 {% macro money_input(name, value=None, placeholder="0.00") %}
 <div class="relative mt-1">
   <span class="absolute inset-y-0 left-2.5 flex items-center text-sm text-aegis-muted" aria-hidden="true">$</span>

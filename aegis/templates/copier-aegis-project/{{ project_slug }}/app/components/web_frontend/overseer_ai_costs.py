@@ -19,7 +19,8 @@ from app.services.ai.domains.spend.schemas import ActionSpend, ModelSpend, Spend
 from app.services.auth.users import UserService
 
 from . import overseer_ai_costs_views as views
-from .overseer_ai_common import HAS_VOICE, section_url
+from .chat_surface import HAS_VOICE
+from .overseer_ai_common import section_url
 
 TABS = {
     "overview": "Overview",

@@ -154,7 +154,8 @@ async def test_the_review_list_holds_only_what_waits(
 
 
 def test_a_chat_reply_carries_the_cards_its_tools_proposed() -> None:
-    from app.components.web_frontend import overseer_ai_chat
+    from app.components.web_frontend import chat_surface
+    from app.components.web_frontend.chat_surface import ChatSurface
 
     trace = [
         {
@@ -178,7 +179,8 @@ def test_a_chat_reply_carries_the_cards_its_tools_proposed() -> None:
         metadata={"tool_trace": trace},
     )
 
-    shaped = overseer_ai_chat.settled(message, "c1")
+    mount = ChatSurface(path="/chat", user="0", surface="app")
+    shaped = chat_surface.settled(mount, message, "c1")
 
     assert shaped["changes"] == [
         "/partials/changes/7",

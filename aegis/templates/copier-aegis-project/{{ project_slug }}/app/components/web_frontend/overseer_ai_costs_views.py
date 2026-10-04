@@ -97,8 +97,8 @@ def overview(data: SpendLedger, first: date, now: date) -> dict[str, Any]:
     current = first == now.replace(day=1)
     last = now if current else _month_end(first)
     days = (last - first).days + 1
-    model_spend = sum(data.daily.values())
-    total = model_spend + sum(data.voice.values())
+    total = sum(data.daily.values())
+    model_spend = total - sum(data.voice.values())
     features = by_feature(data.actions)
     top = features[0] if features else None
     projected = total / days * _days_in(first) if current and days else None
@@ -194,7 +194,7 @@ def _week_over_week(daily: dict[date, float], now: date) -> tuple[str, str]:
 
 def projections(data: SpendLedger, now: date, horizon: int) -> dict[str, Any]:
     """Where the last 90 days' average says the spend is heading."""
-    per_day = (sum(data.daily.values()) + sum(data.voice.values())) / WINDOW_DAYS
+    per_day = sum(data.daily.values()) / WINDOW_DAYS
     annual = per_day * 365
     horizon_days = horizon * DAYS_PER_MONTH
     change, versus = _week_over_week(data.daily, now)

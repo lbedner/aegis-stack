@@ -122,17 +122,23 @@
    drawn chart in place. ``empty`` is said over the chart while its data has no
    ``points`` (``series.chart`` counts them; charts.js keeps it in step). #}
 {% call card(title, subtitle, id="chart-" ~ id) %}
-<div class="relative h-64">
+{{ chart(id, kind, data, label=title, drilldown=drilldown, live=live, empty=empty) }}
+{% endcall %}
+{% endmacro %}
+
+{# The canvas charts.js draws, and the data beside it: the one recipe, for
+   a page's panel and for a card the assistant draws in chat alike. #}
+{% macro chart(id, kind, data, height="h-64", label=None, drilldown=None, live=None, empty=None) %}
+<div class="relative {{ height }}">
   <canvas data-chart="{{ kind }}"
           data-chart-data="chart-{{ id }}-data"
           {% if drilldown %}data-drilldown="{{ drilldown }}"{% endif %}
-          role="img" aria-label="{{ title or id|replace("-", " ") }}"></canvas>
+          role="img" aria-label="{{ label or id|replace("-", " ") }}"></canvas>
   {% if empty %}
   <p data-chart-empty class="absolute inset-0 flex items-center justify-center bg-aegis-card text-sm text-aegis-muted{% if data.points %} hidden{% endif %}">{{ empty }}</p>
   {% endif %}
 </div>
 {% if live %}<div sse-swap="{{ id }}" hx-target="this">{{ chart_data(id, data) }}</div>{% else %}{{ chart_data(id, data) }}{% endif %}
-{% endcall %}
 {% endmacro %}
 
 {# A chart's data, as chart_panel renders it and as a live stream sends it

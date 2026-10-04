@@ -10,8 +10,15 @@ from typing import Any, Self
 from pydantic import BaseModel, Field
 
 from app.core import secrets
+from app.core.voice_settings import TTS_SPEED_MAX, TTS_SPEED_MIN, setting_default
 
-from ..models import TTSProvider
+from ..models import (
+    DEFAULT_TTS_MODEL,
+    DEFAULT_TTS_PROVIDER,
+    DEFAULT_TTS_VOICE,
+    TTS_KEYS,
+    TTSProvider,
+)
 
 
 class TTSConfig(BaseModel):
@@ -22,63 +29,48 @@ class TTSConfig(BaseModel):
     and sensible defaults.
     """
 
-    provider: TTSProvider = TTSProvider.OPENAI
+    provider: TTSProvider = DEFAULT_TTS_PROVIDER
     model: str | None = None  # None = use provider default
     voice: str | None = None  # None = use provider default
-    speed: float = Field(default=1.0, ge=0.25, le=4.0)
-
-    # Provider-specific defaults
-    DEFAULT_MODELS: dict[TTSProvider, str] = Field(
-        default={
-            TTSProvider.OPENAI: "tts-1",
-        },
-        exclude=True,
+    speed: float = Field(
+        default=setting_default("TTS_SPEED"), ge=TTS_SPEED_MIN, le=TTS_SPEED_MAX
     )
-
-    DEFAULT_VOICES: dict[TTSProvider, str] = Field(
-        default={
-            TTSProvider.OPENAI: "alloy",
-        },
-        exclude=True,
-    )
+    instructions: str | None = None  # how to say it; gpt-4o models only
 
     @classmethod
     def from_settings(cls, settings: Any) -> Self:
         """Create configuration from main application settings."""
-        provider_str = getattr(settings, "TTS_PROVIDER", "openai")
+        provider_str = getattr(settings, "TTS_PROVIDER", DEFAULT_TTS_PROVIDER.value)
 
         try:
             provider = TTSProvider(provider_str)
         except ValueError:
-            provider = TTSProvider.OPENAI
+            provider = DEFAULT_TTS_PROVIDER
 
         return cls(
             provider=provider,
             model=getattr(settings, "TTS_MODEL", None),
             voice=getattr(settings, "TTS_VOICE", None),
-            speed=getattr(settings, "TTS_SPEED", 1.0),
+            speed=getattr(settings, "TTS_SPEED", None) or setting_default("TTS_SPEED"),
+            instructions=getattr(settings, "TTS_INSTRUCTIONS", None),
         )
 
     def get_model(self) -> str:
         """Get the model to use, falling back to provider default."""
         if self.model:
             return self.model
-        return self.DEFAULT_MODELS.get(self.provider, "tts-1")
+        return DEFAULT_TTS_MODEL
 
     def get_voice(self) -> str:
         """Get the voice to use, falling back to provider default."""
         if self.voice:
             return self.voice
-        return self.DEFAULT_VOICES.get(self.provider, "alloy")
+        return DEFAULT_TTS_VOICE
 
     async def get_api_key(self, settings: Any) -> str | None:
         """Get API key for the current provider, read now (``.env``, then the
         secrets store)."""
-        api_key_mapping = {
-            TTSProvider.OPENAI: "OPENAI_API_KEY",
-        }
-
-        key_name = api_key_mapping.get(self.provider)
+        key_name = TTS_KEYS.get(self.provider)
         if key_name:
             return await secrets.get(key_name, source=settings)
 
@@ -94,24 +86,13 @@ class TTSConfig(BaseModel):
         errors = []
 
         # Check API key for cloud providers
-        cloud_providers = {TTSProvider.OPENAI}
-
-        if self.provider in cloud_providers:
+        if key_name := TTS_KEYS.get(self.provider):
             api_key = await self.get_api_key(settings)
             if not api_key:
-                key_name = {
-                    TTSProvider.OPENAI: "OPENAI_API_KEY",
-                }.get(self.provider)
                 errors.append(
                     f"Missing API key for {self.provider.value}. "
                     f"Set {key_name} environment variable."
                 )
-
-        # Validate speed range
-        if not 0.25 <= self.speed <= 4.0:
-            errors.append(
-                f"Invalid speed '{self.speed}'. Must be between 0.25 and 4.0."
-            )
 
         return errors
 

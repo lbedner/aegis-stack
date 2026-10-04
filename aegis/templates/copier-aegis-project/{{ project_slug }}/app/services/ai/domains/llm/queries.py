@@ -26,6 +26,7 @@ from app.services.ai.models.llm import (
     LLMPrice,
     LLMUsage,
 )
+from app.services.ai.models.llm.llm_price import RATE_FIELDS
 from app.services.shared.queries import owner_clause, within
 
 # --- Catalog -----------------------------------------------------------
@@ -83,7 +84,7 @@ async def latest_price_for(session: AsyncSession, llm_id: int) -> LLMPrice | Non
 # In the shared cache (Redis when the stack has it), not a per-process
 # dict: the sync runs in the scheduler, and a dict it cleared would be the
 # scheduler's own while the webserver kept charging the old rate.
-PRICE_CACHE_PREFIX = "llm_price:"
+PRICE_CACHE_PREFIX = "llm_rates:"
 # A backstop, not the mechanism: the sync invalidates on every change, and
 # a day matches its cadence if an invalidation is ever lost.
 PRICE_CACHE_TTL = 24 * 60 * 60
@@ -100,13 +101,17 @@ async def invalidate_price_cache() -> None:
     await get_cache().invalidate_prefix(PRICE_CACHE_PREFIX)
 
 
-async def price_for_model(
-    session: AsyncSession, model_name: str
-) -> tuple[float, float] | None:
-    """Per-token input and output cost for a model, memoized.
+# A model's rates by column name (``RATE_FIELDS``); None is "not billed
+# this way".
+Rates = dict[str, float | None]
 
-    A plain tuple rather than the row: it crosses processes through the
-    cache, and the caller only ever reads two floats.
+
+async def price_for_model(session: AsyncSession, model_name: str) -> Rates | None:
+    """Every rate a cost reads for a model (tokens, cached input, voice),
+    memoized.
+
+    A plain dict rather than the row: it crosses processes through the
+    cache.
     """
     from app.core.cache import get_cache
 
@@ -116,9 +121,7 @@ async def price_for_model(
     if cached is not None:
         return None if cached == _NOT_CATALOGUED else cached
     row = await latest_price_for_model(session, model_name)
-    price = (
-        None if row is None else (row.input_cost_per_token, row.output_cost_per_token)
-    )
+    price = None if row is None else {name: getattr(row, name) for name in RATE_FIELDS}
     await cache.set(
         key, _NOT_CATALOGUED if price is None else price, ttl=PRICE_CACHE_TTL
     )
@@ -185,6 +188,8 @@ async def catalog_models(
     ``vendor`` is a substring match, ``vendors`` an exact whitelist.
     ``released_after`` keeps models released on or after that day; an
     undated model has nothing to compare, so a window leaves it out.
+    ``mode`` is the kind of model (chat unless asked; None for every
+    kind), so a chat picker never offers a transcription model.
     ``limit`` caps the SQL result; a caller capping per vendor leaves it
     unset, since a global cap under newest-first ordering would let one
     vendor's fresh catalog starve the others.

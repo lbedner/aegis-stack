@@ -225,6 +225,7 @@ class ChatMixin(PromptMixin):
                 usage,
                 user_id,
                 duration_ms=response_time_ms,
+                conversation_id=conversation.id,
             )
 
             # Add TPS (tokens per second) to metadata for performance monitoring

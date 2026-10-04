@@ -4,12 +4,15 @@ TTS provider implementations.
 Provides a unified interface for Text-to-Speech synthesis.
 """
 
-import logging
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
+import logging
 from typing import Any
 
 from ..models import (
+    DEFAULT_TTS_MODEL,
+    DEFAULT_TTS_VOICE,
+    INSTRUCTED_TTS_MODELS,
     AudioFormat,
     SpeechRequest,
     SpeechResult,
@@ -71,8 +74,8 @@ class OpenAITTSProvider(BaseTTSProvider):
     def __init__(
         self,
         api_key: str | None = None,
-        model: str = "tts-1",
-        voice: str = "alloy",
+        model: str = DEFAULT_TTS_MODEL,
+        voice: str = DEFAULT_TTS_VOICE,
         base_url: str | None = None,
     ) -> None:
         """Initialize OpenAI TTS provider.
@@ -109,20 +112,29 @@ class OpenAITTSProvider(BaseTTSProvider):
 
         return self._client
 
+    def _speech_kwargs(self, request: SpeechRequest) -> dict[str, Any]:
+        """One set of arguments for the whole-file and the streamed call.
+        ``speed`` works on every model (measured on gpt-4o-mini-tts: 6.40s ->
+        4.95s at 1.5); ``instructions`` - tone, emotion, pacing - only on the
+        gpt-4o ones, and tts-1 refuses it."""
+        kwargs: dict[str, Any] = {
+            "model": self.model,
+            "voice": request.voice or self.default_voice,
+            "input": request.text,
+            "response_format": "mp3",
+        }
+        if request.speed:
+            kwargs["speed"] = request.speed
+        if request.instructions and self.model in INSTRUCTED_TTS_MODELS:
+            kwargs["instructions"] = request.instructions
+        return kwargs
+
     async def synthesize(self, request: SpeechRequest) -> SpeechResult:
         """Synthesize speech using OpenAI TTS API."""
         client = self._get_client()
 
-        voice = request.voice or self.default_voice
-
         try:
-            response = await client.audio.speech.create(
-                model=self.model,
-                voice=voice,
-                input=request.text,
-                speed=request.speed,
-                response_format="mp3",
-            )
+            response = await client.audio.speech.create(**self._speech_kwargs(request))
 
             # Read the audio content
             audio_data = response.content
@@ -141,23 +153,15 @@ class OpenAITTSProvider(BaseTTSProvider):
         """Stream audio from OpenAI TTS."""
         client = self._get_client()
 
-        voice = request.voice or self.default_voice
-
+        # Passed on as OpenAI generates it: awaiting the whole response and
+        # slicing it made a long answer wait for all of its audio before the
+        # first byte left.
         try:
-            response = await client.audio.speech.create(
-                model=self.model,
-                voice=voice,
-                input=request.text,
-                speed=request.speed,
-                response_format="mp3",
-            )
-
-            # OpenAI returns the full response, stream in chunks
-            audio_data = response.content
-            chunk_size = 4096
-
-            for i in range(0, len(audio_data), chunk_size):
-                yield audio_data[i : i + chunk_size]
+            async with client.audio.speech.with_streaming_response.create(
+                **self._speech_kwargs(request)
+            ) as response:
+                async for chunk in response.iter_bytes(4096):
+                    yield chunk
 
         except Exception as e:
             logger.error(f"OpenAI TTS streaming failed: {e}")
@@ -189,8 +193,8 @@ def get_tts_provider(
     if provider == TTSProvider.OPENAI:
         return OpenAITTSProvider(
             api_key=api_key,
-            model=model or "tts-1",
-            voice=voice or "alloy",
+            model=model or DEFAULT_TTS_MODEL,
+            voice=voice or DEFAULT_TTS_VOICE,
             **kwargs,
         )
     else:

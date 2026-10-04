@@ -3,13 +3,14 @@ users it was spent on, the span of the ledger, and what voice calls cost.
 Set-shaped inputs (a half-open ``[start, end)`` window), map-shaped outputs,
 no business logic; the Overseer's Costs section shapes them."""
 
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 
 from sqlalchemy import func
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.ai.models.llm import LLMUsage
+from app.services.ai.usage_recording import VOICE_ACTIONS
 from app.services.shared.queries import within
 
 from .schemas import ActionSpend
@@ -18,7 +19,8 @@ from .schemas import ActionSpend
 async def daily_spend(
     session: AsyncSession, start: datetime, end: datetime
 ) -> dict[date, float]:
-    """Model spend per calendar day in the window (days with none absent)."""
+    """Spend per calendar day in the window, voice included (days with none
+    absent)."""
     day = func.date(LLMUsage.timestamp)
     rows = await session.exec(
         select(day, func.sum(LLMUsage.total_cost))
@@ -88,18 +90,16 @@ async def first_call(session: AsyncSession) -> datetime | None:
 async def voice_spend(
     session: AsyncSession, start: datetime, end: datetime
 ) -> dict[str, float]:
-    """What transcription and speech cost in the window. Their ledgers keep
-    aware timestamps, so the window is made aware to match. Only where
-    voice is installed."""
-    from app.services.ai.models.voice_usage import STTUsage, TTSUsage
-
-    aware = (start.replace(tzinfo=UTC), end.replace(tzinfo=UTC))
-    spend: dict[str, float] = {}
-    for label, table in (("Transcription", STTUsage), ("Speech", TTSUsage)):
-        result = await session.exec(
-            select(func.coalesce(func.sum(table.total_cost), 0.0)).where(
-                *within(table.timestamp, *aware)
-            )
+    """What transcription, speech and live calls cost in the window, read
+    from the one ledger by action (every voice kind is named, at 0 when
+    unused)."""
+    rows = await session.exec(
+        select(LLMUsage.action, func.sum(LLMUsage.total_cost))
+        .where(
+            *within(LLMUsage.timestamp, start, end),
+            col(LLMUsage.action).in_(VOICE_ACTIONS),
         )
-        spend[label] = float(result.one() or 0)
-    return spend
+        .group_by(col(LLMUsage.action))
+    )
+    spent = {action: float(cost or 0) for action, cost in rows.all()}
+    return {label: spent.get(action, 0.0) for action, label in VOICE_ACTIONS.items()}

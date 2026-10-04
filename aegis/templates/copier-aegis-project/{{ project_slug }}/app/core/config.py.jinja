@@ -11,6 +11,7 @@ from typing import Annotated, Any, Literal
 from pydantic import {% if include_worker %}Field, {% endif %}model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from app.core.configurable import Configurable, timezones
+{% if include_ai and ai_voice %}from app.core.voice_settings import VoiceSettings{% endif %}
 {% if include_worker %}from app.core.queue_workers import DEFAULT_QUEUES, QueueWorker{% endif %}
 {%- for p in _plugins | default([]) %}
 {%- for s in p.wiring.settings_mixins %}
@@ -32,6 +33,9 @@ class Settings(
     {{ s.symbol }},
 {%- endfor %}
 {%- endfor %}
+{%- if include_ai and ai_voice %}
+    VoiceSettings,
+{%- endif %}
     BaseSettings,
 ):
     """
@@ -425,23 +429,6 @@ class Settings(
     # Conversation settings
     AI_MAX_CONVERSATION_LENGTH: int = 50  # Max messages per conversation
     AI_CONVERSATION_TIMEOUT_HOURS: int = 24  # Auto-cleanup old conversations
-{% if ai_voice %}
-
-    # Speech-to-Text (STT) Configuration
-    # Provider: openai_whisper, whisper_local, faster_whisper, groq_whisper
-    STT_PROVIDER: str = "openai_whisper"  # Default to OpenAI Whisper API
-    STT_MODEL: str | None = None  # Model name/size (provider-specific, None = default)
-    STT_LANGUAGE: str | None = None  # ISO 639-1 language code (None = auto-detect)
-    # For local providers (whisper_local, faster_whisper)
-    STT_DEVICE: str | None = None  # Device: 'cpu', 'cuda', 'mps' (None = auto-detect)
-
-    # Text-to-Speech (TTS) Configuration
-    # Provider: openai
-    TTS_PROVIDER: str = "openai"  # Default to OpenAI TTS API
-    TTS_MODEL: str | None = None  # Model: tts-1 (fast), tts-1-hd (quality). None = default
-    TTS_VOICE: str | None = None  # Voice: alloy, echo, fable, onyx, nova, shimmer. None = alloy
-    TTS_SPEED: float = 1.0  # Speech speed multiplier (0.25 to 4.0)
-{% endif %}
 {% endif %}
 
     # Operations / registrar configuration (always present — the `dns`

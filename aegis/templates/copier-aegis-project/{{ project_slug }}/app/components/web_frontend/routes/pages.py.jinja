@@ -57,6 +57,7 @@ from app.components.web_frontend.routes.partials import (
 {%- if include_ai %}
 from app.components.web_frontend.routes.partials import (
     overseer_ai as overseer_ai_partials,
+    overseer_ai_chat as overseer_ai_chat_partials,
 )
 {%- endif %}
 {%- if include_inference %}
@@ -210,6 +211,7 @@ router.include_router(overseer_payment_partials.router)
 {%- endif %}
 {%- if include_ai %}
 router.include_router(overseer_ai_partials.router)
+router.include_router(overseer_ai_chat_partials.router)
 {%- endif %}
 {%- if include_inference %}
 router.include_router(overseer_inference_partials.router)

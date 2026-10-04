@@ -13,6 +13,8 @@
   <li>
     <form hx-post="{{ picker.path }}" hx-target="#dialog-body" hx-swap="innerHTML">
       <input type="hidden" name="q" value="{{ picker.query }}">
+      {# What a pick sets: the chat model, or what a live call runs on. #}
+      <input type="hidden" name="kind" value="{{ row.kind }}">
       <button type="submit" name="model_id" value="{{ row.model_id }}" data-model-id="{{ row.model_id }}" {% if row.model_id in picker.active %}aria-current="true"{% endif %}
               class="w-full flex items-center gap-3 px-2 py-2 rounded text-left hover:bg-aegis-border/20 transition-colors">
         {% if row.icon_name %}{{ avatar(row.icon_name, row.icon_url) }}{% else %}<span class="w-5 shrink-0"></span>{% endif %}
@@ -32,7 +34,7 @@
 {% if chip_only %}{{ model_chip(chip, path) }}{% else %}
 {% if chip_oob %}{{ model_chip(chip, picker.path, oob=True) }}{% endif %}
 <div id="model-picker">
-  {{ dialog_title("Models", "What the assistant runs on, for the whole app. A pick takes effect on the next message.") }}
+  {{ dialog_title("Models", "What the assistant runs on, for the whole app. A pick takes effect on the next message, or the next call.") }}
   {# Only the list moves: swapping the search box mid-keystroke takes the
      caret with it. #}
   <form hx-get="{{ picker.path }}" hx-target="#model-list" hx-select="#model-list" hx-swap="outerHTML"

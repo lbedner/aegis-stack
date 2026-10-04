@@ -318,7 +318,15 @@ class PromptMixin(ContextsMixin):
         context_parts: list[str] = []
         used = 0
         dropped = 0
-        for msg in reversed(conversation.messages[:-1]):
+        # The last message is set aside only when it is the question being
+        # asked now. A live call opens on a thread that ends with the
+        # assistant's last reply, and setting that aside - then returning
+        # nothing, since it was not a question - started every call with
+        # no history at all.
+        latest_message = conversation.get_last_message()
+        asking = latest_message is not None and latest_message.role == MessageRole.USER
+        earlier = conversation.messages[:-1] if asking else conversation.messages
+        for msg in reversed(earlier):
             if msg.role == MessageRole.USER:
                 line = f"User: {msg.content}"
             elif msg.role == MessageRole.ASSISTANT:
@@ -340,21 +348,19 @@ class PromptMixin(ContextsMixin):
             messages_dropped=dropped,
         )
 
-        # Add the current user message
-        latest_message = conversation.get_last_message()
-        if latest_message and latest_message.role == MessageRole.USER:
-            if context_parts:
-                # Include conversation history + current message
-                return (
-                    prefix
-                    + "\n".join(context_parts)
-                    + f"\n\nUser: {latest_message.content}"
-                )
-            else:
-                # First message in conversation
-                return prefix + latest_message.content
-
-        return ""
+        if not asking:
+            # A call opening on the thread so far: the history alone.
+            return prefix + "\n".join(context_parts)
+        assert latest_message is not None
+        if context_parts:
+            # Include conversation history + current message
+            return (
+                prefix
+                + "\n".join(context_parts)
+                + f"\n\nUser: {latest_message.content}"
+            )
+        # First message in conversation
+        return prefix + latest_message.content
 {% else %}
     async def _prepare_llm_and_messages(
         self,

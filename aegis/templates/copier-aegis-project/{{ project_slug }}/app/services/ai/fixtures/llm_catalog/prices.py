@@ -4,10 +4,74 @@ Keyed by ``(vendor, model_id)`` because price is a property of the
 deployment, not the model: OpenAI charges for gpt-4o-mini and LLM7.io
 gives it away.
 
-Rates are as of Dec 2024.
+Rates are as of Dec 2024. Voice rates (``VOICE_PRICE_FIELDS``) are
+given as the source catalog gives them, per unit, not per 1M; a model
+lists only the measures it bills by. As of Sep 2026.
 """
 
 PRICES: dict[tuple[str, str], dict[str, float]] = {
+    # Google voice (Sep 2026)
+    ("google", "gemini-3.8-live"): {
+        "input": 0.75,
+        "output": 4.50,
+        "input_cost_per_audio_token": 3 / 1_000_000,
+        "output_cost_per_audio_token": 12 / 1_000_000,
+    },
+    # OpenAI voice (Sep 2026)
+    ("openai", "gpt-live-1"): {
+        "input": 0,
+        "output": 0,
+        "input_cost_per_second": 0.05 / 60,
+    },
+    ("openai", "gpt-realtime-2.1"): {
+        "input": 4.00,
+        "output": 24.00,
+        "cache": 0.40,
+        "input_cost_per_audio_token": 32 / 1_000_000,
+        "output_cost_per_audio_token": 64 / 1_000_000,
+    },
+    ("openai", "gpt-realtime-2.1-mini"): {
+        "input": 0.60,
+        "output": 2.40,
+        "cache": 0.06,
+        "input_cost_per_audio_token": 10 / 1_000_000,
+        "output_cost_per_audio_token": 20 / 1_000_000,
+    },
+    ("openai", "gpt-transcribe"): {
+        "input": 0,
+        "output": 0,
+        "input_cost_per_second": 0.0045 / 60,
+    },
+    ("openai", "gpt-4o-transcribe"): {
+        "input": 2.50,
+        "output": 10.00,
+        "input_cost_per_second": 0.006 / 60,
+    },
+    ("openai", "gpt-4o-mini-transcribe"): {
+        "input": 1.25,
+        "output": 5.00,
+        "input_cost_per_second": 0.003 / 60,
+    },
+    ("openai", "whisper-1"): {
+        "input": 0,
+        "output": 0,
+        "input_cost_per_second": 0.006 / 60,
+    },
+    ("openai", "tts-1"): {
+        "input": 0,
+        "output": 0,
+        "input_cost_per_character": 15 / 1_000_000,
+    },
+    ("openai", "tts-1-hd"): {
+        "input": 0,
+        "output": 0,
+        "input_cost_per_character": 30 / 1_000_000,
+    },
+    ("openai", "gpt-4o-mini-tts"): {
+        "input": 0.60,
+        "output": 10.00,
+        "output_cost_per_second": 0.015 / 60,
+    },
     # OpenAI pricing (Dec 2024)
     ("openai", "gpt-4o"): {"input": 2.50, "output": 10.00},
     ("openai", "gpt-4o-mini"): {"input": 0.15, "output": 0.60},

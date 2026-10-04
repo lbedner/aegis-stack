@@ -8,7 +8,9 @@ for 2000+ models across all major providers.
 from dataclasses import dataclass, field
 
 import httpx
+
 from app.core.log import logger
+from app.services.ai.models.llm.llm_price import VOICE_PRICE_FIELDS
 
 
 @dataclass
@@ -33,6 +35,10 @@ class LiteLLMModel:
     supports_system_messages: bool
     supports_prompt_caching: bool
     deprecation_date: str | None
+    # Its own cache-read rate, for models OpenRouter does not enrich.
+    cache_read_cost_per_token: float | None = None
+    # The voice rates it lists (VOICE_PRICE_FIELDS), and only those.
+    voice_prices: dict[str, float] = field(default_factory=dict)
 
 
 class LiteLLMClient:
@@ -119,6 +125,12 @@ class LiteLLMClient:
             supports_system_messages=raw.get("supports_system_messages", True),
             supports_prompt_caching=raw.get("supports_prompt_caching", False),
             deprecation_date=raw.get("deprecation_date"),
+            cache_read_cost_per_token=raw.get("cache_read_input_token_cost"),
+            voice_prices={
+                name: float(raw[name])
+                for name in VOICE_PRICE_FIELDS
+                if isinstance(raw.get(name), int | float)
+            },
         )
 
 

@@ -43,6 +43,7 @@ class MergedLLMData:
     family: str | None = None
     deprecation_date: str | None = None
     created_at: datetime | None = None  # When model was released/added
+    voice_prices: dict[str, float] = field(default_factory=dict)
 
 
 # Vendor name normalization mapping
@@ -289,7 +290,10 @@ def merge_single_model(
         max_output = openrouter_model.max_completion_tokens
         input_modalities = openrouter_model.input_modalities
         output_modalities = openrouter_model.output_modalities
-        cache_read_cost = openrouter_model.cache_read_cost_per_token
+        cache_read_cost = (
+            openrouter_model.cache_read_cost_per_token
+            or litellm_model.cache_read_cost_per_token
+        )
         # Convert Unix timestamp to datetime
         created_at = (
             datetime.fromtimestamp(openrouter_model.created, tz=UTC)
@@ -302,7 +306,7 @@ def merge_single_model(
         context_window = litellm_model.max_tokens
         max_output = litellm_model.max_output_tokens
         input_modalities, output_modalities = _modalities_from_litellm(litellm_model)
-        cache_read_cost = None
+        cache_read_cost = litellm_model.cache_read_cost_per_token
         created_at = None
 
     return MergedLLMData(
@@ -329,6 +333,7 @@ def merge_single_model(
         family=extract_family(model_id),
         deprecation_date=litellm_model.deprecation_date,
         created_at=created_at,
+        voice_prices=litellm_model.voice_prices,
     )
 
 

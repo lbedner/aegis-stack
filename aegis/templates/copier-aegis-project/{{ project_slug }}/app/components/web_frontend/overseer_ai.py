@@ -23,10 +23,9 @@ from app.services.ai.domains.llm.provider_management import (
 from app.services.system.models import ComponentStatus
 
 from . import ranges
+from .chat_surface import HAS_VOICE, PERSISTED
 from .overseer_ai_common import (
     HAS_RAG,
-    HAS_VOICE,
-    PERSISTED,
     dollars,
     get_current_config,
     label,
@@ -299,9 +298,10 @@ async def section_context(
             return await overseer_ai_rag.knowledge_context(req.query)
         return await overseer_ai_rag.search_context()
     if section == "chat":
-        from . import overseer_ai_chat
+        from .chat_surface import surface_context
+        from .overseer_ai_chat import OVERSEER
 
-        return await overseer_ai_chat.surface_context()
+        return await surface_context(OVERSEER)
     if section == "voice":
         from . import overseer_ai_voice
 

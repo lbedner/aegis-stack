@@ -153,6 +153,8 @@ EXPECTED_EFFECTS = {
     "record_reading": "writes",
     "save_memory": "writes",
     "replace_memory": "writes",
+    # A card shows what a script computed; it changes nothing.
+    "draw_card": "read",
     # finance
     "ledger": "read",
     "accounts": "read",

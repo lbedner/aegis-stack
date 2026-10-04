@@ -33,7 +33,7 @@
 {% from "components/macros/layout.html" import avatar, badge %}
 
 {% macro _cell(row, col) -%}
-{%- set value = row[col.key] if row is mapping else row|attr(col.key) -%}
+{%- set value = row[col.key] if row is mapping or col.key is number else row|attr(col.key) -%}
 {%- if value is not defined or value is none or value == "" -%}
 -
 {%- elif col.render -%}
@@ -65,7 +65,7 @@
 
 {# The text colour of one cell: signed money reads by sign. #}
 {% macro _tone(row, col) -%}
-{%- set value = row[col.key] if row is mapping else row|attr(col.key) -%}
+{%- set value = row[col.key] if row is mapping or col.key is number else row|attr(col.key) -%}
 {%- if col.kind == "money" and (col.signed or col.toned) and value is number and value != 0 -%}
 {{ "text-aegis-teal" if value > 0 else "text-error" }}
 {%- else -%}
@@ -102,10 +102,12 @@ text-aegis-text
 {% if oob %}</template>{% endif %}
 {% endmacro %}
 
-{% macro data_table(columns, rows, empty="Nothing here yet", row_id=None, detail=None, actions=None) %}
+{# ``flush`` is the card bleed: on by default, because a table spans its
+   card; off where the caller already bleeds (a drawn card's table). #}
+{% macro data_table(columns, rows, empty="Nothing here yet", row_id=None, detail=None, actions=None, flush=True) %}
 {% set actions = actions or (caller if caller is defined else None) %}
 {% if rows %}
-<div class="overflow-x-auto -mx-5">
+<div class="overflow-x-auto{{ " -mx-5" if flush }}">
   <table class="w-full text-sm">
     <thead>
       <tr class="text-xxs text-aegis-muted caps border-b border-aegis-border">

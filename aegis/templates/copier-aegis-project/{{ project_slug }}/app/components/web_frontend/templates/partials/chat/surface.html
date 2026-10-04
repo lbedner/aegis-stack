@@ -5,9 +5,12 @@
    Needs: assistant, chat_path, stream_url, turn_defaults, messages,
    conversation_id, picker (the catalog is there to pick from), voice (how
    a spoken turn is heard, or none), approvals (the change queue's
-   review list's URL, or none). #}
+   review list's URL, or none), voices (profiles and live calls: voice
+   with a database). #}
 {% from "components/macros/icons.html" import icon %}
-{% from "components/macros/chat.html" import button_classes, conversation_field, voice_states %}
+{% from "components/macros/chat.html" import assistant_row, button_classes, conversation_field, voice_states %}
+{# A call's states, as the phone and the call bar both draw them. #}
+{% macro phone_states() %}{% call voice_states(record=True, work=True) %}{{ icon("phone", "w-4 h-4") }}{% endcall %}{% endmacro %}
 <div id="chat" class="flex flex-col h-full"
      data-chat='{{ {"stream": stream_url, "defaults": turn_defaults, "path": chat_path}|tojson }}'>
   {% if approvals %}
@@ -44,6 +47,11 @@
     </span>
   </template>
   <template id="chat-image"><img src="" alt="" width="800" height="600" class="max-h-[75vh] h-auto w-auto max-w-full mx-auto rounded"></template>
+  {% if voices %}
+  {# A card drawn mid-call, which the call announces: held at the foot of
+     the thread until the saved turn redraws the thread. #}
+  <template id="chat-live-card"><li {{ assistant_row() }} data-live-card></li></template>
+  {% endif %}
   {% if voice %}
   {# What the microphone is doing, read out as well as shown. The server's
      own refusals (nothing heard, transcription down) arrive as text. #}
@@ -56,6 +64,11 @@
       <span data-state="denied">The microphone is blocked. Allow it for this site, or type instead.</span>
       <span data-state="unsupported">This browser can't record here. You can type instead.</span>
       <span data-state="offline">Couldn't reach the app. You can type instead.</span>
+      {% if voices %}
+      <span data-state="live">Talking live - just speak.</span>
+      <span data-state="working">{{ assistant }} is pulling that up...</span>
+      <span data-state="muted">Muted - {{ assistant }} can't hear you.</span>
+      {% endif %}
     </span>
   </template>
   {% endif %}
@@ -71,6 +84,7 @@
        drawer, they took the width the message needs. #}
     <div class="w-full flex flex-wrap items-center gap-x-4 gap-y-1" data-composer-chips>
       {% if picker %}<span id="chat-model" hx-get="{{ chat_path }}/models/chip" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></span>{% endif %}
+      {% if voices %}<span id="chat-voice" hx-get="{{ chat_path }}/voices/chip" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></span>{% endif %}
     </div>
     {# Not ``required``: a message may be images alone (the route sends the
        house line); Send stays disabled until there is text or an image. #}
@@ -95,7 +109,42 @@
       {% call voice_states(record=True) %}{{ icon("mic", "w-4 h-4") }}{% endcall %}
     </button>
     {% endif %}
+    {% if voices %}
+    {# A live call (routes/partials/chat_live.py): the server holds the
+       engine's session and carries the audio over this mount's socket. #}
+    <button type="button" id="chat-live" data-state="idle"
+            class="group relative {{ button_classes('default') }} data-[state=recording]:text-aegis-teal data-[state=recording]:border-aegis-teal data-[state=speaking]:text-aegis-teal data-[state=speaking]:border-aegis-teal data-[state=working]:text-aegis-teal data-[state=working]:border-aegis-teal"
+            aria-pressed="false" aria-label="Talk live" title="Talk live"
+            data-relay="{{ chat_path }}/live/ws" data-worklet="{{ static('js/mic-worklet.js') }}"
+            data-thread="{{ chat_path }}/conversations/">
+      {{ phone_states() }}
+    </button>
+    {% endif %}
     <button type="button" id="chat-stop" hidden class="{{ button_classes('default') }}" aria-label="Stop">Stop</button>
     <button type="submit" id="chat-send" class="{{ button_classes('primary') }}" aria-label="Send" :disabled="!text.trim() && !staged">Send</button>
   </form>
+  {% if voices %}
+  {# In a call the composer row gives way to this: what the call is doing
+     (voice_states), the engine, a timer and the running cost, mute and
+     hang up. voice.js swaps the two and fills the figures. #}
+  <div id="chat-call" hidden data-state="idle"
+       class="group shrink-0 border-t border-aegis-border pt-3 flex items-center gap-3">
+    <span class="relative w-9 h-9 rounded-full bg-aegis-teal/10 text-aegis-teal flex items-center justify-center">
+      {{ phone_states() }}
+    </span>
+    <span class="min-w-0 flex-1 text-sm text-aegis-text tabular-nums">
+      Live · <span data-call-engine></span> · <span data-call-timer>0:00</span>
+      <span class="text-aegis-muted"> · <span data-call-cost></span><span data-call-cost-later>priced as it goes</span></span>
+    </span>
+    <button type="button" id="chat-mute" aria-pressed="false" aria-label="Mute" title="Mute"
+            class="group/mute {{ button_classes('default') }} aria-pressed:text-error aria-pressed:border-error">
+      <span class="group-aria-pressed/mute:hidden">{{ icon("mic", "w-4 h-4") }}</span>
+      {{ icon("mic-off", "hidden group-aria-pressed/mute:block w-4 h-4") }}
+    </button>
+    <button type="button" id="chat-hang-up" aria-label="Hang up" title="Hang up"
+            class="{{ button_classes('default') }} text-error border-error hover:bg-error/10">
+      {{ icon("phone", "w-4 h-4 rotate-[135deg]") }}
+    </button>
+  </div>
+  {% endif %}
 </div>

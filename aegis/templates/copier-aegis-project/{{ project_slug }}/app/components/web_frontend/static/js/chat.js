@@ -12,18 +12,42 @@
    EventSource is GET-only. Frames are `event: <name>` + `data: <json>`
    pairs separated by a blank line.
 
-   Also here: `chatDrawer`, the drawer frame's Alpine state. */
+   Also here: `chatDrawer`, the drawer frame's Alpine state, and the
+   surface's parts both this and voice.js reach. */
+
+// Markup a script needs is cloned from a <template> in the surface
+// partial, so styling has one home (the template), never a JS string.
+function clone(id) {
+  return document.getElementById(id).content.firstElementChild.cloneNode(true);
+}
+// The thread (streamed into, reloaded mid-call), the conversation it is,
+// and the composer.
+function chatThread() {
+  return document.getElementById('chat-thread');
+}
+function chatConversation() {
+  return document.getElementById('chat-conversation');
+}
+// The conversation's id, or null for a new one; and a new id kept.
+function conversationId() {
+  return chatConversation()?.value || null;
+}
+function setConversation(id) {
+  const field = chatConversation();
+  if (id && field) field.value = id;
+}
+function chatComposer() {
+  return document.getElementById('chat-composer');
+}
+
 (() => {
   const CURSOR = '▌';
   let controller = null; // the in-flight turn's AbortController
 
   const root = () => document.getElementById('chat');
-  const thread = () => document.getElementById('chat-thread');
+  const thread = chatThread;
   const scroller = () => document.getElementById('chat-scroll');
   const config = () => JSON.parse(root().dataset.chat);
-  // Markup the script needs is cloned from <template>s in the surface
-  // partial, so styling has one home (the template), never a JS string.
-  const clone = (id) => document.getElementById(id).content.firstElementChild.cloneNode(true);
   // The live turn, told to whoever listens (voice.js speaks it as it comes):
   // `chat:text` per streamed chunk, `chat:tool` when the assistant stops
   // writing to run a tool, `chat:end` when the stream is over.
@@ -73,7 +97,7 @@
     const replay = event.target.closest('[data-replay]');
     if (replay) {
       const text = replay.closest('[data-role=user]').querySelector('[data-text]').textContent;
-      const form = document.getElementById('chat-composer');
+      const form = chatComposer();
       const box = form.querySelector('textarea');
       box.value = text;
       // Alpine owns this box through x-model and never sees a direct
@@ -254,7 +278,7 @@
     event.target.value = '';
   });
   document.addEventListener('paste', (event) => {
-    if (!document.getElementById('chat-composer')) return;
+    if (!chatComposer()) return;
     const files = [...(event.clipboardData?.files || [])].filter((f) => f.type.startsWith('image/'));
     if (files.length) { event.preventDefault(); files.forEach(stage); }
   });
@@ -273,7 +297,7 @@
 
   // --- The turn -------------------------------------------------------------
   const setStreaming = (on) => {
-    const form = document.getElementById('chat-composer');
+    const form = chatComposer();
     if (!form) return;
     form.querySelector('textarea').disabled = on;
     document.getElementById('chat-send').hidden = on;
@@ -344,10 +368,7 @@
       busy.hidden = true;
       setStreaming(false);
       announce('chat:end');
-      if (ids.conversation) {
-        const hidden = document.getElementById('chat-conversation');
-        if (hidden) hidden.value = ids.conversation;
-      }
+      setConversation(ids.conversation);
     }
     if (!failed && attachments.length) {
       // Sent: the bytes rode this turn. A failed turn keeps them staged so

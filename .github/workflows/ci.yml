@@ -55,8 +55,15 @@ jobs:
     - name: Run type checking
       run: uv run ty check
 
-  test:
+  # The fast lane in two parallel shards (``--shard``, tests/conftest.py):
+  # one 4-worker job ran ~11 minutes; each shard is about half of it.
+  test-shard:
+    name: test ${{ matrix.shard }}/2
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     steps:
     - uses: actions/checkout@v7
     
@@ -73,7 +80,58 @@ jobs:
       run: uv sync --all-extras
     
     - name: Run tests
-      run: uv run pytest -n auto --dist=loadgroup -v -m "not slow"
+      run: uv run pytest -n auto --dist=loadgroup -v -m "not slow" --shard ${{ matrix.shard }}/2
+
+  # The required check is named ``test``: it passes only when every shard did,
+  # so sharding never changes what branch protection waits for.
+  test:
+    if: always()
+    needs: test-shard
+    runs-on: ubuntu-latest
+    steps:
+    - name: Every shard passed
+      run: test "${{ needs.test-shard.result }}" = success
+
+  # Every stack combination generates (tests/cli/test_stack_generation.py,
+  # marked slow so the fast lane above skips it), in four shards. Here rather
+  # than in the path-filtered stack matrix, so every PR generates and the
+  # ``generation`` check always reports. A stack's tests share a shard, so
+  # each stack is generated once. These tests ran inside ``test`` until
+  # they were split out, under this same environment.
+  generation-shard:
+    name: generation ${{ matrix.shard }}/4
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+    - uses: actions/checkout@v7
+    
+    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+      with:
+        enable-cache: true
+        cache-dependency-glob: "uv.lock"
+    
+    - name: Set up Python
+      run: uv python install 3.11
+    
+    - name: Install dependencies
+      run: uv sync --all-extras
+    
+    - name: Test all stack combinations generate
+      run: uv run pytest tests/cli/test_stack_generation.py -v --tb=short --shard ${{ matrix.shard }}/4
+
+  # One check named ``generation`` that passes only when every shard did.
+  generation:
+    if: always()
+    needs: generation-shard
+    runs-on: ubuntu-latest
+    steps:
+    - name: Every shard passed
+      run: test "${{ needs.generation-shard.result }}" = success
 
   test-uvx:
     runs-on: ubuntu-latest

@@ -20,12 +20,25 @@ generated on first request and reused, so scoped runs only pay for the stacks
 their tests touch. Two rules when adding a matrix row:
 
 - Every new `StackCombination` adds a full init (render + uv sync + make fix
-  + migrations, 10-40s) to any session that exercises the whole matrix — the
-  matrix file is in the FAST lane, so `make test` pays it. Add rows only for
-  genuinely new coverage.
+  + migrations, 10-40s) to every PR: `test_stack_generation.py` is marked
+  `slow` and runs in CI's own `generation` jobs on every PR (`make
+  test-stacks` locally), not in `make test`. Add rows only for genuinely new
+  coverage.
 - Do not build a second near-identical config: if factory-based tests need the
   same stack, use a `NAMED_PROJECT_SPECS` entry (copied per test), not another
   matrix row.
+
+### CI shards: `--shard K/N`
+
+CI (`ci.yml`) runs the fast lane as two parallel jobs (`test 1/2`, `test 2/2`,
+gated by one `test` check) and stack generation as four (`generation 1/4`..`4/4`,
+gated by `generation`).
+`--shard K/N` (`tests/conftest.py`) keeps the K-th of N slices by a stable hash.
+What must share a process stays together: a stack's parametrized tests (keyed
+on the `combination` param, so each stack generates once) and every
+`xdist_group`. Anything else splits by file, so a new expensive file lands in
+one shard; run `pytest -m "not slow" --collect-only -q -o addopts= --shard K/2`
+to see where. Locally nothing changes: without `--shard` every test runs.
 
 ### Cache Configuration: `NAMED_PROJECT_SPECS`
 

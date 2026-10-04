@@ -15,7 +15,7 @@ import pytest
 from apscheduler.job import Job
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from app.components.scheduler.jobs import SERVICE_JOBS{% if include_worker %}, ServiceJob{% endif %}
+from app.core.schedule import service_jobs{% if include_worker %}, ServiceJob{% endif %}
 from app.components.scheduler.main import _quiet_successful_runs, register_service_jobs
 
 
@@ -26,7 +26,7 @@ def _scheduled() -> dict[str, Job]:
 
 
 def test_every_service_job_is_scheduled() -> None:
-    assert set(_scheduled()) == {job.id for job in SERVICE_JOBS}
+    assert set(_scheduled()) == {job.id for job in service_jobs()}
 
 
 def test_a_run_that_succeeds_logs_nothing() -> None:
@@ -49,7 +49,7 @@ def test_the_scheduler_only_enqueues() -> None:
     from app.components.worker.pools import enqueue_task
 
     scheduled = _scheduled()
-    for job in SERVICE_JOBS:
+    for job in service_jobs():
         assert scheduled[job.id].func is enqueue_task, job.id
         assert list(scheduled[job.id].args) == [job.task_name, "system"]
 
@@ -59,7 +59,7 @@ def test_every_enqueued_name_is_a_system_task() -> None:
     register would be enqueued forever and run never."""
     from app.components.worker.registry import queue_tasks
 
-    missing = {job.task_name for job in SERVICE_JOBS} - set(queue_tasks("system"))
+    missing = {job.task_name for job in service_jobs()} - set(queue_tasks("system"))
     assert not missing, f"scheduled but not registered on the worker: {missing}"
 
 
@@ -129,7 +129,7 @@ def test_a_worker_task_runs_its_job_under_its_own_name() -> None:
 
 def test_without_a_worker_the_scheduler_runs_each_job() -> None:
     scheduled = _scheduled()
-    for job in SERVICE_JOBS:
+    for job in service_jobs():
         assert scheduled[job.id].func is job.func, job.id
 {%- endif %}
 {%- if scheduler_backend != "memory" %}
@@ -162,17 +162,14 @@ def test_interval_jobs_keep_their_times_across_restarts(
     Anchored to a fixed start, the next run is the same whenever it starts."""
     from datetime import UTC, datetime, timedelta
 
-    from app.components.scheduler.jobs import ServiceJob
+    from app.core.schedule import ServiceJob
     import app.components.scheduler.main as scheduler_main
 
     async def daily() -> None:
         """A daily chore."""
 
-    monkeypatch.setattr(
-        scheduler_main,
-        "SERVICE_JOBS",
-        (ServiceJob(daily, "daily", "Daily", {"trigger": "interval", "hours": 24}),),
-    )
+    job = ServiceJob(daily, "daily", "Daily", {"trigger": "interval", "hours": 24})
+    monkeypatch.setattr(scheduler_main, "service_jobs", lambda: (job,))
     trigger = _scheduled()["daily"].trigger
     started = [
         datetime(2026, 9, 26, 22, 0, tzinfo=UTC),

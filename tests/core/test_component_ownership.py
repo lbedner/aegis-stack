@@ -23,7 +23,6 @@ from pathlib import Path
 import pytest
 
 from aegis.core.component_files import (
-    OWNED_BUT_SHARED_PATHS,
     get_all_owned_paths,
     get_component_files,
     get_shared_scope,
@@ -111,17 +110,15 @@ class TestGetSharedScope:
         )
         assert "app/components/scheduler/__init__.py" not in scope
 
-    def test_documented_exception_is_included_even_though_owned(self) -> None:
+    def test_a_cross_cutting_owned_file_is_left_to_the_cross_spec_rule(
+        self,
+    ) -> None:
+        """The scheduler's ``main.py`` depends on the worker's answers, but it
+        is scheduler-owned: an unrelated operation must never create it.
+        ``get_cross_spec_scope`` re-renders it where it exists."""
         scope = get_shared_scope(
             ["app/components/scheduler/main.py", "app/components/scheduler/__init__.py"]
         )
-        assert "app/components/scheduler/main.py" in scope
-        assert "app/components/scheduler/__init__.py" not in scope
-
-    def test_exception_absent_from_input_is_not_injected(self) -> None:
-        """The exception only applies to paths that are actually present
-        in the candidate set — get_shared_scope must not invent paths."""
-        scope = get_shared_scope(["docker-compose.yml"])
         assert "app/components/scheduler/main.py" not in scope
 
     def test_returns_a_sorted_list(self) -> None:
@@ -234,18 +231,6 @@ class TestGetSharedScope:
         assert "docker-compose.yml" in scope
         assert "docs/components/api-load-testing.md" not in scope
         assert "tests/services/test_health_logic.py" not in scope
-
-
-class TestOwnedButSharedPaths:
-    def test_documented_exception_is_still_actually_owned(self) -> None:
-        """If scheduler/main.py stops being manifest-owned, the exception
-        has gone stale and must be trimmed — see get_shared_scope's use of
-        it and test_render_diff_shared_scope.py for the full story."""
-        owned = get_all_owned_paths()
-        stale = OWNED_BUT_SHARED_PATHS - owned
-        assert not stale, (
-            f"No longer manifest-owned, trim OWNED_BUT_SHARED_PATHS: {sorted(stale)}"
-        )
 
 
 class TestPluginOwnedPathsStayOutOfEngineScope:

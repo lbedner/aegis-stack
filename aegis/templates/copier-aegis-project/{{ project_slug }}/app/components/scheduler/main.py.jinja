@@ -1,7 +1,8 @@
 """
 Scheduler component for {{ project_name }}.
 
-Schedules the service jobs listed in ``jobs.SERVICE_JOBS``; add yours there.
+Schedules every service's jobs (``app.core.schedule``): a service lists its
+own in ``app/services/<service>/scheduled_jobs.py``.
 """
 
 from datetime import datetime
@@ -32,12 +33,12 @@ from app.services.scheduler.execution_log import (
 {% endif %}
 from app.core.config import settings
 from app.core.log import logger
+from app.core.schedule import service_jobs
 {%- if include_worker %}
 from app.components.worker.pools import enqueue_task
 {%- endif %}
 from app.services.system import activity
 from .heartbeat import is_heartbeat_event, register_heartbeat_job
-from .jobs import SERVICE_JOBS
 from .resilient import ResilientScheduler
 
 {% if scheduler_backend != "memory" %}
@@ -98,7 +99,7 @@ INTERVAL_ANCHOR = datetime(2000, 1, 1)
 
 
 def register_service_jobs(scheduler: AsyncIOScheduler) -> None:
-    """Schedule every entry in ``SERVICE_JOBS``.
+    """Schedule every service job (``service_jobs``).
 {%- if include_worker %}
 
     The scheduler only produces: each job is scheduled as an enqueue of its
@@ -106,7 +107,7 @@ def register_service_jobs(scheduler: AsyncIOScheduler) -> None:
     repeats the stored call, so it lands on the worker too.
 {%- endif %}
     """
-    for job in SERVICE_JOBS:
+    for job in service_jobs():
         trigger = dict(job.trigger)
         if trigger.get("trigger") == "interval":
             trigger.setdefault("start_date", INTERVAL_ANCHOR)
@@ -174,7 +175,7 @@ def create_scheduler() -> AsyncIOScheduler:
 
     # Code is the source of truth: every startup re-registers each job via
     # ``replace_existing=True``, so runtime edits to persisted jobs do not
-    # survive a restart by design. Add jobs to ``SERVICE_JOBS`` in .jobs.
+    # survive a restart by design.
     register_heartbeat_job(scheduler)
     register_service_jobs(scheduler)
 

@@ -1,0 +1,56 @@
+"""The insights service's scheduled jobs (``app.core.schedule``): one
+collection per configured source."""
+
+from app.core.schedule import ServiceJob
+{%- if insights_github %}
+from app.services.insights.jobs import (
+    collect_github_events_job,
+    collect_github_stars_job,
+    collect_github_traffic_job,
+)
+{%- endif %}
+{%- if insights_pypi %}
+from app.services.insights.jobs import collect_pypi_job
+{%- endif %}
+{%- if insights_plausible %}
+from app.services.insights.jobs import collect_plausible_job
+{%- endif %}
+
+JOBS: tuple[ServiceJob, ...] = (
+{%- if insights_github %}
+    ServiceJob(
+        collect_github_traffic_job,
+        "insight_github_traffic",
+        "Insight: GitHub Traffic",
+        {"trigger": "cron", "hour": 12, "minute": 0},
+    ),
+    ServiceJob(
+        collect_github_stars_job,
+        "insight_github_stars",
+        "Insight: GitHub Stars",
+        {"trigger": "cron", "hour": 12, "minute": 0},
+    ),
+    ServiceJob(
+        collect_github_events_job,
+        "insight_github_events",
+        "Insight: GitHub Events",
+        {"trigger": "cron", "hour": 12, "minute": 0},
+    ),
+{%- endif %}
+{%- if insights_pypi %}
+    ServiceJob(
+        collect_pypi_job,
+        "insight_pypi",
+        "Insight: PyPI Downloads",
+        {"trigger": "cron", "hour": 18, "minute": 0},
+    ),
+{%- endif %}
+{%- if insights_plausible %}
+    ServiceJob(
+        collect_plausible_job,
+        "insight_plausible",
+        "Insight: Plausible Analytics",
+        {"trigger": "cron", "minute": 0},
+    ),
+{%- endif %}
+)

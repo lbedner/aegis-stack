@@ -29,7 +29,6 @@ from .auth_service_parser import auth_level_answers
 from .component_files import (
     JINJA_EXTENSION,
     MIGRATION_SKILL_FILE,
-    OWNED_BUT_SHARED_PATHS,
     PROJECT_SLUG_PLACEHOLDER,
     SERVICES_CARD_FILE,
     get_component_cleanup_paths,
@@ -370,19 +369,11 @@ class ManualUpdater:
     @cached_property
     def _shared_scope(self) -> list[str]:
         """Candidate template paths ``_regenerate_shared_files`` may touch:
-        every path no component/service manifest claims, plus the one
-        documented exception (``get_shared_scope``, aegis-stack#918).
-        Cached — neither the template tree nor the component/service
-        registry changes within one ``ManualUpdater``'s lifetime.
-
-        This is a *candidate* set, not the final per-call scope: paths in
-        ``OWNED_BUT_SHARED_PATHS`` (existence is manifest-owned; only their
-        content is cross-cutting) must additionally exist on disk before
-        a call may touch them — see ``_regenerate_shared_files``. Without
-        that extra check, a project without scheduler would have
-        ``scheduler/main.py`` backfill-created by an unrelated operation
-        (e.g. adding insights), reproducing the exact bug the old
-        ``_REGEN_EXISTING`` "no-create" policy existed to prevent.
+        every path no component/service manifest claims
+        (``get_shared_scope``, aegis-stack#918). Cached — neither the
+        template tree nor the component/service registry changes within one
+        ``ManualUpdater``'s lifetime. Owned files on disk whose content
+        depends on the operated spec join per call (``get_cross_spec_scope``).
         """
         return get_shared_scope(self._render_diff_engine.discover_paths())
 
@@ -978,16 +969,7 @@ class ManualUpdater:
             self._extract_env_vars(env_path.read_text()) if env_path.exists() else {}
         )
 
-        # OWNED_BUT_SHARED_PATHS entries only join THIS call's scope when
-        # already on disk — their existence is manifest-owned (only
-        # content is cross-cutting), so an operation unrelated to their
-        # owning component must never backfill-create them. See
-        # ``_shared_scope``'s docstring.
-        scope = [
-            p
-            for p in self._shared_scope
-            if p not in OWNED_BUT_SHARED_PATHS or (self.project_path / p).exists()
-        ]
+        scope = list(self._shared_scope)
         if operated is not None:
             fresh = written or set()
             scope += get_cross_spec_scope(

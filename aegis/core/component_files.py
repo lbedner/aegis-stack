@@ -425,20 +425,6 @@ def get_all_owned_paths() -> set[str]:
     return owned
 
 
-# Manifest-owned paths whose CONTENT also depends on other specs' answers,
-# not just their own gate — ownership alone can't tell the render-diff
-# engine these need touching. The scheduler's two files: existence is
-# scheduler-owned (only ever copied when scheduler is selected), but
-# ``jobs.py`` lists OTHER services' jobs (insights, finance, ...) and
-# ``main.py`` schedules them onto the worker when there is one. The old
-# ``shared_files.py`` carried the scheduler under the "no-create"
-# ``_REGEN_EXISTING`` policy for exactly this reason. One documented
-# exception, not a list that grows — kept honest by
-# ``tests/core/test_component_ownership.py::TestOwnedButSharedPaths``.
-OWNED_BUT_SHARED_PATHS: frozenset[str] = frozenset(
-    {"app/components/scheduler/main.py", "app/components/scheduler/jobs.py"}
-)
-
 # Unowned by any component/service manifest (nothing claims them), but
 # NOT safe for the render-diff engine to render either — the naive
 # derivation would otherwise pull them into scope. Kept honest by
@@ -519,8 +505,9 @@ _ENGINE_UNSAFE_PATHS: frozenset[str] = frozenset(
 def get_shared_scope(all_paths: Iterable[str]) -> list[str]:
     """Restrict ``all_paths`` (typically ``RenderDiffEngine.discover_paths()``)
     to the render-diff engine's safe scope: every path no component/service
-    manifest claims, plus :data:`OWNED_BUT_SHARED_PATHS`, minus
-    :data:`_ENGINE_UNSAFE_PATHS`.
+    manifest claims, minus :data:`_ENGINE_UNSAFE_PATHS`. A manifest-owned
+    file whose content depends on another spec's answers (the scheduler's
+    ``main.py`` on the worker) is reached by :func:`get_cross_spec_scope`.
 
     The single canonical scoping expression — callers (``ManualUpdater``,
     tests) use this rather than each re-deriving the set expression
@@ -528,7 +515,7 @@ def get_shared_scope(all_paths: Iterable[str]) -> list[str]:
     """
     owned = get_all_owned_paths()
     candidates = set(all_paths)
-    scope = (candidates - owned) | (candidates & OWNED_BUT_SHARED_PATHS)
+    scope = candidates - owned
     scope -= _ENGINE_UNSAFE_PATHS
     return sorted(scope)
 

@@ -10,7 +10,7 @@ import sys
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import Any, AsyncGenerator, Generator
+from typing import Any, AsyncGenerator, Callable, Generator
 
 # Before any app import reads settings: a developer .env with a real
 # LOGFIRE_TOKEN must never arm instrumentation (or ship test spans).
@@ -137,6 +137,34 @@ def _finance_calendar(
 # (uvicorn keeps one loop for the server's lifetime); only the
 # test suite needs this swap. Dict-mode keeps the same async API,
 # so call sites don't change.
+@pytest.fixture
+def fake_service(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> Generator[Callable[..., Path], None, None]:
+    """Make a service package on ``app.services``' path, as a plugin would:
+    ``fake_service("demo_x", scheduled_jobs="JOBS = ()")`` writes
+    ``demo_x/scheduled_jobs.py``. For the conventions found on disk
+    (``app.core.discovery``); the modules it imported are forgotten after."""
+    import app.services as services
+
+    monkeypatch.setattr(services, "__path__", [*services.__path__, str(tmp_path)])
+    made: list[str] = []
+
+    def make(name: str, **modules: str) -> Path:
+        package = tmp_path / name
+        package.mkdir()
+        (package / "__init__.py").write_text("")
+        for module, source in modules.items():
+            (package / f"{module}.py").write_text(source)
+        made.append(f"app.services.{name}")
+        return package
+
+    yield make
+    for name in list(sys.modules):
+        if any(name == m or name.startswith(f"{m}.") for m in made):
+            del sys.modules[name]
+
+
 @pytest.fixture
 def clean_registry() -> Generator[None, None, None]:
     """Unregister the tools a test registered, so cases stay independent.

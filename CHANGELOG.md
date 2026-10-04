@@ -244,6 +244,17 @@
 
 ### Changed
 
+- **Each service declares its own scheduled jobs.** A service lists its
+  jobs as `JOBS` in `app/services/<service>/scheduled_jobs.py`, and the
+  scheduler and the worker read them all through
+  `app.core.schedule.service_jobs`, found on disk like `models` and
+  `change_types`. A plugin or a hand-written service schedules jobs with no
+  edit outside its own package, and removing a service takes its jobs with
+  it. `app/components/scheduler/jobs.py` and `SERVICE_JOBS` are gone:
+  `ServiceJob` and `LONG_RUNNING` now import from `app.core.schedule`, and a
+  project's own entries move into their services' `scheduled_jobs.py`. An id
+  or a function name claimed twice, or a `scheduled_jobs.py` without `JOBS`,
+  fails at startup (#1419).
 - **The tool registry moved to core.** `register_tool`, tool effects and
   `mcp_servable` live in `app.core.tools` and ship with every project, so a
   service's tools exist whether or not the AI service is installed. AI

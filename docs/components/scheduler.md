@@ -45,10 +45,10 @@ graph TB
 
 ### 1. Create Service Functions
 
-Add your business logic in `app/services/`:
+Add the job functions to the service they belong to:
 
 ```python
-# app/services/my_tasks.py
+# app/services/reports/jobs.py
 from app.core.log import logger
 
 async def send_daily_report() -> None:
@@ -65,13 +65,17 @@ async def cleanup_temp_files() -> None:
 
 ### 2. Schedule Your Tasks
 
-Add an entry to `SERVICE_JOBS` in `app/components/scheduler/jobs.py`. It is
-the one list of scheduled jobs; the scheduler schedules every entry.
+List them as `JOBS` in the same service's `scheduled_jobs.py`. Every
+service keeps its own; the scheduler finds each one on disk and schedules
+every entry, so nothing outside the service is edited (a plugin's jobs run
+the same way).
 
 ```python
-from app.services.my_tasks import send_daily_report, cleanup_temp_files
+# app/services/reports/scheduled_jobs.py
+from app.core.schedule import ServiceJob
+from app.services.reports.jobs import cleanup_temp_files, send_daily_report
 
-SERVICE_JOBS: tuple[ServiceJob, ...] = (
+JOBS: tuple[ServiceJob, ...] = (
     # Daily report at 9 AM
     ServiceJob(
         send_daily_report,
@@ -148,7 +152,7 @@ The scheduler uses APScheduler's default settings. Configuration is managed via 
 
 - `SCHEDULER_TIMEZONE` (str, default: `"UTC"`): IANA timezone name; cron triggers inherit this.
 
-Code is the source of truth for job schedules. Every restart re-registers each job via `replace_existing=True`, so editing a trigger in `app/components/scheduler/jobs.py` and redeploying is all that's needed to change the schedule. Runtime edits via `scheduler.modify_job()` do not survive a restart by design.
+Code is the source of truth for job schedules. Every restart re-registers each job via `replace_existing=True`, so editing a trigger in its service's `scheduled_jobs.py` and redeploying is all that's needed to change the schedule. Runtime edits via `scheduler.modify_job()` do not survive a restart by design.
 
 ## Best Practices
 

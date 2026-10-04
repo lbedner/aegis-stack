@@ -347,7 +347,7 @@ async def send_daily_digest() -> None:
             html=generate_digest_html(user),
         )
 
-# app/components/scheduler/jobs.py: daily at 8am
+# app/services/digest/scheduled_jobs.py, in JOBS: daily at 8am
 ServiceJob(
     send_daily_digest,
     "daily_digest",

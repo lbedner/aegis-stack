@@ -78,7 +78,7 @@ def create_scheduler() -> AsyncIOScheduler:
 A daily database backup job is automatically included:
 
 ```python
-# app/components/scheduler/jobs.py, present with the database component
+# app/services/system/scheduled_jobs.py, present with the database component
 ServiceJob(
     backup_database_job,
     "database_backup",
@@ -116,13 +116,13 @@ my-app health check --detailed
 
 ## Keeping the Jobstore in Sync With Code
 
-`SERVICE_JOBS` in `app/components/scheduler/jobs.py` is the source of truth for every job. On each start, `create_scheduler()` re-registers them all, and with a persistent jobstore the stored rows are reconciled against code three ways:
+Each service's `JOBS`, in `app/services/<service>/scheduled_jobs.py`, is the source of truth for its jobs. On each start, `create_scheduler()` re-registers them all, and with a persistent jobstore the stored rows are reconciled against code three ways:
 
 - **Changed schedule** - every entry is scheduled with `replace_existing=True`, so an edited trigger overwrites the persisted row on the next restart.
 - **Removed job** - `_drop_unknown_persisted_jobs()` deletes persisted rows whose ID is no longer registered in code, so a job you delete stops firing instead of running forever from its stored row.
 - **Un-importable job** - `_cleanup_stale_jobs()` drops persisted jobs whose function can no longer be imported, which handles a Docker volume carrying jobs from a previous project configuration.
 
-To change a schedule, edit the entry's trigger in `SERVICE_JOBS`, commit, and redeploy:
+To change a schedule, edit the entry's trigger in its service's `scheduled_jobs.py`, commit, and redeploy:
 
 ```python
 ServiceJob(

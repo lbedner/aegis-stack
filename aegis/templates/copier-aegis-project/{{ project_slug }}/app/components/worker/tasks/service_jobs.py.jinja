@@ -2,8 +2,8 @@
 {%- if include_scheduler %}
 
 The scheduler enqueues each job by its function's name; this is where the
-worker learns those names. The list is the scheduler's own
-(``app.components.scheduler.jobs``), so the two cannot drift apart.
+worker learns those names. Both read ``app.core.schedule.service_jobs``,
+so the two cannot drift apart.
 {%- else %}
 
 This stack has no scheduler, so there are none.
@@ -26,7 +26,7 @@ import dramatiq
 {%- endif %}
 {%- if include_scheduler %}
 
-from app.components.scheduler.jobs import SERVICE_JOBS, ServiceJob
+from app.core.schedule import ServiceJob, service_jobs
 {%- endif %}
 {%- if worker_backend == "dramatiq" %}
 
@@ -52,7 +52,7 @@ def as_task(job: ServiceJob) -> Function:
 def service_job_tasks() -> list[Function]:
     """Every scheduled job, for ``WorkerSettings.functions``."""
 {%- if include_scheduler %}
-    return [as_task(job) for job in SERVICE_JOBS]
+    return [as_task(job) for job in service_jobs()]
 {%- else %}
     return []
 {%- endif %}
@@ -85,7 +85,7 @@ def service_job_tasks(broker: Any) -> dict[str, Any]:
     these as module attributes.
     """
 {%- if include_scheduler %}
-    return {job.task_name: as_task(job, broker) for job in SERVICE_JOBS}
+    return {job.task_name: as_task(job, broker) for job in service_jobs()}
 {%- else %}
     return {}
 {%- endif %}
@@ -113,7 +113,7 @@ def service_job_tasks() -> dict[str, Any]:
     these as module attributes.
     """
 {%- if include_scheduler %}
-    return {job.task_name: as_task(job) for job in SERVICE_JOBS}
+    return {job.task_name: as_task(job) for job in service_jobs()}
 {%- else %}
     return {}
 {%- endif %}

@@ -1,0 +1,24 @@
+{% if ai_backend != "memory" -%}
+"""The AI service's scheduled jobs (``app.core.schedule``)."""
+
+from app.core.schedule import LONG_RUNNING, ServiceJob
+from app.services.ai.jobs import analyze_sentiment_job, sync_llm_catalog_job
+
+JOBS: tuple[ServiceJob, ...] = (
+    # Model list + pricing from the upstream feeds, so per-request cost in
+    # ``llm_usage`` tracks vendor prices without a deploy.
+    ServiceJob(
+        sync_llm_catalog_job,
+        "llm_sync",
+        "LLM Catalog Sync",
+        {"trigger": "interval", "hours": 6},
+        timeout=LONG_RUNNING,
+    ),
+    ServiceJob(
+        analyze_sentiment_job,
+        "sentiment_analysis",
+        "Conversation Sentiment Analysis",
+        {"trigger": "interval", "hours": 1},
+    ),
+)
+{%- endif %}

@@ -5,6 +5,7 @@ This module provides common functionality used across all CLI test files
 to avoid code duplication and ensure consistent behavior.
 """
 
+import ast
 import os
 import subprocess
 import time
@@ -625,3 +626,33 @@ def strip_ansi_codes(text: str) -> str:
 
     ansi_pattern = re.compile(r"\x1b\[[0-9;]*m")
     return ansi_pattern.sub("", text)
+
+
+def revision_chain(versions: Path) -> dict[str, str | None]:
+    """revision -> down_revision for every file, ids asserted unique."""
+    chain: dict[str, str | None] = {}
+    for path in sorted(versions.glob("*.py")):
+        if path.name.startswith("__"):
+            continue
+        module = ast.parse(path.read_text())
+        found: dict[str, str | None] = {}
+        for node in module.body:
+            if not isinstance(node, ast.Assign):
+                continue
+            name = node.targets[0]
+            if isinstance(name, ast.Name) and name.id in ("revision", "down_revision"):
+                found[name.id] = ast.literal_eval(node.value)
+        revision = found.get("revision")
+        assert isinstance(revision, str), f"{path.name} declares no revision"
+        assert revision not in chain, (
+            f"{path.name} reuses revision id {revision!r} - the chain forks here"
+        )
+        chain[revision] = found.get("down_revision")
+    return chain
+
+
+def revision_head(chain: dict[str, str | None]) -> str:
+    parents = {down for down in chain.values() if down is not None}
+    heads = sorted(set(chain) - parents)
+    assert len(heads) == 1, f"expected one head, found {heads}"
+    return heads[0]

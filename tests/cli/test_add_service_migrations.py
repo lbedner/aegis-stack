@@ -13,7 +13,12 @@ import sqlite3
 import pytest
 
 from tests.cli.conftest import ProjectFactory
-from tests.cli.test_utils import run_aegis_command, run_project_command
+from tests.cli.test_utils import (
+    revision_chain,
+    revision_head,
+    run_aegis_command,
+    run_project_command,
+)
 
 
 class TestAddServiceMigrationGeneration:
@@ -69,13 +74,8 @@ class TestAddServiceMigrationGeneration:
         alembic_dir = project_path / "alembic"
         versions_dir = alembic_dir / "versions"
 
-        # Verify ai migrations exist (catalog + agent registry)
-        ai_migrations = list(versions_dir.glob("001_ai.py"))
-        assert len(ai_migrations) == 1, "Should have ai migration"
-        agents_migrations = list(versions_dir.glob("002_ai_agents.py"))
-        assert len(agents_migrations) == 1, "Should have ai_agents migration"
-        sentiment_migrations = list(versions_dir.glob("003_ai_sentiment.py"))
-        assert len(sentiment_migrations) == 1, "Should have ai_sentiment migration"
+        before = revision_chain(versions_dir)
+        head_before = revision_head(before)
 
         # Add auth service
         result = run_aegis_command(
@@ -87,15 +87,15 @@ class TestAddServiceMigrationGeneration:
         )
         assert result.returncode == 0, f"Add-service failed: {result.stderr}"
 
-        # Verify auth migration was added with correct revision
-        auth_migrations = list(versions_dir.glob("004_auth.py"))
-        assert len(auth_migrations) == 1, "Should have auth migration as 004"
-
-        # Verify revision chain
-        auth_content = auth_migrations[0].read_text()
-        assert "down_revision = '003'" in auth_content, (
-            "Auth should chain after ai_sentiment"
-        )
+        # One auth revision, chained onto the head the project had: the ids
+        # follow whatever the project already holds, so none is pinned here.
+        after = revision_chain(versions_dir)
+        auth = list(versions_dir.glob("*_auth.py"))
+        assert len(auth) == 1, "Should have exactly one auth migration"
+        auth_revision = auth[0].name.split("_", 1)[0]
+        assert after[auth_revision] == head_before, "Auth should chain onto the head"
+        assert set(before) < set(after)
+        revision_head(after)
 
 
 class TestAddServiceSeedsAgents:

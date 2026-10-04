@@ -19,10 +19,11 @@ from fastapi.testclient import TestClient
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.services import change_queue
 from app.services.finance.models import FinanceCategory
 from app.services.finance.service import FinanceService
 from app.services.finance.utils import current_date
-from app.services import change_queue
+from tests._session import opens
 
 
 @pytest.mark.asyncio
@@ -66,7 +67,6 @@ async def test_overview_composite_matches_granular_endpoints(
 ) -> None:
     """One surface, one round trip: /overview returns every Overview
     section in the granular endpoints' own shapes, consistent with them."""
-    from datetime import date
 
     service = FinanceService(async_db_session)
     account = await service.create_manual_account(
@@ -418,7 +418,7 @@ async def test_net_worth_series_after_recompute(
     acting_owner_user_id: int | None,
 ) -> None:
     """FIN-13 acceptance: House ($505k) + Mortgage ($300k) → net worth $205k."""
-    from datetime import UTC, datetime, timedelta
+    from datetime import timedelta
 
     from app.services.finance.domains.ledger import networth
 
@@ -701,15 +701,9 @@ async def test_background_import_runs_as_a_job(
     monkeypatch,
 ) -> None:
     """``background=true``: 202 + job id, terminal event carries the counts."""
-    from contextlib import asynccontextmanager
-
     from app.components.backend.api.finance import imports as finance_imports_module
 
-    @asynccontextmanager
-    async def _session():
-        yield async_db_session
-
-    monkeypatch.setattr(finance_imports_module, "_job_session", _session)
+    monkeypatch.setattr(finance_imports_module, "_job_session", opens(async_db_session))
 
     account_id = await _checking_account(async_db_session, acting_owner_user_id)
     data = (_FIXTURES / "sample_quicken.qif").read_bytes()
@@ -741,15 +735,9 @@ async def test_background_import_failure_lands_in_the_job_error(
 ) -> None:
     """A QIF without a target account fails INSIDE the job; the error text
     reaches the subscriber instead of dying in a log."""
-    from contextlib import asynccontextmanager
-
     from app.components.backend.api.finance import imports as finance_imports_module
 
-    @asynccontextmanager
-    async def _session():
-        yield async_db_session
-
-    monkeypatch.setattr(finance_imports_module, "_job_session", _session)
+    monkeypatch.setattr(finance_imports_module, "_job_session", opens(async_db_session))
 
     data = (_FIXTURES / "sample_quicken.qif").read_bytes()
     response = authenticated_client.post(
@@ -857,7 +845,7 @@ async def test_recurring_list_includes_icon_and_staleness(
     """Only the list endpoint (not the single-row create/update responses)
     has the context to compute a favicon guess and a staleness read per
     stream."""
-    from datetime import date, timedelta
+    from datetime import timedelta
 
     authenticated_client.post(
         "/api/v1/finance/recurring",
@@ -932,7 +920,6 @@ async def test_uncategorized_counts_the_source_apps_catchall_too(
 ) -> None:
     """A NULL-only check reports a clean ledger on a Quicken import that
     carried a thousand rows in its own "Uncategorized" bucket. Both count."""
-    from datetime import date
 
     service = FinanceService(async_db_session)
     account = await service.create_manual_account(
@@ -977,7 +964,6 @@ async def test_uncategorized_q_filters_by_payee(
 ) -> None:
     """Same search /transactions already has - a case-insensitive
     substring match on ``name`` only."""
-    from datetime import date
 
     service = FinanceService(async_db_session)
     account = await service.create_manual_account(
@@ -1013,7 +999,7 @@ async def test_uncategorized_from_filters_by_date(
     """Same trailing-window filter /transactions already has (``>=``,
     no upper bound) - the date range picker UncategorizedPanel shares
     with the Accounts register."""
-    from datetime import date, timedelta
+    from datetime import timedelta
 
     service = FinanceService(async_db_session)
     account = await service.create_manual_account(
@@ -1055,7 +1041,6 @@ async def test_uncategorized_account_ids_scopes_to_that_account(
 ) -> None:
     """Same account-scope filter Overview's charts use
     (``AccountFilter.params()``)."""
-    from datetime import date
 
     service = FinanceService(async_db_session)
     checking = await service.create_manual_account(
@@ -1106,7 +1091,6 @@ async def test_uncategorized_empty_account_ids_means_nothing(
     the GET endpoint over HTTP (it just drops out of the query string,
     which is why the frontend skips the request entirely in that state -
     see ``AccountFilter.params()``)."""
-    from datetime import date
 
     service = FinanceService(async_db_session)
     account = await service.create_manual_account(
@@ -1136,8 +1120,6 @@ async def test_categorize_transaction_sets_category(
     async_db_session: AsyncSession,
     acting_owner_user_id: int | None,
 ) -> None:
-    from datetime import date
-
     service = FinanceService(async_db_session)
     account = await service.create_manual_account(
         owner_user_id=acting_owner_user_id,
@@ -1232,7 +1214,6 @@ async def test_top_payees_ranks_outflows_and_skips_transfers(
 ) -> None:
     """The Overview payee card reads this. Transfers must be excluded or a
     card payment tops the list forever, and inflows are not "money taken"."""
-    from datetime import date
 
     service = FinanceService(async_db_session)
     account = await service.create_manual_account(
@@ -1280,7 +1261,6 @@ async def test_cashflow_splits_income_from_spend_and_skips_transfers(
     """The Overview bars read this. Transfers must not appear as BOTH
     income and spend - a card payment is money moved, and counting it
     twice inflates both bars for the same dollars."""
-    from datetime import date
 
     service = FinanceService(async_db_session)
     account = await service.create_manual_account(
@@ -1325,7 +1305,6 @@ async def test_categories_listing_reports_usage_and_keeps_unused(
     """The Categories tab reads this: signed totals (inflows kept, unlike
     the spending breakdown), and categories with no activity still listed
     so imported taxonomy is visible and prunable."""
-    from datetime import date
 
     service = FinanceService(async_db_session)
     account = await service.create_manual_account(
@@ -1379,7 +1358,7 @@ async def test_recurring_projection_walks_balance_through_schedule(
     """Projection = today's cash balance, then scheduled income and
     commitment bills applied in date order with a running balance.
     Detected merchant rhythms (non-commitments) must not appear."""
-    from datetime import date, timedelta
+    from datetime import timedelta
 
     from app.services.finance.models import FinanceRecurringStream
 
@@ -1664,8 +1643,6 @@ async def test_budget_line_round_trip_and_summary(
     async_db_session: AsyncSession,
     acting_owner_user_id: int | None,
 ) -> None:
-    from datetime import date
-
     service = FinanceService(async_db_session)
     account = await service.create_manual_account(
         owner_user_id=acting_owner_user_id,
@@ -3304,9 +3281,7 @@ async def test_pending_change_approve_round_trip(
     listed = authenticated_client.get("/api/v1/changes").json()
     assert [c["id"] for c in listed["items"]] == [change["id"]]
 
-    approved = authenticated_client.post(
-        f"/api/v1/changes/{change['id']}/approve"
-    )
+    approved = authenticated_client.post(f"/api/v1/changes/{change['id']}/approve")
     assert approved.status_code == 200
     assert approved.json()["status"] == "approved"
 
@@ -3333,9 +3308,7 @@ async def test_pending_change_reject_keeps_the_audit_row(
         },
     ).json()
 
-    rejected = authenticated_client.post(
-        f"/api/v1/changes/{change['id']}/reject"
-    )
+    rejected = authenticated_client.post(f"/api/v1/changes/{change['id']}/reject")
     assert rejected.status_code == 200
     assert rejected.json()["status"] == "rejected"
 
@@ -3394,9 +3367,9 @@ async def test_a_withdrawn_row_tells_the_card_why(
     )
     await async_db_session.commit()
 
-    (item,) = authenticated_client.get(
-        f"/api/v1/changes/batch/{row.batch_id}"
-    ).json()["items"]
+    (item,) = authenticated_client.get(f"/api/v1/changes/batch/{row.batch_id}").json()[
+        "items"
+    ]
     assert item["status"] == "rejected"
     assert item["note"] == "Withdrawn by finance-assistant. Superseded."
 
@@ -3425,7 +3398,9 @@ async def test_batch_approve_with_a_veto(
         )
         for i in range(3)
     ]
-    rows = await change_queue.propose_many(service.db, "transaction.categorize",
+    rows = await change_queue.propose_many(
+        service.db,
+        "transaction.categorize",
         [{"transaction_id": t.id, "category_id": category.id} for t in txns],
         owner_user_id=acting_owner_user_id,
     )
@@ -3492,9 +3467,7 @@ async def test_an_executor_crash_keeps_the_recorded_error(
             json={"change_type": "test.boom", "payload": {"anything": 1}},
         ).json()
 
-        crashed = authenticated_client.post(
-            f"/api/v1/changes/{change['id']}/approve"
-        )
+        crashed = authenticated_client.post(f"/api/v1/changes/{change['id']}/approve")
 
         assert crashed.status_code == 500
         assert "secret internal detail" not in crashed.text

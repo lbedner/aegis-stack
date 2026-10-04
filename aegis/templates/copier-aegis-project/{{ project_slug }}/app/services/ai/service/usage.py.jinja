@@ -64,6 +64,7 @@ class UsageMixin(AIServiceBase):
         success: bool = True,
         error_message: str | None = None,
         duration_ms: float | None = None,
+        conversation_id: str | None = None,
     ) -> None:
         """Write one ledger row for this request; never raises.
 
@@ -79,6 +80,7 @@ class UsageMixin(AIServiceBase):
             success=success,
             error_message=error_message,
             duration_ms=duration_ms,
+            conversation_id=conversation_id,
         )
 
     async def get_usage_stats(

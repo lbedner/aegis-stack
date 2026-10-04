@@ -1,0 +1,14 @@
+{# Bars, in the order the assistant gave them, drawn by the app's own chart code:
+   The highest is bright teal, the lowest
+   violet, the rest a darker teal; each bar's tone is decided here and
+   charts.js only colours it. The axis starts at zero, so a bar's height
+   is its value. A month key ("2025-11") reads as a month. #}
+{% from "partials/chat/cards/_frame.html" import card_chart %}
+{% set rows = card["rows"] %}
+{% set figures = rows|map(attribute="value")|list %}
+{% set top = figures|max if figures else 0 %}
+{% set low = figures|min if figures else 0 %}
+{% set tones = [] %}
+{% for row in rows %}{% set _ = tones.append("high" if row["value"] == top else "low" if row["value"] == low else "mid") %}{% endfor %}
+{{ card_chart("bar", "bar", card, card_id, card_url, large,
+              rows|map(attribute="label")|map("short_date")|list, tones=tones) }}

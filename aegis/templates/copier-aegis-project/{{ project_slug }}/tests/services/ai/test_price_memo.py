@@ -18,7 +18,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.cache import get_cache
 from app.services.ai.domains.llm import queries
-from app.services.ai.models.llm import LargeLanguageModel, LLMOrg, LLMPrice
+from app.services.ai.models.llm import RATE_FIELDS, LargeLanguageModel, LLMOrg, LLMPrice
 
 KEY = f"{queries.PRICE_CACHE_PREFIX}deepseek-v4.1-flash"
 
@@ -66,7 +66,11 @@ class TestItRemembers:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         first = await queries.price_for_model(async_db_session, "deepseek-v4.1-flash")
-        assert first == (1.5e-07, 6e-07)
+        assert first is not None
+        assert (first["input_cost_per_token"], first["output_cost_per_token"]) == (
+            1.5e-07,
+            6e-07,
+        )
 
         _explode_on_query(monkeypatch, "price")
 
@@ -99,7 +103,11 @@ class TestEveryProcessSeesTheSameAnswer:
         process's sync can clear."""
         await queries.price_for_model(async_db_session, "deepseek-v4.1-flash")
 
-        assert await get_cache().get(KEY) == (1.5e-07, 6e-07)
+        cached = await get_cache().get(KEY)
+        assert (cached["input_cost_per_token"], cached["output_cost_per_token"]) == (
+            1.5e-07,
+            6e-07,
+        )
         assert not hasattr(queries, "_PRICE_CACHE")
 
     # The price query runs twice on purpose - once to fill the cache, once
@@ -145,9 +153,9 @@ class TestItHandsBackPlainValues:
     async def test_not_an_orm_row(
         self, async_db_session: AsyncSession, catalog: None
     ) -> None:
-        """It crosses processes through the cache, and the caller only
-        reads two floats."""
+        """It crosses processes through the cache: every rate a cost reads,
+        by name, and nothing else."""
         price = await queries.price_for_model(async_db_session, "deepseek-v4.1-flash")
 
-        assert isinstance(price, tuple)
-        assert all(isinstance(value, float) for value in price)
+        assert isinstance(price, dict)
+        assert set(price) == set(RATE_FIELDS)

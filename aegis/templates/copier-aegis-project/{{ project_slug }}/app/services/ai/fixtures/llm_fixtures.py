@@ -7,14 +7,16 @@ re-run is a no-op rather than a conflict. The data itself is in
 
 from datetime import UTC, datetime
 
+from sqlmodel import Session, select
+
 from app.core.log import logger
 from app.services.ai.models.llm import (
+    VOICE_PRICE_FIELDS,
     LargeLanguageModel,
     LLMDeployment,
     LLMOrg,
     LLMPrice,
 )
-from sqlmodel import Session, select
 
 from .llm_catalog import DEPLOYMENTS, MODELS, PRICES, VENDORS
 
@@ -125,6 +127,28 @@ def _load_deployments(session: Session) -> int:
     return count
 
 
+def price_row(
+    price_data: dict[str, float],
+    *,
+    org_id: int,
+    llm_id: int,
+    effective_date: datetime | None = None,
+) -> LLMPrice:
+    """A ``PRICES`` entry as its row: token rates from per-1M to per-token,
+    voice rates as given."""
+    return LLMPrice(
+        org_id=org_id,
+        llm_id=llm_id,
+        input_cost_per_token=price_data["input"] / 1_000_000,
+        output_cost_per_token=price_data["output"] / 1_000_000,
+        cache_input_cost_per_token=(
+            price_data["cache"] / 1_000_000 if "cache" in price_data else None
+        ),
+        effective_date=effective_date or datetime.now(UTC),
+        **{k: price_data[k] for k in VOICE_PRICE_FIELDS if k in price_data},
+    )
+
+
 def _load_prices(session: Session) -> int:
     """Load price fixtures, skipping existing."""
     count = 0
@@ -157,12 +181,10 @@ def _load_prices(session: Session) -> int:
         ).first()
 
         if not existing:
-            # Convert from per-1M-tokens to per-token
-            price = LLMPrice(
+            price = price_row(
+                price_data,
                 org_id=vendor_id,
                 llm_id=llm_id,
-                input_cost_per_token=price_data["input"] / 1_000_000,
-                output_cost_per_token=price_data["output"] / 1_000_000,
                 effective_date=effective_date,
             )
             session.add(price)

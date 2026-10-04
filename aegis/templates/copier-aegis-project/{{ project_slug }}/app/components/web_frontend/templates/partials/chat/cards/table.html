@@ -1,0 +1,19 @@
+{# A titled table, drawn by the one table macro: ``columns`` names every
+   column, the label one first, and ``figures`` says which value columns
+   are figures (right, unwrapped) and which are words (left, wrapping).
+   Fields are read with ``[...]``: the payload is a plain dict, and
+   ``row.values`` would be the dict METHOD, not the field. The card is as
+   wide as the table, up to the answer's; past that, words wrap, and what
+   still does not fit scrolls inside the card. #}
+{% from "partials/chat/cards/_frame.html" import card_frame %}
+{% from "components/macros/table.html" import data_table %}
+{% set columns = [{"key": 0, "label": card["columns"][0]}] %}
+{% for name in card["columns"][1:] %}
+{% set figure = card["figures"][loop.index0] %}
+{% set _ = columns.append({"key": loop.index, "label": name, "align": "right" if figure else "left", "wrap": not figure}) %}
+{% endfor %}
+{% set rows = [] %}
+{% for row in card["rows"] %}{% set _ = rows.append([row["label"]] + row["values"]) %}{% endfor %}
+{% call card_frame("table", card["title"], None, card_url, large, fit=True) %}
+  {{ data_table(columns, rows, flush=False) }}
+{% endcall %}

@@ -1,6 +1,7 @@
 """Tests for STT models."""
 
 import pytest
+
 from app.services.ai.domains.voice.models import (
     AudioFormat,
     AudioInput,

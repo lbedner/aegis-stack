@@ -34,7 +34,7 @@ async def seed_llm_catalog() -> None:
             logger.info("LLM catalog already populated; refresh is the sync job's")
         else:
             logger.info("LLM catalog empty; running initial sync...")
-            result = await sync_llm_catalog(session, mode="chat")
+            result = await sync_llm_catalog(session)
             logger.info(f"LLM catalog synced: {result.total_synced} models")
 {%- endif %}
 {%- if include_inference %}

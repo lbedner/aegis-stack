@@ -113,7 +113,7 @@ def test_sections(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> None:
 
     agents = ["Agents", "Memory"] if PERSISTED else []
     knowledge = ["Knowledge", "Search"] if HAS_RAG else []
-    from app.components.web_frontend.overseer_ai_common import HAS_VOICE
+    from app.components.web_frontend.chat_surface import HAS_VOICE
 
     voice = ["Voice"] if HAS_VOICE else []
     catalog = ["Catalog"] if PERSISTED else []

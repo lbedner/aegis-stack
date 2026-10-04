@@ -5,7 +5,6 @@ Provides a high-level interface for transcription with provider abstraction,
 configuration management, and optional caching.
 """
 
-from datetime import UTC, datetime
 import logging
 import time
 from typing import Any
@@ -175,10 +174,7 @@ class STTService:
         finally:
             latency_ms = int((time.perf_counter() - start_time) * 1000)
             await self._record_usage(
-                input_bytes=len(audio.content),
                 input_duration_seconds=audio.duration_seconds,
-                output_characters=len(result.text) if result else None,
-                detected_language=result.language if result else None,
                 latency_ms=latency_ms,
                 user_id=user_id,
                 success=success,
@@ -232,61 +228,31 @@ class STTService:
 
     async def _record_usage(
         self,
-        input_bytes: int,
         input_duration_seconds: float | None,
-        output_characters: int | None,
-        detected_language: str | None,
         latency_ms: int,
         user_id: str | None,
         success: bool,
         error_message: str | None,
     ) -> None:
-        """Record STT usage to database.
-
-        Args:
-            input_bytes: Size of input audio in bytes.
-            input_duration_seconds: Duration of input audio.
-            output_characters: Length of transcribed text.
-            detected_language: Detected or specified language.
-            latency_ms: Request latency in milliseconds.
-            user_id: Optional user identifier.
-            success: Whether transcription succeeded.
-            error_message: Error message if transcription failed.
-        """
+        """The transcription's row in the usage ledger, priced by the second
+        at the catalog's rate. Never fails the request."""
         try:
-            from app.core.db import get_async_session
-            from app.services.ai.models.voice_usage import STTUsage
+            from app.services.ai import usage_recording
         except ImportError:
-            # A project generated without a database has no stt_usage table
-            # (and no app.core.db at all). The recording call stays in the
-            # transcription path so the code is one shape everywhere; there is
-            # simply nowhere to write, and a warning per request would be
-            # worse than silence.
+            # A project generated without a database has no ledger (and no
+            # app.core.db at all). The recording call stays in the path so
+            # the code is one shape everywhere; there is simply nowhere to
+            # write, and a warning per request would be worse than silence.
             return
-
-        try:
-            async with get_async_session() as session:
-                usage = STTUsage(
-                    provider=self.provider_type.value,
-                    model=self.model,
-                    user_id=user_id,
-                    timestamp=datetime.now(UTC),
-                    input_duration_seconds=input_duration_seconds,
-                    input_bytes=input_bytes,
-                    output_characters=output_characters,
-                    detected_language=detected_language,
-                    latency_ms=latency_ms,
-                    total_cost=0.0,  # TODO: Calculate cost based on provider pricing
-                    success=success,
-                    error_message=error_message,
-                )
-                session.add(usage)
-
-            logger.debug(
-                f"STT usage recorded: {input_bytes} bytes, "
-                f"{latency_ms}ms, success={success}"
-            )
-
-        except Exception as e:
-            # Don't fail the request if usage tracking fails
-            logger.warning(f"Failed to record STT usage: {e}")
+        await usage_recording.record_speech(
+            usage_recording.STT_ACTION,
+            self.model,
+            cost=await usage_recording.speech_cost(
+                self.model, input_seconds=input_duration_seconds
+            ),
+            seconds=input_duration_seconds,
+            duration_ms=latency_ms,
+            user_id=user_id,
+            success=success,
+            error_message=error_message,
+        )

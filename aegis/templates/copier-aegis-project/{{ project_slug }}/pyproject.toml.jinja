@@ -130,7 +130,10 @@ dependencies = [
 {%- set _mapped_extras = ai_providers | replace("public", "openai") | replace("openrouter", "openai") | replace("ollama", "openai") | replace("mistral", "openai") | replace("cohere", "openai") %}
 {#- Several providers collapse to "openai"; dedupe so the extras list stays clean (e.g. openai + mistral -> [openai], not [openai,openai]). #}
 {%- set pydantic_extras = _mapped_extras.split(",") | map("trim") | unique | join(",") %}
-    "pydantic-ai-slim[{{ pydantic_extras }}]>=1.0.10,<3",
+{#- A live call is a Pydantic AI realtime session (2.51 brought them): the
+    OpenAI and Gemini realtime transports ride as extras. #}
+{%- if ai_voice %}{% set pydantic_extras = pydantic_extras ~ ",openai-realtime,google-realtime" %}{% endif %}
+    "pydantic-ai-slim[{{ pydantic_extras }}]>=2.51,<3",
 {#- Code mode: sandboxed Monty execution for agents flagged code_mode.
     The capability only constructs for flagged agent rows, so unflagged
     installs carry the dependency but never touch it. #}

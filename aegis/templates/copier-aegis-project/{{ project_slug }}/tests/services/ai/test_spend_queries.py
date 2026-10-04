@@ -2,7 +2,7 @@
 spent per day and per action, how many users it spent on, the span of the
 ledger, and what voice calls cost beside the model calls."""
 
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -73,30 +73,39 @@ async def test_an_empty_ledger_has_no_first_call(
     assert await queries.first_call(async_db_session) is None
 
 
-async def test_voice_spend(async_db_session: AsyncSession) -> None:
-    import pytest
-
-    voice = pytest.importorskip("app.services.ai.models.voice_usage")
-    if not hasattr(voice, "STTUsage"):
-        pytest.skip("no voice in this stack")
+async def test_voice_spend_is_read_from_the_one_ledger(
+    async_db_session: AsyncSession,
+) -> None:
+    """Speech and live calls are priced into ``llm_usage`` like any model
+    call: the voice split reads them there, and the day's spend counts
+    them once, with everything else."""
     async_db_session.add_all(
         [
-            voice.STTUsage(
-                provider="openai_whisper",
-                timestamp=datetime(2026, 9, 4, tzinfo=UTC),
-                total_cost=0.25,
-            ),
-            voice.TTSUsage(
-                provider="openai",
-                timestamp=datetime(2026, 9, 4, tzinfo=UTC),
-                total_cost=0.75,
-            ),
+            LLMUsage(
+                model_id=model,
+                action=action,
+                timestamp=datetime(2026, 9, 4),
+                input_tokens=0,
+                output_tokens=0,
+                total_cost=cost,
+            )
+            for model, action, cost in (
+                ("gpt-transcribe", "stt", 0.25),
+                ("tts-1", "tts", 0.75),
+                ("gemini-3.8-live", "realtime", 1.5),
+                ("gpt-x", "chat:assistant", 2.0),
+            )
         ]
     )
     await async_db_session.commit()
+
     assert await queries.voice_spend(async_db_session, START, END) == {
         "Transcription": 0.25,
         "Speech": 0.75,
+        "Live calls": 1.5,
+    }
+    assert await queries.daily_spend(async_db_session, START, END) == {
+        date(2026, 9, 4): 4.5
     }
 
 

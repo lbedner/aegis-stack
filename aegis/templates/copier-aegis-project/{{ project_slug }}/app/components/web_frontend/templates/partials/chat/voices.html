@@ -1,0 +1,73 @@
+{# The assistant's voice, in the one modal: the voice profiles, each with a
+   preview; switch, make one from the active, or edit one. ``view`` picks
+   the piece: the composer's chip, the list, or one voice's form.
+   Previews play through voice.js's Listen handler ([data-speak]). #}
+{% from "components/macros/icons.html" import icon %}
+{% from "components/macros/chat.html" import voice_chip, speak_button %}
+{% from "components/macros/form.html" import action, field, text_input, number_input, select, textarea, primary_button %}
+{% from "components/macros/feedback.html" import error_banner, empty_state %}
+{% from "components/macros/layout.html" import dialog_title %}
+
+{% if view == "chip" %}
+{{ voice_chip(active, path) }}
+
+{% elif view == "list" %}
+{% if chip_oob %}{{ voice_chip(active, path, oob=True) }}{% endif %}
+<div id="voice-profiles" class="space-y-4">
+  {{ dialog_title("Voice", "How " ~ assistant ~ " hears and speaks. A switch takes effect on the next thing said.") }}
+  {% if voices %}
+  <ul class="divide-y divide-aegis-border/60">
+    {% for voice in voices %}
+    <li class="flex items-center gap-3 py-2 aria-[current=true]:bg-aegis-teal/10 rounded px-2"
+        data-voice-profile="{{ voice.id }}" {% if voice.is_active %}aria-current="true"{% endif %}>
+      {{ speak_button(path ~ "/" ~ voice.id ~ "/preview", "text-aegis-muted hover:text-aegis-text") }}
+      <span class="min-w-0 flex-1">
+        <span class="block text-sm text-aegis-text truncate" data-name>{{ voice.name }}</span>
+        <span class="block text-xs text-aegis-muted truncate">{{ voice.tts_voice }} · {{ voice.tts_model }} · {{ voice.tts_speed }}×{% if voice.tts_instructions %} · styled{% endif %}</span>
+      </span>
+      {% if voice.is_active %}
+      {{ icon("check", "w-4 h-4 text-aegis-teal shrink-0", 2, '', label="In use") }}
+      {% else %}
+      {{ action("Use", hx_dialog_post(path ~ "/" ~ voice.id ~ "/active")) }}
+      {% endif %}
+      {{ action("Edit", hx_dialog(path ~ "/" ~ voice.id ~ "/edit")) }}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  {{ empty_state("No voices yet", "The first one is made from .env when the app starts.") }}
+  {% endif %}
+  {# A new voice starts as a copy of the one in use, then opens to edit. #}
+  <form {{ hx_dialog_post(path) }} class="flex items-end gap-2">
+    {{ error_banner(errors) }}
+    <label class="flex-1 block text-aegis-muted micro-label">New voice from {{ active.name if active else "the current one" }}
+      {{ text_input("name", new_name, placeholder="e.g. Marin, faster", required=True) }}
+    </label>
+    {{ primary_button("Make", type="submit") }}
+  </form>
+</div>
+
+{% elif view == "form" %}
+<form {{ hx_dialog_post(path ~ "/" ~ voice.id) }} data-voice-form class="space-y-3">
+  {{ dialog_title(voice.name, "In use - saving changes how it sounds now." if voice.is_active else "Not in use - preview it, then Use it from the list.") }}
+  {{ error_banner(errors) }}
+  {% call field("Name") %}{{ text_input("name", values.name, required=True) }}{% endcall %}
+  <div class="grid grid-cols-2 gap-3">
+    {% call field("Voice") %}{{ select("tts_voice", choices.tts_voice, values.tts_voice, blank=None, block=True) }}{% endcall %}
+    {% call field("Speech model") %}{{ select("tts_model", choices.tts_model, values.tts_model, blank=None, block=True) }}{% endcall %}
+    {% call field("Speed (" ~ speed[0] ~ "-" ~ speed[1] ~ ")") %}{{ number_input("tts_speed", values.tts_speed, step=0.05, min=speed[0], max=speed[1]) }}{% endcall %}
+    {% call field("Hearing model") %}{{ select("stt_model", choices.stt_model, values.stt_model, blank=None, block=True) }}{% endcall %}
+    {% call field("Reply") %}{{ select("reply", choices.reply, values.reply, blank=None, block=True) }}{% endcall %}
+    {% call field("Live: hang up after (seconds of quiet, 0 never)") %}{{ number_input("live_idle_seconds", values.live_idle_seconds, min=idle[0], max=idle[1]) }}{% endcall %}
+    {% call field("While it works") %}{{ select("working_sound", choices.working_sound, values.working_sound, blank=None, block=True) }}{% endcall %}
+  </div>
+  {% call field("How it is said (Voice Affect, Tone, Emotion, Pronunciation, Pauses, Pacing)") %}{{ textarea("tts_instructions", values.tts_instructions, rows=8) }}{% endcall %}
+  <div class="flex items-center justify-between gap-2">
+    {{ action("Back", hx_dialog(path)) }}
+    <span class="flex items-center gap-2">
+      {{ speak_button(path ~ "/" ~ voice.id ~ "/preview", "text-aegis-muted hover:text-aegis-text", form=True) }}
+      {{ primary_button("Save", type="submit") }}
+    </span>
+  </div>
+</form>
+{% endif %}

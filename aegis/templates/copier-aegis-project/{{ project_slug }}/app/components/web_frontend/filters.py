@@ -237,8 +237,9 @@ def highlight(text: str, query: str | None) -> Markup:
     )
 
 
-FILTERS: dict[str, Callable[..., str]] = {
+FILTERS: dict[str, Callable[..., Any]] = {
     "money": money,
+    "dollars": dollars,
     "cents_to_input": cents_to_input,
     "short_date": short_date,
     "pct": pct,

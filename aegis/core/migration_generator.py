@@ -187,7 +187,7 @@ AUTH_TOKENS_MIGRATION = ServiceMigrationSpec(
 
 VOICE_MIGRATION = ServiceMigrationSpec(
     service_name="ai_voice",
-    description="AI voice service table (TTS and STT usage tracking)",
+    description="AI voice tables (voice profiles and live-call engines)",
 )
 
 INSIGHTS_MIGRATION = ServiceMigrationSpec(
@@ -651,16 +651,62 @@ def _append_body(name: str, src: str, body: str) -> str:
     return f"{head.rstrip()}\n{body}\n{marker}{tail}"
 
 
+def _call_at(text: str, start: int) -> str:
+    """The call opening at ``text[start]`` (its name up to the matching
+    close paren), or the rest of ``text`` when it never closes."""
+    depth = 0
+    for i in range(text.index("(", start), len(text)):
+        depth += {"(": 1, ")": -1}.get(text[i], 0)
+        if depth == 0:
+            return text[start : i + 1]
+    return text[start:]
+
+
+def _adds_required_column(upgrade: str, table: str) -> bool:
+    """Whether ``upgrade`` adds a NOT NULL column to ``table``, inside its
+    ``batch_alter_table`` or by a bare ``op.add_column``."""
+    for quote in ('"', "'"):
+        named = f"{quote}{table}{quote}"
+        at = upgrade.find("op.add_column(")
+        while at != -1:
+            call = _call_at(upgrade, at)
+            first = call.partition("(")[2].lstrip()
+            if first.startswith(named) and "nullable=False" in call:
+                return True
+            at = upgrade.find("op.add_column(", at + 1)
+        at = upgrade.find(f"batch_alter_table({named}")
+        while at != -1:
+            line_start = upgrade.rfind("\n", 0, at) + 1
+            indent = len(upgrade[line_start:at]) - len(upgrade[line_start:at].lstrip())
+            body_start = upgrade.find("\n", at) + 1
+            end = body_start
+            for line in upgrade[body_start:].splitlines(keepends=True):
+                stripped = line.strip()
+                if stripped and len(line) - len(line.lstrip()) <= indent:
+                    break
+                end += len(line)
+            block = upgrade[body_start:end]
+            add = block.find("add_column(")
+            while add != -1:
+                if "nullable=False" in _call_at(block, add):
+                    return True
+                add = block.find("add_column(", add + 1)
+            at = upgrade.find(f"batch_alter_table({named}", at + 1)
+    return False
+
+
 def _tables_changed(src: str, tables: list[str]) -> list[str]:
-    """The ``tables`` this revision's ``upgrade()`` actually operates on.
+    """The ``tables`` this revision must empty before it runs.
 
     ``cleared_tables`` exists for the revision that adds a column old rows
     cannot supply. Every later revision of the service inherited the clear,
     so adding voice - new tables only - emptied the synced LLM catalog
-    (#1259). A table is cleared only when the revision names it.
+    (#1259); and naming a table is not enough either, since a nullable
+    column (a voice price) needs nothing from old rows. A table is cleared
+    only when the revision adds a required column to it.
     """
     upgrade = src.partition("def upgrade() -> None:")[2].partition("def downgrade")[0]
-    return [t for t in tables if f'"{t}"' in upgrade or f"'{t}'" in upgrade]
+    return [t for t in tables if _adds_required_column(upgrade, t)]
 
 
 def _place_data_statements(

@@ -356,6 +356,7 @@ class TestWebFrontendScaffolding:
                 "date_input",
                 "field",
                 "money_input",
+                "number_input",
                 "or_divider",
                 "password_input",
                 "primary_button",
@@ -373,6 +374,7 @@ class TestWebFrontendScaffolding:
                 "badge",
                 "card",
                 "avatar",
+                "chart",
                 "chart_data",
                 "chart_panel",
                 "chip",
@@ -1062,3 +1064,26 @@ class TestGeneratedWebFrontendTests:
 
     def test_renders_valid_python_when_htmx_on(self) -> None:
         ast.parse(_render(self.PATH, _ctx(include_htmx=True)))
+
+
+def test_the_chat_surface_ships_with_ai_not_with_the_overseer() -> None:
+    """An app mounts the chat surface on its own pages, with or without auth
+    (``ChatSurface``); only the Overseer's mount of it is auth's. Listed
+    under auth, an app without auth lost its whole chat on ``aegis update``."""
+    from aegis.core.services import SERVICES
+
+    surface = {
+        "app/components/web_frontend/chat_surface.py",
+        "app/components/web_frontend/chat_models.py",
+        "app/components/web_frontend/routes/partials/chat_surface.py",
+        "app/components/web_frontend/routes/partials/chat_cards.py",
+        "app/components/web_frontend/static/js/chat.js",
+        "app/components/web_frontend/static/js/voice.js",
+        "app/components/web_frontend/templates/components/macros/chat.html",
+        "app/components/web_frontend/templates/partials/chat",
+    }
+    auth = set(SERVICES["auth"].files.extras["include_htmx"])
+    ai = set(SERVICES["ai"].files.extras["include_htmx"])
+    assert surface & auth == set()
+    assert surface <= ai
+    assert "app/components/web_frontend/overseer_ai_chat.py" in auth

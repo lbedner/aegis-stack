@@ -17,6 +17,7 @@ from app.services.ai.models.llm import (
     LLMUsage,
 )
 from app.services.ai.service import AIService
+from tests._session import opens
 
 
 class TestExtractUsage:
@@ -122,10 +123,7 @@ def _store_session(session: AsyncSession) -> Generator[None]:
     """The store's ``get_async_session`` yields the test's transactional
     session, wherever the ledger opens one."""
 
-    @asynccontextmanager
-    async def opened() -> AsyncGenerator[AsyncSession]:
-        yield session
-
+    opened = opens(session)
     with ExitStack() as stack:
         for target in (
             "app.services.ai.service.usage.get_async_session",
@@ -168,6 +166,30 @@ class TestWhatTheLedgerKeeps:
         row = (await async_db_session.exec(stmt)).first()
         assert row is not None
         assert row.duration_ms == 1234.5
+
+    async def test_a_turn_names_its_conversation(
+        self,
+        async_db_session: AsyncSession,
+        llm: LargeLanguageModel,
+        price: LLMPrice,
+    ) -> None:
+        """A live call and the turns taken during it share a conversation,
+        so what a call cost can be read back from the ledger."""
+        from app.services.ai import usage_recording
+
+        with _store_session(async_db_session):
+            await usage_recording.record_usage(
+                action="chat",
+                model_name="gpt-4o",
+                usage={"input_tokens": 10, "output_tokens": 5},
+                user_id="u-conversation",
+                conversation_id="c-1",
+            )
+
+        stmt = select(LLMUsage).where(LLMUsage.user_id == "u-conversation")
+        row = (await async_db_session.exec(stmt)).first()
+        assert row is not None
+        assert row.conversation_id == "c-1"
 
     async def test_a_timed_call_is_a_point_on_the_live_charts(
         self,

@@ -25,8 +25,8 @@ btn btn-outline {{ {"sm": "btn-sm", "xs": "btn-xs"}[size] }} {{ tones.get(tone, 
    heard or fetched; speaking, an equalizer while it plays. The control
    carries ``group relative``; one set of visuals for the mic and every
    speaker. #}
-{% macro voice_states(size="w-4 h-4", record=False) %}
-<span class="contents group-data-[state=thinking]:hidden group-data-[state=speaking]:hidden">{{ caller() }}</span>
+{% macro voice_states(size="w-4 h-4", record=False, work=False) %}
+<span class="contents group-data-[state=thinking]:hidden group-data-[state=speaking]:hidden group-data-[state=working]:hidden">{{ caller() }}</span>
 {% if record %}
 <span data-mic-visual="recording" class="hidden group-data-[state=recording]:flex absolute -top-1 -right-1 w-2.5 h-2.5" aria-hidden="true">
   <span class="absolute inset-0 rounded-full bg-aegis-error animate-ping"></span>
@@ -34,6 +34,15 @@ btn btn-outline {{ {"sm": "btn-sm", "xs": "btn-xs"}[size] }} {{ tones.get(tone, 
 </span>
 {% endif %}
 {{ icon("spinner", "hidden group-data-[state=thinking]:block " ~ size ~ " animate-spin", 1.5, 'data-mic-visual="thinking"') }}
+{# ``work``: the agent pulling data mid-call - not the spinner, which is
+   connecting or transcribing. #}
+{% if work %}
+<span data-mic-visual="working" class="hidden group-data-[state=working]:flex items-center justify-center gap-0.5 {{ size }}" aria-hidden="true">
+  <span class="w-1 h-1 rounded-full bg-current animate-bounce"></span>
+  <span class="w-1 h-1 rounded-full bg-current animate-bounce [animation-delay:150ms]"></span>
+  <span class="w-1 h-1 rounded-full bg-current animate-bounce [animation-delay:300ms]"></span>
+</span>
+{% endif %}
 <span data-mic-visual="speaking" class="hidden group-data-[state=speaking]:flex items-end gap-0.5 {{ size }}" aria-hidden="true">
   <span class="w-1 h-full rounded-sm bg-current origin-bottom animate-voice-bar"></span>
   <span class="w-1 h-full rounded-sm bg-current origin-bottom animate-voice-bar [animation-delay:150ms]"></span>
@@ -41,11 +50,17 @@ btn btn-outline {{ {"sm": "btn-sm", "xs": "btn-xs"}[size] }} {{ tones.get(tone, 
 </span>
 {% endmacro %}
 
+{# A card under a reply, loaded in place by its own route. #}
+{% macro card_loader(url, what) %}
+<div data-card-load hx-get="{{ url }}" hx-trigger="load" hx-swap="outerHTML" class="my-2 text-xs text-aegis-muted">Loading {{ what }}&hellip;</div>
+{% endmacro %}
+
 {# Hear an answer: the stored message, said aloud. Same place and weight
    as the copy button; voice.js plays it, and plays it unasked when the
    turn began at the microphone. #}
-{% macro speak_button(url, extra="") %}
-<button type="button" data-speak="{{ url }}" data-state="idle" aria-label="Listen" title="Listen" aria-pressed="false" class="group relative {{ extra }} aria-pressed:text-aegis-text data-[state=speaking]:text-aegis-teal">
+
+{% macro speak_button(url, extra="", form=False) %}
+<button type="button" data-speak="{{ url }}" data-state="idle" {% if form %}data-speak-form{% endif %} aria-label="Listen" title="Listen" aria-pressed="false" class="group relative {{ extra }} aria-pressed:text-aegis-text data-[state=speaking]:text-aegis-teal">
   {% call voice_states("w-3.5 h-3.5") %}{{ icon("speaker", "w-3.5 h-3.5") }}{% endcall %}
 </button>
 {% endmacro %}
@@ -101,8 +116,12 @@ btn btn-outline {{ {"sm": "btn-sm", "xs": "btn-xs"}[size] }} {{ tones.get(tone, 
    also fold the trail, hence the preventDefault. #}
 {% macro assistant_name(assistant, url=None) %}{% if url %}<button type="button" {{ hx_drawer(url) }} hx-on:click="event.preventDefault()" title="{{ assistant }}'s settings" class="micro-label text-aegis-muted hover:text-aegis-text underline-offset-2 hover:underline transition-colors" data-assistant>{{ assistant }}</button>{% else %}<span class="micro-label text-aegis-muted" data-assistant>{{ assistant }}</span>{% endif %}{% endmacro %}
 
+{# An assistant's row in the thread: the settled bubble, the one a turn
+   streams into, and a card drawn mid-call all sit on it. #}
+{% macro assistant_row() %}class="pr-24" data-role="assistant"{% endmacro %}
+
 {% macro assistant_bubble(message, assistant) %}
-<li class="pr-24" data-role="assistant" data-message-id="{{ message.id }}">
+<li {{ assistant_row() }} data-message-id="{{ message.id }}">
   <div class="group/bubble">
     {# The tool trail folds under the name: a caret shows on hover over the
        bubble (and stays while open), so the audit is a click away without
@@ -120,11 +139,10 @@ btn btn-outline {{ {"sm": "btn-sm", "xs": "btn-xs"}[size] }} {{ tones.get(tone, 
     <div class="flex items-center gap-2 mb-1">{{ assistant_name(assistant, message.agent_url) }}</div>
     {% endif %}
     <div class="{{ prose }}" data-body>{{ message.content|markdown }}</div>
-    {# The approval cards this reply's tools proposed, loaded fresh so a
-       card shows its state now, not the state when it was filed. #}
-    {% for url in message.changes %}
-    <div hx-get="{{ url }}" hx-trigger="load" hx-swap="outerHTML" class="my-2 text-xs text-aegis-muted">Loading the change&hellip;</div>
-    {% endfor %}
+    {# The card the reply drew, then the approval cards its tools proposed,
+       loaded fresh so a change shows its state now, not when it was filed. #}
+    {% for url in message.cards %}{{ card_loader(url, "the chart") }}{% endfor %}
+    {% for url in message.changes %}{{ card_loader(url, "the change") }}{% endfor %}
     {% if message.cut_off %}
     <div data-cut-off class="mt-2 flex flex-wrap items-center gap-2 text-xs text-aegis-amber">
       <span>{{ message.cut_off }}</span>
@@ -147,7 +165,7 @@ btn btn-outline {{ {"sm": "btn-sm", "xs": "btn-xs"}[size] }} {{ tones.get(tone, 
    stream completes it swaps this whole element for ``assistant_bubble``
    rendered from the stored message. #}
 {% macro streaming_bubble(text, conversation_id, assistant) %}
-<li class="pr-24" data-role="assistant" data-stream data-text="{{ text }}" {% if conversation_id %}data-conversation-id="{{ conversation_id }}"{% endif %}>
+<li {{ assistant_row() }} data-stream data-text="{{ text }}" {% if conversation_id %}data-conversation-id="{{ conversation_id }}"{% endif %}>
   <div class="flex items-center gap-2 mb-1">{{ assistant_name(assistant) }}</div>
   <ul class="{{ trail_classes }}" data-trail hidden></ul>
   <div class="{{ prose }}" data-body></div>
@@ -185,6 +203,11 @@ btn btn-outline {{ {"sm": "btn-sm", "xs": "btn-xs"}[size] }} {{ tones.get(tone, 
 {# The composer's model chip: the active model's id, opening the picker.
    Re-rendered out of band by a pick. #}
 {% macro model_chip(chip, path, oob=False) %}{{ composer_chip("chat-model", chip.label, path, "Switch the active model", "data-model", chip.model, oob) }}{% endmacro %}
+
+{# The composer's voice chip: the active voice profile's name, opening the
+   voice dialog. Same place and weight as the model chip; it loads itself,
+   and a switch sends it back out of band. #}
+{% macro voice_chip(active, path, oob=False) %}{{ composer_chip("chat-voice", active.name if active else "Voice", path, "Change the voice", "data-voice-name", oob=oob) }}{% endmacro %}
 
 {# One stored message as its bubble: the transcript and the settle swap
    draw messages through this, so the role switch has one home. #}

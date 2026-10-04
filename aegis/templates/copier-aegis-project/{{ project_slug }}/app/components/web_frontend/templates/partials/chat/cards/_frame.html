@@ -1,0 +1,47 @@
+{# The frame every drawn card sits in: border, title, the line
+   under it, and the click that opens it larger in the one dialog. One
+   copy, so the kinds cannot drift apart.
+
+   ``url`` is the card's own address; in the thread the frame opens
+   ``url?size=large``, and in the dialog (``large``) it is just the card. #}
+{# ``fit``: as wide as what it holds, up to the answer's width (a table),
+   rather than the fixed width a chart draws into. #}
+{% macro card_frame(kind, title, subtitle, url, large=False, fit=False) %}
+<div data-card="{{ kind }}" {% if fit %}data-fit{% endif %}
+     {% if not large %}{{ hx_dialog(url ~ "?size=large", "hx-trigger=\"click, keyup[key=='Enter']\"") }}
+     role="button" tabindex="0" title="Open larger" aria-label="Open {{ title }} larger"{% endif %}
+     class="block {{ 'w-fit max-w-full' if fit else ('w-full' if large else 'w-full max-w-xl') }} {{ '' if large else 'cursor-zoom-in hover:border-aegis-muted transition-colors' }} raised overflow-hidden">
+  <div class="px-4 py-2.5 border-b border-aegis-border">
+    <div class="text-sm font-medium text-aegis-text">{{ title }}</div>
+    {% if subtitle %}<div class="text-xs text-aegis-muted mt-0.5">{{ subtitle }}</div>{% endif %}
+  </div>
+  {{ caller() }}
+</div>
+{% endmacro %}
+
+{# A chart card, one series drawn by the app's own chart code: the frame,
+   the values (money arrives in cents and is drawn in dollars), sized to
+   where it shows, or a quiet line when the window held nothing. ``tones``
+   colours each mark (the bar card's). One copy for every chart kind. #}
+{% macro card_chart(kind, chart_type, card, card_id, url, large, labels, small="h-48", tones=None) %}
+{% from "components/macros/layout.html" import chart %}
+{% set money = card["unit"] == "money" %}
+{% set values = [] %}
+{% for row in card["rows"] %}{% set _ = values.append(row["value"]|dollars if money else row["value"]) %}{% endfor %}
+{% set series = {"label": card["measure"], "values": values} %}
+{% if tones %}{% set _ = series.update(tones=tones) %}{% endif %}
+{% call card_frame(kind, card["title"], card["measure"], url, large) %}
+  {% if card["rows"] %}
+  <div class="px-2 py-2">
+    {{ chart("card-" ~ card_id ~ ("-large" if large else ""), chart_type,
+             {"labels": labels, "series": [series], "format": "money" if money else "count"},
+             height="h-80" if large else small, label=card["title"]) }}
+  </div>
+  {% else %}
+  <p class="px-4 py-3 text-xs text-aegis-muted">No data in this window.</p>
+  {% endif %}
+{% endcall %}
+{% endmacro %}
+
+{# A figure as the card's unit reads it: money arrives in cents. #}
+{% macro amount(value, unit) %}{{ value|int|money if unit == "money" else "{:,}".format(value|round|int) }}{% endmacro %}

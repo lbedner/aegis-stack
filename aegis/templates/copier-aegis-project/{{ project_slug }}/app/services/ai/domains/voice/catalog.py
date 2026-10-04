@@ -9,6 +9,9 @@ doesn't require database storage.
 from typing import Any
 
 from .models import (
+    INSTRUCTED_TTS_MODELS,
+    STT_KEYS,
+    TTS_KEYS,
     ModelInfo,
     OpenAIVoice,
     ProviderInfo,
@@ -17,6 +20,8 @@ from .models import (
     VoiceCategory,
     VoiceInfo,
 )
+from .stt.config import STTConfig
+from .tts.config import TTSConfig
 
 # =============================================================================
 # TTS Catalog Data
@@ -28,14 +33,30 @@ _TTS_PROVIDERS: list[ProviderInfo] = [
         name="OpenAI",
         type="tts",
         requires_api_key=True,
-        api_key_env_var="OPENAI_API_KEY",
+        api_key_env_var=TTS_KEYS[TTSProvider.OPENAI],
         is_local=False,
         description="OpenAI Text-to-Speech API with natural-sounding voices",
     ),
 ]
 
+# OpenAI's speech models: gpt-4o-mini-tts (INSTRUCTED_TTS_MODELS) takes
+# delivery instructions and every voice; tts-1 and tts-1-hd take neither
+# and know only nine of the voices.
+_TTS_1 = ["tts-1", "tts-1-hd"]
+
 _TTS_MODELS: list[ModelInfo] = [
     # OpenAI Models
+    *(
+        ModelInfo(
+            id=model,
+            name=model,
+            provider_id=TTSProvider.OPENAI.value,
+            description="Takes delivery instructions and every voice",
+            supports_streaming=True,
+            max_input_chars=4096,
+        )
+        for model in INSTRUCTED_TTS_MODELS
+    ),
     ModelInfo(
         id="tts-1",
         name="TTS-1",
@@ -56,62 +77,60 @@ _TTS_MODELS: list[ModelInfo] = [
     ),
 ]
 
+
+def _openai_voice(
+    voice: OpenAIVoice,
+    description: str,
+    category: VoiceCategory | None = None,
+    gender: str | None = None,
+    tts_1: bool = True,
+) -> VoiceInfo:
+    return VoiceInfo(
+        id=voice.value,
+        name=voice.value.title(),
+        provider_id=TTSProvider.OPENAI.value,
+        model_ids=INSTRUCTED_TTS_MODELS + (_TTS_1 if tts_1 else []),
+        description=description,
+        category=category,
+        gender=gender,
+    )
+
+
+# The one list of OpenAI's voices: the voice API lists it, and a voice
+# profile picks from it. Marin and cedar, the recommended two, lead.
 _TTS_VOICES: list[VoiceInfo] = [
-    # OpenAI Voices - descriptions from models.py comments
-    VoiceInfo(
-        id=OpenAIVoice.ALLOY.value,
-        name="Alloy",
-        provider_id=TTSProvider.OPENAI.value,
-        model_ids=["tts-1", "tts-1-hd"],
-        description="Neutral, balanced voice",
-        category=VoiceCategory.NEUTRAL,
-        gender="neutral",
+    _openai_voice(OpenAIVoice.MARIN, "OpenAI's recommended voice", tts_1=False),
+    _openai_voice(OpenAIVoice.CEDAR, "OpenAI's recommended voice", tts_1=False),
+    _openai_voice(
+        OpenAIVoice.ALLOY, "Neutral, balanced voice", VoiceCategory.NEUTRAL, "neutral"
     ),
-    VoiceInfo(
-        id=OpenAIVoice.ECHO.value,
-        name="Echo",
-        provider_id=TTSProvider.OPENAI.value,
-        model_ids=["tts-1", "tts-1-hd"],
-        description="Warm, friendly voice",
-        category=VoiceCategory.WARM,
-        gender="male",
+    _openai_voice(OpenAIVoice.ASH, "OpenAI voice"),
+    _openai_voice(OpenAIVoice.BALLAD, "OpenAI voice", tts_1=False),
+    _openai_voice(OpenAIVoice.CORAL, "OpenAI voice"),
+    _openai_voice(OpenAIVoice.ECHO, "Warm, friendly voice", VoiceCategory.WARM, "male"),
+    _openai_voice(
+        OpenAIVoice.FABLE,
+        "British-accented, narrative voice",
+        VoiceCategory.EXPRESSIVE,
+        "male",
     ),
-    VoiceInfo(
-        id=OpenAIVoice.FABLE.value,
-        name="Fable",
-        provider_id=TTSProvider.OPENAI.value,
-        model_ids=["tts-1", "tts-1-hd"],
-        description="British-accented, narrative voice",
-        category=VoiceCategory.EXPRESSIVE,
-        gender="male",
+    _openai_voice(
+        OpenAIVoice.NOVA, "Energetic, youthful voice", VoiceCategory.ENERGETIC, "female"
     ),
-    VoiceInfo(
-        id=OpenAIVoice.ONYX.value,
-        name="Onyx",
-        provider_id=TTSProvider.OPENAI.value,
-        model_ids=["tts-1", "tts-1-hd"],
-        description="Deep, authoritative voice",
-        category=VoiceCategory.AUTHORITATIVE,
-        gender="male",
+    _openai_voice(
+        OpenAIVoice.ONYX,
+        "Deep, authoritative voice",
+        VoiceCategory.AUTHORITATIVE,
+        "male",
     ),
-    VoiceInfo(
-        id=OpenAIVoice.NOVA.value,
-        name="Nova",
-        provider_id=TTSProvider.OPENAI.value,
-        model_ids=["tts-1", "tts-1-hd"],
-        description="Energetic, youthful voice",
-        category=VoiceCategory.ENERGETIC,
-        gender="female",
+    _openai_voice(OpenAIVoice.SAGE, "OpenAI voice"),
+    _openai_voice(
+        OpenAIVoice.SHIMMER,
+        "Clear, expressive voice",
+        VoiceCategory.EXPRESSIVE,
+        "female",
     ),
-    VoiceInfo(
-        id=OpenAIVoice.SHIMMER.value,
-        name="Shimmer",
-        provider_id=TTSProvider.OPENAI.value,
-        model_ids=["tts-1", "tts-1-hd"],
-        description="Clear, expressive voice",
-        category=VoiceCategory.EXPRESSIVE,
-        gender="female",
-    ),
+    _openai_voice(OpenAIVoice.VERSE, "OpenAI voice", tts_1=False),
 ]
 
 # =============================================================================
@@ -124,7 +143,7 @@ _STT_PROVIDERS: list[ProviderInfo] = [
         name="OpenAI Whisper",
         type="stt",
         requires_api_key=True,
-        api_key_env_var="OPENAI_API_KEY",
+        api_key_env_var=STT_KEYS[STTProvider.OPENAI_WHISPER],
         is_local=False,
         description="OpenAI Whisper API for accurate transcription",
     ),
@@ -133,7 +152,7 @@ _STT_PROVIDERS: list[ProviderInfo] = [
         name="Groq Whisper",
         type="stt",
         requires_api_key=True,
-        api_key_env_var="GROQ_API_KEY",
+        api_key_env_var=STT_KEYS[STTProvider.GROQ_WHISPER],
         is_local=False,
         description="Ultra-fast Whisper inference via Groq",
     ),
@@ -158,7 +177,16 @@ _STT_PROVIDERS: list[ProviderInfo] = [
 ]
 
 _STT_MODELS: list[ModelInfo] = [
-    # OpenAI Whisper
+    # OpenAI's transcription models then Whisper
+    *(
+        ModelInfo(
+            id=model,
+            name=model,
+            provider_id=STTProvider.OPENAI_WHISPER.value,
+            description="OpenAI transcription model",
+        )
+        for model in ("gpt-transcribe", "gpt-4o-transcribe", "gpt-4o-mini-transcribe")
+    ),
     ModelInfo(
         id="whisper-1",
         name="Whisper-1",
@@ -291,23 +319,16 @@ def get_current_voice_config(settings: Any) -> dict[str, Any]:
     Returns:
         Dictionary with current TTS and STT configuration
     """
-    # Get values with defaults, filtering out None for required fields
-    tts_provider = getattr(settings, "TTS_PROVIDER", None) or TTSProvider.OPENAI.value
-    tts_model = getattr(settings, "TTS_MODEL", None) or "tts-1"
-    tts_voice = getattr(settings, "TTS_VOICE", None) or OpenAIVoice.ALLOY.value
-    tts_speed = getattr(settings, "TTS_SPEED", None) or 1.0
-    stt_provider = (
-        getattr(settings, "STT_PROVIDER", None) or STTProvider.OPENAI_WHISPER.value
-    )
-    stt_model = getattr(settings, "STT_MODEL", None) or "whisper-1"
-    stt_language = getattr(settings, "STT_LANGUAGE", None)
-
+    # What the services would use: the configs resolve every default
+    # (a provider's own model, the profile's voice) in one place.
+    tts = TTSConfig.from_settings(settings)
+    stt = STTConfig.from_settings(settings)
     return {
-        "tts_provider": tts_provider,
-        "tts_model": tts_model,
-        "tts_voice": tts_voice,
-        "tts_speed": tts_speed,
-        "stt_provider": stt_provider,
-        "stt_model": stt_model,
-        "stt_language": stt_language,
+        "tts_provider": tts.provider.value,
+        "tts_model": tts.get_model(),
+        "tts_voice": tts.get_voice(),
+        "tts_speed": tts.speed,
+        "stt_provider": stt.provider.value,
+        "stt_model": stt.get_model(),
+        "stt_language": stt.language,
     }

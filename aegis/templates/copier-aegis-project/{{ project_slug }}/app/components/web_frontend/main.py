@@ -14,6 +14,7 @@ from fastapi import APIRouter, FastAPI
 from fastapi.routing import APIRoute
 
 CHANGES = "app.components.web_frontend.routes.partials.changes"
+OVERSEER_CHAT = "app.components.web_frontend.routes.partials.overseer_ai_chat"
 
 
 def create_web_frontend_app() -> APIRouter:
@@ -32,6 +33,12 @@ def create_web_frontend_app() -> APIRouter:
     if importlib.util.find_spec(CHANGES) is not None:
         changes = importlib.import_module(CHANGES)
         router.include_router(changes.router, include_in_schema=False)
+    # The Overseer chat's live call: a socket, outside the pages' gate,
+    # behind its own (routes/partials/overseer_ai_chat.py).
+    if importlib.util.find_spec(OVERSEER_CHAT) is not None:
+        sockets = importlib.import_module(OVERSEER_CHAT).sockets
+        if sockets is not None:
+            router.include_router(sockets)
     for route in router.routes:
         if isinstance(route, APIRoute):
             route.tags = ["overseer" if "/overseer" in route.path else "web"]

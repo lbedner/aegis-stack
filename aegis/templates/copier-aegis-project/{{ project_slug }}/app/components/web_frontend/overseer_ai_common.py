@@ -6,26 +6,20 @@ Usage, Sentiment, Providers), ``overseer_ai_catalog`` and
 """
 
 from importlib.util import find_spec
-from types import SimpleNamespace
 from typing import Any
 from urllib.parse import quote
 
-from app.core.config import settings
 from app.services.ai.models import AIProvider
 from app.services.ai.models.provider_names import provider_label
 
+# Voice and a database, as the chat surface reads them: one home.
+from .chat_surface import PERSISTED
 from .overseer_nav import page_url
 from .rendering import with_query
 
-# Usage, sentiment, the catalog and the registries read the AI service's
-# tables, which exist only with a persistence backend (``ai[sqlite]`` /
-# ``ai[postgres]``); on the memory backend none of those sections is offered.
-PERSISTED = find_spec("app.services.ai.domains.chat.sentiment") is not None
 # RAG is file-based (Chroma), so it needs no database: offered wherever
 # ``ai[...,rag]`` installed it.
 HAS_RAG = find_spec("app.services.rag") is not None
-# Voice rides the ``ai[...,voice]`` option.
-HAS_VOICE = find_spec("app.services.ai.domains.voice") is not None
 
 PAGE = page_url("services", "ai")
 PARTIALS = "/partials/overseer/ai"
@@ -37,27 +31,10 @@ def section_url(section: str, **query: str | list[str] | None) -> str:
 
 
 async def get_current_config() -> Any:
-    """The model in effect. With a persistence backend that is the catalog
-    service's answer (a stored choice can shadow ``.env``); on the memory
-    backend there is no catalog and ``.env`` is the whole story."""
-    if PERSISTED:
-        from app.services.ai.domains.llm.llm_service import (
-            get_current_config as current,
-        )
+    """The model in effect (``chat_models.current_config``)."""
+    from .chat_models import current_config
 
-        return await current()
-    return SimpleNamespace(
-        provider=settings.AI_PROVIDER,
-        model=settings.AI_MODEL,
-        temperature=settings.AI_TEMPERATURE,
-        max_tokens=settings.AI_MAX_TOKENS,
-        in_catalog=False,
-        source="env",
-        env_model=settings.AI_MODEL,
-        context_window=None,
-        input_price=None,
-        output_price=None,
-    )
+    return await current_config()
 
 
 def label(provider: str) -> str:

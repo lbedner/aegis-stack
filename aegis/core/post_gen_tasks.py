@@ -441,10 +441,40 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         # Every chat read goes through the queries module; its tables are gone.
         remove_file(project_path, "app/services/ai/domains/chat/queries.py")
         remove_file(project_path, "app/services/ai/models/sentiment.py")
-        # stt_usage/tts_usage are tables. ai_voice gates the file's body, but
-        # persistence gates whether there is anywhere to put a table at all —
-        # without it the model registry walks into an unimportable sqlalchemy.
-        remove_file(project_path, "app/services/ai/models/voice_usage.py")
+        # A drawn card is a row (chat_card): no cards without persistence.
+        remove_file(project_path, "app/services/ai/models/chat_card.py")
+        remove_file(project_path, "app/services/ai/domains/chat/cards.py")
+        remove_file(
+            project_path, "app/components/web_frontend/routes/partials/chat_cards.py"
+        )
+        remove_file(project_path, "tests/services/ai/test_chat_cards.py")
+        remove_file(project_path, "tests/web/test_chat_cards.py")
+        # Voice profiles and live engines are tables. ai_voice gates them,
+        # but persistence gates whether there is anywhere to put a table at
+        # all - without it the model registry walks into an unimportable
+        # sqlalchemy.
+        remove_dir(project_path, "app/services/ai/models/voice")
+        remove_file(project_path, "app/services/ai/domains/voice/profiles.py")
+        remove_file(project_path, "app/services/ai/domains/voice/queries.py")
+        remove_file(project_path, "app/services/ai/domains/voice/live_engines.py")
+        remove_file(project_path, "app/services/ai/domains/voice/realtime_calls.py")
+        remove_file(project_path, "app/components/backend/startup/live_engine.py")
+        remove_file(
+            project_path, "app/components/web_frontend/routes/partials/chat_live.py"
+        )
+        remove_file(project_path, "app/components/backend/startup/voice_profile.py")
+        remove_file(
+            project_path, "app/components/web_frontend/routes/partials/chat_voices.py"
+        )
+        # Voice prices and the usage ledger they land in are tables too.
+        remove_file(project_path, "tests/services/ai/voice/test_speech_costs.py")
+        remove_file(project_path, "tests/services/ai/voice/test_voice_profiles.py")
+        remove_file(project_path, "tests/web/test_chat_voices.py")
+        remove_file(project_path, "tests/web/test_chat_live.py")
+        remove_file(project_path, "tests/_voice_catalog.py")
+        remove_file(project_path, "tests/_realtime.py")
+        remove_file(project_path, "tests/services/ai/voice/test_realtime_calls.py")
+        remove_file(project_path, "tests/services/ai/voice/test_live_engines.py")
         remove_file(project_path, "tests/services/ai/test_sentiment.py")
         # The spend reads (the Overseer's Costs) read the usage ledgers.
         remove_dir(project_path, "app/services/ai/domains/spend")
@@ -556,19 +586,11 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(project_path, "app/services/ai/domains/llm/model_factory.py")
         remove_file(project_path, "app/services/ai/domains/llm/agents.py")
 
-    # Remove voice (TTS/STT) if not enabled
+    # Remove voice (TTS/STT) if not enabled: what the AI spec lists under
+    # ``ai_voice``, so a new voice file is cleaned up by being listed there.
     if not is_enabled(AnswerKeys.AI_VOICE):
-        remove_dir(project_path, "app/components/backend/api/voice")
-        # The spoken-turn endpoints under /ai; the /voice catalog above
-        # is a different router.
-        remove_file(project_path, "app/components/backend/api/ai/speech.py")
-        remove_dir(project_path, "app/services/ai/domains/voice")
-        remove_dir(project_path, "tests/services/ai/voice")
-        remove_file(project_path, "tests/api/test_voice_endpoints.py")
-        remove_dir(
-            project_path,
-            "app/components/frontend/dashboard/modals/voice_settings",
-        )
+        for _rel_path in SERVICES["ai"].files.extras[AnswerKeys.AI_VOICE]:
+            apply_cleanup_path(project_path, _rel_path)
 
     # (comms / payment / insights / auth-dashboard primary cleanups handled
     # by the Pattern A loop above.)

@@ -9,6 +9,10 @@ is refused here as it is there. Honest caps: a group shows this many rows
 and a search this many, with a "more - search to narrow" line rather than
 silent truncation. Needs the catalog, so offered with a persistence
 backend only.
+
+With voice, the same list picks what a live call runs on: a "Live calls"
+group of the realtime models a call can reach, a pick making it the
+active voice profile's engine (made on the spot when it has none).
 """
 
 from typing import Any
@@ -25,9 +29,6 @@ from app.core.model_picker import (
     newest_first,
 )
 
-from .overseer_ai_chat import PATH
-
-MODELS = f"{PATH}/models"
 # How many recently used models lead the list; read from a few more, as
 # some may not be callable now.
 RECENT = 3
@@ -37,8 +38,8 @@ FLAT_ROW_CAP = 60
 CATALOG_LIMIT = 200
 
 
-async def catalog() -> list[dict[str, Any]]:
-    """Every model this install can call right now."""
+async def catalog(mode: str = "chat") -> list[dict[str, Any]]:
+    """Every model of this kind this install can call right now."""
     from app.components.backend.api.llm.routes import get_models
 
     # Every argument spelled out: called in-process, the handler's Query
@@ -50,25 +51,96 @@ async def catalog() -> list[dict[str, Any]]:
         limit=CATALOG_LIMIT,
         include_disabled=False,
         usable=True,
+        mode=mode,
     )
     return [m.model_dump() for m in models]
 
 
-async def vendor_icons(vendors: list[str]) -> dict[str, str]:
-    """``{vendor: icon URL}`` for the vendors the catalog holds a mark for,
-    served by the AI page's icon route like every other Overseer logo."""
-    from app.core.db import get_async_session
+async def call_models() -> list[dict[str, Any]]:
+    """The realtime models a live call can reach: a vendor the call path
+    serves, by the vendor's own id (the catalog's routed copies, "gemini/...",
+    are not reachable)."""
+    from app.services.ai.domains.voice.live_engines import CALL_VENDORS
 
-    from .overseer_ai_common import mark_urls
+    return [
+        m
+        for m in await catalog("realtime")
+        if m.get("vendor") in CALL_VENDORS and "/" not in m["model_id"]
+    ]
+
+
+async def calling_model() -> str | None:
+    """The catalog model a live call runs on now (the active profile's
+    engine), or None."""
+    from app.core.config import settings
+    from app.core.db import get_async_session
+    from app.services.ai.domains.voice import live_engines
 
     async with get_async_session() as db:
-        return await mark_urls(db, {v: (v,) for v in vendors})
+        engine = await live_engines.resolve(db, settings.VOICE_LIVE_ENGINE)
+        return engine.llm.model_id if engine else None
+
+
+async def use_for_calls(model_id: str) -> str | None:
+    """Make ``model_id`` what a live call runs on: its engine (made when it
+    has none) on the active voice profile; why not, when it cannot be."""
+    from app.components.backend.api.ai.service import ai_service
+    from app.core.config import settings
+    from app.core.db import get_async_session
+    from app.services.ai.domains.voice import live_engines, profiles
+
+    async with get_async_session() as db:
+        engine = await live_engines.choose(db, model_id)
+        active = await profiles.active_profile(db)
+        if engine is None:
+            return f"A live call cannot run on {model_id}."
+        if active is None or active.id is None:
+            return "Make a voice first: a live call runs on the active voice."
+        active = await profiles.update(db, active.id, live_engine=engine.key)
+    profiles.apply(active, settings, ai_service)
+    return None
+
+
+async def vendor_icons(vendors: list[str]) -> dict[str, str]:
+    """``{vendor: icon URL}`` for the vendors the catalog holds a mark for
+    (served by the Overseer's icon route; none without the Overseer)."""
+    from .chat_surface import marks
+
+    return await marks({v: (v,) for v in vendors})
+
+
+async def current_config() -> Any:
+    """The model in effect. With a persistence backend that is the catalog
+    service's answer (a stored choice can shadow ``.env``); on the memory
+    backend there is no catalog and ``.env`` is the whole story."""
+    from .chat_surface import PERSISTED
+
+    if PERSISTED:
+        from app.services.ai.domains.llm.llm_service import (
+            get_current_config as current,
+        )
+
+        return await current()
+    from types import SimpleNamespace
+
+    from app.core.config import settings
+
+    return SimpleNamespace(
+        provider=settings.AI_PROVIDER,
+        model=settings.AI_MODEL,
+        temperature=settings.AI_TEMPERATURE,
+        max_tokens=settings.AI_MAX_TOKENS,
+        in_catalog=False,
+        source="env",
+        env_model=settings.AI_MODEL,
+        context_window=None,
+        input_price=None,
+        output_price=None,
+    )
 
 
 async def running_model() -> str:
-    from .overseer_ai_common import get_current_config
-
-    return (await get_current_config()).model
+    return (await current_config()).model
 
 
 async def recent_ids() -> list[str]:
@@ -118,6 +190,7 @@ def _row(
     )
     return {
         "model_id": model["model_id"],
+        "kind": model.get("kind", "chat"),
         "title": display_title(model, under_vendor=under_vendor),
         "facts": facts,
         "icon_name": icon_for,
@@ -178,22 +251,42 @@ def _recent(
     ]
 
 
-async def picker(query: str, current: str) -> dict[str, Any]:
+def _calls(live: list[dict[str, Any]], icons: dict[str, str]) -> dict[str, Any]:
+    """The live-call models, a group of their own: what a call runs on."""
+    return {
+        "name": "Live calls",
+        "icon_url": None,
+        "count": len(live),
+        "rows": [_row(m, under_vendor=None, icons=icons) for m in live],
+        "hidden": 0,
+    }
+
+
+async def picker(
+    query: str, current: str, path: str, calls: bool = False
+) -> dict[str, Any]:
     """The dialog's contents: grouped by vendor, or flat when searching,
-    with the recently used leading and the active model marked."""
+    with the recently used leading and the active model marked; with
+    ``calls``, the live-call models too, the one calls run on marked.
+    ``path`` is the picker's own URL on the chat mount it opened from."""
     models = await catalog()
-    icons = await vendor_icons(sorted({str(m.get("vendor") or "") for m in models}))
+    live = [{**m, "kind": "realtime"} for m in await call_models()] if calls else []
+    calling = await calling_model() if calls else None
+    every = models + live
+    icons = await vendor_icons(sorted({str(m.get("vendor") or "") for m in every}))
     query = query.strip()
     if query:
-        sections = _flat(models, query, icons)
+        sections = _flat(every, query, icons)
     else:
         # A pick leads at once: it has no usage until it answers.
         leading = [current, *await recent_ids()]
         sections = _recent(models, leading, icons) + _grouped(models, icons)
+        if live:
+            sections = [_calls(live, icons), *sections]
     return {
         "query": query,
-        "active": {current},
+        "active": {current, calling} - {None},
         "sections": sections,
         "empty": not any(section["rows"] for section in sections),
-        "path": MODELS,
+        "path": path,
     }

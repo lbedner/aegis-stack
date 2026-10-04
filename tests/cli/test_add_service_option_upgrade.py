@@ -36,9 +36,8 @@ def test_existing_files_take_the_new_option(project_factory: ProjectFactory) -> 
     assert "speech" in (project / "app/components/backend/api/ai/router.py").read_text()
     assert "/transcribe" in (project / SPEECH).read_text()
     assert (project / f"{AI}/domains/voice/__init__.py").exists()
-    # Gated whole-file on voice, so init left none; not a file the
-    # project deleted.
-    assert "stt_usage" in (project / f"{AI}/models/voice_usage.py").read_text()
+    # The voice tables' package arrives with the option.
+    assert (project / f"{AI}/models/voice/profile.py").exists()
 
 
 def test_an_edited_file_keeps_its_edit(project_factory: ProjectFactory) -> None:

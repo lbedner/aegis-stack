@@ -253,6 +253,9 @@ async def get_models(
     usable: bool = Query(
         False, description="Only models this install can call (key configured)"
     ),
+    mode: str | None = Query(
+        "chat", description="Kind of model (chat, realtime, ...); none for all"
+    ),
 ) -> list[ModelResponse]:
     """
     List/search LLM models from catalog.
@@ -272,6 +275,7 @@ async def get_models(
                 modality=modality,
                 limit=limit,
                 include_disabled=include_disabled,
+                mode=mode,
             )
         else:
             results = await list_models(
@@ -280,6 +284,7 @@ async def get_models(
                 modality=modality,
                 limit=limit,
                 include_disabled=include_disabled,
+                mode=mode,
             )
         return [
             ModelResponse(

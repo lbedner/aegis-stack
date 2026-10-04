@@ -14,7 +14,9 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
 
-from app.components.web_frontend import overseer_ai_chat
+from app.components.web_frontend import chat_surface
+from app.components.web_frontend.chat_surface import ChatSurface
+from app.components.web_frontend.overseer_ai_chat import OVERSEER
 from app.services.ai.models import (
     AIProvider,
     Conversation,
@@ -27,7 +29,9 @@ from tests.web.overseer import sign_in, status_with
 
 PAGE = "/overseer/services/ai"
 CHAT = "/partials/overseer/ai/chat"
-SCRIPTS = Path(overseer_ai_chat.__file__).parent / "static/js"
+# A realtime model a live call can run on.
+LIVE = "gemini-3.8-live"
+SCRIPTS = Path(chat_surface.__file__).parent / "static/js"
 
 TRACE = [{"tool": "search_docs", "args": '{"q": "aegis"}', "result": "3 hits"}]
 SHOT = {"key": "ab/cd.png", "media_type": "image/png", "name": "shot.png"}
@@ -39,7 +43,7 @@ def _conversation() -> Conversation:
         title="Hello",
         provider=AIProvider.OLLAMA,
         model="llama3",
-        metadata={"user_id": overseer_ai_chat.USER},
+        metadata={"user_id": OVERSEER.user},
         messages=[
             ConversationMessage(
                 id="m1",
@@ -61,22 +65,22 @@ def _conversation() -> Conversation:
 def client(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     stored = _conversation()
 
-    async def conversations() -> list[Conversation]:
+    async def conversations(chat: ChatSurface) -> list[Conversation]:
         return [stored]
 
-    async def find(conversation_id: str) -> Conversation | None:
+    async def find(chat: ChatSurface, conversation_id: str) -> Conversation | None:
         return stored if conversation_id == stored.id else None
 
-    async def assistant_name() -> str:
+    async def assistant_name(chat: ChatSurface) -> str:
         return "Illiana"
 
     async def provider_icons(providers: list[str]) -> dict[str, str]:
         return {p: f"/icons/{p}" for p in providers}
 
-    monkeypatch.setattr(overseer_ai_chat, "conversations", conversations)
-    monkeypatch.setattr(overseer_ai_chat, "find_conversation", find)
-    monkeypatch.setattr(overseer_ai_chat, "assistant_name", assistant_name)
-    monkeypatch.setattr(overseer_ai_chat, "provider_icons", provider_icons)
+    monkeypatch.setattr(chat_surface, "conversations", conversations)
+    monkeypatch.setattr(chat_surface, "find_conversation", find)
+    monkeypatch.setattr(chat_surface, "assistant_name", assistant_name)
+    monkeypatch.setattr(chat_surface, "provider_icons", provider_icons)
     ai = ComponentStatus(name="ai", message="AI", metadata={"engine": "pydantic-ai"})
     sign_in(app, monkeypatch, status_with(services=[ai]))
     return TestClient(app)
@@ -103,7 +107,7 @@ def test_cards_waiting_for_approval_sit_beside_the_thread(
     """On the stacks that ship the change queue, the surface carries the
     review list, fetched when it is first opened."""
     found = select(_chat_page(client), "[data-approvals] [hx-get]")
-    expected = ["/partials/changes"] if overseer_ai_chat.CARDS else []
+    expected = ["/partials/changes"] if chat_surface.CARDS else []
     assert [e.get("hx-get") for e in found] == expected
 
 
@@ -180,8 +184,7 @@ def test_a_settled_turn_is_the_servers_html(client: TestClient) -> None:
 def test_a_reply_cut_off_at_the_limit_says_so(client: TestClient) -> None:
     """Ending mid-sentence reads as a broken app; the bubble says it was the
     token limit, and how many tokens that was."""
-    stored = overseer_ai_chat.conversations
-    message = asyncio.run(stored())[0].messages[1]
+    message = asyncio.run(chat_surface.conversations(OVERSEER))[0].messages[1]
     message.metadata |= {"finish_reason": "length", "output_tokens": 1000}
     note = one(client.get(f"{CHAT}/messages/c1/m2").text, "[data-cut-off]")
     assert "1,000" in text(note)
@@ -189,7 +192,7 @@ def test_a_reply_cut_off_at_the_limit_says_so(client: TestClient) -> None:
 
 def test_the_note_names_the_configured_limit(client: TestClient) -> None:
     """The agent's max_tokens is the limit; output tokens can fall short of it."""
-    message = asyncio.run(overseer_ai_chat.conversations())[0].messages[1]
+    message = asyncio.run(chat_surface.conversations(OVERSEER))[0].messages[1]
     message.metadata |= {
         "finish_reason": "length",
         "output_tokens": 998,
@@ -225,7 +228,7 @@ def agent_drawer(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> TestCli
         return AGENT_ROW if slug == "assistant" else None
 
     monkeypatch.setattr(overseer_ai_agents, "agent_row", agent_row)
-    message = asyncio.run(overseer_ai_chat.conversations())[0].messages[1]
+    message = asyncio.run(chat_surface.conversations(OVERSEER))[0].messages[1]
     message.metadata |= {"agent": SNAPSHOT}
     return client
 
@@ -254,7 +257,7 @@ def test_raise_max_tokens_lands_on_that_field(agent_drawer: TestClient) -> None:
 
 
 def test_a_cut_off_reply_offers_raise_and_continue(client: TestClient) -> None:
-    message = asyncio.run(overseer_ai_chat.conversations())[0].messages[1]
+    message = asyncio.run(chat_surface.conversations(OVERSEER))[0].messages[1]
     message.metadata |= {"finish_reason": "length", "output_tokens": 1000}
     note = one(client.get(f"{CHAT}/messages/c1/m2").text, "[data-cut-off]")
     raise_button = one(note, "button[data-raise]")
@@ -274,7 +277,7 @@ def test_a_stored_image_shows_in_its_question(
     async def read(key: str) -> bytes | None:
         return b"PNG" if key == "ab/cd.png" else None
 
-    monkeypatch.setattr(overseer_ai_chat, "read_attachment", read)
+    monkeypatch.setattr(chat_surface, "read_attachment", read)
     image = client.get(thumb.get("src"))
     assert image.content == b"PNG" and image.headers["content-type"] == "image/png"
     assert client.get(f"{CHAT}/attachments/zz/none.png").status_code == 404
@@ -316,8 +319,11 @@ def test_the_hooks_the_scripts_read_are_the_ones_the_markup_emits(
         client.post(f"{CHAT}/turns", data={"message": "hi"}).text,
     ]
     optional = {"dialog", "dialog-body"}
-    if not overseer_ai_chat.HAS_VOICE:
+    if not chat_surface.HAS_VOICE:
         optional |= {"chat-mic", "chat-mic-states", "data-speak", "data-state"}
+    # A live call needs voice and a database (profiles and engines are rows).
+    if not (chat_surface.HAS_VOICE and chat_surface.PERSISTED):
+        optional |= {"chat-live", "chat-call", "chat-mute"}
     for element_id in ids - optional:
         assert any(select(h, f"#{element_id}") for h in pages), element_id
     for hook in hooks - optional:
@@ -330,20 +336,30 @@ class TestModelPicker:
 
     @pytest.fixture(autouse=True)
     def catalog(self, monkeypatch: pytest.MonkeyPatch) -> list[str]:
-        if not overseer_ai_chat.PERSISTED:
+        if not chat_surface.PERSISTED:
             pytest.skip("the picker reads the catalog")
-        from app.components.web_frontend import overseer_ai_chat_models as models
+        from app.components.web_frontend import chat_models as models
 
         switched: list[str] = []
 
-        async def catalog() -> list[dict[str, Any]]:
+        async def catalog(mode: str = "chat") -> list[dict[str, Any]]:
+            if mode == "realtime":
+                return [{"model_id": LIVE, "title": "Gemini Live", "vendor": "google"}]
             return [
                 {"model_id": "llama3", "title": "Llama 3", "vendor": "Ollama"},
                 {"model_id": "claude-x", "title": "Claude X", "vendor": "Anthropic"},
             ]
 
+        async def calling() -> str | None:
+            return switched[-1] if switched and switched[-1] == LIVE else None
+
+        async def use_for_calls(model_id: str) -> str | None:
+            switched.append(model_id)
+            return None
+
         async def running() -> str:
-            return switched[-1] if switched else "llama3"
+            chat_picks = [m for m in switched if m != LIVE]
+            return chat_picks[-1] if chat_picks else "llama3"
 
         async def recent() -> list[str]:
             return ["claude-x"]
@@ -362,6 +378,8 @@ class TestModelPicker:
         monkeypatch.setattr(models, "recent_ids", recent)
         monkeypatch.setattr(models, "switch", switch)
         monkeypatch.setattr(models, "vendor_icons", icons)
+        monkeypatch.setattr(models, "calling_model", calling)
+        monkeypatch.setattr(models, "use_for_calls", use_for_calls)
         return switched
 
     def test_the_chip_names_the_model_and_opens_the_picker(
@@ -375,7 +393,11 @@ class TestModelPicker:
         assert text(one(chip, "[data-model]")) == "llama3"
         picker = client.get(chip.get("hx-get")).text
         assert one(picker, "#model-picker") is not None
-        rows = [b.get("data-model-id") for b in select(picker, "[data-model-id]")]
+        rows = [
+            b.get("data-model-id")
+            for b in select(picker, "[data-model-id]")
+            if b.get("data-model-id") != LIVE  # the live-call group, below
+        ]
         # The model in use and the recently used lead, then each vendor's group.
         assert rows[:2] == ["llama3", "claude-x"]
         assert sorted(rows[2:]) == ["claude-x", "llama3"]
@@ -400,6 +422,30 @@ class TestModelPicker:
         assert chip.get("hx-swap-oob") == "true"
         assert text(one(chip, "[data-model]")) == "claude-x"
 
+    def test_live_calls_are_picked_in_the_same_list(
+        self, client: TestClient, catalog: list[str]
+    ) -> None:
+        """With voice, what a call runs on is a pick here too: a group of
+        the models a call can reach, a pick setting the call's engine and
+        leaving the chat model alone."""
+        if not (chat_surface.HAS_VOICE and chat_surface.PERSISTED):
+            pytest.skip("no live calls in this stack")
+        picker = client.get(f"{CHAT}/models").text
+        live = one(picker, f'[data-model-id="{LIVE}"]')
+        kind = live.getparent().cssselect("input[name=kind]")[0]
+        assert kind.get("value") == "realtime"
+
+        response = client.post(
+            f"{CHAT}/models", data={"model_id": LIVE, "kind": "realtime"}
+        )
+
+        assert catalog == [LIVE]
+        current = {
+            b.get("data-model-id") for b in select(response.text, "[aria-current]")
+        }
+        assert current == {"llama3", LIVE}  # the chat model and the call's
+        assert text(one(response.text, "#chat-model [data-model]")) == "llama3"
+
     def test_a_refused_pick_says_why(self, client: TestClient) -> None:
         response = client.post(f"{CHAT}/models", data={"model_id": "nope"})
         toast = triggers(response)["toast"]
@@ -409,18 +455,18 @@ class TestModelPicker:
 class TestVoice:
     @pytest.fixture(autouse=True)
     def voice(self) -> None:
-        if not overseer_ai_chat.HAS_VOICE:
+        if not chat_surface.HAS_VOICE:
             pytest.skip("no voice in this stack")
 
     def test_the_mic_transcribes_what_was_said(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from app.components.web_frontend import overseer_ai_voice
+        from app.components.backend.api.ai import speech
 
-        async def transcribe(audio: Any) -> Any:
+        async def transcribe(audio: Any, language: str | None = None) -> Any:
             return SimpleNamespace(text="  what is aegis  ")
 
-        monkeypatch.setattr(overseer_ai_voice, "transcribe", transcribe)
+        monkeypatch.setattr(speech, "transcribe_audio", transcribe)
         mic = one(_chat_page(client), "#chat-mic")
         response = client.post(
             mic.get("data-transcripts"),
@@ -431,12 +477,12 @@ class TestVoice:
     def test_nothing_heard_says_so(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        from app.components.web_frontend import overseer_ai_voice
+        from app.components.backend.api.ai import speech
 
-        async def transcribe(audio: Any) -> Any:
+        async def transcribe(audio: Any, language: str | None = None) -> Any:
             return SimpleNamespace(text="  ")
 
-        monkeypatch.setattr(overseer_ai_voice, "transcribe", transcribe)
+        monkeypatch.setattr(speech, "transcribe_audio", transcribe)
         response = client.post(
             f"{CHAT}/speech/transcripts",
             files={"audio": ("clip.webm", b"....", "audio/webm")},
@@ -452,10 +498,53 @@ class TestVoice:
             said.append(text)
             return b"MP3"
 
-        monkeypatch.setattr(overseer_ai_chat, "synthesize", speak)
+        monkeypatch.setattr(chat_surface, "synthesize", speak)
         mic = one(_chat_page(client), "#chat-mic")
         sentence = client.get(mic.get("data-say"), params={"text": "Hello there."})
         assert sentence.content == b"MP3"
         answer = one(client.get(f"{CHAT}/messages/c1/m2").text, "[data-speak]")
         assert client.get(answer.get("data-speak")).content == b"MP3"
         assert said == ["Hello there.", "A stack."]
+
+
+def test_an_app_mounts_the_surface_again_for_its_own_agent(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The same routes at an app's own path: its user's conversations, its
+    agent answering, its own guard, and every link on the surface pointing
+    back at that mount rather than the Overseer's."""
+    import json
+
+    from app.components.web_frontend.routes.partials.chat_surface import chat_router
+
+    mine = ChatSurface(path="/chat", user="7", surface="app", agent_slug="helper")
+    asked: list[ChatSurface] = []
+
+    async def conversations(chat: ChatSurface) -> list[Conversation]:
+        asked.append(chat)
+        return []
+
+    async def assistant_name(chat: ChatSurface) -> str:
+        return f"Agent {chat.agent_slug}"
+
+    async def allow() -> None:
+        return None
+
+    monkeypatch.setattr(chat_surface, "conversations", conversations)
+    monkeypatch.setattr(chat_surface, "assistant_name", assistant_name)
+    app.include_router(chat_router(mine, allow))
+
+    html = TestClient(app).get("/chat/drawer").text
+
+    assert asked == [mine]
+    surface = json.loads(one(html, "[data-chat]").get("data-chat"))
+    assert surface["path"] == "/chat"
+    assert surface["defaults"] == {
+        "user_id": "7",
+        "surface": "app",
+        "agent_slug": "helper",
+    }
+    assert one(html, "form[hx-post]").get("hx-post") == "/chat/turns"
+    # The agent drawer is the Overseer's editor; this mount has none.
+    response = TestClient(app).get("/chat/messages/c1/m2/agent")
+    assert response.status_code == 404

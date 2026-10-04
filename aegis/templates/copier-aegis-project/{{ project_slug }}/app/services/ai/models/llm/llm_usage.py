@@ -1,10 +1,11 @@
 """LLM Usage model for tracking AI interactions."""
 
-from datetime import UTC, datetime
+from datetime import datetime
 
 from sqlalchemy import Index
-from app.core.time import utcnow
 from sqlmodel import Field, SQLModel
+
+from app.core.time import utcnow
 
 
 class LLMUsage(SQLModel, table=True):
@@ -46,3 +47,9 @@ class LLMUsage(SQLModel, table=True):
     cache_read_tokens: int | None = Field(default=None, ge=0)
     cache_write_tokens: int | None = Field(default=None, ge=0)
     tool_calls: int | None = Field(default=None, ge=0)
+
+    # Voice: speech and live calls meter ``audio_seconds`` (a transcription
+    # reports no tokens, so its 0 tokens are not a missed count).
+    # ``conversation_id`` ties a call and the turns taken during it together.
+    conversation_id: str | None = Field(default=None, index=True, max_length=64)
+    audio_seconds: float | None = Field(default=None, ge=0)

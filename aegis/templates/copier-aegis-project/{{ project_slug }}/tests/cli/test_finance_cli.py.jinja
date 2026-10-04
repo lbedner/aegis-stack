@@ -6,7 +6,7 @@ registration, argument plumbing, and console output only - the behavior itself
 is covered by the service-layer tests.
 """
 
-from contextlib import asynccontextmanager
+
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, patch
@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock, patch
 from typer.testing import CliRunner
 
 from app.cli.finance import app
+from tests._session import opens
 
 runner = CliRunner()
 
@@ -21,12 +22,7 @@ runner = CliRunner()
 def _fake_session_cm() -> tuple[AsyncMock, Any]:
     """A stand-in for ``get_async_session`` yielding a mock session."""
     session = AsyncMock()
-
-    @asynccontextmanager
-    async def cm() -> Any:
-        yield session
-
-    return session, cm
+    return session, opens(session)
 
 
 def _seed_result(**overrides: Any) -> SimpleNamespace:

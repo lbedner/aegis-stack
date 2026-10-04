@@ -68,6 +68,12 @@ EXAMPLES: dict[str, dict[str, str]] = {
               "labels": ["09:00", "10:00", "11:00", "12:00"],
               "series": [{"label": "Done", "values": [120, 180, 150, 210]}],
             }) }}""",
+        "chart": """
+            {{ chart("catalog-bare", "line", {
+              "labels": ["Mon", "Tue", "Wed"],
+              "series": [{"label": "Calls", "values": [4, 9, 6]}],
+              "format": "count",
+            }, height="h-40", label="Calls this week") }}""",
         "chart_data": """
             {# What a live stream re-sends for chart_panel(..., live=...). #}
             {{ chart_data("catalog-demo", {"labels": [1, 2], "series": [{"label": "Done", "values": [3, 4]}]}) }}""",
@@ -208,6 +214,7 @@ EXAMPLES: dict[str, dict[str, str]] = {
             {% endcall %}""",
         "text_input": """{{ text_input("name", placeholder="Display name") }}""",
         "money_input": """{{ money_input("amount", "12.50") }}""",
+        "number_input": """{{ number_input("speed", 1.25, step=0.05, min=0.25, max=4) }}""",
         "textarea": """{{ textarea("notes", rows=3, placeholder="Notes") }}""",
         "select_field": """
             <div x-data="{ queue: 'system' }" class="w-48">

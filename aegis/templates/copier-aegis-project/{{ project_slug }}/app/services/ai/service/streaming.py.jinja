@@ -36,6 +36,7 @@ from app.services.ai.domains.chat.attachments import ChatAttachment
 from app.services.ai.domains.chat.readings import merge_staged_readings
 {%- endif %}
 {%- if ai_backend != "memory" and ai_framework == "pydantic-ai" %}
+from app.services.ai.domains.chat.cards import attach_cards, card_stage
 from app.services.ai.domains.chat.user_memory import memory_user
 {%- endif %}
 from app.services.ai.domains.llm.providers import ProviderNotInstalledError
@@ -207,6 +208,7 @@ class StreamingMixin(ChatMixin):
                     conversation_id=conversation.id,
                 ),
                 reading_stage() as staged_readings,
+                card_stage() as drawn_cards,
             ):
 {% else %}
             with reading_stage() as staged_readings:
@@ -245,6 +247,10 @@ class StreamingMixin(ChatMixin):
                             # dispatched calls as metadata; surface each one so
                             # the UI trail shows what the script actually did.
                             record_tool_result(tool_trace, event)
+{%- if ai_backend != "memory" %}
+                            # Cards a script drew ride that script's entry.
+                            attach_cards(tool_trace, drawn_cards)
+{%- endif %}
                             for name, args in nested_tool_calls(event):
                                 yield self._tool_notice(
                                     name,
@@ -371,6 +377,7 @@ class StreamingMixin(ChatMixin):
                 stream_usage,
                 user_id,
                 duration_ms=response_time_ms,
+                conversation_id=conversation.id,
             )
 {%- endif %}
             # Extractions recorded mid-run outlive the image AND the

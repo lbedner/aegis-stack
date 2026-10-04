@@ -17,7 +17,8 @@ from app.components.web_frontend import (
     overseer_ai_rag,
     overseer_ai_voice,
 )
-from app.components.web_frontend.overseer_ai_common import PARTIALS, PERSISTED
+from app.components.web_frontend.chat_surface import PERSISTED
+from app.components.web_frontend.overseer_ai_common import PARTIALS
 from app.components.web_frontend.rendering import (
     dialog,
     form_fields,
@@ -29,12 +30,9 @@ from app.core.db import get_async_db
 from app.models.user import User
 from app.services.auth.deps import get_optional_user
 
-from . import overseer_ai_chat
 from .overseer_auth import signed_in
 
 router = APIRouter(prefix=PARTIALS)
-# The chat surface's fragments, under this page's prefix.
-router.include_router(overseer_ai_chat.router)
 
 
 @router.get("/icons/{slug}")

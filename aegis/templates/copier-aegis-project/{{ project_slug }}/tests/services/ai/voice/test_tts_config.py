@@ -40,6 +40,7 @@ class TestTTSConfigFromSettings:
         settings.TTS_MODEL = "tts-1-hd"
         settings.TTS_VOICE = "nova"
         settings.TTS_SPEED = 1.5
+        settings.TTS_INSTRUCTIONS = None
 
         config = TTSConfig.from_settings(settings)
 
@@ -66,6 +67,7 @@ class TestTTSConfigFromSettings:
         settings.TTS_MODEL = None
         settings.TTS_VOICE = None
         settings.TTS_SPEED = 1.0
+        settings.TTS_INSTRUCTIONS = None
 
         config = TTSConfig.from_settings(settings)
 
@@ -83,6 +85,7 @@ class TestTTSConfigFromSettings:
             settings.TTS_MODEL = None
             settings.TTS_VOICE = None
             settings.TTS_SPEED = 1.0
+            settings.TTS_INSTRUCTIONS = None
 
             config = TTSConfig.from_settings(settings)
             assert config.provider == expected_enum, f"Failed for {provider_str}"
@@ -196,6 +199,7 @@ class TestGetTTSConfigFunction:
         settings.TTS_MODEL = None
         settings.TTS_VOICE = None
         settings.TTS_SPEED = 1.0
+        settings.TTS_INSTRUCTIONS = None
 
         config = get_tts_config(settings)
 

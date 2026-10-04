@@ -1,0 +1,6 @@
+{# Parts of a whole, drawn as the Overview's spending doughnut by the app's
+   own chart code: the palette's colours in order, and a row labelled
+   "Other" in the muted tail colour. #}
+{% from "partials/chat/cards/_frame.html" import card_chart %}
+{{ card_chart("pie", "doughnut", card, card_id, card_url, large,
+              card["rows"]|map(attribute="label")|list) }}

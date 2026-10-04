@@ -28,7 +28,9 @@ from tests.web.overseer import sign_in, status_with  # noqa: E402
 PAGE = "/overseer/services/ai"
 
 LEDGER = SpendLedger(
-    daily={date(2026, 9, 3): 1.5, date(2026, 9, 5): 2.0},
+    # Every day's spend, voice included: $3.50 of model calls and $1.00 of
+    # voice.
+    daily={date(2026, 9, 3): 1.5, date(2026, 9, 5): 3.0},
     actions={
         "stream_chat:finance-assistant": ActionSpend(calls=3, cost=1.0),
         "chat:finance-assistant": ActionSpend(calls=1, cost=0.5),
@@ -133,7 +135,6 @@ def test_an_unknown_tab_is_the_overview(client: TestClient) -> None:
 
 def test_the_month_in_figures(client: TestClient) -> None:
     figures = _figures(_costs(client))
-    # Model calls $3.50 plus voice $1.00.
     assert figures["Total spend"] == "$4.50"
     assert figures["Daily average"] == "$0.45"  # ten days into September
     assert figures["Cost per user"] == "$2.25"
@@ -195,7 +196,7 @@ def test_projections_read_the_last_90_days(client: TestClient) -> None:
     assert figures["6 months forecast"] == "$9.00"
     assert figures["Month-end forecast"] == "$1.50"
     assert figures["Annual run rate"] == "$18.25"
-    assert figures["Week over week"] == "+33.3%"  # $2.00 vs $1.50
+    assert figures["Week over week"] == "+100.0%"  # $3.00 vs $1.50
 
 
 def test_the_horizon_is_chosen(client: TestClient) -> None:

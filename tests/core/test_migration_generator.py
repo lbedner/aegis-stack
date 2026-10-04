@@ -348,8 +348,8 @@ class TestOrgMigrationSpec:
 class TestVoiceMigrationSpec:
     """Test AI voice migration specification.
 
-    The voice migration creates the voice_usage table for tracking
-    TTS (Text-to-Speech) and STT (Speech-to-Text) usage.
+    The voice migration creates the voice profiles and the live-call
+    engines; voice usage lands in the shared ``llm_usage`` ledger.
     """
 
     def test_ai_voice_spec_exists(self) -> None:
@@ -360,8 +360,7 @@ class TestVoiceMigrationSpec:
     def test_voice_migration_description(self) -> None:
         """Voice migration should have a descriptive description."""
         assert "voice" in VOICE_MIGRATION.description.lower()
-        assert "tts" in VOICE_MIGRATION.description.lower()
-        assert "stt" in VOICE_MIGRATION.description.lower()
+        assert "profile" in VOICE_MIGRATION.description.lower()
 
 
 class TestGetServicesNeedingMigrationsVoice:

@@ -1,6 +1,7 @@
 """Tests for TTS models."""
 
 import pytest
+
 from app.services.ai.domains.voice.models import (
     AudioFormat,
     OpenAIVoice,
@@ -74,10 +75,11 @@ class TestSpeechRequest:
         assert request.language == "en"
 
     def test_default_speed(self) -> None:
-        """Test speed defaults to 1.0."""
+        """Unset, so the service fills it from TTS_SPEED. A default of 1.0
+        here is what kept TTS_SPEED from ever reaching the provider."""
         request = SpeechRequest(text="Hello")
 
-        assert request.speed == 1.0
+        assert request.speed is None
 
     def test_custom_speed(self) -> None:
         """Test speed can be set."""

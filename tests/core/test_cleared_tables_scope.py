@@ -69,3 +69,38 @@ def test_a_revision_that_alters_a_catalog_table_clears_that_table(
     assert "DELETE FROM llm_price" in out
     assert "DELETE FROM llm_deployment" not in out
     assert out.index("DELETE FROM llm_price") < out.index("batch_alter_table")
+
+
+def test_a_revision_that_adds_an_optional_column_keeps_the_catalog(
+    tmp_path: Path,
+) -> None:
+    """A nullable column needs nothing from old rows: voice prices added to
+    ``llm_price`` must not wipe every chat price an existing project holds."""
+    out = _place(
+        tmp_path,
+        """    with op.batch_alter_table("llm_price", schema=None) as batch_op:
+        batch_op.add_column(
+            sa.Column("input_cost_per_second", sa.Float(), nullable=True)
+        )
+    op.add_column(
+        "llm_deployment", sa.Column("note", sa.String(), nullable=True)
+    )
+""",
+    )
+
+    assert "DELETE FROM" not in out
+
+
+def test_a_required_column_added_outside_a_batch_clears_its_table(
+    tmp_path: Path,
+) -> None:
+    out = _place(
+        tmp_path,
+        """    op.add_column(
+        "llm_deployment", sa.Column("org_id", sa.Integer(), nullable=False)
+    )
+""",
+    )
+
+    assert "DELETE FROM llm_deployment" in out
+    assert "DELETE FROM llm_price" not in out

@@ -273,5 +273,6 @@ def as_markers(component: Any) -> list[dict[str, Any]]:
 
 
 def card_markers(entry: dict[str, Any]) -> list[dict[str, Any]]:
-    """The approval cards a stored trace entry carries (``card_component``)."""
+    """The cards a stored trace entry carries: an approval card's marker
+    (``card_component``), and the cards a script drew beside it."""
     return as_markers(entry.get("component"))

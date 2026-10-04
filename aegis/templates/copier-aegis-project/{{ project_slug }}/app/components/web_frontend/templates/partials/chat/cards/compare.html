@@ -1,0 +1,26 @@
+{# A before and an after. The change is worked out here, never carried in
+   the payload: a figure the assistant could derive is one the assistant could get wrong. Both
+   bars scale to the larger; a rise is teal, a fall the error tone, and a
+   figure appearing from zero is new, not an infinite rise. #}
+{% from "partials/chat/cards/_frame.html" import card_frame, amount %}
+{% set before = card["before"] %}
+{% set after = card["after"] %}
+{% set peak = [before, after]|max %}
+{% set fresh = before == 0 and after > 0 %}
+{% set up = fresh or after >= before %}
+{% set pct = ((after - before) / before * 100)|round(1) if before else None %}
+{% call card_frame("compare", card["title"], card["measure"], card_url, large) %}
+  <div class="px-4 py-3 space-y-2.5">
+    {% for side in [{"label": card["before_label"], "value": before, "tone": "bg-aegis-muted/50"},
+                    {"label": card["after_label"], "value": after, "tone": "bg-aegis-teal" if up else "bg-error"}] %}
+    <div>
+      <div class="flex items-baseline justify-between gap-4 text-xs text-aegis-muted mb-1">
+        <span class="truncate">{{ side["label"] }}</span>
+        <span class="font-medium text-aegis-text tabular-nums">{{ amount(side["value"], card["unit"]) }}</span>
+      </div>
+      <div class="h-2 rounded bg-aegis-border/60"><div class="h-2 rounded {{ side['tone'] }}" style="width: {{ (100 * side['value'] / peak)|round|int if peak else 0 }}%"></div></div>
+    </div>
+    {% endfor %}
+    <p data-change class="text-xs {{ 'text-aegis-teal' if up else 'text-error' }}">{% if fresh %}new{% elif pct is none %}no baseline{% else %}{{ "+" if pct >= 0 else "" }}{{ pct }}%{% endif %}</p>
+  </div>
+{% endcall %}

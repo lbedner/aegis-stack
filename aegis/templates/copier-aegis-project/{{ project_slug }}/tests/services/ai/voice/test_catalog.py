@@ -368,6 +368,8 @@ class TestGetCurrentVoiceConfig:
         settings.STT_PROVIDER = None
         settings.STT_MODEL = None
         settings.STT_LANGUAGE = None
+        settings.TTS_INSTRUCTIONS = None
+        settings.STT_DEVICE = None
 
         config = get_current_voice_config(settings)
         # Should use defaults for None values
@@ -390,6 +392,8 @@ class TestGetCurrentVoiceConfig:
         settings.STT_PROVIDER = STTProvider.GROQ_WHISPER.value
         settings.STT_MODEL = "whisper-large-v3"
         settings.STT_LANGUAGE = "en"
+        settings.TTS_INSTRUCTIONS = None
+        settings.STT_DEVICE = None
 
         config = get_current_voice_config(settings)
         assert config["tts_provider"] == TTSProvider.OPENAI.value

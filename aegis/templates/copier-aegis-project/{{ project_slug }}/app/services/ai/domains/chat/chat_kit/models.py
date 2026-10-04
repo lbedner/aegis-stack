@@ -144,7 +144,20 @@ class ErrorFrame:
         return {"kind": self.kind, "message": self.message}
 
 
-StreamFrame = DeltaFrame | ToolFrame | DoneFrame | BlockedFrame | ErrorFrame
+@dataclass(frozen=True, slots=True)
+class CardFrame:
+    """Approval cards a tool's result named (``card_component``): identity
+    only, so the caller stores them with the turn and draws each card from
+    the queue, as the Overseer chat does from its stored trace."""
+
+    markers: list[dict[str, Any]]
+    kind: Literal["cards"] = "cards"
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"kind": self.kind, "markers": self.markers}
+
+
+StreamFrame = DeltaFrame | ToolFrame | CardFrame | DoneFrame | BlockedFrame | ErrorFrame
 
 
 @dataclass(frozen=True, slots=True)

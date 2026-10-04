@@ -28,6 +28,7 @@ from typing import Any, Generic, TypeVar
 from pydantic_ai import Agent
 from pydantic_ai.messages import (
     FunctionToolCallEvent,
+    FunctionToolResultEvent,
     ModelMessage,
     ModelRequest,
     ModelResponse,
@@ -41,7 +42,7 @@ from pydantic_ai.run import AgentRunResultEvent
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import UsageLimits
 
-from app.core.chat_transcript import tool_label
+from app.core.chat_transcript import as_markers, card_component, tool_label
 from app.core.log import logger
 from app.services.ai.domains.chat.tool_telemetry import tool_turn
 from app.services.ai.domains.chat.user_memory import memory_user
@@ -49,6 +50,7 @@ from app.services.ai.usage_recording import extract_usage, record_usage
 
 from .context import ContextProvider, compose_context, gather_context
 from .models import (
+    CardFrame,
     ChatMessage,
     ChatScope,
     DeltaFrame,
@@ -207,6 +209,10 @@ class ToolChatAgent(Generic[DepsT]):
                             result = event.result
                         elif isinstance(event, FunctionToolCallEvent):
                             yield _tool_frame(event)
+                        elif isinstance(event, FunctionToolResultEvent):
+                            cards = _card_frame(event)
+                            if cards is not None:
+                                yield cards
                         if delta:
                             answer_parts.append(delta)
                             yield DeltaFrame(delta)
@@ -260,6 +266,14 @@ def _tool_frame(event: FunctionToolCallEvent) -> ToolFrame:
             args = str(raw)
     name = str(getattr(part, "tool_name", "") or "")
     return ToolFrame(tool=name, args=args, label=tool_label(name, args))
+
+
+def _card_frame(event: FunctionToolResultEvent) -> CardFrame | None:
+    """The approval cards a finished tool call proposed or listed, if any."""
+    part = event.part
+    name = str(getattr(part, "tool_name", "") or "")
+    markers = as_markers(card_component(name, getattr(part, "content", None)))
+    return CardFrame(markers=markers) if markers else None
 
 
 def _count_tool_calls(result: Any) -> int:

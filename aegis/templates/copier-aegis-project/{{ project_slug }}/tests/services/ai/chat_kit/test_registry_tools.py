@@ -84,3 +84,35 @@ async def test_a_tool_runs_as_the_scopes_owner_and_conversation() -> None:
 
     assert seen == [(7, "c7")]
     assert current_owner_user_id.get() is None
+
+
+async def test_a_proposal_reaches_the_caller_as_its_card() -> None:
+    """A ``propose`` result yields a ``CardFrame`` naming the card, so a kit
+    runtime can store it with the turn and draw it from the queue."""
+    from app.services.ai.domains.chat.chat_kit import CardFrame
+    from app.services.ai.domains.chat.tools import get_tool
+
+    async def propose(change_type: str) -> dict[str, object]:
+        """File a change."""
+        return {"pending_change_id": 41, "change_type": change_type, "title": "T"}
+
+    real = get_tool("propose")
+    register_tool("propose", propose, replace=True)
+    try:
+        frames = await _turn("propose", ChatScope(user_id="u1", surface="test"))
+    finally:
+        if real is not None:
+            register_tool(
+                "propose",
+                real.func,
+                description=real.description,
+                effect=real.effect,
+                replace=True,
+            )
+        else:
+            unregister_tool("propose")
+
+    (cards,) = [f for f in frames if isinstance(f, CardFrame)]
+    assert [(m["kind"], m["pending_change_id"]) for m in cards.markers] == [
+        ("pending_change", 41)
+    ]

@@ -9,6 +9,13 @@
 
 ### Added
 
+- **Approval cards in a chat-kit turn.** `ToolChatAgent.stream_turn` yields
+  a `CardFrame` when a tool's result proposed or listed approval cards
+  (`propose`, `propose_many`, `pending`): the cards' identities, for the
+  caller to store with the turn and draw from the queue, as the Overseer
+  chat does from its stored trace. The marker builder moved to
+  `chat_transcript.card_component`, so both paths name a card the same way.
+
 - **Approval cards in the htmx UI.** A change an agent proposes now shows
   as a card in the htmx chat, under the reply that proposed it, and in a
   "Waiting for your approval" list beside the thread: the change's title,

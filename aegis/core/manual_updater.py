@@ -31,6 +31,7 @@ from .component_files import (
     MIGRATION_SKILL_FILE,
     PROJECT_SLUG_PLACEHOLDER,
     SERVICES_CARD_FILE,
+    dependent_files,
     get_component_cleanup_paths,
     get_component_files,
     get_copier_defaults,
@@ -422,6 +423,13 @@ class ManualUpdater:
             component_files = get_component_files(
                 component, backend_variant, answers=updated_answers
             )
+            # And what other installed specs keep only while this one is
+            # there (mcp's activity record, with a database).
+            component_files += [
+                f
+                for f in dependent_files(component, updated_answers, expand=True)
+                if f not in component_files
+            ]
             if is_variant_upgrade:
                 # An option upgrade creates only what the new option adds.
                 # The service's files from before are the project's: the
@@ -692,7 +700,9 @@ class ManualUpdater:
             # expanding it to the files the template ships would strand
             # anything the project grew since (``__pycache__``, built assets)
             # and leave the tree behind.
-            component_files = get_component_cleanup_paths(component)
+            component_files = get_component_cleanup_paths(component) + dependent_files(
+                component, self.answers, expand=False
+            )
 
             # Delete each file
             deleted_paths: list[Path] = []

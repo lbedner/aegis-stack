@@ -17,7 +17,6 @@ import typer
 from aegis.constants import (
     AIFrameworks,
     AnswerKeys,
-    ComponentNames,
     StorageBackends,
     WorkerBackends,
 )
@@ -329,12 +328,14 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
             for _rel_path in iter_cleanup_paths(_spec, selected=False):
                 apply_cleanup_path(project_path, _rel_path)
 
-    # Deploy history needs a database to keep it in; deploy without one
-    # still reads containers and logs.
-    if is_enabled(AnswerKeys.DEPLOY) and not is_enabled(AnswerKeys.DATABASE):
-        deploy_files = COMPONENTS[ComponentNames.DEPLOY].files
-        for _rel_path in deploy_files.extras[AnswerKeys.DATABASE]:
-            apply_cleanup_path(project_path, _rel_path)
+    # A component's database-only files (deploy's history, mcp's activity
+    # record) go when there is no database to keep them in; the component
+    # itself still works without them.
+    if not is_enabled(AnswerKeys.DATABASE):
+        for _name, _spec in COMPONENTS.items():
+            if is_enabled(AnswerKeys.include_key(_name)):
+                for _rel_path in _spec.files.extras.get(AnswerKeys.DATABASE, []):
+                    apply_cleanup_path(project_path, _rel_path)
 
     # =====================================================================
     # Pattern B/D: option-driven and backend-variant cleanups (inline).

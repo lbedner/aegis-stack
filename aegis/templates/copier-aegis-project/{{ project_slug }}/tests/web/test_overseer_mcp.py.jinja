@@ -1,0 +1,123 @@
+{% if include_mcp and include_htmx %}"""Overseer > MCP: the tools an outside assistant is served (and each
+granted one it is not, with why), how to connect one, and what each
+client did."""
+
+from collections.abc import Generator
+from typing import Any
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+import pytest
+
+from app.core.config import settings
+from app.core.tools import load_tools, register_tool
+from app.services.system.models import ComponentStatus, ComponentStatusType
+from tests.web.dom import one, text
+from tests.web.overseer import sign_in, status_with
+
+PAGE = "/overseer/components/mcp"
+MCP = ComponentStatus(
+    name="mcp",
+    status=ComponentStatusType.HEALTHY,
+    message="1 tool served",
+    metadata={"served": 1, "dropped": 2},
+)
+
+
+async def lookup(order_id: str) -> dict[str, Any]:
+    """Look up an order by id."""
+    return {"order_id": order_id}
+
+
+async def save(note: str) -> str:
+    """Save a note."""
+    return note
+
+
+@pytest.fixture
+def loaded() -> None:
+    load_tools()
+
+
+@pytest.fixture
+def signed_in(
+    loaded: None,
+    clean_registry: None,
+    app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+) -> Generator[TestClient]:
+    register_tool("lookup", lookup, effect="read")
+    register_tool("save", save, effect="writes")
+    monkeypatch.setattr(settings, "MCP_TOOLS", ["lookup", "save", "gone"])
+    sign_in(app, monkeypatch, status_with(MCP))
+    with TestClient(app) as client:
+        yield client
+
+
+def _html(client: TestClient, section: str = "") -> str:
+    response = client.get(PAGE + (f"/{section}" if section else ""))
+    assert response.status_code == 200, response.text
+    return response.text
+
+
+def test_the_overview_shows_what_a_client_is_and_is_not_served(
+    signed_in: TestClient,
+) -> None:
+    html = _html(signed_in)
+
+    served = text(one(html, "#mcp-served"))
+    dropped = text(one(html, "#mcp-dropped"))
+    assert "lookup" in served and "save" not in served
+    # The effect is a badge, never the cell's raw dict.
+    assert "read" in served and "'tone'" not in served
+    assert "Writes are never served" in dropped
+    assert "No tool by that name" in dropped
+    assert f"{settings.PROJECT_NAME} mcp" in text(one(html, "#mcp-connect"))
+{%- if include_database %}
+
+
+def test_activity_shows_each_client(
+    signed_in: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from datetime import UTC, datetime
+
+    from app.components.mcp import activity
+
+    when = datetime(2026, 10, 5, 9, 30, tzinfo=UTC)
+
+    async def by_client() -> list[activity.ClientActivity]:
+        return [activity.ClientActivity("claude-code", 3, 2, 1, 0, when)]
+
+    async def recent(*, limit: int = 50) -> list[Any]:
+        return [
+            activity.McpToolCall(
+                called_at=when,
+                client="claude-code",
+                tool="lookup",
+                effect="read",
+                ok=True,
+                duration_ms=12,
+                result_bytes=90,
+            )
+        ]
+
+    monkeypatch.setattr(activity, "by_client", by_client)
+    monkeypatch.setattr(activity, "recent", recent)
+
+    html = _html(signed_in, "activity")
+
+    clients = text(one(html, "#mcp-clients"))
+    assert "claude-code" in clients and "3" in clients
+    calls = text(one(html, "#mcp-calls"))
+    assert "lookup" in calls and "OK" in calls and "'tone'" not in calls
+{%- else %}
+
+
+def test_without_a_database_activity_says_where_it_goes(
+    signed_in: TestClient,
+) -> None:
+    html = _html(signed_in, "activity")
+
+    assert "log" in text(one(html, "#mcp-activity")).lower()
+{%- endif %}
+{% endif %}

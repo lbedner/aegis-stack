@@ -351,71 +351,24 @@ def generate_with_copier(
 
     # Run post-generation tasks with explicit working directory control
     # This ensures consistent behavior with Cookiecutter
-    include_auth = copier_data.get(AnswerKeys.AUTH, False)
     include_ai = copier_data.get(AnswerKeys.AI, False)
-    include_insights = copier_data.get(AnswerKeys.INSIGHTS, False)
-    include_blog = copier_data.get(AnswerKeys.BLOG, False)
-    include_documents = copier_data.get(AnswerKeys.DOCUMENTS, False)
-    include_research = copier_data.get(AnswerKeys.RESEARCH, False)
     ai_backend = copier_data.get(AnswerKeys.AI_BACKEND, StorageBackends.MEMORY)
     database_engine = copier_data.get(
         AnswerKeys.DATABASE_ENGINE, StorageBackends.SQLITE
     )
-
-    # Type narrowing: ensure booleans for include_auth and include_ai
-    is_auth_included: bool = include_auth is True
-    is_ai_included: bool = include_ai is True
-
     # Type narrowing: ai_backend should always be a string, but narrow from Any
     ai_backend_str: str = str(ai_backend) if ai_backend else StorageBackends.MEMORY
-
-    is_insights_included: bool = include_insights is True
-    is_blog_included: bool = include_blog is True
-    is_documents_included: bool = include_documents is True
-    is_research_included: bool = include_research is True
-    ai_needs_migrations = is_ai_included and ai_backend_str != StorageBackends.MEMORY
+    ai_needs_migrations = (
+        include_ai is True and ai_backend_str != StorageBackends.MEMORY
+    )
     # Only run migrations automatically for SQLite (file-based, no server needed)
     # PostgreSQL requires a running server, so skip auto-migration
     is_sqlite = database_engine == StorageBackends.SQLITE
-    is_payment_included: bool = copier_data.get(AnswerKeys.PAYMENT, False) is True
-    is_finance_included: bool = copier_data.get(AnswerKeys.FINANCE, False) is True
-    is_scheduler_included: bool = copier_data.get(AnswerKeys.SCHEDULER, False) is True
-    scheduler_backend_str: str = str(
-        copier_data.get(AnswerKeys.SCHEDULER_BACKEND, StorageBackends.MEMORY)
-        or StorageBackends.MEMORY
-    )
-    # Get ai_voice from copier_data (it's a boolean after conversion)
-    ai_voice_enabled: bool = copier_data.get(AnswerKeys.AI_VOICE, False) is True
-    context = {
-        AnswerKeys.AUTH: is_auth_included,
-        AnswerKeys.AUTH_ORG: copier_data.get(AnswerKeys.AUTH_ORG, False) is True,
-        AnswerKeys.AUTH_LEVEL: copier_data.get(AnswerKeys.AUTH_LEVEL, AuthLevels.BASIC),
-        AnswerKeys.AI: is_ai_included,
-        AnswerKeys.AI_BACKEND: ai_backend_str,
-        AnswerKeys.AI_VOICE: ai_voice_enabled,
-        AnswerKeys.INSIGHTS: is_insights_included,
-        AnswerKeys.INSIGHTS_PER_USER: copier_data.get(
-            AnswerKeys.INSIGHTS_PER_USER, False
-        )
-        is True,
-        AnswerKeys.BLOG: is_blog_included,
-        AnswerKeys.DOCUMENTS: is_documents_included,
-        AnswerKeys.RESEARCH: is_research_included,
-        AnswerKeys.PAYMENT: is_payment_included,
-        AnswerKeys.FINANCE: is_finance_included,
-        AnswerKeys.SCHEDULER: is_scheduler_included,
-        AnswerKeys.SCHEDULER_BACKEND: scheduler_backend_str,
-        AnswerKeys.SECRETS: template_context.get(AnswerKeys.SECRETS) == "yes",
-        AnswerKeys.DEPLOY: template_context.get(AnswerKeys.DEPLOY) == "yes",
-        AnswerKeys.DATABASE: template_context.get(AnswerKeys.DATABASE) == "yes",
-        # Finance tables live in a dedicated Postgres ``finance`` schema
-        # (dropped on SQLite); the migration variant is engine-resolved.
-        AnswerKeys.DATABASE_ENGINE: database_engine,
-    }
     # One source of truth for "which services ship a migration": the same
-    # function that picks them. A hand-kept OR chain here drifted once and
-    # silently generated documents stacks with no migration at all.
-    services = get_services_needing_migrations(context)
+    # function that picks them, reading the same answers Copier rendered with.
+    # A hand-kept copy of those answers drifted twice (documents shipped no
+    # migration; RAG's knowledge tables folded into another service's).
+    services = get_services_needing_migrations(copier_data)
     needs_migration_files = bool(services)
     run_migrations = needs_migration_files and is_sqlite
 

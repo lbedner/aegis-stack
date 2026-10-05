@@ -36,7 +36,14 @@ async def save(note: str) -> str:
 
 
 @pytest.fixture
-def tools(clean_registry: None) -> None:
+def loaded() -> None:
+    """Every app tool registered before a test snapshots the registry, so
+    its cleanup never unregisters a module's tools (``clean_registry``)."""
+    load_tools()
+
+
+@pytest.fixture
+def tools(loaded: None, clean_registry: None) -> None:
     register_tool("lookup", lookup, effect="read")
     register_tool("broken", broken, effect="read")
     register_tool("save", save, effect="writes")
@@ -68,7 +75,11 @@ async def test_a_call_returns_what_the_tool_returns() -> None:
 @pytest.mark.usefixtures("tools")
 async def test_every_call_is_recorded_with_its_client() -> None:
     calls: list[McpCall] = []
-    server = build_server(["lookup", "broken"], record=calls.append)
+
+    async def keep(call: McpCall) -> None:
+        calls.append(call)
+
+    server = build_server(["lookup", "broken"], record=keep)
     claude = Implementation(name="claude-code", version="1.0")
 
     async with Client(server, client_info=claude) as client:
@@ -88,6 +99,52 @@ def test_the_default_grant_names_only_servable_tools() -> None:
     load_tools()
 
     assert mcp_servable(settings.MCP_TOOLS) == settings.MCP_TOOLS
+
+
+@pytest.mark.usefixtures("tools")
+def test_the_grant_view_says_what_is_served_and_why_the_rest_is_not(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """What the Overseer shows: served tools with their effect, and each
+    granted name a client will never see, with the reason."""
+    from app.services.system import ui_mcp
+
+    monkeypatch.setattr(settings, "MCP_TOOLS", ["lookup", "save", "gone"])
+
+    view = ui_mcp.grant()
+
+    assert [(t["name"], t["effect"]) for t in view["served"]] == [("lookup", "read")]
+    assert {t["name"]: t["reason"] for t in view["dropped"]} == {
+        "save": "Writes are never served",
+        "gone": "No tool by that name",
+    }
+
+
+@pytest.mark.usefixtures("tools")
+async def test_health_counts_the_served_tools(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.components.mcp.health import check_mcp_health
+    from app.services.system.models import ComponentStatusType
+
+    monkeypatch.setattr(settings, "MCP_TOOLS", ["lookup", "save"])
+
+    status = await check_mcp_health()
+
+    assert status.status == ComponentStatusType.HEALTHY
+    assert (status.metadata["served"], status.metadata["dropped"]) == (1, 1)
+
+
+async def test_health_warns_when_nothing_is_served(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.components.mcp.health import check_mcp_health
+    from app.services.system.models import ComponentStatusType
+
+    monkeypatch.setattr(settings, "MCP_TOOLS", [])
+
+    status = await check_mcp_health()
+
+    assert status.status == ComponentStatusType.WARNING
+    assert "MCP_TOOLS" in status.message
 
 
 def test_stdout_carries_only_the_protocol() -> None:

@@ -12,6 +12,7 @@ from app.components.frontend.dashboard.modals.modal_sections.cards import (
     MetricCard,
     MilestoneCard,
     headline_stat,
+    metric_row,
 )
 from app.components.frontend.dashboard.modals.modal_sections.chart_bar import (
     BarChartCard,
@@ -74,6 +75,7 @@ __all__ = [
     "LineSeries",
     "MetricCard",
     "MetricCardSection",
+    "metric_row",
     "MilestoneCard",
     "PIE_CHART_COLORS",
     "PIE_CHART_TAIL_COLOR",

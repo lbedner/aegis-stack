@@ -227,3 +227,15 @@ def headline_stat(label: str, value: str, color: str) -> ft.Control:
         spacing=2,
         horizontal_alignment=ft.CrossAxisAlignment.END,
     )
+
+
+def metric_row(counts: list[tuple[str, str]]) -> ft.Container:
+    """A modal's row of ``(label, value)`` metrics, the card's counts at
+    modal size."""
+    return ft.Container(
+        content=ft.Row(
+            [MetricCard(label, value, Theme.Colors.INFO) for label, value in counts],
+            spacing=Theme.Spacing.MD,
+        ),
+        padding=Theme.Spacing.MD,
+    )

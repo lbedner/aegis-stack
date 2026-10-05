@@ -16,6 +16,11 @@ from app.components.frontend.theme import AegisTheme as Theme
 Column = tuple[str, str, int | None]
 
 
+def columns_of(pairs: tuple[tuple[str, str], ...]) -> list[Column]:
+    """A ``ui_*`` module's ``(key, label)`` pairs as columns, each filling."""
+    return [(label, key, None) for key, label in pairs]
+
+
 class TableTab(ft.Container):
     """``rows`` as a table; the first column reads as each row's name, and
     ``actions`` (a row's buttons) adds a last column, as htmx's

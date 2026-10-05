@@ -1,0 +1,22 @@
+{# Overseer > MCP: the tools an outside assistant is served (MCP_TOOLS,
+   never a write), each granted one it is not with why, and the commands a
+   client runs to start the server over stdio (overseer_mcp). #}
+{% from "components/macros/layout.html" import card, command %}
+{% from "components/macros/table.html" import data_table %}
+<div class="space-y-4">
+  {% call card("Served") %}
+  <div id="mcp-served">{{ data_table(served_columns, served, empty=none_served) }}</div>
+  {% endcall %}
+  {% if dropped %}
+  {% call card("Granted, not served") %}
+  <div id="mcp-dropped">{{ data_table(dropped_columns, dropped) }}</div>
+  {% endcall %}
+  {% endif %}
+  {% call card("Connect a client") %}
+  <div id="mcp-connect" class="space-y-2 text-xs text-aegis-muted">
+    {% for c in connect %}
+    <p class="flex items-center gap-2"><span class="w-32 shrink-0">{{ c.label }}</span>{{ command(c.command) }}</p>
+    {% endfor %}
+  </div>
+  {% endcall %}
+</div>

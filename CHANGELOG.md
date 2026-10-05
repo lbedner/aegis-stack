@@ -20,6 +20,20 @@
   own watches (#1422).
 - `.copier-answers.yml` now records `include_insights`, so add, remove and
   update no longer have to infer it from files on disk.
+
+- **MCP activity is on the record.** With the database component, every
+  call an outside assistant makes is kept by client (tool, read or
+  proposal, result, time, size) in the mcp component's own table, apart
+  from the chat agents' tool calls. An MCP page in Overseer (Flet and
+  htmx) shows what a client is served, how to connect one, and each
+  client's reads and proposals.
+
+- **A component's database-only files follow the database.** Adding the
+  database to a project later brings deploy's history and mcp's activity
+  record, with their migrations; removing it takes them away. Which files
+  and migrations wait on the database is read from each component's
+  manifest, not a hand-kept list.
+
 - **The MCP component: an outside assistant reads the app's tools.**
   `aegis add mcp` adds `<app> mcp`, a FastMCP server over stdio for Claude
   Desktop, Claude Code or a local model. A client sees only the tools

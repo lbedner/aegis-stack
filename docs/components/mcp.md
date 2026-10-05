@@ -74,4 +74,4 @@ One middleware records each call: the tool, the client that made it, the duratio
 
 ## Tools without the AI service
 
-MCP does not need the AI service: the [tool registry](../services/ai/agents.md#tools) is core, and `load_tools()` imports every module that registers tools, in any process.
+MCP does not need the AI service: the [tool registry](../services/ai/agents.md#tools) is core, and `load_tools()` imports every service's `tools.py`, found on disk, in any process.

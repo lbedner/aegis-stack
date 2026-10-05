@@ -22,8 +22,10 @@ from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
+import importlib
 from typing import Any, Literal
 
+from app.core.discovery import modules_named
 from app.core.log import logger
 
 ToolFunc = Callable[..., Any]
@@ -169,20 +171,12 @@ def registered_tool_names() -> list[str]:
 
 
 def load_tools() -> None:
-    """Import every module that registers tools, so the registry is whole
-    in any process: a chat turn, the MCP server, a seed script. A module
-    registers at import, and importing twice is a no-op."""
-{%- if include_ai %}
-    import app.services.ai.domains.chat.readings  # noqa: F401
-    import app.services.ai.domains.chat.self_context  # noqa: F401
-{%- if ai_backend != "memory" %}
-    import app.services.ai.domains.chat.cards  # noqa: F401
-    import app.services.ai.domains.chat.user_memory  # noqa: F401
-{%- endif %}
-{%- endif %}
-{%- if include_finance or (include_ai and ai_backend != "memory") %}
-    import app.services.change_queue.tools  # noqa: F401
-{%- endif %}
-{%- if include_finance %}
-    import app.services.finance.ai_tools  # noqa: F401
-{%- endif %}
+    """Import every service's ``tools`` module, so the registry is whole in
+    any process: a chat turn, the MCP server, a seed script. Found on disk
+    (``app.core.discovery``), so a service or a plugin registers tools in
+    its own ``tools.py`` and nothing else lists it. A module registers at
+    import, and importing twice is a no-op."""
+    import app.services as services
+
+    for name in modules_named(services, "tools"):
+        importlib.import_module(name)

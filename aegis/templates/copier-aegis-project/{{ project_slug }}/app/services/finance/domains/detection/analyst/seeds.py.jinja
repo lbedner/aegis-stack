@@ -108,7 +108,7 @@ def deep_dive_agent_definition() -> dict[str, Any]:
 
 
 # The chat agent's data surface: the finance host tools registered by
-# ``app.services.finance.ai_tools``. Attachment is by name against the
+# ``app.services.finance.tools``. Attachment is by name against the
 # tool rows the fixture sync seeds; a missing row is skipped, never an
 # error, so seed order cannot brick the chat tab.
 FINANCE_CHAT_TOOL_NAMES = (

@@ -310,6 +310,13 @@
 
 ### Changed
 
+- **Each service declares its own tools.** `load_tools()` imports every
+  service's `app/services/<service>/tools.py`, found on disk like `models`,
+  `change_types` and `scheduled_jobs`, so a plugin or a hand-written
+  service registers tools with no edit outside its package (#1420). The AI
+  service's lives in `ai/tools.py`; finance's `ai_tools.py` and
+  `ai_write_tools.py` are now `tools.py` and `write_tools.py` (update
+  imports), and `app/core/tools.py` is no longer templated.
 - **Each service declares its own scheduled jobs.** A service lists its
   jobs as `JOBS` in `app/services/<service>/scheduled_jobs.py`, and the
   scheduler and the worker read them all through

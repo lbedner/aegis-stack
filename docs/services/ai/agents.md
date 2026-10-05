@@ -61,9 +61,10 @@ Tools attach separately through the `tool` and `agent_tool` tables, and resolve 
 
 ## Tools
 
-The database decides WHICH tools an agent may call; Python decides WHAT each name executes. Register a tool once, from any service: the registry lives in core (`app.core.tools`), not in the AI service.
+The database decides WHICH tools an agent may call; Python decides WHAT each name executes. Register a tool once, from any service: the registry lives in core (`app.core.tools`), not in the AI service. A service keeps its tools in its own `app/services/<service>/tools.py`; `load_tools()` finds every such module on disk, so a new service or a plugin adds tools without editing anything else.
 
 ```python
+# app/services/orders/tools.py
 from app.core.tools import register_tool
 
 async def lookup_order(order_id: str) -> str:

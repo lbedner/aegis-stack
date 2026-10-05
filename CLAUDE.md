@@ -117,6 +117,7 @@ matches the skill's description. Reach for:
 
 - `add-service` - add a new business-capability service to the framework
 - `add-component` - add a new component, or a variant axis on an existing one
+- `create-plugin` - build an Aegis Stack plugin (a separate `aegis-stack-<name>` package)
 - `i18n` - add or translate locale strings (en.py first, parity across locales)
 - `add-cli-command` - add a command to the `aegis` tool CLI
 - `release` - cut a version or rc release (bump, gates, TestPyPI, tagging)

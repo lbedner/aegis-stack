@@ -105,6 +105,8 @@ class TestEffect:
 # new tool's effect is a decision, not the (write) default.
 EXPECTED_EFFECTS = {
     "context": "read",
+    "research_search": "read",
+    "research_thread": "read",
     "record_reading": "writes",
     "save_memory": "writes",
     "replace_memory": "writes",

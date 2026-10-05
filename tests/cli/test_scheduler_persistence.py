@@ -49,6 +49,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # AI service
                 False,  # comms
                 False,  # insights
+                False,  # research
                 False,  # blog service
                 False,  # finance service
                 False,  # documents service
@@ -87,6 +88,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # AI service
                 False,  # comms
                 False,  # insights
+                False,  # research
                 False,  # blog service
                 False,  # finance service
                 False,  # documents service
@@ -125,6 +127,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # AI service
                 False,  # comms
                 False,  # insights
+                False,  # research
                 False,  # blog service
                 False,  # finance service
                 False,  # documents service
@@ -165,6 +168,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # AI service
                 False,  # comms
                 False,  # insights
+                False,  # research
                 False,  # blog service
                 False,  # finance service
                 False,  # documents service
@@ -206,6 +210,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # AI service
                 False,  # comms
                 False,  # insights
+                False,  # research
                 False,  # blog service
                 False,  # finance service
                 False,  # documents service
@@ -252,6 +257,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # AI service
                 False,  # comms
                 False,  # insights
+                False,  # research
                 False,  # blog service
                 False,  # finance service
                 False,  # documents service
@@ -296,6 +302,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # AI service
                 False,  # comms
                 False,  # insights
+                False,  # research
                 False,  # blog service
                 False,  # finance service
                 False,  # documents service
@@ -470,6 +477,7 @@ class TestSchedulerPersistenceLogic:
                 False,  # AI service
                 False,  # comms
                 False,  # insights
+                False,  # research
                 False,  # blog service
                 False,  # finance service
                 False,  # documents service
@@ -510,6 +518,7 @@ class TestSchedulerPersistenceLogic:
                     False,  # AI service
                     False,  # comms
                     False,  # insights
+                    False,  # research
                     False,  # blog service
                     False,  # finance service
                     False,  # documents service

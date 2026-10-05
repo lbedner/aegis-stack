@@ -137,6 +137,18 @@ def _finance_calendar(
 # (uvicorn keeps one loop for the server's lifetime); only the
 # test suite needs this swap. Dict-mode keeps the same async API,
 # so call sites don't change.
+{%- if include_research %}
+@pytest.fixture
+def site() -> Generator[Any, None, None]:
+    """A research source the test controls (``tests._research``), installed
+    as ``fake`` for the test."""
+    from tests._research import fake_source
+
+    with fake_source() as fake:
+        yield fake
+
+
+{% endif %}
 @pytest.fixture
 def fake_service(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

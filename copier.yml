@@ -345,6 +345,11 @@ include_documents:
   help: "Include document store service (scans, statements, forms)?"
   default: false
 
+include_research:
+  type: bool
+  help: "Include research service (outside posts and threads, collected by saved searches)?"
+  default: false
+
 include_insights:
   type: bool
   help: "Include insights service (adoption metrics and analytics)?"

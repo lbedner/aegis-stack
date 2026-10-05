@@ -79,7 +79,7 @@ from ..dashboard.cards import (
     SchedulerCard,
 {% endif %}
     ServerCard,
-{% if include_auth or include_ai or include_blog or include_comms or include_documents or include_insights or include_payment or include_finance or _plugins %}
+{% if include_auth or include_ai or include_blog or include_comms or include_documents or include_research or include_insights or include_payment or include_finance or _plugins %}
     ServicesCard,
 {% endif %}
 {% if include_worker %}
@@ -215,7 +215,7 @@ def create_component_card(
         elif component_name == "scheduler":
             return SchedulerCard(component_data).build()
 {% endif %}
-{% if include_auth or include_ai or include_blog or include_comms or include_documents or include_insights or include_payment or include_finance %}
+{% if include_auth or include_ai or include_blog or include_comms or include_documents or include_research or include_insights or include_payment or include_finance %}
         elif component_name == "services":
             return ServicesCard(component_data).build()
 {% endif %}
@@ -258,7 +258,7 @@ def create_component_card(
             return {{ c.symbol }}(component_data).build()
 {%- endfor %}
 {%- endfor %}
-{% if include_auth or include_ai or include_blog or include_comms or include_documents or include_insights or include_payment or include_finance or _plugins %}
+{% if include_auth or include_ai or include_blog or include_comms or include_documents or include_research or include_insights or include_payment or include_finance or _plugins %}
         elif component_name.startswith("service_"):
             # For other services, use generic ServicesCard for now
             return ServicesCard(component_data).build()

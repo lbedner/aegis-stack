@@ -61,6 +61,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # AI
                 False,  # comms
                 False,  # insights
+                False,  # research
                 False,  # blog service
                 False,  # finance service
                 False,  # documents service
@@ -109,6 +110,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # AI
                 False,  # comms
                 False,  # insights
+                False,  # research
                 False,  # blog service
                 False,  # finance service
                 False,  # documents service
@@ -150,6 +152,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # no AI
                 False,  # comms
                 False,  # insights
+                False,  # research
                 False,  # blog service
                 False,  # finance service
                 False,  # documents service
@@ -187,6 +190,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # no AI
                 False,  # comms
                 False,  # insights
+                False,  # research
                 False,  # blog service
                 False,  # finance service
                 False,  # documents service
@@ -230,6 +234,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # no AI
                 False,  # comms
                 False,  # insights
+                False,  # research
                 False,  # blog service
                 False,  # finance service
                 False,  # documents service
@@ -281,6 +286,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # no AI
                 False,  # comms
                 False,  # insights
+                False,  # research
                 False,  # blog service
                 False,  # finance service
                 False,  # documents service
@@ -324,6 +330,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # no AI
                 False,  # comms
                 False,  # insights
+                False,  # research
                 False,  # blog service
                 False,  # finance service
                 False,  # documents service

@@ -12,10 +12,9 @@ scheduler.
 from collections import Counter
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-import importlib
 from typing import Any
 
-from app.core.discovery import modules_named
+from app.core.discovery import import_modules_named
 
 # Seconds a worker lets a long job run, where the queue's own limit (five
 # minutes) is too short. A ceiling, not a measurement.
@@ -52,10 +51,10 @@ def service_jobs() -> tuple[ServiceJob, ...]:
     import app.services as services
 
     jobs: list[ServiceJob] = []
-    for name in modules_named(services, "scheduled_jobs"):
-        declared = getattr(importlib.import_module(name), "JOBS", None)
+    for module in import_modules_named(services, "scheduled_jobs"):
+        declared = getattr(module, "JOBS", None)
         if declared is None:
-            raise ValueError(f"{name} declares no JOBS")
+            raise ValueError(f"{module.__name__} declares no JOBS")
         jobs.extend(declared)
     for label, keys in (
         ("id", Counter(job.id for job in jobs)),

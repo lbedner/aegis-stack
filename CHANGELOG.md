@@ -9,6 +9,17 @@
 
 ### Added
 
+- **The research service.** `aegis add-service research`: outside posts and
+  threads, collected by saved searches (watches) into one store, refreshed
+  nightly with the scheduler, and read through `/api/v1/research`, the
+  `research` CLI and two read-only tools, `research_search` and
+  `research_thread`. Sources are plugins that register in their own
+  `sources.py`; each item is stored once per source, with the numbers every
+  source has as columns and the rest checked by the source. Watches and
+  what they found are their owner's; a source that fails skips only its
+  own watches (#1422).
+- `.copier-answers.yml` now records `include_insights`, so add, remove and
+  update no longer have to infer it from files on disk.
 - **The MCP component: an outside assistant reads the app's tools.**
   `aegis add mcp` adds `<app> mcp`, a FastMCP server over stdio for Claude
   Desktop, Claude Code or a local model. A client sees only the tools

@@ -283,6 +283,8 @@ class TestCopierAnswersTemplate:
             "include_ai",
             "include_comms",  # This was missing and caused the bug!
             "include_blog",
+            "include_insights",
+            "include_research",
         ]
 
         for flag in required_service_flags:

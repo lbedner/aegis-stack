@@ -79,6 +79,7 @@ MESSAGES: dict[str, str] = {
     "service.ai": "マルチフレームワーク対応 AI チャットボットサービス",
     "service.comms": "メール・SMS・音声のコミュニケーションサービス",
     "service.documents": "Document store: keep the paper, deduped and findable",
+    "service.research": "Outside posts and threads, collected by saved searches",
     "service.blog": "下書き、公開、タグに対応した Markdown ブログ",
     # ── 対話モード：コンポーネントプロンプト ────────────────────────────
     "interactive.add_prompt": "{description} を追加しますか？",
@@ -440,6 +441,7 @@ MESSAGES: dict[str, str] = {
     "projectmap.insights": "Adoption metrics",
     "projectmap.payment": "Payments and subscriptions",
     "projectmap.documents": "Document store",
+    "projectmap.research": "Saved searches",
     "projectmap.blog": "Markdown blog",
     "projectmap.finance": "Personal finance",
     "projectmap.docs": "ドキュメント",

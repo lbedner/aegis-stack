@@ -403,6 +403,24 @@ STACK_COMBINATIONS = [
         expected_pyproject_deps=["fastapi", "flet", "sqlmodel"],
     ),
     StackCombination(
+        name="research",
+        # The service on its own: no auth (every watch unowned) and no
+        # scheduler (a watch refreshes when asked). ``everything`` carries it
+        # with every other service.
+        components=["database"],
+        services=["research"],
+        description="Research service (watches, outside items) + database",
+        expected_files=[
+            "app/services/research/",
+            "app/components/backend/api/research/",
+            "app/cli/research.py",
+            "app/core/db.py",
+            "alembic/versions/001_research.py",
+        ],
+        expected_docker_services=["webserver"],
+        expected_pyproject_deps=["fastapi", "flet", "sqlmodel", "alembic"],
+    ),
+    StackCombination(
         name="documents_auth",
         # Paired with auth deliberately: the documents routes sit behind
         # ``get_current_active_user`` whenever the auth service is present,
@@ -570,6 +588,7 @@ STACK_COMBINATIONS = [
             "comms",
             "documents",
             "finance",
+            "research",
         ],
         description="Kitchen sink: every service + all processing infra",
         expected_files=[
@@ -581,6 +600,7 @@ STACK_COMBINATIONS = [
             "app/services/comms/",
             "app/services/documents/",
             "app/services/finance/",
+            "app/services/research/",
             "app/core/db.py",
             "app/components/scheduler/",
             "app/components/worker/",

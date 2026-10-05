@@ -86,6 +86,7 @@ MESSAGES: dict[str, str] = {
     "service.ai": "Servicio de chatbot IA con soporte multi-framework",
     "service.comms": "Servicio de comunicaciones con email, SMS y voz",
     "service.documents": "Document store: keep the paper, deduped and findable",
+    "service.research": "Outside posts and threads, collected by saved searches",
     "service.blog": "Blog Markdown con borradores, publicación y etiquetas",
     # ── Interactive: component prompts ─────────────────────────────────
     "interactive.add_prompt": "¿Agregar {description}?",
@@ -452,6 +453,7 @@ MESSAGES: dict[str, str] = {
     "projectmap.insights": "Adoption metrics",
     "projectmap.payment": "Payments and subscriptions",
     "projectmap.documents": "Document store",
+    "projectmap.research": "Saved searches",
     "projectmap.blog": "Markdown blog",
     "projectmap.finance": "Personal finance",
     "projectmap.docs": "Documentación",

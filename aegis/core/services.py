@@ -35,6 +35,7 @@ from .migration_generator import (
     ORG_MIGRATION,
     PAYMENT_AUTH_LINK_MIGRATION,
     PAYMENT_MIGRATION,
+    RESEARCH_MIGRATION,
     SENTIMENT_MIGRATION,
     VOICE_MIGRATION,
 )
@@ -1393,7 +1394,75 @@ SERVICES: dict[str, ServiceSpec] = {
             },
         ),
     ),
+    "research": ServiceSpec(
+        readme=ReadmeWiring(
+            reach=(
+                "/api/v1/research, the `research` CLI, the research_search "
+                "and research_thread tools"
+            ),
+            cli_groups=["research"],
+            first_steps=[
+                "Install a source (aegis-stack-hackernews), add a watch, refresh it"
+            ],
+        ),
+        name="research",
+        docs_path="services/research",
+        marker_path="app/services/research",
+        type=ServiceType.ANALYTICS,
+        description="Outside posts and threads, collected by saved searches",
+        long_description=(
+            "What other people published elsewhere - a story, a thread, a "
+            "blog post, the comments under them - collected by saved "
+            "searches (watches) into one store, refreshed nightly, and read "
+            "by agents, MCP clients, the API and the CLI. Sources are "
+            "plugins (Hacker News is the first); storing, refreshing and "
+            "reading what they find is the same for every source."
+        ),
+        required_components=[
+            ComponentNames.BACKEND,
+            ComponentNames.DATABASE,
+        ],
+        # Without a scheduler a watch refreshes only when asked to.
+        recommended_components=[ComponentNames.SCHEDULER],
+        wiring=PluginWiring(
+            routers=[
+                RouterWiring(
+                    module="app.components.backend.api.research.router",
+                    symbol="router",
+                    alias="research_router",
+                    prefix="/api/v1",
+                ),
+            ],
+            deps_providers=[
+                SymbolWiring(
+                    module="app.services.research.deps",
+                    symbol="get_research_service",
+                ),
+            ],
+        ),
+        migrations=[RESEARCH_MIGRATION],
+        pyproject_deps=["alembic==1.16.5"],
+        template_files=[
+            "app/services/research/",
+            "app/components/backend/api/research/",
+        ],
+        files=FileManifest(
+            primary=[
+                "app/services/research",
+                "app/components/backend/api/research",
+                "app/cli/research.py",
+                "tests/services/test_research_service.py",
+                "tests/api/test_research_endpoints.py",
+                "tests/_research.py",
+            ],
+        ),
+    ),
 }
+
+# Every service's selection flag: whether ANY business service is in a stack
+# (the dashboard's ServicesCard) is asked of this, derived from the registry
+# so a new service cannot be left out.
+SERVICE_ANSWER_KEYS: tuple[str, ...] = tuple(f"include_{name}" for name in SERVICES)
 
 
 def get_service(name: str) -> ServiceSpec:

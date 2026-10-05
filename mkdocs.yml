@@ -149,6 +149,8 @@ nav:
       - API Reference: services/documents/api.md
       - Extraction: services/documents/extraction.md
       - Dashboard: services/documents/dashboard.md
+    - Research:
+      - Getting Started: services/research/index.md
     - Communications:
       - Getting Started: services/comms/index.md
       - Provider Setup: services/comms/setup.md

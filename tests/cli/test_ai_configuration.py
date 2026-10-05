@@ -61,6 +61,7 @@ class TestAIProviderSelection:
             True,  # Enable voice?
             False,  # comms
             False,  # insights
+            False,  # research
             False,  # blog service
             False,  # finance service
             False,  # documents service
@@ -110,6 +111,7 @@ class TestAIProviderSelection:
             True,  # Enable voice?
             False,  # comms
             False,  # insights
+            False,  # research
             False,  # blog service
             False,  # finance service
             False,  # documents service
@@ -160,6 +162,7 @@ class TestAIProviderSelection:
             True,  # Enable voice?
             False,  # comms
             False,  # insights
+            False,  # research
             False,  # blog service
             False,  # finance service
             False,  # documents service
@@ -198,6 +201,7 @@ class TestAIProviderSelection:
             False,  # AI service
             False,  # comms
             False,  # insights
+            False,  # research
             False,  # blog service
             False,  # finance service
             False,  # documents service
@@ -264,6 +268,7 @@ class TestAIBackendSelection:
                 True,  # Enable voice?
                 False,  # comms
                 False,  # insights
+                False,  # research
                 False,  # blog service
                 False,  # finance service
                 False,  # documents service
@@ -328,6 +333,7 @@ class TestAIBackendSelection:
                 True,  # Enable voice?
                 False,  # comms
                 False,  # insights
+                False,  # research
                 False,  # blog service
                 False,  # finance service
                 False,  # documents service
@@ -382,6 +388,7 @@ class TestAIBackendSelection:
             True,  # Enable voice?
             False,  # comms
             False,  # insights
+            False,  # research
             False,  # blog service
             False,  # finance service
             False,  # documents service
@@ -555,6 +562,7 @@ class TestAIConfigurationEndToEnd:
             True,  # Enable voice?
             False,  # comms
             False,  # insights
+            False,  # research
             False,  # blog service
             False,  # finance service
             False,  # documents service
@@ -668,6 +676,7 @@ class TestOllamaModeSelection:
             True,  # Enable voice?
             False,  # comms
             False,  # insights
+            False,  # research
             False,  # blog service
             False,  # finance service
             False,  # documents service

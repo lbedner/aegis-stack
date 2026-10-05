@@ -27,7 +27,7 @@ import_all_models()
 
 
 {#- Mirrors get_services_needing_migrations; tests/core/test_alembic_dependency_matches_migrations.py holds the two together. #}
-{% set needs_migrations = include_auth or include_blog or include_documents or include_insights or include_payment or include_finance or (include_ai and ai_backend != "memory") or (include_scheduler and scheduler_backend != "memory") or include_secrets or (include_deploy and include_database) %}
+{% set needs_migrations = include_auth or include_blog or include_documents or include_research or include_insights or include_payment or include_finance or (include_ai and ai_backend != "memory") or (include_scheduler and scheduler_backend != "memory") or include_secrets or (include_deploy and include_database) %}
 {% if database_engine == "postgres" and needs_migrations %}
 def _check_and_stamp_existing_tables() -> None:
     """

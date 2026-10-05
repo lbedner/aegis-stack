@@ -58,7 +58,7 @@ from .redis_card import RedisCard
 from .scheduler_card import SchedulerCard
 {%- endif %}
 from .server_card import ServerCard
-{%- if include_auth or include_ai or include_blog or include_comms or include_documents or include_insights or include_payment or include_finance or _plugins %}
+{%- if include_auth or include_ai or include_blog or include_comms or include_documents or include_research or include_insights or include_payment or include_finance or _plugins %}
 from .services_card import ServicesCard
 {%- endif %}
 {%- if include_worker %}
@@ -96,7 +96,7 @@ __all__ = [
     "{{ c.symbol }}",
 {%- endfor %}
 {%- endfor %}
-{%- if include_auth or include_ai or include_blog or include_comms or include_documents or include_insights or include_payment or include_finance or _plugins %}
+{%- if include_auth or include_ai or include_blog or include_comms or include_documents or include_research or include_insights or include_payment or include_finance or _plugins %}
     "ServicesCard",
 {%- endif %}
 {%- if include_database %}

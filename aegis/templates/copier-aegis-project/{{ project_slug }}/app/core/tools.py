@@ -22,10 +22,9 @@ from collections.abc import Callable, Iterable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-import importlib
 from typing import Any, Literal
 
-from app.core.discovery import modules_named
+from app.core.discovery import import_modules_named
 from app.core.log import logger
 
 ToolFunc = Callable[..., Any]
@@ -68,6 +67,7 @@ def acting_as(
         current_conversation_id.reset(conversation)
         current_agent_slug.reset(agent)
         current_owner_user_id.reset(owner)
+
 
 # What a call does to the app's state, declared by the tool itself:
 # ``read`` changes nothing, ``proposes`` files work for the user's
@@ -178,5 +178,4 @@ def load_tools() -> None:
     import, and importing twice is a no-op."""
     import app.services as services
 
-    for name in modules_named(services, "tools"):
-        importlib.import_module(name)
+    import_modules_named(services, "tools")

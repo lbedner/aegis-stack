@@ -183,6 +183,13 @@ async def startup_hook() -> None:
     logger.info("Documents service health check registered")
     {%- endif %}
 
+    {%- if include_research %}
+    # Register research service health check
+    from app.services.research.health import check_research_service_health
+    register_service_health_check("research", check_research_service_health)
+    logger.info("Research service health check registered")
+    {%- endif %}
+
     {%- for p in _plugins | default([]) %}
     {%- for h in p.wiring.health_checks %}
     # Register {{ h.label }} service health check (plugin)

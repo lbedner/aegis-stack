@@ -295,6 +295,7 @@ class TestInteractiveServiceSelection:
                 False,  # AI service
                 False,  # comms service
                 False,  # insights service
+                False,  # research service
                 False,  # blog service
                 False,  # finance service
                 False,  # documents service
@@ -332,6 +333,7 @@ class TestInteractiveServiceSelection:
                 False,  # AI service
                 False,  # comms service
                 False,  # insights service
+                False,  # research service
                 False,  # blog service
                 False,  # finance service
                 False,  # documents service

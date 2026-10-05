@@ -88,6 +88,9 @@ def get_component_title(component_name: str) -> str:
         {%- if include_documents %}
         "service_documents": "Documents",
         {%- endif %}
+        {%- if include_research %}
+        "service_research": "Research",
+        {%- endif %}
         {%- if include_insights %}
         "service_insights": "Insights",
         {%- endif %}
@@ -145,6 +148,9 @@ def get_component_label(component_name: str) -> str:
         {%- endif %}
         {%- if include_documents %}
         "service_documents": "Document store",
+        {%- endif %}
+        {%- if include_research %}
+        "service_research": "Saved searches",
         {%- endif %}
         {%- if include_payment %}
         "service_payment": "Stripe",

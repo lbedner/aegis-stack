@@ -80,6 +80,7 @@ MESSAGES: dict[str, str] = {
     "service.ai": "멀티 프레임워크 지원 AI 챗봇 서비스",
     "service.comms": "이메일, SMS, 음성 통신 서비스",
     "service.documents": "Document store: keep the paper, deduped and findable",
+    "service.research": "Outside posts and threads, collected by saved searches",
     "service.blog": "초안, 게시, 태그 워크플로가 있는 Markdown 블로그",
     # ── Interactive: component prompts ─────────────────────────────────
     "interactive.add_prompt": "{description}을(를) 추가하시겠습니까?",
@@ -427,6 +428,7 @@ MESSAGES: dict[str, str] = {
     "projectmap.insights": "Adoption metrics",
     "projectmap.payment": "Payments and subscriptions",
     "projectmap.documents": "Document store",
+    "projectmap.research": "Saved searches",
     "projectmap.blog": "Markdown blog",
     "projectmap.finance": "Personal finance",
     "projectmap.docs": "문서",

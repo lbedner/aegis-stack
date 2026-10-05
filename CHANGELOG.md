@@ -321,6 +321,11 @@
 
 ### Changed
 
+- **A plugin's template files are left to the project.** The scaffold's
+  `pyproject.toml` excludes `src/*/templates` from the plugin repo's ruff and
+  limits its pytest to `tests/`: plain `.py` template files are linted and
+  tested inside a generated project, under its rules. A `create-plugin` skill
+  in `.claude/skills/` walks a plugin from scaffold to published repo.
 - **Each service declares its own tools.** `load_tools()` imports every
   service's `app/services/<service>/tools.py`, found on disk like `models`,
   `change_types` and `scheduled_jobs`, so a plugin or a hand-written

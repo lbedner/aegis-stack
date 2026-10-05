@@ -148,6 +148,23 @@ class TestScaffoldContent:
         ).read_text()
         assert "from aegis_stack_scraper.plugin import get_spec" in test_py
 
+    def test_template_files_are_left_to_the_generated_project(
+        self, tmp_path: Path
+    ) -> None:
+        """A template file renders into a project and is linted and tested
+        there, under that project's rules; the plugin repo's own ruff and
+        pytest stay out of it (its import order differs, its tests import
+        ``app``)."""
+        import tomllib
+
+        scaffold_plugin("scraper", tmp_path, author="Demo Dev")
+        config = tomllib.loads(
+            (tmp_path / "aegis-stack-scraper" / "pyproject.toml").read_text()
+        )
+
+        assert config["tool"]["ruff"]["extend-exclude"] == ["src/*/templates"]
+        assert config["tool"]["pytest"]["ini_options"]["testpaths"] == ["tests"]
+
 
 class TestScaffoldErrors:
     def test_target_dir_must_exist(self, tmp_path: Path) -> None:

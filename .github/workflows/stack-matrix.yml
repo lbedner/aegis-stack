@@ -74,6 +74,7 @@ jobs:
           - blog
           - documents_auth
           - documents_worker
+          - research
           - storage
           - finance
           - finance_auth

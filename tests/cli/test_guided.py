@@ -43,9 +43,9 @@ def _drive(keys: list[str]):
 
 
 # worker scheduler database redis storage ingress observability htmx inference secrets deploy mcp |
-# auth payment ai comms insights blog finance documents
+# auth payment ai comms insights research documents blog finance
 # (redis is skipped entirely when an accepted worker already bundled it)
-_DECLINE_ALL = ["n"] * 20
+_DECLINE_ALL = ["n"] * 21
 
 # The full init flow opens with the starting-point screen; enter selects
 # Blank canvas. (run_guided_selection alone never shows it.)
@@ -334,7 +334,7 @@ class TestReviewScreen:
     def test_review_enter_confirms_plan(self) -> None:
         # database accepted (engine screen -> enter = SQLite), everything else
         # declined, enter on REVIEW.
-        keys = _BLANK + ["n", "n", "y", "\r"] + ["n"] * 17 + ["\r"]
+        keys = _BLANK + ["n", "n", "y", "\r"] + ["n"] * 18 + ["\r"]
         ui = _ui(keys)
         plan, _ = run_guided_init_flow("demo", "3.13", ui=ui)
         assert "database" in plan.components
@@ -352,7 +352,7 @@ class TestReviewScreen:
         assert plan.services == []
 
     def test_review_detail_panes_toggle_harmlessly(self) -> None:
-        keys = _BLANK + ["n", "n", "y"] + ["n"] * 17 + ["f", "d", "f", "\r"]
+        keys = _BLANK + ["n", "n", "y"] + ["n"] * 18 + ["f", "d", "f", "\r"]
         ui = _ui(keys)
         plan, _ = run_guided_init_flow("demo", "3.13", ui=ui)
         assert "database" in plan.components
@@ -367,7 +367,7 @@ class TestReviewScreen:
     def test_plan_includes_dependency_auto_adds(self) -> None:
         # Worker accepted -> the resolved plan carries the auto-added redis
         # (same resolution quick mode runs; REVIEW shows it tagged "auto").
-        keys = _BLANK + ["y", "\r"] + ["n"] * 18 + ["\r"]
+        keys = _BLANK + ["y", "\r"] + ["n"] * 19 + ["\r"]
         ui = _ui(keys)
         plan, _ = run_guided_init_flow("demo", "3.13", ui=ui)
         bases = [c.split("[", 1)[0] for c in plan.components]
@@ -388,7 +388,7 @@ class TestInExperienceBuild:
             calls.append(plan.project_name)
             return "/tmp/demo"
 
-        keys = _BLANK + ["n", "n", "y", "\r"] + ["n"] * 17 + ["\r", "\r"]
+        keys = _BLANK + ["n", "n", "y", "\r"] + ["n"] * 18 + ["\r", "\r"]
         ui = _ui(keys)
         plan, _ = run_guided_init_flow(
             "demo",
@@ -486,7 +486,7 @@ class TestBreadcrumbs:
     def test_crumbs_record_each_component_decision(self) -> None:
         # Worker leads now; accepting it amends its crumb with the backend
         # and pushes the auto-added redis crumb (capability-first name).
-        ui = GuidedSelectionUI(keys=["y", "\r"] + ["n"] * 18)
+        ui = GuidedSelectionUI(keys=["y", "\r"] + ["n"] * 19)
         run_guided_selection(ui)
         assert ui.breadcrumbs[0] == "Worker ✓ arq"
         assert "Cache/Broker/Pubsub ✓" in ui.breadcrumbs
@@ -804,7 +804,7 @@ class TestBreadcrumbs:
     def test_back_rewinds_the_trail(self) -> None:
         # Worker accepted then revised to declined via esc on the backend
         # chips: the trail must show the revised answer, not the original.
-        ui = GuidedSelectionUI(keys=["y", "esc"] + ["n"] * 20)
+        ui = GuidedSelectionUI(keys=["y", "esc"] + ["n"] * 21)
         run_guided_selection(ui)
         assert ui.breadcrumbs[0] == "Worker ✗"
         assert all("✓" not in crumb for crumb in ui.breadcrumbs)

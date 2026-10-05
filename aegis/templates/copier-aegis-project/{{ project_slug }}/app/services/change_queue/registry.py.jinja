@@ -18,13 +18,12 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-import importlib
 from typing import Any
 
 from pydantic import BaseModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.core.discovery import modules_named
+from app.core.discovery import import_modules_named
 from app.services.change_queue.schemas import ChangeDisplayRow
 
 
@@ -97,8 +96,5 @@ def load_change_types() -> list[str]:
     names imported."""
     import app.services as services
 
-    loaded = modules_named(services, "change_types")
-    for name in loaded:
-        importlib.import_module(name)
-    return loaded
+    return [m.__name__ for m in import_modules_named(services, "change_types")]
 {% endif %}

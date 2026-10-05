@@ -42,6 +42,7 @@ ORDER = {
         "ai",
         "comms",
         "documents",
+        "research",
         "insights",
         "payment",
         "finance",

@@ -282,6 +282,25 @@ class TestServicesRegistry:
             in spec.files.primary
         )
 
+    def test_research_service_wiring(self):
+        """Research mounts its router and dependency, and owns its tables,
+        its CLI and the helper its tests share. Its Overseer page waits on
+        plugin pages (#1421), so it ships no Flet card yet."""
+        spec = SERVICES["research"]
+
+        assert spec.wiring.routers[0].module == (
+            "app.components.backend.api.research.router"
+        )
+        assert spec.wiring.routers[0].alias == "research_router"
+        assert spec.wiring.deps_providers[0].symbol == "get_research_service"
+        assert spec.migrations[0].service_name == "research"
+        for path in (
+            "app/services/research",
+            "app/cli/research.py",
+            "tests/_research.py",
+        ):
+            assert path in spec.files.primary
+
 
 class TestServiceRegistryFunctions:
     """Test service registry helper functions."""

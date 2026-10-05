@@ -210,6 +210,11 @@ DOCUMENTS_MIGRATION = ServiceMigrationSpec(
     description="Document store: the paper, addressed by its own content",
 )
 
+RESEARCH_MIGRATION = ServiceMigrationSpec(
+    service_name="research",
+    description="Research: saved searches, the outside items they found",
+)
+
 FINANCE_MIGRATION = ServiceMigrationSpec(
     service_name="finance",
     description="Finance service tables (currencies, fx rates)",
@@ -927,6 +932,11 @@ def get_services_needing_migrations(context: dict[str, Any]) -> list[str]:
     include_documents = context.get(AnswerKeys.DOCUMENTS)
     if include_documents == "yes" or include_documents is True:
         services.append("documents")
+
+    # Research service (always needs database)
+    include_research = context.get(AnswerKeys.RESEARCH)
+    if include_research == "yes" or include_research is True:
+        services.append("research")
 
     # Finance service (always needs database).
     include_finance = context.get(AnswerKeys.FINANCE)

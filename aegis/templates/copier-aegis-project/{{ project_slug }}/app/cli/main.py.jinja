@@ -169,6 +169,14 @@ except ImportError:
     # Blog service not available, skip blog commands
     pass
 
+# Conditionally register research command if research service is available
+try:
+    research_module = importlib.import_module("app.cli.research")
+    app.add_typer(research_module.app, name="research")
+except ImportError:
+    # Research service not available, skip research commands
+    pass
+
 # Conditionally register rag command if ai_rag is enabled
 try:
     rag_module = importlib.import_module("app.cli.rag")

@@ -9,6 +9,7 @@ or a hand-written service that follows a convention is picked up with no
 edit anywhere else.
 """
 
+import importlib
 from pathlib import Path
 import pkgutil
 from types import ModuleType
@@ -25,3 +26,9 @@ def modules_named(package: ModuleType, name: str) -> list[str]:
         if (here / f"{name}.py").is_file() or (here / name / "__init__.py").is_file():
             found.append(f"{package.__name__}.{child.name}.{name}")
     return found
+
+
+def import_modules_named(package: ModuleType, name: str) -> list[ModuleType]:
+    """Import every ``modules_named(package, name)``, in name order: how a
+    service's convention module registers what it declares."""
+    return [importlib.import_module(found) for found in modules_named(package, name)]

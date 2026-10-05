@@ -161,7 +161,15 @@ NAMED_PROJECT_SPECS: dict[str, ProjectTemplateSpec] = {
     ),
     "everything": ProjectTemplateSpec(
         components=("database", "scheduler", "worker", "redis", "htmx"),
-        services=("auth[org]", "ai[sqlite]", "insights", "payment", "blog", "comms"),
+        services=(
+            "auth[org]",
+            "ai[sqlite]",
+            "insights",
+            "payment",
+            "blog",
+            "comms",
+            "research",
+        ),
     ),
 }
 

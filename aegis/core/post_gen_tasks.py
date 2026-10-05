@@ -29,7 +29,7 @@ from aegis.core.file_manifest import (
     iter_cleanup_paths,
 )
 from aegis.core.project_map import render_project_map
-from aegis.core.services import SERVICES
+from aegis.core.services import SERVICE_ANSWER_KEYS, SERVICES
 from aegis.core.template_cleanup import run_resilient
 from aegis.i18n import t
 
@@ -597,16 +597,7 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
 
     # Remove services_card.py only if NO services are enabled
     # ServicesCard shows all services, so keep if ANY service is enabled
-    if (
-        not is_enabled(AnswerKeys.AUTH)
-        and not is_enabled(AnswerKeys.AI)
-        and not is_enabled(AnswerKeys.COMMS)
-        and not is_enabled(AnswerKeys.INSIGHTS)
-        and not is_enabled(AnswerKeys.PAYMENT)
-        and not is_enabled(AnswerKeys.BLOG)
-        and not is_enabled(AnswerKeys.DOCUMENTS)
-        and not is_enabled(AnswerKeys.FINANCE)
-    ):
+    if not any(is_enabled(key) for key in SERVICE_ANSWER_KEYS):
         remove_file(
             project_path, "app/components/frontend/dashboard/cards/services_card.py"
         )

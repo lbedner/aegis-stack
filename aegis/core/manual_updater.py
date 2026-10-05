@@ -94,24 +94,6 @@ REGENERATE_ON_COMPONENT_CHANGE = {
     "app/components/backend/api/routing.py",
 }
 
-# Service flags that gate the cross-spec ``ServicesCard``
-# (SERVICES_CARD_FILE, defined next to its engine-scope exclusion in
-# ``component_files``). It is shown whenever ANY business service is
-# enabled (mirrors the removal in ``post_gen_tasks.cleanup_components``).
-# MIGRATION_SKILL_FILE likewise: init removes it alongside ``alembic/``
-# when nothing needs migrations, and the first migration-bearing add must
-# bring it back (issue #814) via ``ManualUpdater._ensure_migration_skill``.
-_SERVICE_ANSWER_KEYS = (
-    AnswerKeys.AUTH,
-    AnswerKeys.AI,
-    AnswerKeys.COMMS,
-    AnswerKeys.INSIGHTS,
-    AnswerKeys.PAYMENT,
-    AnswerKeys.BLOG,
-    AnswerKeys.DOCUMENTS,
-    AnswerKeys.FINANCE,
-)
-
 
 def _true_flags(answers: dict[str, Any]) -> dict[str, Any]:
     """Marker inference only ever asserts what it can see; a flag it
@@ -1087,7 +1069,9 @@ class ManualUpdater:
         # Mirrors the condition in ``cards/__init__.py.jinja``: a plugin
         # is a service on the dashboard, so it brings ServicesCard back
         # just as an in-tree service does.
-        has_service = any(answers.get(key) for key in _SERVICE_ANSWER_KEYS)
+        from .services import SERVICE_ANSWER_KEYS
+
+        has_service = any(answers.get(key) for key in SERVICE_ANSWER_KEYS)
         if not has_service and not answers.get(PLUGINS_ANSWER_KEY):
             return None
         output_path = self.project_path / SERVICES_CARD_FILE
@@ -1754,6 +1738,8 @@ class ManualUpdater:
             inferred[AnswerKeys.BLOG] = True
         if has_nonstub_dir("app", "services", "documents"):
             inferred[AnswerKeys.DOCUMENTS] = True
+        if has_nonstub_dir("app", "services", "research"):
+            inferred[AnswerKeys.RESEARCH] = True
         if has_nonstub_dir("app", "services", "payment"):
             inferred[AnswerKeys.PAYMENT] = True
         if has_nonstub_dir("app", "services", "comms"):

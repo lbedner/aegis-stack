@@ -5,8 +5,8 @@ import asyncio
 
 import pytest
 
+from app.services.system import health
 from app.services.system.health import (
-    _health_checks,
     get_system_status,
     invalidate_status_cache,
     register_health_check,
@@ -28,11 +28,15 @@ def _counting_check(counter: dict[str, int]) -> object:
 
 
 @pytest.fixture
-def counted_check():
+def counted_check(monkeypatch: pytest.MonkeyPatch):
+    """Only this check registered: the walk is the cache's subject here,
+    not whatever checks earlier tests left behind."""
+    monkeypatch.setattr(health, "_health_checks", {})
+    monkeypatch.setattr(health, "_service_health_checks", {})
     counter = {"calls": 0}
     register_health_check("counted", _counting_check(counter))
+    invalidate_status_cache()
     yield counter
-    _health_checks.pop("counted", None)
     invalidate_status_cache()
 
 
@@ -66,6 +70,6 @@ async def test_registering_a_check_invalidates_cache(counted_check) -> None:
     try:
         await get_system_status()
     finally:
-        _health_checks.pop("counted_2", None)
+        health._health_checks.pop("counted_2", None)
     assert counter2["calls"] == 1
     assert counted_check["calls"] == 2

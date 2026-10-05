@@ -51,6 +51,9 @@ from app.components.backend.api.blog.router import router as blog_router
 {%- if include_documents %}
 from app.components.backend.api.documents.router import router as documents_router
 {%- endif %}
+{%- if include_research %}
+from app.components.backend.api.research.router import router as research_router
+{%- endif %}
 {%- if include_finance %}
 from app.components.backend.api.finance.router import router as finance_router
 {%- endif %}
@@ -122,6 +125,9 @@ def include_routers(app: FastAPI) -> None:
     {%- endif %}
     {%- if include_documents %}
     app.include_router(documents_router, prefix="/api/v1")
+    {%- endif %}
+    {%- if include_research %}
+    app.include_router(research_router, prefix="/api/v1")
     {%- endif %}
     {%- if include_secrets %}
     app.include_router(secrets_router, prefix="/api/v1")

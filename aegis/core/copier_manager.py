@@ -356,6 +356,7 @@ def generate_with_copier(
     include_insights = copier_data.get(AnswerKeys.INSIGHTS, False)
     include_blog = copier_data.get(AnswerKeys.BLOG, False)
     include_documents = copier_data.get(AnswerKeys.DOCUMENTS, False)
+    include_research = copier_data.get(AnswerKeys.RESEARCH, False)
     ai_backend = copier_data.get(AnswerKeys.AI_BACKEND, StorageBackends.MEMORY)
     database_engine = copier_data.get(
         AnswerKeys.DATABASE_ENGINE, StorageBackends.SQLITE
@@ -371,6 +372,7 @@ def generate_with_copier(
     is_insights_included: bool = include_insights is True
     is_blog_included: bool = include_blog is True
     is_documents_included: bool = include_documents is True
+    is_research_included: bool = include_research is True
     ai_needs_migrations = is_ai_included and ai_backend_str != StorageBackends.MEMORY
     # Only run migrations automatically for SQLite (file-based, no server needed)
     # PostgreSQL requires a running server, so skip auto-migration
@@ -398,6 +400,7 @@ def generate_with_copier(
         is True,
         AnswerKeys.BLOG: is_blog_included,
         AnswerKeys.DOCUMENTS: is_documents_included,
+        AnswerKeys.RESEARCH: is_research_included,
         AnswerKeys.PAYMENT: is_payment_included,
         AnswerKeys.FINANCE: is_finance_included,
         AnswerKeys.SCHEDULER: is_scheduler_included,

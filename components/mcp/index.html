@@ -5721,7 +5721,7 @@
 <h2 id="every-call-is-recorded">Every call is recorded</h2>
 <p>One middleware records each call: the tool, the client that made it, the duration, the size of the result in bytes, and whether it succeeded. Today the record is a log line (<code>mcp.call</code>) on stderr. No tool has to know it was reached over MCP.</p>
 <h2 id="tools-without-the-ai-service">Tools without the AI service</h2>
-<p>MCP does not need the AI service: the <a href="../../services/ai/agents/#tools">tool registry</a> is core, and <code>load_tools()</code> imports every module that registers tools, in any process.</p>
+<p>MCP does not need the AI service: the <a href="../../services/ai/agents/#tools">tool registry</a> is core, and <code>load_tools()</code> imports every service's <code>tools.py</code>, found on disk, in any process.</p>
 
 
 

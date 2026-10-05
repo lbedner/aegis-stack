@@ -77,6 +77,21 @@ def test_a_card_names_who_proposed_it(hx_user: TestClient) -> None:
     assert "mcp:claude-code" in text(one(card.text, "[data-change]"))
 
 
+@pytest.mark.parametrize(
+    ("where", "new_tab"), [("/app/orders/7", False), ("https://github.com/x", True)]
+)
+def test_a_row_that_names_a_place_links_to_it(
+    hx_user: TestClient, where: str, new_tab: bool
+) -> None:
+    """In the app it opens in place; anywhere else in a new tab."""
+    change_id = _propose(hx_user, where)
+
+    link = one(hx_user.get(f"/partials/changes/{change_id}").text, f'a[href="{where}"]')
+
+    assert text(link) == where
+    assert (link.get("target") == "_blank") is new_tab
+
+
 def test_approving_runs_the_change_and_swaps_the_card(hx_user: TestClient) -> None:
     change_id = _propose(hx_user, "hi")
 

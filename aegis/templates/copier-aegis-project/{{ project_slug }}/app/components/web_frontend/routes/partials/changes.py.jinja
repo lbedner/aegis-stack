@@ -12,6 +12,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, Response
+from markupsafe import Markup
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.components.web_frontend.rendering import templates
@@ -19,7 +20,7 @@ from app.core.chat_transcript import CARD_STATUS, proposer_line
 from app.core.db import get_async_db
 from app.core.log import logger
 from app.services import change_queue
-from app.services.change_queue import PendingChange
+from app.services.change_queue import ChangeDisplayRow, PendingChange
 from app.services.change_queue.deps import owned_batch, owned_change
 from app.services.shared.deps import get_owner_user_id
 
@@ -44,6 +45,17 @@ def card_url(marker: dict[str, Any]) -> str | None:
     return None
 
 
+def _linked(line: ChangeDisplayRow) -> str | Markup:
+    """A row's value, as a link when the row says where it leads: a path in
+    the app opens in place, anywhere else in a new tab."""
+    if not line.url:
+        return line.value
+    elsewhere = "" if line.url.startswith("/") else ' target="_blank" rel="noopener"'
+    return Markup(
+        '<a href="{}"{} class="text-aegis-teal hover:underline">{}</a>'
+    ).format(line.url, Markup(elsewhere), line.value)
+
+
 async def _views(db: AsyncSession, rows: list[PendingChange]) -> list[dict[str, Any]]:
     """Rows as their cards show them, described together."""
     views = []
@@ -52,7 +64,7 @@ async def _views(db: AsyncSession, rows: list[PendingChange]) -> list[dict[str, 
         views.append(
             card.model_dump()
             | {
-                "display": [(line.label, line.value) for line in card.display],
+                "display": [(line.label, _linked(line)) for line in card.display],
                 "label": label,
                 "tone": tone,
                 "url": change_url(card.id),

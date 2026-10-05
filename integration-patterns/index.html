@@ -6123,7 +6123,7 @@
 </span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>        <span class="k">await</span> <span class="n">cleanup_service</span><span class="o">.</span><span class="n">deactivate_inactive_users</span><span class="p">(</span><span class="n">days</span><span class="o">=</span><span class="mi">90</span><span class="p">)</span>
 </span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>
 </span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>
-</span><span id="__span-4-12"><a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a><span class="c1"># app/components/scheduler/jobs.py</span>
+</span><span id="__span-4-12"><a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a><span class="c1"># app/services/users/scheduled_jobs.py, in JOBS</span>
 </span><span id="__span-4-13"><a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="n">ServiceJob</span><span class="p">(</span>
 </span><span id="__span-4-14"><a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>    <span class="n">cleanup_inactive_users</span><span class="p">,</span>
 </span><span id="__span-4-15"><a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>    <span class="s2">&quot;cleanup_inactive_users&quot;</span><span class="p">,</span>
@@ -6153,7 +6153,7 @@
 in its own process, and "Run Now" runs it in the process that received the
 request; that is the right setup for light jobs and small deployments.</p>
 <p>Add a worker and the scheduler hands every scheduled job to it instead:
-each <code>SERVICE_JOBS</code> entry is scheduled as an enqueue of the job's name onto
+each service's scheduled job is scheduled as an enqueue of the job's name onto
 the <code>system</code> queue, and the worker registers the same entry as a task and
 runs it. Nothing to wire by hand; the job function stays a plain service
 function:</p>
@@ -6163,7 +6163,7 @@ function:</p>
 </span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>    <span class="o">...</span>
 </span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>
 </span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>
-</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="c1"># app/components/scheduler/jobs.py</span>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="c1"># app/services/reports/scheduled_jobs.py, in JOBS</span>
 </span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="n">ServiceJob</span><span class="p">(</span>
 </span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>    <span class="n">generate_daily_report</span><span class="p">,</span>
 </span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>    <span class="s2">&quot;daily_report&quot;</span><span class="p">,</span>
@@ -6173,8 +6173,8 @@ function:</p>
 </span><span id="__span-6-14"><a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a><span class="p">)</span>
 </span></code></pre></div>
 <p>The worker's resources, retries and live feed apply to scheduled jobs and
-to "Run Now" alike. <code>SERVICE_JOBS</code> does not change either way, so a worker
-can be added or removed later without touching the job list.</p>
+to "Run Now" alike. No service's <code>JOBS</code> changes either way, so a worker
+can be added or removed later without touching a schedule.</p>
 <h3 id="api-worker">API → Worker</h3>
 <p>Queue background tasks from API endpoints:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1"># app/components/backend/api/reports.py</span>

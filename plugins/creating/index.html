@@ -5310,6 +5310,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#what-a-project-finds-by-convention" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What a project finds by convention
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#depending-on-a-service-variant" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -5565,6 +5576,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#what-a-project-finds-by-convention" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What a project finds by convention
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#depending-on-a-service-variant" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -5641,6 +5663,51 @@ runs <code>aegis add scraper</code>.</p>
 </ul>
 <p>The reference plugin, <code>aegis-stack-crawl4ai</code>, exercises most of that surface
 and is the best example to read.</p>
+<h2 id="what-a-project-finds-by-convention">What a project finds by convention</h2>
+<p>Some of what a plugin contributes needs no wiring in <code>plugin.py</code>: the
+project looks for a module of a known name in every service package, on
+disk, and picks up a plugin's the same way as its own.</p>
+<table>
+<thead>
+<tr>
+<th>File in <code>app/services/&lt;your service&gt;/</code></th>
+<th>What it holds</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>models.py</code> (or a <code>models/</code> package)</td>
+<td>the plugin's tables</td>
+</tr>
+<tr>
+<td><code>change_types.py</code></td>
+<td>changes a model proposes and the user approves</td>
+</tr>
+<tr>
+<td><code>scheduled_jobs.py</code></td>
+<td><code>JOBS</code>, the jobs that run on a schedule</td>
+</tr>
+</tbody>
+</table>
+<p>A scheduled job is a <code>ServiceJob</code> from <code>app.core.schedule</code>: the job
+function, a stable id, a display name and the trigger. In a project with a
+worker it runs on the worker. Without a scheduler the list is simply never
+read, so a plugin can ship its jobs whether or not the project has one.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># app/services/scraper/scheduled_jobs.py</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.core.schedule</span><span class="w"> </span><span class="kn">import</span> <span class="n">ServiceJob</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.scraper.jobs</span><span class="w"> </span><span class="kn">import</span> <span class="n">recrawl_sites_job</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="n">JOBS</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">ServiceJob</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>    <span class="n">ServiceJob</span><span class="p">(</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>        <span class="n">recrawl_sites_job</span><span class="p">,</span>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>        <span class="s2">&quot;scraper_recrawl&quot;</span><span class="p">,</span>
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>        <span class="s2">&quot;Scraper: Recrawl Sites&quot;</span><span class="p">,</span>
+</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>        <span class="p">{</span><span class="s2">&quot;trigger&quot;</span><span class="p">:</span> <span class="s2">&quot;cron&quot;</span><span class="p">,</span> <span class="s2">&quot;hour&quot;</span><span class="p">:</span> <span class="mi">3</span><span class="p">},</span>
+</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>    <span class="p">),</span>
+</span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="p">)</span>
+</span></code></pre></div>
+<p>Ids and function names are shared with every other service: prefix them
+with the plugin's name.</p>
 <h2 id="depending-on-a-service-variant">Depending on a service variant</h2>
 <p>Dependencies can name a variant. <code>required_services = ["auth[org]"]</code> asks for
 auth at org level: <code>aegis add</code> installs it at that level when the project has
@@ -5651,8 +5718,8 @@ than applied silently.</p>
 <h2 id="how-the-cli-finds-it">How the CLI finds it</h2>
 <p><code>pyproject.toml</code> registers the spec under the <code>aegis.plugins</code> entry point
 group:</p>
-<div class="language-toml highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">[project.entry-points.</span><span class="s2">&quot;aegis.plugins&quot;</span><span class="k">]</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="n">scraper</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;aegis_stack_scraper.plugin:get_spec&quot;</span>
+<div class="language-toml highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">[project.entry-points.</span><span class="s2">&quot;aegis.plugins&quot;</span><span class="k">]</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="n">scraper</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;aegis_stack_scraper.plugin:get_spec&quot;</span>
 </span></code></pre></div>
 <p>Any <code>aegis</code> command run in an environment where the package is installed sees
 it, whether it was installed from PyPI, a git URL or a local path. <code>aegis</code>

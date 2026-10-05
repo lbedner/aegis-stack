@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, SerializerFunctionWrapHandler, model_serializer
 
 if TYPE_CHECKING:
     from app.services.change_queue.models import PendingChange
@@ -31,6 +31,20 @@ class ChangeDisplayRow(BaseModel):
 
     label: str
     value: str
+    # Where the value leads, when it names something that has a page (a
+    # campaign, an issue): the card shows the value as a link to it.
+    url: str | None = None
+
+    @model_serializer(mode="wrap")
+    def _without_a_blank_url(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> dict[str, Any]:
+        """A row with no link serializes as label and value alone, so a
+        model reading the card is not handed a field of nulls."""
+        data = handler(self)
+        if data.get("url") is None:
+            data.pop("url", None)
+        return data
 
 
 class PendingChangeResponse(BaseModel):

@@ -80,6 +80,12 @@ def test_a_collection_opens_with_its_files(
     )
 
 
+def test_a_collection_that_is_not_there_is_a_404(client: TestClient) -> None:
+    """A drawer for a name the index does not hold (a stale link): no such
+    collection, not a crash."""
+    assert client.get(f"{PARTIALS}/collections/gone/drawer").status_code == 404
+
+
 def test_a_collection_is_deleted(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -209,6 +209,7 @@ EXAMPLES: dict[str, dict[str, str]] = {
         "date_input": """{{ date_input("since", "2026-09-01", label="Since") }}""",
         "checkbox": """{{ checkbox("failed_only", True, "Failed only") }}""",
         "search_input": """{{ search_input("catalog", placeholder="Search keys") }}""",
+        "filter_input": """{{ filter_input("#catalog-demo-rows", placeholder="Filter rows") }}""",
         "field": """
             {% call field("Email", error="Enter a valid address") %}
               {{ text_input("email", "ops@") }}

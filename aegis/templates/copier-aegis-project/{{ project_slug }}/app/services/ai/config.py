@@ -91,16 +91,16 @@ class AIServiceConfig(BaseModel):
         AIProvider.PUBLIC
     )  # Default to public endpoints (LLM7.io free anonymous tier)
     model: str = "gpt-3.5-turbo"  # Default to widely supported model
-    temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+    temperature: float = 0.7
     # Anthropic-only: thinking depth / output-token spend. None = the API
     # default. Ignored by non-Anthropic providers.
     effort: Literal["low", "medium", "high", "xhigh", "max"] | None = None
-    max_tokens: int = Field(default=1000, gt=0, le=8000)
-    timeout_seconds: float = Field(default=120.0, gt=0)
+    max_tokens: int = 1000
+    timeout_seconds: float = 120.0
 
     # RAG-Chat integration settings (used when RAG is enabled)
     rag_default_collection: str = "default"
-    rag_top_k: int = Field(default=10, gt=0, le=50)
+    rag_top_k: int = 10
     rag_min_score: float = Field(default=0.1, ge=0.0, le=1.0)
 
     @classmethod

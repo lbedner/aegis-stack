@@ -34,15 +34,19 @@ from app.components.web_frontend.overseer_access import overseer_gate
 from app.components.web_frontend.rendering import templates
 from app.components.web_frontend.routes import overseer as overseer_routes
 from app.components.web_frontend.routes.partials import overseer_runtime as overseer_runtime_partials
+{%- if include_scheduler %}
 from app.components.web_frontend.routes.partials import (
     overseer_scheduler as overseer_scheduler_partials,
 )
+{%- endif %}
 from app.components.web_frontend.routes.partials import (
     overseer_secrets as overseer_secrets_partials,
 )
+{%- if include_redis %}
 from app.components.web_frontend.routes.partials import (
     overseer_redis as overseer_redis_partials,
 )
+{%- endif %}
 from app.components.web_frontend.routes.partials import (
     overseer_storage as overseer_storage_partials,
 )
@@ -154,9 +158,13 @@ async def overseer_login_page(request: Request) -> HTMLResponse:
 {%- if include_auth %}
 router.include_router(overseer_auth_partials.router)
 {%- endif %}
+{%- if include_scheduler %}
 router.include_router(overseer_scheduler_partials.router)
+{%- endif %}
 router.include_router(overseer_secrets_partials.router)
+{%- if include_redis %}
 router.include_router(overseer_redis_partials.router)
+{%- endif %}
 router.include_router(overseer_storage_partials.router)
 router.include_router(overseer_server_partials.router)
 router.include_router(overseer_runtime_partials.router)

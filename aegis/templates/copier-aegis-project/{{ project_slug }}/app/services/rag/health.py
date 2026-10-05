@@ -6,11 +6,9 @@ Provides health check functions for monitoring RAG service status.
 
 from typing import Any
 
-from app.core.config import settings
 from app.core.log import logger
 
-from .config import get_rag_config
-from .service import RAGService
+from .config import get_rag_service
 
 
 async def check_rag_service_health() -> dict[str, Any]:
@@ -25,8 +23,7 @@ async def check_rag_service_health() -> dict[str, Any]:
             - issues: Any validation issues
     """
     try:
-        config = get_rag_config(settings)
-        service = RAGService(config)
+        service = get_rag_service()
 
         # Get service status
         status = service.get_service_status()

@@ -91,10 +91,18 @@ def test_the_same_bytes_are_filed_once(docs: TestClient) -> None:
 
 
 def test_the_list_narrows_by_kind_and_search(docs: TestClient) -> None:
+    """Kind on the server; the search over the rows on the page as you type
+    (``filter_input``), the text kept in the URL."""
     _upload(docs, "electric-bill.pdf", data=b"1", kind="statement")
     _upload(docs, "lease.pdf", data=b"2", kind="letter")
     assert _titles(_get(docs, "documents", "kind=letter")) == ["lease.pdf"]
-    assert _titles(_get(docs, "documents", "q=electric")) == ["electric-bill.pdf"]
+    html = _get(docs, "documents", "q=electric")
+    assert sorted(_titles(html)) == ["electric-bill.pdf", "lease.pdf"]
+    search = one(html, "input[data-filter]")
+    assert (search.get("data-filter"), search.get("value")) == (
+        "#documents-list tbody",
+        "electric",
+    )
 
 
 def _drawer(client: TestClient, doc: int) -> str:

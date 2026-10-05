@@ -58,7 +58,7 @@ SCHEDULER_TIMEZONE: Annotated[
 A saved value reaches code that reads `settings.NAME` when it runs. Mark a setting only if all of these hold:
 
 - **It is read inside a function, when the code runs.** A value copied once when a module is imported (a module-level constant, a class attribute, a default argument, a decorator argument) is fixed before the saved value is applied, so it would never change. The generated test `test_no_configurable_setting_is_read_at_import` scans `app/` and fails if a marked setting is read that way.
-- **Nothing copies it into an object built at import.** A service created in a router module, for example `rag_service = RAGService(get_rag_config(settings))`, keeps the values it was built with. The test cannot see this one: check where the value ends up.
+- **Nothing copies it into an object built at import.** A service created in a router module keeps the values it was built with: build it on first use instead (the RAG API's `rag_service()` is cached on its first call), or read `settings` where the value is used (`AIService.config`, the rate limiters). The test cannot see this one: check where the value ends up.
 - **The app does not need it to start.** `DATABASE_URL`, `REDIS_URL`, `SECRET_KEY` and `ENCRYPTION_KEY` are read before saved values can be loaded. So are the settings a process is launched with, such as the webserver engine or a worker's concurrency.
 - **It is not a credential, or a provider's own setting.** Keys belong on the Secrets page, along with the settings that finish a provider's setup (a from address, a phone number).
 
@@ -68,17 +68,19 @@ Saved values apply in the webserver, the scheduler and the worker. A CLI command
 
 | Owner | Settings |
 |---|---|
-| Health | `MEMORY_THRESHOLD_PERCENT`, `DISK_THRESHOLD_PERCENT`, `CPU_THRESHOLD_PERCENT`, `HEALTH_CHECK_TIMEOUT_SECONDS`, `SYSTEM_METRICS_CACHE_SECONDS` |
-| Traffic | `TRAFFIC_MONITOR_ENABLED`, `TRAFFIC_WINDOW_HOURS`, `TRAFFIC_DOMINANCE_SHARE`, `TRAFFIC_DOMINANCE_FLOOR` |
-| Auth | `ACCOUNT_LOCKOUT_ATTEMPTS`, `ACCOUNT_LOCKOUT_MINUTES` |
-| Database | `DATABASE_SLOW_TRANSACTION_SECONDS` |
+| Health | `MEMORY_THRESHOLD_PERCENT`, `DISK_THRESHOLD_PERCENT`, `CPU_THRESHOLD_PERCENT`, `WARNING_PERCENT_OF_THRESHOLD`, `HEALTH_CHECK_TIMEOUT_SECONDS`, `SYSTEM_METRICS_CACHE_SECONDS` |
+| Server | `LOG_LEVEL`, `TRAFFIC_MONITOR_ENABLED`, `TRAFFIC_WINDOW_HOURS`, `TRAFFIC_DOMINANCE_SHARE`, `TRAFFIC_DOMINANCE_FLOOR` |
+| Auth | `REGISTRATION_ENABLED`, `ACCESS_TOKEN_EXPIRE_MINUTES`, `REFRESH_TOKEN_EXPIRE_DAYS`, `ACCOUNT_LOCKOUT_ATTEMPTS`, `ACCOUNT_LOCKOUT_MINUTES`, the `RATE_LIMIT_*` limits and windows |
+| Database | `DATABASE_SLOW_TRANSACTION_SECONDS`, `DATABASE_BACKUP_KEEP` |
 | Worker | `TASK_HISTORY_TTL_SECONDS`, `WORKER_MAX_REDELIVERIES` |
 | Scheduler | `SCHEDULER_TIMEZONE` (picked from the IANA timezones) |
-| AI | `AI_SENTIMENT_ENABLED`, `AI_SENTIMENT_BATCH_LIMIT` |
+| AI | `AI_TEMPERATURE`, `AI_MAX_TOKENS`, `AI_TIMEOUT_SECONDS`, `AI_SENTIMENT_ENABLED`, `AI_SENTIMENT_BATCH_LIMIT`, `RAG_CHUNK_SIZE`, `RAG_CHUNK_OVERLAP`, `RAG_DEFAULT_TOP_K`, `RAG_CHAT_TOP_K` |
 | Finance | `FINANCE_RULES_LOOKBACK_DAYS` |
 | Insights | `INSIGHT_GITHUB_OWNER`, `INSIGHT_GITHUB_REPO`, `INSIGHT_PYPI_PACKAGE`, `INSIGHT_PROJECT_DESCRIPTION`, `INSIGHT_PROJECT_HOMEPAGE` |
 
-Each only appears in a project that has what reads it. The rate limits are not on the list: the limiters are built when their module is imported. Neither are the AI provider and model, which the model picker and `llm use` already change without a restart.
+Each only appears in a project that has what reads it. A value is checked against its type and its bounds before it is saved (an AI temperature from 0 to 2, say), so nothing that reads it refuses it later. Not on the list: the AI provider and model, which the model picker and `llm use` already change without a restart, and the arq worker's `WORKER_MAX_TRIES` and `WORKER_KEEP_RESULT_SECONDS`, which arq reads from its queue classes before saved values apply.
+
+A setting nothing reads any more is retired rather than left in `Settings`: its name goes in `RETIRED_SETTINGS` (`app/core/settings_base.py`), and a `.env` that still sets it starts as before, the value ignored.
 
 ## From the terminal
 

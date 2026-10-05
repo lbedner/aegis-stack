@@ -7,13 +7,15 @@ value as it starts. ``.env`` still wins and reads as read-only.
 """
 
 import ast
+import logging
 from pathlib import Path
 
 import pytest
 
 from app.components.backend.startup import saved_overrides
-from app.core import saved_settings, secrets
-from app.core.config import settings
+from app.core import boot, saved_settings, secrets
+from app.core.config import Settings, settings
+from app.core.settings_base import RETIRED_SETTINGS
 from tests._secret_settings import FakeStore, settings_at_default, use_store
 
 NAME = "MEMORY_THRESHOLD_PERCENT"
@@ -149,3 +151,25 @@ def test_every_setting_says_what_it_is() -> None:
     """The Settings page shows it under the name; a blank reads as a dash."""
     blank = [entry.name for entry in saved_settings.declarations() if not entry.label]
     assert not blank, f"Configurable without a description: {blank}"
+
+
+def test_a_retired_setting_left_in_env_still_boots(tmp_path: Path) -> None:
+    """A setting nothing reads any more is gone from ``Settings``; a
+    ``.env`` that still sets it starts as before (unknown names are
+    refused), the value ignored."""
+    env = tmp_path / ".env"
+    env.write_text("".join(f"{name}=1\n" for name in RETIRED_SETTINGS))
+    Settings(_env_file=env)  # type: ignore[call-arg]
+    assert not RETIRED_SETTINGS & set(Settings.model_fields)
+
+
+async def test_a_saved_log_level_applies_once_the_process_has_booted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Logging is set up before saved settings apply, so applying them sets
+    the level again."""
+    root = logging.getLogger()
+    monkeypatch.setattr(root, "level", logging.INFO)
+    monkeypatch.setattr(settings, "LOG_LEVEL", "DEBUG")
+    await boot.apply_saved_overrides()
+    assert root.level == logging.DEBUG

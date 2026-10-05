@@ -207,7 +207,7 @@ async def test_several_pages_are_served_from_one_reading(
 async def test_cpu_and_memory_say_when_they_pass_their_threshold(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """By the host checks' own rule (``usage_status``): a warning from 80%
+    """By the host checks' own rule (``app.core.thresholds.status``): a warning from 80%
     of the alert threshold, unhealthy at it. Memory is a share of its
     limit, CPU of the cores it can use."""
     monkeypatch.setattr(settings, "MEMORY_THRESHOLD_PERCENT", 30.0)  # 25% >= 24
@@ -222,6 +222,7 @@ async def test_cpu_and_memory_charts_mark_where_warning_and_alert_begin(
 ) -> None:
     monkeypatch.setattr(settings, "MEMORY_THRESHOLD_PERCENT", 90.0)
     monkeypatch.setattr(settings, "CPU_THRESHOLD_PERCENT", 80.0)
+    monkeypatch.setattr(series, "GUIDE_REACH", float("inf"))  # every one, in reach
     use_runtime(monkeypatch, FakeRuntime(REDIS))
     await ui_runtime.containers("redis")  # the reading the limits come from
     charts = {c["key"]: c["data"] for c in await ui_runtime.charts("redis")}

@@ -7,22 +7,17 @@ search, and collection management.
 
 from typing import Any
 
-from app.core.config import settings
-from app.services.rag.config import get_rag_config
-from app.services.rag.service import (
-    IndexingError,
-    LoaderError,
-    RAGService,
-    SearchError,
-)
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-router = APIRouter(prefix="/rag", tags=["rag"])
+from app.services.rag.config import get_rag_service
+from app.services.rag.service import (
+    IndexingError,
+    LoaderError,
+    SearchError,
+)
 
-# Initialize RAG service
-_rag_config = get_rag_config(settings)
-rag_service = RAGService(_rag_config)
+router = APIRouter(prefix="/rag", tags=["rag"])
 
 
 # Request/Response models
@@ -120,7 +115,7 @@ async def index_documents(request: IndexRequest) -> IndexResponse:
         HTTPException: If indexing fails
     """
     try:
-        stats = await rag_service.refresh_index(
+        stats = await get_rag_service().refresh_index(
             path=request.path,
             collection_name=request.collection_name,
             extensions=request.extensions,
@@ -160,7 +155,7 @@ async def search_documents(request: SearchRequest) -> SearchResponse:
         HTTPException: If search fails
     """
     try:
-        results = await rag_service.search(
+        results = await get_rag_service().search(
             query=request.query,
             collection_name=request.collection_name,
             top_k=request.top_k,
@@ -197,7 +192,7 @@ async def list_collections() -> list[str]:
         List of collection names
     """
     try:
-        return await rag_service.list_collections()
+        return await get_rag_service().list_collections()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to list collections: {e}")
 
@@ -217,7 +212,7 @@ async def get_collection_info(collection_name: str) -> CollectionInfoResponse:
         HTTPException: If collection not found
     """
     try:
-        stats = await rag_service.get_collection_stats(collection_name)
+        stats = await get_rag_service().get_collection_stats(collection_name)
         if not stats:
             raise HTTPException(
                 status_code=404, detail=f"Collection '{collection_name}' not found"
@@ -255,13 +250,13 @@ async def get_collection_files(collection_name: str) -> CollectionFilesResponse:
     """
     try:
         # Check collection exists first
-        stats = await rag_service.get_collection_stats(collection_name)
+        stats = await get_rag_service().get_collection_stats(collection_name)
         if not stats:
             raise HTTPException(
                 status_code=404, detail=f"Collection '{collection_name}' not found"
             )
 
-        files = await rag_service.list_files(collection_name)
+        files = await get_rag_service().list_files(collection_name)
         total_chunks = sum(f.chunks for f in files)
 
         return CollectionFilesResponse(
@@ -295,7 +290,7 @@ async def delete_collection(collection_name: str) -> dict[str, Any]:
         HTTPException: If deletion fails
     """
     try:
-        deleted = await rag_service.delete_collection(collection_name)
+        deleted = await get_rag_service().delete_collection(collection_name)
         if not deleted:
             raise HTTPException(
                 status_code=404, detail=f"Collection '{collection_name}' not found"
@@ -316,9 +311,9 @@ async def rag_health() -> dict[str, Any]:
     Returns health status including configuration and collection count.
     """
     try:
-        status = rag_service.get_service_status()
-        validation_errors = rag_service.validate_service()
-        collections = await rag_service.list_collections()
+        status = get_rag_service().get_service_status()
+        validation_errors = get_rag_service().validate_service()
+        collections = await get_rag_service().list_collections()
 
         return {
             "service": "rag",

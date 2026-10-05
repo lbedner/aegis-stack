@@ -19,9 +19,9 @@ TOP_K_CHOICES = (3, 5, 10, 20)
 
 
 def _service() -> Any:
-    from app.components.backend.api.rag.routes import rag_service
+    from app.services.rag.config import get_rag_service
 
-    return rag_service
+    return get_rag_service()
 
 
 def service_status() -> tuple[dict[str, Any], list[str]]:
@@ -90,7 +90,10 @@ async def knowledge_context(query: Any) -> dict[str, Any]:
     }
 
 
-async def collection_context(name: str) -> dict[str, Any]:
+async def collection_context(name: str) -> dict[str, Any] | None:
+    """A collection's drawer, or None when the index has no such one."""
+    if name not in {c["name"] for c in await collection_stats()}:
+        return None
     files = await collection_files(name)
     return {
         "name": name,

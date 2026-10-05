@@ -161,15 +161,16 @@
   .chip {
     @apply inline-block text-xs px-2 py-0.5 rounded border border-aegis-border text-aegis-muted whitespace-nowrap transition-colors hover:border-aegis-muted hover:text-aegis-text;
   }
-  .chip[aria-pressed="true"],
+  /* A pressed chip or toggle action (Wrap, Pause), and a ticked chip. */
+  :is(.chip, .action)[aria-pressed="true"],
   .peer:checked ~ .chip {
     @apply border-aegis-teal bg-aegis-teal/10 text-aegis-text font-semibold;
   }
 
-  /* A search's matches (the ``highlight`` filter): a quiet amber wash,
-     not the browser's yellow block. */
-  mark {
-    @apply bg-aegis-amber/25 text-inherit rounded-sm;
+  /* A search's matches (``filter_input``, app.js ``data-filter``), painted
+     with the CSS Highlight API: in the accent, on a wash of it. */
+  ::highlight(found) {
+    @apply bg-aegis-teal/25 text-aegis-teal;
   }
 
   /* A native select draws its caret flush against its border; the house
@@ -233,18 +234,36 @@
   /* An Overseer page's width (``data-width`` on _shell.html): a document
      keeps a reading column, a workspace runs to the gutters. */
   .overseer-page[data-width="document"] { @apply max-w-screen-xl mx-auto; }
-  /* A tone (``data-tone``: warn, error) colours what carries it: a live
-     figure past its threshold, its sparkline, a map connection; a map
-     node takes it on its border. */
-  :is(.tone, .spark, .map-link)[data-tone="warn"] { @apply text-aegis-amber; }
-  :is(.tone, .spark, .map-link)[data-tone="error"] { @apply text-aegis-error; }
+  /* A tone (``data-tone``) colours what carries it. A badge, a stat, a bar
+     or a volume stack (``.toned``) shows every tone; a live figure past its
+     threshold, its sparkline and a map connection only warn and error; a
+     map node and a log row's first cell take it on their border. */
+  .toned { @apply text-aegis-text; }
+  .toned[data-tone="ok"] { @apply text-aegis-teal; }
+  .toned[data-tone="muted"] { @apply text-aegis-muted; }
+  :is(.toned, .tone, .spark, .map-link)[data-tone="warn"] { @apply text-aegis-amber; }
+  :is(.toned, .tone, .spark, .map-link)[data-tone="error"] { @apply text-aegis-error; }
   .map-node { @apply border-aegis-border; }
   .map-node[data-tone="warn"] { @apply border-aegis-amber/70; }
   .map-node[data-tone="error"] { @apply border-aegis-error/70; }
+  .log-row[data-tone="warn"] > td:first-child { @apply border-l-aegis-amber; }
+  .log-row[data-tone="error"] > td:first-child { @apply border-l-aegis-error; }
   /* A line drawn small or between nodes: one stroke, in its colour. */
   :is(.spark polyline, .map-link) { fill: none; stroke: currentColor; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
   .map-link { @apply text-aegis-teal opacity-60; }
   .map-link:is([data-tone="warn"], [data-tone="error"]) { @apply opacity-100; }
+  /* A log line on one line, cut at the edge; opened (a click) or wrapped
+     (Wrap), whole, with its traceback. A volume bar stacks its tones. */
+  .log-line { @apply truncate; }
+  :is(.logs-wrap, .log-row[data-open]) .log-line { @apply whitespace-normal break-all; }
+  .log-row:not([data-open]) .log-trace, :is(.logs-wrap, .log-row[data-open]) .log-trace-hint { @apply hidden; }
+  .logs-wrap .log-row .log-trace { @apply block; }
+  .volume-bar span { @apply block w-full bg-current; }
+  .volume-bar span[data-tone="muted"] { @apply opacity-40; }
+  .volume-bar:hover span, .volume-bar:is([aria-current], [data-selecting]) span { @apply opacity-80 outline outline-1 outline-aegis-teal; }
+  /* The lines on screen, like a minimap's viewport: a dark wash of the
+     accent; a picked or dragged range is outlined in it. */
+  .volume-bar[data-in-view] { @apply bg-aegis-teal/15; }
   .worker-swatch { @apply inline-block h-3 w-4 rounded-sm border border-aegis-border; }
   .keyspace__swatch[data-active="true"] { @apply text-aegis-teal; animation: keyspace-live 2.4s ease-in-out infinite; }
 }

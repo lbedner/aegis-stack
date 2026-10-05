@@ -7,8 +7,12 @@ state such as the storage browser's open bucket and folder lives in the
 query string, and dropping it sends the viewer back to the top.
 """
 
+import json
 from pathlib import Path
 
+import pytest
+
+from tests.test_formatting import MATCH_CASES
 from tests.web.node import run
 
 APP_JS = Path("app/components/web_frontend/static/js/app.js")
@@ -26,9 +30,11 @@ global.CustomEvent = class extends global.Event {
 global.window = { location: { origin: 'http://app', pathname: '/', search: '' },
                   addEventListener: on, dispatchEvent: () => {} };
 global.document = { addEventListener: on, getElementById: () => null,
-                    querySelector: () => null,
+                    querySelector: () => null, querySelectorAll: () => [],
                     body: { addEventListener: on, dispatchEvent: () => {} } };
 global.htmx = { ajax: () => {} };
+global.requestAnimationFrame = () => 0;
+global.cancelAnimationFrame = () => {};
 """
 
 HARNESS = (
@@ -257,3 +263,52 @@ def test_the_sidebar_marks_the_page_it_leads_to() -> None:
     to the link whose page holds the new address (a section under it
     included), and only the home link for the home page itself."""
     assert run(MARK_HARNESS, APP_JS=APP_JS) == [None, "page", None]
+
+
+RANGE_HARNESS = (
+    STUBS
+    + """
+const { rangeUrl, spanned, inView } = require(APP_JS);
+const bars = ['a', 'b', 'c', 'd'];
+const timed = [[0, 10], [10, 20], [20, 30], [30, 40]].map(([f, t]) => ({ dataset: { from: String(f), to: String(t) } }));
+console.log(JSON.stringify({
+  seen: inView(timed, 12, 25).map((b) => b.dataset.from),
+  none: inView(timed, null, null).length,
+  url: rangeUrl('/overseer/logs?window=900&service=worker&service=redis&from=1&to=2', 9),
+  forward: spanned(bars, 'b', 'd'),
+  backward: spanned(bars, 'd', 'b'),
+}));
+"""
+)
+
+
+def test_dragging_across_the_volume_narrows_to_every_bar_it_covers() -> None:
+    """The first bar's request (every filter it carries) with the last bar's
+    end, whichever way the drag ran."""
+    out = run(RANGE_HARNESS, APP_JS=APP_JS)
+    assert out["url"] == (
+        "/overseer/logs?window=900&service=worker&service=redis&from=1&to=9"
+    )
+    assert out["forward"] == out["backward"] == ["b", "c", "d"]
+
+
+def test_the_bars_behind_the_lines_on_screen_are_marked() -> None:
+    """A bar is in view when its time overlaps the oldest to the newest line
+    showing; with no line showing, none is."""
+    out = run(RANGE_HARNESS, APP_JS=APP_JS)
+    assert out["seen"] == ["10", "20"] and out["none"] == 0
+
+
+@pytest.mark.parametrize(("text", "query", "runs"), MATCH_CASES)
+def test_a_filter_marks_the_same_matches_as_the_server(
+    text: str, query: str, runs: list[tuple[str, bool]]
+) -> None:
+    """The client-side filter's highlighter is ``split_matches``' twin, held
+    to one table (``MATCH_CASES``)."""
+    found = run(
+        STUBS
+        + "const { splitMatches } = require(APP_JS);"
+        + f"console.log(JSON.stringify(splitMatches({json.dumps(text)}, {json.dumps(query)})));",
+        APP_JS=APP_JS,
+    )
+    assert [tuple(r) for r in found] == runs

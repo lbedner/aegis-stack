@@ -207,6 +207,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 # Worker-only modal section (imported solely by worker_modal);
                 # part of the worker footprint so add/remove cover it.
                 "app/components/frontend/dashboard/modals/task_history_section.py",
+                "app/components/backend/api/task_history.py",
             ],
             extras={
                 # The Overseer page's test: needs the web frontend too.
@@ -362,6 +363,10 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 "app/components/frontend/dashboard/cards/redis_card.py",
                 "app/components/frontend/dashboard/modals/redis_modal",
             ],
+            extras={
+                # The Overseer page's test: needs the web frontend too.
+                "include_htmx": ["tests/web/test_overseer_redis.py"],
+            },
         ),
     ),
     "storage": ComponentSpec(

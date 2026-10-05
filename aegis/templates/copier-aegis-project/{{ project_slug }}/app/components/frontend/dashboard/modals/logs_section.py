@@ -22,21 +22,23 @@ from app.components.frontend.dashboard.modals.modal_sections import DateRangeChi
 from app.components.frontend.dashboard.modals.modal_sections.chart_primitives import (
     ChartColors,
 )
+from app.components.frontend.theme import TONE_COLORS
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.formatting import split_matches
 from app.services.system import ui_logs
 
-# A level's color; info and an unlevelled line stay plain. A warning or
-# worse also marks its line's left edge, and a debug line steps back.
-LEVEL_COLORS = {
-    "debug": ft.Colors.ON_SURFACE_VARIANT,
-    "warning": Theme.Colors.WARNING,
-    "error": Theme.Colors.ERROR,
-    "critical": Theme.Colors.ERROR,
-}
-EDGED = ("warning", "error", "critical")
+# A level's color, from its tone (``ui_logs.TONES``); info and an
+# unlevelled line stay plain. A warning or worse also marks its line's left
+# edge, and a debug line steps back.
+LEVEL_COLORS = {level: TONE_COLORS[tone] for level, tone in ui_logs.TONES.items()}
+EDGED = tuple(
+    level for level, tone in ui_logs.TONES.items() if tone in ("warn", "error")
+)
 MUTED = ft.TextStyle(color=ft.Colors.ON_SURFACE_VARIANT)
-MARKED = ft.TextStyle(bgcolor=ft.Colors.with_opacity(0.25, Theme.Colors.WARNING))
+MARKED = ft.TextStyle(
+    color=Theme.Colors.PRIMARY,
+    bgcolor=ft.Colors.with_opacity(0.25, Theme.Colors.PRIMARY),
+)
 
 
 class LogsSection(ft.Column):
@@ -72,8 +74,8 @@ class LogsSection(ft.Column):
                     options=[
                         ft.dropdown.Option("", "All levels"),
                         *(
-                            ft.dropdown.Option(level, level.capitalize())
-                            for level in ui_logs.LEVELS
+                            ft.dropdown.Option(level, label)
+                            for level, label in ui_logs.LEVEL_CHOICES
                         ),
                     ],
                     value="",
@@ -202,9 +204,10 @@ class LogsSection(ft.Column):
 def _line(
     row: dict[str, Any], titles: dict[str, str] | None = None, query: str = ""
 ) -> ft.Control:
-    """One line: time, its service in its own color (with ``titles``),
-    container, level, then the message (its lead dimmed, the search
-    marked) and its fields; a traceback folds under it. Hovering it shows a
+    """One line: time, its service in its own color (with ``titles``) and
+    which of its containers when it has several (``source``), level, then
+    the message (the lead the time repeats left out, the search marked) and
+    its fields; a traceback folds under it. Hovering it shows a
     copy of the whole line."""
     fields = " ".join(f"{key}={value}" for key, value in row["fields"])
     service = titles.get(row["page"], row["page"]) if titles else ""
@@ -226,13 +229,17 @@ def _line(
                 spacing=6,
                 visible=bool(service),
             ),
-            SecondaryText(row["instance"], size=11),
+            ft.Container(
+                SecondaryText(row["source"], size=11),
+                tooltip=row["instance"],
+                visible=bool(row["source"]),
+            ),
             ft.Text(level, size=11, color=LEVEL_COLORS.get(level), width=60),
             BodyText(
                 "",
                 size=12,
                 selectable=True,
-                spans=_marked(row["message"], query, lead=row["prefix"]),
+                spans=_marked(row["message"], query),
             ),
             BodyText(
                 "",
@@ -289,11 +296,9 @@ def _line(
     )
 
 
-def _marked(text: str, query: str, lead: str = "") -> list[ft.TextSpan]:
-    """``text`` as spans: ``lead`` dimmed, then each match of ``query``
-    marked (``split_matches``)."""
-    spans = [ft.TextSpan(lead, MUTED)] if lead else []
-    return spans + [
+def _marked(text: str, query: str) -> list[ft.TextSpan]:
+    """``text`` as spans, each match of ``query`` marked (``split_matches``)."""
+    return [
         ft.TextSpan(run, MARKED if hit else None)
         for run, hit in split_matches(text, query)
     ]

@@ -1,8 +1,8 @@
 """The Overview tab: what the process is doing right now.
 
-Four metric cards over a configuration panel. ``_get_metric_color``
-lives here because this is the only tab that colours a number by how
-close it is to its ceiling.
+Four metric cards over a configuration panel. The host's CPU, memory and
+disk meters take their checks' status colour (``get_status_color``), the
+saved thresholds' rule, as htmx's meters do.
 """
 
 import flet as ft
@@ -16,20 +16,10 @@ from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system import ui_backend
 from app.services.system.models import ComponentStatus
 
-from ...cards.card_utils import create_progress_indicator
+from ...cards.card_utils import create_progress_indicator, get_status_color
 from ..modal_sections import (
     MetricCard,
 )
-
-
-def _get_metric_color(percent: float) -> str:
-    """Get color based on metric percentage."""
-    if percent >= 90:
-        return Theme.Colors.ERROR
-    elif percent >= 70:
-        return Theme.Colors.WARNING
-    else:
-        return Theme.Colors.SUCCESS
 
 
 class OverviewTab(ft.Container):
@@ -100,7 +90,7 @@ class OverviewTab(ft.Container):
         if cpu_data and cpu_data.metadata:
             cpu_percent = cpu_data.metadata.get("percent_used", 0.0)
             cpu_cores = cpu_data.metadata.get("cpu_count", 0)
-            cpu_color = _get_metric_color(cpu_percent)
+            cpu_color = get_status_color(cpu_data.status.value)
             system_metrics.append(
                 create_progress_indicator(
                     label=f"CPU Usage ({cpu_cores} cores)",
@@ -116,7 +106,7 @@ class OverviewTab(ft.Container):
             memory_total = memory_data.metadata.get("total_gb", 0.0)
             memory_available = memory_data.metadata.get("available_gb", 0.0)
             memory_used = memory_total - memory_available
-            memory_color = _get_metric_color(memory_percent)
+            memory_color = get_status_color(memory_data.status.value)
             system_metrics.append(
                 create_progress_indicator(
                     label="Memory Usage",
@@ -131,7 +121,7 @@ class OverviewTab(ft.Container):
             disk_percent = disk_data.metadata.get("percent_used", 0.0)
             disk_free = disk_data.metadata.get("free_gb", 0.0)
             disk_total = disk_data.metadata.get("total_gb", 0.0)
-            disk_color = _get_metric_color(disk_percent)
+            disk_color = get_status_color(disk_data.status.value)
             system_metrics.append(
                 create_progress_indicator(
                     label="Disk Usage",

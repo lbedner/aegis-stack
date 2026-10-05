@@ -8,8 +8,8 @@ one place. No UI framework imports.
 from datetime import datetime
 import re
 from typing import Any
-from urllib.parse import urlsplit, urlunsplit
 
+from app.core import credential
 from app.core.formatting import format_relative_time
 
 # Docker service names a developer reaches as localhost from the host.
@@ -32,12 +32,7 @@ def display_url(url: str, hide_password: bool = True) -> str:
     """
     for host in _DOCKER_HOSTS:
         url = url.replace(host, "@localhost:")
-    parts = urlsplit(url)
-    if not hide_password or not parts.password:
-        return url
-    credentials, _, host = parts.netloc.rpartition("@")
-    user = credentials.split(":", 1)[0]
-    return urlunsplit(parts._replace(netloc=f"{user}:***@{host}"))
+    return credential.hide_password(url) if hide_password else url
 
 
 def overview(metadata: dict[str, Any]) -> dict[str, str]:

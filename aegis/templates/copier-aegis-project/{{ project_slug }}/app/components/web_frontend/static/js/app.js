@@ -308,5 +308,235 @@ window.addEventListener('pageshow', () => {
   syncProgress();
 });
 
+// A range strip (``data-range``: the Logs volume): a click on a bar narrows
+// to it (its own link), and a drag across several narrows to all of them:
+// the first bar's request, every filter it carries, with the last bar's
+// end (``data-to``), whichever way the drag ran.
+function rangeUrl(href, to) {
+  const url = new URL(href, 'http://local');
+  url.searchParams.set('to', to);
+  return url.pathname + url.search;
+}
+function spanned(bars, a, b) {
+  const [i, j] = [bars.indexOf(a), bars.indexOf(b)].sort((x, y) => x - y);
+  return bars.slice(i, j + 1);
+}
+let drag = null;
+// The click that ends a drag is not a click on the bar under it.
+let dragged = false;
+function rangeBar(event) {
+  return event.target.closest && event.target.closest('[data-range] [data-to]');
+}
+function markDrag(on) {
+  const covered = new Set(on ? spanned(drag.bars, drag.first, drag.last) : []);
+  drag.bars.forEach((bar) => bar.toggleAttribute('data-selecting', covered.has(bar)));
+}
+document.addEventListener('pointerdown', (event) => {
+  const bar = rangeBar(event);
+  if (!bar || event.button !== 0) return;
+  const bars = [...bar.closest('[data-range]').querySelectorAll('[data-to]')];
+  drag = { bars, first: bar, last: bar };
+  markDrag(true);
+});
+document.addEventListener('pointerover', (event) => {
+  const bar = drag && rangeBar(event);
+  if (!bar || !drag.bars.includes(bar)) return;
+  drag.last = bar;
+  markDrag(true);
+});
+document.addEventListener('pointerup', () => {
+  if (!drag) return;
+  const covered = spanned(drag.bars, drag.first, drag.last);
+  markDrag(false);
+  drag = null;
+  if (covered.length < 2) return; // a click: the bar's own link
+  const [from, to] = [covered[0], covered[covered.length - 1]];
+  dragged = true;
+  htmx.ajax('GET', rangeUrl(from.getAttribute('href'), to.dataset.to), { source: from });
+});
+document.addEventListener('click', (event) => {
+  if (!dragged) return;
+  dragged = false;
+  if (!event.target.closest || !event.target.closest('[data-range]')) return;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+}, true);
+
+// The bars behind what is on screen: a strip that names a list
+// (``data-range-of``, its rows' times in ``data-at``) marks the bars from
+// its oldest to its newest visible line, as it scrolls and as lines arrive.
+function inView(bars, lo, hi) {
+  if (lo === null || hi === null) return [];
+  return bars.filter((bar) => Number(bar.dataset.from) <= hi && Number(bar.dataset.to) > lo);
+}
+// The rows on screen in the lists a strip or a search follows, kept by one
+// IntersectionObserver, so nothing measures every row on a scroll or as a
+// search shows hundreds again; a hidden row is not on screen.
+const onScreen = new Set();
+const screenWatch = typeof IntersectionObserver === 'undefined' ? null : new IntersectionObserver((entries) => {
+  entries.forEach((entry) => {
+    if (entry.isIntersecting) onScreen.add(entry.target);
+    else onScreen.delete(entry.target);
+  });
+  queueScreen();
+});
+function watchedLists() {
+  const ranged = [...document.querySelectorAll('[data-range-of]')].map((strip) => document.getElementById(strip.dataset.rangeOf));
+  const searched = [...document.querySelectorAll('input[data-filter]')].map((input) => document.querySelector(input.dataset.filter));
+  return [...new Set([...ranged, ...searched].filter(Boolean))];
+}
+// Each list is watched once, and then only the rows that arrive (a stream's
+// batch) are: nothing re-walks a list that only grows.
+const watched = new WeakSet();
+const rowsAdded = typeof MutationObserver === 'undefined' ? null : new MutationObserver((records) => {
+  records.forEach((record) => {
+    const rows = [...record.addedNodes].filter((node) => node.nodeType === 1);
+    rows.forEach((row) => screenWatch?.observe(row));
+    filterRows(rows, searchOf(record.target));
+  });
+  queueScreen();
+});
+function watchLists() {
+  watchedLists().forEach((list) => {
+    if (watched.has(list)) return;
+    watched.add(list);
+    for (const row of list.children) screenWatch?.observe(row);
+    rowsAdded?.observe(list, { childList: true });
+    filterRows([...list.children], searchOf(list));
+  });
+}
+function rowsOnScreen(list) {
+  return [...onScreen].filter((row) => list.contains(row));
+}
+function markInView() {
+  document.querySelectorAll('[data-range-of]').forEach((strip) => {
+    const list = document.getElementById(strip.dataset.rangeOf);
+    const times = list ? rowsOnScreen(list).map((row) => Number(row.dataset.at)).filter(Boolean) : [];
+    const span = times.length ? [Math.min(...times), Math.max(...times)] : [null, null];
+    const bars = [...strip.querySelectorAll('[data-to]')];
+    const seen = new Set(inView(bars, ...span));
+    bars.forEach((bar) => bar.toggleAttribute('data-in-view', seen.has(bar)));
+  });
+}
+let screenFrame = 0;
+function queueScreen() {
+  cancelAnimationFrame(screenFrame);
+  screenFrame = requestAnimationFrame(() => {
+    onScreen.forEach((row) => {
+      if (!row.isConnected) onScreen.delete(row);
+    });
+    markInView();
+    highlightOnScreen();
+  });
+}
+// The first paint and every swap: a new list is watched (and searched, its
+// box filled from the URL), and what is on screen marked.
+document.body.addEventListener('htmx:load', () => {
+  watchLists();
+  queueScreen();
+});
+
+// A search over what is on the page (the ``filter_input`` macro): typing
+// narrows its target's rows (``data-filter``) to those holding the text,
+// any case, and marks each match; rows that arrive later follow it; the
+// text rides in the URL. No request: whatever is there, at once.
+// splitMatches is split_matches' twin (app.core.formatting), held to one
+// table of cases (tests/test_formatting.py MATCH_CASES).
+function splitMatches(text, query) {
+  if (!query) return [[text, false]];
+  const runs = [];
+  const lower = text.toLowerCase();
+  const needle = query.toLowerCase();
+  let at = 0;
+  for (let hit = lower.indexOf(needle); hit !== -1; hit = lower.indexOf(needle, at)) {
+    if (hit > at) runs.push([text.slice(at, hit), false]);
+    runs.push([text.slice(hit, hit + needle.length), true]);
+    at = hit + needle.length;
+  }
+  if (at < text.length) runs.push([text.slice(at), false]);
+  return runs.length ? runs : [[text, false]];
+}
+// Each row's text, lowercased once: a row's lines do not change.
+const rowText = new WeakMap();
+function textOf(row) {
+  let text = rowText.get(row);
+  if (text === undefined) {
+    text = row.textContent.toLowerCase();
+    rowText.set(row, text);
+  }
+  return text;
+}
+// The matches on screen, painted with the CSS Highlight API
+// (``::highlight(found)`` in input.css): no element added or removed, and
+// only the rows showing, re-painted as they scroll. Without the API the
+// rows still filter, unmarked.
+function rangesIn(row, query) {
+  const ranges = [];
+  const walker = document.createTreeWalker(row, NodeFilter.SHOW_TEXT, {
+    acceptNode: (node) => (node.parentElement.closest('button, svg') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+  });
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+    let at = 0;
+    splitMatches(node.data, query).forEach(([run, hit]) => {
+      if (hit) {
+        const range = new Range();
+        range.setStart(node, at);
+        range.setEnd(node, at + run.length);
+        ranges.push(range);
+      }
+      at += run.length;
+    });
+  }
+  return ranges;
+}
+function highlightOnScreen() {
+  if (typeof CSS === 'undefined' || !CSS.highlights) return;
+  const ranges = [];
+  document.querySelectorAll('input[data-filter]').forEach((input) => {
+    const query = input.value.trim();
+    const list = document.querySelector(input.dataset.filter);
+    if (query && list) rowsOnScreen(list).forEach((row) => ranges.push(...rangesIn(row, query)));
+  });
+  if (ranges.length) CSS.highlights.set('found', new Highlight(...ranges));
+  else CSS.highlights.delete('found');
+}
+let urlTimer = 0;
+function keepInUrl(input, query) {
+  clearTimeout(urlTimer);
+  urlTimer = setTimeout(() => {
+    const url = new URL(window.location.href);
+    if (query) url.searchParams.set(input.name, query);
+    else url.searchParams.delete(input.name);
+    window.history.replaceState(window.history.state, '', url);
+  }, 300);
+}
+// The search box over ``list``, if it has one.
+function searchOf(list) {
+  return [...document.querySelectorAll('input[data-filter]')].find((input) => list.matches(input.dataset.filter));
+}
+// ``rows`` shown or hidden by ``input``'s text, touching only those that change.
+function filterRows(rows, input) {
+  const needle = input ? input.value.trim().toLowerCase() : '';
+  rows.forEach((row) => {
+    const hide = Boolean(needle) && !textOf(row).includes(needle);
+    if (row.hidden !== hide) row.hidden = hide;
+  });
+}
+// Typing faster than a frame applies once, with the latest text.
+let filterFrame = 0;
+document.addEventListener('input', (event) => {
+  if (!event.target.matches || !event.target.matches('[data-filter]')) return;
+  const input = event.target;
+  cancelAnimationFrame(filterFrame);
+  filterFrame = requestAnimationFrame(() => {
+    const list = document.querySelector(input.dataset.filter);
+    if (!list) return;
+    filterRows([...list.children], input);
+    keepInUrl(input, input.value.trim());
+    queueScreen();
+  });
+});
+
 // The dismissal rules, for the node tests (tests/web/test_app_js.py).
-if (typeof module !== 'undefined') module.exports = { outsideClick, dismiss, navigates, markCurrent };
+if (typeof module !== 'undefined') module.exports = { outsideClick, dismiss, navigates, markCurrent, rangeUrl, spanned, inView, splitMatches };

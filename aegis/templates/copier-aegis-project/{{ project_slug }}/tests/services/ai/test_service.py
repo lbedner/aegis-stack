@@ -27,6 +27,17 @@ class TestAIServiceInitialization:
         assert hasattr(service.config, "model")
 
 
+def test_a_setting_saved_after_the_service_was_built_applies(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The service is built at import and saved settings apply as the
+    process boots, after it: its config reads them as they stand."""
+    service = AIService(settings)
+    monkeypatch.setattr(settings, "AI_TEMPERATURE", 0.2)
+    monkeypatch.setattr(settings, "AI_MAX_TOKENS", 300)
+    assert (service.config.temperature, service.config.max_tokens) == (0.2, 300)
+
+
 class TestAIServiceStatus:
     """Test AI service status reporting."""
 
@@ -206,3 +217,17 @@ class TestAIServiceErrorHandling:
                 pass
 
         assert "disabled" in str(exc_info.value).lower()
+
+
+@pytest.mark.parametrize(
+    ("name", "value"), [("AI_TEMPERATURE", "5"), ("AI_MAX_TOKENS", "0")]
+)
+def test_a_value_the_config_would_refuse_is_refused_when_saved(
+    name: str, value: str
+) -> None:
+    """``config`` reads settings on every call, so an out-of-range value
+    saved in the Overseer would break each one; it is refused at the save."""
+    from app.core import saved_settings, secrets
+
+    with pytest.raises(secrets.SecretRejectedError):
+        saved_settings.coerce(name, value)

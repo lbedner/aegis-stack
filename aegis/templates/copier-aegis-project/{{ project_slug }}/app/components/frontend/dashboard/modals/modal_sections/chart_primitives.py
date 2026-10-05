@@ -148,6 +148,9 @@ class LineSeries:
     highlight_color: str = (
         "#F59E0B"  # ChartColors.AMBER - keep dataclass self-contained
     )
+    # A guide (where a warning begins, say): a dashed level, out of the
+    # legend and the tooltips, that the y-axis still takes in.
+    guide: bool = False
 
 
 @dataclass

@@ -68,6 +68,43 @@ def test_a_chart_lines_series_up_on_their_shared_times() -> None:
     assert (data["x"], data["format"]) == ("time", "percent")
 
 
+def test_any_chart_can_mark_where_warning_and_alert_begin() -> None:
+    """``thresholds`` (``app.core.thresholds.levels``): the ones in reach."""
+    found = {"depth": [(100.0, 30.0)]}
+    data = series.chart(
+        found,
+        str,
+        thresholds=[{"value": 50, "tone": "warn"}, {"value": 90, "tone": "error"}],
+    )
+    assert data["thresholds"] == [{"value": 50, "tone": "warn"}]
+    assert "thresholds" not in series.chart(found, str)
+
+
+def test_a_live_frame_carries_only_what_the_chart_lacks() -> None:
+    """A live chart already holds what it was sent: the next frame carries
+    the times from the last one sent on (that bucket may still be filling),
+    and still counts every point, so "nothing yet" reads right."""
+    drawn = {
+        "labels": [1000, 2000, 3000],
+        "series": [{"label": "a", "values": [1.0, 2.0, 3.0]}],
+        "x": "time",
+        "points": 3,
+        "window": [0, 3000],
+    }
+    newer = series.since(drawn, 2000)
+    assert newer["labels"] == [2000, 3000]
+    assert newer["series"] == [{"label": "a", "values": [2.0, 3.0]}]
+    assert (newer["points"], newer["window"]) == (3, [0, 3000])
+
+
+def test_a_threshold_is_drawn_only_in_reach_of_the_data() -> None:
+    """An alert at 640% (eight cores) would flatten a 5% line, so a guide
+    shows once the data is within half of it; the page draws what it is sent."""
+    lines = [{"label": "a", "values": [None, 4.0]}]
+    levels = [{"value": 8, "tone": "warn"}, {"value": 10, "tone": "error"}]
+    assert series.thresholds_in_reach(lines, levels) == [{"value": 8, "tone": "warn"}]
+
+
 def test_a_chart_spans_its_window_even_with_nothing_in_it(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

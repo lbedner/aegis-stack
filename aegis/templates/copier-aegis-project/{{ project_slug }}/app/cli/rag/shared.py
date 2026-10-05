@@ -4,36 +4,17 @@ The app object lives here rather than in ``__init__`` so a command
 module can import it without importing its siblings.
 """
 
-import asyncio
 from pathlib import Path
-from typing import Annotated
 
 import typer
+
 from app.cli import theme
 from app.core.config import settings
-from app.core.log import suppress_logs
 from app.i18n import lazy_t, t
-from app.services.rag.config import get_rag_config
-from app.services.rag.service import RAGService
-from rich.panel import Panel
-from rich.progress import (
-    BarColumn,
-    Progress,
-    SpinnerColumn,
-    TaskProgressColumn,
-    TextColumn,
-)
-from rich.table import Table
-
+from app.services.rag.config import get_rag_service as get_rag_service
 
 app = typer.Typer(help=lazy_t("rag.help"))
 console = theme.console()
-
-
-def get_rag_service() -> RAGService:
-    """Get RAG service instance."""
-    config = get_rag_config(settings)
-    return RAGService(config)
 
 
 def format_duration(ms: float) -> str:
@@ -114,4 +95,3 @@ def _ensure_model_ready() -> None:
         console.print(f"[{theme.ERROR}]{t('rag.model_download_failed', error=e)}[/]")
         console.print(f"[dim]{t('rag.model_download_hint')}[/dim]")
         raise typer.Exit(code=1)
-

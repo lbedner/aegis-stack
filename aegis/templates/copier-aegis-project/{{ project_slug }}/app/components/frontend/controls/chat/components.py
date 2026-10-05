@@ -26,6 +26,7 @@ from app.components.frontend.controls.chat.display_rows import (
     _display_rows,
 )
 from app.components.frontend.controls.text import LabelText, SecondaryText
+from app.components.frontend.theme import TONE_COLORS
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.chat_transcript import (
     CARD_STATUS,
@@ -44,14 +45,8 @@ ChangeAction = Callable[[int, str], Awaitable[dict[str, Any] | None]]
 # fixed narrow width and centers in whatever column hosts it.
 CARD_WIDTH = 420
 
-_TONE_COLORS = {
-    "warn": Theme.Colors.WARNING,
-    "ok": Theme.Colors.SUCCESS,
-    "error": Theme.Colors.ERROR,
-    "muted": ft.Colors.OUTLINE,
-}
 _STATUS_COPY = {
-    status: (label, _TONE_COLORS[tone]) for status, (label, tone) in CARD_STATUS.items()
+    status: (label, TONE_COLORS[tone]) for status, (label, tone) in CARD_STATUS.items()
 }
 
 

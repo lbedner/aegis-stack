@@ -8,9 +8,10 @@ from environment variables for easy configuration in different environments.
 
 from typing import Annotated, Any, Literal
 
-from pydantic import {% if include_worker %}Field, {% endif %}model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import {% if include_worker or include_ai %}Field, {% endif %}model_validator
+from pydantic_settings import SettingsConfigDict
 from app.core.configurable import Configurable, timezones
+from app.core.settings_base import SettingsBase
 {% if include_ai and ai_voice %}from app.core.voice_settings import VoiceSettings{% endif %}
 {% if include_worker %}from app.core.queue_workers import DEFAULT_QUEUES, QueueWorker{% endif %}
 {%- for p in _plugins | default([]) %}
@@ -25,6 +26,7 @@ from {{ s.module }} import {{ s.symbol }}
 # so the startup guard below has a single source of truth and a renamed
 # placeholder doesn't accidentally bypass the check.
 _SECRET_KEY_PLACEHOLDER = "change-this-secret-key-in-production-use-env-variable"
+LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 
 
 class Settings(
@@ -36,7 +38,7 @@ class Settings(
 {%- if include_ai and ai_voice %}
     VoiceSettings,
 {%- endif %}
-    BaseSettings,
+    SettingsBase,
 ):
     """
     Defines application settings.
@@ -67,10 +69,10 @@ class Settings(
 
     # Public signup gate. When False, /register returns 403 and OAuth new-user
     # creation is refused. Existing users still sign in normally.
-    REGISTRATION_ENABLED: bool = True
+    REGISTRATION_ENABLED: Annotated[bool, Configurable("service_auth", "Whether anyone can sign up; off, an admin makes accounts")] = True
 
     # Log level for the application
-    LOG_LEVEL: str = "INFO"
+    LOG_LEVEL: Annotated[str, Configurable("backend", "Lowest level a log line is written at", choices=lambda: LOG_LEVELS)] = "INFO"
 
     # Port for the web server
     PORT: int = 8000
@@ -124,18 +126,9 @@ class Settings(
     # namespaced by it. See ``services/insights/constants.py``.
     BUILD_ID: str = "dev"
 
-    # Health monitoring and alerting
-    # Health checks are available via API endpoints (/health/)
-    # Use external monitoring tools (Prometheus, DataDog, etc.) to poll these endpoints
-    HEALTH_CHECK_ENABLED: bool = True
-    HEALTH_CHECK_INTERVAL_MINUTES: int = 5  # Recommended interval for monitoring
-
+    # Health monitoring: checks answer on /health/ for any monitor to poll
     HEALTH_CHECK_TIMEOUT_SECONDS: Annotated[float, Configurable("health", "Seconds a health check waits before calling a component down")] = 2.0
     SYSTEM_METRICS_CACHE_SECONDS: Annotated[int, Configurable("health", "Seconds the host's CPU, memory and disk readings are reused")] = 5
-
-    # Basic alerting configuration
-    ALERTING_ENABLED: bool = False
-    ALERT_COOLDOWN_MINUTES: int = 60  # Minutes between repeated alerts for same issue
 
     MEMORY_THRESHOLD_PERCENT: Annotated[float, Configurable("health", "Memory in use, percent, at which the host or a container is unhealthy")] = 90.0
     DISK_THRESHOLD_PERCENT: Annotated[float, Configurable("health", "Disk in use, percent, at which the host is unhealthy")] = 85.0
@@ -230,15 +223,15 @@ class Settings(
     EMAIL_VERIFICATION_EXPIRE_HOURS: int = 24
 
     # Rate limiting settings
-    RATE_LIMIT_LOGIN_MAX: int = 5
-    RATE_LIMIT_LOGIN_WINDOW: int = 60
-    RATE_LIMIT_REGISTER_MAX: int = 3
-    RATE_LIMIT_REGISTER_WINDOW: int = 60
+    RATE_LIMIT_LOGIN_MAX: Annotated[int, Configurable("service_auth", "Sign-in attempts one address may make per window")] = 5
+    RATE_LIMIT_LOGIN_WINDOW: Annotated[int, Configurable("service_auth", "Seconds the sign-in limit counts over")] = 60
+    RATE_LIMIT_REGISTER_MAX: Annotated[int, Configurable("service_auth", "Sign-ups or password resets one address may ask for per window")] = 3
+    RATE_LIMIT_REGISTER_WINDOW: Annotated[int, Configurable("service_auth", "Seconds the sign-up limit counts over")] = 60
     # Resend-verification is a user-initiated button; a tighter-than-register
     # limit would feel punishing during legit retries. 3 per 5 min strikes
     # the balance — still spam-proof, far less fiddly.
-    RATE_LIMIT_RESEND_VERIFICATION_MAX: int = 3
-    RATE_LIMIT_RESEND_VERIFICATION_WINDOW: int = 300
+    RATE_LIMIT_RESEND_VERIFICATION_MAX: Annotated[int, Configurable("service_auth", "Verification emails one address may ask for per window")] = 3
+    RATE_LIMIT_RESEND_VERIFICATION_WINDOW: Annotated[int, Configurable("service_auth", "Seconds the verification-email limit counts over")] = 300
 
     # Account lockout settings
     ACCOUNT_LOCKOUT_ATTEMPTS: Annotated[int, Configurable("service_auth", "Failed sign-ins before an account is locked")] = 5
@@ -314,6 +307,7 @@ class Settings(
     # Worker settings; per-queue ones are modelled in app/core/queue_workers.py
     WORKER_QUEUES: dict[str, QueueWorker] = Field(default_factory=DEFAULT_QUEUES.copy)
     WORKER_QUEUE_DEFAULT: QueueWorker = QueueWorker()
+    # Not on Overseer > Settings: arq reads both in its queue classes, before saved values apply
     WORKER_KEEP_RESULT_SECONDS: int = 3600  # Keep job results for 1 hour
     WORKER_MAX_TRIES: int = 3
 {%- if worker_backend == "taskiq" %}
@@ -390,13 +384,13 @@ class Settings(
     AI_ENABLED: bool = True
     AI_PROVIDER: str = "public"  # Default to public provider
     AI_MODEL: str = "auto"  # Default model (public provider uses available models)
-    AI_TEMPERATURE: float = 0.7
-    AI_MAX_TOKENS: int = 1000
+    AI_TEMPERATURE: Annotated[float, Field(ge=0.0, le=2.0), Configurable("service_ai", "How varied the model's answers are, 0 to 2")] = 0.7
+    AI_MAX_TOKENS: Annotated[int, Field(gt=0, le=8000), Configurable("service_ai", "Most tokens one answer may run to")] = 1000
     # Anthropic-only thinking depth (low|medium|high|xhigh|max). None = the API
     # default; other providers ignore it. Most of a call's cost is thinking
     # tokens, so "low" cuts spend several-fold on constrained tasks.
     AI_EFFORT: str | None = None
-    AI_TIMEOUT_SECONDS: float = 120.0
+    AI_TIMEOUT_SECONDS: Annotated[float, Field(gt=0), Configurable("service_ai", "Seconds the model has to answer")] = 120.0
 {% if ai_backend != "memory" %}
     # Batch sentiment scoring of conversations. OFF by default: the job
     # spends model tokens on every unscored conversation.
@@ -625,10 +619,10 @@ class Settings(
     # limits. Optional — public models download without it.
     HF_TOKEN: str | None = None
     RAG_MODEL_CACHE_DIR: str | None = None  # None = system default, "./data/models" for local dev
-    RAG_CHUNK_SIZE: int = 2000
-    RAG_CHUNK_OVERLAP: int = 400
-    RAG_DEFAULT_TOP_K: int = 15
-    RAG_CHAT_TOP_K: int = 15  # Number of chunks for AI chat context
+    RAG_CHUNK_SIZE: Annotated[int, Field(gt=0, le=10000), Configurable("service_ai", "Characters per indexed chunk")] = 2000
+    RAG_CHUNK_OVERLAP: Annotated[int, Field(ge=0, le=1000), Configurable("service_ai", "Characters each chunk shares with the next")] = 400
+    RAG_DEFAULT_TOP_K: Annotated[int, Field(gt=0, le=50), Configurable("service_ai", "Chunks a search returns by default")] = 15
+    RAG_CHAT_TOP_K: Annotated[int, Field(gt=0, le=50), Configurable("service_ai", "Chunks a chat answer draws on")] = 15
 {% endif %}
 
 {% if include_redis or database_engine == "postgres" or ollama_mode != "none" or include_ingress %}

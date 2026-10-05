@@ -38,7 +38,7 @@
 {% endblock %}
 
 {% block auth_footer %}
-{% if registration_enabled %}
+{% if registration_enabled() %}
 New here? <a href="/register" class="text-aegis-teal hover:text-aegis-text transition-colors">Create an account</a>.
 {% else %}
 <span class="text-aegis-muted">Signups are closed right now.</span>

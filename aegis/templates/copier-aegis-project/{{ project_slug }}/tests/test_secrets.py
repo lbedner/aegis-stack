@@ -419,3 +419,32 @@ async def test_a_provider_that_cannot_answer_offers_no_choices(
 async def test_choices_for_an_undeclared_name_refuse(env: pytest.MonkeyPatch) -> None:
     with pytest.raises(secrets.UnknownSecretError):
         await secrets.choices("PATH")
+
+
+# The app's own credentials, which no ``SECRETS`` declares.
+APP_CREDENTIALS = {"SECRET_KEY", "ENCRYPTION_KEY", "DOCS_PASSWORD"}
+
+
+def test_a_settings_repr_shows_no_credential() -> None:
+    """A log line, a traceback or a failing assert that shows ``settings``
+    never carries a credential: any one declared, or the app's own."""
+    declared = {e.name for e in secrets.collect() if e.secret and not e.setting}
+    names = (declared | APP_CREDENTIALS) & set(type(settings).model_fields)
+    shown = settings.model_copy(update={name: f"{name}-value" for name in names})
+    for text in (repr(shown), str(shown)):
+        assert not [name for name in names if f"{name}-value" in text]
+
+
+@pytest.mark.parametrize(
+    ("url", "masked"),
+    [
+        ("postgresql://app:hunter2@db:5432/app", "postgresql://app:***@db:5432/app"),
+        ("redis://:hunter2@redis:6379/0", "redis://:***@redis:6379/0"),  # no user
+        ("postgresql://app:hun/ter2@db/app", "postgresql://app:***@db/app"),
+        ("https://example.com/a?b=c", "https://example.com/a?b=c"),
+    ],
+)
+def test_a_settings_repr_hides_a_urls_password(url: str, masked: str) -> None:
+    shown = repr(settings.model_copy(update={"PUBLIC_BASE_URL": url}))
+    assert "hunter2" not in shown and "hun/ter2" not in shown
+    assert masked in shown

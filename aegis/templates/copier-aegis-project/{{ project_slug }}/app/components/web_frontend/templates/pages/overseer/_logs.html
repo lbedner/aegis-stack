@@ -4,19 +4,25 @@
    the filters that chose them, and new lines added over SSE at the newest
    end while it is open, unless paused (a paused line is dropped). Oldest
    first, the column-reverse scroller keeps that end in view as lines
-   arrive. #}
-{% from "components/macros/form.html" import action, checklist, range_chips, search_input, select %}
+   arrive. Above them, the window's volume (``logs.volume``): a bar per
+   slice, stacked by tone, that narrows the lines to its time; a drag across
+   bars narrows to all of them, and the bars behind the lines on screen
+   are marked as the list scrolls (``data-range``, ``data-range-of`` in
+   app.js). #}
+{% from "components/macros/form.html" import action, checklist, filter_input, range_chips, select %}
 {% set newest_first = logs_order == "desc" %}
-<div id="logs" class="space-y-3" x-data="{ paused: false }" x-on:htmx:sse-before-message="paused && $event.preventDefault()"{% if not logs.note %} hx-ext="sse" sse-connect="{{ logs_events }}"{% endif %}>
+<div id="logs" class="space-y-3" x-data="{ paused: false, wrap: false }" x-bind:class="wrap && 'logs-wrap'" x-on:htmx:sse-before-message="paused && $event.preventDefault()"{% if not logs.note %} hx-ext="sse" sse-connect="{{ logs_events }}"{% endif %}>
   <form class="flex flex-wrap items-center gap-3" {{ hx_replace(request.url.path, "#logs") }}
-        hx-trigger="change, search, keyup changed delay:300ms from:input[name=q]">
+        hx-trigger="change[!target.closest('[data-filter]')]" x-on:submit.prevent>
     {{ range_chips(logs_windows, logs_window, field="window", aria="Log window") }}
     {% if logs_services is defined %}{{ checklist("logs-services", "service", "Services", logs_services) }}{% endif %}
-    {{ select("level", logs_levels, logs_level, blank="All levels") }}
+    {% if logs_containers %}{{ checklist("logs-containers", "container", "Containers", logs_containers) }}{% endif %}
+    {{ checklist("logs-levels", "level", "Levels", logs_levels) }}
     {{ select("order", logs_orders, logs_order, blank=None) }}
-    {{ search_input("q", logs_q, placeholder="Search lines") }}
+    {{ filter_input("#logs-lines", "q", logs_q, placeholder="Search lines") }}
     {% if not logs.note %}
     <div class="ml-auto flex gap-1.5">
+      {{ action("Wrap", "data-wrap x-on:click=\"wrap = !wrap\" x-bind:aria-pressed=\"wrap\"") }}
       {{ action("Pause", "data-pause x-on:click=\"paused = !paused\" x-text=\"paused ? 'Resume' : 'Pause'\" x-bind:aria-pressed=\"paused\"") }}
       {% if logs.lines %}
       {{ action("Top", 'data-scroll-to="#logs-lines > tr:first-child"') }}
@@ -28,12 +34,33 @@
   {% if logs.note %}
   <p class="text-sm text-aegis-muted">{{ logs.note }}</p>
   {% else %}
+  {% if logs.volume %}
+  {% set peak = [1] + logs.volume|map(attribute="total")|list %}{% set peak = peak|max %}
+  {% set picked = request.query_params.get("from") %}
+  <div class="flex items-end gap-3">
+    <div class="flex-1">
+    <div id="logs-volume" data-range data-range-of="logs-lines" class="flex items-end gap-px h-10 select-none" aria-label="Lines over the window; drag across bars to narrow to them">
+      {% for bar in logs.volume %}
+      {% set url = request.url.include_query_params(**{"from": bar.from, "to": bar.to}) %}
+      <a href="{{ url }}" {{ hx_replace(url|string, "#logs") }} data-from="{{ bar.from }}" data-to="{{ bar.to }}" draggable="false" class="volume-bar flex-1 h-full flex flex-col justify-end"{% if bar.picked %} aria-current="true"{% endif %} title="{{ bar.at }} · {{ bar.total }} lines">
+        {% for tone in logs_volume_tones if bar[tone] %}<span class="toned" data-tone="{{ 'muted' if tone == 'other' else tone }}" style="height: {{ (bar[tone] / peak * 100)|round(1) }}%"></span>{% endfor %}
+      </a>
+      {% endfor %}
+    </div>
+    <div id="logs-volume-scale" class="mt-1 flex justify-between text-xxs text-aegis-muted font-mono"><span>{{ logs.volume[0].at }}</span><span>now</span></div>
+    </div>
+    {% if picked %}{% set every = request.url.remove_query_params(["from", "to"]) %}<a data-clear-range href="{{ every }}" {{ hx_replace(every|string, "#logs") }} class="text-xs text-aegis-muted hover:text-aegis-teal">Whole window</a>{% endif %}
+  </div>
+  {% endif %}
   {# Runs to the bottom of the window and scrolls inside, so the filters
      above stay put. A stream, so flat on the canvas, not on a card. #}
   <div data-scroll class="flex {{ 'flex-col' if newest_first else 'flex-col-reverse' }} h-[calc(100vh-16rem)] min-h-[24rem] overflow-y-auto border-t border-aegis-border">
-    <table class="w-full text-xs">
-      <tbody id="logs-lines" sse-swap="logs-lines" hx-swap="{{ 'afterbegin' if newest_first else 'beforeend' }}">
-        {% with rows = logs.lines, tones = logs_tones, links = logs_links if logs_links is defined else none, q = logs_q %}{% include "pages/overseer/_logs_rows.html" %}{% endwith %}
+    {# Fixed columns: lines a search shows again never re-measure the table. #}
+    <table class="w-full text-xs table-fixed">
+      <colgroup><col class="w-28"><col class="w-52"><col></colgroup>
+      <tbody id="logs-lines" sse-swap="logs-lines" hx-swap="{{ 'afterbegin' if newest_first else 'beforeend' }}"
+             x-on:click="$event.target.closest('a, button, summary') || getSelection().toString() || $event.target.closest('tr')?.toggleAttribute('data-open')">
+        {% with rows = logs.lines, tones = logs_tones, links = logs_links if logs_links is defined else none %}{% include "pages/overseer/_logs_rows.html" %}{% endwith %}
       </tbody>
     </table>
   </div>

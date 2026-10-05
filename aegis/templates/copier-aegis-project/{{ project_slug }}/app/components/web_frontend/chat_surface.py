@@ -14,10 +14,10 @@ its own agent and its own user's conversations, is another. Every route
 mount it serves.
 """
 
-from dataclasses import dataclass
 import importlib
-from importlib.util import find_spec
 import json
+from dataclasses import dataclass
+from importlib.util import find_spec
 from typing import Any
 from urllib.parse import urlencode
 
@@ -30,6 +30,8 @@ from app.core.chat_transcript import (
     trace_label,
     trace_output,
 )
+from app.core.log import logger
+from fastapi import HTTPException
 
 from .main import CHANGES
 
@@ -77,13 +79,16 @@ class ChatSurface:
         return defaults
 
 
-async def assistant_name(chat: ChatSurface) -> str:
-    """The answering agent's name, as the registry holds it."""
+async def assistant_name(chat: ChatSurface, session: Any = None) -> str:
+    """The answering agent's name, as the registry holds it. A route that
+    holds a session passes it: a second one would wait on SQLite's write
+    lock and fail ("database is locked")."""
     from app.services.ai.domains.chat.agent_loader import resolve_agent
 
-    agent = await (
-        resolve_agent(chat.agent_slug) if chat.agent_slug else resolve_agent()
-    )
+    if chat.agent_slug:
+        agent = await resolve_agent(chat.agent_slug, session=session)
+    else:
+        agent = await resolve_agent(session=session)
     return agent.name
 
 
@@ -148,7 +153,11 @@ async def synthesize(text: str, tts: Any = None) -> bytes:
     from app.services.ai.domains.voice.models import SpeechRequest
 
     speaker = tts or ai_service.tts
-    return (await speaker.synthesize(SpeechRequest(text=text))).audio
+    try:
+        return (await speaker.synthesize(SpeechRequest(text=text))).audio
+    except Exception:  # the provider's own: a key, the network, a format
+        logger.exception("Speech synthesis failed")
+        raise HTTPException(status_code=503, detail="Speech synthesis failed") from None
 
 
 def _voice() -> dict[str, str]:

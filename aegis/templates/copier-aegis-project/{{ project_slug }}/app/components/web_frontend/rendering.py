@@ -33,7 +33,15 @@ templates.env.globals["project_description"] = settings.PROJECT_DESCRIPTION
 # on this at render time. AUTH_ENABLED is False when the service was not
 # selected.
 templates.env.globals["auth_enabled"] = settings.AUTH_ENABLED
-templates.env.globals["registration_enabled"] = settings.REGISTRATION_ENABLED
+
+
+def registration_enabled() -> bool:
+    """Whether signups are open, read as a page renders: a value saved in
+    the Overseer applies once the process has booted, after import."""
+    return settings.REGISTRATION_ENABLED
+
+
+templates.env.globals["registration_enabled"] = registration_enabled
 templates.env.globals["email_flows_enabled"] = (
     settings.AUTH_ENABLED and settings.AUTH_LEVEL != "basic"
 )

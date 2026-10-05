@@ -91,7 +91,9 @@ def coerce(name: str, value: str) -> Any:
     why it does not fit the type or, for a closed set, its values."""
     field, _ = _marked()[name]
     try:
-        typed = TypeAdapter(field.annotation).validate_python(value)
+        # With its bounds (``Field(ge=...)``), not only its type: the
+        # code that reads it may refuse what the type allows.
+        typed = TypeAdapter(field.rebuild_annotation()).validate_python(value)
     except ValidationError as exc:
         reason = exc.errors()[0]["msg"]
         raise secrets.SecretRejectedError(

@@ -16,6 +16,7 @@ from app.components.frontend.dashboard.modals.modal_sections.chart_primitives im
 )
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.runtime import LogLine, parse_log_line
+from app.services.system import ui_logs
 from tests._fake_runtime import REDIS, WORKER, FakeRuntime, use_runtime
 from tests.components.frontend._tree import texts, walk
 
@@ -153,6 +154,7 @@ def _row(**given: object) -> dict[str, object]:
         "at": "20:45:01",
         "page": "redis",
         "instance": REDIS.name,
+        "source": "",
         "level": None,
         "prefix": "",
         "message": "Write failed",
@@ -168,14 +170,37 @@ def test_a_warning_or_worse_has_a_stripe_in_its_color() -> None:
     assert _line(_row(level="info")).border is None
 
 
-def test_the_lead_is_dimmed_and_the_search_marked() -> None:
+def test_the_lead_is_left_out_and_the_search_marked() -> None:
+    """The time and level the line's own lead repeats are shown once."""
     line = _line(_row(prefix="[02:13:16] ", message="Write failed"), query="write")
     spans = [n for node in walk(line) for n in (getattr(node, "spans", None) or [])]
-    assert [s.text for s in spans] == ["[02:13:16] ", "Write", " failed"]
-    assert spans[1].style.bgcolor is not None and spans[2].style is None
+    assert [s.text for s in spans] == ["Write", " failed"]
+    assert spans[0].style.bgcolor is not None and spans[1].style is None
+
+
+def test_a_line_names_its_container_only_where_its_service_has_several() -> None:
+    """One source: the service, then which of its containers when it has
+    several (``source``), as the htmx page shows it."""
+    alone = texts(_line(_row(), titles={"redis": "Cache"}))
+    assert REDIS.name not in alone
+    several = texts(_line(_row(source="system"), titles={"redis": "Cache"}))
+    assert "system" in several
 
 
 def test_each_service_has_its_own_color() -> None:
     line = _line(_row(color=3), titles={"redis": "Cache"})
     (dot,) = [n for n in walk(line) if getattr(n, "data", None) == "service-dot"]
     assert dot.bgcolor == ChartColors.RAMP[3]
+
+
+def test_the_level_picker_offers_what_the_page_does() -> None:
+    """The levels htmx offers, lines with none among them, from one list."""
+    import flet as ft
+
+    picker = next(
+        n
+        for n in walk(LogsSection("redis"))
+        if isinstance(n, ft.Dropdown) and any(o.key == "error" for o in n.options)
+    )
+    keys = [o.key for o in picker.options]
+    assert keys[1:] == [value for value, _ in ui_logs.LEVEL_CHOICES]

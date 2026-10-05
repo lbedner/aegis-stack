@@ -67,7 +67,7 @@ def add_voice_routes(router: APIRouter, mount: ChatSurface) -> None:
             view="list",
             voices=rows,
             path=voices_path,
-            assistant=await chat.assistant_name(mount),
+            assistant=await chat.assistant_name(mount, db),
             active=next((p for p in rows if p.is_active), None),
             chip_oob=chip,
             errors=errors or [],

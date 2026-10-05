@@ -32,6 +32,13 @@ packages = ["src/{{ pkg }}"]
 [tool.ruff]
 line-length = 88
 target-version = "py311"
+# Template files render into a generated project and are linted there,
+# under that project's rules (its first-party ``app``, its import order).
+extend-exclude = ["src/*/templates"]
+
+[tool.pytest.ini_options]
+# Tests a template ships run inside a generated project; these pin the spec.
+testpaths = ["tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP"]

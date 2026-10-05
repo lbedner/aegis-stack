@@ -3,7 +3,7 @@
    every provider aegis knows as a card (the one in use marked; a card's
    command and token show when it is picked), the live build and the
    host (overseer_deployments). #}
-{% from "components/macros/layout.html" import avatar, card, copy_button, facts %}
+{% from "components/macros/layout.html" import avatar, card, command, facts %}
 {% macro where(title, place) %}
 {% call card(title) %}
   <div class="flex items-center gap-3">
@@ -36,7 +36,7 @@
     </div>
     {% for p in providers %}
     <div data-provider-detail="{{ p.key }}" x-show="pick === '{{ p.key }}'"{% if p.key != picked %} x-cloak{% endif %} class="text-xs text-aegis-muted space-y-1">
-      <p class="flex items-center gap-2"><code class="font-mono text-aegis-text">{{ p.command }}</code>{{ copy_button(p.command) }}</p>
+      <p class="flex items-center gap-2">{{ command(p.command) }}</p>
       {% if p.token %}<p>Reads <code class="font-mono text-aegis-text">{{ p.token }}</code> from your environment; the token never leaves your machine.</p>{% endif %}
     </div>
     {% endfor %}

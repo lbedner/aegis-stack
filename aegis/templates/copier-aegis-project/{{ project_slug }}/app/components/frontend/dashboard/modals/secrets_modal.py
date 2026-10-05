@@ -34,7 +34,7 @@ from app.services.system.ui import get_component_subtitle, get_component_title
 from ..cards.card_utils import get_status_detail
 from ..cards.secrets_card import counts
 from .base_detail_popup import BaseDetailPopup
-from .modal_sections import MetricCard
+from .modal_sections import metric_row
 
 API = "/api/v1/secrets"
 # A provider check's snack bar, by its result.
@@ -257,16 +257,7 @@ class SecretsDetailDialog(BaseDetailPopup):
     def __init__(self, component_data: ComponentStatus, page: ft.Page) -> None:
         metadata = component_data.metadata or {}
         writable = bool(metadata.get("writable"))
-        overview = ft.Container(
-            content=ft.Row(
-                [
-                    MetricCard(label, value, Theme.Colors.INFO)
-                    for label, value in counts(metadata)
-                ],
-                spacing=Theme.Spacing.MD,
-            ),
-            padding=Theme.Spacing.MD,
-        )
+        overview = metric_row(counts(metadata))
         super().__init__(
             page=page,
             component_data=component_data,

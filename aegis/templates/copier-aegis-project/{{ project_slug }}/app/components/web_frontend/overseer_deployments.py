@@ -10,7 +10,7 @@ from app.services.system import hosting, ui_deployments
 from app.services.system.models import ComponentStatus
 
 from .overseer_nav import NavItem, SectionRequest
-from .rendering import status_cell
+from .rendering import columns, status_cell
 
 SECTIONS = (
     (None, {"overview": "Overview", "history": "History", "backups": "Backups"}),
@@ -23,13 +23,8 @@ ITEM = NavItem(
     status="",
     component=ComponentStatus(name="deployments", message=""),
 )
-BACKUP_COLUMNS = [
-    {"key": key, "label": label} for key, label in ui_deployments.BACKUP_COLUMNS
-]
-HISTORY_COLUMNS = [
-    {"key": key, "label": label} | ({"kind": "status"} if key == "health" else {})
-    for key, label in ui_deployments.HISTORY_COLUMNS
-]
+BACKUP_COLUMNS = columns(ui_deployments.BACKUP_COLUMNS)
+HISTORY_COLUMNS = columns(ui_deployments.HISTORY_COLUMNS, status=("health",))
 # A deploy's health check, as a status cell's tone.
 HEALTH_TONES = {"passed": "ok", "failed": "error"}
 

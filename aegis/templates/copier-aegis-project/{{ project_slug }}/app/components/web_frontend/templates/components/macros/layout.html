@@ -491,6 +491,9 @@
         class="shrink-0 text-xxs caps px-2 py-0.5 rounded border border-aegis-border text-aegis-muted hover:text-aegis-text hover:border-aegis-muted transition-colors">{{ label }}</button>
 {% endmacro %}
 
+{# A command to run, in monospace, with its copy button. #}
+{% macro command(value) %}<code class="font-mono text-aegis-text">{{ value }}</code>{{ copy_button(value) }}{% endmacro %}
+
 {# The same as an icon, for a copy that sits beside what it copies (a
    chat bubble, a log cell): the icon becomes a tick and pops, then
    settles back, since without it the button looks broken and gets

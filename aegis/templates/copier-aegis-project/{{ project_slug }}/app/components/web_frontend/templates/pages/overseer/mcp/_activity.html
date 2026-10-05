@@ -1,0 +1,16 @@
+{# Overseer > MCP > Activity: each client's reads and proposals, then the
+   newest calls, or why none are kept (ui_mcp.recorded). #}
+{% from "components/macros/layout.html" import card %}
+{% from "components/macros/table.html" import data_table %}
+<div id="mcp-activity" class="space-y-4">
+  {% if not activity.clients %}
+  <p class="text-sm text-aegis-muted">{{ activity.note }}</p>
+  {% else %}
+  {% call card("By client") %}
+  <div id="mcp-clients">{{ data_table(client_columns, activity.clients) }}</div>
+  {% endcall %}
+  {% call card("Recent calls") %}
+  <div id="mcp-calls">{{ data_table(call_columns, activity.calls) }}</div>
+  {% endcall %}
+  {% endif %}
+</div>

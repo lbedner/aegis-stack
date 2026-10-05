@@ -104,6 +104,14 @@ def _optional_pages() -> dict[tuple[str, str], SectionedPage]:
     except ImportError:  # no payment service in this project
         pass
     try:
+        from . import overseer_mcp
+
+        pages[("components", "mcp")] = SectionedPage(
+            "mcp", overseer_mcp.SECTIONS, overseer_mcp.section_context
+        )
+    except ImportError:  # no mcp component in this project
+        pass
+    try:
         from . import overseer_inference
 
         pages[("components", "ollama")] = SectionedPage(

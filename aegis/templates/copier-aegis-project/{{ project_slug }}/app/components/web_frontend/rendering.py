@@ -154,6 +154,17 @@ def status_cell(label: str, tone: str) -> dict[str, str]:
     return {"label": label, "tone": tone}
 
 
+def columns(
+    pairs: tuple[tuple[str, str], ...], *, status: tuple[str, ...] = ()
+) -> list[dict[str, str]]:
+    """A ``ui_*`` module's ``(key, label)`` pairs as ``data_table`` columns,
+    the ``status`` keys rendered as badges (their cells are ``status_cell``)."""
+    return [
+        {"key": key, "label": label} | ({"kind": "status"} if key in status else {})
+        for key, label in pairs
+    ]
+
+
 def ranked(rows: list[dict[str, Any]], by: str) -> list[dict[str, Any]]:
     """Rows for the ``ranked_rows`` macro: each gains the ``ratio`` of its
     ``by`` figure to the largest row's, the width of its bar."""

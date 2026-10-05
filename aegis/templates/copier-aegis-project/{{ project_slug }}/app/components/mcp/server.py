@@ -7,7 +7,7 @@ are one computation. Never ``FastMCP.from_fastapi``: that would turn every
 API route into a tool, writes included, and give one question two answers.
 """
 
-from collections.abc import Callable, Iterable
+from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
 import time
 from typing import Any
@@ -30,16 +30,23 @@ class McpCall:
 
     tool: str
     client: str
+    effect: str
     duration_ms: int
     result_bytes: int
     ok: bool
 
 
-def log_call(call: McpCall) -> None:
+Recorder = Callable[[McpCall], Awaitable[None]]
+
+
+async def log_call(call: McpCall) -> None:
+    """The record where there is no database (``activity.record`` keeps it
+    where there is one)."""
     logger.info(
         "mcp.call",
         tool=call.tool,
         client=call.client,
+        effect=call.effect,
         duration_ms=call.duration_ms,
         result_bytes=call.result_bytes,
         ok=call.ok,
@@ -68,7 +75,7 @@ class Attribution(Middleware):
     the agent ``mcp:<client>`` (``acting_as``), and is recorded - tool,
     client, duration, size, outcome."""
 
-    def __init__(self, record: Callable[[McpCall], None]) -> None:
+    def __init__(self, record: Recorder) -> None:
         self._record = record
 
     async def on_call_tool(
@@ -84,10 +91,12 @@ class Attribution(Middleware):
                 result = await call_next(context)
             return result
         finally:
-            self._record(
+            tool = get_tool(context.message.name)
+            await self._record(
                 McpCall(
                     tool=context.message.name,
                     client=client,
+                    effect=tool.effect if tool is not None else "unknown",
                     duration_ms=int((time.perf_counter() - started) * 1000),
                     result_bytes=_result_bytes(result) if result else 0,
                     ok=result is not None,
@@ -95,9 +104,7 @@ class Attribution(Middleware):
             )
 
 
-def build_server(
-    grant: Iterable[str], *, record: Callable[[McpCall], None] = log_call
-) -> FastMCP:
+def build_server(grant: Iterable[str], *, record: Recorder = log_call) -> FastMCP:
     """A server offering exactly the granted tools that MCP may serve:
     reads and proposals, never a write (``mcp_servable``)."""
     server = FastMCP(settings.PROJECT_NAME, middleware=[Attribution(record)])

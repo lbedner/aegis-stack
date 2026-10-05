@@ -70,6 +70,9 @@ def get_component_title(component_name: str) -> str:
         {%- if include_storage %}
         "storage": "Storage",
         {%- endif %}
+        {%- if include_mcp %}
+        "mcp": "MCP",
+        {%- endif %}
         {%- if include_inference %}
         "ollama": "Inference",
         {%- endif %}
@@ -166,6 +169,9 @@ def get_component_label(component_name: str) -> str:
         {%- endif %}
         {%- if include_secrets %}
         "secrets": "Encrypted store",
+        {%- endif %}
+        {%- if include_mcp %}
+        "mcp": "Outside assistants, over stdio",
         {%- endif %}
     }
     return mapping.get(component_name, component_name.replace("_", " ").title())

@@ -317,6 +317,7 @@ STACK_COMBINATIONS = [
             "app/components/mcp/__init__.py",
             "app/components/mcp/server.py",
             "app/cli/mcp_cli.py",
+            "app/components/mcp/activity.py",
             "tests/components/test_mcp.py",
         ],
         expected_docker_services=["webserver", "scheduler"],

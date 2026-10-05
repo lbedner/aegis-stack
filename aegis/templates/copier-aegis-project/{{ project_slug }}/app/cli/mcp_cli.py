@@ -18,9 +18,16 @@ async def serve() -> None:
     # to register ``mcp``, and only this one needs FastMCP loaded.
     from app.components.mcp.server import build_server
 
+    try:  # kept on the record where there is a database to keep it in
+        from app.components.mcp.activity import record
+    except ImportError:
+        from app.components.mcp.server import log_call as record
+
     # stdout carries the protocol and nothing else: one stray log line
     # there and the client reads garbage.
     setup_logging(stream=sys.stderr)
     load_tools()
     logger.info("mcp.serving", tools=mcp_servable(settings.MCP_TOOLS))
-    await build_server(settings.MCP_TOOLS).run_stdio_async(show_banner=False)
+    await build_server(settings.MCP_TOOLS, record=record).run_stdio_async(
+        show_banner=False
+    )

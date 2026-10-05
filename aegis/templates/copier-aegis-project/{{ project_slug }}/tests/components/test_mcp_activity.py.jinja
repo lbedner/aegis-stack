@@ -1,0 +1,100 @@
+{% if include_mcp and include_database %}"""What did an outside assistant look at, and what did it propose? Every MCP
+call is kept, by client, apart from the chat agents' own tool calls."""
+
+from contextlib import asynccontextmanager
+from typing import Any
+
+from fastmcp import Client, FastMCP
+from mcp.types import Implementation
+import pytest
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.components.mcp import activity
+from app.components.mcp.server import build_server
+from app.core.tools import register_tool
+
+CLAUDE = Implementation(name="claude-code", version="1")
+DESKTOP = Implementation(name="claude-desktop", version="1")
+
+
+async def lookup(order_id: str) -> dict[str, Any]:
+    """Look up an order by id."""
+    return {"order_id": order_id}
+
+
+async def file_it(note: str) -> dict[str, Any]:
+    """File a note for approval."""
+    return {"status": "pending", "note": note}
+
+
+@pytest.fixture
+def server(
+    clean_registry: None,
+    async_db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> FastMCP:
+    """A server whose calls are kept through the test session."""
+
+    @asynccontextmanager
+    async def test_session():  # type: ignore[no-untyped-def]
+        yield async_db_session
+
+    monkeypatch.setattr(activity, "get_async_session", test_session)
+    register_tool("lookup", lookup, effect="read")
+    register_tool("file_it", file_it, effect="proposes")
+    return build_server(["lookup", "file_it"], record=activity.record)
+
+
+async def _call(
+    server: FastMCP, client: Implementation, tool: str, arguments: dict[str, Any]
+) -> None:
+    async with Client(server, client_info=client) as session:
+        await session.call_tool(tool, arguments)
+
+
+async def test_every_call_is_kept_with_its_client_and_effect(
+    server: FastMCP,
+) -> None:
+    await _call(server, CLAUDE, "lookup", {"order_id": "A1"})
+    await _call(server, CLAUDE, "file_it", {"note": "hi"})
+
+    rows = await activity.recent(limit=10)
+
+    assert [(r.client, r.tool, r.effect, r.ok) for r in rows] == [
+        ("claude-code", "file_it", "proposes", True),
+        ("claude-code", "lookup", "read", True),
+    ]
+
+
+async def test_activity_reads_by_client(server: FastMCP) -> None:
+    await _call(server, CLAUDE, "lookup", {"order_id": "A1"})
+    await _call(server, CLAUDE, "file_it", {"note": "hi"})
+    await _call(server, DESKTOP, "lookup", {"order_id": "B2"})
+
+    clients = {c.client: c for c in await activity.by_client()}
+
+    assert (clients["claude-code"].reads, clients["claude-code"].proposals) == (1, 1)
+    assert (clients["claude-desktop"].reads, clients["claude-desktop"].proposals) == (
+        1,
+        0,
+    )
+{%- if include_ai and ai_backend != "memory" %}
+
+
+async def test_mcp_calls_stay_out_of_the_agents_ledger(
+    server: FastMCP, async_db_session: AsyncSession
+) -> None:
+    """The agents' tool-call ledger answers for chat agents only; an MCP
+    client's calls are on their own record."""
+    from sqlmodel import func, select
+
+    from app.services.ai.models.agents import AgentToolCall
+
+    await _call(server, CLAUDE, "lookup", {"order_id": "A1"})
+
+    agent_calls = (
+        await async_db_session.exec(select(func.count()).select_from(AgentToolCall))
+    ).one()
+    assert agent_calls == 0
+{%- endif %}
+{% endif %}

@@ -1,0 +1,35 @@
+"""The MCP component's one table: a row per call an outside assistant made.
+{%- if database_engine == "postgres" %}
+
+Lives in its own ``mcp`` Postgres schema, apart from service tables.
+{%- endif %}
+"""
+
+from datetime import datetime
+
+from sqlalchemy import Column, DateTime, String
+from sqlmodel import Field, SQLModel
+
+from app.core.time import utcnow
+
+
+class McpToolCall(SQLModel, table=True):
+    """One tool call over MCP, by client (``activity`` writes and reads it).
+    Apart from the chat agents' ``agent_tool_call`` on purpose: what an
+    outside assistant did is its own question."""
+
+    __tablename__ = "mcp_tool_call"
+{%- if database_engine == "postgres" %}
+    __table_args__ = {"schema": "mcp"}
+{%- endif %}
+
+    id: int | None = Field(default=None, primary_key=True)
+    called_at: datetime = Field(
+        default_factory=utcnow, sa_column=Column(DateTime, nullable=False)
+    )
+    client: str = Field(sa_column=Column(String(128), nullable=False))
+    tool: str = Field(sa_column=Column(String(128), nullable=False))
+    effect: str = Field(sa_column=Column(String(16), nullable=False))
+    ok: bool
+    duration_ms: int
+    result_bytes: int

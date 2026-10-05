@@ -65,6 +65,8 @@ from ..dashboard.cards import (
 {% endif %}
 {% if include_secrets %}
     SecretsCard,
+{% endif %}{% if include_mcp %}
+    McpCard,
 {% endif %}
 {% if ollama_mode != "none" %}
     OllamaCard,
@@ -206,6 +208,9 @@ def create_component_card(
 {% if include_secrets %}
         elif component_name == "secrets":
             return SecretsCard(component_data).build()
+{% endif %}{% if include_mcp %}
+        elif component_name == "mcp":
+            return McpCard(component_data).build()
 {% endif %}
 {% if ollama_mode != "none" %}
         elif component_name == "ollama":

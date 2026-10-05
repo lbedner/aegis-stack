@@ -68,9 +68,15 @@ Over stdio there is no signed-in user. `MCP_OWNER_USER_ID` says who a client act
 MCP_OWNER_USER_ID=1
 ```
 
-## Every call is recorded
+## Every call is on the record
 
-One middleware records each call: the tool, the client that made it, the duration, the size of the result in bytes, and whether it succeeded. Today the record is a log line (`mcp.call`) on stderr. No tool has to know it was reached over MCP.
+One middleware records each call: the tool, the client that made it, its effect (a read or a proposal), the duration, the size of the result in bytes, and whether it succeeded. No tool has to know it was reached over MCP.
+
+With the database component the record is kept, in the component's own `mcp_tool_call` table, apart from the chat agents' tool calls. Without one it is a log line (`mcp.call` on stderr).
+
+Overseer shows it on its MCP page (htmx) and MCP card (Flet): the tools a client is served, each granted name it is not (and why), the commands that start the server, then each client's reads and proposals and the newest calls. Adding the database to a project later brings the record; removing it takes the record away.
+
+A client's proposals are approved where every card is, and each one names the client that proposed it.
 
 ## Tools without the AI service
 

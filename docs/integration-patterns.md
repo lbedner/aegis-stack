@@ -144,7 +144,7 @@ async def cleanup_inactive_users() -> None:
         await cleanup_service.deactivate_inactive_users(days=90)
 
 
-# app/components/scheduler/jobs.py
+# app/services/users/scheduled_jobs.py, in JOBS
 ServiceJob(
     cleanup_inactive_users,
     "cleanup_inactive_users",
@@ -184,7 +184,7 @@ in its own process, and "Run Now" runs it in the process that received the
 request; that is the right setup for light jobs and small deployments.
 
 Add a worker and the scheduler hands every scheduled job to it instead:
-each `SERVICE_JOBS` entry is scheduled as an enqueue of the job's name onto
+each service's scheduled job is scheduled as an enqueue of the job's name onto
 the `system` queue, and the worker registers the same entry as a task and
 runs it. Nothing to wire by hand; the job function stays a plain service
 function:
@@ -196,7 +196,7 @@ async def generate_daily_report() -> None:
     ...
 
 
-# app/components/scheduler/jobs.py
+# app/services/reports/scheduled_jobs.py, in JOBS
 ServiceJob(
     generate_daily_report,
     "daily_report",
@@ -207,8 +207,8 @@ ServiceJob(
 ```
 
 The worker's resources, retries and live feed apply to scheduled jobs and
-to "Run Now" alike. `SERVICE_JOBS` does not change either way, so a worker
-can be added or removed later without touching the job list.
+to "Run Now" alike. No service's `JOBS` changes either way, so a worker
+can be added or removed later without touching a schedule.
 
 ### API → Worker
 

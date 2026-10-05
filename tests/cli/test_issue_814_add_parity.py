@@ -33,7 +33,7 @@ pytestmark = pytest.mark.xdist_group("generated_stacks")
 DEPS_FILE = "app/components/backend/api/deps.py"
 METRICS_FILE = "app/components/backend/api/metrics.py"
 SCHEDULER_MAIN = "app/components/scheduler/main.py"
-SCHEDULER_JOBS = "app/components/scheduler/jobs.py"
+SYSTEM_SCHEDULE = "app/services/system/scheduled_jobs.py"
 MIGRATION_SKILL = ".claude/skills/add-model-and-migration/SKILL.md"
 
 
@@ -103,23 +103,19 @@ class TestPromotedWiringFiles:
             "metrics endpoint left unprotected after auth add"
         )
 
-    def test_scheduler_jobs_gain_insights_jobs(
+    def test_adding_a_scheduler_schedules_the_backup(
         self, project_factory: ProjectFactory
     ) -> None:
-        """add-service insights must register its jobs, or collectors
-        silently never run."""
-        project = project_factory("scheduler_and_database")
+        """Each service lists its own jobs in its ``scheduled_jobs.py``; the
+        system service's backup needs a scheduler, so adding one must
+        regenerate that file, or the database is never backed up."""
+        project = project_factory("base_with_database")
+        assert "backup_database_job" not in (project / SYSTEM_SCHEDULE).read_text()
         updater = ManualUpdater(project)
-        updater._regenerate_shared_files(
-            {
-                **updater.answers,
-                "include_insights": True,
-                "insights_github": True,
-            }
-        )
+        updater._regenerate_shared_files({**updater.answers, "include_scheduler": True})
 
-        assert "insights" in (project / SCHEDULER_JOBS).read_text(), (
-            "scheduler/jobs.py never listed the insights jobs"
+        assert "backup_database_job" in (project / SYSTEM_SCHEDULE).read_text(), (
+            "system/scheduled_jobs.py never gained the backup job"
         )
 
     def test_scheduler_main_not_created_without_component(
@@ -131,10 +127,9 @@ class TestPromotedWiringFiles:
         updater = ManualUpdater(project)
         updater._regenerate_shared_files({**updater.answers, "include_insights": True})
 
-        for path in (SCHEDULER_MAIN, SCHEDULER_JOBS):
-            assert not (project / path).exists(), (
-                f"regen materialized {path} in a scheduler-less project"
-            )
+        assert not (project / SCHEDULER_MAIN).exists(), (
+            f"regen materialized {SCHEDULER_MAIN} in a scheduler-less project"
+        )
 
 
 class TestGatedOnArrival:

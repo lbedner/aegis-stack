@@ -116,20 +116,10 @@ def test_signatures_name_real_model_objects() -> None:
         "sqlmodel", reason="stack has migrations dir but no ORM (e.g. worker-only)"
     )
 
-    import importlib
-    import pkgutil
+    from app.core.model_registry import import_all_models
 
-    import app.models  # noqa: F401  (registers core tables)
-    import app.services
-
-    # Service-owned tables register only when their models module imports -
-    # exactly how alembic's env.py loads them. Walk every installed service;
-    # a service without a models module is fine.
-    for info in pkgutil.iter_modules(app.services.__path__):
-        try:
-            importlib.import_module(f"app.services.{info.name}.models")
-        except ModuleNotFoundError:
-            continue
+    # Every table registers the way alembic's env.py registers them.
+    import_all_models()
 
     tables = set(sqlmodel.SQLModel.metadata.tables)
     bare = {t.split(".")[-1] for t in tables}

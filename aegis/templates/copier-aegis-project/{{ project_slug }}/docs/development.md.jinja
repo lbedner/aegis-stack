@@ -236,13 +236,13 @@ class WorkerSettings:
 ```{% if include_scheduler %}
 
 ### 4. Add Scheduled Tasks
-Add an entry to `SERVICE_JOBS` in `app/components/scheduler/jobs.py`:
+List it in the service's own `app/services/my_service/scheduled_jobs.py`:
 
 ```python
-from app.services.my_service import process_data_job
+from app.core.schedule import ServiceJob
+from app.services.my_service.jobs import process_data_job
 
-SERVICE_JOBS: tuple[ServiceJob, ...] = (
-    # ...existing entries...
+JOBS: tuple[ServiceJob, ...] = (
     ServiceJob(
         process_data_job,  # an async function taking no arguments
         "daily_processing",

@@ -5,9 +5,8 @@ proposed, then approved or rejected through the same HTTP surface the
 chat card calls. That is the whole contract a new service relies on.
 """
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
-import sys
 {%- if include_ai and ai_backend != "memory" %}
 from typing import Any
 {%- endif %}
@@ -59,23 +58,21 @@ def test_each_type_carries_its_contract() -> None:
 
 
 def test_a_services_change_types_module_registers_itself(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    fake_service: Callable[..., Path],
 ) -> None:
     """A service registers its types in ``app/services/<service>/change_types.py``
     (#1415): the queue imports it, so nothing edits the queue's own files."""
-    import app.services as services
     from app.services.change_queue import registry
 
-    service = tmp_path / "demo_service"
-    service.mkdir()
-    (service / "__init__.py").write_text("")
-    (service / "change_types.py").write_text(
-        "from app.services.change_queue.registry import ChangeExecutor, register\n"
-        "from tests._change_queue import NotePayload, _describe, _execute\n"
-        "register(ChangeExecutor(change_type='demo.note', title='Demo',"
-        " payload_model=NotePayload, execute=_execute, describe=_describe))\n"
+    fake_service(
+        "demo_service",
+        change_types=(
+            "from app.services.change_queue.registry import ChangeExecutor, register\n"
+            "from tests._change_queue import NotePayload, _describe, _execute\n"
+            "register(ChangeExecutor(change_type='demo.note', title='Demo',"
+            " payload_model=NotePayload, execute=_execute, describe=_describe))\n"
+        ),
     )
-    monkeypatch.setattr(services, "__path__", [*services.__path__, str(tmp_path)])
     try:
         loaded = registry.load_change_types()
 
@@ -83,9 +80,6 @@ def test_a_services_change_types_module_registers_itself(
         assert "demo.note" in change_queue.registered_change_types()
     finally:
         registry._EXECUTORS.pop("demo.note", None)
-        for name in list(sys.modules):
-            if name.startswith("app.services.demo_service"):
-                del sys.modules[name]
 
 
 @pytest.mark.asyncio

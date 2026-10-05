@@ -79,11 +79,11 @@ async def generate_daily_report() -> None:
     # Your logic here
 
 
-# app/components/scheduler/jobs.py: add an entry to SERVICE_JOBS
+# app/services/reports/scheduled_jobs.py: the service's own schedule
+from app.core.schedule import ServiceJob
 from app.services.reports.jobs import generate_daily_report
 
-SERVICE_JOBS: tuple[ServiceJob, ...] = (
-    # ...existing entries...
+JOBS: tuple[ServiceJob, ...] = (
     ServiceJob(
         generate_daily_report,
         "daily_report",

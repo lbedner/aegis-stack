@@ -19,13 +19,12 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 import importlib
-from pathlib import Path
-import pkgutil
 from typing import Any
 
 from pydantic import BaseModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.discovery import modules_named
 from app.services.change_queue.schemas import ChangeDisplayRow
 
 
@@ -93,19 +92,13 @@ def change_type_contracts() -> dict[str, dict[str, Any]]:
 
 
 def load_change_types() -> list[str]:
-    """Import every service's ``change_types`` module, registering its
-    types. Read from the filesystem, so no other service package is
-    imported to find them. Returns the module names imported."""
+    """Import every service's ``change_types`` module (found through
+    ``app.core.discovery``), registering its types. Returns the module
+    names imported."""
     import app.services as services
 
-    loaded: list[str] = []
-    for service in pkgutil.iter_modules(services.__path__):
-        if not service.ispkg or service.name == "change_queue":
-            continue
-        root = Path(service.module_finder.path) / service.name  # type: ignore[union-attr]
-        if (root / "change_types.py").is_file():
-            name = f"app.services.{service.name}.change_types"
-            importlib.import_module(name)
-            loaded.append(name)
+    loaded = modules_named(services, "change_types")
+    for name in loaded:
+        importlib.import_module(name)
     return loaded
 {% endif %}

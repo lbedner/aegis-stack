@@ -17,7 +17,6 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from aegis.core.component_files import (
-    OWNED_BUT_SHARED_PATHS,
     get_component_files,
     get_cross_spec_scope,
 )
@@ -28,7 +27,7 @@ TEMPLATE_PATHS = [
     FINANCE_MODELS,
     SCHEDULER_API,
     "app/components/scheduler/main.py",
-    "app/components/scheduler/jobs.py",
+    "app/services/system/scheduled_jobs.py",
     "app/services/auth/service.py",
     ".copier-answers.yml",
     "app/core/config.py",
@@ -80,10 +79,10 @@ def test_unowned_and_unsafe_paths_stay_out() -> None:
     assert "app/core/config.py" not in scope
 
 
-def test_the_old_single_exception_is_covered_by_the_rule() -> None:
-    """The scheduler's files were hand-listed for exactly this reason."""
-    scope = get_cross_spec_scope(
-        TEMPLATE_PATHS, _on_disk(*OWNED_BUT_SHARED_PATHS), operated="insights"
-    )
+def test_the_scheduler_main_is_covered_by_the_rule() -> None:
+    """``scheduler/main.py`` branches on the worker's answers; it was once
+    hand-listed as an exception, and the rule now covers it."""
+    main = "app/components/scheduler/main.py"
+    scope = get_cross_spec_scope(TEMPLATE_PATHS, _on_disk(main), operated="worker")
 
-    assert set(OWNED_BUT_SHARED_PATHS) <= set(scope)
+    assert main in scope

@@ -1,0 +1,20 @@
+"""The system service's scheduled jobs (``app.core.schedule``). A backup
+needs a database to copy and a scheduler to run it."""
+
+from app.core.schedule import ServiceJob
+{%- if include_scheduler and include_database %}
+from app.core.schedule import LONG_RUNNING
+from app.services.system.backup import backup_database_job
+{%- endif %}
+
+JOBS: tuple[ServiceJob, ...] = (
+{%- if include_scheduler and include_database %}
+    ServiceJob(
+        backup_database_job,
+        "database_backup",
+        "Daily Database Backup",
+        {"trigger": "cron", "hour": 2, "minute": 0},
+        timeout=LONG_RUNNING,
+    ),
+{%- endif %}
+)

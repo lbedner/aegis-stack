@@ -42,6 +42,41 @@ It declares:
 The reference plugin, `aegis-stack-crawl4ai`, exercises most of that surface
 and is the best example to read.
 
+## What a project finds by convention
+
+Some of what a plugin contributes needs no wiring in `plugin.py`: the
+project looks for a module of a known name in every service package, on
+disk, and picks up a plugin's the same way as its own.
+
+| File in `app/services/<your service>/` | What it holds |
+|---|---|
+| `models.py` (or a `models/` package) | the plugin's tables |
+| `change_types.py` | changes a model proposes and the user approves |
+| `scheduled_jobs.py` | `JOBS`, the jobs that run on a schedule |
+
+A scheduled job is a `ServiceJob` from `app.core.schedule`: the job
+function, a stable id, a display name and the trigger. In a project with a
+worker it runs on the worker. Without a scheduler the list is simply never
+read, so a plugin can ship its jobs whether or not the project has one.
+
+```python
+# app/services/scraper/scheduled_jobs.py
+from app.core.schedule import ServiceJob
+from app.services.scraper.jobs import recrawl_sites_job
+
+JOBS: tuple[ServiceJob, ...] = (
+    ServiceJob(
+        recrawl_sites_job,
+        "scraper_recrawl",
+        "Scraper: Recrawl Sites",
+        {"trigger": "cron", "hour": 3},
+    ),
+)
+```
+
+Ids and function names are shared with every other service: prefix them
+with the plugin's name.
+
 ## Depending on a service variant
 
 Dependencies can name a variant. `required_services = ["auth[org]"]` asks for

@@ -5,7 +5,10 @@ serve them without the AI service.
 """
 
 import importlib
+import json
 from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 
@@ -132,15 +135,41 @@ def _import_every_registrant() -> None:
             importlib.import_module(".".join(rel.parts))
 
 
+def _app_tools() -> dict[str, str]:
+    """Every tool the app's own modules register, by its effect."""
+    _import_every_registrant()
+    return {
+        name: tool.effect
+        for name in registered_tool_names()
+        if (tool := get_tool(name)) is not None
+        and tool.func.__module__.startswith("app.")
+    }
+
+
 def test_every_registered_app_tool_declares_its_expected_effect() -> None:
     # No ``clean_registry``: the sweep's imports register for good.
-    _import_every_registrant()
-    declared: dict[str, str | None] = {}
-    for name in registered_tool_names():
-        tool = get_tool(name)
-        if tool is not None and tool.func.__module__.startswith("app."):
-            declared[name] = tool.effect
+    declared = _app_tools()
 
     if not declared:
         pytest.skip("no service in this project registers tools")
     assert declared == {n: EXPECTED_EFFECTS.get(n) for n in declared}
+
+
+def test_load_tools_registers_every_tool_the_app_defines() -> None:
+    """``load_tools`` is how a process that never builds a chat agent (the
+    MCP server) gets the whole registry: a module missing from it is a
+    tool no outside assistant can be granted. Run fresh, since this
+    process has imported the registrants already."""
+    defined = set(_app_tools())
+    script = (
+        "import json; from app.core.tools import load_tools, "
+        "registered_tool_names; load_tools(); "
+        "print(json.dumps(registered_tool_names()))"
+    )
+
+    done = subprocess.run(
+        [sys.executable, "-c", script], capture_output=True, text=True, check=True
+    )
+
+    loaded = set(json.loads(done.stdout.strip().splitlines()[-1]))
+    assert defined <= loaded

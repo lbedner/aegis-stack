@@ -26,6 +26,7 @@ class ComponentNames:
     INFERENCE = "inference"
     SECRETS = "secrets"
     DEPLOY = "deploy"
+    MCP = "mcp"
 
     # Ordered list for interactive selection. Worker leads and redis
     # follows the steps that auto-add it (worker bundles redis), so most
@@ -44,6 +45,7 @@ class ComponentNames:
         INFERENCE,
         SECRETS,
         DEPLOY,
+        MCP,
     ]
 
 
@@ -306,6 +308,7 @@ class AnswerKeys:
     SECRETS = "include_secrets"
     SECRETS_BACKEND = "secrets_backend"
     DEPLOY = "include_deploy"
+    MCP = "include_mcp"
     DEPLOY_TARGET = "deploy_target"
     PROJECT_SLUG = "project_slug"
     SRC_PATH = "_src_path"

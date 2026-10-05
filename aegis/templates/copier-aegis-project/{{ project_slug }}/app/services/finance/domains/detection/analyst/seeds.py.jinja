@@ -16,10 +16,7 @@ from app.services.ai.models.agents import (
     Tool,
 )
 
-# Registers the finance host tools (ledger/accounts/quote) by import, so a
-# bare seeding process gets their ``tool`` rows and the grants below
-# resolve. Same reason the ai fixtures import their built-ins.
-import app.services.finance.ai_tools  # noqa: F401
+from app.core.tools import load_tools
 from app.services.finance.domains.detection.analyst.prompts import (
     ANALYST_MAX_TOKENS,
     ANALYST_SYSTEM_PROMPT,
@@ -37,6 +34,11 @@ from app.services.finance.domains.detection.analyst.shared import (
     FINANCE_CHAT_AGENT_SLUG,
     SNAPSHOT_MODULE_SLUG,
 )
+
+# A seeding process never builds a chat agent, so it registers the tools
+# itself: an unregistered tool gets no ``tool`` row, and every grant
+# below against it resolves to nothing.
+load_tools()
 
 SNAPSHOT_TOKEN_ESTIMATE = 1_200
 

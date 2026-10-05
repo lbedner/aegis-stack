@@ -52,7 +52,7 @@ class PendingChangesSection(ft.Container):
                     [
                         H3Text("Pending changes"),
                         SecondaryText(
-                            "Proposed by your assistant - nothing runs until you approve"
+                            "Proposed by an assistant - nothing runs until you approve"
                         ),
                     ],
                     spacing=Theme.Spacing.SM,

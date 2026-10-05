@@ -584,7 +584,6 @@ MESSAGES: dict[str, str] = {
     "ai.prov_current_local": "Текущий (локальный)",
     "ai.prov_need_key": "Нужен API-ключ",
     "ai.prov_not_installed": "Не установлен",
-    "ai.prov_error": "Ошибка",
     "ai.providers_tip": "Совет: выполните '{app} ai add-provider <имя>' для установки провайдеров.",
     # Панель использования
     "ai.usage_title": "Сводка использования AI",
@@ -856,7 +855,6 @@ MESSAGES: dict[str, str] = {
     "loadtest.waiting_progress": "Ожидание завершения нагрузочного теста...",
     "loadtest.waiting_elapsed": "Ожидание завершения... ({elapsed}с)",
     "loadtest.timeout_progress": "Таймаут",
-    "loadtest.completed_progress": "Нагрузочный тест завершён!",
     # Быстрый тест
     "loadtest.quick_cpu_title": "Быстрый CPU нагрузочный тест",
     "loadtest.quick_cpu_tasks": "{count} CPU-интенсивных задач",

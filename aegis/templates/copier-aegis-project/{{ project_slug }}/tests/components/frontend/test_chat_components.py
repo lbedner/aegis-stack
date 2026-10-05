@@ -60,6 +60,19 @@ class TestPendingChangeCard:
         assert "Approve" in text
         assert "Reject" in text
 
+    def test_a_card_names_who_proposed_it(self) -> None:
+        from app.components.frontend.controls.chat.components import (
+            render_component,
+        )
+
+        card = render_component(
+            "pending_change",
+            {**_CHANGE, "proposed_by_agent": "mcp:claude-code"},
+            on_action=_noop_action,
+        )
+
+        assert "mcp:claude-code" in rendered(card)
+
     def test_a_resolved_card_drops_the_actions(self) -> None:
         from app.components.frontend.controls.chat.components import (
             render_component,

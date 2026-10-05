@@ -18,13 +18,54 @@ Services register their own tools at import time:
     register_tool("lookup_order", lookup_order, effect="read")
 """
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any, Literal
 
 from app.core.log import logger
 
 ToolFunc = Callable[..., Any]
+
+# Who a tool call acts for, bound by whatever runs the tool: a chat turn
+# (``memory_user``) or the MCP server, per call.
+#
+# The owner is whose data it reads and whose cards it files: the signed-in
+# user, never a name a client sends. ``None`` (a single-tenant install, or
+# MCP with no MCP_OWNER_USER_ID) reads every row.
+current_owner_user_id: ContextVar[int | None] = ContextVar(
+    "current_owner_user_id", default=None
+)
+# The author of the writes it proposes: which agent asked (an MCP client
+# files as ``mcp:<client>``), in which conversation. A write with no
+# author cannot be audited, and a card is withdrawable only by its author.
+current_agent_slug: ContextVar[str | None] = ContextVar(
+    "current_agent_slug", default=None
+)
+current_conversation_id: ContextVar[str | None] = ContextVar(
+    "current_conversation_id", default=None
+)
+
+
+@contextmanager
+def acting_as(
+    owner_user_id: int | None,
+    agent_slug: str | None,
+    conversation_id: str | None = None,
+) -> Iterator[None]:
+    """Bind who the tool calls in the block act for, and restore the outer
+    binding after. Every field is set, so nothing leaks in from outside:
+    an MCP call binds no conversation, whatever a caller had."""
+    owner = current_owner_user_id.set(owner_user_id)
+    agent = current_agent_slug.set(agent_slug)
+    conversation = current_conversation_id.set(conversation_id)
+    try:
+        yield
+    finally:
+        current_conversation_id.reset(conversation)
+        current_agent_slug.reset(agent)
+        current_owner_user_id.reset(owner)
 
 # What a call does to the app's state, declared by the tool itself:
 # ``read`` changes nothing, ``proposes`` files work for the user's
@@ -125,3 +166,23 @@ def mcp_servable(names: Iterable[str]) -> list[str]:
 def registered_tool_names() -> list[str]:
     """All currently registered tool names, in registration order."""
     return list(_registry)
+
+
+def load_tools() -> None:
+    """Import every module that registers tools, so the registry is whole
+    in any process: a chat turn, the MCP server, a seed script. A module
+    registers at import, and importing twice is a no-op."""
+{%- if include_ai %}
+    import app.services.ai.domains.chat.readings  # noqa: F401
+    import app.services.ai.domains.chat.self_context  # noqa: F401
+{%- if ai_backend != "memory" %}
+    import app.services.ai.domains.chat.cards  # noqa: F401
+    import app.services.ai.domains.chat.user_memory  # noqa: F401
+{%- endif %}
+{%- endif %}
+{%- if include_finance or (include_ai and ai_backend != "memory") %}
+    import app.services.change_queue.tools  # noqa: F401
+{%- endif %}
+{%- if include_finance %}
+    import app.services.finance.ai_tools  # noqa: F401
+{%- endif %}

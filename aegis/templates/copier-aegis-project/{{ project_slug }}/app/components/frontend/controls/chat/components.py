@@ -32,6 +32,7 @@ from app.core.chat_transcript import (
     CARD_TOOLS,
     card_markers,
     card_outcome,
+    proposer_line,
 )
 
 # on_action(change_id, "approve" | "reject") -> the updated change dict
@@ -164,6 +165,8 @@ class PendingChangeBatchCard(ft.Container):
         rows: list[ft.Control] = [
             ft.Row(header, vertical_alignment=ft.CrossAxisAlignment.CENTER)
         ]
+        if by := proposer_line(items[0].get("proposed_by_agent") if items else None):
+            rows.append(SecondaryText(by))
         if not pending and not self._expanded:
             rows.append(SecondaryText(self._outcome_summary(items)))
             self.content = ft.Column(rows, spacing=Theme.Spacing.SM, tight=True)
@@ -311,6 +314,8 @@ class PendingChangeCard(ft.Container):
         rows: list[ft.Control] = [
             ft.Row(header, vertical_alignment=ft.CrossAxisAlignment.CENTER)
         ]
+        if by := proposer_line(data.get("proposed_by_agent")):
+            rows.append(SecondaryText(by))
         if note:
             # Shown folded or not: the reason is the point of the card now.
             rows.append(SecondaryText(note))

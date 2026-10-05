@@ -58,10 +58,7 @@ async def test_registered_tool_is_called_in_the_loop(registered_lookup: str) -> 
 async def test_a_tool_runs_as_the_scopes_owner_and_conversation() -> None:
     """The kit binds the scope's owner and conversation for the tools it
     runs (``memory_user``), and restores them after the turn."""
-    from app.services.ai.domains.chat.user_memory import (
-        current_conversation_id,
-        current_owner_user_id,
-    )
+    from app.core.tools import current_conversation_id, current_owner_user_id
 
     seen: list[tuple[int | None, str | None]] = []
 

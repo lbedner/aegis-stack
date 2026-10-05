@@ -43,6 +43,7 @@ class TestAIProviderSelection:
             False,  # inference
             False,  # secrets
             False,  # deploy
+            False,  # mcp
             False,  # auth service
             False,  # payment
             True,  # AI service
@@ -91,6 +92,7 @@ class TestAIProviderSelection:
             False,  # inference
             False,  # secrets
             False,  # deploy
+            False,  # mcp
             False,  # auth service
             False,  # payment
             True,  # AI service
@@ -140,6 +142,7 @@ class TestAIProviderSelection:
             False,  # inference
             False,  # secrets
             False,  # deploy
+            False,  # mcp
             False,  # auth service
             False,  # payment
             True,  # AI service
@@ -189,6 +192,7 @@ class TestAIProviderSelection:
             False,  # inference
             False,  # secrets
             False,  # deploy
+            False,  # mcp
             False,  # auth service
             False,  # payment
             False,  # AI service
@@ -241,6 +245,7 @@ class TestAIBackendSelection:
                 False,  # inference
                 False,  # secrets
                 False,  # deploy
+                False,  # mcp
                 False,  # auth service
                 False,  # payment
                 True,  # AI service
@@ -304,6 +309,7 @@ class TestAIBackendSelection:
                 False,  # inference
                 False,  # secrets
                 False,  # deploy
+                False,  # mcp
                 False,  # auth service
                 False,  # payment
                 True,  # AI service
@@ -358,6 +364,7 @@ class TestAIBackendSelection:
             False,  # inference
             False,  # secrets
             False,  # deploy
+            False,  # mcp
             False,  # auth service
             False,  # payment
             True,  # AI service
@@ -530,6 +537,7 @@ class TestAIConfigurationEndToEnd:
             False,  # inference
             False,  # secrets
             False,  # deploy
+            False,  # mcp
             False,  # No auth service
             False,  # payment
             True,  # Yes AI service
@@ -641,6 +649,7 @@ class TestOllamaModeSelection:
             False,  # inference
             False,  # secrets
             False,  # deploy
+            False,  # mcp
             False,  # auth service
             False,  # payment
             True,  # AI service

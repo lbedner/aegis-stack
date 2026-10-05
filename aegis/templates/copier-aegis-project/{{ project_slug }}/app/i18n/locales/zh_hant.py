@@ -584,7 +584,6 @@ MESSAGES: dict[str, str] = {
     "ai.prov_current_local": "當前（本地）",
     "ai.prov_need_key": "需要 API 密鑰",
     "ai.prov_not_installed": "未安裝",
-    "ai.prov_error": "錯誤",
     "ai.providers_tip": "提示：運行 '{app} ai add-provider <名稱>' 安裝缺少的服務商。",
     # 用量面板
     "ai.usage_title": "AI 用量概覽",
@@ -856,7 +855,6 @@ MESSAGES: dict[str, str] = {
     "loadtest.waiting_progress": "等待測試完成...",
     "loadtest.waiting_elapsed": "等待中... ({elapsed} 秒)",
     "loadtest.timeout_progress": "等待超時",
-    "loadtest.completed_progress": "測試完成！",
     # 快速測試輸出
     "loadtest.quick_cpu_title": "CPU 快速壓力測試",
     "loadtest.quick_cpu_tasks": "{count} 個 CPU 密集型任務",

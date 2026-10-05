@@ -9,6 +9,22 @@
 
 ### Added
 
+- **The MCP component: an outside assistant reads the app's tools.**
+  `aegis add mcp` adds `<app> mcp`, a FastMCP server over stdio for Claude
+  Desktop, Claude Code or a local model. A client sees only the tools
+  granted in `MCP_TOOLS` (finance's read tools by default), and never a
+  write; every call is recorded with the client that made it. It needs no
+  AI service: finance's tools now load without it, and `load_tools()`
+  registers every tool module in any process.
+
+- **An MCP client can propose changes; only you can make them.** Granting
+  `propose`, `pending` and `withdraw` lets a client file cards in the
+  app's approval queue, filed as `mcp:<client>`; nothing changes until a
+  person approves it, and a client sees and withdraws only its own cards.
+  `MCP_OWNER_USER_ID` says whose cards (and whose data) a stdio client
+  acts for. The queue's tools moved to `app.services.change_queue.tools`
+  so they exist without the AI service.
+
 - **Change types carry their contract, and register themselves.** A
   `ChangeExecutor` takes a `description` (when to propose it), and
   `change_type_contracts()` returns every type's title, description and
@@ -305,6 +321,15 @@
   project's own entries move into their services' `scheduled_jobs.py`. An id
   or a function name claimed twice, or a `scheduled_jobs.py` without `JOBS`,
   fails at startup (#1419).
+
+- **Finance's tools no longer re-export the propose family.** Import
+  `propose`, `propose_many`, `pending` and `withdraw` from
+  `app.services.change_queue.tools` (formerly
+  `app.services.ai.domains.chat.change_tools`), not
+  `app.services.finance.ai_tools`. `current_owner_user_id`,
+  `current_agent_slug` and `current_conversation_id` live in
+  `app.core.tools`, bound together by `acting_as()`.
+
 - **The tool registry moved to core.** `register_tool`, tool effects and
   `mcp_servable` live in `app.core.tools` and ship with every project, so a
   service's tools exist whether or not the AI service is installed. AI

@@ -55,6 +55,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # inference
                 False,  # secrets
                 False,  # deploy
+                False,  # mcp
                 False,  # auth
                 False,  # payment
                 False,  # AI
@@ -102,6 +103,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # inference
                 False,  # secrets
                 False,  # deploy
+                False,  # mcp
                 False,  # auth
                 False,  # payment
                 False,  # AI
@@ -142,6 +144,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # inference
                 False,  # secrets
                 False,  # deploy
+                False,  # mcp
                 False,  # no auth
                 False,  # payment
                 False,  # no AI
@@ -178,6 +181,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # inference
                 False,  # secrets
                 False,  # deploy
+                False,  # mcp
                 False,  # no auth
                 False,  # payment
                 False,  # no AI
@@ -220,6 +224,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # inference
                 False,  # secrets
                 False,  # deploy
+                False,  # mcp
                 False,  # no auth
                 False,  # payment
                 False,  # no AI
@@ -270,6 +275,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # inference
                 False,  # secrets
                 False,  # deploy
+                False,  # mcp
                 False,  # no auth
                 False,  # payment
                 False,  # no AI
@@ -312,6 +318,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # inference
                 False,  # secrets
                 False,  # deploy
+                False,  # mcp
                 False,  # no auth
                 False,  # payment
                 False,  # no AI

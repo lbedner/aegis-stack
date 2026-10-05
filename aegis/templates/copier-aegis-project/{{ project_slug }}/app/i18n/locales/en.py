@@ -629,7 +629,6 @@ MESSAGES: dict[str, str] = {
     "ai.prov_current_local": "Current (Local)",
     "ai.prov_need_key": "Need API key",
     "ai.prov_not_installed": "Not installed",
-    "ai.prov_error": "Error",
     "ai.providers_tip": "Tip: Run '{app} ai add-provider <name>' to install missing providers.",
     # Usage panel
     "ai.usage_title": "AI Usage Summary",
@@ -920,7 +919,6 @@ MESSAGES: dict[str, str] = {
     "loadtest.waiting_progress": "Waiting for load test to complete...",
     "loadtest.waiting_elapsed": "Waiting for completion... ({elapsed}s)",
     "loadtest.timeout_progress": "Timeout reached",
-    "loadtest.completed_progress": "Load test completed!",
     # Quick test output
     "loadtest.quick_cpu_title": "Quick CPU Load Test",
     "loadtest.quick_cpu_tasks": "{count} CPU-intensive tasks",
@@ -1336,4 +1334,6 @@ MESSAGES: dict[str, str] = {
     "blog.col_failed": "Failed",
     "blog.col_kind": "Kind",
     "blog.col_count": "Count",
+    # ── MCP ──────────────────────────────────────────────────────────
+    "mcp.help": "Serve this app's granted tools (MCP_TOOLS) to an MCP client over stdio.",
 }

@@ -129,6 +129,28 @@ class TestAddCommand:
         assert answers.get("inference_placement") == "host"
         assert answers.get("ollama_mode") == "host"
 
+    def test_add_mcp_lands_the_server_command_and_dependency(
+        self, project_factory: ProjectFactory
+    ) -> None:
+        """``aegis add mcp`` copies the component, its CLI command and its
+        test, and adds fastmcp; no container, it runs as ``<app> mcp``."""
+        project_path = project_factory("base")
+
+        result = run_aegis_command(
+            "add", "mcp", "--project-path", str(project_path), "--yes"
+        )
+
+        assert result.success, f"Command failed: {result.stderr}"
+        assert load_copier_answers(project_path).get("include_mcp") is True
+        for path in (
+            "app/components/mcp/server.py",
+            "app/cli/mcp_cli.py",
+            "tests/components/test_mcp.py",
+        ):
+            assert (project_path / path).is_file(), path
+        assert "fastmcp" in (project_path / "pyproject.toml").read_text()
+        assert "MCP_TOOLS" in (project_path / "app/core/config.py").read_text()
+
     def test_add_deploy_records_its_target_and_adds_the_proxy(
         self, project_factory: ProjectFactory
     ) -> None:

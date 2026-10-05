@@ -71,6 +71,7 @@ MESSAGES: dict[str, str] = {
     "component.inference": "Local model serving (Ollama)",
     "component.secrets": "Encrypted credential store (keys editable, live)",
     "component.deploy": "デプロイ先 (Docker Compose)、Overseer が参照",
+    "component.mcp": "MCP server: an outside assistant reads the app's tools",
     "component.storage": "S3 object storage, SeaweedFS in dev",
     "component.htmx": "Server-rendered htmx web frontend",
     # ── サービス説明 ────────────────────────────────────────────────────
@@ -1178,6 +1179,7 @@ MESSAGES: dict[str, str] = {
     "component.inference.long": "Serves open-weight models from your own machine. Ollama runs on the host by default, where it already lives, and the app reaches it over host.docker.internal; pick docker to ship it as a container instead. The AI service's ollama provider pulls it in, and it stands alone for a model server with no AI service.",
     "component.secrets.long": "Makes credentials writable without a restart: keys are stored encrypted in the database, read live by the webserver, worker and scheduler, and never shown again after saving (only their last four characters). A key set in .env still wins. Swap the backend later (Vault, a cloud secrets manager) without touching the code that reads keys.",
     "component.deploy.long": "アプリの実行場所をコンポーネントとして扱います。現在はホスト上の Docker Compose です。Docker ソケットに触れる唯一のコンテナとしてソケットプロキシを追加し、読み取り専用の問い合わせ (コンテナ、統計、ログ、ディスク) だけに応答します。Web サーバーがソケットを持たずに、Overseer が稼働状況を表示できます。",
+    "component.mcp.long": "Serves the app's own registered tools to an outside assistant (Claude Desktop, Claude Code, a local model) over MCP, through FastMCP. A client sees only the tools granted in MCP_TOOLS, and never a write; every call is recorded with the client that made it.",
     "component.storage.long": "An S3 backend for the object store every stack already has: documents, chat attachments, anything addressed by its content hash. Talks to any S3-compatible endpoint; the dev stack ships SeaweedFS in a container. Switching from the filesystem is a byte copy, never a migration.",
     "component.htmx.long": "Server-rendered pages with Jinja2, htmx, and Alpine.js, styled with Tailwind and DaisyUI, served at / by the existing webserver alongside the Flet dashboard at /dashboard. Ships a generic landing page ready to grow into your own pages.",
     "service.auth.long": "JWT 認証、セッション Cookie、リフレッシュトークンのローテーションを備えた完全なユーザー管理。3 つのレベル：基本のメール/パスワード、RBAC のロールと権限、マルチテナント組織。登録、ログイン、管理ダッシュボードのタブを含みます。",

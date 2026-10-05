@@ -83,6 +83,10 @@ dependencies = [
 {%- if include_observability %}
     "logfire[fastapi,httpx{%- if include_database %},sqlalchemy{%- endif %}{%- if include_redis %},redis{%- endif %}]<6",
 {%- endif %}
+{%- if include_mcp %}
+    # 3.4 needs starlette 1.x, which the fastapi pin above rules out.
+    "fastmcp>=3.2,<3.4",
+{%- endif %}
 {%- if include_htmx %}
     "jinja2>=3.1.0,<4",
 {%- if not include_ai %}

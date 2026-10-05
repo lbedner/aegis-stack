@@ -10,12 +10,13 @@
 {# The frame both cards share: a title line, its right-hand side as the
    caller's body, then ``rows``. A batch is a form so its "skip" boxes ride
    along: htmx sends the enclosing form's fields with a button's POST. #}
-{% macro _card(tag, id, data, title, side) %}
+{% macro _card(tag, id, data, title, side, by=none) %}
 <{{ tag }} id="{{ id }}" {{ data }} class="my-2 border border-aegis-border rounded-lg p-3 text-sm bg-aegis-card">
   <div class="flex items-center justify-between gap-3">
     <span class="font-medium text-aegis-text">{{ title }}</span>
     <span class="text-xxs">{{ side }}</span>
   </div>
+  {% if by %}<div class="text-xs text-aegis-muted">{{ by }}</div>{% endif %}
   {{ caller() }}
 </{{ tag }}>
 {% endmacro %}
@@ -29,7 +30,7 @@
 {% endmacro %}
 
 {% macro change_card(change) %}
-{% call _card("div", "change-" ~ change.id, "data-change", change.title, badge(change.label, change.tone)) %}
+{% call _card("div", "change-" ~ change.id, "data-change", change.title, badge(change.label, change.tone), change.by) %}
   <div class="mt-2">{{ facts(change.display) }}</div>
   {% if change.error %}<div class="mt-2">{{ error_banner([change.error]) }}</div>{% endif %}
   {% if change.status == "pending" %}{{ _actions(change.url, "change-" ~ change.id, "Reject") }}{% endif %}
@@ -38,7 +39,7 @@
 
 {% macro batch_card(batch) %}
 {% set count = batch.rows|length %}
-{% call _card("form", "batch-" ~ batch.batch_id, "data-change-batch", batch.title, count ~ (" change" if count == 1 else " changes")) %}
+{% call _card("form", "batch-" ~ batch.batch_id, "data-change-batch", batch.title, count ~ (" change" if count == 1 else " changes"), batch.by) %}
   <ul class="mt-2 space-y-2">
     {% for row in batch.rows %}
     <li class="border-t border-aegis-border/50 pt-2 first:border-0 first:pt-0">

@@ -1,0 +1,108 @@
+{% if include_mcp and (include_finance or (include_ai and ai_backend != "memory")) %}"""Any assistant can suggest; only you can change.
+
+A change an MCP client asks for is a card in the app's own queue, filed
+under that client, and nothing moves until a person approves it.
+"""
+
+from collections.abc import Iterator
+from typing import Any
+
+from fastmcp import Client, FastMCP
+from mcp.types import Implementation
+import pytest
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.components.mcp.server import build_server
+from app.core.config import settings
+from app.core.tools import load_tools
+from app.services import change_queue
+from tests._change_queue import executed, note_type, queue_tools_on
+
+NOTE = "test.note"
+QUEUE_TOOLS = ["propose", "propose_many", "pending", "withdraw", "withdraw_batch"]
+CLAUDE = Implementation(name="claude-code", version="1")
+DESKTOP = Implementation(name="claude-desktop", version="1")
+
+
+@pytest.fixture(autouse=True)
+def _note() -> Iterator[None]:
+    with note_type(NOTE):
+        yield
+
+
+@pytest.fixture
+def server(
+    async_db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+    acting_owner_user_id: int | None,
+) -> FastMCP:
+    """A server granting the queue's tools, writing through the test
+    session as the owner the stdio server is configured to act for."""
+    load_tools()
+    queue_tools_on(async_db_session, monkeypatch)
+    monkeypatch.setattr(settings, "MCP_OWNER_USER_ID", acting_owner_user_id)
+    return build_server(QUEUE_TOOLS)
+
+
+async def _call(
+    server: FastMCP, client: Implementation, tool: str, arguments: dict[str, Any]
+) -> Any:
+    async with Client(server, client_info=client) as session:
+        return (await session.call_tool(tool, arguments, raise_on_error=False)).data
+
+
+async def test_a_proposal_is_a_card_and_moves_nothing_until_approved(
+    server: FastMCP,
+    async_db_session: AsyncSession,
+    acting_owner_user_id: int | None,
+) -> None:
+    filed = await _call(
+        server, CLAUDE, "propose", {"change_type": NOTE, "payload": {"text": "hi"}}
+    )
+
+    assert filed["status"] == "pending"
+    assert executed == []
+    row = await change_queue.get_change(
+        async_db_session, filed["pending_change_id"], owner_user_id=None
+    )
+    assert row is not None
+    assert row.proposed_by_agent == "mcp:claude-code"
+
+    await change_queue.approve(
+        async_db_session, row.id, owner_user_id=acting_owner_user_id
+    )
+    assert executed == ["hi"]
+
+
+# Lists ``pending`` for two clients on purpose, so its read repeats by
+# construction rather than by a loop.
+@pytest.mark.queryspy(allow_n_plus_one=True)
+async def test_a_client_sees_and_withdraws_only_its_own_cards(
+    server: FastMCP,
+) -> None:
+    filed = await _call(
+        server, CLAUDE, "propose", {"change_type": NOTE, "payload": {"text": "mine"}}
+    )
+    card = {"pending_change_id": filed["pending_change_id"]}
+
+    seen_by_other = await _call(server, DESKTOP, "pending", {})
+    refused = await _call(server, DESKTOP, "withdraw", card)
+    seen_by_owner = await _call(server, CLAUDE, "pending", {})
+    withdrawn = await _call(server, CLAUDE, "withdraw", card)
+
+    assert seen_by_other["pending"] == []
+    assert "only the proposing agent" in refused["error"]
+    assert [c["pending_change_ids"] for c in seen_by_owner["pending"]] == [
+        [filed["pending_change_id"]]
+    ]
+    assert withdrawn["status"] == "rejected"
+
+
+async def test_proposing_needs_a_grant_that_includes_it() -> None:
+    """The default grant reads; a client can propose only once its grant
+    names the queue's tools."""
+    async with Client(build_server(settings.MCP_TOOLS)) as client:
+        names = {tool.name for tool in await client.list_tools()}
+
+    assert not names & set(QUEUE_TOOLS)
+{% endif %}

@@ -116,6 +116,11 @@ async def startup_hook() -> None:
     register_health_check("secrets", check_secrets_health)
     logger.info("Secrets component health check registered")
     {%- endif %}
+    {%- if include_mcp %}
+    # Register MCP component health check (how many granted tools are served)
+    from app.components.mcp.health import check_mcp_health
+    register_health_check("mcp", check_mcp_health)
+    {%- endif %}
 
     logger.info("Component health detection complete")
 

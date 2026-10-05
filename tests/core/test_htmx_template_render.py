@@ -380,6 +380,7 @@ class TestWebFrontendScaffolding:
                 "chart_panel",
                 "chip",
                 "code_block",
+                "command",
                 "confirm",
                 "copy_button",
                 "copy_icon",

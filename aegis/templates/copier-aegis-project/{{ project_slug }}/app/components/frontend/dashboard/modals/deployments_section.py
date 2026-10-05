@@ -14,12 +14,7 @@ from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system import hosting, ui_deployments
 
 from .base_detail_popup import PagePopup
-from .table_tab import TableTab
-
-
-def _columns(pairs: tuple[tuple[str, str], ...]) -> list[tuple[str, str, None]]:
-    """``(key, label)`` pairs as TableTab's ``(header, key, width)``."""
-    return [(label, key, None) for key, label in pairs]
+from .table_tab import TableTab, columns_of
 
 
 class DeploymentsSection(ft.Column):
@@ -120,7 +115,7 @@ def _table(
     body: ft.Control = (
         SecondaryText(view["note"])
         if view["note"]
-        else TableTab(view["rows"], _columns(columns), "Nothing yet")
+        else TableTab(view["rows"], columns_of(columns), "Nothing yet")
     )
     return [H3Text(title), body]
 

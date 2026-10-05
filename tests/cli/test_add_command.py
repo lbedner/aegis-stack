@@ -129,6 +129,33 @@ class TestAddCommand:
         assert answers.get("inference_placement") == "host"
         assert answers.get("ollama_mode") == "host"
 
+    def test_a_database_added_later_brings_mcp_its_record(
+        self, project_factory: ProjectFactory
+    ) -> None:
+        """mcp keeps its activity only with a database: adding one later
+        brings its record files and its migration, and removing it takes the
+        files away again. Deploy's history rides the same rule."""
+        project_path = project_factory(components=("mcp",))
+        record = project_path / "app/components/mcp/activity.py"
+        assert not record.exists()
+
+        added = run_aegis_command(
+            "add", "database", "--project-path", str(project_path), "--yes"
+        )
+
+        assert added.success, f"Command failed: {added.stderr}"
+        assert record.is_file()
+        migrations = sorted((project_path / "alembic/versions").glob("*_mcp.py"))
+        assert migrations, "no mcp revision"
+
+        removed = run_aegis_command(
+            "remove", "database", "--project-path", str(project_path), "--yes"
+        )
+
+        assert removed.success, f"Command failed: {removed.stderr}"
+        assert not record.exists()
+        assert not (project_path / "tests/components/test_mcp_activity.py").exists()
+
     def test_add_mcp_lands_the_server_command_and_dependency(
         self, project_factory: ProjectFactory
     ) -> None:

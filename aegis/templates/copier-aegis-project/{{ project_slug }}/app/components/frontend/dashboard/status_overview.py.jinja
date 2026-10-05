@@ -139,6 +139,11 @@ def get_component_display_info(
     elif component_name == "secrets":
         return ("Secrets", get_component_subtitle("secrets", metadata))
 {% endif %}
+{% if include_mcp %}
+
+    elif component_name == "mcp":
+        return ("MCP", get_component_subtitle("mcp", metadata))
+{% endif %}
 
     elif component_name == "frontend":
         return ("Frontend", "Flet")
@@ -286,6 +291,8 @@ class StatusOverviewPanel(ft.Container):
 {% endif %}
 {% if include_secrets %}
             "secrets",
+{% endif %}{% if include_mcp %}
+            "mcp",
 {% endif %}
         ]
 

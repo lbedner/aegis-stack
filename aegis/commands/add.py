@@ -741,7 +741,20 @@ def add_command(
         # project's answers now call for and it lacks, exactly as ``init``
         # would have generated them, then applied. A project whose models
         # have no revision fails its own drift check.
-        if any(COMPONENTS[c].migrations for c in components_to_add if c in COMPONENTS):
+        # A spec whose tables wait on an added component (mcp's activity
+        # record, deploy's history: both on the database) counts too.
+        answers_now = load_copier_answers(target_path)
+        if any(
+            COMPONENTS[c].migrations for c in components_to_add if c in COMPONENTS
+        ) or any(
+            spec.migrations
+            and answers_now.get(AnswerKeys.include_key(name))
+            and any(
+                AnswerKeys.include_key(c) in spec.files.extras
+                for c in components_to_add
+            )
+            for name, spec in COMPONENTS.items()
+        ):
             from ..core.migration_generator import (
                 bootstrap_alembic,
                 generate_missing_migrations,
@@ -750,9 +763,7 @@ def add_command(
 
             if not (target_path / "alembic").exists():
                 bootstrap_alembic(target_path, updater.jinja_env, updater.answers)
-            generated = generate_missing_migrations(
-                target_path, load_copier_answers(target_path)
-            )
+            generated = generate_missing_migrations(target_path, answers_now)
             for migration_path in generated:
                 brand.success(
                     f"   {t('add.generated_migration', name=migration_path.name)}"

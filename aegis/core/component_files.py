@@ -257,6 +257,27 @@ def _foreign_gated_files(component: str, answers: dict[str, Any]) -> set[str]:
     return excluded
 
 
+def dependent_files(
+    component: str, answers: dict[str, Any], *, expand: bool
+) -> list[str]:
+    """Files other installed specs keep only while ``component`` is there:
+    their extras keyed on its flag (mcp's activity record and deploy's
+    history, keyed on the database). Adding ``component`` brings them and
+    removing it takes them, whichever spec owns them. ``expand`` lists a
+    directory's files, for copying; unexpanded, for deleting whole."""
+    from .components import COMPONENTS
+    from .services import SERVICES
+
+    key = AnswerKeys.include_key(component)
+    paths = [
+        path
+        for name, spec in {**SERVICES, **COMPONENTS}.items()
+        if name != component and answers.get(AnswerKeys.include_key(name))
+        for path in (spec.files.extras or {}).get(key, [])
+    ]
+    return _expand_directories_to_files(paths) if expand else paths
+
+
 # The one extras group that is a backend variant, not an answer to gate on.
 SCHEDULER_PERSISTENCE = "scheduler_persistence"
 

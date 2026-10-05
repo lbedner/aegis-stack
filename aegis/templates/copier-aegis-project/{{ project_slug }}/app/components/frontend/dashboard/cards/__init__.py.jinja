@@ -48,6 +48,9 @@ from .storage_card import StorageCard
 {%- if include_secrets %}
 from .secrets_card import SecretsCard
 {%- endif %}
+{%- if include_mcp %}
+from .mcp_card import McpCard
+{%- endif %}
 {%- if ollama_mode != "none" %}
 from .ollama_card import OllamaCard
 {%- endif %}
@@ -113,6 +116,9 @@ __all__ = [
 {%- endif %}
 {%- if include_secrets %}
     "SecretsCard",
+{%- endif %}
+{%- if include_mcp %}
+    "McpCard",
 {%- endif %}
 {%- if ollama_mode != "none" %}
     "OllamaCard",

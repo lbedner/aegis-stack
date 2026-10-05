@@ -287,6 +287,14 @@ DEPLOY_MIGRATION = ServiceMigrationSpec(
 )
 
 
+MCP_MIGRATION = ServiceMigrationSpec(
+    service_name="mcp",
+    description="MCP activity: one row per call an outside assistant made",
+    schema="mcp",
+    stamp_signature=("table", "mcp.mcp_tool_call"),
+)
+
+
 # Default registry-facing variant is the shared-mode shape. Per-user mode
 # rebuilds the spec at generation time via _build_insights_migration(True).
 
@@ -976,14 +984,22 @@ def get_services_needing_migrations(context: dict[str, Any]) -> list[str]:
     if include_secrets == "yes" or include_secrets is True:
         services.append("secrets")
 
-    # Deploy component: its history table, only where there is a database to
-    # keep it in (deploy without one still reads containers and logs).
-    include_deploy = context.get(AnswerKeys.DEPLOY)
+    # A component whose tables live in its database-only files (its
+    # FileManifest extras keyed on the database: deploy's history, mcp's
+    # activity record) migrates only where there is a database; without one
+    # it works without them. The same marker decides their cleanup.
+    from .components import COMPONENTS
+
     include_database = context.get(AnswerKeys.DATABASE)
-    if (include_deploy == "yes" or include_deploy is True) and (
-        include_database == "yes" or include_database is True
-    ):
-        services.append("deploy")
+    if include_database == "yes" or include_database is True:
+        for name, spec in COMPONENTS.items():
+            enabled = context.get(AnswerKeys.include_key(name))
+            if (
+                spec.migrations
+                and AnswerKeys.DATABASE in spec.files.extras
+                and (enabled == "yes" or enabled is True)
+            ):
+                services.append(name)
 
     # Per-user vs shared insights is one folded migration — generation
     # picks the shape from the context flag (see ``generate_migration``).

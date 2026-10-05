@@ -82,8 +82,7 @@
 
 {# A thin native progress bar; ``tone`` colours it (see badge). #}
 {% macro progress(ratio, tone="ok", label=None, size="h-1") %}
-{% set tones = {"ok": "text-aegis-teal", "warn": "text-aegis-amber", "error": "text-aegis-error", "muted": "text-aegis-muted"} %}
-<progress value="{{ [1, [0, ratio]|max]|min }}" max="1" {% if label %}aria-label="{{ label }}"{% endif %} class="aegis-progress w-full {{ size }} {{ tones.get(tone, 'text-aegis-teal') }}"></progress>
+<progress value="{{ [1, [0, ratio]|max]|min }}" max="1" {% if label %}aria-label="{{ label }}"{% endif %} data-tone="{{ tone }}" class="aegis-progress toned w-full {{ size }}"></progress>
 {% endmacro %}
 
 
@@ -318,8 +317,7 @@
    accent; no tone renders the label plain. One shape for every "state"
    cell and chip, so tests find them by role. #}
 {% macro badge(label, tone=None) %}
-{% set tones = {"ok": "text-aegis-teal", "warn": "text-aegis-amber", "error": "text-error", "muted": "text-aegis-muted", "accent": "text-aegis-accent"} %}
-<span data-tone="{{ tone or '' }}" class="inline-flex items-center gap-1.5 whitespace-nowrap {{ tones.get(tone, 'text-aegis-text') }}">
+<span data-tone="{{ tone or '' }}" class="toned inline-flex items-center gap-1.5 whitespace-nowrap">
   {% if tone %}<span class="w-1.5 h-1.5 rounded-full bg-current" aria-hidden="true"></span>{% endif %}{{ label }}
 </span>
 {% endmacro %}
@@ -432,7 +430,7 @@
     <dt class="text-xxs text-aegis-muted caps flex items-center gap-1.5"><span class="truncate">{{ cell.label }}</span>
       {% if cell.explain %}<span aria-hidden="true" class="inline-flex shrink-0 w-3.5 h-3.5 rounded-full border border-current items-center justify-center text-xxs leading-none opacity-50 group-hover:opacity-100 transition-opacity">?</span>{% endif %}
     </dt>
-    <dd data-tone="{{ cell.tone or '' }}" class="mt-1 text-2xl font-semibold tabular-nums {{ {'error': 'text-error', 'warn': 'text-aegis-amber', 'ok': 'text-aegis-teal'}.get(cell.tone, 'text-aegis-text') }}">{{ cell.value }}</dd>
+    <dd data-tone="{{ cell.tone or '' }}" class="toned mt-1 text-2xl font-semibold tabular-nums">{{ cell.value }}</dd>
     {% if cell.caption %}<dd class="mt-1 text-xxs text-aegis-muted truncate">{{ cell.caption }}</dd>{% endif %}
   </div>
   {% endfor %}

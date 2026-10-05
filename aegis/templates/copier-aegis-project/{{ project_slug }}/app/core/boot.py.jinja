@@ -8,7 +8,7 @@ on ``.env``, which is already in effect.
 """
 
 from app.core import saved_settings
-from app.core.log import logger
+from app.core.log import apply_log_level, logger
 
 
 async def apply_saved_overrides() -> None:
@@ -20,6 +20,7 @@ async def apply_saved_overrides() -> None:
     else:
         if applied:
             logger.info("Saved settings applied: %s", ", ".join(applied))
+    apply_log_level()
 {%- if include_ai and ai_backend in ("sqlite", "postgres") %}
     await _apply_active_model()
 

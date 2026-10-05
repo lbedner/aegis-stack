@@ -143,3 +143,56 @@ def test_a_threshold_spans_the_window_as_it_moves() -> None:
     found = run(GUIDE_REFRESH, CHARTS_JS=CHARTS_JS)
     assert found["guide"] == [{"x": 1500, "y": 9}, {"x": 3500, "y": 9}]
     assert found["same_array"] is True
+
+
+DELTA_REFRESH = (
+    TIME_REFRESH.replace(
+        "const points = [{ x: 1000, y: 1 }, kept];",
+        "const points = [{ x: 500, y: 1 }, { x: 1000, y: 8 }, kept];",
+    )
+    .replace(
+        "data: { datasets: [{ label: 'a', data: points }] }",
+        "data: { datasets: [{ label: 'a', data: points },"
+        " { guide: true, data: [{ x: 500, y: 12 }, { x: 2000, y: 12 }] }] }",
+    )
+    .replace(
+        "window: [1500, 3500], points: 2 }",
+        "window: [900, 3000], points: 3, thresholds: [{ value: 12, tone: 'warn' }] }",
+    )
+    .replace(
+        "console.log(JSON.stringify({ same_array",
+        "console.log(JSON.stringify({ guide: chart.data.datasets[1].data, same_array",
+    )
+)
+
+
+def test_a_frame_of_new_points_keeps_the_rest_of_the_window() -> None:
+    """A tick sends only the newest points: the chart keeps what it has back
+    to the window's start, and its guides go by everything it shows (the
+    alert at 12 stays in reach of the 8 earlier on)."""
+    found = run(DELTA_REFRESH, CHARTS_JS=CHARTS_JS)
+    assert found["data"] == [
+        {"x": 1000, "y": 8},
+        {"x": 2000, "y": 2.5},
+        {"x": 3000, "y": 5},
+    ]
+    assert found["guide"] == [{"x": 900, "y": 12}, {"x": 3000, "y": 12}]
+
+
+RENAMED_REFRESH = (
+    "global.getComputedStyle = () => ({ getPropertyValue: () => '0 0 0' });\n"
+    + TIME_REFRESH.replace(
+        "series: [{ label: 'a', values: [2.5, 5] }]",
+        "series: [{ label: 'b', values: [2.5, 5] }]",
+    ).replace(
+        "console.log(JSON.stringify({ same_array",
+        "console.log(JSON.stringify({ label: chart.data.datasets[0].label, same_array",
+    )
+)
+
+
+def test_a_chart_whose_lines_are_renamed_is_drawn_again() -> None:
+    """The server sends a chart whole when its lines change (a container
+    replaced by one of another name), and the page redraws it by the same
+    rule: the names, not only how many."""
+    assert run(RENAMED_REFRESH, CHARTS_JS=CHARTS_JS)["label"] == "b"

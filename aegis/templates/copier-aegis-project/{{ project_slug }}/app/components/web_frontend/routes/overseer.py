@@ -102,7 +102,10 @@ async def _standalone(
     request: Request, group: str, section: str, user: Viewer, db: Db
 ) -> Response:
     """A ``STANDALONE`` page on one of its sections, its first by default."""
-    labels = list(SECTIONED_PAGES[(group, group)].labels)
+    page = SECTIONED_PAGES.get((group, group))
+    if page is None:
+        raise HTTPException(status_code=404)
+    labels = list(page.labels)
     if section and section not in labels[1:]:
         raise HTTPException(status_code=404)
     return await _overseer_detail(request, group, group, user, db, section or labels[0])

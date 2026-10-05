@@ -20,6 +20,7 @@ from app.components.frontend.dashboard.modals.modal_sections.chart_primitives im
     chart_tooltip_kwargs,
     diverging_stop,
 )
+from app.components.frontend.theme import TONE_COLORS
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.formatting import format_value
 
@@ -90,6 +91,20 @@ class LineChartCard(ft.Container):
                     ],
                 )
             )
+        # Where warning and alert begin, as the htmx chart draws them: the
+        # ones the server sent (in reach of the data), across the chart.
+        last = max(0, len(x_labels) - 1)
+        series += [
+            LineSeries(
+                label="",
+                color=TONE_COLORS[threshold["tone"]],
+                points=[(0, threshold["value"]), (last, threshold["value"])],
+                stroke_width=1,
+                show_in_legend=False,
+                guide=True,
+            )
+            for threshold in data.get("thresholds", [])
+        ]
         return cls(
             title=title,
             subtitle=subtitle,
@@ -165,7 +180,9 @@ class LineChartCard(ft.Container):
 
         # Y-axis range - driven by the visible (legend-shown) series so
         # annotation overlays at y=0 don't squash the scale.
-        visible_values = [y for s in series if s.show_in_legend for _, y in s.points]
+        visible_values = [
+            y for s in series if s.show_in_legend or s.guide for _, y in s.points
+        ]
         max_val = max(visible_values) if visible_values else 1
         step = self._smart_step(max_val - min_y)
         max_y = int((max_val // step + 1) * step) if step else int(max_val + 1)
@@ -343,7 +360,10 @@ class LineChartCard(ft.Container):
         # block is intentionally skipped - they're invisible tooltip
         # carriers, and applying line styling can change how Flet
         # registers their points in the tooltip stack.
-        if s.stroke_width > 0:
+        if s.guide:
+            kwargs["dash_pattern"] = [6, 4]
+            kwargs["point"] = False
+        elif s.stroke_width > 0:
             kwargs["curved"] = True
             kwargs["stroke_cap_round"] = True
             kwargs["point"] = ChartPoint.dot(

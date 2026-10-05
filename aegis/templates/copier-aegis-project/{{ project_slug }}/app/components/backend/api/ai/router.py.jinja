@@ -14,7 +14,6 @@ from app.components.backend.api.ai import memory as memory_routes
 {% else %}
 {% endif %}
 from app.components.backend.api.ai import chat, status
-from app.components.backend.api.ai.service import ai_service
 {%- if ai_backend != "memory" %}
 from app.components.backend.api.ai import analytics
 {%- endif %}
@@ -43,12 +42,8 @@ async def sync_active_model() -> None:
     from app.services.ai.domains.llm import active_model
 
     # No catalog table yet reads as nothing applied: .env is in effect.
-    applied = await active_model.sync_from_db(settings)
-    if applied and (
-        ai_service.config.model != settings.AI_MODEL
-        or ai_service.config.provider.value != settings.AI_PROVIDER
-    ):
-        ai_service.refresh_config()
+    # ``ai_service.config`` reads ``settings``, so what this applies is used.
+    await active_model.sync_from_db(settings)
 
 
 router = APIRouter(

@@ -15,9 +15,6 @@ chat page mounts them again with its own agent and user.
 from collections.abc import Callable
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, Response
-
 from app.components.web_frontend import chat_surface as chat
 from app.components.web_frontend.chat_surface import ChatSurface
 from app.components.web_frontend.rendering import (
@@ -26,6 +23,8 @@ from app.components.web_frontend.rendering import (
     templates,
     with_toast,
 )
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 NOTHING_HEARD = "Didn't catch anything. Try again, a little closer."
 MODELS_TEMPLATE = "partials/chat/models.html"
@@ -150,90 +149,98 @@ def chat_router(mount: ChatSurface, guard: Callable[..., Any]) -> APIRouter:
             headers={"Cache-Control": "private, max-age=31536000, immutable"},
         )
 
-    # --- The model chip and its picker ----------------------------------------
+    # --- The model chip and its picker: the catalog is rows ------------------
 
-    @router.get("/models/chip", response_class=HTMLResponse)
-    async def model_chip(request: Request) -> Response:
-        """The composer's chip; it loads itself, and a pick sends it back out
-        of band."""
-        from app.components.web_frontend import chat_models as models
+    if chat.PERSISTED:
 
-        chip = models.chip(await models.running_model())
-        return _fragment(
-            request, MODELS_TEMPLATE, chip=chip, chip_only=True, path=models_path
-        )
+        @router.get("/models/chip", response_class=HTMLResponse)
+        async def model_chip(request: Request) -> Response:
+            """The composer's chip; it loads itself, and a pick sends it back out
+            of band."""
+            from app.components.web_frontend import chat_models as models
 
-    @router.get("/models", response_class=HTMLResponse)
-    async def models_dialog(request: Request, q: str = "") -> Response:
-        """The picker, in the modal; the same route re-renders its list as
-        the search changes."""
-        from app.components.web_frontend import chat_models as models
-
-        current = await models.running_model()
-        picker = await models.picker(q, current, models_path, calls)
-        return dialog(request, MODELS_TEMPLATE, picker=picker)
-
-    @router.post("/models", response_class=HTMLResponse)
-    async def pick_model(
-        request: Request,
-        model_id: Annotated[str, Form()],
-        q: Annotated[str, Form()] = "",
-        kind: Annotated[str, Form()] = "chat",
-    ) -> Response:
-        """A pick sets its role - the chat model, or what a live call runs
-        on - and updates the dialog in place (compare and switch twice
-        without reopening) and the chip out of band; a refused pick says
-        why and changes nothing."""
-        from app.components.web_frontend import chat_models as models
-
-        if calls and kind == "realtime":
-            refused = await models.use_for_calls(model_id)
-        else:
-            refused = await models.switch(model_id)
-        current = await models.running_model()
-        picker = await models.picker(q, current, models_path, calls)
-        if refused:
-            return with_toast(
-                dialog(request, MODELS_TEMPLATE, picker=picker), refused, tone="error"
+            chip = models.chip(await models.running_model())
+            return _fragment(
+                request, MODELS_TEMPLATE, chip=chip, chip_only=True, path=models_path
             )
-        return _fragment(
-            request,
-            MODELS_TEMPLATE,
-            picker=picker,
-            chip=models.chip(current),
-            chip_oob=True,
-        )
 
-    # --- Speech ---------------------------------------------------------------
+        @router.get("/models", response_class=HTMLResponse)
+        async def models_dialog(request: Request, q: str = "") -> Response:
+            """The picker, in the modal; the same route re-renders its list as
+            the search changes."""
+            from app.components.web_frontend import chat_models as models
 
-    @router.post("/speech/transcripts")
-    async def transcribe(audio: UploadFile) -> Response:
-        """The microphone's recording as text, through the same transcription
-        the Voice section uses. Audio is never kept."""
-        from app.components.backend.api.ai.speech import transcribe_audio
+            current = await models.running_model()
+            picker = await models.picker(q, current, models_path, calls)
+            return dialog(request, MODELS_TEMPLATE, picker=picker)
 
-        try:
-            result = await transcribe_audio(audio=audio, language=None)
-        except HTTPException as exc:
-            return JSONResponse({"error": str(exc.detail)}, status_code=exc.status_code)
-        text = (result.text or "").strip()
-        if not text:
-            return JSONResponse({"error": NOTHING_HEARD}, status_code=422)
-        return JSONResponse({"text": text})
+        @router.post("/models", response_class=HTMLResponse)
+        async def pick_model(
+            request: Request,
+            model_id: Annotated[str, Form()],
+            q: Annotated[str, Form()] = "",
+            kind: Annotated[str, Form()] = "chat",
+        ) -> Response:
+            """A pick sets its role - the chat model, or what a live call runs
+            on - and updates the dialog in place (compare and switch twice
+            without reopening) and the chip out of band; a refused pick says
+            why and changes nothing."""
+            from app.components.web_frontend import chat_models as models
 
-    @router.get("/speech/say")
-    async def say(text: str = "") -> Response:
-        """One sentence said aloud, as a reply streams in."""
-        words = chat.spoken(text)
-        if not words:
-            raise HTTPException(status_code=422)
-        return _audio(await chat.synthesize(words))
+            if calls and kind == "realtime":
+                refused = await models.use_for_calls(model_id)
+            else:
+                refused = await models.switch(model_id)
+            current = await models.running_model()
+            picker = await models.picker(q, current, models_path, calls)
+            if refused:
+                return with_toast(
+                    dialog(request, MODELS_TEMPLATE, picker=picker),
+                    refused,
+                    tone="error",
+                )
+            return _fragment(
+                request,
+                MODELS_TEMPLATE,
+                picker=picker,
+                chip=models.chip(current),
+                chip_oob=True,
+            )
 
-    @router.get("/messages/{conversation_id}/{message_id}/speech")
-    async def speak(conversation_id: str, message_id: str) -> Response:
-        """A stored answer said aloud."""
-        found = await stored(conversation_id, message_id)
-        return _audio(await chat.synthesize(chat.spoken(found.content)))
+    # --- Speech: only where voice is installed --------------------------------
+
+    if chat.HAS_VOICE:
+
+        @router.post("/speech/transcripts")
+        async def transcribe(audio: UploadFile) -> Response:
+            """The microphone's recording as text, through the same transcription
+            the Voice section uses. Audio is never kept."""
+            from app.components.backend.api.ai.speech import transcribe_audio
+
+            try:
+                result = await transcribe_audio(audio=audio, language=None)
+            except HTTPException as exc:
+                return JSONResponse(
+                    {"error": str(exc.detail)}, status_code=exc.status_code
+                )
+            text = (result.text or "").strip()
+            if not text:
+                return JSONResponse({"error": NOTHING_HEARD}, status_code=422)
+            return JSONResponse({"text": text})
+
+        @router.get("/speech/say")
+        async def say(text: str = "") -> Response:
+            """One sentence said aloud, as a reply streams in."""
+            words = chat.spoken(text)
+            if not words:
+                raise HTTPException(status_code=422)
+            return _audio(await chat.synthesize(words))
+
+        @router.get("/messages/{conversation_id}/{message_id}/speech")
+        async def speak(conversation_id: str, message_id: str) -> Response:
+            """A stored answer said aloud."""
+            found = await stored(conversation_id, message_id)
+            return _audio(await chat.synthesize(chat.spoken(found.content)))
 
     # A drawn card is a row: no card route without a database.
     if chat.PERSISTED:

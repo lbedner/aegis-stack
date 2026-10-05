@@ -5,10 +5,10 @@ This module provides the main RAGService class that handles document loading,
 chunking, indexing, and semantic search functionality.
 """
 
-import time
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
+import time
 from typing import Any
 
 from app.core.log import logger

@@ -56,11 +56,6 @@ def page_url_for(document_id: int, number: int) -> str:
     return f"{PARTIALS}/{document_id}/pages/{number}"
 
 
-def _matches(document: Document, q: str) -> bool:
-    said = q.casefold()
-    return said in (document.title or "").casefold()
-
-
 def _row(
     document: Document, tags: list[str], filters: dict[str, str | None]
 ) -> dict[str, Any]:
@@ -105,9 +100,9 @@ async def _documents(
 ) -> dict[str, Any]:
     kind = query.get("kind") if query.get("kind") in DOCUMENT_KINDS else None
     tag, q = query.get("tag") or None, query.get("q") or ""
+    # The search (``q``) narrows the rows on the page as you type
+    # (``filter_input``); it only rides along in the URL.
     documents, _ = await service.list_documents(kind=kind, tag=tag, page_size=LIST_SIZE)
-    if q:
-        documents = [d for d in documents if _matches(d, q)]
     tags = await service.tags_for_many([d.id for d in documents if d.id is not None])
     filters = {"q": q, "kind": kind, "tag": tag}
     raw = query.get(DRAWER_PARAM) or ""

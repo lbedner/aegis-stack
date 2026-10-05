@@ -408,3 +408,13 @@ class AegisTheme:
         )
 
         return theme
+
+
+# A tone's colour (ok, warn, error, muted): what htmx's ``data-tone`` CSS
+# reads, for Flet's badges, log lines and chart guides alike.
+TONE_COLORS = {
+    "ok": AegisTheme.Colors.SUCCESS,
+    "warn": AegisTheme.Colors.WARNING,
+    "error": AegisTheme.Colors.ERROR,
+    "muted": ft.Colors.OUTLINE,
+}

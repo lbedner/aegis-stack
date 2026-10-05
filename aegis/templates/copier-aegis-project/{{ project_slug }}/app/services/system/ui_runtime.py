@@ -15,12 +15,11 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from app.core import runtime, series
+from app.core import runtime, series, thresholds
 from app.core.config import settings
 from app.core.formatting import format_bytes, format_percentage, format_span
 from app.core.runtime import Instance, RuntimeUnavailableError, Stats
 from app.core.series import Sample, Sampler
-from app.services.system.health_probes import usage_status, warning_at
 
 NO_DEPLOY = (
     "No deploy target: this process is all the app can see. Add the deploy "
@@ -286,7 +285,8 @@ async def charts(
             fmt=spec.fmt,
             window=window,
             style=spec.style,
-        ) | {"thresholds": _thresholds(spec, rows)}
+            thresholds=_thresholds(spec, rows),
+        )
         drawn.append(
             {
                 "key": spec.key,
@@ -309,8 +309,8 @@ def _charts_for(page: str, tables: dict[str, Any] | None) -> tuple[Chart, ...]:
 
 
 def _thresholds(spec: Chart, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Where warning and alert begin on ``spec``'s chart, by the host checks'
-    rule (``usage_status``); none when its containers differ in what they
+    """Where warning and alert begin on ``spec``'s chart (``thresholds``);
+    none when its containers differ in what they
     have (one line cannot mark two limits) or it has no limit."""
     if spec.limit is None:
         return []
@@ -318,11 +318,7 @@ def _thresholds(spec: Chart, rows: list[dict[str, Any]]) -> list[dict[str, Any]]
     capacities = {row[key] for row in rows if row.get(key)}
     if len(capacities) != 1:
         return []
-    alert = capacities.pop() * getattr(settings, setting) / 100
-    return [
-        {"value": warning_at(alert), "tone": "warn"},
-        {"value": alert, "tone": "error"},
-    ]
+    return thresholds.levels(capacities.pop() * getattr(settings, setting) / 100)
 
 
 async def trends(
@@ -469,5 +465,4 @@ def _status(value: float | None, capacity: float | None, setting: str) -> str | 
     """``value``'s share of ``capacity`` against the ``setting`` alert share."""
     if value is None or not capacity:
         return None
-    threshold = getattr(settings, setting)
-    return usage_status(value / capacity * 100, threshold).value
+    return thresholds.status(value / capacity * 100, getattr(settings, setting)).value

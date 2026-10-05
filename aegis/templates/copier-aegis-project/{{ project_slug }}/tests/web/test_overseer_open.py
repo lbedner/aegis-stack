@@ -32,6 +32,22 @@ def test_nothing_refuses_anyone(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -
     assert not refused, f"refused without auth: {refused}"
 
 
+def test_nothing_fails_for_a_missing_component(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A component's partials are there only when it is, so none crashes
+    (500) in a stack without it; an unreachable runtime is a 503."""
+    sign_in(app, monkeypatch, status_with())
+    client = TestClient(app, raise_server_exceptions=False)
+    calls = [(m, p) for m, p in overseer_calls(app) if "/events" not in p]
+    failed = [
+        (method, path)
+        for method, path in calls
+        if client.request(method, path, follow_redirects=False).status_code == 500
+    ]
+    assert not failed
+
+
 def test_the_home_page_opens(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> None:
     sign_in(app, monkeypatch, status_with())
     response = TestClient(app).get("/overseer")

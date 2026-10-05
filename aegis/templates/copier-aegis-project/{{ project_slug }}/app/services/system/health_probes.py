@@ -15,6 +15,7 @@ import time
 from typing import Any
 import weakref
 import psutil
+from app.core import thresholds
 from app.core.config import settings
 from app.core.log import logger
 from . import activity
@@ -113,9 +114,12 @@ async def _run_health_check(
                 # Log on FIRST check (previous is None) OR status change
                 if previous_status is None or previous_status != current_status:
                     event_status = (
-                        "success" if current_status == ComponentStatusType.HEALTHY
-                        else "error" if current_status == ComponentStatusType.UNHEALTHY
-                        else "info" if current_status == ComponentStatusType.INFO
+                        "success"
+                        if current_status == ComponentStatusType.HEALTHY
+                        else "error"
+                        if current_status == ComponentStatusType.UNHEALTHY
+                        else "info"
+                        if current_status == ComponentStatusType.INFO
                         else "warning"
                     )
                     display_name = name.replace("_", " ").title()
@@ -152,7 +156,8 @@ async def _run_health_check(
             return ComponentStatus(
                 name=name,
                 status=(
-                    ComponentStatusType.HEALTHY if bool(result)
+                    ComponentStatusType.HEALTHY
+                    if bool(result)
                     else ComponentStatusType.UNHEALTHY
                 ),
                 message="OK" if result else "Failed",
@@ -186,23 +191,6 @@ def _get_system_info() -> dict[str, Any]:
         return {"error": str(e)}
 
 
-def warning_at(threshold: float) -> float:
-    """Where a warning starts below ``threshold``, in its units:
-    ``WARNING_PERCENT_OF_THRESHOLD`` of it (Overseer > Settings, Health)."""
-    return threshold * settings.WARNING_PERCENT_OF_THRESHOLD / 100
-
-
-def usage_status(percent: float, threshold: float) -> ComponentStatusType:
-    """A share of a resource in use: unhealthy at its alert threshold, a
-    warning from ``warning_at`` it (the host's memory, disk and CPU, and a
-    container's)."""
-    if percent >= threshold:
-        return ComponentStatusType.UNHEALTHY
-    if percent >= warning_at(threshold):
-        return ComponentStatusType.WARNING
-    return ComponentStatusType.HEALTHY
-
-
 async def _check_memory() -> ComponentStatus:
     """Check system memory usage."""
     try:
@@ -211,7 +199,7 @@ async def _check_memory() -> ComponentStatus:
         memory_percent = memory.percent
 
         # Determine status based on memory usage thresholds
-        status = usage_status(memory_percent, settings.MEMORY_THRESHOLD_PERCENT)
+        status = thresholds.status(memory_percent, settings.MEMORY_THRESHOLD_PERCENT)
 
         return ComponentStatus(
             name="memory",
@@ -242,7 +230,7 @@ async def _check_disk_space() -> ComponentStatus:
         disk_percent = (disk.used / disk.total) * 100
 
         # Determine status based on disk usage thresholds
-        status = usage_status(disk_percent, settings.DISK_THRESHOLD_PERCENT)
+        status = thresholds.status(disk_percent, settings.DISK_THRESHOLD_PERCENT)
 
         return ComponentStatus(
             name="disk",
@@ -272,7 +260,7 @@ async def _check_cpu_usage() -> ComponentStatus:
         cpu_percent = await asyncio.to_thread(psutil.cpu_percent, None)
 
         # Determine status based on CPU usage thresholds
-        status = usage_status(cpu_percent, settings.CPU_THRESHOLD_PERCENT)
+        status = thresholds.status(cpu_percent, settings.CPU_THRESHOLD_PERCENT)
 
         return ComponentStatus(
             name="cpu",

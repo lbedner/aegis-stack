@@ -77,23 +77,48 @@ bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-
 
 {# A dropdown of checkboxes, posting ``name`` once per tick: a multi-pick
    filter. ``options`` are dicts with ``value``, ``label``, ``checked`` and
-   an optional ``count``. Kept across the swaps of the form it sits in
+   an optional ``count``, and may carry their own ``name`` (a container under
+   its service, ``indent``ed). Kept across the swaps of the form it sits in
    (``hx-preserve``, which needs the ``id``), so the menu stays open while
-   several are ticked. #}
+   several are ticked; a click anywhere else closes it. The button at its
+   top ticks every option, or clears them when all are ticked, and the form
+   refreshes as for any tick. #}
 {% macro checklist(id, name, label, options) %}
 {% set ticked = options|selectattr("checked")|list|length %}
-<details id="{{ id }}" hx-preserve class="relative">
+<details id="{{ id }}" hx-preserve class="relative" @click.outside="$el.removeAttribute('open')"
+         x-data="{ full: false, boxes() { return [...$root.querySelectorAll('input[type=checkbox]')] }, sync() { this.full = this.boxes().every((b) => b.checked) } }"
+         x-init="sync()" x-on:change="sync()">
   <summary class="list-none cursor-pointer text-xs px-2.5 py-1 rounded border border-aegis-border text-aegis-muted hover:text-aegis-text">{{ label }}{% if ticked %}: {{ ticked }}{% endif %}</summary>
   <div class="absolute z-20 mt-1 w-64 max-h-80 overflow-y-auto rounded-lg border border-aegis-border bg-aegis-card shadow-xl p-2 space-y-0.5">
+    <div class="flex items-center justify-between px-2 pb-1 mb-1 border-b border-aegis-border/60">
+      <span class="text-xxs caps text-aegis-muted">{{ label }}</span>
+      <button type="button" data-check-all class="p-1 rounded text-aegis-muted hover:text-aegis-text hover:bg-aegis-border/30"
+              x-bind:title="full ? 'Clear all' : 'Select all'" x-bind:aria-label="full ? 'Clear all' : 'Select all'"
+              x-on:click="const on = !full; boxes().forEach((b) => { b.checked = on }); sync(); $el.closest('form')?.dispatchEvent(new Event('change', { bubbles: true }))">
+        <span x-show="!full">{{ icon("check", "w-3.5 h-3.5", 2) }}</span><span x-show="full" x-cloak>{{ icon("x-mark", "w-3.5 h-3.5", 2) }}</span>
+      </button>
+    </div>
     {% for o in options %}
-    <label class="flex items-center gap-2 px-2 py-1 rounded text-sm hover:bg-aegis-border/30 cursor-pointer">
-      <input type="checkbox" name="{{ name }}" value="{{ o.value }}" {% if o.checked %}checked{% endif %} class="checkbox checkbox-xs">
+    <label class="flex items-center gap-2 px-2 py-1 rounded text-sm hover:bg-aegis-border/30 cursor-pointer{% if o.indent %} pl-6 text-aegis-muted{% endif %}">
+      <input type="checkbox" name="{{ o.name or name }}" value="{{ o.value }}" {% if o.checked %}checked{% endif %} class="checkbox checkbox-xs checkbox-primary">
       <span class="flex-1 truncate">{{ o.label }}</span>
       {% if o.count is defined %}<span class="text-xxs text-aegis-muted tabular-nums">{{ "{:,}".format(o.count) }}</span>{% endif %}
     </label>
     {% endfor %}
   </div>
 </details>
+{% endmacro %}
+
+{# A search over what is already on the page: as you type it narrows
+   ``target``'s rows to those holding the text and marks each match, with no
+   request, and rows that arrive later follow it (app.js ``data-filter``).
+   For a list the page holds whole (Logs); a list the server pages through
+   searches there instead (``search_input``). Its ``name`` keeps the text in
+   the URL, so a reload or another filter keeps it; the form that holds it
+   leaves it out of its triggers (``change[!target.closest('[data-filter]')]``). #}
+{% macro filter_input(target, name="q", value=None, placeholder="Filter") %}
+<input type="search" name="{{ name }}" value="{{ value or '' }}" data-filter="{{ target }}" placeholder="{{ placeholder }}"
+       aria-label="{{ placeholder }}" autocomplete="off" class="{{ _control_classes }} min-w-[12rem]">
 {% endmacro %}
 
 {# A stable id lets htmx restore focus when a search result replaces the form. #}
@@ -292,5 +317,5 @@ bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-
    button uses. #}
 {% macro action(label, attrs, tone="default", vals=None) %}
 {% set tones = {"default": "border-aegis-border text-aegis-muted hover:text-aegis-text hover:border-aegis-muted", "primary": "border-aegis-teal text-aegis-text hover:bg-aegis-teal/10", "danger": "border-aegis-error/40 text-error hover:border-aegis-error", "warn": "border-aegis-amber/40 text-aegis-text hover:border-aegis-amber"} %}
-<button type="button" {{ attrs|safe }} {% if vals is not none %}hx-vals='{{ vals|tojson }}'{% endif %} class="px-2.5 py-1 text-xs rounded border whitespace-nowrap transition-colors disabled:opacity-40 disabled:pointer-events-none {{ tones.get(tone, tones['default']) }}">{{ label }}</button>
+<button type="button" {{ attrs|safe }} {% if vals is not none %}hx-vals='{{ vals|tojson }}'{% endif %} class="action px-2.5 py-1 text-xs rounded border whitespace-nowrap transition-colors disabled:opacity-40 disabled:pointer-events-none {{ tones.get(tone, tones['default']) }}">{{ label }}</button>
 {% endmacro %}

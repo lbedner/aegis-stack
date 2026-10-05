@@ -24,6 +24,12 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger()
 _logging_configured = False
 
 
+def apply_log_level() -> None:
+    """``LOG_LEVEL`` on the root logger: at setup, and again once saved
+    settings apply (``app.core.boot``), so a saved level takes effect."""
+    logging.getLogger().setLevel(getattr(logging, settings.LOG_LEVEL.upper()))
+
+
 def setup_logging(stream: TextIO = sys.stdout) -> None:
     """
     Configures logging for the entire application.
@@ -91,8 +97,7 @@ def setup_logging(stream: TextIO = sys.stdout) -> None:
 
     # CRITICAL: Set log level BEFORE adding handler
     # This ensures all loggers (including import-time loggers) respect the level
-    log_level = settings.LOG_LEVEL.upper()
-    root_logger.setLevel(getattr(logging, log_level))
+    apply_log_level()
 
     # Add handler after level is set
     root_logger.addHandler(handler)
@@ -122,7 +127,7 @@ def setup_logging(stream: TextIO = sys.stdout) -> None:
     log_format = "DEV" if settings.APP_ENV == "dev" else "JSON"
     logger.debug(
         "Logging setup complete",
-        level=log_level,
+        level=settings.LOG_LEVEL.upper(),
         log_format=log_format,
         root_level=root_logger.level,
         effective_level=root_logger.getEffectiveLevel(),

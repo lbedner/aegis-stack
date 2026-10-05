@@ -426,6 +426,7 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         # Per-user memory needs the agent_user_memory table + async DB.
         remove_file(project_path, "app/services/ai/domains/chat/user_memory.py")
         remove_file(project_path, "tests/services/ai/test_user_memory.py")
+        remove_file(project_path, "app/components/backend/api/ai/memory.py")
         # Memory modules are DB rows (the memory_module table).
         remove_file(project_path, "app/services/ai/domains/chat/memory_modules.py")
         remove_file(project_path, "tests/services/ai/test_memory_modules.py")

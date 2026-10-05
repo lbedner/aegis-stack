@@ -152,14 +152,11 @@ function datasets(kind, data) {
 }
 
 // Where warning and alert begin (``thresholds``: the host checks' rule,
-// from the server), as dashed lines across the window. Only those in reach
-// of the data: the axis takes in every line, and an alert at 640% (eight
-// cores) would flatten a 5% one. Out of the legend and the tooltip.
+// the ones in reach of the data, from the server: series.thresholds_in_reach),
+// as dashed lines across the window. Out of the legend and the tooltip.
 const GUIDE_TONES = { warn: '--wa', error: '--er' };
-const GUIDE_REACH = 2; // drawn once the data is within half of it
 function shownThresholds(data) {
-  const top = highest(data) * GUIDE_REACH;
-  return timed(data) ? (data.thresholds || []).filter((t) => t.value <= top) : [];
+  return timed(data) ? data.thresholds || [] : [];
 }
 function guideLine(data, threshold) {
   const [min, max] = span(data);
@@ -283,9 +280,8 @@ function build(Chart, canvas) {
 // A time series moving on: the points older than the new window leave from
 // the front and the new ones join at the back, on the same array, so every
 // other point (and a hovered tooltip) stays where it was.
-function slide(dataset, points) {
+function slide(dataset, points, from) {
   const live = dataset.data;
-  const from = points.length ? points[0].x : Infinity;
   while (live.length && live[0].x < from) live.shift();
   const last = live[live.length - 1];
   // A long window's newest bucket fills as the tick goes on: it moves.
@@ -306,18 +302,32 @@ function refresh(Chart, script) {
   const canvas = document.querySelector(`canvas[data-chart-data="${script.id}"]`);
   const chart = canvas && Chart.getChart(canvas);
   if (!chart) return false;
-  const data = JSON.parse(script.textContent);
+  let data = JSON.parse(script.textContent);
   showEmpty(canvas, data);
-  const shown = shownThresholds(data);
-  if (chart.data.datasets.length !== data.series.length + shown.length) {
+  const lines = chart.data.datasets.filter((dataset) => !dataset.guide);
+  // Its lines renamed or added: the server sent it whole (its own rule in
+  // overseer_container.events), so draw it again.
+  const names = (list) => list.map((line) => line.label).join('\n');
+  if (names(lines) !== names(data.series)) {
     chart.data.datasets = datasets(canvas.dataset.chart, data);
   } else if (timed(data)) {
+    // A tick sends only the newest points (series.since): each line keeps
+    // the rest back to the window's start, and a byte axis steps by
+    // everything the chart now shows.
     data.series.forEach((series, i) => {
-      slide(chart.data.datasets[i], values(data, series));
+      slide(lines[i], values(data, series), span(data)[0]);
     });
-    shown.forEach((threshold, j) => {
-      chart.data.datasets[data.series.length + j].data = guideLine(data, threshold);
-    });
+    if (BYTE_FORMATS.has(data.format)) {
+      data = { ...data, series: lines.map((line) => ({ values: line.data.map((point) => point.y) })) };
+    }
+    const shown = shownThresholds(data);
+    if (chart.data.datasets.length !== lines.length + shown.length) {
+      chart.data.datasets = lines.concat(guides(data));
+    } else {
+      shown.forEach((threshold, j) => {
+        chart.data.datasets[lines.length + j].data = guideLine(data, threshold);
+      });
+    }
   } else {
     data.series.forEach((series, i) => {
       Object.assign(chart.data.datasets[i], { label: series.label, data: series.values });

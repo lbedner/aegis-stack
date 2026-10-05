@@ -60,10 +60,7 @@ async def overview_events(view: str | None = None) -> StreamingResponse:
 async def confirm_restart(request: Request, name: str) -> Response:
     """Confirm restarting one of this app's containers; the button calls the
     restart API, which audits it."""
-    try:
-        own = runtime.is_own(await runtime.mine(name))
-    except runtime.UnknownInstanceError:
-        raise HTTPException(status_code=404) from None
+    own = runtime.is_own(await runtime.mine(name))  # errors: backend/main.py
     return dialog(
         request,
         "pages/overseer/_confirm.html",

@@ -243,15 +243,11 @@ class SlashCommandHandler:
 {% if ai_rag %}
     async def load_collection_cache(self) -> None:
         """Pre-populate collection cache for tab completion."""
-        from app.core.config import settings
         from app.core.log import logger
-        from app.services.rag.config import get_rag_config
-        from app.services.rag.service import RAGService
+        from app.services.rag.config import get_rag_service
 
         try:
-            rag_config = get_rag_config(settings)
-            rag_service = RAGService(rag_config)
-            self._collection_cache = await rag_service.list_collections()
+            self._collection_cache = await get_rag_service().list_collections()
             count = len(self._collection_cache)
             logger.debug(f"Collection cache loaded: {count} collections")
         except Exception as e:
@@ -357,7 +353,6 @@ class SlashCommandHandler:
 
         from dotenv import load_dotenv
         load_dotenv(override=True)
-        self.ai_service.refresh_config()
 
         # Build message
         if result.provider_updated:
@@ -427,7 +422,6 @@ class SlashCommandHandler:
 
         from dotenv import load_dotenv
         load_dotenv(override=True)
-        self.ai_service.refresh_config()
 
         if provider:
             return CommandResult(

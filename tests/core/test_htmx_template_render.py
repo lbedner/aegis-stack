@@ -363,6 +363,7 @@ class TestWebFrontendScaffolding:
                 "range_chips",
                 "range_form",
                 "search_input",
+                "filter_input",
                 "select",
                 "select_field",
                 "submit_button",

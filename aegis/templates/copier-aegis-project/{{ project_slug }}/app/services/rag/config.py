@@ -5,6 +5,7 @@ Configuration management for RAG service including chunking settings,
 vector store paths, and search parameters.
 """
 
+from functools import cache
 from typing import TYPE_CHECKING, Self
 
 from pydantic import BaseModel, Field
@@ -13,6 +14,7 @@ from app.core.secrets import Secret, probe
 
 if TYPE_CHECKING:
     from app.core.config import Settings
+    from app.services.rag.service import RAGService
 
 
 async def _verify_hf_token(token: str) -> None:
@@ -61,25 +63,17 @@ class RAGServiceConfig(BaseModel):
     )
     openai_api_key: str | None = Field(
         default=None,
+        repr=False,  # a credential: never in a log line or a traceback
         description="OpenAI API key for embeddings (if using OpenAI provider)",
     )
     chunk_size: int = Field(
-        default=2000,
-        gt=0,
-        le=10000,
-        description="Maximum chunk size in characters",
+        default=2000, description="Maximum chunk size in characters"
     )
     chunk_overlap: int = Field(
-        default=400,
-        ge=0,
-        le=1000,
-        description="Overlap between chunks in characters",
+        default=400, description="Overlap between chunks in characters"
     )
     default_top_k: int = Field(
-        default=15,
-        gt=0,
-        le=50,
-        description="Default number of search results",
+        default=15, description="Default number of search results"
     )
     default_extensions: list[str] = Field(
         default=[".py", ".js", ".ts", ".tsx", ".md", ".yaml", ".yml", ".json", ".toml"],
@@ -125,3 +119,15 @@ class RAGServiceConfig(BaseModel):
 def get_rag_config(settings: "Settings") -> RAGServiceConfig:
     """Get RAG service configuration from application settings."""
     return RAGServiceConfig.from_settings(settings)
+
+
+@cache
+def get_rag_service() -> "RAGService":
+    """The process's RAG service: one vector store client and embedding
+    model for the API, Overseer, chat and the CLI. Built on first use, after
+    the process has booted, so a chunk size or top-k saved in the Overseer
+    applies."""
+    from app.core.config import settings
+    from app.services.rag.service import RAGService  # it imports this module
+
+    return RAGService(get_rag_config(settings))

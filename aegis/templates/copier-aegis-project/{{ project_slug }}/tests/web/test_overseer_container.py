@@ -127,6 +127,34 @@ async def test_the_stream_charts_the_window_it_was_opened_with(
     assert end - start == 3600 * 1000
 
 
+async def test_after_its_first_frame_a_chart_sends_only_its_new_points(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The page's chart holds what it was sent, so a tick carries a few
+    points, not the whole window again; a new line sends it all."""
+    readings = iter([["a"], ["a"], ["a", "b"]])
+
+    async def section(page: str, window: int, wait: bool = True) -> tuple:
+        names = next(readings)
+        data = series.chart(
+            {name: [(1.0, 1.0), (2.0, 2.0), (3.0, 3.0)] for name in names}, str
+        )
+        return {"rows": []}, [{"key": "cpu", "data": data}]
+
+    monkeypatch.setattr(ui_runtime, "section", section)
+    monkeypatch.setattr(overseer_container, "render", lambda view: "")
+    monkeypatch.setattr(series, "TICK_SECONDS", 0)
+    sent = [
+        chart_json(f.split("data: ", 1)[1], "chart-container-cpu-data")
+        async for f in overseer_container.events("redis", max_frames=3)
+        if f.startswith("event: container-cpu")
+    ]
+    first, tick, new_line = sent
+    assert first["labels"] == [1000, 2000, 3000]
+    assert tick["labels"] == [3000] and tick["points"] == 3
+    assert new_line["labels"] == [1000, 2000, 3000]
+
+
 def test_a_page_with_no_container_has_no_section(client: TestClient) -> None:
     links = [
         text(a)
@@ -379,3 +407,13 @@ def test_restarting_the_server_overseer_runs_on_says_the_page_drops(
     assert "this page drops" not in _html(
         client, overseer_container.RESTART.format(name=REDIS.name)
     )
+
+
+def test_a_runtime_that_does_not_answer_is_a_503_not_a_crash(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Any route that reaches the runtime: the app maps its errors once (an
+    unknown container 404, no answer 503), so none of them is a 500."""
+    use_runtime(monkeypatch, FakeRuntime(REDIS, fail=True))
+    response = client.get(overseer_container.RESTART.format(name=REDIS.name))
+    assert response.status_code == 503

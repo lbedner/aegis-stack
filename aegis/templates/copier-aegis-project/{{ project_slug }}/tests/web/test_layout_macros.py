@@ -3,6 +3,7 @@
 import json
 
 from fastapi.testclient import TestClient
+import pytest
 
 from app.components.web_frontend.rendering import templates
 from tests.web.dom import none, one, select, text
@@ -197,7 +198,24 @@ class TestStatsStrip:
         strip = one(html, "dl#s")
         assert len(select(strip, "dt")) == 2
         assert one(strip, "[hx-get]").get("hx-get") == "/x/income"
-        assert "text-error" in select(strip, "dd")[2].get("class")
+        assert select(strip, "dd")[2].get("data-tone") == "error"
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        '{{ badge("Down", "error") }}',
+        '{{ progress(0.5, "error") }}',
+        "{{ stats_strip([{'label': 'Owed', 'value': '1', 'tone': 'error'}]) }}",
+    ],
+)
+def test_a_tone_is_coloured_in_one_place(source: str) -> None:
+    """Every tone maps to its colour in input.css's ``.toned`` family, so an
+    error is the same red on a badge, a bar and a stat."""
+    toned = one(render(source), ".toned")
+    assert toned.get("data-tone") == "error"
+    colours = ("text-aegis-", "text-error")
+    assert not [c for c in toned.get("class").split() if c.startswith(colours)]
 
 
 class TestRankedRows:
@@ -264,3 +282,9 @@ class TestStatRow:
         html = render('{{ stat_row([("p95 ms", "4.2"), ("Clients", 3)]) }}')
         assert [text(dt) for dt in select(html, "dt")] == ["p95 ms", "Clients"]
         assert [text(dd) for dd in select(html, "dd")] == ["4.2", "3"]
+
+
+def test_a_toggle_action_shows_when_it_is_on() -> None:
+    """Wrap, Pause: a pressed action reads as on, as a pressed chip does."""
+    html = render('{% from "components/macros/form.html" import action %}{{ action("Wrap", \'aria-pressed="true"\') }}')
+    assert "action" in one(html, "button").get("class").split()  # input.css

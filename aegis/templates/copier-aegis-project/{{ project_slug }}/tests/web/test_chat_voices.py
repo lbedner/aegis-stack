@@ -310,6 +310,26 @@ class TestEditing:
 
 
 class TestPreviewing:
+    def test_a_voice_the_provider_cannot_say_is_a_503(
+        self,
+        client: TestClient,
+        voices: dict[str, VoiceProfile],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """No key, no network: said plainly, as the speech API says it, not
+        a crash."""
+
+        class _Unreachable:
+            def __init__(self, voice_settings: Any) -> None:
+                pass
+
+            async def synthesize(self, request: Any) -> Any:
+                raise RuntimeError("the provider refused")
+
+        monkeypatch.setattr(chat_voices, "TTSService", _Unreachable)
+        response = client.get(f"{VOICES}/{voices['marin'].id}/preview")
+        assert response.status_code == 503
+
     def test_a_preview_is_that_voice_not_the_active_one(
         self,
         client: TestClient,

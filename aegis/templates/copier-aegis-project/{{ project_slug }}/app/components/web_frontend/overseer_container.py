@@ -226,15 +226,23 @@ def events(  # noqa: ANN201 - async iterator
     page: str, window: int = series.DEFAULT_WINDOW, max_frames: int | None = None
 ):
     """The cards and each chart over SSE, each sent again only when it
-    changes."""
+    changes: a chart whole at first and when its lines change, and after
+    that only its new points (``series.since``)."""
     chart_data = templates.env.get_template(MACROS).module.chart_data  # type: ignore[attr-defined]
+    # Each chart's lines and the newest time sent, which the page now has.
+    held: dict[str, tuple[list[str], int]] = {}
 
     async def frame() -> dict[str, str]:
         table, charts = await ui_runtime.section(page, window)
         sent = {EVENT: render(table)}
         for chart in charts:
-            event = chart_event(chart["key"])
-            sent[event] = str(chart_data(event, chart["data"]))
+            event, data = chart_event(chart["key"]), chart["data"]
+            lines = [line["label"] for line in data["series"]]
+            if event in held and held[event][0] == lines:
+                data = series.since(data, held[event][1])
+            if data["labels"]:
+                held[event] = (lines, data["labels"][-1])
+            sent[event] = str(chart_data(event, data))
         return sent
 
     return fragments_events(frame, series.TICK_SECONDS, max_frames)

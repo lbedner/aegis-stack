@@ -20,8 +20,9 @@ register_health_check(name: str, check_fn: Callable[[], Awaitable[ComponentStatu
 **Example: Backend Component**
 ```python
 # app/components/backend/health.py
+from app.core import thresholds
 from app.services.system import register_health_check
-from app.services.system.models import ComponentStatus, ComponentStatusType
+from app.services.system.models import ComponentStatus
 
 async def check_backend_health() -> ComponentStatus:
     """Check backend component health."""
@@ -29,10 +30,9 @@ async def check_backend_health() -> ComponentStatus:
     cpu_percent = psutil.cpu_percent(interval=0.1)
     memory = psutil.virtual_memory()
 
-    # Determine status based on thresholds
-    status = ComponentStatusType.HEALTHY
-    if cpu_percent > 90:
-        status = ComponentStatusType.WARNING
+    # Unhealthy at the alert, a warning short of it: the rule every
+    # Overseer figure and chart reads (app/core/thresholds.py)
+    status = thresholds.status(cpu_percent, 90)
 
     return ComponentStatus(
         name="backend",
@@ -48,6 +48,11 @@ async def check_backend_health() -> ComponentStatus:
 # Register during component initialization
 register_health_check("backend", check_backend_health)
 ```
+
+**Warning and alert levels.** `thresholds.status(value, alert)` is unhealthy
+at `alert` and a warning from `WARNING_PERCENT_OF_THRESHOLD` of it (Overseer >
+Settings, Health). A live chart marks the same levels as dashed lines with
+`series.chart(..., thresholds=thresholds.levels(alert))`.
 
 ### Service Health Checks
 

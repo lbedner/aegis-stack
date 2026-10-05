@@ -21,6 +21,7 @@ history (downsampled, or in the database) can sit behind the same ``read``.
 """
 
 import asyncio
+from bisect import bisect_left
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
 import math
@@ -58,6 +59,8 @@ WINDOWS: tuple[tuple[int, str], ...] = ((900, "15m"), (1800, "30m"), (3600, "1h"
 DEFAULT_WINDOW = 900
 # The most points a chart line carries: a longer window is averaged down.
 MAX_POINTS = 900
+# A chart's threshold shows once its data is within 1/GUIDE_REACH of it.
+GUIDE_REACH = 2
 
 
 def window_of(
@@ -228,6 +231,7 @@ def chart(
     window: float | None = None,
     max_points: int = MAX_POINTS,
     style: str | None = None,
+    thresholds: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """``chart_panel`` data (the one home of its shape): one line per series, on the times they share
     (ms, which the browser shows on its own clock); a gap where one has no
@@ -235,7 +239,9 @@ def chart(
     an empty chart reads right and a live one keeps moving. More than
     ``max_points`` across it are averaged into buckets on fixed boundaries,
     so a bucket keeps its place as the window moves. ``style="events"``:
-    each point is a moment (a call), drawn as a dot rather than a line."""
+    each point is a moment (a call), drawn as a dot rather than a line.
+    ``thresholds`` (``app.core.thresholds.levels``): the dashed guides, the
+    ones in reach of the data."""
     found = _bucketed(found, window, max_points)
     times = sorted({at for points in found.values() for at, _ in points})
     tables = {name: dict(points) for name, points in found.items()}
@@ -253,10 +259,37 @@ def chart(
     }
     if style is not None:
         drawn["style"] = style
+    if thresholds:
+        drawn["thresholds"] = thresholds_in_reach(drawn["series"], thresholds)
     if window is not None:
         now = time.time()
         drawn["window"] = [round((now - window) * 1000), round(now * 1000)]
     return drawn
+
+
+def thresholds_in_reach(
+    lines: list[dict[str, Any]], thresholds: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """The ``thresholds`` the ``lines``' values come within reach of: every
+    one is drawn and the axis takes it in, so an alert at 640% (eight cores)
+    would flatten a 5% line. Judged on the whole window, so a live frame
+    (``since``) carries the ones its chart shows."""
+    values = [v for line in lines for v in line["values"] if v is not None]
+    top = max(values, default=0) * GUIDE_REACH
+    return [t for t in thresholds if t["value"] <= top]
+
+
+def since(drawn: dict[str, Any], after: int) -> dict[str, Any]:
+    """``chart``'s ``drawn`` from ``after`` (ms) on: what a live chart lacks,
+    given it holds everything up to ``after``, whose bucket may still be
+    filling. ``points`` still counts the whole window."""
+    start = bisect_left(drawn["labels"], after)  # the labels are in time order
+    return drawn | {
+        "labels": drawn["labels"][start:],
+        "series": [
+            line | {"values": line["values"][start:]} for line in drawn["series"]
+        ],
+    }
 
 
 def _bucketed(

@@ -17,6 +17,7 @@ from app.components.frontend.dashboard.modals.modal_sections import (
     DateRangeChips,
     LineChartCard,
 )
+from app.components.frontend.theme import AegisTheme as Theme
 from app.core import series
 from app.services.system import ui_runtime
 from app.services.system.models import ComponentStatus
@@ -190,3 +191,45 @@ async def test_restart_calls_the_api(monkeypatch: pytest.MonkeyPatch) -> None:
     await container_section.restart(page, REDIS.name)
     assert posted == [ui_runtime.RESTART_API.format(name=REDIS.name)]
     page.open.assert_called_once()  # the snackbar saying it restarted
+
+
+def test_a_chart_draws_where_warning_begins_as_a_dashed_guide() -> None:
+    """The htmx chart's dashed lines: each threshold the server sent (those
+    in reach, ``series.thresholds_in_reach``), across the chart, out of the
+    legend, and inside the axis."""
+    data = {
+        "labels": [1_000, 2_000],
+        "series": [{"label": "app-redis-1", "values": [5.0, 8.0]}],
+        "x": "time",
+        "format": "percent",
+        "thresholds": [{"value": 12, "tone": "warn"}],
+    }
+    card = LineChartCard.from_chart("CPU", data)
+    (chart,) = [c for c in walk(card) if isinstance(c, ft.LineChart)]
+    line, guide = chart.data_series
+    assert guide.dash_pattern and guide.color == Theme.Colors.WARNING
+    assert [(p.x, p.y) for p in guide.data_points] == [(0, 12), (1, 12)]
+    assert chart.max_y >= 12
+
+
+async def test_a_figure_past_its_threshold_takes_its_tone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The htmx section's colours: CPU at a warning in amber, memory at the
+    alert in red, a figure under its threshold plain."""
+    row = {key: "x" for _, key, _ in container_section.COLUMNS}
+    row |= {"cpu": "95%", "memory": "1 GB", "disk": "9 B/s"}
+    row |= {"cpu_status": "warning", "memory_status": "unhealthy"}
+
+    async def section(page: str, window: int) -> tuple:
+        return {"rows": [row], "note": None}, []
+
+    monkeypatch.setattr(ui_runtime, "section", section)
+    shown = ContainerSection("redis")
+    await shown.load()
+    colors = {
+        n.value: n.color for n in walk(shown) if isinstance(n, ft.Text) and n.value
+    }
+    assert colors["95%"] == Theme.Colors.WARNING
+    assert colors["1 GB"] == Theme.Colors.ERROR
+    assert colors["9 B/s"] == ft.Colors.ON_SURFACE

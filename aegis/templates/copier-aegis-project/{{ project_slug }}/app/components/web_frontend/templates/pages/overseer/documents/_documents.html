@@ -2,11 +2,11 @@
    row opens its document in the drawer; the address holds which. #}
 {% from "components/macros/layout.html" import card, drawer_sync %}
 {% from "components/macros/table.html" import data_table %}
-{% from "components/macros/form.html" import search_input, select %}
+{% from "components/macros/form.html" import filter_input, select %}
 <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
   <form {{ hx_replace(path, "#overseer-main") }}
-        hx-trigger="keyup changed delay:250ms from:input[name=q], change from:select, search" class="flex flex-wrap items-center gap-3">
-    {{ search_input("q", q, placeholder="Search titles") }}
+        hx-trigger="change[!target.closest('[data-filter]')]" x-data x-on:submit.prevent class="flex flex-wrap items-center gap-3">
+    {{ filter_input("#documents-list tbody", "q", q, placeholder="Search documents") }}
     {{ select("kind", kind_options, kind, blank="All kinds", label="Kind") }}
     {% if tag %}<input type="hidden" name="tag" value="{{ tag }}"><span class="text-xs text-aegis-muted">tag: {{ tag }}</span>{% endif %}
   </form>

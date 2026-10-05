@@ -7,18 +7,15 @@ audio file transcribed. Mounted by ``routes/pages.py``."""
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, Response
-
 from app.components.web_frontend import (
     overseer_ai_agents,
     overseer_ai_catalog,
     overseer_ai_rag,
     overseer_ai_voice,
 )
-from app.components.web_frontend.chat_surface import PERSISTED
+from app.components.web_frontend.chat_surface import HAS_VOICE, PERSISTED
 from app.components.web_frontend.overseer_access import Db, overseer_db
-from app.components.web_frontend.overseer_ai_common import PARTIALS
+from app.components.web_frontend.overseer_ai_common import HAS_RAG, PARTIALS
 from app.components.web_frontend.rendering import (
     dialog,
     form_fields,
@@ -26,12 +23,20 @@ from app.components.web_frontend.rendering import (
     image_response,
     toast_response,
 )
-
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile
+from fastapi.responses import HTMLResponse, Response
 
 router = APIRouter(prefix=PARTIALS)
+# What the stack has decides what is mounted (at the end): a database for
+# the catalog, agents, memory modules and saved facts; RAG for its
+# collections and search; voice for transcription. A route for something
+# the stack lacks is not there (a 404), never a crash.
+stored = APIRouter()
+with_rag = APIRouter()
+with_voice = APIRouter()
 
 
-@router.get("/icons/{slug}")
+@stored.get("/icons/{slug}")
 async def provider_icon(
     request: Request,
     slug: str,
@@ -39,8 +44,6 @@ async def provider_icon(
 ) -> Response:
     """A provider's mark, for the browser to cache; the page only links to
     one the catalog holds, so a 404 here is a mark since removed."""
-    if not PERSISTED:
-        raise HTTPException(status_code=404)
     from app.services.ai.domains.llm.queries import org_icons
 
     icon = (await org_icons(db, [slug])).get(slug)
@@ -49,7 +52,7 @@ async def provider_icon(
     return image_response(request, icon)
 
 
-@router.get("/models/drawer", response_class=HTMLResponse)
+@stored.get("/models/drawer", response_class=HTMLResponse)
 async def model_drawer(
     request: Request,
     model: str,
@@ -68,7 +71,7 @@ async def set_active_model(model_id: str, force: bool = False) -> Any:
     return await switch(model_id, force=force)
 
 
-@router.post("/models/use")
+@stored.post("/models/use")
 async def use_model(
     model_id: Annotated[str, Form()] = "",
 ) -> Response:
@@ -81,7 +84,7 @@ async def use_model(
     )
 
 
-@router.get("/agents/{slug}/drawer", response_class=HTMLResponse)
+@stored.get("/agents/{slug}/drawer", response_class=HTMLResponse)
 async def agent_drawer(
     request: Request,
     slug: str,
@@ -100,7 +103,7 @@ async def update_agent(db: Db, slug: str, changes: dict[str, Any]) -> Any:
     return await update(slug, changes, session=db)
 
 
-@router.post("/agents/{slug}")
+@stored.post("/agents/{slug}")
 async def save_agent(
     request: Request,
     slug: str,
@@ -122,7 +125,7 @@ async def save_agent(
     )
 
 
-@router.get("/modules/{slug}/drawer", response_class=HTMLResponse)
+@stored.get("/modules/{slug}/drawer", response_class=HTMLResponse)
 async def module_drawer(
     request: Request,
     slug: str,
@@ -141,7 +144,7 @@ async def update_module(db: Db, slug: str, changes: dict[str, Any]) -> Any:
     return await update_memory_module(slug, session=db, **changes)
 
 
-@router.post("/modules/{slug}")
+@stored.post("/modules/{slug}")
 async def save_module(
     request: Request,
     slug: str,
@@ -173,7 +176,7 @@ async def _fact(db: Db, index: int) -> dict[str, Any]:
     return fact
 
 
-@router.get("/facts/{index}/edit", response_class=HTMLResponse)
+@stored.get("/facts/{index}/edit", response_class=HTMLResponse)
 async def fact_form(
     request: Request,
     index: int,
@@ -198,7 +201,7 @@ async def correct_fact(db: Db, index: int, fact: str, category: str) -> Any:
     )
 
 
-@router.post("/facts/{index}")
+@stored.post("/facts/{index}")
 async def save_fact(
     index: int,
     fact: Annotated[str, Form()] = "",
@@ -216,7 +219,7 @@ async def save_fact(
     )
 
 
-@router.get("/facts/{index}/confirm-forget", response_class=HTMLResponse)
+@stored.get("/facts/{index}/confirm-forget", response_class=HTMLResponse)
 async def confirm_forget(
     request: Request,
     index: int,
@@ -244,7 +247,7 @@ async def forget_fact(db: Db, index: int) -> Any:
     return await delete_user_fact(DEFAULT_MEMORY_USER_ID, index, session=db)
 
 
-@router.delete("/facts/{index}", status_code=204)
+@stored.delete("/facts/{index}", status_code=204)
 async def forget(
     index: int,
     db: Db = Depends(overseer_db),
@@ -256,13 +259,15 @@ async def forget(
     return Response(status_code=204)
 
 
-@router.get("/collections/{name}/drawer", response_class=HTMLResponse)
+@with_rag.get("/collections/{name}/drawer", response_class=HTMLResponse)
 async def collection_drawer(request: Request, name: str) -> Response:
     context = await overseer_ai_rag.collection_context(name)
+    if context is None:
+        raise HTTPException(status_code=404, detail="No such collection.")
     return dialog(request, "pages/overseer/ai/_collection_drawer.html", **context)
 
 
-@router.get("/collections/{name}/confirm-delete", response_class=HTMLResponse)
+@with_rag.get("/collections/{name}/confirm-delete", response_class=HTMLResponse)
 async def confirm_delete_collection(request: Request, name: str) -> Response:
     return dialog(
         request,
@@ -276,14 +281,14 @@ async def confirm_delete_collection(request: Request, name: str) -> Response:
     )
 
 
-@router.delete("/collections/{name}", status_code=204)
+@with_rag.delete("/collections/{name}", status_code=204)
 async def delete_collection(name: str) -> Response:
     if not await overseer_ai_rag.delete_collection(name):
         raise HTTPException(status_code=404, detail="No such collection.")
     return Response(status_code=204)
 
 
-@router.post("/rag/search", response_class=HTMLResponse)
+@with_rag.post("/rag/search", response_class=HTMLResponse)
 async def rag_search(
     request: Request,
     collection: Annotated[str, Form()] = "",
@@ -304,7 +309,7 @@ async def rag_search(
     )
 
 
-@router.post("/voice/transcribe", response_class=HTMLResponse)
+@with_voice.post("/voice/transcribe", response_class=HTMLResponse)
 async def transcribe(
     request: Request,
     audio: UploadFile,
@@ -315,3 +320,12 @@ async def transcribe(
     except HTTPException as exc:  # its format and provider errors
         return toast_response(str(exc.detail), "error")
     return dialog(request, "pages/overseer/ai/_voice_transcript.html", result=result)
+
+
+for part, present in (
+    (stored, PERSISTED),
+    (with_rag, HAS_RAG),
+    (with_voice, HAS_VOICE),
+):
+    if present:
+        router.include_router(part)

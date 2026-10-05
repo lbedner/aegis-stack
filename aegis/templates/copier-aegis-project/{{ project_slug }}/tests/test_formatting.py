@@ -176,12 +176,22 @@ def test_a_charted_value_reads_in_its_charts_format(
     assert format_value(value, fmt) == expected
 
 
-def test_split_matches_marks_every_match_whatever_its_case() -> None:
-    assert split_matches("Write failed, write again", "WRITE") == [
-        ("Write", True),
-        (" failed, ", False),
-        ("write", True),
-        (" again", False),
-    ]
-    assert split_matches("Write failed", "") == [("Write failed", False)]
-    assert split_matches("Write failed", "nothing") == [("Write failed", False)]
+# A search's matches, for split_matches and its browser twin (app.js
+# splitMatches, the client-side filter: tests/web/test_app_js.py).
+MATCH_CASES = [
+    (
+        "Write failed, write again",
+        "WRITE",
+        [("Write", True), (" failed, ", False), ("write", True), (" again", False)],
+    ),
+    ("Write failed", "", [("Write failed", False)]),
+    ("Write failed", "nothing", [("Write failed", False)]),
+    ("a.b (c)", ".b (", [("a", False), (".b (", True), ("c)", False)]),
+]
+
+
+@pytest.mark.parametrize(("text", "query", "runs"), MATCH_CASES)
+def test_split_matches_marks_every_match_whatever_its_case(
+    text: str, query: str, runs: list[tuple[str, bool]]
+) -> None:
+    assert split_matches(text, query) == runs

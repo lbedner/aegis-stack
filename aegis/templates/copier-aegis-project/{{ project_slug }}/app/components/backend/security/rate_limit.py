@@ -54,24 +54,28 @@ def get_session_metadata(request: Request) -> dict[str, str | None]:
 
 
 class RateLimiter:
-    """In-memory rate limiter using sliding window."""
+    """In-memory rate limiter using sliding window. Its limit and window are
+    the named settings, read on each check, so a value saved in the Overseer
+    applies once the process has booted (as does ``TRUST_PROXY_HEADERS``)."""
 
-    def __init__(
-        self,
-        max_requests: int = 5,
-        window_seconds: int = 60,
-        trust_proxy_headers: bool = False,
-    ) -> None:
-        self.max_requests = max_requests
-        self.window_seconds = window_seconds
-        self.trust_proxy_headers = trust_proxy_headers
+    def __init__(self, max_setting: str, window_setting: str) -> None:
+        self.max_setting = max_setting
+        self.window_setting = window_setting
         self._requests: dict[str, list[float]] = defaultdict(list)
+
+    @property
+    def max_requests(self) -> int:
+        return int(getattr(settings, self.max_setting))
+
+    @property
+    def window_seconds(self) -> int:
+        return int(getattr(settings, self.window_setting))
 
     def _get_client_ip(self, request: Request) -> str:
         """Get client IP from request. The limiter wants a real bucket
         key even when the IP can't be resolved, so this falls back to
         the literal ``"unknown"`` rather than ``None``."""
-        ip = get_client_ip(request, trust_proxy_headers=self.trust_proxy_headers)
+        ip = get_client_ip(request)
         return ip if ip is not None else "unknown"
 
     def _cleanup(self, key: str) -> None:
@@ -99,29 +103,17 @@ class RateLimiter:
 
 
 # Shared instances for auth endpoints
-login_limiter = RateLimiter(
-    max_requests=settings.RATE_LIMIT_LOGIN_MAX,
-    window_seconds=settings.RATE_LIMIT_LOGIN_WINDOW,
-    trust_proxy_headers=settings.TRUST_PROXY_HEADERS,
-)
-register_limiter = RateLimiter(
-    max_requests=settings.RATE_LIMIT_REGISTER_MAX,
-    window_seconds=settings.RATE_LIMIT_REGISTER_WINDOW,
-    trust_proxy_headers=settings.TRUST_PROXY_HEADERS,
-)
+login_limiter = RateLimiter("RATE_LIMIT_LOGIN_MAX", "RATE_LIMIT_LOGIN_WINDOW")
+register_limiter = RateLimiter("RATE_LIMIT_REGISTER_MAX", "RATE_LIMIT_REGISTER_WINDOW")
 password_reset_limiter = RateLimiter(
-    max_requests=settings.RATE_LIMIT_REGISTER_MAX,
-    window_seconds=settings.RATE_LIMIT_REGISTER_WINDOW,
-    trust_proxy_headers=settings.TRUST_PROXY_HEADERS,
+    "RATE_LIMIT_REGISTER_MAX", "RATE_LIMIT_REGISTER_WINDOW"
 )
 # Separate bucket for verification-email resends. Its own dedicated
 # settings keep it from inheriting the tighter register limit — this
 # is a user-facing button, not a signup path, and legit retries
 # shouldn't feel punishing.
 resend_verification_limiter = RateLimiter(
-    max_requests=settings.RATE_LIMIT_RESEND_VERIFICATION_MAX,
-    window_seconds=settings.RATE_LIMIT_RESEND_VERIFICATION_WINDOW,
-    trust_proxy_headers=settings.TRUST_PROXY_HEADERS,
+    "RATE_LIMIT_RESEND_VERIFICATION_MAX", "RATE_LIMIT_RESEND_VERIFICATION_WINDOW"
 )
 
 

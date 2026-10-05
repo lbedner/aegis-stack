@@ -97,8 +97,16 @@ async def test_the_level_and_text_filters_narrow_the_lines(
         ]
     }
     use_runtime(monkeypatch, FakeRuntime(REDIS, lines=lines))
-    warned = await ui_logs.recent(["redis"], {"level": "warning", "order": "asc"})
-    assert [row["message"] for row in warned["lines"]] == ["Slow query", "Query failed"]
+    from starlette.datastructures import QueryParams
+
+    async def shown(query: str) -> list[str]:
+        view = await ui_logs.recent(["redis"], QueryParams(query + "&order=asc"))
+        return [row["message"] for row in view["lines"]]
+
+    # Exactly the levels picked, not that level and worse.
+    assert await shown("level=warning") == ["Slow query"]
+    assert await shown("level=info&level=error") == ["Started", "Query failed"]
+    assert await shown(f"level={ui_logs.NO_LEVEL}") == ["plain text with no level"]
     found = await ui_logs.recent(["redis"], {"q": "QUERY", "order": "asc"})
     assert [row["message"] for row in found["lines"]] == ["Slow query", "Query failed"]
 
@@ -155,8 +163,19 @@ async def test_the_sources_are_the_pages_with_a_container(
 ) -> None:
     use_runtime(monkeypatch, FakeRuntime(REDIS, WORKER))
     assert await ui_logs.sources() == [
-        {"page": "redis", "title": "Cache"},
-        {"page": "worker", "title": "Worker"},
+        {"page": "redis", "title": "Cache", "containers": []},
+        {"page": "worker", "title": "Worker", "containers": []},
+    ]
+
+
+async def test_a_source_with_several_containers_lists_each(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    use_runtime(monkeypatch, FakeRuntime(WORKER, STOPPED))
+    (worker,) = await ui_logs.sources()
+    assert worker["containers"] == [
+        {"name": SYSTEM, "label": "system"},
+        {"name": MEDIA, "label": "media"},
     ]
 
 
@@ -188,9 +207,9 @@ async def test_the_sources_are_the_pages_with_a_container(
 async def test_the_lead_the_columns_repeat_is_split_off(
     monkeypatch: pytest.MonkeyPatch, raw: str, prefix: str, message: str
 ) -> None:
-    """A plain line's leading time and level (which the time and level
-    columns already show) as ``prefix``, kept so the UIs can dim it and a
-    copy can keep it."""
+    """A plain line's leading time and level (which the time cell and the
+    level tag already show) as ``prefix``: the UIs leave it out, and a copy
+    keeps it."""
     use_runtime(monkeypatch, FakeRuntime(REDIS, lines={REDIS.name: [_at(1, raw)]}))
     (row,) = (await ui_logs.recent(["redis"], {}))["lines"]
     assert (row["prefix"], row["message"]) == (prefix, message)
@@ -206,3 +225,74 @@ async def test_each_service_keeps_one_color(monkeypatch: pytest.MonkeyPatch) -> 
     use_runtime(monkeypatch, FakeRuntime(REDIS, lines=lines))
     (row,) = (await ui_logs.recent(["redis"], {}))["lines"]
     assert row["color"] == colors["redis"]
+
+
+async def test_a_line_names_its_container_only_where_its_service_has_several(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One source column: the worker's lines say which of its containers
+    (what their names do not share), the cache's one container needs none."""
+    lines = {SYSTEM: [_at(1, "a")], MEDIA: [_at(2, "b")], REDIS.name: [_at(3, "c")]}
+    use_runtime(monkeypatch, FakeRuntime(REDIS, WORKER, STOPPED, lines=lines))
+    view = await ui_logs.recent(["worker", "redis"], {})
+    assert {(row["message"], row["source"]) for row in view["lines"]} == {
+        ("a", "system"),
+        ("b", "media"),
+        ("c", ""),
+    }
+
+
+def _json(level: str, event: str) -> str:
+    return json.dumps({"level": level, "event": event})
+
+
+async def test_the_volume_counts_the_windows_lines_by_level(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A bar per slice of the window, its lines stacked by tone, so where
+    things went wrong shows before a line is read."""
+    lines = {
+        REDIS.name: [
+            _at(1, _json("info", "up")),
+            _at(2, _json("error", "down")),
+            _at(3, _json("warning", "slow")),
+            _at(4, "plain"),
+        ]
+    }
+    use_runtime(monkeypatch, FakeRuntime(REDIS, lines=lines))
+    view = await ui_logs.recent(["redis"], {"window": str(ui_logs.ALL)}, volume=True)
+    volume = view["volume"]
+    assert len(volume) == ui_logs.VOLUME_BARS
+    totals = {tone: sum(bar[tone] for bar in volume) for tone in ui_logs.VOLUME_TONES}
+    assert totals == {"error": 1, "warn": 1, "other": 2}
+    assert all(bar["from"] < bar["to"] for bar in volume)
+
+
+async def test_a_bars_time_range_narrows_the_lines_but_not_the_volume(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    lines = {REDIS.name: [_at(1, "early"), _at(30, "late")]}
+    use_runtime(monkeypatch, FakeRuntime(REDIS, lines=lines))
+    late = lines[REDIS.name][1].timestamp
+    assert late is not None
+    start = ui_logs._ms(late)
+    query = {"window": str(ui_logs.ALL), "from": str(start), "to": str(start + 1000)}
+    view = await ui_logs.recent(["redis"], query, volume=True)
+    assert [row["message"] for row in view["lines"]] == ["late"]
+    assert sum(bar["other"] for bar in view["volume"]) == 2
+
+
+async def test_a_picked_container_narrows_its_page_to_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``container``: of a page with several, only the ones picked; a page
+    with none picked shows every container."""
+    from starlette.datastructures import QueryParams
+
+    lines = {SYSTEM: [_at(1, "a")], MEDIA: [_at(2, "b")], REDIS.name: [_at(3, "c")]}
+    use_runtime(monkeypatch, FakeRuntime(REDIS, WORKER, STOPPED, lines=lines))
+    query = QueryParams({"container": SYSTEM})
+    view = await ui_logs.recent(["worker", "redis"], query)
+    assert sorted(row["message"] for row in view["lines"]) == ["a", "c"]
+    # Read alone, it is still the worker's ``system``.
+    assert {r["message"]: r["source"] for r in view["lines"]}["a"] == "system"

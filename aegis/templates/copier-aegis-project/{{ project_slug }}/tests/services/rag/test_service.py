@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import pytest
+
 from app.services.rag.config import RAGServiceConfig
 from app.services.rag.service import LoaderError, RAGService
 
@@ -173,3 +174,17 @@ class TestRAGService:
 
         # Should have no errors with valid config
         assert len(errors) == 0
+
+
+def test_the_rag_service_is_built_on_first_use(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One per process, built after it has booted, so a chunk size or top-k
+    saved in the Overseer applies (the API, chat and Overseer all read it)."""
+    from app.core.config import settings
+    from app.services.rag.config import get_rag_service
+
+    get_rag_service.cache_clear()
+    monkeypatch.setattr(settings, "RAG_CHUNK_SIZE", 1234)
+    assert get_rag_service().config.chunk_size == 1234
+    get_rag_service.cache_clear()

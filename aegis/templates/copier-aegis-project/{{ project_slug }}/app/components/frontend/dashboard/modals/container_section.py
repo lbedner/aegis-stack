@@ -11,6 +11,7 @@ import flet as ft
 
 from app.components.frontend.controls import ConfirmDialog, H3Text, SecondaryText
 from app.components.frontend.controls.snack_bar import ErrorSnackBar, SuccessSnackBar
+from app.components.frontend.dashboard.cards.card_utils import get_status_color
 from app.components.frontend.dashboard.modals.modal_sections import (
     DateRangeChips,
     LineChartCard,
@@ -101,6 +102,7 @@ class ContainerSection(ft.Column):
                 COLUMNS,
                 "No containers",
                 actions=self._restart_button,
+                color_of=_figure_color,
             )
         )
         self.controls = [H3Text("Container"), body]
@@ -125,6 +127,14 @@ async def restart(page: ft.Page, name: str) -> None:
         )
     else:
         ErrorSnackBar(f"Could not restart {name}").launch(page)
+
+
+def _figure_color(row: dict[str, str], key: str) -> str | None:
+    """A live figure past its threshold in its status's colour (``ui_runtime``
+    sets ``<column>_status`` beside the figures it judges), as the htmx
+    section's; under it, plain."""
+    status = row.get(f"{key}_status")
+    return get_status_color(status) if status in ("warning", "unhealthy") else None
 
 
 def _chart(chart: dict[str, Any]) -> ft.Control:

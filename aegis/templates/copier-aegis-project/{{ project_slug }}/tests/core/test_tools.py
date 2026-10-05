@@ -4,6 +4,7 @@ It lives in core, so any service can register tools and an MCP server can
 serve them without the AI service.
 """
 
+from collections.abc import Callable
 import importlib
 import json
 from pathlib import Path
@@ -15,6 +16,7 @@ import pytest
 import app
 from app.core.tools import (
     get_tool,
+    load_tools,
     mcp_servable,
     native_write_tool_names,
     register_tool,
@@ -173,3 +175,25 @@ def test_load_tools_registers_every_tool_the_app_defines() -> None:
 
     loaded = set(json.loads(done.stdout.strip().splitlines()[-1]))
     assert defined <= loaded
+
+
+@pytest.mark.usefixtures("clean_registry")
+def test_a_services_tools_module_loads_without_editing_anything(
+    fake_service: Callable[..., Path],
+) -> None:
+    """A service, or a plugin, keeps its tools in its own ``tools.py``;
+    ``load_tools`` finds it on disk, so nothing else lists it (#1420)."""
+    fake_service(
+        "demo_tools",
+        tools=(
+            "from app.core.tools import register_tool\n"
+            "async def demo_lookup() -> str:\n"
+            "    '''Look one thing up.'''\n"
+            "    return 'found'\n"
+            "register_tool('demo_lookup', demo_lookup, effect='read')\n"
+        ),
+    )
+
+    load_tools()
+
+    assert "demo_lookup" in registered_tool_names()

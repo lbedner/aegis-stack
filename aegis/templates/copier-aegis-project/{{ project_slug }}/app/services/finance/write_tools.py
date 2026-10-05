@@ -1,6 +1,6 @@
 """The finance write surface for agents: the ids its proposals need.
 
-Split from ``ai_tools`` (the read surface): ``categories``, ``bills``,
+Split from ``tools`` (the read surface): ``categories``, ``bills``,
 ``bill_candidates`` and ``tags`` are the lookups a finance payload is
 built from. Filing the proposal itself is the shared queue's job - the
 ``propose`` family lives in ``app.services.change_queue.tools``

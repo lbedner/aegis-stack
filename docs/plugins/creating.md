@@ -53,6 +53,7 @@ disk, and picks up a plugin's the same way as its own.
 | `models.py` (or a `models/` package) | the plugin's tables |
 | `change_types.py` | changes a model proposes and the user approves |
 | `scheduled_jobs.py` | `JOBS`, the jobs that run on a schedule |
+| `tools.py` | tools an agent or an MCP client can be granted (`register_tool`) |
 
 A scheduled job is a `ServiceJob` from `app.core.schedule`: the job
 function, a stable id, a display name and the trigger. In a project with a

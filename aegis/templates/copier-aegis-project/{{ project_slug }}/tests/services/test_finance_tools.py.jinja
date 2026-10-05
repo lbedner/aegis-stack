@@ -12,8 +12,8 @@ import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.tools import current_owner_user_id, registered_tool_names
-import app.services.finance.ai_tools as ai_tools
-import app.services.finance.ai_write_tools as ai_write_tools
+import app.services.finance.tools as tools
+import app.services.finance.write_tools as write_tools
 from app.services.finance.domains.ledger.properties import set_property_metadata
 from app.services.finance.domains.planning.envelopes import create_envelope
 from app.services.finance.domains.planning.goals import set_goal_metadata
@@ -55,8 +55,8 @@ def _tools_use_test_session(
         yield session
 
     # The id lookups live in their own module, with its own session import.
-    monkeypatch.setattr(ai_tools, "get_async_session", test_session)
-    monkeypatch.setattr(ai_write_tools, "get_async_session", test_session)
+    monkeypatch.setattr(tools, "get_async_session", test_session)
+    monkeypatch.setattr(write_tools, "get_async_session", test_session)
 
 
 def test_finance_tools_register_on_import() -> None:
@@ -72,7 +72,7 @@ async def test_ledger_monthly_detail_reports_cashflow(
     await seed_txn(svc, account.id, 250_00, today)
     await seed_txn(svc, account.id, -100_00, today)
 
-    summary = await ai_tools.ledger(months=1)
+    summary = await tools.ledger(months=1)
 
     assert len(summary["months"]) == 1
     month = summary["months"][0]
@@ -92,7 +92,7 @@ async def test_ledger_transactions_detail_lists_line_items(
     )
     await seed_txn(svc, account.id, 250_00, today, name="Paycheck")
 
-    result = await ai_tools.ledger(months=1, detail="transactions")
+    result = await tools.ledger(months=1, detail="transactions")
 
     assert result["total"] == 2
     starbucks = next(t for t in result["transactions"] if t["payee"] == "Starbucks")
@@ -118,7 +118,7 @@ async def test_ledger_transactions_use_the_curated_payee(
     session.add(txn)
     await session.commit()
 
-    result = await ai_tools.ledger(months=1, detail="transactions")
+    result = await tools.ledger(months=1, detail="transactions")
 
     payees = [t["payee"] for t in result["transactions"]]
     assert payees == ["Hudson Valley Grounded"]
@@ -126,7 +126,7 @@ async def test_ledger_transactions_use_the_curated_payee(
 
 async def test_ledger_rejects_unknown_detail() -> None:
     with pytest.raises(ValueError):
-        await ai_tools.ledger(detail="weekly")
+        await tools.ledger(detail="weekly")
 
 
 async def test_accounts_returns_the_full_balance_sheet(
@@ -160,7 +160,7 @@ async def test_accounts_returns_the_full_balance_sheet(
     session.add(goal_account)
     await session.commit()
 
-    result = await ai_tools.accounts()
+    result = await tools.accounts()
 
     by_name = {a["name"]: a for a in result["accounts"]}
     assert by_name["Checking"]["balance_cents"] == 5_000_00
@@ -195,7 +195,7 @@ async def test_accounts_carries_property_provenance(
     session.add(house)
     await session.commit()
 
-    result = await ai_tools.accounts()
+    result = await tools.accounts()
 
     entry = {a["name"]: a for a in result["accounts"]}["House Bedner"]
     assert entry["property"]["valuation_source"] == "user"
@@ -226,7 +226,7 @@ async def test_the_valuation_row_outranks_the_typed_provenance(
     )
     await session.commit()
 
-    result = await ai_tools.accounts()
+    result = await tools.accounts()
 
     entry = {a["name"]: a for a in result["accounts"]}["House Bedner"]
     assert entry["property"]["valuation_source"] == "zillow"
@@ -253,7 +253,7 @@ async def test_accounts_uses_register_balance_when_none_was_written(
     )
     await session.commit()
 
-    result = await ai_tools.accounts()
+    result = await tools.accounts()
 
     by_name = {a["name"]: a for a in result["accounts"]}
     assert by_name["Checking"]["balance_cents"] == 150_00
@@ -284,7 +284,7 @@ async def test_accounts_carries_upcoming_scheduled_flows(
     )
     await session.commit()
 
-    result = await ai_tools.accounts()
+    result = await tools.accounts()
 
     entry = next(a for a in result["accounts"] if a["name"] == "Checking")
     assert entry["upcoming"] == [
@@ -322,7 +322,7 @@ async def test_accounts_carries_liability_card_terms(
     )
     await session.commit()
 
-    result = await ai_tools.accounts()
+    result = await tools.accounts()
 
     amex_entry = next(a for a in result["accounts"] if a["name"] == "AMEX")
     liability = amex_entry["liability"]
@@ -357,7 +357,7 @@ async def test_quote_returns_latest_stored_price(session: AsyncSession) -> None:
     )
     await session.commit()
 
-    result = await ai_tools.quote("vti")
+    result = await tools.quote("vti")
 
     assert result["found"] is True
     assert result["ticker"] == "VTI"
@@ -385,7 +385,7 @@ async def test_quote_normalizes_sub_cent_scales_in_integer_math(
     )
     await session.commit()
 
-    result = await ai_tools.quote("SATS")
+    result = await tools.quote("SATS")
 
     assert result["close_cents"] == 123  # 123.456789 cents, rounded half up
 
@@ -393,7 +393,7 @@ async def test_quote_normalizes_sub_cent_scales_in_integer_math(
 async def test_quote_unknown_ticker_reports_not_found(
     session: AsyncSession,
 ) -> None:
-    result = await ai_tools.quote("ZZZZ")
+    result = await tools.quote("ZZZZ")
 
     assert result["found"] is False
 
@@ -429,7 +429,7 @@ async def test_a_linked_property_reports_equity_and_ltv(
     )
     await session.commit()
 
-    result = await ai_tools.accounts()
+    result = await tools.accounts()
 
     entry = next(a for a in result["accounts"] if a["name"] == "House Bedner")
     assert entry["property"]["equity_cents"] == 52_420_000
@@ -453,7 +453,7 @@ async def test_an_unlinked_property_shows_no_lending_figures(
     await svc.set_property_details(house.id, owner_user_id=1, property_kind="primary")
     await session.commit()
 
-    result = await ai_tools.accounts()
+    result = await tools.accounts()
 
     entry = next(a for a in result["accounts"] if a["name"] == "House Bedner")
     assert "equity_cents" not in entry["property"]
@@ -478,7 +478,7 @@ async def test_transaction_detail_carries_the_ids_a_proposal_needs(
     )
     await session.commit()
 
-    result = await ai_tools.ledger(months=3, detail="transactions")
+    result = await tools.ledger(months=3, detail="transactions")
 
     row = next(r for r in result["transactions"] if r["payee"] == "Target")
     assert row["id"] == txn.id
@@ -502,7 +502,7 @@ async def test_categories_lists_the_assignable_targets(
     )
     await session.commit()
 
-    result = await ai_tools.categories()
+    result = await tools.categories()
 
     match = next(
         c for c in result["categories"] if c["name"] == "Food & Dining:Groceries"
@@ -561,7 +561,7 @@ async def test_ledger_rows_say_uncategorized_outright(
     await svc.categorize_transaction(filed.id, groceries.id, owner_user_id=1)
     await session.commit()
 
-    result = await ai_tools.ledger(months=3, detail="transactions")
+    result = await tools.ledger(months=3, detail="transactions")
 
     by_name = {r["payee"]: r for r in result["transactions"]}
     assert by_name["Bare"]["uncategorized"] is True
@@ -593,7 +593,7 @@ async def test_bills_lists_the_recurring_surface(
     )
     await session.commit()
 
-    result = await ai_tools.bills()
+    result = await tools.bills()
 
     rows = {b["name"]: b for b in result["bills"]}
     eleanor = rows["Eleanor Nursing Care"]
@@ -626,7 +626,7 @@ async def test_a_bill_the_user_never_priced_still_reports_an_amount(
     session.add(stream)
     await session.commit()
 
-    result = await ai_tools.bills()
+    result = await tools.bills()
 
     row = {b["name"]: b for b in result["bills"]}["Detected Bill"]
     assert row["amount"] == 2_918
@@ -667,7 +667,7 @@ async def test_bill_candidates_returns_the_ranked_shortlist(
     )
     await session.commit()
 
-    result = await ai_tools.bill_candidates(stream.id)
+    result = await tools.bill_candidates(stream.id)
 
     ids = [c["id"] for c in result["candidates"]]
     assert payment.id in ids
@@ -695,7 +695,7 @@ async def test_ledger_rows_carry_their_tags(
     await tag_transactions(session, [txn.id], "Business", owner_user_id=None)
     await session.commit()
 
-    result = await ai_tools.ledger(months=3, detail="transactions")
+    result = await tools.ledger(months=3, detail="transactions")
 
     row = next(r for r in result["transactions"] if r["id"] == txn.id)
     assert row["tags"] == ["Business"]
@@ -713,7 +713,7 @@ async def test_tags_tool_lists_the_directory_with_counts(
     await tag_transactions(session, [a.id, b.id], "Business", owner_user_id=None)
     await session.commit()
 
-    result = await ai_tools.tags()
+    result = await tools.tags()
 
     assert {"name": "Business", "count": 2} in [
         {"name": t["name"], "count": t["count"]} for t in result["tags"]
@@ -740,9 +740,9 @@ async def test_a_signed_in_turn_reads_only_its_owners_ledger(
 
     token = current_owner_user_id.set(1)
     try:
-        ledger = await ai_tools.ledger(months=1, detail="transactions")
-        accounts = await ai_tools.accounts()
-        bills = await ai_write_tools.bills()
+        ledger = await tools.ledger(months=1, detail="transactions")
+        accounts = await tools.accounts()
+        bills = await write_tools.bills()
     finally:
         current_owner_user_id.reset(token)
 

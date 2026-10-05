@@ -438,10 +438,10 @@ register_tool(
 )
 
 # The id lookups proposals need live in their own module; importing it
-# here keeps "import ai_tools" the one line that registers the whole
+# here keeps "import tools" the one line that registers the whole
 # finance tool surface. Filing a proposal is the shared queue's job
 # (``change_queue.tools``), which ``load_tools`` registers.
-from app.services.finance.ai_write_tools import (  # noqa: E402,F401
+from app.services.finance.write_tools import (  # noqa: E402,F401
     bill_candidates,
     bills,
     categories,

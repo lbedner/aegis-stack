@@ -2803,6 +2803,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#in-overseer-resources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        In Overseer: Resources
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#in-overseer-deployments" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -5812,6 +5823,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#in-overseer-resources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        In Overseer: Resources
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#in-overseer-deployments" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -5945,7 +5967,8 @@
 </ul>
 <h2 id="in-overseer-the-container-section">In Overseer: the Container section</h2>
 <p>Every Overseer page with a container behind it (Server, Worker, Scheduler, Redis, Database on Postgres, Storage, Ingress, Inference) has a <strong>Container</strong> section, in Overseer's htmx pages and Flet modals alike. It shows one card per instance: its name, state and health, uptime, restarts and the image with its build, then a fixed strip of CPU, memory used against its limit, network in and out, and disk read and write, so a figure changing width moves nothing else. It renders from the containers sampler's last reading (<code>app.core.series</code>), so it opens full, then refreshes every second while it is open, with charts over the last 15 minutes, 30 minutes or hour: CPU, memory, and network and disk I/O as bytes per second (the sampler keeps Docker's running totals; a chart reads the rate between readings, and drops the step where a restart reset them).</p>
-<p>The Scheduler and Cache pages also open with a glance above their Overview: a line per container with its state, uptime, CPU, memory as a share of its limit (amber, then red, by the host memory check's rule), its Restart, and the way to its Container and Logs sections.</p>
+<p>The Server, Scheduler and Cache pages also open with a glance above their Overview (the Server's in place of the host's figures, which are on Resources; without a deploy target it shows the machine it runs on): a line per container with its state, uptime, CPU, memory as a share of its limit (amber, then red, by the host memory check's rule), its Restart, and the way to its Container and Logs sections.</p>
+<p>A component's health is the worse of its own check and Docker's healthcheck on its containers, as the containers sampler last read them (so the health check itself waits on no Docker call). When the check passes but Docker calls a container unhealthy (Traefik answering its API while its healthcheck command fails, say), the component reads as a warning naming the container, in Overseer, the health API and the CLI alike. The healthcheck's own output is not shown: the socket proxy refuses container inspect, which would expose every container's environment.</p>
 <h3 id="restart">Restart</h3>
 <p>Each card has a <strong>Restart</strong>, in htmx and Flet alike. It asks first, then calls <code>POST /api/v1/runtime/containers/{name}/restart</code>: with the auth service only an admin may call it, and without auth anyone who reaches the app may, like the rest of Overseer. Every attempt is audited (<code>runtime.container_restart</code>: who, from which address, which container, and whether it restarted, was refused or failed). The app refuses any container its own services do not list, since the proxy would restart any container on the host; without a deploy target there is nothing to restart. Restarting the webserver Overseer itself runs on answers first and restarts after: the confirm says the page will drop, the audit records <code>restarting</code>, and the page reconnects when the server is back.</p>
 <p>Without the deploy component the backend is <code>none</code>: the section says so and points at <code>aegis add deploy</code> instead of showing the app's own process as if it were a container. A page with nothing running behind it (a SQLite database, which is a file) says that too, and a runtime that does not answer says why.</p>
@@ -5963,6 +5986,16 @@
 <p>The filters stay in the address: the window (15m, 1h, 6h, 1d, or All from each container's start), a level (that level and worse; a line with no level is left out) and text, matched against the line and its traceback. Without the deploy component it says so, like Container. The Docker backend keeps one connection to the socket proxy for the app's life and closes it on shutdown.</p>
 <h2 id="in-overseer-logs">In Overseer: Logs</h2>
 <p><strong>Logs</strong> in the sidebar (and the Logs button in the Flet header) shows every service's lines in one view: the same reading, filters and following as the Logs section, merged across every container, with each line naming its service and linking to its page. A Services filter narrows it to the ones ticked. Following can be paused, in this view and in each page's Logs section; a line written while paused is not added.</p>
+<h2 id="in-overseer-resources">In Overseer: Resources</h2>
+<p><strong>Resources</strong> in the sidebar shows everything the stack uses at once, kept live while it is open (<code>app.services.system.ui_resources</code>, htmx only for now):</p>
+<ul>
+<li><strong>CPU</strong> and <strong>Memory</strong>, each split three ways: this stack (its containers, summed), the rest of the host (what the host's own checks see in use beyond this stack) and what is free. CPU counts cores, so 4 cores is 400% of one.</li>
+<li><strong>Containers</strong>: every container across every page, heaviest first, with its CPU, its memory and its share of this stack's memory, linked to its page. Stopped ones come last.</li>
+<li><strong>Outside Docker</strong>: a server that runs on the host instead (Ollama, say) is named, since it has no container to read.</li>
+<li><strong>Inside the webserver</strong>: every service, and the components' code the webserver runs (its UIs, the storage client, the deploy runtime), lives in the webserver, which Docker sees as one container, so each part's cost to load is measured apart (<code>app.services.system.load_cost</code>): every module in it loaded alone in a fresh Python on top of the app's core, one part at a time in the background by one process of many, the first time the page opens, then kept a day per build. The map's Server node shows the same figure on each chip. Libraries two services share count in each, so these add up to more than the webserver uses.</li>
+<li><strong>Charts</strong>: CPU, memory, network and disk I/O over the last 15 minutes, 30 minutes or hour, a band per part (its containers added together, network and disk in and out together) in the same colour it has in Logs, stacked so the top edge is this stack. CPU and memory carry the host's in use as a dashed line, so the gap above the bands is the rest of the host. A host sampler records it beside the containers sampler: every second while Overseer is open, every 15 seconds otherwise, an hour kept.</li>
+</ul>
+<p>The host is what Docker runs on: on Docker Desktop that is its VM, not your machine. Without the deploy component there are no containers to read, and the page says so.</p>
 <h2 id="in-overseer-deployments">In Overseer: Deployments</h2>
 <p><strong>Deployments</strong> in the sidebar (and the Deployments button in the Flet header) shows what is live and where it runs, read-only:</p>
 <ul>

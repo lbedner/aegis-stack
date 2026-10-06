@@ -1,22 +1,56 @@
 {# Overseer's home as a map (overseer_map.layout, ``?view=map``): each process
    a node at its place in its tier, linking to its page, with its state and
    its containers' CPU and memory; the connections between them as lines (in
-   the tone of what each leads to); what runs in the webserver as chips in
+   the tone of what each leads to, dashed for queued work, dotted for a key
+   Secrets holds); what runs in the webserver as chips in
    the Server's node, two to a row, each with its cost to load
    (load_cost). Rendered in the page and again for each frame. #}
-{% from "components/macros/layout.html" import health_badge %}
+{% from "components/macros/layout.html" import health_badge, status_dot %}
+{% from "components/macros/icons.html" import icon %}
 {% from "pages/overseer/_glance_macros.html" import cause, figures %}
+{# A node's name, linking to its page; plain for what has none (outside). #}
+{% macro node_title(node, size="") -%}
+{% if node.url %}<a data-title href="{{ node.url }}" {{ hx_replace(node.url, "#overseer-main") }} class="{{ size }} min-w-0 font-semibold text-aegis-text hover:text-aegis-teal truncate">{{ node.title }}</a>
+{%- else %}<span data-title class="{{ size }} min-w-0 text-aegis-muted truncate">{{ node.title }}</span>{% endif %}
+{%- endmacro %}
+{% if map_zoom %}
+{# Zoomed into the Server (overseer_container._opened): the way back out. #}
+<nav data-breadcrumb aria-label="Map level" class="mb-3 flex items-center gap-2 text-sm">
+  <a href="{{ map_back }}" {{ hx_replace(map_back, "#overseer-main") }} class="text-aegis-muted hover:text-aegis-teal">{{ project_name }}</a>
+  <span class="text-aegis-muted" aria-hidden="true">›</span><span class="text-aegis-text">{{ map_zoom }}</span>
+</nav>
+{% endif %}
 <div class="overflow-x-auto">
-  <div class="relative min-w-[960px]" style="height: {{ map_height }}px">
+  <div data-map{% if map_compact %} data-compact{% endif %} class="relative min-w-[960px]" style="height: {{ map_height }}px">
     <svg class="absolute inset-0 w-full h-full" viewBox="0 0 {{ map_width }} {{ map_height }}" preserveAspectRatio="none" aria-hidden="true">
-      {% for link in map_links %}<path data-link data-from="{{ link.start }}" data-to="{{ link.end }}" class="map-link" data-tone="{{ link.tone }}" d="{{ link.d }}" />{% endfor %}
+      {% for link in map_links %}<path data-link data-from="{{ link.start }}" data-to="{{ link.end }}"{% if link.queued %} data-queued{% endif %}{% if link.key %} data-key{% endif %} class="map-link" data-tone="{{ link.tone }}" d="{{ link.d }}" />{% endfor %}
     </svg>
     {% for node in map_nodes %}
+    {% if map_compact %}
+    {# One line: its dot, its name, its cost to load; an outside provider a
+       pill. What it says, why it fails and the fix (a key's set dialog),
+       under it on hover (CSS, so a live frame cannot close it; padded, not
+       spaced, so the pointer can move into it). #}
+    <section data-node="{{ node.key }}"{% if node.outside %} data-outside{% endif %} data-tone="{{ node.tone }}"
+             class="group absolute -translate-x-1/2 hover:z-30 tone-border border bg-aegis-card {{ 'rounded-full justify-center' if node.outside else 'rounded-lg' }} px-3 flex items-center gap-2 text-sm"
+             style="left: {{ node.left }}%; top: {{ node.top }}px; width: {{ map_node_width }}%; height: {{ node.height }}px">
+      {% if node.status %}{{ status_dot(node.status) }}{% endif %}
+      {{ node_title(node) }}
+      {% if node.load %}<span data-load class="ml-auto shrink-0 text-xs tabular-nums text-aegis-muted">{{ node.load }}</span>{% endif %}
+      <span data-hint role="tooltip" class="absolute left-0 {{ 'bottom-full pb-1.5' if node.hint_above else 'top-full pt-1.5' }} z-20 hidden group-hover:block">
+        <span class="tooltip-panel block w-max max-w-xs px-2.5 py-1.5">{{ node.message|message }}{{ cause(node) }}
+          {% for fix in node.fix or [] %}<button type="button" data-fix {{ hx_dialog(fix.url) }} class="mt-1 block text-aegis-teal hover:underline">Set {{ fix.name }}</button>{% endfor %}</span>
+      </span>
+    </section>
+    {% else %}
     <section data-node="{{ node.key }}" class="absolute -translate-x-1/2 tone-border rounded-lg border bg-aegis-card p-4 space-y-3 overflow-hidden" data-tone="{{ node.tone }}"
              style="left: {{ node.left }}%; top: {{ node.top }}px; width: {{ map_node_width }}%; height: {{ node.height }}px">
       <header class="flex items-center justify-between gap-2">
-        <a data-title href="{{ node.url }}" {{ hx_replace(node.url, "#overseer-main") }} class="text-base font-semibold text-aegis-text hover:text-aegis-teal truncate">{{ node.title }}</a>
-        {{ health_badge(node.status) }}
+        {{ node_title(node, "text-base") }}
+        <span class="ml-auto flex items-center gap-2 shrink-0">
+          {% if node.zoom %}<a data-zoom href="{{ node.zoom }}" {{ hx_replace(node.zoom, "#overseer-main") }} title="Open up: what runs inside it" class="text-aegis-muted hover:text-aegis-teal">{{ icon("tiers", "w-4 h-4") }}<span class="sr-only">Open up {{ node.title }}</span></a>{% endif %}
+          {% if node.status %}{{ health_badge(node.status) }}{% endif %}
+        </span>
       </header>
       {{ cause(node) }}
       {% if node.glance %}
@@ -26,7 +60,7 @@
       </div>
       {% endfor %}
       {% else %}
-      <p class="text-sm text-aegis-muted truncate">{{ node.message }}</p>
+      <p class="text-sm text-aegis-muted truncate">{{ node.message|message }}</p>
       {% endif %}
       {% if node.hosted %}
       <div class="grid grid-cols-2 gap-1.5 pt-1">
@@ -39,6 +73,7 @@
       </div>
       {% endif %}
     </section>
+    {% endif %}
     {% endfor %}
   </div>
 </div>

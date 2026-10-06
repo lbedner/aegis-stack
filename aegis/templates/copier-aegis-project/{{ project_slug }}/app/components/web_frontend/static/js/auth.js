@@ -14,8 +14,10 @@
 
 function _loginUrlWithNext() {
   // Preserve the current page path as ?next= so a successful sign-in returns
-  // the user to where they were. Mirrors the server-side gate.
+  // the user to where they were. Mirrors the server-side gate. Overseer has
+  // its own sign-in, which always lands on Overseer.
   const here = window.location.pathname;
+  if (here && here.startsWith('/overseer')) return '/overseer/login';
   if (!here || here === '/login' || !here.startsWith('/')) return '/login';
   return '/login?next=' + encodeURIComponent(here);
 }

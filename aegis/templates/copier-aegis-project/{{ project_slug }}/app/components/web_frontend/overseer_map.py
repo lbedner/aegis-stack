@@ -19,26 +19,49 @@ TIER_GAP = 96
 # the most a node takes (percent of the map), however small the stack.
 FILL = 0.8
 MAX_NODE_WIDTH = 28.0
+ROW = 5  # the most nodes side by side; a wider tier wraps onto more rows
+# A compact map (the Server opened up): one-line nodes, more to a row.
+COMPACT_HEIGHT = 52
+COMPACT_ROW = 8
 
 
-def layout(stack: list[dict[str, Any]]) -> dict[str, Any]:
+def layout(
+    stack: list[dict[str, Any]],
+    shape: topology.Shape | None = None,
+    *,
+    compact: bool = False,
+) -> dict[str, Any]:
     """``overview()``'s entries as placed nodes, the lines between them,
-    and the map's height."""
+    and the map's height; in ``shape`` (the stack's own by default: the
+    Server opened up is ``topology.zoomed``), ``compact`` for one-line
+    nodes."""
     items = {item["key"]: item for item in stack}
-    found = topology.shape(list(items))
+    found = shape or topology.shape(list(items))
     hosted = [items[key] for key in found.hosted]
     chips = -(-len(hosted) // CHIPS_PER_ROW) * CHIP_ROW
-    busiest = max((len(tier) for tier in found.tiers), default=1)
+    per_row, node_height = (
+        (COMPACT_ROW, COMPACT_HEIGHT) if compact else (ROW, NODE_HEIGHT)
+    )
+    rows = [
+        tier[i : i + per_row]
+        for tier in found.tiers
+        for i in range(0, len(tier), per_row)
+    ]
+    busiest = max((len(row) for row in rows), default=1)
     nodes, place, top = [], {}, 0
-    for tier in found.tiers:
-        height = NODE_HEIGHT + (chips if topology.HOST in tier else 0)
-        for index, key in enumerate(tier):
-            x = (index + 0.5) / len(tier) * WIDTH
+    for number, row in enumerate(rows):
+        height = node_height + (chips if topology.HOST in row else 0)
+        # The map scrolls sideways, so it clips what runs past its bottom:
+        # the last row's hints open above it.
+        last = number == len(rows) - 1 and len(rows) > 1
+        for index, key in enumerate(row):
+            x = (index + 0.5) / len(row) * WIDTH
             place[key] = (x, top, height)
             nodes.append(
                 items[key]
                 | {"left": x / WIDTH * 100, "top": top, "height": height}
                 | {"hosted": hosted if key == topology.HOST else []}
+                | {"hint_above": last}
             )
         top += height + TIER_GAP
     return {
@@ -47,6 +70,7 @@ def layout(stack: list[dict[str, Any]]) -> dict[str, Any]:
         "map_height": max(top - TIER_GAP, 0),
         "map_width": WIDTH,
         "map_node_width": min(FILL * 100 / busiest, MAX_NODE_WIDTH),
+        "map_compact": compact,
     }
 
 
@@ -67,4 +91,6 @@ def _line(
         "tone": target["tone"],
         "start": source,
         "end": target["key"],
+        "queued": target["key"] in topology.QUEUED,
+        "key": source == topology.KEYS,
     }

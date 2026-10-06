@@ -51,3 +51,30 @@ def test_a_stream_error_renews_an_expired_session() -> None:
 def test_a_burst_of_errors_probes_once() -> None:
     """Every retry fires an error; one probe covers the burst."""
     assert _stream_errors(5).count("/api/v1/auth/refresh") == 1
+
+
+BOUNCE_HARNESS = """
+const handlers = {};
+global.window = { location: { pathname: PATH } };
+global.document = { addEventListener: (name, fn) => { (handlers[name] ||= []).push(fn); } };
+global.fetch = async () => ({ ok: false, status: 401 });
+require(%s);
+(async () => {
+  for (const fn of handlers['htmx:responseError'] || []) fn({ detail: { xhr: { status: 401 } } });
+  await new Promise((r) => setTimeout(r, 50));
+  console.log(JSON.stringify(String(window.location)));
+})();
+"""
+
+
+def _bounced_from(path: str) -> str:
+    script = BOUNCE_HARNESS.replace("PATH", json.dumps(path))
+    return run(script % json.dumps(str(AUTH_JS.resolve())))
+
+
+def test_a_session_past_renewing_signs_in_where_the_page_does() -> None:
+    """An htmx request refused for a dead session (no refresh to be had)
+    goes to the sign-in its page uses: Overseer's own, else the app's,
+    back to the page after."""
+    assert _bounced_from("/overseer/components/worker") == "/overseer/login"
+    assert _bounced_from("/notes") == "/login?next=%2Fnotes"

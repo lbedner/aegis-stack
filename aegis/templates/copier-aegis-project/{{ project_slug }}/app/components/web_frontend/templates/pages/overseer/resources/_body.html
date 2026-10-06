@@ -46,7 +46,7 @@
   {% call card("Inside the webserver", subtitle="To load each service") %}
     {% if resources.load %}
     {{ ranked_rows(resources.load.rows) }}
-    <p class="text-xs text-aegis-muted">Each loaded alone on top of Python and the app's core ({{ resources.load.core }}), measured once a day. Libraries they share count in each, so these add up to more than the webserver uses.</p>
+    <p class="text-xs text-aegis-muted">Each part's own cost: loaded on top of Python and the app's core ({{ resources.load.core }}) and the parts it uses, so a library counts with the first part that needs it. Measured once a day.</p>
     {% else %}
     <p data-measuring class="text-sm text-aegis-muted">Measuring what each service costs to load, one at a time.</p>
     {% endif %}

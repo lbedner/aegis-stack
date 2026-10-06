@@ -338,3 +338,53 @@ def test_a_filter_marks_the_same_matches_as_the_server(
         APP_JS=APP_JS,
     )
     assert [tuple(r) for r in found] == runs
+
+
+FOCUS_HARNESS = (
+    STUBS
+    + """
+require(APP_JS);
+const c = require(APP_JS);
+const lines = [{ from: 'service_auth', to: 'database' },
+               { from: 'service_payment', to: 'outside:Stripe' },
+               { from: 'service_documents', to: 'database' }];
+console.log(JSON.stringify([...c.mapFocus(lines, 'database')].sort()));
+"""
+)
+
+
+def test_hovering_a_map_node_keeps_it_and_its_neighbours_lit() -> None:
+    """Who uses the Database: the node and every node a line joins it to;
+    the rest of the map dims."""
+    assert run(FOCUS_HARNESS, APP_JS=APP_JS) == [
+        "database",
+        "service_auth",
+        "service_documents",
+    ]
+
+
+PIN_HARNESS = (
+    STUBS
+    + """
+const root = { dataset: {}, querySelector: () => null };
+document.getElementById = (id) => (id === 'overview-stack' ? root : null);
+require(APP_JS);
+const node = { dataset: { node: 'database' } };
+const at = (sel) => (sel === '[data-map] [data-node]' ? node : sel === '[data-map]' ? {} : null);
+const seen = [];
+fire('click', { target: { closest: at } }); seen.push(root.dataset.pinned || '');
+fire('mouseover', { target: { closest: (sel) => (sel === '[data-map] [data-node]' ? { dataset: { node: 'cache' } } : null) } });
+seen.push(root.dataset.pinned || '');
+fire('keydown', { key: 'Escape' }); seen.push(root.dataset.pinned || '');
+fire('click', { target: { closest: at } });
+fire('click', { target: { closest: (sel) => (sel === '[data-map]' ? {} : null) } });
+seen.push(root.dataset.pinned || '');
+console.log(JSON.stringify(seen));
+"""
+)
+
+
+def test_a_click_pins_a_map_nodes_focus_until_escape_or_the_canvas() -> None:
+    """Hover is a glance; a click keeps it while the pointer moves on.
+    Escape, or a click on the empty canvas, lets it go."""
+    assert run(PIN_HARNESS, APP_JS=APP_JS) == ["database", "database", "", ""]

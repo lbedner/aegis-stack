@@ -69,6 +69,25 @@ def test_signed_out_pages_go_to_login_and_the_rest_is_401(app: FastAPI) -> None:
     assert client.get("/overseer/events").status_code == 401
 
 
+@pytest.mark.parametrize(
+    "path",
+    ["/overseer/components/backend", "/partials/overseer/runtime/restart/app-redis-1"],
+)
+def test_an_htmx_request_signed_out_takes_the_whole_page_to_login(
+    app: FastAPI, path: str
+) -> None:
+    """A session that ran out mid-page: htmx would follow a redirect itself
+    and swap the login page's (missing) main area into the shell, leaving
+    it blank. A plain 401 instead, which auth.js answers by renewing the
+    session from its refresh cookie, or, past that, signing in whole."""
+    app.dependency_overrides[get_optional_user] = lambda: None
+    response = TestClient(app).get(
+        path, headers={"HX-Request": "true"}, follow_redirects=False
+    )
+    assert response.status_code == 401
+    assert "hx-redirect" not in response.headers
+
+
 def test_dev_mode_opens_the_overseer_without_signing_in(
     app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> None:

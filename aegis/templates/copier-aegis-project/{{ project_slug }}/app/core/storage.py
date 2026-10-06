@@ -24,6 +24,9 @@ import re
 import tempfile
 from typing import Protocol, runtime_checkable
 
+# The component this client fronts (``service_links``).
+FRONTS = "storage"
+
 DIGEST_ALGORITHM = "sha256"
 # A key is exactly what ``content_key`` produces. Keys arrive from
 # database columns and API payloads, so they are validated rather than

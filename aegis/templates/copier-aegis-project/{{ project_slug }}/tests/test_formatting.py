@@ -195,3 +195,21 @@ def test_split_matches_marks_every_match_whatever_its_case(
     text: str, query: str, runs: list[tuple[str, bool]]
 ) -> None:
     assert split_matches(text, query) == runs
+
+
+@pytest.mark.parametrize(
+    ("count", "expected"), [(0, "0 drafts"), (1, "1 draft"), (2, "2 drafts")]
+)
+def test_a_count_takes_its_noun_singular_only_for_one(
+    count: int, expected: str
+) -> None:
+    from app.core.formatting import counted
+
+    assert counted(count, "draft") == expected
+
+
+def test_a_noun_whose_plural_is_not_an_s_names_it() -> None:
+    from app.core.formatting import counted
+
+    assert counted(1, "watch", "watches") == "1 watch"
+    assert counted(3, "watch", "watches") == "3 watches"

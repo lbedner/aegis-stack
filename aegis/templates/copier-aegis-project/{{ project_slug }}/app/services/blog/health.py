@@ -3,6 +3,7 @@
 import logging
 
 from app.core.db import get_async_session
+from app.core.formatting import counted
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
 from .service import BlogService
@@ -32,9 +33,12 @@ async def check_blog_service_health() -> ComponentStatus:
             if summary.stale_draft_count
             else ComponentStatusType.HEALTHY
         )
-        message = f"{summary.published_posts} published, {summary.draft_posts} drafts"
+        message = (
+            f"{summary.published_posts} published, "
+            f"{counted(summary.draft_posts, 'draft')}"
+        )
         if summary.stale_draft_count:
-            message = f"{message}; {summary.stale_draft_count} stale drafts"
+            message = f"{message}; {counted(summary.stale_draft_count, 'stale draft')}"
 
         return ComponentStatus(
             name=BLOG_COMPONENT_NAME,

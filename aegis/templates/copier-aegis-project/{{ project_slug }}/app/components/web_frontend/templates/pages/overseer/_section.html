@@ -5,7 +5,7 @@
 {% set component = item.component %}
 {# A page whose numbers are live says ``header_message: None`` so the header,
    rendered once, cannot show a count the stream has moved past. #}
-{% set message = header_message if header_message is defined else component.message %}
+{% set message = header_message if header_message is defined else component.message|message %}
 {# A section may say what it is for (``section_subtitle``) and put its own
    verbs in the header (``<folder>/_<section>_actions.html``). #}
 {% set subtitle = section_subtitle if section_subtitle is defined else (message if current == "overview" else none) %}

@@ -543,4 +543,58 @@ document.addEventListener('input', (event) => {
 });
 
 // The dismissal rules, for the node tests (tests/web/test_app_js.py).
-if (typeof module !== 'undefined') module.exports = { outsideClick, dismiss, navigates, markCurrent, rangeUrl, spanned, inView, splitMatches };
+// The map (_overview_map.html): hovering a node keeps it, its lines and the
+// nodes they join lit, and dims the rest, so "who uses the Database" reads
+// at a glance; a click pins it while the pointer moves on, and Escape or a
+// click on the empty canvas lets it go. Kept on the stream's wrapper
+// (#overview-stack, outside what each frame swaps), so a live frame keeps it.
+function mapFocus(lines, key) {
+  const lit = new Set([key]);
+  lines.forEach(({ from, to }) => {
+    if (from === key) lit.add(to);
+    if (to === key) lit.add(from);
+  });
+  return lit;
+}
+function applyMapFocus(root) {
+  const map = root && root.querySelector('[data-map]');
+  if (!map) return;
+  const key = root.dataset.pinned || root.dataset.hover;
+  const lines = [...map.querySelectorAll('path[data-link]')];
+  const lit = key ? mapFocus(lines.map((line) => line.dataset), key) : new Set();
+  lines.forEach((line) => {
+    line.toggleAttribute('data-dim', Boolean(key) && line.dataset.from !== key && line.dataset.to !== key);
+  });
+  map.querySelectorAll('[data-node]').forEach((node) => {
+    node.toggleAttribute('data-dim', Boolean(key) && !lit.has(node.dataset.node));
+  });
+}
+document.addEventListener('mouseover', (event) => {
+  const root = document.getElementById('overview-stack');
+  if (!root) return;
+  const node = event.target.closest && event.target.closest('[data-map] [data-node]');
+  const key = node ? node.dataset.node : '';
+  if ((root.dataset.hover || '') === key) return;
+  if (key) root.dataset.hover = key;
+  else delete root.dataset.hover;
+  applyMapFocus(root);
+});
+document.addEventListener('click', (event) => {
+  const root = document.getElementById('overview-stack');
+  if (!root || !event.target.closest || !event.target.closest('[data-map]') || event.target.closest('a')) return;
+  const node = event.target.closest('[data-map] [data-node]');
+  if (node) root.dataset.pinned = node.dataset.node;
+  else delete root.dataset.pinned;
+  applyMapFocus(root);
+});
+document.addEventListener('keydown', (event) => {
+  const root = document.getElementById('overview-stack');
+  if (event.key !== 'Escape' || !root || !root.dataset.pinned) return;
+  delete root.dataset.pinned;
+  applyMapFocus(root);
+});
+document.body.addEventListener('htmx:afterSwap', () => {
+  applyMapFocus(document.getElementById('overview-stack'));
+});
+
+if (typeof module !== 'undefined') module.exports = { outsideClick, dismiss, navigates, markCurrent, rangeUrl, spanned, inView, splitMatches, mapFocus };

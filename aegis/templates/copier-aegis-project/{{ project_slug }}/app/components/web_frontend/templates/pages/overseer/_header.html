@@ -3,6 +3,6 @@
    component's status message. #}
 {% from "components/macros/layout.html" import page_header, health_badge %}
 {% set state = component.status.value %}
-{% call page_header(title, subtitle or component.message) %}
+{% call page_header(title, subtitle or component.message|message) %}
   {{ health_badge(state) }}
 {% endcall %}

@@ -27,11 +27,11 @@ from app.services.auth.refresh_tokens import RefreshService
 from app.services.auth.service import session_id_of
 from app.services.auth.users import UserService
 from fastapi import Form, HTTPException
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 from fastapi.security import OAuth2PasswordRequestForm
 {%- endif %}
 from app.components.web_frontend.overseer_access import overseer_gate
-from app.components.web_frontend.rendering import templates
+from app.components.web_frontend.rendering import is_htmx, templates
 from app.components.web_frontend.routes import overseer as overseer_routes
 from app.components.web_frontend.routes.partials import overseer_runtime as overseer_runtime_partials
 {%- if include_scheduler %}
@@ -113,7 +113,7 @@ def _safe_next(target: str | None) -> str:
 def _current_user_or_redirect(
     request: Request,
     user: User | None,
-) -> RedirectResponse | None:
+) -> Response | None:
     """Bounce anonymous visitors to ``/login?next=<here>``, else ``None``.
 
     Page-level protection is opt-in, exactly like the API's. A page that
@@ -129,6 +129,8 @@ def _current_user_or_redirect(
     """
     if user is not None:
         return None
+    if is_htmx(request):
+        return Response(status_code=401)
     return RedirectResponse(
         url=f"/login?next={quote(request.url.path)}", status_code=303
     )

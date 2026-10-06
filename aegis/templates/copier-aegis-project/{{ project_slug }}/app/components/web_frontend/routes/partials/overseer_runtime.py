@@ -55,9 +55,12 @@ async def every_logs_events(request: Request) -> StreamingResponse:
 
 
 @router.get(overseer_container.OVERVIEW_EVENTS, include_in_schema=False)
-async def overview_events(view: str | None = None) -> StreamingResponse:
-    """Overseer's home: every page's glance over SSE, in its view."""
-    return event_stream(overseer_container.overview_events(view))
+async def overview_events(
+    view: str | None = None, zoom: str | None = None
+) -> StreamingResponse:
+    """Overseer's home: every page's glance over SSE, in its view (and
+    zoom)."""
+    return event_stream(overseer_container.overview_events(view, zoom))
 
 
 @router.get(overseer_resources.EVENTS, include_in_schema=False)

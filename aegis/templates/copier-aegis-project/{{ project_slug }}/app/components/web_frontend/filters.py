@@ -6,6 +6,7 @@ finance service as integer minor units with a currency code.
 
 from collections.abc import Callable, Iterable
 from datetime import UTC, date, datetime
+from functools import cache
 import html
 import re
 from typing import Any
@@ -170,6 +171,10 @@ def markdown(text: str | None) -> Markup:
 
 
 _RST_LITERAL = re.compile(r"``(.+?)``")
+# A literal set as code, in the accent: a docstring's, a message's names.
+_LITERAL = '<code class="font-mono text-aegis-teal">{}</code>'
+# An upper-case name, as settings and secrets are (``STRIPE_SECRET_KEY``).
+_NAME = re.compile(r"\b[A-Z][A-Z0-9_]{2,}\b")
 
 
 def docstring(text: str | None) -> Markup:
@@ -179,12 +184,30 @@ def docstring(text: str | None) -> Markup:
     """
     if isinstance(text, Markup):
         return text
+    escaped = html.escape(text or "", quote=False)
+    return Markup(_RST_LITERAL.sub(lambda m: _LITERAL.format(m.group(1)), escaped))
+
+
+def message(text: str | None) -> Markup:
+    """A health check's message as HTML: escaped, every setting or secret
+    it names (``STRIPE_SECRET_KEY not configured``) set as code, as a
+    docstring's literals are. An upper-case word nothing declares (``OK``)
+    is left alone."""
+    known = _declared_names()
+    escaped = html.escape(text or "", quote=False)
     return Markup(
-        _RST_LITERAL.sub(
-            r'<code class="font-mono text-aegis-teal">\1</code>',
-            html.escape(text or "", quote=False),
-        )
+        _NAME.sub(lambda m: _LITERAL.format(m[0]) if m[0] in known else m[0], escaped)
     )
+
+
+@cache
+def _declared_names() -> frozenset[str]:
+    """Every setting and declared secret, by name: code, so read once."""
+    from app.core import secrets
+    from app.core.config import settings
+
+    names = {entry.name for entry in secrets.declared()}
+    return frozenset(names | set(type(settings).model_fields))
 
 
 # Tailwind classes for a block of rendered markdown. One string, because a
@@ -244,6 +267,7 @@ FILTERS: dict[str, Callable[..., Any]] = {
     "pct": pct,
     "markdown": markdown,
     "docstring": docstring,
+    "message": message,
     "health_tone": health_tone,
     "color_tone": color_tone,
 }

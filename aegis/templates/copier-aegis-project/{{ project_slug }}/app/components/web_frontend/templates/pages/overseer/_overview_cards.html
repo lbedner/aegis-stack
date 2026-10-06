@@ -13,7 +13,7 @@
     <header class="flex items-start justify-between gap-3">
       <div class="min-w-0">
         <a data-title href="{{ item.url }}" {{ hx_replace(item.url, "#overseer-main") }} class="font-semibold text-aegis-text hover:text-aegis-teal">{{ item.title }}</a>
-        <p class="text-xs text-aegis-muted truncate">{{ item.message }}</p>
+        <p class="text-xs text-aegis-muted truncate">{{ item.message|message }}</p>
         {{ cause(item) }}
       </div>
       {{ health_badge(item.status) }}

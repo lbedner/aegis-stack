@@ -324,3 +324,26 @@ class _FakeServer:
 
     def serve(self) -> str:
         return "coroutine"
+
+
+def test_the_reload_supervisor_does_not_load_the_app() -> None:
+    """With reload on, the process running the entrypoint only supervises:
+    the worker it spawns imports the app from ``APP_TARGET``. Importing the
+    entrypoint must not import the app, or the supervisor holds all of it -
+    201 MB where 46 MB will do (#1444)."""
+    import subprocess
+    import sys
+
+    probe = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys, app.entrypoints.webserver; "
+            "print('app.integrations.main' in sys.modules)",
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert probe.stdout.strip() == "False"

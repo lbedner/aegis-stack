@@ -328,7 +328,9 @@ class TestCLIInit:
         )
         assert expected_import in component_health_content
 
-        registration_snippet = 'register_health_check("worker", check_worker_health)'
+        registration_snippet = (
+            "register_health_check(ComponentName.WORKER, check_worker_health)"
+        )
         assert registration_snippet in component_health_content
         assert "Worker component health check registered" in component_health_content
 

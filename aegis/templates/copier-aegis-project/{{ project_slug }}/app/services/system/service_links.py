@@ -105,7 +105,9 @@ def _target(module: str, service: str) -> str | None:
     parts = module.split(".")
     if parts[:2] == ["app", "components"] and len(parts) > 2:
         # Not the server's own package: the service runs inside it.
-        return parts[2] if parts[2] != topology.HOST else None
+        if parts[2] == topology.HOST:
+            return None
+        return topology.THROUGH.get(parts[2], parts[2])
     if parts[:2] == ["app", "services"] and len(parts) > 2:
         other = parts[2]
         if other != service and other not in PLUMBING:

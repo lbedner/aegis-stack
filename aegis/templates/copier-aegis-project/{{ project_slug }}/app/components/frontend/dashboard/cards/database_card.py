@@ -7,6 +7,7 @@ Supports both SQLite and PostgreSQL backends.
 
 import flet as ft
 
+from app.core.constants import ComponentName
 from app.core.formatting import format_bytes
 from app.services.system.models import ComponentStatus
 
@@ -143,5 +144,5 @@ class DatabaseCard:
             content=self._create_card_content(),
             border_color=border_color,
             component_data=self.component_data,
-            component_name="database",
+            component_name=ComponentName.DATABASE,
         )

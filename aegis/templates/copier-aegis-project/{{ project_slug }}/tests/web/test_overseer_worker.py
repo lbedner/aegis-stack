@@ -12,36 +12,17 @@ from app.components.web_frontend import overseer_worker
 from app.services.system import ui_worker
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_title
+from tests._fake_runtime import queue_status as _queue
+from tests._fake_runtime import worker_status
 from tests.web.dom import none, one, select, text
 from tests.web.overseer import sign_in, status_with
 
 
-def _queue(name: str, message: str = "", **meta: Any) -> ComponentStatus:
-    base = {
-        "worker_alive": True,
-        "queued_jobs": 0,
-        "jobs_ongoing": 0,
-        "jobs_completed": 0,
-        "jobs_failed": 0,
-        "failure_rate_percent": 0.0,
-        "consumer_count": 1,
-        "max_concurrency": 10,
-        "timeout_seconds": 300,
-        "description": f"{name} jobs",
-        "stream_name": f"taskiq:{name}",
-    }
-    return ComponentStatus(name=name, message=message, metadata=base | meta)
-
-
 def _worker(*queues: ComponentStatus) -> ComponentStatus:
-    group = ComponentStatus(
-        name="queues", message="", sub_components={q.name: q for q in queues}
-    )
-    return ComponentStatus(
-        name="worker",
+    return worker_status(
+        *queues,
         message="TaskIQ worker infrastructure: 2 queues",
-        metadata={"redis_url": "redis://redis:6379"},
-        sub_components={"queues": group},
+        redis_url="redis://redis:6379",
     )
 
 

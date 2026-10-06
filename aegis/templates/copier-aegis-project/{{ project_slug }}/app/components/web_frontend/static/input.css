@@ -244,9 +244,9 @@
   :is(.toned, .tone, .spark, .map-link)[data-tone="warn"] { @apply text-aegis-amber; }
   :is(.toned, .tone, .spark, .map-link)[data-tone="error"] { @apply text-aegis-error; }
   /* An entry outlined in its tone: a map node, a home page card, a request flow step. */
-  .tone-border { @apply border-aegis-border; }
-  .tone-border[data-tone="warn"] { @apply border-aegis-amber/70; }
-  .tone-border[data-tone="error"] { @apply border-aegis-error/70; }
+  .tone-border { @apply border-aegis-border stroke-aegis-border; }
+  .tone-border[data-tone="warn"] { @apply border-aegis-amber/70 stroke-aegis-amber/70; }
+  .tone-border[data-tone="error"] { @apply border-aegis-error/70 stroke-aegis-error/70; }
   /* Overseer's home cards, client side so a live frame keeps the choice:
      trouble first, or only trouble. */
   [data-order="trouble"] [data-card][data-tone="error"] { order: -2; }
@@ -262,6 +262,12 @@
   .map-link:is([data-tone="warn"], [data-tone="error"]) { @apply opacity-100; }
   .map-link[data-queued] { stroke-dasharray: 5 4; }
   .map-link[data-key] { stroke-dasharray: 1 4; stroke-linecap: round; }
+  /* A data node's outline: its tone's stroke (inherited from .tone-border),
+     filled like a card so the lines behind it stop at its edge. */
+  .map-shape { @apply fill-aegis-card; stroke-width: 1; }
+  /* A tall data node, opened up: narrower, so it reads as a cylinder (the
+     Flow's columns are narrow already). */
+  [data-map]:not([data-across]) [data-tall] { max-width: 9rem; }
   /* A map node hovered: what it is not joined to dims (app.js mapFocus). */
   [data-map] :is([data-node], .map-link) { transition: opacity 150ms; }
   [data-map] [data-dim] { opacity: 0.35; }  /* context, not disabled */

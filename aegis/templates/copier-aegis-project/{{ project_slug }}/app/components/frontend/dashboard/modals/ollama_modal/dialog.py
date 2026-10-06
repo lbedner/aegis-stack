@@ -15,6 +15,7 @@ import flet as ft
 
 from app.components.frontend.controls.tabs import PulseTabs
 from app.components.inference.activity import get_ollama_activity
+from app.core.constants import ComponentName
 from app.core.log import logger
 from app.services.system.models import ComponentStatus
 
@@ -194,7 +195,7 @@ class OllamaDetailDialog(BaseDetailPopup):
         # already fresh, so hand it to the card it describes.
         apply_one = self._page.data.get("update_component")
         if apply_one is not None:
-            await apply_one("ollama", fresh_status)
+            await apply_one(ComponentName.OLLAMA, fresh_status)
         self._page.update()
 
     def _apply(self, fresh_status: ComponentStatus) -> None:

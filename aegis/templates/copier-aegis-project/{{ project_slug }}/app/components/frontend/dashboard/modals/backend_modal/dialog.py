@@ -11,6 +11,7 @@ from contextlib import contextmanager
 import flet as ft
 
 from app.components.frontend.controls.tabs import PulseTabs
+from app.core.constants import ComponentName
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_subtitle, get_component_title
 
@@ -92,9 +93,9 @@ class BackendDetailDialog(BaseDetailPopup):
         super().__init__(
             page=page,
             component_data=backend_component,
-            title_text=get_component_title("backend"),
+            title_text=get_component_title(ComponentName.BACKEND),
             sections=[tabs],
-            subtitle_text=get_component_subtitle("backend", backend_component.metadata),
+            subtitle_text=get_component_subtitle(ComponentName.BACKEND, backend_component.metadata),
             scrollable=False,
             width=1100,
             height=800,

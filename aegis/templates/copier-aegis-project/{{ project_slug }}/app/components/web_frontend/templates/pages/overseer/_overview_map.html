@@ -2,7 +2,8 @@
    a node at its place in its tier, linking to its page, with its state and
    its containers' CPU and memory; the connections between them as lines (in
    the tone of what each leads to, dashed for queued work, dotted for a key
-   Secrets holds); what runs in the webserver as chips in
+   Secrets holds); data in its shape (a store, the queue, object storage:
+   a glyph here, the outline opened up); what runs in the webserver as chips in
    the Server's node, two to a row, each with its cost to load
    (load_cost). Rendered in the page and again for each frame. #}
 {% from "components/macros/layout.html" import health_badge, status_dot %}
@@ -21,31 +22,38 @@
 </nav>
 {% endif %}
 <div class="overflow-x-auto">
-  <div data-map{% if map_compact %} data-compact{% endif %} class="relative min-w-[960px]" style="height: {{ map_height }}px">
+  <div data-map{% if map_compact %} data-compact{% endif %}{% if map_across %} data-across{% endif %} class="relative min-w-[960px]" style="height: {{ map_height }}px">
     <svg class="absolute inset-0 w-full h-full" viewBox="0 0 {{ map_width }} {{ map_height }}" preserveAspectRatio="none" aria-hidden="true">
       {% for link in map_links %}<path data-link data-from="{{ link.start }}" data-to="{{ link.end }}"{% if link.queued %} data-queued{% endif %}{% if link.key %} data-key{% endif %} class="map-link" data-tone="{{ link.tone }}" d="{{ link.d }}" />{% endfor %}
     </svg>
     {% for node in map_nodes %}
     {% if map_compact %}
-    {# One line: its dot, its name, its cost to load; an outside provider a
-       pill. What it says, why it fails and the fix (a key's set dialog),
-       under it on hover (CSS, so a live frame cannot close it; padded, not
-       spaced, so the pointer can move into it). #}
-    <section data-node="{{ node.key }}"{% if node.outside %} data-outside{% endif %} data-tone="{{ node.tone }}"
-             class="group absolute -translate-x-1/2 hover:z-30 tone-border border bg-aegis-card {{ 'rounded-full justify-center' if node.outside else 'rounded-lg' }} px-3 flex items-center gap-2 text-sm"
+    {# One line: its dot, its name, its cost to load; data in its outline
+       (the stroke takes the tone, as a border does), an outside provider a
+       dashed pill. What it says, why it fails and the fix (a key's set
+       dialog), under it on hover (CSS, so a live frame cannot close it;
+       padded, not spaced, so the pointer can move into it). #}
+    {% set outside = node.role == map_roles.OUTSIDE %}
+    {% set shaped = node.role and not outside %}
+    {% set outline = "" if shaped else ("rounded-full justify-center border border-dashed bg-aegis-card" if outside else "rounded-lg border bg-aegis-card") %}
+    <section data-node="{{ node.key }}"{% if node.role %} data-role="{{ node.role }}"{% endif %}{% if node.tall %} data-tall{% endif %} data-tone="{{ node.tone }}"
+             class="group absolute -translate-x-1/2 hover:z-30 tone-border {{ outline }} {{ 'justify-center pt-3' if node.tall }} px-3 flex items-center gap-2 text-sm"
              style="left: {{ node.left }}%; top: {{ node.top }}px; width: {{ map_node_width }}%; height: {{ node.height }}px">
+      {% if shaped %}<svg data-shape class="map-shape absolute inset-0 -z-10 w-full h-full overflow-visible" aria-hidden="true"><use href="#shape-{{ node.role }}" width="100%" height="100%"/></svg>{% endif %}
       {% if node.status %}{{ status_dot(node.status) }}{% endif %}
       {{ node_title(node) }}
       {% if node.load %}<span data-load class="ml-auto shrink-0 text-xs tabular-nums text-aegis-muted">{{ node.load }}</span>{% endif %}
+      {% if node.figure %}<span data-figure class="ml-auto shrink-0 text-xs tabular-nums text-aegis-muted">{{ node.figure }}</span>{% endif %}
       <span data-hint role="tooltip" class="absolute left-0 {{ 'bottom-full pb-1.5' if node.hint_above else 'top-full pt-1.5' }} z-20 hidden group-hover:block">
-        <span class="tooltip-panel block w-max max-w-xs px-2.5 py-1.5">{{ node.message|message }}{{ cause(node) }}
+        <span class="tooltip-panel block w-max max-w-xs px-2.5 py-1.5">{{ node.message|message }}{% if node.note %}<span class="block">{{ node.note }}</span>{% endif %}{{ cause(node) }}
           {% for fix in node.fix or [] %}<button type="button" data-fix {{ hx_dialog(fix.url) }} class="mt-1 block text-aegis-teal hover:underline">Set {{ fix.name }}</button>{% endfor %}</span>
       </span>
     </section>
     {% else %}
-    <section data-node="{{ node.key }}" class="absolute -translate-x-1/2 tone-border rounded-lg border bg-aegis-card p-4 space-y-3 overflow-hidden" data-tone="{{ node.tone }}"
+    <section data-node="{{ node.key }}"{% if node.role %} data-role="{{ node.role }}"{% endif %} class="absolute -translate-x-1/2 tone-border rounded-lg border bg-aegis-card p-4 space-y-3 overflow-hidden" data-tone="{{ node.tone }}"
              style="left: {{ node.left }}%; top: {{ node.top }}px; width: {{ map_node_width }}%; height: {{ node.height }}px">
       <header class="flex items-center justify-between gap-2">
+        {% if node.role %}{{ icon(node.role, "w-4 h-4 shrink-0 text-aegis-muted") }}{% endif %}
         {{ node_title(node, "text-base") }}
         <span class="ml-auto flex items-center gap-2 shrink-0">
           {% if node.zoom %}<a data-zoom href="{{ node.zoom }}" {{ hx_replace(node.zoom, "#overseer-main") }} title="Open up: what runs inside it" class="text-aegis-muted hover:text-aegis-teal">{{ icon("tiers", "w-4 h-4") }}<span class="sr-only">Open up {{ node.title }}</span></a>{% endif %}
@@ -62,6 +70,7 @@
       {% else %}
       <p class="text-sm text-aegis-muted truncate">{{ node.message|message }}</p>
       {% endif %}
+      {% if node.note %}<p class="text-xs text-aegis-muted truncate">{{ node.note }}</p>{% endif %}
       {% if node.hosted %}
       <div class="grid grid-cols-2 gap-1.5 pt-1">
         {% for chip in node.hosted %}

@@ -1,35 +1,12 @@
 """What the worker views show, for Flet and the web frontend alike: each
 queue's state, how full it is, and its share of the work."""
 
-from typing import Any
-
 import pytest
 
 from app.services.system import ui_worker
-from app.services.system.models import ComponentStatus
-
-
-def _queue(name: str, message: str = "", **meta: Any) -> ComponentStatus:
-    base = {
-        "worker_alive": True,
-        "queued_jobs": 0,
-        "jobs_ongoing": 0,
-        "jobs_completed": 0,
-        "jobs_failed": 0,
-        "failure_rate_percent": 0.0,
-        "consumer_count": 1,
-        "max_concurrency": 10,
-        "timeout_seconds": 300,
-        "description": f"{name} jobs",
-    }
-    return ComponentStatus(name=name, message=message, metadata=base | meta)
-
-
-def _worker(*queues: ComponentStatus) -> ComponentStatus:
-    group = ComponentStatus(
-        name="queues", message="", sub_components={q.name: q for q in queues}
-    )
-    return ComponentStatus(name="worker", message="", sub_components={"queues": group})
+from app.services.system.models import ComponentStatus, ComponentStatusType
+from tests._fake_runtime import queue_status as _queue
+from tests._fake_runtime import worker_status as _worker
 
 
 class TestQueueState:
@@ -106,6 +83,19 @@ class TestOverview:
         work = {q["name"]: q["work_share"] for q in view["queues"]}
         assert work == {"system": 82, "load_test": 18}  # of 110 finished
         assert view["success"] == round(100 * 100 / 110, 1)
+
+    def test_the_backlog_is_what_waits_and_runs(self) -> None:
+        found = ui_worker.backlog(_worker(_queue("q", queued_jobs=12, jobs_ongoing=3)))
+        assert found.status == ComponentStatusType.HEALTHY
+        assert (found.queued, found.message) == (12, "12 queued, 3 running")
+
+    def test_a_backlog_warns_while_a_queue_backs_up_and_says_why(self) -> None:
+        backed_up = _queue(
+            "q", queued_jobs=40, oldest_waiting_seconds=720, max_wait_seconds=300
+        )
+        found = ui_worker.backlog(_worker(backed_up))
+        assert found.status == ComponentStatusType.WARNING
+        assert "backed up" in found.message and "12m" in found.message
 
     def test_no_queues_is_an_empty_overview(self) -> None:
         view = ui_worker.overview(ComponentStatus(name="worker", message=""))

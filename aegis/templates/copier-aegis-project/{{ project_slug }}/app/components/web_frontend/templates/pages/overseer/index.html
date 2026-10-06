@@ -3,17 +3,17 @@
 {% from "components/macros/form.html" import action, range_form %}
 
 {% block title %}Overseer - {{ project_name }}{% endblock %}
-{# The Map is a workspace: the stack's shape needs the whole canvas. #}
-{% block overseer_width %}{{ "workspace" if overview_view == "map" else "document" }}{% endblock %}
+{# The Map and the Flow are a workspace: the stack's shape needs the whole canvas. #}
+{% block overseer_width %}{{ "workspace" if overview_wide else "document" }}{% endblock %}
 
 {% block overseer_content %}
 {% call page_header("Overview", "Your stack at a glance") %}
 {{ range_form(overview_views, overview_view, request.url.path, "#overseer-main", field="view", aria="View", id="overview-view") }}
 {% endcall %}
-{# Everything in the sidebar (overseer_container.overview), as cards or a
-   map, kept live. The cards can put trouble first (the default) or
+{# Everything in the sidebar (overseer_container.overview), as cards, a
+   map or the flow of work, kept live. The cards can put trouble first (the default) or
    show only it, client side (input.css orders them by tone). #}
-{% set cards = overview_view == "cards" %}
+{% set cards = overview_cards %}
 <div id="overview-stack" hx-ext="sse" sse-connect="{{ overview_events }}"
      {% if cards %}x-data="{ first: true, only: false }" data-order="trouble" data-only="false"
      x-bind:data-order="first ? 'trouble' : 'sidebar'" x-bind:data-only="only"{% endif %}>

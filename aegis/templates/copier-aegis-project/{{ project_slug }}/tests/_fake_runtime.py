@@ -4,10 +4,12 @@ put back after."""
 
 from collections.abc import AsyncIterator
 from datetime import datetime, timedelta
+from typing import Any
 
 import pytest
 
 from app.core import runtime
+from app.core.constants import ComponentName
 from app.core.runtime import (
     Host,
     Instance,
@@ -176,3 +178,37 @@ def use_load_costs(monkeypatch: pytest.MonkeyPatch, found: LoadCosts | None) -> 
         return found
 
     monkeypatch.setattr(load_cost, "costs", costs)
+
+
+def queue_status(name: str, message: str = "", **meta: Any) -> ComponentStatus:
+    """A worker queue as its health check reports it: alive, idle, one
+    consumer of ten slots, unless ``meta`` says otherwise."""
+    base = {
+        "worker_alive": True,
+        "queued_jobs": 0,
+        "jobs_ongoing": 0,
+        "jobs_completed": 0,
+        "jobs_failed": 0,
+        "failure_rate_percent": 0.0,
+        "consumer_count": 1,
+        "max_concurrency": 10,
+        "timeout_seconds": 300,
+        "description": f"{name} jobs",
+        "stream_name": f"taskiq:{name}",
+    }
+    return ComponentStatus(name=name, message=message, metadata=base | meta)
+
+
+def worker_status(
+    *queues: ComponentStatus, message: str = "", **meta: Any
+) -> ComponentStatus:
+    """The worker's health check with ``queues`` under it."""
+    group = ComponentStatus(
+        name="queues", message="", sub_components={q.name: q for q in queues}
+    )
+    return ComponentStatus(
+        name=ComponentName.WORKER,
+        message=message,
+        metadata=meta,
+        sub_components={"queues": group},
+    )

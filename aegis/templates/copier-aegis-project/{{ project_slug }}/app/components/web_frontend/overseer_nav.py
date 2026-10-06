@@ -12,6 +12,7 @@ from urllib.parse import quote
 
 from starlette.routing import BaseRoute
 
+from app.core.constants import ComponentName
 from app.services.system import ui_runtime
 from app.services.system.health import last_system_status, registered_health_names
 from app.services.system.models import (
@@ -25,17 +26,17 @@ from .overseer_access import Db, Viewer
 
 ORDER = {
     "components": (
-        "backend",
-        "web_frontend",
-        "frontend",
-        "database",
-        "worker",
-        "scheduler",
-        "cache",
-        "storage",
-        "ingress",
-        "observability",
-        "ollama",
+        ComponentName.BACKEND,
+        ComponentName.WEB_FRONTEND,
+        ComponentName.FRONTEND,
+        ComponentName.DATABASE,
+        ComponentName.WORKER,
+        ComponentName.SCHEDULER,
+        ComponentName.CACHE,
+        ComponentName.STORAGE,
+        ComponentName.INGRESS,
+        ComponentName.OBSERVABILITY,
+        ComponentName.OLLAMA,
     ),
     "services": (
         "auth",

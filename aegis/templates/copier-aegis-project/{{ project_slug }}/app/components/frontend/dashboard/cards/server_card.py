@@ -7,6 +7,7 @@ Combines FastAPI backend and Flet frontend into a single unified view.
 
 import flet as ft
 
+from app.core.constants import ComponentName
 from app.services.system.models import ComponentStatus
 
 from .card_container import CardContainer
@@ -146,5 +147,5 @@ class ServerCard:
             content=self._create_card_content(),
             border_color=border_color,
             component_data=self.component_data,
-            component_name="backend",
+            component_name=ComponentName.BACKEND,
         )

@@ -10,6 +10,7 @@ from app.components.frontend.controls import (
 )
 from app.components.frontend.controls.tabs import PulseTabs
 from app.components.frontend.theme import AegisTheme as Theme
+from app.core.constants import ComponentName
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_subtitle, get_component_title
 
@@ -57,8 +58,8 @@ class RedisDetailDialog(BaseDetailPopup):
         super().__init__(
             page=page,
             component_data=component_data,
-            title_text=get_component_title("cache"),
-            subtitle_text=get_component_subtitle("cache", metadata),
+            title_text=get_component_title(ComponentName.CACHE),
+            subtitle_text=get_component_subtitle(ComponentName.CACHE, metadata),
             sections=[tabs],
             scrollable=False,
             width=900,

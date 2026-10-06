@@ -112,7 +112,7 @@ class TestHtmxOffLeavesNoTrace:
 
     def test_ui_label_is_flet_only(self) -> None:
         rendered = _render("app/services/system/ui.py.jinja", _ctx())
-        assert '"frontend": "Flet",' in rendered
+        assert 'ComponentName.FRONTEND: "Flet",' in rendered
         assert "htmx" not in rendered.lower()
 
     def test_import_gate_is_whitespace_controlled(self) -> None:
@@ -196,7 +196,7 @@ class TestHtmxOnAddsWebFrontend:
             "app/components/backend/startup/component_health.py.jinja",
             _ctx(include_htmx=True),
         )
-        assert 'register_health_check("web_frontend"' in rendered
+        assert "register_health_check(ComponentName.WEB_FRONTEND" in rendered
 
     def test_health_web_frontend_checks_templates_and_manifest(self) -> None:
         rendered = _render(

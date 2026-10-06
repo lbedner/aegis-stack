@@ -6,6 +6,7 @@ to the ones the web frontend tags ``web`` or ``overseer``.
 
 from typing import Any
 
+from app.core.constants import ComponentName
 from app.services.system import ui_backend
 from app.services.system.models import ComponentStatus
 
@@ -18,7 +19,7 @@ WEB_TAGS = frozenset({"web", "overseer"})
 
 def web_routes() -> list[dict[str, Any]]:
     """The backend's routes that belong to the web frontend."""
-    backend = find_installed("components", "backend")
+    backend = find_installed("components", ComponentName.BACKEND)
     routes = (backend.component.metadata or {}).get("routes") if backend else None
     return [r for r in routes or [] if WEB_TAGS & set(r.get("tags") or [])]
 

@@ -10,6 +10,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from app.core.config import settings
+from app.core.constants import ComponentName
 from app.core.formatting import (
     format_duration_ms,
     format_relative_time,
@@ -222,7 +223,7 @@ async def section_context(
         }
     if section == "jobs":
         stats = await _stats_for(req, tasks(metadata))
-        history = page_url("components", "scheduler") + "/history"
+        history = page_url("components", ComponentName.SCHEDULER) + "/history"
         return {"jobs": _job_rows(metadata, stats, history), "partials": PARTIALS}
     if section == "history":
         return await _history(req, metadata)

@@ -11,6 +11,7 @@ import flet as ft
 
 from app.components.frontend.controls import SecondaryText, status_dot
 from app.components.frontend.theme import AegisTheme as Theme
+from app.core.constants import ComponentName
 from app.services.system.models import ComponentStatus
 
 from .card_container import CardContainer
@@ -245,5 +246,5 @@ class SchedulerCard:
             content=self._create_card_content(),
             border_color=border_color,
             component_data=self.component_data,
-            component_name="scheduler",
+            component_name=ComponentName.SCHEDULER,
         )

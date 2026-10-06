@@ -2,9 +2,8 @@
 """
 PostgreSQL database health check for {{ project_name }}.
 
-Provides comprehensive health checking for PostgreSQL databases including
-connection testing, version info, database size, connection counts, and
-server settings.
+Checks a PostgreSQL database: the connection, its version and size,
+connection counts and server settings.
 """
 {% if include_database and database_engine == "postgres" %}
 import os
@@ -13,6 +12,7 @@ import re
 from typing import Any
 
 from app.core.config import settings
+from app.core.constants import ComponentName
 from app.core.log import logger
 from app.core.formatting import format_bytes
 from app.services.system.models import ComponentStatus, ComponentStatusType, MigrationInfo
@@ -429,7 +429,7 @@ async def check_database_health() -> ComponentStatus:
                 enhanced_metadata["migration_count"] = 0
 
         return ComponentStatus(
-            name="database",
+            name=ComponentName.DATABASE,
             status=ComponentStatusType.HEALTHY,
             message="Database connection successful",
             response_time_ms=None,
@@ -438,7 +438,7 @@ async def check_database_health() -> ComponentStatus:
 
     except ImportError:
         return ComponentStatus(
-            name="database",
+            name=ComponentName.DATABASE,
             status=ComponentStatusType.UNHEALTHY,
             message="Database module not available",
             response_time_ms=None,
@@ -451,7 +451,7 @@ async def check_database_health() -> ComponentStatus:
         error_str = str(e).lower()
         if "connection refused" in error_str:
             return ComponentStatus(
-                name="database",
+                name=ComponentName.DATABASE,
                 status=ComponentStatusType.UNHEALTHY,
                 message="PostgreSQL server not reachable",
                 response_time_ms=None,
@@ -464,7 +464,7 @@ async def check_database_health() -> ComponentStatus:
             )
         if "authentication failed" in error_str or "password" in error_str:
             return ComponentStatus(
-                name="database",
+                name=ComponentName.DATABASE,
                 status=ComponentStatusType.UNHEALTHY,
                 message="PostgreSQL authentication failed",
                 response_time_ms=None,
@@ -477,7 +477,7 @@ async def check_database_health() -> ComponentStatus:
             )
         if "does not exist" in error_str:
             return ComponentStatus(
-                name="database",
+                name=ComponentName.DATABASE,
                 status=ComponentStatusType.WARNING,
                 message="PostgreSQL database does not exist",
                 response_time_ms=None,
@@ -490,7 +490,7 @@ async def check_database_health() -> ComponentStatus:
             )
 
         return ComponentStatus(
-            name="database",
+            name=ComponentName.DATABASE,
             status=ComponentStatusType.UNHEALTHY,
             message=f"Database connection failed: {str(e)}",
             response_time_ms=None,

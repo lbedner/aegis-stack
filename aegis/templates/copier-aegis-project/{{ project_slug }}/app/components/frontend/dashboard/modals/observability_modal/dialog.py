@@ -16,6 +16,7 @@ from app.components.frontend.controls.expandable_data_table import (
 from app.components.frontend.controls.markdown import copyable_markdown
 from app.components.frontend.controls.tabs import PulseTabs
 from app.components.frontend.theme import AegisTheme as Theme
+from app.core.constants import ComponentName
 from app.core.formatting import format_relative_time
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_title
@@ -65,7 +66,7 @@ class ObservabilityDetailDialog(BaseDetailPopup):
             super().__init__(
                 page=page,
                 component_data=component_data,
-                title_text=get_component_title("observability"),
+                title_text=get_component_title(ComponentName.OBSERVABILITY),
                 subtitle_text=subtitle,
                 sections=sections,
                 scrollable=True,
@@ -112,7 +113,7 @@ class ObservabilityDetailDialog(BaseDetailPopup):
         super().__init__(
             page=page,
             component_data=component_data,
-            title_text=get_component_title("observability"),
+            title_text=get_component_title(ComponentName.OBSERVABILITY),
             subtitle_text=subtitle,
             sections=[tabs],
             scrollable=False,

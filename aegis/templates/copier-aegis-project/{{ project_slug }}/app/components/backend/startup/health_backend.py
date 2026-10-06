@@ -14,6 +14,7 @@ from app.core.log import logger
 from app.services.backend.middleware_inspector import MiddlewareMetadata
 from app.services.backend.route_inspector import RouteMetadata
 from app.services.system.models import ComponentStatus, ComponentStatusType
+from app.services.system.ui_backend import endpoints_apart
 
 from .health_metadata import lifecycle, route_and_middleware
 
@@ -94,8 +95,11 @@ def _active_message(
     )
 
     message_parts = [f"{route_metadata.total_routes} routes"]
-    if route_metadata.total_endpoints != route_metadata.total_routes:
-        message_parts.append(f"{route_metadata.total_endpoints} endpoints")
+    endpoints = endpoints_apart(
+        route_metadata.total_routes, route_metadata.total_endpoints
+    )
+    if endpoints is not None:
+        message_parts.append(f"{endpoints} endpoints")
     if middleware_metadata.security_count > 0:
         message_parts.append(f"{middleware_metadata.security_count} security layers")
     if method_summary:

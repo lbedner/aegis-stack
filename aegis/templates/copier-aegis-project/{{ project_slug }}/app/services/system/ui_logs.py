@@ -89,6 +89,11 @@ def color_of(page: str) -> int:
     return _PAGES.index(page) % RAMP if page in _PAGES else 0
 
 
+def title_of(page: str) -> str:
+    """A page's name, as its component's (``redis`` is the Cache)."""
+    return get_component_title(ui_runtime.component_of(page))
+
+
 def _split_lead(text: str) -> tuple[str, str]:
     """``(lead, message)``: the lead the columns repeat, or none when it
     would leave no message."""
@@ -329,7 +334,7 @@ async def sources(pages: Sequence[str] = ()) -> list[dict[str, Any]]:
     found = [
         {
             "page": page,
-            "title": get_component_title(ui_runtime.component_of(page)),
+            "title": title_of(page),
             "containers": [
                 {"name": name, "label": short[name]}
                 for p, name in names

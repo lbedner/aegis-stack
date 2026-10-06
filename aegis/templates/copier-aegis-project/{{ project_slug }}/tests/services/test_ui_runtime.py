@@ -8,6 +8,7 @@ import pytest
 
 from app.core import series
 from app.core.config import settings
+from app.core.runtime import Instance
 from app.services.system import ui_runtime
 from tests._fake_runtime import (
     REDIS,
@@ -25,7 +26,7 @@ async def test_a_page_lists_its_own_containers(monkeypatch: pytest.MonkeyPatch) 
     assert view["note"] is None
     running, stopped = view["rows"]
     assert running["name"] == "app-worker-system-1"
-    assert running["state"] == "running (healthy)"
+    assert (running["state"], running["state_status"]) == ("running", "healthy")
     assert running["cpu"] == "12.5%"
     assert "128.0 MB" in running["memory"] and "512.0 MB" in running["memory"]
     assert running["restarts"] == "2" and running["uptime"].startswith("3h")
@@ -251,3 +252,30 @@ async def test_where_a_warning_starts_is_a_setting(
     charts = {c["key"]: c["data"] for c in await ui_runtime.charts("redis")}
     warn, _alert = charts[ui_runtime.MEMORY]["thresholds"]
     assert warn["value"] == pytest.approx(STATS.memory_limit * 0.2)
+
+
+@pytest.mark.parametrize(
+    ("state", "health", "label", "status"),
+    [
+        ("running", None, "running", "healthy"),
+        # Running while Docker's healthcheck on it fails: it still serves.
+        ("running", "unhealthy", "unhealthy", "warning"),
+        ("restarting", None, "restarting", "warning"),
+        ("exited", None, "exited", "unhealthy"),
+    ],
+)
+async def test_a_containers_state_is_judged_once_for_both_uis(
+    monkeypatch: pytest.MonkeyPatch,
+    state: str,
+    health: str | None,
+    label: str,
+    status: str,
+) -> None:
+    """Its word and status (``state_status``, read the way ``cpu_status``
+    is) come with the row, so htmx and Flet colour it alike."""
+    one = Instance(
+        id="r1", name="app-redis-1", service="redis", state=state, health=health
+    )
+    use_runtime(monkeypatch, FakeRuntime(one))
+    (row,) = (await ui_runtime.containers("redis"))["rows"]
+    assert (row["state"], row["state_status"]) == (label, status)

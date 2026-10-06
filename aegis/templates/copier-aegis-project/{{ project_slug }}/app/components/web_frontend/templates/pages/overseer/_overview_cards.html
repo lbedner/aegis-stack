@@ -5,17 +5,18 @@
    container's tone), and the way to its
    Container and Logs; without, a few of its health check's own figures and
    where it runs. Rendered in the page and again for each frame. #}
-{% from "components/macros/layout.html" import badge, sparkline, stat_row %}
-{% from "pages/overseer/_glance_macros.html" import figures, links %}
+{% from "components/macros/layout.html" import health_badge, sparkline, stat_row %}
+{% from "pages/overseer/_glance_macros.html" import cause, figures, links %}
 <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
   {% for item in overview_stack %}
-  <section data-card="{{ item.key }}" class="rounded-lg border border-aegis-border bg-aegis-card p-4 space-y-3 min-w-0">
+  <section data-card="{{ item.key }}" data-tone="{{ item.tone }}" class="tone-border rounded-lg border bg-aegis-card p-4 space-y-3 min-w-0">
     <header class="flex items-start justify-between gap-3">
       <div class="min-w-0">
         <a data-title href="{{ item.url }}" {{ hx_replace(item.url, "#overseer-main") }} class="font-semibold text-aegis-text hover:text-aegis-teal">{{ item.title }}</a>
         <p class="text-xs text-aegis-muted truncate">{{ item.message }}</p>
+        {{ cause(item) }}
       </div>
-      {{ badge(item.status or "unknown", item.tone) }}
+      {{ health_badge(item.status) }}
     </header>
     {% if item.glance %}
     <div class="space-y-1.5 text-sm">

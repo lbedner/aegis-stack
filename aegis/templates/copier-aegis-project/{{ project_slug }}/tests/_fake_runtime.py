@@ -17,6 +17,8 @@ from app.core.runtime import (
     Stats,
 )
 from app.core.time import utcnow
+from app.services.system import health_probes, load_cost
+from app.services.system.models import ComponentStatus, LoadCosts
 
 MiB = 2**20
 GiB = 2**30
@@ -35,6 +37,14 @@ STOPPED = Instance(
     id="w2", name="app-worker-media-1", service="worker-media", state="exited"
 )
 REDIS = Instance(id="r1", name="app-redis-1", service="redis", state="running")
+# Running while Docker's healthcheck on it fails.
+UNHEALTHY = Instance(
+    id="t1",
+    name="app-traefik-1",
+    service="traefik",
+    state="running",
+    health="unhealthy",
+)
 SERVER = Instance(
     id="s1",
     name="app-webserver-1",
@@ -127,3 +137,42 @@ class FakeRuntime:
 def use_runtime(monkeypatch: pytest.MonkeyPatch, fake: FakeRuntime) -> FakeRuntime:
     monkeypatch.setattr(runtime, "_runtime", fake)
     return fake
+
+
+def use_host_checks(
+    monkeypatch: pytest.MonkeyPatch,
+    memory_percent: float = 50.0,
+    cpu_percent: float = 10.0,
+) -> None:
+    """The host's memory and CPU checks (``health_probes.host_metrics``) on
+    ``HOST``, this much of each in use."""
+
+    async def checks() -> dict[str, ComponentStatus]:
+        total = HOST.memory / GiB
+        return {
+            "memory": ComponentStatus(
+                name="memory",
+                message="",
+                metadata={
+                    "percent_used": memory_percent,
+                    "total_gb": total,
+                    "available_gb": total * (1 - memory_percent / 100),
+                },
+            ),
+            "cpu": ComponentStatus(
+                name="cpu",
+                message="",
+                metadata={"percent_used": cpu_percent, "cpu_count": HOST.cpus},
+            ),
+        }
+
+    monkeypatch.setattr(health_probes, "host_metrics", checks)
+
+
+def use_load_costs(monkeypatch: pytest.MonkeyPatch, found: LoadCosts | None) -> None:
+    """``load_cost.costs`` answering ``found`` (None: still measuring)."""
+
+    async def costs() -> LoadCosts | None:
+        return found
+
+    monkeypatch.setattr(load_cost, "costs", costs)

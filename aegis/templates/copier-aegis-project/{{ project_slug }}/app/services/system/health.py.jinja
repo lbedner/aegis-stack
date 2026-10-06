@@ -23,10 +23,12 @@ from app.services.system.health_probes import (
     _get_system_info,
     _run_health_check,
     _run_health_check_with_cache,
+    loop_lock,
 )
 from app.core.log import logger
 
 from . import activity
+from . import container_health
 from .alerts import send_critical_alert, send_health_alert
 from .models import ComponentStatus, ComponentStatusType, SystemStatus
 
@@ -90,12 +92,7 @@ _status_locks: weakref.WeakKeyDictionary[
 
 
 def _status_lock() -> asyncio.Lock:
-    loop = asyncio.get_running_loop()
-    lock = _status_locks.get(loop)
-    if lock is None:
-        lock = asyncio.Lock()
-        _status_locks[loop] = lock
-    return lock
+    return loop_lock(_status_locks)
 
 
 def invalidate_status_cache() -> None:
@@ -225,6 +222,9 @@ async def _collect_system_status() -> SystemStatus:
                 message=f"Service health check failed: {str(e)}",
                 response_time_ms=None,
             )
+
+    # Docker's healthcheck on a component's containers can fail its check.
+    component_results = await container_health.overlay(component_results)
 
     # Collect system metrics (already running concurrently)
     system_metrics = await metrics_task

@@ -43,17 +43,24 @@ class OverviewTab(ft.Container):
         security_count = metadata.get("security_count", 0)
         deprecated_count = metadata.get("deprecated_count", 0)
 
-        # Build metric cards
+        # Build metric cards; endpoints only apart from routes
+        endpoints = ui_backend.endpoints_apart(total_routes, total_endpoints)
         metric_cards = [
             MetricCard(
                 value=str(total_routes),
                 label="Total Routes",
                 color=ft.Colors.BLUE,
             ),
-            MetricCard(
-                value=str(total_endpoints),
-                label="Endpoints",
-                color=Theme.Colors.SUCCESS,
+            *(
+                [
+                    MetricCard(
+                        value=str(endpoints),
+                        label="Endpoints",
+                        color=Theme.Colors.SUCCESS,
+                    )
+                ]
+                if endpoints is not None
+                else []
             ),
             MetricCard(
                 value=str(total_middleware),

@@ -42,6 +42,12 @@ def get_status_color_name(status: ComponentStatusType) -> str:
     return "white"
 
 
+def registry_key(group: str, name: str) -> str:
+    """An entry's key in the one name registry: a component's own name, a
+    service's ``service_<name>`` (``get_component_title``)."""
+    return name if group == "components" else f"service_{name}"
+
+
 def get_component_title(component_name: str) -> str:
     """The one name for a component or service, on every surface.
 
@@ -100,6 +106,9 @@ def get_component_title(component_name: str) -> str:
         {%- if include_payment %}
         "service_payment": "Payment",
         {%- endif %}
+        "service_rag": "RAG",
+        # The job history the scheduler keeps, not the scheduler itself.
+        "service_scheduler": "Scheduler history",
         {%- if include_finance %}
         "service_finance": "Finance",
         {%- endif %}

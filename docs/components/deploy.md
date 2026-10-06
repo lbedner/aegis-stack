@@ -79,7 +79,9 @@ Everything about an instance comes from the container list, never from inspect:
 
 Every Overseer page with a container behind it (Server, Worker, Scheduler, Redis, Database on Postgres, Storage, Ingress, Inference) has a **Container** section, in Overseer's htmx pages and Flet modals alike. It shows one card per instance: its name, state and health, uptime, restarts and the image with its build, then a fixed strip of CPU, memory used against its limit, network in and out, and disk read and write, so a figure changing width moves nothing else. It renders from the containers sampler's last reading (`app.core.series`), so it opens full, then refreshes every second while it is open, with charts over the last 15 minutes, 30 minutes or hour: CPU, memory, and network and disk I/O as bytes per second (the sampler keeps Docker's running totals; a chart reads the rate between readings, and drops the step where a restart reset them).
 
-The Scheduler and Cache pages also open with a glance above their Overview: a line per container with its state, uptime, CPU, memory as a share of its limit (amber, then red, by the host memory check's rule), its Restart, and the way to its Container and Logs sections.
+The Server, Scheduler and Cache pages also open with a glance above their Overview (the Server's in place of the host's figures, which are on Resources; without a deploy target it shows the machine it runs on): a line per container with its state, uptime, CPU, memory as a share of its limit (amber, then red, by the host memory check's rule), its Restart, and the way to its Container and Logs sections.
+
+A component's health is the worse of its own check and Docker's healthcheck on its containers, as the containers sampler last read them (so the health check itself waits on no Docker call). When the check passes but Docker calls a container unhealthy (Traefik answering its API while its healthcheck command fails, say), the component reads as a warning naming the container, in Overseer, the health API and the CLI alike. The healthcheck's own output is not shown: the socket proxy refuses container inspect, which would expose every container's environment.
 
 ### Restart
 
@@ -109,6 +111,18 @@ The filters stay in the address: the window (15m, 1h, 6h, 1d, or All from each c
 ## In Overseer: Logs
 
 **Logs** in the sidebar (and the Logs button in the Flet header) shows every service's lines in one view: the same reading, filters and following as the Logs section, merged across every container, with each line naming its service and linking to its page. A Services filter narrows it to the ones ticked. Following can be paused, in this view and in each page's Logs section; a line written while paused is not added.
+
+## In Overseer: Resources
+
+**Resources** in the sidebar shows everything the stack uses at once, kept live while it is open (`app.services.system.ui_resources`, htmx only for now):
+
+- **CPU** and **Memory**, each split three ways: this stack (its containers, summed), the rest of the host (what the host's own checks see in use beyond this stack) and what is free. CPU counts cores, so 4 cores is 400% of one.
+- **Containers**: every container across every page, heaviest first, with its CPU, its memory and its share of this stack's memory, linked to its page. Stopped ones come last.
+- **Outside Docker**: a server that runs on the host instead (Ollama, say) is named, since it has no container to read.
+- **Inside the webserver**: every service, and the components' code the webserver runs (its UIs, the storage client, the deploy runtime), lives in the webserver, which Docker sees as one container, so each part's cost to load is measured apart (`app.services.system.load_cost`): every module in it loaded alone in a fresh Python on top of the app's core, one part at a time in the background by one process of many, the first time the page opens, then kept a day per build. The map's Server node shows the same figure on each chip. Libraries two services share count in each, so these add up to more than the webserver uses.
+- **Charts**: CPU, memory, network and disk I/O over the last 15 minutes, 30 minutes or hour, a band per part (its containers added together, network and disk in and out together) in the same colour it has in Logs, stacked so the top edge is this stack. CPU and memory carry the host's in use as a dashed line, so the gap above the bands is the rest of the host. A host sampler records it beside the containers sampler: every second while Overseer is open, every 15 seconds otherwise, an hour kept.
+
+The host is what Docker runs on: on Docker Desktop that is its VM, not your machine. Without the deploy component there are no containers to read, and the page says so.
 
 ## In Overseer: Deployments
 

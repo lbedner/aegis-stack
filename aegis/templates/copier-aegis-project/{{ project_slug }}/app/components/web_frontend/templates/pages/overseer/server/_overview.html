@@ -2,14 +2,18 @@
 {% from "pages/overseer/_macros.html" import status_card %}
 {% set meta = component.metadata or {} %}
 {% set deprecated = meta.get("deprecated_count") or 0 %}
+{# Endpoints only apart from routes (ui_backend.endpoints_apart). #}
 <div class="space-y-4">
   {{ stats_strip([
-    {"label": "Routes", "value": meta.get("total_routes", "-")},
-    {"label": "Endpoints", "value": meta.get("total_endpoints", "-"), "caption": (deprecated ~ " deprecated") if deprecated else none},
+    {"label": "Routes", "value": meta.get("total_routes", "-"), "caption": (deprecated ~ " deprecated") if deprecated else none},
+  ] + ([{"label": "Endpoints", "value": endpoints}] if endpoints is not none else []) + [
     {"label": "Middleware", "value": meta.get("total_middleware", "-")},
     {"label": "Security layers", "value": meta.get("security_count", "-")},
   ], id="server-api") }}
-  <div class="grid gap-4 lg:grid-cols-3">
+  <div class="grid gap-4 {{ 'lg:grid-cols-3' if host_figures else 'lg:grid-cols-2' }}">
+    {# The machine it runs on, only without containers to read
+       (overseer_server.overview_context). #}
+    {% if host_figures %}
     <div class="lg:col-span-2">
       {% call card("Resources", "Current snapshot") %}
         <div class="space-y-6">
@@ -29,6 +33,7 @@
         </div>
       {% endcall %}
     </div>
+    {% endif %}
     {{ status_card(component, "backend", [("HTTP methods", methods or "-")]) }}
   </div>
 </div>

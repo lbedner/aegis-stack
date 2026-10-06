@@ -8,7 +8,7 @@ from environment variables for easy configuration in different environments.
 
 from typing import Annotated, Any, Literal
 
-from pydantic import {% if include_worker or include_ai %}Field, {% endif %}model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import SettingsConfigDict
 from app.core.configurable import Configurable, timezones
 from app.core.settings_base import SettingsBase
@@ -128,7 +128,7 @@ class Settings(
 
     # Health monitoring: checks answer on /health/ for any monitor to poll
     HEALTH_CHECK_TIMEOUT_SECONDS: Annotated[float, Configurable("health", "Seconds a health check waits before calling a component down")] = 2.0
-    SYSTEM_METRICS_CACHE_SECONDS: Annotated[int, Configurable("health", "Seconds the host's CPU, memory and disk readings are reused")] = 5
+    SYSTEM_METRICS_CACHE_SECONDS: Annotated[int, Field(ge=1), Configurable("health", "Seconds the host's CPU, memory and disk readings are reused (at least one: CPU is read as its share since the last read)")] = 5
 
     MEMORY_THRESHOLD_PERCENT: Annotated[float, Configurable("health", "Memory in use, percent, at which the host or a container is unhealthy")] = 90.0
     DISK_THRESHOLD_PERCENT: Annotated[float, Configurable("health", "Disk in use, percent, at which the host is unhealthy")] = 85.0

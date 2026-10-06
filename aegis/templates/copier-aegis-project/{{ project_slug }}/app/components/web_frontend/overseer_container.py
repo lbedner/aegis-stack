@@ -12,26 +12,30 @@ from collections.abc import Mapping
 from typing import Any
 
 from app.core import series
-from app.services.system import topology, ui_runtime
+from app.services.system import topology, ui_resources, ui_runtime
+from app.services.system.ui import registry_key
 
 from . import overseer_map
 from .filters import health_tone, worst_tone
-from .overseer_live import fragments_events
+from .overseer_live import chart_frames, chart_panel, fragments_events
 from .overseer_nav import NavItem, current_navigation, runtime_page_url
-from .rendering import fragment, templates, with_query
+from .rendering import fragment, with_query
 
 SECTION = {"container": "Container"}
 EVENTS = "/overseer/events/container/{page}"
 EVENT = "container"
 CARDS = "pages/overseer/_container_cards.html"
-MACROS = "components/macros/layout.html"
 # The glance above a page's Overview (``SectionedPage.glance``).
 GLANCE = "pages/overseer/_glance_rows.html"
 GLANCE_EVENTS = "/overseer/events/glance/{page}"
 GLANCE_EVENT = "glance"
 # Overseer's home, in the view its toggle chose (``?view=``, like every filter).
-VIEWS = (("list", "List"), ("cards", "Cards"), ("map", "Map"))
-TEMPLATES = {key: f"pages/overseer/_overview_{key}.html" for key, _ in VIEWS}
+VIEWS = (
+    ("list", "List", "list-bullet"),
+    ("cards", "Cards", "squares-2x2"),
+    ("map", "Map", "tiers"),
+)
+TEMPLATES = {key: f"pages/overseer/_overview_{key}.html" for key, *_ in VIEWS}
 OVERVIEW_EVENTS = "/overseer/events/overview"
 OVERVIEW_EVENT = "overview"
 # A card's figures for what has no container: a few of its health check's
@@ -63,27 +67,24 @@ async def context(page: str, query: Mapping[str, str]) -> dict[str, Any]:
     seconds = series.window_of(query.get("window"))
     table, charts = await ui_runtime.section(page, seconds, wait=False)
     return {
-        "container": _rows(table),
-        "container_charts": [
-            chart | {"id": chart_event(chart["key"])} for chart in charts
-        ],
-        "container_events": with_query(EVENTS.format(page=page), window=str(seconds)),
-        "container_windows": series.WINDOWS,
-        "container_window": seconds,
+        "container": toned(table),
+        "container_charts": chart_panel(
+            EVENT, charts, seconds, EVENTS.format(page=page)
+        ),
     }
 
 
 def render(view: dict[str, Any]) -> str:
-    return fragment(CARDS, container=_rows(view))
+    return fragment(CARDS, container=toned(view))
 
 
-def _rows(view: dict[str, Any]) -> dict[str, Any]:
-    """Each row with its state's and its memory's tone, and the confirm its
+def toned(view: dict[str, Any]) -> dict[str, Any]:
+    """Each row with its state's and its figures' tones, and the confirm its
     Restart opens."""
     rows = [
         r
         | {
-            "tone": _tone(r),
+            "tone": health_tone(r["state_status"]),
             "cpu_tone": _figure_tone(r["cpu_status"]),
             "memory_tone": _figure_tone(r["memory_status"]),
             "restart_url": RESTART.format(name=r["name"]),
@@ -104,7 +105,7 @@ async def glance(page: str, *, wait: bool = False) -> dict[str, Any]:
     stream."""
     table = await ui_runtime.containers(page, wait=wait)
     return {
-        "glance": _rows(table),
+        "glance": toned(table),
         "glance_base": runtime_page_url(page),
         "glance_events": GLANCE_EVENTS.format(page=page),
         "glance_event": GLANCE_EVENT,
@@ -126,7 +127,8 @@ async def overview(
     """Every sidebar entry, in its order: a page with containers behind it
     as their glance, anything else as its health check's line; as cards,
     with their trend or a few figures too; as a map, placed. One read of
-    the containers and one of their trends, whatever the stack's size."""
+    the containers and one of their trends, whatever the stack's size. A
+    failing entry names the failing ones it depends on (``cause``)."""
     view = view if view in TEMPLATES else VIEWS[0][0]
     entries = [
         (entry, ui_runtime.page_of(entry.name) if group == "components" else None)
@@ -142,17 +144,21 @@ async def overview(
         rows = found[page]["rows"] if page else []
         item = {
             "key": entry.name,
+            "registry": registry_key(entry.group, entry.name),
             "title": entry.title,
             "url": entry.url,
             "status": entry.status,
             "tone": health_tone(entry.status or ""),
             "message": entry.component.message,
-            "glance": _rows(found[page]) if page and rows else None,
+            "glance": toned(found[page]) if page and rows else None,
         }
         if view == "cards":
             trend = trends[page] if page and rows else None
             item |= _card(trend, item["glance"], entry.details)
         stack.append(item)
+    _name_causes(stack)
+    if view == "map":
+        await _name_loads(stack)
     server = found[host]["rows"] if host else []
     return (overseer_map.layout(stack) if view == "map" else {}) | {
         "overview_stack": stack,
@@ -164,6 +170,25 @@ async def overview(
         "overview_views": VIEWS,
         "overview_template": TEMPLATES[view],
     }
+
+
+async def _name_loads(stack: list[dict[str, Any]]) -> None:
+    """Each entry's cost to load (``ui_resources.load_costs``), as its
+    ``load``, for the map's chips in the Server's node; none while it is
+    measured, or for what is not measured."""
+    found = await ui_resources.load_costs()
+    loads = {row["key"]: row["value"] for row in found["rows"]} if found else {}
+    for item in stack:
+        item["load"] = loads.get(item["registry"])
+
+
+def _name_causes(stack: list[dict[str, Any]]) -> None:
+    """Each failing entry's failing dependencies, at the root
+    (``topology.causes``), by title, as its ``cause``."""
+    titles = {item["key"]: item["title"] for item in stack}
+    found = topology.causes({i["key"] for i in stack if i["tone"] == "error"})
+    for item in stack:
+        item["cause"] = ", ".join(titles[key] for key in found.get(item["key"], []))
 
 
 def _card(
@@ -209,40 +234,15 @@ def overview_events(view: str | None = None, max_frames: int | None = None):  # 
     return fragments_events(frame, series.TICK_SECONDS, max_frames)
 
 
-def _tone(row: dict[str, Any]) -> str:
-    """Running and not unhealthy is fine; stopped or unhealthy is not; the
-    rest (starting, restarting) is on its way."""
-    if row["health"] == "unhealthy" or row["phase"] in ("exited", "dead"):
-        return "error"
-    return "ok" if row["phase"] == "running" else "warn"
-
-
-def chart_event(key: str) -> str:
-    """The SSE event (and chart id) for one of the section's charts."""
-    return f"{EVENT}-{key}"
-
-
 def events(  # noqa: ANN201 - async iterator
     page: str, window: int = series.DEFAULT_WINDOW, max_frames: int | None = None
 ):
     """The cards and each chart over SSE, each sent again only when it
-    changes: a chart whole at first and when its lines change, and after
-    that only its new points (``series.since``)."""
-    chart_data = templates.env.get_template(MACROS).module.chart_data  # type: ignore[attr-defined]
-    # Each chart's lines and the newest time sent, which the page now has.
+    changes (``overseer_live.chart_frames``)."""
     held: dict[str, tuple[list[str], int]] = {}
 
     async def frame() -> dict[str, str]:
         table, charts = await ui_runtime.section(page, window)
-        sent = {EVENT: render(table)}
-        for chart in charts:
-            event, data = chart_event(chart["key"]), chart["data"]
-            lines = [line["label"] for line in data["series"]]
-            if event in held and held[event][0] == lines:
-                data = series.since(data, held[event][1])
-            if data["labels"]:
-                held[event] = (lines, data["labels"][-1])
-            sent[event] = str(chart_data(event, data))
-        return sent
+        return {EVENT: render(table)} | chart_frames(EVENT, charts, held)
 
     return fragments_events(frame, series.TICK_SECONDS, max_frames)

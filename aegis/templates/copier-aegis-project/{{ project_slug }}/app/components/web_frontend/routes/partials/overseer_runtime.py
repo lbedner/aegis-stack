@@ -1,12 +1,16 @@
 """The streams of the runtime sections (Container, ``overseer_container``,
-and Logs, ``overseer_logs``) on every page with a container behind it, and
-of Overseer > Logs; and a container row's Restart confirm.
+and Logs, ``overseer_logs``) on every page with a container behind it, of
+Overseer > Logs and of Overseer > Resources; and a container row's Restart confirm.
 Mounted by ``routes/pages.py`` behind Overseer's gate (``overseer_access``)."""
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
 
-from app.components.web_frontend import overseer_container, overseer_logs
+from app.components.web_frontend import (
+    overseer_container,
+    overseer_logs,
+    overseer_resources,
+)
 from app.components.web_frontend.overseer_live import event_stream
 from app.components.web_frontend.rendering import dialog
 from app.core import runtime, series
@@ -54,6 +58,13 @@ async def every_logs_events(request: Request) -> StreamingResponse:
 async def overview_events(view: str | None = None) -> StreamingResponse:
     """Overseer's home: every page's glance over SSE, in its view."""
     return event_stream(overseer_container.overview_events(view))
+
+
+@router.get(overseer_resources.EVENTS, include_in_schema=False)
+async def resources_events(window: str | None = None) -> StreamingResponse:
+    """Overseer > Resources over SSE, charted over the window its range
+    chips chose."""
+    return event_stream(overseer_resources.events(series.window_of(window)))
 
 
 @router.get(overseer_container.RESTART, response_class=HTMLResponse)

@@ -4,8 +4,8 @@
    container's figures and actions, or, for anything without a container of
    its own, where it runs (``overview_host``) and its health check's line.
    Rendered in the page and again for each frame. #}
-{% from "components/macros/layout.html" import badge %}
-{% from "pages/overseer/_glance_macros.html" import actions, cpu, memory, state, uptime %}
+{% from "components/macros/layout.html" import health_badge %}
+{% from "pages/overseer/_glance_macros.html" import actions, cause, cpu, memory, state, uptime %}
 {% set _grid = "grid grid-cols-[9rem_6rem_minmax(0,1fr)_6rem_13rem_auto] items-center gap-x-5 px-4 py-2.5 text-sm" %}
 {% set _title = "font-semibold text-aegis-text hover:text-aegis-teal truncate" %}
 <div class="rounded-lg border border-aegis-border bg-aegis-card divide-y divide-aegis-border/60">
@@ -13,7 +13,7 @@
   {% if item.glance %}
   {% for row in item.glance.rows %}
   <div data-overview="{{ item.key }}" data-glance="{{ row.name }}" class="{{ _grid }}">
-    {% if loop.first %}<a data-title href="{{ item.url }}" {{ hx_replace(item.url, "#overseer-main") }} class="{{ _title }}">{{ item.title }}</a>{% else %}<span></span>{% endif %}
+    {% if loop.first %}<span class="min-w-0"><a data-title href="{{ item.url }}" {{ hx_replace(item.url, "#overseer-main") }} class="{{ _title }} block">{{ item.title }}</a>{{ cause(item) }}</span>{% else %}<span></span>{% endif %}
     {{ state(row) }}
     <span class="min-w-0 truncate"><span class="font-mono text-aegis-text">{{ row.name }}</span> {{ uptime(row) }}</span>
     {{ cpu(row) }}
@@ -23,8 +23,8 @@
   {% endfor %}
   {% else %}
   <div data-overview="{{ item.key }}" data-health class="{{ _grid }}">
-    <a data-title href="{{ item.url }}" {{ hx_replace(item.url, "#overseer-main") }} class="{{ _title }}">{{ item.title }}</a>
-    <span>{{ badge(item.status or "unknown", item.tone) }}</span>
+    <span class="min-w-0"><a data-title href="{{ item.url }}" {{ hx_replace(item.url, "#overseer-main") }} class="{{ _title }} block">{{ item.title }}</a>{{ cause(item) }}</span>
+    <span>{{ health_badge(item.status) }}</span>
     <span class="col-span-3 min-w-0 truncate text-aegis-muted">{% if overview_host %}<span class="text-xs">in <span class="font-mono">{{ overview_host }}</span></span><span class="mx-2">·</span>{% endif %}{{ item.message }}</span>
     <span></span>
   </div>

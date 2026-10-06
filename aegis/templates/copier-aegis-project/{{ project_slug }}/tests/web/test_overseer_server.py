@@ -1,5 +1,6 @@
 """The Overseer Server page: six tabs carried over from the Flet backend modal."""
 
+import asyncio
 from collections.abc import Generator
 from typing import Any
 
@@ -8,7 +9,9 @@ from fastapi.testclient import TestClient
 import pytest
 
 from app.components.web_frontend import overseer_connections, overseer_server
+from app.services.system import ui_runtime
 from app.services.system.models import ComponentStatus
+from tests._fake_runtime import SERVER, FakeRuntime, use_runtime
 from tests.web.dom import none, one, select, text
 from tests.web.overseer import sign_in, status_with
 
@@ -147,6 +150,38 @@ class TestOverview:
         assert figures["Routes"] == "3"
         assert figures["Middleware"] == "2"
         assert "2 GET" in text(one(html, "#card-current-status"))
+        # Every route one method: endpoints would repeat the routes.
+        assert "Endpoints" not in figures
+
+    def test_endpoints_show_when_a_route_has_more_than_one_method(
+        self, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        backend = ComponentStatus(
+            name="backend",
+            message="Serving",
+            metadata=METADATA | {"total_endpoints": 5},
+        )
+        sign_in(app, monkeypatch, status_with(backend))
+        html = _get(TestClient(app))
+        labels = [text(dt) for dt in select(html, "#server-api dt")]
+        assert "Endpoints" in labels
+
+    def test_its_figures_are_its_containers_not_the_hosts(
+        self, signed_in: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The host's are on Resources; the Server shows what its own
+        container uses, live, like every page with one."""
+        use_runtime(monkeypatch, FakeRuntime(SERVER))
+        asyncio.run(ui_runtime.containers("server"))
+        html = _get(signed_in)
+        one(html, f'#runtime-glance [data-glance="{SERVER.name}"]')
+        none(html, "#card-resources")
+
+    def test_without_a_container_it_shows_the_machine_it_runs_on(
+        self, signed_in: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        use_runtime(monkeypatch, FakeRuntime(SERVER, backend_name="none"))
+        one(_get(signed_in), "#card-resources")
 
 
 class TestRoutes:

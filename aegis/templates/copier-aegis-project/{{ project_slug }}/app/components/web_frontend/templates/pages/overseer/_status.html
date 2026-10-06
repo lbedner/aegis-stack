@@ -1,5 +1,5 @@
 {# The generic status page's body: status, details and checks. #}
-{% from "components/macros/layout.html" import card, facts %}
+{% from "components/macros/layout.html" import card, facts, health_badge %}
 {% from "pages/overseer/_macros.html" import status_card %}
 <div class="grid gap-4 lg:grid-cols-2">
   {{ status_card(item.component, item.name) }}
@@ -8,7 +8,8 @@
   {% endif %}
   {% if item.component.sub_components %}
   {% call card("Checks") %}
-    {{ facts(item.checks) }}
+    {% set checks = [] %}{% for name, state in item.checks %}{% set _ = checks.append((name, health_badge(state))) %}{% endfor %}
+    {{ facts(checks) }}
   {% endcall %}
   {% endif %}
 </div>

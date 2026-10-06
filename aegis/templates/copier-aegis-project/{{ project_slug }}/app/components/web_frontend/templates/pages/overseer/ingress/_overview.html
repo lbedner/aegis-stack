@@ -15,7 +15,7 @@
       <ol aria-label="{{ flow.name }} request flow" class="flex flex-wrap items-stretch gap-2">
         {% for step in flow.steps %}
         <li data-step data-tone="{{ step.tone or '' }}" class="flex items-center gap-2">
-          <div class="h-full min-w-0 max-w-[18rem] bg-aegis-bg border {{ 'border-aegis-amber/60' if step.tone == 'warn' else 'border-aegis-border' }} rounded px-3 py-2">
+          <div data-tone="{{ step.tone or '' }}" class="h-full min-w-0 max-w-[18rem] bg-aegis-bg border tone-border rounded px-3 py-2">
             <p class="text-xxs caps {{ 'text-aegis-amber' if step.tone == 'warn' else 'text-aegis-muted' }}">{{ step.detail }}</p>
             <p data-step-label class="text-sm font-mono text-aegis-text break-words">{{ step.label }}</p>
           </div>

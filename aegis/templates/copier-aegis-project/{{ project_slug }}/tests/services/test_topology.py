@@ -31,3 +31,15 @@ def test_a_connection_is_drawn_only_when_both_ends_are_there() -> None:
         ("worker", "database"),
     ]
     assert ("ingress", "backend") not in found.links
+
+
+def test_a_failing_part_names_the_failing_parts_it_depends_on_at_the_root() -> None:
+    """The Database down takes the Server with it, and the Ingress in front
+    of the Server: both point at the Database, not at each other."""
+    causes = topology.causes({"ingress", "backend", "database", "cache"} - {"cache"})
+    assert causes == {"backend": ["database"], "ingress": ["database"]}
+
+
+def test_a_failing_part_with_no_failing_dependency_is_its_own_cause() -> None:
+    assert topology.causes({"ingress"}) == {}
+    assert topology.causes({"database"}) == {}

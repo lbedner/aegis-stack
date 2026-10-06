@@ -29,33 +29,14 @@
            class="overseer-rail-row nav-link py-2">
           {{ sidebar_icon("overview") }}<span class="overseer-rail-hide truncate">Overview</span>
         </a>
-        <a href="/overseer/patterns" title="Patterns" {{ hx_replace("/overseer/patterns", "#overseer-main") }}
-           {% if item is defined and item.group == "patterns" %}aria-current="page"{% endif %}
+        {# Overseer's own pages (overseer_sections.rail). #}
+        {% for page in overseer_rail() %}
+        <a href="{{ page.url }}" title="{{ page.title }}" {{ hx_replace(page.url, "#overseer-main") }}
+           {% if item is defined and item.group == page.group %}aria-current="page"{% endif %}
            class="overseer-rail-row nav-link py-2">
-          {{ sidebar_icon("patterns") }}<span class="overseer-rail-hide truncate">Patterns</span>
+          {{ sidebar_icon(page.name) }}<span class="overseer-rail-hide truncate">{{ page.title }}</span>
         </a>
-        <a href="/overseer/logs" title="Logs" {{ hx_replace("/overseer/logs", "#overseer-main") }}
-           {% if item is defined and item.group == "logs" %}aria-current="page"{% endif %}
-           class="overseer-rail-row nav-link py-2">
-          {{ sidebar_icon("logs") }}<span class="overseer-rail-hide truncate">Logs</span>
-        </a>
-        <a href="/overseer/deployments" title="Deployments" {{ hx_replace("/overseer/deployments", "#overseer-main") }}
-           {% if item is defined and item.group == "deployments" %}aria-current="page"{% endif %}
-           class="overseer-rail-row nav-link py-2">
-          {{ sidebar_icon("deployments") }}<span class="overseer-rail-hide truncate">Deployments</span>
-        </a>
-        {% if secrets_page() == "/overseer/secrets" %}{# with the component, it lives under Components #}
-        <a href="/overseer/secrets" title="Secrets" {{ hx_replace("/overseer/secrets", "#overseer-main") }}
-           {% if item is defined and item.group == "secrets" %}aria-current="page"{% endif %}
-           class="overseer-rail-row nav-link py-2">
-          {{ sidebar_icon("secrets") }}<span class="overseer-rail-hide truncate">Secrets</span>
-        </a>
-        {% endif %}
-        <a href="/overseer/settings" title="Settings" {{ hx_replace("/overseer/settings", "#overseer-main") }}
-           {% if item is defined and item.group == "settings" %}aria-current="page"{% endif %}
-           class="overseer-rail-row nav-link py-2">
-          {{ sidebar_icon("settings") }}<span class="overseer-rail-hide truncate">Settings</span>
-        </a>
+        {% endfor %}
       </div>
       {% for group, heading in [("components", "Components"), ("services", "Services")] %}
       {% if navigation[group] %}

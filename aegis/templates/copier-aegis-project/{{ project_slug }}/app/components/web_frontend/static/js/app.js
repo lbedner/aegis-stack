@@ -292,13 +292,17 @@ document.addEventListener('click', (event) => {
   leaving = true;
   syncProgress();
 });
-document.body.addEventListener('htmx:beforeRequest', () => {
+// Counted down when the request ends, not on htmx:afterRequest: that fires
+// on the element that sent it, and an element a live frame swapped out while
+// its request was out (a Restart button in a row the stream re-sends) is no
+// longer in the page, so the event never reaches here.
+document.body.addEventListener('htmx:beforeRequest', (event) => {
   requestsOut += 1;
   syncProgress();
-});
-document.body.addEventListener('htmx:afterRequest', () => {
-  requestsOut = Math.max(0, requestsOut - 1);
-  syncProgress();
+  event.detail.xhr.addEventListener('loadend', () => {
+    requestsOut = Math.max(0, requestsOut - 1);
+    syncProgress();
+  }, { once: true });
 });
 // The page's first paint, and every swap after it (a stream's included).
 document.body.addEventListener('htmx:load', syncProgress);

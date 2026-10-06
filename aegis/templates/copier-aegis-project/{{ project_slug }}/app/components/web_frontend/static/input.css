@@ -243,9 +243,15 @@
   .toned[data-tone="muted"] { @apply text-aegis-muted; }
   :is(.toned, .tone, .spark, .map-link)[data-tone="warn"] { @apply text-aegis-amber; }
   :is(.toned, .tone, .spark, .map-link)[data-tone="error"] { @apply text-aegis-error; }
-  .map-node { @apply border-aegis-border; }
-  .map-node[data-tone="warn"] { @apply border-aegis-amber/70; }
-  .map-node[data-tone="error"] { @apply border-aegis-error/70; }
+  /* An entry outlined in its tone: a map node, a home page card, a request flow step. */
+  .tone-border { @apply border-aegis-border; }
+  .tone-border[data-tone="warn"] { @apply border-aegis-amber/70; }
+  .tone-border[data-tone="error"] { @apply border-aegis-error/70; }
+  /* Overseer's home cards, client side so a live frame keeps the choice:
+     trouble first, or only trouble. */
+  [data-order="trouble"] [data-card][data-tone="error"] { order: -2; }
+  [data-order="trouble"] [data-card][data-tone="warn"] { order: -1; }
+  [data-only="true"] [data-card]:not([data-tone="warn"], [data-tone="error"]) { display: none; }
   .log-row[data-tone="warn"] > td:first-child { @apply border-l-aegis-amber; }
   .log-row[data-tone="error"] > td:first-child { @apply border-l-aegis-error; }
   /* A line drawn small or between nodes: one stroke, in its colour. */

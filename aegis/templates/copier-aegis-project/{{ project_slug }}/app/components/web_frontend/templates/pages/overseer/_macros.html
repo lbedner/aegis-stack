@@ -1,5 +1,20 @@
 {# Pieces shared by Overseer pages. #}
-{% from "components/macros/layout.html" import card, facts %}
+{% from "components/macros/layout.html" import card, chart_panel, facts, health_badge %}
+{% from "components/macros/form.html" import range_form %}
+
+{# A page's live charts (``overseer_live.chart_panel``): the range chips,
+   which re-request ``target`` at ``url`` over the new window (its stream
+   follows), then the charts, two across. #}
+{% macro live_charts(panel, target, url) %}
+{% if panel.charts %}
+{{ range_form(panel.windows, panel.window, url, target, field="window", aria="Chart window", class="mt-4 flex justify-end") }}
+<div class="grid gap-4 lg:grid-cols-2 mt-3">
+  {% for chart in panel.charts %}
+  {{ chart_panel(chart.id, chart.title, "line", chart.data, subtitle=chart.subtitle, live=True, empty=chart.empty) }}
+  {% endfor %}
+</div>
+{% endif %}
+{% endmacro %}
 
 {# An HTTP verb, set in the mono label voice. #}
 {% macro method_tag(method) %}
@@ -10,7 +25,7 @@
    go between the health check and the registered name. #}
 {% macro status_card(component, name, extra=[]) %}
 {% call card("Current status") %}
-  {{ facts([("State", component.status.value|title), ("Health check", "%.1f ms"|format(component.response_time_ms) if component.response_time_ms is not none else none)] + extra + [("Registered as", name)]) }}
+  {{ facts([("State", health_badge(component.status.value)), ("Health check", "%.1f ms"|format(component.response_time_ms) if component.response_time_ms is not none else none)] + extra + [("Registered as", name)]) }}
 {% endcall %}
 {% endmacro %}
 

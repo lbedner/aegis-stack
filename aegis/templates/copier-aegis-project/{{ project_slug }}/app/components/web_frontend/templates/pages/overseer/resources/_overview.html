@@ -1,0 +1,8 @@
+{# Overseer > Resources (overseer_resources): the snapshot, re-sent whole
+   over SSE every tick while the page is open, then each figure charted
+   over the chosen window, its new points sent the same way. #}
+{% from "pages/overseer/_macros.html" import live_charts %}
+<div id="resources" hx-ext="sse" sse-connect="{{ resources_charts.events }}">
+  <div sse-swap="{{ resources_event }}" hx-target="this">{% include "pages/overseer/resources/_body.html" %}</div>
+  {{ live_charts(resources_charts, "#resources", request.url.path) }}
+</div>

@@ -286,15 +286,21 @@ bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-
 {# The time-window chips: a row of exclusive pills that submits as one
    radio field, so a click re-requests the enclosing form. Same recipe as
    ``layout.chip``, driven by ``peer-checked`` because a radio rather than
-   a link marks the choice. #}
+   a link marks the choice. ``ranges`` are ``(value, label)``, or
+   ``(value, label, icon)`` for a chip that shows its icon (``icons.html``),
+   its label on hover and to a reader. #}
 {% macro range_chips(ranges, days, field="days", aria="Time window") %}
 <fieldset class="flex flex-wrap items-center gap-1.5" aria-label="{{ aria }}">
-  {% for value, label in ranges %}
-  <label class="cursor-pointer">
+  {% for choice in ranges %}
+  {% set value, label = choice[0], choice[1] %}
+  {% set glyph = choice[2] if choice|length > 2 else none %}
+  <label class="cursor-pointer"{% if glyph %} title="{{ label }}"{% endif %}>
     <input type="radio" name="{{ field }}" value="{{ value }}" class="sr-only peer" {% if value == days %}checked{% endif %}>
-    <span class="inline-block text-xs px-2 py-0.5 rounded border border-aegis-border text-aegis-muted
+    <span class="{{ 'inline-flex px-1.5' if glyph else 'inline-block px-2' }} text-xs py-0.5 rounded border border-aegis-border text-aegis-muted
                  peer-checked:border-aegis-teal peer-checked:text-aegis-text peer-checked:bg-aegis-teal/10 peer-checked:font-semibold
-                 peer-focus-visible:ring-2 peer-focus-visible:ring-aegis-teal hover:border-aegis-muted hover:text-aegis-text transition-colors">{{ label }}</span>
+                 peer-focus-visible:ring-2 peer-focus-visible:ring-aegis-teal hover:border-aegis-muted hover:text-aegis-text transition-colors">
+      {%- if glyph %}{{ icon(glyph) }}<span class="sr-only">{{ label }}</span>{% else %}{{ label }}{% endif -%}
+    </span>
   </label>
   {% endfor %}
 </fieldset>

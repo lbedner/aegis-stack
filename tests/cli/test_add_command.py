@@ -156,6 +156,28 @@ class TestAddCommand:
         assert not record.exists()
         assert not (project_path / "tests/components/test_mcp_activity.py").exists()
 
+    def test_auth_added_later_brings_mcp_its_tokens(
+        self, project_factory: ProjectFactory
+    ) -> None:
+        """mcp's tokens belong to people: adding auth later brings the token
+        files and a revision that creates their table."""
+        project_path = project_factory(components=("database", "mcp"))
+        token_files = [
+            project_path / "app/components/mcp/tokens.py",
+            project_path / "app/components/mcp/models/tokens.py",
+            project_path / "app/cli/mcp_tokens_cli.py",
+        ]
+        assert not any(path.exists() for path in token_files)
+
+        added = run_aegis_command(
+            "add-service", "auth", "--project-path", str(project_path), "--yes"
+        )
+
+        assert added.success, f"Command failed: {added.stderr}"
+        assert all(path.is_file() for path in token_files)
+        revisions = (project_path / "alembic/versions").glob("*.py")
+        assert any("mcp_token" in path.read_text() for path in revisions)
+
     def test_add_mcp_lands_the_server_command_and_dependency(
         self, project_factory: ProjectFactory
     ) -> None:

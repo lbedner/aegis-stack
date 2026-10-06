@@ -24,7 +24,7 @@ def test_the_component_declares_its_activity_migration_and_files() -> None:
     spec = COMPONENTS[ComponentNames.MCP]
     assert MCP_MIGRATION in spec.migrations
     activity = spec.files.extras[AnswerKeys.DATABASE]
-    assert "app/components/mcp/models.py" in activity
+    assert "app/components/mcp/models/calls.py" in activity
     assert "app/components/mcp/activity.py" in activity
 
 
@@ -67,6 +67,43 @@ def test_its_activity_lives_in_its_own_schema() -> None:
 
     assert MCP_MIGRATION.schema == "mcp"
     env = Environment(loader=FileSystemLoader(str(get_template_path())))
-    template = env.get_template("{{ project_slug }}/app/components/mcp/models.py.jinja")
+    template = env.get_template(
+        "{{ project_slug }}/app/components/mcp/models/calls.py.jinja"
+    )
     assert '"schema": "mcp"' in template.render(database_engine="postgres")
     assert "schema" not in template.render(database_engine="sqlite").split('"""')[-1]
+
+
+TOKEN_FILES = (
+    "app/components/mcp/models/tokens.py",
+    "app/components/mcp/tokens.py",
+    "app/components/mcp/http.py",
+    "app/components/backend/api/mcp_tokens.py",
+    "app/cli/mcp_tokens_cli.py",
+    "tests/components/test_mcp_tokens.py",
+)
+
+
+def test_tokens_come_with_auth() -> None:
+    """A token belongs to a person, so the token files are auth's to bring."""
+    by_auth = COMPONENTS[ComponentNames.MCP].files.extras[AnswerKeys.AUTH]
+    assert set(TOKEN_FILES) <= set(by_auth)
+
+
+@pytest.mark.parametrize(("services", "kept"), [(["auth"], True), ([], False)])
+def test_init_keeps_the_token_files_only_with_auth(
+    tmp_path: Any, services: list[str], kept: bool
+) -> None:
+    from aegis.core.post_gen_tasks import cleanup_components
+
+    paths = [tmp_path / p for p in TOKEN_FILES]
+    for path in paths:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("# stub\n")
+    context = TemplateGenerator(
+        "demo", ["database", "mcp"], selected_services=services
+    ).get_template_context()
+
+    cleanup_components(tmp_path, context)
+
+    assert all(path.exists() is kept for path in paths)

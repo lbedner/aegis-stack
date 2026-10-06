@@ -1,5 +1,6 @@
-"""MCP component detail modal: the same served tools, connect commands and
-client activity as the htmx page (``ui_mcp``), read when it opens."""
+"""MCP component detail modal: the same served tools, connect commands,
+client activity and (with auth) tokens as the htmx page (``ui_mcp``), read
+when it opens."""
 
 import flet as ft
 
@@ -13,6 +14,7 @@ from app.services.system.ui import get_component_subtitle, get_component_title
 from ..cards.card_utils import get_status_detail
 from ..cards.mcp_card import counts
 from .base_detail_popup import BaseDetailPopup
+from .mcp_tokens import McpTokensSection
 from .modal_sections import StatRowsSection, metric_row
 from .table_tab import TableTab, columns_of
 
@@ -74,6 +76,11 @@ class McpDetailDialog(BaseDetailPopup):
 
     def __init__(self, component_data: ComponentStatus, page: ft.Page) -> None:
         metadata = component_data.metadata or {}
+        tokens: list[ft.Control] = (
+            [ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT), McpTokensSection(page)]
+            if ui_mcp.has_tokens()
+            else []
+        )
         super().__init__(
             page=page,
             component_data=component_data,
@@ -83,6 +90,7 @@ class McpDetailDialog(BaseDetailPopup):
                 metric_row(counts(metadata)),
                 ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
                 McpSection(),
+                *tokens,
             ],
             width=900,
             height=640,

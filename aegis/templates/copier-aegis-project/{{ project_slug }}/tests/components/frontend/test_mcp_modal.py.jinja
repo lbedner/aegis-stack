@@ -69,4 +69,88 @@ def test_the_dialog_holds_the_section() -> None:
     dialog = McpDetailDialog(MCP, MagicMock())
 
     assert any(isinstance(node, McpSection) for node in walk(dialog))
+{%- if include_auth %}
+
+
+TOKEN = {
+    "id": 7,
+    "name": "laptop",
+    "scope": "read",
+    "hint": "mcp_abcd",
+    "created_at": "2026-10-05T09:30:00Z",
+    "last_used_at": None,
+}
+
+
+class FakeAPI:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str, Any]] = []
+
+    async def request_with_status(
+        self, method: str, endpoint: str, json: dict[str, Any] | None = None
+    ) -> tuple[int, Any]:
+        self.calls.append((method, endpoint, json))
+        if method == "GET":
+            return 200, [TOKEN]
+        if method == "POST":
+            return 201, {**TOKEN, **(json or {}), "token": "mcp_the-value-shown-once"}
+        return 204, None
+
+
+@pytest.fixture
+def api(monkeypatch: pytest.MonkeyPatch) -> FakeAPI:
+    from types import SimpleNamespace
+
+    from app.components.frontend.dashboard.modals import mcp_tokens
+
+    fake = FakeAPI()
+    monkeypatch.setattr(
+        mcp_tokens, "get_session_state", lambda page: SimpleNamespace(api_client=fake)
+    )
+    return fake
+
+
+async def _tokens() -> Any:
+    from app.components.frontend.dashboard.modals.mcp_tokens import McpTokensSection
+    from tests.components.frontend._fakes import FakePage
+
+    page = FakePage()
+    page.open = lambda control: None  # type: ignore[attr-defined]  # snack bars
+    section = McpTokensSection(page)  # type: ignore[arg-type]
+    await section.load()
+    return section
+
+
+async def test_tokens_list_without_their_values(api: FakeAPI) -> None:
+    shown = rendered(await _tokens())
+
+    assert "laptop" in shown and "mcp_abcd..." in shown
+
+
+async def test_a_new_token_is_shown_once(api: FakeAPI) -> None:
+    section = await _tokens()
+
+    await section.make("ci", "propose")
+
+    assert ("POST", "/api/v1/mcp/tokens", {"name": "ci", "scope": "propose"}) in api.calls
+    assert "mcp_the-value-shown-once" in rendered(section)
+    await section.load()
+    assert "mcp_the-value-shown-once" not in rendered(section)
+
+
+async def test_revoking_calls_the_api(api: FakeAPI) -> None:
+    section = await _tokens()
+
+    await section.revoke(7)
+
+    assert ("DELETE", "/api/v1/mcp/tokens/7", None) in api.calls
+
+
+async def test_the_modal_holds_the_tokens(api: FakeAPI) -> None:
+    from app.components.frontend.dashboard.modals.mcp_tokens import McpTokensSection
+
+    dialog = McpDetailDialog(MCP, MagicMock())
+
+    assert any(isinstance(node, McpTokensSection) for node in walk(dialog))
+{%- endif %}
 {% endif %}

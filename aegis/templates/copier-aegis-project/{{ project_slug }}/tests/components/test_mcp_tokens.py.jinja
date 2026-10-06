@@ -1,0 +1,170 @@
+{% if include_mcp and include_auth %}"""MCP tokens: the credential a person makes for an outside assistant beyond
+stdio. Kept only as a hash, shown once, revocable, and scoped: a token
+reaches the granted tools its scope allows (read, or read and propose),
+never a write."""
+
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from typing import Any
+
+from fastapi.testclient import TestClient
+import pytest
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.cli import mcp_tokens_cli
+from app.components.mcp import tokens
+from app.core.tools import register_tool
+
+URL = "/api/v1/mcp/tokens"
+
+
+async def look(order_id: str) -> dict[str, Any]:
+    """Look up an order by id."""
+    return {"order_id": order_id}
+
+
+async def file_it(note: str) -> dict[str, Any]:
+    """File a note for approval."""
+    return {"status": "pending", "note": note}
+
+
+async def save(note: str) -> str:
+    """Save a note."""
+    return note
+
+
+async def test_a_token_is_shown_once_and_kept_only_as_a_hash(
+    async_db_session: AsyncSession, user_factory: Any
+) -> None:
+    user = await user_factory()
+
+    row, value = await tokens.create(async_db_session, user.id, "laptop", "read")
+
+    assert value.startswith(tokens.PREFIX)
+    assert value not in {str(v) for v in row.model_dump().values()}
+    found = await tokens.resolve(async_db_session, value)
+    assert found is not None and found.id == row.id
+
+
+async def test_a_revoked_token_fails_on_its_next_use(
+    async_db_session: AsyncSession, user_factory: Any
+) -> None:
+    user = await user_factory()
+    row, value = await tokens.create(async_db_session, user.id, "laptop", "read")
+
+    assert await tokens.revoke(async_db_session, row.id, user.id)
+
+    assert await tokens.resolve(async_db_session, value) is None
+    assert await tokens.live(async_db_session, user.id) == []
+
+
+async def test_nobody_revokes_another_persons_token(
+    async_db_session: AsyncSession, user_factory: Any
+) -> None:
+    alice, bob = await user_factory(), await user_factory()
+    row, value = await tokens.create(async_db_session, alice.id, "laptop", "read")
+
+    assert not await tokens.revoke(async_db_session, row.id, bob.id)
+    assert await tokens.resolve(async_db_session, value) is not None
+
+
+async def test_an_unknown_token_resolves_to_nobody(
+    async_db_session: AsyncSession,
+) -> None:
+    assert await tokens.resolve(async_db_session, f"{tokens.PREFIX}nope") is None
+
+
+async def test_an_unknown_scope_is_refused(
+    async_db_session: AsyncSession, user_factory: Any
+) -> None:
+    user = await user_factory()
+
+    with pytest.raises(ValueError):
+        await tokens.create(async_db_session, user.id, "laptop", "admin")
+
+
+def test_a_token_reaches_only_the_tools_its_scope_allows(
+    clean_registry: None,
+) -> None:
+    register_tool("look", look, effect="read")
+    register_tool("file_it", file_it, effect="proposes")
+    register_tool("save", save, effect="writes")
+    grant = ["look", "file_it", "save"]
+
+    assert tokens.scoped(grant, "read") == ["look"]
+    assert tokens.scoped(grant, "propose") == ["look", "file_it"]
+
+
+def test_the_api_shows_a_token_once_then_lists_it_without_it(
+    authenticated_client: TestClient,
+) -> None:
+    made = authenticated_client.post(URL, json={"name": "laptop", "scope": "read"})
+
+    assert made.status_code == 201
+    value = made.json()["token"]
+    listed = authenticated_client.get(URL)
+    assert [t["name"] for t in listed.json()] == ["laptop"]
+    assert value not in listed.text
+
+
+async def test_the_api_revokes_a_token(
+    authenticated_client: TestClient, async_db_session: AsyncSession
+) -> None:
+    made = authenticated_client.post(URL, json={"name": "laptop", "scope": "propose"})
+
+    gone = authenticated_client.delete(f"{URL}/{made.json()['id']}")
+
+    assert gone.status_code == 204
+    assert await tokens.resolve(async_db_session, made.json()["token"]) is None
+
+
+def test_the_api_refuses_to_revoke_a_token_that_is_not_yours(
+    authenticated_client: TestClient,
+) -> None:
+    assert authenticated_client.delete(f"{URL}/999").status_code == 404
+
+
+def test_the_api_refuses_an_unknown_scope(authenticated_client: TestClient) -> None:
+    made = authenticated_client.post(URL, json={"name": "laptop", "scope": "admin"})
+
+    assert made.status_code == 422
+
+
+def test_the_api_needs_someone_signed_in(async_client_with_db: TestClient) -> None:
+    assert async_client_with_db.get(URL).status_code == 401
+
+
+@pytest.fixture
+def cli_session(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The CLI's sessions are the test's."""
+
+    @asynccontextmanager
+    async def test_session() -> AsyncIterator[AsyncSession]:
+        yield async_db_session
+
+    monkeypatch.setattr(mcp_tokens_cli, "get_async_session", test_session)
+
+
+async def test_the_cli_creates_lists_and_revokes_a_persons_tokens(
+    cli_session: None,
+    async_db_session: AsyncSession,
+    user_factory: Any,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    user = await user_factory()
+
+    await mcp_tokens_cli.create(email=user.email, name="laptop", scope="read")
+    value = next(
+        word for word in capsys.readouterr().out.split() if word.startswith(tokens.PREFIX)
+    )
+    row = await tokens.resolve(async_db_session, value)
+    assert row is not None
+    await mcp_tokens_cli.list_tokens(email=user.email)
+    listed = capsys.readouterr().out
+    await mcp_tokens_cli.revoke(email=user.email, token_id=row.id)
+
+    assert "laptop" in listed and value not in listed
+    assert row.revoked_at is not None
+{% endif %}

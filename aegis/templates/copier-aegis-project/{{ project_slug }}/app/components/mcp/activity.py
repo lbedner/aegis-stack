@@ -16,7 +16,7 @@ from sqlmodel import col, func, select
 from app.core.db import get_async_session
 from app.core.log import logger
 
-from .models import McpToolCall
+from .models.calls import McpToolCall
 from .server import McpCall, log_call
 
 

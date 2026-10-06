@@ -151,17 +151,21 @@ def native_write_tool_names() -> frozenset[str]:
     return frozenset(t.name for t in _registry.values() if t.effect != "read")
 
 
-def mcp_servable(names: Iterable[str]) -> list[str]:
-    """The granted names an MCP client may call: reads and proposals only.
+def mcp_servable(
+    names: Iterable[str], effects: Iterable[str] = _MCP_SERVABLE_EFFECTS
+) -> list[str]:
+    """The granted names an MCP client may call: reads and proposals only,
+    narrowed to ``effects`` (a token's scope) when given.
 
     The one gate for MCP. A ``writes`` tool is dropped whatever the grant
-    says, and so is a name with no registered tool. Order is preserved.
+    or ``effects`` says, and so is a name with no registered tool. Order is
+    preserved.
     """
+    allowed = _MCP_SERVABLE_EFFECTS & frozenset(effects)
     return [
         name
         for name in names
-        if (tool := _registry.get(name)) is not None
-        and tool.effect in _MCP_SERVABLE_EFFECTS
+        if (tool := _registry.get(name)) is not None and tool.effect in allowed
     ]
 
 

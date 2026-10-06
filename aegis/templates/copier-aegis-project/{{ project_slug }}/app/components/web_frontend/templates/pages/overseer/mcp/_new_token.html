@@ -1,0 +1,14 @@
+{# The new-token form (dialog body). A 422 re-renders it with ``errors``. #}
+{% from "components/macros/layout.html" import dialog_title %}
+{% from "components/macros/form.html" import field, text_input, select, primary_button %}
+{% from "components/macros/feedback.html" import error_banner %}
+{{ dialog_title("New token", "For a client beyond stdio. Its value is shown once.") }}
+<form {{ hx_dialog_post(partials ~ "/tokens") }} class="space-y-4">
+  {{ error_banner(errors) }}
+  {% call field("Name") %}{{ text_input("name", form.name, "What it is for: laptop, CI", required=True, autofocus=True) }}{% endcall %}
+  {% call field("Reaches") %}{{ select("scope", scopes, form.scope or "read", blank=None, block=True) }}{% endcall %}
+  <div class="flex items-center gap-3">
+    {{ primary_button("Make token", "submit") }}
+    <button type="button" @click="$el.closest('dialog').close()" class="text-xs text-aegis-muted hover:text-aegis-text">Cancel</button>
+  </div>
+</form>

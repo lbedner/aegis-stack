@@ -679,6 +679,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 "app/services/system/ui_mcp.py",
                 "app/components/frontend/dashboard/cards/mcp_card.py",
                 "app/components/frontend/dashboard/modals/mcp_modal.py",
+                "app/components/frontend/dashboard/modals/mcp_tokens.py",
                 "tests/components/test_mcp.py",
                 "tests/components/test_mcp_proposals.py",
                 "tests/components/frontend/test_mcp_modal.py",
@@ -686,13 +687,25 @@ COMPONENTS: dict[str, ComponentSpec] = {
             extras={
                 # The activity record: only with a database to keep it in.
                 AnswerKeys.DATABASE: [
-                    "app/components/mcp/models.py",
+                    "app/components/mcp/models/__init__.py",
+                    "app/components/mcp/models/calls.py",
                     "app/components/mcp/activity.py",
                     "tests/components/test_mcp_activity.py",
+                ],
+                # Tokens: each belongs to a person, so only with auth.
+                AnswerKeys.AUTH: [
+                    "app/components/mcp/models/tokens.py",
+                    "app/components/mcp/tokens.py",
+                    "app/components/mcp/http.py",
+                    "app/components/backend/api/mcp_tokens.py",
+                    "app/cli/mcp_tokens_cli.py",
+                    "tests/components/test_mcp_tokens.py",
+                    "tests/components/test_mcp_http.py",
                 ],
                 # The Overseer page, where the htmx frontend is.
                 "include_htmx": [
                     "app/components/web_frontend/overseer_mcp.py",
+                    "app/components/web_frontend/routes/partials/overseer_mcp.py",
                     "app/components/web_frontend/templates/pages/overseer/mcp",
                     "tests/web/test_overseer_mcp.py",
                 ],

@@ -66,6 +66,9 @@ from app.components.backend.api.secrets.router import router as secrets_router
 {%- if include_deploy %}
 from app.components.backend.api.deploy.router import router as deploy_router
 {%- endif %}
+{%- if include_mcp and include_auth %}
+from app.components.backend.api.mcp_tokens import router as mcp_tokens_router
+{%- endif %}
 {%- for p in _plugins | default([]) %}
 {%- for r in p.wiring.routers %}
 from {{ r.module }} import {{ r.symbol }} as {{ r.alias }}
@@ -134,6 +137,9 @@ def include_routers(app: FastAPI) -> None:
     {%- endif %}
     {%- if include_deploy %}
     app.include_router(deploy_router, prefix="/api/v1")
+    {%- endif %}
+    {%- if include_mcp and include_auth %}
+    app.include_router(mcp_tokens_router, prefix="/api/v1")
     {%- endif %}
     {%- if include_finance %}
     app.include_router(finance_router, prefix="/api/v1")

@@ -1,0 +1,215 @@
+{% if include_mcp and include_auth %}"""MCP over HTTP at /mcp: the stdio server's tools for a client elsewhere,
+signed in with an MCP token. No token, no tools; the token's owner is who
+its calls act for, and its scope which tools it sees."""
+
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from typing import Any
+
+from fastapi.testclient import TestClient
+import httpx
+import pytest
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.components.mcp import http, tokens
+from app.core.config import settings
+from app.core.tools import current_owner_user_id, register_tool
+
+# A client's session is several HTTP requests (initialize, initialized, then
+# the call), and each checks its token: one lookup per request, not a loop.
+pytestmark = pytest.mark.queryspy(threshold=5)
+
+HEADERS = {
+    "accept": "application/json, text/event-stream",
+    "content-type": "application/json",
+}
+INITIALIZE = {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "initialize",
+    "params": {
+        "protocolVersion": "2025-06-18",
+        "capabilities": {},
+        "clientInfo": {"name": "claude-code", "version": "1"},
+    },
+}
+
+
+async def look(order_id: str) -> dict[str, Any]:
+    """Look up an order by id, for whoever the call acts for."""
+    return {"order_id": order_id, "owner": current_owner_user_id.get()}
+
+
+async def file_it(note: str) -> dict[str, Any]:
+    """File a note for approval."""
+    return {"status": "pending", "note": note}
+
+
+async def save(note: str) -> str:
+    """Save a note."""
+    return note
+
+
+class Rpc:
+    """A client's JSON-RPC over HTTP, signed in with ``token``."""
+
+    def __init__(self, client: httpx.AsyncClient, token: str | None) -> None:
+        self._client = client
+        self._headers = HEADERS | (
+            {"authorization": f"Bearer {token}"} if token else {}
+        )
+        self._id = 1
+
+    async def open(self) -> httpx.Response:
+        response = await self._client.post("/", json=INITIALIZE, headers=self._headers)
+        if response.status_code == 200:
+            self._headers["mcp-session-id"] = response.headers["mcp-session-id"]
+            await self._client.post(
+                "/",
+                json={"jsonrpc": "2.0", "method": "notifications/initialized"},
+                headers=self._headers,
+            )
+        return response
+
+    async def call(self, method: str, params: dict[str, Any] | None = None) -> Any:
+        self._id += 1
+        message = {"jsonrpc": "2.0", "id": self._id, "method": method}
+        response = await self._client.post(
+            "/", json=message | {"params": params or {}}, headers=self._headers
+        )
+        assert response.status_code == 200, response.text
+        return response.json()
+
+
+@pytest.fixture
+def granted(
+    clean_registry: None,
+    async_db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The HTTP app reads tokens through the test's session, and is granted
+    a read, a proposal and a write."""
+
+    @asynccontextmanager
+    async def test_session() -> AsyncIterator[AsyncSession]:
+        yield async_db_session
+
+    async def keep(call: Any) -> None:
+        return None
+
+    monkeypatch.setattr(http, "get_async_session", test_session)
+    monkeypatch.setattr(http, "record", keep)
+    monkeypatch.setattr(settings, "MCP_TOOLS", ["look", "file_it", "save"])
+    register_tool("look", look, effect="read")
+    register_tool("file_it", file_it, effect="proposes")
+    register_tool("save", save, effect="writes")
+
+
+@asynccontextmanager
+async def serving() -> AsyncIterator[httpx.AsyncClient]:
+    """The HTTP app with its lifespan running, entered and left in the
+    test's own task (a fixture would leave it in another)."""
+    app = http.build_http_app()
+    async with app.lifespan(app):
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
+            yield c
+
+
+async def _token(db: AsyncSession, user_factory: Any, scope: str) -> tuple[Any, str]:
+    user = await user_factory()
+    row, value = await tokens.create(db, user.id, "laptop", scope)
+    return user, value
+
+
+async def _tools(rpc: Rpc) -> list[str]:
+    listed = await rpc.call("tools/list")
+    return sorted(tool["name"] for tool in listed["result"]["tools"])
+
+
+async def test_no_token_is_refused_and_sees_no_tools(granted: None) -> None:
+    async with serving() as served:
+        response = await Rpc(served, None).open()
+
+    assert response.status_code == 401
+
+
+async def test_a_revoked_token_is_refused(
+    granted: None, async_db_session: AsyncSession, user_factory: Any
+) -> None:
+    user, value = await _token(async_db_session, user_factory, "read")
+    (row,) = await tokens.live(async_db_session, user.id)
+    await tokens.revoke(async_db_session, row.id, user.id)
+
+    async with serving() as served:
+        assert (await Rpc(served, value).open()).status_code == 401
+
+
+async def test_a_read_token_sees_the_reads(
+    granted: None, async_db_session: AsyncSession, user_factory: Any
+) -> None:
+    _, value = await _token(async_db_session, user_factory, "read")
+    async with serving() as served:
+        rpc = Rpc(served, value)
+        await rpc.open()
+        tools = await _tools(rpc)
+
+    assert tools == ["look"]
+
+
+async def test_a_propose_token_also_sees_the_proposals_never_a_write(
+    granted: None, async_db_session: AsyncSession, user_factory: Any
+) -> None:
+    _, value = await _token(async_db_session, user_factory, "propose")
+    async with serving() as served:
+        rpc = Rpc(served, value)
+        await rpc.open()
+        tools = await _tools(rpc)
+
+    assert tools == ["file_it", "look"]
+
+
+async def test_a_call_acts_for_the_tokens_owner(
+    granted: None, async_db_session: AsyncSession, user_factory: Any
+) -> None:
+    user, value = await _token(async_db_session, user_factory, "read")
+    async with serving() as served:
+        rpc = Rpc(served, value)
+        await rpc.open()
+        answer = await rpc.call(
+            "tools/call", {"name": "look", "arguments": {"order_id": "A1"}}
+        )
+
+    assert answer["result"]["structuredContent"]["owner"] == user.id
+
+
+async def test_a_call_outside_the_scope_is_refused(
+    granted: None, async_db_session: AsyncSession, user_factory: Any
+) -> None:
+    _, value = await _token(async_db_session, user_factory, "read")
+    async with serving() as served:
+        rpc = Rpc(served, value)
+        await rpc.open()
+        answer = await rpc.call(
+            "tools/call", {"name": "file_it", "arguments": {"note": "hi"}}
+        )
+
+    assert answer.get("error") or answer["result"]["isError"]
+
+
+def test_the_webserver_serves_it_at_mcp(client: TestClient) -> None:
+    """Mounted in the app, its lifespan running with the app's: a request
+    without a token is answered (401), not left without a session."""
+    response = client.post(f"{http.PATH}/", json=INITIALIZE, headers=HEADERS)
+
+    assert response.status_code == 401
+
+
+def test_connect_says_how_a_client_signs_in_over_http() -> None:
+    from app.services.system import ui_mcp
+
+    (line,) = [c for c in ui_mcp.connect() if "--transport http" in c["command"]]
+
+    assert f"{http.PATH}/" in line["command"]
+    assert "Authorization: Bearer" in line["command"]
+{% endif %}

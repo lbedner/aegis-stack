@@ -706,6 +706,11 @@ COMPONENTS: dict[str, ComponentSpec] = {
                     "tests/components/test_mcp_tokens.py",
                     "tests/components/test_mcp_http.py",
                 ],
+                # run_code: the AI service's code mode, over MCP.
+                AnswerKeys.AI: [
+                    "app/components/mcp/run_code.py",
+                    "tests/components/test_mcp_run_code.py",
+                ],
                 # The Overseer page, where the htmx frontend is.
                 "include_htmx": [
                     "app/components/web_frontend/overseer_mcp.py",

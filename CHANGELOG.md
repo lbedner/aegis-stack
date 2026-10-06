@@ -37,6 +37,10 @@
   tools at `/mcp` for clients elsewhere. Every request carries an MCP
   token: no token, a 401 and no tools. A call acts for the token's owner,
   and a client sees and calls only what the token's scope reaches.
+- **run_code over MCP.** With the AI service's code mode, an MCP client
+  can send a script that calls the read tools as functions; the app runs
+  it in the same sandbox its agents use, with the same limits, and only the
+  result crosses back. Proposals and writes are never inside the sandbox.
 
 - **A component's database-only files follow the database.** Adding the
   database to a project later brings deploy's history and mcp's activity

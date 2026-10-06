@@ -61,6 +61,18 @@ claude mcp add --transport http my-app http://localhost:8000/mcp/ \
 
 There is no CORS on it (desktop and coding clients are not browsers), and it is not reachable through the dev tunnel, whose guard admits only the Plaid webhook.
 
+## Running a script: run_code
+
+With the AI service (pydantic-ai, with a database for its agents), a client also gets `run_code`: it writes a short Python script that calls the read tools as functions, and the app runs it next to the data, in the sandbox its own agents use in code mode. Only what the script returns crosses back, so a question that needs a dozen reads is one call, and the arithmetic happens in the script, not in the client's head.
+
+```python
+months = await ledger(months=12)
+grew = sorted(months["months"], key=lambda m: m["spend_cents"])[-3:]
+[m["month"] for m in grew]
+```
+
+The client's own model writes the script; it sees `run_code` like any tool, and its description lists the signature and docstring of every function inside. Only read tools are inside: proposals stay their own tools, and nothing that writes is ever reachable. The limits are the agents' (tool calls, time, memory, the size of what comes back), and each call starts fresh. It is granted by default where it can run, and counts as a read, so a read token reaches it.
+
 ## Proposing changes
 
 Any assistant can suggest; only you can change. Grant the queue's tools and a client can file changes, never make them:

@@ -13,9 +13,9 @@ from fastmcp import Client
 from mcp.types import Implementation
 import pytest
 
-from app.components.mcp.server import McpCall, build_server
+from app.components.mcp.server import McpCall, build_server, served_effects
 from app.core.config import settings
-from app.core.tools import load_tools, mcp_servable, register_tool
+from app.core.tools import load_tools, register_tool
 
 PROJECT = Path(__file__).resolve().parents[2]
 
@@ -94,11 +94,11 @@ async def test_every_call_is_recorded_with_its_client() -> None:
 
 
 def test_the_default_grant_names_only_servable_tools() -> None:
-    """``mcp_servable`` drops an unknown name without a word, so a renamed
+    """``served_effects`` drops an unknown name without a word, so a renamed
     or removed tool must fail here instead of vanishing from every client."""
     load_tools()
 
-    assert mcp_servable(settings.MCP_TOOLS) == settings.MCP_TOOLS
+    assert list(served_effects(settings.MCP_TOOLS)) == settings.MCP_TOOLS
 
 
 @pytest.mark.usefixtures("tools")

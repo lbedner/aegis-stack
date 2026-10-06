@@ -1,0 +1,108 @@
+{% if ai_framework == "pydantic-ai" and ai_backend != "memory" %}"""run_code over MCP: an outside model's script, run next to the data in the
+sandbox the chat agents' code mode uses, against the granted read tools
+only; only what the script returns crosses back.
+
+The sandbox is built only inside an agent run (``CodeMode`` makes its
+toolset from the run's context), so each call is a real pydantic-ai run
+whose scripted model hands the client's script to ``run_code`` and stops.
+No LLM runs and nothing is billed, and everything the chat agents' run
+carries comes with it unchanged: ``agent_capabilities`` (the sandbox, the
+output cap), the tool-call limit, the sandbox's time and memory limits.
+Proposals and writes are never inside: proposals stay their own MCP tools.
+"""
+
+from collections.abc import Sequence
+from typing import Any
+
+from fastmcp.exceptions import ToolError
+from fastmcp.tools import Tool
+from pydantic_ai import Agent
+from pydantic_ai.messages import (
+    ModelMessage,
+    ModelResponse,
+    RetryPromptPart,
+    TextPart,
+    ToolCallPart,
+    ToolReturnPart,
+)
+from pydantic_ai.models.function import AgentInfo, FunctionModel
+from pydantic_ai.tools import ToolDefinition
+from pydantic_ai.usage import UsageLimits
+
+from app.services.ai.domains.chat.agent_loader import (
+    CODE_MODE_TOOL_CALLS_LIMIT,
+    AgentConfig,
+    agent_capabilities,
+)
+from app.services.ai.domains.chat.tools import resolve_tools
+
+NAME = "run_code"
+# The harness describes a REPL; each MCP call is its own run.
+FRESH = "Over MCP every call starts fresh: nothing carries over from an earlier call."
+
+
+def _outcome(messages: Sequence[ModelMessage]) -> ToolReturnPart | RetryPromptPart | None:
+    """What ``run_code`` answered: its return, or why the script failed."""
+    return next(
+        (
+            part
+            for message in reversed(messages)
+            for part in message.parts
+            if isinstance(part, ToolReturnPart | RetryPromptPart)
+            and part.tool_name == NAME
+        ),
+        None,
+    )
+
+
+def _agent(reads: Sequence[str], code: str | None, seen: dict[str, ToolDefinition]) -> Agent:
+    """A code-mode agent over ``reads`` whose model sends ``code`` once (or,
+    with None, sends nothing), noting the tools it was offered in ``seen``."""
+
+    def model(messages: list[ModelMessage], info: AgentInfo) -> ModelResponse:
+        seen.update({tool.name: tool for tool in info.function_tools})
+        if code is None or _outcome(messages) is not None:
+            return ModelResponse(parts=[TextPart("done")])
+        return ModelResponse(parts=[ToolCallPart(NAME, {"code": code})])
+
+    config = AgentConfig(
+        slug="mcp",
+        name="MCP",
+        system_prompt="",
+        model_id=None,
+        temperature=0.0,
+        max_tokens=1,
+        tool_names=tuple(reads),
+        code_mode=True,
+    )
+    return Agent(
+        FunctionModel(model),
+        tools=resolve_tools(reads),
+        capabilities=agent_capabilities(config),
+    )
+
+
+async def run(reads: Sequence[str], code: str) -> Any:
+    """Run a client's script against ``reads``: what it returns, or a tool
+    error saying what was wrong with it."""
+    limits = UsageLimits(tool_calls_limit=CODE_MODE_TOOL_CALLS_LIMIT)
+    result = await _agent(reads, code, {}).run(NAME, usage_limits=limits)
+    outcome = _outcome(result.all_messages())
+    if isinstance(outcome, ToolReturnPart):
+        return outcome.content
+    raise ToolError(outcome.model_response() if outcome else "The script did not run.")
+
+
+async def code_tool(reads: Sequence[str]) -> Tool:
+    """``run_code`` as an MCP tool, described the way the harness describes
+    it to the chat agents: the sandbox's rules and every read's signature."""
+    seen: dict[str, ToolDefinition] = {}
+    await _agent(reads, None, seen).run(NAME)
+
+    async def run_code(code: str) -> Any:
+        return await run(reads, code)
+
+    return Tool.from_function(
+        run_code, name=NAME, description=f"{seen[NAME].description}\n\n{FRESH}"
+    )
+{% endif %}

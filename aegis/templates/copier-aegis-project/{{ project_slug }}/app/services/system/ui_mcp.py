@@ -6,7 +6,8 @@ from typing import Any
 
 from app.core.config import settings
 from app.core.formatting import format_bytes, format_duration_ms, format_relative_time
-from app.core.tools import RegisteredTool, get_tool, load_tools, mcp_servable
+from app.components.mcp.server import RUN_CODE, served_effects
+from app.core.tools import RegisteredTool, get_tool, load_tools
 
 NAME = "mcp"
 NONE_SERVED = "No tools served: grant some in MCP_TOOLS"
@@ -42,6 +43,7 @@ TOKEN_COLUMNS = (
 SCOPE_LABELS = {"read": "Read", "propose": "Read and propose"}
 NO_TOKENS = "No tokens yet. A client beyond stdio needs one."
 SHOWN_ONCE = "Copy it now: it is not shown again."
+RUN_CODE_ABOUT = "Runs a script against the read tools, in the sandbox"
 NOT_KEPT = (
     "Without a database, calls are logged (mcp.call on stderr), not kept. "
     "Add the database component to keep them."
@@ -54,20 +56,26 @@ def _about(tool: RegisteredTool) -> str:
     return tool.description or (doc[0] if doc else "")
 
 
+def _why_not(name: str) -> str:
+    if name == RUN_CODE:
+        return "Needs the AI service's code mode"
+    return "No tool by that name" if get_tool(name) is None else "Writes are never served"
+
+
 def grant() -> dict[str, list[dict[str, str]]]:
     """``MCP_TOOLS`` split into what a client is served and what it never
-    sees, with why: the same rule the server applies (``mcp_servable``)."""
+    sees, with why: the same rule the server applies (``served_effects``)."""
     load_tools()
+    effects = served_effects(settings.MCP_TOOLS)
     served: list[dict[str, str]] = []
     dropped: list[dict[str, str]] = []
     for name in settings.MCP_TOOLS:
+        if name not in effects:
+            dropped.append({"name": name, "reason": _why_not(name)})
+            continue
         tool = get_tool(name)
-        if tool is None:
-            dropped.append({"name": name, "reason": "No tool by that name"})
-        elif not mcp_servable([name]):
-            dropped.append({"name": name, "reason": "Writes are never served"})
-        else:
-            served.append({"name": name, "effect": tool.effect, "about": _about(tool)})
+        about = _about(tool) if tool is not None else RUN_CODE_ABOUT
+        served.append({"name": name, "effect": effects[name], "about": about})
     return {"served": served, "dropped": dropped}
 
 

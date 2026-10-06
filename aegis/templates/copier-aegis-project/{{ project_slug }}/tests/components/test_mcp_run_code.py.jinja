@@ -1,0 +1,105 @@
+{% if include_mcp and include_ai and ai_framework == "pydantic-ai" and ai_backend != "memory" %}"""run_code over MCP: an outside model's script, run next to the data in the
+sandbox the chat agents' code mode uses, against the granted read tools
+only. Only what the script returns crosses back."""
+
+import json
+from typing import Any
+
+from fastmcp import Client, FastMCP
+import pytest
+
+from app.components.mcp.server import McpCall, build_server
+from app.core.config import settings
+from app.core.tools import register_tool
+from app.services.system import ui_mcp
+
+ORDERS = {"A1": 1250, "B2": 4075}
+
+
+async def order(order_id: str) -> dict[str, Any]:
+    """An order's total, in cents."""
+    return {"order_id": order_id, "total_cents": ORDERS[order_id]}
+
+
+async def file_it(note: str) -> dict[str, Any]:
+    """File a note for approval."""
+    return {"status": "pending", "note": note}
+
+
+async def save(note: str) -> str:
+    """Save a note."""
+    return note
+
+
+GRANT = ["order", "file_it", "save", "run_code"]
+
+
+@pytest.fixture
+def granted(clean_registry: None, monkeypatch: pytest.MonkeyPatch) -> None:
+    register_tool("order", order, effect="read")
+    register_tool("file_it", file_it, effect="proposes")
+    register_tool("save", save, effect="writes")
+    monkeypatch.setattr(settings, "MCP_TOOLS", GRANT)
+
+
+async def _run(server: FastMCP, code: str) -> Any:
+    async with Client(server) as client:
+        result = await client.call_tool("run_code", {"code": code}, raise_on_error=False)
+    return result
+
+
+async def test_a_script_computes_next_to_the_data(granted: None) -> None:
+    code = "a = await order(order_id='A1')\nb = await order(order_id='B2')\na['total_cents'] + b['total_cents']"
+
+    result = await _run(build_server(GRANT), code)
+
+    assert not result.is_error
+    assert json.loads(result.content[0].text) == sum(ORDERS.values())
+
+
+async def test_nothing_that_writes_or_proposes_is_callable_inside(
+    granted: None,
+) -> None:
+    for code in ("await file_it(note='x')", "await save(note='x')"):
+        result = await _run(build_server(GRANT), code)
+
+        assert result.is_error, code
+
+
+async def test_its_description_lists_the_reads_and_nothing_else(
+    granted: None,
+) -> None:
+    async with Client(build_server(GRANT)) as client:
+        tools = {tool.name: tool for tool in await client.list_tools()}
+
+    described = tools["run_code"].description or ""
+    assert "async def order(" in described
+    assert "file_it" not in described and "def save(" not in described
+    assert set(tools["run_code"].inputSchema["properties"]) == {"code"}
+    # Proposals stay their own tools, outside the sandbox; writes never come.
+    assert "file_it" in tools and "save" not in tools
+
+
+async def test_a_broken_script_says_why(granted: None) -> None:
+    result = await _run(build_server(GRANT), "await order(order_id=")
+
+    assert result.is_error
+    assert "error" in result.content[0].text.lower()
+
+
+async def test_it_is_a_read_on_the_record(granted: None) -> None:
+    calls: list[McpCall] = []
+
+    async def keep(call: McpCall) -> None:
+        calls.append(call)
+
+    await _run(build_server(GRANT, record=keep), "1 + 1")
+
+    assert [(c.tool, c.effect, c.ok) for c in calls] == [("run_code", "read", True)]
+
+
+def test_overseer_counts_it_as_served(granted: None) -> None:
+    served = {tool["name"]: tool["effect"] for tool in ui_mcp.grant()["served"]}
+
+    assert served["run_code"] == "read"
+{% endif %}

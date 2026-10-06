@@ -13,7 +13,7 @@ import pytest
 from jinja2 import Environment, FileSystemLoader
 
 from aegis.constants import AnswerKeys, ComponentNames
-from aegis.core.component_files import get_template_path
+from aegis.core.component_files import get_copier_defaults, get_template_path
 from aegis.core.components import COMPONENTS
 from aegis.core.template_generator import TemplateGenerator
 
@@ -107,3 +107,46 @@ def test_init_keeps_the_token_files_only_with_auth(
     cleanup_components(tmp_path, context)
 
     assert all(path.exists() is kept for path in paths)
+
+
+def test_run_code_comes_with_ai() -> None:
+    by_ai = COMPONENTS[ComponentNames.MCP].files.extras[AnswerKeys.AI]
+    assert "app/components/mcp/run_code.py" in by_ai
+
+
+@pytest.mark.parametrize(
+    ("answers", "granted"),
+    [
+        (
+            {"include_ai": True, "ai_framework": "pydantic-ai", "ai_backend": "sqlite"},
+            True,
+        ),
+        (
+            {"include_ai": True, "ai_framework": "pydantic-ai", "ai_backend": "memory"},
+            False,
+        ),
+        (
+            {"include_ai": True, "ai_framework": "langchain", "ai_backend": "sqlite"},
+            False,
+        ),
+        ({"include_ai": False}, False),
+    ],
+)
+def test_run_code_is_granted_by_default_only_where_it_can_run(
+    answers: dict[str, Any], granted: bool
+) -> None:
+    """The sandbox is the AI service's code mode: pydantic-ai, kept agents."""
+    env = Environment(loader=FileSystemLoader(str(get_template_path())))
+    context = {
+        **get_copier_defaults(),
+        "project_slug": "demo",
+        "include_mcp": True,
+        "include_finance": True,
+        **answers,
+    }
+    config = env.get_template("{{ project_slug }}/app/core/config.py.jinja").render(
+        context
+    )
+    line = next(row for row in config.splitlines() if "MCP_TOOLS:" in row)
+
+    assert ('"run_code"' in line) is granted

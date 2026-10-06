@@ -7,7 +7,8 @@ are one computation. Never ``FastMCP.from_fastapi``: that would turn every
 API route into a tool, writes included, and give one question two answers.
 """
 
-from collections.abc import Awaitable, Callable, Iterable, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Sequence
+from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from dataclasses import dataclass
 import time
 from typing import Any
@@ -82,9 +83,28 @@ def _reach() -> tuple[int | None, frozenset[str] | None]:
     return token.claims["user_id"], frozenset(token.scopes)
 
 
-def _within(name: str, effects: frozenset[str] | None) -> bool:
-    tool = get_tool(name)
-    return effects is None or (tool is not None and tool.effect in effects)
+RUN_CODE = "run_code"
+
+
+def code_tool_builder() -> Callable[[Sequence[str]], Awaitable[Tool]] | None:
+    """``run_code.code_tool`` where the AI service's code mode is there to
+    run a script (pydantic-ai, a persistent backend); None elsewhere."""
+    try:
+        from .run_code import code_tool
+    except ImportError:
+        return None
+    return code_tool
+
+
+def served_effects(grant: Iterable[str]) -> dict[str, str]:
+    """Each granted tool a client is served, by its effect: the registry's
+    reads and proposals (``mcp_servable``), and ``run_code`` (a read: only
+    reads run inside it) where it can run."""
+    names = list(grant)
+    effects = {name: tool.effect for name in mcp_servable(names) if (tool := get_tool(name))}
+    if RUN_CODE in names and code_tool_builder() is not None:
+        effects[RUN_CODE] = "read"
+    return effects
 
 
 class Attribution(Middleware):
@@ -94,16 +114,20 @@ class Attribution(Middleware):
     only what its scope reaches, and each call is recorded - tool, client,
     duration, size, outcome."""
 
-    def __init__(self, record: Recorder) -> None:
+    def __init__(self, record: Recorder, effects: dict[str, str]) -> None:
         self._record = record
+        self._effects = effects
+
+    def _within(self, name: str, reach: frozenset[str] | None) -> bool:
+        return reach is None or self._effects.get(name) in reach
 
     async def on_list_tools(
         self,
         context: MiddlewareContext[types.ListToolsRequest],
         call_next: CallNext[types.ListToolsRequest, Sequence[Tool]],
     ) -> Sequence[Tool]:
-        _, effects = _reach()
-        return [tool for tool in await call_next(context) if _within(tool.name, effects)]
+        _, reach = _reach()
+        return [tool for tool in await call_next(context) if self._within(tool.name, reach)]
 
     async def on_call_tool(
         self,
@@ -113,20 +137,19 @@ class Attribution(Middleware):
         started = time.perf_counter()
         result: ToolResult | None = None
         client = _client_name(context)
-        owner, effects = _reach()
+        owner, reach = _reach()
         try:
-            if not _within(context.message.name, effects):
+            if not self._within(context.message.name, reach):
                 raise ToolError(f"{context.message.name} is outside this token's scope")
             with acting_as(owner, f"mcp:{client}"):
                 result = await call_next(context)
             return result
         finally:
-            tool = get_tool(context.message.name)
             await self._record(
                 McpCall(
                     tool=context.message.name,
                     client=client,
-                    effect=tool.effect if tool is not None else "unknown",
+                    effect=self._effects.get(context.message.name, "unknown"),
                     duration_ms=int((time.perf_counter() - started) * 1000),
                     result_bytes=_result_bytes(result) if result else 0,
                     ok=result is not None,
@@ -141,11 +164,34 @@ def build_server(
     auth: AuthProvider | None = None,
 ) -> FastMCP:
     """A server offering exactly the granted tools that MCP may serve:
-    reads and proposals, never a write (``mcp_servable``). ``auth`` checks
-    each HTTP request's token (``http``); stdio has none."""
-    server = FastMCP(settings.PROJECT_NAME, middleware=[Attribution(record)], auth=auth)
-    for name in mcp_servable(grant):
+    reads and proposals, never a write (``served_effects``), ``run_code``
+    among them where granted and able to run. ``auth`` checks each HTTP
+    request's token (``http``); stdio has none."""
+    names = list(grant)
+    effects = served_effects(names)
+    builder = code_tool_builder() if RUN_CODE in effects else None
+    server = FastMCP(
+        settings.PROJECT_NAME,
+        middleware=[Attribution(record, effects)],
+        auth=auth,
+        lifespan=_adding(builder, mcp_servable(names, {"read"})) if builder else None,
+    )
+    for name in effects:
         tool = get_tool(name)
         if tool is not None:
             server.add_tool(Tool.from_function(tool.func, name=name))
     return server
+
+
+def _adding(
+    builder: Callable[[Sequence[str]], Awaitable[Tool]], reads: Sequence[str]
+) -> Callable[[FastMCP], AbstractAsyncContextManager[dict[str, Any]]]:
+    """A lifespan that adds ``run_code`` over ``reads`` when the server
+    starts: its description comes from an agent run, which is async."""
+
+    @asynccontextmanager
+    async def lifespan(server: FastMCP) -> AsyncIterator[dict[str, Any]]:
+        server.add_tool(await builder(reads))
+        yield {}
+
+    return lifespan

@@ -42,7 +42,7 @@ def actor_of(user: User | None) -> Actor:
     """``user`` as the maker of a change."""
     if user is None:
         return Actor()
-    return Actor(user.id, user.email, user.full_name or user.email)
+    return Actor(user.id, user.email, user.display_name)
 
 
 async def get_admin_actor(admin: User = Depends(require_admin)) -> Actor:

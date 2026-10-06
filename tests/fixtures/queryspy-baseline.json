@@ -119,12 +119,6 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM \"user\"",
-      "file": "app/services/auth/health.py",
-      "function": "check_auth_service_health"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM \"user\"",
       "file": "app/services/auth/users.py",
       "function": "create_user"
     },
@@ -1954,12 +1948,6 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM organization",
-      "file": "app/services/auth/health.py",
-      "function": "check_auth_service_health"
-    },
-    {
-      "kind": "repeated_statement",
       "label": "SELECT ... FROM organization WHERE organization.id = :id_1",
       "file": "app/services/auth/orgs.py",
       "function": "hard_delete_org"
@@ -2232,19 +2220,55 @@
       "kind": "repeated_statement",
       "label": "SELECT ... FROM refresh_token WHERE refresh_token.token = :pk_1",
       "file": "app/services/auth/refresh_tokens.py",
-      "function": "revoke"
+      "function": "row_of"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM refresh_token WHERE refresh_token.token = :pk_1",
-      "file": "app/services/auth/refresh_tokens.py",
-      "function": "rotate"
+      "file": "tests/services/test_refresh_service.py",
+      "function": "test_the_table_never_keeps_a_token_itself"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM refresh_token WHERE refresh_token.user_id = :user_id_1 AND refresh_token.revoked_at IS NULL AND refresh_token.expires_at > :expires_at_1",
       "file": "app/services/auth/refresh_tokens.py",
       "function": "list_active_for_user"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM research_item WHERE research_item.id IN (SELECT research_match.item_id FROM research_match JOIN research_watch ON research_watch.id = research_match.watch_id WHERE research_watch.owner_user_id = :owner_user_id_1) OR research_item.root_id IN (SELECT coalesce(research_item.root_id, research_match.item_id) AS coalesce_1 FROM research_match JOIN research_watch ON research_watch.id = research_match.watch_id JOIN research_item ON research_item.id = research_match.item_id WHERE research_watch.owner_user_id = :owner_user_id_2 AND research_watch.with_threads IS true) ORDER BY research_item.published_at DESC NULLS LAST, research_item.id LIMIT :param_1",
+      "file": "app/services/research/service.py",
+      "function": "search"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM research_watch WHERE research_watch.id = :id_1",
+      "file": "app/services/research/service.py",
+      "function": "get_watch"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM research_watch WHERE research_watch.id = :id_1 AND research_watch.owner_user_id = :owner_user_id_1",
+      "file": "app/services/research/service.py",
+      "function": "get_watch"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM secret",
+      "file": "app/components/secrets/store.py",
+      "function": "stored"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM secret WHERE secret.name = :pk_1",
+      "file": "app/components/secrets/store.py",
+      "function": "put"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM secret WHERE secret.name IN (__[POSTCOMPILE_name_1])",
+      "file": "app/components/secrets/store.py",
+      "function": "get_many"
     },
     {
       "kind": "repeated_statement",

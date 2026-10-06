@@ -18,7 +18,7 @@ import pytest
 from app.core.config import settings
 from app.core.security import create_access_token
 from app.models.refresh_token import RefreshToken
-from app.services.auth.refresh_tokens import REUSE_GRACE_SECONDS
+from app.services.auth.refresh_tokens import REUSE_GRACE_SECONDS, RefreshService
 from app.services.auth.users import UserService
 from fastapi import status
 from fastapi.testclient import TestClient
@@ -620,7 +620,7 @@ class TestSessionCookie:
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
     @pytest.mark.asyncio
-    async def test_refresh_reuse_within_grace_converges(
+    async def test_refresh_reuse_within_grace_stays_signed_in(
         self,
         async_client_with_db: TestClient,
         async_db_session: AsyncSession,
@@ -628,8 +628,9 @@ class TestSessionCookie:
     ) -> None:
         """Immediate replay of a just-rotated token is the benign
         concurrent-request race, not theft: within ``REUSE_GRACE_SECONDS``
-        the racer gets a 200 carrying the family's live successor instead
-        of a session-nuking 401."""
+        the racer gets a 200 carrying a live token of the same session (its
+        own: the table keeps digests, so the successor's cannot be handed
+        out twice) instead of a session-nuking 401."""
         user = await user_factory()
         async_client_with_db.post(
             "/api/v1/auth/token",
@@ -651,8 +652,10 @@ class TestSessionCookie:
             cookies={"aegis_refresh": original_refresh},
         )
         assert racer.status_code == status.HTTP_200_OK
-        # Both requests converge on the same successor — no parallel branch.
-        assert async_client_with_db.cookies.get("aegis_refresh") == rotated_refresh
+        racer_refresh = async_client_with_db.cookies.get("aegis_refresh")
+        assert racer_refresh and racer_refresh != rotated_refresh
+        sessions = async_client_with_db.get("/api/v1/auth/sessions").json()
+        assert len(sessions) == 1  # one session, both tokens in it
 
     @pytest.mark.asyncio
     async def test_refresh_reuse_past_grace_triggers_401(
@@ -680,7 +683,7 @@ class TestSessionCookie:
 
         # Age the revocation past the benign-race window so the replay
         # reads as theft (same technique as the refresh-service unit tests).
-        original_row = await async_db_session.get(RefreshToken, original_refresh)
+        original_row = await RefreshService(async_db_session).row_of(original_refresh)
         assert original_row is not None
         original_row.revoked_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(
             seconds=REUSE_GRACE_SECONDS + 1
@@ -773,6 +776,23 @@ class TestSessionsEndpoints:
         async_client_with_db.cookies.clear()
         response = async_client_with_db.get("/api/v1/auth/sessions")
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    @pytest.mark.asyncio
+    async def test_signing_in_again_retires_the_session_this_browser_held(
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
+    ):
+        """Signing in again replaces this browser's refresh cookie: the
+        session it held ends, rather than sitting live, held by nobody,
+        for its full lifetime."""
+        user = await user_factory()
+        await self._login(async_client_with_db, user.email)
+        await self._login(async_client_with_db, user.email)
+
+        sessions = async_client_with_db.get("/api/v1/auth/sessions").json()
+        assert len(sessions) == 1 and sessions[0]["is_current"] is True
 
     @pytest.mark.asyncio
     async def test_list_sessions_marks_current_session(
@@ -1427,3 +1447,107 @@ async def test_resolving_the_user_releases_the_database(
 
     assert resolved.email == user.email
     assert not async_db_session.in_transaction()
+
+
+class TestAdminSessions:
+    """An administrator ends another user's sessions: one (a stolen or
+    forgotten device) or all of them. Audited like every admin action."""
+
+    async def _signed_in(self, async_db_session: AsyncSession, user_factory) -> tuple:
+        from app.services.auth.refresh_tokens import RefreshService
+
+        user = await user_factory()
+        service = RefreshService(async_db_session)
+        _, first = await service.start_session(user, source="password")
+        _, second = await service.start_session(user, source="password")
+        return user, service, first, second
+
+    @pytest.mark.asyncio
+    async def test_an_admin_signs_out_one_of_someones_sessions(
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
+        auth_headers: dict[str, str],
+    ) -> None:
+        headers = auth_headers
+        user, service, first, second = await self._signed_in(
+            async_db_session, user_factory
+        )
+        family = await service.family_of(first)
+
+        response = async_client_with_db.delete(
+            f"/api/v1/auth/users/{user.id}/sessions/{family}", headers=headers
+        )
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert await service.validate(first) is None
+        assert await service.validate(second) == user.id
+
+    @pytest.mark.asyncio
+    async def test_a_session_that_is_not_that_users_is_not_found(
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
+        auth_headers: dict[str, str],
+    ) -> None:
+        headers = auth_headers
+        user, service, first, _ = await self._signed_in(async_db_session, user_factory)
+        other = await user_factory()
+        family = await service.family_of(first)
+
+        response = async_client_with_db.delete(
+            f"/api/v1/auth/users/{other.id}/sessions/{family}", headers=headers
+        )
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert await service.validate(first) == user.id
+
+    @pytest.mark.asyncio
+    async def test_an_admin_signs_someone_out_everywhere(
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
+        auth_headers: dict[str, str],
+    ) -> None:
+        headers = auth_headers
+        user, service, first, second = await self._signed_in(
+            async_db_session, user_factory
+        )
+
+        response = async_client_with_db.delete(
+            f"/api/v1/auth/users/{user.id}/sessions", headers=headers
+        )
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json() == {"revoked": 2}
+        assert await service.validate(first) is None
+        assert await service.validate(second) is None
+
+    def test_anonymous_callers_are_refused(
+        self, async_client_with_db: TestClient
+    ) -> None:
+        for path in ("/api/v1/auth/users/1/sessions", "/api/v1/auth/users/1/sessions/x"):
+            response = async_client_with_db.delete(path)
+            assert response.status_code == status.HTTP_401_UNAUTHORIZED, path
+{%- if include_auth_rbac %}
+
+    @pytest.mark.asyncio
+    async def test_only_an_admin_may(
+        self,
+        async_client_with_db: TestClient,
+        async_db_session: AsyncSession,
+        user_factory,
+    ) -> None:
+        member = await user_factory()
+        member.role = "user"
+        async_db_session.add(member)
+        await async_db_session.commit()
+        headers = {"Authorization": f"Bearer {create_access_token(data={'sub': member.email})}"}
+        user, _, _, _ = await self._signed_in(async_db_session, user_factory)
+
+        response = async_client_with_db.delete(
+            f"/api/v1/auth/users/{user.id}/sessions", headers=headers
+        )
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+{%- endif %}
+

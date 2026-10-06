@@ -56,7 +56,6 @@ class ResearchService:
         )
         self.db.add(watch)
         await self.db.commit()
-        await self.db.refresh(watch)
         return watch
 
     async def list_watches(self) -> list[ResearchWatch]:

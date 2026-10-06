@@ -6,9 +6,11 @@
   {% set toggle = "deactivate" if row.active else "activate" %}
   <span class="inline-flex gap-2">
     {{ action("Disable" if row.active else "Enable", hx_dialog(partials ~ "/confirm/" ~ toggle ~ "/" ~ row.id), "warn" if row.active else "default") }}
+    {% if row.signed_in %}{{ action("Sign out everywhere", hx_dialog(partials ~ "/confirm/revoke-user/" ~ row.id), "warn") }}{% endif %}
     {{ action("Delete", hx_dialog(partials ~ "/confirm/delete/" ~ row.id), "danger") }}
   </span>
 {% endmacro %}
+
 {% if not available %}
 {{ empty_state("User management unavailable", "Database backend required for user management.") }}
 {% elif not allowed %}
@@ -27,6 +29,7 @@
     {"key": "verified", "label": "Verification", "kind": "status"},
     {"key": "created", "label": "Created"},
     {"key": "last_login", "label": "Last sign-in"},
+    {"key": "sessions", "label": "Sessions", "kind": "link", "target": "#overseer-main"},
   ] %}
   {{ data_table(columns, users, empty="No users found", actions=user_actions if can_admin else none) }}
 {% endcall %}

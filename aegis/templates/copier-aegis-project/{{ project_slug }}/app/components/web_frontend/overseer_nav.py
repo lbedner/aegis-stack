@@ -7,6 +7,7 @@ including plugin-provided entries.
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from hashlib import sha1
 from urllib.parse import quote
 
@@ -68,8 +69,10 @@ class SectionRequest:
     path: str
     # The app's routes, for pages that describe the app itself.
     routes: Sequence[BaseRoute] = ()
-    # The viewer's own sign-in session (the access token's ``sid``).
+    # The viewer's own sign-in session (the access token's ``sid``), and when
+    # its session cookie runs out and renews from the refresh token.
     session_id: str | None = None
+    session_expires: datetime | None = None
 
 
 @dataclass(frozen=True)

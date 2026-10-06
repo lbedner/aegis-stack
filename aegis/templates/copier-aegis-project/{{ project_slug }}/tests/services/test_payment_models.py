@@ -243,3 +243,14 @@ class TestPaymentConstants:
         assert SubscriptionStatus.ACTIVE == "active"
         assert SubscriptionStatus.CANCELED == "canceled"
         assert SubscriptionStatus.PAST_DUE == "past_due"
+
+
+@pytest.mark.parametrize("hostile", ["//evil.example/x", "/\\evil.example/x"])
+def test_a_checkout_redirect_cannot_leave_the_site(hostile: str) -> None:
+    """A path that a browser resolves off-site is not a local one."""
+    from pydantic import ValidationError
+
+    from app.services.payment.schemas import CheckoutRequest
+
+    with pytest.raises(ValidationError):
+        CheckoutRequest(price_id="price_1", success_url=hostile)

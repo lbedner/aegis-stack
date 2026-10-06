@@ -206,7 +206,6 @@ async def _transactions(
     rows, total = await service.get_transactions(
         page=page, page_size=PAGE_SIZE, status=chosen
     )
-    params = {"status": chosen} if chosen else {}
     wanted = query.get(DRAWER_PARAM) or ""
     return drawer_state(
         DRAWER_PARAM,
@@ -214,7 +213,7 @@ async def _transactions(
     ) | {
         "chips": _chips(TRANSACTION_CHIPS, chosen, path),
         "rows": [_transaction_row(t, status=chosen) for t in rows],
-        "pager": pager(path, page, PAGE_SIZE, total, **params),
+        "pager": pager(path, page, PAGE_SIZE, total, status=chosen),
     }
 
 

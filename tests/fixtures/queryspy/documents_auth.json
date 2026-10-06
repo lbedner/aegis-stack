@@ -4,12 +4,6 @@
   "entries": [
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM \"user\"",
-      "file": "app/services/auth/health.py",
-      "function": "check_auth_service_health"
-    },
-    {
-      "kind": "repeated_statement",
       "label": "SELECT ... FROM \"user\" WHERE \"user\".email = :email_1 AND \"user\".deleted_at IS NULL",
       "file": "app/services/auth/users.py",
       "function": "get_user_by_email"
@@ -31,18 +25,6 @@
       "label": "SELECT ... FROM document WHERE document.content_hash = :content_hash_1 AND document.deleted_at IS NULL AND document.owner_user_id = :owner_user_id_1",
       "file": "app/services/documents/queries.py",
       "function": "document_by_content"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM document WHERE document.deleted_at IS NULL AND document.received_at >= :received_at_1",
-      "file": "app/services/documents/queries.py",
-      "function": "store_summary"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM document WHERE document.deleted_at IS NULL GROUP BY document.kind",
-      "file": "app/services/documents/queries.py",
-      "function": "store_summary"
     },
     {
       "kind": "repeated_statement",
@@ -108,13 +90,13 @@
       "kind": "repeated_statement",
       "label": "SELECT ... FROM refresh_token WHERE refresh_token.token = :pk_1",
       "file": "app/services/auth/refresh_tokens.py",
-      "function": "revoke"
+      "function": "row_of"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM refresh_token WHERE refresh_token.token = :pk_1",
-      "file": "app/services/auth/refresh_tokens.py",
-      "function": "rotate"
+      "file": "tests/services/test_refresh_service.py",
+      "function": "test_the_table_never_keeps_a_token_itself"
     },
     {
       "kind": "repeated_statement",

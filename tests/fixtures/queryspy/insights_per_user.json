@@ -11,12 +11,6 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM \"user\"",
-      "file": "app/services/auth/health.py",
-      "function": "check_auth_service_health"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM \"user\"",
       "file": "app/services/auth/users.py",
       "function": "create_user"
     },
@@ -58,12 +52,6 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM insight_metric",
-      "file": "app/services/insights/queries/metrics.py",
-      "function": "metric_count"
-    },
-    {
-      "kind": "repeated_statement",
       "label": "SELECT ... FROM insight_metric JOIN insight_metric_type ON insight_metric.metric_type_id = insight_metric_type.id JOIN insight_source ON insight_metric_type.source_id = insight_source.id WHERE insight_source.key = :key_1 AND insight_metric_type.key = :key_2 AND insight_metric.date >= :date_1",
       "file": "tests/services/test_goal_service.py",
       "function": "spy_exec"
@@ -100,12 +88,6 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM insight_source WHERE insight_source.enabled = true ORDER BY insight_source.id",
-      "file": "app/services/insights/queries/metrics.py",
-      "function": "sources"
-    },
-    {
-      "kind": "repeated_statement",
       "label": "SELECT ... FROM insight_source WHERE insight_source.key = :key_1",
       "file": "app/services/insights/queries/metrics.py",
       "function": "source_by_key"
@@ -127,12 +109,6 @@
       "label": "SELECT ... FROM org_invite WHERE org_invite.organization_id = :organization_id_1 AND org_invite.email = :email_1 AND org_invite.status = :status_1",
       "file": "app/services/auth/invites.py",
       "function": "_get_pending_invite"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM organization",
-      "file": "app/services/auth/health.py",
-      "function": "check_auth_service_health"
     },
     {
       "kind": "repeated_statement",
@@ -222,13 +198,13 @@
       "kind": "repeated_statement",
       "label": "SELECT ... FROM refresh_token WHERE refresh_token.token = :pk_1",
       "file": "app/services/auth/refresh_tokens.py",
-      "function": "revoke"
+      "function": "row_of"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM refresh_token WHERE refresh_token.token = :pk_1",
-      "file": "app/services/auth/refresh_tokens.py",
-      "function": "rotate"
+      "file": "tests/services/test_refresh_service.py",
+      "function": "test_the_table_never_keeps_a_token_itself"
     },
     {
       "kind": "repeated_statement",

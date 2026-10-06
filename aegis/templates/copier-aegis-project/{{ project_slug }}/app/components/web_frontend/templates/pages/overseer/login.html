@@ -12,6 +12,7 @@
 
   <form action="/overseer/login" method="post" class="space-y-4" @submit="loading = true">
     {{ auth_banner("error") }}
+    {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
     {{ auth_field("email", "Email", type="email", autocomplete="username", placeholder="you@domain.com") }}
     {% call auth_field("password", "Password", type="password", autocomplete="current-password") %}
       {% if email_flows_enabled %}
@@ -25,7 +26,7 @@
 
 {% block auth_footer %}
 {% if registration_enabled() %}
-New here? <a href="/register?next=/overseer" class="text-aegis-teal hover:text-aegis-text transition-colors">Create an account</a>.
+New here? <a href="/register?next={{ (next or '/overseer') | urlencode }}" class="text-aegis-teal hover:text-aegis-text transition-colors">Create an account</a>.
 {% else %}
 <span class="text-aegis-muted">Signups are closed right now.</span>
 {% endif %}

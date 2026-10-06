@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.components.backend.api.auth.admin import create_user as api_create_user
 from app.components.backend.api.auth.admin import may_admin_users
 from app.components.web_frontend import overseer_auth
+from app.components.web_frontend.overseer_access import session_id
 from app.components.web_frontend.overseer_nav import find_installed, page_url
 from app.components.web_frontend.rendering import dialog, dialog_done
 from app.core.audit import AuditEmitter, get_audit
@@ -58,7 +59,7 @@ async def confirm(
     if item is None:
         raise HTTPException(status_code=404)
     context = await overseer_auth.confirmation(
-        action, target, item.component, viewer, db
+        action, target, item.component, viewer, db, session_id(request)
     )
     if context is None:
         raise HTTPException(status_code=404)

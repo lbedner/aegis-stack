@@ -214,16 +214,17 @@ def page_number(raw: str | None) -> int:
 
 
 def pager(
-    path: str, page: int, page_size: int, total: int, **params: str
+    path: str, page: int, page_size: int, total: int, **params: str | None
 ) -> dict[str, Any] | None:
     """The ``pager`` macro's ``{start, end, total, prev, next}`` for ``page``
     (1-based) of ``total`` items, or None when everything fits on one page.
-    ``params`` ride along on the previous/next links (filters, say)."""
+    ``params`` ride along on the previous/next links (filters, say), the
+    empty ones left out (``with_query``)."""
     if total <= page_size:
         return None
 
     def link(number: int) -> str:
-        return f"{path}?{urlencode({**params, 'page': number})}"
+        return with_query(path, **params, page=str(number))
 
     start = (page - 1) * page_size
     return {

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
 
 import flet as ft
 
@@ -20,26 +19,6 @@ def headline_stat_color(cents: int) -> str:
     no longer stands out.
     """
     return Theme.Colors.ERROR if cents < 0 else Theme.Colors.TEXT_PRIMARY
-
-
-def row_matches(query: str, values: Iterable[object]) -> bool:
-    """Does this row match a search box, looking at EVERY column?
-
-    The tabs that hold their whole dataset (Bills & Income, Payees) filter
-    in memory, and each of them used to match its name column alone while
-    rendering five or six. Searching a category or an account then came
-    back empty, which reads as "no such row" rather than "that column is
-    not searched".
-
-    Callers pass the same values they render, so the rule stays "if you
-    can see it, you can search it" without this needing to know their
-    shapes. The register is not a caller: it pages, so it searches
-    server-side (``transaction_search_filter``).
-    """
-    needle = (query or "").strip().casefold()
-    if not needle:
-        return True
-    return any(needle in str(value).casefold() for value in values if value is not None)
 
 
 def date_cell(

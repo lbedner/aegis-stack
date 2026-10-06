@@ -33,17 +33,20 @@ from app.services.auth.service import get_current_user_from_token, session_id_of
 from app.services.auth.deps import get_current_active_user, get_session_token
 from app.services.auth.refresh_tokens import RefreshService, access_token
 from app.services.auth.users import RestoreConflictError, UserService
+from app.components.backend.api.auth.admin import require_user_admin
 
 router = APIRouter()
 
 
-def _session_metadata(request: Request) -> dict[str, str | None]:
-    """Thin re-export so the existing call sites keep working. The
-    real implementation lives in
-    :func:`app.components.backend.security.rate_limit.get_session_metadata`,
-    which honors ``settings.TRUST_PROXY_HEADERS`` when extracting the
-    client IP (issue #633)."""
-    return get_session_metadata(request)
+async def sign_in_metadata(
+    request: Request, refresh_service: RefreshService
+) -> dict[str, str | None]:
+    """``get_session_metadata`` plus the session the browser's refresh cookie
+    belongs to (``replaces``), so a sign-in ends the session it replaces.
+    The cookie rides only on the auth API, so a page form's sign-in has none."""
+    cookie = request.cookies.get(REFRESH_COOKIE_NAME)
+    replaces = await refresh_service.family_of(cookie) if cookie else None
+    return get_session_metadata(request) | {"replaces": replaces}
 
 
 @router.post("/refresh", response_model=TokenResponse)
@@ -78,7 +81,9 @@ async def refresh(
     # cookie-deletion headers — leaving the browser stuck retrying with
     # a stale refresh cookie. Same pattern as ``/auth/logout``'s failure
     # branch.
-    result = await refresh_service.rotate(refresh_cookie, **_session_metadata(request))
+    result = await refresh_service.rotate(
+        refresh_cookie, **get_session_metadata(request)
+    )
     if result is None:
         await audit.emit("auth.refresh_failed")
         failure = JSONResponse(
@@ -166,8 +171,7 @@ async def _current_session_family(
     cookie = request.cookies.get(REFRESH_COOKIE_NAME)
     if not cookie:
         return None
-    row = await refresh_service.db.get(RefreshToken, cookie)
-    return row.family_id if row else None
+    return await refresh_service.family_of(cookie)
 
 
 @router.get("/sessions", response_model=list[SessionResponse])
@@ -193,7 +197,7 @@ async def list_sessions(
 def session_responses(
     rows: list[RefreshToken], current_family: str | None
 ) -> list[SessionResponse]:
-    """The public view of each session row. Shared with the web Overseer."""
+    """The public view of each session row."""
     return [
         SessionResponse(
             id=row.family_id,
@@ -223,17 +227,8 @@ async def revoke_session(
     The session's access tokens stop working on their next request.
     """
     current_user = await get_current_user_from_token(token, user_service)
-    revoked = await refresh_service.revoke_session(session_id, current_user.id)
-    if not revoked:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Session not found",
-        )
-    await audit.emit(
-        "auth.session_revoked",
-        actor_id=current_user.id,
-        target_type="session",
-        target_id=session_id,  # type: ignore[arg-type]
+    await _revoke_one(
+        refresh_service, audit, current_user.id, current_user.id, session_id
     )
 
 
@@ -265,3 +260,62 @@ async def revoke_other_sessions(
         count=revoked,
     )
     return {"revoked": revoked}
+
+
+# An administrator ending someone else's sessions: one (a stolen or
+# forgotten device) or all of them. Scoped to the user named in the path,
+# so a session id alone never reaches another account's.
+@router.delete(
+    "/users/{user_id}/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+async def revoke_user_session(
+    user_id: int,
+    session_id: str,
+    current_user: User = Depends(require_user_admin),
+    refresh_service: RefreshService = Depends(get_refresh_service),
+    audit: AuditEmitter = Depends(get_audit),
+) -> None:
+    """Sign out one of ``user_id``'s sessions. 404 when it is not theirs,
+    or already over."""
+    await _revoke_one(refresh_service, audit, current_user.id, user_id, session_id)
+
+
+async def _revoke_one(
+    refresh_service: RefreshService,
+    audit: AuditEmitter,
+    actor_id: int,
+    user_id: int,
+    session_id: str,
+) -> None:
+    """End ``user_id``'s session ``session_id`` (404 when it is not theirs
+    or already over), audited as ``actor_id``'s doing."""
+    if not await refresh_service.revoke_session(session_id, user_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Session not found"
+        )
+    await audit.emit(
+        "auth.session_revoked",
+        actor_id=actor_id,
+        target_type="session",
+        target_id=session_id,  # type: ignore[arg-type]
+    )
+
+
+@router.delete("/users/{user_id}/sessions")
+async def revoke_user_sessions(
+    user_id: int,
+    current_user: User = Depends(require_user_admin),
+    refresh_service: RefreshService = Depends(get_refresh_service),
+    audit: AuditEmitter = Depends(get_audit),
+) -> dict[str, int]:
+    """Sign ``user_id`` out everywhere. Returns ``{"revoked": N}``."""
+    revoked = await refresh_service.revoke_other_sessions("", user_id)
+    await audit.emit(
+        "auth.session_revoked",
+        actor_id=current_user.id,
+        target_type="user",
+        target_id=user_id,
+        count=revoked,
+    )
+    return {"revoked": revoked}
+

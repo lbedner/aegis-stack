@@ -213,3 +213,25 @@ def test_a_noun_whose_plural_is_not_an_s_names_it() -> None:
 
     assert counted(1, "watch", "watches") == "1 watch"
     assert counted(3, "watch", "watches") == "3 watches"
+
+
+@pytest.mark.parametrize(
+    ("target", "local"),
+    [
+        ("/notes", True),
+        ("/overseer/components/worker?view=map", True),
+        ("//evil.example", False),
+        ("/\\evil.example", False),  # browsers read a backslash as a slash
+        ("/notes\\..\\evil", False),
+        ("https://evil.example", False),
+        ("javascript:alert(1)", False),
+        ("", False),
+        (None, False),
+    ],
+)
+def test_only_a_path_on_this_site_is_local(target: str | None, local: bool) -> None:
+    """What a ``next`` or a redirect may send someone to: a path here, never
+    an address that leaves the site, however it is spelled."""
+    from app.core.formatting import is_local_path
+
+    assert is_local_path(target) is local

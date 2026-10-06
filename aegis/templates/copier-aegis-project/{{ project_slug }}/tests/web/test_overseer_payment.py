@@ -22,6 +22,7 @@ from app.services.payment.constants import (  # noqa: E402
 )
 from app.services.payment.demo_seed import seed_fake_data  # noqa: E402
 from app.services.payment.deps import get_payment_service  # noqa: E402
+from app.services.payment.health import invalidate_payment_health_cache  # noqa: E402
 from app.services.payment.providers.base import CatalogEntry  # noqa: E402
 from app.services.payment.service import PaymentService  # noqa: E402
 from app.services.system.models import ComponentStatus  # noqa: E402
@@ -38,6 +39,8 @@ def pay(
     app: FastAPI, monkeypatch: pytest.MonkeyPatch, async_client_with_db: TestClient
 ) -> TestClient:
     monkeypatch.setattr(settings, "STRIPE_SECRET_KEY", None)
+    # The provider probe is cached per process: another test's would stand in.
+    invalidate_payment_health_cache()
     sign_in(app, monkeypatch, status_with(services=[PAYMENT]))
     return async_client_with_db
 

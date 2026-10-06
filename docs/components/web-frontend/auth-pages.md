@@ -60,6 +60,21 @@ authenticated requests in parallel would otherwise trigger several concurrent
 refresh calls, and the second one would replay the token the first had just
 rotated, which the service treats as theft and revokes the whole session.
 
+The same renewal covers the other two ways a session runs out:
+
+- **An htmx request** refused for an expired session gets a plain `401`,
+  never a redirect: htmx would follow a redirect itself and swap the login
+  page into the current one. The hook renews and reloads the page, or sends
+  the whole page to sign in.
+- **A full page load** lands on the sign-in page, which tries one silent
+  renewal before showing the form and, if it works, goes back to `?next=`.
+  So a returning visitor whose refresh cookie is still valid never sees the
+  form. It tries at most once every few seconds, so a renewed session that
+  pages still refuse cannot loop, and not at all when the form came back with
+  a banner (a refused sign-in, a fresh registration). Overseer's own sign-in
+  page (`/overseer/login`) behaves the same way and returns to the Overseer
+  page asked for.
+
 ## Protecting a page
 
 Page protection is opt-in, mirroring how

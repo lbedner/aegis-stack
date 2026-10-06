@@ -2,8 +2,10 @@
 """Refresh-token model for the rotating refresh-token auth scheme.
 
 The token itself is an opaque, server-issued 32-byte random string
-(``secrets.token_urlsafe(32)``) stored as the primary key. Lookup is
-O(1) on the PK so per-request validation stays cheap. Rotation works
+(``secrets.token_urlsafe(32)``); the primary key is its SHA-256 hex digest
+(``refresh_tokens.token_digest``), never the token, so the table holds
+nothing a reader could sign in with. Lookup is O(1) on the PK so
+per-request validation stays cheap. Rotation works
 by inserting a new row with the same ``family_id`` and marking the
 inbound row as revoked. A refresh arriving with an already-revoked
 token in any family is treated as a replay attempt — the service
@@ -11,6 +13,7 @@ revokes every other row sharing that ``family_id`` and forces re-auth.
 """
 
 from datetime import datetime
+from enum import StrEnum
 
 from pydantic import BaseModel
 from sqlmodel import Field, SQLModel
@@ -64,4 +67,31 @@ class SessionResponse(BaseModel):
     last_used_at: datetime | None
     expires_at: datetime
     is_current: bool
+
+
+class SessionEnd(StrEnum):
+    """How a sign-in ended: its refresh token ran out, or was revoked (a
+    sign-out, here or elsewhere, or a replay caught). The table records the
+    revocation, not why."""
+
+    EXPIRED = "expired"
+    REVOKED = "revoked"
+
+
+class SessionHistory(BaseModel):
+    """One sign-in (a ``family_id``) across its tokens, as the table still
+    keeps them: when it began, each renewal, and whether it lives or how it
+    ended. Never carries a raw token."""
+
+    id: str
+    user_id: int
+    source: str | None
+    user_agent: str | None
+    ip: str | None
+    signed_in: datetime  # its first token still kept
+    renewals: list[datetime]  # each later token's creation, oldest first
+    last_used_at: datetime | None
+    expires_at: datetime
+    ended: SessionEnd | None = None
+    ended_at: datetime | None = None
 {%- endif %}

@@ -113,12 +113,6 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM \"user\"",
-      "file": "app/services/auth/health.py",
-      "function": "check_auth_service_health"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM \"user\"",
       "file": "app/services/auth/users.py",
       "function": "create_user"
     },
@@ -178,18 +172,6 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM apscheduler_jobs ORDER BY apscheduler_jobs.next_run_time DESC NULLS LAST",
-      "file": "app/services/scheduler/scheduled_task_manager.py",
-      "function": "list_tasks"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM blog_post GROUP BY blog_post.status",
-      "file": "app/services/blog/queries.py",
-      "function": "count_posts_by_status"
-    },
-    {
-      "kind": "repeated_statement",
       "label": "SELECT ... FROM blog_post WHERE blog_post.id = :id_1",
       "file": "app/services/blog/service.py",
       "function": "_get_post_model"
@@ -226,33 +208,15 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM blog_post WHERE blog_post.status = :status_1 AND blog_post.updated_at < :updated_at_1",
-      "file": "app/services/blog/summary.py",
-      "function": "blog_health_summary"
-    },
-    {
-      "kind": "repeated_statement",
       "label": "SELECT ... FROM blog_post WHERE blog_post.status = :status_1 ORDER BY blog_post.created_at DESC LIMIT :param_1 OFFSET :param_2",
       "file": "app/services/blog/service.py",
       "function": "list_posts"
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM blog_post WHERE blog_post.status = :status_1 ORDER BY blog_post.published_at DESC LIMIT :param_1",
-      "file": "app/services/blog/summary.py",
-      "function": "blog_health_summary"
-    },
-    {
-      "kind": "repeated_statement",
       "label": "SELECT ... FROM blog_post_tag JOIN blog_tag ON blog_tag.id = blog_post_tag.tag_id WHERE blog_post_tag.post_id IN (__[POSTCOMPILE_post_id_1]) ORDER BY blog_tag.name",
       "file": "app/services/blog/queries.py",
       "function": "tags_for_posts"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM blog_tag",
-      "file": "app/services/blog/summary.py",
-      "function": "blog_health_summary"
     },
     {
       "kind": "repeated_statement",
@@ -265,12 +229,6 @@
       "label": "SELECT ... FROM blog_tag WHERE blog_tag.slug = :slug_1",
       "file": "app/services/blog/tags.py",
       "function": "get_or_create_tag"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM conversation",
-      "file": "app/services/ai/domains/chat/queries.py",
-      "function": "conversation_count"
     },
     {
       "kind": "repeated_statement",
@@ -292,18 +250,6 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM conversation WHERE conversation.meta_data[:meta_data_1] IS NOT NULL",
-      "file": "app/services/ai/domains/chat/queries.py",
-      "function": "distinct_user_count"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM conversation_message",
-      "file": "app/services/ai/domains/chat/queries.py",
-      "function": "message_count"
-    },
-    {
-      "kind": "repeated_statement",
       "label": "SELECT ... FROM conversation_message WHERE conversation_message.conversation_id = :conversation_id_1",
       "file": "app/services/ai/domains/chat/queries.py",
       "function": "latest_message_timestamp"
@@ -319,18 +265,6 @@
       "label": "SELECT ... FROM document WHERE document.content_hash = :content_hash_1 AND document.deleted_at IS NULL AND document.owner_user_id = :owner_user_id_1",
       "file": "app/services/documents/queries.py",
       "function": "document_by_content"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM document WHERE document.deleted_at IS NULL AND document.received_at >= :received_at_1",
-      "file": "app/services/documents/queries.py",
-      "function": "store_summary"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM document WHERE document.deleted_at IS NULL GROUP BY document.kind",
-      "file": "app/services/documents/queries.py",
-      "function": "store_summary"
     },
     {
       "kind": "repeated_statement",
@@ -823,12 +757,6 @@
       "label": "SELECT ... FROM finance_insight WHERE finance_insight.related_stream_id IN (__[POSTCOMPILE_related_stream_id_1])",
       "file": "app/services/finance/domains/detection/queries.py",
       "function": "insight_rows_where"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM finance_insight WHERE finance_insight.status = :status_1 AND finance_insight.insight_type != :insight_type_1",
-      "file": "app/services/finance/domains/planning/queries.py",
-      "function": "new_insight_count"
     },
     {
       "kind": "repeated_statement",
@@ -1672,12 +1600,6 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM insight_metric",
-      "file": "app/services/insights/queries/metrics.py",
-      "function": "metric_count"
-    },
-    {
-      "kind": "repeated_statement",
       "label": "SELECT ... FROM insight_metric WHERE insight_metric.metric_type_id = :metric_type_id_1 AND insight_metric.date = :date_1 AND insight_metric.period = :period_1",
       "file": "app/services/insights/queries/metrics.py",
       "function": "metric_on"
@@ -1705,12 +1627,6 @@
       "label": "SELECT ... FROM insight_record WHERE insight_record.metric_type_id = :metric_type_id_1",
       "file": "app/services/insights/queries/metrics.py",
       "function": "record_for_type"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM insight_source WHERE insight_source.enabled = true ORDER BY insight_source.id",
-      "file": "app/services/insights/queries/metrics.py",
-      "function": "sources"
     },
     {
       "kind": "repeated_statement",
@@ -1798,24 +1714,6 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM llm_usage",
-      "file": "app/services/ai/domains/llm/queries.py",
-      "function": "usage_totals"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM llm_usage LEFT OUTER JOIN large_language_model ON llm_usage.model_id = large_language_model.model_id LEFT OUTER JOIN llm_org ON large_language_model.served_by_org_id = llm_org.id GROUP BY llm_usage.model_id, large_language_model.title, llm_org.name, llm_org.color ORDER BY count(llm_usage.id) DESC",
-      "file": "app/services/ai/domains/llm/queries.py",
-      "function": "usage_by_model"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM llm_usage ORDER BY llm_usage.timestamp DESC LIMIT :param_1",
-      "file": "app/services/ai/domains/llm/queries.py",
-      "function": "recent_usage"
-    },
-    {
-      "kind": "repeated_statement",
       "label": "SELECT ... FROM llm_usage WHERE llm_usage.user_id = :user_id_1",
       "file": "tests/services/ai/test_usage_tracking.py",
       "function": "test_a_turn_that_used_no_tools_records_zero_not_null"
@@ -1837,12 +1735,6 @@
       "label": "SELECT ... FROM org_invite WHERE org_invite.organization_id = :organization_id_1 AND org_invite.email = :email_1 AND org_invite.status = :status_1",
       "file": "app/services/auth/invites.py",
       "function": "_get_pending_invite"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM organization",
-      "file": "app/services/auth/health.py",
-      "function": "check_auth_service_health"
     },
     {
       "kind": "repeated_statement",
@@ -1906,12 +1798,6 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM payment_dispute ORDER BY payment_dispute.created_at DESC",
-      "file": "app/services/payment/disputes.py",
-      "function": "get_disputes"
-    },
-    {
-      "kind": "repeated_statement",
       "label": "SELECT ... FROM payment_dispute WHERE payment_dispute.id = :id_1 AND payment_dispute.transaction_id IN (__[POSTCOMPILE_transaction_id_1])",
       "file": "app/services/payment/disputes.py",
       "function": "get_dispute_by_id"
@@ -1930,12 +1816,6 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM payment_dispute WHERE payment_dispute.status IN (__[POSTCOMPILE_status_1])",
-      "file": "app/services/payment/reporting.py",
-      "function": "get_status_summary"
-    },
-    {
-      "kind": "repeated_statement",
       "label": "SELECT ... FROM payment_dispute WHERE payment_dispute.transaction_id IN (__[POSTCOMPILE_transaction_id_1]) ORDER BY payment_dispute.created_at DESC",
       "file": "app/services/payment/disputes.py",
       "function": "get_disputes"
@@ -1948,33 +1828,15 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM payment_subscription ORDER BY payment_subscription.created_at DESC",
-      "file": "app/services/payment/subscriptions.py",
-      "function": "get_subscriptions"
-    },
-    {
-      "kind": "repeated_statement",
       "label": "SELECT ... FROM payment_subscription WHERE payment_subscription.customer_id IN (__[POSTCOMPILE_customer_id_1]) ORDER BY payment_subscription.created_at DESC",
       "file": "app/services/payment/subscriptions.py",
       "function": "get_subscriptions"
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM payment_subscription WHERE payment_subscription.status = :status_1",
-      "file": "app/services/payment/reporting.py",
-      "function": "get_status_summary"
-    },
-    {
-      "kind": "repeated_statement",
       "label": "SELECT ... FROM payment_transaction",
       "file": "app/services/payment/reporting.py",
       "function": "get_status_summary"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM payment_transaction ORDER BY payment_transaction.created_at DESC LIMIT :param_1 OFFSET :param_2",
-      "file": "app/services/payment/service.py",
-      "function": "get_transactions"
     },
     {
       "kind": "repeated_statement",
@@ -2020,12 +1882,6 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM payment_transaction WHERE payment_transaction.status = :status_1 AND payment_transaction.type = :type_1",
-      "file": "app/services/payment/reporting.py",
-      "function": "get_status_summary"
-    },
-    {
-      "kind": "repeated_statement",
       "label": "SELECT ... FROM pending_change WHERE (pending_change.status = :status_1 OR pending_change.resolved_at >= :resolved_at_1) AND pending_change.owner_user_id = :owner_user_id_1 ORDER BY pending_change.id DESC",
       "file": "app/services/change_queue/queries.py",
       "function": "list_changes"
@@ -2064,19 +1920,37 @@
       "kind": "repeated_statement",
       "label": "SELECT ... FROM refresh_token WHERE refresh_token.token = :pk_1",
       "file": "app/services/auth/refresh_tokens.py",
-      "function": "revoke"
+      "function": "row_of"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM refresh_token WHERE refresh_token.token = :pk_1",
-      "file": "app/services/auth/refresh_tokens.py",
-      "function": "rotate"
+      "file": "tests/services/test_refresh_service.py",
+      "function": "test_the_table_never_keeps_a_token_itself"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM refresh_token WHERE refresh_token.user_id = :user_id_1 AND refresh_token.revoked_at IS NULL AND refresh_token.expires_at > :expires_at_1",
       "file": "app/services/auth/refresh_tokens.py",
       "function": "list_active_for_user"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM research_item WHERE research_item.id IN (SELECT research_match.item_id FROM research_match JOIN research_watch ON research_watch.id = research_match.watch_id WHERE research_watch.owner_user_id = :owner_user_id_1) OR research_item.root_id IN (SELECT coalesce(research_item.root_id, research_match.item_id) AS coalesce_1 FROM research_match JOIN research_watch ON research_watch.id = research_match.watch_id JOIN research_item ON research_item.id = research_match.item_id WHERE research_watch.owner_user_id = :owner_user_id_2 AND research_watch.with_threads IS true) ORDER BY research_item.published_at DESC NULLS LAST, research_item.id LIMIT :param_1",
+      "file": "app/services/research/service.py",
+      "function": "search"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM research_watch WHERE research_watch.id = :id_1",
+      "file": "app/services/research/service.py",
+      "function": "get_watch"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM research_watch WHERE research_watch.id = :id_1 AND research_watch.owner_user_id = :owner_user_id_1",
+      "file": "app/services/research/service.py",
+      "function": "get_watch"
     },
     {
       "kind": "repeated_statement",

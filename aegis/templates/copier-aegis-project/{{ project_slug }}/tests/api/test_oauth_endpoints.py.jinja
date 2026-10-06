@@ -127,4 +127,58 @@ class TestDisabledAccountOAuth:
         assert response.headers["location"] == "/login?error=disabled"
         assert "set-cookie" not in response.headers
 
+
+class TestOAuthRetiresTheSessionItReplaces:
+    """The refresh cookie is SameSite=Strict, so the provider's redirect
+    back to the callback never carries it: the start (same-site) notes the
+    session this browser held, and the sign-in at the callback ends it."""
+
+    @staticmethod
+    def _request(cookie: str | None = None, session: dict | None = None):
+        from starlette.requests import Request
+
+        headers = [(b"cookie", f"aegis_refresh={cookie}".encode())] if cookie else []
+        scope = {
+            "type": "http",
+            "session": session if session is not None else {},
+            "headers": headers,
+            "method": "GET",
+            "path": "/",
+        }
+        return Request(scope)
+
+    @pytest.mark.asyncio
+    async def test_the_start_notes_the_session_this_browser_holds(
+        self, async_db_session, user_factory
+    ) -> None:
+        from app.components.backend.api.auth.oauth import _remember_session
+        from app.services.auth.refresh_tokens import RefreshService
+
+        user = await user_factory()
+        service = RefreshService(async_db_session)
+        _, held = await service.start_session(user, source="password")
+        request = self._request(cookie=held)
+        await _remember_session(request, service)
+        assert request.session == {"oauth_replaces": await service.family_of(held)}
+
+    @pytest.mark.asyncio
+    async def test_signing_in_at_the_callback_ends_it(
+        self, async_db_session, user_factory
+    ) -> None:
+        from app.components.backend.api.auth.oauth import _finalize_oauth_signin
+        from app.services.auth.refresh_tokens import RefreshService
+        from app.services.auth.users import UserService
+
+        user = await user_factory()
+        service = RefreshService(async_db_session)
+        _, held = await service.start_session(user, source="password")
+        family = await service.family_of(held)
+        request = self._request(session={"oauth_replaces": family})
+        await _finalize_oauth_signin(
+            request, user, service, UserService(async_db_session), provider="github"
+        )
+        assert await service.validate(held) is None
+        assert len(await service.list_sessions(user.id)) == 1
+        assert "oauth_replaces" not in request.session
+
 {%- endif %}

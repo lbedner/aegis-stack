@@ -1,5 +1,6 @@
 """Shared formatting utilities for display across CLI and frontend."""
 
+from collections.abc import Iterable
 from datetime import UTC, datetime
 import re
 
@@ -101,6 +102,11 @@ def _coarse_age(seconds: float) -> str:
     return f"{counted(years, 'year')} ago"
 
 
+# A moment by the clock (``Oct 06 14:05``): past a day, or wherever relative
+# times would blur a burst of them into one.
+CLOCK = "%b %d %H:%M"
+
+
 def format_relative_time(
     iso_str: str | datetime | None,
     *,
@@ -149,7 +155,7 @@ def format_relative_time(
             return f"{counted(hours, 'hour')} ago"
         if coarse:
             return _coarse_age(seconds)
-        return dt.strftime("%b %d %H:%M")
+        return dt.strftime(CLOCK)
     except (ValueError, TypeError, IndexError):
         return str(iso_str)
 
@@ -322,6 +328,31 @@ def safe_filename(name: str, fallback: str = "document") -> str:
     stray newline there is header injection, not a formatting nuisance.
     """
     return _UNSAFE_FILENAME.sub("", name).strip() or fallback
+
+
+def is_local_path(target: str | None) -> bool:
+    """Whether ``target`` is a path on this site, the only thing a ``next``
+    or a redirect may send someone to: it starts with one ``/``, and holds
+    no backslash (browsers read ``/\\host`` as ``//host``, off the site)."""
+    return bool(
+        target
+        and target.startswith("/")
+        and not target.startswith("//")
+        and "\\" not in target
+    )
+
+
+def row_matches(query: str, values: Iterable[object]) -> bool:
+    """Does this row match a search box, looking at EVERY column?
+
+    Callers pass the same values they render, so the rule stays "if you
+    can see it, you can search it" without this needing to know their
+    shapes. Something that pages searches server-side instead.
+    """
+    needle = (query or "").strip().casefold()
+    if not needle:
+        return True
+    return any(needle in str(value).casefold() for value in values if value is not None)
 
 
 def split_matches(text: str, query: str) -> list[tuple[str, bool]]:

@@ -29,12 +29,17 @@ from typing import Any
 import httpx
 from app.components.backend.security.rate_limit import get_session_metadata
 from app.core.db import get_async_db
+from app.core.formatting import is_local_path
 from app.core.time import utcnow
 from app.services.auth.deps import get_refresh_service, get_user_service
 from app.core.log import logger
 from app.core import secrets
 from app.core.secrets import Secret
-from app.core.security import set_refresh_cookie, set_session_cookie
+from app.core.security import (
+    REFRESH_COOKIE_NAME,
+    set_refresh_cookie,
+    set_session_cookie,
+)
 from app.models.user import OAuthProvider, User, UserOAuthIdentity
 from app.services.auth.deps import get_current_active_user
 from app.services.auth.refresh_tokens import RefreshService
@@ -137,11 +142,22 @@ def _safe_next(candidate: str | None) -> str:
     Rejects anything that could redirect off-site (protocol-relative
     URLs, escaped backslashes, etc.).
     """
-    if not candidate or not candidate.startswith("/"):
-        return ""
-    if candidate.startswith("//") or candidate.startswith("/\\") or "\\" in candidate:
-        return ""
-    return candidate
+    return candidate if is_local_path(candidate) else ""
+
+
+# The refresh cookie is SameSite=Strict, so the provider's redirect back to
+# the callback (a cross-site navigation) never carries it. The start is
+# same-site: it notes the session that cookie belongs to, for the sign-in
+# at the callback to end.
+OAUTH_REPLACES = "oauth_replaces"
+
+
+async def _remember_session(request: Request, refresh_service: RefreshService) -> None:
+    """Note the session this browser holds, for the OAuth sign-in to end."""
+    cookie = request.cookies.get(REFRESH_COOKIE_NAME)
+    family = await refresh_service.family_of(cookie) if cookie else None
+    if family:
+        request.session[OAUTH_REPLACES] = family
 
 
 async def _finalize_oauth_signin(
@@ -172,7 +188,10 @@ async def _finalize_oauth_signin(
         user.id, last_login=utcnow()
     )
     jwt, refresh_token = await refresh_service.start_session(
-        user, source=f"oauth:{provider}", **get_session_metadata(request)
+        user,
+        source=f"oauth:{provider}",
+        replaces=request.session.pop(OAUTH_REPLACES, None),
+        **get_session_metadata(request),
     )
     nxt = _safe_next(request.session.pop("oauth_next", ""))
     response = RedirectResponse(
@@ -185,7 +204,11 @@ async def _finalize_oauth_signin(
 
 
 @router.get("/github/start")
-async def github_start(request: Request, next: str = "") -> RedirectResponse:
+async def github_start(
+    request: Request,
+    next: str = "",
+    refresh_service: RefreshService = Depends(get_refresh_service),
+) -> RedirectResponse:
     """Kick off the GitHub authorization flow.
 
     ``next`` (when same-origin) is stashed in the session so the
@@ -196,6 +219,7 @@ async def github_start(request: Request, next: str = "") -> RedirectResponse:
     nxt = _safe_next(next)
     if nxt:
         request.session["oauth_next"] = nxt
+    await _remember_session(request, refresh_service)
     redirect_uri = str(request.url_for("github_callback"))
     return await client.authorize_redirect(request, redirect_uri)
 
@@ -279,13 +303,18 @@ async def github_callback(
 
 
 @router.get("/google/start")
-async def google_start(request: Request, next: str = "") -> RedirectResponse:
+async def google_start(
+    request: Request,
+    next: str = "",
+    refresh_service: RefreshService = Depends(get_refresh_service),
+) -> RedirectResponse:
     """Kick off the Google authorization flow. Same ``next``-stashing
     pattern as GitHub — keeps the post-login landing consistent."""
     client = await _oauth_client("google")
     nxt = _safe_next(next)
     if nxt:
         request.session["oauth_next"] = nxt
+    await _remember_session(request, refresh_service)
     redirect_uri = str(request.url_for("google_callback"))
     return await client.authorize_redirect(request, redirect_uri)
 

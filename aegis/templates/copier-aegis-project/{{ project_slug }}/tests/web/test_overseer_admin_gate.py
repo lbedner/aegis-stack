@@ -63,9 +63,12 @@ def test_an_admin_gets_in(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> None
 def test_signed_out_pages_go_to_login_and_the_rest_is_401(app: FastAPI) -> None:
     app.dependency_overrides[get_optional_user] = lambda: None
     client = TestClient(app)
-    page = client.get("/overseer", follow_redirects=False)
+    page = client.get("/overseer/components/backend", follow_redirects=False)
     assert page.status_code == 303
-    assert page.headers["location"].startswith("/overseer/login")
+    # Back to the page asked for, once signed in (or renewed).
+    assert (
+        page.headers["location"] == "/overseer/login?next=/overseer/components/backend"
+    )
     assert client.get("/overseer/events").status_code == 401
 
 

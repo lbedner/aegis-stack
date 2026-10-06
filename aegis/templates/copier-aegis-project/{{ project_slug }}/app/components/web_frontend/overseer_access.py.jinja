@@ -16,7 +16,13 @@ Without auth, Overseer is open: whoever reaches the app may use it, its
 writes included, like any route a stack serves without auth.
 """
 
+{%- if include_auth %}
+from datetime import UTC, datetime
+{%- endif %}
 from typing import Any
+{%- if include_auth %}
+from urllib.parse import quote
+{%- endif %}
 
 from fastapi import Depends, FastAPI, Request
 {%- if include_auth %}
@@ -31,7 +37,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import get_async_db
 {%- endif %}
 {%- if include_auth %}
-from app.core.security import SESSION_COOKIE_NAME
+from app.core.security import SESSION_COOKIE_NAME, verify_token
 from app.models.user import User
 from app.services.auth.deps import get_optional_user, get_user_service, is_admin
 from app.services.auth.service import session_id_of
@@ -93,7 +99,9 @@ async def overseer_gate(
         return
     if user is None:
         if _is_page(request) and not is_htmx(request):
-            raise HTTPException(status.HTTP_303_SEE_OTHER, headers={"Location": LOGIN})
+            # Back to this page once signed in, or renewed (auth.js).
+            back = f"{LOGIN}?next={quote(path)}"
+            raise HTTPException(status.HTTP_303_SEE_OTHER, headers={"Location": back})
         raise HTTPException(status.HTTP_401_UNAUTHORIZED)
     if is_admin(user):
         return
@@ -112,6 +120,15 @@ async def admin_only_page(request: Request, exc: Exception) -> Response:
 def session_id(request: Request) -> str | None:
     """The viewer's own sign-in session (the access token's ``sid``)."""
     return session_id_of(request.cookies.get(SESSION_COOKIE_NAME))
+
+
+def session_expires(request: Request) -> datetime | None:
+    """When the viewer's session cookie (its access token) runs out and has
+    to renew from the refresh token."""
+    token = request.cookies.get(SESSION_COOKIE_NAME)
+    payload = verify_token(token) if token else None
+    expires = payload.get("exp") if payload else None
+    return datetime.fromtimestamp(expires, UTC) if isinstance(expires, int) else None
 
 
 async def overseer_socket_gate(
@@ -134,7 +151,7 @@ def add_refusal_page(app: FastAPI) -> None:
 async def user_names(db: Any, ids: list[str]) -> dict[str, str]:
     """``{id: name}`` for the ids (as text) that are this app's users."""
     known = await UserService(db).get_users_by_ids([int(i) for i in ids if i.isdigit()])
-    return {str(uid): user.full_name or user.email for uid, user in known.items()}
+    return {str(uid): user.display_name for uid, user in known.items()}
 {%- else %}
 
 Viewer = None
@@ -157,6 +174,11 @@ async def overseer_socket_gate() -> None:
 
 def session_id(request: Request) -> None:
     """No sign-in, so no session."""
+    return None
+
+
+def session_expires(request: Request) -> None:
+    """No sign-in, so no session cookie."""
     return None
 
 

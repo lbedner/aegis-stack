@@ -13,6 +13,7 @@ from app.components.backend.api.auth.router import register as api_register
 from app.components.backend.api.deps import login_rate_limit, register_rate_limit
 from app.components.web_frontend.routes.partials import overseer_auth as overseer_auth_partials
 from app.core.audit import AuditEmitter, get_audit
+from app.core.formatting import is_local_path
 from app.core.security import SESSION_COOKIE_NAME, clear_refresh_cookie, clear_session_cookie
 from app.models.user import User, UserCreate
 from app.services.auth.deps import get_refresh_service, get_user_service
@@ -32,6 +33,10 @@ from fastapi.security import OAuth2PasswordRequestForm
 {%- endif %}
 from app.components.web_frontend.overseer_access import overseer_gate
 from app.components.web_frontend.rendering import is_htmx, templates
+{%- if include_auth %}
+from app.components.web_frontend.overseer_access import LOGIN
+from app.components.web_frontend.rendering import with_query
+{%- endif %}
 from app.components.web_frontend.routes import overseer as overseer_routes
 from app.components.web_frontend.routes.partials import overseer_runtime as overseer_runtime_partials
 {%- if include_scheduler %}
@@ -103,16 +108,14 @@ async def landing(request: Request) -> HTMLResponse:
 {%- if include_auth %}
 
 
-def _safe_next(target: str | None) -> str:
-    """Return ``target`` only if it is a local path, else ``/``.
+def _safe_next(target: str | None, home: str = "/") -> str:
+    """Return ``target`` only if it is a local path, else ``home``.
 
-    ``?next=`` arrives from the URL, so it is attacker-controlled: anything not
-    starting with a single ``/`` is discarded (``//evil.example`` included),
-    or sign-in becomes an open redirect.
+    ``?next=`` arrives from the URL, so it is attacker-controlled: anything
+    that is not a path on this site (``is_local_path``) is discarded, or
+    sign-in becomes an open redirect.
     """
-    if not target or not target.startswith("/") or target.startswith("//"):
-        return "/"
-    return target
+    return target if is_local_path(target) else home
 
 
 def _current_user_or_redirect(
@@ -150,12 +153,13 @@ async def login_page(request: Request, next: str = "") -> HTMLResponse:
     )
 
 
-@router.get("/overseer/login", response_class=HTMLResponse, include_in_schema=False)
-async def overseer_login_page(request: Request) -> HTMLResponse:
-    """The server-rendered entry point for Overseer."""
+@router.get(LOGIN, response_class=HTMLResponse, include_in_schema=False)
+async def overseer_login_page(request: Request, next: str = "") -> HTMLResponse:
+    """The server-rendered entry point for Overseer, back to ``next`` after."""
     return templates.TemplateResponse(
         request=request,
         name="pages/overseer/login.html",
+        context={"next": _safe_next(next) if next else ""},
     )
 {%- endif %}
 
@@ -202,7 +206,7 @@ router.include_router(overseer_routes.router)
 
 
 @router.post("/login", include_in_schema=False)
-@router.post("/overseer/login", include_in_schema=False)
+@router.post(LOGIN, include_in_schema=False)
 async def login_submit(
     request: Request,
     email: Annotated[str, Form()],
@@ -223,9 +227,9 @@ async def login_submit(
     The redirect is handed in as the ``response``, so the session and refresh
     cookies the API handler sets land on the 303 the browser follows.
     """
-    overseer = request.url.path == "/overseer/login"
+    overseer = request.url.path == LOGIN
     redirect = RedirectResponse(
-        url="/overseer" if overseer else _safe_next(next), status_code=303
+        url=_safe_next(next, "/overseer" if overseer else "/"), status_code=303
     )
     try:
         await api_login(
@@ -243,8 +247,14 @@ async def login_submit(
         # message. Its 403 comes only after a correct password, for a
         # disabled account, so saying so reveals nothing new.
         reason = "disabled" if exc.status_code == 403 else "invalid"
-        error_path = "/overseer/login" if overseer else "/login"
-        return RedirectResponse(url=f"{error_path}?error={reason}", status_code=303)
+        return RedirectResponse(
+            url=with_query(
+                LOGIN if overseer else "/login",
+                error=reason,
+                next=next if is_local_path(next) else None,
+            ),
+            status_code=303,
+        )
     return redirect
 
 
@@ -280,7 +290,7 @@ async def register_submit(
     ``Depends`` sentinel and fails the moment the handler touches it.
     """
 {%- if auth_level == "basic" %}
-    redirect = RedirectResponse(url=_safe_next(next) if next else "/overseer", status_code=303)
+    redirect = RedirectResponse(url=_safe_next(next, "/overseer"), status_code=303)
 {%- else %}
     redirect = RedirectResponse(url="/verify-pending", status_code=303)
 {%- endif %}

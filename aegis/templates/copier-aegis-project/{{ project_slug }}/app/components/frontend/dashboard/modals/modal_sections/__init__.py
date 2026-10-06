@@ -41,7 +41,6 @@ from app.components.frontend.dashboard.modals.modal_sections.formatting import (
     date_cell,
     headline_stat_color,
     ledger_amount_color,
-    row_matches,
     status_dot,
 )
 from app.components.frontend.dashboard.modals.modal_sections.lifecycle import (
@@ -57,7 +56,7 @@ from app.components.frontend.dashboard.modals.modal_sections.sections import (
     SectionHeader,
     StatRowsSection,
 )
-from app.core.formatting import format_duration_ms, format_timestamp
+from app.core.formatting import format_duration_ms, format_timestamp, row_matches
 
 __all__ = [
     "BarChartCard",

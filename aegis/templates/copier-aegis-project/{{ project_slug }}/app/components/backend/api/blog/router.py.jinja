@@ -130,7 +130,7 @@ async def create_post(
             payload,
 {% if include_auth %}
             author_id=current_user.id,
-            author_name=current_user.full_name or current_user.email,
+            author_name=current_user.display_name,
 {% else %}
             author_id=None,
             author_name=None,

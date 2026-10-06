@@ -267,12 +267,12 @@
 
 {# THE tooltip panel — the one popover shell every hover/help hint uses.
    Callers provide the open/show()/hide() Alpine state on a ``relative``
-   wrapper and pass the body via {% call %}. Change tooltip styling here,
-   nowhere else. #}
+   wrapper and pass the body via {% call %}. Its look is ``.tooltip-panel``
+   (input.css), which the map's CSS-only hints share. #}
 {% macro popover_panel(align='left') %}
 <div x-show="open" x-cloak x-transition.opacity role="tooltip"
      @mouseenter="show()" @mouseleave="hide()"
-     class="absolute {{ 'right-0' if align == 'right' else 'left-0' }} top-full mt-1 z-50 w-64 bg-aegis-card border border-aegis-border rounded-lg shadow-lg p-3 text-xxs normal-case tracking-normal text-aegis-muted space-y-2 text-left">
+     class="tooltip-panel absolute {{ 'right-0' if align == 'right' else 'left-0' }} top-full mt-1 z-50 w-64 p-3 space-y-2">
   {{ caller() }}
 </div>
 {% endmacro %}

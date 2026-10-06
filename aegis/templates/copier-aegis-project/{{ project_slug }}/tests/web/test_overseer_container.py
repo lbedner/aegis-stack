@@ -10,10 +10,10 @@ from fastapi.testclient import TestClient
 import pytest
 
 from app.components.web_frontend import overseer_container, overseer_map
-from app.core import runtime, series
+from app.core import runtime, secrets, series
 from app.core.config import settings
 from app.core.runtime import Instance
-from app.services.system import topology, ui_runtime
+from app.services.system import service_links, topology, ui_runtime
 from app.services.system.models import (
     ComponentStatus,
     ComponentStatusType,
@@ -26,6 +26,7 @@ from tests._fake_runtime import (
     use_load_costs,
     use_runtime,
 )
+from tests._secret_settings import secret_settings, use_store
 from tests.web.dom import chart_json, checked, none, one, select, text
 from tests.web.overseer import page_html, sign_in, status_with
 
@@ -244,30 +245,24 @@ async def test_the_stream_keeps_the_glance_live(
     assert REDIS.name in sent
 
 
-def test_the_home_page_is_every_glance(
-    client: TestClient, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize("path", ["/overseer", "/overseer?view=list"])
+def test_the_home_page_opens_as_cards(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, path: str
 ) -> None:
-    """Overseer's Overview: everything in the sidebar as one list, in its
-    order, a row each (one per container), the name first and linking to its
-    page. A page with containers behind it shows their glance; anything else
-    runs in the webserver, and says so beside its health check's line. Kept
-    live by one stream for the whole stack."""
-    server = Instance(
-        id="s1", name="app-webserver-1", service="webserver", state="running"
-    )
-    use_runtime(monkeypatch, FakeRuntime(server, REDIS))
+    """Overseer's Overview: everything in the sidebar as a card, in its
+    order, the name first and linking to its page; an old link to the list
+    it once had lands here too. Kept live by one stream for the whole
+    stack."""
+    use_runtime(monkeypatch, FakeRuntime(REDIS))
     asyncio.run(ui_runtime.containers("redis"))
-    html = page_html(client, "/overseer")
+    html = page_html(client, path)
     stack = one(html, "#overview-stack")
-    assert stack.get("sse-connect") == f"{overseer_container.OVERVIEW_EVENTS}?view=list"
-    none(stack, "h2")  # a column, not a heading per entry
-    cache = one(stack, '[data-overview="cache"]')
-    assert cache.get("data-glance") == REDIS.name
-    title = one(cache, "[data-title]")
+    assert (
+        stack.get("sse-connect") == f"{overseer_container.OVERVIEW_EVENTS}?view=cards"
+    )
+    title = one(stack, '[data-card="cache"] [data-title]')
     assert (text(title), title.get("href")) == ("Cache", "/overseer/components/cache")
-    auth = one(stack, '[data-overview="auth"][data-health]')
-    assert "in app-webserver-1" in text(auth) and "Ready" in text(auth)
-    keys = [r.get("data-overview") for r in select(stack, "[data-overview]")]
+    keys = [card.get("data-card") for card in select(stack, "[data-card]")]
     assert keys.index("cache") < keys.index("auth")  # components, then services
 
 
@@ -285,7 +280,7 @@ async def test_the_home_stream_sends_every_glance(
 
 
 def test_the_home_page_also_reads_as_cards(client: TestClient) -> None:
-    """A view toggle (List or Cards, kept in the address like every filter):
+    """A view toggle (Cards or Map, kept in the address like every filter):
     a card a sidebar entry, its status and health line; with containers, its
     CPU and memory and their lines over the last 15 minutes; without, a few
     of its health check's own figures."""
@@ -299,7 +294,6 @@ def test_the_home_page_also_reads_as_cards(client: TestClient) -> None:
     assert "12.5%" in text(cache)
     auth = one(stack, '[data-card="auth"]')
     assert "Ready" in text(auth)
-    none(html, "[data-overview]")  # not the list
 
 
 def test_a_cards_figures_are_its_health_checks_own() -> None:
@@ -397,7 +391,7 @@ def test_a_line_takes_the_tone_of_what_it_leads_to(
 
 @pytest.mark.parametrize(
     ("view", "entry"),
-    [("map", "data-node"), ("list", "data-overview"), ("cards", "data-card")],
+    [("map", "data-node"), ("cards", "data-card")],
 )
 def test_a_part_failing_with_what_it_depends_on_names_it(
     app: FastAPI, monkeypatch: pytest.MonkeyPatch, view: str, entry: str
@@ -414,7 +408,6 @@ def test_a_part_failing_with_what_it_depends_on_names_it(
     [
         "/overseer/components/cache",
         "/overseer/components/cache/container",
-        "/overseer?view=list",
         "/overseer?view=cards",
         "/overseer?view=map",
     ],
@@ -473,7 +466,6 @@ def test_a_runtime_that_does_not_answer_is_a_503_not_a_crash(
     ("view", "entry", "healthy"),
     [
         ("map", "data-node", "cache"),
-        ("list", "data-overview", "auth"),  # its containers' rows show the Cache
         ("cards", "data-card", "cache"),
     ],
 )
@@ -565,15 +557,11 @@ def test_the_views_switch_by_icon_and_still_say_which(client: TestClient) -> Non
     it points at is drawn on the page."""
     html = page_html(client, "/overseer")
     chips = select(html, "#overview-view label")
-    assert [c.get("title") for c in chips] == ["List", "Cards", "Map"]
-    assert [text(one(c, ".sr-only:not(input)")) for c in chips] == [
-        "List",
-        "Cards",
-        "Map",
-    ]
+    assert [c.get("title") for c in chips] == ["Cards", "Map"]
+    assert [text(one(c, ".sr-only:not(input)")) for c in chips] == ["Cards", "Map"]
     used = {one(c, "svg use").get("href") for c in chips}
     defined = {f"#{s.get('id')}" for s in select(html, "svg[data-icons] symbol")}
-    assert len(used) == 3 and used <= defined
+    assert len(used) == 2 and used <= defined
 
 
 def test_the_servers_services_sit_two_to_a_row() -> None:
@@ -595,3 +583,164 @@ def test_a_service_chip_says_what_it_costs_to_load(
     html = page_html(TestClient(app), "/overseer?view=map")
     chip = one(html, '[data-chip="auth"]')
     assert text(one(chip, "[data-load]")) == "50.0 MB"
+
+
+def test_a_tier_wider_than_a_row_wraps() -> None:
+    """Six services side by side would each be a sliver: rows of five."""
+    shape = topology.Shape(tiers=[[f"s{n}" for n in range(6)]], links=[], hosted=[])
+    found = overseer_map.layout([_entry(f"s{n}") for n in range(6)], shape)
+    assert len({node["top"] for node in found["map_nodes"]}) == 2
+    assert found["map_node_width"] == pytest.approx(
+        overseer_map.FILL * 100 / overseer_map.ROW
+    )
+
+
+def _zoomable(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    """A Server with Auth and Secrets inside it; Auth talks to the Database
+    and Stripe, whose key is set unless a test says otherwise."""
+    server = ComponentStatus(name="backend", message="FastAPI", metadata={})
+    database = ComponentStatus(name="database", message="Connected", metadata={})
+    keys = ComponentStatus(name="secrets", message="Stored", metadata={})
+    sign_in(app, monkeypatch, status_with(server, database, keys, services=[AUTH]))
+    monkeypatch.setattr(service_links, "provider_keys", lambda: {})
+    use_runtime(monkeypatch, FakeRuntime(REDIS))
+    monkeypatch.setattr(
+        service_links,
+        "links",
+        lambda: {"service_auth": ["database", "outside:Stripe"]},
+    )
+    return TestClient(app)
+
+
+def test_the_servers_node_zooms_in(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    html = page_html(_zoomable(app, monkeypatch), "/overseer?view=map")
+    zoom = one(html, '[data-node="backend"] [data-zoom]')
+    assert zoom.get("href") == "/overseer?view=map&zoom=backend"
+
+
+def test_zoomed_in_the_servers_services_are_its_map(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Each service a node, what it talks to below it, in the same lines,
+    and the way back out."""
+    html = page_html(_zoomable(app, monkeypatch), "/overseer?view=map&zoom=backend")
+    for key in ("service_auth", "database", "outside:Stripe"):
+        one(html, f'[data-node="{key}"]')
+    lines = {
+        (p.get("data-from"), p.get("data-to"))
+        for p in select(html, "svg path[data-link]")
+    }
+    assert lines == {("service_auth", "database"), ("service_auth", "outside:Stripe")}
+    back = one(html, "[data-breadcrumb] a")
+    assert back.get("href") == "/overseer?view=map"
+    assert "zoom=backend" in one(html, "#overview-stack").get("sse-connect")
+
+
+def test_a_compact_map_fits_more_to_a_row() -> None:
+    """The Server opened up: one-line nodes, eight to a row."""
+    shape = topology.Shape(tiers=[[f"s{n}" for n in range(8)]], links=[], hosted=[])
+    found = overseer_map.layout(
+        [_entry(f"s{n}") for n in range(8)], shape, compact=True
+    )
+    assert len({node["top"] for node in found["map_nodes"]}) == 1
+    assert {node["height"] for node in found["map_nodes"]} == {
+        overseer_map.COMPACT_HEIGHT
+    }
+
+
+def test_zoomed_in_nodes_are_one_line_and_outside_ones_are_pills(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    html = page_html(_zoomable(app, monkeypatch), "/overseer?view=map&zoom=backend")
+    one(html, "[data-map][data-compact]")
+    assert one(html, '[data-node="outside:Stripe"]').get("data-outside") is not None
+    assert one(html, '[data-node="service_auth"]').get("data-outside") is None
+
+
+def test_an_outside_provider_without_its_key_is_amber(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Payment needs Stripe's key and it is not set: the connection cannot
+    be used, so the pill and the line into it say so."""
+    client = _stripe_keyed(app, monkeypatch)
+    with secret_settings("STRIPE_SECRET_KEY"):
+        html = page_html(client, "/overseer?view=map&zoom=backend")
+    stripe = one(html, '[data-node="outside:Stripe"]')
+    assert stripe.get("data-tone") == "warn"
+    assert "STRIPE_SECRET_KEY" in text(one(stripe, "[data-hint]"))
+    line = one(html, 'svg path[data-from="service_auth"][data-to="outside:Stripe"]')
+    assert line.get("data-tone") == "warn"
+    # Where the missing key lives: a line from Secrets, the core of it.
+    key = one(html, 'svg path[data-from="secrets"][data-to="outside:Stripe"]')
+    assert key.get("data-key") is not None and key.get("data-tone") == "warn"
+    # The fix, one click away: the key's set dialog, right on the map.
+    fix = one(stripe, "[data-hint] button[data-fix]")
+    assert fix.get("hx-get") == "/partials/overseer/secrets/STRIPE_SECRET_KEY"
+    assert "STRIPE_SECRET_KEY" in text(fix)
+
+
+def _stripe_keyed(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    """``_zoomable``, with Stripe called with a declared key."""
+    client = _zoomable(app, monkeypatch)
+    entry = secrets.Secret("STRIPE_SECRET_KEY", owner="Payment (Stripe)")
+    monkeypatch.setattr(secrets, "declared", lambda: (entry,))
+    monkeypatch.setattr(
+        service_links, "provider_keys", lambda: {"outside:Stripe": [entry.name]}
+    )
+    return client
+
+
+def test_telling_a_key_is_set_never_reads_it(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The map asks only whether each key is set, every frame: nothing is
+    decrypted (a key that cannot be is still set), so one bad key cannot
+    take the map down."""
+    client = _stripe_keyed(app, monkeypatch)
+    store = use_store(monkeypatch)
+    store.values["STRIPE_SECRET_KEY"] = "sk_test_kept"
+
+    async def unreadable(names: list[str]) -> dict[str, str | None]:
+        raise secrets.SecretUnreadableError("STRIPE_SECRET_KEY")
+
+    monkeypatch.setattr(store, "get_many", unreadable)
+    monkeypatch.setitem(settings.__dict__, "STRIPE_SECRET_KEY", None)
+    html = page_html(client, "/overseer?view=map&zoom=backend")
+    assert one(html, '[data-node="outside:Stripe"]').get("data-tone") != "warn"
+
+
+def test_a_line_into_the_worker_is_queued_work() -> None:
+    """Documents enqueues; it does not wait on the worker: drawn dashed."""
+    shape = topology.Shape(
+        tiers=[["service_documents"], ["worker", "database"]],
+        links=[("service_documents", "worker"), ("service_documents", "database")],
+        hosted=[],
+    )
+    stack = [_entry(k) for k in ("service_documents", "worker", "database")]
+    lines = {
+        line["end"]: line["queued"]
+        for line in overseer_map.layout(stack, shape)["map_links"]
+    }
+    assert lines == {"worker": True, "database": False}
+
+
+def test_a_bottom_rows_hint_opens_above_it() -> None:
+    """The map scrolls sideways, so it clips what runs past its bottom: a
+    hint under the last row would not show. Those open above instead."""
+    shape = topology.Shape(
+        tiers=[["service_payment"], ["outside:Stripe"]], links=[], hosted=[]
+    )
+    stack = [_entry("service_payment"), _entry("outside:Stripe")]
+    nodes = {
+        n["key"]: n
+        for n in overseer_map.layout(stack, shape, compact=True)["map_nodes"]
+    }
+    assert (
+        nodes["service_payment"]["hint_above"],
+        nodes["outside:Stripe"]["hint_above"],
+    ) == (
+        False,
+        True,
+    )

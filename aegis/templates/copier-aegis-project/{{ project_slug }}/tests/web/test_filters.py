@@ -9,6 +9,7 @@ from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
+from fastapi import FastAPI
 import pytest
 
 from app.components.web_frontend.filters import (
@@ -16,6 +17,7 @@ from app.components.web_frontend.filters import (
     money_to_cents,
 )
 from app.components.web_frontend.rendering import templates
+from app.services.system.models import ComponentStatus
 from tests.web.dom import select, text
 
 
@@ -257,3 +259,32 @@ class TestDocstringFacts:
     def test_the_rest_is_still_escaped(self) -> None:
         html = self._render("<b>``x``</b>")
         assert not select(html, "dd b") and "&lt;b&gt;" in html
+
+
+def test_a_message_sets_the_settings_and_secrets_it_names_as_code() -> None:
+    """A health message naming a setting or secret (``BUILD_ID``, ships
+    with every stack) shows it as a docstring shows a literal; an upper-case
+    word nothing declares is left alone, and the rest is escaped."""
+    from app.components.web_frontend.filters import message
+
+    html = f"<p>{message('BUILD_ID not set, OK <now>')}</p>"
+    assert [text(code) for code in select(html, "code")] == ["BUILD_ID"]  # not OK
+    assert "&lt;now&gt;" in html
+
+
+def test_every_health_message_on_overseer_shows_the_names_it_mentions(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The cards, the map and a page's heading go through the one filter."""
+    from fastapi.testclient import TestClient
+
+    from tests.web.overseer import page_html, sign_in, status_with
+
+    named = ComponentStatus(name="observability", message="BUILD_ID is not set")
+    sign_in(app, monkeypatch, status_with(named))
+    for path in (
+        "/overseer?view=cards",
+        "/overseer/components/observability",
+    ):
+        html = page_html(TestClient(app), path)
+        assert "BUILD_ID" in [text(code) for code in select(html, "code")], path

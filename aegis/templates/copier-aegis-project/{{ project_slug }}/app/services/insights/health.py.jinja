@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import logging
 
 from app.core.db import get_async_session
+from app.core.formatting import counted
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
 from . import queries
@@ -55,7 +56,10 @@ async def check_insight_health() -> ComponentStatus:
                 message = f"Stale sources: {', '.join(stale_sources)}"
             else:
                 status = ComponentStatusType.HEALTHY
-                message = f"{total_metrics} metrics across {len(sources)} sources"
+                message = (
+                    f"{counted(total_metrics, 'metric')} across "
+                    f"{counted(len(sources), 'source')}"
+                )
 
         return ComponentStatus(
             name=INSIGHT_COMPONENT_NAME,

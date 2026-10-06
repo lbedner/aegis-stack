@@ -8,6 +8,7 @@ backend holding the bytes.
 import logging
 
 from app.core.db import get_async_session
+from app.core.formatting import counted
 from app.core.storage import get_storage
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
@@ -36,7 +37,8 @@ async def check_documents_service_health() -> ComponentStatus:
         return ComponentStatus(
             name=DOCUMENTS_COMPONENT_NAME,
             status=ComponentStatusType.HEALTHY,
-            message=f"{summary['total']} documents, {summary['this_month']} this month",
+            message=f"{counted(summary['total'], 'document')}, "
+            f"{summary['this_month']} this month",
             metadata=metadata,
         )
     except Exception as e:

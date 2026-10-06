@@ -24,7 +24,7 @@ value the provider refuses is never stored, so a typo fails at the paste.
 """
 
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from functools import cache
 from importlib import import_module
@@ -86,8 +86,7 @@ class Secret:
     # of typed. Raises like ``verify`` when the provider cannot answer.
     choices: Callable[[], Awaitable[list[tuple[str, str]]]] | None = None
     # Read with ``secrets.get``, so a stored value takes effect. False for a
-    # key read through ``settings`` (a ``Credential`` field), which only
-    # ever sees ``.env``: listed, never set here.
+    # key read through ``settings`` (a ``Credential``, only ever ``.env``).
     live: bool = True
     # A ``Configurable`` setting rather than a credential
     # (``app.core.saved_settings``): its own page, its default shown, and a
@@ -96,6 +95,7 @@ class Secret:
     setting: bool = False
     default: str | None = None
     parse: Callable[[str], str] | None = None
+    module: str = ""  # the ``OWNERS`` module that declared it (``collect``)
 
     def is_needed(self) -> bool:
         return self.needed() if callable(self.needed) else self.needed
@@ -257,7 +257,7 @@ def collect() -> tuple[Secret, ...]:
         except ImportError:
             continue
         for entry in getattr(module, "SECRETS", ()):
-            found.setdefault(entry.name, entry)
+            found.setdefault(entry.name, replace(entry, module=path))
     for name, field in type(settings).model_fields.items():
         if CREDENTIAL in field.metadata:
             found.setdefault(

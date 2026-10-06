@@ -2,6 +2,7 @@
 granted tools a client is served. A warning when it is served none, since
 a client that connects then sees nothing to call."""
 
+from app.core.formatting import counted
 from app.services.system import ui_mcp
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
@@ -12,7 +13,7 @@ async def check_mcp_health() -> ComponentStatus:
         name=ui_mcp.NAME,
         status=ComponentStatusType.HEALTHY if served else ComponentStatusType.WARNING,
         message=(
-            f"{served} tool{'' if served == 1 else 's'} served"
+            f"{counted(served, 'tool')} served"
             if served
             else ui_mcp.NONE_SERVED
         ),

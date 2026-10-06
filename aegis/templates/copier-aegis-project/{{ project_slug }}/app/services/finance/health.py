@@ -8,6 +8,7 @@ contract the dashboard card/modal read from.
 import logging
 
 from app.core.db import get_async_session
+from app.core.formatting import counted
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
 from .constants import FINANCE_COMPONENT_NAME
@@ -32,7 +33,8 @@ async def check_finance_service_health() -> ComponentStatus:
             else ComponentStatusType.WARNING
         )
         message = (
-            f"{summary.account_count} accounts, {summary.connection_count} connections"
+            f"{counted(summary.account_count, 'account')}, "
+            f"{counted(summary.connection_count, 'connection')}"
         )
         return ComponentStatus(
             name=FINANCE_COMPONENT_NAME,

@@ -81,6 +81,11 @@ def page_context(
     }
 
 
+def set_url(name: str) -> str:
+    """Where a key's set dialog, and its other actions, live."""
+    return f"{PARTIALS}/{name}"
+
+
 def base_row(row: secrets.SecretStatus) -> dict[str, Any]:
     """What a Secrets or Settings row always carries: its name with what it
     is (the first column), and where its actions go."""
@@ -88,7 +93,7 @@ def base_row(row: secrets.SecretStatus) -> dict[str, Any]:
         "name": row.name,
         "named": {"name": row.name, "label": row.label},
         "in_env": row.source == secrets.ENV,
-        "url": f"{PARTIALS}/{row.name}",
+        "url": set_url(row.name),
     }
 
 

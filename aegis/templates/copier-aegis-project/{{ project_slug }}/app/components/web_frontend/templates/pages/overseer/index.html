@@ -10,8 +10,8 @@
 {% call page_header("Overview", "Your stack at a glance") %}
 {{ range_form(overview_views, overview_view, request.url.path, "#overseer-main", field="view", aria="View", id="overview-view") }}
 {% endcall %}
-{# Everything in the sidebar (overseer_container.overview), as a list, cards
-   or a map, kept live. The cards can put trouble first (the default) or
+{# Everything in the sidebar (overseer_container.overview), as cards or a
+   map, kept live. The cards can put trouble first (the default) or
    show only it, client side (input.css orders them by tone). #}
 {% set cards = overview_view == "cards" %}
 <div id="overview-stack" hx-ext="sse" sse-connect="{{ overview_events }}"

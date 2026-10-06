@@ -44,6 +44,9 @@ import pickle
 import time
 from typing import Any, NamedTuple
 
+# The component this client fronts (``service_links``).
+FRONTS = "cache"
+
 # Entries the Overseer's Cache view reads before sampling, like the Redis
 # keyspace map.
 INSPECT_LIMIT = 10_000

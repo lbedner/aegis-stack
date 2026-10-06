@@ -9,6 +9,13 @@ def format_number(num: int) -> str:
     return f"{num:,}"
 
 
+def counted(count: int, noun: str, plural: str | None = None) -> str:
+    """``count`` and its noun, singular for exactly one: ``1 draft``,
+    ``2 drafts``; ``plural`` where it is not the noun and an s
+    (``watches``)."""
+    return f"{count} {noun if count == 1 else plural or noun + 's'}"
+
+
 def format_cost(cost: float) -> str:
     """Format cost with dollar sign and appropriate decimal places.
 
@@ -86,12 +93,12 @@ def _coarse_age(seconds: float) -> str:
     """
     days = int(seconds / 86400)
     if days < 30:
-        return f"{days} day{'s' if days != 1 else ''} ago"
+        return f"{counted(days, 'day')} ago"
     if days < 365:
         months = max(1, round(days / 30.44))
-        return f"{months} month{'s' if months != 1 else ''} ago"
+        return f"{counted(months, 'month')} ago"
     years = max(1, round(days / 365.25))
-    return f"{years} year{'s' if years != 1 else ''} ago"
+    return f"{counted(years, 'year')} ago"
 
 
 def format_relative_time(
@@ -136,10 +143,10 @@ def format_relative_time(
             return "just now"
         if seconds < 3600:
             mins = int(seconds / 60)
-            return f"{mins} minute{'s' if mins != 1 else ''} ago"
+            return f"{counted(mins, 'minute')} ago"
         if seconds < 86400:
             hours = int(seconds / 3600)
-            return f"{hours} hour{'s' if hours != 1 else ''} ago"
+            return f"{counted(hours, 'hour')} ago"
         if coarse:
             return _coarse_age(seconds)
         return dt.strftime("%b %d %H:%M")

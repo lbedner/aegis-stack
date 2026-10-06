@@ -3,6 +3,7 @@ and items across every owner, the last run, and the sources installed. A
 failure here is reported by the health walk itself."""
 
 from app.core.db import get_async_session
+from app.core.formatting import counted
 from app.services.research.registry import installed_sources
 from app.services.research.service import research_counts
 from app.services.system.models import ComponentStatus, ComponentStatusType
@@ -24,6 +25,7 @@ async def check_research_service_health() -> ComponentStatus:
     return ComponentStatus(
         name=RESEARCH_COMPONENT_NAME,
         status=ComponentStatusType.HEALTHY,
-        message=f"{counts['watches']} watches, {counts['items']} items",
+        message=f"{counted(counts['watches'], 'watch', 'watches')}, "
+        f"{counted(counts['items'], 'item')}",
         metadata=metadata,
     )

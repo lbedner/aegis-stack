@@ -48,7 +48,7 @@ async def overseer_page(request: Request, user: Viewer = Depends(viewer)) -> Res
     status = last_system_status()
     navigation = build_navigation(status)
     overview = await overseer_container.overview(
-        navigation, request.query_params.get("view")
+        navigation, request.query_params.get("view"), request.query_params.get("zoom")
     )
     return render(
         request,

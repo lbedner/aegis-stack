@@ -243,6 +243,13 @@ PAGE_LAYOUT = "layouts/page.html"
 FRAGMENT_LAYOUT = "layouts/fragment.html"
 
 
+def is_htmx(request: Request) -> bool:
+    """A request htmx made. It follows a redirect itself and swaps what it
+    gets, so one refused for a dead session gets a plain 401 instead, which
+    auth.js answers by renewing the session or signing in whole."""
+    return request.headers.get("HX-Request") == "true"
+
+
 def wants_fragment(request: Request) -> bool:
     """True when htmx will swap the response into ``#app-content``.
 
@@ -250,8 +257,7 @@ def wants_fragment(request: Request) -> bool:
     needs the shell; history restores never reach here because the htmx
     config turns them into full page loads.
     """
-    headers = request.headers
-    return headers.get("HX-Request") == "true" and headers.get("HX-Boosted") != "true"
+    return is_htmx(request) and request.headers.get("HX-Boosted") != "true"
 
 
 def fragment(name: str, **context: Any) -> str:

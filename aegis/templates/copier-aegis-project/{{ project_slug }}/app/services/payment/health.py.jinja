@@ -6,6 +6,7 @@ import logging
 import time
 
 from app.core.db import get_async_session
+from app.core.formatting import counted
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
 from .constants import PAYMENT_COMPONENT_NAME
@@ -50,7 +51,7 @@ async def check_payment_service_health() -> ComponentStatus:
             mode = "test" if summary.is_test_mode else "live"
             message = (
                 f"{summary.provider_display_name} ({mode} mode) — "
-                f"{summary.total_transactions} transactions"
+                f"{counted(summary.total_transactions, 'transaction')}"
             )
 
             return ComponentStatus(

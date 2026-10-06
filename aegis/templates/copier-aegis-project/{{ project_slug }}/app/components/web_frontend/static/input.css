@@ -257,7 +257,14 @@
   /* A line drawn small or between nodes: one stroke, in its colour. */
   :is(.spark polyline, .map-link) { fill: none; stroke: currentColor; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
   .map-link { @apply text-aegis-teal opacity-60; }
+  /* Every hover hint's panel (popover_panel, the map's hints). */
+  .tooltip-panel { @apply bg-aegis-card border border-aegis-border rounded-lg shadow-lg text-xxs normal-case tracking-normal text-aegis-muted text-left; }
   .map-link:is([data-tone="warn"], [data-tone="error"]) { @apply opacity-100; }
+  .map-link[data-queued] { stroke-dasharray: 5 4; }
+  .map-link[data-key] { stroke-dasharray: 1 4; stroke-linecap: round; }
+  /* A map node hovered: what it is not joined to dims (app.js mapFocus). */
+  [data-map] :is([data-node], .map-link) { transition: opacity 150ms; }
+  [data-map] [data-dim] { opacity: 0.35; }  /* context, not disabled */
   /* A log line on one line, cut at the edge; opened (a click) or wrapped
      (Wrap), whole, with its traceback. A volume bar stacks its tones. */
   .log-line { @apply truncate; }

@@ -2767,6 +2767,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Connecting a client">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#over-http" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Over HTTP
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -2796,6 +2813,17 @@
     <span class="md-ellipsis">
       
         Every call is on the record
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tokens" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tokens
       
     </span>
   </a>
@@ -5698,6 +5726,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Connecting a client">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#over-http" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Over HTTP
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -5727,6 +5772,17 @@
     <span class="md-ellipsis">
       
         Every call is on the record
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tokens" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tokens
       
     </span>
   </a>
@@ -5770,7 +5826,7 @@
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>aegis<span class="w"> </span>add<span class="w"> </span>mcp
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>aegis<span class="w"> </span>init<span class="w"> </span>my-app<span class="w"> </span>--components<span class="w"> </span>mcp<span class="w"> </span>--services<span class="w"> </span>finance
 </span></code></pre></div>
-<p>The server is <a href="https://gofastmcp.com">FastMCP</a>. It runs over stdio as a CLI command, so it adds no container and needs no token: whoever can run the CLI already owns the database.</p>
+<p>The server is <a href="https://gofastmcp.com">FastMCP</a>. It runs over stdio as a CLI command, so it adds no container and needs no token: whoever can run the CLI already owns the database. With the auth service it is also served over HTTP at <code>/mcp</code>, for a client elsewhere, signed in with a <a href="#tokens">token</a>.</p>
 <h2 id="what-a-client-sees">What a client sees</h2>
 <p>A client sees the tools listed in <code>MCP_TOOLS</code>, by registered name, and nothing else. A tool that writes is never served, whatever the list says (see <a href="../../services/ai/agents/#proposals-writes-the-user-approves">tool effects</a>), and a name with no registered tool is dropped. With the finance service, the default grant is finance's read tools. Set it in <code>.env</code> as a JSON list to narrow it, for example <code>MCP_TOOLS=["ledger","accounts"]</code>; <code>MCP_TOOLS=[]</code> serves nothing.</p>
 <p>The tools are the registry's own functions, registered by name. FastMCP builds each tool's schema from the type hints and docstring the app's agents already read, so a read over MCP and the same read by a chat agent are one computation. The server is never built with <code>FastMCP.from_fastapi</code>, which would turn every API route into a tool, writes included.</p>
@@ -5795,20 +5851,35 @@
 </span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="p">}</span>
 </span></code></pre></div>
 <p>stdout carries the protocol and nothing else; the command sends every log line to stderr before it starts.</p>
+<h3 id="over-http">Over HTTP</h3>
+<p>With the auth service, the webserver serves the same tools at <code>/mcp</code>. Every request carries an <a href="#tokens">MCP token</a>; without one the answer is 401 and no tools. The token's owner is who the calls act for (in place of <code>MCP_OWNER_USER_ID</code>), and its scope is what they reach.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>claude<span class="w"> </span>mcp<span class="w"> </span>add<span class="w"> </span>--transport<span class="w"> </span>http<span class="w"> </span>my-app<span class="w"> </span>http://localhost:8000/mcp/<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span>--header<span class="w"> </span><span class="s2">&quot;Authorization: Bearer mcp_...&quot;</span>
+</span></code></pre></div>
+<p>There is no CORS on it (desktop and coding clients are not browsers), and it is not reachable through the dev tunnel, whose guard admits only the Plaid webhook.</p>
 <h2 id="proposing-changes">Proposing changes</h2>
 <p>Any assistant can suggest; only you can change. Grant the queue's tools and a client can file changes, never make them:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nv">MCP_TOOLS</span><span class="o">=[</span><span class="s2">&quot;ledger&quot;</span>,<span class="s2">&quot;accounts&quot;</span>,<span class="s2">&quot;categories&quot;</span>,<span class="s2">&quot;propose&quot;</span>,<span class="s2">&quot;propose_many&quot;</span>,<span class="s2">&quot;pending&quot;</span>,<span class="s2">&quot;withdraw&quot;</span>,<span class="s2">&quot;withdraw_batch&quot;</span>,<span class="s2">&quot;change_types&quot;</span><span class="o">]</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nv">MCP_TOOLS</span><span class="o">=[</span><span class="s2">&quot;ledger&quot;</span>,<span class="s2">&quot;accounts&quot;</span>,<span class="s2">&quot;categories&quot;</span>,<span class="s2">&quot;propose&quot;</span>,<span class="s2">&quot;propose_many&quot;</span>,<span class="s2">&quot;pending&quot;</span>,<span class="s2">&quot;withdraw&quot;</span>,<span class="s2">&quot;withdraw_batch&quot;</span>,<span class="s2">&quot;change_types&quot;</span><span class="o">]</span>
 </span></code></pre></div>
 <p>A proposal is a card in the app's own approval queue, filed under the client as <code>mcp:&lt;client&gt;</code> (<code>mcp:claude-code</code>). Nothing changes until a person approves it in Review, row by row. The client sees only its own cards with <code>pending</code> (pending, approved, rejected, withdrawn) and can withdraw only its own; another client's cards do not exist to it.</p>
 <h2 id="whose-data">Whose data</h2>
 <p>Over stdio there is no signed-in user. <code>MCP_OWNER_USER_ID</code> says who a client acts for: whose rows it reads and whose cards it files. Unset, it reads every row, the same as a single-tenant app; with the auth service, proposing needs it.</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nv">MCP_OWNER_USER_ID</span><span class="o">=</span><span class="m">1</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="nv">MCP_OWNER_USER_ID</span><span class="o">=</span><span class="m">1</span>
 </span></code></pre></div>
 <h2 id="every-call-is-on-the-record">Every call is on the record</h2>
 <p>One middleware records each call: the tool, the client that made it, its effect (a read or a proposal), the duration, the size of the result in bytes, and whether it succeeded. No tool has to know it was reached over MCP.</p>
 <p>With the database component the record is kept, in the component's own <code>mcp_tool_call</code> table, apart from the chat agents' tool calls. Without one it is a log line (<code>mcp.call</code> on stderr).</p>
 <p>Overseer shows it on its MCP page (htmx) and MCP card (Flet): the tools a client is served, each granted name it is not (and why), the commands that start the server, then each client's reads and proposals and the newest calls. Adding the database to a project later brings the record; removing it takes the record away.</p>
 <p>A client's proposals are approved where every card is, and each one names the client that proposed it.</p>
+<h2 id="tokens">Tokens</h2>
+<p>A client over HTTP needs a credential a person makes and can revoke. With the auth service, each person makes their own MCP tokens: on Overseer's MCP page (Tokens), from the CLI, or through the API.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>my-app<span class="w"> </span>mcp-tokens<span class="w"> </span>create<span class="w"> </span>--email<span class="w"> </span>you@example.com<span class="w"> </span>--name<span class="w"> </span>laptop<span class="w"> </span>--scope<span class="w"> </span><span class="nb">read</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>my-app<span class="w"> </span>mcp-tokens<span class="w"> </span>list<span class="w"> </span>--email<span class="w"> </span>you@example.com
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>my-app<span class="w"> </span>mcp-tokens<span class="w"> </span>revoke<span class="w"> </span>--email<span class="w"> </span>you@example.com<span class="w"> </span><span class="m">3</span>
+</span></code></pre></div>
+<p>A token's scope is its grant: <code>read</code> reaches the read tools in <code>MCP_TOOLS</code>, <code>propose</code> the proposals too. A client sees only the tools its scope reaches, and a call outside it is refused. There is no second permission system, and a token never reaches a write. People start read-only and grant proposals later.</p>
+<p>Only a hash of the token is kept, so its value is shown once, when it is made. It works until it is revoked: each request checks it, so a revoked token fails on its next request, and each use is noted as its last use. Sessions in the browser are unaffected.</p>
+<p>The API is the signed-in person's own: <code>GET /api/v1/mcp/tokens</code> lists them (never their values), <code>POST</code> makes one (its value in that answer only), and <code>DELETE /api/v1/mcp/tokens/{id}</code> revokes one.</p>
 <h2 id="tools-without-the-ai-service">Tools without the AI service</h2>
 <p>MCP does not need the AI service: the <a href="../../services/ai/agents/#tools">tool registry</a> is core, and <code>load_tools()</code> imports every service's <code>tools.py</code>, found on disk, in any process.</p>
 

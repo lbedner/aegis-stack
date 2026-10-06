@@ -155,7 +155,7 @@ async def sample() -> Sample:
     """Every container that belongs on a page, read once: CPU (once there is
     a reading to compare with) and memory by ``page:name``, and each page's
     table as ``latest``. Nothing without a deploy target."""
-    if not _deployed():
+    if not runtime.deployed():
         return Sample()
     pages: dict[str, list[Instance]] = {}
     for service in await runtime.services():
@@ -222,7 +222,7 @@ async def _reading(
     """The sampler's reading for ``pages`` (``series.current``), or why
     there is none. Pages whose servers can all run outside Docker read its
     last reading without keeping Docker at full pace for them."""
-    if not _deployed():
+    if not runtime.deployed():
         return None, NO_DEPLOY
     try:
         return await (
@@ -246,10 +246,6 @@ def _view(page: str, tables: dict[str, Any] | None, note: str | None) -> dict[st
     return _note(host.note) if host and not view["rows"] else view
 
 
-def _deployed() -> bool:
-    return runtime.get_runtime().backend_name != "none"
-
-
 def _note(text: str) -> dict[str, Any]:
     """A page with no rows, and why."""
     return {"rows": [], "note": text}
@@ -266,7 +262,7 @@ async def charts(
     ``[{"key", "title", "subtitle", "data", "empty"}]``; empty with nothing
     to chart. ``tables``: a reading already in hand (``section``)."""
     if tables == "latest":
-        tables = await series.latest(SAMPLER) if _deployed() else None
+        tables = await series.latest(SAMPLER) if runtime.deployed() else None
     rows = ((tables or {}).get(page) or {}).get("rows", [])
     specs = _charts_for(page, tables)
     words = series.phrase(window)
@@ -277,7 +273,7 @@ async def charts(
         prefix = spec.prefix.format(page=page)
         if prefix not in read:
             read[prefix] = await series.read(prefix, window, viewed=True)
-        found = _lines(spec, read[prefix], lines.get(spec.within or ""))
+        found = lines_of(spec, read[prefix], lines.get(spec.within or ""))
         lines[spec.key] = {_label(name) for name in found}
         data = series.chart(
             found,
@@ -287,16 +283,19 @@ async def charts(
             style=spec.style,
             thresholds=_thresholds(spec, rows),
         )
-        drawn.append(
-            {
-                "key": spec.key,
-                "title": spec.title,
-                "subtitle": words.removeprefix("the ").capitalize(),
-                "data": data,
-                "empty": spec.empty.format(window=words),
-            }
-        )
+        drawn.append(entry(spec, data, words))
     return drawn
+
+
+def entry(spec: Chart, data: dict[str, Any], words: str) -> dict[str, Any]:
+    """One drawn chart as views take it; ``words``: its window phrased."""
+    return {
+        "key": spec.key,
+        "title": spec.title,
+        "subtitle": words.removeprefix("the ").capitalize(),
+        "data": data,
+        "empty": spec.empty.format(window=words),
+    }
 
 
 def _charts_for(page: str, tables: dict[str, Any] | None) -> tuple[Chart, ...]:
@@ -304,7 +303,7 @@ def _charts_for(page: str, tables: dict[str, Any] | None) -> tuple[Chart, ...]:
     Docker, its own when no container runs it (the last reading says)."""
     host = host_of(page)
     if host is None:
-        return CONTAINER_CHARTS if _deployed() else ()
+        return CONTAINER_CHARTS if runtime.deployed() else ()
     return CONTAINER_CHARTS if tables and tables.get(page) else host.charts
 
 
@@ -336,16 +335,30 @@ async def trends(
 def _trend(
     page: str, found: dict[str, list[tuple[float, float]]]
 ) -> dict[str, list[float]]:
-    totals: dict[str, dict[float, float]] = {CPU: {}, MEMORY: {}}
+    def metric(name: str) -> str | None:
+        owner, *_, measured = name.split(":")
+        return measured if owner == page and measured in (CPU, MEMORY) else None
+
+    totals = added(found, metric)
+    return {m: [v for _, v in totals.get(m, [])] for m in (CPU, MEMORY)}
+
+
+def added(
+    found: dict[str, list[tuple[float, float]]], group: Callable[[str], str | None]
+) -> dict[str, list[tuple[float, float]]]:
+    """The series added together, tick by tick, within each ``group`` a
+    series' name gives (None leaves it out)."""
+    totals: dict[str, dict[float, float]] = {}
     for name, points in found.items():
-        owner, *_, metric = name.split(":")
-        if owner == page and metric in totals:
-            for at, value in points:
-                totals[metric][at] = totals[metric].get(at, 0.0) + value
-    return {metric: [v for _, v in sorted(t.items())] for metric, t in totals.items()}
+        if (key := group(name)) is None:
+            continue
+        total = totals.setdefault(key, {})
+        for at, value in points:
+            total[at] = total.get(at, 0.0) + value
+    return {key: sorted(total.items()) for key, total in totals.items()}
 
 
-def _lines(
+def lines_of(
     spec: Chart,
     read: dict[str, list[tuple[float, float]]],
     within: set[str] | None,
@@ -392,11 +405,10 @@ async def _stats(instance: Instance) -> Stats | None:
 
 def _row(instance: Instance, stats: Stats | None) -> dict[str, Any]:
     """One instance's row; a stopped one (no stats) has the same keys."""
-    health = f" ({instance.health})" if instance.health else ""
     return {
         "name": instance.name,
-        "state": f"{instance.state}{health}",
-        # The parts, for a view that shows them apart (htmx's cards).
+        **_state(instance),
+        # Its parts too, for a view that shows them apart (htmx's cards).
         "phase": instance.state,
         "health": instance.health or "",
         "restarts": "-" if instance.restarts is None else str(instance.restarts),
@@ -405,8 +417,21 @@ def _row(instance: Instance, stats: Stats | None) -> dict[str, Any]:
     } | _figures(stats)
 
 
+def _state(instance: Instance) -> dict[str, str]:
+    """Its word and status (read like ``cpu_status``): stopped is down; a
+    failing healthcheck while it serves, or starting, is a warning."""
+    if instance.state in ("exited", "dead"):
+        return {"state": instance.state, "state_status": "unhealthy"}
+    sick = instance.health == "unhealthy"
+    fine = instance.state == "running" and not sick
+    word = "unhealthy" if sick else instance.state
+    return {"state": word, "state_status": "healthy" if fine else "warning"}
+
+
 # A stopped container's live figures: none.
 _LIVE = (
+    "cpu_value",
+    "memory_value",
     "memory_percent",
     "cpu_status",
     "memory_status",
@@ -443,6 +468,9 @@ def _figures(stats: Stats | None) -> dict[str, Any]:
         "network": f"in {rx}, out {tx}",
         "disk": f"read {read}, write {write}",
         "memory_used": used,
+        # The raw figures, for what sums them (``ui_resources``).
+        "cpu_value": stats.cpu_percent,
+        "memory_value": stats.memory_used,
         # Creeping toward the limit is what kills a container.
         "memory_percent": round(stats.memory_used / limit * 100, 1) if limit else None,
         "memory_limit": format_bytes(limit) if limit else "",

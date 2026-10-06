@@ -11,6 +11,7 @@ from typing import Any, NamedTuple
 
 from app.services.system import ui_runtime
 from app.services.system.models import ComponentStatus
+from app.services.system.ui import registry_key
 
 from . import (
     overseer_container,
@@ -20,6 +21,7 @@ from . import (
     overseer_logs,
     overseer_patterns,
     overseer_redis,
+    overseer_resources,
     overseer_scheduler,
     overseer_secrets,
     overseer_server,
@@ -28,7 +30,8 @@ from . import (
     overseer_web_frontend,
     overseer_worker,
 )
-from .overseer_nav import SectionRequest, registry_key
+from .overseer_nav import NavItem, SectionRequest
+from .rendering import templates
 
 # Grouped sections: (heading or None, {section key: label}). The first
 # section is the page's own URL.
@@ -136,12 +139,25 @@ STANDALONE = {
     for item in (
         overseer_patterns.ITEM,
         overseer_logs.ITEM,
+        overseer_resources.ITEM,
         overseer_deployments.ITEM,
         overseer_secrets.ITEM,
         overseer_settings.ITEM,
     )
 }
 
+
+def rail() -> list[NavItem]:
+    """The sidebar's own pages, in its order (``_shell.html``): Secrets
+    only where it has no component page of its own."""
+    return [
+        item
+        for item in STANDALONE.values()
+        if item is not overseer_secrets.ITEM or overseer_secrets.url() == item.url
+    ]
+
+
+templates.env.globals["overseer_rail"] = rail
 
 # The sections every page with a container behind it gets, in order: each
 # module has a ``SECTION`` label and ``context(page, query)``.
@@ -215,6 +231,12 @@ _PAGES: dict[tuple[str, str], SectionedPage] = {
     ("logs", "logs"): SectionedPage(
         "logs", overseer_logs.SECTIONS, overseer_logs.section_context, workspace=True
     ),
+    ("resources", "resources"): SectionedPage(
+        "resources",
+        overseer_resources.SECTIONS,
+        overseer_resources.section_context,
+        workspace=True,
+    ),
     ("deployments", "deployments"): SectionedPage(
         "deployments",
         overseer_deployments.SECTIONS,
@@ -232,7 +254,11 @@ _PAGES: dict[tuple[str, str], SectionedPage] = {
         "secrets", overseer_secrets.SECTIONS, overseer_secrets.section_context
     ),
     ("components", "backend"): SectionedPage(
-        "server", overseer_server.SECTIONS, overseer_server.section_context, live=True
+        "server",
+        overseer_server.SECTIONS,
+        overseer_server.section_context,
+        live=True,
+        glance=True,
     ),
     ("components", "web_frontend"): SectionedPage(
         "web_frontend",

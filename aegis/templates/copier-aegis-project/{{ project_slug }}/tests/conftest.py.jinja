@@ -217,6 +217,15 @@ def _no_background_sampling(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(series, "get_cache", lambda: history)
 
 
+@pytest.fixture(autouse=True)
+def _no_load_cost_measuring(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A page asking what each part costs to load (``load_cost``) starts
+    measuring in the background, a Python per part: no test starts one."""
+    from app.services.system import load_cost
+
+    monkeypatch.setattr(load_cost, "_start", lambda: None)
+
+
 @pytest.fixture(autouse=True, scope="session")
 def _use_dict_backed_cache():
     import app.core.cache as cache_module

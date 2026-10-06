@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
+from fastapi.testclient import TestClient
 import pytest
 
 from app.components.web_frontend import overseer_nav
@@ -19,6 +20,13 @@ from app.services.system.models import ComponentStatus, SystemStatus
 
 
 PREFIXES = ("/overseer", "/partials/overseer")
+
+
+def page_html(client: TestClient, path: str) -> str:
+    """The page at ``path``, which must answer 200."""
+    response = client.get(path)
+    assert response.status_code == 200, response.text
+    return response.text
 
 
 def overseer_calls(app: FastAPI) -> list[tuple[str, str]]:

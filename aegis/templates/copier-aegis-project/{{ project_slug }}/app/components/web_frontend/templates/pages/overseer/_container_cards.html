@@ -18,7 +18,7 @@
     <header class="flex flex-wrap items-center gap-x-3 gap-y-1">
       <h3 class="font-mono text-sm font-semibold text-aegis-text">{{ row.name }}</h3>
       {{ state(row) }}
-      {% if row.health %}<span class="text-xs text-aegis-muted">{{ row.health }}</span>{% endif %}
+      {% if row.health and row.health != row.state %}<span class="text-xs text-aegis-muted">{{ row.health }}</span>{% endif %}
       {{ uptime(row) }}
       {% if row.restarts != "-" %}<span class="text-xs text-aegis-muted">{{ row.restarts }} restarts</span>{% endif %}
       <span class="text-xs text-aegis-muted font-mono truncate min-w-0">{{ row.image }}</span>

@@ -1,8 +1,8 @@
 {# A component page's heading: title, one line under it, and its state.
    Expects ``title`` and ``component``; ``subtitle`` defaults to the
    component's status message. #}
-{% from "components/macros/layout.html" import page_header, badge %}
+{% from "components/macros/layout.html" import page_header, health_badge %}
 {% set state = component.status.value %}
 {% call page_header(title, subtitle or component.message) %}
-  {{ badge(state|title, state|health_tone) }}
+  {{ health_badge(state) }}
 {% endcall %}

@@ -1,1 +1,1 @@
-{% set tone = health_status|health_tone %}<span data-tone="{{ tone }}" class="status-dot w-2 h-2 shrink-0 rounded-full {{ {"ok": "bg-aegis-teal", "warn": "bg-aegis-amber", "error": "bg-aegis-error"}.get(tone, "bg-aegis-muted") }}" aria-hidden="true"></span><span class="sr-only">{{ health_status }}</span>
+{% from "components/macros/layout.html" import status_dot %}{{ status_dot(health_status) }}

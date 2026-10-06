@@ -97,6 +97,13 @@ def dominant_source_message(dominant: dict[str, Any]) -> str:
     )
 
 
+def endpoints_apart(routes: int, endpoints: int) -> int | None:
+    """The endpoints (each route's methods counted), or None where they
+    would repeat the routes (every route one method): the Server's tile in
+    both UIs and its health check's message show them only apart."""
+    return endpoints if endpoints != routes else None
+
+
 def method_summary(metadata: dict[str, Any]) -> str:
     """Route counts per HTTP method, e.g. ``29 GET, 11 POST``."""
     counts = metadata.get("method_counts") or {}

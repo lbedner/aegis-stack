@@ -11,14 +11,16 @@ const RAMP = 8; // --aegis-chart-1 .. -8 in tailwind.config.js; cycles past that
 
 // Colors come from the active theme's tokens, read at mount time so a
 // theme switch repaints charts in the new palette.
+// A chart token is a hex colour (its alpha a byte on the end); the rest
+// are oklch channels.
 function token(name, alpha) {
   const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  return name.startsWith('--aegis-chart-')
-    ? value
-    : (alpha === undefined ? `oklch(${value})` : `oklch(${value} / ${alpha})`);
+  if (alpha === undefined) return name.startsWith('--aegis-chart-') ? value : `oklch(${value})`;
+  if (!name.startsWith('--aegis-chart-')) return `oklch(${value} / ${alpha})`;
+  return `${value}${Math.round(alpha * 255).toString(16).padStart(2, '0')}`;
 }
-function rampColor(i) {
-  return token(`--aegis-chart-${(i % RAMP) + 1}`);
+function rampColor(i, alpha) {
+  return token(`--aegis-chart-${(i % RAMP) + 1}`, alpha);
 }
 
 let chartJsLoading = null;
@@ -121,11 +123,14 @@ function values(data, series) {
 }
 
 // One line is the theme's teal over a soft fill; several are the ramp,
-// unfilled, with a legend to tell them apart.
+// unfilled, with a legend to tell them apart. A line may name its place in
+// the ramp (``color``: a part's colour everywhere).
 function datasets(kind, data) {
   const tail = token('--n'); // "Other" reads as tail, never as a category
   const many = data.series.length > 1;
-  const line = (i) => (many ? rampColor(i) : token('--p'));
+  // A line's place in the ramp: its own (``color``), else its order.
+  const place = (i) => data.series[i].color ?? i;
+  const line = (i) => (many || data.series[i].color != null ? rampColor(place(i)) : token('--p'));
   // ``"style": "events"`` (see series.chart): dots, no line.
   const events = data.style === 'events';
   return data.series.map((series, i) => (series.points || events ? markers(data, series, events ? line(i) : token('--er')) : {
@@ -148,7 +153,21 @@ function datasets(kind, data) {
     pointHoverBorderWidth: 2,
     pointHoverBackgroundColor: token('--b2'),
     pointHoverBorderColor: line(i),
-  })).concat(kind === 'line' ? guides(data) : []);
+  })).map((set, i) => stacked(data, i, set, rampColor(place(i), 0.35))).concat(kind === 'line' ? guides(data) : []);
+}
+
+// ``"style": "stacked"`` (Resources): each line a band filled down to the
+// one below, so the top edge is the total; a ``dashed`` line (the host's in
+// use) stands apart, unstacked and unfilled, over them.
+function stacked(data, i, set, fill) {
+  if (data.style !== 'stacked') return set;
+  if (data.series[i].dashed) {
+    const color = token('--n');
+    return { ...set, stack: 'dashed', fill: false, borderDash: [6, 4], borderWidth: 1.5,
+      borderColor: color, backgroundColor: color, pointHoverBorderColor: color };
+  }
+  const below = data.series.slice(0, i).some((series) => !series.dashed);
+  return { ...set, fill: below ? '-1' : 'origin', backgroundColor: fill, borderWidth: 1 };
 }
 
 // Where warning and alert begin (``thresholds``: the host checks' rule,
@@ -228,6 +247,7 @@ function build(Chart, canvas) {
       : { ticks: { color: muted }, grid: { color: grid } },
     // A time chart measures from zero, so a small change reads as small.
     y: {
+      stacked: data.style === 'stacked',
       beginAtZero: timed(data),
       ticks: {
         color: muted,
@@ -243,6 +263,8 @@ function build(Chart, canvas) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      // A stack's bands redraw whole on every frame: hovering animates none.
+      animation: data.style === 'stacked' ? false : undefined,
       // Every value at the hovered spot, from anywhere over the chart, not
       // only on a line's exact pixel.
       interaction: kind === 'doughnut' ? { mode: 'nearest' } : { mode: 'index', intersect: false },
@@ -367,4 +389,4 @@ if (typeof document !== 'undefined') {
   document.addEventListener('theme-changed', () => mount(document));
 }
 
-if (typeof module !== 'undefined') module.exports = { formatValue, refresh, timeTicks, byteStep };
+if (typeof module !== 'undefined') module.exports = { datasets, formatValue, refresh, timeTicks, byteStep };

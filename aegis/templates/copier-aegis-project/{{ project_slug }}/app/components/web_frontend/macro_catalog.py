@@ -120,6 +120,16 @@ EXAMPLES: dict[str, dict[str, str]] = {
               {{ badge("Failing", "error") }} {{ badge("Idle", "muted") }}
               {{ badge("Active", "accent") }}
             </span>""",
+        "status_dot": """
+            <span class="flex items-center gap-3">
+              {{ status_dot("healthy") }} {{ status_dot("warning") }}
+              {{ status_dot("unhealthy") }}
+            </span>""",
+        "health_badge": """
+            <span class="flex flex-wrap items-center gap-4 text-sm">
+              {{ health_badge("healthy") }} {{ health_badge("warning") }}
+              {{ health_badge("unhealthy") }}
+            </span>""",
         "menu_item": """
             {% set on_click %}@click="$dispatch('toast', { text: 'Clicked', tone: 'ok' })"{% endset %}
             {% call dropdown("Actions", align="left") %}

@@ -3,20 +3,31 @@
 refreshes over SSE, so opening it never waits on Docker. A page with no container has none."""
 
 import asyncio
+from typing import Any
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
 
-from app.components.web_frontend import overseer_container
+from app.components.web_frontend import overseer_container, overseer_map
 from app.core import runtime, series
 from app.core.config import settings
 from app.core.runtime import Instance
 from app.services.system import topology, ui_runtime
-from app.services.system.models import ComponentStatus
-from tests._fake_runtime import REDIS, WORKER, FakeRuntime, use_runtime
+from app.services.system.models import (
+    ComponentStatus,
+    ComponentStatusType,
+    LoadCosts,
+)
+from tests._fake_runtime import (
+    REDIS,
+    WORKER,
+    FakeRuntime,
+    use_load_costs,
+    use_runtime,
+)
 from tests.web.dom import chart_json, checked, none, one, select, text
-from tests.web.overseer import sign_in, status_with
+from tests.web.overseer import page_html, sign_in, status_with
 
 CACHE = ComponentStatus(name="cache", message="Connected", metadata={})
 AUTH = ComponentStatus(name="auth", message="Ready", metadata={})
@@ -29,17 +40,11 @@ def client(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     return TestClient(app)
 
 
-def _html(client: TestClient, path: str) -> str:
-    response = client.get(path)
-    assert response.status_code == 200, response.text
-    return response.text
-
-
 def test_a_page_with_a_container_gets_the_section(client: TestClient) -> None:
     links = [
         text(a)
         for a in select(
-            _html(client, "/overseer/components/cache"), "#overseer-subnav nav a"
+            page_html(client, "/overseer/components/cache"), "#overseer-subnav nav a"
         )
     ]
     assert links[-2:] == ["Container", "Logs"]
@@ -51,7 +56,7 @@ def test_the_section_opens_without_waiting_on_the_runtime(
     """The page asks the runtime nothing: it renders from the sampler's last
     reading (pending before the first), and the stream keeps it fresh."""
     fake = use_runtime(monkeypatch, FakeRuntime(REDIS))
-    html = _html(client, "/overseer/components/cache/container")
+    html = page_html(client, "/overseer/components/cache/container")
     assert (fake.listed, fake.asked) == (0, [])
     assert "Reading" in text(one(html, "#container [data-pending]"))
     assert (
@@ -81,7 +86,7 @@ def test_the_charts_draw_what_was_sampled_without_asking_the_runtime(
             {f"{ui_runtime.SAMPLER}:redis:app-redis-1:{ui_runtime.CPU}": 12.5}
         )
     )
-    html = _html(client, "/overseer/components/cache/container")
+    html = page_html(client, "/overseer/components/cache/container")
     data = chart_json(html, "chart-container-cpu-data")
     assert data["series"] == [{"label": "app-redis-1", "values": [12.5]}]
     assert (fake.listed, fake.asked) == (0, [])
@@ -105,7 +110,7 @@ def test_the_range_chips_pick_the_window_and_the_stream_follows(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     use_runtime(monkeypatch, FakeRuntime(REDIS))
-    html = _html(client, "/overseer/components/cache/container?window=1800")
+    html = page_html(client, "/overseer/components/cache/container?window=1800")
     assert checked(html, '#container input[name="window"]') == ["1800"]
     assert one(html, "#container").get("sse-connect") == (
         "/overseer/events/container/redis?window=1800"
@@ -159,7 +164,7 @@ def test_a_page_with_no_container_has_no_section(client: TestClient) -> None:
     links = [
         text(a)
         for a in select(
-            _html(client, "/overseer/services/auth"), "#overseer-subnav nav a"
+            page_html(client, "/overseer/services/auth"), "#overseer-subnav nav a"
         )
     ]
     assert "Container" not in links
@@ -170,11 +175,11 @@ def test_each_container_restarts_after_a_confirm(client: TestClient) -> None:
     the restart API (which audits it); a container that is not
     this app's has no confirm to open."""
     asyncio.run(ui_runtime.containers("redis"))  # the sampler's first reading
-    html = _html(client, "/overseer/components/cache/container")
+    html = page_html(client, "/overseer/components/cache/container")
     opener = one(html, f'#container [data-container="{REDIS.name}"] [hx-get]')
     assert text(opener) == "Restart"
     assert opener.get("hx-get") == overseer_container.RESTART.format(name=REDIS.name)
-    dialog = _html(client, opener.get("hx-get"))
+    dialog = page_html(client, opener.get("hx-get"))
     button = one(dialog, "[hx-post]")
     assert button.get("hx-post") == f"/api/v1/runtime/containers/{REDIS.name}/restart"
     assert f"Restart {REDIS.name}?" in dialog
@@ -191,7 +196,7 @@ def test_each_container_is_a_card_of_steady_figures(client: TestClient) -> None:
     its live figures as a fixed strip, so a value changing width never moves
     the others (a table re-sized its columns on every frame)."""
     asyncio.run(ui_runtime.containers("redis"))
-    html = _html(client, "/overseer/components/cache/container")
+    html = page_html(client, "/overseer/components/cache/container")
     none(html, "#container table")
     card = one(html, f'#container [data-container="{REDIS.name}"]')
     assert text(one(card, "[data-state]")) == "running"
@@ -212,7 +217,7 @@ def test_the_overview_opens_with_a_glance_at_its_containers(client: TestClient) 
     a share of its limit, its Restart, and the way to its Container and Logs
     sections; kept live by its own stream."""
     asyncio.run(ui_runtime.containers("redis"))
-    html = _html(client, "/overseer/components/cache")
+    html = page_html(client, "/overseer/components/cache")
     glance = one(html, "#runtime-glance")
     assert glance.get("sse-connect") == "/overseer/events/glance/redis"
     row = one(glance, f'[data-glance="{REDIS.name}"]')
@@ -252,7 +257,7 @@ def test_the_home_page_is_every_glance(
     )
     use_runtime(monkeypatch, FakeRuntime(server, REDIS))
     asyncio.run(ui_runtime.containers("redis"))
-    html = _html(client, "/overseer")
+    html = page_html(client, "/overseer")
     stack = one(html, "#overview-stack")
     assert stack.get("sse-connect") == f"{overseer_container.OVERVIEW_EVENTS}?view=list"
     none(stack, "h2")  # a column, not a heading per entry
@@ -285,7 +290,7 @@ def test_the_home_page_also_reads_as_cards(client: TestClient) -> None:
     CPU and memory and their lines over the last 15 minutes; without, a few
     of its health check's own figures."""
     asyncio.run(ui_runtime.containers("redis"))
-    html = _html(client, "/overseer?view=cards")
+    html = page_html(client, "/overseer?view=cards")
     assert checked(html, '#overview-view input[name="view"]') == ["cards"]
     stack = one(html, "#overview-stack")
     assert "view=cards" in stack.get("sse-connect")
@@ -343,7 +348,7 @@ def test_the_home_page_also_reads_as_a_map(
     use_runtime(monkeypatch, FakeRuntime(REDIS))
     asyncio.run(ui_runtime.containers("redis"))
     client = TestClient(app)
-    html = _html(client, "/overseer?view=map")
+    html = page_html(client, "/overseer?view=map")
     assert one(html, '[data-node="backend"] [data-chip="auth"]') is not None
     assert checked(html, '#overview-view input[name="view"]') == ["map"]
     stack = one(html, "#overview-stack")
@@ -357,6 +362,51 @@ def test_the_home_page_also_reads_as_a_map(
     )
     assert len(paths) == len(shape.links)
     assert one(stack, '[data-chip="auth"]').get("href") == "/overseer/services/auth"
+
+
+def _failing(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> TestClient:
+    """The Database down and the Server failing with it; the Cache fine."""
+    down = ComponentStatusType.UNHEALTHY
+    sign_in(
+        app,
+        monkeypatch,
+        status_with(
+            ComponentStatus(name="backend", status=down, message="No database"),
+            ComponentStatus(name="database", status=down, message="Refused"),
+            CACHE,
+            services=[AUTH],
+        ),
+    )
+    use_runtime(monkeypatch, FakeRuntime(REDIS))
+    return TestClient(app)
+
+
+def test_a_line_takes_the_tone_of_what_it_leads_to(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A call fails when what it calls does: the line into the Database is
+    red, the failing Server's line into the healthy Cache is not."""
+    html = page_html(_failing(app, monkeypatch), "/overseer?view=map")
+    tones = {
+        (p.get("data-from"), p.get("data-to")): p.get("data-tone")
+        for p in select(html, "svg path[data-link]")
+    }
+    assert tones[("backend", "database")] == "error"
+    assert tones[("backend", "cache")] == "ok"
+
+
+@pytest.mark.parametrize(
+    ("view", "entry"),
+    [("map", "data-node"), ("list", "data-overview"), ("cards", "data-card")],
+)
+def test_a_part_failing_with_what_it_depends_on_names_it(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch, view: str, entry: str
+) -> None:
+    html = page_html(_failing(app, monkeypatch), f"/overseer?view={view}")
+    assert text(one(html, f'[{entry}="backend"] [data-cause]')) == (
+        "Likely cause: Database"
+    )
+    none(html, f'[{entry}="database"] [data-cause]')
 
 
 @pytest.mark.parametrize(
@@ -376,7 +426,7 @@ def test_a_stopped_container_draws_everywhere(
     stopped = Instance(id="r1", name=REDIS.name, service="redis", state="exited")
     use_runtime(monkeypatch, FakeRuntime(stopped))
     asyncio.run(ui_runtime.containers("redis"))
-    assert "exited" in _html(client, path)
+    assert "exited" in page_html(client, path)
 
 
 def test_a_figure_past_its_threshold_takes_its_tone(
@@ -386,11 +436,11 @@ def test_a_figure_past_its_threshold_takes_its_tone(
     Container card and the home page's card, sparkline included."""
     monkeypatch.setattr(settings, "MEMORY_THRESHOLD_PERCENT", 30.0)  # 25% warns
     asyncio.run(ui_runtime.containers("redis"))
-    card = one(_html(client, "/overseer/components/cache/container"), "#container")
+    card = one(page_html(client, "/overseer/components/cache/container"), "#container")
     figures = {text(dt): dt.getnext() for dt in select(card, "dl dt")}
     assert figures["Memory"].get("data-tone") == "warn"
     assert not figures["CPU"].get("data-tone")  # a fine figure stays plain
-    home = one(_html(client, "/overseer?view=cards"), '[data-card="cache"]')
+    home = one(page_html(client, "/overseer?view=cards"), '[data-card="cache"]')
     assert one(home, "[data-spark=memory] svg").get("data-tone") == "warn"
     assert one(home, "[data-spark=cpu] svg").get("data-tone") == "ok"
 
@@ -402,9 +452,9 @@ def test_restarting_the_server_overseer_runs_on_says_the_page_drops(
 
     use_runtime(monkeypatch, FakeRuntime(SERVER, REDIS))
     monkeypatch.setattr(runtime.socket, "gethostname", lambda: SERVER.id)
-    own = _html(client, overseer_container.RESTART.format(name=SERVER.name))
+    own = page_html(client, overseer_container.RESTART.format(name=SERVER.name))
     assert "this page drops" in own
-    assert "this page drops" not in _html(
+    assert "this page drops" not in page_html(
         client, overseer_container.RESTART.format(name=REDIS.name)
     )
 
@@ -417,3 +467,131 @@ def test_a_runtime_that_does_not_answer_is_a_503_not_a_crash(
     use_runtime(monkeypatch, FakeRuntime(REDIS, fail=True))
     response = client.get(overseer_container.RESTART.format(name=REDIS.name))
     assert response.status_code == 503
+
+
+@pytest.mark.parametrize(
+    ("view", "entry", "healthy"),
+    [
+        ("map", "data-node", "cache"),
+        ("list", "data-overview", "auth"),  # its containers' rows show the Cache
+        ("cards", "data-card", "cache"),
+    ],
+)
+def test_healthy_is_only_its_dot_and_anything_else_says_what_it_is(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch, view: str, entry: str, healthy: str
+) -> None:
+    html = page_html(_failing(app, monkeypatch), f"/overseer?view={view}")
+    one(html, f'[{entry}="{healthy}"] [data-healthy]')
+    none(html, f'[{entry}="database"] [data-healthy]')
+    assert "unhealthy" in text(one(html, f'[{entry}="database"]'))
+
+
+def test_a_healthy_pages_heading_is_only_its_dot(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A component with no page of its own gets the generic one: its
+    heading, its current status and its checks say healthy by the dot
+    alone, anything else in words."""
+    probe = ComponentStatus(
+        name="probe", status=ComponentStatusType.WARNING, message="Slow"
+    )
+    plain = ComponentStatus(
+        name="observability",
+        message="Exporting",
+        metadata={},
+        sub_components={"probe": probe},
+    )
+    sign_in(app, monkeypatch, status_with(plain))
+    html = page_html(TestClient(app), "/overseer/components/observability")
+    one(html, "header [data-healthy]")
+    one(html, "#card-current-status [data-healthy]")
+    warning = one(html, "#card-checks [data-tone]")
+    assert (text(warning), warning.get("data-tone")) == ("warning", "warn")
+
+
+@pytest.mark.parametrize(
+    ("view", "entry"), [("map", "data-node"), ("cards", "data-card")]
+)
+def test_an_entry_in_trouble_is_outlined_in_its_tone(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch, view: str, entry: str
+) -> None:
+    html = page_html(_failing(app, monkeypatch), f"/overseer?view={view}")
+    database = one(html, f'[{entry}="database"]')
+    assert database.get("data-tone") == "error"
+    assert "tone-border" in database.get("class").split()
+
+
+def test_cards_put_trouble_first_and_can_show_only_it(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Client side, so a live frame keeps the choice: the stack carries it
+    (CSS orders and hides the cards by their tone), trouble first at the
+    start."""
+    html = page_html(_failing(app, monkeypatch), "/overseer?view=cards")
+    stack = one(html, "#overview-stack")
+    assert (stack.get("data-order"), stack.get("data-only")) == ("trouble", "false")
+    one(html, "[data-toggle=trouble-first]")
+    one(html, "[data-toggle=only-trouble]")
+    none(page_html(_failing(app, monkeypatch), "/overseer?view=map"), "[data-toggle]")
+
+
+def _entry(key: str) -> dict[str, Any]:
+    return {"key": key, "title": key, "tone": "ok"}
+
+
+@pytest.mark.parametrize(
+    ("installed", "width"),
+    [
+        (["ingress", "backend", "database", "cache", "storage", "ollama"], 20.0),
+        (["backend", "database"], overseer_map.MAX_NODE_WIDTH),
+    ],
+)
+def test_the_map_sizes_its_nodes_to_the_stack(
+    installed: list[str], width: float
+) -> None:
+    """The busiest tier shares the map's width: four data stores get a fifth
+    of it each; a small stack's nodes stop at a node's size. Each tier
+    spreads across the whole width."""
+    found = overseer_map.layout([_entry(key) for key in installed])
+    assert found["map_node_width"] == pytest.approx(width)
+    bottom = max(n["top"] for n in found["map_nodes"])
+    data = [n["left"] for n in found["map_nodes"] if n["top"] == bottom]
+    gap = 100 / len(data)  # each node centred in an equal share of the width
+    assert data == pytest.approx([gap * (i + 0.5) for i in range(len(data))])
+
+
+def test_the_views_switch_by_icon_and_still_say_which(client: TestClient) -> None:
+    """Each view is an icon, named for a reader and on hover; every icon
+    it points at is drawn on the page."""
+    html = page_html(client, "/overseer")
+    chips = select(html, "#overview-view label")
+    assert [c.get("title") for c in chips] == ["List", "Cards", "Map"]
+    assert [text(one(c, ".sr-only:not(input)")) for c in chips] == [
+        "List",
+        "Cards",
+        "Map",
+    ]
+    used = {one(c, "svg use").get("href") for c in chips}
+    defined = {f"#{s.get('id')}" for s in select(html, "svg[data-icons] symbol")}
+    assert len(used) == 3 and used <= defined
+
+
+def test_the_servers_services_sit_two_to_a_row() -> None:
+    """Room for each name in full, and its cost to load."""
+    stack = [_entry(key) for key in ("backend", "auth", "ai", "blog")]
+    found = overseer_map.layout(stack)
+    server = next(n for n in found["map_nodes"] if n["key"] == "backend")
+    two_rows = overseer_map.NODE_HEIGHT + 2 * overseer_map.CHIP_ROW
+    assert server["height"] == two_rows
+
+
+def test_a_service_chip_says_what_it_costs_to_load(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    server = ComponentStatus(name="backend", message="FastAPI", metadata={})
+    sign_in(app, monkeypatch, status_with(server, services=[AUTH]))
+    use_runtime(monkeypatch, FakeRuntime(REDIS))
+    use_load_costs(monkeypatch, LoadCosts(core=1, parts={"service_auth": 50 * 2**20}))
+    html = page_html(TestClient(app), "/overseer?view=map")
+    chip = one(html, '[data-chip="auth"]')
+    assert text(one(chip, "[data-load]")) == "50.0 MB"

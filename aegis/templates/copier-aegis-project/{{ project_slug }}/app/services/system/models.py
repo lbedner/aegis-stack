@@ -253,3 +253,20 @@ class MigrationInfo(BaseModel):
 
 # Singleton for alert severity constants
 alert_severity = AlertSeverity()
+
+
+class LoadReading(BaseModel):
+    """A fresh Python's memory in use, in bytes, before and after it loaded
+    one part of the app (``load_cost``)."""
+
+    before: int
+    after: int
+
+
+class LoadCosts(BaseModel):
+    """What the app's core and each part of it cost the webserver to load,
+    in bytes (``load_cost``): each part loaded alone on top of the core,
+    keyed as the name registry keys it."""
+
+    core: int = Field(0, description="Python and the app's core")
+    parts: dict[str, int] = Field(default_factory=dict)

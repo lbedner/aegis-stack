@@ -48,3 +48,16 @@ def shape(installed: Sequence[str]) -> Shape:
         links=[(a, b) for a, b in LINKS if a in present and b in present],
         hosted=[name for name in installed if name not in placed],
     )
+
+
+def causes(failing: set[str]) -> dict[str, list[str]]:
+    """Each of the ``failing`` parts that depends on another failing one
+    (``LINKS``, followed down), and the failing parts at the bottom of it:
+    the Database down names the Database on the Server and on the Ingress in
+    front of it. A part failing on its own is left out."""
+
+    def roots(name: str) -> list[str]:
+        below = [b for a, b in LINKS if a == name and b in failing]
+        return list(dict.fromkeys(r for b in below for r in roots(b) or [b]))
+
+    return {name: found for name in sorted(failing) if (found := roots(name))}

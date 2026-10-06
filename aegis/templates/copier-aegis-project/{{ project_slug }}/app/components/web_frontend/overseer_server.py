@@ -10,6 +10,7 @@ from typing import Any
 from app.components.backend.api.load_test_api import recent_runs
 from app.components.backend.api.traffic import get_traffic_sources
 from app.components.backend.middleware.performance import metrics_service
+from app.core import runtime
 from app.core.formatting import format_relative_time
 from app.core.log import logger
 from app.services.system import ui_backend, ui_cache
@@ -104,8 +105,18 @@ def _run_rows(runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def overview_context(backend: ComponentStatus) -> dict[str, Any]:
-    """The Overview's context, shared by the page and its SSE refresh."""
-    return {"methods": ui_backend.method_summary(backend.metadata or {})}
+    """The Overview's context, shared by the page and its SSE refresh. With
+    containers to read, the glance above it has the server's own figures
+    and the host's are on Resources; without, the machine it runs on is
+    all there is to show."""
+    metadata = backend.metadata or {}
+    return {
+        "methods": ui_backend.method_summary(metadata),
+        "endpoints": ui_backend.endpoints_apart(
+            metadata.get("total_routes", 0), metadata.get("total_endpoints", 0)
+        ),
+        "host_figures": not runtime.deployed(),
+    }
 
 
 async def section_context(

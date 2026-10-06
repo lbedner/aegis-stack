@@ -330,6 +330,12 @@ def get_runtime() -> Runtime:
     return backend
 
 
+def deployed() -> bool:
+    """Whether there are containers to read: a deploy target's backend is
+    installed, rather than this process alone."""
+    return get_runtime().backend_name != "none"
+
+
 async def services() -> list[Service]:
     return await get_runtime().services()
 

@@ -218,6 +218,32 @@ def test_the_bar_runs_while_part_of_the_page_is_still_on_its_way() -> None:
     assert out == [True, False]
 
 
+REQUEST_HARNESS = (
+    STUBS
+    + """
+const classes = new Set();
+const bar = { classList: { toggle: (c, on) => (on ? classes.add(c) : classes.delete(c)) } };
+document.getElementById = (id) => (id === 'page-progress' ? bar : null);
+require(APP_JS);
+const ends = [];
+const xhr = { addEventListener: (name, fn) => { if (name === 'loadend') ends.push(fn); } };
+const seen = [];
+fire('htmx:beforeRequest', { detail: { elt: {}, xhr } }); seen.push(classes.has('is-loading'));
+ends.forEach((fn) => fn());  // no htmx:afterRequest reaches the page
+seen.push(classes.has('is-loading'));
+console.log(JSON.stringify(seen));
+"""
+)
+
+
+def test_the_bar_stops_when_a_request_ends_even_if_its_sender_was_swapped_out() -> None:
+    """A live frame can swap out the element that sent a request while it is
+    out (a Restart button in a row the stream re-sends): htmx's
+    ``afterRequest`` then fires on a detached element and never bubbles
+    here, so the bar counts the request down when it ends (its ``loadend``)."""
+    assert run(REQUEST_HARNESS, APP_JS=APP_JS) == [True, False]
+
+
 SCROLL_HARNESS = (
     STUBS
     + """

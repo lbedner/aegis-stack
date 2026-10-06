@@ -196,3 +196,26 @@ def test_a_chart_whose_lines_are_renamed_is_drawn_again() -> None:
     replaced by one of another name), and the page redraws it by the same
     rule: the names, not only how many."""
     assert run(RENAMED_REFRESH, CHARTS_JS=CHARTS_JS)["label"] == "b"
+
+
+STACKED = """
+const c = require(CHARTS_JS);
+global.getComputedStyle = () => ({ getPropertyValue: (name) => name });
+global.document = { documentElement: {} };
+const sets = c.datasets('line', { x: 'time', labels: [1], style: 'stacked', series: [
+  { label: 'Server', values: [2], color: 2 },
+  { label: 'Cache', values: [1], color: 5 },
+  { label: 'Host in use', values: [9], dashed: true }] });
+console.log(JSON.stringify(sets.map((s) => ({ label: s.label, color: s.borderColor,
+  fill: s.fill, stack: s.stack ?? null, dash: s.borderDash ?? null }))));
+"""
+
+
+def test_a_stacked_chart_fills_each_line_on_the_one_below() -> None:
+    """Resources' charts: each part in its own colour (``color``, the
+    palette's), stacked so the top edge is the total; a ``dashed`` line
+    stands apart, unstacked and unfilled (the host's in use)."""
+    server, cache, host = run(STACKED, CHARTS_JS=CHARTS_JS)
+    assert (server["color"], server["fill"]) == ("--aegis-chart-3", "origin")
+    assert (cache["color"], cache["fill"]) == ("--aegis-chart-6", "-1")
+    assert host["fill"] is False and host["dash"] and host["stack"] == "dashed"

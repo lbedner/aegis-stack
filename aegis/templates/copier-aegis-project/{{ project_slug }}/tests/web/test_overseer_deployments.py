@@ -14,7 +14,7 @@ from app.core.config import settings
 from app.services.system import backup, health
 from tests._fake_runtime import SERVER, FakeRuntime, use_runtime
 from tests.web.dom import one, select, text
-from tests.web.overseer import sign_in, status_with
+from tests.web.overseer import page_html, sign_in, status_with
 
 PAGE = "/overseer/deployments"
 
@@ -47,24 +47,18 @@ def _local(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(hosting, "deploys_to", lambda: None)
 
 
-def _html(client: TestClient, path: str) -> str:
-    response = client.get(path)
-    assert response.status_code == 200, response.text
-    return response.text
-
-
 def _facts(html: str, card: str) -> dict[str, str]:
     terms = select(html, f"#{card} dt")
     return {text(t): text(t.getnext()) for t in terms}
 
 
 def test_the_sidebar_leads_to_deployment(client: TestClient) -> None:
-    link = one(_html(client, "/overseer"), f'#overseer-nav a[href="{PAGE}"]')
+    link = one(page_html(client, "/overseer"), f'#overseer-nav a[href="{PAGE}"]')
     assert text(link) == "Deployments"
 
 
 def test_the_live_build_and_the_host(client: TestClient) -> None:
-    html = _html(client, PAGE)
+    html = page_html(client, PAGE)
     now = _facts(html, "card-now")
     assert (now["Build"], now["Commit"], now["Health"]) == (
         "abc1234",
@@ -90,7 +84,7 @@ def test_the_backups_newest_first(
         path.write_bytes(b"x" * 2048)
         when = (datetime.now() - timedelta(hours=age)).timestamp()
         os.utime(path, (when, when))
-    rows = select(_html(client, f"{PAGE}/backups"), "#deployments-backups tbody tr")
+    rows = select(page_html(client, f"{PAGE}/backups"), "#deployments-backups tbody tr")
     assert "20261003_020000" in text(rows[0]) and "3 hours ago" in text(rows[0])
     assert len(rows) == 2
 
@@ -101,7 +95,7 @@ def test_no_backups_says_why(
     # Without scheduled backups the page says so; with them, an empty volume.
     if hasattr(backup, "list_backups"):
         monkeypatch.setattr(settings, "DATABASE_BACKUP_DIR", str(tmp_path / "none"))
-    note = text(one(_html(client, f"{PAGE}/backups"), "#deployments-backups"))
+    note = text(one(page_html(client, f"{PAGE}/backups"), "#deployments-backups"))
     assert "backups" in note.lower()
 
 
@@ -123,7 +117,9 @@ def test_the_history_section_lists_each_deploy(
         return {"rows": [row], "note": None}
 
     monkeypatch.setattr(ui_deployments, "history", recorded)
-    (row,) = select(_html(client, f"{PAGE}/history"), "#deployments-history tbody tr")
+    (row,) = select(
+        page_html(client, f"{PAGE}/history"), "#deployments-history tbody tr"
+    )
     assert "aaa1111" in text(row) and "Ada" in text(row) and "passed" in text(row)
 
 
@@ -147,7 +143,7 @@ def test_it_shows_where_it_runs_and_where_it_can(
 
     monkeypatch.setattr(hosting, "running_on", on_hetzner)
     monkeypatch.setattr(hosting, "deploys_to", lambda: None)
-    html = _html(client, PAGE)
+    html = page_html(client, PAGE)
     card = one(html, "#card-running-on")
     assert "Hetzner Cloud" in text(card) and "fsn1-dc14" in text(card)
     assert (

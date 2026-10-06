@@ -19,7 +19,7 @@ from app.services.system.models import (
     ComponentStatusType,
     SystemStatus,
 )
-from app.services.system.ui import get_component_title
+from app.services.system.ui import get_component_title, registry_key
 
 from .overseer_access import Db, Viewer
 
@@ -84,7 +84,7 @@ class NavItem:
     def checks(self) -> list[tuple[str, str]]:
         """Each sub-check's name and state, for the status page."""
         return [
-            (name.replace("_", " ").title(), check.status.value.title())
+            (name.replace("_", " ").title(), check.status.value)
             for name, check in (self.component.sub_components or {}).items()
         ]
 
@@ -104,12 +104,6 @@ class NavItem:
         """Stable, SSE-safe event name even for plugin-provided keys."""
         digest = sha1(self.name.encode(), usedforsecurity=False).hexdigest()[:12]
         return f"status-{self.group}-{digest}"
-
-
-def registry_key(group: str, name: str) -> str:
-    """An entry's key in the one name registry: a component's own name, a
-    service's ``service_<name>`` (``get_component_title``)."""
-    return name if group == "components" else f"service_{name}"
 
 
 def page_url(group: str, name: str) -> str:

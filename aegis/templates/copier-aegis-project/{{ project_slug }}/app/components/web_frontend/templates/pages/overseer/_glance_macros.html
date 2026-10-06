@@ -5,7 +5,7 @@
 {% from "components/macros/layout.html" import badge, progress %}
 
 {% macro state(row) -%}
-<span data-state>{{ badge(row.phase, row.tone) }}</span>
+<span data-state>{{ badge(row.state, row.tone) }}</span>
 {%- endmacro %}
 
 {% macro uptime(row) -%}
@@ -24,17 +24,23 @@
 {%- endmacro %}
 
 {# Memory as a share of its limit: a bar and the percent, in its tone (the
-   host's memory check's rule); the amount where there is no limit. #}
+   host's memory check's rule); the amount where there is no limit. Short
+   of room (a map node), the bar gives way so the percent stays. #}
 {% macro memory(row) -%}
-<span data-memory class="flex items-center gap-2 tabular-nums"><span class="text-xxs caps text-aegis-muted">{{ figure_names.memory }}</span>
+<span data-memory class="flex min-w-0 items-center gap-2 tabular-nums"><span class="text-xxs caps text-aegis-muted">{{ figure_names.memory }}</span>
   {%- if row.memory_percent is not none %}
-  <span class="w-24">{{ progress(row.memory_percent / 100, row.memory_tone, figure_names.memory, "h-1.5") }}</span><span class="tone" data-tone="{{ row.memory_tone }}">{{ row.memory_percent }}%</span>
+  <span class="w-24 min-w-0">{{ progress(row.memory_percent / 100, row.memory_tone, figure_names.memory, "h-1.5") }}</span><span class="tone" data-tone="{{ row.memory_tone }}">{{ row.memory_percent }}%</span>
   {%- else %}{{ row.memory_used }}{% endif %}</span>
 {%- endmacro %}
 
 {# Its CPU and memory, or, stopped, its state (where nothing else says it). #}
 {% macro figures(row) -%}
 {% if row.phase == "running" %}{{ cpu(row) }}{{ memory(row) }}{% else %}{{ state(row) }}{% endif %}
+{%- endmacro %}
+
+{# A failing entry's failing dependencies (``topology.causes``), named. #}
+{% macro cause(item) -%}
+{% if item.cause %}<span data-cause class="block text-xxs text-aegis-muted truncate">Likely cause: {{ item.cause }}</span>{% endif %}
 {%- endmacro %}
 
 {# The way to a page's Container and Logs sections (``base``: its URL). #}

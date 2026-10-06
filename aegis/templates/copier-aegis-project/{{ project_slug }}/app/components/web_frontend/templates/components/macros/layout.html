@@ -19,6 +19,7 @@
   "settings": "M4 6h16 M4 12h16 M4 18h16 M9 4v4 M15 10v4 M7 16v4",
   "logs": "M4 5h16v14H4z M7 9h6 M7 12h10 M7 15h8",
   "deployments": "M12 3l4 4h-3v7h-2V7H8l4-4z M4 14v5h16v-5",
+  "resources": "M7 7h10v10H7z M10 10h4v4h-4z M10 3v4 M14 3v4 M10 17v4 M14 17v4 M3 10h4 M3 14h4 M17 10h4 M17 14h4",
   "backend": "M4 4h16v7H4z M4 13h16v7H4z M8 7.5h.01 M8 16.5h.01 M12 7.5h6 M12 16.5h6",
   "web_frontend": "M3 4h18v16H3z M3 9h18 M6 6.5h.01 M9 6.5h.01 M12 6.5h.01",
   "frontend": "M3 4h18v14H3z M8 21h8 M12 18v3",
@@ -321,6 +322,19 @@
   {% if tone %}<span class="w-1.5 h-1.5 rounded-full bg-current" aria-hidden="true"></span>{% endif %}{{ label }}
 </span>
 {% endmacro %}
+
+{# A health status as a dot in its tone, its word for a reader: the
+   sidebar's, the sub-menu's, a map chip's, and a healthy badge. #}
+{% macro status_dot(status) -%}
+{% set tone = status|health_tone %}<span data-tone="{{ tone }}" class="status-dot w-2 h-2 shrink-0 rounded-full {{ {"ok": "bg-aegis-teal", "warn": "bg-aegis-amber", "error": "bg-aegis-error"}.get(tone, "bg-aegis-muted") }}" aria-hidden="true"></span><span class="sr-only">{{ status }}</span>
+{%- endmacro %}
+
+{# A health status: healthy is only its dot (saying so is noise), anything
+   else says what it is. #}
+{% macro health_badge(status) -%}
+{% if status == "healthy" %}<span data-healthy title="Healthy" class="inline-flex items-center">{{ status_dot(status) }}</span>
+{%- else %}{{ badge(status or "unknown", (status or "")|health_tone) }}{% endif %}
+{%- endmacro %}
 
 
 {# One entry in a dropdown() menu. ``attrs`` carries the htmx verb

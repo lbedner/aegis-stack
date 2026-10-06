@@ -9,10 +9,16 @@ import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
 import contextlib
 import time
+from typing import Any
 
 from fastapi.responses import StreamingResponse
 
+from app.core import series
+
+from .rendering import templates, with_query
+
 MAX_STREAM_SECONDS = 300
+MACROS = "components/macros/layout.html"  # ``chart_data``, a chart's data
 # A comment line this often keeps a quiet pushed stream (``heartbeat``) open,
 # and finds a closed tab.
 HEARTBEAT_SECONDS = 15.0
@@ -108,3 +114,39 @@ async def heartbeat(
         with contextlib.suppress(asyncio.CancelledError, StopAsyncIteration):
             await upcoming
         await frames.aclose()  # type: ignore[attr-defined]
+
+
+def chart_panel(
+    prefix: str, charts: list[dict[str, Any]], seconds: int, events: str
+) -> dict[str, Any]:
+    """A page's live charts as its ``live_charts`` macro draws them: each
+    chart with its id (``prefix``-key, its stream event too), the range
+    chips over ``seconds``, and the stream (``events``) over that window."""
+    return {
+        "charts": [chart | {"id": f"{prefix}-{chart['key']}"} for chart in charts],
+        "windows": series.WINDOWS,
+        "window": seconds,
+        "events": with_query(events, window=str(seconds)),
+    }
+
+
+def chart_frames(
+    prefix: str,
+    charts: list[dict[str, Any]],
+    held: dict[str, tuple[list[str], int]],
+) -> dict[str, str]:
+    """Each chart's frame for a live stream, by its event (``chart_panel``'s
+    id): whole at first and when its lines change, and after that only its
+    new points (``series.since``). ``held``: each chart's lines and the
+    newest time sent, which the page now has; kept across frames."""
+    chart_data = templates.env.get_template(MACROS).module.chart_data  # type: ignore[attr-defined]
+    sent = {}
+    for chart in charts:
+        event, data = f"{prefix}-{chart['key']}", chart["data"]
+        lines = [line["label"] for line in data["series"]]
+        if event in held and held[event][0] == lines:
+            data = series.since(data, held[event][1])
+        if data["labels"]:
+            held[event] = (lines, data["labels"][-1])
+        sent[event] = str(chart_data(event, data))
+    return sent

@@ -9,7 +9,7 @@ it); it runs at its ``interval`` while someone watches and its
 from app.components.inference.sampler import HOST as INFERENCE_HOST
 from app.components.inference.sampler import SAMPLER as INFERENCE
 {% endif -%}
-from app.services.system import ui_runtime
+from app.services.system import ui_resources, ui_runtime
 {%- if include_redis %}
 from app.services.system.redis_keys import KEYSPACE
 {%- endif %}
@@ -19,6 +19,7 @@ from app.services.system.ui_worker import QUEUES
 
 SAMPLERS = [
     ui_runtime.CONTAINERS,
+    ui_resources.HOST,
 {%- if include_inference %}
     INFERENCE,
 {%- endif %}

@@ -14,9 +14,8 @@ from app.core.runtime import LogLine, parse_log_line
 from app.services.system.models import ComponentStatus
 from tests._fake_runtime import REDIS, STOPPED, WORKER, FakeRuntime, use_runtime
 from tests.web.dom import checked, none, one, select, text
-from tests.web.overseer import page_html, sign_in, status_with
+from tests.web.overseer import CACHE, page_html, sign_in, status_with
 
-CACHE = ComponentStatus(name="cache", message="Connected", metadata={})
 PAGE = "/overseer/components/cache/logs"
 
 

@@ -328,7 +328,7 @@ class TestIngressHealthCheck:
         content = template_path.read_text()
 
         assert "check_ingress_health" in content
-        assert 'register_health_check("ingress"' in content
+        assert "register_health_check(ComponentName.INGRESS" in content
 
 
 class TestIngressConfig:
@@ -418,7 +418,7 @@ class TestIngressDashboardCard:
         content = cards_path.read_text()
 
         assert "IngressCard" in content
-        assert 'component_name == "ingress"' in content
+        assert "component_name == ComponentName.INGRESS" in content
 
 
 class TestIngressModal:
@@ -491,7 +491,7 @@ class TestIngressModal:
         content = registry_path.read_text()
 
         assert "IngressDetailDialog" in content
-        assert '"ingress": IngressDetailDialog' in content
+        assert "ComponentName.INGRESS: IngressDetailDialog" in content
 
 
 class TestIngressDiagramLayout:
@@ -506,7 +506,7 @@ class TestIngressDiagramLayout:
         )
         content = layout_path.read_text()
 
-        assert '"ingress"' in content
+        assert "ComponentName.INGRESS" in content
         assert "RADIAL_POSITIONS" in content
 
     def test_ingress_connection_to_backend(self) -> None:
@@ -518,5 +518,5 @@ class TestIngressDiagramLayout:
         )
         content = layout_path.read_text()
 
-        assert '"ingress"' in content
+        assert "ComponentName.INGRESS" in content
         assert "ingress" in content and "backend" in content

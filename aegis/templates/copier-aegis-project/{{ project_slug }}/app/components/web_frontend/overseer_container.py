@@ -13,8 +13,20 @@ from dataclasses import replace
 from typing import Any
 
 from app.core import secrets, series
-from app.services.system import service_links, topology, ui_resources, ui_runtime
-from app.services.system.ui import registry_key
+from app.core.constants import ComponentName
+from app.services.system import (
+    service_links,
+    topology,
+    ui_resources,
+    ui_runtime,
+    ui_worker,
+)
+from app.services.system.models import ComponentStatusType
+from app.services.system.ui import (
+    get_component_label,
+    get_component_title,
+    registry_key,
+)
 
 from . import overseer_map, overseer_secrets
 from .filters import health_tone, worst_tone
@@ -31,9 +43,12 @@ GLANCE = "pages/overseer/_glance_rows.html"
 GLANCE_EVENTS = "/overseer/events/glance/{page}"
 GLANCE_EVENT = "glance"
 # Overseer's home, in the view its toggle chose (``?view=``, like every filter).
+HOME = "/overseer"
+CARDS_VIEW, MAP_VIEW, FLOW_VIEW = "cards", "map", "flow"
 VIEWS = (
-    ("cards", "Cards", "squares-2x2"),
-    ("map", "Map", "tiers"),
+    (CARDS_VIEW, "Cards", "squares-2x2"),
+    (MAP_VIEW, "Map", "tiers"),
+    (FLOW_VIEW, "Flow", "flow"),
 )
 TEMPLATES = {key: f"pages/overseer/_overview_{key}.html" for key, *_ in VIEWS}
 OVERVIEW_EVENTS = "/overseer/events/overview"
@@ -144,14 +159,18 @@ async def overview(
     ]
     host = ui_runtime.page_of(topology.HOST)
     pages = [page for _, page in entries if page]
-    zoomed = view == "map" and zoom == topology.HOST
-    # The Server opened up shows no glance: no containers read for it.
+    drawn = view in (MAP_VIEW, FLOW_VIEW)
+    zoomed = view == MAP_VIEW and zoom == topology.HOST
+    compact = zoomed or view == FLOW_VIEW
+    # A compact map (one line a node) shows no glance: no containers read.
     found = (
         {}
-        if zoomed
-        else await ui_runtime.containers_of([*pages, host] if host else pages, wait=wait)
+        if compact
+        else await ui_runtime.containers_of(
+            [*pages, host] if host else pages, wait=wait
+        )
     )
-    trends = await ui_runtime.trends(pages) if view == "cards" else {}
+    trends = await ui_runtime.trends(pages) if view == CARDS_VIEW else {}
     stack = []
     for entry, page in entries:
         rows = found[page]["rows"] if page in found else []
@@ -165,42 +184,103 @@ async def overview(
             "message": entry.component.message,
             "glance": toned(found[page]) if page and rows else None,
         }
-        if view == "cards":
+        if view == CARDS_VIEW:
             trend = trends[page] if page and rows else None
             item |= _card(trend, item["glance"], entry.details)
         stack.append(item)
-    shape, map_zoom = None, None
-    if zoomed:
-        map_zoom = next(
-            (item["title"] for item in stack if item["key"] == topology.HOST), "Server"
-        )
-        stack, shape = _opened(stack)
-        await _name_unkeyed(stack)
-        shape = _with_key_lines(stack, shape)
-    _name_causes(stack, shape.links if shape else topology.LINKS)
-    if view == "map":
-        await _name_loads(stack)
-    if view == "map" and not zoomed:
-        for item in stack:
-            if item["key"] == topology.HOST:
-                item["zoom"] = with_query("/overseer", view="map", zoom=topology.HOST)
+    if drawn:
+        placed = await _drawn(stack, [entry for entry, _ in entries], view, zoomed)
+    else:
+        _name_causes(stack, topology.LINKS)
+        placed = {"overview_stack": stack}
     server = found[host]["rows"] if host in found else []
-    placed = overseer_map.layout(stack, shape, compact=zoomed) if view == "map" else {}
     return placed | {
-        "overview_stack": stack,
         # What has no container of its own runs in the webserver.
         "overview_host": server[0]["name"] if server else None,
         "overview_events": with_query(
             OVERVIEW_EVENTS, view=view, zoom=topology.HOST if zoomed else None
         ),
-        # The way back out of the Server opened up.
-        "map_zoom": map_zoom,
-        "map_back": with_query("/overseer", view="map"),
+        "overview_wide": drawn,
+        "overview_cards": view == CARDS_VIEW,
         "overview_event": OVERVIEW_EVENT,
         "overview_view": view,
         "overview_views": VIEWS,
         "overview_template": TEMPLATES[view],
     }
+
+
+async def _drawn(
+    stack: list[dict[str, Any]], entries: list[NavItem], view: str, zoomed: bool
+) -> dict[str, Any]:
+    """The Map's or the Flow's entries placed (``overseer_map.layout``):
+    with the worker's queue; opened up into the Server when ``zoomed`` (its
+    own links, outside providers, unset keys); each entry's role and cause;
+    the Map's costs to load, the Flow's way of work and its key."""
+    worker = next((e for e in entries if e.name == ComponentName.WORKER), None)
+    if worker:
+        stack.append(_queue(worker))
+    _inherit(stack)
+    shape = None
+    if zoomed:
+        stack, shape = _opened(stack)
+        await _name_unkeyed(stack)
+        shape = _with_key_lines(stack, shape)
+    _name_causes(stack, shape.links if shape else topology.LINKS)
+    flow = view == FLOW_VIEW
+    if flow:
+        shape = topology.flow([item["key"] for item in stack])
+    else:
+        await _name_loads(stack)
+    for item in stack:
+        item.setdefault("role", topology.ROLES.get(item["key"]))
+        if item["key"] == topology.HOST and not (zoomed or flow):
+            item["zoom"] = with_query(HOME, view=MAP_VIEW, zoom=topology.HOST)
+    placed = overseer_map.layout(stack, shape, compact=zoomed, across=flow)
+    return placed | {
+        "overview_stack": stack,
+        # The way back out of the Server opened up.
+        "map_zoom": get_component_title(topology.HOST) if zoomed else None,
+        "map_back": with_query(HOME, view=MAP_VIEW),
+        "map_legend": _legend(placed) if flow else [],
+    }
+
+
+def _queue(worker: NavItem) -> dict[str, Any]:
+    """The worker's queue (``topology.QUEUE``) as a node, from the worker's
+    own health check (``ui_worker.backlog``)."""
+    found = ui_worker.backlog(worker.component)
+    holder = topology.INSIDE[topology.QUEUE]
+    return {
+        "key": topology.QUEUE,
+        "registry": topology.QUEUE,
+        "title": get_component_title(topology.QUEUE),
+        "url": worker.url,
+        "status": found.status.value,
+        "tone": health_tone(found.status.value),
+        "message": found.message,
+        "figure": f"{found.queued} queued",
+        "note": f"In {get_component_label(holder)}, beside the "
+        f"{get_component_title(holder)}",
+        "glance": None,
+    }
+
+
+def _inherit(stack: list[dict[str, Any]]) -> None:
+    """A part inside another (``topology.INSIDE``) is down when what holds
+    it is."""
+    found = {item["key"]: item for item in stack}
+    down = ComponentStatusType.UNHEALTHY.value
+    for part, holder in topology.INSIDE.items():
+        if part in found and found.get(holder, {}).get("status") == down:
+            found[part] |= {"status": down, "tone": health_tone(down)}
+
+
+def _legend(placed: dict[str, Any]) -> list[tuple[str, str]]:
+    """Each shape the map draws, and what it stands for."""
+    drawn = {node["role"] for node in placed["map_nodes"]}
+    return [
+        (role, label) for role, label in topology.ROLE_LABELS.items() if role in drawn
+    ]
 
 
 async def _name_loads(stack: list[dict[str, Any]]) -> None:
@@ -251,7 +331,7 @@ async def _name_unkeyed(stack: list[dict[str, Any]]) -> None:
     keyed = {row.name for row in await secrets.status() if row.is_set}
     for item in stack:
         unset = [n for n in wanted.get(item["key"], []) if n not in keyed]
-        if item.get("outside") and unset:
+        if item.get("role") == topology.Role.OUTSIDE and unset:
             item |= {
                 "tone": "warn",
                 "message": "Not usable: a key it needs is not set.",
@@ -282,9 +362,9 @@ def _outside(key: str) -> dict[str, Any]:
         "url": None,
         "status": None,
         "tone": "muted",
-        "message": "Outside the stack",
+        "message": topology.ROLE_LABELS[topology.Role.OUTSIDE],
         "glance": None,
-        "outside": True,
+        "role": topology.Role.OUTSIDE,
     }
 
 

@@ -11,6 +11,7 @@ from fastapi.responses import HTMLResponse, Response
 from app.components.web_frontend import overseer_scheduler
 from app.components.web_frontend.overseer_nav import find_installed
 from app.components.web_frontend.rendering import dialog
+from app.core.constants import ComponentName
 
 router = APIRouter(prefix=overseer_scheduler.PARTIALS)
 
@@ -18,7 +19,7 @@ router = APIRouter(prefix=overseer_scheduler.PARTIALS)
 @router.get("/confirm/run/{job_id}", response_class=HTMLResponse)
 async def confirm_run(request: Request, job_id: str) -> Response:
     """Confirm running one scheduled job now."""
-    item = find_installed("components", "scheduler")
+    item = find_installed("components", ComponentName.SCHEDULER)
     task = (
         next(
             (

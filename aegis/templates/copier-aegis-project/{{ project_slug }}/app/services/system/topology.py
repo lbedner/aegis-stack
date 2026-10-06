@@ -9,32 +9,75 @@ imports.
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from enum import StrEnum
 
+from app.core.constants import ComponentName
+
+# The worker's queue: not a process or a health check of its own, but where
+# every enqueue lands and the worker takes work from (in Redis, beside the
+# Cache). Drawn whenever there is a worker.
+QUEUE = "queue"
 # Each tier's processes, by their health component name, in drawing order.
 TIERS: tuple[tuple[str, ...], ...] = (
-    ("ingress",),
-    ("backend", "worker", "scheduler"),
-    ("database", "cache", "storage", "ollama"),
+    (ComponentName.INGRESS,),
+    (ComponentName.BACKEND, ComponentName.WORKER, ComponentName.SCHEDULER),
+    (
+        ComponentName.DATABASE,
+        QUEUE,
+        ComponentName.CACHE,
+        ComponentName.STORAGE,
+        ComponentName.OLLAMA,
+    ),
 )
 # Who talks to whom: requests in through the ingress; the app's processes
-# to their stores, the cache being the worker's broker too.
+# to their stores; work handed to the queue, and taken from it.
 LINKS: tuple[tuple[str, str], ...] = (
-    ("ingress", "backend"),
-    ("backend", "database"),
-    ("backend", "cache"),
-    ("backend", "storage"),
-    ("backend", "ollama"),
-    ("worker", "cache"),
-    ("worker", "database"),
-    ("scheduler", "database"),
-    ("scheduler", "cache"),
+    (ComponentName.INGRESS, ComponentName.BACKEND),
+    (ComponentName.BACKEND, ComponentName.DATABASE),
+    (ComponentName.BACKEND, QUEUE),
+    (ComponentName.BACKEND, ComponentName.CACHE),
+    (ComponentName.BACKEND, ComponentName.STORAGE),
+    (ComponentName.BACKEND, ComponentName.OLLAMA),
+    (ComponentName.WORKER, QUEUE),
+    (ComponentName.WORKER, ComponentName.DATABASE),
+    (ComponentName.SCHEDULER, ComponentName.DATABASE),
+    (ComponentName.SCHEDULER, QUEUE),
 )
-HOST = "backend"  # what has no process of its own runs in the webserver
-# What a caller hands work to rather than calls and waits on: a line into it
-# is queued work.
-QUEUED = frozenset({"worker"})
+# What lives inside another part, so fails with it, with no line drawn.
+INSIDE: dict[str, str] = {QUEUE: ComponentName.CACHE}
+HOST = ComponentName.BACKEND  # what has no process of its own runs in the webserver
+# Nothing calls the worker: a part using it hands work to its queue.
+THROUGH: dict[str, str] = {ComponentName.WORKER: QUEUE}
+# A part that takes from another rather than calls it: in the way work
+# flows (``flow``), the line runs the other way.
+PULLS = frozenset({(ComponentName.WORKER, QUEUE)})
 # Where every key lives: a line from it is a key it holds for another part.
-KEYS = "secrets"
+KEYS = ComponentName.SECRETS
+
+
+class Role(StrEnum):
+    """What a part is on the map, where it is not compute (a box): data in
+    its own shape, the same size, and an outside provider as a pill."""
+
+    STORE = "store"
+    QUEUE = "queue"
+    BUCKET = "bucket"
+    OUTSIDE = "outside"
+
+
+ROLES: dict[str, Role] = {
+    ComponentName.DATABASE: Role.STORE,
+    ComponentName.CACHE: Role.STORE,
+    QUEUE: Role.QUEUE,
+    ComponentName.STORAGE: Role.BUCKET,
+}
+# Each shape, named for the map's key.
+ROLE_LABELS: dict[Role, str] = {
+    Role.STORE: "Store",
+    Role.QUEUE: "Queue",
+    Role.BUCKET: "Object storage",
+    Role.OUTSIDE: "Outside the stack",
+}
 
 
 @dataclass(frozen=True)
@@ -55,6 +98,23 @@ def shape(installed: Sequence[str]) -> Shape:
         links=[(a, b) for a, b in LINKS if a in present and b in present],
         hosted=[name for name in installed if name not in placed],
     )
+
+
+def queued(a: str, b: str) -> bool:
+    """Whether the line from ``a`` to ``b`` is queued work: handed to the
+    queue, or taken from it, never waited on."""
+    return QUEUE in (a, b)
+
+
+def flow(installed: Sequence[str]) -> Shape:
+    """The way work moves through the stack's own processes and stores, a
+    tier each step (``zoomed``'s rule): who takes work from the queue drawn
+    after it (``PULLS``), so the queue sits between who hands work over and
+    the worker. What runs inside the webserver is left in it."""
+    found = shape(installed)
+    pairs = [(b, a) if (a, b) in PULLS else (a, b) for a, b in found.links]
+    placed = [key for tier in found.tiers for key in tier]
+    return zoomed(placed, {key: [b for a, b in pairs if a == key] for key in placed})
 
 
 def zoomed(inside: Sequence[str], links: Mapping[str, Sequence[str]]) -> Shape:
@@ -108,10 +168,12 @@ def causes(
     """Each of the ``failing`` parts that depends on another failing one
     (``links``, followed down), and the failing parts at the bottom of it:
     the Database down names the Database on the Server and on the Ingress in
-    front of it. A part failing on its own is left out."""
+    front of it. A part failing on its own is left out; one inside another
+    (``INSIDE``) fails with it."""
+    followed = [*links, *INSIDE.items()]
 
     def roots(name: str) -> list[str]:
-        below = [b for a, b in links if a == name and b in failing]
+        below = [b for a, b in followed if a == name and b in failing]
         return list(dict.fromkeys(r for b in below for r in roots(b) or [b]))
 
     return {name: found for name in sorted(failing) if (found := roots(name))}

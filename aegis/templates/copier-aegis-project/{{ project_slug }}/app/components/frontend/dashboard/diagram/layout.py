@@ -7,6 +7,7 @@ Provides positioning algorithms for tree and radial layouts.
 from dataclasses import dataclass
 from enum import Enum
 
+from app.core.constants import ComponentName
 from app.services.system.models import ComponentStatus
 
 
@@ -32,14 +33,14 @@ class NodePosition:
 # These positions are hand-tuned: compact layout
 # Ingress → Server hierarchy at top, other components radiate from Server
 RADIAL_POSITIONS: dict[str, tuple[float, float]] = {
-    "ingress": (0.0, -0.45),  # Top center - entry point
-    "backend": (0.0, -0.10),  # Below ingress - the hub
-    "worker": (-0.45, -0.35),  # Upper-left
-    "scheduler": (0.45, -0.35),  # Upper-right
-    "database": (-0.50, 0.0),  # Left
-    "ollama": (0.50, 0.0),  # Right
-    "cache": (-0.15, 0.30),  # Bottom-center-left
-    "storage": (-0.50, -0.25),  # Left, above database
+    ComponentName.INGRESS: (0.0, -0.45),  # Top center - entry point
+    ComponentName.BACKEND: (0.0, -0.10),  # Below ingress - the hub
+    ComponentName.WORKER: (-0.45, -0.35),  # Upper-left
+    ComponentName.SCHEDULER: (0.45, -0.35),  # Upper-right
+    ComponentName.DATABASE: (-0.50, 0.0),  # Left
+    ComponentName.OLLAMA: (0.50, 0.0),  # Right
+    ComponentName.CACHE: (-0.15, 0.30),  # Bottom-center-left
+    ComponentName.STORAGE: (-0.50, -0.25),  # Left, above database
     "service_auth": (0.15, 0.30),  # Bottom-center-right
     "service_ai": (0.50, 0.25),  # Bottom-right
     "service_comms": (-0.50, 0.25),  # Bottom-left
@@ -63,17 +64,17 @@ def get_connections(components: dict[str, ComponentStatus]) -> list[tuple[str, s
     connections: list[tuple[str, str]] = []
 
     # Ingress → Backend (if ingress exists)
-    if "ingress" in components and "backend" in components:
-        connections.append(("ingress", "backend"))
+    if ComponentName.INGRESS in components and ComponentName.BACKEND in components:
+        connections.append((ComponentName.INGRESS, ComponentName.BACKEND))
 
     # All components connect through backend (except ingress which connects TO backend)
     for name in components:
-        if name != "backend" and name != "ingress":
-            connections.append(("backend", name))
+        if name != ComponentName.BACKEND and name != ComponentName.INGRESS:
+            connections.append((ComponentName.BACKEND, name))
 
     # Inference → AI Service
-    if "ollama" in components and "service_ai" in components:
-        connections.append(("ollama", "service_ai"))
+    if ComponentName.OLLAMA in components and "service_ai" in components:
+        connections.append((ComponentName.OLLAMA, "service_ai"))
 
     return connections
 
@@ -100,14 +101,14 @@ def calculate_tree_positions(
     positions: list[NodePosition] = []
 
     # Separate into categories
-    ingress_data = components.get("ingress")
-    backend_data = components.get("backend")
+    ingress_data = components.get(ComponentName.INGRESS)
+    backend_data = components.get(ComponentName.BACKEND)
 
     # Infrastructure components (excludes backend and ingress)
     infra_names = [
         name
         for name in components
-        if name not in ("backend", "ingress") and not name.startswith("service_")
+        if name not in (ComponentName.BACKEND, ComponentName.INGRESS) and not name.startswith("service_")
     ]
 
     # Services at bottom
@@ -117,7 +118,7 @@ def calculate_tree_positions(
     if ingress_data:
         positions.append(
             NodePosition(
-                x=0.0, y=-0.48, component_name="ingress", component_data=ingress_data
+                x=0.0, y=-0.48, component_name=ComponentName.INGRESS, component_data=ingress_data
             )
         )
 
@@ -128,7 +129,7 @@ def calculate_tree_positions(
             NodePosition(
                 x=0.0,
                 y=backend_y,
-                component_name="backend",
+                component_name=ComponentName.BACKEND,
                 component_data=backend_data,
             )
         )

@@ -10,6 +10,7 @@ from collections.abc import AsyncIterator
 import time
 import weakref
 
+from app.core.constants import ComponentName
 from app.core.log import logger
 from app.services.system.health import get_system_status, last_system_status
 
@@ -39,7 +40,7 @@ def _state() -> dict[str, str]:
         (
             entry.component
             for entry in navigation["components"]
-            if entry.name == "backend"
+            if entry.name == ComponentName.BACKEND
         ),
         None,
     )

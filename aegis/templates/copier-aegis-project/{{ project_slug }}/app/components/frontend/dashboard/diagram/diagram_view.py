@@ -8,6 +8,7 @@ in either tree or radial layout.
 import flet as ft
 
 from app.components.frontend.controls import SecondaryText
+from app.core.constants import ComponentName
 from app.services.system.models import ComponentStatus
 
 from .diagram_canvas import DiagramCanvas
@@ -208,7 +209,7 @@ class DiagramView(ft.Container):
                 end = position_map[child_name]
 
                 # Tree layout: all connections from backend start at bottom center
-                if is_tree and parent_name == "backend":
+                if is_tree and parent_name == ComponentName.BACKEND:
                     start = (start[0], start[1] + self._node_size / 2)
 
                 child_data = self._components.get(child_name)

@@ -6,7 +6,7 @@ what is enabled reads (an outside provider)."""
 from pathlib import Path
 
 from app.core.secrets import Secret
-from app.services.system import service_links
+from app.services.system import service_links, topology
 
 
 def _package(root: Path, *imports: str) -> Path:
@@ -33,6 +33,12 @@ def test_a_service_talks_to_what_it_imports(tmp_path: Path) -> None:
         "inference",
         "service_blog",
     ]
+
+
+def test_a_service_using_the_worker_hands_work_to_its_queue(tmp_path: Path) -> None:
+    """Nothing calls the worker: work is enqueued, and the worker takes it."""
+    package = _package(tmp_path, "from app.components.worker.pools import enqueue_task")
+    assert service_links.talks_to(package, ()) == [topology.QUEUE]
 
 
 def test_a_service_talks_to_the_providers_whose_keys_it_reads(

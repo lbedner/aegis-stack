@@ -9,6 +9,7 @@ already gathered.
 import flet as ft
 
 from app.components.frontend.theme import AegisTheme as Theme
+from app.core.constants import ComponentName
 from app.core.formatting import format_bytes
 from app.services.system.models import ComponentStatus, ComponentStatusType
 from app.services.system.ui import get_component_subtitle, get_component_title
@@ -79,8 +80,8 @@ class StorageDetailDialog(BaseDetailPopup):
         super().__init__(
             page=page,
             component_data=component_data,
-            title_text=get_component_title("storage"),
-            subtitle_text=get_component_subtitle("storage", metadata),
+            title_text=get_component_title(ComponentName.STORAGE),
+            subtitle_text=get_component_subtitle(ComponentName.STORAGE, metadata),
             sections=[
                 OverviewSection(component_data),
                 ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),

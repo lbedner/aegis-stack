@@ -9,6 +9,7 @@ the generic status page.
 from collections.abc import Awaitable, Callable
 from typing import Any, NamedTuple
 
+from app.core.constants import ComponentName
 from app.services.system import ui_runtime
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import registry_key
@@ -109,7 +110,7 @@ def _optional_pages() -> dict[tuple[str, str], SectionedPage]:
     try:
         from . import overseer_mcp
 
-        pages[("components", "mcp")] = SectionedPage(
+        pages[("components", ComponentName.MCP)] = SectionedPage(
             "mcp", overseer_mcp.SECTIONS, overseer_mcp.section_context
         )
     except ImportError:  # no mcp component in this project
@@ -117,7 +118,7 @@ def _optional_pages() -> dict[tuple[str, str], SectionedPage]:
     try:
         from . import overseer_inference
 
-        pages[("components", "ollama")] = SectionedPage(
+        pages[("components", ComponentName.OLLAMA)] = SectionedPage(
             "inference", overseer_inference.SECTIONS, overseer_inference.section_context
         )
     except ImportError:  # no inference component in this project
@@ -250,40 +251,40 @@ _PAGES: dict[tuple[str, str], SectionedPage] = {
         "settings", overseer_settings.SECTIONS, overseer_settings.section_context
     ),
     # The same page, on the secrets component's own entry when it is there.
-    ("components", "secrets"): SectionedPage(
+    ("components", ComponentName.SECRETS): SectionedPage(
         "secrets", overseer_secrets.SECTIONS, overseer_secrets.section_context
     ),
-    ("components", "backend"): SectionedPage(
+    ("components", ComponentName.BACKEND): SectionedPage(
         "server",
         overseer_server.SECTIONS,
         overseer_server.section_context,
         live=True,
         glance=True,
     ),
-    ("components", "web_frontend"): SectionedPage(
+    ("components", ComponentName.WEB_FRONTEND): SectionedPage(
         "web_frontend",
         overseer_web_frontend.SECTIONS,
         overseer_web_frontend.section_context,
     ),
-    ("components", "scheduler"): SectionedPage(
+    ("components", ComponentName.SCHEDULER): SectionedPage(
         "scheduler",
         overseer_scheduler.SECTIONS,
         overseer_scheduler.section_context,
         glance=True,
     ),
-    ("components", "database"): SectionedPage(
+    ("components", ComponentName.DATABASE): SectionedPage(
         "database", overseer_database.SECTIONS, overseer_database.section_context
     ),
-    ("components", "cache"): SectionedPage(
+    ("components", ComponentName.CACHE): SectionedPage(
         "redis", overseer_redis.SECTIONS, overseer_redis.section_context, glance=True
     ),
-    ("components", "ingress"): SectionedPage(
+    ("components", ComponentName.INGRESS): SectionedPage(
         "ingress", overseer_ingress.SECTIONS, overseer_ingress.section_context
     ),
-    ("components", "storage"): SectionedPage(
+    ("components", ComponentName.STORAGE): SectionedPage(
         "storage", overseer_storage.SECTIONS, overseer_storage.section_context
     ),
-    ("components", "worker"): SectionedPage(
+    ("components", ComponentName.WORKER): SectionedPage(
         "worker", overseer_worker.SECTIONS, overseer_worker.section_context
     ),
 } | _optional_pages()

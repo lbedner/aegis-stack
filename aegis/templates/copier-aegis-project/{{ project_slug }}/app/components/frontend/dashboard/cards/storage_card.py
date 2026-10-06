@@ -1,6 +1,7 @@
 """Storage component card: where the bytes live and whether they answer."""
 
 import flet as ft
+from app.core.constants import ComponentName
 from app.core.formatting import format_bytes
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_subtitle
@@ -12,8 +13,6 @@ from .card_utils import (
     get_status_colors,
 )
 from .card_metadata import metadata_number
-
-STORAGE_COMPONENT_NAME = "storage"
 
 
 class StorageCard:
@@ -42,7 +41,7 @@ class StorageCard:
         return ft.Container(content=ft.Row(metrics, expand=True), expand=True)
 
     def _create_card_content(self) -> ft.Container:
-        subtitle = get_component_subtitle(STORAGE_COMPONENT_NAME, self.metadata)
+        subtitle = get_component_subtitle(ComponentName.STORAGE, self.metadata)
         return ft.Container(
             content=ft.Column(
                 [
@@ -60,7 +59,7 @@ class StorageCard:
         _, _, border_color = get_status_colors(self.component_data)
         return CardContainer(
             content=self._create_card_content(),
-            component_name=STORAGE_COMPONENT_NAME,
+            component_name=ComponentName.STORAGE,
             component_data=self.component_data,
             border_color=border_color,
         )

@@ -6,11 +6,10 @@ from typing import Any
 
 import flet as ft
 
+from app.core.constants import ComponentName
 from app.services.system.models import ComponentStatus
 
 from .counts_card import counts_card
-
-SECRETS_COMPONENT_NAME = "secrets"
 
 
 def counts(metadata: dict[str, Any]) -> list[tuple[str, str]]:
@@ -32,7 +31,7 @@ class SecretsCard:
         """Build the secrets card."""
         return counts_card(
             self.component_data,
-            SECRETS_COMPONENT_NAME,
+            ComponentName.SECRETS,
             "Secrets",
             counts(self.component_data.metadata or {}),
         )

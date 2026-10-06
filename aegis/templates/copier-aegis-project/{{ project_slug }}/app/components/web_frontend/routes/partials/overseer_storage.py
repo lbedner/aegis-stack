@@ -15,12 +15,13 @@ from fastapi.responses import HTMLResponse, Response
 from app.components.web_frontend import overseer_storage
 from app.components.web_frontend.overseer_nav import page_url
 from app.components.web_frontend.rendering import dialog, go_to
+from app.core.constants import ComponentName
 from app.core.formatting import safe_filename
 from app.core.storage import get_storage
 
 router = APIRouter(prefix=overseer_storage.PARTIALS)
 
-BROWSE_PAGE = page_url("components", "storage") + "/browse"
+BROWSE_PAGE = page_url("components", ComponentName.STORAGE) + "/browse"
 
 
 def _store() -> Any:

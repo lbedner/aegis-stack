@@ -1,0 +1,12 @@
+{# Overseer's home at the high level (``?view=flow``, ``topology.flow``):
+   the stack's own processes and stores left to right, the way work moves
+   (through the queue to the worker), each in its shape (``topology.Role``),
+   and a key to the shapes it draws. Rendered in the page and again for each
+   frame. #}
+{% from "components/macros/icons.html" import icon %}
+{% include "pages/overseer/_overview_map.html" %}
+<p data-legend class="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-aegis-muted">
+  <span class="flex items-center gap-1.5"><span class="inline-block w-4 h-3 rounded-sm border border-aegis-muted" aria-hidden="true"></span>Compute</span>
+  {% for role, label in map_legend %}<span class="flex items-center gap-1.5">{{ icon(role, "w-4 h-4") }}{{ label }}</span>{% endfor %}
+  <span class="flex items-center gap-1.5"><svg class="w-6 h-2" viewBox="0 0 24 2" aria-hidden="true"><path d="M0 1H24" class="map-link" data-queued /></svg>Queued work</span>
+</p>

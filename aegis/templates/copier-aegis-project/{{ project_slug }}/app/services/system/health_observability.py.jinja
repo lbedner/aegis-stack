@@ -15,6 +15,7 @@ import time
 from typing import Any
 
 from app.core.config import settings
+from app.core.constants import ComponentName
 from app.core.log import logger
 
 from .models import ComponentStatus, ComponentStatusType
@@ -60,7 +61,7 @@ async def check_observability_health() -> ComponentStatus:
             metadata.update(trace_data)
 
         return ComponentStatus(
-            name="observability",
+            name=ComponentName.OBSERVABILITY,
             status=status,
             message=message,
             response_time_ms=None,
@@ -70,7 +71,7 @@ async def check_observability_health() -> ComponentStatus:
     except Exception as e:
         logger.error(f"Observability health check failed: {e}")
         return ComponentStatus(
-            name="observability",
+            name=ComponentName.OBSERVABILITY,
             status=ComponentStatusType.UNHEALTHY,
             message=f"Observability health check failed: {str(e)}",
             response_time_ms=None,

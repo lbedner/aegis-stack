@@ -28,9 +28,8 @@ from tests._fake_runtime import (
 )
 from tests._secret_settings import secret_settings, use_store
 from tests.web.dom import chart_json, checked, none, one, select, text
-from tests.web.overseer import page_html, sign_in, status_with
+from tests.web.overseer import CACHE, page_html, reported_only, sign_in, status_with
 
-CACHE = ComponentStatus(name="cache", message="Connected", metadata={})
 AUTH = ComponentStatus(name="auth", message="Ready", metadata={})
 
 
@@ -557,11 +556,12 @@ def test_the_views_switch_by_icon_and_still_say_which(client: TestClient) -> Non
     it points at is drawn on the page."""
     html = page_html(client, "/overseer")
     chips = select(html, "#overview-view label")
-    assert [c.get("title") for c in chips] == ["Cards", "Map"]
-    assert [text(one(c, ".sr-only:not(input)")) for c in chips] == ["Cards", "Map"]
+    labels = [label for _, label, _ in overseer_container.VIEWS]
+    assert [c.get("title") for c in chips] == labels
+    assert [text(one(c, ".sr-only:not(input)")) for c in chips] == labels
     used = {one(c, "svg use").get("href") for c in chips}
     defined = {f"#{s.get('id')}" for s in select(html, "svg[data-icons] symbol")}
-    assert len(used) == 2 and used <= defined
+    assert len(used) == len(labels) and used <= defined
 
 
 def test_the_servers_services_sit_two_to_a_row() -> None:
@@ -655,8 +655,9 @@ def test_zoomed_in_nodes_are_one_line_and_outside_ones_are_pills(
 ) -> None:
     html = page_html(_zoomable(app, monkeypatch), "/overseer?view=map&zoom=backend")
     one(html, "[data-map][data-compact]")
-    assert one(html, '[data-node="outside:Stripe"]').get("data-outside") is not None
-    assert one(html, '[data-node="service_auth"]').get("data-outside") is None
+    stripe = one(html, '[data-node="outside:Stripe"]')
+    assert stripe.get("data-role") == topology.Role.OUTSIDE
+    assert one(html, '[data-node="service_auth"]').get("data-role") is None
 
 
 def test_an_outside_provider_without_its_key_is_amber(
@@ -711,19 +712,51 @@ def test_telling_a_key_is_set_never_reads_it(
     assert one(html, '[data-node="outside:Stripe"]').get("data-tone") != "warn"
 
 
-def test_a_line_into_the_worker_is_queued_work() -> None:
+def test_a_line_into_the_queue_is_queued_work() -> None:
     """Documents enqueues; it does not wait on the worker: drawn dashed."""
     shape = topology.Shape(
-        tiers=[["service_documents"], ["worker", "database"]],
-        links=[("service_documents", "worker"), ("service_documents", "database")],
+        tiers=[["service_documents"], [topology.QUEUE, "database"]],
+        links=[
+            ("service_documents", topology.QUEUE),
+            ("service_documents", "database"),
+        ],
         hosted=[],
     )
-    stack = [_entry(k) for k in ("service_documents", "worker", "database")]
+    stack = [_entry(k) for k in ("service_documents", topology.QUEUE, "database")]
     lines = {
         line["end"]: line["queued"]
         for line in overseer_map.layout(stack, shape)["map_links"]
     }
-    assert lines == {"worker": True, "database": False}
+    assert lines == {topology.QUEUE: True, "database": False}
+
+
+def test_without_a_worker_there_is_no_queue(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    reported_only(monkeypatch)
+    none(page_html(client, "/overseer?view=map"), f'[data-node="{topology.QUEUE}"]')
+
+
+def test_data_takes_its_shape_on_the_map(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Compute stays a box; a store, the queue and an outside provider
+    each take their own shape, the same size, so the layout holds. On the
+    main map a glyph in the card's header; opened up, the node's outline."""
+    html = page_html(_zoomable(app, monkeypatch), "/overseer?view=map")
+    store = topology.Role.STORE
+    database = one(html, '[data-node="database"]')
+    assert database.get("data-role") == store
+    assert one(database, "header svg use").get("href") == f"#i-{store}"
+    assert one(html, '[data-node="backend"]').get("data-role") is None
+    opened = page_html(_zoomable(app, monkeypatch), "/overseer?view=map&zoom=backend")
+    outline = one(opened, '[data-node="database"] svg[data-shape]')
+    assert one(outline, "use").get("href") == f"#shape-{store}"
+    stripe = one(opened, '[data-node="outside:Stripe"]')
+    assert stripe.get("data-role") == topology.Role.OUTSIDE
+    defined = {s.get("id") for s in select(opened, "svg symbol")}
+    for role in set(topology.ROLES.values()):
+        assert {f"i-{role}", f"shape-{role}"} <= defined
 
 
 def test_a_bottom_rows_hint_opens_above_it() -> None:
@@ -744,3 +777,40 @@ def test_a_bottom_rows_hint_opens_above_it() -> None:
         False,
         True,
     )
+
+
+def test_a_store_stands_taller_than_a_line_of_compute() -> None:
+    """A cylinder or a bucket squeezed to one line reads as a slab: data
+    stands taller (and, opened up, narrower), and its row makes room."""
+    store, queue = topology.Role.STORE, topology.Role.QUEUE
+    shape = topology.Shape(
+        tiers=[["service_auth"], ["database", topology.QUEUE]], links=[], hosted=[]
+    )
+    stack = [
+        _entry("service_auth"),
+        _entry("database") | {"role": store},
+        _entry(topology.QUEUE) | {"role": queue},
+    ]
+    nodes = {
+        n["key"]: n
+        for n in overseer_map.layout(stack, shape, compact=True)["map_nodes"]
+    }
+    assert nodes["database"]["height"] == overseer_map.SHAPE_HEIGHT
+    assert nodes[topology.QUEUE]["height"] == overseer_map.COMPACT_HEIGHT
+    assert nodes["database"]["tall"] and not nodes[topology.QUEUE]["tall"]
+    assert nodes["service_auth"]["height"] == overseer_map.COMPACT_HEIGHT
+
+
+def test_across_each_tier_is_a_column_and_lines_run_left_to_right() -> None:
+    shape = topology.Shape(
+        tiers=[["backend"], [topology.QUEUE], ["worker"]],
+        links=[("backend", topology.QUEUE), (topology.QUEUE, "worker")],
+        hosted=[],
+    )
+    stack = [_entry(k) for k in ("backend", topology.QUEUE, "worker")]
+    found = overseer_map.layout(stack, shape, compact=True, across=True)
+    lefts = [n["left"] for n in found["map_nodes"]]
+    assert lefts == sorted(lefts) and len(set(lefts)) == 3
+    assert {n["top"] for n in found["map_nodes"]} == {0}
+    out = {line["end"]: line["queued"] for line in found["map_links"]}
+    assert out == {topology.QUEUE: True, "worker": True}  # either side of it

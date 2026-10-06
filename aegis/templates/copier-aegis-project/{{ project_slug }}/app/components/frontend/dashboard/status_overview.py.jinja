@@ -7,6 +7,7 @@ Uses DataTable for consistent styling with other tables in the app.
 
 import flet as ft
 from app.components.frontend.controls import DataTable, DataTableColumn
+from app.core.constants import ComponentName
 {% if include_blog %}
 from app.services.blog.constants import BLOG_COMPONENT_NAME
 {% endif %}
@@ -41,26 +42,26 @@ def get_component_display_info(
     metadata = component_data.metadata or {}
 
     # Map component names to their display info
-    if component_name == "backend":
+    if component_name == ComponentName.BACKEND:
         return ("Server", "FastAPI + Flet")
 
-    elif component_name == "database":
+    elif component_name == ComponentName.DATABASE:
         return ("Database", get_database_subtitle(metadata))
 
-    elif component_name == "worker":
-        return ("Worker", get_component_subtitle("worker", metadata))
+    elif component_name == ComponentName.WORKER:
+        return ("Worker", get_component_subtitle(ComponentName.WORKER, metadata))
 
-    elif component_name == "cache":
+    elif component_name == ComponentName.CACHE:
         return ("Cache", "Redis")
 {% if ollama_mode != "none" %}
 
-    elif component_name == "ollama":
+    elif component_name == ComponentName.OLLAMA:
         version = metadata.get("version", "")
         subtitle = f"Ollama v{version}" if version else "Ollama"
         return ("Inference", subtitle)
 {% endif %}
 
-    elif component_name == "scheduler":
+    elif component_name == ComponentName.SCHEDULER:
         return ("Scheduler", "APScheduler")
 
     elif component_name == "service_auth":
@@ -113,7 +114,7 @@ def get_component_display_info(
 {% endif %}
 {% if include_ingress %}
 
-    elif component_name == "ingress":
+    elif component_name == ComponentName.INGRESS:
         version = metadata.get("version", "")
         subtitle = (
             f"Traefik {version}"
@@ -124,28 +125,28 @@ def get_component_display_info(
 {% endif %}
 {% if include_observability %}
 
-    elif component_name == "observability":
+    elif component_name == ComponentName.OBSERVABILITY:
         version = metadata.get("logfire_version", "")
         subtitle = f"Pydantic Logfire {version}".strip() if version else "Pydantic Logfire"
         return ("Observability", subtitle)
 {% endif %}
 {% if include_storage %}
 
-    elif component_name == "storage":
-        return ("Storage", get_component_subtitle("storage", metadata))
+    elif component_name == ComponentName.STORAGE:
+        return ("Storage", get_component_subtitle(ComponentName.STORAGE, metadata))
 {% endif %}
 {% if include_secrets %}
 
-    elif component_name == "secrets":
-        return ("Secrets", get_component_subtitle("secrets", metadata))
+    elif component_name == ComponentName.SECRETS:
+        return ("Secrets", get_component_subtitle(ComponentName.SECRETS, metadata))
 {% endif %}
 {% if include_mcp %}
 
-    elif component_name == "mcp":
-        return ("MCP", get_component_subtitle("mcp", metadata))
+    elif component_name == ComponentName.MCP:
+        return ("MCP", get_component_subtitle(ComponentName.MCP, metadata))
 {% endif %}
 
-    elif component_name == "frontend":
+    elif component_name == ComponentName.FRONTEND:
         return ("Frontend", "Flet")
 
     else:
@@ -243,21 +244,21 @@ class StatusOverviewPanel(ft.Container):
 
         # Define display order (most important first)
         display_order = [
-            "backend",
+            ComponentName.BACKEND,
 {% if include_database %}
-            "database",
+            ComponentName.DATABASE,
 {% endif %}
 {% if ollama_mode != "none" %}
-            "ollama",
+            ComponentName.OLLAMA,
 {% endif %}
 {% if include_redis %}
-            "cache",
+            ComponentName.CACHE,
 {% endif %}
 {% if include_worker %}
-            "worker",
+            ComponentName.WORKER,
 {% endif %}
 {% if include_scheduler %}
-            "scheduler",
+            ComponentName.SCHEDULER,
 {% endif %}
 {% if include_auth %}
             "service_auth",
@@ -281,18 +282,18 @@ class StatusOverviewPanel(ft.Container):
             f"service_{BLOG_COMPONENT_NAME}",
 {% endif %}
 {% if include_ingress %}
-            "ingress",
+            ComponentName.INGRESS,
 {% endif %}
 {% if include_observability %}
-            "observability",
+            ComponentName.OBSERVABILITY,
 {% endif %}
 {% if include_storage %}
-            "storage",
+            ComponentName.STORAGE,
 {% endif %}
 {% if include_secrets %}
-            "secrets",
+            ComponentName.SECRETS,
 {% endif %}{% if include_mcp %}
-            "mcp",
+            ComponentName.MCP,
 {% endif %}
         ]
 
@@ -306,7 +307,7 @@ class StatusOverviewPanel(ft.Container):
 
         # Add any remaining components not in the display order
         for comp_name, comp_data in components.items():
-            if comp_name not in added and comp_name != "frontend":
+            if comp_name not in added and comp_name != ComponentName.FRONTEND:
                 rows.append([create_status_cell(comp_name, comp_data)])
 
         # Rebuild table with new rows

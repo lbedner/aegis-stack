@@ -9,8 +9,28 @@ Following 12-Factor App principles:
 - Configuration = environment (varies between dev/staging/production)
 """
 
+from enum import StrEnum
 from pathlib import Path
 import tempfile
+
+
+class ComponentName(StrEnum):
+    """Each infrastructure component's health check name: its key in the
+    name registry (``ui.get_component_title``), in status and on the map."""
+
+    BACKEND = "backend"
+    FRONTEND = "frontend"
+    WEB_FRONTEND = "web_frontend"
+    DATABASE = "database"
+    CACHE = "cache"
+    WORKER = "worker"
+    SCHEDULER = "scheduler"
+    INGRESS = "ingress"
+    STORAGE = "storage"
+    SECRETS = "secrets"
+    OBSERVABILITY = "observability"
+    MCP = "mcp"
+    OLLAMA = "ollama"
 
 
 class APIEndpoints:

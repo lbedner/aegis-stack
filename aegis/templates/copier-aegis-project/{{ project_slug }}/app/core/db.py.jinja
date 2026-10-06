@@ -32,10 +32,11 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core import db_activity
 from app.core.config import settings
+from app.core.constants import ComponentName
 from app.core.log import logger
 
 # The component this client fronts (``service_links``).
-FRONTS = "database"
+FRONTS = ComponentName.DATABASE
 
 {% if database_engine == "sqlite" %}
 # Extract database file path from URL for backup operations

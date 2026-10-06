@@ -5,6 +5,7 @@ from collections.abc import Awaitable
 from typing import Any, cast
 
 from app.core.config import settings
+from app.core.constants import ComponentName
 from app.core.log import logger
 from app.services.system.health import propagate_status
 from app.services.system.health_worker_rules import (
@@ -238,7 +239,7 @@ async def check_worker_health() -> ComponentStatus:
         )
 
         return ComponentStatus(
-            name="worker",
+            name=ComponentName.WORKER,
             status=worker_status,
             message=main_message,
             response_time_ms=None,
@@ -264,7 +265,7 @@ async def check_worker_health() -> ComponentStatus:
 
     except ImportError:
         return ComponentStatus(
-            name="worker",
+            name=ComponentName.WORKER,
             status=ComponentStatusType.UNHEALTHY,
             message="Redis library not available for worker health check",
             response_time_ms=None,
@@ -273,7 +274,7 @@ async def check_worker_health() -> ComponentStatus:
     except Exception as e:
         logger.error(f"Worker health check failed: {e}")
         return ComponentStatus(
-            name="worker",
+            name=ComponentName.WORKER,
             status=ComponentStatusType.UNHEALTHY,
             message=f"Worker health check failed: {str(e)}",
             response_time_ms=None,

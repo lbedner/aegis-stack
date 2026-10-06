@@ -21,6 +21,7 @@ from app.components.frontend.controls.buttons import PulseButton
 from app.components.frontend.controls.snack_bar import ErrorSnackBar, SuccessSnackBar
 from app.components.frontend.controls.tabs import PulseTabs
 from app.components.frontend.theme import AegisTheme as Theme
+from app.core.constants import ComponentName
 from app.services.system import ui_scheduler
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_subtitle, get_component_title
@@ -260,8 +261,8 @@ class SchedulerDetailDialog(BaseDetailPopup):
         super().__init__(
             page=page,
             component_data=component_data,
-            title_text=get_component_title("scheduler"),
-            subtitle_text=get_component_subtitle("scheduler", metadata),
+            title_text=get_component_title(ComponentName.SCHEDULER),
+            subtitle_text=get_component_subtitle(ComponentName.SCHEDULER, metadata),
             sections=[tabs],
             status_detail=get_status_detail(component_data),
             scrollable=False,

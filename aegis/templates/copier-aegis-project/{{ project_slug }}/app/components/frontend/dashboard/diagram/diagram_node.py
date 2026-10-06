@@ -8,28 +8,9 @@ click-to-open-modal functionality and hover effects.
 import flet as ft
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system.models import ComponentStatus, ComponentStatusType
-from app.services.system.ui import get_component_subtitle
+from app.services.system.ui import get_component_subtitle, get_component_title
 
 from ..cards.card_utils import _open_modal, get_ai_engine_display
-
-# Display names per component id. The id itself is what opens the modal:
-# cards, overview rows and diagram nodes all use the health-tree id, and
-# the modal registers under it, so there is no second name to keep in step.
-# Subtitles are generated dynamically via get_component_subtitle()
-COMPONENT_NAMES: dict[str, str] = {
-    "backend": "Server",
-    "database": "Database",
-    "cache": "Cache",
-    "worker": "Worker",
-    "ingress": "Ingress",
-    "ollama": "Inference",
-    "scheduler": "Scheduler",
-    "storage": "Storage",
-    "service_ai": "AI Service",
-    "service_auth": "Auth Service",
-    "service_comms": "Comms Service",
-    "frontend": "Frontend",
-}
 
 
 def get_status_color(status: ComponentStatusType) -> str:
@@ -88,9 +69,7 @@ class DiagramNode(ft.Container):
         self._component_data = component_data
         self._size = size
 
-        self._display_name = COMPONENT_NAMES.get(
-            component_name, component_name.replace("_", " ").title()
-        )
+        self._display_name = get_component_title(component_name)
         self._subtitle = self._get_subtitle(component_name, component_data)
 
         # Status colors

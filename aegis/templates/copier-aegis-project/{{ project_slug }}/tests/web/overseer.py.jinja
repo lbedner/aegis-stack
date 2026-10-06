@@ -16,10 +16,15 @@ from app.core.config import settings
 from app.models.user import User
 from app.services.auth.deps import get_optional_user
 {%- endif %}
+from app.core.constants import ComponentName
 from app.services.system.models import ComponentStatus, SystemStatus
 
 
 PREFIXES = ("/overseer", "/partials/overseer")
+
+
+# The Cache, healthy: a page with containers behind it (Redis).
+CACHE = ComponentStatus(name=ComponentName.CACHE, message="Connected", metadata={})
 
 
 def page_html(client: TestClient, path: str) -> str:
@@ -67,6 +72,16 @@ def status_with(
     )
     return SystemStatus(
         components={"aegis": aegis}, overall_healthy=True, timestamp=datetime.now(UTC)
+    )
+
+
+def reported_only(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The sidebar as the snapshot has it: no entry for a health check
+    another test registered (a Scheduler, a Worker) that this one leaves out."""
+    monkeypatch.setattr(
+        overseer_nav,
+        "registered_health_names",
+        lambda: {"components": (), "services": ()},
     )
 
 

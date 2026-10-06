@@ -17,6 +17,7 @@ import weakref
 import psutil
 
 from app.core.config import settings
+from app.core.constants import ComponentName
 from app.core.formatting import format_bytes
 from app.services.system.health_probes import (
     _get_cached_system_metrics,
@@ -230,9 +231,9 @@ async def _collect_system_status() -> SystemStatus:
     system_metrics = await metrics_task
 
     # Group system metrics under backend component if it exists
-    if "backend" in component_results:
+    if ComponentName.BACKEND in component_results:
         # Backend exists - recreate with system metrics as sub-components
-        backend_component = component_results["backend"]
+        backend_component = component_results[ComponentName.BACKEND]
 
         # Propagate status from system metrics and original backend status
         system_metrics_statuses = [
@@ -246,7 +247,7 @@ async def _collect_system_status() -> SystemStatus:
 
         backend_status = propagate_status(all_backend_statuses)
 
-        component_results["backend"] = ComponentStatus(
+        component_results[ComponentName.BACKEND] = ComponentStatus(
             name=backend_component.name,
             status=backend_status,
             message=backend_component.message,
@@ -272,8 +273,8 @@ async def _collect_system_status() -> SystemStatus:
             else "System container has issues"
         )
 
-        component_results["backend"] = ComponentStatus(
-            name="backend",
+        component_results[ComponentName.BACKEND] = ComponentStatus(
+            name=ComponentName.BACKEND,
             status=backend_status,
             message=backend_message,
             response_time_ms=None,

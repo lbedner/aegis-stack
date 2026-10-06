@@ -11,6 +11,7 @@ from typing import Annotated, Any, Literal
 from pydantic import Field, model_validator
 from pydantic_settings import SettingsConfigDict
 from app.core.configurable import Configurable, timezones
+from app.core.constants import ComponentName
 from app.core.settings_base import SettingsBase
 {% if include_ai and ai_voice %}from app.core.voice_settings import VoiceSettings{% endif %}
 {% if include_worker %}from app.core.queue_workers import DEFAULT_QUEUES, QueueWorker{% endif %}
@@ -72,7 +73,7 @@ class Settings(
     REGISTRATION_ENABLED: Annotated[bool, Configurable("service_auth", "Whether anyone can sign up; off, an admin makes accounts")] = True
 
     # Log level for the application
-    LOG_LEVEL: Annotated[str, Configurable("backend", "Lowest level a log line is written at", choices=lambda: LOG_LEVELS)] = "INFO"
+    LOG_LEVEL: Annotated[str, Configurable(ComponentName.BACKEND, "Lowest level a log line is written at", choices=lambda: LOG_LEVELS)] = "INFO"
 
     # Port for the web server
     PORT: int = 8000
@@ -162,7 +163,7 @@ class Settings(
     # the scheduler at a mounted absolute path so prod dumps outlive the
     # container; restore from the scheduler, which is where they are visible.
     DATABASE_BACKUP_DIR: str = "backups"
-    DATABASE_BACKUP_KEEP: Annotated[int, Configurable("database", "Backups kept; older ones are removed")] = 7
+    DATABASE_BACKUP_KEEP: Annotated[int, Configurable(ComponentName.DATABASE, "Backups kept; older ones are removed")] = 7
 {%- endif %}
 
     # Flet frontend settings
@@ -244,13 +245,13 @@ class Settings(
     # you") rendered in Overseer. Counts requests per client IP, bucketed
     # hourly; backed by Redis when present (shared across processes), in-memory
     # otherwise (per-process, resets on restart).
-    TRAFFIC_MONITOR_ENABLED: Annotated[bool, Configurable("backend", "Count requests per client address, for the Server page's traffic")] = True
+    TRAFFIC_MONITOR_ENABLED: Annotated[bool, Configurable(ComponentName.BACKEND, "Count requests per client address, for the Server page's traffic")] = True
     # Trailing window the Overseer panel ranks sources over (hours).
-    TRAFFIC_WINDOW_HOURS: Annotated[int, Configurable("backend", "Hours of traffic the Server page ranks sources over")] = 24
+    TRAFFIC_WINDOW_HOURS: Annotated[int, Configurable(ComponentName.BACKEND, "Hours of traffic the Server page ranks sources over")] = 24
     # Read-time dominance flag: a single source over this share of windowed
     # traffic (and clearing the absolute floor) is highlighted as "hammering."
-    TRAFFIC_DOMINANCE_SHARE: Annotated[float, Configurable("backend", "Share of all traffic (0 to 1) that flags one source as hammering")] = 0.5
-    TRAFFIC_DOMINANCE_FLOOR: Annotated[int, Configurable("backend", "Fewest requests a source needs before it can be flagged")] = 100
+    TRAFFIC_DOMINANCE_SHARE: Annotated[float, Configurable(ComponentName.BACKEND, "Share of all traffic (0 to 1) that flags one source as hammering")] = 0.5
+    TRAFFIC_DOMINANCE_FLOOR: Annotated[int, Configurable(ComponentName.BACKEND, "Fewest requests a source needs before it can be flagged")] = 100
 
     # HttpOnly session cookie holding the JWT after login / register /
     # OAuth callback. None = auto (off in dev, on otherwise). Set to
@@ -315,7 +316,7 @@ class Settings(
     # many times, so a task that kills its worker every run (OOM/SIGKILL never
     # acks, so xautoclaim re-yields it forever) can't loop and re-bill paid
     # work. 0 disables the guard.
-    WORKER_MAX_REDELIVERIES: Annotated[int, Configurable("worker", "Redeliveries before a job that keeps killing its worker is dropped (0: never)")] = 5
+    WORKER_MAX_REDELIVERIES: Annotated[int, Configurable(ComponentName.WORKER, "Redeliveries before a job that keeps killing its worker is dropped (0: never)")] = 5
 {%- endif %}
 
     # Redis connection settings for arq workers
@@ -327,12 +328,12 @@ class Settings(
     WORKER_HEALTH_CHECK_INTERVAL: int = 15  # In seconds (default: 15)
 
     # Task history retention (Redis Hashes auto-expire after this)
-    TASK_HISTORY_TTL_SECONDS: Annotated[int, Configurable("worker", "Seconds a job's history is kept")] = 86400  # 24 hours
+    TASK_HISTORY_TTL_SECONDS: Annotated[int, Configurable(ComponentName.WORKER, "Seconds a job's history is kept")] = 86400  # 24 hours
 
 {% endif %}
 {% if include_database %}
     # Database settings
-    DATABASE_SLOW_TRANSACTION_SECONDS: Annotated[float, Configurable("database", "A transaction held this long is recorded on the Database page, seconds (0: off)")] = 2.0
+    DATABASE_SLOW_TRANSACTION_SECONDS: Annotated[float, Configurable(ComponentName.DATABASE, "A transaction held this long is recorded on the Database page, seconds (0: off)")] = 2.0
 {% if database_engine == "postgres" %}
     DATABASE_URL: str = "postgresql://postgres:postgres@postgres:5432/{{ project_slug }}"
     DATABASE_URL_LOCAL: str | None = None  # Manual override for local CLI usage
@@ -596,7 +597,7 @@ class Settings(
 
 {% if include_scheduler %}
     # Scheduler settings: an IANA timezone name, which cron triggers inherit
-    SCHEDULER_TIMEZONE: Annotated[str, Configurable("scheduler", "Timezone scheduled jobs run in", choices=timezones)] = "UTC"
+    SCHEDULER_TIMEZONE: Annotated[str, Configurable(ComponentName.SCHEDULER, "Timezone scheduled jobs run in", choices=timezones)] = "UTC"
 {% endif %}
 
 {% if include_ingress %}

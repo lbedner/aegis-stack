@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from app.core.config import settings
+from app.core.constants import ComponentName
 from app.core.log import logger
 
 from .models import ComponentStatus, ComponentStatusType
@@ -37,7 +38,7 @@ async def check_ollama_health() -> ComponentStatus:
 
     except ImportError:
         return ComponentStatus(
-            name="ollama",
+            name=ComponentName.OLLAMA,
             status=ComponentStatusType.UNHEALTHY,
             message="Ollama client not available",
             response_time_ms=None,
@@ -46,7 +47,7 @@ async def check_ollama_health() -> ComponentStatus:
     except Exception as e:
         logger.error(f"Ollama health check failed: {e}")
         return ComponentStatus(
-            name="ollama",
+            name=ComponentName.OLLAMA,
             status=ComponentStatusType.UNHEALTHY,
             message=f"Ollama health check failed: {str(e)}",
             response_time_ms=None,
@@ -61,7 +62,7 @@ def ollama_status(
     modal's from the inference sampler's last reading."""
     if not server_status.available:
         return ComponentStatus(
-            name="ollama",
+            name=ComponentName.OLLAMA,
             status=ComponentStatusType.UNHEALTHY,
             message="Ollama server not reachable",
             response_time_ms=None,
@@ -106,7 +107,7 @@ def ollama_status(
         message = "Ollama running but no models installed"
 
     return ComponentStatus(
-        name="ollama",
+        name=ComponentName.OLLAMA,
         status=status,
         message=message,
         response_time_ms=None,

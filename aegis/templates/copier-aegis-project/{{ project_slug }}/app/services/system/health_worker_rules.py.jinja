@@ -9,6 +9,7 @@ consumer group.
 {% if include_worker %}
 from typing import Any, NamedTuple
 
+from app.core.constants import ComponentName
 from app.core.formatting import format_span
 
 from app.services.system.models import ComponentStatus, ComponentStatusType
@@ -69,7 +70,7 @@ def broken_queue_status() -> ComponentStatus | None:
         return None
     detail = "; ".join(f"{name}: {error}" for name, error in sorted(broken.items()))
     return ComponentStatus(
-        name="worker",
+        name=ComponentName.WORKER,
         status=ComponentStatusType.UNHEALTHY,
         message=f"Worker queues failed to import: {detail}",
         metadata={"broken_queues": broken},

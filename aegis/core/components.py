@@ -211,8 +211,12 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 "app/components/backend/api/task_history.py",
             ],
             extras={
-                # The Overseer page's test: needs the web frontend too.
-                "include_htmx": ["tests/web/test_overseer_worker.py"],
+                # The Overseer page's and the maps' queue tests: need the
+                # web frontend too.
+                "include_htmx": [
+                    "tests/web/test_overseer_worker.py",
+                    "tests/web/test_overseer_queue.py",
+                ],
             },
         ),
         # Pattern D: the templates ship every backend's implementation side

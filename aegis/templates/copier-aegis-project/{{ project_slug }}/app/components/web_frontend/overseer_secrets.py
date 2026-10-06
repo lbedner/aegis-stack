@@ -15,6 +15,7 @@ from itertools import groupby
 from typing import Any
 
 from app.core import secrets
+from app.core.constants import ComponentName
 from app.core.formatting import format_relative_time
 from app.services.system.models import ComponentStatus
 
@@ -26,15 +27,15 @@ PARTIALS = "/partials/overseer/secrets"
 
 ITEM = NavItem(
     group="secrets",
-    name="secrets",
+    name=ComponentName.SECRETS,
     title="Secrets",
     url="/overseer/secrets",
     status="",
-    component=ComponentStatus(name="secrets", message=""),
+    component=ComponentStatus(name=ComponentName.SECRETS, message=""),
 )
 # With the secrets component installed, its page under Components holds
 # all of this (one home); without it, the page stays at the top level.
-COMPONENT_URL = page_url("components", "secrets")
+COMPONENT_URL = page_url("components", ComponentName.SECRETS)
 
 
 def has_component() -> bool:

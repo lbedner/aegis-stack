@@ -9,6 +9,7 @@ import contextlib
 
 import flet as ft
 from app.components.frontend.controls.tabs import PulseTabs
+from app.core.constants import ComponentName
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_subtitle, get_component_title
 
@@ -98,8 +99,8 @@ class WorkerDetailDialog(BaseDetailPopup):
         super().__init__(
             page=page,
             component_data=component_data,
-            title_text=get_component_title("worker"),
-            subtitle_text=get_component_subtitle("worker", component_data.metadata),
+            title_text=get_component_title(ComponentName.WORKER),
+            subtitle_text=get_component_subtitle(ComponentName.WORKER, component_data.metadata),
             sections=[tabs],
             status_detail=status_detail,
             scrollable=False,

@@ -8,11 +8,10 @@ the bucket: the bucket knows keys, we know what they are.
 from urllib.parse import urlparse
 
 from app.core.config import settings
+from app.core.constants import ComponentName
 from app.core.log import logger
 from app.core.storage import get_storage
 from app.services.system.models import ComponentStatus, ComponentStatusType
-
-STORAGE_COMPONENT_NAME = "storage"
 
 
 def _endpoint_label(endpoint: str | None) -> str:
@@ -46,20 +45,20 @@ async def check_storage_health() -> ComponentStatus:
     reachable = getattr(storage, "reachable", None)
     if reachable is None:
         return ComponentStatus(
-            name=STORAGE_COMPONENT_NAME,
+            name=ComponentName.STORAGE,
             status=ComponentStatusType.HEALTHY,
             message="Filesystem store",
             metadata=metadata,
         )
     if await reachable():
         return ComponentStatus(
-            name=STORAGE_COMPONENT_NAME,
+            name=ComponentName.STORAGE,
             status=ComponentStatusType.HEALTHY,
             message=f"Bucket {settings.S3_BUCKET} reachable",
             metadata=metadata,
         )
     return ComponentStatus(
-        name=STORAGE_COMPONENT_NAME,
+        name=ComponentName.STORAGE,
         status=ComponentStatusType.UNHEALTHY,
         message=f"Bucket {settings.S3_BUCKET} not reachable at {metadata['endpoint']}",
         metadata=metadata,

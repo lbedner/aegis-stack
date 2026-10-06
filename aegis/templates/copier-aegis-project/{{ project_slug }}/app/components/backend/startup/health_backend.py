@@ -10,6 +10,7 @@ and the metadata is the point.
 import os
 from typing import Any
 
+from app.core.constants import ComponentName
 from app.core.log import logger
 from app.services.backend.middleware_inspector import MiddlewareMetadata
 from app.services.backend.route_inspector import RouteMetadata
@@ -27,7 +28,7 @@ def _in_test_environment() -> bool:
 
 def _healthy(message: str, metadata: dict[str, Any]) -> ComponentStatus:
     return ComponentStatus(
-        name="backend",
+        name=ComponentName.BACKEND,
         status=ComponentStatusType.HEALTHY,
         message=message,
         response_time_ms=None,
@@ -169,7 +170,7 @@ async def backend_component_health() -> ComponentStatus:
         return _production_status(*route_and_middleware(warn_when_cold=True))
     except Exception as e:
         return ComponentStatus(
-            name="backend",
+            name=ComponentName.BACKEND,
             status=ComponentStatusType.UNHEALTHY,
             message=f"Backend component check failed: {str(e)}",
             response_time_ms=None,

@@ -6,6 +6,7 @@ Top-down layout matching the service card pattern.
 """
 
 import flet as ft
+from app.core.constants import ComponentName
 from app.services.system.models import ComponentStatus
 
 from .card_container import CardContainer
@@ -117,5 +118,5 @@ class RedisCard:
             content=self._create_card_content(),
             border_color=border_color,
             component_data=self.component_data,
-            component_name="cache",
+            component_name=ComponentName.CACHE,
         )

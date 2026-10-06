@@ -24,8 +24,10 @@ import re
 import tempfile
 from typing import Protocol, runtime_checkable
 
+from app.core.constants import ComponentName
+
 # The component this client fronts (``service_links``).
-FRONTS = "storage"
+FRONTS = ComponentName.STORAGE
 
 DIGEST_ALGORITHM = "sha256"
 # A key is exactly what ``content_key`` produces. Keys arrive from

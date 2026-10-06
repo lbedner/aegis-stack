@@ -20,7 +20,7 @@ from app.components.web_frontend.assets import COMPONENT_DIR, static_url
 from app.components.web_frontend.filters import FILTERS
 from app.core import series
 from app.core.config import settings
-from app.services.system import ui_runtime
+from app.services.system import topology, ui_runtime
 
 templates = Jinja2Templates(directory=str(COMPONENT_DIR / "templates"))
 
@@ -48,6 +48,8 @@ templates.env.globals["email_flows_enabled"] = (
 # A container's live figures by name (CPU, Memory...), as Flet and the
 # charts name them.
 templates.env.globals["figure_names"] = ui_runtime.FIGURES
+# What each map node is (a store, the queue, an outside provider), by name.
+templates.env.globals["map_roles"] = topology.Role
 # Every sparkline's box, the one ``series.sparkline`` draws its points in.
 templates.env.globals["spark_box"] = f"0 0 {series.SPARK_WIDTH} {series.SPARK_HEIGHT}"
 templates.env.filters.update(FILTERS)

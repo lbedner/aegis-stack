@@ -7,6 +7,7 @@ register_health_check machinery.
 """
 {% if include_ingress %}
 from app.core.config import settings
+from app.core.constants import ComponentName
 from app.core.log import logger
 
 from .models import ComponentStatus, ComponentStatusType
@@ -36,7 +37,7 @@ async def check_ingress_health() -> ComponentStatus:
 
             if not traefik_available:
                 return ComponentStatus(
-                    name="ingress",
+                    name=ComponentName.INGRESS,
                     status=ComponentStatusType.UNHEALTHY,
                     message="Traefik not reachable",
                     response_time_ms=None,
@@ -129,7 +130,7 @@ async def check_ingress_health() -> ComponentStatus:
                 })
 
             return ComponentStatus(
-                name="ingress",
+                name=ComponentName.INGRESS,
                 status=status,
                 message=message,
                 response_time_ms=None,
@@ -149,7 +150,7 @@ async def check_ingress_health() -> ComponentStatus:
 
     except ImportError:
         return ComponentStatus(
-            name="ingress",
+            name=ComponentName.INGRESS,
             status=ComponentStatusType.UNHEALTHY,
             message="HTTP client not available",
             response_time_ms=None,
@@ -158,7 +159,7 @@ async def check_ingress_health() -> ComponentStatus:
     except Exception as e:
         logger.error(f"Ingress health check failed: {e}")
         return ComponentStatus(
-            name="ingress",
+            name=ComponentName.INGRESS,
             status=ComponentStatusType.UNHEALTHY,
             message=f"Ingress health check failed: {str(e)}",
             response_time_ms=None,

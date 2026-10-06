@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app.components.backend.middleware.connections import find, history
+from app.core.constants import ComponentName
 from app.core.formatting import format_span
 from app.core.log import logger
 
@@ -20,7 +21,7 @@ from .overseer_live import fragment_events
 from .overseer_nav import page_url
 from .rendering import drawer_state, fragment, status_cell, with_query
 
-PAGE = page_url("components", "backend") + "/connections"
+PAGE = page_url("components", ComponentName.BACKEND) + "/connections"
 PARTIALS = "/partials/overseer/server/connections"
 EVENTS = "/overseer/events/server-connections"
 EVENT = "server-connections"

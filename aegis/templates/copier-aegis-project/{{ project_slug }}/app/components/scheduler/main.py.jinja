@@ -19,6 +19,7 @@ from apscheduler.events import (
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.core.boot import apply_saved_overrides
+from app.core.constants import ComponentName
 {% if scheduler_backend != "memory" %}
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from app.core.db import engine, init_database, db_session
@@ -236,7 +237,7 @@ async def run_scheduler() -> None:
 {%- endif %}
         if event.code == EVENT_JOB_EXECUTED:
             activity.add_event(
-                component="scheduler",
+                component=ComponentName.SCHEDULER,
                 event_type="job_complete",
                 message=f"Job '{event.job_id}' completed",
                 status="success",
@@ -251,7 +252,7 @@ async def run_scheduler() -> None:
 {%- endif %}
         elif event.code == EVENT_JOB_ERROR:
             activity.add_event(
-                component="scheduler",
+                component=ComponentName.SCHEDULER,
                 event_type="job_failed",
                 message=f"Job '{event.job_id}' failed",
                 status="error",
@@ -269,7 +270,7 @@ async def run_scheduler() -> None:
 {%- endif %}
         elif event.code == EVENT_JOB_MISSED:
             activity.add_event(
-                component="scheduler",
+                component=ComponentName.SCHEDULER,
                 event_type="job_missed",
                 message=f"Job '{event.job_id}' missed its scheduled run",
                 status="warning",

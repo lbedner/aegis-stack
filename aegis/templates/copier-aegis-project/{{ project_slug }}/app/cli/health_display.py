@@ -7,7 +7,7 @@ from rich.panel import Panel
 
 from app.cli import theme
 from app.cli.health_messages import _translate_health_msg
-from app.core.constants import CLI
+from app.core.constants import CLI, ComponentName
 from app.i18n import t
 from app.services.system.models import (
     ComponentStatusType,
@@ -197,7 +197,7 @@ def _display_sub_components(
         # Show metadata for sub-components if detailed and available
         elif detailed and sub_component.metadata:
             # Special handling for scheduler component
-            if sub_name == "scheduler" and _is_scheduler_metadata(
+            if sub_name == ComponentName.SCHEDULER and _is_scheduler_metadata(
                 sub_component.metadata
             ):
                 _display_scheduler_metadata(
@@ -364,7 +364,7 @@ def _display_health_status(
         # Show metadata for main components if detailed and available
         elif detailed and component.metadata:
             # Special handling for scheduler component
-            if name == "scheduler" and _is_scheduler_metadata(component.metadata):
+            if name == ComponentName.SCHEDULER and _is_scheduler_metadata(component.metadata):
                 _display_scheduler_metadata(component.metadata, "", True, detailed)
             else:
                 # Generic metadata display for other components

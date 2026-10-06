@@ -28,6 +28,7 @@ from app.components.frontend.state.session_state import get_session_state
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core import saved_settings, secrets
 from app.core.client import error_detail
+from app.core.constants import ComponentName
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_subtitle, get_component_title
 
@@ -261,8 +262,8 @@ class SecretsDetailDialog(BaseDetailPopup):
         super().__init__(
             page=page,
             component_data=component_data,
-            title_text=get_component_title("secrets"),
-            subtitle_text=get_component_subtitle("secrets", metadata),
+            title_text=get_component_title(ComponentName.SECRETS),
+            subtitle_text=get_component_subtitle(ComponentName.SECRETS, metadata),
             sections=[
                 overview,
                 ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),

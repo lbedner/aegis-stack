@@ -8,10 +8,11 @@ grey), which each frontend maps to its own theme.
 
 import asyncio
 import math
-from typing import Any
+from typing import Any, NamedTuple
 
 from app.core import series
-from app.services.system.models import ComponentStatus
+from app.core.constants import ComponentName
+from app.services.system.models import ComponentStatus, ComponentStatusType
 
 SUCCESS_RATE_HEALTHY = 95  # % - green
 SUCCESS_RATE_WARNING = 80  # % - yellow
@@ -29,6 +30,7 @@ def task_status(status: str) -> tuple[str, str]:
     return TASK_STATUSES.get(status, (status.replace("_", " ").capitalize(), "grey"))
 
 
+BACKED_UP = "backed_up"  # the verdict state of a queue backing up
 # Each verdict state as a label and colour; a healthy queue that is busy
 # reads "Active" instead of "Online".
 STATE_LABELS: dict[str, tuple[str, str]] = {
@@ -36,7 +38,7 @@ STATE_LABELS: dict[str, tuple[str, str]] = {
     "offline": ("Offline", "red"),
     "failing": ("Failing", "red"),
     "degraded": ("Degraded", "yellow"),
-    "backed_up": ("Backed up", "yellow"),
+    BACKED_UP: ("Backed up", "yellow"),
     "healthy": ("Online", "green"),
 }
 
@@ -91,6 +93,7 @@ def queue_view(queue: ComponentStatus, held: int | None = None) -> dict[str, Any
     """
     meta = queue.metadata or {}
     label, color = queue_state(queue)
+    verdict = _verdict(queue)
     consumers = int(meta.get("consumer_count", 0) or 0)
     configured = int(meta.get("max_concurrency", 0) or 0) * max(consumers, 1)
     slots = held or configured
@@ -115,8 +118,29 @@ def queue_view(queue: ComponentStatus, held: int | None = None) -> dict[str, Any
         "timeout": meta.get("timeout_seconds"),
         "stream": meta.get("stream_name"),
         "oldest_waiting": meta.get("oldest_waiting_seconds"),
-        "detail": _verdict(queue).lead if label != "No tasks" else "",
+        "detail": verdict.lead if label != "No tasks" else "",
+        "verdict": verdict.state,
     }
+
+
+class Backlog(NamedTuple):
+    """The worker's queues as one part (Overseer's queue node): what waits
+    and what runs now; healthy, or warning while any queue backs up."""
+
+    status: ComponentStatusType
+    message: str
+    queued: int
+
+
+def backlog(worker: ComponentStatus) -> Backlog:
+    """The worker's queues as one ``Backlog``, by the health check's own rule."""
+    found = overview(worker)
+    queued = found["queued"]
+    message = f"{queued} queued, {found['busy']} running"
+    lags = [q["detail"] for q in found["queues"] if q["verdict"] == BACKED_UP]
+    if lags:
+        return Backlog(ComponentStatusType.WARNING, f"{message}: {lags[0]}", queued)
+    return Backlog(ComponentStatusType.HEALTHY, message, queued)
 
 
 def overview(
@@ -229,7 +253,7 @@ async def load_worker() -> ComponentStatus:
     try:
         from app.services.system.health_worker import check_worker_health
     except ImportError:
-        return ComponentStatus(name="worker", message="No worker installed")
+        return ComponentStatus(name=ComponentName.WORKER, message="No worker installed")
     return await check_worker_health()
 
 

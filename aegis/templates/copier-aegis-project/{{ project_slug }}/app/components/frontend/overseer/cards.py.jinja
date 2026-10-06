@@ -9,6 +9,7 @@ parameters now.
 import time
 from typing import Any
 import flet as ft
+from app.core.constants import ComponentName
 from app.core.log import logger
 from app.services.system.models import ComponentStatus, ComponentStatusType
 {% if include_insights %}
@@ -176,48 +177,48 @@ def create_component_card(
             return ft.Container()
 
         # Map component names to their stunning card classes
-        if component_name == "backend":
+        if component_name == ComponentName.BACKEND:
             return ServerCard(component_data).build()
-        elif component_name in ("frontend", "web_frontend"):
+        elif component_name in (ComponentName.FRONTEND, ComponentName.WEB_FRONTEND):
             # Both frontends are shown through the ServerCard, return empty
             return ft.Container()
 {% if include_worker %}
-        elif component_name == "worker":
+        elif component_name == ComponentName.WORKER:
             return WorkerCard(component_data).build()
 {% endif %}
 {% if include_redis %}
-        elif component_name == "cache":
+        elif component_name == ComponentName.CACHE:
             return RedisCard(component_data).build()
 {% endif %}
 {% if include_database %}
-        elif component_name == "database":
+        elif component_name == ComponentName.DATABASE:
             return DatabaseCard(component_data).build()
 {% endif %}
 {% if include_ingress %}
-        elif component_name == "ingress":
+        elif component_name == ComponentName.INGRESS:
             return IngressCard(component_data).build()
 {% endif %}
 {% if include_observability %}
-        elif component_name == "observability":
+        elif component_name == ComponentName.OBSERVABILITY:
             return ObservabilityCard(component_data).build()
 {% endif %}
 {% if include_storage %}
-        elif component_name == "storage":
+        elif component_name == ComponentName.STORAGE:
             return StorageCard(component_data).build()
 {% endif %}
 {% if include_secrets %}
-        elif component_name == "secrets":
+        elif component_name == ComponentName.SECRETS:
             return SecretsCard(component_data).build()
 {% endif %}{% if include_mcp %}
-        elif component_name == "mcp":
+        elif component_name == ComponentName.MCP:
             return McpCard(component_data).build()
 {% endif %}
 {% if ollama_mode != "none" %}
-        elif component_name == "ollama":
+        elif component_name == ComponentName.OLLAMA:
             return OllamaCard(component_data).build()
 {% endif %}
 {% if include_scheduler %}
-        elif component_name == "scheduler":
+        elif component_name == ComponentName.SCHEDULER:
             return SchedulerCard(component_data).build()
 {% endif %}
 {% if include_auth or include_ai or include_blog or include_comms or include_documents or include_research or include_insights or include_payment or include_finance %}

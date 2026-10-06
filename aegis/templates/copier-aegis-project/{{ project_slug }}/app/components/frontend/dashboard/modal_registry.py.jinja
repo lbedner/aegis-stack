@@ -8,6 +8,7 @@ test_card_modal_keys.py`` walks every card to make sure none is.
 
 import flet as ft
 
+from app.core.constants import ComponentName
 {%- if include_documents %}
 from app.services.documents.health import DOCUMENTS_MODAL_ID
 {%- endif %}
@@ -113,37 +114,37 @@ def modal_registry() -> dict[str, type[ft.Container]]:
         "{{ m.modal_id }}": {{ m.symbol }},
         {%- endfor %}
         {%- endfor %}
-        "backend": BackendDetailDialog,
-        "frontend": FrontendDetailDialog,
+        ComponentName.BACKEND: BackendDetailDialog,
+        ComponentName.FRONTEND: FrontendDetailDialog,
         {%- if include_database %}
-        "database": DatabaseDetailDialog,
+        ComponentName.DATABASE: DatabaseDetailDialog,
         {%- endif %}
         {%- if include_ingress %}
-        "ingress": IngressDetailDialog,
+        ComponentName.INGRESS: IngressDetailDialog,
         {%- endif %}
         {%- if include_observability %}
-        "observability": ObservabilityDetailDialog,
+        ComponentName.OBSERVABILITY: ObservabilityDetailDialog,
         {%- endif %}
         {%- if include_storage %}
-        "storage": StorageDetailDialog,
+        ComponentName.STORAGE: StorageDetailDialog,
         {%- endif %}
         {%- if include_secrets %}
-        "secrets": SecretsDetailDialog,
+        ComponentName.SECRETS: SecretsDetailDialog,
         {%- endif %}
         {%- if include_mcp %}
-        "mcp": McpDetailDialog,
+        ComponentName.MCP: McpDetailDialog,
         {%- endif %}
         {%- if ollama_mode != "none" %}
-        "ollama": OllamaDetailDialog,
+        ComponentName.OLLAMA: OllamaDetailDialog,
         {%- endif %}
         {%- if include_redis %}
-        "cache": RedisDetailDialog,
+        ComponentName.CACHE: RedisDetailDialog,
         {%- endif %}
         {%- if include_scheduler %}
-        "scheduler": SchedulerDetailDialog,
+        ComponentName.SCHEDULER: SchedulerDetailDialog,
         {%- endif %}
         {%- if include_worker %}
-        "worker": WorkerDetailDialog,
+        ComponentName.WORKER: WorkerDetailDialog,
         {%- endif %}
     }
 

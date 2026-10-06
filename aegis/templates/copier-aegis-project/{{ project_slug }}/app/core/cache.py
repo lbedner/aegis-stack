@@ -44,8 +44,10 @@ import pickle
 import time
 from typing import Any, NamedTuple
 
+from app.core.constants import ComponentName
+
 # The component this client fronts (``service_links``).
-FRONTS = "cache"
+FRONTS = ComponentName.CACHE
 
 # Entries the Overseer's Cache view reads before sampling, like the Redis
 # keyspace map.

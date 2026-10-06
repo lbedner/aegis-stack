@@ -9,6 +9,7 @@ import flet as ft
 
 from app.components.frontend.controls import status_dot
 from app.components.frontend.theme import AegisTheme as Theme
+from app.core.constants import ComponentName
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_label
 
@@ -218,7 +219,7 @@ class WorkerCard:
                 [
                     create_header_row(
                         "Worker",
-                        get_component_label("worker"),
+                        get_component_label(ComponentName.WORKER),
                         self.component_data,
                     ),
                     self._create_queue_table(),
@@ -237,5 +238,5 @@ class WorkerCard:
             content=self._create_card_content(),
             border_color=border_color,
             component_data=self.component_data,
-            component_name="worker",
+            component_name=ComponentName.WORKER,
         )

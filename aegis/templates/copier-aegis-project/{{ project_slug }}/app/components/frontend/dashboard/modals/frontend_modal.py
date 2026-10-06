@@ -14,6 +14,7 @@ from app.components.frontend.controls import (
     SecondaryText,
 )
 from app.components.frontend.theme import AegisTheme as Theme
+from app.core.constants import ComponentName
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_subtitle, get_component_title
 
@@ -350,8 +351,8 @@ class FrontendDetailDialog(BaseDetailPopup):
         super().__init__(
             page=page,
             component_data=component_data,
-            title_text=get_component_title("frontend"),
-            subtitle_text=get_component_subtitle("frontend", metadata),
+            title_text=get_component_title(ComponentName.FRONTEND),
+            subtitle_text=get_component_subtitle(ComponentName.FRONTEND, metadata),
             sections=sections,
             status_detail=get_status_detail(component_data),
         )

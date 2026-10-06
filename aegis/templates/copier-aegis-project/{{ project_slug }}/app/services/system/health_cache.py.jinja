@@ -11,6 +11,7 @@ from typing import Any, cast
 from uuid import uuid4
 
 from app.core.config import settings
+from app.core.constants import ComponentName
 from app.core.log import logger
 
 from .models import ComponentStatus, ComponentStatusType
@@ -175,7 +176,7 @@ async def check_cache_health() -> ComponentStatus:
         mem_fragmentation_ratio = memory_info.get('mem_fragmentation_ratio', 1.0)
         
         return ComponentStatus(
-            name="cache",
+            name=ComponentName.CACHE,
             status=ComponentStatusType.HEALTHY,
             message="Redis cache connection and operations successful",
             response_time_ms=None,  # Will be set by caller
@@ -237,7 +238,7 @@ async def check_cache_health() -> ComponentStatus:
 
     except ImportError:
         return ComponentStatus(
-            name="cache",
+            name=ComponentName.CACHE,
             status=ComponentStatusType.UNHEALTHY,
             message="Cache library not installed",
             response_time_ms=None,
@@ -248,7 +249,7 @@ async def check_cache_health() -> ComponentStatus:
         )
     except Exception as e:
         return ComponentStatus(
-            name="cache",
+            name=ComponentName.CACHE,
             status=ComponentStatusType.UNHEALTHY,
             message=f"Cache health check failed: {str(e)}",
             response_time_ms=None,

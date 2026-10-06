@@ -328,13 +328,18 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
             for _rel_path in iter_cleanup_paths(_spec, selected=False):
                 apply_cleanup_path(project_path, _rel_path)
 
-    # A component's database-only files (deploy's history, mcp's activity
-    # record) go when there is no database to keep them in; the component
-    # itself still works without them.
-    if not is_enabled(AnswerKeys.DATABASE):
-        for _name, _spec in COMPONENTS.items():
-            if is_enabled(AnswerKeys.include_key(_name)):
-                for _rel_path in _spec.files.extras.get(AnswerKeys.DATABASE, []):
+    # A component's files that need another plugin (deploy's history and
+    # mcp's activity record need the database, mcp's tokens need auth) go
+    # when that plugin is absent; the component itself still works without.
+    _plugin_keys = {
+        AnswerKeys.include_key(_name) for _name in {**COMPONENTS, **SERVICES}
+    }
+    for _name, _spec in COMPONENTS.items():
+        if not is_enabled(AnswerKeys.include_key(_name)):
+            continue
+        for _key, _paths in _spec.files.extras.items():
+            if _key in _plugin_keys and not is_enabled(_key):
+                for _rel_path in _paths:
                     apply_cleanup_path(project_path, _rel_path)
 
     # =====================================================================

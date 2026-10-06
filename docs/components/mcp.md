@@ -7,7 +7,7 @@ aegis add mcp
 aegis init my-app --components mcp --services finance
 ```
 
-The server is [FastMCP](https://gofastmcp.com). It runs over stdio as a CLI command, so it adds no container and needs no token: whoever can run the CLI already owns the database.
+The server is [FastMCP](https://gofastmcp.com). It runs over stdio as a CLI command, so it adds no container and needs no token: whoever can run the CLI already owns the database. With the auth service it is also served over HTTP at `/mcp`, for a client elsewhere, signed in with a [token](#tokens).
 
 ## What a client sees
 
@@ -50,6 +50,17 @@ Claude Desktop, in `claude_desktop_config.json`:
 
 stdout carries the protocol and nothing else; the command sends every log line to stderr before it starts.
 
+### Over HTTP
+
+With the auth service, the webserver serves the same tools at `/mcp`. Every request carries an [MCP token](#tokens); without one the answer is 401 and no tools. The token's owner is who the calls act for (in place of `MCP_OWNER_USER_ID`), and its scope is what they reach.
+
+```bash
+claude mcp add --transport http my-app http://localhost:8000/mcp/ \
+  --header "Authorization: Bearer mcp_..."
+```
+
+There is no CORS on it (desktop and coding clients are not browsers), and it is not reachable through the dev tunnel, whose guard admits only the Plaid webhook.
+
 ## Proposing changes
 
 Any assistant can suggest; only you can change. Grant the queue's tools and a client can file changes, never make them:
@@ -77,6 +88,22 @@ With the database component the record is kept, in the component's own `mcp_tool
 Overseer shows it on its MCP page (htmx) and MCP card (Flet): the tools a client is served, each granted name it is not (and why), the commands that start the server, then each client's reads and proposals and the newest calls. Adding the database to a project later brings the record; removing it takes the record away.
 
 A client's proposals are approved where every card is, and each one names the client that proposed it.
+
+## Tokens
+
+A client over HTTP needs a credential a person makes and can revoke. With the auth service, each person makes their own MCP tokens: on Overseer's MCP page (Tokens), from the CLI, or through the API.
+
+```bash
+my-app mcp-tokens create --email you@example.com --name laptop --scope read
+my-app mcp-tokens list --email you@example.com
+my-app mcp-tokens revoke --email you@example.com 3
+```
+
+A token's scope is its grant: `read` reaches the read tools in `MCP_TOOLS`, `propose` the proposals too. A client sees only the tools its scope reaches, and a call outside it is refused. There is no second permission system, and a token never reaches a write. People start read-only and grant proposals later.
+
+Only a hash of the token is kept, so its value is shown once, when it is made. It works until it is revoked: each request checks it, so a revoked token fails on its next request, and each use is noted as its last use. Sessions in the browser are unaffected.
+
+The API is the signed-in person's own: `GET /api/v1/mcp/tokens` lists them (never their values), `POST` makes one (its value in that answer only), and `DELETE /api/v1/mcp/tokens/{id}` revokes one.
 
 ## Tools without the AI service
 

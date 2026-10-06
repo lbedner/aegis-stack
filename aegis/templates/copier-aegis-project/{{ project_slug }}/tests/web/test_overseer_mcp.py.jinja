@@ -120,4 +120,98 @@ def test_without_a_database_activity_says_where_it_goes(
 
     assert "log" in text(one(html, "#mcp-activity")).lower()
 {%- endif %}
+{%- if include_auth %}
+
+
+REQUEST_SESSION = object()
+TOKENS = "/partials/overseer/mcp/tokens"
+
+
+@pytest.fixture
+def made(
+    signed_in: TestClient, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> list[tuple[int, str, str]]:
+    """The viewer's tokens, kept in a list; each made one is (user, name, scope)."""
+    from datetime import UTC, datetime
+
+    from app.components.mcp import tokens
+    from app.components.mcp.models.tokens import McpToken
+    from app.core.db import get_async_db
+
+    when = datetime(2026, 10, 5, 9, 30, tzinfo=UTC)
+    calls: list[tuple[int, str, str]] = []
+    row = McpToken(
+        id=7, user_id=1, name="laptop", scope="read", token_hash="h", hint="mcp_abcd",
+        created_at=when,
+    )
+
+    async def live(db: Any, user_id: int) -> list[McpToken]:
+        assert db is REQUEST_SESSION and user_id == 1
+        return [row]
+
+    async def create(db: Any, user_id: int, name: str, scope: str) -> Any:
+        assert db is REQUEST_SESSION
+        if scope not in tokens.SCOPES:
+            raise ValueError(f"Unknown scope {scope!r}")
+        calls.append((user_id, name, scope))
+        return row, "mcp_the-value-shown-once"
+
+    async def request_session() -> Any:
+        return REQUEST_SESSION
+
+    app.dependency_overrides[get_async_db] = request_session
+    monkeypatch.setattr(tokens, "live", live)
+    monkeypatch.setattr(tokens, "create", create)
+    return calls
+
+
+def test_tokens_lists_the_viewers_tokens_never_their_values(
+    signed_in: TestClient, made: list[tuple[int, str, str]]
+) -> None:
+    html = _html(signed_in, "tokens")
+
+    listed = text(one(html, "#mcp-tokens"))
+    assert "laptop" in listed and "mcp_abcd..." in listed and "Read" in listed
+    assert one(html, f'button[hx-get="{TOKENS}/new"]') is not None
+    assert one(html, f'button[hx-get="{TOKENS}/7/revoke"]') is not None
+
+
+def test_a_new_token_is_shown_once(
+    signed_in: TestClient, made: list[tuple[int, str, str]]
+) -> None:
+    form = signed_in.get(f"{TOKENS}/new")
+    assert one(form.text, "form").get("hx-post") == TOKENS
+
+    shown = signed_in.post(TOKENS, data={"name": "laptop", "scope": "propose"})
+
+    assert shown.status_code == 200
+    assert made == [(1, "laptop", "propose")]
+    assert "mcp_the-value-shown-once" in text(one(shown.text, "#mcp-token-value"))
+
+
+def test_an_unknown_scope_re_renders_the_form(
+    signed_in: TestClient, made: list[tuple[int, str, str]]
+) -> None:
+    shown = signed_in.post(TOKENS, data={"name": "laptop", "scope": "admin"})
+
+    assert shown.status_code == 422
+    assert one(shown.text, "form") is not None and made == []
+
+
+def test_revoking_asks_then_calls_the_api(
+    signed_in: TestClient, made: list[tuple[int, str, str]]
+) -> None:
+    confirm = signed_in.get(f"{TOKENS}/7/revoke")
+
+    button = one(confirm.text, "button[data-api-done]")
+    assert button.get("hx-delete") == "/api/v1/mcp/tokens/7"
+    assert "laptop" in text(one(confirm.text, "p"))
+    assert signed_in.get(f"{TOKENS}/99/revoke").status_code == 404
+{%- else %}
+
+
+def test_without_auth_there_are_no_tokens(signed_in: TestClient) -> None:
+    assert signed_in.get(PAGE + "/tokens").status_code == 404
+    assert signed_in.get("/partials/overseer/mcp/tokens/new").status_code == 404
+{%- endif %}
 {% endif %}

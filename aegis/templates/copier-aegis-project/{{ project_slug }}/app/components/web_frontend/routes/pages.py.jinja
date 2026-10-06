@@ -84,6 +84,11 @@ from app.components.web_frontend.routes.partials import (
     overseer_inference as overseer_inference_partials,
 )
 {%- endif %}
+{%- if include_mcp %}
+from app.components.web_frontend.routes.partials import (
+    overseer_mcp as overseer_mcp_partials,
+)
+{%- endif %}
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 
@@ -188,6 +193,9 @@ router.include_router(overseer_ai_chat_partials.router)
 {%- endif %}
 {%- if include_inference %}
 router.include_router(overseer_inference_partials.router)
+{%- endif %}
+{%- if include_mcp %}
+router.include_router(overseer_mcp_partials.router)
 {%- endif %}
 router.include_router(overseer_routes.router)
 {%- if include_auth %}

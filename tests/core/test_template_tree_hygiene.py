@@ -67,6 +67,8 @@ def test_a_plain_file_importing_a_service_module_is_owned_by_that_service() -> N
     and breaks collection on every stack without the service - which is
     exactly how the whole CI stack matrix goes red at once.
     """
+    from aegis.constants import AnswerKeys
+    from aegis.core.components import COMPONENTS
     from aegis.core.services import SERVICES
 
     ownership: dict[str, list[str]] = {}
@@ -79,6 +81,12 @@ def test_a_plain_file_importing_a_service_module_is_owned_by_that_service() -> N
             # owned, just conditionally.
             for group in (spec.files.extras or {}).values():
                 entries += list(group)
+        # Another plugin's files keyed on this service go with it too
+        # (mcp's tokens, keyed on auth).
+        key = AnswerKeys.include_key(service_name)
+        for other in {**SERVICES, **COMPONENTS}.values():
+            if other.files is not None:
+                entries += list((other.files.extras or {}).get(key, []))
         ownership[service_name] = entries
 
     tree = _project_tree()

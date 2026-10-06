@@ -121,6 +121,14 @@ except ImportError:
     # MCP component not available, skip mcp command
     pass
 
+# Conditionally register mcp-tokens if the mcp component has auth to own them
+try:
+    mcp_tokens_module = importlib.import_module("app.cli.mcp_tokens_cli")
+    app.add_typer(mcp_tokens_module.app, name="mcp-tokens")
+except ImportError:
+    # No auth, so no tokens: skip mcp-tokens
+    pass
+
 # Conditionally register deploy command if deploy history is available
 try:
     deploy_module = importlib.import_module("app.cli.deploy_cli")

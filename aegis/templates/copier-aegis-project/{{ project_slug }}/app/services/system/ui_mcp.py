@@ -32,6 +32,16 @@ CALL_COLUMNS = (
     ("time", "Time"),
     ("size", "Size"),
 )
+TOKEN_COLUMNS = (
+    ("name", "Name"),
+    ("scope", "Reaches"),
+    ("hint", "Token"),
+    ("created", "Made"),
+    ("last_used", "Last used"),
+)
+SCOPE_LABELS = {"read": "Read", "propose": "Read and propose"}
+NO_TOKENS = "No tokens yet. A client beyond stdio needs one."
+SHOWN_ONCE = "Copy it now: it is not shown again."
 NOT_KEPT = (
     "Without a database, calls are logged (mcp.call on stderr), not kept. "
     "Add the database component to keep them."
@@ -62,9 +72,10 @@ def grant() -> dict[str, list[dict[str, str]]]:
 
 
 def connect() -> list[dict[str, str]]:
-    """How a client starts the server: it runs the command, over stdio."""
+    """How a client starts the server over stdio (it runs the command), and,
+    with tokens, how one elsewhere reaches it over HTTP."""
     app = settings.PROJECT_NAME
-    return [
+    commands = [
         {"label": "From the project", "command": f"uv run {app} mcp"},
         {
             "label": "In Docker",
@@ -75,6 +86,16 @@ def connect() -> list[dict[str, str]]:
             "command": f"claude mcp add {app} -- uv run --directory <project> {app} mcp",
         },
     ]
+    if has_tokens():
+        commands.append(
+            {
+                "label": "Over HTTP",
+                "command": f"claude mcp add --transport http {app} "
+                f"{settings.API_BASE_URL}/mcp/ "
+                '--header "Authorization: Bearer <token>"',
+            }
+        )
+    return commands
 
 
 async def recorded(limit: int = 50) -> dict[str, Any]:
@@ -108,3 +129,28 @@ async def recorded(limit: int = 50) -> dict[str, Any]:
     ]
     note = "" if clients else "No MCP client has called a tool yet."
     return {"note": note, "clients": clients, "calls": calls}
+
+
+def has_tokens() -> bool:
+    """Whether people can make tokens here: only with auth, since each
+    belongs to someone."""
+    try:
+        from app.components.mcp import tokens  # noqa: F401
+    except ImportError:
+        return False
+    return True
+
+
+def token_row(token: dict[str, Any]) -> dict[str, Any]:
+    """A token (``McpTokenResponse``'s fields, from a row or the API) as
+    both UIs show it."""
+    return {
+        "id": token["id"],
+        "name": token["name"],
+        "scope": SCOPE_LABELS[token["scope"]],
+        "hint": f"{token['hint']}...",
+        "created": format_relative_time(token["created_at"]),
+        "last_used": format_relative_time(token["last_used_at"])
+        if token.get("last_used_at")
+        else "Never",
+    }

@@ -51,6 +51,28 @@ def test_alembic_ships_exactly_when_a_migration_does(stack: str) -> None:
     assert ('"alembic==' in _pyproject(answers)) is migrates
 
 
+def _migrating_plugins() -> list[str]:
+    from aegis.core.components import COMPONENTS
+    from aegis.core.services import SERVICES
+
+    return sorted(
+        name for name, spec in {**SERVICES, **COMPONENTS}.items() if spec.migrations
+    )
+
+
+@pytest.mark.parametrize("plugin", _migrating_plugins())
+def test_alembic_follows_every_plugins_migrations(plugin: str) -> None:
+    """Every spec that declares a migration, with a database at its
+    defaults: derived, so a new one cannot be left off ``STACKS`` (mcp's
+    activity record was)."""
+    from aegis.constants import AnswerKeys
+
+    answers = {"include_database": True, AnswerKeys.include_key(plugin): True}
+    migrates = bool(get_services_needing_migrations(answers))
+
+    assert ('"alembic==' in _pyproject(answers)) is migrates
+
+
 @pytest.mark.parametrize("stack", ["secrets", "deploy with a database", "finance"])
 def test_update_generates_the_migrations_of_every_table_owner(
     stack: str, tmp_path: Any, monkeypatch: pytest.MonkeyPatch

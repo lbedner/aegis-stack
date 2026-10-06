@@ -1,0 +1,71 @@
+"""The tokens people make for outside assistants (``app.components.mcp.tokens``
+makes, finds and revokes them). Only the token's hash is kept: the value is
+shown once, when it is made.
+{%- if database_engine == "postgres" %}
+
+Lives in the ``mcp`` Postgres schema, with the call record.
+{%- endif %}
+"""
+
+from datetime import datetime
+from typing import Literal
+
+from pydantic import BaseModel, Field as PydanticField
+from sqlalchemy import Column, DateTime, String
+from sqlmodel import Field, SQLModel
+
+from app.core.time import utcnow
+
+Scope = Literal["read", "propose"]
+
+
+class McpToken(SQLModel, table=True):
+    """One token: whose it is, what its scope reaches, when it was last
+    used, and when (if ever) it was revoked."""
+
+    __tablename__ = "mcp_token"
+{%- if database_engine == "postgres" %}
+    __table_args__ = {"schema": "mcp"}
+{%- endif %}
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id", index=True)
+    name: str = Field(sa_column=Column(String(128), nullable=False))
+    scope: str = Field(sa_column=Column(String(16), nullable=False))
+    token_hash: str = Field(
+        sa_column=Column(String(64), nullable=False, unique=True, index=True)
+    )
+    hint: str = Field(sa_column=Column(String(16), nullable=False))
+    created_at: datetime = Field(
+        default_factory=utcnow, sa_column=Column(DateTime, nullable=False)
+    )
+    last_used_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=True)
+    )
+    revoked_at: datetime | None = Field(
+        default=None, sa_column=Column(DateTime, nullable=True)
+    )
+
+
+class McpTokenCreate(BaseModel):
+    """What a person names a new token, and what it may reach."""
+
+    name: str = PydanticField(min_length=1, max_length=128)
+    scope: Scope = "read"
+
+
+class McpTokenResponse(BaseModel):
+    """A token as its owner sees it: never its value."""
+
+    id: int
+    name: str
+    scope: Scope
+    hint: str
+    created_at: datetime
+    last_used_at: datetime | None = None
+
+
+class McpTokenCreated(McpTokenResponse):
+    """A new token, with its value: the one time it is shown."""
+
+    token: str

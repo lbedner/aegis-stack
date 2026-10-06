@@ -27,6 +27,16 @@
   from the chat agents' tool calls. An MCP page in Overseer (Flet and
   htmx) shows what a client is served, how to connect one, and each
   client's reads and proposals.
+- **MCP tokens.** With the auth service, each person makes, lists and
+  revokes their own MCP tokens on Overseer's MCP page (Flet and htmx),
+  with `<app> mcp-tokens`, or through `/api/v1/mcp/tokens`. A token's
+  scope is its grant (read, or read and propose; never a write), only its
+  hash is kept, its value is shown once, and a revoked token fails on its
+  next use.
+- **MCP over HTTP.** With the auth service, the webserver serves the MCP
+  tools at `/mcp` for clients elsewhere. Every request carries an MCP
+  token: no token, a 401 and no tools. A call acts for the token's owner,
+  and a client sees and calls only what the token's scope reaches.
 
 - **A component's database-only files follow the database.** Adding the
   database to a project later brings deploy's history and mcp's activity

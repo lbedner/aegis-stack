@@ -142,7 +142,7 @@ class ResearchService:
         limit: int = 50,
     ) -> list[ResearchItem]:
         """What the owner may read, newest first. ``current_only`` keeps what
-        the last refresh still found; otherwise history counts too."""
+        the last refresh still found; otherwise past finds count too."""
         query = select(ResearchItem).where(self._visible(watch_id, current_only))
         if text:
             pattern = f"%{text}%"

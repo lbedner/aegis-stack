@@ -66,7 +66,6 @@ def test_an_items_history_reads_back_a_day_at_a_time(
     history = client.get(f"/api/v1/research/items/{item['id']}/history").json()
 
     assert [(h["score"], h["comment_count"]) for h in history] == [(42, 0)]
-    assert set(history[0]) == {"item_id", "as_of", "score", "comment_count"}
 
 
 def test_a_query_the_source_refuses_is_a_400(

@@ -74,7 +74,7 @@ async def test_an_items_extras_are_the_sources_to_check(
     assert await _items(async_db_session) == {}
 
 
-async def test_an_item_that_stops_matching_keeps_its_history(
+async def test_an_item_that_stops_matching_stays_a_past_find(
     async_db_session: AsyncSession, site: FakeSite
 ) -> None:
     svc = ResearchService(async_db_session, owner_user_id=None)
@@ -146,6 +146,8 @@ async def test_one_owner_never_sees_anothers_watches_or_their_finds(
         await mine.refresh_watch(watch.id)  # type: ignore[arg-type]
     root = (await _items(async_db_session))["1"]
     assert await mine.thread(root.id) == []  # type: ignore[arg-type]
+    assert await mine.history(root.id) == []  # type: ignore[arg-type]
+    assert len(await theirs.history(root.id)) == 1  # type: ignore[arg-type]
 
 
 async def test_one_failing_watch_does_not_stop_the_others(
@@ -214,11 +216,14 @@ async def test_deleting_a_watch_drops_what_only_it_found(
     }
     site.threads["1"] = [story("1", "Only A"), comment("2", "1", "Reply")]
     await refresh_every_watch(async_db_session)
+    both = (await _items(async_db_session))["3"]
 
     await svc.delete_watch(gone.id)  # type: ignore[arg-type]
 
     assert set(await _items(async_db_session)) == {"3"}
     assert [w.id for w in await svc.list_watches()] == [kept.id]
+    snapshots = (await async_db_session.exec(select(ResearchItemSnapshot))).all()
+    assert [s.item_id for s in snapshots] == [both.id]
 
 
 async def test_a_watch_on_an_uninstalled_source_sits_out(
@@ -243,42 +248,37 @@ def _on(monkeypatch: pytest.MonkeyPatch, day: int, hour: int = 3) -> None:
     monkeypatch.setattr(refresh, "utcnow", lambda: datetime(2026, 9, day, hour))
 
 
-async def test_each_days_refresh_keeps_that_days_numbers(
-    async_db_session: AsyncSession, site: FakeSite, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    ("runs", "kept"),
+    [
+        # A day apiece: each day keeps its own numbers.
+        ([(1, 3, 12), (2, 3, 90), (4, 3, 140)], [(1, 12), (2, 90), (4, 140)]),
+        # Twice in one day: the later run replaces the day's.
+        ([(1, 3, 12), (1, 15, 30)], [(1, 30)]),
+    ],
+)
+async def test_the_row_holds_the_latest_numbers_and_the_history_each_days(
+    async_db_session: AsyncSession,
+    site: FakeSite,
+    monkeypatch: pytest.MonkeyPatch,
+    runs: list[tuple[int, int, int]],
+    kept: list[tuple[int, int]],
 ) -> None:
-    """The item holds the latest numbers; the history holds each day's, so
-    when a thread took off is still there after it settles."""
+    """So when a thread took off is still there after it settles."""
     svc = ResearchService(async_db_session, owner_user_id=None)
     watch = await svc.add_watch("fake", "Templates", {"q": "t"})
-    for day, score in ((1, 12), (2, 90), (4, 140)):
-        _on(monkeypatch, day)
+    for day, hour, score in runs:
+        _on(monkeypatch, day, hour)
         site.results["t"] = [story("1", "Show: a template", score=score)]
         await svc.refresh_watch(watch.id)  # type: ignore[arg-type]
 
     item = (await _items(async_db_session))["1"]
     history = await svc.history(item.id)  # type: ignore[arg-type]
 
-    assert item.score == 140
+    assert item.score == runs[-1][2]
     assert [(h.as_of, h.score) for h in history] == [
-        (date(2026, 9, 1), 12),
-        (date(2026, 9, 2), 90),
-        (date(2026, 9, 4), 140),
+        (date(2026, 9, day), score) for day, score in kept
     ]
-
-
-async def test_a_second_refresh_the_same_day_replaces_the_days_numbers(
-    async_db_session: AsyncSession, site: FakeSite, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    svc = ResearchService(async_db_session, owner_user_id=None)
-    watch = await svc.add_watch("fake", "Templates", {"q": "t"})
-    for hour, score in ((3, 12), (15, 30)):
-        _on(monkeypatch, 1, hour)
-        site.results["t"] = [story("1", "Show: a template", score=score)]
-        await svc.refresh_watch(watch.id)  # type: ignore[arg-type]
-
-    item = (await _items(async_db_session))["1"]
-
-    assert [h.score for h in await svc.history(item.id)] == [30]  # type: ignore[arg-type]
 
 
 async def test_an_item_with_no_numbers_keeps_no_history(
@@ -295,40 +295,6 @@ async def test_an_item_with_no_numbers_keeps_no_history(
     reply = (await _items(async_db_session))["2"]
 
     assert await svc.history(reply.id) == []  # type: ignore[arg-type]
-
-
-async def test_one_owner_never_reads_anothers_history(
-    async_db_session: AsyncSession, site: FakeSite
-) -> None:
-    theirs = ResearchService(async_db_session, owner_user_id=2)
-    watch = await theirs.add_watch("fake", "Theirs", {"q": "t"})
-    site.results["t"] = [story("1", "Theirs")]
-    await theirs.refresh_watch(watch.id)  # type: ignore[arg-type]
-    item = (await _items(async_db_session))["1"]
-
-    mine = ResearchService(async_db_session, owner_user_id=1)
-
-    assert await mine.history(item.id) == []  # type: ignore[arg-type]
-    assert len(await theirs.history(item.id)) == 1  # type: ignore[arg-type]
-
-
-async def test_deleting_a_watch_drops_the_history_of_what_only_it_found(
-    async_db_session: AsyncSession, site: FakeSite
-) -> None:
-    svc = ResearchService(async_db_session, owner_user_id=None)
-    gone = await svc.add_watch("fake", "Gone", {"q": "a"})
-    await svc.add_watch("fake", "Kept", {"q": "b"})
-    site.results = {
-        "a": [story("1", "Only A"), story("3", "Both")],
-        "b": [story("3", "Both")],
-    }
-    await refresh_every_watch(async_db_session)
-    both = (await _items(async_db_session))["3"]
-
-    await svc.delete_watch(gone.id)  # type: ignore[arg-type]
-
-    snapshots = (await async_db_session.exec(select(ResearchItemSnapshot))).all()
-    assert [s.item_id for s in snapshots] == [both.id]
 
 
 async def test_an_agent_reads_an_items_history_as_plain_rows(

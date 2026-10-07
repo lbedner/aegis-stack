@@ -54,6 +54,7 @@ def test_the_audit_names_the_client_behind_the_proxy(
 
     use_runtime(monkeypatch, FakeRuntime(REDIS))
     monkeypatch.setattr(settings, "TRUST_PROXY_HEADERS", True)
+    monkeypatch.setattr(settings, "TRUSTED_PROXIES", ["testclient"])
     admin.post(URL.format(name=REDIS.name), headers={"X-Forwarded-For": "203.0.113.9"})
     assert audit.events[0]["ip_address"] == "203.0.113.9"
 

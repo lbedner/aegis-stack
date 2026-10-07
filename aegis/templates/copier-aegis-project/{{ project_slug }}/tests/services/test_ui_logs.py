@@ -162,7 +162,7 @@ async def test_the_sources_are_the_pages_with_a_container(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     use_runtime(monkeypatch, FakeRuntime(REDIS, WORKER))
-    assert await ui_logs.sources() == [
+    assert ui_logs.sources(await ui_logs.containers()) == [
         {"page": "redis", "title": "Cache", "containers": []},
         {"page": "worker", "title": "Worker", "containers": []},
     ]
@@ -172,7 +172,7 @@ async def test_a_source_with_several_containers_lists_each(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     use_runtime(monkeypatch, FakeRuntime(WORKER, STOPPED))
-    (worker,) = await ui_logs.sources()
+    (worker,) = ui_logs.sources(await ui_logs.containers())
     assert worker["containers"] == [
         {"name": SYSTEM, "label": "system"},
         {"name": MEDIA, "label": "media"},
@@ -296,3 +296,15 @@ async def test_a_picked_container_narrows_its_page_to_it(
     assert sorted(row["message"] for row in view["lines"]) == ["a", "c"]
     # Read alone, it is still the worker's ``system``.
     assert {r["message"]: r["source"] for r in view["lines"]}["a"] == "system"
+
+
+async def test_a_page_without_a_container_keeps_its_reason_among_others(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Read from a lookup that found other pages' containers, a page with
+    none still says why, as it would looked up alone."""
+    use_runtime(monkeypatch, FakeRuntime(REDIS))
+    found = await ui_logs.containers(["redis", "worker"])
+    alone = await ui_logs.containers(["worker"])
+    view = await ui_logs.recent(["worker"], {}, found=found)
+    assert alone.note and view["note"] == alone.note

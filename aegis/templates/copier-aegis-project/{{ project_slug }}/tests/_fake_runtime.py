@@ -19,7 +19,7 @@ from app.core.runtime import (
     Stats,
 )
 from app.core.time import utcnow
-from app.services.system import health_probes, load_cost
+from app.services.system import health_probes, load_cost, ui_runtime
 from app.services.system.models import ComponentStatus, LoadCosts
 
 MiB = 2**20
@@ -139,6 +139,20 @@ class FakeRuntime:
 def use_runtime(monkeypatch: pytest.MonkeyPatch, fake: FakeRuntime) -> FakeRuntime:
     monkeypatch.setattr(runtime, "_runtime", fake)
     return fake
+
+
+def container_lookups(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
+    """Each lookup of the containers behind some pages (``containers_of``),
+    by the pages it asked for."""
+    seen: list[list[str]] = []
+    real = ui_runtime.containers_of
+
+    async def counted(pages: list[str], **options: Any) -> dict[str, Any]:
+        seen.append(pages)
+        return await real(pages, **options)
+
+    monkeypatch.setattr(ui_runtime, "containers_of", counted)
+    return seen
 
 
 def use_host_checks(

@@ -40,10 +40,13 @@ ITEM = NavItem(
 
 async def context(page: str, query: Mapping[str, str]) -> dict[str, Any]:
     """One page's Logs section, with a container picker when it has several."""
-    sources = await ui_logs.sources([page])
+    found = await ui_logs.containers([page])
+    sources = ui_logs.sources(found)
     _pages, _ticked, picked = _reading(query, sources)
-    found = await _context([page], query, EVENTS.format(page=page), container=picked)
-    return found | {
+    shown = await _context(
+        [page], found, query, EVENTS.format(page=page), container=picked
+    )
+    return shown | {
         "logs_containers": [
             _option(c["name"], c["label"], c["name"] in picked)
             for s in sources
@@ -56,10 +59,11 @@ async def section_context(
     section: str, component: ComponentStatus, req: SectionRequest
 ) -> dict[str, Any]:
     """Overseer > Logs: the services ticked, every one when none is."""
-    sources = await ui_logs.sources()
+    found = await ui_logs.containers()
+    sources = ui_logs.sources(found)
     pages, ticked, picked = _reading(req.query, sources)
     every = await _context(
-        pages, req.query, EVERY_EVENTS, service=ticked, container=picked
+        pages, found, req.query, EVERY_EVENTS, service=ticked, container=picked
     )
     return every | {
         "section_subtitle": "Every service's lines in one place.",
@@ -122,7 +126,11 @@ def _links(sources: list[dict[str, Any]]) -> dict[str, dict[str, str]]:
 
 
 async def _context(
-    pages: Sequence[str], query: Mapping[str, str], events: str, **more: Any
+    pages: Sequence[str],
+    found: ui_logs.Containers,
+    query: Mapping[str, str],
+    events: str,
+    **more: Any,
 ) -> dict[str, Any]:
     """The window's lines and the filters that chose them, and the stream
     that follows them (with the same level, order and ``more``). The search
@@ -133,7 +141,9 @@ async def _context(
     # A picked range narrows the stream too: a line after it is not added.
     span = {key: query.get(key) for key in ("from", "to")}
     return {
-        "logs": await ui_logs.recent(pages, _unsearched(query), volume=True),
+        "logs": await ui_logs.recent(
+            pages, _unsearched(query), volume=True, found=found
+        ),
         "logs_tones": ui_logs.TONES,
         "logs_volume_tones": ui_logs.VOLUME_TONES,
         "logs_events": with_query(events, level=levels, order=order, **span, **more),
@@ -166,24 +176,26 @@ def render(
 
 def events(page: str, query: Mapping[str, str]) -> AsyncIterator[str]:
     """One page's new lines as rows to add, over SSE, while it is open."""
-    return _stream([page], query, None)
+    return _stream([page], query)
 
 
 async def everything_events(query: Mapping[str, str]) -> AsyncIterator[str]:
     """Overseer > Logs' new lines, each with its service, over SSE."""
-    sources = await ui_logs.sources()
+    found = await ui_logs.containers()
+    sources = ui_logs.sources(found)
     pages, _ticked, _picked = _reading(query, sources)
-    async for sent in _stream(pages, query, _links(sources)):
+    async for sent in _stream(pages, query, _links(sources), found):
         yield sent
 
 
 def _stream(
     pages: Sequence[str],
     query: Mapping[str, str],
-    links: dict[str, dict[str, str]] | None,
+    links: dict[str, dict[str, str]] | None = None,
+    found: ui_logs.Containers | None = None,
 ) -> AsyncIterator[str]:
     async def lines() -> AsyncIterator[str]:
-        async for batch in ui_logs.follow(pages, query):
+        async for batch in ui_logs.follow(pages, query, found=found):
             yield frame(EVENT, render(batch, links))
 
     return heartbeat(lines())

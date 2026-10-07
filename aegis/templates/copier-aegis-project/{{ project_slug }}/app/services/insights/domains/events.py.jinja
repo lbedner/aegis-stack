@@ -14,6 +14,7 @@ import logging
 from datetime import date, datetime
 from typing import Any
 
+from app.core.time import today
 from app.services.insights import queries
 from app.services.insights.models import (
     EventOrigin,
@@ -115,7 +116,7 @@ class EventService:
         _validate_event_shape(event_type, description)
 
         event = InsightEvent(
-            date=datetime.combine(event_date or date.today(), datetime.min.time()),
+            date=datetime.combine(event_date or today(), datetime.min.time()),
             event_type=event_type.value,
             description=description,
             metadata_=metadata or {},

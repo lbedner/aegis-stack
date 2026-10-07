@@ -12,6 +12,7 @@ import flet as ft
 
 from app.components.frontend.controls.data_table import DataTableColumn
 from app.components.frontend.theme import AegisTheme as Theme
+from app.services.finance.utils import current_date
 
 _RECURRING_URL = "/api/v1/finance/recurring"
 
@@ -123,7 +124,7 @@ def stream_is_paused(stream: dict) -> bool:
     until = stream.get("paused_until")
     if not until:
         return False
-    return date.today() < date.fromisoformat(str(until))
+    return current_date() < date.fromisoformat(str(until))
 
 
 def _status_key(stream: dict) -> str:

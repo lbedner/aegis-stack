@@ -656,7 +656,9 @@ def test_a_refused_switch_is_the_toast(
 def test_the_release_chips_window_the_catalog(
     app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from datetime import date, timedelta
+    from datetime import timedelta
+
+    from app.core.time import today
 
     seen: list[Any] = []
     client = _client(app, monkeypatch)
@@ -665,9 +667,7 @@ def test_the_release_chips_window_the_catalog(
     assert seen[-1]["released_after"] is None
     client.get(f"{PAGE}/catalog?released=6m")
     after = seen[-1]["released_after"]
-    assert (
-        date.today() - timedelta(days=190) < after < date.today() - timedelta(days=170)
-    )
+    assert today() - timedelta(days=190) < after < today() - timedelta(days=170)
     chips = [
         text(a)
         for a in select(

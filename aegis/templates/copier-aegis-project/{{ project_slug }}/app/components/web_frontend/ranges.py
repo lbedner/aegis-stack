@@ -8,7 +8,9 @@ the summary pages hand their day count to the API instead.
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, timedelta
+
+from app.core.time import today
 
 # Big enough to mean "no cutoff", small enough to stay a plain int in a
 # query string. The API's own windows cap at 3650 days, so a summary
@@ -33,10 +35,7 @@ def since(days: int | None) -> date | None:
     """The date a window starts at; ``None`` when it means everything."""
     if days is None or days >= ALL:
         return None
-    # The same UTC clock the finance service reads. Spelled out rather
-    # than imported: the web frontend ships in projects that have no
-    # finance service, and a window is the browser's concern anyway.
-    return datetime.now(UTC).date() - timedelta(days=days)
+    return today() - timedelta(days=days)
 
 
 def horizon(days: int, cap: int) -> int:

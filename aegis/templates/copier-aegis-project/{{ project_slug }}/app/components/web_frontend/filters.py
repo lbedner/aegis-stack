@@ -5,7 +5,7 @@ finance service as integer minor units with a currency code.
 """
 
 from collections.abc import Callable, Iterable
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 from functools import cache
 import html
 import re
@@ -13,6 +13,7 @@ from typing import Any
 
 from markupsafe import Markup
 
+from app.core.time import today as utc_today
 from app.services.system.models import ComponentStatusType
 from app.services.system.ui import get_status_color_name
 
@@ -20,15 +21,6 @@ from app.services.system.ui import get_status_color_name
 # shows its code.
 _CURRENCY_SYMBOLS = {"USD": "$", "EUR": "€", "GBP": "£", "JPY": "¥"}
 _ZERO_DECIMAL_CURRENCIES = {"JPY", "KRW"}
-
-
-def _utc_today() -> date:
-    """Today in UTC, the clock the rest of the app stamps rows with.
-
-    Spelled out rather than imported from a service: the web frontend
-    ships in projects that have none of them.
-    """
-    return datetime.now(UTC).date()
 
 
 def money(cents: int | None, currency: str = "USD", whole: bool = False) -> str:
@@ -79,7 +71,7 @@ def short_date(value: date | datetime | str | None, today: date | None = None) -
     if isinstance(value, datetime):
         value = value.date()
     label = f"{value:%b} {value.day}"
-    if value.year == (today or _utc_today()).year:
+    if value.year == (today or utc_today()).year:
         return label
     return f"{label}, {value.year}"
 

@@ -19,3 +19,34 @@ class TestAsStored:
         naive = datetime(2026, 9, 22, 12, 0)
 
         assert as_stored(naive) is naive
+
+
+# Calendar reads written out by hand: the host's local date (a day apart
+# from UTC for part of every evening), and UTC ones that bypass the clock.
+CLOCK_READS = (
+    "date.today()",
+    "datetime.now().date()",
+    "datetime.now(UTC).date()",
+    "utcnow().date()",
+)
+# The clocks themselves: core's, and finance's, which its tests pin. A
+# date picker highlights the person's own today, so it reads the local date.
+CLOCKS = ("core/time.py", "services/finance/utils.py", "components/frontend/controls/calendar.py")
+
+
+def test_the_app_reads_the_calendar_through_its_clock() -> None:
+    """``app.core.time.today()`` (finance: ``current_date()``) is the one
+    source of today's date, so a test can pin it and no page shows
+    yesterday for the hours each evening when local and UTC disagree."""
+    from pathlib import Path
+
+    import app
+
+    root = Path(app.__file__).parent
+    offenders = [
+        str(path.relative_to(root))
+        for path in root.rglob("*.py")
+        if not str(path.relative_to(root)).endswith(CLOCKS)
+        and any(read in path.read_text() for read in CLOCK_READS)
+    ]
+    assert offenders == [], f"calendar reads (use app.core.time.today): {offenders}"

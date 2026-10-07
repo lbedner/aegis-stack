@@ -1,7 +1,7 @@
 """Revenue over time, and where the account stands right now."""
 
 from collections.abc import Iterable
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -10,6 +10,8 @@ from sqlmodel import select
 
 if TYPE_CHECKING:
     pass
+
+from app.core.time import today as utc_today
 
 from .constants import (
     DisputeStatus,
@@ -48,7 +50,7 @@ class ReportingMixin(PaymentServiceBase):
         if days < 1:
             days = 1
 
-        today = datetime.now(UTC).date()
+        today = utc_today()
         start_date = today - timedelta(days=days - 1)
         start_dt = datetime.combine(start_date, datetime.min.time())
 

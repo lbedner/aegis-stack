@@ -16,12 +16,6 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM insight_metric",
-      "file": "app/services/insights/queries/metrics.py",
-      "function": "metric_count"
-    },
-    {
-      "kind": "repeated_statement",
       "label": "SELECT ... FROM insight_metric WHERE insight_metric.metric_type_id = :metric_type_id_1 AND insight_metric.date = :date_1 AND insight_metric.period = :period_1",
       "file": "app/services/insights/queries/metrics.py",
       "function": "metric_on"
@@ -46,21 +40,27 @@
     },
     {
       "kind": "repeated_statement",
+      "label": "SELECT ... FROM insight_metric_type WHERE insight_metric_type.source_id = :source_id_1 AND insight_metric_type.key = :key_1",
+      "file": "app/services/insights/seed.py",
+      "function": "seed_insight_tables"
+    },
+    {
+      "kind": "repeated_statement",
       "label": "SELECT ... FROM insight_record WHERE insight_record.metric_type_id = :metric_type_id_1",
       "file": "app/services/insights/queries/metrics.py",
       "function": "record_for_type"
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM insight_source WHERE insight_source.enabled = true ORDER BY insight_source.id",
+      "label": "SELECT ... FROM insight_source WHERE insight_source.key = :key_1",
       "file": "app/services/insights/queries/metrics.py",
-      "function": "sources"
+      "function": "source_by_key"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM insight_source WHERE insight_source.key = :key_1",
-      "file": "app/services/insights/queries/metrics.py",
-      "function": "source_by_key"
+      "file": "app/services/insights/seed.py",
+      "function": "seed_insight_tables"
     },
     {
       "kind": "repeated_statement",

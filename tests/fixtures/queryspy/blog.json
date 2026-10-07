@@ -4,9 +4,15 @@
   "entries": [
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM blog_post GROUP BY blog_post.status",
-      "file": "app/services/blog/queries.py",
-      "function": "count_posts_by_status"
+      "label": "SELECT ... FROM blog_post",
+      "file": "app/services/blog/service.py",
+      "function": "list_posts"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM blog_post ORDER BY blog_post.created_at DESC LIMIT :param_1 OFFSET :param_2",
+      "file": "app/services/blog/service.py",
+      "function": "list_posts"
     },
     {
       "kind": "repeated_statement",
@@ -46,21 +52,9 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM blog_post WHERE blog_post.status = :status_1 AND blog_post.updated_at < :updated_at_1",
-      "file": "app/services/blog/summary.py",
-      "function": "blog_health_summary"
-    },
-    {
-      "kind": "repeated_statement",
       "label": "SELECT ... FROM blog_post WHERE blog_post.status = :status_1 ORDER BY blog_post.created_at DESC LIMIT :param_1 OFFSET :param_2",
       "file": "app/services/blog/service.py",
       "function": "list_posts"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM blog_post WHERE blog_post.status = :status_1 ORDER BY blog_post.published_at DESC LIMIT :param_1",
-      "file": "app/services/blog/summary.py",
-      "function": "blog_health_summary"
     },
     {
       "kind": "repeated_statement",
@@ -70,9 +64,9 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM blog_tag",
-      "file": "app/services/blog/summary.py",
-      "function": "blog_health_summary"
+      "label": "SELECT ... FROM blog_tag ORDER BY blog_tag.name",
+      "file": "app/services/blog/service.py",
+      "function": "list_tags"
     },
     {
       "kind": "repeated_statement",

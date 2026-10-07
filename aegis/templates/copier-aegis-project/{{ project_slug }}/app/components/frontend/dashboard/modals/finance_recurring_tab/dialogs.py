@@ -36,6 +36,7 @@ from app.components.frontend.dashboard.modals.finance_recurring_tab.shared impor
 )
 from app.components.frontend.dashboard.modals.modal_sections import DateRangeChips
 from app.components.frontend.theme import AegisTheme as Theme
+from app.services.finance.utils import current_date
 
 
 class StreamDialogsMixin(RecurringTabState):
@@ -54,7 +55,7 @@ class StreamDialogsMixin(RecurringTabState):
         """
         from app.components.frontend.state.session_state import get_session_state
 
-        today_iso = date.today().isoformat()
+        today_iso = current_date().isoformat()
         passed = sorted(
             (s for s in self._items if needs_review(s, today_iso)),
             key=lambda s: s.get("next_expected_date") or "",
@@ -254,7 +255,7 @@ class StreamDialogsMixin(RecurringTabState):
         """
         from app.services.finance.constants import PAUSE_INDEFINITE, add_months
 
-        today = date.today()
+        today = current_date()
         until = FormDateField(
             label="Paused until",
             value=pause_options(today)[2][1].isoformat(),  # 3 months

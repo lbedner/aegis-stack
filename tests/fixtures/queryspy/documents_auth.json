@@ -22,9 +22,27 @@
     },
     {
       "kind": "repeated_statement",
+      "label": "SELECT ... FROM document WHERE document.content_hash = :content_hash_1 AND document.deleted_at IS NULL",
+      "file": "app/services/documents/queries.py",
+      "function": "document_by_content"
+    },
+    {
+      "kind": "repeated_statement",
       "label": "SELECT ... FROM document WHERE document.content_hash = :content_hash_1 AND document.deleted_at IS NULL AND document.owner_user_id = :owner_user_id_1",
       "file": "app/services/documents/queries.py",
       "function": "document_by_content"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM document WHERE document.deleted_at IS NULL AND (document.id NOT IN (SELECT document.supersedes_id FROM document WHERE document.supersedes_id IS NOT NULL AND document.deleted_at IS NULL))",
+      "file": "app/services/documents/queries.py",
+      "function": "documents_page"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM document WHERE document.deleted_at IS NULL AND (document.id NOT IN (SELECT document.supersedes_id FROM document WHERE document.supersedes_id IS NOT NULL AND document.deleted_at IS NULL)) ORDER BY document.created_at DESC, document.id DESC LIMIT :param_1 OFFSET :param_2",
+      "file": "app/services/documents/queries.py",
+      "function": "documents_page"
     },
     {
       "kind": "repeated_statement",

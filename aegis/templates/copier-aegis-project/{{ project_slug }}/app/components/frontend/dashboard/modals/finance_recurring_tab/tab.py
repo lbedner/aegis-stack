@@ -43,6 +43,7 @@ from app.components.frontend.dashboard.modals.finance_recurring_tab.shared impor
 )
 from app.components.frontend.dashboard.modals.modal_sections import DateRangeChips
 from app.components.frontend.theme import AegisTheme as Theme
+from app.services.finance.utils import current_date
 
 
 class RecurringTab(
@@ -369,7 +370,7 @@ class RecurringTab(
         # three per load is what made this tab feel slow; the API itself
         # answers in ~10ms). The others build on first visit - see
         # _show_subtab.
-        due = [s for s in items if needs_review(s, date.today().isoformat())]
+        due = [s for s in items if needs_review(s, current_date().isoformat())]
         # .text is a dead store after construction (BaseElevatedButton
         # renders a content Text built in __init__) - the label lives in
         # content.value.

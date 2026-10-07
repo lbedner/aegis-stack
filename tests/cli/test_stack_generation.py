@@ -325,14 +325,17 @@ STACK_COMBINATIONS = [
     ),
     StackCombination(
         name="ai_langchain",
-        components=["database"],
-        services=["ai[sqlite,langchain,openai]"],
-        description="AI service on the LangChain framework + database",
+        # finance too: its analyst is the AI service's main framework-
+        # specific consumer, and its langchain branch was never built.
+        components=["database", "scheduler"],
+        services=["ai[sqlite,langchain,openai]", "finance"],
+        description="AI service on the LangChain framework + finance",
         expected_files=[
             "app/services/ai/",
+            "app/services/finance/",
             "tests/services/ai/test_langchain_turns.py",
         ],
-        expected_docker_services=["webserver"],
+        expected_docker_services=["webserver", "scheduler"],
         expected_pyproject_deps=["fastapi", "flet", "langchain-openai"],
     ),
     StackCombination(
@@ -351,7 +354,7 @@ STACK_COMBINATIONS = [
         name="insights",
         # Every source, not the default two: `plausible` and `reddit` have
         # collectors of their own that nothing generated.
-        components=["database", "scheduler"],
+        components=["database", "scheduler", "htmx"],
         services=["insights[github,pypi,plausible,reddit]"],
         description="Insights service, all four sources + database + scheduler",
         expected_files=[
@@ -380,7 +383,7 @@ STACK_COMBINATIONS = [
     ),
     StackCombination(
         name="payment",
-        components=["database"],
+        components=["database", "htmx"],
         services=["payment"],
         description="Payment service (Stripe) + database",
         expected_files=[
@@ -392,7 +395,7 @@ STACK_COMBINATIONS = [
     ),
     StackCombination(
         name="blog",
-        components=["database"],
+        components=["database", "htmx"],
         services=["blog"],
         description="Blog service + database",
         expected_files=[
@@ -408,7 +411,7 @@ STACK_COMBINATIONS = [
         # The service on its own: no auth (every watch unowned) and no
         # scheduler (a watch refreshes when asked). ``everything`` carries it
         # with every other service.
-        components=["database"],
+        components=["database", "htmx"],
         services=["research"],
         description="Research service (watches, outside items) + database",
         expected_files=[
@@ -429,7 +432,7 @@ STACK_COMBINATIONS = [
         # the matrix stayed green (#1179). ``documents_worker`` below is the
         # same service WITHOUT auth, so both shapes stay covered and this
         # costs no extra runner.
-        components=["database"],
+        components=["database", "htmx"],
         services=["auth", "documents"],
         description="Document store service + auth (owner-scoped) + database",
         expected_files=[
@@ -496,7 +499,10 @@ STACK_COMBINATIONS = [
         # only adds tables and tests on top, and this suite has to finish
         # inside QUALITY_CHECK_TIMEOUTS["tests"] — the kitchen sink is
         # already near it, which is why finance is not simply added there.
-        components=["database", "scheduler"],
+        components=["database", "scheduler", "htmx"],
+        # htmx too: finance and AI's Overseer pages together, the shape
+        # that shipped three bugs no row built. The other services take
+        # htmx on their own rows; ``everything`` cannot carry it in time.
         services=["auth[rbac]", "ai[sqlite]", "finance"],
         description="Finance beside AI and RBAC auth: analyst renders, user.role exists",
         expected_files=[
@@ -510,7 +516,7 @@ STACK_COMBINATIONS = [
     ),
     StackCombination(
         name="comms",
-        components=[],
+        components=["htmx"],
         services=["comms"],
         description="Communications service (Twilio/SendGrid) only",
         expected_files=[

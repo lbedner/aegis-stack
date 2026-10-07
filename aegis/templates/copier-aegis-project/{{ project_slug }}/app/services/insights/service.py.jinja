@@ -10,6 +10,8 @@ from typing import Any
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.time import today
+
 from . import queries
 from .constants import MetricKeys, Periods
 from .models import (
@@ -219,7 +221,7 @@ class InsightService:
         directly and set origin explicitly.
         """
         event = InsightEvent(
-            date=datetime.combine(event_date or date.today(), datetime.min.time()),
+            date=datetime.combine(event_date or today(), datetime.min.time()),
             event_type=event_type,
             description=description,
             metadata_=metadata or {},

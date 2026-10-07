@@ -89,7 +89,7 @@ class SessionsTableSection(ft.Container):
                     ]
                 )
 
-            ua_display = session.get("user_agent") or "Unknown device"
+            ua_display = ui_auth.device_label(session.get("user_agent"))
 
             rows.append(
                 [
@@ -261,15 +261,15 @@ class AuthSessionsTab(ft.Container):
             return
 
         session_id = session["id"]
-        ua = session.get("user_agent") or "this device"
+        title, body = ui_auth.revoke_session_confirmation(session.get("user_agent"))
 
         async def do_revoke() -> None:
             await self._revoke_session(session_id)
 
         ConfirmDialog(
             page=page,
-            title="Sign out this device",
-            message=f"Sign out '{ua}'? It is signed out on its next request.",
+            title=title,
+            message=body,
             confirm_text="Sign out",
             on_confirm=do_revoke,
             destructive=True,

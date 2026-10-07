@@ -985,3 +985,25 @@ class TestStreamSsePost:
 
         assert events == []
         assert client.last_error == "HTTP 500"
+
+
+@pytest.mark.asyncio
+async def test_the_client_names_itself_to_the_api(
+    make_client: Callable[..., APIClient],
+) -> None:
+    """Its sessions list as the frontend that made them (Overseer > Sessions),
+    not as a bare ``python-httpx``: the name registry's own name for it."""
+    import httpx
+
+    from app.core.constants import ComponentName
+    from app.services.system.ui import get_component_title
+
+    seen: list[str] = []
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        seen.append(request.headers["user-agent"])
+        return httpx.Response(200, json={})
+
+    client = make_client(transport=httpx.MockTransport(answer))
+    await client.get("/anything")
+    assert seen == [get_component_title(ComponentName.FRONTEND)]

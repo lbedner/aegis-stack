@@ -196,6 +196,11 @@ class User(UserBase, table=True):
     failed_login_attempts: int = Field(default=0)
     locked_until: datetime | None = None
 
+    @property
+    def display_name(self) -> str:
+        """The user as the app names them: their name, else their email."""
+        return self.full_name or self.email
+
 
 class UserCreate(SQLModel):
     """User creation model.

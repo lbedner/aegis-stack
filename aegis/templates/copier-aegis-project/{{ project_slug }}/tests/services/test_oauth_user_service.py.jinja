@@ -101,9 +101,12 @@ class TestUpsertFromOauth:
         """
         user_service = UserService(async_db_session)
         existing = await user_factory(email="bridge@example.com")
-        # Existing user starts unverified; OAuth should flip the flag
-        # since the provider has already confirmed the email.
-        assert existing.is_verified is False
+        # The existing user is unverified (set here: at the basic level a
+        # new account starts verified, with no email flow to confirm it);
+        # OAuth flips the flag, since the provider has confirmed the email.
+        existing.is_verified = False
+        async_db_session.add(existing)
+        await async_db_session.commit()
 
         oauth_user = await user_service.upsert_from_oauth(
             provider=OAuthProvider.GOOGLE,

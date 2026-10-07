@@ -9,6 +9,8 @@ from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from app.core.formatting import is_local_path
+
 from .constants import RefundReason
 
 
@@ -30,16 +32,12 @@ def _validate_redirect_url(value: str | None) -> str | None:
     # that import without a fully-wired settings object.
     from app.core.config import settings
 
-    # Reject protocol-relative URLs (``//evil.com/path``) BEFORE the
-    # root-relative check below — browsers resolve ``//host`` as an
-    # absolute URL inheriting the current scheme, so treating it as a
-    # local path lets an attacker host-spoof via a single extra slash.
-    if value.startswith("//"):
-        raise ValueError("Redirect URL must not be protocol-relative.")
-
+    # A root-relative path resolves against PUBLIC_BASE_URL server-side, so
+    # it has no host to spoof, unless a browser would read it as one
+    # (``//host``, ``/\\host``): ``is_local_path`` refuses those.
     if value.startswith("/"):
-        # Root-relative path — no host to spoof, resolves against
-        # PUBLIC_BASE_URL server-side.
+        if not is_local_path(value):
+            raise ValueError("Redirect URL must stay on this site.")
         return value
 
     parsed = urlparse(value)

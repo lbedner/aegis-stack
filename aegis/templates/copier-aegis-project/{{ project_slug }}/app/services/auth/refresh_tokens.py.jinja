@@ -13,15 +13,22 @@ Rotation invariants:
   raced rotation (a page fires many fetches at once when the access
   token expires; without the grace, sibling #2 would "replay" the
   token sibling #1 just rotated and nuke the session). The racer
-  gets the family's already-minted successor. After the grace it's a
-  replay: ``rotate`` revokes every live row in that family and returns
-  ``None`` so the caller can 401 + force re-auth.
+  gets a token of its own in the same family (the table keeps digests,
+  so the successor's token cannot be handed out a second time). After
+  the grace it's a replay: ``rotate`` revokes every live row in that
+  family and returns ``None`` so the caller can 401 + force re-auth.
 - An expired row is treated as just "not valid"; no family revocation.
   (Expiration is normal; replay is suspicious.)
 
 The token itself is opaque to the client: a 32-byte url-safe random
-string with no embedded claims. All authorization decisions look up
-the row by PK.
+string with no embedded claims. The table keeps only its SHA-256
+(``token_digest``), so reading the table yields no usable token; every
+lookup hashes what it is handed and finds the row by PK.
+
+Signing in from a browser that still holds a refresh cookie ends the
+session that cookie belonged to (``start_session(replaces=<its family>)``):
+the new cookie overwrites it, and the old session would otherwise sit live,
+held by nobody, for its whole lifetime.
 
 A session is one family, and every access token minted for it carries
 the family id as its ``sid`` claim. That is how a request knows which
@@ -33,9 +40,11 @@ live row left.
 
 from __future__ import annotations
 
+import hashlib
 import secrets
 import uuid
 from datetime import datetime, timedelta
+from typing import NamedTuple
 
 from sqlmodel import delete, select, update
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -55,7 +64,7 @@ REFRESH_TOKEN_RETENTION_DAYS = 7
 
 # Reuse of a just-revoked token within this window is treated as a benign
 # concurrency race (same browser, parallel requests) rather than theft —
-# the racer is handed the family's live successor. Industry-standard
+# the racer is handed a live token of its own in the same family. Industry-standard
 # pattern (Auth0 calls it the "reuse interval"); 30s comfortably covers
 # request fan-out + retries without meaningfully widening the replay
 # window an attacker would need to hit.
@@ -70,6 +79,22 @@ _LAZY_SWEEP_INTERVAL = timedelta(hours=1)
 
 def _new_token_value() -> str:
     return secrets.token_urlsafe(32)
+
+
+def token_digest(token: str) -> str:
+    """What the table keeps for a refresh token: its SHA-256, never the
+    token, so reading the table gives nobody a usable one. A random
+    32-byte token needs no salt or slow hash to stay unguessable."""
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+class Issued(NamedTuple):
+    """A refresh token just issued: the token itself, for the cookie (the
+    table keeps only its digest), and the session it belongs to."""
+
+    token: str
+    user_id: int
+    family_id: str
 
 
 def _new_family_id() -> str:
@@ -116,7 +141,7 @@ class RefreshService:
         UI. They're all optional so paths without request
         context (tests, internal flows) still work.
         """
-        row = self._add(
+        token = self._add(
             user_id,
             family_id or _new_family_id(),
             source=source,
@@ -125,21 +150,25 @@ class RefreshService:
             last_used_at=last_used_at,
         )
         await self.db.commit()
-        return row.token
+        return token
 
     def _add(
         self, user_id: int, family_id: str, **metadata: str | datetime | None
-    ) -> RefreshToken:
-        """Stage a new row; the caller commits."""
-        row = RefreshToken(
-            token=_new_token_value(),
-            user_id=user_id,
-            family_id=family_id,
-            expires_at=utcnow() + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
-            **metadata,
+    ) -> str:
+        """Stage a new row, keyed by the new token's digest; the caller
+        commits. Returns the token itself, which is kept nowhere else."""
+        token = _new_token_value()
+        self.db.add(
+            RefreshToken(
+                token=token_digest(token),
+                user_id=user_id,
+                family_id=family_id,
+                expires_at=utcnow()
+                + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+                **metadata,
+            )
         )
-        self.db.add(row)
-        return row
+        return token
 
     async def start_session(
         self,
@@ -148,12 +177,17 @@ class RefreshService:
         source: str,
         user_agent: str | None = None,
         ip: str | None = None,
+        replaces: str | None = None,
     ) -> tuple[str, str]:
         """Sign ``user`` in: a new session's ``(access_token, refresh_token)``.
 
         Every sign-in (password login, registration, OAuth) starts here, so
-        each access token names the session it belongs to.
+        each access token names the session it belongs to. ``replaces`` is
+        the session (family) the browser held: it ends, since the new cookie
+        overwrites its refresh token and nothing could renew it again.
         """
+        if replaces:
+            await self.revoke_family(replaces)
         session_id = _new_family_id()
         refresh = await self.mint(
             user.id, session_id, source=source, user_agent=user_agent, ip=ip
@@ -177,10 +211,10 @@ class RefreshService:
         *,
         user_agent: str | None = None,
         ip: str | None = None,
-    ) -> RefreshToken | None:
+    ) -> Issued | None:
         """Validate ``token``, revoke it, mint a successor in the same family.
 
-        Returns the successor row on success.
+        Returns the successor (its token, for the cookie) on success.
         Returns ``None`` if the token is missing, expired, or already revoked
         (the revoked-already case ALSO triggers family-wide revocation as a
         replay-attack defense).
@@ -191,20 +225,22 @@ class RefreshService:
         forward from the parent row — because the way a session was
         originally created doesn't change on rotation.
         """
-        row = await self.db.get(RefreshToken, token)
+        row = await self.row_of(token)
         if row is None:
             return None
 
         # Already-revoked path. Within the grace window this is the benign
         # concurrent-rotation race (parallel requests sharing one cookie),
-        # not theft: hand the racer the family's live successor so both
-        # requests converge on the same session. Past the window — or if
-        # no live successor exists — treat as replay and nuke the family.
+        # not theft: the racer gets a live token of its own in the same
+        # family (the successor's token is kept nowhere to hand out twice).
+        # Past the window — or once the family is dead — treat as replay
+        # and nuke the family.
         if row.revoked_at is not None:
             if (utcnow() - row.revoked_at) <= timedelta(seconds=REUSE_GRACE_SECONDS):
-                successor = await self._newest_active_in_family(row.family_id)
-                if successor is not None:
-                    return successor
+                if await self.is_live_session(row.family_id):
+                    racer = self._successor(row, user_agent, ip)
+                    await self.db.commit()
+                    return racer
             await self.revoke_family(row.family_id)
             return None
 
@@ -221,14 +257,7 @@ class RefreshService:
         # authenticating in between would read the session as signed out.
         row.revoked_at = utcnow()
         self.db.add(row)
-        successor = self._add(
-            row.user_id,
-            row.family_id,
-            source=row.source,
-            user_agent=user_agent,
-            ip=ip,
-            last_used_at=utcnow(),
-        )
+        successor = self._successor(row, user_agent, ip)
         await self.db.commit()
 {% if not include_scheduler %}
         # No scheduler component — sweep expired rows opportunistically
@@ -266,23 +295,31 @@ class RefreshService:
             logger.exception("Lazy refresh-token sweep failed; will retry next interval")
 
 {% endif %}
-    async def _newest_active_in_family(self, family_id: str) -> RefreshToken | None:
-        """Most recently minted live (unrevoked, unexpired) row in a family.
-
-        The grace-window path in ``rotate`` returns this to a request
-        that raced rotation, so concurrent refreshes converge on one
-        successor instead of minting parallel branches.
-        """
-        stmt = (
-            select(RefreshToken)
-            .where(RefreshToken.family_id == family_id)
-            .where(RefreshToken.revoked_at.is_(None))  # type: ignore[union-attr]
-            .where(RefreshToken.expires_at > utcnow())
-            .order_by(RefreshToken.created_at.desc())  # type: ignore[union-attr]
-            .limit(1)
+    def _successor(
+        self, row: RefreshToken, user_agent: str | None, ip: str | None
+    ) -> Issued:
+        """Stage the next token of ``row``'s session (the caller commits):
+        its ``source`` carried forward, the rotating request's device."""
+        token = self._add(
+            row.user_id,
+            row.family_id,
+            source=row.source,
+            user_agent=user_agent,
+            ip=ip,
+            last_used_at=utcnow(),
         )
-        result = await self.db.exec(stmt)
-        return result.first()
+        return Issued(token, row.user_id, row.family_id)
+
+    async def row_of(self, token: str) -> RefreshToken | None:
+        """The row behind ``token``, found by its digest (the table never
+        holds the token itself)."""
+        return await self.db.get(RefreshToken, token_digest(token))
+
+    async def family_of(self, token: str) -> str | None:
+        """The session (family) ``token`` belongs to, live or not; None for
+        a token the table never issued."""
+        row = await self.row_of(token)
+        return row.family_id if row else None
 
     async def revoke(self, token: str) -> None:
         """Revoke a single refresh token.
@@ -290,7 +327,7 @@ class RefreshService:
         No-op when the token is missing or already revoked — logout
         should never 500 because the cookie is stale.
         """
-        row = await self.db.get(RefreshToken, token)
+        row = await self.row_of(token)
         if row is None or row.revoked_at is not None:
             return
         row.revoked_at = utcnow()
@@ -342,7 +379,7 @@ class RefreshService:
         diagnostic paths (tests, debugging) rather than the hot refresh
         path, which should use ``rotate``.
         """
-        row = await self.db.get(RefreshToken, token)
+        row = await self.row_of(token)
         if row is None or row.revoked_at is not None:
             return None
         if row.expires_at <= utcnow():
@@ -410,10 +447,18 @@ class RefreshService:
         ``keep_family_id``. Returns the count of *families* revoked
         (one increment per affected session, not per row)."""
         rows = await self.list_active_for_user(user_id)
-        families: set[str] = {
-            r.family_id for r in rows if r.family_id != keep_family_id
-        }
-        for fid in families:
-            await self.revoke_family(fid)
+        families = {r.family_id for r in rows if r.family_id != keep_family_id}
+        if families:
+            stmt = (
+                update(RefreshToken)
+                .where(
+                    RefreshToken.family_id.in_(families),  # type: ignore[attr-defined]
+                    RefreshToken.revoked_at.is_(None),  # type: ignore[union-attr]
+                )
+                .values(revoked_at=utcnow())
+            )
+            await self.db.exec(stmt)  # type: ignore[call-overload]
+            await self.db.commit()
         return len(families)
+
 {%- endif %}

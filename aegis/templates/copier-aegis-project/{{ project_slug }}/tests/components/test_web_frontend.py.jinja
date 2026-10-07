@@ -421,7 +421,12 @@ class TestAuthPages:
             data={"email": "linus@example.com", "password": "hunter2hunter2"},
             follow_redirects=False,
         )
-        for hostile in ("//evil.example", "https://evil.example", "javascript:alert(1)"):
+        for hostile in (
+            "//evil.example",
+            "/\\evil.example",  # browsers read a backslash as a slash
+            "https://evil.example",
+            "javascript:alert(1)",
+        ):
             response = async_client_with_db.post(
                 "/login",
                 data={

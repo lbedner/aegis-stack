@@ -1,28 +1,63 @@
-{% from "components/macros/layout.html" import card %}
+{# Authentication > Sessions: the live sign-ins (one per device; every
+   user's for an administrator), a page at a time, narrowed by a search of
+   users' names and emails or to one user (a name's link); each opens to its
+   device, address and renewals; then the last week's ended ones and how each
+   ended (overseer_auth). Acting on a whole account is on Users. #}
+{% from "components/macros/layout.html" import card, facts %}
 {% from "components/macros/feedback.html" import empty_state %}
-{% from "components/macros/table.html" import data_table %}
-{% from "components/macros/form.html" import action %}
+{% from "components/macros/table.html" import data_table, pager as page_links %}
+{% from "components/macros/form.html" import action, search_input %}
+{# A device by its browser and system, its whole user-agent string on hover. #}
+{% macro device(value) %}<span data-device title="{{ value.full or '' }}">{{ value.label }}</span>{% endmacro %}
+{% macro session_facts(row) %}{{ facts(row.facts) }}{% endmacro %}
 {% if not available %}
 {{ empty_state("Active sessions unavailable", "Database backend required for session listing.") }}
 {% else %}
 {% set here = item.url ~ "/sessions" %}
-{% call card("Your sessions", "One per signed-in device") %}
-  <div class="flex justify-end gap-2">
-    {{ action("Sign out everywhere else", hx_dialog(partials ~ "/confirm/revoke-others/all", "disabled" if sessions|length <= 1 else ""), "danger") }}
-    {{ action("Refresh", hx_replace(here, "#overseer-main")) }}
+{% call card("Sessions", "One per signed-in device") %}
+  <div class="flex flex-wrap items-center justify-between gap-2">
+    <div class="flex flex-wrap items-center gap-3">
+      <form data-session-search {{ hx_replace(here, "#overseer-main") }} hx-trigger="keyup changed delay:250ms from:input[name=q], search">
+        {{ search_input("q", q, placeholder="Search users") }}
+      </form>
+      {% if showing %}<p data-showing class="text-xs text-aegis-muted">Showing {{ showing }}'s sessions · <a href="{{ here }}" {{ hx_replace(here, "#overseer-main") }} class="text-aegis-teal hover:underline">Everyone</a></p>{% endif %}
+      <p data-lifetimes class="text-xs text-aegis-muted">{{ lifetimes }}</p>
+    </div>
+    <div class="flex gap-2">
+      {{ action("Sign out everywhere else", hx_dialog(partials ~ "/confirm/revoke-others/all", "disabled" if own_sessions <= 1 else ""), "danger") }}
+      {{ action("Refresh", hx_replace(here, "#overseer-main")) }}
+    </div>
   </div>
+  <div data-sessions>
   {% call(row) data_table([
+    {"key": "user", "label": "User", "kind": "link", "target": "#overseer-main"},
     {"key": "source", "label": "Signed in with", "kind": "status"},
-    {"key": "device", "label": "Device"},
-    {"key": "ip", "label": "IP"},
+    {"key": "device", "label": "Device", "render": device},
+    {"key": "signed_in", "label": "Signed in"},
+    {"key": "renewed", "label": "Renewed"},
     {"key": "last_used", "label": "Last used"},
     {"key": "expires", "label": "Expires", "kind": "date"},
-  ], sessions, empty="No active sessions") %}
+  ], sessions, empty="No active sessions", detail=session_facts) %}
     {% if row.current %}
     <span class="text-xs text-aegis-muted">This browser</span>
-    {% else %}
+    {% elif row.can_sign_out %}
     {{ action("Sign out", hx_dialog(partials ~ "/confirm/revoke/" ~ row.id), "danger") }}
     {% endif %}
   {% endcall %}
+  {{ page_links(pager, "#overseer-main") }}
+  </div>
 {% endcall %}
+{% if ended %}
+{% call card("Ended this week", "Kept a week, then cleared") %}
+  <div data-ended>
+  {{ data_table([
+    {"key": "user", "label": "User", "kind": "link", "target": "#overseer-main"},
+    {"key": "device", "label": "Device", "render": device},
+    {"key": "signed_in", "label": "Signed in"},
+    {"key": "ended", "label": "Ended"},
+    {"key": "how", "label": "How"},
+  ], ended) }}
+  </div>
+{% endcall %}
+{% endif %}
 {% endif %}

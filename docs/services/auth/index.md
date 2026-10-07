@@ -71,7 +71,7 @@ graph TB
 
         subgraph "Database Schema"
             Users["👥 user table<br/>id, email, hashed_password<br/>created_at, updated_at"]
-            RefreshTokens["♻️ refresh_token table<br/>token (PK), user_id, family_id<br/>expires_at, revoked_at"]
+            RefreshTokens["refresh_token table<br/>token digest (PK), user_id, family_id<br/>expires_at, revoked_at"]
         end
     end
 
@@ -185,6 +185,8 @@ sequenceDiagram
 ```
 
 A session is one `family_id`, and every access token minted for it carries that id as its `sid` claim. Each request checks the session is still live, so revoking a session (logout, signing out a device, a password reset, reuse detection) ends its access tokens on their next request rather than when they expire. The same claim tells the API and the Overseer which session is the caller's own.
+
+The table keeps each refresh token's SHA-256 digest, never the token itself, so a copy of the database holds nothing anyone could sign in with; every lookup hashes the cookie it is handed. A browser that signs in again through the API (password, registration or OAuth) ends the session its old refresh cookie belonged to, since the new cookie overwrites it and the old session would otherwise sit live, held by nobody, until it expired. The sign-in pages cannot see that cookie (it rides only on `/api/v1/auth`); instead they renew a live session before showing the form.
 
 ## Quick Start
 

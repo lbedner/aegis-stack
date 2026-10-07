@@ -4,12 +4,6 @@
   "entries": [
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM \"user\"",
-      "file": "app/services/auth/health.py",
-      "function": "check_auth_service_health"
-    },
-    {
-      "kind": "repeated_statement",
       "label": "SELECT ... FROM \"user\" WHERE \"user\".email = :email_1 AND \"user\".deleted_at IS NULL",
       "file": "app/services/auth/users.py",
       "function": "get_user_by_email"
@@ -48,13 +42,13 @@
       "kind": "repeated_statement",
       "label": "SELECT ... FROM refresh_token WHERE refresh_token.token = :pk_1",
       "file": "app/services/auth/refresh_tokens.py",
-      "function": "revoke"
+      "function": "row_of"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM refresh_token WHERE refresh_token.token = :pk_1",
-      "file": "app/services/auth/refresh_tokens.py",
-      "function": "rotate"
+      "file": "tests/services/test_refresh_service.py",
+      "function": "test_the_table_never_keeps_a_token_itself"
     },
     {
       "kind": "repeated_statement",

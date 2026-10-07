@@ -12,14 +12,46 @@
 // 3. The auth pages' Alpine components, registered at the bottom so the
 //    pages themselves carry no inline scripts.
 
+// Overseer has its own sign-in and home; everything else, the app's.
+function _signIn(path) {
+  return path && path.startsWith('/overseer')
+    ? { login: '/overseer/login', home: '/overseer' }
+    : { login: '/login', home: '/' };
+}
+
 function _loginUrlWithNext() {
   // Preserve the current page path as ?next= so a successful sign-in returns
-  // the user to where they were. Mirrors the server-side gate. Overseer has
-  // its own sign-in, which always lands on Overseer.
+  // the user to where they were. Mirrors the server-side gates.
   const here = window.location.pathname;
-  if (here && here.startsWith('/overseer')) return '/overseer/login';
-  if (!here || here === '/login' || !here.startsWith('/')) return '/login';
-  return '/login?next=' + encodeURIComponent(here);
+  const { login } = _signIn(here);
+  if (!here || here === login || !here.startsWith('/')) return login;
+  return login + '?next=' + encodeURIComponent(here);
+}
+
+// The page asked for: the form's hidden ``next``, which the server has
+// already kept to a path on this site (``is_local_path``), so the rule
+// lives in one place.
+function _next() {
+  const field = document.querySelector('input[name=next]');
+  return field ? field.value : '';
+}
+
+// A full page load with an expired session lands on sign-in, where the
+// refresh cookie can still renew it: try once and go back to the page
+// asked for, so only a dead refresh shows the form. Not again within a few
+// seconds, so a renewed session the pages still refuse cannot loop.
+const RENEW_GUARD_MS = 10000;
+const RENEWED_AT = 'aegis.renewedAt';
+function _renewThenReturn() {
+  try {
+    if (Date.now() - Number(sessionStorage.getItem(RENEWED_AT) || 0) < RENEW_GUARD_MS) return;
+    sessionStorage.setItem(RENEWED_AT, String(Date.now()));
+  } catch (_) {
+    return; // no storage to guard the loop with: show the form
+  }
+  _tryRefresh().then((ok) => {
+    if (ok) window.location = _next() || _signIn(window.location.pathname).home;
+  });
 }
 
 // Single-flight refresh. The server rotates refresh tokens with reuse
@@ -124,6 +156,19 @@ document.addEventListener('htmx:sseError', () => {
   fetchAuth('/api/v1/auth/me').catch(() => {});
 });
 
+// The sign-in form's banners, by the query key the server redirects back
+// with (``?registered=1``, ``?error=invalid``).
+const SIGN_IN_BANNERS = {
+  registered: 'Account created. Check your email to verify it.',
+  verified: 'Email verified. Sign in to continue.',
+  reset: 'Password updated. Sign in with your new password.',
+};
+const SIGN_IN_ERRORS = {
+  invalid: 'Incorrect email or password.',
+  locked: 'Account temporarily locked after too many failed attempts. Try again shortly.',
+  disabled: 'This account has been disabled. Contact an administrator to restore access.',
+};
+
 document.addEventListener('alpine:init', () => {
   Alpine.data('loginForm', () => ({
       loading: false,
@@ -135,18 +180,13 @@ document.addEventListener('alpine:init', () => {
         // redirect back here with a reason rather than rendering the message
         // themselves, so a refresh never re-posts the form.
         const p = new URLSearchParams(window.location.search);
-        if (p.get('registered')) this.success = 'Account created. Check your email to verify it.';
-        if (p.get('verified')) this.success = 'Email verified. Sign in to continue.';
-        if (p.get('reset')) this.success = 'Password updated. Sign in with your new password.';
-
+        const shown = Object.keys(SIGN_IN_BANNERS).filter((key) => p.get(key));
+        shown.forEach((key) => { this.success = SIGN_IN_BANNERS[key]; });
         const err = p.get('error');
-        if (err === 'invalid') {
-          this.error = 'Incorrect email or password.';
-        } else if (err === 'locked') {
-          this.error = 'Account temporarily locked after too many failed attempts. Try again shortly.';
-        } else if (err === 'disabled') {
-          this.error = 'This account has been disabled. Contact an administrator to restore access.';
-        }
+        this.error = SIGN_IN_ERRORS[err] || '';
+        // The form came back with a banner (why it refused, what just
+        // happened): nothing to renew.
+        if (!shown.length && !p.has('error')) _renewThenReturn();
       },
   }));
 

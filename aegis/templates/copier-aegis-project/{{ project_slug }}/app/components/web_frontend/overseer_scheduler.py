@@ -185,7 +185,7 @@ async def _history(req: SectionRequest, metadata: dict[str, Any]) -> dict[str, A
         job_id=job,
     )
     names = {t.get("job_id"): t.get("name") for t in tasks(metadata)}
-    params = {k: v for k, v in {"status": status_param, "job": job}.items() if v}
+    params = {"status": status_param, "job": job}
     return {
         "history_available": True,
         "executions": _execution_rows(records),

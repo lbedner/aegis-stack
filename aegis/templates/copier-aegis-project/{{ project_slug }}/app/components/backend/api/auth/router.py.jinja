@@ -22,10 +22,7 @@ from app.components.backend.api.deps import (
     resend_verification_rate_limit,
 {% endif %}
 )
-from app.components.backend.security.rate_limit import (
-    get_client_ip,
-    get_session_metadata,
-)
+from app.components.backend.security.rate_limit import get_client_ip
 from app.core.audit import AuditEmitter
 from app.core.config import settings
 from app.core.security import (
@@ -66,7 +63,7 @@ from app.services.auth.deps import get_current_active_user
 {% endif %}
 from app.services.auth.refresh_tokens import RefreshService
 from app.components.backend.api.auth import admin, sessions
-from app.components.backend.api.auth.sessions import _session_metadata
+from app.components.backend.api.auth.sessions import sign_in_metadata
 from app.services.auth.users import RestoreConflictError, UserService
 {% if include_auth_org %}
 from app.services.auth.invites import InviteService
@@ -134,7 +131,9 @@ async def register(
     # opaque, server-side row; its cookie is path-scoped to ``/api/v1/auth``
     # so it only rides on auth endpoints.
     access_token, refresh_token = await refresh_service.start_session(
-        user, source="password", **_session_metadata(request)
+        user,
+        source="password",
+        **await sign_in_metadata(request, refresh_service),
     )
     set_session_cookie(response, access_token)
     set_refresh_cookie(response, refresh_token)
@@ -233,7 +232,9 @@ async def login(
 
     # See /register for the cookie scoping rationale.
     access_token, refresh_token = await refresh_service.start_session(
-        user, source="password", **_session_metadata(request)
+        user,
+        source="password",
+        **await sign_in_metadata(request, refresh_service),
     )
     set_session_cookie(response, access_token)
     set_refresh_cookie(response, refresh_token)

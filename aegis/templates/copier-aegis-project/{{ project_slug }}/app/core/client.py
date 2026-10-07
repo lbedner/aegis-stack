@@ -36,7 +36,9 @@ import httpx
 
 from app.core.client_session import SessionCookieMixin
 from app.core.config import settings
+from app.core.constants import ComponentName
 from app.core.log import logger
+from app.services.system.ui import get_component_title
 
 UnauthorizedHandler = Callable[[], None] | Callable[[], Awaitable[None]]
 SessionRotatedHandler = Callable[[str], None] | Callable[[str], Awaitable[None]]
@@ -85,17 +87,16 @@ class APIClient(SessionCookieMixin):
         # ``/auth/refresh`` itself from triggering a refresh attempt if
         # it returns 401, which would otherwise recurse.
         self._in_refresh = False
-        # ``follow_redirects`` lets the OAuth callback chain (303 → /)
-        # work end-to-end if a server-side caller ever uses it. Cookie
-        # jar is built into ``httpx.AsyncClient``.
+        # ``follow_redirects`` lets the OAuth callback chain (303 → /) work
+        # end-to-end. The User-Agent names the frontend, so its sign-ins
+        # read as that in Overseer > Sessions, not as ``python-httpx``.
         # ``transport`` is the seam, matching GraphQLClient: a test hands
-        # in ``httpx.MockTransport`` and never monkeypatches httpx. The
-        # auth lifecycle - login, restart, resume - is only testable with
-        # a server that can answer, and mocking the client's own methods
-        # tests the mock instead of the cookie jar.
+        # in ``httpx.MockTransport`` and never monkeypatches httpx (the
+        # auth lifecycle is only testable with a server that answers).
         self._client = httpx.AsyncClient(
             timeout=timeout,
             follow_redirects=True,
+            headers={"User-Agent": get_component_title(ComponentName.FRONTEND)},
             **({"transport": transport} if transport is not None else {}),
         )
         # Opt-in GET cache (see ``get``'s ``cache_ttl``). Key is

@@ -6,7 +6,9 @@ Checks JWT configuration, database connectivity, and service-specific metrics.
 """
 
 from app.core.config import settings
+from app.core.formatting import counted
 from app.core.log import logger
+from app.core.security import access_token_minutes
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
 
@@ -100,14 +102,14 @@ async def check_auth_service_health() -> ComponentStatus:
                 # If user counting fails, leave as 0
                 pass
 
-        # Format token expiry for display
+        # Format token expiry for display: what a session cookie lasts here
+        # (longer in dev), the figure Overseer's Sessions page shows too.
         token_expiry_display = "30 min"  # Default
         if access_token_expire:
-            if access_token_expire >= 60:
-                hours = access_token_expire // 60
-                token_expiry_display = "1 hour" if hours == 1 else f"{hours} hours"
-            else:
-                token_expiry_display = f"{access_token_expire} min"
+            minutes = access_token_minutes()
+            token_expiry_display = (
+                counted(minutes // 60, "hour") if minutes >= 60 else f"{minutes} min"
+            )
 
         # Determine security level based on configuration
         security_level = "standard"

@@ -21,6 +21,7 @@ from app.components.web_frontend.overseer_access import (
     Db,
     Viewer,
     overseer_db,
+    session_expires,
     session_id,
     viewer,
 )
@@ -171,6 +172,7 @@ async def _overseer_detail(
             request.url.path,
             request.app.routes,
             session_id(request),
+            session_expires(request),
         )
         context |= {"page": page, "current": section}
         context |= await page.context(section, item.component, req)

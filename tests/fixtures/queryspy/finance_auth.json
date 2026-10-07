@@ -88,12 +88,6 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM \"user\"",
-      "file": "app/services/auth/health.py",
-      "function": "check_auth_service_health"
-    },
-    {
-      "kind": "repeated_statement",
       "label": "SELECT ... FROM \"user\" WHERE \"user\".email = :email_1 AND \"user\".deleted_at IS NULL",
       "file": "app/services/auth/users.py",
       "function": "get_user_by_email"
@@ -109,12 +103,6 @@
       "label": "SELECT ... FROM \"user\" WHERE \"user\".id = :id_1",
       "file": "app/services/auth/user_deletion.py",
       "function": "restore_user"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM apscheduler_jobs ORDER BY apscheduler_jobs.next_run_time DESC NULLS LAST",
-      "file": "app/services/scheduler/scheduled_task_manager.py",
-      "function": "list_tasks"
     },
     {
       "kind": "repeated_statement",
@@ -173,6 +161,12 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM finance_account WHERE finance_account.deleted_at IS NULL AND finance_account.owner_user_id = :owner_user_id_1",
+      "file": "app/services/finance/domains/ledger/queries/accounts.py",
+      "function": "accounts_page"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM finance_account WHERE finance_account.deleted_at IS NULL AND finance_account.owner_user_id = :owner_user_id_1",
       "file": "app/services/finance/domains/ledger/queries/networth.py",
       "function": "account_rollup"
     },
@@ -185,6 +179,12 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM finance_account WHERE finance_account.deleted_at IS NULL AND finance_account.owner_user_id = :owner_user_id_1 AND NOT finance_account.is_hidden ORDER BY finance_account.classification, finance_account.name LIMIT :param_1 OFFSET :param_2",
+      "file": "app/services/finance/domains/ledger/queries/accounts.py",
+      "function": "accounts_page"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM finance_account WHERE finance_account.deleted_at IS NULL AND finance_account.owner_user_id = :owner_user_id_1 ORDER BY finance_account.classification, finance_account.name LIMIT :param_1 OFFSET :param_2",
       "file": "app/services/finance/domains/ledger/queries/accounts.py",
       "function": "accounts_page"
     },
@@ -529,12 +529,6 @@
       "label": "SELECT ... FROM finance_insight WHERE finance_insight.related_stream_id IN (__[POSTCOMPILE_related_stream_id_1])",
       "file": "app/services/finance/domains/detection/queries.py",
       "function": "insight_rows_where"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM finance_insight WHERE finance_insight.status = :status_1 AND finance_insight.insight_type != :insight_type_1",
-      "file": "app/services/finance/domains/planning/queries.py",
-      "function": "new_insight_count"
     },
     {
       "kind": "repeated_statement",
@@ -1404,13 +1398,13 @@
       "kind": "repeated_statement",
       "label": "SELECT ... FROM refresh_token WHERE refresh_token.token = :pk_1",
       "file": "app/services/auth/refresh_tokens.py",
-      "function": "revoke"
+      "function": "row_of"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM refresh_token WHERE refresh_token.token = :pk_1",
-      "file": "app/services/auth/refresh_tokens.py",
-      "function": "rotate"
+      "file": "tests/services/test_refresh_service.py",
+      "function": "test_the_table_never_keeps_a_token_itself"
     },
     {
       "kind": "repeated_statement",

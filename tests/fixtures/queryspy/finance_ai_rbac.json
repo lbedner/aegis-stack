@@ -113,12 +113,6 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM \"user\"",
-      "file": "app/services/auth/health.py",
-      "function": "check_auth_service_health"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM \"user\"",
       "file": "app/services/auth/users.py",
       "function": "create_user"
     },
@@ -178,18 +172,6 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM apscheduler_jobs ORDER BY apscheduler_jobs.next_run_time DESC NULLS LAST",
-      "file": "app/services/scheduler/scheduled_task_manager.py",
-      "function": "list_tasks"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM conversation",
-      "file": "app/services/ai/domains/chat/queries.py",
-      "function": "conversation_count"
-    },
-    {
-      "kind": "repeated_statement",
       "label": "SELECT ... FROM conversation LEFT OUTER JOIN sentiment_analysis ON sentiment_analysis.conversation_id = conversation.id WHERE sentiment_analysis.id IS NULL ORDER BY conversation.updated_at LIMIT :param_1",
       "file": "app/services/ai/domains/chat/queries.py",
       "function": "unscored_conversations"
@@ -205,18 +187,6 @@
       "label": "SELECT ... FROM conversation WHERE conversation.id = :pk_1",
       "file": "app/services/ai/domains/chat/conversation.py",
       "function": "_save_to_db"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM conversation WHERE conversation.meta_data[:meta_data_1] IS NOT NULL",
-      "file": "app/services/ai/domains/chat/queries.py",
-      "function": "distinct_user_count"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM conversation_message",
-      "file": "app/services/ai/domains/chat/queries.py",
-      "function": "message_count"
     },
     {
       "kind": "repeated_statement",
@@ -679,12 +649,6 @@
       "label": "SELECT ... FROM finance_insight WHERE finance_insight.related_stream_id IN (__[POSTCOMPILE_related_stream_id_1])",
       "file": "app/services/finance/domains/detection/queries.py",
       "function": "insight_rows_where"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM finance_insight WHERE finance_insight.status = :status_1 AND finance_insight.insight_type != :insight_type_1",
-      "file": "app/services/finance/domains/planning/queries.py",
-      "function": "new_insight_count"
     },
     {
       "kind": "repeated_statement",
@@ -1600,24 +1564,6 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM llm_usage",
-      "file": "app/services/ai/domains/llm/queries.py",
-      "function": "usage_totals"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM llm_usage LEFT OUTER JOIN large_language_model ON llm_usage.model_id = large_language_model.model_id LEFT OUTER JOIN llm_org ON large_language_model.served_by_org_id = llm_org.id GROUP BY llm_usage.model_id, large_language_model.title, llm_org.name, llm_org.color ORDER BY count(llm_usage.id) DESC",
-      "file": "app/services/ai/domains/llm/queries.py",
-      "function": "usage_by_model"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM llm_usage ORDER BY llm_usage.timestamp DESC LIMIT :param_1",
-      "file": "app/services/ai/domains/llm/queries.py",
-      "function": "recent_usage"
-    },
-    {
-      "kind": "repeated_statement",
       "label": "SELECT ... FROM llm_usage WHERE llm_usage.user_id = :user_id_1",
       "file": "tests/services/ai/test_usage_tracking.py",
       "function": "test_a_turn_that_used_no_tools_records_zero_not_null"
@@ -1674,13 +1620,13 @@
       "kind": "repeated_statement",
       "label": "SELECT ... FROM refresh_token WHERE refresh_token.token = :pk_1",
       "file": "app/services/auth/refresh_tokens.py",
-      "function": "revoke"
+      "function": "row_of"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM refresh_token WHERE refresh_token.token = :pk_1",
-      "file": "app/services/auth/refresh_tokens.py",
-      "function": "rotate"
+      "file": "tests/services/test_refresh_service.py",
+      "function": "test_the_table_never_keeps_a_token_itself"
     },
     {
       "kind": "repeated_statement",

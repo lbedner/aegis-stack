@@ -107,3 +107,12 @@ async def test_empty_snapshot_shape():
         "sources": [],
         "dominant": None,
     }
+
+
+def test_the_suite_never_counts_into_a_real_redis() -> None:
+    """The app's monitor is built at import from ``redis_url_effective``,
+    which on the host is the running dev stack's Redis: every test request
+    would land in its traffic panel."""
+    from app.components.backend.middleware import traffic
+
+    assert traffic.traffic_monitor.backend == "memory"

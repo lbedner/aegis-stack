@@ -30,3 +30,28 @@ def test_sync_and_async_app_owned_sessions_share_one_database(
         present = set(inspect(bind).get_table_names())
     expected = {t.name for t in SQLModel.metadata.tables.values() if t.schema is None}
     assert expected <= present, sorted(expected - present)
+
+
+def test_a_developer_env_never_points_the_suite_at_a_real_database(
+    tmp_path,
+) -> None:
+    """Every ``DATABASE_URL_*`` setting the app or alembic prefers over
+    ``DATABASE_URL`` is blanked in conftest, so a ``.env`` naming a real
+    database never wins. A new one fails here until conftest blanks it."""
+    from app.core.config import Settings
+
+    redirects = [
+        name for name in Settings.model_fields if name.startswith("DATABASE_URL_")
+    ]
+    if not redirects:
+        pytest.skip("a SQLite stack has no setting that redirects the database")
+    env = tmp_path / ".env"
+    env.write_text(
+        "".join(f"{name}=postgresql://dev@localhost:5432/live\n" for name in redirects)
+    )
+    settings = Settings(_env_file=env)
+    urls = {
+        settings.database_url_effective,
+        getattr(settings, "migration_database_url", settings.database_url_effective),
+    }
+    assert all(url.startswith("sqlite:///") for url in urls), urls

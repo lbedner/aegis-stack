@@ -27,6 +27,12 @@ os.environ["LOGFIRE_TOKEN"] = ""
 os.environ["DATABASE_URL"] = (
     f"sqlite:///{tempfile.mkdtemp(prefix='aegis-test-db-')}/app.db"
 )
+# And every setting the app prefers over it: ``.env``'s
+# ``DATABASE_URL_LOCAL`` on the host, ``DATABASE_URL_UNPOOLED`` (alembic's,
+# on Neon). Left set, each test entering the app's lifespan runs startup
+# migrations - stamp, upgrade - against the developer's real database.
+os.environ["DATABASE_URL_LOCAL"] = ""
+os.environ["DATABASE_URL_UNPOOLED"] = ""
 
 import pytest  # noqa: E402
 from fastapi import FastAPI
@@ -234,6 +240,19 @@ def _use_dict_backed_cache():
     cache_module.cache = cache_module.CacheService()
     yield
     cache_module.cache = original
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _count_traffic_in_memory():
+    """The traffic monitor is built at import from ``redis_url_effective``:
+    on the host, the running dev stack's Redis, whose traffic panel would
+    count every test request."""
+    from app.components.backend.middleware import traffic
+
+    original = traffic.traffic_monitor
+    traffic.traffic_monitor = traffic.TrafficMonitor(redis_url=None)
+    yield
+    traffic.traffic_monitor = original
 
 
 {%- if include_ai and ai_backend != "memory" %}

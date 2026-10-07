@@ -129,11 +129,25 @@ async def _fetch(
                 top for (name, top) in threads if name == source.name
             }
 
-            async def read(top: str) -> tuple[str, list[SourceItem]]:
+            async def read(top: str) -> tuple[str, list[SourceItem] | None]:
+                """A thread, or None when the source can't give it (deleted,
+                not indexed yet): it is skipped, not read as empty, which
+                would mark the replies already stored under it deleted."""
                 async with gate:
-                    return top, await source.thread(top)
+                    try:
+                        return top, await source.thread(top)
+                    except Exception:
+                        logger.warning(
+                            "Research: %s thread %s unreadable",
+                            source.name,
+                            top,
+                            exc_info=True,
+                        )
+                        return top, None
 
             for top, replies in await asyncio.gather(*(read(top) for top in tops)):
+                if replies is None:
+                    continue
                 for item in replies:
                     item.data = validated(
                         source.data, item.data, f"{source.name} item data"

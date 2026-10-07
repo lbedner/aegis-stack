@@ -35,6 +35,8 @@ def create_integrated_app() -> Any:
     from app.integrations.main import create_integrated_app as create
 
     return create()
+
+
 # Every interface: the container publishes the port, nothing else reaches it.
 HOST = "0.0.0.0"
 # Seconds a reload waits for the old worker before killing it. A clean
@@ -58,8 +60,7 @@ def uvicorn_settings(loop: str) -> dict[str, Any]:
 
     One place on purpose: a server-level setting has to land on the reload
     path AND the production path, and a setting added to only one of them
-    means dev and prod quietly serve differently. Proxy-header handling
-    lands here when it arrives.
+    means dev and prod quietly serve differently.
     """
     check_engine_loop("uvicorn", loop)
     return {
@@ -71,6 +72,9 @@ def uvicorn_settings(loop: str) -> dict[str, Any]:
         # behind Traefik. Granian needs no equivalent; it sends no ping.
         "ws_ping_interval": None,
         "ws_ping_timeout": None,
+        # Uvicorn would believe X-Forwarded-For from loopback on its own, and
+        # granian never does: TrustedProxyMiddleware decides for both.
+        "proxy_headers": False,
     }
 
 

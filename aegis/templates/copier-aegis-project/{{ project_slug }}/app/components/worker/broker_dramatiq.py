@@ -84,11 +84,7 @@ class PausableRedisBroker(RedisBroker):
 
 
 # Use redis_url_effective for Docker vs local auto-detection
-redis_url = (
-    settings.redis_url_effective
-    if hasattr(settings, "redis_url_effective")
-    else settings.REDIS_URL
-)
+redis_url = settings.redis_url_effective
 
 # Result backend for storing task return values
 result_backend = RedisBackend(url=redis_url)

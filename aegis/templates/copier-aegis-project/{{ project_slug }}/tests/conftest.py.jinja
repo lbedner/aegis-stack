@@ -233,26 +233,26 @@ def _no_load_cost_measuring(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True, scope="session")
-def _use_dict_backed_cache():
-    import app.core.cache as cache_module
-
-    original = cache_module.cache
-    cache_module.cache = cache_module.CacheService()
-    yield
-    cache_module.cache = original
-
-
-@pytest.fixture(autouse=True, scope="session")
-def _count_traffic_in_memory():
-    """The traffic monitor is built at import from ``redis_url_effective``:
-    on the host, the running dev stack's Redis, whose traffic panel would
-    count every test request."""
+def _no_real_redis():
+    """Every Redis the app builds at import or startup, held in memory for
+    the session. Each is at ``redis_url_effective``, which on the host is
+    the running dev stack's Redis: tests would count into its traffic
+    panel and attach the job API to its store. The cache also binds to an
+    event loop at import, and each test gets a fresh one. The job store's
+    stand-in is one in-memory Redis, as one server would be."""
     from app.components.backend.middleware import traffic
+    import app.core.cache as cache_module
+    from app.services.system.job_store import RedisJobStore
+    from tests._fake_redis import FakeRedis
 
-    original = traffic.traffic_monitor
-    traffic.traffic_monitor = traffic.TrafficMonitor(redis_url=None)
-    yield
-    traffic.traffic_monitor = original
+    memory = FakeRedis()
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(cache_module, "cache", cache_module.CacheService())
+        patch.setattr(traffic, "traffic_monitor", traffic.TrafficMonitor())
+        patch.setattr(
+            RedisJobStore, "from_url", classmethod(lambda cls, _url: cls(memory))
+        )
+        yield
 
 
 {%- if include_ai and ai_backend != "memory" %}

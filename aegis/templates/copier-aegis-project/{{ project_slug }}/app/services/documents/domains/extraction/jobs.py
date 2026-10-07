@@ -49,10 +49,9 @@ async def run_extraction_job(
     job_id: str, document_id: int, owner_user_id: int | None, force: bool
 ) -> dict[str, Any]:
     """The worker's entry: narrate into the shared job store, then finish."""
-    from app.core.config import settings
     from app.services.system.job_store import RedisJobStore
 
-    store = RedisJobStore.from_url(settings.REDIS_URL)
+    store = RedisJobStore.shared()
     loop = asyncio.get_running_loop()
     # Labels are written without waiting, so the page being read is never
     # held up by Redis - but they are held here, because closing the client

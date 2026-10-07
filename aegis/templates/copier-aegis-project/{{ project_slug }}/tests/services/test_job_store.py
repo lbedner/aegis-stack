@@ -12,32 +12,7 @@ import pytest
 
 from app.services.system.job_store import RedisJobStore
 from app.services.system.jobs import JobRunner, unwatched
-
-
-class FakeRedis:
-    """The four calls the store makes, over a dict."""
-
-    def __init__(self) -> None:
-        self.hashes: dict[str, dict[str, str]] = {}
-        self.ttl: dict[str, int] = {}
-
-    async def hset(self, key: str, mapping: dict[str, str]) -> None:
-        self.hashes.setdefault(key, {}).update(mapping)
-
-    async def hgetall(self, key: str) -> dict[str, str]:
-        return dict(self.hashes.get(key, {}))
-
-    async def expire(self, key: str, seconds: int) -> None:
-        self.ttl[key] = seconds
-
-    async def aclose(self) -> None:
-        return None
-
-    async def scan_iter(self, match: str):
-        prefix = match.rstrip("*")
-        for key in list(self.hashes):
-            if key.startswith(prefix):
-                yield key
+from tests._fake_redis import FakeRedis
 
 
 @pytest.fixture

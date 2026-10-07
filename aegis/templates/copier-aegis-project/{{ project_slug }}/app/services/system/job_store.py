@@ -36,6 +36,16 @@ class RedisJobStore:
 
         return cls(aioredis.from_url(url, decode_responses=True))
 
+    @classmethod
+    def shared(cls) -> RedisJobStore:
+        """The store the webserver and the worker share, where this process
+        reaches Redis (``redis_url_effective``: the compose hostname inside
+        Docker, the published port on the host). Only a stack with a worker,
+        hence Redis, asks for it."""
+        from app.services.system.redis_keys import redis_url
+
+        return cls.from_url(redis_url())
+
     @staticmethod
     def _key(job_id: str) -> str:
         return f"{KEY_PREFIX}{job_id}"

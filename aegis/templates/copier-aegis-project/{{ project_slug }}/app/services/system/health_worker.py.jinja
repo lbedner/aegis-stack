@@ -332,7 +332,7 @@ async def check_worker_health() -> ComponentStatus:
                     if total_completed + total_failed > 0
                     else 0
                 ),
-                "redis_url": settings.REDIS_URL,
+                "redis_url": settings.redis_url_effective,
                 "version": arq_version,
                 "queue_configuration": {
                     queue_type: {
@@ -363,7 +363,7 @@ async def check_worker_health() -> ComponentStatus:
             response_time_ms=None,
             metadata={
                 "error": str(e),
-                "redis_url": settings.REDIS_URL,
+                "redis_url": settings.redis_url_effective,
             },
             sub_components={},
         )

@@ -55,11 +55,7 @@ async def _get_redis() -> aioredis.Redis:
     """Get or create an async Redis client."""
     global _redis
     if _redis is None:
-        redis_url = (
-            settings.redis_url_effective
-            if hasattr(settings, "redis_url_effective")
-            else settings.REDIS_URL
-        )
+        redis_url = settings.redis_url_effective
         _redis = aioredis.from_url(redis_url, decode_responses=True)
     return _redis
 

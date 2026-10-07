@@ -53,11 +53,7 @@ class LoadTestService(AnalysisMixin):
 
         from app.core.config import settings
 
-        redis_url = (
-            settings.redis_url_effective
-            if hasattr(settings, "redis_url_effective")
-            else settings.REDIS_URL
-        )
+        redis_url = settings.redis_url_effective
         lock_redis = aioredis.from_url(redis_url)
         lock_key = "aegis:load_test:lock"
 

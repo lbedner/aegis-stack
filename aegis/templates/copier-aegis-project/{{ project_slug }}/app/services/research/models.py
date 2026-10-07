@@ -2,13 +2,14 @@
 what.
 
 An item is stored once per source, whoever's watch found it: outside posts
-are public, and a refresh updates the one row. Watches are their owner's;
+are public, and a refresh updates the one row. Its numbers are kept a day at
+a time beside it (``ResearchItemSnapshot``), so a thread's rise outlives it. Watches are their owner's;
 what an owner may read is ``ResearchService``'s rule.
 """
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from sqlalchemy import JSON, Column, Index, UniqueConstraint
@@ -82,3 +83,15 @@ class ResearchMatch(SQLModel, table=True):
     watch_id: int = Field(foreign_key="research_watch.id", primary_key=True)
     item_id: int = Field(foreign_key="research_item.id", primary_key=True)
     last_matched_at: datetime = Field(default_factory=utcnow)
+
+
+class ResearchItemSnapshot(SQLModel, table=True):
+    """An item's numbers on one day: the row holds the latest, this the
+    days before. One per item per day; a later run that day replaces it."""
+
+    __tablename__ = "research_item_snapshot"
+
+    item_id: int = Field(foreign_key="research_item.id", primary_key=True)
+    as_of: date = Field(primary_key=True)
+    score: int | None = None
+    comment_count: int | None = None

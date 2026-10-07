@@ -5,6 +5,7 @@ A source is a plugin's business: it searches, reads a thread, refreshes
 numbers. Everything else is here, tested through a fake source.
 """
 
+from datetime import date, datetime
 from typing import Any
 
 import pytest
@@ -12,7 +13,7 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.research import registry
-from app.services.research.models import ResearchItem
+from app.services.research.models import ResearchItem, ResearchItemSnapshot
 from app.services.research.refresh import refresh_every_watch
 from app.services.research.registry import UnknownSourceError
 from app.services.research.service import (
@@ -233,6 +234,120 @@ async def test_a_watch_on_an_uninstalled_source_sits_out(
     site.results["ok"] = [story("1", "Fine")]
 
     assert await refresh_every_watch(async_db_session) == {fine.id: 1}
+
+
+def _on(monkeypatch: pytest.MonkeyPatch, day: int, hour: int = 3) -> None:
+    """Refreshes run on September ``day``, 2026, at ``hour`` UTC."""
+    from app.services.research import refresh
+
+    monkeypatch.setattr(refresh, "utcnow", lambda: datetime(2026, 9, day, hour))
+
+
+async def test_each_days_refresh_keeps_that_days_numbers(
+    async_db_session: AsyncSession, site: FakeSite, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The item holds the latest numbers; the history holds each day's, so
+    when a thread took off is still there after it settles."""
+    svc = ResearchService(async_db_session, owner_user_id=None)
+    watch = await svc.add_watch("fake", "Templates", {"q": "t"})
+    for day, score in ((1, 12), (2, 90), (4, 140)):
+        _on(monkeypatch, day)
+        site.results["t"] = [story("1", "Show: a template", score=score)]
+        await svc.refresh_watch(watch.id)  # type: ignore[arg-type]
+
+    item = (await _items(async_db_session))["1"]
+    history = await svc.history(item.id)  # type: ignore[arg-type]
+
+    assert item.score == 140
+    assert [(h.as_of, h.score) for h in history] == [
+        (date(2026, 9, 1), 12),
+        (date(2026, 9, 2), 90),
+        (date(2026, 9, 4), 140),
+    ]
+
+
+async def test_a_second_refresh_the_same_day_replaces_the_days_numbers(
+    async_db_session: AsyncSession, site: FakeSite, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    svc = ResearchService(async_db_session, owner_user_id=None)
+    watch = await svc.add_watch("fake", "Templates", {"q": "t"})
+    for hour, score in ((3, 12), (15, 30)):
+        _on(monkeypatch, 1, hour)
+        site.results["t"] = [story("1", "Show: a template", score=score)]
+        await svc.refresh_watch(watch.id)  # type: ignore[arg-type]
+
+    item = (await _items(async_db_session))["1"]
+
+    assert [h.score for h in await svc.history(item.id)] == [30]  # type: ignore[arg-type]
+
+
+async def test_an_item_with_no_numbers_keeps_no_history(
+    async_db_session: AsyncSession, site: FakeSite
+) -> None:
+    """A comment carries no score or reply count: a row a day would say
+    nothing."""
+    svc = ResearchService(async_db_session, owner_user_id=None)
+    watch = await svc.add_watch("fake", "Replies", {"q": "r"}, with_threads=True)
+    site.results["r"] = [story("1", "Top")]
+    site.threads["1"] = [story("1", "Top"), comment("2", "1", "Reply")]
+    await svc.refresh_watch(watch.id)  # type: ignore[arg-type]
+
+    reply = (await _items(async_db_session))["2"]
+
+    assert await svc.history(reply.id) == []  # type: ignore[arg-type]
+
+
+async def test_one_owner_never_reads_anothers_history(
+    async_db_session: AsyncSession, site: FakeSite
+) -> None:
+    theirs = ResearchService(async_db_session, owner_user_id=2)
+    watch = await theirs.add_watch("fake", "Theirs", {"q": "t"})
+    site.results["t"] = [story("1", "Theirs")]
+    await theirs.refresh_watch(watch.id)  # type: ignore[arg-type]
+    item = (await _items(async_db_session))["1"]
+
+    mine = ResearchService(async_db_session, owner_user_id=1)
+
+    assert await mine.history(item.id) == []  # type: ignore[arg-type]
+    assert len(await theirs.history(item.id)) == 1  # type: ignore[arg-type]
+
+
+async def test_deleting_a_watch_drops_the_history_of_what_only_it_found(
+    async_db_session: AsyncSession, site: FakeSite
+) -> None:
+    svc = ResearchService(async_db_session, owner_user_id=None)
+    gone = await svc.add_watch("fake", "Gone", {"q": "a"})
+    await svc.add_watch("fake", "Kept", {"q": "b"})
+    site.results = {
+        "a": [story("1", "Only A"), story("3", "Both")],
+        "b": [story("3", "Both")],
+    }
+    await refresh_every_watch(async_db_session)
+    both = (await _items(async_db_session))["3"]
+
+    await svc.delete_watch(gone.id)  # type: ignore[arg-type]
+
+    snapshots = (await async_db_session.exec(select(ResearchItemSnapshot))).all()
+    assert [s.item_id for s in snapshots] == [both.id]
+
+
+async def test_an_agent_reads_an_items_history_as_plain_rows(
+    async_db_session: AsyncSession, site: FakeSite, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.services.research import tools
+    from tests._session import opens
+
+    monkeypatch.setattr(tools, "get_async_session", opens(async_db_session))
+    svc = ResearchService(async_db_session, owner_user_id=None)
+    watch = await svc.add_watch("fake", "Templates", {"q": "t"})
+    _on(monkeypatch, 1)
+    site.results["t"] = [story("1", "Show: a template", score=12)]
+    await svc.refresh_watch(watch.id)  # type: ignore[arg-type]
+    item = (await _items(async_db_session))["1"]
+
+    rows = await tools.research_history(item.id)  # type: ignore[arg-type]
+
+    assert rows == [{"as_of": "2026-09-01", "score": 12, "comment_count": 0}]
 
 
 @pytest.fixture

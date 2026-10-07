@@ -15,7 +15,12 @@ from sqlalchemy import ColumnElement, case, delete, func, or_
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.research.models import ResearchItem, ResearchMatch, ResearchWatch
+from app.services.research.models import (
+    ResearchItem,
+    ResearchItemSnapshot,
+    ResearchMatch,
+    ResearchWatch,
+)
 from app.services.research.refresh import refresh_watches
 from app.services.research.registry import source_for, validated
 from app.services.shared.queries import owner_filters
@@ -82,22 +87,33 @@ class ResearchService:
         return watch
 
     async def delete_watch(self, watch_id: int) -> None:
-        """The watch, what it found, and the items no other watch found."""
+        """The watch, what it found, and the items no other watch found,
+        with their history."""
         watch = await self.get_watch(watch_id)
         await self.db.execute(
             delete(ResearchMatch).where(col(ResearchMatch.watch_id) == watch.id)
         )
         await self.db.delete(watch)
         matched = select(ResearchMatch.item_id)
+        orphaned = (
+            col(ResearchItem.id).not_in(matched),
+            or_(
+                col(ResearchItem.root_id).is_(None),
+                col(ResearchItem.root_id).not_in(matched),
+            ),
+        )
+        await self.db.execute(
+            delete(ResearchItemSnapshot)
+            .where(
+                col(ResearchItemSnapshot.item_id).in_(
+                    select(ResearchItem.id).where(*orphaned)
+                )
+            )
+            .execution_options(synchronize_session=False)
+        )
         await self.db.execute(
             delete(ResearchItem)
-            .where(
-                col(ResearchItem.id).not_in(matched),
-                or_(
-                    col(ResearchItem.root_id).is_(None),
-                    col(ResearchItem.root_id).not_in(matched),
-                ),
-            )
+            .where(*orphaned)
             .execution_options(synchronize_session=False)
         )
         await self.db.commit()
@@ -166,6 +182,23 @@ class ResearchService:
                         case((ResearchItem.id == root, 0), else_=1),
                         col(ResearchItem.id),
                     )
+                )
+            ).all()
+        )
+
+    async def history(self, item_id: int) -> list[ResearchItemSnapshot]:
+        """An item's numbers a day at a time, oldest first, if the owner may
+        read it; else nothing."""
+        return list(
+            (
+                await self.db.exec(
+                    select(ResearchItemSnapshot)
+                    .join(
+                        ResearchItem,
+                        col(ResearchItem.id) == ResearchItemSnapshot.item_id,
+                    )
+                    .where(ResearchItemSnapshot.item_id == item_id, self._visible())
+                    .order_by(col(ResearchItemSnapshot.as_of))
                 )
             ).all()
         )

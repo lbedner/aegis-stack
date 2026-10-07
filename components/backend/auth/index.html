@@ -5827,7 +5827,11 @@ happens in <code>.env</code> rather than in code:</p>
 </tr>
 <tr>
 <td><code>TRUST_PROXY_HEADERS</code></td>
-<td>Read client IP from <code>X-Forwarded-For</code> when behind a reverse proxy</td>
+<td>Read the client IP from <code>X-Forwarded-For</code> when behind a reverse proxy</td>
+</tr>
+<tr>
+<td><code>TRUSTED_PROXIES</code></td>
+<td>Senders whose <code>X-Forwarded-For</code> is believed (addresses or CIDR ranges); defaults to loopback and the private ranges</td>
 </tr>
 </tbody>
 </table>

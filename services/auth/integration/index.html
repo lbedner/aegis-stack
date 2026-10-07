@@ -6972,14 +6972,18 @@
 <p><strong>Standard event type naming:</strong> <code>&lt;domain&gt;.&lt;action&gt;</code>, for example <code>auth.login_success</code>, <code>org.member_added</code>, <code>user.password_reset</code>.</p>
 <hr />
 <h3 id="ratelimiter">RateLimiter</h3>
-<p>Sliding-window, in-memory rate limiter. Three pre-configured instances cover the main auth endpoints:</p>
+<p>Sliding-window, in-memory rate limiter. Each instance names the settings that hold its limit and window, read on every check rather than once at import:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-24-1"><a id="__codelineno-24-1" name="__codelineno-24-1" href="#__codelineno-24-1"></a><span class="c1"># app/components/backend/security/rate_limit.py</span>
-</span><span id="__span-24-2"><a id="__codelineno-24-2" name="__codelineno-24-2" href="#__codelineno-24-2"></a><span class="n">login_limiter</span>          <span class="o">=</span> <span class="n">RateLimiter</span><span class="p">(</span><span class="n">max_requests</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>  <span class="n">window_seconds</span><span class="o">=</span><span class="mi">60</span><span class="p">)</span>
-</span><span id="__span-24-3"><a id="__codelineno-24-3" name="__codelineno-24-3" href="#__codelineno-24-3"></a><span class="n">register_limiter</span>       <span class="o">=</span> <span class="n">RateLimiter</span><span class="p">(</span><span class="n">max_requests</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>  <span class="n">window_seconds</span><span class="o">=</span><span class="mi">60</span><span class="p">)</span>
-</span><span id="__span-24-4"><a id="__codelineno-24-4" name="__codelineno-24-4" href="#__codelineno-24-4"></a><span class="n">password_reset_limiter</span> <span class="o">=</span> <span class="n">RateLimiter</span><span class="p">(</span><span class="n">max_requests</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>  <span class="n">window_seconds</span><span class="o">=</span><span class="mi">60</span><span class="p">)</span>
+</span><span id="__span-24-2"><a id="__codelineno-24-2" name="__codelineno-24-2" href="#__codelineno-24-2"></a><span class="n">login_limiter</span> <span class="o">=</span> <span class="n">RateLimiter</span><span class="p">(</span><span class="s2">&quot;RATE_LIMIT_LOGIN_MAX&quot;</span><span class="p">,</span> <span class="s2">&quot;RATE_LIMIT_LOGIN_WINDOW&quot;</span><span class="p">)</span>
+</span><span id="__span-24-3"><a id="__codelineno-24-3" name="__codelineno-24-3" href="#__codelineno-24-3"></a><span class="n">register_limiter</span> <span class="o">=</span> <span class="n">RateLimiter</span><span class="p">(</span><span class="s2">&quot;RATE_LIMIT_REGISTER_MAX&quot;</span><span class="p">,</span> <span class="s2">&quot;RATE_LIMIT_REGISTER_WINDOW&quot;</span><span class="p">)</span>
+</span><span id="__span-24-4"><a id="__codelineno-24-4" name="__codelineno-24-4" href="#__codelineno-24-4"></a><span class="n">password_reset_limiter</span> <span class="o">=</span> <span class="n">RateLimiter</span><span class="p">(</span><span class="s2">&quot;RATE_LIMIT_REGISTER_MAX&quot;</span><span class="p">,</span> <span class="s2">&quot;RATE_LIMIT_REGISTER_WINDOW&quot;</span><span class="p">)</span>
+</span><span id="__span-24-5"><a id="__codelineno-24-5" name="__codelineno-24-5" href="#__codelineno-24-5"></a><span class="n">resend_verification_limiter</span> <span class="o">=</span> <span class="n">RateLimiter</span><span class="p">(</span>
+</span><span id="__span-24-6"><a id="__codelineno-24-6" name="__codelineno-24-6" href="#__codelineno-24-6"></a>    <span class="s2">&quot;RATE_LIMIT_RESEND_VERIFICATION_MAX&quot;</span><span class="p">,</span> <span class="s2">&quot;RATE_LIMIT_RESEND_VERIFICATION_WINDOW&quot;</span>
+</span><span id="__span-24-7"><a id="__codelineno-24-7" name="__codelineno-24-7" href="#__codelineno-24-7"></a><span class="p">)</span>
 </span></code></pre></div>
 <p>The module also exposes thin <code>Depends</code>-able wrappers (<code>login_rate_limit</code>,
-<code>register_rate_limit</code>, <code>password_reset_rate_limit</code>) re-exported from
+<code>register_rate_limit</code>, <code>password_reset_rate_limit</code>,
+<code>resend_verification_rate_limit</code>) re-exported from
 <code>app/components/backend/api/deps.py</code>. Add the matching dep to your
 route signature; it raises <code>HTTP 429</code> with a <code>Retry-After</code> header when
 the limit is exceeded.</p>
@@ -6994,7 +6998,13 @@ the limit is exceeded.</p>
 </span><span id="__span-25-9"><a id="__codelineno-25-9" name="__codelineno-25-9" href="#__codelineno-25-9"></a><span class="p">):</span>
 </span><span id="__span-25-10"><a id="__codelineno-25-10" name="__codelineno-25-10" href="#__codelineno-25-10"></a>    <span class="c1"># ... authentication logic</span>
 </span></code></pre></div>
-<p>Set <code>TRUST_PROXY_HEADERS=true</code> in settings when running behind a reverse proxy so the limiter reads the real client IP from <code>X-Forwarded-For</code> rather than the proxy's address.</p>
+<p>Set <code>TRUST_PROXY_HEADERS=true</code> when running behind a reverse proxy so the limiter (and sessions, audit and traffic) see the real client IP from <code>X-Forwarded-For</code> rather than the proxy's address. The header is believed only when it comes from a sender in <code>TRUSTED_PROXIES</code>, which defaults to loopback and the private ranges the bundled Traefik reaches the app from. A caller hitting the app's port directly can't name itself, and a CDN in front of Traefik works once its ranges are added:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-26-1"><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a><span class="nv">TRUSTED_PROXIES</span><span class="o">=</span><span class="s1">&#39;[&quot;127.0.0.1&quot;, &quot;172.16.0.0/12&quot;, &quot;173.245.48.0/20&quot;]&#39;</span>
+</span></code></pre></div>
+<p>Never set it to <code>["*"]</code>: trusting every sender reads the address the caller wrote.</p>
+<p>For a limit on something other than the caller, such as a user, call <code>check_key</code>. Buckets whose window has passed are let go, so keys a caller chooses cannot grow memory without end:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-27-1"><a id="__codelineno-27-1" name="__codelineno-27-1" href="#__codelineno-27-1"></a><span class="n">limiter</span><span class="o">.</span><span class="n">check_key</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;share:</span><span class="si">{</span><span class="n">user</span><span class="o">.</span><span class="n">id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</span></code></pre></div>
 <div class="admonition warning">
 <p class="admonition-title">Process-local storage</p>
 <p>Rate limit counters are in-memory and not shared across processes. For multi-worker deployments, use a Redis-backed rate limiter.</p>

@@ -21,9 +21,10 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 from app.core.discovery import import_modules_named
 from app.core.time import as_stored
+from app.services.research.models import ResearchNumbers
 
 
-class SourceItem(BaseModel):
+class SourceItem(ResearchNumbers):
     """One item as a source returns it, before it is stored."""
 
     model_config = ConfigDict(extra="forbid")
@@ -40,8 +41,6 @@ class SourceItem(BaseModel):
     text: str | None = None
     author: str | None = None
     published_at: datetime | None = None
-    score: int | None = None
-    comment_count: int | None = None
     data: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("published_at")

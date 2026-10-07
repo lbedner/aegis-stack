@@ -1397,8 +1397,8 @@ SERVICES: dict[str, ServiceSpec] = {
     "research": ServiceSpec(
         readme=ReadmeWiring(
             reach=(
-                "/api/v1/research, the `research` CLI, the research_search "
-                "and research_thread tools"
+                "/api/v1/research, the `research` CLI, the research_search, "
+                "research_thread and research_history tools"
             ),
             cli_groups=["research"],
             first_steps=[

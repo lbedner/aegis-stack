@@ -44,7 +44,8 @@ async def research_search(
     and comments (Hacker News and other installed sources), newest first.
     ``text`` matches titles and bodies; ``source`` (e.g. "hn") and ``kind``
     (story, comment, post) narrow it. Each item has its score and comment
-    count; read a whole discussion with ``research_thread``."""
+    count; read a whole discussion with ``research_thread``, and how an
+    item's numbers moved day by day with ``research_history``."""
     async with get_async_session() as session:
         items = await ResearchService(session, current_owner_user_id.get()).search(
             text, source=source, kind=kind, limit=min(limit, 100)

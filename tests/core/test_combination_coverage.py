@@ -162,6 +162,25 @@ def test_no_new_option_value_goes_unbuilt() -> None:
     )
 
 
+def _services_built_with_htmx() -> set[str]:
+    return {
+        _parse(entry)[0]
+        for combination in STACK_COMBINATIONS
+        if "htmx" in (combination.components or [])
+        for entry in combination.services or []
+    }
+
+
+def test_every_service_is_built_with_htmx() -> None:
+    """A service's Overseer pages only render with htmx: one never built
+    with it ships those pages untested (each service's row carries htmx)."""
+    unbuilt = sorted(set(SERVICES) - _services_built_with_htmx())
+    assert not unbuilt, (
+        f"Services no stack builds with htmx: {unbuilt}. Add htmx to a "
+        "StackCombination carrying them."
+    )
+
+
 def test_recorded_service_pair_gaps_are_still_gaps() -> None:
     """Cover a recorded pair and its entry has to go, or it hides a gap."""
     uncovered = _all_service_pairs() - _covered_service_pairs()

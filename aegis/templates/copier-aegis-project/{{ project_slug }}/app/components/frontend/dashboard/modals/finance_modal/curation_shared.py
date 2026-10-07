@@ -38,6 +38,7 @@ from app.components.frontend.dashboard.modals.finance_modal.formatting import (
 from app.components.frontend.dashboard.modals.finance_modal.transactions_view import (
     post_tag,
 )
+from app.services.finance.utils import current_date
 
 
 def _group_columns() -> list[DataTableColumn]:
@@ -210,4 +211,4 @@ def range_start(range_days: int) -> "date | None":
     or ``None`` for the "All" sentinel (>= 9000, per insights)."""
     if range_days >= 9000:
         return None
-    return date.today() - timedelta(days=range_days)
+    return current_date() - timedelta(days=range_days)

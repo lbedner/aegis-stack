@@ -5,12 +5,13 @@ from ``overseer_ai`` (imported when the section is asked for); needs a
 persistence backend, which is the only place the catalog lives.
 """
 
-from datetime import date, timedelta
+from datetime import timedelta
 from types import SimpleNamespace
 from typing import Any
 from urllib.parse import urlencode
 
 from app.core.config import settings
+from app.core.time import today
 from app.services.ai.domains.llm.provider_management import usable_providers
 
 from .overseer_ai_common import (
@@ -106,7 +107,7 @@ async def section_context(db: Any, query: Any) -> dict[str, Any]:
         pattern=q,
         vendors=await _vendor_filter(chosen, usable),
         limit=CATALOG_LIMIT,
-        released_after=date.today() - reach if reach else None,
+        released_after=today() - reach if reach else None,
         mode=None,  # a place to look: every kind, each saying which
     )
     from app.services.ai.domains.llm.queries import org_icons

@@ -13,6 +13,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 from typing import Any
 
+from app.core.time import today
 from app.services.ai.domains.llm import queries as llm_queries
 from app.services.ai.domains.spend import queries
 from app.services.ai.domains.spend.schemas import ActionSpend, ModelSpend, SpendLedger
@@ -31,10 +32,6 @@ TABS = {
 # Tabs that read one month; Projections reads the last 90 days from today.
 MONTH_TABS = ("overview", "users", "breakdown")
 MONTHS_SHOWN = 12
-
-
-def today() -> date:
-    return date.today()
 
 
 # --- Reads ---------------------------------------------------------------------

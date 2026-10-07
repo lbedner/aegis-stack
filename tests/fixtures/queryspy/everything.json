@@ -172,6 +172,18 @@
     },
     {
       "kind": "repeated_statement",
+      "label": "SELECT ... FROM blog_post",
+      "file": "app/services/blog/service.py",
+      "function": "list_posts"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM blog_post ORDER BY blog_post.created_at DESC LIMIT :param_1 OFFSET :param_2",
+      "file": "app/services/blog/service.py",
+      "function": "list_posts"
+    },
+    {
+      "kind": "repeated_statement",
       "label": "SELECT ... FROM blog_post WHERE blog_post.id = :id_1",
       "file": "app/services/blog/service.py",
       "function": "_get_post_model"
@@ -220,6 +232,12 @@
     },
     {
       "kind": "repeated_statement",
+      "label": "SELECT ... FROM blog_tag ORDER BY blog_tag.name",
+      "file": "app/services/blog/service.py",
+      "function": "list_tags"
+    },
+    {
+      "kind": "repeated_statement",
       "label": "SELECT ... FROM blog_tag WHERE blog_tag.id = :id_1",
       "file": "app/services/blog/service.py",
       "function": "_get_tag_model"
@@ -262,9 +280,27 @@
     },
     {
       "kind": "repeated_statement",
+      "label": "SELECT ... FROM document WHERE document.content_hash = :content_hash_1 AND document.deleted_at IS NULL",
+      "file": "app/services/documents/queries.py",
+      "function": "document_by_content"
+    },
+    {
+      "kind": "repeated_statement",
       "label": "SELECT ... FROM document WHERE document.content_hash = :content_hash_1 AND document.deleted_at IS NULL AND document.owner_user_id = :owner_user_id_1",
       "file": "app/services/documents/queries.py",
       "function": "document_by_content"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM document WHERE document.deleted_at IS NULL AND (document.id NOT IN (SELECT document.supersedes_id FROM document WHERE document.supersedes_id IS NOT NULL AND document.deleted_at IS NULL))",
+      "file": "app/services/documents/queries.py",
+      "function": "documents_page"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM document WHERE document.deleted_at IS NULL AND (document.id NOT IN (SELECT document.supersedes_id FROM document WHERE document.supersedes_id IS NOT NULL AND document.deleted_at IS NULL)) ORDER BY document.created_at DESC, document.id DESC LIMIT :param_1 OFFSET :param_2",
+      "file": "app/services/documents/queries.py",
+      "function": "documents_page"
     },
     {
       "kind": "repeated_statement",
@@ -1624,6 +1660,12 @@
     },
     {
       "kind": "repeated_statement",
+      "label": "SELECT ... FROM insight_metric_type WHERE insight_metric_type.source_id = :source_id_1 AND insight_metric_type.key = :key_1",
+      "file": "app/services/insights/seed.py",
+      "function": "seed_insight_tables"
+    },
+    {
+      "kind": "repeated_statement",
       "label": "SELECT ... FROM insight_record WHERE insight_record.metric_type_id = :metric_type_id_1",
       "file": "app/services/insights/queries/metrics.py",
       "function": "record_for_type"
@@ -1633,6 +1675,12 @@
       "label": "SELECT ... FROM insight_source WHERE insight_source.key = :key_1",
       "file": "app/services/insights/queries/metrics.py",
       "function": "source_by_key"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM insight_source WHERE insight_source.key = :key_1",
+      "file": "app/services/insights/seed.py",
+      "function": "seed_insight_tables"
     },
     {
       "kind": "repeated_statement",
@@ -1687,6 +1735,12 @@
       "label": "SELECT ... FROM llm_org",
       "file": "app/services/ai/domains/llm/etl/queries.py",
       "function": "all_rows"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM llm_org WHERE (llm_org.slug IN (__[POSTCOMPILE_slug_1]) OR llm_org.name IN (__[POSTCOMPILE_name_1])) AND llm_org.icon_b64 IS NOT NULL",
+      "file": "app/services/ai/domains/llm/queries.py",
+      "function": "org_icons"
     },
     {
       "kind": "repeated_statement",
@@ -1783,6 +1837,12 @@
       "label": "SELECT ... FROM organization_member WHERE organization_member.organization_id IN (__[POSTCOMPILE_organization_id_1]) GROUP BY organization_member.organization_id",
       "file": "app/services/auth/user_deletion.py",
       "function": "orphaned_sole_owner_org_ids"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM payment_customer WHERE payment_customer.id IN (__[POSTCOMPILE_id_1])",
+      "file": "app/services/payment/reporting.py",
+      "function": "get_customers"
     },
     {
       "kind": "repeated_statement",

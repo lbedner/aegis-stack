@@ -1488,6 +1488,7 @@ class TestContextHygiene:
         assert "$3,709.09" not in snapshot
         assert "Fee charged: $3.00" in snapshot
 
+{%- if ai_framework == "pydantic-ai" %}
     @pytest.mark.asyncio
     async def test_the_deep_dive_reads_findings_once_not_twice(
         self, async_db_session: AsyncSession
@@ -1508,6 +1509,7 @@ class TestContextHygiene:
         assert context is not None
         assert "FINDINGS DIGEST" in context
         assert "OPEN ANOMALIES" not in context
+{%- endif %}
 
     @pytest.mark.asyncio
     async def test_the_daily_note_keeps_its_flat_findings_list(

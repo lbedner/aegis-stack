@@ -119,11 +119,13 @@ async def checkout(
 ) -> Response:
     """A checkout link for one catalog price. A recurring price is a
     subscription, which is always one seat."""
-    entry = next((e for e in await get_catalog(service) if e.price_id == price), None)
-    if entry is None:
-        return toast_response("That price is not in the catalog.", "error")
-    recurring = entry.price_type == PriceType.RECURRING or entry.interval is not None
     try:
+        # The catalog is the provider's too: a refused key fails here first.
+        catalog = await get_catalog(service)
+        entry = next((e for e in catalog if e.price_id == price), None)
+        if entry is None:
+            return toast_response("That price is not in the catalog.", "error")
+        recurring = entry.price_type == PriceType.RECURRING or entry.interval is not None
         result = await service.create_checkout(
             price_id=entry.price_id,
             quantity=1 if recurring else max(1, quantity),

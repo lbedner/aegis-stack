@@ -6,7 +6,7 @@ to honour the code.
 """
 
 from collections.abc import Callable
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from fastapi import FastAPI
@@ -119,11 +119,11 @@ class TestWindows:
     """The chip rows all speak one vocabulary (web_frontend/ranges.py)."""
 
     def test_since_is_the_cutoff_a_window_means(self) -> None:
-        """UTC, the clock rows are stamped with, and no service import:
-        the web frontend ships without any of them."""
+        """The app's one clock (``app.core.time.today``), UTC like the rows."""
         from app.components.web_frontend import ranges
+        from app.core.time import today
 
-        assert ranges.since(7) == datetime.now(UTC).date() - timedelta(days=7)
+        assert ranges.since(7) == today() - timedelta(days=7)
         assert ranges.since(ranges.ALL) is None
         assert ranges.since(None) is None
 

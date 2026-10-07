@@ -3,7 +3,7 @@ Tests for CacheService (in-memory dict backend).
 
 All ops are async. These tests exercise the dict-backed path
 directly. The Redis-backed singleton is bypassed for the test
-session via the ``_use_dict_backed_cache`` fixture in
+session via the ``_no_real_redis`` fixture in
 ``tests/conftest.py`` — Redis clients bind to an event loop at
 import, and pytest-asyncio creates a fresh loop per test, so
 running tests through the live Redis singleton breaks. Adding

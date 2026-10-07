@@ -38,12 +38,11 @@ async def start_extraction(
     """Record the job in the shared store, then hand it to the worker."""
     import uuid
 
-    from app.core.config import settings
     from app.core.log import logger
     from app.services.system.job_store import RedisJobStore
 
     job_id = uuid.uuid4().hex
-    store = RedisJobStore.from_url(settings.REDIS_URL)
+    store = RedisJobStore.shared()
     try:
         await store.create(job_id, f"documents-extract:{document_id}", "Queued...")
         try:

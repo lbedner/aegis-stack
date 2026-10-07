@@ -91,11 +91,7 @@ class LoadTestService(AnalysisMixin):
 
         # Use fresh result backend to avoid cached connections that cause
         # 'Event loop is closed' errors when CLI exits
-        redis_url = (
-            settings.redis_url_effective
-            if hasattr(settings, "redis_url_effective")
-            else settings.REDIS_URL
-        )
+        redis_url = settings.redis_url_effective
         result_backend = RedisAsyncResultBackend(redis_url=redis_url)
 
         try:

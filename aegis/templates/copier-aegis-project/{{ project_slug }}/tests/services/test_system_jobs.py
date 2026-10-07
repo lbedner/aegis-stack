@@ -227,3 +227,40 @@ class TestRemoteJobs:
 
         assert store.gets == polls, "the relay kept polling after nobody was left"
 
+
+class TestSharedStore:
+    """The store the webserver and the worker share (``RedisJobStore.shared``)."""
+
+    def test_it_is_where_this_process_reaches_redis(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """On the host the compose hostname in ``REDIS_URL`` resolves to
+        nothing: the store is at ``redis_url_effective``, as every other
+        Redis client is."""
+        from app.core.config import Settings
+        from app.services.system.job_store import RedisJobStore
+
+        asked: list[str] = []
+        monkeypatch.setattr(
+            Settings,
+            "redis_url_effective",
+            property(lambda _: "redis://localhost:6390"),
+            raising=False,
+        )
+        monkeypatch.setattr(
+            RedisJobStore,
+            "from_url",
+            classmethod(lambda cls, url: asked.append(url) or cls(None)),
+        )
+        RedisJobStore.shared()
+        assert asked == ["redis://localhost:6390"]
+
+    def test_the_suite_never_reaches_a_real_redis(self) -> None:
+        from app.services.system.job_store import RedisJobStore
+        from tests._fake_redis import FakeRedis
+
+        # Every store is built through ``from_url``, which the suite holds in
+        # memory; any URL, so a stack without Redis checks the same.
+        assert isinstance(
+            RedisJobStore.from_url("redis://redis:6379")._redis, FakeRedis
+        )

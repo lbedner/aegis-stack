@@ -54,11 +54,7 @@ class EventPublishMiddleware(TaskiqMiddleware):
         """
         await apply_saved_overrides()
         try:
-            redis_url = (
-                settings.redis_url_effective
-                if hasattr(settings, "redis_url_effective")
-                else settings.REDIS_URL
-            )
+            redis_url = settings.redis_url_effective
             self._redis = aioredis.from_url(redis_url)
             await publish_event(self._redis, "worker.started", self._queue_name)
             launched = runtime.launch_settings("taskiq", sys.argv)

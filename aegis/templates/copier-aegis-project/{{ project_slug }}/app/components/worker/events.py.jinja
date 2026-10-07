@@ -47,11 +47,7 @@ async def events_redis() -> "aioredis.Redis":
     """
     global _events_redis
     if _events_redis is None:
-        redis_url = (
-            settings.redis_url_effective
-            if hasattr(settings, "redis_url_effective")
-            else settings.REDIS_URL
-        )
+        redis_url = settings.redis_url_effective
         _events_redis = aioredis.from_url(redis_url)
     return _events_redis
 

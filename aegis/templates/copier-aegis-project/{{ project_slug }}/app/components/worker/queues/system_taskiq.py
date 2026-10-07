@@ -15,11 +15,7 @@ from app.core.config import settings
 from app.core.log import logger
 
 # Use redis_url_effective for Docker vs local auto-detection
-redis_url = (
-    settings.redis_url_effective
-    if hasattr(settings, "redis_url_effective")
-    else settings.REDIS_URL
-)
+redis_url = settings.redis_url_effective
 
 # Create the broker with Redis backend (using streams for acknowledgement support)
 # Use unique queue_name to ensure workers don't consume from each other's streams

@@ -46,7 +46,7 @@ def store(monkeypatch: pytest.MonkeyPatch) -> _FakeStore:
 
     class _Factory:
         @staticmethod
-        def from_url(_url: str) -> _FakeStore:
+        def shared() -> _FakeStore:
             return fake
 
     monkeypatch.setattr(

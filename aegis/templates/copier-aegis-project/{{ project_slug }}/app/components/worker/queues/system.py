@@ -32,7 +32,7 @@ class WorkerSettings:
     ]
 
     # arq configuration with improved connection settings
-    base_settings = RedisSettings.from_dsn(settings.REDIS_URL)
+    base_settings = RedisSettings.from_dsn(settings.redis_url_effective)
     redis_settings = RedisSettings(
         host=base_settings.host,
         port=base_settings.port,

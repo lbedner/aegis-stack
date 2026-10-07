@@ -30,15 +30,6 @@ from app.services.system.redis_keys import KeyFamily
 WORKER_EVENT_STREAM = "aegis:events:worker"
 
 
-def _get_redis_url() -> str:
-    """Get the effective Redis URL."""
-    return (
-        settings.redis_url_effective
-        if hasattr(settings, "redis_url_effective")
-        else settings.REDIS_URL
-    )
-
-
 def _sync_publish(
     client: redis.Redis,
     event_type: str,
@@ -126,7 +117,7 @@ class EventPublishMiddleware(dramatiq.Middleware):
         Called once when the Dramatiq worker process starts.
         """
         try:
-            self._redis = redis.from_url(_get_redis_url())
+            self._redis = redis.from_url(settings.redis_url_effective)
             self._queue_names = (
                 worker.consumer_whitelist or broker.get_declared_queues()
             )

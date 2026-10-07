@@ -23,11 +23,7 @@ from app.services.load_test_workloads import (
 )
 
 # Use redis_url_effective for Docker vs local auto-detection
-redis_url = (
-    settings.redis_url_effective
-    if hasattr(settings, "redis_url_effective")
-    else settings.REDIS_URL
-)
+redis_url = settings.redis_url_effective
 
 
 @dramatiq.actor(queue_name="load_test", store_results=True)

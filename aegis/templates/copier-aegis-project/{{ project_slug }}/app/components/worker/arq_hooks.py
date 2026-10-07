@@ -43,7 +43,7 @@ def for_queue(queue: str, max_jobs: int) -> tuple[Hook, Hook, Hook, Hook]:
         """Apply what the Overseer saved, then publish worker.started."""
         await apply_saved_overrides()
         try:
-            redis_url = getattr(settings, "redis_url_effective", settings.REDIS_URL)
+            redis_url = settings.redis_url_effective
             ctx["events_redis"] = aioredis.from_url(redis_url)
             ctx["worker_queue_name"] = queue
             await publish_event(ctx["events_redis"], "worker.started", queue)

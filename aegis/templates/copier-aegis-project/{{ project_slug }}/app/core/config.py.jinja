@@ -240,8 +240,8 @@ class Settings(
     ACCOUNT_LOCKOUT_ATTEMPTS: Annotated[int, Configurable("service_auth", "Failed sign-ins before an account is locked")] = 5
     ACCOUNT_LOCKOUT_MINUTES: Annotated[int, Configurable("service_auth", "Minutes a locked account stays locked")] = 15
 
-    # Proxy trust settings
-    TRUST_PROXY_HEADERS: bool = False  # Set to True only behind a trusted reverse proxy
+    TRUST_PROXY_HEADERS: bool = False  # Behind a reverse proxy: the client comes from X-Forwarded-For
+    TRUSTED_PROXIES: list[str] = ["127.0.0.1", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]  # Senders believed (Traefik's ranges); never "*", which believes the caller
 
     # Traffic monitor: per-source request-volume visibility ("who's hammering
     # you") rendered in Overseer. Counts requests per client IP, bucketed

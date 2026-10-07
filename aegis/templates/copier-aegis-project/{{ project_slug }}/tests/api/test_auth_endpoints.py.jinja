@@ -999,25 +999,23 @@ class TestSessionsEndpoints:
         async_client_with_db: TestClient,
         async_db_session: AsyncSession,
         user_factory,
+        monkeypatch: pytest.MonkeyPatch,
     ):
-        """With ``TRUST_PROXY_HEADERS`` on, the stored session IP must
-        be the ``X-Forwarded-For`` head, not the proxy address."""
+        """Behind a trusted proxy (here the test client itself), the stored
+        session IP is the client it forwarded, not the proxy's own, and
+        not what the caller claimed before it."""
         from app.models.refresh_token import RefreshToken
         from sqlmodel import select
 
         user = await user_factory()
-
-        previous_trust = settings.TRUST_PROXY_HEADERS
-        settings.TRUST_PROXY_HEADERS = True
-        try:
-            response = async_client_with_db.post(
-                "/api/v1/auth/token",
-                data={"username": user.email, "password": _PASSWORD},
-                headers={"X-Forwarded-For": "203.0.113.7, 10.0.0.1"},
-            )
-            assert response.status_code == status.HTTP_200_OK
-        finally:
-            settings.TRUST_PROXY_HEADERS = previous_trust
+        monkeypatch.setattr(settings, "TRUST_PROXY_HEADERS", True)
+        monkeypatch.setattr(settings, "TRUSTED_PROXIES", ["testclient"])
+        response = async_client_with_db.post(
+            "/api/v1/auth/token",
+            data={"username": user.email, "password": _PASSWORD},
+            headers={"X-Forwarded-For": "198.51.100.1, 203.0.113.7"},
+        )
+        assert response.status_code == status.HTTP_200_OK
 
         rows = (
             await async_db_session.exec(

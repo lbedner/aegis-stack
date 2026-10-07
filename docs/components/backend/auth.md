@@ -82,7 +82,8 @@ happens in `.env` rather than in code:
 | --- | --- |
 | `RATE_LIMIT_LOGIN_MAX` / `RATE_LIMIT_LOGIN_WINDOW` | Login attempts per window |
 | `RATE_LIMIT_REGISTER_MAX` / `RATE_LIMIT_REGISTER_WINDOW` | Registration and password-reset attempts |
-| `TRUST_PROXY_HEADERS` | Read client IP from `X-Forwarded-For` when behind a reverse proxy |
+| `TRUST_PROXY_HEADERS` | Read the client IP from `X-Forwarded-For` when behind a reverse proxy |
+| `TRUSTED_PROXIES` | Senders whose `X-Forwarded-For` is believed (addresses or CIDR ranges); defaults to loopback and the private ranges |
 
 Because the state is in-process, this is appropriate for single-instance
 deployments. If you horizontally scale the backend, swap the in-memory

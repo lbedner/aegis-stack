@@ -4,9 +4,9 @@ Every watch's source is asked first, with no transaction open; each thread
 is read once however many watches found it. Then each source's items are
 upserted together, the day's numbers kept beside them, threads linked,
 replies a re-read thread no longer holds marked, and every watch's finds
-stamped: a handful of statements per
-source, in bounded batches, whatever the number of items or watches. A
-watch whose source fails sits that run out; the others still refresh.
+stamped: a handful of statements per source, in bounded batches, whatever
+the number of items or watches. A watch whose source fails sits that run
+out; the others still refresh.
 """
 
 from __future__ import annotations
@@ -28,6 +28,7 @@ from app.services.research.models import (
     ResearchItem,
     ResearchItemSnapshot,
     ResearchMatch,
+    ResearchNumbers,
     ResearchWatch,
 )
 from app.services.research.registry import SourceItem, source_for, validated
@@ -153,6 +154,17 @@ def _insert(db: AsyncSession, model: Any) -> Any:
     return dialect.insert(model)
 
 
+def _upsert(
+    db: AsyncSession, model: Any, chunk: Sequence[dict[str, Any]], keys: list[str]
+) -> Any:
+    """Insert ``chunk``; a row whose ``keys`` exist takes every other value."""
+    upsert = _insert(db, model).values(list(chunk))
+    return upsert.on_conflict_do_update(
+        index_elements=keys,
+        set_={name: upsert.excluded[name] for name in chunk[0] if name not in keys},
+    )
+
+
 def _chunks(rows: Sequence[Any]) -> Iterator[Sequence[Any]]:
     for start in range(0, len(rows), BATCH):
         yield rows[start : start + BATCH]
@@ -170,14 +182,8 @@ async def _save(
     ]
     ids: dict[str, int] = {}
     for chunk in _chunks(rows):
-        upsert = _insert(db, ResearchItem).values(list(chunk))
-        upsert = upsert.on_conflict_do_update(
-            index_elements=["source", "external_id"],
-            set_={
-                name: upsert.excluded[name]
-                for name in chunk[0]
-                if name not in ("source", "external_id")
-            },
+        upsert = _upsert(
+            db, ResearchItem, chunk, ["source", "external_id"]
         ).returning(col(ResearchItem.external_id), col(ResearchItem.id))
         ids |= dict((await db.execute(upsert)).tuples().all())
     # A reply found by search whose parent or top is not in this run.
@@ -216,28 +222,17 @@ async def _save(
 async def _snapshot(
     db: AsyncSession, ids: dict[str, int], fetched: _Fetched, now: datetime
 ) -> None:
-    """Keep today's numbers for every item that has any; a later run the
-    same day replaces the day's."""
-    rows = [
-        {
-            "item_id": ids[external_id],
-            "as_of": now.date(),
-            "score": item.score,
-            "comment_count": item.comment_count,
-        }
-        for external_id, item in fetched.items.items()
-        if item.score is not None or item.comment_count is not None
-    ]
-    for chunk in _chunks(rows):
-        upsert = _insert(db, ResearchItemSnapshot).values(list(chunk))
-        await db.execute(
-            upsert.on_conflict_do_update(
-                index_elements=["item_id", "as_of"],
-                set_={
-                    "score": upsert.excluded.score,
-                    "comment_count": upsert.excluded.comment_count,
-                },
+    """Today's ``ResearchItemSnapshot`` for every item with a number."""
+    rows = []
+    for external_id, item in fetched.items.items():
+        numbers = item.model_dump(include=set(ResearchNumbers.model_fields))
+        if any(value is not None for value in numbers.values()):
+            rows.append(
+                {"item_id": ids[external_id], "as_of": now.date(), **numbers}
             )
+    for chunk in _chunks(rows):
+        await db.execute(
+            _upsert(db, ResearchItemSnapshot, chunk, ["item_id", "as_of"])
         )
 
 
@@ -265,10 +260,4 @@ async def _match(db: AsyncSession, pairs: set[tuple[int, int]], now: datetime) -
         for watch_id, item_id in sorted(pairs)
     ]
     for chunk in _chunks(rows):
-        upsert = _insert(db, ResearchMatch).values(list(chunk))
-        await db.execute(
-            upsert.on_conflict_do_update(
-                index_elements=["watch_id", "item_id"],
-                set_={"last_matched_at": upsert.excluded.last_matched_at},
-            )
-        )
+        await db.execute(_upsert(db, ResearchMatch, chunk, ["watch_id", "item_id"]))

@@ -1,8 +1,10 @@
 """Container logs, as Overseer shows them in htmx and Flet alike: one
 page's (its Logs section) or several pages' (Overseer > Logs).
 
-``recent(pages, query)`` reads the last lines of every container behind
-``pages`` (named by the containers sampler's reading, ``ui_runtime``),
+``containers(pages)`` looks up the containers behind ``pages`` (the
+containers sampler's reading, ``ui_runtime``), once for a view's pickers
+(``sources``) and its lines. ``recent(pages, query)`` reads the last lines
+of every container behind ``pages``,
 merged by time, newest first. ``follow(pages, query)`` yields new lines in
 batches as the containers write them; Docker pushes them, so following
 polls nothing. Both fold a traceback into the line it belongs to and
@@ -16,7 +18,7 @@ framework imports.
 import asyncio
 from collections import defaultdict
 from collections.abc import AsyncIterator, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 import os
 import re
@@ -306,12 +308,37 @@ def listed(query: Mapping[str, str], key: str) -> list[str]:
     return [query[key]] if query.get(key) else []
 
 
-async def _names(pages: Sequence[str]) -> tuple[list[tuple[str, str]], str | None]:
-    """Each page's containers as ``(page, container)``, or why there are
-    none (the first page's reason)."""
-    views = await ui_runtime.containers_of(list(pages))
-    names = [(page, row["name"]) for page in pages for row in views[page]["rows"]]
-    return names, None if names else next((v["note"] for v in views.values()), None)
+@dataclass(frozen=True)
+class Containers:
+    """The containers behind some pages, each as ``(page, container)``, and
+    each page's reason when it has none: one lookup a view's pickers and
+    lines share."""
+
+    names: list[tuple[str, str]]
+    notes: dict[str, str | None]
+
+    @property
+    def note(self) -> str | None:
+        """Why there are none (the first page's reason); None when there are."""
+        return None if self.names else next(iter(self.notes.values()), None)
+
+    def of(self, pages: Sequence[str]) -> Self:
+        """Only those behind ``pages``, with their own reasons."""
+        return replace(
+            self,
+            names=[(page, name) for page, name in self.names if page in pages],
+            notes={page: note for page, note in self.notes.items() if page in pages},
+        )
+
+
+async def containers(pages: Sequence[str] | None = None) -> Containers:
+    """Each page's containers, every page's when ``pages`` is None."""
+    pages = _PAGES if pages is None else list(pages)
+    views = await ui_runtime.containers_of(pages)
+    return Containers(
+        [(page, row["name"]) for page in pages for row in views[page]["rows"]],
+        {page: views[page]["note"] for page in pages},
+    )
 
 
 def _narrowed(
@@ -324,36 +351,40 @@ def _narrowed(
     return [(p, n) for p, n in names if p not in narrowed or n in picked]
 
 
-async def sources(pages: Sequence[str] = ()) -> list[dict[str, Any]]:
-    """The pages (``pages``, every page by default) with a container behind
-    them, each with its title and, for a page with several, each container
-    and what tells it apart: what a Logs view can pick from."""
-    pages = sorted(pages or runtime.PAGES)
-    names, _note = await _names(pages)
-    short = _sources(names)
-    found = [
+def sources(found: Containers) -> list[dict[str, Any]]:
+    """The pages with a container behind them, each with its title and, for
+    a page with several, each container and what tells it apart: what a
+    Logs view can pick from."""
+    short = _sources(found.names)
+    pages = dict.fromkeys(page for page, _ in found.names)
+    picks = [
         {
             "page": page,
             "title": title_of(page),
             "containers": [
                 {"name": name, "label": short[name]}
-                for p, name in names
+                for p, name in found.names
                 if p == page and short[name]
             ],
         }
         for page in pages
-        if any(p == page for p, _ in names)
     ]
-    return sorted(found, key=lambda source: source["title"])
+    return sorted(picks, key=lambda source: source["title"])
 
 
 async def recent(
-    pages: Sequence[str], query: Mapping[str, str], *, volume: bool = False
+    pages: Sequence[str],
+    query: Mapping[str, str],
+    *,
+    volume: bool = False,
+    found: Containers | None = None,
 ) -> dict[str, Any]:
     """``{"lines": [...], "volume": [...], "note": str | None}``: the
-    window's lines from every container behind ``pages`` that pass the
-    filters, in the query's order, and, asked for, their ``volume``."""
-    every, note = await _names(pages)
+    window's lines from every container behind ``pages`` (of those already
+    ``found``, else looked up) that pass the filters, in the query's order,
+    and, asked for, their ``volume``."""
+    behind = found.of(pages) if found else await containers(pages)
+    every, note = behind.names, behind.note
     source = _sources(every)  # what tells a container apart, picked or not
     names = _narrowed(every, query)
     if not names:
@@ -381,12 +412,15 @@ async def recent(
 
 
 async def follow(
-    pages: Sequence[str], query: Mapping[str, str]
+    pages: Sequence[str],
+    query: Mapping[str, str],
+    *,
+    found: Containers | None = None,
 ) -> AsyncIterator[list[dict[str, Any]]]:
-    """New lines from every container behind ``pages`` as they are written,
-    in batches in the query's order, each line once its traceback (if any)
-    has arrived."""
-    every, _note = await _names(pages)
+    """New lines from every container behind ``pages`` (of those already
+    ``found``, else looked up) as they are written, in batches in the
+    query's order, each line once its traceback (if any) has arrived."""
+    every = (found.of(pages) if found else await containers(pages)).names
     source = _sources(every)
     names = _narrowed(every, query)
     if not names:

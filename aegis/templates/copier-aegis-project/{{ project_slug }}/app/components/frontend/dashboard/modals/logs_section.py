@@ -53,6 +53,8 @@ class LogsSection(ft.Column):
         # Every service's title by page, read on load (Overseer > Logs only).
         self._titles: dict[str, str] | None = None
         self._reading: list[str] = [page] if page else []
+        # The containers the service menu was built from, for the lines too.
+        self._found: ui_logs.Containers | None = None
         self.paused = False
         self._following: Future[None] | None = None
         self._note = SecondaryText("", visible=False)
@@ -151,7 +153,8 @@ class LogsSection(ft.Column):
 
     async def _read_services(self) -> None:
         """Every service's title, the menu to tick them, and which to read."""
-        sources = await ui_logs.sources()
+        self._found = await ui_logs.containers()
+        sources = ui_logs.sources(self._found)
         self._titles = {s["page"]: s["title"] for s in sources}
         self._services_menu.items = [
             ft.PopupMenuItem(
@@ -167,7 +170,9 @@ class LogsSection(ft.Column):
     async def load(self) -> None:
         if self._page_key is None:
             await self._read_services()
-        view = await ui_logs.recent(self._reading, self._query)
+        else:
+            self._found = await ui_logs.containers([self._page_key])
+        view = await ui_logs.recent(self._reading, self._query, found=self._found)
         self._note.value = view["note"] or ""
         self._note.visible = bool(view["note"])
         self._lines.controls = [
@@ -182,7 +187,9 @@ class LogsSection(ft.Column):
         """Add new lines at the newest end until the modal closes or a
         filter changes; paused, a new line is dropped."""
         newest_first = ui_logs.order_of(self._query) == "desc"
-        async for batch in ui_logs.follow(self._reading, self._query):
+        async for batch in ui_logs.follow(
+            self._reading, self._query, found=self._found
+        ):
             if self.paused:
                 continue
             lines = [

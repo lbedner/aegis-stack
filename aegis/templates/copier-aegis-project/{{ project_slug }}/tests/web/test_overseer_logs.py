@@ -12,7 +12,14 @@ import pytest
 from app.components.web_frontend import overseer_logs
 from app.core.runtime import LogLine, parse_log_line
 from app.services.system.models import ComponentStatus
-from tests._fake_runtime import REDIS, STOPPED, WORKER, FakeRuntime, use_runtime
+from tests._fake_runtime import (
+    REDIS,
+    STOPPED,
+    WORKER,
+    FakeRuntime,
+    container_lookups,
+    use_runtime,
+)
 from tests.web.dom import checked, none, one, select, text
 from tests.web.overseer import CACHE, page_html, sign_in, status_with
 
@@ -432,3 +439,22 @@ def test_a_picked_range_narrows_the_stream_too(client: TestClient) -> None:
     stream = one(narrowed, "#logs").get("sse-connect")
     assert f"from={bars[0].get('data-from')}" in stream
     assert f"to={bars[0].get('data-to')}" in stream
+
+
+@pytest.mark.parametrize("path", [ALL, PAGE])
+def test_a_load_looks_its_containers_up_once(
+    everything: TestClient, monkeypatch: pytest.MonkeyPatch, path: str
+) -> None:
+    """The pickers and the lines read the same containers: one lookup."""
+    seen = container_lookups(monkeypatch)
+    page_html(everything, path)
+    assert len(seen) == 1
+
+
+async def test_a_stream_looks_its_containers_up_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    use_runtime(monkeypatch, FakeRuntime(REDIS, WORKER))
+    seen = container_lookups(monkeypatch)
+    [f async for f in overseer_logs.everything_events({})]
+    assert len(seen) == 1

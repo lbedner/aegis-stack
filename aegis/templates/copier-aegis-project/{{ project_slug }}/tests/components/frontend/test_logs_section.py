@@ -17,7 +17,13 @@ from app.components.frontend.dashboard.modals.modal_sections.chart_primitives im
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.runtime import LogLine, parse_log_line
 from app.services.system import ui_logs
-from tests._fake_runtime import REDIS, WORKER, FakeRuntime, use_runtime
+from tests._fake_runtime import (
+    REDIS,
+    WORKER,
+    FakeRuntime,
+    container_lookups,
+    use_runtime,
+)
 from tests.components.frontend._tree import texts, walk
 
 
@@ -204,3 +210,24 @@ def test_the_level_picker_offers_what_the_page_does() -> None:
     )
     keys = [o.key for o in picker.options]
     assert keys[1:] == [value for value, _ in ui_logs.LEVEL_CHOICES]
+
+
+async def test_every_services_load_looks_its_containers_up_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The service menu and the lines read the same containers."""
+    use_runtime(monkeypatch, FakeRuntime(REDIS, WORKER, lines=LINES))
+    seen = container_lookups(monkeypatch)
+    await LogsSection().load()
+    assert len(seen) == 1
+
+
+async def test_a_pages_load_and_follow_look_its_containers_up_once(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    use_runtime(monkeypatch, FakeRuntime(REDIS, lines=LINES))
+    seen = container_lookups(monkeypatch)
+    section = LogsSection("redis")
+    await section.load()
+    await section.follow()
+    assert len(seen) == 1

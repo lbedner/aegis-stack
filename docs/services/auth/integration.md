@@ -554,17 +554,21 @@ async def deactivate_user(
 
 ### RateLimiter
 
-Sliding-window, in-memory rate limiter. Three pre-configured instances cover the main auth endpoints:
+Sliding-window, in-memory rate limiter. Each instance names the settings that hold its limit and window, read on every check rather than once at import:
 
 ```python
 # app/components/backend/security/rate_limit.py
-login_limiter          = RateLimiter(max_requests=5,  window_seconds=60)
-register_limiter       = RateLimiter(max_requests=3,  window_seconds=60)
-password_reset_limiter = RateLimiter(max_requests=3,  window_seconds=60)
+login_limiter = RateLimiter("RATE_LIMIT_LOGIN_MAX", "RATE_LIMIT_LOGIN_WINDOW")
+register_limiter = RateLimiter("RATE_LIMIT_REGISTER_MAX", "RATE_LIMIT_REGISTER_WINDOW")
+password_reset_limiter = RateLimiter("RATE_LIMIT_REGISTER_MAX", "RATE_LIMIT_REGISTER_WINDOW")
+resend_verification_limiter = RateLimiter(
+    "RATE_LIMIT_RESEND_VERIFICATION_MAX", "RATE_LIMIT_RESEND_VERIFICATION_WINDOW"
+)
 ```
 
 The module also exposes thin `Depends`-able wrappers (`login_rate_limit`,
-`register_rate_limit`, `password_reset_rate_limit`) re-exported from
+`register_rate_limit`, `password_reset_rate_limit`,
+`resend_verification_rate_limit`) re-exported from
 `app/components/backend/api/deps.py`. Add the matching dep to your
 route signature; it raises `HTTP 429` with a `Retry-After` header when
 the limit is exceeded.
@@ -582,7 +586,19 @@ async def login(
     # ... authentication logic
 ```
 
-Set `TRUST_PROXY_HEADERS=true` in settings when running behind a reverse proxy so the limiter reads the real client IP from `X-Forwarded-For` rather than the proxy's address.
+Set `TRUST_PROXY_HEADERS=true` when running behind a reverse proxy so the limiter (and sessions, audit and traffic) see the real client IP from `X-Forwarded-For` rather than the proxy's address. The header is believed only when it comes from a sender in `TRUSTED_PROXIES`, which defaults to loopback and the private ranges the bundled Traefik reaches the app from. A caller hitting the app's port directly can't name itself, and a CDN in front of Traefik works once its ranges are added:
+
+```bash
+TRUSTED_PROXIES='["127.0.0.1", "172.16.0.0/12", "173.245.48.0/20"]'
+```
+
+Never set it to `["*"]`: trusting every sender reads the address the caller wrote.
+
+For a limit on something other than the caller, such as a user, call `check_key`. Buckets whose window has passed are let go, so keys a caller chooses cannot grow memory without end:
+
+```python
+limiter.check_key(f"share:{user.id}")
+```
 
 !!! warning "Process-local storage"
     Rate limit counters are in-memory and not shared across processes. For multi-worker deployments, use a Redis-backed rate limiter.

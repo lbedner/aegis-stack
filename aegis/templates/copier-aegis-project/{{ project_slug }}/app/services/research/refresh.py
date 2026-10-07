@@ -2,8 +2,9 @@
 
 Every watch's source is asked first, with no transaction open; each thread
 is read once however many watches found it. Then each source's items are
-upserted together, threads linked, replies a re-read thread no longer holds
-marked, and every watch's finds stamped: a handful of statements per
+upserted together, the day's numbers kept beside them, threads linked,
+replies a re-read thread no longer holds marked, and every watch's finds
+stamped: a handful of statements per
 source, in bounded batches, whatever the number of items or watches. A
 watch whose source fails sits that run out; the others still refresh.
 """
@@ -23,7 +24,12 @@ from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.time import utcnow
-from app.services.research.models import ResearchItem, ResearchMatch, ResearchWatch
+from app.services.research.models import (
+    ResearchItem,
+    ResearchItemSnapshot,
+    ResearchMatch,
+    ResearchWatch,
+)
 from app.services.research.registry import SourceItem, source_for, validated
 
 logger = logging.getLogger(__name__)
@@ -86,6 +92,7 @@ async def refresh_watches(
     ids: dict[str, dict[str, int]] = {}
     for source, fetched in by_source.items():
         ids[source] = await _save(db, source, fetched, now)
+        await _snapshot(db, ids[source], fetched, now)
         tops = [ids[source][t] for t in fetched.threads if t in ids[source]]
         await _mark_vanished(db, tops, now)
     await _match(
@@ -204,6 +211,34 @@ async def _save(
     for chunk in _chunks(links):
         await db.execute(update(ResearchItem), list(chunk))
     return ids
+
+
+async def _snapshot(
+    db: AsyncSession, ids: dict[str, int], fetched: _Fetched, now: datetime
+) -> None:
+    """Keep today's numbers for every item that has any; a later run the
+    same day replaces the day's."""
+    rows = [
+        {
+            "item_id": ids[external_id],
+            "as_of": now.date(),
+            "score": item.score,
+            "comment_count": item.comment_count,
+        }
+        for external_id, item in fetched.items.items()
+        if item.score is not None or item.comment_count is not None
+    ]
+    for chunk in _chunks(rows):
+        upsert = _insert(db, ResearchItemSnapshot).values(list(chunk))
+        await db.execute(
+            upsert.on_conflict_do_update(
+                index_elements=["item_id", "as_of"],
+                set_={
+                    "score": upsert.excluded.score,
+                    "comment_count": upsert.excluded.comment_count,
+                },
+            )
+        )
 
 
 async def _mark_vanished(db: AsyncSession, root_ids: list[int], now: datetime) -> None:

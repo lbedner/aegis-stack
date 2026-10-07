@@ -22,9 +22,10 @@ Outside posts and threads, collected by saved searches. What other people publis
 - **Items** - one row per outside post, comment or page, from any source: `source` and `external_id` identify it, so a refresh updates the row instead of adding one. The numbers every source has (`score`, `comment_count`) are columns; anything else a source carries is in `data`, checked by that source.
 - **Threads** - a watch that reads threads stores the discussion under each find, read from its top even when the search hit a reply. A reply the source no longer returns is marked deleted: its numbers stay, its text and author are cleared.
 - **History** - each watch remembers when it last found each item, so search can ask for what a watch finds now or for everything it ever found.
+- **Numbers over time** - an item's row holds its latest `score` and `comment_count`; each refresh also keeps that day's in `research_item_snapshot` (one row per item per day, a later run the same day replacing it), so when a thread took off is still there after it settles. An item with neither number, a comment on most sources, keeps no history.
 - **Owners** - watches are their owner's, and an owner reads what its watches found (replies only through a watch that reads threads). Items themselves are stored once, since outside posts are public. Without an owner (no auth, the CLI) every watch is in reach.
 - **Failures stay local** - a source that times out, or a plugin removed while its watches remain, skips those watches for the run; the rest still refresh. Deleting a watch removes what only it found.
-- **Reading** - `GET /api/v1/research/items`, the `research search` command, and two read-only tools for agents and MCP clients: `research_search` and `research_thread`.
+- **Reading** - `GET /api/v1/research/items`, the `research search` command, and three read-only tools for agents and MCP clients: `research_search`, `research_thread` and `research_history`.
 
 ## Sources
 
@@ -66,3 +67,4 @@ register_source(Source(
 | `DELETE` | `/api/v1/research/watches/{id}` | Remove it and what it found |
 | `GET` | `/api/v1/research/items` | Search (`text`, `source`, `kind`, `watch_id`, `current_only`, `limit`) |
 | `GET` | `/api/v1/research/items/{id}/thread` | The discussion an item belongs to, top first |
+| `GET` | `/api/v1/research/items/{id}/history` | Its numbers a day at a time, oldest first |

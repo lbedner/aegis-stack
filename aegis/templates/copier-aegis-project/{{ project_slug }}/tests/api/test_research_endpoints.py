@@ -54,6 +54,21 @@ def test_a_thread_reads_back_top_first(
     assert [i["external_id"] for i in thread] == ["1", "2"]
 
 
+def test_an_items_history_reads_back_a_day_at_a_time(
+    authenticated_app_client: TestClient, site: FakeSite
+) -> None:
+    client = authenticated_app_client
+    site.results["h"] = [story("7", "Took off", score=42)]
+    watch_id = _watch(client, "h")
+    client.post(f"/api/v1/research/watches/{watch_id}/refresh")
+    (item,) = client.get("/api/v1/research/items", params={"text": "Took off"}).json()
+
+    history = client.get(f"/api/v1/research/items/{item['id']}/history").json()
+
+    assert [(h["score"], h["comment_count"]) for h in history] == [(42, 0)]
+    assert set(history[0]) == {"item_id", "as_of", "score", "comment_count"}
+
+
 def test_a_query_the_source_refuses_is_a_400(
     authenticated_app_client: TestClient, site: FakeSite
 ) -> None:

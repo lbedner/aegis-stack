@@ -63,5 +63,17 @@ async def research_thread(item_id: int) -> list[dict[str, Any]]:
     return [_item(item) for item in items]
 
 
+async def research_history(item_id: int) -> list[dict[str, Any]]:
+    """An item's score and comment count a day at a time, oldest first:
+    when a thread took off, and how far. Only days a watch refreshed it
+    are there. Empty if the user's watches never found it."""
+    async with get_async_session() as session:
+        days = await ResearchService(session, current_owner_user_id.get()).history(
+            item_id
+        )
+    return [day.model_dump(mode="json", exclude={"item_id"}) for day in days]
+
+
 register_tool("research_search", research_search, effect="read")
 register_tool("research_thread", research_thread, effect="read")
+register_tool("research_history", research_history, effect="read")

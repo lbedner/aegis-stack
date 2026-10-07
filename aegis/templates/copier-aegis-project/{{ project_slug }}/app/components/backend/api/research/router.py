@@ -7,7 +7,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
 from app.services.research.deps import get_research_service
-from app.services.research.models import ResearchItem, ResearchWatch
+from app.services.research.models import (
+    ResearchItem,
+    ResearchItemSnapshot,
+    ResearchWatch,
+)
 from app.services.research.registry import UnknownSourceError, installed_sources
 from app.services.research.service import (
     MAX_RESULTS,
@@ -99,3 +103,11 @@ async def item_thread(
     item_id: int, svc: ResearchService = Depends(get_research_service)
 ) -> list[ResearchItem]:
     return await svc.thread(item_id)
+
+
+@router.get("/items/{item_id}/history", response_model=list[ResearchItemSnapshot])
+async def item_history(
+    item_id: int, svc: ResearchService = Depends(get_research_service)
+) -> list[ResearchItemSnapshot]:
+    """The item's numbers a day at a time, oldest first."""
+    return await svc.history(item_id)

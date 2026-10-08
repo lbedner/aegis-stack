@@ -1,0 +1,19 @@
+{# Start a worker load test and watch the recent ones. The same runs the
+   CLI's load-test commands start; the list streams while the page is open. #}
+{% from "components/macros/layout.html" import card %}
+{% from "components/macros/form.html" import field, number_input, select, primary_button %}
+<div class="space-y-4">
+  {% call card("New run", "Sent from this server, counted from task history") %}
+  <form hx-post="{{ partials }}/load-tests" hx-swap="none" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-6 items-end">
+    <div class="lg:col-span-2">{% call field("Type") %}{{ select("task_type", types, blank=None, block=True) }}{% endcall %}</div>
+    {% call field("Tasks") %}{{ number_input("num_tasks", 100, min=1, max=max_tasks) }}{% endcall %}
+    {% call field("Batch") %}{{ number_input("batch_size", 10, min=1, max=100) }}{% endcall %}
+    {% call field("Delay ms") %}{{ number_input("delay_ms", 0, min=0, max=5000) }}{% endcall %}
+    {% call field("Queue") %}{{ select("target_queue", queues, selected="load_test", blank=None, block=True) }}{% endcall %}
+    <div class="sm:col-span-2 lg:col-span-6">{{ primary_button("Start", "submit") }}</div>
+  </form>
+  {% endcall %}
+  <div id="worker-load-tests-live" hx-ext="sse" sse-connect="{{ events }}">
+    <div sse-swap="{{ event }}" hx-target="this">{% include "pages/overseer/worker/_load_test_runs.html" %}</div>
+  </div>
+</div>

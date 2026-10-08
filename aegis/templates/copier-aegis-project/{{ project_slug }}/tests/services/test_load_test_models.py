@@ -14,9 +14,6 @@ from app.services.load_test_models import (
     PerformanceAnalysis,
     ValidationStatus,
 )
-from app.services.load_test_models import (
-    LoadTestErrorModel as LoadTestError,
-)
 from pydantic import ValidationError
 
 
@@ -332,7 +329,7 @@ class TestLoadTestResult:
 
         assert result.status == "completed"
         assert result.test_id == "test-123"
-        assert result.task == "load_test_orchestrator"  # Default value
+        assert result.task == "worker_load_test"  # Default value
         assert result.configuration.task_type == LoadTestTypes.CPU_INTENSIVE
         assert result.metrics.tasks_sent == 100
 
@@ -398,8 +395,6 @@ class TestOrchestratorRawResult:
             overall_throughput_per_second=3.1,
             failure_rate_percent=5.0,
             completion_percentage=95.0,
-            average_throughput_per_second=3.1,
-            monitor_duration_seconds=30.0,
             batch_size=10,
             target_queue="load_test",
         )
@@ -421,13 +416,10 @@ class TestOrchestratorRawResult:
             overall_throughput_per_second=3.1,
             failure_rate_percent=4.0,
             completion_percentage=96.0,
-            average_throughput_per_second=3.1,
-            monitor_duration_seconds=15.0,
             batch_size=5,
             target_queue="load_test",
             start_time="2023-01-01T10:00:00",
             end_time="2023-01-01T10:00:15",
-            task_ids=["task1", "task2", "task3"],
         )
 
         result = raw_result.to_load_test_result()
@@ -435,7 +427,7 @@ class TestOrchestratorRawResult:
         # Check main fields
         assert result.status == "completed"
         assert result.test_id == "test-123"
-        assert result.task == "load_test_orchestrator"
+        assert result.task == "worker_load_test"
 
         # Check configuration transformation
         assert result.configuration.task_type == LoadTestTypes.IO_SIMULATION
@@ -454,7 +446,6 @@ class TestOrchestratorRawResult:
         # Check optional fields
         assert result.start_time == "2023-01-01T10:00:00"
         assert result.end_time == "2023-01-01T10:00:15"
-        assert result.task_ids == ["task1", "task2", "task3"]
 
     def test_transformation_with_minimal_data(self):
         """Test transformation with only required fields."""
@@ -477,51 +468,6 @@ class TestOrchestratorRawResult:
         assert result.metrics.tasks_failed == 0  # Default value
         assert result.start_time is None
         assert result.end_time is None
-        assert result.task_ids == []
-
-
-class TestLoadTestError:
-    """Test LoadTestError model validation."""
-
-    def test_valid_error(self):
-        """Test creating valid load test error."""
-        error = LoadTestError(
-            status="failed",
-            test_id="error-test-123",
-            error="Task execution timeout",
-            partial_info="Some tasks may have completed",
-            tasks_sent=100,
-        )
-
-        assert error.task == "load_test_orchestrator"  # Default
-        assert error.status == "failed"
-        assert error.test_id == "error-test-123"
-        assert error.error == "Task execution timeout"
-        assert error.partial_info == "Some tasks may have completed"
-        assert error.tasks_sent == 100
-
-    def test_invalid_status_values(self):
-        """Test that invalid status values are rejected."""
-        with pytest.raises(ValidationError, match="String should match pattern"):
-            LoadTestError(
-                status="completed",  # Should only be failed or timed_out
-                test_id="error-test-123",
-                error="Some error",
-            )
-
-    def test_required_fields(self):
-        """Test that required fields are validated."""
-        # Missing test_id
-        with pytest.raises(ValidationError, match="Field required"):
-            LoadTestError(  # ty: ignore[missing-argument]
-                status="failed", error="Some error"
-            )
-
-        # Missing error
-        with pytest.raises(ValidationError, match="Field required"):
-            LoadTestError(  # ty: ignore[missing-argument]
-                status="timed_out", test_id="error-test-123"
-            )
 
 
 # Integration test for real-world data shapes
@@ -530,7 +476,7 @@ class TestRealWorldDataShapes:
 
     def test_typical_successful_load_test_flow(self):
         """Test the complete flow with typical successful data."""
-        # Raw orchestrator result (what comes from Redis)
+        # A run's tally, as runs.tally gives it
         raw_data = {
             "test_id": "6273dc3c0a87424e93318244e1baf73b",
             "task_type": "io_simulation",
@@ -541,17 +487,11 @@ class TestRealWorldDataShapes:
             "overall_throughput_per_second": 4.96,
             "failure_rate_percent": 0.0,
             "completion_percentage": 100.0,
-            "average_throughput_per_second": 4.98,
-            "monitor_duration_seconds": 2.01,
             "batch_size": 10,
             "delay_ms": 0,
             "target_queue": "load_test",
             "start_time": "2025-08-16T16:07:46.080128",
             "end_time": "2025-08-16T16:07:48.097005",
-            "task_ids": [
-                "ba4c043531c645f8956616eb60df1cc4",
-                "8669123b761c4284a0423ccaa362e0b8",
-            ],
         }
 
         # Validate raw result
@@ -578,8 +518,6 @@ class TestRealWorldDataShapes:
             "overall_throughput_per_second": 1.89,
             "failure_rate_percent": 15.0,
             "completion_percentage": 85.0,
-            "average_throughput_per_second": 1.89,
-            "monitor_duration_seconds": 45.0,
             "batch_size": 20,
             "delay_ms": 100,
             "target_queue": "system",
@@ -605,8 +543,6 @@ class TestRealWorldDataShapes:
             "overall_throughput_per_second": 10.0,
             "failure_rate_percent": 90.0,
             "completion_percentage": 10.0,
-            "average_throughput_per_second": 10.0,
-            "monitor_duration_seconds": 0.1,
             "batch_size": 1,  # Minimum allowed
             "delay_ms": 0,
             "target_queue": "load_test",

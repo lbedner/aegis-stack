@@ -12,12 +12,6 @@ from app.core.config import get_load_test_queue
 from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 
 
-class LoadTestError(Exception):
-    """Custom exception for load test operations."""
-
-    pass
-
-
 class LoadTestConfiguration(BaseModel):
     """Load test configuration with validation and defaults."""
 
@@ -171,7 +165,7 @@ class LoadTestAnalysis(BaseModel):
 class LoadTestResult(BaseModel):
     """Complete load test result with analysis."""
 
-    task: str = Field(default="load_test_orchestrator", description="Task name")
+    task: str = Field(default="worker_load_test", description="Task name")
     status: str = Field(
         ...,
         pattern=r"^(completed|failed|timed_out)$",
@@ -195,91 +189,46 @@ class LoadTestResult(BaseModel):
 
 
 class OrchestratorRawResult(BaseModel):
-    """Raw orchestrator result format for transformation.
+    """A run's tally (``runs.tally``), turned into a ``LoadTestResult``."""
 
-    Supports both fire-and-forget (enqueue-only) and monitored orchestrator
-    results. Fire-and-forget returns enqueue_duration_seconds; monitored
-    returns total_duration_seconds with completion stats.
-    """
-
-    test_id: str | None = Field(None, description="Test identifier (optional)")
+    test_id: str = Field(..., description="Test identifier")
     task_type: str = Field(..., description="Task type executed")
     tasks_sent: int = Field(..., description="Tasks enqueued")
     tasks_completed: int = Field(0, description="Successfully completed")
     tasks_failed: int = Field(0, description="Failed tasks")
-    # Fire-and-forget orchestrator fields
-    enqueue_duration_seconds: float = Field(0, description="Time to enqueue all tasks")
-    enqueue_throughput_per_second: float = Field(
-        0, description="Enqueue throughput (tasks/sec)"
-    )
-    # Monitored orchestrator fields (arq/TaskIQ)
-    total_duration_seconds: float = Field(0, description="Total duration")
-    overall_throughput_per_second: float = Field(0, description="Overall throughput")
+    total_duration_seconds: float = Field(0, description="Start to last finish")
+    overall_throughput_per_second: float = Field(0, description="Completed per second")
     failure_rate_percent: float = Field(0, description="Failure rate")
     completion_percentage: float = Field(0, description="Completion rate")
-    average_throughput_per_second: float = Field(0, description="Average throughput")
-    monitor_duration_seconds: float = Field(0, description="Monitor duration")
     batch_size: int = Field(1, description="Batch size used")
     delay_ms: int = Field(0, description="Delay between batches")
     target_queue: str = Field(..., description="Target queue")
     start_time: str | None = Field(None, description="Start time")
     end_time: str | None = Field(None, description="End time")
-    task_ids: list[str] = Field(default_factory=list, description="Task IDs")
+    error: str | None = Field(None, description="Why sending stopped, if it did")
 
     def to_load_test_result(self) -> LoadTestResult:
         """Transform to standard LoadTestResult format."""
-        configuration = LoadTestConfiguration(
-            task_type=LoadTestTypes(self.task_type),
-            num_tasks=self.tasks_sent,
-            batch_size=self.batch_size,
-            delay_ms=self.delay_ms,
-            target_queue=self.target_queue,
-        )
-
-        # Use whichever duration is available
-        duration = self.total_duration_seconds or self.enqueue_duration_seconds
-        throughput = (
-            self.overall_throughput_per_second or self.enqueue_throughput_per_second
-        )
-
-        metrics = LoadTestMetrics(
-            tasks_sent=self.tasks_sent,
-            tasks_completed=self.tasks_completed,
-            tasks_failed=self.tasks_failed,
-            total_duration_seconds=duration,
-            overall_throughput=throughput,
-            failure_rate_percent=self.failure_rate_percent,
-            completion_percentage=self.completion_percentage,
-            average_throughput_per_second=self.average_throughput_per_second,
-            monitor_duration_seconds=self.monitor_duration_seconds,
-        )
-
-        # Use test_id if provided, otherwise generate from task_ids or use "unknown"
-        effective_test_id = self.test_id or (
-            self.task_ids[0] if self.task_ids else "unknown"
-        )
-
         return LoadTestResult(
-            status="completed",
-            test_id=effective_test_id,
-            configuration=configuration,
-            metrics=metrics,
+            status="failed" if self.error else "completed",
+            test_id=self.test_id,
+            configuration=LoadTestConfiguration(
+                task_type=LoadTestTypes(self.task_type),
+                num_tasks=max(self.tasks_sent, 1),
+                batch_size=self.batch_size,
+                delay_ms=self.delay_ms,
+                target_queue=self.target_queue,
+            ),
+            metrics=LoadTestMetrics(
+                tasks_sent=self.tasks_sent,
+                tasks_completed=self.tasks_completed,
+                tasks_failed=self.tasks_failed,
+                total_duration_seconds=self.total_duration_seconds,
+                overall_throughput=self.overall_throughput_per_second,
+                failure_rate_percent=self.failure_rate_percent,
+                completion_percentage=self.completion_percentage,
+            ),
             start_time=self.start_time,
             end_time=self.end_time,
-            task_ids=self.task_ids,
-            error=None,
-            analysis=None,
+            error=self.error,
         )
-
-
-class LoadTestErrorModel(BaseModel):
-    """Load test error result with partial information."""
-
-    task: str = Field(default="load_test_orchestrator", description="Task name")
-    status: str = Field(
-        ..., pattern=r"^(failed|timed_out)$", description="Error status"
-    )
-    test_id: str = Field(..., description="Unique test identifier")
-    error: str = Field(..., description="Error message")
-    partial_info: str | None = Field(None, description="Partial completion info")
-    tasks_sent: int | None = Field(None, ge=0, description="Tasks that were sent")

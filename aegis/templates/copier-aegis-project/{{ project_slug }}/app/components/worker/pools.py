@@ -121,6 +121,11 @@ async def enqueue_task(
     return job
 
 
+def job_id(handle: Any) -> str:
+    """The id ``enqueue_task``'s handle is tracked by in task history."""
+    return str(handle.job_id)
+
+
 async def clear_pool_cache() -> None:
     """Clear all cached pools. Use during shutdown or for testing."""
     for cache_key, pool in _pool_cache.items():
@@ -131,4 +136,12 @@ async def clear_pool_cache() -> None:
             logger.warning(f"Error closing cached pool {cache_key}: {e}")
 
     _pool_cache.clear()
+    from app.components.worker.events import close_events_redis
+
+    await close_events_redis()
     logger.info("Pool cache cleared")
+
+
+# The name every backend's pools give their shutdown, so a caller needs
+# no branch per backend.
+shutdown_brokers = clear_pool_cache

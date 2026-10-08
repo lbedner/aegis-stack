@@ -16,7 +16,7 @@ from app.components.web_frontend import overseer_inference
 from app.services.system.models import ComponentStatus, ComponentStatusType
 from tests._fake_ollama import SERVING, FakeClient, serve
 from tests.web.dom import chart_json, one, select, text
-from tests.web.overseer import sign_in, status_with
+from tests.web.overseer import sent_events, sign_in, status_with
 
 PAGE = "/overseer/components/ollama"
 OLLAMA = ComponentStatus(
@@ -192,8 +192,7 @@ async def test_the_stream_sends_the_table_only_when_it_changes(
 ) -> None:
     monkeypatch.setattr(overseer_inference, "OllamaClient", FakeClient)
     monkeypatch.setattr(overseer_inference, "MODELS_INTERVAL_SECONDS", 0)
-    frames = [f async for f in overseer_inference.models_events(max_frames=3)]
-    events = [f for f in frames if f.startswith("event:")]
+    events = await sent_events(overseer_inference.models_events(max_frames=3))
     assert len(events) == 1
     assert events[0].startswith(f"event: {overseer_inference.MODELS_EVENT}\n")
 

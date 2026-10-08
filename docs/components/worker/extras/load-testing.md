@@ -83,86 +83,22 @@ The load testing extra adds one additional queue:
     taskiq worker app.components.worker.queues.load_test:broker
     ```
 
-## Orchestrator Pattern
+## How a Run Works
 
-Each backend uses an orchestrator to enqueue load test tasks in batches. A Redis lock prevents concurrent load tests (`aegis:load_test:lock` with 10-minute TTL).
+The process that starts a run sends its tasks: the CLI, the API, or Overseer's server. No job on the worker drives the test, so nothing competes with the load it sends or holds a slot in the queue it measures, and a long run is never redelivered and sent twice.
 
-=== "arq"
+1. The run is recorded in Redis (`load_test:worker:<test id>`): its configuration and start time.
+2. Its tasks are enqueued in batches through the backend's own `enqueue_task`, with `--delay` between batches. Each batch's job ids are added to the run.
+3. Progress is read on demand from those tasks' task-history records: how many finished, how many failed, and when the last one finished. A run is finished once every task was sent and every sent task has finished.
 
-    The arq orchestrator enqueues tasks via the standard pool interface:
+Every backend (arq, TaskIQ, Dramatiq) takes the same path, so a run started anywhere reads the same from `load-test results <test id>`, `GET /api/v1/tasks/load-test-result/<test id>` and Overseer.
 
-    ```python
-    async def run_load_test(task_type: str, task_count: int) -> dict:
-        """Enqueue load test tasks via arq pool."""
-        pool, queue_name = await get_queue_pool("load_test")
-        try:
-            job_ids = []
-            for _ in range(task_count):
-                job = await pool.enqueue_job(
-                    f"{task_type}_task", _queue_name=queue_name
-                )
-                job_ids.append(job.job_id)
-            return {"status": "enqueued", "task_count": task_count, "job_ids": job_ids}
-        finally:
-            await pool.aclose()
-    ```
+!!! info "Waiting is optional"
+    `load-test run` waits up to `--timeout` seconds for the result. Past that it stops waiting, not the test: the tasks keep running, and `load-test results <test id>` reads them later.
 
-=== "Dramatiq"
+## Overseer
 
-    Dramatiq uses a **fire-and-forget orchestrator actor**. The orchestrator enqueues all individual tasks and returns immediately. It does not wait for them to complete:
-
-    ```python
-    @dramatiq.actor(queue_name="load_test", store_results=True)
-    async def run_load_test_orchestrator(task_type: str, task_count: int) -> dict:
-        """Enqueue load test tasks and return immediately."""
-        messages = []
-        for _ in range(task_count):
-            if task_type == "io":
-                msg = await asyncio.to_thread(io_simulation_task.send)
-            elif task_type == "cpu":
-                msg = await asyncio.to_thread(cpu_intensive_task.send)
-            messages.append(msg.message_id)
-
-        return {
-            "status": "enqueued",
-            "task_count": task_count,
-            "message_ids": messages,
-        }
-    ```
-
-    Note the `asyncio.to_thread` wrapper, Dramatiq's `.send()` is a synchronous Redis LPUSH.
-
-=== "TaskIQ"
-
-    The TaskIQ orchestrator is itself a task that spawns individual tasks via `.kiq()` in batches:
-
-    ```python
-    @broker.task
-    async def load_test_orchestrator(
-        num_tasks: int = 100,
-        task_type: str = "io",
-        batch_size: int = 10,
-    ) -> dict:
-        """Enqueue load test tasks in batches."""
-        task_func = _get_task_by_type(task_type)
-        task_handles = []
-
-        for batch_start in range(0, num_tasks, batch_size):
-            batch_end = min(batch_start + batch_size, num_tasks)
-            for _ in range(batch_end - batch_start):
-                handle = await task_func.kiq()
-                task_handles.append(handle)
-
-        return {
-            "status": "enqueued",
-            "task_count": num_tasks,
-            "task_ids": [str(h.task_id) for h in task_handles[:10]],
-        }
-    ```
-
-    TaskIQ's `.kiq()` is already async, so no thread wrapping is needed.
-
-The dashboard SSE stream shows real-time completion as individual tasks finish, regardless of which backend is used.
+Worker > Load tests starts a run (type, tasks, batch, delay, queue) and lists the recent ones, whoever started them, with their progress streamed while the page is open. A run started from the page is capped at 10,000 tasks; the CLI takes more.
 
 ## Test Types
 
@@ -200,4 +136,3 @@ Tests return performance metrics and analysis:
 - Monitor resources during tests
 - Use dedicated load_test queue only
 - Document baseline performance
-- Use the Redis lock to prevent concurrent tests in automated pipelines

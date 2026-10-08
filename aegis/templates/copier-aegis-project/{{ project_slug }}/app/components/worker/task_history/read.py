@@ -29,7 +29,7 @@ async def get_task_record(redis: Any, job_id: str) -> dict[str, str] | None:
         return None
 
 
-async def _pipeline_get_records(redis: Any, job_ids: list[str]) -> list[dict[str, str]]:
+async def get_task_records(redis: Any, job_ids: list[str]) -> list[dict[str, str]]:
     """Fetch multiple task records in a single Redis pipeline round trip."""
     if not job_ids:
         return []
@@ -137,7 +137,7 @@ async def list_tasks_by_queue(
             ]
             total = len(matching_ids)
             page_ids = matching_ids[offset : offset + limit]
-            tasks = await _pipeline_get_records(redis, page_ids)
+            tasks = await get_task_records(redis, page_ids)
         else:
             total = await redis.zcard(index_key)
 
@@ -149,7 +149,7 @@ async def list_tasks_by_queue(
                 job_ids_raw = await redis.zrange(index_key, offset, offset + limit - 1)
 
             job_ids = [j if isinstance(j, str) else j.decode() for j in job_ids_raw]
-            tasks = await _pipeline_get_records(redis, job_ids)
+            tasks = await get_task_records(redis, job_ids)
         return tasks, total
     except Exception as e:
         logger.debug(f"Failed to list tasks by queue: {e}")

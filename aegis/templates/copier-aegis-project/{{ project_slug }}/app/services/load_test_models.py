@@ -8,8 +8,6 @@ working without forcing callsite changes.
 from app.services.load_test.worker.models import (
     LoadTestAnalysis,
     LoadTestConfiguration,
-    LoadTestError,
-    LoadTestErrorModel,
     LoadTestMetrics,
     LoadTestResult,
     OrchestratorRawResult,
@@ -21,8 +19,6 @@ from app.services.load_test.worker.models import (
 __all__ = [
     "LoadTestAnalysis",
     "LoadTestConfiguration",
-    "LoadTestError",
-    "LoadTestErrorModel",
     "LoadTestMetrics",
     "LoadTestResult",
     "OrchestratorRawResult",

@@ -139,6 +139,11 @@ async def enqueue_task(
     return msg
 
 
+def job_id(handle: Any) -> str:
+    """The id ``enqueue_task``'s handle is tracked by in task history."""
+    return str(handle.message_id)
+
+
 async def get_task_result(
     task_id: str,
     queue_name: str = QueueName.SYSTEM,

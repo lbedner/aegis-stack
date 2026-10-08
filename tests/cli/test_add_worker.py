@@ -166,7 +166,7 @@ class TestAddWorkerComponent:
         assert (worker_dir / "pools.py").exists()
         assert (worker_dir / "registry.py").exists()
         assert (worker_dir / "queues" / "system.py").exists()
-        assert (worker_dir / "tasks" / "system_tasks.py").exists()
+        assert (worker_dir / "tasks" / "load_tasks.py").exists()
 
     def test_add_worker_creates_service_files(
         self, project_factory: "ProjectFactory"

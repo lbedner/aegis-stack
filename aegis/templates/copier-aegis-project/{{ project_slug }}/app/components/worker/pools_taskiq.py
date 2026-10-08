@@ -164,6 +164,11 @@ async def enqueue_task(
     return task_handle
 
 
+def job_id(handle: Any) -> str:
+    """The id ``enqueue_task``'s handle is tracked by in task history."""
+    return str(handle.task_id)
+
+
 async def get_task_result(task_id: str, timeout: float = 30.0) -> Any:
     """
     Get the result of a completed task.

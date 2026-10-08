@@ -2,6 +2,7 @@
 without it Overseer is open and nobody signs in) and a health snapshot
 holding exactly the components a test hands in."""
 
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
 from fastapi import FastAPI
@@ -25,6 +26,11 @@ PREFIXES = ("/overseer", "/partials/overseer")
 
 # The Cache, healthy: a page with containers behind it (Redis).
 CACHE = ComponentStatus(name=ComponentName.CACHE, message="Connected", metadata={})
+
+
+async def sent_events(stream: AsyncIterator[str]) -> list[str]:
+    """The frames an SSE stream sent, its heartbeats and unchanged marks aside."""
+    return [frame async for frame in stream if frame.startswith("event:")]
 
 
 def page_html(client: TestClient, path: str) -> str:

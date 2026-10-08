@@ -1,22 +1,11 @@
-"""Reading a finished load test: what it was, and what it returned.
-
-Identical for every worker backend, so the three backend services
-inherit it rather than each carrying a copy. The transform takes
-dramatiq's form, which falls back to the enqueue-phase duration and
-throughput when the run reports none - the other backends never send
-those keys, so the fallback costs them nothing.
-"""
+"""Reading a finished load test: what it was, and how it did."""
 
 from typing import Any
 
-from pydantic import ValidationError
 
 from app.components.worker.constants import LoadTestTypes
-from app.core.log import logger
 from app.services.load_test.worker.advice import AdviceMixin
 from app.services.load_test.worker.models import (
-    LoadTestConfiguration,
-    LoadTestMetrics,
     LoadTestResult,
     TestTypeInfo,
 )
@@ -102,142 +91,9 @@ class AnalysisMixin(AdviceMixin):
         return test_info.get(test_type, {})
 
     @staticmethod
-    def _transform_orchestrator_result(
-        orchestrator_result: dict[str, Any],
-    ) -> dict[str, Any]:
-        """Transform orchestrator result to expected analysis format."""
-        configuration = {
-            "task_type": orchestrator_result.get("task_type", "unknown"),
-            "num_tasks": orchestrator_result.get("tasks_sent", 0),
-            "batch_size": orchestrator_result.get("batch_size", 0),
-            "delay_ms": orchestrator_result.get("delay_ms", 0),
-            "target_queue": orchestrator_result.get("target_queue", "unknown"),
-        }
-
-        # Use whichever duration/throughput is available (fire-and-forget vs monitored)
-        duration = orchestrator_result.get(
-            "total_duration_seconds"
-        ) or orchestrator_result.get("enqueue_duration_seconds", 0)
-        throughput = orchestrator_result.get(
-            "overall_throughput_per_second"
-        ) or orchestrator_result.get("enqueue_throughput_per_second", 0)
-
-        metrics = {
-            "tasks_sent": orchestrator_result.get("tasks_sent", 0),
-            "tasks_completed": orchestrator_result.get("tasks_completed", 0),
-            "tasks_failed": orchestrator_result.get("tasks_failed", 0),
-            "total_duration_seconds": duration,
-            "overall_throughput": throughput,
-            "failure_rate_percent": orchestrator_result.get("failure_rate_percent", 0),
-            "completion_percentage": orchestrator_result.get(
-                "completion_percentage", 0
-            ),
-            "average_throughput_per_second": orchestrator_result.get(
-                "average_throughput_per_second", 0
-            ),
-            "monitor_duration_seconds": orchestrator_result.get(
-                "monitor_duration_seconds", 0
-            ),
-        }
-
-        transformed = {
-            "task": "load_test_orchestrator",
-            "status": "completed",
-            "test_id": orchestrator_result.get("test_id", "unknown"),
-            "configuration": configuration,
-            "metrics": metrics,
-            "start_time": orchestrator_result.get("start_time"),
-            "end_time": orchestrator_result.get("end_time"),
-            "task_ids": orchestrator_result.get("task_ids", []),
-        }
-
-        return transformed
-
-    @staticmethod
-    def _analyze_load_test_result(
-        result: LoadTestResult | dict[str, Any],
-    ) -> LoadTestResult:
+    def _analyze_load_test_result(result: LoadTestResult) -> LoadTestResult:
         """Add analysis and validation to load test results."""
-
-        # Convert dict to model if needed
-        if isinstance(result, dict):
-            try:
-                result = LoadTestResult(**result)
-            except ValidationError as e:
-                logger.error(f"Failed to validate result as LoadTestResult: {e}")
-                # Return a basic error result
-                return LoadTestResult(
-                    status="failed",
-                    test_id=(
-                        result.get("test_id", "unknown")
-                        if isinstance(result, dict)
-                        else "unknown"
-                    ),
-                    configuration=LoadTestConfiguration(
-                        task_type=LoadTestTypes.CPU_INTENSIVE,  # Safe default enum
-                        num_tasks=10,  # Minimum valid value
-                        batch_size=1,
-                        delay_ms=0,
-                        target_queue="unknown",
-                    ),
-                    metrics=LoadTestMetrics(
-                        tasks_sent=0,
-                        tasks_completed=0,
-                        tasks_failed=0,
-                        total_duration_seconds=0.0,
-                        overall_throughput=0.0,
-                        failure_rate_percent=0.0,
-                        completion_percentage=0.0,
-                        average_throughput_per_second=0.0,
-                        monitor_duration_seconds=0.0,
-                    ),
-                    start_time=None,
-                    end_time=None,
-                    error=f"Validation failed: {e}",
-                    analysis=None,
-                )
-
-        # Verify result is LoadTestResult and handle unexpected types
-        if not isinstance(result, LoadTestResult):
-            logger.error(f"Expected LoadTestResult but got {type(result)}")
-            return LoadTestResult(
-                status="failed",
-                test_id="unknown",
-                configuration=LoadTestConfiguration(
-                    task_type=LoadTestTypes.CPU_INTENSIVE,
-                    num_tasks=10,
-                    batch_size=1,
-                    delay_ms=0,
-                    target_queue="unknown",
-                ),
-                metrics=LoadTestMetrics(
-                    tasks_sent=0,
-                    tasks_completed=0,
-                    tasks_failed=0,
-                    total_duration_seconds=0.0,
-                    overall_throughput=0.0,
-                    failure_rate_percent=0.0,
-                    completion_percentage=0.0,
-                    average_throughput_per_second=0.0,
-                    monitor_duration_seconds=0.0,
-                ),
-                start_time=None,
-                end_time=None,
-                error=f"Unexpected result type: {type(result)}",
-                analysis=None,
-            )
-
         task_type = result.configuration.task_type
-
-        # Get expected characteristics for this test type
-        # Validate task type against known types
-        if task_type not in [
-            LoadTestTypes.CPU_INTENSIVE,
-            LoadTestTypes.IO_SIMULATION,
-            LoadTestTypes.MEMORY_OPERATIONS,
-            LoadTestTypes.FAILURE_TESTING,
-        ]:
-            task_type = LoadTestTypes.CPU_INTENSIVE  # Default fallback
 
         test_info_dict = AnalysisMixin.get_test_type_info(task_type)
         test_info = TestTypeInfo(**test_info_dict)

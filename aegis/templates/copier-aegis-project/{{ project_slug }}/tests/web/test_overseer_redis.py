@@ -13,7 +13,7 @@ from app.services.system import redis_keys
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_title
 from tests.web.dom import none, one, select, text
-from tests.web.overseer import sign_in, status_with
+from tests.web.overseer import sent_events, sign_in, status_with
 
 METADATA: dict[str, Any] = {
     "implementation": "redis",
@@ -228,9 +228,7 @@ class TestKeyspaceStream:
 
         monkeypatch.setattr(overseer_redis, "load_keyspace", keyspace)
         monkeypatch.setattr(overseer_redis, "KEYSPACE_INTERVAL_SECONDS", 0)
-        stream = overseer_redis.keyspace_events(max_frames=3)
-        frames = [frame async for frame in stream]
-        events = [f for f in frames if f.startswith("event:")]
+        events = await sent_events(overseer_redis.keyspace_events(max_frames=3))
         assert len(events) == 1  # unchanged frames are not re-sent
         assert events[0].startswith(f"event: {overseer_redis.KEYSPACE_EVENT}\n")
 

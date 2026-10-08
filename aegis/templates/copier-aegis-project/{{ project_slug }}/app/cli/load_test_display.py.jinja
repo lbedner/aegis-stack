@@ -155,7 +155,7 @@ def _display_test_type_info(test_type: str, info: dict[str, Any]) -> None:
 
 
 async def _poll_for_result_with_progress(
-    task_id: str, target_queue: str, timeout: int
+    task_id: str, timeout: int
 ) -> dict[str, Any] | None:
     """
     Poll for load test result with progress display.
@@ -182,9 +182,7 @@ async def _poll_for_result_with_progress(
                 return None
 
             try:
-                result = await LoadTestService.get_load_test_result(
-                    task_id, target_queue
-                )
+                result = await LoadTestService.get_load_test_result(task_id)
                 if result:
                     return result
             except Exception as e:
@@ -202,9 +200,9 @@ def _display_load_test_results(result: dict[str, Any], detailed: bool = False) -
     # Basic results
     status = result.get("status", "unknown")
 
-    # Handle timeout and failure cases
-    if status in ["timed_out", "failed"]:
-        _display_error_result(result, status)
+    # A run that stopped sending
+    if status == "failed":
+        _display_error_result(result)
         return
 
     # Handle successful results
@@ -272,47 +270,24 @@ def _display_load_test_results(result: dict[str, Any], detailed: bool = False) -
             console.print(f"   {i}. {rec}")
 
 
-def _display_error_result(result: dict[str, Any], status: str) -> None:
-    """Display results for failed or timed out load tests."""
+def _display_error_result(result: dict[str, Any]) -> None:
+    """Display a load test that stopped sending."""
 
     test_id = result.get("test_id", "unknown")
     error = result.get("error", "Unknown error")
-    partial_info = result.get("partial_info", "")
-
-    if status == "timed_out":
-        console.print(
-            Panel(
-                f"[bold {theme.ERROR}]{t('loadtest.timed_out_title')}[/bold {theme.ERROR}]\n\n"
-                f"[dim]{t('loadtest.test_id_label')}[/dim] {test_id}\n"
-                f"[dim]{t('loadtest.error_label')}[/dim] {error}\n\n"
-                f"[bold]{t('loadtest.what_this_means')}[/bold]\n"
-                f"{t('loadtest.timeout_explanation')}\n\n"
-                f"[bold]{t('loadtest.to_investigate')}[/bold]\n"
-                f"• {t('loadtest.tip_check_logs')}\n"
-                f"• {t('loadtest.tip_smaller_batch')}\n"
-                f"• {t('loadtest.tip_check_metrics')}",
-                title=t("loadtest.analysis_panel"),
-                border_style=theme.ERROR,
-            )
+    console.print(
+        Panel(
+            f"[bold {theme.ERROR}]{t('loadtest.failed_title')}[/bold {theme.ERROR}]\n\n"
+            f"[dim]{t('loadtest.test_id_label')}[/dim] {test_id}\n"
+            f"[dim]{t('loadtest.error_label')}[/dim] {error}\n\n"
+            f"[bold]{t('loadtest.next_steps')}[/bold]\n"
+            f"• {t('loadtest.tip_check_worker_logs')}\n"
+            f"• {t('loadtest.tip_verify_queue')}\n"
+            f"• {t('loadtest.tip_try_smaller')}",
+            title=t("loadtest.analysis_panel"),
+            border_style=theme.ERROR,
         )
-
-        if partial_info:
-            console.print(f"\n[dim]{partial_info}[/dim]")
-
-    elif status == "failed":
-        console.print(
-            Panel(
-                f"[bold {theme.ERROR}]{t('loadtest.failed_title')}[/bold {theme.ERROR}]\n\n"
-                f"[dim]{t('loadtest.test_id_label')}[/dim] {test_id}\n"
-                f"[dim]{t('loadtest.error_label')}[/dim] {error}\n\n"
-                f"[bold]{t('loadtest.next_steps')}[/bold]\n"
-                f"• {t('loadtest.tip_check_worker_logs')}\n"
-                f"• {t('loadtest.tip_verify_queue')}\n"
-                f"• {t('loadtest.tip_try_smaller')}",
-                title=t("loadtest.analysis_panel"),
-                border_style=theme.ERROR,
-            )
-        )
+    )
 
     # Show basic troubleshooting info
     console.print(f"\n[bold]{t('loadtest.troubleshooting')}[/bold]")

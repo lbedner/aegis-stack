@@ -11,9 +11,6 @@ from enum import Enum
 class TaskNames:
     """Worker task function names - must match actual function names in code."""
 
-    # Orchestrator
-    LOAD_TEST_ORCHESTRATOR = "load_test_orchestrator"
-
     # Load test tasks
     CPU_INTENSIVE_TASK = "cpu_intensive_task"
     IO_SIMULATION_TASK = "io_simulation_task"

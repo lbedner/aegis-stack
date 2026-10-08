@@ -95,6 +95,11 @@ from app.components.web_frontend.routes.partials import (
     overseer_mcp as overseer_mcp_partials,
 )
 {%- endif %}
+{%- if include_worker %}
+from app.components.web_frontend.routes.partials import (
+    overseer_worker as overseer_worker_partials,
+)
+{%- endif %}
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 
@@ -201,6 +206,9 @@ router.include_router(overseer_inference_partials.router)
 {%- endif %}
 {%- if include_mcp %}
 router.include_router(overseer_mcp_partials.router)
+{%- endif %}
+{%- if include_worker %}
+router.include_router(overseer_worker_partials.router)
 {%- endif %}
 router.include_router(overseer_errors_partials.router)
 router.include_router(overseer_routes.router)

@@ -5369,6 +5369,28 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#container-error-collection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Container error collection
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#automatic-error-attribution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Automatic error attribution
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -5944,6 +5966,28 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#container-error-collection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Container error collection
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#automatic-error-attribution" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Automatic error attribution
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -6234,6 +6278,120 @@ Settings, Health). A live chart marks the same levels as dashed lines with
 <li><strong><a href="../story/">The Overseer Story</a></strong> - Evolution and vision</li>
 <li><strong><a href="../../cli-reference/">CLI Reference</a></strong> - Health command documentation (search for "health")</li>
 </ul>
+<h2 id="container-error-collection">Container error collection</h2>
+<p>The backend's <code>startup/error_tracking.py</code> starts the collector through the shared
+background task registry. The matching shutdown hook cancels and awaits pumps,
+releases its lease when possible, and closes its Redis client. One 20-second
+Redis lease per project fences writes from superseded collectors. Discovery and
+lease renewal run every five seconds. Each running container on a known runtime
+page has an independent stream; workers are supported without importing worker
+modules. Sources reconnect with exponential backoff, capped at 30 seconds.</p>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Default</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ERROR_TRACKING_ENABLED</code></td>
+<td><code>true</code></td>
+<td>Enable background collection</td>
+</tr>
+<tr>
+<td><code>ERROR_TRACKING_RETENTION_SECONDS</code></td>
+<td><code>604800</code></td>
+<td>Maximum retained age: seven days</td>
+</tr>
+<tr>
+<td><code>ERROR_TRACKING_MAX_OCCURRENCES</code></td>
+<td><code>10000</code></td>
+<td>Total retained occurrences per project; maximum 10,000</td>
+</tr>
+<tr>
+<td><code>ERROR_TRACKING_MAX_SOURCES</code></td>
+<td><code>64</code></td>
+<td>Concurrent container streams; maximum 256</td>
+</tr>
+</tbody>
+</table>
+<p>Keys use <code>aegis:errors:&lt;hash-of-PROJECT_NAME&gt;:</code> and notifications use
+<code>aegis:events:errors:&lt;hash-of-PROJECT_NAME&gt;</code>. Projects sharing Redis must use
+distinct <code>PROJECT_NAME</code> values. Redis keyspace ownership is declared by the
+repository and appears on Overseer's Redis page. History uses hashes and sorted
+indexes; notifications are hints, capped at approximately 10,000 stream entries.</p>
+<p>An occurrence is capped at 64 KiB including serialized JSON escaping. Each
+source assembler holds at most 48 KiB per stdout/stderr record; the Docker stream
+decoder bounds unfinished input to 1 MiB. Writes are awaited to apply backpressure.
+Search metadata is bounded separately. Retention removes records, search metadata,
+and indexes together in batches of at most 128 per atomic operation, yielding
+between batches. Cleanup runs within one discovery tick plus batch processing
+time; reading never writes. Empty issue indexes disappear. With no filter, the
+list reads per-issue summaries each write keeps current; any filter reads the
+search metadata once and groups it.
+Active source cursors are removed when their containers leave discovery; lease
+and shared health status expire automatically.</p>
+<p>Replay identity retains Docker's original nanosecond timestamp and per-stream
+ordinal, including non-error input. A source's position is saved at most once a
+second, and reconnect re-reads the second before it; occurrence IDs absorb the
+overlap. A fixed-size discarded-history watermark
+prevents count-pruned records from returning on replay. Late inputs at or before
+that boundary, including timestamp ties, are conservatively dropped and counted.</p>
+<p>Recovery is <strong>best effort within Docker log retention</strong>, not a durable capture
+or exactly-once promise. The restricted proxy does not expose exact restart
+incarnations; container ID plus timestamp identify restart input. Rotation, missing
+source timestamps, unfinished traces and oversized input can leave gaps. Bootstrap
+looks back at most the retention window. Redis persistence/eviction configuration
+determines whether history and cursors survive Redis restarts. Losing cursors may
+trigger a broader retained-log replay; losing both source logs and Redis history
+cannot be repaired.</p>
+<p>Credential-shaped keys, authorization strings, URL credentials, and recognized
+nested locals are redacted before retention. Redaction is best effort: secrets in
+arbitrary exception prose may remain. Stored data is escaped when rendered; it is
+never treated as HTML. Collector failures are reported through shared status,
+rather than logging captured error diagnostics back into their own feed.</p>
+<p>The page distinguishes disabled collection (configuration or missing Redis/Docker),
+degraded collection (source/Redis failure, stale status, source cap), empty history,
+and expired detail. For degraded collection, check Redis connectivity, the Docker
+socket proxy, container logging drivers, and source limits. Sources retry without
+blocking requests. A running state indicates current collection health; it does
+not certify that Docker's historical logs are complete.</p>
+<p>Run the isolated real Docker/Redis scenario from a generated project with Redis
+and deploy installed:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="nv">AEGIS_ERROR_TRACKING_DOCKER_TEST</span><span class="o">=</span><span class="m">1</span><span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>tests/components/test_error_tracking_integration.py<span class="w"> </span>-q
+</span></code></pre></div>
+<p>It uses unique Redis namespaces and disposable source containers, verifies
+closed-browser collection, grouping, exact traces, replay, failover and container
+replacement, and removes its containers and keys afterward. The Redis contract
+and SSE tests run only against a Redis you name, never the development stack's,
+each in its own namespace:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>docker<span class="w"> </span>run<span class="w"> </span>--rm<span class="w"> </span>-d<span class="w"> </span>-p<span class="w"> </span><span class="m">6390</span>:6379<span class="w"> </span>--name<span class="w"> </span>error-test-redis<span class="w"> </span>redis
+</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="nv">AEGIS_ERROR_TRACKING_REDIS_URL</span><span class="o">=</span>redis://127.0.0.1:6390<span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>pytest<span class="w"> </span>tests/services/test_error_store.py<span class="w"> </span>-q
+</span></code></pre></div>
+<h2 id="automatic-error-attribution">Automatic error attribution</h2>
+<p>Keep using <code>from app.core.log import logger</code>. The shared logging processor derives
+<code>app_service</code> from <code>app/services/&lt;name&gt;/...</code> only when the name belongs to the
+shared <code>ServiceName</code> registry, checked against the generator’s <code>ServiceSpec</code> list; runtime-registered plugin services are also accepted. Shared
+folders such as <code>system</code> and <code>change_queue</code> are not application services.
+Existing logger calls need no per-function context manager. <code>emitting_service</code>
+records the service that wrote the log. For exceptions, the processor inspects
+traceback frames and chained causes before formatting, allowing an AI failure
+logged by an HTTP handler to retain its AI origin. Suppressed exception contexts
+are not used. This is code-location attribution, not proof of the underlying
+system responsible for a failure.</p>
+<p>Scheduled job discovery retains the declaring service. The existing execution
+wrappers establish scoped ownership automatically on scheduler and worker runs,
+restore it after completion/failure, and preserve exception ownership for outer
+handlers. Every process sets the same logging pipeline up as it boots
+(<code>apply_saved_overrides</code>), workers started by their own CLI included. Arbitrary
+process/thread handoffs outside those wrappers do not automatically inherit it.</p>
+<p>Both development console logs and production JSON logs carry attribution into
+retained errors. The runtime <code>service</code> and container identity remain separate
+from <code>app_service</code>. The Errors checklist is the Logs one, with the same query
+parameters (<code>service</code>, <code>container</code>, <code>app_service</code>), so a filter carries between
+the two pages. Grouping includes the application service.</p>
 
 
 

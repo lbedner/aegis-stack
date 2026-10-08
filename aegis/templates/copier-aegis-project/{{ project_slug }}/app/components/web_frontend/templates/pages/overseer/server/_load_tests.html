@@ -1,18 +1,18 @@
 {# Start a load test against one of this app's routes, and the runs, the
-   CLI's included. The run list streams while the page is open. #}
+   CLI's included. The form is Routes' request form for the route picked,
+   with requests and clients; the run list streams while the page is open. #}
 {% from "components/macros/layout.html" import card %}
-{% from "components/macros/form.html" import field, number_input, select, text_input, primary_button %}
+{% from "components/macros/form.html" import field, select %}
 <div class="space-y-4">
   {% call card("New run", "In this server, against the app itself") %}
-  <form hx-post="{{ partials }}" hx-swap="none" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-6 items-end">
-    <div class="sm:col-span-2 lg:col-span-3">{% call field("Route") %}{{ select("target", targets, blank=None, block=True) }}{% endcall %}</div>
-    {% call field("Requests") %}{{ number_input("requests", 100, min=1, max=max_requests) }}{% endcall %}
-    {% call field("Clients") %}{{ number_input("clients", 10, min=1, max=max_clients) }}{% endcall %}
-    {% call field("Sign in as") %}{{ select("role", roles, blank=None, block=True) }}{% endcall %}
-    <div class="sm:col-span-2 lg:col-span-3">{% call field("Path params") %}{{ text_input("path_params", placeholder="id=5 slug=intro") }}{% endcall %}</div>
-    <div class="sm:col-span-2 lg:col-span-3">{% call field("JSON payload") %}{{ text_input("payload", placeholder='{"name": "x"}') }}{% endcall %}</div>
-    <div class="sm:col-span-2 lg:col-span-6">{{ primary_button("Start", "submit") }}</div>
-  </form>
+  <div class="space-y-3">
+    {% call field("Route") %}
+    <div hx-get="{{ requests_partials }}/form?mode=load" hx-trigger="change" hx-include="find select" hx-target="#load-test-form" hx-swap="innerHTML">
+      {{ select("route", targets, selected=picked, blank=None, block=True) }}
+    </div>
+    {% endcall %}
+    <div id="load-test-form">{{ form_html }}</div>
+  </div>
   {% endcall %}
   <div id="server-load-tests-live" hx-ext="sse" sse-connect="{{ events }}">
     <div sse-swap="{{ event }}" hx-target="this">{% include "pages/overseer/server/_load_test_runs.html" %}</div>

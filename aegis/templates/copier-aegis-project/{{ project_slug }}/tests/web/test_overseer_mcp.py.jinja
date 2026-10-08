@@ -12,7 +12,7 @@ import pytest
 from app.core.config import settings
 from app.core.tools import load_tools, register_tool
 from app.services.system.models import ComponentStatus, ComponentStatusType
-from tests.web.dom import one, text
+from tests.web.dom import one, select, text
 from tests.web.overseer import sign_in, status_with
 
 PAGE = "/overseer/components/mcp"
@@ -187,6 +187,8 @@ def test_a_new_token_is_shown_once(
     assert shown.status_code == 200
     assert made == [(1, "laptop", "propose")]
     assert "mcp_the-value-shown-once" in text(one(shown.text, "#mcp-token-value"))
+    done = next(b for b in select(shown.text, "button") if text(b) == "Done")
+    assert done.get("@click") == "$el.closest('dialog').close()"  # not escaped
 
 
 def test_an_unknown_scope_re_renders_the_form(

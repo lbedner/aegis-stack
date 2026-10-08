@@ -7,6 +7,11 @@
   ("Endpoint", row.name), ("Summary", row.summary), ("Description", row.description),
   ("Path params", row.path_params), ("Dependencies", row.dependencies), ("Response", row.response_model),
 ]) }}
+{% for key in row.requests %}
+<div class="mt-4 border-t border-aegis-border pt-4" hx-get="{{ requests_partials }}/form?route={{ key|urlencode }}" hx-trigger="intersect once" hx-swap="innerHTML">
+  <p class="text-xs text-aegis-muted">Loading the request form...</p>
+</div>
+{% endfor %}
 {% endmacro %}
 {% if route_groups %}
 <div class="space-y-4">

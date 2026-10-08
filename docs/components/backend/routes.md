@@ -122,6 +122,23 @@ grouped by OpenAPI tag. Each route card shows:
   endpoint runs).
 - A security badge when the endpoint requires authentication.
 
+### Calling a route
+
+Expand a route and it shows a request form built from its OpenAPI
+operation, the same schema `/openapi.json` and `/docs` serve: path and
+query parameters as typed fields (required ones marked, enums as a list,
+defaults filled in), the body as JSON pre-filled with an example from its
+model, and who to sign in as (admin, user or anonymous). **Execute** sends
+the request once, in the server itself, and shows the curl command, the
+status, how long it took, the response body and its headers, as FastAPI's
+`/docs` does. A route that writes (POST, PUT, PATCH, DELETE) is sent only
+once you tick the box under it. Execute's requests are not load-test runs
+and stay out of their history.
+
+**Load test this** opens Server > Load Tests with the route and the values
+you filled in. Load Tests' route picker shows this same form, with requests
+and clients added, so a route is filled in the same way on both pages.
+
 Because the Routes tab reads from cached metadata built by the
 `component_health` startup hook, anything you add at runtime (rare, but
 possible via the FastAPI app object) will not appear until the next

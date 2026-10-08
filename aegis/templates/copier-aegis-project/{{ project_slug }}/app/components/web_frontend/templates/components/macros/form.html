@@ -145,9 +145,9 @@ bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-
        class="{{ _control_classes }} w-full mt-1">
 {% endmacro %}
 
-{% macro number_input(name, value=None, step=1, min=None, max=None) %}
+{% macro number_input(name, value=None, step=1, min=None, max=None, required=False) %}
 <input type="number" name="{{ name }}" value="{{ value if value is not none else '' }}" step="{{ step }}"
-       {% if min is not none %}min="{{ min }}"{% endif %} {% if max is not none %}max="{{ max }}"{% endif %}
+       {% if min is not none %}min="{{ min }}"{% endif %} {% if max is not none %}max="{{ max }}"{% endif %} {% if required %}required{% endif %}
        class="{{ _control_classes }} w-full mt-1 tabular-nums">
 {% endmacro %}
 

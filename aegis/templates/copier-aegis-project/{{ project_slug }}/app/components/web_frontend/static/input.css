@@ -144,10 +144,15 @@
   .code-block pre {
     @apply text-xs font-mono leading-relaxed text-aegis-text bg-aegis-bg border border-aegis-border rounded p-3 overflow-x-auto whitespace-pre;
   }
+  pre.code-block--wrap,
+  .code-block--wrap pre { @apply whitespace-pre-wrap; overflow-wrap: anywhere; }
   .code-block .highlight :is(.k, .kc, .kd, .kn, .kp, .kr, .ow) { @apply text-aegis-teal; }
   .code-block .highlight :is(.s, .s1, .s2, .sa, .sb, .sd, .se, .si, .dl) { @apply text-aegis-amber; }
   .code-block .highlight :is(.c, .c1, .cm, .cs, .ch) { @apply text-aegis-muted italic; }
   .code-block .highlight :is(.nf, .nc, .fm, .nd) { @apply font-semibold; }
+  /* JSON (a response body): keys as names, numbers with the keywords. */
+  .code-block .highlight .nt { @apply text-aegis-text font-semibold; }
+  .code-block .highlight :is(.m, .mi, .mf, .mh, .mo, .mb) { @apply text-aegis-teal; }
 
   .micro-label {
     @apply text-xxs;

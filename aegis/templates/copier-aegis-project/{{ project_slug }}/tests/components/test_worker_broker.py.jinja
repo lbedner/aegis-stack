@@ -236,13 +236,13 @@ async def test_listen_remembers_each_messages_claim(
 
 
 @pytest.mark.parametrize("queue", ["system", "load_test"])
-def test_a_queue_claims_only_what_it_runs_at_once(queue: str) -> None:
-    """Claimed jobs belong to one worker: claiming more than it can start
-    starves its neighbours and strands the rest if it dies."""
+def test_a_queue_claims_one_job_per_free_slot(queue: str) -> None:
+    """Claimed jobs belong to one worker. taskiq asks for a message each
+    time a slot frees, so a read of more than one claims jobs that only
+    wait: up to twice the concurrency held, the waiting ones with no claim
+    kept alive, and starved neighbours. One per read claims what it starts."""
     from importlib import import_module
 
-    from app.core.queue_workers import concurrency_for
-
     broker = import_module(f"app.components.worker.queues.{queue}").broker
-    assert broker.count == concurrency_for(queue)
+    assert broker.count == 1
 {%- endif %}

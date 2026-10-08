@@ -10,9 +10,9 @@ import pytest
 from app.components.web_frontend import overseer_server_load_tests as load_tests
 from app.services.load_test.api import auth
 from app.services.load_test.api.discovery import describe_routes
+from tests.web import test_overseer_server as server_page
 from tests.web.dom import none, one, select, text, triggers
 from tests.web.overseer import sent_events
-from tests.web import test_overseer_server as server_page
 
 # The Server page's own sign-in and fetch: this is one of its sections.
 signed_in = server_page.signed_in
@@ -54,18 +54,23 @@ def runner(monkeypatch: pytest.MonkeyPatch) -> FakeRunner:
 def _target(client: TestClient) -> str:
     """A GET route of the app with no path params."""
     routes = describe_routes(client.app.routes)  # type: ignore[attr-defined]
-    return next(f"GET {r.path}" for r in routes if r.method == "GET" and not r.path_params)
+    return next(
+        f"GET {r.path}" for r in routes if r.method == "GET" and not r.path_params
+    )
 
 
 def _form(client: TestClient, **fields: str) -> dict[str, str]:
-    return {"target": _target(client), "requests": "20", "clients": "2"} | fields
+    return {"route": _target(client), "requests": "20", "clients": "2"} | fields
 
 
 class TestStarting:
     def test_the_form_offers_the_apps_routes_not_overseers(
         self, signed_in: TestClient
     ) -> None:
-        options = [text(o) for o in select(_get(signed_in, "load-tests"), "select[name=target] option")]
+        options = [
+            text(o)
+            for o in select(_get(signed_in, "load-tests"), "select[name=route] option")
+        ]
         assert _target(signed_in) in options
         assert not [o for o in options if " /overseer" in o or " /partials" in o]
 
@@ -98,31 +103,24 @@ class TestStarting:
     @pytest.mark.parametrize(
         "fields, why",
         [
-            ({"target": "GET /overseer"}, "this app's routes"),
+            ({"route": "GET /overseer"}, "this app's routes"),
             ({"requests": str(load_tests.MAX_REQUESTS + 1)}, "the CLI takes more"),
             ({"clients": "0"}, "the CLI takes more"),
-            ({"payload": "{not json"}, "not JSON"),
+            ({"body": "{not json"}, "not JSON"),
         ],
     )
     def test_a_run_out_of_bounds_is_refused(
-        self, signed_in: TestClient, runner: FakeRunner, fields: dict[str, str], why: str
+        self,
+        signed_in: TestClient,
+        runner: FakeRunner,
+        fields: dict[str, str],
+        why: str,
     ) -> None:
         response = signed_in.post(load_tests.PARTIALS, data=_form(signed_in, **fields))
 
         toast = triggers(response)["toast"]
         assert toast["tone"] == "error" and why in toast["text"]
         assert runner.started == []
-
-    def test_a_path_param_the_route_needs_is_asked_for(
-        self, signed_in: TestClient, runner: FakeRunner
-    ) -> None:
-        routes = describe_routes(signed_in.app.routes)  # type: ignore[attr-defined]
-        route = next(r for r in routes if r.path_params)
-        form = _form(signed_in, target=f"{route.method} {route.path}")
-
-        toast = triggers(signed_in.post(load_tests.PARTIALS, data=form))["toast"]
-
-        assert toast["tone"] == "error" and route.path_params[0] in toast["text"]
 
 
 class TestWatching:
@@ -151,7 +149,9 @@ class TestWatching:
 
         async def jobs() -> list[JobSnapshot]:
             name = f"{load_tests.JOB_PREFIX}GET /health/"
-            return [JobSnapshot("j1", name, "running", "40 of 100 requests", None, None)]
+            return [
+                JobSnapshot("j1", name, "running", "40 of 100 requests", None, None)
+            ]
 
         monkeypatch.setattr(load_tests, "load_jobs", jobs)
         job = one(_get(signed_in, "load-tests"), "#server-load-tests [data-job]")
@@ -167,7 +167,13 @@ class TestWatching:
     ) -> None:
         async def runs(limit: int) -> list[dict[str, Any]]:
             metrics = {"status_codes": {"307": 100}, "only_redirects": True}
-            return [{"test_id": "t1", "configuration": {"path": "/health"}, "metrics": metrics}]
+            return [
+                {
+                    "test_id": "t1",
+                    "configuration": {"path": "/health"},
+                    "metrics": metrics,
+                }
+            ]
 
         monkeypatch.setattr(load_tests, "recent_runs", runs)
         one(_get(signed_in, "load-tests"), "tr[data-detail] [data-redirected]")
@@ -177,7 +183,13 @@ class TestWatching:
     ) -> None:
         async def runs(limit: int) -> list[dict[str, Any]]:
             metrics = {"status_codes": {"200": 99, "307": 1}, "only_redirects": False}
-            return [{"test_id": "t1", "configuration": {"path": "/health/"}, "metrics": metrics}]
+            return [
+                {
+                    "test_id": "t1",
+                    "configuration": {"path": "/health/"},
+                    "metrics": metrics,
+                }
+            ]
 
         monkeypatch.setattr(load_tests, "recent_runs", runs)
         none(_get(signed_in, "load-tests"), "[data-redirected]")

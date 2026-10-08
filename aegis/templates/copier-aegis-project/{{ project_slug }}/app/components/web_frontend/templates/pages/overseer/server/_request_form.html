@@ -1,0 +1,50 @@
+{# A route's request, from its OpenAPI operation, as FastAPI's /docs shows
+   it: ``mode`` "try" sends it once (Execute), "load" starts a load test of
+   it. One form for Routes and Load Tests. #}
+{% from "components/macros/form.html" import field, number_input, select, text_input, textarea, checkbox, primary_button, action %}
+<form data-request-form
+  {% if mode == "load" %}hx-post="{{ load_partials }}" hx-swap="none"
+  {% else %}hx-post="{{ partials }}/execute" hx-target="next [data-answer]" hx-swap="innerHTML"{% endif %}
+  class="space-y-3">
+  <input type="hidden" name="route" value="{{ key }}">
+  {% if op.summary %}<p class="text-sm text-aegis-text">{{ op.summary }}</p>{% endif %}
+  {% if op.description %}<p class="text-xs text-aegis-muted whitespace-pre-line">{{ op.description }}</p>{% endif %}
+  {% if fields %}
+  <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    {% for f in fields %}
+    {% set p = f.param %}
+    <div>
+      {% call field(p.name ~ (" *" if p.required else "") ~ " (" ~ p.location ~ ", " ~ p.kind ~ ")") %}
+        {% if f.options %}{{ select(p.field, f.options, selected=f.value, blank=None if p.required else "", block=True) }}
+        {% elif p.kind in ("integer", "number") %}{{ number_input(p.field, f.value, step=1 if p.kind == "integer" else "any", required=p.required) }}
+        {% else %}{{ text_input(p.field, f.value, required=p.required) }}{% endif %}
+      {% endcall %}
+      {% if p.description %}<p class="text-xxs text-aegis-muted mt-1">{{ p.description }}</p>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% if op.body_example is not none %}
+  {% call field("Body, JSON" ~ (" *" if op.body_required else "")) %}{{ textarea("body", body, rows=8) }}{% endcall %}
+  {% endif %}
+  <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 items-end">
+    {% call field("Sign in as") %}{{ select("role", roles, selected=role, blank=None, block=True) }}{% endcall %}
+    {% if mode == "load" %}
+    {% call field("Requests") %}{{ number_input("requests", requests, min=1, max=max_requests) }}{% endcall %}
+    {% call field("Clients") %}{{ number_input("clients", clients, min=1, max=max_clients) }}{% endcall %}
+    {% endif %}
+  </div>
+  {% if op.writes %}{{ checkbox("confirm", label=op.method ~ " changes data: send it anyway") }}{% endif %}
+  {% if op.responses %}
+  <p class="text-xxs text-aegis-muted">Responses: {% for code, description in op.responses %}<span class="font-mono text-aegis-text">{{ code }}</span> {{ description }}{{ ", " if not loop.last }}{% endfor %}</p>
+  {% endif %}
+  <div class="flex flex-wrap items-center gap-2">
+    {% if mode == "load" %}
+    {{ primary_button("Start", "submit") }}
+    {% else %}
+    {{ primary_button("Execute", "submit") }}
+    {{ action("Load test this", load_test_this) }}
+    {% endif %}
+  </div>
+</form>
+{% if mode != "load" %}<div data-answer class="mt-3"></div>{% endif %}

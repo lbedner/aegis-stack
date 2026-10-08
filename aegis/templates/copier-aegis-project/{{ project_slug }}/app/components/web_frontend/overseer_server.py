@@ -5,17 +5,18 @@ read the backend's health metadata; Performance, Traffic and Load Tests read
 the sources behind their API routes, as of this request.
 """
 
+from collections.abc import Collection
 from typing import Any
 
 from app.components.backend.api.traffic import get_traffic_sources
 from app.components.backend.middleware.performance import metrics_service
 from app.core import runtime
 from app.core.formatting import format_relative_time
-from app.core.log import logger
+from app.services.load_test.api import request_form
 from app.services.system import ui_backend, ui_cache
 from app.services.system.models import ComponentStatus
 
-from . import overseer_connections, overseer_server_load_tests
+from . import overseer_connections, overseer_requests, overseer_server_load_tests
 from .overseer_nav import SectionRequest
 from .rendering import one_decimal, status_cell
 
@@ -45,8 +46,12 @@ def _endpoint_rows(endpoints: dict[str, dict[str, Any]]) -> list[dict[str, Any]]
     return rows
 
 
-def route_rows(routes: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """One table row per route: badges for auth and deprecation."""
+def route_rows(
+    routes: list[dict[str, Any]], documented: Collection[str] = ()
+) -> list[dict[str, Any]]:
+    """One table row per route: badges for auth and deprecation, and the
+    ``"<METHOD> <path>"`` of each method the schema describes (each gets a
+    request form)."""
     return [
         route
         | {
@@ -54,6 +59,11 @@ def route_rows(routes: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "state": status_cell("Deprecated", "warn")
             if route.get("deprecated")
             else None,
+            "requests": [
+                key
+                for method in route.get("methods") or []
+                if (key := f"{method} {route.get('path')}") in documented
+            ],
         }
         for route in routes
     ]
@@ -98,11 +108,16 @@ async def section_context(
     if section == "connections":
         return await overseer_connections.section_context(dict(req.query))
     if section == "routes":
+        documented = request_form.documented(req.routes)
         groups = [
-            (name, route_rows(routes))
+            (name, route_rows(routes, documented))
             for name, routes in ui_backend.route_groups(metadata.get("routes") or [])
         ]
-        return {"route_groups": groups, "groups_open": len(groups) <= 5}
+        return {
+            "route_groups": groups,
+            "groups_open": len(groups) <= 5,
+            "requests_partials": overseer_requests.PARTIALS,
+        }
     if section == "lifecycle":
         steps = ui_backend.lifecycle(metadata)
         badge = status_cell("Security", "warn")
@@ -125,5 +140,7 @@ async def section_context(
             "traffic": _traffic(await get_traffic_sources(window_hours=None, limit=20))
         }
     if section == "load-tests":
-        return await overseer_server_load_tests.section_context(req.routes)
+        return await overseer_server_load_tests.section_context(
+            req.routes, dict(req.query)
+        )
     return {}

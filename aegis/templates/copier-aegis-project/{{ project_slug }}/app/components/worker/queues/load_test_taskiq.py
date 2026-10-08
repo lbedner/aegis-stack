@@ -12,7 +12,6 @@ from app.components.worker.broker import PausableRedisStreamBroker
 from app.components.worker.middleware import EventPublishMiddleware
 from app.core.config import settings
 from app.core.constants import QueueName
-from app.core.queue_workers import concurrency_for
 from app.services.load_test_workloads import (
     run_cpu_intensive,
     run_failure_testing,
@@ -34,8 +33,10 @@ broker = (
         url=redis_url,
         queue_name="taskiq:load_test",
         consumer_id="0",
-        # Claim only what this worker can start: claimed jobs are its alone.
-        xread_count=concurrency_for(QueueName.LOAD_TEST),
+        # One job per read: taskiq reads each time a slot frees, so a
+        # bigger read claims jobs that only wait (claimed jobs are this
+        # worker's alone, and only running ones keep their claim alive).
+        xread_count=1,
     )
     .with_result_backend(
         RedisAsyncResultBackend(redis_url=redis_url, result_ex_time=60)

@@ -1,33 +1,29 @@
 """
 Shared load test workload functions.
 
-Pure computation functions used by both arq and TaskIQ worker backends.
+Workload functions used by every worker backend.
 These functions contain the actual workload logic, allowing task wrappers
 to remain thin and backend-agnostic.
 """
 
 import asyncio
+from datetime import datetime
 import hashlib
 import random
-from datetime import datetime
 from typing import Any, cast
 
+from app.core.concurrency import cpu_bound
 from app.core.log import logger
 
 
 async def run_cpu_intensive(task_id: str = "unknown") -> dict[str, Any]:
-    """
-    CPU-intensive workload for load testing.
+    """CPU-intensive workload for load testing, run off the event loop
+    (``cpu_bound``) so the worker's loop keeps serving while it runs."""
+    return await cpu_bound(_cpu_work, task_id)
 
-    Performs realistic computational work including hash calculations, sorting,
-    and mathematical operations to test worker CPU processing capabilities.
 
-    Args:
-        task_id: Identifier for this task execution
-
-    Returns:
-        Workload completion data with CPU-specific metrics
-    """
+def _cpu_work(task_id: str) -> dict[str, Any]:
+    """Hashing, sorting, maths and matrix work, with what it did and how fast."""
     start_time = datetime.now()
 
     # CPU work 1: Fibonacci calculation (larger numbers for real work)
@@ -123,11 +119,6 @@ async def run_cpu_intensive(task_id: str = "unknown") -> dict[str, Any]:
         ),
         "start_time": start_time.isoformat(),
         "end_time": end_time.isoformat(),
-        "async_event_loop_blocked_ms": round(duration_ms, 2),
-        "event_loop_warning": (
-            "CPU work blocks async event loop - other tasks must wait!"
-        ),
-        "concurrency_impact": "HIGH - Blocks entire event loop during execution",
         "work_type": "CPU_COMPUTATION_WITH_ENCODING",
         "verification": (
             f"fib({n}), sort({data_size}), hash({hash_operations}), "

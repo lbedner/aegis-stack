@@ -15,6 +15,13 @@
   </div>
 </div>
 {% endmacro %}
+{# Up to 40 slots, lit in proportion to the jobs running in them: a queue's,
+   or one process's. #}
+{% macro slot_row(busy, slots) %}
+{% set cells = [slots, 40]|min %}
+{% set lit = ((busy * cells / slots)|round(0, "ceil")|int) if busy and slots else 0 %}
+<div class="worker-slots">{% for i in range(cells) %}<span class="worker-slot" {% if i < lit %}data-busy="true"{% endif %}></span>{% endfor %}</div>
+{% endmacro %}
 <div class="space-y-4">
   {{ stats_strip([
     {"label": "Running", "value": w.busy ~ " / " ~ w.slots, "caption": w.busy_pct ~ "% of capacity"},
@@ -24,8 +31,6 @@
   ], id="worker-figures") }}
   <div id="worker-queues" class="space-y-4">
     {% for q in w.queues %}
-    {% set cells = [q.slots, 40]|min %}
-    {% set lit = ((q.busy_pct * cells / 100)|round(0, "ceil")|int) if q.busy else 0 %}
     {% set finished = q.completed + q.failed %}
     <section data-queue="{{ q.name }}" class="bg-aegis-card border border-aegis-border rounded-lg p-5 flex flex-col gap-5 min-w-0">
       <header class="flex items-start justify-between gap-3">
@@ -44,8 +49,20 @@
         <span class="worker-flow__arrow" aria-hidden="true">&rarr;</span>
         <div class="worker-stage">
           <div class="worker-stage__head"><span>Running</span><strong>{{ q.busy }}</strong></div>
-          <div class="worker-slots">{% for i in range(cells) %}<span class="worker-slot" {% if i < lit %}data-busy="true"{% endif %}></span>{% endfor %}</div>
-          <p class="worker-stage__note">{{ q.busy }} of {{ q.slots }} at once · {{ q.busy_pct }}% of capacity</p>
+          {% if q.processes|length > 1 %}
+          {# A row per process: its slots, lit by the jobs it is running. #}
+          <div class="space-y-2">
+            {% for p in q.processes %}
+            <div data-process="{{ p.worker }}" class="space-y-1">
+              <p class="text-xxs font-mono text-aegis-muted truncate" title="{{ p.worker }}">{{ p.worker }} · {{ p.busy }} of {{ p.slots }}</p>
+              {{ slot_row(p.busy, p.slots) }}
+            </div>
+            {% endfor %}
+          </div>
+          {% else %}
+          {{ slot_row(q.busy, q.slots) }}
+          {% endif %}
+          <p class="worker-stage__note" title="A slot holds a job that has started. I/O work in slots overlaps; CPU-bound work runs one at a time per process, the rest waiting their turn.">{{ q.busy }} of {{ q.slots }} slots taken · {{ q.busy_pct }}% of capacity</p>
         </div>
         <span class="worker-flow__arrow" aria-hidden="true">&rarr;</span>
         <div data-outcome class="worker-stage">

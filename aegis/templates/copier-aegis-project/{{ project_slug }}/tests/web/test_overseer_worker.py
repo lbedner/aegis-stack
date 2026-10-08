@@ -90,6 +90,7 @@ RUNTIME = [
         "concurrency": "100",
         "configured": "50",
         "source": "WORKER_QUEUES[load_test]",
+        "busy": "0",
     },
     {
         "worker": "c3d4:12",
@@ -100,6 +101,7 @@ RUNTIME = [
         "concurrency": "10",
         "configured": "10",
         "source": "WORKER_QUEUE_DEFAULT",
+        "busy": "4",
     },
 ]
 
@@ -182,7 +184,9 @@ class TestOverview:
         slots = select(card, ".worker-slot")
         assert len(slots) == 10
         assert len(select(card, '.worker-slot[data-busy="true"]')) == 4
-        assert "4 of 10 at once" in text(card)
+        assert "4 of 10 slots taken" in text(card)
+        # A slot is a started job, not a running core: said where it shows.
+        assert "one at a time per process" in one(card, ".worker-stage__note[title]").get("title")
 
     def test_waiting_jobs_pile_up_as_blocks(self, signed_in: TestClient) -> None:
         card = one(_get(signed_in), '#worker-queues [data-queue="system"]')
@@ -406,12 +410,33 @@ class TestRuntime:
 
 
 class TestReportedCapacity:
+    def test_each_process_shows_its_own_running_jobs(
+        self, signed_in: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Two processes on a queue are two rows of slots, each lit by the
+        jobs that process is running, whatever the backend."""
+        two = [
+            {"worker": "a1b2:96", "queue": "load_test", "concurrency": "3", "busy": "2"},
+            {"worker": "a1b2:97", "queue": "load_test", "concurrency": "3", "busy": "1"},
+        ]
+
+        async def reports() -> list[dict[str, str]]:
+            return two
+
+        monkeypatch.setattr(ui_worker, "load_runtime", reports)
+        card = one(_get(signed_in), '#worker-queues [data-queue="load_test"]')
+        rows = select(card, "[data-process]")
+
+        assert [r.get("data-process") for r in rows] == ["a1b2:96", "a1b2:97"]
+        assert [len(select(r, ".worker-slot")) for r in rows] == [3, 3]
+        assert [len(select(r, '.worker-slot[data-busy="true"]')) for r in rows] == [2, 1]
+
     def test_the_overview_counts_what_the_workers_really_hold(
         self, signed_in: TestClient
     ) -> None:
         """Reported limits beat the configured one: 100 held is 100."""
         card = one(_get(signed_in), '#worker-queues [data-queue="load_test"]')
-        assert "of 100 at once" in text(card)
+        assert "of 100 slots taken" in text(card)
 
 
 class TestLifecycle:

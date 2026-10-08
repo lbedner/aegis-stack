@@ -84,3 +84,51 @@ def test_completed_trace_does_not_steal_a_plain_log_message() -> None:
     (record,) = assembly.feed("one", line("Started: worker"), now=0)
     assert record.trace is not None and record.trace.endswith("ValueError: bad")
     assert assembly.flush()[0].line.text == "Started: worker"
+
+
+def test_a_line_that_carries_a_traceback_is_an_error() -> None:
+    """A traceback folds into the line before it; that line, levelled or not
+    ("Running in Docker container..." before a crash), is shown as an error."""
+    assembly = LogAssembler()
+    for text in [
+        "Running in Docker container...",
+        "Traceback (most recent call last):",
+        '  File "/code/app/run.py", line 3, in <module>',
+        "ImportError: cannot import name 'x'",
+    ]:
+        assembly.feed("one", line(text), now=0)
+    (record,) = assembly.flush()
+
+    assert record.trace is not None and record.trace.endswith("cannot import name 'x'")
+    assert record.line.level == "error"
+
+
+def test_a_traceback_on_its_own_is_an_error() -> None:
+    assembly = LogAssembler()
+    assembly.feed("one", line("Traceback (most recent call last):"), now=0)
+    assembly.feed("one", line("ValueError: bad"), now=0)
+    (record,) = assembly.flush()
+
+    assert record.line.level == "error"
+
+
+def test_an_error_lines_trace_stays_with_it_and_keeps_its_level() -> None:
+    assembly = LogAssembler()
+    assembly.feed("one", line("CRITICAL: payment failed"), now=0)
+    assembly.feed("one", line("Traceback (most recent call last):"), now=0)
+    assembly.feed("one", line("ValueError: bad"), now=0)
+    (record,) = assembly.flush()
+
+    assert record.line.level == "critical" and record.trace is not None
+
+
+def test_indented_lines_folded_in_are_not_a_traceback() -> None:
+    """A warning's source line or a pretty-printed dict folds into its line
+    for Logs; that is not an exception, so the line keeps its level."""
+    assembly = LogAssembler()
+    assembly.feed("one", line("/code/app/x.py:12: DeprecationWarning: old"), now=0)
+    assembly.feed("one", line("  warnings.warn('old')"), now=0)
+    (record,) = assembly.flush()
+
+    assert record.trace is not None and not record.recognized
+    assert record.line.level is None

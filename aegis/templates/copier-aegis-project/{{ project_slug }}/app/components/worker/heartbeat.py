@@ -23,6 +23,12 @@ threads). The helpers reference-count in-flight jobs so the key and its
 refresh loop are torn down only when the *last* job on the process
 finishes — otherwise the first job to complete would delete the key
 while siblings are still running and let the drain check proceed early.
+
+The key's value is that count, so Overseer can show each process's
+running jobs (``with_busy``) on every backend: arq and taskiq call the
+async helpers, dramatiq the sync ones. A job starting writes it; a job
+ending does not (the next start, or the refresh, does), which keeps job
+ends free of a Redis call.
 """
 
 from __future__ import annotations
@@ -41,6 +47,11 @@ from app.services.system.redis_keys import KeyFamily
 BUSY_KEY_PREFIX = "worker:"
 BUSY_KEY_SUFFIX = ":busy"
 DEFAULT_TTL_SECONDS = 30
+# Set by ``aegis deploy --rolling`` while it drains: every backend stops
+# taking jobs while it exists (taskiq's and dramatiq's brokers, arq's
+# ``arq_hooks.follow_pause``), so the busy keys can clear.
+PAUSE_KEY = "aegis:queue:paused"
+PAUSE_POLL_SECONDS = 1.0
 
 REDIS_KEYS = (
     KeyFamily(
@@ -50,6 +61,14 @@ REDIS_KEYS = (
         "One per worker mid-job, refreshed while it runs; deploys drain on these",
         "Worker heartbeat",
         columns=("Worker", "Since"),
+    ),
+    KeyFamily(
+        PAUSE_KEY,
+        "string",
+        "Queue pause",
+        "Set during a rolling deploy so workers stop taking new jobs",
+        "Worker heartbeat",
+        columns=("Key", "Value"),
     ),
 )
 
@@ -86,7 +105,7 @@ async def _refresh_loop(
     while True:
         await asyncio.sleep(interval)
         try:
-            await redis.set(key, "1", ex=ttl_seconds)
+            await redis.set(key, str(_busy_count), ex=ttl_seconds)
         except Exception as exc:
             logger.debug("heartbeat refresh failed: %s", exc)
 
@@ -107,7 +126,7 @@ async def mark_busy(
     global _refresh_task, _busy_count
     _busy_count += 1
     try:
-        await redis.set(busy_key(), "1", ex=ttl_seconds)
+        await redis.set(busy_key(), str(_busy_count), ex=ttl_seconds)
     except Exception as exc:
         logger.debug("heartbeat mark_busy failed: %s", exc)
         _busy_count -= 1
@@ -156,7 +175,7 @@ def _refresh_loop_sync(
     key = busy_key()
     while not stop.wait(interval):
         try:
-            redis.set(key, "1", ex=ttl_seconds)
+            redis.set(key, str(_busy_count_sync), ex=ttl_seconds)
         except Exception as exc:
             logger.debug("heartbeat refresh failed: %s", exc)
 
@@ -174,7 +193,7 @@ def mark_busy_sync(
     with _busy_lock:
         _busy_count_sync += 1
         try:
-            redis.set(busy_key(), "1", ex=ttl_seconds)
+            redis.set(busy_key(), str(_busy_count_sync), ex=ttl_seconds)
         except Exception as exc:
             logger.debug("heartbeat mark_busy_sync failed: %s", exc)
             _busy_count_sync -= 1
@@ -216,3 +235,18 @@ def mark_idle_sync(redis: sync_redis.Redis) -> None:
         redis.delete(busy_key())
     except Exception as exc:
         logger.debug("heartbeat mark_idle_sync failed: %s", exc)
+
+
+async def with_busy(
+    redis: aioredis.Redis, reports: list[dict[str, str]]
+) -> list[dict[str, str]]:
+    """Each worker's runtime report with ``busy``: how many jobs its process
+    is running now, read in one round trip (no key: none)."""
+    pipe = redis.pipeline(transaction=False)
+    for report in reports:
+        pipe.get(busy_key(report.get("worker", "")))
+    counts = await pipe.execute()
+    return [
+        report | {"busy": str(int(count or 0))}
+        for report, count in zip(reports, counts, strict=True)
+    ]

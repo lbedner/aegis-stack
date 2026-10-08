@@ -1,8 +1,9 @@
-"""An in-memory Redis for the job store (``RedisJobStore``) and the worker
-load-test runs."""
+"""An in-memory Redis for the tests that need one: the job store, the worker
+load-test runs, the worker runtime reports and busy counts."""
 
 from __future__ import annotations
 
+from fnmatch import fnmatchcase
 from typing import Any
 
 
@@ -13,10 +14,17 @@ class FakeRedis:
         self.hashes: dict[str, dict[str, str]] = {}
         self.lists: dict[str, list[str]] = {}
         self.zsets: dict[str, dict[str, float]] = {}
+        self.strings: dict[str, str] = {}
         self.ttl: dict[str, int] = {}
 
-    async def hset(self, key: str, mapping: dict[str, str]) -> None:
-        self.hashes.setdefault(key, {}).update(mapping)
+    async def set(self, key: str, value: str, **_options: Any) -> None:
+        self.strings[key] = value
+
+    async def get(self, key: str) -> str | None:
+        return self.strings.get(key)
+
+    async def hset(self, key: str, mapping: dict[str, Any]) -> None:
+        self.hashes.setdefault(key, {}).update({k: str(v) for k, v in mapping.items()})
 
     async def hgetall(self, key: str) -> dict[str, str]:
         return dict(self.hashes.get(key, {}))
@@ -39,6 +47,7 @@ class FakeRedis:
         for key in keys:
             self.hashes.pop(key, None)
             self.lists.pop(key, None)
+            self.strings.pop(key, None)
 
     async def expire(self, key: str, seconds: int) -> None:
         self.ttl[key] = seconds
@@ -49,22 +58,24 @@ class FakeRedis:
     async def aclose(self) -> None:
         return None
 
-    async def scan_iter(self, match: str):
-        prefix = match.rstrip("*")
-        for key in list(self.hashes):
-            if key.startswith(prefix):
+    async def scan_iter(self, match: str, count: int = 100):
+        for key in [*self.hashes, *self.strings]:
+            if fnmatchcase(key, match):
                 yield key
 
 
 class _Pipeline:
-    """Queued ``hgetall`` calls, answered in order on ``execute``."""
+    """Queued ``hgetall`` and ``get`` calls, answered in order on ``execute``."""
 
     def __init__(self, redis: FakeRedis) -> None:
         self._redis = redis
-        self._keys: list[str] = []
+        self._calls: list[tuple[str, str]] = []
 
     def hgetall(self, key: str) -> None:
-        self._keys.append(key)
+        self._calls.append(("hgetall", key))
+
+    def get(self, key: str) -> None:
+        self._calls.append(("get", key))
 
     async def execute(self) -> list[Any]:
-        return [await self._redis.hgetall(k) for k in self._keys]
+        return [await getattr(self._redis, op)(key) for op, key in self._calls]

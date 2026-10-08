@@ -115,7 +115,13 @@ class EventPublishMiddleware(dramatiq.Middleware):
         for each queue this worker consumes, sets initial heartbeat keys,
         and starts a background thread that refreshes heartbeats every 10s.
         Called once when the Dramatiq worker process starts.
+
+        Also sets the prefetch to the thread count, not dramatiq's default
+        of twice that: a prefetched message is this worker's alone while it
+        waits. Consumers are built after this hook, so every launcher
+        (entrypoint, a bare ``dramatiq`` command) gets it.
         """
+        worker.queue_prefetch = worker.worker_threads
         try:
             self._redis = redis.from_url(settings.redis_url_effective)
             self._queue_names = (

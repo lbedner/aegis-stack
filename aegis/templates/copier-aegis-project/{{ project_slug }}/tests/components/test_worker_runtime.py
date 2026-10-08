@@ -12,6 +12,7 @@ import pytest
 
 from app.components.worker import runtime
 from app.core.queue_workers import QueueWorker
+from tests._fake_redis import FakeRedis
 
 
 class TestLaunchSettings:
@@ -81,28 +82,20 @@ class TestDiscoveryCheck:
     def test_the_shipped_queues_pass(self) -> None:
         runtime.check_queues()
 
+    def test_the_entrypoint_can_ask_a_queues_concurrency(self) -> None:
+        """``scripts/entrypoint.sh`` runs this module first, before anything
+        else is imported, so its imports must not loop back into it."""
+        import subprocess
+        import sys
 
-class FakeRedis:
-    def __init__(self) -> None:
-        self.hashes: dict[str, dict[str, str]] = {}
-        self.ttls: dict[str, int] = {}
-
-    async def hset(self, key: str, mapping: dict[str, Any]) -> None:
-        self.hashes[key] = {k: str(v) for k, v in mapping.items()}
-
-    async def expire(self, key: str, seconds: int) -> None:
-        self.ttls[key] = seconds
-
-    async def scan_iter(self, match: str, count: int = 100) -> Any:
-        from fnmatch import fnmatchcase
-
-        for key in list(self.hashes):
-            if fnmatchcase(key, match):
-                yield key.encode()
-
-    async def hgetall(self, key: bytes | str) -> dict[bytes, bytes]:
-        name = key.decode() if isinstance(key, bytes) else key
-        return {k.encode(): v.encode() for k, v in self.hashes[name].items()}
+        done = subprocess.run(
+            [sys.executable, "-m", "app.components.worker.runtime", "concurrency", "system"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert done.returncode == 0, done.stderr
+        assert done.stdout.strip().isdigit()
 
 
 def _report(**overrides: Any) -> dict[str, Any]:
@@ -136,7 +129,7 @@ class TestReports:
         redis = FakeRedis()
         await runtime.publish_runtime(redis, _report())
         key = runtime.runtime_key("host:42")
-        assert redis.ttls[key] == runtime.RUNTIME_TTL_SECONDS
+        assert redis.ttl[key] == runtime.RUNTIME_TTL_SECONDS
         (back,) = await runtime.read_runtime(redis)
         assert back["worker"] == "host:42" and back["concurrency"] == "50"
 

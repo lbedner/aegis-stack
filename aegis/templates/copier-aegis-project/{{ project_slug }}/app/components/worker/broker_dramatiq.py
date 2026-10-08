@@ -19,6 +19,7 @@ import logging
 import time
 
 import dramatiq
+from app.components.worker.heartbeat import PAUSE_KEY, PAUSE_POLL_SECONDS
 from app.components.worker.middleware import EventPublishMiddleware
 from app.core.config import settings
 from app.services.system.redis_keys import KeyFamily
@@ -45,8 +46,6 @@ REDIS_KEYS = (
 )
 
 
-PAUSE_KEY = "aegis:queue:paused"
-PAUSE_POLL_SECONDS = 1.0
 
 _logger = logging.getLogger(__name__)
 

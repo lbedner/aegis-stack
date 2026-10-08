@@ -1284,10 +1284,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#reading-results-in-overseer" class="md-nav__link">
+  <a href="#overseer" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Reading results in Overseer
+        Overseer
       
     </span>
   </a>
@@ -5780,10 +5780,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#reading-results-in-overseer" class="md-nav__link">
+  <a href="#overseer" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Reading results in Overseer
+        Overseer
       
     </span>
   </a>
@@ -5974,7 +5974,7 @@ Persists results in Redis when present; degrades cleanly without it.</p>
 <tr>
 <td>Auth-gated</td>
 <td><code>GET /api/v1/users/me</code></td>
-<td>works with <code>--header "Authorization=..."</code></td>
+<td>works: signed in automatically (<code>--as-admin</code>, <code>--as-user</code>, <code>--anon</code>)</td>
 </tr>
 <tr>
 <td>SSE / streaming</td>
@@ -5988,18 +5988,25 @@ Persists results in Redis when present; degrades cleanly without it.</p>
 </tr>
 </tbody>
 </table>
-<p>A first-class <code>--auth-as &lt;username&gt;</code> flag (CLI handles the login round-trip)
-is on the roadmap.</p>
-<h2 id="reading-results-in-overseer">Reading results in Overseer</h2>
-<p>Click the <strong>Backend</strong> card on the dashboard → <strong>Load Tests</strong> tab. Each run
-is a row in an expandable table:</p>
+<h2 id="overseer">Overseer</h2>
+<p>Server &gt; <strong>Load Tests</strong> starts a run and lists every run, the CLI's included.</p>
 <ul>
-<li>Top row: method, path, req/s, p95 ms, error %, "5 minutes ago"</li>
-<li>Expand a row for full latency percentiles, status code distribution,
-  sampled errors, total duration, client count, test ID</li>
+<li><strong>New run</strong>: pick one of the app's routes (Overseer's own pages are not
+  offered), the requests and clients, who to sign in as (admin, user or
+  anonymous, admin first when <code>ADMIN_USER_EMAILS</code> names one), path params
+  as <code>name=value</code> pairs, and a JSON payload. It runs in the server itself,
+  in-process like <code>--in-process</code>, through the same service and store as the
+  CLI. A run from here is capped at 5,000 requests and 50 clients; the CLI
+  takes more.</li>
+<li><strong>Running</strong>: a run started here shows its progress (requests done of the
+  total) until it lands in the list.</li>
+<li><strong>Recent runs</strong>: method, path, req/s, p95 ms, error %, when. Expand a row
+  for the latency percentiles, status codes, sampled errors, duration,
+  clients and test ID. A run whose every response was a redirect says so:
+  <code>/health</code> answers <code>307</code> to <code>/health/</code>, so it measured the redirect, not
+  the health check.</li>
 </ul>
-<p>Same data the CLI's <code>recent</code> command shows, with the addition of
-per-request error samples.</p>
+<p>The list streams while the page is open.</p>
 <h2 id="in-process-vs-out-of-process">In-process vs out-of-process</h2>
 <table>
 <thead>
@@ -6076,8 +6083,6 @@ behaviour:</p>
 <code>key_prefix</code> differs.</p>
 <h2 id="limitations">Limitations</h2>
 <ul>
-<li>No automatic <code>--auth-as</code> round-trip yet. Use <code>--header "Authorization=..."</code>
-  with a token obtained out of band</li>
 <li>No streaming-aware mode for SSE / chunked endpoints. Runs work, but
   each request is awaited to completion (inflates latency / risks timeouts)</li>
 <li>No run-to-run regression comparison built in. Persist results yourself

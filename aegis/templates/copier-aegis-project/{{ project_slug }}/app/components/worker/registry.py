@@ -10,7 +10,7 @@ from typing import Any
 
 from app.components.worker import queue_discovery as discovery
 from app.core.log import logger
-from app.services.system.redis_keys import KeyFamily
+from app.core.key_family import KeyFamily
 
 
 # What arq keeps in Redis, for the keyspace map (``redis_keys``).

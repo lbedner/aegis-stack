@@ -23,7 +23,7 @@ from taskiq_redis.redis_broker import logger as _broker_logger
 
 from app.components.worker.heartbeat import PAUSE_KEY, PAUSE_POLL_SECONDS
 from app.core.config import settings
-from app.services.system.redis_keys import KeyFamily
+from app.core.key_family import KeyFamily
 
 
 REDIS_KEYS = (

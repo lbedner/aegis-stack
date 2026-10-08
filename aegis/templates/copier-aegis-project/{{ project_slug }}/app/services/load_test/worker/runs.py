@@ -21,7 +21,8 @@ from app.components.worker.constants import LoadTestTypes, TaskNames
 from app.components.worker.task_history import get_task_records
 from app.core.config import settings
 from app.services.load_test.worker.models import LoadTestConfiguration
-from app.services.system.redis_keys import KeyFamily, decoded
+from app.core.key_family import KeyFamily
+from app.services.system.redis_keys import decoded
 
 PREFIX = "load_test:worker"
 RECENT_KEY = f"{PREFIX}:recent"

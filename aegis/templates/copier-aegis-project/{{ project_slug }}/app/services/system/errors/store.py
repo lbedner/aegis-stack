@@ -18,7 +18,8 @@ from app.services.system.errors.models import (
     ErrorOccurrence,
     ErrorSearch,
 )
-from app.services.system.redis_keys import KeyFamily, decoded
+from app.core.key_family import KeyFamily
+from app.services.system.redis_keys import decoded
 
 InsertResult = Literal["inserted", "replay", "expired", "fenced"]
 PREFIX = "aegis:errors:"

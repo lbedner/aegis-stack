@@ -37,7 +37,7 @@ from starlette.types import ASGIApp
 from app.components.backend.security.rate_limit import get_client_ip
 from app.core.config import settings
 from app.core.log import logger
-from app.services.system.redis_keys import KeyFamily
+from app.core.key_family import KeyFamily
 
 _BUCKET_SECONDS = 3600
 # Keep ~24h of hourly buckets; older ones are pruned (memory) or TTL'd (Redis).

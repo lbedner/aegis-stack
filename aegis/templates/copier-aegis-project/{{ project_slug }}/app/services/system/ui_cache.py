@@ -10,7 +10,7 @@ from typing import Any
 
 from app.core.cache import CacheEntry, CacheStats, cache, family
 from app.core.formatting import format_bytes, format_span
-from app.services.system.redis_keys import KeyFamily
+from app.core.key_family import KeyFamily
 
 LARGEST = 20
 

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncGenerator
+from typing import Any
 
 import redis.asyncio as aioredis
 from taskiq import AckableMessage
@@ -71,6 +72,59 @@ class PausableRedisStreamBroker(RedisStreamBroker):
     (the deploy script's drain wait handles those via the heartbeat).
     """
 
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        # Each delivered job's stream entry, by task id, and the refresh
+        # holding the claim of each one running (``keep_claim``).
+        # ponytail: an entry the receiver drops unrun (an unknown task) is
+        # never released; rare, and bounded by the redelivery cap.
+        self._claims: dict[str, tuple[Any, Any]] = {}
+        self._keeping: dict[str, asyncio.Task[None]] = {}
+
+    def keep_claim(self, task_id: str) -> None:
+        """Hold a running job's claim. ``xautoclaim`` (``listen``) hands a
+        job unacked past ``idle_timeout`` to another worker, for a worker
+        that died; refreshing the claim every third of that (``XCLAIM ...
+        JUSTID``, no delivery counted) keeps a job that is still running
+        from being run twice."""
+        if task_id in self._claims and task_id not in self._keeping:
+            self._keeping[task_id] = asyncio.create_task(
+                self._keep(*self._claims[task_id])
+            )
+
+    def release_claim(self, task_id: str) -> None:
+        """The job finished: stop holding its claim."""
+        self._claims.pop(task_id, None)
+        if (keeping := self._keeping.pop(task_id, None)) is not None:
+            keeping.cancel()
+
+    async def _keep(self, stream: Any, msg_id: Any) -> None:
+        async with aioredis.Redis(connection_pool=self.connection_pool) as conn:
+            while True:
+                await asyncio.sleep(self.idle_timeout / 3000)
+                try:
+                    await conn.xclaim(
+                        stream,
+                        self.consumer_group_name,
+                        self.consumer_name,
+                        min_idle_time=0,
+                        message_ids=[msg_id],
+                        justid=True,
+                    )
+                except aioredis.RedisError as exc:
+                    _broker_logger.warning(
+                        "Could not refresh the claim on %s: %s", msg_id, exc
+                    )
+
+    def _delivered(self, stream: Any, msg_id: Any, data: bytes) -> AckableMessage:
+        """A message for the receiver, its stream entry remembered by task
+        id so the job can hold its claim while it runs."""
+        try:
+            self._claims[self.formatter.loads(message=data).task_id] = (stream, msg_id)
+        except Exception as exc:  # the receiver skips it too
+            _broker_logger.debug("No task id in %s: %s", msg_id, exc)
+        return AckableMessage(data=data, ack=self._ack_generator(msg_id))
+
     async def _is_paused(self, conn: aioredis.Redis) -> bool:
         try:
             return bool(await conn.get(PAUSE_KEY))
@@ -106,12 +160,9 @@ class PausableRedisStreamBroker(RedisStreamBroker):
                     noack=False,
                     count=self.count,
                 )
-                for _, msg_list in fetched:
+                for stream, msg_list in fetched:
                     for msg_id, msg in msg_list:
-                        yield AckableMessage(
-                            data=msg[b"data"],
-                            ack=self._ack_generator(msg_id),
-                        )
+                        yield self._delivered(stream, msg_id, msg[b"data"])
 
                 if await self._is_paused(redis_conn):
                     continue
@@ -133,10 +184,7 @@ class PausableRedisStreamBroker(RedisStreamBroker):
                         for msg_id, msg in pending[1]:
                             if await self._is_poison(redis_conn, stream, msg_id):
                                 continue
-                            yield AckableMessage(
-                                data=msg[b"data"],
-                                ack=self._ack_generator(msg_id),
-                            )
+                            yield self._delivered(stream, msg_id, msg[b"data"])
 
     async def _is_poison(
         self,

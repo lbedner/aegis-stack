@@ -64,8 +64,9 @@ async def _enqueue(
 ) -> None:
 {%- if worker_backend == "arq" %}
     from app.components.worker.pools import get_queue_pool
+    from app.core.constants import QueueName
 
-    pool, queue_name = await get_queue_pool("system")
+    pool, queue_name = await get_queue_pool(QueueName.SYSTEM)
     await pool.enqueue_job(
         "extract_document_task",
         job_id,

@@ -1,9 +1,11 @@
 {#- aegis: no-backup -#}
 """Worker health for taskiq."""
 {% if include_worker and worker_backend == "taskiq" %}
+from collections import Counter
 import time
 from typing import Any, cast
 
+from app.components.worker.runtime import read_runtime
 from app.core.config import settings
 from app.core.constants import ComponentName
 from app.core.log import logger
@@ -12,7 +14,7 @@ from app.services.system.health import propagate_status
 from app.services.system.health_worker_rules import (
     broken_queue_status,
     last_delivered,
-    live_consumers,
+    live_workers,
     queue_status,
     stream_age,
     taskiq_group_stats,
@@ -58,6 +60,7 @@ async def check_worker_health() -> ComponentStatus:
         total_processed = 0
         total_ongoing = 0
         active_workers = 0
+        reports = Counter(r.get("queue") for r in await read_runtime(redis_client))
 
         for queue_type, queue_config in functional_queues.items():
             stream_name = queue_config.get("stream_name", f"taskiq:{queue_type}")
@@ -83,12 +86,14 @@ async def check_worker_health() -> ComponentStatus:
                 consumer_count, pending_count, entries_read, lag = taskiq_group_stats(
                     groups_info, stream_length
                 )
-                if consumer_count:
-                    # The group's count includes consumers from processes
-                    # that have since restarted away; only live ones hold slots.
-                    consumer_count = live_consumers(
-                        await redis_client.xinfo_consumers(stream_name, "taskiq")
-                    )
+                # The group's count includes consumers from processes that have
+                # since restarted away; only live ones hold slots.
+                consumers = (
+                    await redis_client.xinfo_consumers(stream_name, "taskiq")
+                    if consumer_count
+                    else []
+                )
+                consumer_count = live_workers(consumers, reports[queue_type])
                 queued_jobs = lag
                 # How long the oldest waiting job has waited: a small count
                 # can hide one stuck for an hour. It is the first entry past

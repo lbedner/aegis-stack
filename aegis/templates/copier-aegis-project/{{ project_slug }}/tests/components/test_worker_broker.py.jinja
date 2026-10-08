@@ -26,6 +26,8 @@ def _make_broker() -> PausableRedisStreamBroker:
     b.count = 1
     b.idle_timeout = 1000
     b.unacknowledged_batch_size = 1
+    b._claims = {}
+    b._keeping = {}
     return b
 
 
@@ -171,4 +173,76 @@ def test_a_new_consumer_group_starts_at_the_beginning_of_the_stream() -> None:
     from app.components.worker.queues.system import broker as system_broker
 
     assert system_broker.consumer_id == "0"
+
+
+# ---------------------------------------------------------------------------
+# A running job keeps its claim; a queue claims only what it runs
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_running_job_keeps_its_claim_until_it_finishes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``xautoclaim`` hands a job unacked past ``idle_timeout`` to another
+    worker, for a worker that died. A job still running refreshes its
+    claim (``XCLAIM ... JUSTID``: no delivery counted) so it is never run
+    twice; once it finishes, the refreshing stops."""
+    conn = AsyncMock()
+    monkeypatch.setattr(
+        broker_module.aioredis, "Redis", lambda **_: _RedisCtx(conn), raising=True
+    )
+    b = _make_broker()
+    b.idle_timeout = 150  # ms: refreshed every 50 ms
+    b._claims["task-1"] = ("q", b"1-0")
+
+    b.keep_claim("task-1")
+    await asyncio.sleep(0.2)
+    conn.xclaim.assert_awaited_with(
+        "q", "g", "c", min_idle_time=0, message_ids=[b"1-0"], justid=True
+    )
+    b.release_claim("task-1")
+    refreshed = conn.xclaim.await_count
+    await asyncio.sleep(0.2)
+    assert conn.xclaim.await_count == refreshed
+    assert "task-1" not in b._claims
+
+
+@pytest.mark.asyncio
+async def test_listen_remembers_each_messages_claim(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The job's task id leads back to its stream entry, for the claim."""
+    from taskiq import TaskiqMessage
+    from taskiq.formatters.json_formatter import JSONFormatter
+
+    message = TaskiqMessage(
+        task_id="task-7", task_name="t", labels={}, args=[], kwargs={}
+    )
+    data = JSONFormatter().dumps(message).message
+    conn = AsyncMock()
+    conn.get.return_value = None
+    conn.xreadgroup.return_value = [(b"q", [(b"7-0", {b"data": data})])]
+    monkeypatch.setattr(
+        broker_module.aioredis, "Redis", lambda **_: _RedisCtx(conn), raising=True
+    )
+    b = _make_broker()
+    b.formatter = JSONFormatter()
+    with patch.object(b, "_ack_generator", return_value=AsyncMock()):
+        agen = b.listen()
+        await asyncio.wait_for(agen.__anext__(), timeout=1.0)
+        await agen.aclose()
+    assert b._claims["task-7"] == (b"q", b"7-0")
+
+
+@pytest.mark.parametrize("queue", ["system", "load_test"])
+def test_a_queue_claims_only_what_it_runs_at_once(queue: str) -> None:
+    """Claimed jobs belong to one worker: claiming more than it can start
+    starves its neighbours and strands the rest if it dies."""
+    from importlib import import_module
+
+    from app.core.queue_workers import concurrency_for
+
+    broker = import_module(f"app.components.worker.queues.{queue}").broker
+    assert broker.count == concurrency_for(queue)
 {%- endif %}

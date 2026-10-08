@@ -14,6 +14,7 @@ import dramatiq
 import redis.asyncio as aioredis
 from app.components.worker.events import publish_event
 from app.core.config import settings
+from app.core.constants import QueueName
 from app.core.log import logger
 from app.services.load_test_workloads import (
     run_cpu_intensive,
@@ -26,7 +27,7 @@ from app.services.load_test_workloads import (
 redis_url = settings.redis_url_effective
 
 
-@dramatiq.actor(queue_name="load_test", store_results=True)
+@dramatiq.actor(queue_name=QueueName.LOAD_TEST, store_results=True)
 async def cpu_intensive_task() -> dict[str, Any]:
     """Stress-test CPU with synthetic computation.
 
@@ -36,7 +37,7 @@ async def cpu_intensive_task() -> dict[str, Any]:
     return await run_cpu_intensive()
 
 
-@dramatiq.actor(queue_name="load_test", store_results=True)
+@dramatiq.actor(queue_name=QueueName.LOAD_TEST, store_results=True)
 async def io_simulation_task() -> dict[str, Any]:
     """Simulate I/O-bound workloads with async sleep.
 
@@ -46,7 +47,7 @@ async def io_simulation_task() -> dict[str, Any]:
     return await run_io_simulation()
 
 
-@dramatiq.actor(queue_name="load_test", store_results=True)
+@dramatiq.actor(queue_name=QueueName.LOAD_TEST, store_results=True)
 async def memory_operations_task() -> dict[str, Any]:
     """Exercise memory allocation and garbage collection.
 
@@ -56,7 +57,7 @@ async def memory_operations_task() -> dict[str, Any]:
     return await run_memory_operations()
 
 
-@dramatiq.actor(queue_name="load_test", store_results=True)
+@dramatiq.actor(queue_name=QueueName.LOAD_TEST, store_results=True)
 async def failure_testing_task() -> dict[str, Any]:
     """Randomly raise exceptions for error-handling validation.
 
@@ -81,7 +82,7 @@ def _get_task_by_type(task_type: str) -> Any:
     return task_map.get(task_type, io_simulation_task)
 
 
-@dramatiq.actor(queue_name="load_test", store_results=True)
+@dramatiq.actor(queue_name=QueueName.LOAD_TEST, store_results=True)
 async def load_test_orchestrator(
     num_tasks: int = 100,
     task_type: str = "io",
@@ -134,7 +135,7 @@ async def load_test_orchestrator(
                 await publish_event(
                     events_redis,
                     "job.enqueued",
-                    "load_test",
+                    QueueName.LOAD_TEST,
                     {"job_id": msg.message_id, "task": task_type},
                 )
 

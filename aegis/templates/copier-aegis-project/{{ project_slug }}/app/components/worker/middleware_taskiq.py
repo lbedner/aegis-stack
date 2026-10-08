@@ -91,7 +91,10 @@ class EventPublishMiddleware(TaskiqMiddleware):
         Publishes a job.started event to the Redis Stream and records
         the task as started in the task history. Fires after the message
         is acknowledged from the stream but before the task function runs.
+        The job holds its claim while it runs (``keep_claim``).
         """
+        if hasattr(broker := getattr(self, "broker", None), "keep_claim"):
+            broker.keep_claim(message.task_id)
         if self._redis:
             await mark_busy(self._redis)
             await publish_event(
@@ -121,6 +124,8 @@ class EventPublishMiddleware(TaskiqMiddleware):
         task function returns (or raises), with the result available for
         inspection.
         """
+        if hasattr(broker := getattr(self, "broker", None), "release_claim"):
+            broker.release_claim(message.task_id)
         if self._redis:
             event_type = "job.failed" if result.is_err else "job.completed"
             await publish_event(

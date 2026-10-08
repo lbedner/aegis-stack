@@ -10,10 +10,11 @@ from datetime import UTC, datetime
 import app.components.worker.broker  # noqa: F401
 import dramatiq
 from app.components.worker.tasks.service_jobs import service_job_tasks
+from app.core.constants import QueueName
 from app.core.log import logger
 
 
-@dramatiq.actor(queue_name="system", store_results=True)
+@dramatiq.actor(queue_name=QueueName.SYSTEM, store_results=True)
 async def system_health_check() -> dict[str, str]:
     """Verify worker connectivity and responsiveness.
 
@@ -30,7 +31,7 @@ async def system_health_check() -> dict[str, str]:
     }
 
 
-@dramatiq.actor(queue_name="system", store_results=True)
+@dramatiq.actor(queue_name=QueueName.SYSTEM, store_results=True)
 async def cleanup_temp_files() -> dict[str, str]:
     """Remove stale temporary files from the working directory.
 
@@ -46,7 +47,7 @@ async def cleanup_temp_files() -> dict[str, str]:
     }
 
 
-@dramatiq.actor(queue_name="system", store_results=True, time_limit=30 * 60 * 1000)
+@dramatiq.actor(queue_name=QueueName.SYSTEM, store_results=True, time_limit=30 * 60 * 1000)
 async def extract_document_task(
     job_id: str, document_id: int, owner_user_id: int | None, force: bool
 ) -> dict:

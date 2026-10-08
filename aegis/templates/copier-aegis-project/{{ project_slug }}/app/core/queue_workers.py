@@ -5,13 +5,16 @@ queue not listed uses ``Settings.WORKER_QUEUE_DEFAULT``. Every worker
 engine reads its concurrency from here (taskiq's max async tasks,
 dramatiq's threads, arq's ``max_jobs``), so the number has one home.
 
-Queue names are strings, not an enum: queues are discovered from
+Queue names are strings: queues are discovered from
 ``app/components/worker/queues/`` and services add their own, so the set is
-open. A name that matches no queue is caught when a worker starts
+open. The ones the stack ships are named in ``QueueName``. A name that
+matches no queue is caught when a worker starts
 (``app.components.worker.runtime.check_queues``).
 """
 
 from pydantic import BaseModel, ConfigDict, PositiveInt
+
+from app.core.constants import QueueName
 
 
 class QueueWorker(BaseModel):
@@ -27,8 +30,8 @@ class QueueWorker(BaseModel):
 # The queues the stack ships with; override any of them, or add others,
 # with ``WORKER_QUEUES='{"load_test": {"concurrency": 100}}'``.
 DEFAULT_QUEUES: dict[str, QueueWorker] = {
-    "load_test": QueueWorker(concurrency=50),
-    "system": QueueWorker(concurrency=15),
+    QueueName.LOAD_TEST: QueueWorker(concurrency=50),
+    QueueName.SYSTEM: QueueWorker(concurrency=15),
 }
 
 

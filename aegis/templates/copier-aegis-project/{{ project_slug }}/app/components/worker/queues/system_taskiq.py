@@ -12,7 +12,9 @@ from app.components.worker.broker import PausableRedisStreamBroker
 from app.components.worker.middleware import EventPublishMiddleware
 from app.components.worker.tasks.service_jobs import service_job_tasks
 from app.core.config import settings
+from app.core.constants import QueueName
 from app.core.log import logger
+from app.core.queue_workers import concurrency_for
 
 # Use redis_url_effective for Docker vs local auto-detection
 redis_url = settings.redis_url_effective
@@ -25,12 +27,16 @@ broker = (
     # skipped forever - the job sits queued and no worker ever sees it.
     # Starting at "0" hands a new group the backlog it was created to work.
     PausableRedisStreamBroker(
-        url=redis_url, queue_name="taskiq:system", consumer_id="0"
+        url=redis_url,
+        queue_name="taskiq:system",
+        consumer_id="0",
+        # Claim only what this worker can start: claimed jobs are its alone.
+        xread_count=concurrency_for(QueueName.SYSTEM),
     )
     .with_result_backend(
         RedisAsyncResultBackend(redis_url=redis_url, result_ex_time=60)
     )
-    .with_middlewares(EventPublishMiddleware().set_queue_name("system"))
+    .with_middlewares(EventPublishMiddleware().set_queue_name(QueueName.SYSTEM))
 )
 
 

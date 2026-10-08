@@ -18,6 +18,7 @@ from app.components.worker.tasks.system_tasks import (
     load_test_orchestrator,
 )
 from app.core.config import settings
+from app.core.constants import QueueName
 from app.core.queue_workers import concurrency_for
 
 
@@ -50,12 +51,12 @@ class WorkerSettings:
         conn_retry_delay=settings.REDIS_CONN_RETRY_DELAY,
     )
     queue_name = "arq:queue:load_test"
-    max_jobs = concurrency_for("load_test")  # Settings.WORKER_QUEUES
+    max_jobs = concurrency_for(QueueName.LOAD_TEST)  # Settings.WORKER_QUEUES
     job_timeout = 60  # Quick tasks
     keep_result = 60  # Short TTL — load test results are fire-and-forget
     max_tries = settings.WORKER_MAX_TRIES
     health_check_interval = settings.WORKER_HEALTH_CHECK_INTERVAL
 
     on_startup, on_shutdown, on_job_start, after_job_end = arq_hooks.for_queue(
-        "load_test", max_jobs
+        QueueName.LOAD_TEST, max_jobs
     )

@@ -82,6 +82,17 @@ def test_only_consumers_seen_lately_count_as_live() -> None:
     assert live_consumers([]) == 0
 
 
+def test_a_worker_busy_on_its_batch_still_serves_the_queue() -> None:
+    """A worker reads nothing while it works through what it claimed, so
+    its consumer goes idle; it keeps reporting itself all the while."""
+    from app.services.system.health_worker_rules import live_workers
+
+    busy = [{"name": "busy", "idle": 45_000}]
+    assert live_workers(busy, reports=1) == 1
+    assert live_workers(busy, reports=0) == 0
+    assert live_workers([{"idle": 100}, {"idle": 120}], reports=1) == 2
+
+
 def test_the_oldest_waiting_job_is_the_first_entry_past_the_last_delivered() -> None:
     """A stream id starts with its arrival time in ms, so its age is free."""
     from app.services.system.health_worker_rules import last_delivered, stream_age

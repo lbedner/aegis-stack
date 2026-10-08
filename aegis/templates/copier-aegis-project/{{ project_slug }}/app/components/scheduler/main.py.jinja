@@ -19,7 +19,7 @@ from apscheduler.events import (
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.core.boot import apply_saved_overrides
-from app.core.constants import ComponentName
+from app.core.constants import ComponentName{% if include_worker %}, QueueName{% endif %}
 {% if scheduler_backend != "memory" %}
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from app.core.db import engine, init_database, db_session
@@ -115,7 +115,7 @@ def register_service_jobs(scheduler: AsyncIOScheduler) -> None:
         scheduler.add_job(
 {%- if include_worker %}
             enqueue_task,
-            args=[job.task_name, "system"],
+            args=[job.task_name, QueueName.SYSTEM],
 {%- else %}
             run_service_job,
             args=[job.id],

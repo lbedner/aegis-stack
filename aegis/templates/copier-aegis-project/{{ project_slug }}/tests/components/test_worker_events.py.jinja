@@ -112,6 +112,25 @@ async def test_pre_execute_publishes_job_started() -> None:
 
 
 @pytest.mark.asyncio
+async def test_a_running_job_holds_its_claim_from_start_to_finish() -> None:
+    """Only a job that really runs keeps its claim fresh: one the receiver
+    drops (an unknown task) never starts, so a live worker still lets it go."""
+    mw = EventPublishMiddleware().set_queue_name("system")
+    mw._redis = AsyncMock()
+    mw.broker = MagicMock()
+    message = MagicMock()
+    message.task_id = "task-9"
+    message.task_name = "cleanup"
+
+    await mw.pre_execute(message)
+    mw.broker.keep_claim.assert_called_once_with("task-9")
+    result = MagicMock()
+    result.is_err = False
+    await mw.post_execute(message, result)
+    mw.broker.release_claim.assert_called_once_with("task-9")
+
+
+@pytest.mark.asyncio
 async def test_post_execute_completed() -> None:
     """post_execute should publish job.completed when result is not an error."""
     mw = EventPublishMiddleware()

@@ -13,6 +13,7 @@ TaskIQ and dramatiq do the same work once, in their event middleware. Only
 arq stacks ship this module.
 """
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -22,7 +23,13 @@ import redis.asyncio as aioredis
 
 from app.components.worker import runtime
 from app.components.worker.events import publish_event
-from app.components.worker.heartbeat import worker_id
+from app.components.worker.heartbeat import (
+    PAUSE_KEY,
+    PAUSE_POLL_SECONDS,
+    mark_busy,
+    mark_idle,
+    worker_id,
+)
 from app.components.worker.task_history import (
     record_task_finished,
     record_task_started,
@@ -33,6 +40,29 @@ from app.core.config import settings
 from app.core.log import logger
 
 Hook = Callable[[dict[str, Any]], Awaitable[None]]
+
+
+async def follow_pause(worker: Any, redis: aioredis.Redis) -> None:
+    """Stop the worker taking jobs while a rolling deploy has the queues
+    paused (``PAUSE_KEY``), and let it take them again after.
+
+    taskiq's and dramatiq's brokers check the key before each read; arq
+    has no broker to subclass, so this flips its ``allow_pick_jobs``. Only
+    a pause this set is undone: arq's own graceful shutdown turns picking
+    off too, and must stay off.
+    """
+    paused = False
+    while True:
+        try:
+            wanted = bool(await redis.get(PAUSE_KEY))
+        except Exception as e:  # a Redis blip must not stop the worker
+            logger.debug(f"Could not read the queue pause: {e}")
+            wanted = paused
+        if wanted and not paused and worker.allow_pick_jobs:
+            worker.allow_pick_jobs, paused = False, True
+        elif paused and not wanted:
+            worker.allow_pick_jobs, paused = True, False
+        await asyncio.sleep(PAUSE_POLL_SECONDS)
 
 
 def for_queue(queue: str, max_jobs: int) -> tuple[Hook, Hook, Hook, Hook]:
@@ -71,21 +101,25 @@ def for_queue(queue: str, max_jobs: int) -> tuple[Hook, Hook, Hook, Hook]:
             await ctx["events_redis"].aclose()
 
     async def on_job_start(ctx: dict[str, Any]) -> None:
-        """Publish job.started and record the task in its history."""
+        """Mark the process busy, publish job.started and record the task in
+        its history."""
         if "events_redis" not in ctx:
             return
         redis = ctx["events_redis"]
         job_id = str(ctx.get("job_id", "unknown"))
+        await mark_busy(redis)
         await publish_event(redis, "job.started", queue, {"job_id": job_id})
         task_name = await resolve_arq_task_name(redis, job_id)
         await record_task_started(redis, job_id, task_name=task_name, queue_name=queue)
 
     async def after_job_end(ctx: dict[str, Any]) -> None:
-        """Publish job.completed or job.failed, and record how it ended."""
+        """Publish job.completed or job.failed, record how it ended, and mark
+        the process one job less busy."""
         if "events_redis" not in ctx:
             return
         redis = ctx["events_redis"]
         job_id = str(ctx.get("job_id", "unknown"))
+        await mark_idle(redis)
         # arq's stored result says how it ended; without one, it succeeded.
         success, error, task_name = True, None, None
         try:

@@ -504,22 +504,49 @@ The total a queue can run at once is its concurrency times its processes
 (`WORKER_PROCESSES`). Each worker reports what it runs with, shown in
 Overseer under Worker > Runtime.
 
-### How a TaskIQ worker takes jobs
+### How a worker takes jobs
 
-A TaskIQ queue is a Redis stream read by one consumer group. A worker claims
-jobs with `XREADGROUP` and acks each when it finishes; a claimed job belongs
-to that worker alone.
+A job a worker has taken is its alone until it finishes, so each backend
+takes only what it can start:
 
-- **It claims what it can start.** A worker reads one job each time one of
-  its slots frees, so it holds no more than it is running: a busy worker
-  never sits on jobs an idle one could run, and one that dies strands only
-  the jobs it was running.
-- **A running job keeps its claim.** Jobs a dead worker left unacked are
-  handed to another after 10 minutes. While a job runs, its claim is
-  refreshed, so a long job is never run a second time alongside itself.
-- **A busy worker still counts as alive.** A worker working through what it
-  claimed reads nothing for a while; Overseer counts it as serving its queue
-  as long as it keeps reporting itself (Worker > Runtime).
+| Backend | Takes a job | A long job |
+|---------|-------------|------------|
+| **TaskIQ** | One `XREADGROUP` read per free slot | Its claim is refreshed while it runs (`XCLAIM ... JUSTID`), so it is never handed to another worker after the 10-minute idle timeout |
+| **Dramatiq** | Prefetches as many messages as it has threads, not twice that (set when the worker boots, however it is launched) | The consumer's heartbeat keeps its messages; a dead worker's are requeued |
+| **arq** | Takes a slot first, then claims the job | Its in-progress key lasts the job's timeout, which arq enforces |
+
+A busy worker still counts as alive: one working through its jobs reads
+nothing for a while, and Overseer counts it as serving its queue as long as
+it keeps reporting itself (Worker > Runtime).
+
+Each worker process counts the jobs it is running in its busy key
+(`worker:<host>:<pid>:busy`), on every backend. A rolling deploy waits for
+those keys to clear, and Overseer's queue card draws a row of slots per
+process when a queue has more than one, each lit by that process's jobs.
+
+### CPU-bound tasks
+
+Every backend runs async tasks on one event loop per process: TaskIQ's,
+Dramatiq's AsyncIO middleware and arq's. A coroutine doing CPU work never
+awaits, so it holds that loop until it finishes, and everything else on it
+waits: the worker's other tasks, its claim keep-alive, its heartbeat.
+
+Run CPU work through `cpu_bound` (`app.core.concurrency`): it runs the
+function in a thread, so the loop stays free, and one at a time per
+process, which is all the GIL runs anyway. The load test's CPU workload
+does.
+
+```python
+from app.core.concurrency import cpu_bound
+
+async def resize_image(path: str) -> dict:
+    return await cpu_bound(_resize, path)  # the CPU part, off the loop
+```
+
+A queue's slots (its concurrency) are jobs started, not cores: I/O work in
+them overlaps, CPU work takes turns. For a queue that is mostly CPU work,
+set its concurrency near its process count (`WORKER_QUEUES`), so a worker
+does not take jobs another worker could run now.
 
 ---
 

@@ -85,19 +85,26 @@ def _success(completed: int, failed: int) -> float | None:
     return round(completed / finished * 100, 1) if finished else None
 
 
-def queue_view(queue: ComponentStatus, held: int | None = None) -> dict[str, Any]:
+def queue_view(
+    queue: ComponentStatus, procs: list[dict[str, Any]] | None = None
+) -> dict[str, Any]:
     """One queue: state, fullness and outcomes.
 
-    ``held`` is how many jobs its workers report they may hold at once;
-    without a report the configured limit times the consumers stands in.
+    ``procs`` are its reporting processes (``processes``): their slots and
+    running jobs, live. Without reports, the configured limit times the
+    consumers and the task history's running count stand in.
     """
     meta = queue.metadata or {}
     label, color = queue_state(queue)
     verdict = _verdict(queue)
     consumers = int(meta.get("consumer_count", 0) or 0)
     configured = int(meta.get("max_concurrency", 0) or 0) * max(consumers, 1)
-    slots = held or configured
-    busy = int(meta.get("jobs_ongoing", 0) or 0)
+    slots = sum(p["slots"] for p in procs or []) or configured
+    busy = (
+        sum(p["busy"] for p in procs)
+        if procs
+        else int(meta.get("jobs_ongoing", 0) or 0)
+    )
     completed = int(meta.get("jobs_completed", 0) or 0)
     failed = int(meta.get("jobs_failed", 0) or 0)
     success = _success(completed, failed) if meta.get("worker_alive") else None
@@ -117,6 +124,7 @@ def queue_view(queue: ComponentStatus, held: int | None = None) -> dict[str, Any
         "consumers": consumers,
         "timeout": meta.get("timeout_seconds"),
         "stream": meta.get("stream_name"),
+        "processes": procs or [],
         "oldest_waiting": meta.get("oldest_waiting_seconds"),
         "detail": verdict.lead if label != "No tasks" else "",
         "verdict": verdict.state,
@@ -144,13 +152,13 @@ def backlog(worker: ComponentStatus) -> Backlog:
 
 
 def overview(
-    worker: ComponentStatus, held: dict[str, int] | None = None
+    worker: ComponentStatus, procs: dict[str, list[dict[str, Any]]] | None = None
 ) -> dict[str, Any]:
     """Every queue, with its share of the backlog and of the finished work,
-    and the worker's totals. ``held``: reported capacity per queue."""
+    and the worker's totals; ``procs``: each queue's processes."""
     group = worker.sub_components.get("queues")
     queues = [
-        queue_view(q, (held or {}).get(name))
+        queue_view(q, (procs or {}).get(name))
         for name, q in (group.sub_components if group else {}).items()
     ]
     queued = sum(q["queued"] for q in queues)
@@ -258,8 +266,10 @@ async def load_worker() -> ComponentStatus:
 
 
 async def load_runtime() -> list[dict[str, str]]:
-    """What each live worker process reports it is running with."""
+    """What each live worker process reports it is running with, and how
+    many jobs it is running now."""
     try:
+        from app.components.worker.heartbeat import with_busy
         from app.components.worker.runtime import read_runtime
     except ImportError:
         return []
@@ -267,17 +277,24 @@ async def load_runtime() -> list[dict[str, str]]:
 
     client = redis_client()
     try:
-        return await read_runtime(client)
+        return await with_busy(client, await read_runtime(client))
     finally:
         await client.aclose()
 
 
-def held(reports: list[dict[str, str]]) -> dict[str, int]:
-    """Jobs each queue's reporting processes may hold, summed."""
-    found: dict[str, int] = {}
+def processes(reports: list[dict[str, str]]) -> dict[str, list[dict[str, Any]]]:
+    """Each queue's reporting processes: the slots each may fill and the jobs
+    it is running now."""
+    found: dict[str, list[dict[str, Any]]] = {}
     for r in reports:
-        if r.get("concurrency", "").isdigit():
-            found[r["queue"]] = found.get(r["queue"], 0) + int(r["concurrency"])
+        if r.get("concurrency", "").isdigit() and int(r["concurrency"]):
+            found.setdefault(r.get("queue", ""), []).append(
+                {
+                    "worker": r.get("worker", ""),
+                    "slots": int(r["concurrency"]),
+                    "busy": int(r.get("busy") or 0),
+                }
+            )
     return found
 
 

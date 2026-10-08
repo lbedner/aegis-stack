@@ -1019,7 +1019,7 @@ MESSAGES: dict[str, str] = {
     "loadtest.type.cpu_intensive.description": "Tests worker CPU processing with fibonacci calculations",
     "loadtest.type.cpu_intensive.signature": "CPU bound - should show computation time scaling with problem size",
     "loadtest.type.cpu_intensive.duration": "1-10ms per task",
-    "loadtest.type.cpu_intensive.concurrency": "Limited by CPU cores, benefits from parallel processing",
+    "loadtest.type.cpu_intensive.concurrency": "One at a time per process, off the event loop: more processes, more at once",
     "loadtest.type.io_simulation.name": "I/O Simulation",
     "loadtest.type.io_simulation.description": "Tests async I/O handling with simulated delays",
     "loadtest.type.io_simulation.signature": "I/O bound - should show async concurrency benefits",

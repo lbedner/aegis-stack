@@ -8,9 +8,11 @@ is asserted directly.
 from __future__ import annotations
 
 import asyncio
+import time
 
 import pytest
 
+from app.core import concurrency
 from app.core.concurrency import fanout
 
 
@@ -106,3 +108,44 @@ async def test_it_is_concurrent_at_all() -> None:
     elapsed = asyncio.get_running_loop().time() - start
 
     assert elapsed < 0.2, f"took {elapsed:.3f}s; that is sequential"
+
+
+class TestCpuBound:
+    """CPU work runs in a thread, so the loop keeps serving (a worker's
+    claim keep-alive and heartbeats run on it), and one piece of it at a
+    time per process: the GIL runs one anyway, so more would only look
+    parallel."""
+
+    def test_the_loop_keeps_running_while_cpu_work_does(self) -> None:
+        ticks = 0
+
+        async def ticker() -> None:
+            nonlocal ticks
+            while True:
+                ticks += 1
+                await asyncio.sleep(0.005)
+
+        async def go() -> None:
+            beat = asyncio.create_task(ticker())
+            await concurrency.cpu_bound(time.sleep, 0.2)  # holds its thread, not the loop
+            beat.cancel()
+
+        asyncio.run(go())
+        assert ticks > 5
+
+    def test_one_piece_runs_at_a_time(self) -> None:
+        running = 0
+        most = 0
+
+        def work() -> None:
+            nonlocal running, most
+            running += 1
+            most = max(most, running)
+            time.sleep(0.02)
+            running -= 1
+
+        async def go() -> None:
+            await asyncio.gather(*(concurrency.cpu_bound(work) for _ in range(5)))
+
+        asyncio.run(go())
+        assert most == 1

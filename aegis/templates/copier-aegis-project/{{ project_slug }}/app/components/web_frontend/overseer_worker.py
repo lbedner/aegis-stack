@@ -129,7 +129,7 @@ async def queues_view() -> dict[str, Any]:
     """The queues and totals for ``_queues.html``, from the queues sampler's
     reading."""
     worker, reports = await series.reading(ui_worker.QUEUES)
-    view = ui_worker.overview(worker, held=ui_worker.held(reports))
+    view = ui_worker.overview(worker, procs=ui_worker.processes(reports))
     # With no queues to show, an unhealthy worker's message is the page.
     unhealthy = worker.status == ComponentStatusType.UNHEALTHY
     view["problem"] = worker.message if unhealthy and not view["queues"] else None

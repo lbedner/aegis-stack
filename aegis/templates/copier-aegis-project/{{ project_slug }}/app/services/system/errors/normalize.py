@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from app.core.log_records import TERMINAL, LogRecord, split_lead, trace_start
+from app.core.log_records import TERMINAL, LogRecord, split_lead
 from app.core.runtime import without_metadata
 
 from . import redact
@@ -21,13 +21,7 @@ def normalize(
 ) -> ErrorOccurrence | None:
     line = record.line
     trace = record.trace
-    recognized = bool(
-        trace
-        and any(
-            trace_start(part) or (record.structured_trace and TERMINAL.match(part))
-            for part in trace.splitlines()
-        )
-    )
+    recognized = record.recognized
     if line.level not in {"error", "critical"} and not recognized:
         return None
     # Indented log metadata is folded for Logs compatibility, but is not

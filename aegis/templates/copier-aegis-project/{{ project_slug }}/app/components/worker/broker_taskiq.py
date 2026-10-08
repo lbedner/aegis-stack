@@ -21,11 +21,10 @@ from taskiq import AckableMessage
 from taskiq_redis import RedisStreamBroker
 from taskiq_redis.redis_broker import logger as _broker_logger
 
+from app.components.worker.heartbeat import PAUSE_KEY, PAUSE_POLL_SECONDS
 from app.core.config import settings
 from app.services.system.redis_keys import KeyFamily
 
-PAUSE_KEY = "aegis:queue:paused"
-PAUSE_POLL_SECONDS = 1.0
 
 REDIS_KEYS = (
     KeyFamily(
@@ -43,14 +42,6 @@ REDIS_KEYS = (
         "A finished job's return value under its bare task id, kept 60s",
         "TaskIQ result backend",
         columns=("Task", "Result"),
-    ),
-    KeyFamily(
-        PAUSE_KEY,
-        "string",
-        "Queue pause",
-        "Set during a rolling deploy so workers stop taking new jobs",
-        "TaskIQ broker",
-        columns=("Key", "Value"),
     ),
     KeyFamily(
         "autoclaim:*",

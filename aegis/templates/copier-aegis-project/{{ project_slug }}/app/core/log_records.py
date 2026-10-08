@@ -61,6 +61,18 @@ class LogRecord:
     structured_trace: bool = False
     ordinal: int = 0
 
+    @property
+    def recognized(self) -> bool:
+        """Whether its trace is an exception's, not indented lines folded in
+        for Logs (a warning's source line, a pretty-printed dict)."""
+        return bool(
+            self.trace
+            and any(
+                trace_start(part) or (self.structured_trace and TERMINAL.match(part))
+                for part in self.trace.splitlines()
+            )
+        )
+
     def continues(self, line: LogLine) -> bool:
         if line.level is not None or line.event is not None:
             return False
@@ -166,6 +178,10 @@ class LogAssembler:
 
     @staticmethod
     def _complete(record: LogRecord) -> None:
+        if record.line.level is None and record.recognized:
+            # A record that carries a traceback failed, whatever its line
+            # printed ("Running in Docker container..." before a crash).
+            record.line = replace(record.line, level="error")
         text = (record.trace or "").rstrip()
         last = text.splitlines()[-1] if text else ""
         closed_group = last.strip().startswith("+") and set(last.strip()) <= {"+", "-"}

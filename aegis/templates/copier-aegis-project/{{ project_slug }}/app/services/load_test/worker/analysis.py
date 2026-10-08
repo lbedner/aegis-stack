@@ -33,7 +33,7 @@ class AnalysisMixin(AdviceMixin):
                 ),
                 "typical_duration_ms": "1-10ms per task",
                 "concurrency_impact": (
-                    "Limited by CPU cores, benefits from parallel processing"
+                    "One at a time per process, off the event loop: more processes, more at once"
                 ),
                 "validation_keys": ["fibonacci_n", "fibonacci_result"],
             },

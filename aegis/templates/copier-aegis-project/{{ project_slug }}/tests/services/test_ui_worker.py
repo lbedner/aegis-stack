@@ -160,13 +160,14 @@ class TestHeldCapacity:
     """What the workers report holding beats the configured limit."""
 
     def test_reported_capacity_replaces_the_configured_one(self) -> None:
-        view = ui_worker.overview(_worker(_queue("q", jobs_ongoing=5)), held={"q": 100})
+        procs = {"q": [{"worker": "h:1", "slots": 100, "busy": 5}]}
+        view = ui_worker.overview(_worker(_queue("q", jobs_ongoing=5)), procs=procs)
         assert view["queues"][0]["slots"] == 100
         assert view["queues"][0]["busy_pct"] == 5
         assert view["slots"] == 100
 
     def test_without_a_report_the_configured_limit_stands(self) -> None:
-        assert ui_worker.overview(_worker(_queue("q")), held={})["slots"] == 10
+        assert ui_worker.overview(_worker(_queue("q")), procs={})["slots"] == 10
 
 
 class TestQueuesSampler:

@@ -197,6 +197,7 @@ docker compose logs redis
 3. **Return Values** - Return structured data for monitoring and debugging
 4. **Timeouts** - Set appropriate timeouts for different task types
 5. **Retry Logic** - Use arq's built-in retry mechanisms
+6. **CPU Work Off The Loop** - Run CPU-bound work through `cpu_bound` (`app.core.concurrency`): a task that computes without awaiting holds the worker's event loop, and its claim keep-alive and heartbeat with it. A queue that is mostly CPU work wants concurrency near its process count
 
 ### Queue Management
 1. **Separate Concerns** - Use different queues for different types of work

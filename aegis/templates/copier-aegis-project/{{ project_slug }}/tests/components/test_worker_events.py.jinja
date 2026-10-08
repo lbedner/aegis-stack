@@ -325,6 +325,7 @@ def test_the_worker_reports_what_it_runs_with(monkeypatch: pytest.MonkeyPatch) -
     )
     worker = MagicMock()
     worker.consumer_whitelist = {"system"}
+    worker.worker_threads = 15
     mw = EventPublishMiddleware()
     mw.before_worker_boot(MagicMock(), worker)
     mw._stop_event.set()
@@ -332,6 +333,9 @@ def test_the_worker_reports_what_it_runs_with(monkeypatch: pytest.MonkeyPatch) -
     (fields,) = published
     assert fields["engine"] == "dramatiq" and fields["queue"] == "system"
     assert fields["processes"] == 2 and fields["concurrency"] == 15
+    # Prefetch what its threads run, not dramatiq's twice that, however it
+    # was launched: consumers are built after this hook, from this value.
+    assert worker.queue_prefetch == 15
 {%- else %}
 
 
@@ -397,6 +401,72 @@ async def test_every_queue_records_its_jobs_in_task_history(
 
     assert started.call_args.kwargs["queue_name"] == queue
     assert finished.call_args.kwargs["queue_name"] == queue
+
+
+@pytest.mark.asyncio
+async def test_a_job_marks_its_process_busy_until_it_ends(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The busy key is how a rolling deploy waits for jobs to drain, and how
+    Overseer counts each process's running jobs; arq sets it like the others."""
+    from app.components.worker import arq_hooks
+    from app.components.worker.queues import system
+
+    busy, idle = AsyncMock(), AsyncMock()
+    monkeypatch.setattr(arq_hooks, "publish_event", AsyncMock())
+    monkeypatch.setattr(arq_hooks, "resolve_arq_task_name", AsyncMock(return_value="t"))
+    monkeypatch.setattr(arq_hooks, "record_task_started", AsyncMock())
+    monkeypatch.setattr(arq_hooks, "record_task_finished", AsyncMock())
+    monkeypatch.setattr(arq_hooks, "mark_busy", busy)
+    monkeypatch.setattr(arq_hooks, "mark_idle", idle)
+    redis = AsyncMock()
+    redis.get.return_value = None
+    ctx = {"events_redis": redis, "job_id": "job-1"}
+
+    await system.WorkerSettings.on_job_start(ctx)
+    busy.assert_awaited_once_with(redis)
+    idle.assert_not_awaited()
+    await system.WorkerSettings.after_job_end(ctx)
+    idle.assert_awaited_once_with(redis)
+
+
+@pytest.mark.asyncio
+async def test_a_paused_queue_stops_arq_taking_jobs_until_resumed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A rolling deploy pauses the queues and waits for busy keys to clear;
+    arq stops picking jobs while paused, and resumes only what it paused
+    (its own graceful shutdown also turns picking off)."""
+    import asyncio
+
+    from app.components.worker import arq_hooks
+    from app.components.worker.heartbeat import PAUSE_KEY
+    from tests._fake_redis import FakeRedis
+
+    monkeypatch.setattr(arq_hooks, "PAUSE_POLL_SECONDS", 0)
+    redis = FakeRedis()
+
+    class Worker:
+        allow_pick_jobs = True
+
+    worker = Worker()
+    watcher = asyncio.create_task(arq_hooks.follow_pause(worker, redis))
+
+    async def ticks() -> None:
+        for _ in range(5):
+            await asyncio.sleep(0)
+
+    await redis.set(PAUSE_KEY, "1")
+    await ticks()
+    assert worker.allow_pick_jobs is False
+    await redis.delete(PAUSE_KEY)
+    await ticks()
+    assert worker.allow_pick_jobs is True
+
+    worker.allow_pick_jobs = False  # arq shutting down, not paused by us
+    await ticks()
+    assert worker.allow_pick_jobs is False
+    watcher.cancel()
 
 
 def test_max_jobs_comes_from_the_settings(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -2705,10 +2705,21 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#how-a-taskiq-worker-takes-jobs" class="md-nav__link">
+  <a href="#how-a-worker-takes-jobs" class="md-nav__link">
     <span class="md-ellipsis">
       
-        How a TaskIQ worker takes jobs
+        How a worker takes jobs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cpu-bound-tasks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CPU-bound tasks
       
     </span>
   </a>
@@ -6253,10 +6264,21 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#how-a-taskiq-worker-takes-jobs" class="md-nav__link">
+  <a href="#how-a-worker-takes-jobs" class="md-nav__link">
     <span class="md-ellipsis">
       
-        How a TaskIQ worker takes jobs
+        How a worker takes jobs
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cpu-bound-tasks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CPU-bound tasks
       
     </span>
   </a>
@@ -6968,49 +6990,87 @@ load, and a queue name that matches no queue stops the worker at startup.
 The total a queue can run at once is its concurrency times its processes
 (<code>WORKER_PROCESSES</code>). Each worker reports what it runs with, shown in
 Overseer under Worker &gt; Runtime.</p>
-<h3 id="how-a-taskiq-worker-takes-jobs">How a TaskIQ worker takes jobs</h3>
-<p>A TaskIQ queue is a Redis stream read by one consumer group. A worker claims
-jobs with <code>XREADGROUP</code> and acks each when it finishes; a claimed job belongs
-to that worker alone.</p>
-<ul>
-<li><strong>It claims what it can start.</strong> A worker reads one job each time one of
-  its slots frees, so it holds no more than it is running: a busy worker
-  never sits on jobs an idle one could run, and one that dies strands only
-  the jobs it was running.</li>
-<li><strong>A running job keeps its claim.</strong> Jobs a dead worker left unacked are
-  handed to another after 10 minutes. While a job runs, its claim is
-  refreshed, so a long job is never run a second time alongside itself.</li>
-<li><strong>A busy worker still counts as alive.</strong> A worker working through what it
-  claimed reads nothing for a while; Overseer counts it as serving its queue
-  as long as it keeps reporting itself (Worker &gt; Runtime).</li>
-</ul>
+<h3 id="how-a-worker-takes-jobs">How a worker takes jobs</h3>
+<p>A job a worker has taken is its alone until it finishes, so each backend
+takes only what it can start:</p>
+<table>
+<thead>
+<tr>
+<th>Backend</th>
+<th>Takes a job</th>
+<th>A long job</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>TaskIQ</strong></td>
+<td>One <code>XREADGROUP</code> read per free slot</td>
+<td>Its claim is refreshed while it runs (<code>XCLAIM ... JUSTID</code>), so it is never handed to another worker after the 10-minute idle timeout</td>
+</tr>
+<tr>
+<td><strong>Dramatiq</strong></td>
+<td>Prefetches as many messages as it has threads, not twice that (set when the worker boots, however it is launched)</td>
+<td>The consumer's heartbeat keeps its messages; a dead worker's are requeued</td>
+</tr>
+<tr>
+<td><strong>arq</strong></td>
+<td>Takes a slot first, then claims the job</td>
+<td>Its in-progress key lasts the job's timeout, which arq enforces</td>
+</tr>
+</tbody>
+</table>
+<p>A busy worker still counts as alive: one working through its jobs reads
+nothing for a while, and Overseer counts it as serving its queue as long as
+it keeps reporting itself (Worker &gt; Runtime).</p>
+<p>Each worker process counts the jobs it is running in its busy key
+(<code>worker:&lt;host&gt;:&lt;pid&gt;:busy</code>), on every backend. A rolling deploy waits for
+those keys to clear, and Overseer's queue card draws a row of slots per
+process when a queue has more than one, each lit by that process's jobs.</p>
+<h3 id="cpu-bound-tasks">CPU-bound tasks</h3>
+<p>Every backend runs async tasks on one event loop per process: TaskIQ's,
+Dramatiq's AsyncIO middleware and arq's. A coroutine doing CPU work never
+awaits, so it holds that loop until it finishes, and everything else on it
+waits: the worker's other tasks, its claim keep-alive, its heartbeat.</p>
+<p>Run CPU work through <code>cpu_bound</code> (<code>app.core.concurrency</code>): it runs the
+function in a thread, so the loop stays free, and one at a time per
+process, which is all the GIL runs anyway. The load test's CPU workload
+does.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-30-1"><a id="__codelineno-30-1" name="__codelineno-30-1" href="#__codelineno-30-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.core.concurrency</span><span class="w"> </span><span class="kn">import</span> <span class="n">cpu_bound</span>
+</span><span id="__span-30-2"><a id="__codelineno-30-2" name="__codelineno-30-2" href="#__codelineno-30-2"></a>
+</span><span id="__span-30-3"><a id="__codelineno-30-3" name="__codelineno-30-3" href="#__codelineno-30-3"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">resize_image</span><span class="p">(</span><span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+</span><span id="__span-30-4"><a id="__codelineno-30-4" name="__codelineno-30-4" href="#__codelineno-30-4"></a>    <span class="k">return</span> <span class="k">await</span> <span class="n">cpu_bound</span><span class="p">(</span><span class="n">_resize</span><span class="p">,</span> <span class="n">path</span><span class="p">)</span>  <span class="c1"># the CPU part, off the loop</span>
+</span></code></pre></div>
+<p>A queue's slots (its concurrency) are jobs started, not cores: I/O work in
+them overlaps, CPU work takes turns. For a queue that is mostly CPU work,
+set its concurrency near its process count (<code>WORKER_QUEUES</code>), so a worker
+does not take jobs another worker could run now.</p>
 <hr />
 <h2 id="redis-configuration">Redis Configuration</h2>
 <h3 id="connection-settings">Connection Settings</h3>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-30-1"><a id="__codelineno-30-1" name="__codelineno-30-1" href="#__codelineno-30-1"></a><span class="c1"># app/core/config.py</span>
-</span><span id="__span-30-2"><a id="__codelineno-30-2" name="__codelineno-30-2" href="#__codelineno-30-2"></a><span class="k">class</span><span class="w"> </span><span class="nc">Settings</span><span class="p">(</span><span class="n">BaseSettings</span><span class="p">):</span>
-</span><span id="__span-30-3"><a id="__codelineno-30-3" name="__codelineno-30-3" href="#__codelineno-30-3"></a>    <span class="n">REDIS_URL</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;redis://localhost:6379&quot;</span>
-</span><span id="__span-30-4"><a id="__codelineno-30-4" name="__codelineno-30-4" href="#__codelineno-30-4"></a>    <span class="n">REDIS_DB</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
-</span><span id="__span-30-5"><a id="__codelineno-30-5" name="__codelineno-30-5" href="#__codelineno-30-5"></a>    <span class="n">REDIS_PASSWORD</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-</span><span id="__span-30-6"><a id="__codelineno-30-6" name="__codelineno-30-6" href="#__codelineno-30-6"></a>    <span class="n">REDIS_MAX_CONNECTIONS</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100</span>
-</span><span id="__span-30-7"><a id="__codelineno-30-7" name="__codelineno-30-7" href="#__codelineno-30-7"></a>    <span class="n">REDIS_CONNECTION_TIMEOUT</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-31-1"><a id="__codelineno-31-1" name="__codelineno-31-1" href="#__codelineno-31-1"></a><span class="c1"># app/core/config.py</span>
+</span><span id="__span-31-2"><a id="__codelineno-31-2" name="__codelineno-31-2" href="#__codelineno-31-2"></a><span class="k">class</span><span class="w"> </span><span class="nc">Settings</span><span class="p">(</span><span class="n">BaseSettings</span><span class="p">):</span>
+</span><span id="__span-31-3"><a id="__codelineno-31-3" name="__codelineno-31-3" href="#__codelineno-31-3"></a>    <span class="n">REDIS_URL</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;redis://localhost:6379&quot;</span>
+</span><span id="__span-31-4"><a id="__codelineno-31-4" name="__codelineno-31-4" href="#__codelineno-31-4"></a>    <span class="n">REDIS_DB</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+</span><span id="__span-31-5"><a id="__codelineno-31-5" name="__codelineno-31-5" href="#__codelineno-31-5"></a>    <span class="n">REDIS_PASSWORD</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+</span><span id="__span-31-6"><a id="__codelineno-31-6" name="__codelineno-31-6" href="#__codelineno-31-6"></a>    <span class="n">REDIS_MAX_CONNECTIONS</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100</span>
+</span><span id="__span-31-7"><a id="__codelineno-31-7" name="__codelineno-31-7" href="#__codelineno-31-7"></a>    <span class="n">REDIS_CONNECTION_TIMEOUT</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span>
 </span></code></pre></div>
 <h3 id="redis-persistence">Redis Persistence</h3>
 <p>For production, configure Redis persistence:</p>
-<div class="language-yaml highlight"><pre><span></span><code><span id="__span-31-1"><a id="__codelineno-31-1" name="__codelineno-31-1" href="#__codelineno-31-1"></a><span class="c1"># docker-compose.yml</span>
-</span><span id="__span-31-2"><a id="__codelineno-31-2" name="__codelineno-31-2" href="#__codelineno-31-2"></a><span class="nt">redis</span><span class="p">:</span>
-</span><span id="__span-31-3"><a id="__codelineno-31-3" name="__codelineno-31-3" href="#__codelineno-31-3"></a><span class="w">  </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">redis:7-alpine</span>
-</span><span id="__span-31-4"><a id="__codelineno-31-4" name="__codelineno-31-4" href="#__codelineno-31-4"></a><span class="w">  </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;</span>
-</span><span id="__span-31-5"><a id="__codelineno-31-5" name="__codelineno-31-5" href="#__codelineno-31-5"></a><span class="w">    </span><span class="no">redis-server</span>
-</span><span id="__span-31-6"><a id="__codelineno-31-6" name="__codelineno-31-6" href="#__codelineno-31-6"></a><span class="w">    </span><span class="no">--maxmemory 512mb</span>
-</span><span id="__span-31-7"><a id="__codelineno-31-7" name="__codelineno-31-7" href="#__codelineno-31-7"></a><span class="w">    </span><span class="no">--maxmemory-policy volatile-lru</span>
-</span><span id="__span-31-8"><a id="__codelineno-31-8" name="__codelineno-31-8" href="#__codelineno-31-8"></a><span class="w">    </span><span class="no">--save 900 1</span>
-</span><span id="__span-31-9"><a id="__codelineno-31-9" name="__codelineno-31-9" href="#__codelineno-31-9"></a><span class="w">    </span><span class="no">--save 300 10</span>
-</span><span id="__span-31-10"><a id="__codelineno-31-10" name="__codelineno-31-10" href="#__codelineno-31-10"></a><span class="w">    </span><span class="no">--save 60 10000</span>
-</span><span id="__span-31-11"><a id="__codelineno-31-11" name="__codelineno-31-11" href="#__codelineno-31-11"></a><span class="w">    </span><span class="no">--appendonly yes</span>
-</span><span id="__span-31-12"><a id="__codelineno-31-12" name="__codelineno-31-12" href="#__codelineno-31-12"></a><span class="w">  </span><span class="nt">volumes</span><span class="p">:</span>
-</span><span id="__span-31-13"><a id="__codelineno-31-13" name="__codelineno-31-13" href="#__codelineno-31-13"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">redis-data:/data</span>
-</span><span id="__span-31-14"><a id="__codelineno-31-14" name="__codelineno-31-14" href="#__codelineno-31-14"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./redis.conf:/usr/local/etc/redis/redis.conf</span>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-32-1"><a id="__codelineno-32-1" name="__codelineno-32-1" href="#__codelineno-32-1"></a><span class="c1"># docker-compose.yml</span>
+</span><span id="__span-32-2"><a id="__codelineno-32-2" name="__codelineno-32-2" href="#__codelineno-32-2"></a><span class="nt">redis</span><span class="p">:</span>
+</span><span id="__span-32-3"><a id="__codelineno-32-3" name="__codelineno-32-3" href="#__codelineno-32-3"></a><span class="w">  </span><span class="nt">image</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">redis:7-alpine</span>
+</span><span id="__span-32-4"><a id="__codelineno-32-4" name="__codelineno-32-4" href="#__codelineno-32-4"></a><span class="w">  </span><span class="nt">command</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">&gt;</span>
+</span><span id="__span-32-5"><a id="__codelineno-32-5" name="__codelineno-32-5" href="#__codelineno-32-5"></a><span class="w">    </span><span class="no">redis-server</span>
+</span><span id="__span-32-6"><a id="__codelineno-32-6" name="__codelineno-32-6" href="#__codelineno-32-6"></a><span class="w">    </span><span class="no">--maxmemory 512mb</span>
+</span><span id="__span-32-7"><a id="__codelineno-32-7" name="__codelineno-32-7" href="#__codelineno-32-7"></a><span class="w">    </span><span class="no">--maxmemory-policy volatile-lru</span>
+</span><span id="__span-32-8"><a id="__codelineno-32-8" name="__codelineno-32-8" href="#__codelineno-32-8"></a><span class="w">    </span><span class="no">--save 900 1</span>
+</span><span id="__span-32-9"><a id="__codelineno-32-9" name="__codelineno-32-9" href="#__codelineno-32-9"></a><span class="w">    </span><span class="no">--save 300 10</span>
+</span><span id="__span-32-10"><a id="__codelineno-32-10" name="__codelineno-32-10" href="#__codelineno-32-10"></a><span class="w">    </span><span class="no">--save 60 10000</span>
+</span><span id="__span-32-11"><a id="__codelineno-32-11" name="__codelineno-32-11" href="#__codelineno-32-11"></a><span class="w">    </span><span class="no">--appendonly yes</span>
+</span><span id="__span-32-12"><a id="__codelineno-32-12" name="__codelineno-32-12" href="#__codelineno-32-12"></a><span class="w">  </span><span class="nt">volumes</span><span class="p">:</span>
+</span><span id="__span-32-13"><a id="__codelineno-32-13" name="__codelineno-32-13" href="#__codelineno-32-13"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">redis-data:/data</span>
+</span><span id="__span-32-14"><a id="__codelineno-32-14" name="__codelineno-32-14" href="#__codelineno-32-14"></a><span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./redis.conf:/usr/local/etc/redis/redis.conf</span>
 </span></code></pre></div>
 <p>Keep the eviction policy <code>volatile-*</code>, never <code>allkeys-*</code>. Redis holds the
 job streams next to the cache: <code>allkeys-lru</code> evicts any key when memory
@@ -7023,73 +7083,73 @@ once none are left Redis refuses the write instead of dropping work.</p>
 <div class="tabbed-content">
 <div class="tabbed-block">
 <h3 id="memory-management">Memory Management</h3>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-32-1"><a id="__codelineno-32-1" name="__codelineno-32-1" href="#__codelineno-32-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">WorkerSettings</span><span class="p">:</span>
-</span><span id="__span-32-2"><a id="__codelineno-32-2" name="__codelineno-32-2" href="#__codelineno-32-2"></a>    <span class="n">functions</span> <span class="o">=</span> <span class="p">[</span><span class="n">system_health_check</span><span class="p">]</span>
-</span><span id="__span-32-3"><a id="__codelineno-32-3" name="__codelineno-32-3" href="#__codelineno-32-3"></a>    <span class="n">keep_result</span> <span class="o">=</span> <span class="mi">1800</span>  <span class="c1"># 30 minutes for production</span>
-</span><span id="__span-32-4"><a id="__codelineno-32-4" name="__codelineno-32-4" href="#__codelineno-32-4"></a>    <span class="n">max_jobs</span> <span class="o">=</span> <span class="mi">15</span>       <span class="c1"># Limit concurrent jobs to manage memory</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-33-1"><a id="__codelineno-33-1" name="__codelineno-33-1" href="#__codelineno-33-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">WorkerSettings</span><span class="p">:</span>
+</span><span id="__span-33-2"><a id="__codelineno-33-2" name="__codelineno-33-2" href="#__codelineno-33-2"></a>    <span class="n">functions</span> <span class="o">=</span> <span class="p">[</span><span class="n">system_health_check</span><span class="p">]</span>
+</span><span id="__span-33-3"><a id="__codelineno-33-3" name="__codelineno-33-3" href="#__codelineno-33-3"></a>    <span class="n">keep_result</span> <span class="o">=</span> <span class="mi">1800</span>  <span class="c1"># 30 minutes for production</span>
+</span><span id="__span-33-4"><a id="__codelineno-33-4" name="__codelineno-33-4" href="#__codelineno-33-4"></a>    <span class="n">max_jobs</span> <span class="o">=</span> <span class="mi">15</span>       <span class="c1"># Limit concurrent jobs to manage memory</span>
 </span></code></pre></div>
 <h3 id="timeout-configuration">Timeout Configuration</h3>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-33-1"><a id="__codelineno-33-1" name="__codelineno-33-1" href="#__codelineno-33-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">WorkerSettings</span><span class="p">:</span>  <span class="c1"># system queue</span>
-</span><span id="__span-33-2"><a id="__codelineno-33-2" name="__codelineno-33-2" href="#__codelineno-33-2"></a>    <span class="n">functions</span> <span class="o">=</span> <span class="p">[</span><span class="n">system_health_check</span><span class="p">,</span> <span class="n">cleanup_temp_files</span><span class="p">]</span>
-</span><span id="__span-33-3"><a id="__codelineno-33-3" name="__codelineno-33-3" href="#__codelineno-33-3"></a>    <span class="n">job_timeout</span> <span class="o">=</span> <span class="mi">300</span>  <span class="c1"># 5 minutes for system tasks</span>
-</span><span id="__span-33-4"><a id="__codelineno-33-4" name="__codelineno-33-4" href="#__codelineno-33-4"></a>
-</span><span id="__span-33-5"><a id="__codelineno-33-5" name="__codelineno-33-5" href="#__codelineno-33-5"></a><span class="k">class</span><span class="w"> </span><span class="nc">WorkerSettings</span><span class="p">:</span>  <span class="c1"># load_test queue</span>
-</span><span id="__span-33-6"><a id="__codelineno-33-6" name="__codelineno-33-6" href="#__codelineno-33-6"></a>    <span class="n">functions</span> <span class="o">=</span> <span class="p">[</span><span class="n">cpu_intensive_task</span><span class="p">,</span> <span class="n">io_simulation_task</span><span class="p">]</span>
-</span><span id="__span-33-7"><a id="__codelineno-33-7" name="__codelineno-33-7" href="#__codelineno-33-7"></a>    <span class="n">job_timeout</span> <span class="o">=</span> <span class="mi">60</span>   <span class="c1"># Quick test tasks</span>
-</span><span id="__span-33-8"><a id="__codelineno-33-8" name="__codelineno-33-8" href="#__codelineno-33-8"></a>    <span class="n">max_jobs</span> <span class="o">=</span> <span class="mi">50</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-34-1"><a id="__codelineno-34-1" name="__codelineno-34-1" href="#__codelineno-34-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">WorkerSettings</span><span class="p">:</span>  <span class="c1"># system queue</span>
+</span><span id="__span-34-2"><a id="__codelineno-34-2" name="__codelineno-34-2" href="#__codelineno-34-2"></a>    <span class="n">functions</span> <span class="o">=</span> <span class="p">[</span><span class="n">system_health_check</span><span class="p">,</span> <span class="n">cleanup_temp_files</span><span class="p">]</span>
+</span><span id="__span-34-3"><a id="__codelineno-34-3" name="__codelineno-34-3" href="#__codelineno-34-3"></a>    <span class="n">job_timeout</span> <span class="o">=</span> <span class="mi">300</span>  <span class="c1"># 5 minutes for system tasks</span>
+</span><span id="__span-34-4"><a id="__codelineno-34-4" name="__codelineno-34-4" href="#__codelineno-34-4"></a>
+</span><span id="__span-34-5"><a id="__codelineno-34-5" name="__codelineno-34-5" href="#__codelineno-34-5"></a><span class="k">class</span><span class="w"> </span><span class="nc">WorkerSettings</span><span class="p">:</span>  <span class="c1"># load_test queue</span>
+</span><span id="__span-34-6"><a id="__codelineno-34-6" name="__codelineno-34-6" href="#__codelineno-34-6"></a>    <span class="n">functions</span> <span class="o">=</span> <span class="p">[</span><span class="n">cpu_intensive_task</span><span class="p">,</span> <span class="n">io_simulation_task</span><span class="p">]</span>
+</span><span id="__span-34-7"><a id="__codelineno-34-7" name="__codelineno-34-7" href="#__codelineno-34-7"></a>    <span class="n">job_timeout</span> <span class="o">=</span> <span class="mi">60</span>   <span class="c1"># Quick test tasks</span>
+</span><span id="__span-34-8"><a id="__codelineno-34-8" name="__codelineno-34-8" href="#__codelineno-34-8"></a>    <span class="n">max_jobs</span> <span class="o">=</span> <span class="mi">50</span>
 </span></code></pre></div>
 </div>
 <div class="tabbed-block">
 <h3 id="processthread-tuning">Process/Thread Tuning</h3>
 <p><code>WORKER_PROCESSES</code> x the queue's concurrency (<code>WORKER_QUEUES</code>, used as dramatiq's threads) determines total concurrency:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-34-1"><a id="__codelineno-34-1" name="__codelineno-34-1" href="#__codelineno-34-1"></a><span class="c1"># I/O-bound: more threads, fewer processes</span>
-</span><span id="__span-34-2"><a id="__codelineno-34-2" name="__codelineno-34-2" href="#__codelineno-34-2"></a><span class="nv">WORKER_PROCESSES</span><span class="o">=</span><span class="m">1</span>
-</span><span id="__span-34-3"><a id="__codelineno-34-3" name="__codelineno-34-3" href="#__codelineno-34-3"></a><span class="nv">WORKER_QUEUES</span><span class="o">=</span><span class="s1">&#39;{&quot;system&quot;: {&quot;concurrency&quot;: 16}}&#39;</span>
-</span><span id="__span-34-4"><a id="__codelineno-34-4" name="__codelineno-34-4" href="#__codelineno-34-4"></a>
-</span><span id="__span-34-5"><a id="__codelineno-34-5" name="__codelineno-34-5" href="#__codelineno-34-5"></a><span class="c1"># CPU-bound: more processes (one per core), fewer threads</span>
-</span><span id="__span-34-6"><a id="__codelineno-34-6" name="__codelineno-34-6" href="#__codelineno-34-6"></a><span class="nv">WORKER_PROCESSES</span><span class="o">=</span><span class="m">4</span>
-</span><span id="__span-34-7"><a id="__codelineno-34-7" name="__codelineno-34-7" href="#__codelineno-34-7"></a><span class="nv">WORKER_QUEUES</span><span class="o">=</span><span class="s1">&#39;{&quot;system&quot;: {&quot;concurrency&quot;: 4}}&#39;</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-35-1"><a id="__codelineno-35-1" name="__codelineno-35-1" href="#__codelineno-35-1"></a><span class="c1"># I/O-bound: more threads, fewer processes</span>
+</span><span id="__span-35-2"><a id="__codelineno-35-2" name="__codelineno-35-2" href="#__codelineno-35-2"></a><span class="nv">WORKER_PROCESSES</span><span class="o">=</span><span class="m">1</span>
+</span><span id="__span-35-3"><a id="__codelineno-35-3" name="__codelineno-35-3" href="#__codelineno-35-3"></a><span class="nv">WORKER_QUEUES</span><span class="o">=</span><span class="s1">&#39;{&quot;system&quot;: {&quot;concurrency&quot;: 16}}&#39;</span>
+</span><span id="__span-35-4"><a id="__codelineno-35-4" name="__codelineno-35-4" href="#__codelineno-35-4"></a>
+</span><span id="__span-35-5"><a id="__codelineno-35-5" name="__codelineno-35-5" href="#__codelineno-35-5"></a><span class="c1"># CPU-bound: more processes (one per core), fewer threads</span>
+</span><span id="__span-35-6"><a id="__codelineno-35-6" name="__codelineno-35-6" href="#__codelineno-35-6"></a><span class="nv">WORKER_PROCESSES</span><span class="o">=</span><span class="m">4</span>
+</span><span id="__span-35-7"><a id="__codelineno-35-7" name="__codelineno-35-7" href="#__codelineno-35-7"></a><span class="nv">WORKER_QUEUES</span><span class="o">=</span><span class="s1">&#39;{&quot;system&quot;: {&quot;concurrency&quot;: 4}}&#39;</span>
 </span></code></pre></div>
 <h3 id="actor-level-tuning">Actor-Level Tuning</h3>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-35-1"><a id="__codelineno-35-1" name="__codelineno-35-1" href="#__codelineno-35-1"></a><span class="nd">@dramatiq</span><span class="o">.</span><span class="n">actor</span><span class="p">(</span>
-</span><span id="__span-35-2"><a id="__codelineno-35-2" name="__codelineno-35-2" href="#__codelineno-35-2"></a>    <span class="n">queue_name</span><span class="o">=</span><span class="s2">&quot;system&quot;</span><span class="p">,</span>
-</span><span id="__span-35-3"><a id="__codelineno-35-3" name="__codelineno-35-3" href="#__codelineno-35-3"></a>    <span class="n">store_results</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-</span><span id="__span-35-4"><a id="__codelineno-35-4" name="__codelineno-35-4" href="#__codelineno-35-4"></a>    <span class="n">max_retries</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
-</span><span id="__span-35-5"><a id="__codelineno-35-5" name="__codelineno-35-5" href="#__codelineno-35-5"></a>    <span class="n">min_backoff</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>     <span class="c1"># 1s minimum backoff</span>
-</span><span id="__span-35-6"><a id="__codelineno-35-6" name="__codelineno-35-6" href="#__codelineno-35-6"></a>    <span class="n">max_backoff</span><span class="o">=</span><span class="mi">600_000</span><span class="p">,</span>  <span class="c1"># 10m maximum backoff</span>
-</span><span id="__span-35-7"><a id="__codelineno-35-7" name="__codelineno-35-7" href="#__codelineno-35-7"></a>    <span class="n">time_limit</span><span class="o">=</span><span class="mi">300_000</span><span class="p">,</span>   <span class="c1"># 5 minute time limit (ms)</span>
-</span><span id="__span-35-8"><a id="__codelineno-35-8" name="__codelineno-35-8" href="#__codelineno-35-8"></a><span class="p">)</span>
-</span><span id="__span-35-9"><a id="__codelineno-35-9" name="__codelineno-35-9" href="#__codelineno-35-9"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">my_task</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
-</span><span id="__span-35-10"><a id="__codelineno-35-10" name="__codelineno-35-10" href="#__codelineno-35-10"></a>    <span class="o">...</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-36-1"><a id="__codelineno-36-1" name="__codelineno-36-1" href="#__codelineno-36-1"></a><span class="nd">@dramatiq</span><span class="o">.</span><span class="n">actor</span><span class="p">(</span>
+</span><span id="__span-36-2"><a id="__codelineno-36-2" name="__codelineno-36-2" href="#__codelineno-36-2"></a>    <span class="n">queue_name</span><span class="o">=</span><span class="s2">&quot;system&quot;</span><span class="p">,</span>
+</span><span id="__span-36-3"><a id="__codelineno-36-3" name="__codelineno-36-3" href="#__codelineno-36-3"></a>    <span class="n">store_results</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+</span><span id="__span-36-4"><a id="__codelineno-36-4" name="__codelineno-36-4" href="#__codelineno-36-4"></a>    <span class="n">max_retries</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+</span><span id="__span-36-5"><a id="__codelineno-36-5" name="__codelineno-36-5" href="#__codelineno-36-5"></a>    <span class="n">min_backoff</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>     <span class="c1"># 1s minimum backoff</span>
+</span><span id="__span-36-6"><a id="__codelineno-36-6" name="__codelineno-36-6" href="#__codelineno-36-6"></a>    <span class="n">max_backoff</span><span class="o">=</span><span class="mi">600_000</span><span class="p">,</span>  <span class="c1"># 10m maximum backoff</span>
+</span><span id="__span-36-7"><a id="__codelineno-36-7" name="__codelineno-36-7" href="#__codelineno-36-7"></a>    <span class="n">time_limit</span><span class="o">=</span><span class="mi">300_000</span><span class="p">,</span>   <span class="c1"># 5 minute time limit (ms)</span>
+</span><span id="__span-36-8"><a id="__codelineno-36-8" name="__codelineno-36-8" href="#__codelineno-36-8"></a><span class="p">)</span>
+</span><span id="__span-36-9"><a id="__codelineno-36-9" name="__codelineno-36-9" href="#__codelineno-36-9"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">my_task</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+</span><span id="__span-36-10"><a id="__codelineno-36-10" name="__codelineno-36-10" href="#__codelineno-36-10"></a>    <span class="o">...</span>
 </span></code></pre></div>
 </div>
 <div class="tabbed-block">
 <h3 id="result-ttl">Result TTL</h3>
 <p>Configure how long results are stored in Redis:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-36-1"><a id="__codelineno-36-1" name="__codelineno-36-1" href="#__codelineno-36-1"></a><span class="n">broker</span> <span class="o">=</span> <span class="p">(</span>
-</span><span id="__span-36-2"><a id="__codelineno-36-2" name="__codelineno-36-2" href="#__codelineno-36-2"></a>    <span class="n">RedisStreamBroker</span><span class="p">(</span><span class="n">url</span><span class="o">=</span><span class="n">redis_url</span><span class="p">,</span> <span class="n">queue_name</span><span class="o">=</span><span class="s2">&quot;taskiq:system&quot;</span><span class="p">)</span>
-</span><span id="__span-36-3"><a id="__codelineno-36-3" name="__codelineno-36-3" href="#__codelineno-36-3"></a>    <span class="o">.</span><span class="n">with_result_backend</span><span class="p">(</span>
-</span><span id="__span-36-4"><a id="__codelineno-36-4" name="__codelineno-36-4" href="#__codelineno-36-4"></a>        <span class="n">RedisAsyncResultBackend</span><span class="p">(</span>
-</span><span id="__span-36-5"><a id="__codelineno-36-5" name="__codelineno-36-5" href="#__codelineno-36-5"></a>            <span class="n">redis_url</span><span class="o">=</span><span class="n">redis_url</span><span class="p">,</span>
-</span><span id="__span-36-6"><a id="__codelineno-36-6" name="__codelineno-36-6" href="#__codelineno-36-6"></a>            <span class="n">result_ex_time</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span>  <span class="c1"># Result TTL in seconds</span>
-</span><span id="__span-36-7"><a id="__codelineno-36-7" name="__codelineno-36-7" href="#__codelineno-36-7"></a>        <span class="p">)</span>
-</span><span id="__span-36-8"><a id="__codelineno-36-8" name="__codelineno-36-8" href="#__codelineno-36-8"></a>    <span class="p">)</span>
-</span><span id="__span-36-9"><a id="__codelineno-36-9" name="__codelineno-36-9" href="#__codelineno-36-9"></a><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-37-1"><a id="__codelineno-37-1" name="__codelineno-37-1" href="#__codelineno-37-1"></a><span class="n">broker</span> <span class="o">=</span> <span class="p">(</span>
+</span><span id="__span-37-2"><a id="__codelineno-37-2" name="__codelineno-37-2" href="#__codelineno-37-2"></a>    <span class="n">RedisStreamBroker</span><span class="p">(</span><span class="n">url</span><span class="o">=</span><span class="n">redis_url</span><span class="p">,</span> <span class="n">queue_name</span><span class="o">=</span><span class="s2">&quot;taskiq:system&quot;</span><span class="p">)</span>
+</span><span id="__span-37-3"><a id="__codelineno-37-3" name="__codelineno-37-3" href="#__codelineno-37-3"></a>    <span class="o">.</span><span class="n">with_result_backend</span><span class="p">(</span>
+</span><span id="__span-37-4"><a id="__codelineno-37-4" name="__codelineno-37-4" href="#__codelineno-37-4"></a>        <span class="n">RedisAsyncResultBackend</span><span class="p">(</span>
+</span><span id="__span-37-5"><a id="__codelineno-37-5" name="__codelineno-37-5" href="#__codelineno-37-5"></a>            <span class="n">redis_url</span><span class="o">=</span><span class="n">redis_url</span><span class="p">,</span>
+</span><span id="__span-37-6"><a id="__codelineno-37-6" name="__codelineno-37-6" href="#__codelineno-37-6"></a>            <span class="n">result_ex_time</span><span class="o">=</span><span class="mi">60</span><span class="p">,</span>  <span class="c1"># Result TTL in seconds</span>
+</span><span id="__span-37-7"><a id="__codelineno-37-7" name="__codelineno-37-7" href="#__codelineno-37-7"></a>        <span class="p">)</span>
+</span><span id="__span-37-8"><a id="__codelineno-37-8" name="__codelineno-37-8" href="#__codelineno-37-8"></a>    <span class="p">)</span>
+</span><span id="__span-37-9"><a id="__codelineno-37-9" name="__codelineno-37-9" href="#__codelineno-37-9"></a><span class="p">)</span>
 </span></code></pre></div>
 <h3 id="process-count">Process Count</h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-37-1"><a id="__codelineno-37-1" name="__codelineno-37-1" href="#__codelineno-37-1"></a><span class="c1"># Match CPU count for CPU-bound tasks</span>
-</span><span id="__span-37-2"><a id="__codelineno-37-2" name="__codelineno-37-2" href="#__codelineno-37-2"></a><span class="nv">WORKER_PROCESSES</span><span class="o">=</span><span class="m">4</span>
-</span><span id="__span-37-3"><a id="__codelineno-37-3" name="__codelineno-37-3" href="#__codelineno-37-3"></a>
-</span><span id="__span-37-4"><a id="__codelineno-37-4" name="__codelineno-37-4" href="#__codelineno-37-4"></a><span class="c1"># Fewer processes for I/O-bound tasks (async handles concurrency)</span>
-</span><span id="__span-37-5"><a id="__codelineno-37-5" name="__codelineno-37-5" href="#__codelineno-37-5"></a><span class="nv">WORKER_PROCESSES</span><span class="o">=</span><span class="m">2</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-38-1"><a id="__codelineno-38-1" name="__codelineno-38-1" href="#__codelineno-38-1"></a><span class="c1"># Match CPU count for CPU-bound tasks</span>
+</span><span id="__span-38-2"><a id="__codelineno-38-2" name="__codelineno-38-2" href="#__codelineno-38-2"></a><span class="nv">WORKER_PROCESSES</span><span class="o">=</span><span class="m">4</span>
+</span><span id="__span-38-3"><a id="__codelineno-38-3" name="__codelineno-38-3" href="#__codelineno-38-3"></a>
+</span><span id="__span-38-4"><a id="__codelineno-38-4" name="__codelineno-38-4" href="#__codelineno-38-4"></a><span class="c1"># Fewer processes for I/O-bound tasks (async handles concurrency)</span>
+</span><span id="__span-38-5"><a id="__codelineno-38-5" name="__codelineno-38-5" href="#__codelineno-38-5"></a><span class="nv">WORKER_PROCESSES</span><span class="o">=</span><span class="m">2</span>
 </span></code></pre></div>
 </div>
 </div>
 </div>
 <h3 id="connection-pooling">Connection Pooling</h3>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-38-1"><a id="__codelineno-38-1" name="__codelineno-38-1" href="#__codelineno-38-1"></a><span class="n">REDIS_MAX_CONNECTIONS</span> <span class="o">=</span> <span class="mi">50</span>  <span class="c1"># Per worker process</span>
-</span><span id="__span-38-2"><a id="__codelineno-38-2" name="__codelineno-38-2" href="#__codelineno-38-2"></a><span class="n">REDIS_CONNECTION_TIMEOUT</span> <span class="o">=</span> <span class="mi">5</span>
-</span><span id="__span-38-3"><a id="__codelineno-38-3" name="__codelineno-38-3" href="#__codelineno-38-3"></a><span class="n">REDIS_SOCKET_KEEPALIVE</span> <span class="o">=</span> <span class="kc">True</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-39-1"><a id="__codelineno-39-1" name="__codelineno-39-1" href="#__codelineno-39-1"></a><span class="n">REDIS_MAX_CONNECTIONS</span> <span class="o">=</span> <span class="mi">50</span>  <span class="c1"># Per worker process</span>
+</span><span id="__span-39-2"><a id="__codelineno-39-2" name="__codelineno-39-2" href="#__codelineno-39-2"></a><span class="n">REDIS_CONNECTION_TIMEOUT</span> <span class="o">=</span> <span class="mi">5</span>
+</span><span id="__span-39-3"><a id="__codelineno-39-3" name="__codelineno-39-3" href="#__codelineno-39-3"></a><span class="n">REDIS_SOCKET_KEEPALIVE</span> <span class="o">=</span> <span class="kc">True</span>
 </span></code></pre></div>
 <hr />
 <h2 id="monitoring-health-checks">Monitoring &amp; Health Checks</h2>
@@ -7097,24 +7157,24 @@ once none are left Redis refuses the write instead of dropping work.</p>
 <div class="tabbed-content">
 <div class="tabbed-block">
 <p>Health checks use Redis heartbeat keys with TTL. Each worker writes a heartbeat key on startup and updates it periodically:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-39-1"><a id="__codelineno-39-1" name="__codelineno-39-1" href="#__codelineno-39-1"></a><span class="c1"># app/components/worker/queues/system.py</span>
-</span><span id="__span-39-2"><a id="__codelineno-39-2" name="__codelineno-39-2" href="#__codelineno-39-2"></a><span class="k">class</span><span class="w"> </span><span class="nc">WorkerSettings</span><span class="p">:</span>
-</span><span id="__span-39-3"><a id="__codelineno-39-3" name="__codelineno-39-3" href="#__codelineno-39-3"></a>    <span class="n">functions</span> <span class="o">=</span> <span class="p">[</span><span class="n">system_health_check</span><span class="p">]</span>
-</span><span id="__span-39-4"><a id="__codelineno-39-4" name="__codelineno-39-4" href="#__codelineno-39-4"></a>    <span class="n">health_check_key</span> <span class="o">=</span> <span class="s2">&quot;worker:health:system&quot;</span>
-</span><span id="__span-39-5"><a id="__codelineno-39-5" name="__codelineno-39-5" href="#__codelineno-39-5"></a>    <span class="n">health_check_interval</span> <span class="o">=</span> <span class="mi">30</span>  <span class="c1"># seconds</span>
-</span><span id="__span-39-6"><a id="__codelineno-39-6" name="__codelineno-39-6" href="#__codelineno-39-6"></a>    <span class="n">keep_result</span> <span class="o">=</span> <span class="mi">3600</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-40-1"><a id="__codelineno-40-1" name="__codelineno-40-1" href="#__codelineno-40-1"></a><span class="c1"># app/components/worker/queues/system.py</span>
+</span><span id="__span-40-2"><a id="__codelineno-40-2" name="__codelineno-40-2" href="#__codelineno-40-2"></a><span class="k">class</span><span class="w"> </span><span class="nc">WorkerSettings</span><span class="p">:</span>
+</span><span id="__span-40-3"><a id="__codelineno-40-3" name="__codelineno-40-3" href="#__codelineno-40-3"></a>    <span class="n">functions</span> <span class="o">=</span> <span class="p">[</span><span class="n">system_health_check</span><span class="p">]</span>
+</span><span id="__span-40-4"><a id="__codelineno-40-4" name="__codelineno-40-4" href="#__codelineno-40-4"></a>    <span class="n">health_check_key</span> <span class="o">=</span> <span class="s2">&quot;worker:health:system&quot;</span>
+</span><span id="__span-40-5"><a id="__codelineno-40-5" name="__codelineno-40-5" href="#__codelineno-40-5"></a>    <span class="n">health_check_interval</span> <span class="o">=</span> <span class="mi">30</span>  <span class="c1"># seconds</span>
+</span><span id="__span-40-6"><a id="__codelineno-40-6" name="__codelineno-40-6" href="#__codelineno-40-6"></a>    <span class="n">keep_result</span> <span class="o">=</span> <span class="mi">3600</span>
 </span></code></pre></div>
 <p><strong>Check queue metrics:</strong></p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-40-1"><a id="__codelineno-40-1" name="__codelineno-40-1" href="#__codelineno-40-1"></a>arq<span class="w"> </span>app.components.worker.queues.system.WorkerSettings<span class="w"> </span>--check
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-41-1"><a id="__codelineno-41-1" name="__codelineno-41-1" href="#__codelineno-41-1"></a>arq<span class="w"> </span>app.components.worker.queues.system.WorkerSettings<span class="w"> </span>--check
 </span></code></pre></div>
 <p>The API uses <code>LLEN</code> on queue keys for depth metrics.</p>
 </div>
 <div class="tabbed-block">
 <p>Dramatiq health is monitored via Redis queue depth and delay queue inspection:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-41-1"><a id="__codelineno-41-1" name="__codelineno-41-1" href="#__codelineno-41-1"></a><span class="c1"># Query Redis directly</span>
-</span><span id="__span-41-2"><a id="__codelineno-41-2" name="__codelineno-41-2" href="#__codelineno-41-2"></a>KEYS<span class="w"> </span>dramatiq:*<span class="w">           </span><span class="c1"># List all Dramatiq keys</span>
-</span><span id="__span-41-3"><a id="__codelineno-41-3" name="__codelineno-41-3" href="#__codelineno-41-3"></a>LLEN<span class="w"> </span>dramatiq:system<span class="w">      </span><span class="c1"># System queue depth</span>
-</span><span id="__span-41-4"><a id="__codelineno-41-4" name="__codelineno-41-4" href="#__codelineno-41-4"></a>LLEN<span class="w"> </span>dramatiq:system.DQ<span class="w">   </span><span class="c1"># System delay queue depth</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-42-1"><a id="__codelineno-42-1" name="__codelineno-42-1" href="#__codelineno-42-1"></a><span class="c1"># Query Redis directly</span>
+</span><span id="__span-42-2"><a id="__codelineno-42-2" name="__codelineno-42-2" href="#__codelineno-42-2"></a>KEYS<span class="w"> </span>dramatiq:*<span class="w">           </span><span class="c1"># List all Dramatiq keys</span>
+</span><span id="__span-42-3"><a id="__codelineno-42-3" name="__codelineno-42-3" href="#__codelineno-42-3"></a>LLEN<span class="w"> </span>dramatiq:system<span class="w">      </span><span class="c1"># System queue depth</span>
+</span><span id="__span-42-4"><a id="__codelineno-42-4" name="__codelineno-42-4" href="#__codelineno-42-4"></a>LLEN<span class="w"> </span>dramatiq:system.DQ<span class="w">   </span><span class="c1"># System delay queue depth</span>
 </span></code></pre></div>
 <p>The Overseer dashboard reads these metrics automatically for real-time display.</p>
 </div>
@@ -7126,16 +7186,16 @@ once none are left Redis refuses the write instead of dropping work.</p>
 <li><code>job.enqueued</code>, Task enqueued (from client side)</li>
 <li><code>job.started</code> / <code>job.completed</code> / <code>job.failed</code>, Task execution</li>
 </ul>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-42-1"><a id="__codelineno-42-1" name="__codelineno-42-1" href="#__codelineno-42-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">EventPublishMiddleware</span><span class="p">(</span><span class="n">TaskiqMiddleware</span><span class="p">):</span>
-</span><span id="__span-42-2"><a id="__codelineno-42-2" name="__codelineno-42-2" href="#__codelineno-42-2"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">startup</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-42-3"><a id="__codelineno-42-3" name="__codelineno-42-3" href="#__codelineno-42-3"></a>        <span class="k">await</span> <span class="n">publish_event</span><span class="p">(</span><span class="n">redis</span><span class="p">,</span> <span class="s2">&quot;worker.started&quot;</span><span class="p">,</span> <span class="n">queue_name</span><span class="p">)</span>
-</span><span id="__span-42-4"><a id="__codelineno-42-4" name="__codelineno-42-4" href="#__codelineno-42-4"></a>
-</span><span id="__span-42-5"><a id="__codelineno-42-5" name="__codelineno-42-5" href="#__codelineno-42-5"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">pre_execute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="n">TaskiqMessage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TaskiqMessage</span><span class="p">:</span>
-</span><span id="__span-42-6"><a id="__codelineno-42-6" name="__codelineno-42-6" href="#__codelineno-42-6"></a>        <span class="k">await</span> <span class="n">publish_event</span><span class="p">(</span><span class="n">redis</span><span class="p">,</span> <span class="s2">&quot;job.started&quot;</span><span class="p">,</span> <span class="n">queue_name</span><span class="p">,</span> <span class="p">{</span><span class="o">...</span><span class="p">})</span>
-</span><span id="__span-42-7"><a id="__codelineno-42-7" name="__codelineno-42-7" href="#__codelineno-42-7"></a>
-</span><span id="__span-42-8"><a id="__codelineno-42-8" name="__codelineno-42-8" href="#__codelineno-42-8"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">post_execute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="n">result</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-42-9"><a id="__codelineno-42-9" name="__codelineno-42-9" href="#__codelineno-42-9"></a>        <span class="n">event_type</span> <span class="o">=</span> <span class="s2">&quot;job.failed&quot;</span> <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">is_err</span> <span class="k">else</span> <span class="s2">&quot;job.completed&quot;</span>
-</span><span id="__span-42-10"><a id="__codelineno-42-10" name="__codelineno-42-10" href="#__codelineno-42-10"></a>        <span class="k">await</span> <span class="n">publish_event</span><span class="p">(</span><span class="n">redis</span><span class="p">,</span> <span class="n">event_type</span><span class="p">,</span> <span class="n">queue_name</span><span class="p">,</span> <span class="p">{</span><span class="o">...</span><span class="p">})</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-43-1"><a id="__codelineno-43-1" name="__codelineno-43-1" href="#__codelineno-43-1"></a><span class="k">class</span><span class="w"> </span><span class="nc">EventPublishMiddleware</span><span class="p">(</span><span class="n">TaskiqMiddleware</span><span class="p">):</span>
+</span><span id="__span-43-2"><a id="__codelineno-43-2" name="__codelineno-43-2" href="#__codelineno-43-2"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">startup</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-43-3"><a id="__codelineno-43-3" name="__codelineno-43-3" href="#__codelineno-43-3"></a>        <span class="k">await</span> <span class="n">publish_event</span><span class="p">(</span><span class="n">redis</span><span class="p">,</span> <span class="s2">&quot;worker.started&quot;</span><span class="p">,</span> <span class="n">queue_name</span><span class="p">)</span>
+</span><span id="__span-43-4"><a id="__codelineno-43-4" name="__codelineno-43-4" href="#__codelineno-43-4"></a>
+</span><span id="__span-43-5"><a id="__codelineno-43-5" name="__codelineno-43-5" href="#__codelineno-43-5"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">pre_execute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="n">TaskiqMessage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TaskiqMessage</span><span class="p">:</span>
+</span><span id="__span-43-6"><a id="__codelineno-43-6" name="__codelineno-43-6" href="#__codelineno-43-6"></a>        <span class="k">await</span> <span class="n">publish_event</span><span class="p">(</span><span class="n">redis</span><span class="p">,</span> <span class="s2">&quot;job.started&quot;</span><span class="p">,</span> <span class="n">queue_name</span><span class="p">,</span> <span class="p">{</span><span class="o">...</span><span class="p">})</span>
+</span><span id="__span-43-7"><a id="__codelineno-43-7" name="__codelineno-43-7" href="#__codelineno-43-7"></a>
+</span><span id="__span-43-8"><a id="__codelineno-43-8" name="__codelineno-43-8" href="#__codelineno-43-8"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">post_execute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">,</span> <span class="n">result</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-43-9"><a id="__codelineno-43-9" name="__codelineno-43-9" href="#__codelineno-43-9"></a>        <span class="n">event_type</span> <span class="o">=</span> <span class="s2">&quot;job.failed&quot;</span> <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">is_err</span> <span class="k">else</span> <span class="s2">&quot;job.completed&quot;</span>
+</span><span id="__span-43-10"><a id="__codelineno-43-10" name="__codelineno-43-10" href="#__codelineno-43-10"></a>        <span class="k">await</span> <span class="n">publish_event</span><span class="p">(</span><span class="n">redis</span><span class="p">,</span> <span class="n">event_type</span><span class="p">,</span> <span class="n">queue_name</span><span class="p">,</span> <span class="p">{</span><span class="o">...</span><span class="p">})</span>
 </span></code></pre></div>
 <p>The Overseer dashboard subscribes to these events via SSE for real-time updates.</p>
 </div>
@@ -7144,28 +7204,28 @@ once none are left Redis refuses the write instead of dropping work.</p>
 <hr />
 <h2 id="security-configuration">Security Configuration</h2>
 <h3 id="authentication">Authentication</h3>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-43-1"><a id="__codelineno-43-1" name="__codelineno-43-1" href="#__codelineno-43-1"></a><span class="n">REDIS_PASSWORD</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;REDIS_PASSWORD&quot;</span><span class="p">)</span>
-</span><span id="__span-43-2"><a id="__codelineno-43-2" name="__codelineno-43-2" href="#__codelineno-43-2"></a><span class="n">REDIS_USERNAME</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;REDIS_USERNAME&quot;</span><span class="p">)</span>  <span class="c1"># Redis 6.0+</span>
-</span><span id="__span-43-3"><a id="__codelineno-43-3" name="__codelineno-43-3" href="#__codelineno-43-3"></a><span class="n">REDIS_SSL</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;REDIS_SSL&quot;</span><span class="p">,</span> <span class="s2">&quot;false&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;true&quot;</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-44-1"><a id="__codelineno-44-1" name="__codelineno-44-1" href="#__codelineno-44-1"></a><span class="n">REDIS_PASSWORD</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;REDIS_PASSWORD&quot;</span><span class="p">)</span>
+</span><span id="__span-44-2"><a id="__codelineno-44-2" name="__codelineno-44-2" href="#__codelineno-44-2"></a><span class="n">REDIS_USERNAME</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;REDIS_USERNAME&quot;</span><span class="p">)</span>  <span class="c1"># Redis 6.0+</span>
+</span><span id="__span-44-3"><a id="__codelineno-44-3" name="__codelineno-44-3" href="#__codelineno-44-3"></a><span class="n">REDIS_SSL</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getenv</span><span class="p">(</span><span class="s2">&quot;REDIS_SSL&quot;</span><span class="p">,</span> <span class="s2">&quot;false&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s2">&quot;true&quot;</span>
 </span></code></pre></div>
 <h3 id="network-security">Network Security</h3>
-<div class="language-yaml highlight"><pre><span></span><code><span id="__span-44-1"><a id="__codelineno-44-1" name="__codelineno-44-1" href="#__codelineno-44-1"></a><span class="c1"># docker-compose.yml - Internal network only</span>
-</span><span id="__span-44-2"><a id="__codelineno-44-2" name="__codelineno-44-2" href="#__codelineno-44-2"></a><span class="nt">services</span><span class="p">:</span>
-</span><span id="__span-44-3"><a id="__codelineno-44-3" name="__codelineno-44-3" href="#__codelineno-44-3"></a><span class="w">  </span><span class="nt">worker-system</span><span class="p">:</span>
-</span><span id="__span-44-4"><a id="__codelineno-44-4" name="__codelineno-44-4" href="#__codelineno-44-4"></a><span class="w">    </span><span class="nt">networks</span><span class="p">:</span>
-</span><span id="__span-44-5"><a id="__codelineno-44-5" name="__codelineno-44-5" href="#__codelineno-44-5"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">internal</span>
-</span><span id="__span-44-6"><a id="__codelineno-44-6" name="__codelineno-44-6" href="#__codelineno-44-6"></a><span class="w">    </span><span class="c1"># No ports exposed</span>
-</span><span id="__span-44-7"><a id="__codelineno-44-7" name="__codelineno-44-7" href="#__codelineno-44-7"></a>
-</span><span id="__span-44-8"><a id="__codelineno-44-8" name="__codelineno-44-8" href="#__codelineno-44-8"></a><span class="w">  </span><span class="nt">redis</span><span class="p">:</span>
-</span><span id="__span-44-9"><a id="__codelineno-44-9" name="__codelineno-44-9" href="#__codelineno-44-9"></a><span class="w">    </span><span class="nt">networks</span><span class="p">:</span>
-</span><span id="__span-44-10"><a id="__codelineno-44-10" name="__codelineno-44-10" href="#__codelineno-44-10"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">internal</span>
-</span><span id="__span-44-11"><a id="__codelineno-44-11" name="__codelineno-44-11" href="#__codelineno-44-11"></a><span class="w">    </span><span class="nt">ports</span><span class="p">:</span>
-</span><span id="__span-44-12"><a id="__codelineno-44-12" name="__codelineno-44-12" href="#__codelineno-44-12"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;127.0.0.1:6379:6379&quot;</span><span class="w">  </span><span class="c1"># Localhost only</span>
-</span><span id="__span-44-13"><a id="__codelineno-44-13" name="__codelineno-44-13" href="#__codelineno-44-13"></a>
-</span><span id="__span-44-14"><a id="__codelineno-44-14" name="__codelineno-44-14" href="#__codelineno-44-14"></a><span class="nt">networks</span><span class="p">:</span>
-</span><span id="__span-44-15"><a id="__codelineno-44-15" name="__codelineno-44-15" href="#__codelineno-44-15"></a><span class="w">  </span><span class="nt">internal</span><span class="p">:</span>
-</span><span id="__span-44-16"><a id="__codelineno-44-16" name="__codelineno-44-16" href="#__codelineno-44-16"></a><span class="w">    </span><span class="nt">driver</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bridge</span>
-</span><span id="__span-44-17"><a id="__codelineno-44-17" name="__codelineno-44-17" href="#__codelineno-44-17"></a><span class="w">    </span><span class="nt">internal</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-45-1"><a id="__codelineno-45-1" name="__codelineno-45-1" href="#__codelineno-45-1"></a><span class="c1"># docker-compose.yml - Internal network only</span>
+</span><span id="__span-45-2"><a id="__codelineno-45-2" name="__codelineno-45-2" href="#__codelineno-45-2"></a><span class="nt">services</span><span class="p">:</span>
+</span><span id="__span-45-3"><a id="__codelineno-45-3" name="__codelineno-45-3" href="#__codelineno-45-3"></a><span class="w">  </span><span class="nt">worker-system</span><span class="p">:</span>
+</span><span id="__span-45-4"><a id="__codelineno-45-4" name="__codelineno-45-4" href="#__codelineno-45-4"></a><span class="w">    </span><span class="nt">networks</span><span class="p">:</span>
+</span><span id="__span-45-5"><a id="__codelineno-45-5" name="__codelineno-45-5" href="#__codelineno-45-5"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">internal</span>
+</span><span id="__span-45-6"><a id="__codelineno-45-6" name="__codelineno-45-6" href="#__codelineno-45-6"></a><span class="w">    </span><span class="c1"># No ports exposed</span>
+</span><span id="__span-45-7"><a id="__codelineno-45-7" name="__codelineno-45-7" href="#__codelineno-45-7"></a>
+</span><span id="__span-45-8"><a id="__codelineno-45-8" name="__codelineno-45-8" href="#__codelineno-45-8"></a><span class="w">  </span><span class="nt">redis</span><span class="p">:</span>
+</span><span id="__span-45-9"><a id="__codelineno-45-9" name="__codelineno-45-9" href="#__codelineno-45-9"></a><span class="w">    </span><span class="nt">networks</span><span class="p">:</span>
+</span><span id="__span-45-10"><a id="__codelineno-45-10" name="__codelineno-45-10" href="#__codelineno-45-10"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">internal</span>
+</span><span id="__span-45-11"><a id="__codelineno-45-11" name="__codelineno-45-11" href="#__codelineno-45-11"></a><span class="w">    </span><span class="nt">ports</span><span class="p">:</span>
+</span><span id="__span-45-12"><a id="__codelineno-45-12" name="__codelineno-45-12" href="#__codelineno-45-12"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&quot;127.0.0.1:6379:6379&quot;</span><span class="w">  </span><span class="c1"># Localhost only</span>
+</span><span id="__span-45-13"><a id="__codelineno-45-13" name="__codelineno-45-13" href="#__codelineno-45-13"></a>
+</span><span id="__span-45-14"><a id="__codelineno-45-14" name="__codelineno-45-14" href="#__codelineno-45-14"></a><span class="nt">networks</span><span class="p">:</span>
+</span><span id="__span-45-15"><a id="__codelineno-45-15" name="__codelineno-45-15" href="#__codelineno-45-15"></a><span class="w">  </span><span class="nt">internal</span><span class="p">:</span>
+</span><span id="__span-45-16"><a id="__codelineno-45-16" name="__codelineno-45-16" href="#__codelineno-45-16"></a><span class="w">    </span><span class="nt">driver</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bridge</span>
+</span><span id="__span-45-17"><a id="__codelineno-45-17" name="__codelineno-45-17" href="#__codelineno-45-17"></a><span class="w">    </span><span class="nt">internal</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
 </span></code></pre></div>
 <hr />
 <h2 id="advanced-configuration">Advanced Configuration</h2>
@@ -7173,52 +7233,52 @@ once none are left Redis refuses the write instead of dropping work.</p>
 <div class="tabbed-content">
 <div class="tabbed-block">
 <h3 id="custom-worker-classes">Custom Worker Classes</h3>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-45-1"><a id="__codelineno-45-1" name="__codelineno-45-1" href="#__codelineno-45-1"></a><span class="c1"># app/components/worker/custom.py</span>
-</span><span id="__span-45-2"><a id="__codelineno-45-2" name="__codelineno-45-2" href="#__codelineno-45-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">arq</span><span class="w"> </span><span class="kn">import</span> <span class="n">Worker</span>
-</span><span id="__span-45-3"><a id="__codelineno-45-3" name="__codelineno-45-3" href="#__codelineno-45-3"></a>
-</span><span id="__span-45-4"><a id="__codelineno-45-4" name="__codelineno-45-4" href="#__codelineno-45-4"></a><span class="k">class</span><span class="w"> </span><span class="nc">CustomWorker</span><span class="p">(</span><span class="n">Worker</span><span class="p">):</span>
-</span><span id="__span-45-5"><a id="__codelineno-45-5" name="__codelineno-45-5" href="#__codelineno-45-5"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Extended worker with custom behavior.&quot;&quot;&quot;</span>
-</span><span id="__span-45-6"><a id="__codelineno-45-6" name="__codelineno-45-6" href="#__codelineno-45-6"></a>
-</span><span id="__span-45-7"><a id="__codelineno-45-7" name="__codelineno-45-7" href="#__codelineno-45-7"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">startup</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-</span><span id="__span-45-8"><a id="__codelineno-45-8" name="__codelineno-45-8" href="#__codelineno-45-8"></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize resources on worker startup.&quot;&quot;&quot;</span>
-</span><span id="__span-45-9"><a id="__codelineno-45-9" name="__codelineno-45-9" href="#__codelineno-45-9"></a>        <span class="k">await</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">startup</span><span class="p">()</span>
-</span><span id="__span-45-10"><a id="__codelineno-45-10" name="__codelineno-45-10" href="#__codelineno-45-10"></a>        <span class="k">await</span> <span class="n">init_database_pool</span><span class="p">()</span>
-</span><span id="__span-45-11"><a id="__codelineno-45-11" name="__codelineno-45-11" href="#__codelineno-45-11"></a>        <span class="k">await</span> <span class="n">setup_monitoring</span><span class="p">()</span>
-</span><span id="__span-45-12"><a id="__codelineno-45-12" name="__codelineno-45-12" href="#__codelineno-45-12"></a>
-</span><span id="__span-45-13"><a id="__codelineno-45-13" name="__codelineno-45-13" href="#__codelineno-45-13"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-</span><span id="__span-45-14"><a id="__codelineno-45-14" name="__codelineno-45-14" href="#__codelineno-45-14"></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Cleanup on worker shutdown.&quot;&quot;&quot;</span>
-</span><span id="__span-45-15"><a id="__codelineno-45-15" name="__codelineno-45-15" href="#__codelineno-45-15"></a>        <span class="k">await</span> <span class="n">close_database_pool</span><span class="p">()</span>
-</span><span id="__span-45-16"><a id="__codelineno-45-16" name="__codelineno-45-16" href="#__codelineno-45-16"></a>        <span class="k">await</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-46-1"><a id="__codelineno-46-1" name="__codelineno-46-1" href="#__codelineno-46-1"></a><span class="c1"># app/components/worker/custom.py</span>
+</span><span id="__span-46-2"><a id="__codelineno-46-2" name="__codelineno-46-2" href="#__codelineno-46-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">arq</span><span class="w"> </span><span class="kn">import</span> <span class="n">Worker</span>
+</span><span id="__span-46-3"><a id="__codelineno-46-3" name="__codelineno-46-3" href="#__codelineno-46-3"></a>
+</span><span id="__span-46-4"><a id="__codelineno-46-4" name="__codelineno-46-4" href="#__codelineno-46-4"></a><span class="k">class</span><span class="w"> </span><span class="nc">CustomWorker</span><span class="p">(</span><span class="n">Worker</span><span class="p">):</span>
+</span><span id="__span-46-5"><a id="__codelineno-46-5" name="__codelineno-46-5" href="#__codelineno-46-5"></a><span class="w">    </span><span class="sd">&quot;&quot;&quot;Extended worker with custom behavior.&quot;&quot;&quot;</span>
+</span><span id="__span-46-6"><a id="__codelineno-46-6" name="__codelineno-46-6" href="#__codelineno-46-6"></a>
+</span><span id="__span-46-7"><a id="__codelineno-46-7" name="__codelineno-46-7" href="#__codelineno-46-7"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">startup</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span id="__span-46-8"><a id="__codelineno-46-8" name="__codelineno-46-8" href="#__codelineno-46-8"></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize resources on worker startup.&quot;&quot;&quot;</span>
+</span><span id="__span-46-9"><a id="__codelineno-46-9" name="__codelineno-46-9" href="#__codelineno-46-9"></a>        <span class="k">await</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">startup</span><span class="p">()</span>
+</span><span id="__span-46-10"><a id="__codelineno-46-10" name="__codelineno-46-10" href="#__codelineno-46-10"></a>        <span class="k">await</span> <span class="n">init_database_pool</span><span class="p">()</span>
+</span><span id="__span-46-11"><a id="__codelineno-46-11" name="__codelineno-46-11" href="#__codelineno-46-11"></a>        <span class="k">await</span> <span class="n">setup_monitoring</span><span class="p">()</span>
+</span><span id="__span-46-12"><a id="__codelineno-46-12" name="__codelineno-46-12" href="#__codelineno-46-12"></a>
+</span><span id="__span-46-13"><a id="__codelineno-46-13" name="__codelineno-46-13" href="#__codelineno-46-13"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">shutdown</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+</span><span id="__span-46-14"><a id="__codelineno-46-14" name="__codelineno-46-14" href="#__codelineno-46-14"></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Cleanup on worker shutdown.&quot;&quot;&quot;</span>
+</span><span id="__span-46-15"><a id="__codelineno-46-15" name="__codelineno-46-15" href="#__codelineno-46-15"></a>        <span class="k">await</span> <span class="n">close_database_pool</span><span class="p">()</span>
+</span><span id="__span-46-16"><a id="__codelineno-46-16" name="__codelineno-46-16" href="#__codelineno-46-16"></a>        <span class="k">await</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">shutdown</span><span class="p">()</span>
 </span></code></pre></div>
 </div>
 <div class="tabbed-block">
 <h3 id="dramatiq-result-retrieval">Dramatiq Result Retrieval</h3>
 <p>Results are stored using a key derived from the actor name, queue name, and message ID. The <code>Results</code> middleware with <code>RedisBackend</code> handles storage automatically when <code>store_results=True</code>:</p>
 <p>Result keys follow the pattern: <code>MD5(namespace:queue_name:actor_name:message_id)</code>.</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-46-1"><a id="__codelineno-46-1" name="__codelineno-46-1" href="#__codelineno-46-1"></a>curl<span class="w"> </span><span class="s2">&quot;http://localhost:8000/api/v1/tasks/result/{message_id}?actor_name=io_simulation_task&amp;queue_name=load_test&quot;</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-47-1"><a id="__codelineno-47-1" name="__codelineno-47-1" href="#__codelineno-47-1"></a>curl<span class="w"> </span><span class="s2">&quot;http://localhost:8000/api/v1/tasks/result/{message_id}?actor_name=io_simulation_task&amp;queue_name=load_test&quot;</span>
 </span></code></pre></div>
 </div>
 <div class="tabbed-block">
 <h3 id="custom-middleware">Custom Middleware</h3>
 <p>TaskIQ middleware hooks into the task lifecycle:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-47-1"><a id="__codelineno-47-1" name="__codelineno-47-1" href="#__codelineno-47-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">taskiq</span><span class="w"> </span><span class="kn">import</span> <span class="n">TaskiqMiddleware</span><span class="p">,</span> <span class="n">TaskiqMessage</span><span class="p">,</span> <span class="n">TaskiqResult</span>
-</span><span id="__span-47-2"><a id="__codelineno-47-2" name="__codelineno-47-2" href="#__codelineno-47-2"></a>
-</span><span id="__span-47-3"><a id="__codelineno-47-3" name="__codelineno-47-3" href="#__codelineno-47-3"></a><span class="k">class</span><span class="w"> </span><span class="nc">MyMiddleware</span><span class="p">(</span><span class="n">TaskiqMiddleware</span><span class="p">):</span>
-</span><span id="__span-47-4"><a id="__codelineno-47-4" name="__codelineno-47-4" href="#__codelineno-47-4"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">pre_execute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="n">TaskiqMessage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TaskiqMessage</span><span class="p">:</span>
-</span><span id="__span-47-5"><a id="__codelineno-47-5" name="__codelineno-47-5" href="#__codelineno-47-5"></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Run before each task.&quot;&quot;&quot;</span>
-</span><span id="__span-47-6"><a id="__codelineno-47-6" name="__codelineno-47-6" href="#__codelineno-47-6"></a>        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Starting task: </span><span class="si">{</span><span class="n">message</span><span class="o">.</span><span class="n">task_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-</span><span id="__span-47-7"><a id="__codelineno-47-7" name="__codelineno-47-7" href="#__codelineno-47-7"></a>        <span class="k">return</span> <span class="n">message</span>
-</span><span id="__span-47-8"><a id="__codelineno-47-8" name="__codelineno-47-8" href="#__codelineno-47-8"></a>
-</span><span id="__span-47-9"><a id="__codelineno-47-9" name="__codelineno-47-9" href="#__codelineno-47-9"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">post_execute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="n">TaskiqMessage</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="n">TaskiqResult</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-</span><span id="__span-47-10"><a id="__codelineno-47-10" name="__codelineno-47-10" href="#__codelineno-47-10"></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Run after each task.&quot;&quot;&quot;</span>
-</span><span id="__span-47-11"><a id="__codelineno-47-11" name="__codelineno-47-11" href="#__codelineno-47-11"></a>        <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">is_err</span><span class="p">:</span>
-</span><span id="__span-47-12"><a id="__codelineno-47-12" name="__codelineno-47-12" href="#__codelineno-47-12"></a>            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Task failed: </span><span class="si">{</span><span class="n">message</span><span class="o">.</span><span class="n">task_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-48-1"><a id="__codelineno-48-1" name="__codelineno-48-1" href="#__codelineno-48-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">taskiq</span><span class="w"> </span><span class="kn">import</span> <span class="n">TaskiqMiddleware</span><span class="p">,</span> <span class="n">TaskiqMessage</span><span class="p">,</span> <span class="n">TaskiqResult</span>
+</span><span id="__span-48-2"><a id="__codelineno-48-2" name="__codelineno-48-2" href="#__codelineno-48-2"></a>
+</span><span id="__span-48-3"><a id="__codelineno-48-3" name="__codelineno-48-3" href="#__codelineno-48-3"></a><span class="k">class</span><span class="w"> </span><span class="nc">MyMiddleware</span><span class="p">(</span><span class="n">TaskiqMiddleware</span><span class="p">):</span>
+</span><span id="__span-48-4"><a id="__codelineno-48-4" name="__codelineno-48-4" href="#__codelineno-48-4"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">pre_execute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="n">TaskiqMessage</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TaskiqMessage</span><span class="p">:</span>
+</span><span id="__span-48-5"><a id="__codelineno-48-5" name="__codelineno-48-5" href="#__codelineno-48-5"></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Run before each task.&quot;&quot;&quot;</span>
+</span><span id="__span-48-6"><a id="__codelineno-48-6" name="__codelineno-48-6" href="#__codelineno-48-6"></a>        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Starting task: </span><span class="si">{</span><span class="n">message</span><span class="o">.</span><span class="n">task_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</span><span id="__span-48-7"><a id="__codelineno-48-7" name="__codelineno-48-7" href="#__codelineno-48-7"></a>        <span class="k">return</span> <span class="n">message</span>
+</span><span id="__span-48-8"><a id="__codelineno-48-8" name="__codelineno-48-8" href="#__codelineno-48-8"></a>
+</span><span id="__span-48-9"><a id="__codelineno-48-9" name="__codelineno-48-9" href="#__codelineno-48-9"></a>    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">post_execute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">message</span><span class="p">:</span> <span class="n">TaskiqMessage</span><span class="p">,</span> <span class="n">result</span><span class="p">:</span> <span class="n">TaskiqResult</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+</span><span id="__span-48-10"><a id="__codelineno-48-10" name="__codelineno-48-10" href="#__codelineno-48-10"></a><span class="w">        </span><span class="sd">&quot;&quot;&quot;Run after each task.&quot;&quot;&quot;</span>
+</span><span id="__span-48-11"><a id="__codelineno-48-11" name="__codelineno-48-11" href="#__codelineno-48-11"></a>        <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">is_err</span><span class="p">:</span>
+</span><span id="__span-48-12"><a id="__codelineno-48-12" name="__codelineno-48-12" href="#__codelineno-48-12"></a>            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Task failed: </span><span class="si">{</span><span class="n">message</span><span class="o">.</span><span class="n">task_name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </span></code></pre></div>
 <p>Attach middleware when creating the broker:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-48-1"><a id="__codelineno-48-1" name="__codelineno-48-1" href="#__codelineno-48-1"></a><span class="n">broker</span> <span class="o">=</span> <span class="p">(</span>
-</span><span id="__span-48-2"><a id="__codelineno-48-2" name="__codelineno-48-2" href="#__codelineno-48-2"></a>    <span class="n">RedisStreamBroker</span><span class="p">(</span><span class="n">url</span><span class="o">=</span><span class="n">redis_url</span><span class="p">,</span> <span class="n">queue_name</span><span class="o">=</span><span class="s2">&quot;taskiq:system&quot;</span><span class="p">)</span>
-</span><span id="__span-48-3"><a id="__codelineno-48-3" name="__codelineno-48-3" href="#__codelineno-48-3"></a>    <span class="o">.</span><span class="n">with_middlewares</span><span class="p">(</span><span class="n">MyMiddleware</span><span class="p">())</span>
-</span><span id="__span-48-4"><a id="__codelineno-48-4" name="__codelineno-48-4" href="#__codelineno-48-4"></a><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-49-1"><a id="__codelineno-49-1" name="__codelineno-49-1" href="#__codelineno-49-1"></a><span class="n">broker</span> <span class="o">=</span> <span class="p">(</span>
+</span><span id="__span-49-2"><a id="__codelineno-49-2" name="__codelineno-49-2" href="#__codelineno-49-2"></a>    <span class="n">RedisStreamBroker</span><span class="p">(</span><span class="n">url</span><span class="o">=</span><span class="n">redis_url</span><span class="p">,</span> <span class="n">queue_name</span><span class="o">=</span><span class="s2">&quot;taskiq:system&quot;</span><span class="p">)</span>
+</span><span id="__span-49-3"><a id="__codelineno-49-3" name="__codelineno-49-3" href="#__codelineno-49-3"></a>    <span class="o">.</span><span class="n">with_middlewares</span><span class="p">(</span><span class="n">MyMiddleware</span><span class="p">())</span>
+</span><span id="__span-49-4"><a id="__codelineno-49-4" name="__codelineno-49-4" href="#__codelineno-49-4"></a><span class="p">)</span>
 </span></code></pre></div>
 </div>
 </div>

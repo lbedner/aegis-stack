@@ -1,56 +1,20 @@
-{% from "components/macros/layout.html" import card, stats_strip, stat_row %}
-{% from "components/macros/feedback.html" import empty_state %}
-{% from "components/macros/table.html" import data_table %}
-{% from "pages/overseer/_macros.html" import method_cell %}
-{% macro run_detail(row) %}
-{% set errors = row.errors or [] %}
+{# Start a load test against one of this app's routes, and the runs, the
+   CLI's included. The run list streams while the page is open. #}
+{% from "components/macros/layout.html" import card %}
+{% from "components/macros/form.html" import field, number_input, select, text_input, primary_button %}
 <div class="space-y-4">
-  {{ stat_row([
-    ("p50 ms", row.latency_ms_p50), ("p95 ms", row.latency_ms_p95), ("p99 ms", row.latency_ms_p99),
-    ("Max ms", row.latency_ms_max), ("Total duration", row.duration),
-  ]) }}
-  {{ stat_row([
-    ("Requests", row.tasks_sent or 0), ("Success", row.tasks_completed or 0), ("Failed", row.tasks_failed or 0),
-    ("Clients", row.clients or 0), ("Test ID", row.test_id or "-"),
-  ]) }}
-  <p class="text-sm"><span class="text-aegis-muted">Status codes:</span>
-    <span class="text-aegis-text">{% for code, count in (row.status_codes or {})|dictsort %}{{ code }}: {{ count }}{{ ", " if not loop.last }}{% else %}-{% endfor %}</span></p>
-  {% if errors %}
-  <div class="space-y-1 text-xs">
-    <p class="text-aegis-muted">Error samples ({{ errors|length }})</p>
-    {% for sample in errors[:5] %}
-    <p class="font-mono text-aegis-text break-all">#{{ sample.request_index if sample.request_index is defined else "?" }} {{ sample.error_type or "?" }}: {{ (sample.message or "")[:200] }}</p>
-    {% endfor %}
-    {% if errors|length > 5 %}<p class="text-aegis-muted">... and {{ errors|length - 5 }} more</p>{% endif %}
-  </div>
-  {% endif %}
-</div>
-{% endmacro %}
-{% if not runs_available %}
-{{ empty_state("Load-test results are unavailable", "Runs are stored in Redis, and the store could not be read.") }}
-{% elif not runs %}
-{{ empty_state("No HTTP load-test runs yet", "Start one from the CLI with api-load-test run /health --in-process. Results land here automatically.") }}
-{% else %}
-<div class="space-y-4">
-  {{ stats_strip([
-    {"label": "Runs", "value": run_summary.runs},
-    {"label": "Avg req/s", "value": "%.0f"|format(run_summary.throughput)},
-    {"label": "Avg p95 ms", "value": "%.1f"|format(run_summary.p95)},
-    {"label": "Failures", "value": "{:,}".format(run_summary.failures), "tone": "error" if run_summary.failures else none},
-  ]) }}
-  {% call card("Recent runs", "Newest first") %}
-    {{ data_table([
-      {"key": "method", "label": "Method", "render": method_cell},
-      {"key": "path", "label": "Path"},
-      {"key": "clients", "label": "Clients", "kind": "int", "align": "right"},
-      {"key": "tasks_sent", "label": "Requests", "kind": "int", "align": "right"},
-      {"key": "throughput", "label": "Req/s", "align": "right"},
-      {"key": "latency_ms_p50", "label": "p50 ms", "align": "right"},
-      {"key": "latency_ms_p95", "label": "p95 ms", "align": "right"},
-      {"key": "latency_ms_p99", "label": "p99 ms", "align": "right"},
-      {"key": "error_pct", "label": "Errors", "align": "right"},
-      {"key": "when", "label": "When"},
-    ], runs, empty="No load-test runs recorded", detail=run_detail) }}
+  {% call card("New run", "In this server, against the app itself") %}
+  <form hx-post="{{ partials }}" hx-swap="none" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-6 items-end">
+    <div class="sm:col-span-2 lg:col-span-3">{% call field("Route") %}{{ select("target", targets, blank=None, block=True) }}{% endcall %}</div>
+    {% call field("Requests") %}{{ number_input("requests", 100, min=1, max=max_requests) }}{% endcall %}
+    {% call field("Clients") %}{{ number_input("clients", 10, min=1, max=max_clients) }}{% endcall %}
+    {% call field("Sign in as") %}{{ select("role", roles, blank=None, block=True) }}{% endcall %}
+    <div class="sm:col-span-2 lg:col-span-3">{% call field("Path params") %}{{ text_input("path_params", placeholder="id=5 slug=intro") }}{% endcall %}</div>
+    <div class="sm:col-span-2 lg:col-span-3">{% call field("JSON payload") %}{{ text_input("payload", placeholder='{"name": "x"}') }}{% endcall %}</div>
+    <div class="sm:col-span-2 lg:col-span-6">{{ primary_button("Start", "submit") }}</div>
+  </form>
   {% endcall %}
+  <div id="server-load-tests-live" hx-ext="sse" sse-connect="{{ events }}">
+    <div sse-swap="{{ event }}" hx-target="this">{% include "pages/overseer/server/_load_test_runs.html" %}</div>
+  </div>
 </div>
-{% endif %}

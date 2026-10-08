@@ -76,24 +76,30 @@ my-app api-load-test results <test-id>
 | GET with path param | `GET /api/v1/tasks/status/{task_id}` | works with `--path-param` |
 | POST with static payload | `POST /api/v1/tasks/enqueue` | works with `--payload` |
 | POST with dynamic payload | callable per request | field exists; resolver pending |
-| Auth-gated | `GET /api/v1/users/me` | works with `--header "Authorization=..."` |
+| Auth-gated | `GET /api/v1/users/me` | works: signed in automatically (`--as-admin`, `--as-user`, `--anon`) |
 | SSE / streaming | `GET /events/worker/stream` | runs, but treats stream as one response (timeout risk) |
 | WebSocket | (none today) | out of scope |
 
-A first-class `--auth-as <username>` flag (CLI handles the login round-trip)
-is on the roadmap.
+## Overseer
 
-## Reading results in Overseer
+Server > **Load Tests** starts a run and lists every run, the CLI's included.
 
-Click the **Backend** card on the dashboard → **Load Tests** tab. Each run
-is a row in an expandable table:
+- **New run**: pick one of the app's routes (Overseer's own pages are not
+  offered), the requests and clients, who to sign in as (admin, user or
+  anonymous, admin first when `ADMIN_USER_EMAILS` names one), path params
+  as `name=value` pairs, and a JSON payload. It runs in the server itself,
+  in-process like `--in-process`, through the same service and store as the
+  CLI. A run from here is capped at 5,000 requests and 50 clients; the CLI
+  takes more.
+- **Running**: a run started here shows its progress (requests done of the
+  total) until it lands in the list.
+- **Recent runs**: method, path, req/s, p95 ms, error %, when. Expand a row
+  for the latency percentiles, status codes, sampled errors, duration,
+  clients and test ID. A run whose every response was a redirect says so:
+  `/health` answers `307` to `/health/`, so it measured the redirect, not
+  the health check.
 
-- Top row: method, path, req/s, p95 ms, error %, "5 minutes ago"
-- Expand a row for full latency percentiles, status code distribution,
-  sampled errors, total duration, client count, test ID
-
-Same data the CLI's `recent` command shows, with the addition of
-per-request error samples.
+The list streams while the page is open.
 
 ## In-process vs out-of-process
 
@@ -157,8 +163,6 @@ Shared with the worker load-test service through
 
 ## Limitations
 
-- No automatic `--auth-as` round-trip yet. Use `--header "Authorization=..."`
-  with a token obtained out of band
 - No streaming-aware mode for SSE / chunked endpoints. Runs work, but
   each request is awaited to completion (inflates latency / risks timeouts)
 - No run-to-run regression comparison built in. Persist results yourself

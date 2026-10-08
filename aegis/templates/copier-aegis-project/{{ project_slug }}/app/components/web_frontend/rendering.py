@@ -150,6 +150,11 @@ def form_number(raw: str | None, label: str, kind: type = int) -> Any:
         raise ValueError(f"{label} must be {noun}.") from None
 
 
+def one_decimal(row: dict[str, Any], *keys: str) -> dict[str, Any]:
+    """Round the named figures for display; the table macro prints values as-is."""
+    return row | {key: f"{float(row.get(key) or 0):.1f}" for key in keys}
+
+
 def status_cell(label: str, tone: str) -> dict[str, str]:
     """A ``data_table`` status cell (rendered as a ``badge``); ``tone`` is ok,
     warn, error, muted or accent."""

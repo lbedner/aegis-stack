@@ -4,7 +4,7 @@ Thin wrapper around ``APILoadTestService`` and ``discovery.list_routes``.
 The CLI does no I/O itself; it constructs a config, hands it to the
 service, and renders the result. This keeps the CLI testable in isolation
 (see ``tests/cli/test_api_load_test_cli.py``) — production wiring
-happens through ``_get_fastapi_app`` and ``_make_store``, both mockable.
+happens through ``_get_fastapi_app`` and ``store.make_store``, both mockable.
 
 The CLI subcommand is ``api-load-test``. The underlying transport is
 still HTTP (httpx) and the service layer is named ``load_test.api`` to
@@ -38,7 +38,7 @@ from app.cli.api_load_test_render import (
     _progress_console,
     _render_result,
 )
-from app.cli.api_load_test_store import _with_store
+from app.services.load_test.api.store import with_store
 from app.core.formatting import format_relative_time
 from app.services.load_test.api.discovery import list_routes
 from app.services.load_test.api.models import (
@@ -259,7 +259,7 @@ def run(
 
     try:
         try:
-            result = asyncio.run(_with_store(_do_run))
+            result = asyncio.run(with_store(_do_run))
         finally:
             if progress is not None:
                 progress.stop()
@@ -294,7 +294,7 @@ def results(
         service = APILoadTestService(store=store)
         return await service.get_result(test_id)
 
-    result = asyncio.run(_with_store(_do_get))
+    result = asyncio.run(with_store(_do_get))
     if result is None:
         console.print(f"No result found for test_id={test_id!r}", style=theme.ERROR)
         sys.exit(1)
@@ -316,7 +316,7 @@ def recent(
         service = APILoadTestService(store=store)
         return await service.list_recent(limit)
 
-    items = asyncio.run(_with_store(_do_list))
+    items = asyncio.run(with_store(_do_list))
 
     if json:
         print(json_lib.dumps([r.model_dump() for r in items]))

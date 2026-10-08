@@ -299,3 +299,17 @@ class TestAPILoadTestConfigurationPathParams:
             original.model_dump_json()
         )
         assert loaded.path_params == {"item_id": "42", "user_id": "u-9"}
+
+
+class TestOnlyRedirects:
+    """``/health`` answers 307 to ``/health/``: a run of it measured the
+    redirect, and says so wherever it is shown."""
+
+    def test_every_response_a_redirect(self) -> None:
+        assert _valid_metrics(status_codes={307: 100}).only_redirects
+
+    def test_some_reached_the_route(self) -> None:
+        assert not _valid_metrics(status_codes={200: 99, 307: 1}).only_redirects
+
+    def test_it_travels_with_the_result(self) -> None:
+        assert _valid_metrics(status_codes={301: 5}).model_dump()["only_redirects"]

@@ -184,6 +184,7 @@ router.include_router(overseer_redis_partials.router)
 {%- endif %}
 router.include_router(overseer_storage_partials.router)
 router.include_router(overseer_server_partials.router)
+router.include_router(overseer_server_partials.load_tests_router)
 router.include_router(overseer_runtime_partials.router)
 {%- if include_blog %}
 router.include_router(overseer_blog_partials.router)

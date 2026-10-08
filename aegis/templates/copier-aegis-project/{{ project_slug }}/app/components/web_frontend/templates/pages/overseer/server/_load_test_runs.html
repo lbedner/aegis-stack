@@ -1,0 +1,73 @@
+{% from "components/macros/layout.html" import card, stats_strip, stat_row %}
+{% from "components/macros/feedback.html" import empty_state %}
+{% from "components/macros/table.html" import data_table %}
+{% from "pages/overseer/_macros.html" import method_cell %}
+{% macro run_detail(row) %}
+{% set errors = row.errors or [] %}
+<div class="space-y-4">
+  {{ stat_row([
+    ("p50 ms", row.latency_ms_p50), ("p95 ms", row.latency_ms_p95), ("p99 ms", row.latency_ms_p99),
+    ("Max ms", row.latency_ms_max), ("Total duration", row.duration),
+  ]) }}
+  {{ stat_row([
+    ("Requests", row.tasks_sent or 0), ("Success", row.tasks_completed or 0), ("Failed", row.tasks_failed or 0),
+    ("Clients", row.clients or 0), ("Test ID", row.test_id or "-"),
+  ]) }}
+  <p class="text-sm"><span class="text-aegis-muted">Status codes:</span>
+    <span class="text-aegis-text">{% for code, count in (row.status_codes or {})|dictsort %}{{ code }}: {{ count }}{{ ", " if not loop.last }}{% else %}-{% endfor %}</span></p>
+  {% if errors %}
+  <div class="space-y-1 text-xs">
+    <p class="text-aegis-muted">Error samples ({{ errors|length }})</p>
+    {% for sample in errors[:5] %}
+    <p class="font-mono text-aegis-text break-all">#{{ sample.request_index if sample.request_index is defined else "?" }} {{ sample.error_type or "?" }}: {{ (sample.message or "")[:200] }}</p>
+    {% endfor %}
+    {% if errors|length > 5 %}<p class="text-aegis-muted">... and {{ errors|length - 5 }} more</p>{% endif %}
+  </div>
+  {% endif %}
+  {% if row.only_redirects %}
+  <p class="text-xs text-aegis-amber" data-redirected>Every response was a redirect: this measured the redirect, not the route it points to.</p>
+  {% endif %}
+</div>
+{% endmacro %}
+<div id="server-load-tests" class="space-y-4">
+{% if jobs %}
+{% call card("Running", "Started from Overseer") %}
+  <ul class="space-y-2 text-sm">
+    {% for job in jobs %}
+    <li data-job class="flex flex-wrap items-baseline justify-between gap-2">
+      <span class="font-mono text-aegis-text">{{ job.target }}</span>
+      {% if job.error %}<span class="text-error">{{ job.error }}</span>{% else %}<span class="text-aegis-muted tabular-nums">{{ job.label }}</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+{% endcall %}
+{% endif %}
+{% if not runs_available %}
+{{ empty_state("Load-test results are unavailable", "Runs are stored in Redis, and the store could not be read.") }}
+{% elif not runs %}
+{{ empty_state("No HTTP load-test runs yet", "Start one above, or from the CLI with api-load-test run. Every run lands here.") }}
+{% else %}
+<div class="space-y-4">
+  {{ stats_strip([
+    {"label": "Runs", "value": run_summary.runs},
+    {"label": "Avg req/s", "value": "%.0f"|format(run_summary.throughput)},
+    {"label": "Avg p95 ms", "value": "%.1f"|format(run_summary.p95)},
+    {"label": "Failures", "value": "{:,}".format(run_summary.failures), "tone": "error" if run_summary.failures else none},
+  ]) }}
+  {% call card("Recent runs", "Newest first") %}
+    {{ data_table([
+      {"key": "method", "label": "Method", "render": method_cell},
+      {"key": "path", "label": "Path"},
+      {"key": "clients", "label": "Clients", "kind": "int", "align": "right"},
+      {"key": "tasks_sent", "label": "Requests", "kind": "int", "align": "right"},
+      {"key": "throughput", "label": "Req/s", "align": "right"},
+      {"key": "latency_ms_p50", "label": "p50 ms", "align": "right"},
+      {"key": "latency_ms_p95", "label": "p95 ms", "align": "right"},
+      {"key": "latency_ms_p99", "label": "p99 ms", "align": "right"},
+      {"key": "error_pct", "label": "Errors", "align": "right"},
+      {"key": "when", "label": "When"},
+    ], runs, empty="No load-test runs recorded", detail=run_detail) }}
+  {% endcall %}
+</div>
+{% endif %}
+</div>

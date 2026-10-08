@@ -85,12 +85,14 @@ my-app api-load-test results <test-id>
 Server > **Load Tests** starts a run and lists every run, the CLI's included.
 
 - **New run**: pick one of the app's routes (Overseer's own pages are not
-  offered), the requests and clients, who to sign in as (admin, user or
-  anonymous, admin first when `ADMIN_USER_EMAILS` names one), path params
-  as `name=value` pairs, and a JSON payload. It runs in the server itself,
-  in-process like `--in-process`, through the same service and store as the
-  CLI. A run from here is capped at 5,000 requests and 50 clients; the CLI
-  takes more.
+  offered) and fill in its request form, the one Server > Routes shows:
+  typed path and query parameters, a JSON body pre-filled from its model,
+  who to sign in as (admin, user or anonymous, admin first when
+  `ADMIN_USER_EMAILS` names one), plus the requests and clients. A route
+  that writes asks you to confirm. It runs in the server itself, in-process
+  like `--in-process`, through the same service and store as the CLI. A
+  run from here is capped at 5,000 requests and 50 clients; the CLI takes
+  more.
 - **Running**: a run started here shows its progress (requests done of the
   total) until it lands in the list.
 - **Recent runs**: method, path, req/s, p95 ms, error %, when. Expand a row

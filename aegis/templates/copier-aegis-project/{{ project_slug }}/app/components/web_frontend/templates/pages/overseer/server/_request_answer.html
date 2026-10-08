@@ -1,0 +1,17 @@
+{# What one request came back with: as /docs shows it, the curl first. #}
+{% from "components/macros/layout.html" import code_block %}
+{% set tone = "text-aegis-teal" if answer.status < 300 else ("text-aegis-amber" if answer.status < 500 else "text-error") %}
+<div class="space-y-3 border-t border-aegis-border pt-3">
+  <div data-curl>{{ code_block(answer.curl, caption="curl", lang="bash", wrap=True) }}</div>
+  <p class="text-sm"><span class="text-aegis-muted">Status</span> <span data-status class="font-mono {{ tone }}">{{ answer.status }}</span>
+    <span class="text-aegis-muted ml-3">Time</span> <span class="font-mono text-aegis-text">{{ answer.ms }} ms</span></p>
+  <details data-body open class="text-xs">
+    <summary class="cursor-pointer text-aegis-muted">Response body</summary>
+    <div class="mt-2">{{ code_block(answer.body or "(empty)", lang="json" if answer.json else None, wrap=True) }}</div>
+  </details>
+  <details class="text-xs">
+    <summary class="cursor-pointer text-aegis-muted">Response headers ({{ answer.headers|length }})</summary>
+    <pre class="code-block code-block--wrap mt-2">{% for name, value in answer.headers %}{{ name }}: {{ value }}
+{% endfor %}</pre>
+  </details>
+</div>

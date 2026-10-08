@@ -522,16 +522,19 @@
 {# A block of source (SQL, Python) with a copy button. ``caption`` is a
    line above it, such as the file it came from. ``lang`` renders it as a
    fenced block through the ``markdown`` filter, so it is highlighted for
-   that language; the copy button always takes the plain text. #}
-{% macro code_block(text, caption=None, lang=None) %}
+   that language; the copy button always takes the plain text. ``wrap``
+   wraps long lines (data such as a response body or a curl command)
+   rather than scrolling them, so the block never widens what holds it. #}
+{% macro code_block(text, caption=None, lang=None, wrap=False) %}
+{% set wraps = " code-block--wrap" if wrap else "" %}
 <div class="space-y-2 min-w-0">
   <div class="flex items-center justify-between gap-3">
     <p class="text-xxs text-aegis-muted truncate">{{ caption or "" }}</p>{{ copy_button(text) }}
   </div>
   {% if lang %}
-  <div class="code-block">{{ ("````" ~ lang ~ "\n" ~ text ~ "\n````")|markdown }}</div>
+  <div class="code-block{{ wraps }}">{{ ("````" ~ lang ~ "\n" ~ text ~ "\n````")|markdown }}</div>
   {% else %}
-  <pre class="code-block">{{ text }}</pre>
+  <pre class="code-block{{ wraps }}">{{ text }}</pre>
   {% endif %}
 </div>
 {% endmacro %}

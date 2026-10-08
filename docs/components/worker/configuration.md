@@ -510,9 +510,10 @@ A TaskIQ queue is a Redis stream read by one consumer group. A worker claims
 jobs with `XREADGROUP` and acks each when it finishes; a claimed job belongs
 to that worker alone.
 
-- **It claims what it can start.** Each read takes at most the queue's
-  concurrency, so a busy worker never sits on jobs an idle one could run, and
-  a worker that dies strands no more than one round.
+- **It claims what it can start.** A worker reads one job each time one of
+  its slots frees, so it holds no more than it is running: a busy worker
+  never sits on jobs an idle one could run, and one that dies strands only
+  the jobs it was running.
 - **A running job keeps its claim.** Jobs a dead worker left unacked are
   handed to another after 10 minutes. While a job runs, its claim is
   refreshed, so a long job is never run a second time alongside itself.

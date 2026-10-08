@@ -8,22 +8,24 @@ label is its progress. The section streams over SSE while it is open.
 """
 
 from collections.abc import Callable, Sequence
-import json
 from typing import Any
 
 from fastapi import FastAPI
+from markupsafe import Markup
 from pydantic import ValidationError
 from starlette.routing import BaseRoute
 
 from app.components.backend.api.load_test_api import recent_runs, run_and_store
 from app.core.formatting import format_relative_time
 from app.core.log import logger
-from app.services.load_test.api import auth
+from app.services.load_test.api import auth, request_form
 from app.services.load_test.api.discovery import describe_routes
-from app.services.load_test.api.models import APILoadTestConfiguration, RouteInfo
+from app.services.load_test.api.models import APILoadTestConfiguration
+from app.services.load_test.api.request_form import Operation
 from app.services.system import ui_backend
 from app.services.system.jobs import JobHandle, JobSnapshot, get_job_runner
 
+from . import overseer_requests
 from .overseer_live import fragment_events
 from .rendering import form_number, fragment, one_decimal
 
@@ -40,10 +42,6 @@ MAX_CLIENTS = 50
 # The runs this process started and has not seen finish. Runs start here
 # and only here, so the shared job store is never scanned to find them.
 started_jobs: set[str] = set()
-
-
-def _key(route: RouteInfo) -> str:
-    return f"{route.method} {route.path}"
 
 
 async def load_runs() -> tuple[list[dict[str, Any]], bool]:
@@ -88,7 +86,11 @@ async def runs_context() -> dict[str, Any]:
     runs, available = await load_runs()
     return {
         "jobs": [
-            {"target": j.name.removeprefix(JOB_PREFIX), "label": j.label, "error": j.error}
+            {
+                "target": j.name.removeprefix(JOB_PREFIX),
+                "label": j.label,
+                "error": j.error,
+            }
             for j in await load_jobs()
         ],
         "runs": run_rows(runs),
@@ -106,32 +108,43 @@ def events(max_frames: int | None = None):  # noqa: ANN201 - async iterator
     return fragment_events(EVENT, _render, INTERVAL_SECONDS, max_frames)
 
 
-async def section_context(routes: Sequence[BaseRoute]) -> dict[str, Any]:
-    """The form's choices and the run list as it stands."""
+async def section_context(
+    routes: Sequence[BaseRoute], query: dict[str, str]
+) -> dict[str, Any]:
+    """The route picker, the form of the route picked (``route`` in the
+    query, its values with it, as Routes' "Load test this" sends them),
+    and the run list as it stands."""
+    keys = [f"{r.method} {r.path}" for r in describe_routes(routes)]
+    picked = query.get("route") if query.get("route") in keys else None
+    picked = picked or next(iter(keys), None)
+    op = overseer_requests.find(routes, picked) if picked else None
     return await runs_context() | {
         "events": EVENTS,
         "event": EVENT,
-        "partials": PARTIALS,
-        "targets": [{"id": _key(r), "name": _key(r)} for r in describe_routes(routes)],
-        "roles": [{"id": r, "name": r.capitalize()} for r in auth.roles()],
+        "requests_partials": overseer_requests.PARTIALS,
+        "targets": [{"id": k, "name": k} for k in keys],
+        "picked": picked,
+        "form_html": Markup(fragment(overseer_requests.FORM, **form_context(op, query)))
+        if op
+        else "",
+    }
+
+
+def form_context(op: Operation, values: dict[str, str]) -> dict[str, Any]:
+    """Routes' request form for ``op``, with what a run adds to it."""
+    return overseer_requests.form_context(op, overseer_requests.LOAD, values) | {
+        "load_partials": PARTIALS,
+        "requests": values.get("requests") or "100",
+        "clients": values.get("clients") or "10",
         "max_requests": MAX_REQUESTS,
         "max_clients": MAX_CLIENTS,
     }
 
 
-def _pairs(text: str) -> dict[str, str]:
-    """``id=5, slug=a`` (commas or whitespace between) as a dict."""
-    pairs = [p for p in text.replace(",", " ").split() if p]
-    if any("=" not in p for p in pairs):
-        raise ValueError("Path params are name=value pairs.")
-    return dict(p.split("=", 1) for p in pairs)
-
-
 async def _config(form: dict[str, str], app: FastAPI) -> APILoadTestConfiguration:
     """The run the form asks for, checked; ``ValueError`` says what is wrong."""
-    found = {_key(r): r for r in describe_routes(app.routes)}
-    route = found.get(form.get("target", ""))
-    if route is None:
+    op = overseer_requests.find(app.routes, form.get("route", ""))
+    if op is None:
         raise ValueError("Pick one of this app's routes.")
     requests = form_number(form.get("requests"), "Requests") or 0
     clients = form_number(form.get("clients"), "Clients") or 0
@@ -140,27 +153,22 @@ async def _config(form: dict[str, str], app: FastAPI) -> APILoadTestConfiguratio
             f"Requests run 1 to {MAX_REQUESTS:,}, clients 1 to {MAX_CLIENTS}; "
             "the CLI takes more."
         )
-    params = _pairs(form.get("path_params", ""))
-    if missing := [p for p in route.path_params if p not in params]:
-        raise ValueError(f"The path needs {', '.join(missing)}.")
-    body = form.get("payload", "").strip()
+    request = request_form.build(op, form)
     role = form.get("role") or auth.default_role()
     try:
         return APILoadTestConfiguration.model_validate(
             {
-                "method": route.method,
-                "path": route.path,
+                "method": request.method,
+                "path": request.load_test_path,
                 "requests": requests,
                 "clients": clients,
-                "path_params": params,
-                "payload": json.loads(body) if body else None,
+                "path_params": request.path_params,
+                "payload": request.payload,
                 "headers": await auth.bearer_header(role),
                 "auth_as": None if role == auth.ANONYMOUS else role,
                 "in_process": True,
             }
         )
-    except json.JSONDecodeError:
-        raise ValueError("The payload is not JSON.") from None
     except ValidationError as exc:
         raise ValueError("; ".join(e["msg"] for e in exc.errors())) from None
 

@@ -6,5 +6,5 @@
 <div class="space-y-4">
   <p id="mcp-token-value" class="flex items-center gap-2 text-xs break-all">{{ command(value) }}</p>
   <p class="text-xs text-aegis-muted">{{ shown_once }}</p>
-  {{ primary_button("Done", attrs=hx_replace(page, "#overseer-main") ~ ' @click="$el.closest(\'dialog\').close()"') }}
+  {{ primary_button("Done", attrs=hx_replace(page, "#overseer-main") ~ (' @click="$el.closest(\'dialog\').close()"'|safe)) }}
 </div>

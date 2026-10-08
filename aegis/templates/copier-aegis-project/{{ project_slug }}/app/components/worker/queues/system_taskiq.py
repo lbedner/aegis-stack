@@ -14,7 +14,6 @@ from app.components.worker.tasks.service_jobs import service_job_tasks
 from app.core.config import settings
 from app.core.constants import QueueName
 from app.core.log import logger
-from app.core.queue_workers import concurrency_for
 
 # Use redis_url_effective for Docker vs local auto-detection
 redis_url = settings.redis_url_effective
@@ -30,8 +29,10 @@ broker = (
         url=redis_url,
         queue_name="taskiq:system",
         consumer_id="0",
-        # Claim only what this worker can start: claimed jobs are its alone.
-        xread_count=concurrency_for(QueueName.SYSTEM),
+        # One job per read: taskiq reads each time a slot frees, so a
+        # bigger read claims jobs that only wait (claimed jobs are this
+        # worker's alone, and only running ones keep their claim alive).
+        xread_count=1,
     )
     .with_result_backend(
         RedisAsyncResultBackend(redis_url=redis_url, result_ex_time=60)

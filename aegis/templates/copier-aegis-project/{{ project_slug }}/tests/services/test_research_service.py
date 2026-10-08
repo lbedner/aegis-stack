@@ -5,6 +5,7 @@ A source is a plugin's business: it searches, reads a thread, refreshes
 numbers. Everything else is here, tested through a fake source.
 """
 
+from dataclasses import replace
 from datetime import date, datetime
 from typing import Any
 
@@ -166,6 +167,35 @@ async def test_one_failing_watch_does_not_stop_the_others(
     assert found == {fine.id: 1}
     assert set(await _items(async_db_session)) == {"1"}
     assert (await svc.get_watch(broken.id)).refreshed_at is None  # type: ignore[arg-type]
+
+
+async def test_a_thread_that_cannot_be_read_is_skipped_not_the_watch(
+    async_db_session: AsyncSession, site: FakeSite, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A source can lack one story's thread (deleted, not indexed yet): that
+    thread is skipped and the watch's other finds still save. Read as empty
+    instead, it would mark the comments already stored under it deleted."""
+    svc = ResearchService(async_db_session, owner_user_id=None)
+    watch = await svc.add_watch("fake", "Launch", {"q": "l"}, with_threads=True)
+    site.results["l"] = [story("1", "Gone"), story("3", "Fine")]
+    site.threads["1"] = [story("1", "Gone"), comment("2", "1", "Kept from before")]
+    site.threads["3"] = [story("3", "Fine"), comment("4", "3", "Nice.")]
+    await svc.refresh_watch(watch.id)  # type: ignore[arg-type]
+    read = site.thread
+
+    async def lacks_one(external_id: str) -> list[Any]:
+        if external_id == "1":
+            raise LookupError("404 for item 1")
+        return await read(external_id)
+
+    registry.register_source(replace(registry.source_for("fake"), thread=lacks_one))
+
+    found = await svc.refresh_watch(watch.id)  # type: ignore[arg-type]
+
+    items = await _items(async_db_session)
+    assert found == 2
+    assert items["2"].deleted_at is None and items["2"].text == "Kept from before"
+    assert items["4"].text == "Nice."
 
 
 async def test_a_reply_found_by_search_reads_its_whole_thread(

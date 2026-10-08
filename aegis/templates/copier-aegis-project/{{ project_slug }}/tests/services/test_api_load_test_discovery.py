@@ -145,3 +145,20 @@ class TestPathParamExtraction:
         by_key = {(r.method, r.path): r for r in routes}
         route = by_key[("GET", "/api/items/{item_id}/owner/{user_id}")]
         assert route.path_params == ["item_id", "user_id"]
+
+
+def test_overseers_own_pages_are_not_loadable() -> None:
+    """They answer a session cookie, never the bearer token a run sends."""
+    app = _build_app()
+
+    @app.get("/overseer/components/{name}")
+    async def page(name: str) -> dict:
+        return {}
+
+    @app.post("/partials/overseer/server/load-tests")
+    async def action() -> dict:
+        return {}
+
+    paths = {r.path for r in list_routes(app)}
+    assert "/health" in paths
+    assert not [p for p in paths if p.startswith(("/overseer", "/partials"))]

@@ -1,4 +1,5 @@
-"""Where a run's results are kept: Redis when there is one, memory otherwise."""
+"""Where an API load test's results are kept: Redis when there is one,
+nowhere otherwise. One home for the CLI, the API and Overseer."""
 
 from __future__ import annotations
 
@@ -11,7 +12,7 @@ from app.services.load_test.api.models import (
 from app.services.load_test.common.storage import RedisResultStore
 
 
-def _build_redis_client() -> Any | None:
+def _redis_client() -> Any | None:
     """Construct a redis.asyncio client from project config; ``None`` if
     Redis isn't configured/available."""
     try:
@@ -27,15 +28,15 @@ def _build_redis_client() -> Any | None:
         return None
 
 
-def _make_store() -> RedisResultStore[APILoadTestResult] | None:
+def make_store() -> RedisResultStore[APILoadTestResult] | None:
     """Construct a Redis-backed store; ``None`` if Redis isn't available.
 
     Mockable seam: tests patch this (or the service class) to skip the
-    storage path entirely. The redis client is owned by ``_with_store``,
+    storage path entirely. The redis client is owned by ``with_store``,
     not by the store itself, so it can be closed cleanly at the end of
     the operation.
     """
-    client = _build_redis_client()
+    client = _redis_client()
     if client is None:
         return None
     return RedisResultStore(
@@ -48,7 +49,7 @@ def _make_store() -> RedisResultStore[APILoadTestResult] | None:
 T = TypeVar("T")
 
 
-async def _with_store(
+async def with_store(
     op: Callable[[RedisResultStore[APILoadTestResult] | None], Awaitable[T]],
 ) -> T:
     """Run ``op`` with a store, ensuring the underlying redis client is
@@ -58,7 +59,7 @@ async def _with_store(
     shutdown when the asyncio loop has already closed, producing an ugly
     ``RuntimeError: Event loop is closed`` traceback.
     """
-    store = _make_store()
+    store = make_store()
     try:
         return await op(store)
     finally:

@@ -395,13 +395,11 @@ class TestRunCommand:
         call_config = mock_service.run.call_args.args[0]
         assert call_config.headers == {"X-Custom": "hello", "X-Other": "world"}
 
-    # Patched where it is CALLED, not where the CLI re-exports it:
-    # ``apply_auto_auth`` reads this name from its own module, so a patch
-    # on ``app.cli.api_load_test`` would rebind a name nothing reads.
-    # (``_get_auth_dependency`` above is the opposite case - the ``list``
-    # command reads it from ``api_load_test``'s globals.)
+    # Patched where it is CALLED: ``bearer_header`` reads this name from
+    # its own module. (``_get_auth_dependency`` above is the opposite case
+    # - the ``list`` command reads it from ``api_load_test``'s globals.)
     @patch(
-        "app.cli.api_load_test_auth._ensure_active_verified_user",
+        "app.services.load_test.api.auth.ensure_load_test_user",
         new_callable=AsyncMock,
     )
     @patch("app.cli.api_load_test.APILoadTestService")

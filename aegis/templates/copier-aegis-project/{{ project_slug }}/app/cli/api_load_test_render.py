@@ -88,6 +88,11 @@ def _render_result(r: APILoadTestResult) -> None:
     console.print(f"  [dim]Total duration[/dim]    {m.total_duration_seconds:.3f}s")
     console.print(f"  [dim]Success[/dim]           {success_markup}")
     console.print(f"  [dim]Errors[/dim]            {errors_markup}")
+    if m.only_redirects:
+        console.print(
+            f"  [{theme.WARNING}]Every response was a redirect: this measured "
+            f"the redirect, not the route it points to.[/{theme.WARNING}]"
+        )
     console.print()
     console.print("[bold]Latency (ms)[/bold]")
     console.print(f"  [dim]p50[/dim]    {m.latency_ms_p50:.1f}")

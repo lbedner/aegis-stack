@@ -7,7 +7,6 @@ the sources behind their API routes, as of this request.
 
 from typing import Any
 
-from app.components.backend.api.load_test_api import recent_runs
 from app.components.backend.api.traffic import get_traffic_sources
 from app.components.backend.middleware.performance import metrics_service
 from app.core import runtime
@@ -16,9 +15,9 @@ from app.core.log import logger
 from app.services.system import ui_backend, ui_cache
 from app.services.system.models import ComponentStatus
 
-from . import overseer_connections
+from . import overseer_connections, overseer_server_load_tests
 from .overseer_nav import SectionRequest
-from .rendering import status_cell
+from .rendering import one_decimal, status_cell
 
 SECTIONS = (
     (None, {"overview": "Overview"}),
@@ -36,18 +35,13 @@ SECTIONS = (
 )
 
 
-def _one_decimal(row: dict[str, Any], *keys: str) -> dict[str, Any]:
-    """Round the named figures for display; the table macro prints values as-is."""
-    return row | {key: f"{float(row.get(key) or 0):.1f}" for key in keys}
-
-
 def _endpoint_rows(endpoints: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     rows = []
     for method, path, stats in ui_backend.endpoints_by_traffic(endpoints):
         row = stats | {"method": method, "path": path}
         row["last"] = format_relative_time(row.get("last_request_at"))
         ms = ("min_ms", "avg_ms", "median_ms", "p95_ms", "p99_ms", "max_ms")
-        rows.append(_one_decimal(row, *ms))
+        rows.append(one_decimal(row, *ms))
     return rows
 
 
@@ -75,33 +69,6 @@ def _traffic(snapshot: dict[str, Any]) -> dict[str, Any]:
     dominant = snapshot.get("dominant")
     message = ui_backend.dominant_source_message(dominant) if dominant else None
     return snapshot | {"sources": sources, "dominant_message": message}
-
-
-async def _load_test_runs() -> tuple[list[dict[str, Any]], bool]:
-    """Recent runs, and whether the result store could be read."""
-    try:
-        return await recent_runs(limit=50), True
-    except Exception as exc:  # the store is optional; show why it is empty
-        logger.warning("Overseer could not read load-test runs", error=str(exc))
-        return [], False
-
-
-def _run_rows(runs: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Flatten each run's configuration and metrics into one table row."""
-    rows = []
-    for run in runs:
-        row = {
-            **(run.get("configuration") or {}),
-            **(run.get("metrics") or {}),
-            "test_id": run.get("test_id"),
-            "when": format_relative_time(run.get("start_time")),
-        }
-        row["error_pct"] = f"{float(row.get('failure_rate_percent') or 0):.1f}%"
-        row["throughput"] = f"{float(row.get('overall_throughput') or 0):.0f}"
-        row["duration"] = f"{float(row.get('total_duration_seconds') or 0):.3f}s"
-        ms = ("latency_ms_p50", "latency_ms_p95", "latency_ms_p99", "latency_ms_max")
-        rows.append(_one_decimal(row, *ms))
-    return rows
 
 
 def overview_context(backend: ComponentStatus) -> dict[str, Any]:
@@ -158,10 +125,5 @@ async def section_context(
             "traffic": _traffic(await get_traffic_sources(window_hours=None, limit=20))
         }
     if section == "load-tests":
-        runs, available = await _load_test_runs()
-        return {
-            "runs": _run_rows(runs),
-            "run_summary": ui_backend.load_test_summary(runs),
-            "runs_available": available,
-        }
+        return await overseer_server_load_tests.section_context(req.routes)
     return {}

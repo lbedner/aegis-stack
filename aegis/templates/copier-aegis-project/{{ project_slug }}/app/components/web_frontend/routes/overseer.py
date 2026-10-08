@@ -15,6 +15,7 @@ from app.components.web_frontend import (
     overseer_container,
     overseer_redis,
     overseer_secrets,
+    overseer_server_load_tests,
     overseer_worker,
     overseer_worker_load_tests,
 )
@@ -82,6 +83,12 @@ async def overseer_worker_queues() -> StreamingResponse:
 async def overseer_worker_load_tests_stream() -> StreamingResponse:
     """The Worker page's load-test runs, while that page is open."""
     return event_stream(overseer_worker_load_tests.events())
+
+
+@router.get(overseer_server_load_tests.EVENTS, include_in_schema=False)
+async def overseer_server_load_tests_stream() -> StreamingResponse:
+    """The Server page's load-test runs, while that page is open."""
+    return event_stream(overseer_server_load_tests.events())
 
 
 @router.get(overseer_connections.EVENTS, include_in_schema=False)

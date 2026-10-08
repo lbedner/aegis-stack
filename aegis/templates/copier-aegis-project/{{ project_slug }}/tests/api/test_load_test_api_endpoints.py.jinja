@@ -10,7 +10,7 @@ Each endpoint has two branches that need independent coverage:
    return value.
 
 Earlier versions of these tests bypassed the closure entirely by patching
-``_with_store`` to return a canned value; that hid regressions in the
+``with_store`` to return a canned value; that hid regressions in the
 branching. ``_patch_store_op`` now actually invokes the closure against a
 controllable store argument so both branches are pinned.
 
@@ -63,7 +63,7 @@ def _result(test_id: str = "t1", failures: int = 0) -> APILoadTestResult:
 
 
 def _patch_store_op(store_value):
-    """Patch ``_with_store`` so it invokes the endpoint's ``op`` closure
+    """Patch ``with_store`` so it invokes the endpoint's ``op`` closure
     against ``store_value``.
 
     - Pass ``None`` to exercise the no-store branch (handlers must
@@ -77,7 +77,7 @@ def _patch_store_op(store_value):
     async def _runner(op):
         return await op(store_value)
     return patch(
-        "app.components.backend.api.load_test_api._with_store",
+        "app.components.backend.api.load_test_api.with_store",
         side_effect=_runner,
     )
 

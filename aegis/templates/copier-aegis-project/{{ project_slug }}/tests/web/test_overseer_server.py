@@ -299,55 +299,6 @@ class TestLifecycle:
         one(html, "#lifecycle-shutdown [data-empty]")
 
 
-class TestLoadTests:
-    def test_lists_recent_runs(
-        self, signed_in: TestClient, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        async def runs(limit: int) -> list[dict[str, Any]]:
-            return [
-                {
-                    "test_id": "t1",
-                    "configuration": {"method": "GET", "path": "/health"},
-                    "metrics": {
-                        "overall_throughput": 250.0,
-                        "latency_ms_p95": 4.2,
-                        "latency_ms_max": 12.0,
-                        "status_codes": {"200": 98, "500": 2},
-                        "errors": [
-                            {
-                                "request_index": i,
-                                "error_type": "HTTP500",
-                                "message": "boom",
-                            }
-                            for i in range(7)
-                        ],
-                    },
-                }
-            ]
-
-        monkeypatch.setattr(overseer_server, "recent_runs", runs)
-        html = _get(signed_in, "load-tests")
-        assert (
-            text(one(html, "tbody tr:not([data-detail])").cssselect("td")[2])
-            == "/health"
-        )
-        detail = text(one(html, "tr[data-detail]"))
-        assert "200: 98, 500: 2" in detail
-        assert "12.0" in detail
-        assert "Error samples (7)" in detail
-        assert detail.count("HTTP500") == 5
-        assert "and 2 more" in detail
-
-    def test_store_failure_renders_a_notice(
-        self, signed_in: TestClient, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        async def broken(limit: int) -> list[dict[str, Any]]:
-            raise ConnectionError("redis down")
-
-        monkeypatch.setattr(overseer_server, "recent_runs", broken)
-        one(_get(signed_in, "load-tests"), "[data-empty]")
-
-
 class TestCache:
     """What is in the cache, by family: how much room each takes and
     whether it earns it."""

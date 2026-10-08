@@ -7,11 +7,12 @@ callable, so this module stays agnostic about where auth lives in the
 project.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 import re
 
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
+from starlette.routing import BaseRoute
 
 from app.core.route_auth import route_requires_auth
 from app.services.load_test.api.models import RouteInfo
@@ -20,6 +21,9 @@ _EXCLUDED_PATHS = frozenset(
     {"/openapi.json", "/docs", "/redoc", "/docs/oauth2-redirect"}
 )
 _EXCLUDED_METHODS = frozenset({"HEAD", "OPTIONS"})
+# Overseer's pages and fragments answer a session cookie, never the bearer
+# token a load test sends.
+_EXCLUDED_PREFIXES = ("/overseer", "/partials")
 # Same regex used by ``route_inspector.py`` — kept in sync so the CLI and the
 # dashboard always see identical path-param names for a given route.
 _PATH_PARAM_RE = re.compile(r"\{([^}]+)\}")
@@ -40,11 +44,18 @@ def list_routes(
     unauthenticated — discovery can't infer what auth means for a given
     project.
     """
+    return describe_routes(app.routes, auth_dependency)
+
+
+def describe_routes(
+    routes: Sequence[BaseRoute], auth_dependency: Callable | None = None
+) -> list[RouteInfo]:
+    """``list_routes`` over a route list rather than an app."""
     results: list[RouteInfo] = []
-    for route in app.routes:
+    for route in routes:
         if not isinstance(route, APIRoute):
             continue
-        if route.path in _EXCLUDED_PATHS:
+        if route.path in _EXCLUDED_PATHS or route.path.startswith(_EXCLUDED_PREFIXES):
             continue
         requires_auth = _route_requires_auth(route, auth_dependency)
         tags = list(route.tags) if route.tags else []

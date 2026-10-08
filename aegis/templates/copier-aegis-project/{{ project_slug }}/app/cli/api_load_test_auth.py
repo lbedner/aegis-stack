@@ -6,6 +6,14 @@ import asyncio
 import sys
 
 from app.cli import theme
+from app.services.load_test.api.auth import (
+    ADMIN,
+    USER,
+    admin_available,
+    auth_installed,
+    bearer_header,
+    email_for,
+)
 
 
 def _get_auth_dependency() -> object | None:
@@ -21,9 +29,6 @@ def _get_auth_dependency() -> object | None:
 
 
 console = theme.console()
-
-
-_LOAD_TEST_USER_EMAIL = "loadtest@example.com"
 
 
 def apply_auto_auth(
@@ -54,10 +59,7 @@ def apply_auto_auth(
     if anon or any(k.lower() == "authorization" for k in headers):
         return None
 
-    try:
-        from app.core.config import settings
-        from app.core.security import create_access_token
-    except ImportError:
+    if not auth_installed():
         if as_admin or as_user:
             console.print(
                 "Auth is not installed in this stack; --as-admin/--as-user "
@@ -67,8 +69,7 @@ def apply_auto_auth(
             sys.exit(2)
         return None
 
-    has_allowlist = bool(settings.ADMIN_USER_EMAILS)
-    if as_admin and not has_allowlist:
+    if as_admin and not admin_available():
         console.print(
             "--as-admin needs ADMIN_USER_EMAILS set in .env, e.g. "
             'ADMIN_USER_EMAILS=["you@example.com"].',
@@ -76,39 +77,10 @@ def apply_auto_auth(
         )
         sys.exit(2)
 
-    use_admin = as_admin or (not as_user and has_allowlist)
-    email = settings.ADMIN_USER_EMAILS[0] if use_admin else _LOAD_TEST_USER_EMAIL
-    role = "admin" if use_admin else "user"
-
-    asyncio.run(_ensure_active_verified_user(email))
-    headers["Authorization"] = f"Bearer {create_access_token({'sub': email})}"
+    role = ADMIN if as_admin or (not as_user and admin_available()) else USER
+    headers.update(asyncio.run(bearer_header(role)))
     if not quiet:
-        theme.label(f"Authenticating as {role} ({email}); pass --anon to disable")
+        theme.label(
+            f"Authenticating as {role} ({email_for(role)}); pass --anon to disable"
+        )
     return role
-
-
-async def _ensure_active_verified_user(email: str) -> None:
-    """Create the load-test user if absent, and ensure it is active and
-    verified so it satisfies ``get_current_active_user`` and ``require_admin``.
-    """
-    import secrets
-
-    from app.core.db import get_async_session
-    from app.models.user import UserCreate
-    from app.services.auth.users import UserService
-
-    async with get_async_session() as session:
-        user_service = UserService(session)
-        user = await user_service.get_user_by_email(email)
-        if user is None:
-            user = await user_service.create_user(
-                UserCreate(
-                    email=email,
-                    full_name="Load Test",
-                    password=secrets.token_urlsafe(16),
-                )
-            )
-        user.is_active = True
-        user.is_verified = True
-        session.add(user)
-        await session.commit()

@@ -15,7 +15,12 @@ from app.services.system import ui_logs
 from app.services.system.models import ComponentStatus
 
 from .overseer_live import frame, heartbeat
-from .overseer_nav import NavItem, SectionRequest, runtime_page_url
+from .overseer_nav import (
+    NavItem,
+    SectionRequest,
+    current_navigation,
+    runtime_page_url,
+)
 from .rendering import fragment, with_query
 
 SECTION = {"logs": "Logs"}
@@ -63,13 +68,48 @@ async def section_context(
     sources = ui_logs.sources(found)
     pages, ticked, picked = _reading(req.query, sources)
     every = await _context(
-        pages, found, req.query, EVERY_EVENTS, service=ticked, container=picked
+        pages,
+        found,
+        req.query,
+        EVERY_EVENTS,
+        service=ticked,
+        container=picked,
+        app_service=ui_logs.listed(req.query, "app_service"),
     )
     return every | {
         "section_subtitle": "Every service's lines in one place.",
-        "logs_services": _options(sources, ticked, picked),
+        "logs_services": picker(sources, req.query),
         "logs_links": _links(sources),
     }
+
+
+def picker(
+    sources: list[dict[str, Any]], query: Mapping[str, str]
+) -> list[dict[str, Any]]:
+    """The Services checklist Logs and Errors share: each page with a
+    container, its containers when it has several, then the application
+    services (``ui_logs.Picked`` reads what it ticks)."""
+    picked = ui_logs.Picked.of(query)
+    options: list[dict[str, Any]] = []
+    for s in sources:
+        options.append(
+            _option(s["page"], s["title"], s["page"] in picked.services, name=None)
+        )
+        options += [
+            _option(
+                c["name"],
+                f"{s['title']} · {c['label']}",
+                c["name"] in picked.containers,
+            )
+            | {"indent": True}
+            for c in s["containers"]
+        ]
+    return options + [
+        _option(
+            item.name, item.title, item.name in picked.app_services, name="app_service"
+        )
+        for item in current_navigation().get("services", [])
+    ]
 
 
 def _reading(
@@ -88,23 +128,9 @@ def _reading(
         for s in sources
         if s["page"] in asked or any(c["name"] in wanted for c in s["containers"])
     ]
+    if ui_logs.listed(query, "app_service"):
+        pages = [s["page"] for s in sources]
     return pages or [s["page"] for s in sources], ticked, picked
-
-
-def _options(
-    sources: list[dict[str, Any]], ticked: list[str], picked: list[str]
-) -> list[dict[str, Any]]:
-    """The service picker: each service, then each of its containers when it
-    has several, to read alone."""
-    options: list[dict[str, Any]] = []
-    for s in sources:
-        options.append(_option(s["page"], s["title"], s["page"] in ticked, name=None))
-        options += [
-            _option(c["name"], f"{s['title']} · {c['label']}", c["name"] in picked)
-            | {"indent": True}
-            for c in s["containers"]
-        ]
-    return options
 
 
 def _option(
@@ -122,6 +148,9 @@ def _links(sources: list[dict[str, Any]]) -> dict[str, dict[str, str]]:
             "url": runtime_page_url(s["page"]),
         }
         for s in sources
+    } | {
+        item.name: {"title": item.title, "url": item.url}
+        for item in current_navigation().get("services", [])
     }
 
 

@@ -341,3 +341,35 @@ async def test_a_refused_restart_says_why() -> None:
     backend = DockerRuntime(project=PROJECT, transport=httpx.MockTransport(refuse))
     with pytest.raises(RuntimeUnavailableError):
         await backend.restart("demo-redis-1")
+
+
+def test_log_decoder_joins_fragments_per_stream_and_bounds_pending() -> None:
+    from app.components.deploy.docker_logs import LogDecoder
+    from app.core.runtime import RuntimeUnavailableError
+
+    def frame(stream: int, payload: bytes) -> bytes:
+        return bytes([stream, 0, 0, 0]) + len(payload).to_bytes(4, "big") + payload
+
+    decoder = LogDecoder()
+    assert decoder.feed(frame(1, b"ERROR: split")) == []
+    stderr = decoder.feed(frame(2, b"WARNING: other\n"))
+    assert stderr[0].stream == "stderr"
+    stdout = decoder.feed(frame(1, b" message\n"))
+    assert stdout[0].text == "ERROR: split message"
+    with pytest.raises(RuntimeUnavailableError, match="limit"):
+        LogDecoder().feed(frame(1, b"x" * (1024 * 1024 + 1)))
+
+
+def test_history_joins_a_line_split_across_frames() -> None:
+    """A writer that flushes mid-line spreads one line over two frames: the
+    history reads it whole, as following does, and leaves blank lines out."""
+    from app.components.deploy.docker_logs import history
+
+    def frame(stream: int, payload: bytes) -> bytes:
+        return bytes([stream, 0, 0, 0]) + len(payload).to_bytes(4, "big") + payload
+
+    body = frame(1, b"ERROR: split") + frame(1, b" message\n\n") + frame(2, b"tail")
+    assert [(line.stream, line.text) for line in history(body)] == [
+        ("stdout", "ERROR: split message"),
+        ("stderr", "tail"),
+    ]

@@ -118,7 +118,9 @@ class FakeRuntime:
         self.logged.append((instance, tail, since))
         return self.lines.get(instance, [])
 
-    async def follow(self, instance: str) -> AsyncIterator[LogLine]:
+    async def follow(
+        self, instance: str, since: datetime | None = None
+    ) -> AsyncIterator[LogLine]:
         for line in self.followed.get(instance, []):
             yield line
 

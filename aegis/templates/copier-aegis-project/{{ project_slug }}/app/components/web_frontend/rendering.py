@@ -205,26 +205,25 @@ def with_query(path: str, **params: str | list[str] | None) -> str:
     return f"{path}?{query}" if query else path
 
 
-def page_number(raw: str | None) -> int:
-    """A ``?page=`` value as a page number, 1 when missing or not a number."""
-    try:
-        return max(1, int(raw or 1))
-    except ValueError:
-        return 1
-
-
 def pager(
-    path: str, page: int, page_size: int, total: int, **params: str | None
+    path: str,
+    page: int,
+    page_size: int,
+    total: int,
+    *,
+    param: str = "page",
+    **params: str | list[str] | None,
 ) -> dict[str, Any] | None:
     """The ``pager`` macro's ``{start, end, total, prev, next}`` for ``page``
     (1-based) of ``total`` items, or None when everything fits on one page.
     ``params`` ride along on the previous/next links (filters, say), the
-    empty ones left out (``with_query``)."""
+    empty ones left out (``with_query``); ``param`` names the page number,
+    for a second list paged on the same URL."""
     if total <= page_size:
         return None
 
     def link(number: int) -> str:
-        return with_query(path, **params, page=str(number))
+        return with_query(path, **params, **{param: str(number)})
 
     start = (page - 1) * page_size
     return {

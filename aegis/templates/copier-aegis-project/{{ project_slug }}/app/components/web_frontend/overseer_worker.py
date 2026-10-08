@@ -15,6 +15,7 @@ from app.core.formatting import (
     format_relative_time,
     format_span,
     format_timestamp,
+    page_number,
 )
 from app.core.log import logger
 from app.services.system import ui_worker
@@ -23,7 +24,7 @@ from app.services.system.models import ComponentStatus, ComponentStatusType
 from .filters import color_tone
 from .overseer_live import fragment_events
 from .overseer_nav import SectionRequest
-from .rendering import fragment, page_number, pager, status_cell, with_query
+from .rendering import fragment, pager, status_cell, with_query
 
 SECTIONS = (
     (None, {"overview": "Overview"}),

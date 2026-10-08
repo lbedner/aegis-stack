@@ -14,7 +14,7 @@ from typing import Any
 
 from app.core import secrets
 from app.core.config import settings
-from app.core.formatting import format_relative_time
+from app.core.formatting import format_relative_time, page_number
 from app.services.payment.catalog import get_catalog
 from app.services.payment.constants import (
     DisputeStatus,
@@ -38,7 +38,6 @@ from .overseer_nav import SectionRequest, page_url
 from .rendering import (
     chart,
     drawer_state,
-    page_number,
     pager,
     status_cell,
     with_query,

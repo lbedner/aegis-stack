@@ -65,11 +65,13 @@ def test_every_enqueued_name_is_a_system_task() -> None:
 
 async def _fake_job() -> None:
     """A job that records that it ran."""
-    _RAN.append(True)
+    from structlog.contextvars import get_contextvars
+
+    _RAN.append(get_contextvars().get("app_service"))
 
 
-_RAN: list[bool] = []
-_FAKE = ServiceJob(_fake_job, "fake", "Fake", {"trigger": "interval", "hours": 1}, timeout=123)
+_RAN: list[str | None] = []
+_FAKE = ServiceJob(_fake_job, "fake", "Fake", {"trigger": "interval", "hours": 1}, timeout=123, app_service="demo")
 {%- if worker_backend == "arq" %}
 
 
@@ -82,7 +84,7 @@ async def test_a_worker_task_runs_its_job_under_its_own_name() -> None:
     assert task.name == "_fake_job"
     assert task.timeout_s == 123
     await task.coroutine({})
-    assert _RAN == [True]
+    assert _RAN == ["demo"]
 {%- elif worker_backend == "taskiq" %}
 
 
@@ -96,7 +98,7 @@ async def test_a_worker_task_runs_its_job_under_its_own_name() -> None:
     assert task.task_name == "_fake_job"
     assert task.labels["timeout"] == 123
     await task.original_func()
-    assert _RAN == [True]
+    assert _RAN == ["demo"]
 
 
 def test_registering_leaves_the_job_function_alone() -> None:
@@ -122,15 +124,22 @@ def test_a_worker_task_runs_its_job_under_its_own_name() -> None:
     assert actor.queue_name == "system"
     assert actor.options["time_limit"] == 123_000
     # Dramatiq wraps an async function to run it on its event loop thread.
-    assert getattr(actor.fn, "__wrapped__", actor.fn) is _fake_job
+    import asyncio
+
+    _RAN.clear()
+    asyncio.run(getattr(actor.fn, "__wrapped__", actor.fn)())
+    assert _RAN == ["demo"]
 {%- endif %}
 {%- else %}
 
 
 def test_without_a_worker_the_scheduler_runs_each_job() -> None:
+    from app.core.schedule import run_service_job
+
     scheduled = _scheduled()
     for job in service_jobs():
-        assert scheduled[job.id].func is job.func, job.id
+        assert scheduled[job.id].func is run_service_job, job.id
+        assert list(scheduled[job.id].args) == [job.id]
 {%- endif %}
 {%- if scheduler_backend != "memory" %}
 

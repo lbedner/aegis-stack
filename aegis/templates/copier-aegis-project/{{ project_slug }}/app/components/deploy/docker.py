@@ -32,11 +32,11 @@ from app.core.runtime import (
     RuntimeUnavailableError,
     Service,
     Stats,
-    parse_log_line,
 )
 from app.core.time import utcnow
 
-from .docker_logs import decode, is_multiplexed
+from .docker_logs import follow as follow_logs
+from .docker_logs import history
 
 PROXY_SOCKET = "/var/run/docker-proxy/docker.sock"
 PROJECT_LABEL = "com.docker.compose.project"
@@ -318,41 +318,15 @@ class DockerRuntime:
             f"/containers/{instance}/logs",
             **self._log_params(str(tail), since),
         )
-        body = response.content
-        multiplexed = is_multiplexed(body)
-        lines, rest = decode(body, multiplexed)
-        if rest.strip() and not multiplexed:
-            lines.append(parse_log_line(rest.decode(errors="replace"), "stdout"))
-        return lines
+        return history(response.content)
 
-    async def follow(self, instance: str) -> AsyncIterator[LogLine]:
+    async def follow(
+        self, instance: str, since: datetime | None = None
+    ) -> AsyncIterator[LogLine]:
         """New lines as the container writes them, until the caller stops."""
-        params = {**self._log_params("0"), "follow": "1"}
-        try:
-            async with self._client().stream(
-                "GET",
-                f"/containers/{instance}/logs",
-                params=params,
-                timeout=httpx.Timeout(10.0, read=None),
-            ) as response:
-                if response.status_code != 200:
-                    raise RuntimeUnavailableError(
-                        f"Docker refused logs for {instance}: {response.status_code}"
-                    )
-                buffer, multiplexed = b"", None
-                async for chunk in response.aiter_bytes():
-                    buffer += chunk
-                    if multiplexed is None:
-                        if len(buffer) < 4:
-                            continue
-                        multiplexed = is_multiplexed(buffer)
-                    lines, buffer = decode(buffer, multiplexed)
-                    for line in lines:
-                        yield line
-        except httpx.TransportError as error:
-            raise RuntimeUnavailableError(
-                f"Docker socket proxy unreachable at {self._socket}: {error}"
-            ) from error
+        params = {**self._log_params("all" if since else "0", since), "follow": "1"}
+        async for line in follow_logs(self._client(), instance, params, self._socket):
+            yield line
 
     async def restart(self, instance: str) -> None:
         """Restart one container: the one write the proxy allows."""

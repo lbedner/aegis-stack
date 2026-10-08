@@ -36,6 +36,53 @@ The dashboard displays:
 - Web dashboard with auto-refresh (30-second polling)
 - Scheduler job execution: trigger jobs manually, view execution history and stats
 
+## Application service logs in HTMX Overseer
+
+Open **Logs** at `/overseer/logs`. The Services checklist includes installed
+application services alongside runtime components and containers. Select AI,
+Auth, or several services to see their attributed logs across containers;
+combined selections include any matching service or container. The same filter
+applies to history, live updates, and the volume chart. Rows show the application
+service alongside its runtime, for example `AI · Worker`.
+
+Normal logs use the same automatic attribution as errors. Older lines without
+attribution remain available under their runtime/container or with all filters
+cleared. Logs continue to come from Docker; no additional Redis pipeline is used.
+
+## Retained errors in HTMX Overseer
+
+Open **Errors** beside Logs, or go directly to `/overseer/errors`. Collection runs
+in the webserver background even when every browser is closed. It needs Redis
+and the Docker runtime; minimal stacks still render the page with an explanation
+when collection is unavailable. The existing Overseer access gate applies to
+pages, fragments, and live streams.
+
+The list groups explicit ERROR/CRITICAL messages and recognized exceptions by
+service and cause. Click an issue to open the side drawer and inspect the selected occurrence, its
+container, timestamp, level, safe structured fields, and stored stack trace.
+Use the occurrence links to inspect older traces, or copy the selected trace.
+An error without a stack trace cannot have one reconstructed from its message.
+Detail URLs are bookmarkable; detail remains stable while the list updates.
+
+The Services checklist is the one Logs uses, so a filter carries between the two
+pages. No selection means every source; an error from any selected runtime,
+container or application service is shown, and an application service matches its
+attributed errors across containers. The Service column shows the application
+service above the runtime, named as Logs names it (`Worker · system`).
+Logs without service evidence remain Unattributed.
+Severity, history, and search filters apply to retained occurrences
+before grouping and pagination. Counts and first/last times describe the matching
+retained occurrences, not lifetime error totals. Detail history shows all retained
+occurrences of the issue. Search covers exception type and the first 1,024 message
+characters across the retained index (up to 10,000 occurrences), not only the
+current page. The Logs link opens the service's last hour of logs; stored detail
+survives Docker log rotation even when those source logs are no longer available.
+
+Live updates use independent Redis notification readers for each viewer and
+replace the grouped list. A reconnect rebuilds from retained state, including
+after notification trimming. Server reconciliation every 15 seconds removes
+quietly expired results. An open occurrence is preserved until navigation.
+
 ## How It Works
 
 ```mermaid

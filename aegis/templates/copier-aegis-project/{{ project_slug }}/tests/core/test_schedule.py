@@ -26,11 +26,14 @@ _ONE_JOB = (
 def test_a_services_schedule_is_found_without_editing_anything(
     fake_service: FakeService,
 ) -> None:
-    fake_service("demo_plugin", scheduled_jobs=_ONE_JOB.format(func="demo_job", id="demo"))
+    fake_service(
+        "demo_plugin", scheduled_jobs=_ONE_JOB.format(func="demo_job", id="demo")
+    )
 
     jobs = {job.id: job for job in service_jobs()}
 
     assert jobs["demo"].task_name == "demo_job"
+    assert jobs["demo"].app_service == "demo_plugin"
 
 
 def test_a_schedule_without_jobs_is_an_error(fake_service: FakeService) -> None:

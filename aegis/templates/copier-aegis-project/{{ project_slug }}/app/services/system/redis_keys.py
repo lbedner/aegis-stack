@@ -29,6 +29,7 @@ OWNERS = (
     "app.components.worker.broker",
     "app.components.worker.registry",
     "app.components.worker.runtime",
+    "app.services.system.errors.store",
     # Last: the shared cache claims whatever is left in its database.
     "app.services.system.ui_cache",
 )
@@ -69,6 +70,11 @@ def families() -> list[KeyFamily]:
             continue
         found.extend(getattr(module, "REDIS_KEYS", ()))
     return found
+
+
+def decoded(value: Any) -> str:
+    """A reply from a client without ``decode_responses`` as text."""
+    return value.decode() if isinstance(value, bytes) else str(value)
 
 
 def redis_url() -> str:

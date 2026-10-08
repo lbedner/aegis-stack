@@ -8,11 +8,14 @@ on ``.env``, which is already in effect.
 """
 
 from app.core import saved_settings
-from app.core.log import apply_log_level, logger
+from app.core.log import apply_log_level, logger, setup_logging
 
 
 async def apply_saved_overrides() -> None:
     """Saved settings{% if include_ai and ai_backend in ("sqlite", "postgres") %}, and the model picked in the Overseer or with ``llm use``{% endif %}."""
+    # Idempotent; a worker started by its own CLI (taskiq, dramatiq) has no
+    # entrypoint of ours to set logging up, so every process does it here.
+    setup_logging()
     try:
         applied = await saved_settings.apply_saved()
     except Exception:

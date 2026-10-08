@@ -13,7 +13,7 @@ from urllib.parse import quote
 
 from starlette.routing import BaseRoute
 
-from app.core.constants import ComponentName
+from app.core.constants import ComponentName, ServiceName
 from app.services.system import ui_runtime
 from app.services.system.health import last_system_status, registered_health_names
 from app.services.system.models import (
@@ -40,15 +40,15 @@ ORDER = {
         ComponentName.OLLAMA,
     ),
     "services": (
-        "auth",
-        "ai",
-        "comms",
-        "documents",
-        "research",
-        "insights",
-        "payment",
-        "finance",
-        "blog",
+        ServiceName.AUTH,
+        ServiceName.AI,
+        ServiceName.COMMS,
+        ServiceName.DOCUMENTS,
+        ServiceName.RESEARCH,
+        ServiceName.INSIGHTS,
+        ServiceName.PAYMENT,
+        ServiceName.FINANCE,
+        ServiceName.BLOG,
     ),
 }
 

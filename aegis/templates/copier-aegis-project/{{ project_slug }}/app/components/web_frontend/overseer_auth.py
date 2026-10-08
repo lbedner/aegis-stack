@@ -22,6 +22,7 @@ from app.core.formatting import (
     counted,
     format_relative_time,
     format_span,
+    page_number,
     row_matches,
 )
 from app.core.security import access_token_minutes
@@ -34,7 +35,7 @@ from app.services.system.models import ComponentStatus
 
 from .filters import color_tone
 from .overseer_nav import SectionRequest, page_url
-from .rendering import page_number, pager, status_cell, with_query
+from .rendering import pager, status_cell, with_query
 
 SECTIONS = (
     (None, {"overview": "Overview"}),

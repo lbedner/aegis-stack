@@ -18,16 +18,23 @@ framework imports.
 import asyncio
 from collections import defaultdict
 from collections.abc import AsyncIterator, Mapping, Sequence
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 import os
-import re
+import time
 from typing import Any, Self
 
 from app.core import runtime, series
 from app.core.formatting import format_relative_time, format_timestamp
 from app.core.log import logger
-from app.core.runtime import LogLine, RuntimeUnavailableError
+from app.core.log_records import LogAssembler, LogRecord
+from app.core.log_records import split_lead as _split_lead
+from app.core.runtime import (
+    METADATA_KEYS,
+    LogLine,
+    RuntimeUnavailableError,
+    without_metadata,
+)
 from app.core.time import utcnow
 from app.services.system import ui_runtime
 from app.services.system.ui import get_component_title
@@ -58,23 +65,6 @@ TONES = {"debug": "muted", "warning": "warn", "error": "error", "critical": "err
 TAIL = 500  # the most lines read from each container
 # How long a followed line waits for the traceback that may follow it.
 FLUSH_SECONDS = 0.5
-# Lines that continue a traceback above them, besides indented ones.
-_TRACEBACK = (
-    "Traceback (most recent call last)",
-    "During handling of the above exception",
-    "The above exception was the direct cause",
-)
-_RAISED = re.compile(r"^[A-Za-z_][\w.]*(Error|Exception|Warning|Exit|Interrupt)\b")
-# A plain line's lead that the time cell and level tag already show: a date
-# and time (an optional zone after it), a bare time, or a level tag, then
-# any bracketed groups (logger, process) up to the message.
-_LEAD = re.compile(
-    r"^(?:\[?\d{4}-\d\d-\d\d[ T]\d\d:\d\d:\d\d(?:[.,]\d+)?(?-i:Z| ?[A-Z]{2,4}\b)?\]?"
-    r"|\[\d\d:\d\d:\d\d\]"
-    r"|(?:debug|info|warn|warning|error|critical)\s*:)"
-    r"\s*(?:\[[^\]]*\]\s*)*",
-    re.IGNORECASE,
-)
 # The volume above the lines: the window in this many bars, each line
 # counted in its tone's stack.
 VOLUME_BARS = 60
@@ -83,6 +73,19 @@ VOLUME_TONES = ("error", "warn", "other")
 # a service's lines take one of its colors.
 RAMP = 8
 _PAGES = sorted(runtime.PAGES)
+
+
+def _presentation(
+    line: LogLine, message: str
+) -> tuple[str, list[tuple[str, str]], list[tuple[str, str]]]:
+    """Keep attribution metadata out of the collapsed message in both renderers."""
+    if line.event is None and line.level:
+        message = without_metadata(message)
+    return (
+        message,
+        [(key, value) for key, value in line.fields if key not in METADATA_KEYS],
+        [(key, value) for key, value in line.fields if key in METADATA_KEYS],
+    )
 
 
 def color_of(page: str) -> int:
@@ -96,15 +99,6 @@ def title_of(page: str) -> str:
     return get_component_title(ui_runtime.component_of(page))
 
 
-def _split_lead(text: str) -> tuple[str, str]:
-    """``(lead, message)``: the lead the columns repeat, or none when it
-    would leave no message."""
-    lead = _LEAD.match(text)
-    if lead is None or not text[lead.end() :].strip():
-        return "", text
-    return lead.group(), text[lead.end() :]
-
-
 @dataclass
 class _Row:
     """One line as shown, with the traceback lines folded under it."""
@@ -114,59 +108,42 @@ class _Row:
     line: LogLine
     # Which of its page's containers, when it has several (``_sources``).
     source: str = ""
-    folded: list[str] = field(default_factory=list)
-
-    def fold(self, text: str) -> None:
-        self.folded.append(text)
-
-    @property
-    def trace(self) -> str | None:
-        """A JSON line's own traceback, then any folded under it."""
-        parts = [part for part in (self.line.trace, *self.folded) if part]
-        return "\n".join(parts) or None
+    trace: str | None = None
 
     def view(self) -> dict[str, Any]:
         when = self.line.timestamp
         lead, message = (
             ("", self.line.event) if self.line.event else _split_lead(self.line.text)
         )
+        copy_text = lead + message
+        message, fields, metadata = _presentation(self.line, message)
         return {
             "at": format_timestamp(when.isoformat()) if when else "-",
             "ms": _ms(when) if when else None,
             "page": self.page,
+            "app_service": dict(self.line.fields).get("app_service"),
             "color": color_of(self.page),
             "instance": self.instance,
             "source": self.source,
             "level": self.line.level,
             "prefix": lead,
             "message": message,
-            "fields": list(self.line.fields),
+            "fields": fields,
+            "metadata": metadata,
+            "copy_text": copy_text,
             "trace": self.trace,
         }
-
-
-def _continues(line: LogLine, last: _Row) -> bool:
-    """Whether ``line`` is the traceback (or more of it) under ``last``."""
-    text = line.text
-    if not text.strip():
-        return last.trace is not None
-    return (
-        text[0].isspace()
-        or text.startswith(_TRACEBACK)
-        or (last.trace is not None and _RAISED.match(text) is not None)
-    )
 
 
 def _rows(
     page: str, instance: str, lines: list[LogLine], source: str = ""
 ) -> list[_Row]:
-    rows: list[_Row] = []
+    assembler = LogAssembler(max_bytes=None)
+    records: list[LogRecord] = []
     for line in lines:
-        if rows and _continues(line, rows[-1]):
-            rows[-1].fold(line.text)
-        elif line.text.strip():
-            rows.append(_Row(page, instance, line, source))
-    return rows
+        records.extend(assembler.feed(instance, line, now=0))
+    records.extend(assembler.flush())
+    return [_Row(page, instance, r.line, source, r.trace) for r in records]
 
 
 def _sources(names: list[tuple[str, str]]) -> dict[str, str]:
@@ -192,9 +169,39 @@ def _ms(at: datetime) -> int:
     return round(at.replace(tzinfo=UTC).timestamp() * 1000)
 
 
-def _bound(query: Mapping[str, str], key: str) -> int | None:
+def number_of(query: Mapping[str, str], key: str) -> int | None:
+    """A whole number a query gives ``key``, None when it gives none."""
     value = query.get(key, "")
     return int(value) if value.isdigit() else None
+
+
+@dataclass(frozen=True)
+class Picked:
+    """The services (pages), containers and application services a query
+    ticks: a line or error from any of them is kept, every one when none is."""
+
+    services: frozenset[str]
+    containers: frozenset[str]
+    app_services: frozenset[str]
+
+    @classmethod
+    def of(cls, query: Mapping[str, str]) -> Self:
+        return cls(
+            frozenset(listed(query, "service")),
+            frozenset(listed(query, "container")),
+            frozenset(listed(query, "app_service")),
+        )
+
+    def __bool__(self) -> bool:
+        return bool(self.services or self.containers or self.app_services)
+
+    def keeps(self, page: str, container: str | None, app_service: str | None) -> bool:
+        return (
+            not self
+            or page in self.services
+            or container in self.containers
+            or app_service in self.app_services
+        )
 
 
 def levels_of(query: Mapping[str, str]) -> list[str]:
@@ -213,18 +220,26 @@ class _Filter:
     text: str
     start: int | None
     end: int | None
+    picked: Picked
 
     @classmethod
     def of(cls, query: Mapping[str, str]) -> Self:
         return cls(
             frozenset(levels_of(query)),
             query.get("q", "").strip().lower(),
-            _bound(query, "from"),
-            _bound(query, "to"),
+            number_of(query, "from"),
+            number_of(query, "to"),
+            Picked.of(query),
         )
 
     def keeps(self, row: _Row) -> bool:
-        """The level and text filters."""
+        """The level and text filters, and with application services ticked,
+        the sources (the pages read and their containers narrow the rest)."""
+        app_service = dict(row.line.fields).get("app_service")
+        if self.picked.app_services and not self.picked.keeps(
+            row.page, row.instance, app_service
+        ):
+            return False
         if self.levels and (row.line.level or NO_LEVEL) not in self.levels:
             return False
         if not self.text:
@@ -346,6 +361,8 @@ def _narrowed(
 ) -> list[tuple[str, str]]:
     """``names`` with a page that has a ``container`` picked keeping only the
     picked ones."""
+    if listed(query, "app_service"):
+        return names  # Service origins can occur in any container; filter rows below.
     picked = set(listed(query, "container"))
     narrowed = {page for page, name in names if name in picked}
     return [(p, n) for p, n in names if p not in narrowed or n in picked]
@@ -428,42 +445,40 @@ async def follow(
     page_by_name = {name: page for page, name in names}
     picked, order = _Filter.of(query), order_of(query)
 
-    def shown(rows: list[_Row]) -> list[dict[str, Any]]:
+    def shown(records: list[LogRecord]) -> list[dict[str, Any]]:
+        rows = [
+            _Row(page_by_name[r.source], r.source, r.line, source[r.source], r.trace)
+            for r in records
+        ]
         return _ordered(
             [r for r in rows if picked.keeps(r) and picked.in_range(r)], order
         )
 
     arrived: asyncio.Queue[tuple[str, LogLine | None]] = asyncio.Queue()
     pumps = [asyncio.create_task(_pump(name, arrived)) for _, name in names]
-    waiting: dict[str, _Row] = {}
+    assembler = LogAssembler(max_bytes=None, idle_seconds=FLUSH_SECONDS)
     open_streams = len(names)
     try:
         while open_streams:
             try:
                 name, line = await asyncio.wait_for(arrived.get(), FLUSH_SECONDS)
             except TimeoutError:
-                ready, waiting = list(waiting.values()), {}
+                ready = assembler.flush(now=time.monotonic())
             else:
-                last = waiting.get(name)
                 if line is None:
                     open_streams -= 1
-                    ready = [waiting.pop(name)] if last else []
-                elif last is not None and _continues(line, last):
-                    last.fold(line.text)
-                    continue
+                    ready = assembler.flush(name)
                 else:
-                    ready = [waiting.pop(name)] if last else []
-                    if line.text.strip():
-                        waiting[name] = _Row(
-                            page_by_name[name], name, line, source[name]
-                        )
+                    ready = assembler.feed(name, line, now=time.monotonic())
+                    ready.extend(assembler.flush(now=time.monotonic()))
             if batch := shown(ready):
                 yield batch
-        if batch := shown(list(waiting.values())):
+        if batch := shown(assembler.flush()):
             yield batch
     finally:
         for pump in pumps:
             pump.cancel()
+        await asyncio.gather(*pumps, return_exceptions=True)
 
 
 async def _pump(name: str, arrived: asyncio.Queue[tuple[str, LogLine | None]]) -> None:

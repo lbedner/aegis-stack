@@ -43,7 +43,7 @@ def as_task(job: ServiceJob) -> Function:
 
     @functools.wraps(job.func)
     async def run(ctx: dict[str, Any]) -> Any:
-        return await job.func()
+        return await job.run()
 
     return func(run, name=job.task_name, timeout=job.timeout)
 {%- endif %}
@@ -69,7 +69,7 @@ def as_task(job: ServiceJob, broker: Any) -> Any:
     """
 
     async def run() -> Any:
-        return await job.func()
+        return await job.run()
 
     run.__name__ = run.__qualname__ = job.task_name
     run.__doc__ = job.func.__doc__
@@ -95,9 +95,13 @@ def service_job_tasks(broker: Any) -> dict[str, Any]:
 
 def as_task(job: ServiceJob) -> Any:
     """One job as a Dramatiq actor under the job's own name and time limit."""
+    async def run() -> Any:
+        return await job.run()
+
+    run.__name__ = job.task_name
     limits = {"time_limit": job.timeout * 1000} if job.timeout else {}
     return dramatiq.actor(
-        job.func,
+        run,
         actor_name=job.task_name,
         queue_name="system",
         store_results=True,

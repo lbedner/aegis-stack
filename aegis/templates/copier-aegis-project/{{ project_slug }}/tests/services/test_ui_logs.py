@@ -308,3 +308,48 @@ async def test_a_page_without_a_container_keeps_its_reason_among_others(
     alone = await ui_logs.containers(["worker"])
     view = await ui_logs.recent(["worker"], {}, found=found)
     assert alone.note and view["note"] == alone.note
+
+
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize(
+    ("query", "expected"),
+    [
+        ("app_service=ai", {"ai one", "ai two"}),
+        ("app_service=ai&app_service=auth", {"ai one", "ai two", "auth"}),
+        ("app_service=ai&service=redis", {"ai one", "ai two", "infra"}),
+        (f"app_service=auth&container={MEDIA}", {"auth", "ai two"}),
+    ],
+)
+async def test_application_services_filter_history_and_stream_across_containers(
+    monkeypatch: pytest.MonkeyPatch, streaming: bool, query: str, expected: set[str]
+) -> None:
+    from starlette.datastructures import QueryParams
+
+    def record(second: int, event: str, owner: str) -> LogLine:
+        return _at(
+            second, json.dumps({"level": "info", "event": event, "app_service": owner})
+        )
+
+    lines = {
+        SYSTEM: [record(1, "ai one", "ai"), record(2, "auth", "auth")],
+        MEDIA: [record(3, "ai two", "ai")],
+        REDIS.name: [_at(4, "infra")],
+    }
+    use_runtime(
+        monkeypatch, FakeRuntime(REDIS, WORKER, STOPPED, lines=lines, followed=lines)
+    )
+    filters = QueryParams(query + "&window=0")
+    if streaming:
+        rows = [
+            row
+            async for batch in ui_logs.follow(["worker", "redis"], filters)
+            for row in batch
+        ]
+    else:
+        view = await ui_logs.recent(["worker", "redis"], filters, volume=True)
+        rows = view["lines"]
+        assert sum(bar["total"] for bar in view["volume"]) == len(expected)
+    assert {row["message"] for row in rows} == expected
+    assert all(
+        row["app_service"] == "ai" for row in rows if row["message"].startswith("ai")
+    )

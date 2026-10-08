@@ -11,10 +11,13 @@ scheduler.
 
 from collections import Counter
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
+from structlog.contextvars import bound_contextvars
+
 from app.core.discovery import import_modules_named
+from app.core.log_attribution import remember_exception_origin
 
 # Seconds a worker lets a long job run, where the queue's own limit (five
 # minutes) is too short. A ceiling, not a measurement.
@@ -34,6 +37,16 @@ class ServiceJob:
     name: str
     trigger: dict[str, Any]
     timeout: int | None = None
+    app_service: str | None = None
+
+    async def run(self) -> Any:
+        """Execute with the discovered owner, restoring context even on failure."""
+        with bound_contextvars(app_service=self.app_service):
+            try:
+                return await self.func()
+            except Exception as error:
+                remember_exception_origin(error, self.app_service)
+                raise
 
     @property
     def task_name(self) -> str:
@@ -55,7 +68,9 @@ def service_jobs() -> tuple[ServiceJob, ...]:
         declared = getattr(module, "JOBS", None)
         if declared is None:
             raise ValueError(f"{module.__name__} declares no JOBS")
-        jobs.extend(declared)
+        # The folder owns the job, a plugin's too, registered or not yet.
+        owner = module.__name__.split(".")[2]
+        jobs.extend(replace(job, app_service=owner) for job in declared)
     for label, keys in (
         ("id", Counter(job.id for job in jobs)),
         ("task", Counter(job.task_name for job in jobs)),
@@ -64,3 +79,11 @@ def service_jobs() -> tuple[ServiceJob, ...]:
             if count > 1:
                 raise ValueError(f"two scheduled jobs claim {label} '{key}'")
     return tuple(jobs)
+
+
+async def run_service_job(job_id: str) -> Any:
+    """Importable scheduler entry point; resolve ownership from discovery."""
+    for job in service_jobs():
+        if job.id == job_id:
+            return await job.run()
+    raise ValueError(f"Unknown service job {job_id!r}")

@@ -12,6 +12,7 @@ import pytest
 from app.components.web_frontend import overseer_logs
 from app.core.runtime import LogLine, parse_log_line
 from app.services.system.models import ComponentStatus
+from app.services.system.ui import get_component_title
 from tests._fake_runtime import (
     REDIS,
     STOPPED,
@@ -24,6 +25,7 @@ from tests.web.dom import checked, none, one, select, text
 from tests.web.overseer import CACHE, page_html, sign_in, status_with
 
 PAGE = "/overseer/components/cache/logs"
+AI_TITLE = get_component_title("service_ai")
 
 
 def _at(second: int, text: str) -> LogLine:
@@ -458,3 +460,97 @@ async def test_a_stream_looks_its_containers_up_once(
     seen = container_lookups(monkeypatch)
     [f async for f in overseer_logs.everything_events({})]
     assert len(seen) == 1
+
+
+def test_application_service_picker_and_runtime_label(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ai = ComponentStatus(name="ai", message="Up")
+    auth = ComponentStatus(name="auth", message="Up")
+    sign_in(app, monkeypatch, status_with(CACHE, services=(ai, auth)))
+    lines = {
+        WORKER.name: [
+            _at(
+                1,
+                json.dumps({"level": "info", "event": "AI ready", "app_service": "ai"}),
+            ),
+            _at(
+                2,
+                json.dumps(
+                    {"level": "info", "event": "Auth ready", "app_service": "auth"}
+                ),
+            ),
+            _at(3, "old unattributed log"),
+        ]
+    }
+    use_runtime(monkeypatch, FakeRuntime(REDIS, WORKER, lines=lines))
+    client = TestClient(app)
+    html = page_html(client, ALL + "?app_service=ai")
+    assert _messages(html) == ["AI ready"]
+    assert checked(html, '#logs-services input[name="app_service"]') == ["ai"]
+    assert {
+        i.get("value") for i in select(html, '#logs-services input[name="app_service"]')
+    } >= {"ai", "auth"}
+    assert "app_service=ai" in one(html, "#logs").get("sse-connect")
+    source = one(html, "#logs-lines [data-service]")
+    # The service's title as this stack names it (a gated one is title-cased).
+    assert AI_TITLE in text(source) and "Worker" in text(source)
+    assert "old unattributed log" in _messages(page_html(client, ALL))
+
+
+async def test_application_service_filter_reaches_live_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    followed = {
+        WORKER.name: [
+            _at(
+                1,
+                json.dumps({"level": "info", "event": "AI live", "app_service": "ai"}),
+            ),
+            _at(
+                2,
+                json.dumps(
+                    {"level": "info", "event": "Auth live", "app_service": "auth"}
+                ),
+            ),
+        ]
+    }
+    use_runtime(monkeypatch, FakeRuntime(REDIS, WORKER, followed=followed))
+    frames = [
+        frame async for frame in overseer_logs.everything_events({"app_service": "ai"})
+    ]
+    html = "".join(frames)
+    assert "AI live" in html and "Auth live" not in html
+    assert "Worker" in html
+
+
+@pytest.mark.parametrize("structured", [False, True])
+def test_attributed_logs_put_dot_first_and_keep_metadata_in_expanded_row(
+    app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+    structured: bool,
+) -> None:
+    ai = ComponentStatus(name="ai", message="Up")
+    sign_in(app, monkeypatch, status_with(CACHE, services=(ai,)))
+    fields = {
+        "app_service": "ai",
+        "emitting_service": "ai",
+        "pathname": "/code/app/services/ai/usage.py",
+    }
+    raw = (
+        json.dumps({"level": "info", "event": "Usage recorded", "cost": 0, **fields})
+        if structured
+        else "2026-10-03 20:45:01 [info ] Usage recorded [app.core.log] app_service=ai cost=0 emitting_service=ai pathname=/code/app/services/ai/usage.py"
+    )
+    use_runtime(monkeypatch, FakeRuntime(WORKER, lines={WORKER.name: [_at(1, raw)]}))
+    row = one(page_html(TestClient(app), ALL), "#logs-lines tr")
+    source = one(row, "[data-service]")
+    assert source[0].get("data-dot") is not None
+    assert text(one(source, "[data-app-service]")) == AI_TITLE
+    assert "text-aegis-muted" in one(source, "a").get("class")
+    message = text(one(row, ".log-line"))
+    assert "Usage recorded" in message and "cost" in message
+    assert all(key not in message for key in fields)
+    details = one(row, "[data-log-metadata]")
+    assert "log-trace" in details.get("class")
+    assert all(f"{key}={value}" in text(details) for key, value in fields.items())

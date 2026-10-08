@@ -112,6 +112,8 @@ class LogLine:
     # A JSON line's other fields, as text, and the traceback it carries.
     fields: tuple[tuple[str, str], ...] = ()
     trace: str | None = None
+    # Exact source time for replay identity; datetime retains display precision.
+    source_timestamp: str | None = None
 
 
 @dataclass(frozen=True)
@@ -142,7 +144,9 @@ class Runtime(Protocol):
         self, instance: str, tail: int = 200, since: datetime | None = None
     ) -> list[LogLine]: ...
 
-    def follow(self, instance: str) -> AsyncIterator[LogLine]: ...
+    def follow(
+        self, instance: str, since: datetime | None = None
+    ) -> AsyncIterator[LogLine]: ...
 
     async def disk(self) -> DiskUsage: ...
 
@@ -177,6 +181,17 @@ _TAGGED = re.compile(
     r"^(?:.{0,60}?\[\s*|\s*)(debug|info|warn|warning|error|critical)\s*[\]:]",
     re.IGNORECASE,
 )
+
+
+# The attribution the development console prints as ``key=value``
+# (``log_attribution``): read into a line's fields here, once.
+METADATA_KEYS = ("app_service", "emitting_service", "pathname")
+_METADATA = re.compile(r"(?<!\S)(" + "|".join(METADATA_KEYS) + r")=(\S+)")
+
+
+def without_metadata(text: str) -> str:
+    """A console line's text with its attribution taken out."""
+    return re.sub(r" {2,}", " ", _METADATA.sub("", text)).strip()
 
 
 def _level(given: object, text: str) -> str | None:
@@ -215,6 +230,8 @@ def parse_log_line(raw: str, stream: str) -> LogLine:
                 for key, value in record.items()
                 if key not in _READ and key not in _TRACES
             )
+    if not text.startswith("{") and _level(level, text):
+        fields = tuple(_METADATA.findall(text))
     return LogLine(
         text=text,
         stream=stream,
@@ -223,6 +240,11 @@ def parse_log_line(raw: str, stream: str) -> LogLine:
         event=str(event) if event is not None else None,
         fields=fields,
         trace=trace,
+        source_timestamp=(
+            match.group(1) + ("." + match.group(2) if match.group(2) else "") + "Z"
+        )
+        if match
+        else None,
     )
 
 
@@ -268,7 +290,9 @@ class ProcessRuntime:
     ) -> list[LogLine]:
         return []
 
-    async def follow(self, instance: str) -> AsyncIterator[LogLine]:
+    async def follow(
+        self, instance: str, since: datetime | None = None
+    ) -> AsyncIterator[LogLine]:
         return
         yield  # an async generator that ends at once
 
@@ -350,8 +374,8 @@ async def logs(
     return await get_runtime().logs(instance, tail=tail, since=since)
 
 
-def follow(instance: str) -> AsyncIterator[LogLine]:
-    return get_runtime().follow(instance)
+def follow(instance: str, since: datetime | None = None) -> AsyncIterator[LogLine]:
+    return get_runtime().follow(instance, since=since)
 
 
 async def disk() -> DiskUsage:

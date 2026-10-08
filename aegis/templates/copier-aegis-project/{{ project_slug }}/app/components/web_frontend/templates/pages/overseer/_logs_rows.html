@@ -16,7 +16,9 @@
 <tr{% if row.ms %} data-at="{{ row.ms }}"{% endif %} class="log-row border-t border-aegis-border/40 hover:bg-aegis-card align-top cursor-pointer{% if tone == 'muted' %} opacity-60{% endif %}"{% if tone %} data-tone="{{ tone }}"{% endif %}>
   <td class="group/cell px-3 py-1 whitespace-nowrap text-aegis-muted font-mono border-l-2 border-l-transparent">{{ row.at }}{{ copy_icon(row.at, _copy) }}</td>
   <td class="group/cell px-3 py-1 whitespace-nowrap truncate" data-service title="{{ row.instance }}">
-    {%- if links %}{% set service = links[row.page] %}<span data-dot class="inline-block w-2 h-2 mr-1.5 rounded-full align-middle" style="background: var(--aegis-chart-{{ row.color + 1 }})"></span><a href="{{ service.url }}" {{ hx_replace(service.url, "#overseer-main") }} class="text-aegis-text hover:text-aegis-teal">{{ service.title }}</a>{% endif %}
+    <span data-dot class="inline-block w-2 h-2 mr-1.5 rounded-full align-middle" style="background: var(--aegis-chart-{{ row.color + 1 }})"></span>
+    {%- if row.app_service %}<span data-app-service class="text-aegis-text">{{ links.get(row.app_service, {}).get("title", row.app_service) if links else row.app_service }}</span>{% if links %}<span class="text-aegis-muted"> · </span>{% endif %}{% endif %}
+    {%- if links %}{% set service = links[row.page] %}<a href="{{ service.url }}" {{ hx_replace(service.url, "#overseer-main") }} class="{{ 'text-aegis-muted' if row.app_service else 'text-aegis-text' }} hover:text-aegis-teal">{{ service.title }}</a>{% endif %}
     {%- if row.source %}<span class="text-aegis-muted">{{ " · " if links }}{{ row.source }}</span>{% endif %}
     {{- copy_icon(row.instance, _copy) -}}
   </td>
@@ -26,8 +28,13 @@
       <span data-message class="text-aegis-text">{{ row.message }}</span>
       {%- for key, value in row.fields %}<span class="ml-2"><span data-field-key class="text-aegis-muted">{{ key }}=</span><span class="text-aegis-text">{{ value }}</span></span>{% endfor -%}
       {%- if row.trace %}<span class="log-trace-hint ml-2 text-xxs text-aegis-muted">traceback</span>{% endif -%}
-      {{- copy_icon(row.prefix ~ row.message, _copy) -}}
+      {{- copy_icon(row.copy_text, _copy) -}}
     </div>
+    {% if row.metadata %}
+    <div data-log-metadata class="log-trace mt-1 text-xs text-aegis-muted break-all">
+      {% for key, value in row.metadata %}<span class="mr-2"><span data-field-key>{{ key }}=</span><span>{{ value }}</span></span>{% endfor %}
+    </div>
+    {% endif %}
     {% if row.trace %}
     <details class="log-trace mt-1"><summary class="cursor-pointer text-aegis-muted">Traceback{{ copy_icon(row.trace, _copy) }}</summary>
       <pre class="mt-1 whitespace-pre-wrap text-aegis-muted">{{ row.trace }}</pre>

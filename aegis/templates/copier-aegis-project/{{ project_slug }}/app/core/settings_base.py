@@ -7,9 +7,9 @@ from collections.abc import Iterable
 from typing import Any
 
 from pydantic import model_validator
-from pydantic_settings import BaseSettings
 
 from app.core.credential import shown
+from app.core.settings_errors import ErrorTrackingSettings
 
 # Settings nothing reads any more. A .env written before still sets them,
 # and Settings refuses unknown names, so they are dropped on the way in.
@@ -23,7 +23,7 @@ RETIRED_SETTINGS = frozenset(
 )
 
 
-class SettingsBase(BaseSettings):
+class SettingsBase(ErrorTrackingSettings):
     """``Settings``' base, in place of ``BaseSettings``."""
 
     @model_validator(mode="before")

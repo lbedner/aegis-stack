@@ -218,6 +218,9 @@ def _no_background_sampling(monkeypatch: pytest.MonkeyPatch) -> None:
     async def idle(samplers: Any) -> None:
         return None
 
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "ERROR_TRACKING_ENABLED", False)
     history = CacheService()
     monkeypatch.setattr(series, "run", idle)
     monkeypatch.setattr(series, "get_cache", lambda: history)
@@ -230,6 +233,30 @@ def _no_load_cost_measuring(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.services.system import load_cost
 
     monkeypatch.setattr(load_cost, "_start", lambda: None)
+
+
+@pytest.fixture
+async def store() -> AsyncGenerator[Any]:
+    """The error store's Lua against a real Redis, only when one is named:
+    the suite never writes to the developer's running Redis. Point
+    ``AEGIS_ERROR_TRACKING_REDIS_URL`` at a throwaway one
+    (``docker run --rm -p 6390:6379 redis``); each test gets a namespace."""
+    from uuid import uuid4
+
+    from app.services.system.errors.store import ErrorStore
+
+    url = os.environ.get("AEGIS_ERROR_TRACKING_REDIS_URL")
+    if not url:
+        pytest.skip("Set AEGIS_ERROR_TRACKING_REDIS_URL to a throwaway Redis to run")
+    redis = pytest.importorskip("redis.asyncio")
+    client = redis.from_url(url, socket_connect_timeout=1)
+    repository = ErrorStore(
+        client, "test-" + uuid4().hex, max_occurrences=3, retention_seconds=7 * 86400
+    )
+    yield repository
+    keys = [key async for key in client.scan_iter(repository.prefix + "*")]
+    await client.delete(repository.notifications, *keys)
+    await client.aclose()
 
 
 @pytest.fixture(autouse=True, scope="session")

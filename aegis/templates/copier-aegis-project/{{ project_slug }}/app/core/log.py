@@ -7,15 +7,17 @@ It supports both human-readable console output for development and JSON
 output for production environments.
 """
 
-import logging
-import sys
 from collections.abc import Generator
 from contextlib import contextmanager
+import logging
+import sys
 from typing import TextIO
 
 import structlog
-from app.core.config import settings
 from structlog.types import Processor
+
+from app.core.config import settings
+from app.core.log_attribution import add_service_attribution
 
 # A global logger instance for easy access throughout the application
 logger: structlog.stdlib.BoundLogger = structlog.get_logger()
@@ -45,6 +47,11 @@ def setup_logging(stream: TextIO = sys.stdout) -> None:
     _logging_configured = True
     # Type hint for the list of processors
     shared_processors: list[Processor] = [
+        structlog.contextvars.merge_contextvars,
+        structlog.processors.CallsiteParameterAdder(
+            parameters={structlog.processors.CallsiteParameter.PATHNAME},
+        ),
+        add_service_attribution,
         structlog.stdlib.add_logger_name,
         structlog.stdlib.add_log_level,
         structlog.stdlib.PositionalArgumentsFormatter(),
@@ -78,6 +85,7 @@ def setup_logging(stream: TextIO = sys.stdout) -> None:
                     show_locals=False
                 ),
             ),
+            foreign_pre_chain=shared_processors,
         )
     else:
         formatter = structlog.stdlib.ProcessorFormatter(

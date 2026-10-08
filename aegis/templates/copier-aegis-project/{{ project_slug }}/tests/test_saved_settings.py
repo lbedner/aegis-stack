@@ -173,3 +173,15 @@ async def test_a_saved_log_level_applies_once_the_process_has_booted(
     monkeypatch.setattr(settings, "LOG_LEVEL", "DEBUG")
     await boot.apply_saved_overrides()
     assert root.level == logging.DEBUG
+
+
+async def test_every_process_has_its_logging_set_up_by_boot(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A worker started by its own CLI (taskiq, dramatiq) has no entrypoint
+    of ours to set structlog up: booting is the one place every process
+    (webserver, scheduler, each worker) goes through."""
+    configured: list[bool] = []
+    monkeypatch.setattr(boot, "setup_logging", lambda: configured.append(True))
+    await boot.apply_saved_overrides()
+    assert configured == [True]

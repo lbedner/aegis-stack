@@ -370,3 +370,11 @@ def split_matches(text: str, query: str) -> list[tuple[str, bool]]:
     if at < len(text):
         runs.append((text[at:], False))
     return runs or [(text, False)]
+
+
+def page_number(raw: str | None) -> int:
+    """A ``?page=`` value as a page number, 1 when missing or not a number."""
+    try:
+        return max(1, int(raw or 1))
+    except ValueError:
+        return 1

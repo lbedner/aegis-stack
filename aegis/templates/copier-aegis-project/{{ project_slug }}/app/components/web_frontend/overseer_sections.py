@@ -18,6 +18,7 @@ from . import (
     overseer_container,
     overseer_database,
     overseer_deployments,
+    overseer_errors,
     overseer_ingress,
     overseer_logs,
     overseer_patterns,
@@ -140,6 +141,7 @@ STANDALONE = {
     for item in (
         overseer_patterns.ITEM,
         overseer_logs.ITEM,
+        overseer_errors.ITEM,
         overseer_resources.ITEM,
         overseer_deployments.ITEM,
         overseer_secrets.ITEM,
@@ -231,6 +233,12 @@ _PAGES: dict[tuple[str, str], SectionedPage] = {
     ),
     ("logs", "logs"): SectionedPage(
         "logs", overseer_logs.SECTIONS, overseer_logs.section_context, workspace=True
+    ),
+    ("errors", "errors"): SectionedPage(
+        "errors",
+        overseer_errors.SECTIONS,
+        overseer_errors.section_context,
+        workspace=True,
     ),
     ("resources", "resources"): SectionedPage(
         "resources",

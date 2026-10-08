@@ -1,0 +1,20 @@
+{% from "components/macros/layout.html" import badge %}
+{% from "components/macros/table.html" import data_table, pager as page_links %}
+{% macro error_cell(value) %}<a href="{{ value.url }}" {{ hx_replace(value.url, "#overseer-main") }} class="text-aegis-teal hover:underline"><span class="font-mono">{{ value.type }}</span><span class="block text-aegis-text break-words">{{ value.message }}</span></a>{% endmacro %}
+{% macro source_cell(value) %}{{ value.service }}<span class="block text-xs text-aegis-muted">{{ value.runtime }}</span>{% endmacro %}
+{% macro seen(value) %}<span class="text-xs text-aegis-muted" title="{{ value }}">{{ error_time(value) }}</span>{% endmacro %}
+<div id="errors-results" class="space-y-4">
+  <div class="text-sm text-aegis-muted" role="status">Collector: {{ badge(error_status.state, {"running": "ok", "degraded": "warn"}.get(error_status.state, "muted")) }} {% if error_status.reason %}{{ error_status.reason }}{% endif %}{% if error_status.last_success %} · Last read <span title="{{ error_status.last_success }}">{{ error_time(error_status.last_success) }}</span>{% endif %}{% if error_status.drops %} · {{ error_status.drops }} dropped inputs{% endif %}</div>
+  <p class="text-xs text-aegis-muted">Up to {{ "%g"|format(error_retention_days) }} days · {{ "{:,}".format(error_max_occurrences) }} retained occurrences. Counts reflect matching history.</p>
+  <details class="text-xs text-aegis-muted"><summary class="cursor-pointer">Collection details</summary><p class="mt-2">Search covers exception type and the first 1,024 message characters. Collection is best effort within Docker log retention.</p></details>
+  {% if error_note %}<p class="text-sm text-aegis-muted">{{ error_note }}</p>{% else %}
+  {{ data_table([
+    {"key": "error", "label": "Error", "render": error_cell, "wrap": True},
+    {"key": "source", "label": "Service", "render": source_cell},
+    {"key": "count", "label": "Matching occurrences", "kind": "int", "align": "right"},
+    {"key": "first_seen", "label": "First seen", "render": seen},
+    {"key": "last_seen", "label": "Last seen", "render": seen},
+  ], error_rows, empty="No matching retained errors.", row_id="error", flush=False) }}
+  {{ page_links(error_pager, "#overseer-main") }}
+  {% endif %}
+</div>

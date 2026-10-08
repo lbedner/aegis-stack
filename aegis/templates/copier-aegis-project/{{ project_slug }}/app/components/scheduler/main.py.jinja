@@ -34,7 +34,7 @@ from app.services.scheduler.execution_log import (
 {% endif %}
 from app.core.config import settings
 from app.core.log import logger
-from app.core.schedule import service_jobs
+from app.core.schedule import service_jobs{% if not include_worker %}, run_service_job{% endif %}
 {%- if include_worker %}
 from app.components.worker.pools import enqueue_task
 {%- endif %}
@@ -117,7 +117,8 @@ def register_service_jobs(scheduler: AsyncIOScheduler) -> None:
             enqueue_task,
             args=[job.task_name, "system"],
 {%- else %}
-            job.func,
+            run_service_job,
+            args=[job.id],
 {%- endif %}
             id=job.id,
             name=job.name,

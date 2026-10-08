@@ -33,6 +33,20 @@ class ComponentName(StrEnum):
     OLLAMA = "ollama"
 
 
+class ServiceName(StrEnum):
+    """Application service names, kept in sync with the generator's ServiceSpecs."""
+
+    AUTH = "auth"
+    AI = "ai"
+    COMMS = "comms"
+    INSIGHTS = "insights"
+    PAYMENT = "payment"
+    BLOG = "blog"
+    FINANCE = "finance"
+    DOCUMENTS = "documents"
+    RESEARCH = "research"
+
+
 class APIEndpoints:
     """API endpoint paths - immutable across all environments."""
 

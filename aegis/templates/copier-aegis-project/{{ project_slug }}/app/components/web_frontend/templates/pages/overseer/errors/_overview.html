@@ -1,0 +1,13 @@
+{% from "components/macros/layout.html" import drawer_sync %}
+{% from "components/macros/form.html" import checklist, select, search_input, primary_button %}
+<div id="errors" class="space-y-6">
+  <form action="/overseer/errors" method="get" hx-trigger="submit, change" {{ hx_replace("/overseer/errors", "#errors") }} class="flex flex-wrap items-center gap-3">
+    {{ checklist("errors-sources", "service", "Services", error_service_options) }}
+    {{ select("level", [{"id":"error", "name":"Error"}, {"id":"critical", "name":"Critical"}, {"id":"warning", "name":"Warning with exception"}], selected=error_query.level, blank="All severities", label="Severity") }}
+    {{ select("window", [{"id":"0", "name":"All retained"}, {"id":"3600", "name":"Last hour"}, {"id":"86400", "name":"Last day"}], selected=error_query.window or "0", blank=none, label="History") }}
+    {{ search_input("q", error_query.q, placeholder="Message or exception type") }}
+    {{ primary_button("Apply", type="submit") }}
+  </form>
+  <div hx-ext="sse" sse-connect="{{ error_events }}"><div sse-swap="errors-results" hx-target="this" hx-swap="innerHTML">{% include "pages/overseer/errors/_rows.html" %}</div></div>
+  {{ drawer_sync(open_drawer, drawer_param) }}
+</div>

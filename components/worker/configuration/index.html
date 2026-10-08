@@ -2701,6 +2701,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Concurrency per Queue">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-a-taskiq-worker-takes-jobs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How a TaskIQ worker takes jobs
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -6232,6 +6249,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Concurrency per Queue">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#how-a-taskiq-worker-takes-jobs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How a TaskIQ worker takes jobs
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -6677,7 +6711,7 @@
 </div>
 <div class="tabbed-block">
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="nv">ENVIRONMENT</span><span class="o">=</span>production
-</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="nv">WORKER_PROCESSES</span><span class="o">=</span><span class="m">4</span><span class="w">                  </span><span class="c1"># Match CPU count</span>
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="nv">WORKER_PROCESSES</span><span class="o">=</span><span class="m">4</span><span class="w">                  </span><span class="c1"># Match the container&#39;s cpus limit</span>
 </span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="nv">WORKER_QUEUES</span><span class="o">=</span><span class="s1">&#39;{&quot;system&quot;: {&quot;concurrency&quot;: 8}}&#39;</span><span class="w">  </span><span class="c1"># Per-process threads</span>
 </span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="nv">REDIS_URL</span><span class="o">=</span>redis://redis-prod:6379
 </span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="nv">REDIS_DB</span><span class="o">=</span><span class="m">1</span>
@@ -6686,13 +6720,17 @@
 </div>
 <div class="tabbed-block">
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="nv">ENVIRONMENT</span><span class="o">=</span>production
-</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="nv">WORKER_PROCESSES</span><span class="o">=</span><span class="m">4</span><span class="w">                  </span><span class="c1"># Match CPU count</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="nv">WORKER_PROCESSES</span><span class="o">=</span><span class="m">4</span><span class="w">                  </span><span class="c1"># Match the container&#39;s cpus limit</span>
 </span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="nv">REDIS_URL</span><span class="o">=</span>redis://redis-prod:6379
 </span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="nv">REDIS_DB</span><span class="o">=</span><span class="m">1</span>
 </span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="nv">REDIS_PASSWORD</span><span class="o">=</span>your-secure-password
 </span></code></pre></div>
 </div>
 </div>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Processes need memory and CPU to match</p>
+<p>Each worker process costs about 95 MiB, on top of about 90 MiB the container pays once, and a container's <code>cpus</code> limit caps it however many processes it runs. Raising <code>WORKER_PROCESSES</code> means raising the service's <code>memory</code> and <code>cpus</code> limits with it. The generated workers default to one process per container; to add capacity without touching limits, scale containers instead: <code>docker compose up -d --scale worker-system=3</code>.</p>
 </div>
 <hr />
 <h2 id="docker-integration">Docker Integration</h2>
@@ -6745,7 +6783,7 @@
 </span><span id="__span-15-8"><a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a><span class="w">    </span><span class="nt">environment</span><span class="p">:</span>
 </span><span id="__span-15-9"><a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DOCKER_CONTAINER=1</span>
 </span><span id="__span-15-10"><a id="__codelineno-15-10" name="__codelineno-15-10" href="#__codelineno-15-10"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">WORKER_QUEUE_TYPE=system</span>
-</span><span id="__span-15-11"><a id="__codelineno-15-11" name="__codelineno-15-11" href="#__codelineno-15-11"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">WORKER_PROCESSES=${SYSTEM_WORKER_PROCESSES:-2}</span>
+</span><span id="__span-15-11"><a id="__codelineno-15-11" name="__codelineno-15-11" href="#__codelineno-15-11"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">WORKER_PROCESSES=${SYSTEM_WORKER_PROCESSES:-1}</span>
 </span><span id="__span-15-12"><a id="__codelineno-15-12" name="__codelineno-15-12" href="#__codelineno-15-12"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">WORKER_TIMEOUT_SECONDS=1800</span>
 </span><span id="__span-15-13"><a id="__codelineno-15-13" name="__codelineno-15-13" href="#__codelineno-15-13"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">REDIS_URL=redis://redis:6379</span>
 </span><span id="__span-15-14"><a id="__codelineno-15-14" name="__codelineno-15-14" href="#__codelineno-15-14"></a><span class="w">    </span><span class="nt">depends_on</span><span class="p">:</span>
@@ -6761,7 +6799,7 @@
 </span><span id="__span-15-24"><a id="__codelineno-15-24" name="__codelineno-15-24" href="#__codelineno-15-24"></a><span class="w">    </span><span class="nt">environment</span><span class="p">:</span>
 </span><span id="__span-15-25"><a id="__codelineno-15-25" name="__codelineno-15-25" href="#__codelineno-15-25"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DOCKER_CONTAINER=1</span>
 </span><span id="__span-15-26"><a id="__codelineno-15-26" name="__codelineno-15-26" href="#__codelineno-15-26"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">WORKER_QUEUE_TYPE=load_test</span>
-</span><span id="__span-15-27"><a id="__codelineno-15-27" name="__codelineno-15-27" href="#__codelineno-15-27"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">WORKER_PROCESSES=${LOAD_TEST_WORKER_PROCESSES:-4}</span>
+</span><span id="__span-15-27"><a id="__codelineno-15-27" name="__codelineno-15-27" href="#__codelineno-15-27"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">WORKER_PROCESSES=${LOAD_TEST_WORKER_PROCESSES:-1}</span>
 </span><span id="__span-15-28"><a id="__codelineno-15-28" name="__codelineno-15-28" href="#__codelineno-15-28"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">WORKER_TIMEOUT_SECONDS=60</span>
 </span><span id="__span-15-29"><a id="__codelineno-15-29" name="__codelineno-15-29" href="#__codelineno-15-29"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">REDIS_URL=redis://redis:6379</span>
 </span><span id="__span-15-30"><a id="__codelineno-15-30" name="__codelineno-15-30" href="#__codelineno-15-30"></a><span class="w">    </span><span class="nt">depends_on</span><span class="p">:</span>
@@ -6781,7 +6819,7 @@
 </span><span id="__span-16-8"><a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a><span class="w">    </span><span class="nt">environment</span><span class="p">:</span>
 </span><span id="__span-16-9"><a id="__codelineno-16-9" name="__codelineno-16-9" href="#__codelineno-16-9"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DOCKER_CONTAINER=1</span>
 </span><span id="__span-16-10"><a id="__codelineno-16-10" name="__codelineno-16-10" href="#__codelineno-16-10"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">WORKER_QUEUE_TYPE=system</span>
-</span><span id="__span-16-11"><a id="__codelineno-16-11" name="__codelineno-16-11" href="#__codelineno-16-11"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">WORKER_PROCESSES=${SYSTEM_WORKER_PROCESSES:-2}</span>
+</span><span id="__span-16-11"><a id="__codelineno-16-11" name="__codelineno-16-11" href="#__codelineno-16-11"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">WORKER_PROCESSES=${SYSTEM_WORKER_PROCESSES:-1}</span>
 </span><span id="__span-16-12"><a id="__codelineno-16-12" name="__codelineno-16-12" href="#__codelineno-16-12"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">WORKER_TIMEOUT_SECONDS=1800</span>
 </span><span id="__span-16-13"><a id="__codelineno-16-13" name="__codelineno-16-13" href="#__codelineno-16-13"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">REDIS_URL=redis://redis:6379</span>
 </span><span id="__span-16-14"><a id="__codelineno-16-14" name="__codelineno-16-14" href="#__codelineno-16-14"></a><span class="w">      </span><span class="c1"># Docker file watching fix</span>
@@ -6800,7 +6838,7 @@
 </span><span id="__span-16-27"><a id="__codelineno-16-27" name="__codelineno-16-27" href="#__codelineno-16-27"></a><span class="w">    </span><span class="nt">environment</span><span class="p">:</span>
 </span><span id="__span-16-28"><a id="__codelineno-16-28" name="__codelineno-16-28" href="#__codelineno-16-28"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DOCKER_CONTAINER=1</span>
 </span><span id="__span-16-29"><a id="__codelineno-16-29" name="__codelineno-16-29" href="#__codelineno-16-29"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">WORKER_QUEUE_TYPE=load_test</span>
-</span><span id="__span-16-30"><a id="__codelineno-16-30" name="__codelineno-16-30" href="#__codelineno-16-30"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">WORKER_PROCESSES=${LOAD_TEST_WORKER_PROCESSES:-4}</span>
+</span><span id="__span-16-30"><a id="__codelineno-16-30" name="__codelineno-16-30" href="#__codelineno-16-30"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">WORKER_PROCESSES=${LOAD_TEST_WORKER_PROCESSES:-1}</span>
 </span><span id="__span-16-31"><a id="__codelineno-16-31" name="__codelineno-16-31" href="#__codelineno-16-31"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">WORKER_TIMEOUT_SECONDS=60</span>
 </span><span id="__span-16-32"><a id="__codelineno-16-32" name="__codelineno-16-32" href="#__codelineno-16-32"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">REDIS_URL=redis://redis:6379</span>
 </span><span id="__span-16-33"><a id="__codelineno-16-33" name="__codelineno-16-33" href="#__codelineno-16-33"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">WATCHFILES_FORCE_POLLING=true</span>
@@ -6930,6 +6968,21 @@ load, and a queue name that matches no queue stops the worker at startup.
 The total a queue can run at once is its concurrency times its processes
 (<code>WORKER_PROCESSES</code>). Each worker reports what it runs with, shown in
 Overseer under Worker &gt; Runtime.</p>
+<h3 id="how-a-taskiq-worker-takes-jobs">How a TaskIQ worker takes jobs</h3>
+<p>A TaskIQ queue is a Redis stream read by one consumer group. A worker claims
+jobs with <code>XREADGROUP</code> and acks each when it finishes; a claimed job belongs
+to that worker alone.</p>
+<ul>
+<li><strong>It claims what it can start.</strong> Each read takes at most the queue's
+  concurrency, so a busy worker never sits on jobs an idle one could run, and
+  a worker that dies strands no more than one round.</li>
+<li><strong>A running job keeps its claim.</strong> Jobs a dead worker left unacked are
+  handed to another after 10 minutes. While a job runs, its claim is
+  refreshed, so a long job is never run a second time alongside itself.</li>
+<li><strong>A busy worker still counts as alive.</strong> A worker working through what it
+  claimed reads nothing for a while; Overseer counts it as serving its queue
+  as long as it keeps reporting itself (Worker &gt; Runtime).</li>
+</ul>
 <hr />
 <h2 id="redis-configuration">Redis Configuration</h2>
 <h3 id="connection-settings">Connection Settings</h3>

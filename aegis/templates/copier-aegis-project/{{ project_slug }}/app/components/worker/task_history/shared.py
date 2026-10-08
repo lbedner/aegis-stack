@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from app.services.system.redis_keys import KeyFamily
+from app.core.key_family import KeyFamily
 
 _TASK_KEY_PREFIX = "aegis:task:"
 _QUEUE_INDEX_PREFIX = "aegis:tasks:queue:"

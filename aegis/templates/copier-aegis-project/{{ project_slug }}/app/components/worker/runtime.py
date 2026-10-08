@@ -24,7 +24,7 @@ from typing import Any
 from app.core.config import settings
 from app.core.log import logger
 from app.core.queue_workers import concurrency_for
-from app.services.system.redis_keys import KeyFamily
+from app.core.key_family import KeyFamily
 
 RUNTIME_KEY_PREFIX = "worker:"
 RUNTIME_KEY_SUFFIX = ":runtime"

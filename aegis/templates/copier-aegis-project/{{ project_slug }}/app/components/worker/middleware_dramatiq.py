@@ -24,7 +24,7 @@ from app.components.worker.heartbeat import mark_busy_sync, mark_idle_sync, work
 from app.core.boot import apply_saved_overrides
 from app.core.config import settings
 from app.core.log import logger
-from app.services.system.redis_keys import KeyFamily
+from app.core.key_family import KeyFamily
 
 # Redis Stream name for worker events (must match events.py)
 WORKER_EVENT_STREAM = "aegis:events:worker"

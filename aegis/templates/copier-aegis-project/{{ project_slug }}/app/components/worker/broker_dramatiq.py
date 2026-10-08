@@ -22,7 +22,7 @@ import dramatiq
 from app.components.worker.heartbeat import PAUSE_KEY, PAUSE_POLL_SECONDS
 from app.components.worker.middleware import EventPublishMiddleware
 from app.core.config import settings
-from app.services.system.redis_keys import KeyFamily
+from app.core.key_family import KeyFamily
 # ``_RedisConsumer`` is dramatiq's internal consumer; there is no public
 # base class to subclass for pause support, so we extend it to gate
 # ``__next__`` on the pause flag. The dramatiq pin is capped to < 2.0 so a

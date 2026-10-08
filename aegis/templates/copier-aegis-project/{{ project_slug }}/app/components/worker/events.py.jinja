@@ -15,7 +15,7 @@ import redis.asyncio as aioredis
 
 from app.core.config import settings
 from app.core.log import logger
-from app.services.system.redis_keys import KeyFamily
+from app.core.key_family import KeyFamily
 
 # Redis Stream name for worker events
 WORKER_EVENT_STREAM = "aegis:events:worker"

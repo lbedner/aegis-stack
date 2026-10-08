@@ -8,12 +8,12 @@ size, TTL and how recently it was touched. Keys nobody claims are shown as
 such, which is how a leftover or a typo gets noticed.
 """
 
-from dataclasses import dataclass
 from fnmatch import fnmatchcase
 from importlib import import_module
 from typing import Any
 
 from app.core.config import settings
+from app.core.key_family import KeyFamily
 from app.core.log import logger
 from app.core.series import Sample, Sampler
 
@@ -41,24 +41,6 @@ MAX_KEYS = 10_000
 SAMPLES = 5  # keys per family read for type, TTL and size
 ACTIVE_SECONDS = 5  # touched this recently counts as active
 PEEK_ROWS = 10
-
-
-@dataclass(frozen=True)
-class KeyFamily:
-    """Keys one part of the app owns, in its own words.
-
-    ``db`` names the settings field holding the logical database;
-    ``columns`` label a peek at the newest key (a sorted set's member and
-    score, a hash's field and value).
-    """
-
-    pattern: str
-    kind: str
-    name: str
-    purpose: str
-    owner: str
-    db: str = "REDIS_DB"
-    columns: tuple[str, str] = ("Member", "Value")
 
 
 def families() -> list[KeyFamily]:

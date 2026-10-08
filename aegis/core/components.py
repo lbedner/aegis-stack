@@ -178,6 +178,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 "app/services/load_test_models.py",
                 "app/services/load_test_workloads.py",
                 "tests/services/test_load_test_models.py",
+                "tests/services/test_worker_load_test_runs.py",
                 "tests/services/test_load_test_service.py",
                 "tests/services/test_worker_health_registration.py",
                 "tests/services/test_queue_status.py",
@@ -187,6 +188,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 "app/services/system/health_worker_rules.py",
                 "app/components/backend/api/worker.py",
                 "app/components/backend/api/worker_taskiq.py",
+                "app/components/backend/api/worker_load_test.py",
                 # Entirely-gated stubs (templates wrapped in
                 # ``{% if include_worker %}``). Without these here the
                 # files render as 0-byte stubs at init and confuse a
@@ -195,7 +197,6 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 "app/components/backend/api/events.py",
                 "tests/components/test_worker_events.py",
                 "tests/components/test_worker_redis_keys.py",
-                "tests/components/test_load_test_monitor.py",
                 "tests/components/test_worker_runtime.py",
                 "app/components/worker/patterns.py",
                 "tests/components/test_worker_patterns.py",
@@ -216,6 +217,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 "include_htmx": [
                     "tests/web/test_overseer_worker.py",
                     "tests/web/test_overseer_queue.py",
+                    "tests/web/test_overseer_worker_load_tests.py",
                 ],
             },
         ),

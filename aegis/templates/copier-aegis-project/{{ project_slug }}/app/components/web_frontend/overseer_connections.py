@@ -15,7 +15,6 @@ from typing import Any
 from app.components.backend.middleware.connections import find, history
 from app.core.constants import ComponentName
 from app.core.formatting import format_span
-from app.core.log import logger
 
 from .overseer_live import fragment_events
 from .overseer_nav import page_url
@@ -168,10 +167,6 @@ def connections_events(
     """The filtered table over SSE, sent again only when it changes."""
 
     async def render() -> str:
-        try:
-            return fragment(TABLE, **await table_context(query))
-        except Exception as exc:  # noqa: BLE001 - keep the stream, show nothing new
-            logger.warning("Connections read failed", error=str(exc))
-            return ""
+        return fragment(TABLE, **await table_context(query))
 
     return fragment_events(EVENT, render, INTERVAL_SECONDS, max_frames)

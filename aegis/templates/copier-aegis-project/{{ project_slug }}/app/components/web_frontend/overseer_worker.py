@@ -17,10 +17,10 @@ from app.core.formatting import (
     format_timestamp,
     page_number,
 )
-from app.core.log import logger
 from app.services.system import ui_worker
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
+from . import overseer_worker_load_tests
 from .filters import color_tone
 from .overseer_live import fragment_events
 from .overseer_nav import SectionRequest
@@ -28,7 +28,7 @@ from .rendering import fragment, pager, status_cell, with_query
 
 SECTIONS = (
     (None, {"overview": "Overview"}),
-    ("Activity", {"tasks": "Tasks"}),
+    ("Activity", {"tasks": "Tasks", "load-tests": "Load tests"}),
     ("Configuration", {"runtime": "Runtime", "lifecycle": "Lifecycle"}),
 )
 
@@ -172,11 +172,7 @@ def queues_events(max_frames: int | None = None):  # noqa: ANN201 - async iterat
     """The queues over SSE, sent again only when they change."""
 
     async def render() -> str:
-        try:
-            return render_queues(await live_queues())
-        except Exception as exc:  # noqa: BLE001 - keep the stream, show nothing new
-            logger.warning("Worker queue read failed", error=str(exc))
-            return ""
+        return render_queues(await live_queues())
 
     return fragment_events(QUEUES_EVENT, render, QUEUES_INTERVAL_SECONDS, max_frames)
 
@@ -306,6 +302,8 @@ async def section_context(
         }
     if section == "tasks":
         return await _tasks(req)
+    if section == "load-tests":
+        return await overseer_worker_load_tests.section_context()
     if section == "runtime":
         return await _runtime()
     if section == "lifecycle":

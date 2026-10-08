@@ -2,7 +2,6 @@
 """Worker task API endpoints."""
 
 from datetime import datetime, timedelta
-from typing import Any
 
 from fastapi import APIRouter, HTTPException
 {%- if include_auth %}
@@ -15,19 +14,17 @@ from app.services.auth.deps import get_current_active_user
 {%- endif %}
 
 from app.components.backend.api.models import (
-    LoadTestRequest,
     TaskListResponse,
     TaskRequest,
     TaskResponse,
     TaskResultResponse,
     TaskStatusResponse,
 )
-from app.components.worker.constants import LoadTestTypes
+from app.components.backend.api.worker_load_test import router as load_test_router
 from app.components.worker.events import publish_event
 from app.components.worker.pools import get_queue_pool
 from app.components.worker.tasks import get_task_by_name, list_available_tasks
 from app.core.config import get_default_queue
-from app.core.constants import QueueName
 from app.core.log import logger
 
 {%- if include_auth %}
@@ -338,191 +335,7 @@ async def get_task_result(task_id: str) -> TaskResultResponse:
         )
 
 
-@router.post("/load-test", response_model=TaskResponse)
-async def start_load_test(load_test_config: LoadTestRequest) -> TaskResponse:
-    """Start a comprehensive load test that measures queue throughput."""
-    from app.components.worker.constants import TaskNames
-    from app.services.load_test import LoadTestConfiguration, LoadTestService
 
-    logger.info(
-        f"Starting load test: {load_test_config.num_tasks} "
-        f"{load_test_config.task_type} tasks"
-    )
-
-    valid_types = [
-        LoadTestTypes.CPU_INTENSIVE,
-        LoadTestTypes.IO_SIMULATION,
-        LoadTestTypes.MEMORY_OPERATIONS,
-        LoadTestTypes.FAILURE_TESTING,
-    ]
-    if load_test_config.task_type not in valid_types:
-        raise HTTPException(
-            status_code=400,
-            detail={
-                "error": "invalid_task_type",
-                "message": f"Invalid task type: {load_test_config.task_type}",
-                "valid_types": valid_types,
-            },
-        )
-
-    config = LoadTestConfiguration(
-        num_tasks=load_test_config.num_tasks,
-        task_type=load_test_config.task_type,
-        batch_size=load_test_config.batch_size,
-        delay_ms=load_test_config.delay_ms,
-        target_queue=load_test_config.target_queue,
-    )
-
-    try:
-        task_id = await LoadTestService.enqueue_load_test(config)
-
-        return TaskResponse(
-            task_id=task_id,
-            task_name=TaskNames.LOAD_TEST_ORCHESTRATOR,
-            queue_type=load_test_config.target_queue,
-            queued_at=datetime.now(),
-            estimated_start=None,
-            message=(
-                f"Load test '{load_test_config.task_type}' enqueued: "
-                f"{load_test_config.num_tasks} tasks to "
-                f"{load_test_config.target_queue} queue"
-            ),
-        )
-
-    except Exception as e:
-        logger.error(f"Failed to enqueue load test: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": "load_test_failed",
-                "message": f"Failed to start load test: {str(e)}",
-            },
-        )
-
-
-@router.post("/examples/load-test-small", response_model=TaskResponse)
-async def enqueue_small_load_test() -> TaskResponse:
-    """Example: Small load test with 50 CPU tasks."""
-    load_test_config = LoadTestRequest(
-        num_tasks=50,
-        task_type=LoadTestTypes.CPU_INTENSIVE,
-        batch_size=10,
-        delay_ms=0,
-        target_queue=get_default_queue(),
-    )
-    return await start_load_test(load_test_config)
-
-
-@router.post("/examples/load-test-medium", response_model=TaskResponse)
-async def enqueue_medium_load_test() -> TaskResponse:
-    """Example: Medium load test with 200 I/O tasks."""
-    load_test_config = LoadTestRequest(
-        num_tasks=200,
-        task_type=LoadTestTypes.IO_SIMULATION,
-        batch_size=20,
-        delay_ms=50,
-        target_queue=get_default_queue(),
-    )
-    return await start_load_test(load_test_config)
-
-
-@router.post("/examples/load-test-large", response_model=TaskResponse)
-async def enqueue_large_load_test() -> TaskResponse:
-    """Example: Large load test with 1000 memory tasks."""
-    load_test_config = LoadTestRequest(
-        num_tasks=1000,
-        task_type=LoadTestTypes.MEMORY_OPERATIONS,
-        batch_size=50,
-        delay_ms=0,
-        target_queue=get_default_queue(),
-    )
-    return await start_load_test(load_test_config)
-
-
-@router.get("/load-test-result/{task_id}")
-async def get_load_test_result(
-    task_id: str, target_queue: str | None = None
-) -> dict[str, Any]:
-    """Get enhanced load test results with analysis and verification."""
-    from app.services.load_test import LoadTestService
-
-    try:
-        result = await LoadTestService.get_load_test_result(task_id, target_queue)
-
-        if not result:
-            raise HTTPException(
-                status_code=404,
-                detail={
-                    "error": "load_test_not_found",
-                    "message": f"No load test results found for task {task_id}",
-                    "task_id": task_id,
-                    "target_queue": target_queue,
-                },
-            )
-
-        return result
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to get load test result for {task_id}: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "error": "result_retrieval_failed",
-                "message": f"Failed to retrieve load test results: {str(e)}",
-            },
-        )
-
-
-@router.get("/load-test-types")
-async def get_load_test_types() -> dict[str, Any]:
-    """Get information about available load test types."""
-    from app.components.worker.constants import LoadTestTypes
-    from app.services.load_test import LoadTestService
-
-    test_types = {}
-
-    all_types = [
-        LoadTestTypes.CPU_INTENSIVE,
-        LoadTestTypes.IO_SIMULATION,
-        LoadTestTypes.MEMORY_OPERATIONS,
-        LoadTestTypes.FAILURE_TESTING,
-    ]
-    for test_type in all_types:
-        test_types[test_type] = LoadTestService.get_test_type_info(test_type)
-
-    return {
-        "available_test_types": test_types,
-        "usage_examples": {
-            "quick_cpu_test": {
-                "description": "Quick CPU test with 50 tasks",
-                "parameters": {
-                    "num_tasks": 50,
-                    "task_type": "cpu_intensive",
-                    "batch_size": 10,
-                    "target_queue": QueueName.LOAD_TEST,
-                },
-            },
-            "io_stress_test": {
-                "description": "I/O stress test with concurrent operations",
-                "parameters": {
-                    "num_tasks": 200,
-                    "task_type": "io_simulation",
-                    "batch_size": 20,
-                    "delay_ms": 50,
-                    "target_queue": QueueName.LOAD_TEST,
-                },
-            },
-            "memory_load_test": {
-                "description": "Memory allocation test with GC pressure",
-                "parameters": {
-                    "num_tasks": 500,
-                    "task_type": "memory_operations",
-                    "batch_size": 25,
-                    "target_queue": QueueName.MEDIA,
-                },
-            },
-        },
-    }
+# The load-test endpoints are the same on every backend.
+router.include_router(load_test_router)
 {%- endif %}

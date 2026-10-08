@@ -130,7 +130,7 @@ EXPECTED_FILES=(
     "app/components/worker/pools.py"
     "app/components/worker/registry.py"
     "app/components/worker/queues/system.py"
-    "app/components/worker/tasks/system_tasks.py"
+    "app/components/worker/tasks/load_tasks.py"
     "app/services/load_test.py"
     "tests/api/test_worker_endpoints.py"
     "tests/services/test_worker_health_registration.py"

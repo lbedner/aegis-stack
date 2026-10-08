@@ -74,8 +74,7 @@ def test_add_worker_dramatiq_installs_dramatiq_files(
     assert (worker_dir / "broker.py").exists()
     api_worker = project / "app" / "components" / "backend" / "api" / "worker.py"
     assert "dramatiq" in api_worker.read_text().lower()
-    lt_service = project / "app" / "services" / "load_test" / "worker" / "service.py"
-    assert "dramatiq" in lt_service.read_text().lower()
+    assert "dramatiq" in (worker_dir / "pools.py").read_text().lower()
 
     assert _variant_leftovers(project) == []
 

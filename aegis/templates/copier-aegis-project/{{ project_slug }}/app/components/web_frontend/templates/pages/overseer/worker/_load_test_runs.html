@@ -1,0 +1,17 @@
+{% from "components/macros/layout.html" import card %}
+{% from "components/macros/table.html" import data_table %}
+<div id="worker-load-tests">
+{% call card("Recent runs", "Newest first") %}
+  {{ data_table([
+    {"key": "test_id", "label": "Test"},
+    {"key": "type", "label": "Type"},
+    {"key": "queue", "label": "Queue"},
+    {"key": "done", "label": "Finished", "align": "right"},
+    {"key": "failed", "label": "Failed", "align": "right"},
+    {"key": "duration", "label": "Duration", "align": "right"},
+    {"key": "rate", "label": "Rate", "align": "right"},
+    {"key": "state", "label": "Status", "kind": "status"},
+    {"key": "when", "label": "Started"},
+  ], runs, empty="No load tests yet: start one above, or with the CLI's load-test run") }}
+{% endcall %}
+</div>

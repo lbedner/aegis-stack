@@ -14,6 +14,7 @@ from typing import Any
 from fastapi.responses import StreamingResponse
 
 from app.core import series
+from app.core.log import logger
 
 from .rendering import templates, with_query
 
@@ -56,13 +57,18 @@ async def fragments_events(
 ) -> AsyncIterator[str]:
     """Several fragments on one stream (a table and its charts, say):
     ``render()`` gives html by event name, and each event goes out when
-    its html differs from the last one sent."""
+    its html differs from the last one sent. A ``render()`` that fails
+    sends nothing that round: the page keeps what it shows."""
     last: dict[str, str] = {}
     deadline = time.monotonic() + MAX_STREAM_SECONDS
     frames = 0
     while time.monotonic() < deadline and (max_frames is None or frames < max_frames):
         frames += 1
-        sent = changed_frames(last, await render())
+        try:
+            sent = changed_frames(last, await render())
+        except Exception as exc:  # noqa: BLE001 - one bad read, not the stream's end
+            logger.warning("Overseer stream read failed", error=str(exc))
+            sent = []
         for frame in sent:
             yield frame
         if not sent:

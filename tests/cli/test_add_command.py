@@ -693,7 +693,7 @@ class TestAddCommand:
             "app/components/worker/registry.py",
             "app/components/worker/queues/system.py",
             "app/components/worker/queues/load_test.py",
-            "app/components/worker/tasks/system_tasks.py",
+            "app/components/worker/tasks/load_tasks.py",
             # ``load_test.py`` was promoted to a package after the
             # api-load-test refactor; check the package entry + worker
             # subpackage instead. ``load_test_models.py`` stays as a

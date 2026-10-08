@@ -1,7 +1,7 @@
 """
 Load test worker queue configuration.
 
-Handles load testing orchestration and synthetic workload tasks using native arq
+Runs the synthetic workload tasks a load test sends, on native arq
 patterns.
 """
 
@@ -13,9 +13,6 @@ from app.components.worker.tasks.load_tasks import (
     failure_testing_task,
     io_simulation_task,
     memory_operations_task,
-)
-from app.components.worker.tasks.system_tasks import (
-    load_test_orchestrator,
 )
 from app.core.config import settings
 from app.core.constants import QueueName
@@ -30,8 +27,6 @@ class WorkerSettings:
 
     # Task functions for this queue
     functions = [
-        # Load test orchestrator
-        load_test_orchestrator,
         # Synthetic workload tasks
         cpu_intensive_task,
         io_simulation_task,

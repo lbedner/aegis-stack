@@ -733,10 +733,13 @@ curl http://localhost:8000/api/v1/tasks/status/{task_id}
 # Get task result
 curl http://localhost:8000/api/v1/tasks/result/{task_id}
 
-# Quick load tests
+# Quick load tests; each answers with a test id (task_id)
 curl -X POST http://localhost:8000/api/v1/tasks/examples/load-test-small
 curl -X POST http://localhost:8000/api/v1/tasks/examples/load-test-medium
 curl -X POST http://localhost:8000/api/v1/tasks/examples/load-test-large
+
+# A load test's result, once it has finished (404 while it runs)
+curl http://localhost:8000/api/v1/tasks/load-test-result/{test_id}
 ```
 
 !!! info "Dramatiq status and result endpoints"

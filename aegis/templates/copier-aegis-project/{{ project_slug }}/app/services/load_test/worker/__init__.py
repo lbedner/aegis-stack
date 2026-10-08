@@ -1,1 +1,1 @@
-"""Worker load-test service: arq/dramatiq/taskiq orchestrator pattern."""
+"""Worker load tests: the caller sends the tasks, task history counts them."""

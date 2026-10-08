@@ -15,7 +15,7 @@ from app.services.system.ui import get_component_title
 from tests._fake_runtime import queue_status as _queue
 from tests._fake_runtime import worker_status
 from tests.web.dom import none, one, select, text
-from tests.web.overseer import sign_in, status_with
+from tests.web.overseer import sent_events, sign_in, status_with
 
 
 def _worker(*queues: ComponentStatus) -> ComponentStatus:
@@ -155,6 +155,7 @@ class TestSections:
         assert [text(a) for a in select(subnav, "nav a")] == [
             "Overview",
             "Tasks",
+            "Load tests",
             "Runtime",
             "Lifecycle",
             "Container",
@@ -330,8 +331,7 @@ class TestQueuesStream:
         monkeypatch.setattr(ui_worker, "load_worker", worker)
         monkeypatch.setattr(ui_worker, "load_runtime", no_reports)
         monkeypatch.setattr(overseer_worker, "QUEUES_INTERVAL_SECONDS", 0)
-        frames = [f async for f in overseer_worker.queues_events(max_frames=3)]
-        events = [f for f in frames if f.startswith("event:")]
+        events = await sent_events(overseer_worker.queues_events(max_frames=3))
         assert len(events) == 1
         assert events[0].startswith(f"event: {overseer_worker.QUEUES_EVENT}\n")
 

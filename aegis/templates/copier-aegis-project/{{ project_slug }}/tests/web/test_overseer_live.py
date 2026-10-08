@@ -5,6 +5,7 @@ import asyncio
 from collections.abc import AsyncIterator
 
 from app.components.web_frontend import overseer_live
+from tests.web.overseer import sent_events
 
 
 def test_a_frame_is_one_line_of_html_under_its_event() -> None:
@@ -33,3 +34,18 @@ async def test_a_stream_passes_its_frames_through_and_ends() -> None:
         yield "b"
 
     assert [f async for f in overseer_live.heartbeat(two(), every=5)] == ["a", "b"]
+
+
+async def test_a_failed_read_sends_nothing_and_the_stream_goes_on() -> None:
+    """A read that fails (Redis down a moment) leaves the page showing what
+    it had: no empty frame that would wipe the section, no ended stream."""
+    reads = iter(["<p>a</p>", None, "<p>a</p>", "<p>b</p>"])
+
+    async def render() -> str:
+        html = next(reads)
+        if html is None:
+            raise ConnectionError("redis down")
+        return html
+
+    sent = await sent_events(overseer_live.fragment_events("x", render, 0, max_frames=4))
+    assert sent == [overseer_live.frame("x", "<p>a</p>"), overseer_live.frame("x", "<p>b</p>")]

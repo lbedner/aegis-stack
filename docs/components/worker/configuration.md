@@ -212,7 +212,7 @@ When running CLI commands locally (outside Docker), the system automatically use
 
     ```bash
     ENVIRONMENT=production
-    WORKER_PROCESSES=4                  # Match CPU count
+    WORKER_PROCESSES=4                  # Match the container's cpus limit
     WORKER_QUEUES='{"system": {"concurrency": 8}}'  # Per-process threads
     REDIS_URL=redis://redis-prod:6379
     REDIS_DB=1
@@ -223,11 +223,14 @@ When running CLI commands locally (outside Docker), the system automatically use
 
     ```bash
     ENVIRONMENT=production
-    WORKER_PROCESSES=4                  # Match CPU count
+    WORKER_PROCESSES=4                  # Match the container's cpus limit
     REDIS_URL=redis://redis-prod:6379
     REDIS_DB=1
     REDIS_PASSWORD=your-secure-password
     ```
+
+!!! note "Processes need memory and CPU to match"
+    Each worker process costs about 95 MiB, on top of about 90 MiB the container pays once, and a container's `cpus` limit caps it however many processes it runs. Raising `WORKER_PROCESSES` means raising the service's `memory` and `cpus` limits with it. The generated workers default to one process per container; to add capacity without touching limits, scale containers instead: `docker compose up -d --scale worker-system=3`.
 
 ---
 
@@ -284,7 +287,7 @@ When running CLI commands locally (outside Docker), the system automatically use
         environment:
           - DOCKER_CONTAINER=1
           - WORKER_QUEUE_TYPE=system
-          - WORKER_PROCESSES=${SYSTEM_WORKER_PROCESSES:-2}
+          - WORKER_PROCESSES=${SYSTEM_WORKER_PROCESSES:-1}
           - WORKER_TIMEOUT_SECONDS=1800
           - REDIS_URL=redis://redis:6379
         depends_on:
@@ -300,7 +303,7 @@ When running CLI commands locally (outside Docker), the system automatically use
         environment:
           - DOCKER_CONTAINER=1
           - WORKER_QUEUE_TYPE=load_test
-          - WORKER_PROCESSES=${LOAD_TEST_WORKER_PROCESSES:-4}
+          - WORKER_PROCESSES=${LOAD_TEST_WORKER_PROCESSES:-1}
           - WORKER_TIMEOUT_SECONDS=60
           - REDIS_URL=redis://redis:6379
         depends_on:
@@ -322,7 +325,7 @@ When running CLI commands locally (outside Docker), the system automatically use
         environment:
           - DOCKER_CONTAINER=1
           - WORKER_QUEUE_TYPE=system
-          - WORKER_PROCESSES=${SYSTEM_WORKER_PROCESSES:-2}
+          - WORKER_PROCESSES=${SYSTEM_WORKER_PROCESSES:-1}
           - WORKER_TIMEOUT_SECONDS=1800
           - REDIS_URL=redis://redis:6379
           # Docker file watching fix
@@ -341,7 +344,7 @@ When running CLI commands locally (outside Docker), the system automatically use
         environment:
           - DOCKER_CONTAINER=1
           - WORKER_QUEUE_TYPE=load_test
-          - WORKER_PROCESSES=${LOAD_TEST_WORKER_PROCESSES:-4}
+          - WORKER_PROCESSES=${LOAD_TEST_WORKER_PROCESSES:-1}
           - WORKER_TIMEOUT_SECONDS=60
           - REDIS_URL=redis://redis:6379
           - WATCHFILES_FORCE_POLLING=true
@@ -500,6 +503,22 @@ load, and a queue name that matches no queue stops the worker at startup.
 The total a queue can run at once is its concurrency times its processes
 (`WORKER_PROCESSES`). Each worker reports what it runs with, shown in
 Overseer under Worker > Runtime.
+
+### How a TaskIQ worker takes jobs
+
+A TaskIQ queue is a Redis stream read by one consumer group. A worker claims
+jobs with `XREADGROUP` and acks each when it finishes; a claimed job belongs
+to that worker alone.
+
+- **It claims what it can start.** Each read takes at most the queue's
+  concurrency, so a busy worker never sits on jobs an idle one could run, and
+  a worker that dies strands no more than one round.
+- **A running job keeps its claim.** Jobs a dead worker left unacked are
+  handed to another after 10 minutes. While a job runs, its claim is
+  refreshed, so a long job is never run a second time alongside itself.
+- **A busy worker still counts as alive.** A worker working through what it
+  claimed reads nothing for a while; Overseer counts it as serving its queue
+  as long as it keeps reporting itself (Worker > Runtime).
 
 ---
 

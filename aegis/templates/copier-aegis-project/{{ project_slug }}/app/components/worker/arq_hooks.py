@@ -6,7 +6,7 @@ its own ``WorkerSettings``, and arq reads the hooks from that class's own
 Each queue assigns these instead, built for its name:
 
     on_startup, on_shutdown, on_job_start, after_job_end = arq_hooks.for_queue(
-        "system", max_jobs
+        QueueName.SYSTEM, max_jobs
     )
 
 TaskIQ and dramatiq do the same work once, in their event middleware. Only

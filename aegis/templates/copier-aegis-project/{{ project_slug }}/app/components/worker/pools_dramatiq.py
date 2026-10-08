@@ -21,6 +21,7 @@ from app.core.config import (
     is_valid_queue,
     settings,
 )
+from app.core.constants import QueueName
 from app.core.log import logger
 
 # Lazy-initialized Redis client for enqueue-side events
@@ -140,7 +141,7 @@ async def enqueue_task(
 
 async def get_task_result(
     task_id: str,
-    queue_name: str = "system",
+    queue_name: str = QueueName.SYSTEM,
     actor_name: str = "",
     timeout: float = 30.0,
 ) -> Any:

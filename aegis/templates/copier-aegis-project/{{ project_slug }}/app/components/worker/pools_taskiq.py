@@ -20,6 +20,7 @@ from app.core.config import (
     is_valid_queue,
     settings,
 )
+from app.core.constants import QueueName
 from app.core.log import logger
 
 # Broker cache to avoid re-importing
@@ -52,11 +53,11 @@ def get_broker(queue_type: str | None = None) -> Any:
         return _broker_cache[queue_type]
 
     # Dynamic import based on queue type
-    if queue_type == "system":
+    if queue_type == QueueName.SYSTEM:
         from app.components.worker.queues.system import broker
 
         _broker_cache[queue_type] = broker
-    elif queue_type == "load_test":
+    elif queue_type == QueueName.LOAD_TEST:
         from app.components.worker.queues.load_test import broker
 
         _broker_cache[queue_type] = broker

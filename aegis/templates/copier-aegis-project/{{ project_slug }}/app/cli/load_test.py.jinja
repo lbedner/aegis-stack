@@ -6,7 +6,6 @@ with full parameter configuration and result analysis.
 """
 
 import asyncio
-from enum import Enum
 import json
 import time
 from typing import Any
@@ -29,6 +28,7 @@ from app.cli.load_test_display import (
 )
 from app.components.worker.constants import LoadTestTypes
 from app.core.config import get_load_test_queue
+from app.core.constants import QueueName
 from app.core.log import logger
 from app.i18n import lazy_t, t
 from app.services.load_test import (
@@ -48,17 +48,6 @@ app = typer.Typer(
 console = theme.console()
 
 
-class QueueChoice(str, Enum):
-    """Available queue types for load testing."""
-
-    load_test = "load_test"
-    system = "system"  # Legacy option
-    media = "media"  # Legacy option
-
-    @classmethod
-    def get_default(cls) -> str:
-        """Get the default queue from config."""
-        return get_load_test_queue()
 
 
 
@@ -87,8 +76,8 @@ def run_load_test(
     delay_ms: int = typer.Option(
         0, "--delay", "-d", help=lazy_t("loadtest.opt_delay"), min=0, max=5000
     ),
-    target_queue: QueueChoice = typer.Option(
-        QueueChoice.load_test, "--queue", "-q", help=lazy_t("loadtest.opt_queue")
+    target_queue: QueueName = typer.Option(
+        QueueName.LOAD_TEST, "--queue", "-q", help=lazy_t("loadtest.opt_queue")
     ),
     wait: bool = typer.Option(
         True, "--wait/--no-wait", help=lazy_t("loadtest.opt_wait")
@@ -284,8 +273,8 @@ def quick_memory_test_cmd(
 @app.command("results", help=lazy_t("loadtest.help_results"))
 def show_results(
     task_id: str = typer.Argument(..., help=lazy_t("loadtest.arg_task_id")),
-    target_queue: QueueChoice = typer.Option(
-        QueueChoice.load_test, "--queue", "-q", help=lazy_t("loadtest.opt_queue_results")
+    target_queue: QueueName = typer.Option(
+        QueueName.LOAD_TEST, "--queue", "-q", help=lazy_t("loadtest.opt_queue_results")
     ),
     detailed: bool = typer.Option(
         False, "--detailed", "-d", help=lazy_t("loadtest.opt_detailed")

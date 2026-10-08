@@ -26,6 +26,9 @@ import dramatiq
 {%- endif %}
 {%- if include_scheduler %}
 
+{%- if worker_backend == "dramatiq" %}
+from app.core.constants import QueueName
+{%- endif %}
 from app.core.schedule import ServiceJob, service_jobs
 {%- endif %}
 {%- if worker_backend == "dramatiq" %}
@@ -103,7 +106,7 @@ def as_task(job: ServiceJob) -> Any:
     return dramatiq.actor(
         run,
         actor_name=job.task_name,
-        queue_name="system",
+        queue_name=QueueName.SYSTEM,
         store_results=True,
         **limits,
     )

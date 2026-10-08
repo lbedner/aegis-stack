@@ -19,6 +19,7 @@ from app.components.worker.constants import LoadTestTypes
 from app.components.worker.pools import enqueue_task, get_broker, get_task
 from app.components.worker.tasks import get_task_by_name, list_available_tasks
 from app.core.config import get_default_queue
+from app.core.constants import QueueName
 from app.core.log import logger
 
 router = APIRouter(prefix="/tasks", tags=["worker"])
@@ -119,7 +120,7 @@ async def enqueue_task_endpoint(task_request: TaskRequest) -> TaskResponse:
 async def get_task_status(
     task_id: str,
     actor_name: str = "",
-    queue_name: str = "system",
+    queue_name: str = QueueName.SYSTEM,
 ) -> TaskStatusResponse:
     """Get the status of a background task.
 
@@ -205,7 +206,7 @@ async def get_task_status(
 async def get_task_result(
     task_id: str,
     actor_name: str = "",
-    queue_name: str = "system",
+    queue_name: str = QueueName.SYSTEM,
 ) -> TaskResultResponse:
     """Get the result of a completed background task.
 
@@ -464,7 +465,7 @@ async def get_load_test_types() -> dict[str, Any]:
                     "num_tasks": 50,
                     "task_type": "cpu_intensive",
                     "batch_size": 10,
-                    "target_queue": "load_test",
+                    "target_queue": QueueName.LOAD_TEST,
                 },
             },
             "io_stress_test": {
@@ -474,7 +475,7 @@ async def get_load_test_types() -> dict[str, Any]:
                     "task_type": "io_simulation",
                     "batch_size": 20,
                     "delay_ms": 50,
-                    "target_queue": "load_test",
+                    "target_queue": QueueName.LOAD_TEST,
                 },
             },
             "memory_load_test": {
@@ -483,7 +484,7 @@ async def get_load_test_types() -> dict[str, Any]:
                     "num_tasks": 500,
                     "task_type": "memory_operations",
                     "batch_size": 25,
-                    "target_queue": "load_test",
+                    "target_queue": QueueName.LOAD_TEST,
                 },
             },
         },

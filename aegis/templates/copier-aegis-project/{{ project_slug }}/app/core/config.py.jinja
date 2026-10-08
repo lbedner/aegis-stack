@@ -11,7 +11,7 @@ from typing import Annotated, Any, Literal
 from pydantic import Field, model_validator
 from pydantic_settings import SettingsConfigDict
 from app.core.configurable import Configurable, timezones
-from app.core.constants import ComponentName
+from app.core.constants import ComponentName{% if include_worker %}, QueueName{% endif %}
 from app.core.settings_base import SettingsBase
 {% if include_ai and ai_voice %}from app.core.voice_settings import VoiceSettings{% endif %}
 {% if include_worker %}from app.core.queue_workers import DEFAULT_QUEUES, QueueWorker{% endif %}
@@ -780,15 +780,15 @@ def get_default_queue() -> str:
     """Get the default queue name for load testing."""
     # Prefer load_test queue if it exists, otherwise use first available
     available = get_available_queues()
-    if "load_test" in available:
-        return "load_test"
-    return available[0] if available else "system"
+    if QueueName.LOAD_TEST in available:
+        return QueueName.LOAD_TEST
+    return available[0] if available else QueueName.SYSTEM
 
 
 def get_load_test_queue() -> str:
     """Get the queue name for load testing."""
     available = get_available_queues()
-    return "load_test" if "load_test" in available else get_default_queue()
+    return QueueName.LOAD_TEST if QueueName.LOAD_TEST in available else get_default_queue()
 
 
 def is_valid_queue(queue_name: str) -> bool:

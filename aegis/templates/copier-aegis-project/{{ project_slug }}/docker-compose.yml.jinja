@@ -201,9 +201,9 @@ services:
       # Load test worker configuration
       - WORKER_QUEUE_TYPE=load_test
 {%- if worker_backend == "taskiq" %}
-      - WORKER_PROCESSES=${LOAD_TEST_WORKER_PROCESSES:-4}
+      - WORKER_PROCESSES=${LOAD_TEST_WORKER_PROCESSES:-1}
 {%- elif worker_backend == "dramatiq" %}
-      - WORKER_PROCESSES=${LOAD_TEST_WORKER_PROCESSES:-4}
+      - WORKER_PROCESSES=${LOAD_TEST_WORKER_PROCESSES:-1}
 {%- endif %}
       - WORKER_TIMEOUT_SECONDS=${LOAD_TEST_WORKER_TIMEOUT:-60}
       - WORKER_MAX_TRIES=${LOAD_TEST_WORKER_MAX_TRIES:-1}
@@ -242,9 +242,9 @@ services:
       # System worker configuration (high reliability)
       - WORKER_QUEUE_TYPE=system
 {%- if worker_backend == "taskiq" %}
-      - WORKER_PROCESSES=${SYSTEM_WORKER_PROCESSES:-2}
+      - WORKER_PROCESSES=${SYSTEM_WORKER_PROCESSES:-1}
 {%- elif worker_backend == "dramatiq" %}
-      - WORKER_PROCESSES=${SYSTEM_WORKER_PROCESSES:-2}
+      - WORKER_PROCESSES=${SYSTEM_WORKER_PROCESSES:-1}
 {%- endif %}
       - WORKER_TIMEOUT_SECONDS=${SYSTEM_WORKER_TIMEOUT:-1800}
       - WORKER_MAX_TRIES=${SYSTEM_WORKER_MAX_TRIES:-5}

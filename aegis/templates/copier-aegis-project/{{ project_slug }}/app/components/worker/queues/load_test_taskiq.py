@@ -16,7 +16,9 @@ from app.components.worker.events import publish_event
 from app.components.worker.middleware import EventPublishMiddleware
 from app.components.worker.task_history import get_task_statuses
 from app.core.config import settings
+from app.core.constants import QueueName
 from app.core.log import logger
+from app.core.queue_workers import concurrency_for
 from app.services.load_test_workloads import (
     run_cpu_intensive,
     run_failure_testing,
@@ -35,12 +37,16 @@ broker = (
     # skipped forever - the job sits queued and no worker ever sees it.
     # Starting at "0" hands a new group the backlog it was created to work.
     PausableRedisStreamBroker(
-        url=redis_url, queue_name="taskiq:load_test", consumer_id="0"
+        url=redis_url,
+        queue_name="taskiq:load_test",
+        consumer_id="0",
+        # Claim only what this worker can start: claimed jobs are its alone.
+        xread_count=concurrency_for(QueueName.LOAD_TEST),
     )
     .with_result_backend(
         RedisAsyncResultBackend(redis_url=redis_url, result_ex_time=60)
     )
-    .with_middlewares(EventPublishMiddleware().set_queue_name("load_test"))
+    .with_middlewares(EventPublishMiddleware().set_queue_name(QueueName.LOAD_TEST))
 )
 
 
@@ -151,7 +157,7 @@ async def load_test_orchestrator(
                 await publish_event(
                     events_redis,
                     "job.enqueued",
-                    "load_test",
+                    QueueName.LOAD_TEST,
                     {"job_id": str(handle.task_id), "task": task_type},
                 )
 

@@ -87,6 +87,14 @@ def live_consumers(consumers: list[dict[str, Any]]) -> int:
     return sum(1 for c in consumers if (c.get("idle") or 0) < LIVE_CONSUMER_IDLE_MS)
 
 
+def live_workers(consumers: list[dict[str, Any]], reports: int) -> int:
+    """How many workers serve a queue: its consumers that read lately, or
+    as many as report themselves (``worker.runtime``), whichever is more.
+    A worker working through what it claimed reads nothing for a while, so
+    its consumer goes idle, but it keeps reporting all the while."""
+    return max(live_consumers(consumers), reports)
+
+
 class Verdict(NamedTuple):
     """A queue's health, the phrase its message leads with, and its state."""
 

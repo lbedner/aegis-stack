@@ -47,6 +47,15 @@ class ServiceName(StrEnum):
     RESEARCH = "research"
 
 
+class QueueName(StrEnum):
+    """The worker queues the stack ships with (``MEDIA`` is arq's); a
+    plugin's own are discovered alongside them, by name."""
+
+    SYSTEM = "system"
+    LOAD_TEST = "load_test"
+    MEDIA = "media"
+
+
 class APIEndpoints:
     """API endpoint paths - immutable across all environments."""
 

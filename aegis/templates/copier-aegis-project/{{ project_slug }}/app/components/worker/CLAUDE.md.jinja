@@ -56,7 +56,7 @@ class WorkerSettings:
     # Standard arq configuration
     redis_settings = RedisSettings.from_dsn(settings.redis_url_effective)
     queue_name = "arq:queue:system"
-    max_jobs = concurrency_for("system")  # Settings.WORKER_QUEUES
+    max_jobs = concurrency_for(QueueName.SYSTEM)  # Settings.WORKER_QUEUES
     job_timeout = 300
 ```
 

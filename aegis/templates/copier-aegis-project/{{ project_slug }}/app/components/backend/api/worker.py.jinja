@@ -27,6 +27,7 @@ from app.components.worker.events import publish_event
 from app.components.worker.pools import get_queue_pool
 from app.components.worker.tasks import get_task_by_name, list_available_tasks
 from app.core.config import get_default_queue
+from app.core.constants import QueueName
 from app.core.log import logger
 
 {%- if include_auth %}
@@ -36,8 +37,7 @@ from app.core.log import logger
 # user data or burn capacity if reachable by anonymous callers. RBAC
 # stacks gate on ``role=admin`` (DB column is source of truth); basic-
 # auth stacks have no role concept, so fall back to "any authed user."
-# Stored at module level so tests can override the closure via
-# ``app.dependency_overrides``.
+# Module level so tests can override it via ``app.dependency_overrides``.
 {%- if include_auth_rbac %}
 _require_admin = require_role("admin")
 {%- else %}
@@ -501,7 +501,7 @@ async def get_load_test_types() -> dict[str, Any]:
                     "num_tasks": 50,
                     "task_type": "cpu_intensive",
                     "batch_size": 10,
-                    "target_queue": "load_test",
+                    "target_queue": QueueName.LOAD_TEST,
                 },
             },
             "io_stress_test": {
@@ -511,7 +511,7 @@ async def get_load_test_types() -> dict[str, Any]:
                     "task_type": "io_simulation",
                     "batch_size": 20,
                     "delay_ms": 50,
-                    "target_queue": "load_test",
+                    "target_queue": QueueName.LOAD_TEST,
                 },
             },
             "memory_load_test": {
@@ -520,7 +520,7 @@ async def get_load_test_types() -> dict[str, Any]:
                     "num_tasks": 500,
                     "task_type": "memory_operations",
                     "batch_size": 25,
-                    "target_queue": "media",
+                    "target_queue": QueueName.MEDIA,
                 },
             },
         },

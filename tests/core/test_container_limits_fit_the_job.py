@@ -14,6 +14,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+import pytest
 import yaml
 from jinja2 import Environment, FileSystemLoader
 
@@ -23,6 +24,13 @@ PROJECT_SLUG_PLACEHOLDER = "{{ project_slug }}"
 # Everything that runs in the background rather than for a waiting person.
 BACKGROUND = ("scheduler", "worker-system", "worker-load-test")
 DEFAULT = re.compile(r"\$\{[A-Z_]+:-([0-9.]+)\}")
+ANY_DEFAULT = re.compile(r"\$\{[A-Z_]+:-([^}]+)\}")
+# Measured on a running taskiq worker (PSS): the supervisor, forkserver and
+# resource tracker cost about 90 MiB once per container, and each worker
+# process about 95 MiB, almost all of it its own.
+FIXED_MIB = 90
+PER_PROCESS_MIB = 95
+WORKERS = ("worker-system", "worker-load-test")
 
 
 def _compose(**overrides: Any) -> dict[str, Any]:
@@ -72,3 +80,43 @@ def test_the_webserver_limit_can_be_raised_without_editing_compose() -> None:
         _compose()["services"]["webserver"]["deploy"]["resources"]["limits"]["cpus"]
     )
     assert DEFAULT.search(raw), f"webserver cpus is hardcoded: {raw!r}"
+
+
+def _given(raw: object) -> str:
+    """A compose value as a stack gets it when nothing overrides it."""
+    match = ANY_DEFAULT.search(str(raw))
+    return match.group(1) if match else str(raw)
+
+
+def _processes(service: dict[str, Any]) -> int:
+    for item in service.get("environment", []):
+        name, _, value = str(item).partition("=")
+        if name == "WORKER_PROCESSES":
+            return int(_given(value))
+    return 1  # arq: one process per container
+
+
+def _memory_mib(service: dict[str, Any]) -> int:
+    raw = _given(service["deploy"]["resources"]["limits"]["memory"])
+    return int(raw[:-1]) * {"M": 1, "G": 1024}[raw[-1].upper()]
+
+
+@pytest.mark.parametrize("backend", ["arq", "taskiq", "dramatiq"])
+@pytest.mark.parametrize("finance", [False, True])
+def test_a_workers_processes_fit_its_memory(backend: str, finance: bool) -> None:
+    """Outside dev a worker starts every process it is told to, each about
+    95 MiB on top of what the container costs once: past the limit the
+    kernel kills it as it fills up, and ``restart`` makes that a loop."""
+    overrides: dict[str, Any] = {"worker_backend": backend}
+    if finance:
+        overrides |= {"include_finance": True, "include_database": True}
+    services = _compose(**overrides)["services"]
+    for name in WORKERS:
+        if name not in services:
+            continue
+        processes = _processes(services[name])
+        need = FIXED_MIB + PER_PROCESS_MIB * processes
+        assert need <= _memory_mib(services[name]), (
+            f"{name}: {processes} processes need about {need} MiB, "
+            f"over its {_memory_mib(services[name])} MiB limit"
+        )

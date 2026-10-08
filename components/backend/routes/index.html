@@ -1130,6 +1130,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Inspecting Routes In Overseer">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#calling-a-route" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Calling a route
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -5700,6 +5717,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Inspecting Routes In Overseer">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#calling-a-route" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Calling a route
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -5851,6 +5885,20 @@ grouped by OpenAPI tag. Each route card shows:</p>
   endpoint runs).</li>
 <li>A security badge when the endpoint requires authentication.</li>
 </ul>
+<h3 id="calling-a-route">Calling a route</h3>
+<p>Expand a route and it shows a request form built from its OpenAPI
+operation, the same schema <code>/openapi.json</code> and <code>/docs</code> serve: path and
+query parameters as typed fields (required ones marked, enums as a list,
+defaults filled in), the body as JSON pre-filled with an example from its
+model, and who to sign in as (admin, user or anonymous). <strong>Execute</strong> sends
+the request once, in the server itself, and shows the curl command, the
+status, how long it took, the response body and its headers, as FastAPI's
+<code>/docs</code> does. A route that writes (POST, PUT, PATCH, DELETE) is sent only
+once you tick the box under it. Execute's requests are not load-test runs
+and stay out of their history.</p>
+<p><strong>Load test this</strong> opens Server &gt; Load Tests with the route and the values
+you filled in. Load Tests' route picker shows this same form, with requests
+and clients added, so a route is filled in the same way on both pages.</p>
 <p>Because the Routes tab reads from cached metadata built by the
 <code>component_health</code> startup hook, anything you add at runtime (rare, but
 possible via the FastAPI app object) will not appear until the next

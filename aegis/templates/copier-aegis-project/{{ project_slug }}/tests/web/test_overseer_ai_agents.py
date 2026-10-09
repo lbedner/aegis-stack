@@ -101,6 +101,75 @@ def test_the_drawer_edits_the_definition(
     assert client.get(f"{PARTIALS}/agents/nobody/drawer").status_code == 404
 
 
+CATALOG = [
+    {
+        "model_id": "claude-haiku-4-5-20251001",
+        "title": "Anthropic: Claude Haiku 4.5",
+        "vendor": "Anthropic",
+    },
+    {"model_id": "qwen3:4b", "title": "qwen3:4b", "vendor": "Ollama"},
+]
+
+
+@pytest.mark.parametrize(
+    ("model_id", "listed"),
+    [("claude-haiku-4-5-20251001", True), ("retired-model-1", False), (None, True)],
+)
+def test_the_model_is_picked_from_the_models_this_install_can_call(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    model_id: str | None,
+    listed: bool,
+) -> None:
+    """Grouped by vendor, blank for the active model; a model the catalog no
+    longer lists stays chosen, so saving does not quietly drop it."""
+    from app.components.web_frontend import chat_models
+
+    async def one_agent(db: Any, slug: str) -> dict[str, Any] | None:
+        return AGENT | {"model_id": model_id}
+
+    async def catalog(mode: str = "chat") -> list[dict[str, Any]]:
+        return CATALOG
+
+    monkeypatch.setattr(overseer_ai_agents, "agent_row", one_agent)
+    monkeypatch.setattr(chat_models, "catalog", catalog)
+    form = one(client.get(f"{PARTIALS}/agents/illiana/drawer").text, "form[data-agent]")
+    picker = one(form, "select[name=model_id]")
+    assert text(select(picker, "option")[0]) == "The active model"
+    groups = [g.get("label") for g in select(picker, "optgroup")]
+    assert {"Anthropic", "Ollama"} <= set(groups)
+    chosen = one(picker, "option[selected]")
+    assert chosen.get("value") == (model_id or "")
+    if not listed:
+        assert "retired-model-1" in text(chosen)
+
+
+async def test_the_model_list_is_read_after_the_agent_is(
+    async_db_session: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The catalog reads on its own connection: with the agent's read still
+    open on the request's, SQLite makes it wait out the busy timeout behind
+    its own request, and the drawer hangs, then comes up empty."""
+    from sqlmodel import text as sql
+
+    from app.components.web_frontend import chat_models
+
+    async def read_agent(db: Any, slug: str) -> dict[str, Any] | None:
+        await db.exec(sql("SELECT 1"))
+        return AGENT
+
+    open_at_catalog: list[bool] = []
+
+    async def catalog(mode: str = "chat") -> list[dict[str, Any]]:
+        open_at_catalog.append(async_db_session.in_transaction())
+        return CATALOG
+
+    monkeypatch.setattr(overseer_ai_agents, "agent_row", read_agent)
+    monkeypatch.setattr(chat_models, "catalog", catalog)
+    assert await overseer_ai_agents.agent_context(async_db_session, "illiana")
+    assert open_at_catalog == [False]
+
+
 def test_saving_an_agent_sends_only_its_fields(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

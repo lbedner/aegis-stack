@@ -3,10 +3,12 @@
 from collections.abc import Generator
 from typing import Any
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-import pytest
 
+from app.components.web_frontend import overseer_container, overseer_database
+from app.services.system import db_transactions
 from app.services.system.models import ComponentStatus
 from tests.web.dom import one, select, text
 from tests.web.overseer import sign_in, status_with
@@ -127,6 +129,7 @@ class TestSections:
             "Migrations",
             "Engine",
             "Activity",
+            "Transactions",
             "Container",
             "Logs",
             "Settings",
@@ -222,3 +225,96 @@ class TestActivity:
 
     def test_nothing_recorded_says_so(self, postgres: TestClient) -> None:
         assert "Nothing" in text(one(_get(postgres, "activity"), "#database-activity"))
+
+
+def _row(**changes: Any) -> dict[str, Any]:
+    return {
+        "pid": None,
+        "process": "worker:268",
+        "code": "app/services/ai/jobs.py:44 in analyze_sentiment_job",
+        "container": "app-worker-system-1",
+        "state": "Holds the write lock",
+        "seconds": 361.0,
+        "wait": None,
+        "blocked_by": [],
+        "query": "",
+        "trouble": True,
+    } | changes
+
+
+def _transactions(
+    monkeypatch: pytest.MonkeyPatch, rows: list[dict[str, Any]], postgres: bool
+) -> None:
+    async def current() -> dict[str, Any]:
+        return {"rows": rows, "postgres": postgres}
+
+    monkeypatch.setattr(db_transactions, "current", current)
+
+
+class TestTransactions:
+    def test_sqlite_names_the_holder_marks_it_and_restarts_its_container(
+        self, sqlite: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """SQLite cannot end another process's transaction: its container
+        restarts, through the Restart every container row has."""
+        quick = _row(process="webserver:7", container=None, seconds=1.5, trouble=False)
+        _transactions(monkeypatch, [_row(), quick], postgres=False)
+        held, short = select(
+            _get(sqlite, "transactions"), "#database-transactions tbody tr"
+        )
+        assert "worker:268" in text(held) and "analyze_sentiment_job" in text(held)
+        assert one(held, "[data-open-for] [data-tone]").get("data-tone") == "error"
+        restart = one(held, "button")
+        assert restart.get("hx-get") == overseer_container.RESTART.format(
+            name="app-worker-system-1"
+        )
+        assert not select(short, "button")
+        assert one(short, "[data-open-for] [data-tone]").get("data-tone") != "error"
+
+    def test_postgres_shows_every_connection_and_ends_one(
+        self, postgres: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        rows = [
+            _row(pid=41, code="", container=None, state="idle in transaction"),
+            _row(
+                pid=42,
+                code="",
+                container=None,
+                state="active",
+                seconds=0.5,
+                trouble=False,
+                blocked_by=[41],
+                wait="Lock: transactionid",
+                query="UPDATE llm_model SET name = $1",
+            ),
+        ]
+        _transactions(monkeypatch, rows, postgres=True)
+        html = _get(postgres, "transactions")
+        holder, waiter = select(html, "#database-transactions tbody tr")
+        assert one(holder, "button").get(
+            "hx-get"
+        ) == overseer_database.END_CONFIRM.format(pid=41)
+        assert "41" in text(one(waiter, "[data-blocked-by]"))
+        assert "UPDATE llm_model" in text(waiter)
+        assert "2 connections" in text(one(html, "#database-transactions"))
+
+    def test_nothing_held_says_so(
+        self, sqlite: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _transactions(monkeypatch, [], postgres=False)
+        assert "Nothing" in text(
+            one(_get(sqlite, "transactions"), "#database-transactions")
+        )
+
+    async def test_the_stream_sends_the_table(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _transactions(monkeypatch, [_row()], postgres=False)
+        frames = [f async for f in overseer_database.events(max_frames=1)]
+        assert frames[0].startswith(f"event: {overseer_database.EVENT}")
+        assert "worker:268" in frames[0]
+
+    def test_ending_a_connection_confirms_first(self, postgres: TestClient) -> None:
+        dialog = postgres.get(overseer_database.END_CONFIRM.format(pid=41)).text
+        form = one(dialog, "[hx-post]")
+        assert form.get("hx-post") == overseer_database.END_API.format(pid=41)

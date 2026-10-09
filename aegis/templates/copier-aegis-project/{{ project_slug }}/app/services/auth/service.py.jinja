@@ -1,6 +1,7 @@
 """Authentication service utilities."""
 
 from app.core.config import settings
+from app.core.db import release_lock
 from app.core.security import verify_token
 from app.models.user import User
 from app.services.auth.refresh_tokens import RefreshService
@@ -87,7 +88,7 @@ async def get_current_user_from_token(
     # the end, so any other session the handler opens (a service with its
     # own) waited it out and failed "database is locked". Nothing is pending
     # yet, and the user stays loaded (expire_on_commit=False).
-    await user_service.db.commit()
+    await release_lock(user_service.db)
 
     return user
 

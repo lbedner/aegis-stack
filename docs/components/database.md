@@ -210,7 +210,18 @@ alembic upgrade head
 
 A transaction held longer than `DATABASE_SLOW_TRANSACTION_SECONDS` (2 seconds by default), and a statement that found the database locked, are recorded with the process and the line of app code behind each. They show on the Database page's **Activity** tab in the Overseer and the Flet dashboard, and in the log.
 
-On SQLite every write takes the database's one write lock and waits up to 30 seconds for it, so `database is locked` means some other transaction held the lock that long. The Activity tab names it: usually a session kept open across slow work (an LLM call, a provider request, a long stream). The fix stays local: close the session before the slow call, or commit sooner.
+On SQLite every write takes the database's one write lock and waits up to 30 seconds for it, so `database is locked` means some other transaction held the lock that long. The Activity tab names it: usually a session kept open across slow work (an LLM call, a provider request, a long stream). The fix stays local: end the transaction before the slow call with `release_lock(session)` from `app.core.db`, or commit sooner.
+
+A request that opens a second transaction while it still holds one waits out those 30 seconds behind itself and then fails. That is recorded the moment it happens, as **Waits on itself**, naming the line that opened the second one: end the first (`release_lock`) before calling code that opens a session of its own.
+
+### Transactions open right now
+
+The Overseer's Database page has a **Transactions** section, live while it is open:
+
+- **PostgreSQL**: every connection to the database (`pg_stat_activity`), the longest open transaction first, with its process (each connection names the process that opened it, such as `worker:268`), its state, how long its transaction has been open, what it is waiting on, which connections block it, and its query. **End** closes one connection and rolls its transaction back (`pg_terminate_backend`); it confirms first, is for admins, and is audited.
+- **SQLite**: SQLite cannot say who holds its lock, so each process publishes the transactions it has held for more than a second, with the line of app code holding each right now (what it is waiting on, a model call, say) and the container it runs in. SQLite cannot end another process's transaction, so **Restart** restarts the container holding it.
+
+A transaction open past `DATABASE_SLOW_TRANSACTION_SECONDS` shows red.
 
 Records live for an hour, in Redis when the stack has it (the webserver then shows what the worker and scheduler recorded too), otherwise in the process that recorded them. `DATABASE_SLOW_TRANSACTION_SECONDS=0` turns it off; it is also on the Database page's Settings section and Overseer > Settings. The engine's own parameters (PostgreSQL settings, SQLite PRAGMAs) are the page's **Engine** section.
 

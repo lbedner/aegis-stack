@@ -1,6 +1,35 @@
-"""Shared API utilities for common error patterns."""
+"""Shared API utilities for common error patterns, and the audit every
+admin write action records."""
 
-from fastapi import HTTPException, status
+from typing import Any
+
+from fastapi import HTTPException, Request, status
+
+from app.components.backend.security.rate_limit import get_client_ip
+from app.core.audit import AuditEmitter
+from app.services.shared.deps import Actor
+
+
+async def audit_admin_action(
+    audit: AuditEmitter,
+    actor: Actor,
+    request: Request,
+    event_type: str,
+    outcome: str,
+    detail: str,
+    **target: Any,
+) -> None:
+    """One admin action, refused ones included: who, from where (the
+    client behind a trusted proxy), what it was done to, and how it went."""
+    await audit.emit(
+        event_type,
+        actor_id=actor.id,
+        actor_email=actor.email,
+        ip_address=get_client_ip(request),
+        detail=detail,
+        outcome=outcome,
+        **target,
+    )
 
 
 def raise_not_found(resource: str) -> None:

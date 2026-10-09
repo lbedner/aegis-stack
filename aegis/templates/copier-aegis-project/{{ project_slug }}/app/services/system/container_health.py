@@ -1,8 +1,11 @@
-"""A component's health as the worse of its own check and Docker's
-healthcheck on the containers behind it. The two can disagree: Traefik
+"""A component's health as the worst of its own check and what the
+containers behind it say: Docker's healthcheck failing on one (Traefik
 answering its API while Docker's healthcheck on it fails is degraded, not
-healthy, so it reads as a warning. A check that already fails keeps its own
-reason, the more specific one.
+healthy, so it reads as a warning), or one's memory past its alert share
+(``MEMORY_THRESHOLD_PERCENT``: unhealthy, as its red bar says) or nearing
+it (a warning). Not CPU: one reading over is a spike, not a fault, and an
+unhealthy component sends a health alert. A check already as bad keeps its
+own reason, the more specific one.
 
 It reads the containers sampler's last reading (``ui_runtime``), so the
 health walk waits on no Docker call; before the first reading, or with no
@@ -11,37 +14,46 @@ the socket proxy refuses container inspect, which would also hand over
 every container's environment. No UI framework imports.
 """
 
+from collections.abc import Iterator
+from typing import Any
+
 from app.core import series
 from app.services.system import ui_runtime
 
 from .models import ComponentStatus, ComponentStatusType
 
-# What Docker's failing healthcheck leaves a passing check at.
-_PASSING = (ComponentStatusType.HEALTHY, ComponentStatusType.INFO)
+_TROUBLED = (ComponentStatusType.WARNING, ComponentStatusType.UNHEALTHY)
+_Trouble = tuple[ComponentStatusType, str]
 
 
 async def overlay(checks: dict[str, ComponentStatus]) -> dict[str, ComponentStatus]:
-    """``checks`` (by health component name), each one with a container
-    Docker calls unhealthy at least a warning."""
+    """``checks`` (by health component name), each one raised to the worst
+    its containers say."""
     tables = await series.latest(ui_runtime.SAMPLER) or {}
-    sick = {
-        ui_runtime.component_of(page): names
-        for page, view in tables.items()
-        if (names := [r["name"] for r in view["rows"] if r["health"] == "unhealthy"])
-    }
+    troubles: dict[str, list[_Trouble]] = {}
+    for page, view in tables.items():
+        troubles.setdefault(ui_runtime.component_of(page), []).extend(
+            trouble for row in view["rows"] for trouble in _troubles(row)
+        )
     return {
-        name: _flagged(check, sick[name]) if name in sick else check
-        for name, check in checks.items()
+        name: _worst(check, troubles.get(name, [])) for name, check in checks.items()
     }
 
 
-def _flagged(check: ComponentStatus, containers: list[str]) -> ComponentStatus:
-    if check.status not in _PASSING:
+def _troubles(row: dict[str, Any]) -> Iterator[_Trouble]:
+    name = row["name"]
+    if row["health"] == "unhealthy":
+        yield ComponentStatusType.WARNING, f"Docker's healthcheck fails on {name}"
+    if (memory := row.get("memory_status")) in _TROUBLED:
+        figure = ui_runtime.FIGURES[ui_runtime.MEMORY]
+        yield ComponentStatusType(memory), f"{figure} high on {name}"
+
+
+def _worst(check: ComponentStatus, troubles: list[_Trouble]) -> ComponentStatus:
+    from .health import propagate_status  # health imports this module
+
+    worst = propagate_status([check.status, *(status for status, _ in troubles)])
+    if worst == check.status:
         return check
-    names = ", ".join(containers)
-    return check.model_copy(
-        update={
-            "status": ComponentStatusType.WARNING,
-            "message": f"Docker's healthcheck fails on {names}",
-        }
-    )
+    reasons = "; ".join(reason for status, reason in troubles if status == worst)
+    return check.model_copy(update={"status": worst, "message": reasons})

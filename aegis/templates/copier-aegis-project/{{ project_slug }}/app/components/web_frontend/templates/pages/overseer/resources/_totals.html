@@ -1,0 +1,25 @@
+{# What this stack uses of the host, each resource split into this stack,
+   the rest of the host and free (ui_resources.overview), above the charts. #}
+{% from "components/macros/layout.html" import card %}
+{% set parts = [("stack", "This stack", "bg-aegis-teal"), ("rest", "Rest of the host", "bg-aegis-muted/60"), ("free", "Free", "bg-aegis-border/40")] %}
+{% if resources.split %}
+<div class="grid gap-4 lg:grid-cols-2">
+  {% for split in resources.split %}
+  <div data-split="{{ split.key }}">
+  {% call card(split.label, subtitle=split.text.total ~ " in all", id="resources-" ~ split.key) %}
+    <div class="flex h-3 w-full overflow-hidden rounded bg-aegis-border/40" role="img" aria-label="{{ split.label }}: this stack {{ split.text.stack }}, the rest of the host {{ split.text.rest }}, free {{ split.text.free }}">
+      {% for key, _, color in parts[:2] if split[key] %}<span class="{{ color }}" style="width: {{ (split[key] / split.total * 100)|round(1) }}%"></span>{% endfor %}
+    </div>
+    <dl class="grid grid-cols-3 gap-3 text-sm">
+      {% for key, label, color in parts %}
+      <div data-part="{{ key }}">
+        <dt class="flex items-center gap-1.5 text-xxs caps text-aegis-muted"><span class="inline-block w-2 h-2 rounded-sm {{ color }}" aria-hidden="true"></span>{{ label }}</dt>
+        <dd class="mt-1 tabular-nums {{ 'text-aegis-teal font-semibold' if key == 'stack' else 'text-aegis-text' }}">{{ split.text[key] }}</dd>
+      </div>
+      {% endfor %}
+    </dl>
+  {% endcall %}
+  </div>
+  {% endfor %}
+</div>
+{% endif %}

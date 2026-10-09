@@ -2,8 +2,8 @@
 (``topology``) laid out in tiers, top to bottom, each process a node at a
 fixed place (so it draws the same every time and nothing overlaps), the
 connections as lines between them, and what runs in the webserver as chips
-in the Server's node. Nodes are as wide as the busiest tier leaves room
-for, so a small stack draws large. Positions are worked out here; the page
+in the Server's node. Each row's nodes are as wide as the row leaves
+room for: a busy row's slimmer, the rest wider, a small stack large. Positions are worked out here; the page
 only draws."""
 
 from typing import Any
@@ -15,7 +15,7 @@ NODE_HEIGHT = 136
 CHIP_ROW = 34  # each row of chips the Server's node grows by
 CHIPS_PER_ROW = 2  # room for a name in full, and its cost to load
 TIER_GAP = 96
-# Each node's share of the width its tier gives it, the rest a gutter; and
+# Each node's share of the width its row gives it, the rest a gutter; and
 # the most a node takes (percent of the map), however small the stack.
 FILL = 0.8
 MAX_NODE_WIDTH = 28.0
@@ -48,10 +48,10 @@ def layout(
     nodes, ``across`` for tiers left to right (compact)."""
     items = {item["key"]: item for item in stack}
     found = shape or topology.shape(list(items))
-    nodes, place, height, width = (_across if across else _down)(
+    nodes, place, height = (_across if across else _down)(
         items, found, compact or across
     )
-    half = width / 100 * WIDTH / 2 if across else None
+    half = nodes[0]["width"] / 100 * WIDTH / 2 if across and nodes else None
     return {
         "map_nodes": nodes,
         "map_links": [
@@ -59,15 +59,12 @@ def layout(
         ],
         "map_height": height,
         "map_width": WIDTH,
-        "map_node_width": width,
         "map_compact": compact or across,
         "map_across": across,
     }
 
 
-Placed = tuple[
-    list[dict[str, Any]], dict[str, tuple[float, float, float]], float, float
-]
+Placed = tuple[list[dict[str, Any]], dict[str, tuple[float, float, float]], float]
 
 
 def _down(
@@ -85,7 +82,6 @@ def _down(
         for tier in found.tiers
         for i in range(0, len(tier), per_row)
     ]
-    busiest = max((len(row) for row in rows), default=1)
     nodes, place, top = [], {}, 0
     for number, row in enumerate(rows):
         extra = chips if topology.HOST in row else 0
@@ -93,18 +89,18 @@ def _down(
         # The map scrolls sideways, so it clips what runs past its bottom:
         # the last row's hints open above it.
         last = number == len(rows) - 1 and len(rows) > 1
+        width = min(FILL * 100 / len(row), MAX_NODE_WIDTH)
         for index, key in enumerate(row):
             x = (index + 0.5) / len(row) * WIDTH
             place[key] = (x, top, heights[key])
             nodes.append(
                 items[key]
                 | {"left": x / WIDTH * 100, "top": top, "height": heights[key]}
-                | {"hosted": hosted if key == topology.HOST else []}
+                | {"width": width, "hosted": hosted if key == topology.HOST else []}
                 | {"hint_above": last, "tall": _tall(items[key], compact)}
             )
         top += max(heights.values()) + TIER_GAP
-    width = min(FILL * 100 / busiest, MAX_NODE_WIDTH)
-    return nodes, place, max(top - TIER_GAP, 0), width
+    return nodes, place, max(top - TIER_GAP, 0)
 
 
 def _across(
@@ -120,7 +116,7 @@ def _across(
         for tier in found.tiers
     ]
     tallest = max(spans, default=0)
-    nodes, place = [], {}
+    nodes, place, width = [], {}, ACROSS_FILL * 100 / count
     for index, tier in enumerate(found.tiers):
         x, top = (index + 0.5) / count * WIDTH, (tallest - spans[index]) / 2
         for key in tier:
@@ -128,10 +124,10 @@ def _across(
             nodes.append(
                 items[key]
                 | {"left": x / WIDTH * 100, "top": top, "height": heights[key]}
-                | {"tall": _tall(items[key], compact)}
+                | {"width": width, "tall": _tall(items[key], compact)}
             )
             top += heights[key] + ACROSS_GAP
-    return nodes, place, tallest + HINT_ROOM, ACROSS_FILL * 100 / count
+    return nodes, place, tallest + HINT_ROOM
 
 
 def _tall(item: dict[str, Any], compact: bool) -> bool:

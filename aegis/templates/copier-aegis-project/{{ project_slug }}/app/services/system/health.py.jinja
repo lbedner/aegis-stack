@@ -224,7 +224,8 @@ async def _collect_system_status() -> SystemStatus:
                 response_time_ms=None,
             )
 
-    # Docker's healthcheck on a component's containers can fail its check.
+    # Its containers can fail a component's check: Docker's healthcheck, or
+    # memory past its alert share.
     component_results = await container_health.overlay(component_results)
 
     # Collect system metrics (already running concurrently)

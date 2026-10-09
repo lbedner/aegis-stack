@@ -70,25 +70,6 @@ def history_char_budget(context_window_tokens: int | None) -> int:
 class PromptMixin(ContextsMixin):
     """Agent-config overlay and per-request prompt/runtime construction."""
 
-    def _apply_agent_config(
-        self, config: AIServiceConfig, agent_config: AgentConfig | None
-    ) -> AIServiceConfig:
-        """Overlay the resolved agent's sampling (and optional model pin).
-
-        The default agent carries the same values as settings, so this is
-        an identity transform until an agent row is edited. A ``model_id``
-        pin assumes the current provider serves that model.
-        """
-        if agent_config is None:
-            return config
-        update: dict[str, Any] = {
-            "temperature": agent_config.temperature,
-            "max_tokens": agent_config.max_tokens,
-        }
-        if agent_config.model_id:
-            update["model"] = agent_config.model_id
-        return config.model_copy(update=update)
-
     def _agent_persona(self, agent_config: AgentConfig | None) -> str | None:
         """The persona override for this request, or None for the built-in.
 
@@ -234,7 +215,7 @@ class PromptMixin(ContextsMixin):
         begin_turn_context()
         record_turn_context(context_window=context_window)
 
-        config = self._apply_agent_config(self.config, agent_config)
+        config = self.config.for_agent(agent_config)
         system_prompt_override = self._system_prompt_for(
             config,
             agent_config,
@@ -397,7 +378,7 @@ class PromptMixin(ContextsMixin):
             tuple[Any, list]: (LLM instance, list of message tuples)
         """
         # Create LLM for this request (agent sampling/model overlaid)
-        config = self._apply_agent_config(self.config, agent_config)
+        config = self.config.for_agent(agent_config)
         llm = await get_llm(config, self.settings)
 
         system_prompt = self._system_prompt_for(

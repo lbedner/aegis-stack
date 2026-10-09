@@ -331,6 +331,10 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 "app/core/db.py",
                 "app/core/db_activity.py",
                 "tests/core/test_db_activity.py",
+                "app/services/system/db_transactions.py",
+                "tests/services/test_db_transactions.py",
+                "app/components/backend/api/database.py",
+                "tests/api/test_database_endpoints.py",
                 "tests/components/frontend/test_database_activity_tab.py",
                 "app/components/frontend/dashboard/cards/database_card.py",
                 "app/components/frontend/dashboard/modals/database_modal",
@@ -344,7 +348,10 @@ COMPONENTS: dict[str, ComponentSpec] = {
             ],
             extras={
                 # The Overseer page's test: needs the web frontend too.
-                "include_htmx": ["tests/web/test_overseer_database.py"],
+                "include_htmx": [
+                    "tests/web/test_overseer_database.py",
+                    "app/components/web_frontend/routes/partials/overseer_database.py",
+                ],
             },
         ),
     ),

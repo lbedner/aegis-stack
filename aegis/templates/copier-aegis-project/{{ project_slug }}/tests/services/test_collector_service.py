@@ -123,6 +123,32 @@ class TestCollectSource:
             await async_db_session.refresh(source)
             assert source.last_collected_at is not None
 
+    @pytest.mark.asyncio
+    async def test_a_collector_fetches_with_no_transaction_open(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """Collectors fetch over the network (and read keys, on a connection
+        of their own): on SQLite an open transaction holds the one write lock
+        through all of it, and the key read waits behind its own caller."""
+        await _seed_source(async_db_session, SourceKeys.GITHUB_TRAFFIC)
+        probe = _make_mock_collector_cls(success=True)
+        open_at_fetch: list[bool] = []
+        collect = probe.collect
+
+        async def watched(self: object, **kwargs: object) -> CollectionResult:
+            open_at_fetch.append(async_db_session.in_transaction())
+            return await collect(self, **kwargs)
+
+        probe.collect = watched  # type: ignore[method-assign]
+        with patch(
+            "app.services.insights.adapters.collectors.collection.COLLECTOR_REGISTRY",
+            {SourceKeys.GITHUB_TRAFFIC: probe},
+        ):
+            await CollectorService(async_db_session).collect_source(
+                SourceKeys.GITHUB_TRAFFIC
+            )
+        assert open_at_fetch == [False]
+
 
 # ---------------------------------------------------------------------------
 # Tests: collect_all
@@ -147,7 +173,8 @@ class TestCollectAll:
         }
 
         with patch(
-            "app.services.insights.adapters.collectors.collection.COLLECTOR_REGISTRY", registry
+            "app.services.insights.adapters.collectors.collection.COLLECTOR_REGISTRY",
+            registry,
         ):
             service = CollectorService(async_db_session)
             results = await service.collect_all()
@@ -266,7 +293,9 @@ class TestGetRegisteredSources:
         false), so we re-derive expected from the registry rather than
         hard-coding all 6 — that would fail any default-config init.
         """
-        from app.services.insights.adapters.collectors.collection import COLLECTOR_REGISTRY
+        from app.services.insights.adapters.collectors.collection import (
+            COLLECTOR_REGISTRY,
+        )
 
         service = CollectorService(AsyncMock())
         sources = service.get_registered_sources()

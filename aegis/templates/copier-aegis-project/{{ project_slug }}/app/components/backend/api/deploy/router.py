@@ -8,7 +8,7 @@ list (``runtime.mine``).
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from pydantic import BaseModel
 
-from app.components.backend.security.rate_limit import get_client_ip
+from app.components.backend.api.utils import audit_admin_action
 from app.core import runtime
 from app.core.audit import AuditEmitter, get_audit
 from app.core.runtime import RuntimeUnavailableError, UnknownInstanceError
@@ -62,12 +62,12 @@ async def _audit(
     outcome: str,
     detail: str,
 ) -> None:
-    await audit.emit(
+    await audit_admin_action(
+        audit,
+        actor,
+        request,
         "runtime.container_restart",
-        actor_id=actor.id,
-        actor_email=actor.email,
-        ip_address=get_client_ip(request),
-        detail=detail,
+        outcome,
+        detail,
         container=name,
-        outcome=outcome,
     )

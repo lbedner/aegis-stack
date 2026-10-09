@@ -27,6 +27,9 @@ ITEM = NavItem(
 EVENTS = "/overseer/events/resources"
 EVENT = "resources"
 BODY = "pages/overseer/resources/_body.html"
+# The split above the charts, sent apart from the rest of the snapshot.
+TOTALS_EVENT = "resources-totals"
+TOTALS = "pages/overseer/resources/_totals.html"
 
 
 async def section_context(
@@ -37,6 +40,7 @@ async def section_context(
     return {
         "section_subtitle": "What this stack uses of the host, and what the rest of it does.",
         "resources_event": EVENT,
+        "resources_totals_event": TOTALS_EVENT,
         "resources_charts": chart_panel(EVENT, charts, window, EVENTS),
     } | view
 
@@ -68,6 +72,9 @@ def events(  # noqa: ANN201 - async iterator
         charts, view = await asyncio.gather(
             ui_resources.charts(window), _view(wait=True)
         )
-        return {EVENT: fragment(BODY, **view)} | chart_frames(EVENT, charts, held)
+        return {
+            EVENT: fragment(BODY, **view),
+            TOTALS_EVENT: fragment(TOTALS, **view),
+        } | chart_frames(EVENT, charts, held)
 
     return fragments_events(frame, series.TICK_SECONDS, max_frames)

@@ -17,7 +17,7 @@ from typing import Any
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.config import settings
-from app.core.db import get_async_session
+from app.core.db import get_async_session, release_lock
 from app.core.log import logger
 from app.models.conversation import Conversation
 from app.services.ai.config import AIServiceConfig
@@ -43,6 +43,12 @@ SENTIMENT_SYSTEM_PROMPT = (
 )
 
 TRANSCRIPT_MESSAGE_LIMIT = 40
+# The agent the scorer runs as: its model, sampling and prompt are picked
+# in Agents (seeded with the prompt above, on the active model).
+SENTIMENT_AGENT_SLUG = "sentiment"
+# A verdict is a short JSON object, read the same way each time.
+SENTIMENT_TEMPERATURE = 0.0
+SENTIMENT_MAX_TOKENS = 600
 
 
 def _build_transcript(conversation: Conversation) -> str | None:
@@ -90,13 +96,30 @@ def _validate_verdict(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-async def _llm_score(transcript: str) -> dict[str, Any]:
-    """Ask the configured model for a verdict; returns the raw parsed dict."""
-    config = AIServiceConfig.from_settings(settings)
+# What a batch scores with: the model's config, and the prompt.
+Scorer = tuple[AIServiceConfig, str]
+
+
+async def _scorer() -> Scorer:
+    """The ``sentiment`` agent's model, sampling and prompt, or, while no
+    such agent is active, the built-in prompt on the model in force.
+    Resolved once a batch."""
+    from app.services.ai.domains.chat import agent_loader
+    from app.services.ai.domains.llm import active_model
+
+    found = await agent_loader.resolve_agent(SENTIMENT_AGENT_SLUG)
+    # A missing or inactive agent resolves to the default one: not ours.
+    agent = found if found.slug == SENTIMENT_AGENT_SLUG else None
+    config = await active_model.config_for_active(settings, agent)
+    return config, agent.system_prompt if agent else SENTIMENT_SYSTEM_PROMPT
+
+
+async def _llm_score(transcript: str, config: AIServiceConfig, prompt: str) -> dict[str, Any]:
+    """Ask ``config``'s model for a verdict; returns the raw parsed dict."""
 {% if ai_framework == "pydantic-ai" %}
     from app.services.ai.domains.llm.providers import get_agent
 
-    agent = await get_agent(config, settings, SENTIMENT_SYSTEM_PROMPT)
+    agent = await get_agent(config, settings, prompt)
     result = await agent.run(transcript)
     reply = result.output
 {% else %}
@@ -104,7 +127,7 @@ async def _llm_score(transcript: str) -> dict[str, Any]:
 
     llm = await get_llm(config, settings)
     result = await llm.ainvoke(
-        [("system", SENTIMENT_SYSTEM_PROMPT), ("human", transcript)]
+        [("system", prompt), ("human", transcript)]
     )
     reply = result.content if hasattr(result, "content") else str(result)
 {% endif %}
@@ -112,15 +135,16 @@ async def _llm_score(transcript: str) -> dict[str, Any]:
 
 
 async def _score_conversation(
-    session: AsyncSession, conversation_id: str, transcript: str
+    session: AsyncSession, conversation_id: str, transcript: str, scorer: Scorer
 ) -> None:
-    """Score one conversation transcript and write its verdict row."""
-    payload = await _llm_score(transcript)
-    verdict = _validate_verdict(payload)
+    """Score one conversation transcript and write its verdict row, with
+    the model that scored it."""
+    config, prompt = scorer
+    verdict = _validate_verdict(await _llm_score(transcript, config, prompt))
     session.add(
         SentimentAnalysis(
             conversation_id=conversation_id,
-            model_id=settings.AI_MODEL,
+            model_id=config.model,
             **verdict,
         )
     )
@@ -160,7 +184,9 @@ async def score_unscored_conversations(
 
     batch_limit = limit or settings.AI_SENTIMENT_BATCH_LIMIT
     batch = await _unscored_batch(session, batch_limit)
+    await release_lock(session)  # each verdict then writes on its own
     counts = {"scored": 0, "skipped": 0, "failed": 0}
+    scorer: Scorer | None = None
     for conversation_id, transcript in batch:
         if transcript is None:
             logger.debug(
@@ -170,7 +196,8 @@ async def score_unscored_conversations(
             counts["skipped"] += 1
             continue
         try:
-            await _score_conversation(session, conversation_id, transcript)
+            scorer = scorer or await _scorer()
+            await _score_conversation(session, conversation_id, transcript, scorer)
             counts["scored"] += 1
         except Exception as exc:
             counts["failed"] += 1

@@ -25,6 +25,10 @@ from app.services.ai.domains.chat.agent_loader import invalidate_agent_cache
 from app.services.ai.domains.llm.providers import ProviderError, model_for
 from app.services.ai.models import AIProvider
 from app.services.finance.domains.detection import analyst
+from app.services.finance.domains.detection.analyst.deep_dive import run_deep_dive
+from app.services.finance.domains.detection.analyst.seeds import (
+    deep_dive_agent_definition,
+)
 from app.services.finance.models import FinanceInsight
 from app.services.finance.seeds import demo_seed
 
@@ -158,6 +162,39 @@ class TestModelFor:
             await model_for(config, settings)
 
         assert "No API key configured" in str(excinfo.value)
+
+
+def _model_sees_no_transaction(monkeypatch, session: AsyncSession) -> list[bool]:
+    """A TestModel, recording whether ``session`` holds a transaction when
+    the model is handed out: on SQLite one holds the database's only write
+    lock, and a model can take minutes."""
+    open_at_model: list[bool] = []
+
+    async def _model_for(config, settings):
+        open_at_model.append(session.in_transaction())
+        return TestModel(custom_output_args={"headline": NOTE_TEXT}), "test-model"
+
+    monkeypatch.setattr("app.services.ai.domains.llm.providers.model_for", _model_for)
+    return open_at_model
+
+
+class TestNoLockWhileTheModelThinks:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("deep", [False, True])
+    async def test_a_runner_ends_its_reads_before_the_model(
+        self, async_db_session: AsyncSession, monkeypatch, use_test_session, deep: bool
+    ) -> None:
+        """The nightly note and the deep dive alike."""
+        use_test_session(async_db_session)
+        open_at_model = _model_sees_no_transaction(monkeypatch, async_db_session)
+        await demo_seed.seed_demo(async_db_session, owner_user_id=OWNER)
+        await _seed_agent(async_db_session)
+        if deep:
+            async_db_session.add(analyst.Agent(**deep_dive_agent_definition()))
+            await async_db_session.flush()
+        run = run_deep_dive if deep else analyst.run_analyst_note
+        await run(async_db_session, owner_user_id=OWNER, today=date(2026, 7, 20))
+        assert open_at_model == [False]
 
 
 class TestRunAnalystNote:

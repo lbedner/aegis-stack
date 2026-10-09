@@ -51,7 +51,7 @@ An `agent` row holds:
 |---|---|
 | `slug` | Unique identifier; chat resolves the `assistant` slug by default |
 | `system_prompt` | The agent's persona. The seeded default is a marker meaning "use the service's built-in dynamic persona"; any edited text is used verbatim |
-| `model_id` | Optional model pin. `NULL` means "use the service's active model", so the default agent tracks your configured provider |
+| `model_id` | Optional model pin. `NULL` means "use the service's active model", so the default agent tracks your configured provider. In the Overseer's agent editor it is picked from the models this install can call, grouped by vendor |
 | `temperature`, `max_tokens` | Sampling parameters applied to every request |
 | `memory_modules` | Slugs of [memory modules](memory-modules.md) rendered into this agent's context |
 | `knowledge_base_ids` | RAG collections this agent may search; empty means unrestricted |
@@ -127,12 +127,14 @@ When RAG is enabled (`ai[...,rag]`), an agent's `knowledge_base_ids` lists the c
 
 ## Sentiment Analysis
 
-Persistence-backed projects ship a batch job that scores each conversation with the configured model: user sentiment (positive, neutral, negative, frustrated), a score from -1.0 to 1.0, assistant performance, and detected issues. The job is registered on the scheduler but **off by default**, because every scored conversation costs model tokens:
+Persistence-backed projects ship a batch job that scores each conversation: user sentiment (positive, neutral, negative, frustrated), a score from -1.0 to 1.0, assistant performance, and detected issues. The job is registered on the scheduler but **off by default**, because every scored conversation costs model tokens:
 
 ```bash
 AI_SENTIMENT_ENABLED=true    # enable scoring
 AI_SENTIMENT_BATCH_LIMIT=20  # conversations per run
 ```
+
+The job runs as the built-in `sentiment` agent, seeded beside the default one: its model, temperature, max tokens and prompt are edited like any agent's. It starts on the service's active model; scoring is a short, structured task, so a small fast model is usually the better pick, especially when the active model is a large local one whose cold start can outlast `AI_TIMEOUT_SECONDS`. With the agent removed or inactive, the job uses the built-in prompt on the active model. The job reads its batch, ends that database transaction, and only then calls the model, so a slow model never holds the database.
 
 Results land in the `sentiment_analysis` table (one verdict per conversation) and surface in the CLI and the dashboard analytics tab:
 

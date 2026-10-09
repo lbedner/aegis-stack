@@ -38,7 +38,7 @@
     {% set outline = "" if shaped else ("rounded-full justify-center border border-dashed bg-aegis-card" if outside else "rounded-lg border bg-aegis-card") %}
     <section data-node="{{ node.key }}"{% if node.role %} data-role="{{ node.role }}"{% endif %}{% if node.tall %} data-tall{% endif %} data-tone="{{ node.tone }}"
              class="group absolute -translate-x-1/2 hover:z-30 tone-border {{ outline }} {{ 'justify-center pt-3' if node.tall }} px-3 flex items-center gap-2 text-sm"
-             style="left: {{ node.left }}%; top: {{ node.top }}px; width: {{ map_node_width }}%; height: {{ node.height }}px">
+             style="left: {{ node.left }}%; top: {{ node.top }}px; width: {{ node.width }}%; height: {{ node.height }}px">
       {% if shaped %}<svg data-shape class="map-shape absolute inset-0 -z-10 w-full h-full overflow-visible" aria-hidden="true"><use href="#shape-{{ node.role }}" width="100%" height="100%"/></svg>{% endif %}
       {% if node.status %}{{ status_dot(node.status) }}{% endif %}
       {{ node_title(node) }}
@@ -50,8 +50,8 @@
       </span>
     </section>
     {% else %}
-    <section data-node="{{ node.key }}"{% if node.role %} data-role="{{ node.role }}"{% endif %} class="absolute -translate-x-1/2 tone-border rounded-lg border bg-aegis-card p-4 space-y-3 overflow-hidden" data-tone="{{ node.tone }}"
-             style="left: {{ node.left }}%; top: {{ node.top }}px; width: {{ map_node_width }}%; height: {{ node.height }}px">
+    <section data-node="{{ node.key }}"{% if node.role %} data-role="{{ node.role }}"{% endif %} class="absolute -translate-x-1/2 tone-border rounded-lg border bg-aegis-card p-4 space-y-3 overflow-hidden flex flex-col" data-tone="{{ node.tone }}"
+             style="left: {{ node.left }}%; top: {{ node.top }}px; width: {{ node.width }}%; height: {{ node.height }}px">
       <header class="flex items-center justify-between gap-2">
         {% if node.role %}{{ icon(node.role, "w-4 h-4 shrink-0 text-aegis-muted") }}{% endif %}
         {{ node_title(node, "text-base") }}
@@ -68,7 +68,7 @@
       </div>
       {% endfor %}
       {% else %}
-      <p class="text-sm text-aegis-muted truncate">{{ node.message|message }}</p>
+      <p class="health-message min-h-0 overflow-y-auto text-sm text-aegis-muted">{{ node.message|message }}</p>
       {% endif %}
       {% if node.note %}<p class="text-xs text-aegis-muted truncate">{{ node.note }}</p>{% endif %}
       {% if node.hosted %}

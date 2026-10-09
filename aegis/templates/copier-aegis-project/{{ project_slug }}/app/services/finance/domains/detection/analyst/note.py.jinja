@@ -49,7 +49,9 @@ async def existing_note(
 async def run_analyst_note(
     db: AsyncSession, *, owner_user_id: int | None, today: date | None = None
 ) -> FinanceInsight | None:
-    """Write today's note for one owner. Writes; the caller commits.
+    """Write today's note for one owner. Its reads (and anything the caller
+    left pending) are committed before the model runs (``release_lock``);
+    the note it writes, the caller commits.
 
     Returns the note - the one just written, or the one already there. Returns
     None when there is nothing to say (no accounts), nobody to say it (the
@@ -79,7 +81,7 @@ async def run_analyst_note(
     from pydantic_ai.settings import ModelSettings
 
     from app.core.config import settings
-    from app.services.ai.config import AIServiceConfig
+    from app.core.db import release_lock
     from app.services.ai.domains.chat.agent_loader import resolve_agent
     from app.services.ai.domains.llm import active_model
     from app.services.ai.domains.llm.providers import model_for
@@ -94,19 +96,6 @@ async def run_analyst_note(
             agent_slug=ANALYST_AGENT_SLUG,
         )
         return None
-
-    # The stored selection first: this runs in a worker or a
-    # scheduled job, which never serves the request that would
-    # otherwise adopt it. An agent's own model_id still wins below.
-    await active_model.sync_from_db(settings)
-    service_config = AIServiceConfig.from_settings(settings)
-    update: dict[str, object] = {
-        "temperature": agent_config.temperature,
-        "max_tokens": agent_config.max_tokens,
-    }
-    if agent_config.model_id:
-        update["model"] = agent_config.model_id
-    service_config = service_config.model_copy(update=update)
 
     facts = await build_report_facts(db, owner_user_id=owner_user_id, context=context)
     snapshot = await build_finance_snapshot(
@@ -123,6 +112,9 @@ async def run_analyst_note(
         facts = facts.model_copy(
             update={"changes": diff_facts(previous, facts, since=since)}
         )
+    await release_lock(db)
+
+    service_config = await active_model.config_for_active(settings, agent_config)
 
     try:
         model, model_name = await model_for(service_config, settings)

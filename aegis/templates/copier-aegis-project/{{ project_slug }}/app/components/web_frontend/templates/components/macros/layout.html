@@ -459,11 +459,12 @@
 
 {# Ranked rows: name, a small count, the amount, and a thin bar scaled to
    the largest row (the Overview's payees and bills). ``rows`` are
-   ``{"label", "count", "value", "ratio", "tone"}``. #}
-{% macro ranked_rows(rows) %}
-<ol class="ranked space-y-3">
+   ``{"label", "count", "value", "ratio", "tone"}``; ``columns`` sets a long
+   list in columns, read down each, so it does not run the page long. #}
+{% macro ranked_rows(rows, columns=False) %}
+<ol class="ranked {{ 'sm:columns-2 xl:columns-3 gap-x-8' if columns else 'space-y-3' }}"{% if columns %} data-columns{% endif %}>
   {% for row in rows %}
-  <li>
+  <li{% if columns %} class="break-inside-avoid pb-3"{% endif %}>
     <div class="flex items-baseline justify-between gap-3 text-sm">
       <span class="text-aegis-text truncate">{{ row.label }}</span>
       <span class="shrink-0 tabular-nums">{% if row.count %}<span class="text-aegis-muted mr-2">{{ row.count }}</span>{% endif %}<span class="text-aegis-text font-medium">{{ row.value }}</span></span>

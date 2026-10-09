@@ -55,7 +55,7 @@ def _stub_llm(
     calls = {"count": 0}
     current_verdict = verdict or _GOOD_VERDICT
 
-    async def fake_llm_score(transcript: str) -> dict[str, Any]:
+    async def fake_llm_score(transcript: str, *_: Any) -> dict[str, Any]:
         calls["count"] += 1
         if fail_for and fail_for in transcript:
             raise RuntimeError("model exploded")
@@ -94,6 +94,103 @@ class TestScoreOnce:
 
         assert counts == {"scored": 0, "skipped": 1, "failed": 0}
         assert calls["count"] == 0
+
+
+class TestNoLockWhileTheModelThinks:
+    async def test_no_transaction_is_open_during_a_model_call(
+        self, session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """SQLite has one writer, and a transaction on this engine takes the
+        write lock when it begins: one held across a slow model call (a
+        local model timing out takes minutes) stalls every process."""
+        open_during_call: list[bool] = []
+
+        async def fake_llm_score(transcript: str, *_: Any) -> dict[str, Any]:
+            open_during_call.append(session.in_transaction())
+            return dict(_GOOD_VERDICT)
+
+        monkeypatch.setattr(sentiment_module, "_llm_score", fake_llm_score)
+        await _add_conversation(session, "c1")
+        await _add_conversation(session, "c2")
+
+        counts = await score_unscored_conversations(session=session)
+
+        assert counts["scored"] == 2
+        assert open_during_call == [False, False]
+
+
+class TestSentimentAgent:
+    """The scorer runs as the ``sentiment`` agent: its model, sampling and
+    prompt are picked in Agents; without the agent, the built-in prompt on
+    the model in force. Resolved once a batch."""
+
+    def _resolving(self, monkeypatch: pytest.MonkeyPatch, agent: Any) -> list[str]:
+        from app.services.ai.domains.chat import agent_loader
+        from app.services.ai.domains.llm import active_model
+
+        asked: list[str] = []
+
+        async def resolve_agent(slug: str = "", **_: Any) -> Any:
+            asked.append(slug)
+            return agent
+
+        async def no_stored_selection(target: Any) -> bool:
+            return False
+
+        monkeypatch.setattr(agent_loader, "resolve_agent", resolve_agent)
+        monkeypatch.setattr(active_model, "sync_from_db", no_stored_selection)
+        return asked
+
+    async def test_the_agents_model_and_prompt_score_it(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from app.services.ai.domains.chat.agent_loader import AgentConfig
+
+        agent = AgentConfig(
+            slug=sentiment_module.SENTIMENT_AGENT_SLUG,
+            name="Sentiment",
+            system_prompt="Rate it.",
+            model_id="qwen3:4b",
+            temperature=0.0,
+            max_tokens=400,
+        )
+        asked = self._resolving(monkeypatch, agent)
+        config, prompt = await sentiment_module._scorer()
+        assert asked == [sentiment_module.SENTIMENT_AGENT_SLUG]
+        assert (config.model, config.max_tokens, prompt) == ("qwen3:4b", 400, "Rate it.")
+
+    async def test_without_the_agent_the_built_in_prompt_on_the_active_model(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from app.core.config import settings
+        from app.services.ai.domains.chat.agent_loader import default_agent_config
+
+        self._resolving(monkeypatch, default_agent_config())
+        config, prompt = await sentiment_module._scorer()
+        assert prompt == sentiment_module.SENTIMENT_SYSTEM_PROMPT
+        assert config.model == settings.AI_MODEL
+
+    async def test_a_batch_resolves_it_once_and_records_its_model(
+        self, session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from app.services.ai.domains.chat.agent_loader import AgentConfig
+
+        agent = AgentConfig(
+            slug=sentiment_module.SENTIMENT_AGENT_SLUG,
+            name="Sentiment",
+            system_prompt="Rate it.",
+            model_id="qwen3:4b",
+            temperature=0.0,
+            max_tokens=400,
+        )
+        asked = self._resolving(monkeypatch, agent)
+        _stub_llm(monkeypatch)
+        await _add_conversation(session, "c1")
+        await _add_conversation(session, "c2")
+        assert (await score_unscored_conversations(session=session))["scored"] == 2
+        assert len(asked) == 1
+        rows = (await session.exec(select(SentimentAnalysis))).all()
+        assert {row.model_id for row in rows} == {"qwen3:4b"}
 
 
 class TestFailureIsolation:

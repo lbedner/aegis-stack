@@ -39,6 +39,11 @@ from app.components.web_frontend.rendering import with_query
 {%- endif %}
 from app.components.web_frontend.routes import overseer as overseer_routes
 from app.components.web_frontend.routes.partials import overseer_code as overseer_code_partials
+{%- if include_database %}
+from app.components.web_frontend.routes.partials import (
+    overseer_database as overseer_database_partials,
+)
+{%- endif %}
 from app.components.web_frontend.routes.partials import overseer_errors as overseer_errors_partials
 from app.components.web_frontend.routes.partials import overseer_runtime as overseer_runtime_partials
 {%- if include_scheduler %}
@@ -188,6 +193,9 @@ router.include_router(overseer_server_partials.router)
 router.include_router(overseer_server_partials.load_tests_router)
 router.include_router(overseer_server_partials.requests_router)
 router.include_router(overseer_runtime_partials.router)
+{%- if include_database %}
+router.include_router(overseer_database_partials.router)
+{%- endif %}
 {%- if include_blog %}
 router.include_router(overseer_blog_partials.router)
 {%- endif %}

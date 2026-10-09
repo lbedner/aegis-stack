@@ -15,6 +15,10 @@ registries exist only with a persistence backend.
 
 from typing import Any
 
+from app.core.db import release_lock
+from app.core.model_picker import display_title, group_models
+
+from . import chat_models
 from .overseer_ai_common import PARTIALS, section_url
 from .rendering import drawer_state, form_number, status_cell
 
@@ -74,9 +78,12 @@ async def agent_context(db: Any, slug: str) -> dict[str, Any] | None:
     agent = await agent_row(db, slug)
     if agent is None:
         return None
+    # The catalog reads on its own connection: never behind this request's.
+    await release_lock(db)
     return {
         "agent": agent,
         "save_url": f"{PARTIALS}/agents/{slug}",
+        "model_choices": await model_choices(agent.get("model_id")),
         "grants": [
             ("Tools", ", ".join(agent.get("tools") or []) or None),
             ("Memory modules", ", ".join(agent.get("memory_modules") or []) or None),
@@ -87,6 +94,27 @@ async def agent_context(db: Any, slug: str) -> dict[str, Any] | None:
             ("Code mode", "On" if agent.get("code_mode") else None),
         ],
     }
+
+
+async def model_choices(current: str | None) -> list[dict[str, Any]]:
+    """The models an agent can run on, grouped by vendor as the chat's
+    picker groups them (``chat_models.catalog``); its own model kept, first,
+    when the catalog no longer lists it, so saving does not drop it."""
+    models = await chat_models.catalog("chat")
+    groups = [
+        {
+            "label": vendor,
+            "options": [
+                {"id": m["model_id"], "name": display_title(m, under_vendor=vendor)}
+                for m in rows
+            ],
+        }
+        for vendor, rows in group_models(models)
+    ]
+    if current and all(m["model_id"] != current for m in models):
+        unlisted = {"id": current, "name": f"{current} (not in the catalog)"}
+        groups.insert(0, {"label": "Chosen", "options": [unlisted]})
+    return groups
 
 
 def parse_agent_form(form: dict[str, str]) -> dict[str, Any]:

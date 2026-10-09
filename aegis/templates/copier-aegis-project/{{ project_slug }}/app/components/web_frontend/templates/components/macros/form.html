@@ -46,17 +46,23 @@ bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-
 
 
 {# A native select. ``options`` are objects or dicts with ``id`` and
-   ``name``; ``blank`` is the "no filter" label (``None`` for no blank
-   choice); ``selected`` the current id. ``label`` wraps it inline for a
-   filter bar; ``block`` lays it out full-width inside a ``field()``. #}
-{% macro select(name, options, selected=None, blank="All", label=None, block=False) %}
+   ``name``, or, ``grouped``, ``{"label", "options"}`` groups of them (an
+   optgroup each); ``blank`` is the "no filter" label (``None`` for no
+   blank choice), chosen while nothing is; ``selected`` the current id.
+   ``label`` wraps it inline for a filter bar; ``block`` lays it out
+   full-width inside a ``field()``. #}
+{% macro select(name, options, selected=None, blank="All", label=None, block=False, grouped=False) %}
 {% if label %}<label class="inline-flex items-center gap-2 text-xs text-aegis-muted"><span>{{ label }}</span>{% endif %}
 <select name="{{ name }}" class="{{ _control_classes }} select-caret pr-8{% if block %} block w-full mt-1{% endif %}">
-  {% if blank is not none %}<option value="">{{ blank }}</option>{% endif %}
-  {% for option in options %}
+  {% if blank is not none %}<option value="" {% if not selected %}selected{% endif %}>{{ blank }}</option>{% endif %}
+  {% for group in (options if grouped else [{"label": none, "options": options}]) %}
+  {% if group.label is not none %}<optgroup label="{{ group.label }}">{% endif %}
+  {% for option in group.options %}
   {% set oid = option["id"] if option is mapping else option.id %}
   {% set oname = option["name"] if option is mapping else option.name %}
   <option value="{{ oid }}" {% if selected is not none and oid == selected %}selected{% endif %}>{{ oname }}</option>
+  {% endfor %}
+  {% if group.label is not none %}</optgroup>{% endif %}
   {% endfor %}
 </select>
 {% if label %}</label>{% endif %}

@@ -5203,6 +5203,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#the-projects-source-in-htmx-overseer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The project's source in HTMX Overseer
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#how-it-works" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -5767,6 +5778,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#the-projects-source-in-htmx-overseer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The project's source in HTMX Overseer
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#how-it-works" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -5897,6 +5919,42 @@ survives Docker log rotation even when those source logs are no longer available
 replace the grouped list. A reconnect rebuilds from retained state, including
 after notification trimming. Server reconciliation every 15 seconds removes
 quietly expired results. An open occurrence is preserved until navigation.</p>
+<h2 id="the-projects-source-in-htmx-overseer">The project's source in HTMX Overseer</h2>
+<p>Open <strong>Code</strong> at <code>/overseer/code</code> to browse the project's source, read-only.
+The tree on the left holds its folders and files. Click a file to open it
+beside the tree, highlighted, with line numbers. Only the file pane changes, so
+the tree keeps its scroll and the folders you opened. The address names the
+file (<code>/overseer/code?file=app/main.py</code>), and every line has its own anchor
+(<code>#L-42</code>), so a link can land on a line. An error's drawer on Errors opens with
+<strong>In your code</strong>: every frame of its stack trace in the app's own code
+(<code>app/...</code>), where it broke first, each a link to its line here. A traceback on
+Logs names the first of them beside it. In the trace itself those frames are
+links too, and a library's frames are dimmed.</p>
+<p>Click a name in a Python file and a small panel opens right beside it: where
+the name is defined and every line that names it, each a link. Click
+elsewhere or press Esc to close it. The index reads the source with
+<code>ast</code> (nothing is imported): a name defined at a module's top level, or
+imported, resolves, directly or through its module (<code>store.put</code>); one reached
+through an object (<code>self.store.put</code>), and a library's, do not.</p>
+<p>The chips above the tree narrow it to one component or service: its files
+wherever they live (its service folder, its API, its Overseer page, its
+tests), every folder down to them open, and a count of how many files sit in
+how many folders. A file belongs to one when its name, or the name of the page
+it shows on (the cache's is <code>redis</code>), is a whole word in the path. The folders
+in the path above an open file are links too: each narrows the tree to that
+folder. The box above the tree (Cmd-P or
+Ctrl-P) jumps to any file by name. Above the file, its path says which source
+it is: the deployed build's commit (<code>at abc1234</code>), or <code>working tree</code> in dev,
+where the files are the ones you are editing.</p>
+<p>Only source is listed or served: Python, templates, styles, scripts, docs and
+configuration files. Hidden files and folders (<code>.env</code>, <code>.git</code>) are never
+listed or served, and neither are generated or installed folders
+(<code>__pycache__</code>, <code>node_modules</code>, <code>dist</code>), data, symlinks, files larger than
+512 KB, or anything that is not text.</p>
+<p>It is on in dev (<code>APP_ENV</code> of <code>dev</code>, <code>development</code> or <code>local</code>). Anywhere else it stays off until
+<code>OVERSEER_CODE_ENABLED</code> is turned on, in <code>.env</code> or on the Web Frontend page's
+<strong>Settings</strong> section, because the source is a map of the app. Like every
+Overseer page, it is for admins only when the stack has auth.</p>
 <h2 id="how-it-works">How It Works</h2>
 <pre class="mermaid"><code>sequenceDiagram
     participant C as Components/Services

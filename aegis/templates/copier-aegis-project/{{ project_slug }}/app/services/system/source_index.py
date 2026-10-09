@@ -169,16 +169,28 @@ class Index:
         except (OSError, SyntaxError, ValueError):
             return None
 
+    def _texts(self) -> Iterator[tuple[str, str]]:
+        """Each module's name and source; one gone or unreadable is skipped."""
+        for name, path in self.paths.items():
+            if (mtime := self._mtime(path)) is None:
+                continue
+            try:
+                text = _text(self.root, path, mtime)
+            except OSError:
+                continue
+            yield name, text
+
+    def warm(self) -> None:
+        """Read every file now, ahead of the first ``naming``, which reads
+        them all: the reads, not the parsing, are most of a cold click."""
+        for _ in self._texts():
+            pass
+
     def naming(self, word: str) -> Iterator[Module]:
         """The modules whose source has ``word`` in it, the only ones a
         reference to it can be in."""
-        for name, path in self.paths.items():
-            mtime = self._mtime(path)
-            try:
-                found = mtime is not None and word in _text(self.root, path, mtime)
-            except OSError:
-                continue
-            if found and (module := self.get(name)) is not None:
+        for name, text in self._texts():
+            if word in text and (module := self.get(name)) is not None:
                 yield module
 
 

@@ -127,7 +127,9 @@ class TestCpuBound:
 
         async def go() -> None:
             beat = asyncio.create_task(ticker())
-            await concurrency.cpu_bound(time.sleep, 0.2)  # holds its thread, not the loop
+            await concurrency.cpu_bound(
+                time.sleep, 0.2
+            )  # holds its thread, not the loop
             beat.cancel()
 
         asyncio.run(go())
@@ -149,3 +151,36 @@ class TestCpuBound:
 
         asyncio.run(go())
         assert most == 1
+
+
+class TestBackground:
+    async def test_the_task_is_held_until_it_ends(self) -> None:
+        """The loop keeps only a weak reference: an unheld task can be
+        collected before it runs."""
+        done = asyncio.Event()
+
+        async def work() -> None:
+            await asyncio.sleep(0)
+            done.set()
+
+        task = concurrency.background(work())
+        assert task in concurrency._background
+        await done.wait()
+        await asyncio.sleep(0)
+        assert task not in concurrency._background
+
+    async def test_a_failure_is_logged(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        logged: list[BaseException | None] = []
+        monkeypatch.setattr(
+            concurrency.logger,
+            "error",
+            lambda *_, exc_info=None, **__: logged.append(exc_info),
+        )
+
+        async def work() -> None:
+            raise ValueError("boom")
+
+        task = concurrency.background(work())
+        await asyncio.gather(task, return_exceptions=True)
+        await asyncio.sleep(0)
+        assert [type(e) for e in logged] == [ValueError]

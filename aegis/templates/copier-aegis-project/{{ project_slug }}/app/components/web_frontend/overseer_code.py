@@ -8,25 +8,27 @@ or folder (``.env``, ``.git``), one generated, installed or holding data, a
 link, or a file that is not source. Outside dev it is off until an admin
 turns it on (``OVERSEER_CODE_ENABLED``): the source is a map of the app."""
 
+import asyncio
+import html
+import os
+import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from functools import cache
-import html
-import os
-from pathlib import Path, PurePosixPath
-import re
+from pathlib import PurePosixPath
 from typing import Any
 
 from markupsafe import Markup, escape
 
+from app.core.concurrency import background
 from app.core.config import settings
 from app.services.system import source_index, ui_deployments, ui_runtime
 from app.services.system.errors.fingerprint import FRAME
 from app.services.system.models import ComponentStatus
 from app.services.system.patterns import PROJECT_ROOT
 
-from .overseer_nav import NavItem, SectionRequest
 from .filters import LINE_ANCHOR
+from .overseer_nav import NavItem, SectionRequest
 from .rendering import templates, with_query
 
 SECTIONS = ((None, {"code": "Code"}),)
@@ -291,11 +293,31 @@ def read(path: str) -> str | None:
         return None
 
 
+def _index() -> source_index.Index:
+    """The tree's Python files, for a name to be looked up across."""
+    python = [p for p in files(tree()) if p.endswith(".py")]
+    return source_index.Index(PROJECT_ROOT, python)
+
+
+def warm() -> None:
+    _index().warm()
+
+
+_warming: asyncio.Task[None] | None = None
+
+
+def warm_in_background() -> None:
+    """``warm`` in a thread, once at a time, so the page's first click
+    answers as fast as the rest."""
+    global _warming
+    if _warming is None or _warming.done():
+        _warming = background(asyncio.to_thread(warm))
+
+
 def symbol_context(path: str, line: int, col: int) -> dict[str, Any]:
     """The name at ``line``:``col`` of ``path``: where it is defined and
     every line naming it, across the tree's Python files."""
-    python = [p for p in files(tree()) if p.endswith(".py")]
-    modules = source_index.Index(PROJECT_ROOT, python)
+    modules = _index()
     found = source_index.symbol_at(modules, path, line, col) if shown(path) else None
     name, symbol = found or ("", None)
     return {
@@ -327,6 +349,7 @@ async def section_context(
     }
     if req.target == PANE:  # a click in the tree: the file alone
         return context
+    warm_in_background()
     nodes = tree()
     listed = pruned(nodes, scope.keeps) if scope != Scope() else nodes
     return context | {

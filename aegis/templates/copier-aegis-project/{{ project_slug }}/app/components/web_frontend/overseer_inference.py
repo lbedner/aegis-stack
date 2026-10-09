@@ -21,6 +21,7 @@ from app.components.inference.activity import get_ollama_activity
 from app.components.inference.formatting import format_quantization
 from app.components.inference.ollama import OllamaClient, OllamaServerStatus
 from app.core import series
+from app.core.concurrency import background
 from app.core.formatting import format_relative_time
 from app.core.log import logger
 from app.core.model_picker import format_context_window
@@ -53,7 +54,6 @@ MODELS_INTERVAL_SECONDS = series.TICK_SECONDS
 # model -> the action running on it, and the action that last failed.
 _moving: dict[str, str] = {}
 _failed: dict[str, str] = {}
-_tasks: set[asyncio.Task[None]] = set()
 
 
 async def _finish(action: str, model: str) -> None:
@@ -78,10 +78,7 @@ def start(action: str, model: str) -> asyncio.Task[None]:
     """Run ``action`` on ``model`` in the background; the table shows it."""
     _moving[model] = action
     _failed.pop(model, None)
-    task = asyncio.create_task(_finish(action, model))
-    _tasks.add(task)
-    task.add_done_callback(_tasks.discard)
-    return task
+    return background(_finish(action, model))
 
 
 def _overview(server: OllamaServerStatus, base_url: str) -> dict[str, Any]:

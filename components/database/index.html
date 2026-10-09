@@ -1473,6 +1473,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Database Activity">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#transactions-open-right-now" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Transactions open right now
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -5934,6 +5951,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Database Activity">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#transactions-open-right-now" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Transactions open right now
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -6147,7 +6181,15 @@ drifted, replay the revisions onto a scratch database and diff:</p>
 </ul>
 <h2 id="database-activity">Database Activity</h2>
 <p>A transaction held longer than <code>DATABASE_SLOW_TRANSACTION_SECONDS</code> (2 seconds by default), and a statement that found the database locked, are recorded with the process and the line of app code behind each. They show on the Database page's <strong>Activity</strong> tab in the Overseer and the Flet dashboard, and in the log.</p>
-<p>On SQLite every write takes the database's one write lock and waits up to 30 seconds for it, so <code>database is locked</code> means some other transaction held the lock that long. The Activity tab names it: usually a session kept open across slow work (an LLM call, a provider request, a long stream). The fix stays local: close the session before the slow call, or commit sooner.</p>
+<p>On SQLite every write takes the database's one write lock and waits up to 30 seconds for it, so <code>database is locked</code> means some other transaction held the lock that long. The Activity tab names it: usually a session kept open across slow work (an LLM call, a provider request, a long stream). The fix stays local: end the transaction before the slow call with <code>release_lock(session)</code> from <code>app.core.db</code>, or commit sooner.</p>
+<p>A request that opens a second transaction while it still holds one waits out those 30 seconds behind itself and then fails. That is recorded the moment it happens, as <strong>Waits on itself</strong>, naming the line that opened the second one: end the first (<code>release_lock</code>) before calling code that opens a session of its own.</p>
+<h3 id="transactions-open-right-now">Transactions open right now</h3>
+<p>The Overseer's Database page has a <strong>Transactions</strong> section, live while it is open:</p>
+<ul>
+<li><strong>PostgreSQL</strong>: every connection to the database (<code>pg_stat_activity</code>), the longest open transaction first, with its process (each connection names the process that opened it, such as <code>worker:268</code>), its state, how long its transaction has been open, what it is waiting on, which connections block it, and its query. <strong>End</strong> closes one connection and rolls its transaction back (<code>pg_terminate_backend</code>); it confirms first, is for admins, and is audited.</li>
+<li><strong>SQLite</strong>: SQLite cannot say who holds its lock, so each process publishes the transactions it has held for more than a second, with the line of app code holding each right now (what it is waiting on, a model call, say) and the container it runs in. SQLite cannot end another process's transaction, so <strong>Restart</strong> restarts the container holding it.</li>
+</ul>
+<p>A transaction open past <code>DATABASE_SLOW_TRANSACTION_SECONDS</code> shows red.</p>
 <p>Records live for an hour, in Redis when the stack has it (the webserver then shows what the worker and scheduler recorded too), otherwise in the process that recorded them. <code>DATABASE_SLOW_TRANSACTION_SECONDS=0</code> turns it off; it is also on the Database page's Settings section and Overseer &gt; Settings. The engine's own parameters (PostgreSQL settings, SQLite PRAGMAs) are the page's <strong>Engine</strong> section.</p>
 <h2 id="testing">Testing</h2>
 <p>The component includes test fixtures for database testing:</p>

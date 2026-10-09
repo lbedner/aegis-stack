@@ -5957,7 +5957,7 @@
 </tr>
 <tr>
 <td><code>model_id</code></td>
-<td>Optional model pin. <code>NULL</code> means "use the service's active model", so the default agent tracks your configured provider</td>
+<td>Optional model pin. <code>NULL</code> means "use the service's active model", so the default agent tracks your configured provider. In the Overseer's agent editor it is picked from the models this install can call, grouped by vendor</td>
 </tr>
 <tr>
 <td><code>temperature</code>, <code>max_tokens</code></td>
@@ -6028,10 +6028,11 @@
 <h2 id="knowledge-base-scoping">Knowledge Base Scoping</h2>
 <p>When RAG is enabled (<code>ai[...,rag]</code>), an agent's <code>knowledge_base_ids</code> lists the collections it may search. Retrieval merges results across the scope and ranks by similarity; an explicitly requested collection inside the scope narrows the search to just it, and a request outside the scope is refused with a log line. An empty scope keeps the unrestricted single-collection behavior. The <code>knowledge_base</code> and <code>knowledge_base_source</code> tables track collection metadata and per-source ingestion state, including the chunking preset (<code>paragraph</code>, <code>sentence</code>, <code>fixed</code>, <code>code</code>).</p>
 <h2 id="sentiment-analysis">Sentiment Analysis</h2>
-<p>Persistence-backed projects ship a batch job that scores each conversation with the configured model: user sentiment (positive, neutral, negative, frustrated), a score from -1.0 to 1.0, assistant performance, and detected issues. The job is registered on the scheduler but <strong>off by default</strong>, because every scored conversation costs model tokens:</p>
+<p>Persistence-backed projects ship a batch job that scores each conversation: user sentiment (positive, neutral, negative, frustrated), a score from -1.0 to 1.0, assistant performance, and detected issues. The job is registered on the scheduler but <strong>off by default</strong>, because every scored conversation costs model tokens:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nv">AI_SENTIMENT_ENABLED</span><span class="o">=</span><span class="nb">true</span><span class="w">    </span><span class="c1"># enable scoring</span>
 </span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="nv">AI_SENTIMENT_BATCH_LIMIT</span><span class="o">=</span><span class="m">20</span><span class="w">  </span><span class="c1"># conversations per run</span>
 </span></code></pre></div>
+<p>The job runs as the built-in <code>sentiment</code> agent, seeded beside the default one: its model, temperature, max tokens and prompt are edited like any agent's. It starts on the service's active model; scoring is a short, structured task, so a small fast model is usually the better pick, especially when the active model is a large local one whose cold start can outlast <code>AI_TIMEOUT_SECONDS</code>. With the agent removed or inactive, the job uses the built-in prompt on the active model. The job reads its batch, ends that database transaction, and only then calls the model, so a slow model never holds the database.</p>
 <p>Results land in the <code>sentiment_analysis</code> table (one verdict per conversation) and surface in the CLI and the dashboard analytics tab:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>my-app<span class="w"> </span>ai<span class="w"> </span>sentiment
 </span></code></pre></div>

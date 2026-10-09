@@ -5935,7 +5935,9 @@ the name is defined and every line that names it, each a link. Click
 elsewhere or press Esc to close it. The index reads the source with
 <code>ast</code> (nothing is imported): a name defined at a module's top level, or
 imported, resolves, directly or through its module (<code>store.put</code>); one reached
-through an object (<code>self.store.put</code>), and a library's, do not.</p>
+through an object (<code>self.store.put</code>), and a library's, do not. Opening Code
+reads the source in the background, so the first click answers as fast as the
+rest.</p>
 <p>The chips above the tree narrow it to one component or service: its files
 wherever they live (its service folder, its API, its Overseer page, its
 tests), every folder down to them open, and a count of how many files sit in

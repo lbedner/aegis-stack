@@ -31,3 +31,10 @@
 
 {# A column's cell renderer for data_table: a row's HTTP method(s). #}
 {% macro method_cell(value) %}{% for method in (value if value is not string else [value]) %}{{ method_tag(method) }}{% endfor %}{% endmacro %}
+
+{# A line of the project's source, linked to it in Overseer > Code:
+   ``app/core/storage.py:36`` (``overseer_code.line_url``). #}
+{% macro line_link(path, line) %}<a href="{{ line_url(path, line) }}" class="font-mono text-aegis-teal hover:underline">{{ path }}:{{ line }}</a>{% endmacro %}
+
+{# A traceback's frame in the app's own code (``overseer_code.own_frames``). #}
+{% macro own_frame(frame) %}{{ line_link(frame.path, frame.line) }}{% endmacro %}

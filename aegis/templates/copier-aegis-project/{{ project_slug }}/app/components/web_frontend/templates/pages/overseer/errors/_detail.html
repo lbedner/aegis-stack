@@ -1,5 +1,6 @@
 {% from "components/macros/layout.html" import code_block, dialog_title, facts %}
 {% from "components/macros/table.html" import pager as page_links %}
+{% from "pages/overseer/_macros.html" import own_frame %}
 <div id="error-detail" class="space-y-5">
   {{ dialog_title("Error occurrence") }}
   {% if error_note %}<p class="text-aegis-muted">{{ error_note }}</p>{% elif error_missing %}<p class="text-aegis-muted">This occurrence has expired or is no longer retained.</p>{% else %}{% set event = error_detail %}
@@ -11,7 +12,14 @@
     ("Runtime", event.service ~ " · " ~ event.container_name),
   ]) }}
   {% if event.truncated %}<p class="text-sm text-aegis-muted">Trace truncated to the retained payload limit.</p>{% endif %}{% if event.incomplete %}<p class="text-sm text-aegis-muted">Trace may be incomplete: collection ended or the source did not provide a terminal exception.</p>{% endif %}
-  {% if event.traceback %}{{ code_block(event.traceback, "Stack trace", lang="pytb", wrap=True) }}{% else %}<p class="text-sm text-aegis-muted">This error did not include a stack trace.</p>{% endif %}
+  {% set own = own_frames(event.traceback) %}
+  {% if own %}
+  <div data-own-frames>
+    <h3 class="micro-label text-aegis-muted mb-1">In your code</h3>
+    <ul class="space-y-1 text-xs">{% for frame in own %}<li>{{ own_frame(frame) }} <span class="text-aegis-muted">in {{ frame.function }}</span></li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+  {% if event.traceback %}{{ code_block(event.traceback, "Stack trace", lang="pytb", wrap=True)|code_frames }}{% else %}<p class="text-sm text-aegis-muted">This error did not include a stack trace.</p>{% endif %}
   {% if event.fields %}<dl class="text-xs font-mono space-y-2">{% for key, value in event.fields.items() %}<div><dt class="text-aegis-muted">{{ key }}</dt><dd class="text-aegis-text whitespace-pre-wrap break-words">{{ value }}</dd></div>{% endfor %}</dl>{% endif %}
   <a href="{{ error_logs_url }}" {{ hx_replace(error_logs_url, "#overseer-main") }} class="text-sm text-aegis-teal">Open service logs (last hour)</a>
   <h3 class="text-sm text-aegis-muted">All retained occurrences of this issue</h3>

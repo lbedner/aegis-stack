@@ -11,7 +11,7 @@ from typing import Annotated, Any, Literal
 from pydantic import Field, model_validator
 from pydantic_settings import SettingsConfigDict
 from app.core.configurable import Configurable, timezones
-from app.core.constants import ComponentName{% if include_worker %}, QueueName{% endif %}
+from app.core.constants import DEV_ENVS, AppEnv, ComponentName{% if include_worker %}, QueueName{% endif %}
 from app.core.settings_base import SettingsBase
 {% if include_ai and ai_voice %}from app.core.voice_settings import VoiceSettings{% endif %}
 {% if include_worker %}from app.core.queue_workers import DEFAULT_QUEUES, QueueWorker{% endif %}
@@ -61,7 +61,7 @@ class Settings(
     PUBLIC_BASE_URL: str = "http://localhost:8000"
 
     # Application environment: "dev" or "prod"
-    APP_ENV: str = "dev"
+    APP_ENV: str = AppEnv.DEV
 
     # API docs auth (HTTP Basic). When both are set, /docs /redoc /openapi.json
     # require these creds. When unset: open in dev, 404 in any other APP_ENV.
@@ -89,6 +89,11 @@ class Settings(
     # published port, so a project served anywhere needs no extra
     # configuration; set it explicitly for a container or a tunnel.
     API_BASE_URL: str = ""
+
+    @property
+    def is_dev(self) -> bool:
+        """Whether this is a development environment (``DEV_ENVS``)."""
+        return self.APP_ENV.lower() in DEV_ENVS
 
     @property
     def is_docker(self) -> bool:
@@ -179,6 +184,7 @@ class Settings(
     # in its SEO meta description; defaults to what you typed when
     # generating the project.
     PROJECT_DESCRIPTION: str = "{{ project_description }}"
+    OVERSEER_CODE_ENABLED: Annotated[bool, Configurable(ComponentName.WEB_FRONTEND, "Show the project's source on Overseer > Code outside dev (admins only)")] = False
 {%- endif %}
 {%- if include_mcp %}
 

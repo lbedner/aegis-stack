@@ -193,5 +193,4 @@ class EnvConfigService:
         Returns:
             True if APP_ENV is development/dev/local
         """
-        app_env = settings.APP_ENV.lower()
-        return app_env in ("development", "dev", "local")
+        return settings.is_dev

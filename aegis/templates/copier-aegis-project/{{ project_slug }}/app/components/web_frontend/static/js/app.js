@@ -92,6 +92,52 @@ function markCurrent(links, path) {
 }
 document.body.addEventListener('htmx:pushedIntoHistory', () => {
   markCurrent(document.querySelectorAll('#overseer-nav a[href]'), window.location.pathname);
+  // Overseer > Code swaps only its file: the tree's link is the address.
+  markCurrent(document.querySelectorAll('[data-code-tree] a[href]'), window.location.pathname + window.location.search);
+});
+
+// Cmd-P (Ctrl-P) on Overseer > Code jumps to a file by name, not print.
+document.addEventListener('keydown', (event) => {
+  const jump = document.querySelector('[data-code-jump]');
+  if (!jump || event.key !== 'p' || !(event.metaKey || event.ctrlKey)) return;
+  event.preventDefault();
+  jump.select();
+});
+
+// A name clicked in an Overseer > Code Python file peeks beside it (the
+// ``#code-peek`` popover): its definition and references. The line is the
+// clicked line's address (``data-line-prefix`` and its number), the column
+// how far into the line's source (its number left out) the name starts.
+function sourceColumn(line, token) {
+  const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+  let column = 0;
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (token.contains(node)) return column;
+    if (!node.parentElement.closest('.linenos')) column += node.length;
+  }
+  return null;
+}
+document.addEventListener('click', (event) => {
+  const pane = event.target.closest && event.target.closest('[data-code-symbol]');
+  const token = pane && event.target.closest('.highlight :is(.n, .nf, .nc, .nn)');
+  const prefix = pane && pane.dataset.linePrefix;
+  const line = token && token.closest(`[id^="${prefix}"]`);
+  if (!line || getSelection().toString()) return;
+  const column = sourceColumn(line, token);
+  if (column === null) return;
+  // The symbol URL names the open file; the click adds where in it.
+  const query = new URLSearchParams({ line: line.id.slice(prefix.length), col: column });
+  const peek = document.getElementById('code-peek');
+  htmx.ajax('GET', `${pane.dataset.codeSymbol}&${query}`, { target: peek, swap: 'innerHTML' }).then(() => {
+    Object.assign(peek.style, { position: 'fixed', inset: 'auto', margin: '0' });
+    peek.showPopover();
+    // Measured once shown: below the name, or above it near the bottom.
+    const at = token.getBoundingClientRect();
+    const below = at.bottom + 4 + peek.offsetHeight <= window.innerHeight;
+    const left = Math.max(8, Math.min(at.left, window.innerWidth - peek.offsetWidth - 8));
+    peek.style.top = `${below ? at.bottom + 4 : Math.max(8, at.top - 4 - peek.offsetHeight)}px`;
+    peek.style.left = `${left}px`;
+  });
 });
 
 // Server and network failures never swap (see the htmx-config
@@ -597,4 +643,4 @@ document.body.addEventListener('htmx:afterSwap', () => {
   applyMapFocus(document.getElementById('overview-stack'));
 });
 
-if (typeof module !== 'undefined') module.exports = { outsideClick, dismiss, navigates, markCurrent, rangeUrl, spanned, inView, splitMatches, mapFocus };
+if (typeof module !== 'undefined') module.exports = { outsideClick, dismiss, navigates, markCurrent, rangeUrl, spanned, inView, splitMatches, mapFocus, sourceColumn };

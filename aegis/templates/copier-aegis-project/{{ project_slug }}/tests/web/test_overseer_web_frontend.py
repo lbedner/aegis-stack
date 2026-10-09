@@ -43,10 +43,12 @@ def _get(client: TestClient, section: str = "") -> str:
     return response.text
 
 
-def test_sections_are_overview_and_routes(client: TestClient) -> None:
+def test_sections_are_overview_routes_and_its_settings(client: TestClient) -> None:
+    """Settings: whether Overseer > Code is on outside dev."""
     assert [text(a) for a in select(_get(client), "#overseer-subnav nav a")] == [
         "Overview",
         "Routes",
+        "Settings",
     ]
 
 

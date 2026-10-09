@@ -388,3 +388,24 @@ def test_a_click_pins_a_map_nodes_focus_until_escape_or_the_canvas() -> None:
     """Hover is a glance; a click keeps it while the pointer moves on.
     Escape, or a click on the empty canvas, lets it go."""
     assert run(PIN_HARNESS, APP_JS=APP_JS) == ["database", "database", "", ""]
+
+
+COLUMN = (
+    STUBS
+    + """
+const { sourceColumn } = require(APP_JS);
+// Line 8 of a file: its number, then ``    store.put(2)`` token by token.
+const text = (s, number = false) => ({ length: s.length, parentElement: { closest: () => number } });
+const nodes = [text('8', true), text('    '), text('store'), text('.'), text('put'), text('(2)')];
+global.NodeFilter = { SHOW_TEXT: 4 };
+document.createTreeWalker = () => { let i = -1; return { nextNode: () => nodes[++i] || null }; };
+const at = (node) => sourceColumn({}, { contains: (n) => n === node });
+console.log(JSON.stringify([at(nodes[4]), at(nodes[2]), at({})]));
+"""
+)
+
+
+def test_a_clicked_name_is_found_by_its_column_in_the_source() -> None:
+    """Overseer > Code asks where a name is by line and column: the column
+    counts the line's source only, never its number."""
+    assert run(COLUMN, APP_JS=APP_JS) == [10, 4, None]

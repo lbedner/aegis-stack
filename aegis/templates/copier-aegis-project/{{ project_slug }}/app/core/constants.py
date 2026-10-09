@@ -14,6 +14,17 @@ from pathlib import Path
 import tempfile
 
 
+class AppEnv(StrEnum):
+    """Where the app runs (``settings.APP_ENV``)."""
+
+    DEV = "dev"
+    PROD = "prod"
+
+
+# What ``APP_ENV`` reads as development, in the spellings people use.
+DEV_ENVS = frozenset({AppEnv.DEV, "development", "local"})
+
+
 class ComponentName(StrEnum):
     """Each infrastructure component's health check name: its key in the
     name registry (``ui.get_component_title``), in status and on the map."""

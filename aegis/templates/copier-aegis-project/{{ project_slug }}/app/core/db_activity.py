@@ -13,19 +13,20 @@ record from still leaves one.
 """
 
 import asyncio
-from collections.abc import Iterator
-from datetime import UTC, datetime
 import os
-from pathlib import Path
 import sys
 import time
+import uuid
+from collections.abc import Iterator
+from datetime import UTC, datetime
+from pathlib import Path
 from types import FrameType
 from typing import Any
-import uuid
 
 from sqlalchemy import Engine, event
 
 from app.core.cache import get_cache
+from app.core.concurrency import background
 from app.core.config import settings
 from app.core.log import logger
 
@@ -35,8 +36,6 @@ SHOWN = 50
 # The project root: a caller is the innermost frame in the app's own code.
 ROOT = Path(__file__).resolve().parents[2]
 DATABASE_LAYER = ("app/core/db.py", "app/core/db_activity.py")
-# Record writes in flight, held so they are not collected before they run.
-_writes: set[asyncio.Task[None]] = set()
 
 
 def watch(engine: Engine) -> None:
@@ -73,13 +72,11 @@ def _record(kind: str, seconds: float | None) -> None:
     }
     logger.warning("Database activity", **entry)
     try:
-        loop = asyncio.get_running_loop()
+        asyncio.get_running_loop()
     except RuntimeError:  # no loop to write from: the log line is the record
         return
     key = f"{PREFIX}{entry['at']}:{uuid.uuid4().hex[:8]}"
-    write = loop.create_task(get_cache().set(key, entry, KEEP_SECONDS))
-    _writes.add(write)
-    write.add_done_callback(_writes.discard)
+    background(get_cache().set(key, entry, KEEP_SECONDS))
 
 
 async def recent() -> list[dict[str, Any]]:

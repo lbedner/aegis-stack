@@ -3,14 +3,14 @@ a tree of folders and one file open beside it."""
 
 from pathlib import Path
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-import pytest
 
-from app.core.config import settings
-from app.core.constants import AppEnv
 from app.components.web_frontend import overseer_code
 from app.components.web_frontend.rendering import with_query
+from app.core.config import settings
+from app.core.constants import AppEnv
 from app.services.system.models import ComponentStatus
 from tests.web.dom import none, one, select, text
 from tests.web.overseer import CACHE, page_html, reported_only, sign_in, status_with
@@ -324,6 +324,38 @@ def test_a_python_file_offers_its_names(client: TestClient, project: Path) -> No
     one(pane, "#code-peek[popover]")
     markdown = one(page_html(client, f"{PAGE}?file=docs/index.md"), "#code-file")
     assert markdown.get("data-code-symbol") is None
+
+
+def test_opening_the_page_warms_the_index_and_a_swap_does_not(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    started: list[bool] = []
+    monkeypatch.setattr(
+        overseer_code, "warm_in_background", lambda: started.append(True)
+    )
+    page_html(client, PAGE)
+    assert started == [True]
+    client.get(
+        with_query(PAGE, file="app/main.py"),
+        headers={"HX-Request": "true", "HX-Target": overseer_code.PANE},
+    )
+    assert started == [True]
+
+
+def test_a_click_after_warming_reads_nothing(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, project: Path
+) -> None:
+    """The first click's every-use look-up reads the whole source: warming
+    has read it already."""
+    _write(project, SYMBOLS)
+    overseer_code.warm()
+
+    def unread(*_: object, **__: object) -> str:
+        raise AssertionError("read after warming")
+
+    monkeypatch.setattr(Path, "read_text", unread)
+    html = _symbol(client, "app/services/use.py", 7, 4)
+    assert len(select(html, "[data-symbol-references] a")) == 4
 
 
 def test_no_symbol_while_code_is_off(

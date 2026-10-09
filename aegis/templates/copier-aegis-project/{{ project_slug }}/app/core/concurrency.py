@@ -1,5 +1,6 @@
-"""Running independent work concurrently, with a ceiling (``fanout``), and
-CPU work off the event loop (``cpu_bound``).
+"""Running independent work concurrently, with a ceiling (``fanout``),
+CPU work off the event loop (``cpu_bound``), and work not waited for
+(``background``).
 
 The slow thing in this stack is rarely the server and rarely the event
 loop. It is a ``for`` loop over items that do not depend on each other,
@@ -23,9 +24,11 @@ thing each call site reinvents.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable, Iterable, Sequence
-from typing import NamedTuple, TypeVar
 import weakref
+from collections.abc import Awaitable, Callable, Coroutine, Iterable, Sequence
+from typing import NamedTuple, TypeVar
+
+from app.core.log import logger
 
 T = TypeVar("T")
 R = TypeVar("R")
@@ -115,3 +118,23 @@ async def cpu_bound(fn: Callable[..., R], *args: object) -> R:
     # thread runs on; hold the gate until the thread ends if timeouts pile up.
     async with _cpu_gate():
         return await asyncio.to_thread(fn, *args)
+
+
+# Work in flight that no one waits for, held so none is collected first.
+_background: set[asyncio.Task[None]] = set()
+
+
+def background(work: Coroutine[object, object, None]) -> asyncio.Task[None]:
+    """Run ``work`` without waiting for it. The loop keeps only a weak
+    reference to a task, so it is held here until it ends; a failure is
+    logged, never left as "exception was never retrieved"."""
+    task = asyncio.create_task(work)
+    _background.add(task)
+    task.add_done_callback(_ended)
+    return task
+
+
+def _ended(task: asyncio.Task[None]) -> None:
+    _background.discard(task)
+    if not task.cancelled() and (error := task.exception()) is not None:
+        logger.error("Background task failed", task=task.get_name(), exc_info=error)

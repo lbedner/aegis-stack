@@ -101,7 +101,9 @@ the name is defined and every line that names it, each a link. Click
 elsewhere or press Esc to close it. The index reads the source with
 `ast` (nothing is imported): a name defined at a module's top level, or
 imported, resolves, directly or through its module (`store.put`); one reached
-through an object (`self.store.put`), and a library's, do not.
+through an object (`self.store.put`), and a library's, do not. Opening Code
+reads the source in the background, so the first click answers as fast as the
+rest.
 
 The chips above the tree narrow it to one component or service: its files
 wherever they live (its service folder, its API, its Overseer page, its

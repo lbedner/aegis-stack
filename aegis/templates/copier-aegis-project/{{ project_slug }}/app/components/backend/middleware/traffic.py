@@ -25,9 +25,8 @@ Auto-discovered by ``backend_hooks`` because the file lives in
 
 from __future__ import annotations
 
-import asyncio
-from collections import Counter
 import time
+from collections import Counter
 from typing import Any
 
 from fastapi import FastAPI, Request, Response
@@ -35,9 +34,10 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
 from app.components.backend.security.rate_limit import get_client_ip
+from app.core.concurrency import background
 from app.core.config import settings
-from app.core.log import logger
 from app.core.key_family import KeyFamily
+from app.core.log import logger
 
 _BUCKET_SECONDS = 3600
 # Keep ~24h of hourly buckets; older ones are pruned (memory) or TTL'd (Redis).
@@ -240,18 +240,14 @@ def _build_monitor() -> TrafficMonitor:
 # Singleton - imported directly by the middleware and the traffic API.
 traffic_monitor = _build_monitor()
 
-# Hold references to in-flight record tasks so they aren't garbage-collected
-# mid-await (asyncio only keeps weak refs to tasks). Discarded on completion.
-_record_tasks: set[asyncio.Task[None]] = set()
-
 
 class TrafficMiddleware(BaseHTTPMiddleware):
     """Records each request's source IP into ``traffic_monitor``.
 
     Recording is fire-and-forget: the perf-metrics middleware can record
     synchronously because it's pure in-memory, but this one may touch Redis,
-    so it must never add I/O latency to the response. The task is tracked
-    (see ``_record_tasks``) and failures are swallowed inside ``record``.
+    so it must never add I/O latency to the response (``background``), and
+    failures are swallowed inside ``record``.
     """
 
     def __init__(self, app: ASGIApp) -> None:
@@ -265,11 +261,7 @@ class TrafficMiddleware(BaseHTTPMiddleware):
             # too - exactly the traffic you want to see when probed.
             if settings.TRAFFIC_MONITOR_ENABLED:
                 try:
-                    task = asyncio.create_task(
-                        traffic_monitor.record(get_client_ip(request))
-                    )
-                    _record_tasks.add(task)
-                    task.add_done_callback(_record_tasks.discard)
+                    background(traffic_monitor.record(get_client_ip(request)))
                 except Exception as e:
                     logger.debug(f"TrafficMiddleware: schedule failed: {e}")
 

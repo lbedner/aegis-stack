@@ -28,15 +28,16 @@ and the frontend falls back to the initial-letter avatar, the same way an
 unmatched merchant degrades everywhere else in this app.
 """
 
-import asyncio
 from datetime import timedelta
 
+from sqlmodel.ext.asyncio.session import AsyncSession
+
 from app.core.brand_icons import domain_of, fetch_icons
+from app.core.concurrency import background
 from app.core.time import utcnow
 from app.services.finance.domains.ledger import queries
 from app.services.finance.models import FinanceIcon
 from app.services.finance.utils import normalize_payee
-from sqlmodel.ext.asyncio.session import AsyncSession
 
 # Below this a "domain" is more likely noise than a brand; above it, the
 # string is a bank descriptor rather than a name ("INTEREST CHARGED TO
@@ -173,10 +174,7 @@ def _schedule_fill(domains: list[str]) -> None:
     if not fresh:
         return
     _IN_FLIGHT.update(fresh)
-    task = asyncio.create_task(_fill_icons(fresh))
-    # A render-path decoration is never worth an "exception was never
-    # retrieved" warning; failures were already logged/stored as misses.
-    task.add_done_callback(lambda t: t.exception())
+    background(_fill_icons(fresh))
 
 
 async def _fill_icons(domains: list[str]) -> None:

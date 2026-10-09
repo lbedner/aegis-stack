@@ -18,6 +18,7 @@ from app.services.system.models import ComponentStatus
 from app.services.system.ui import registry_key
 
 from . import (
+    overseer_code,
     overseer_container,
     overseer_database,
     overseer_deployments,
@@ -143,6 +144,7 @@ STANDALONE = {
     item.name: item
     for item in (
         overseer_patterns.ITEM,
+        overseer_code.ITEM,
         overseer_logs.ITEM,
         overseer_errors.ITEM,
         overseer_resources.ITEM,
@@ -155,12 +157,13 @@ STANDALONE = {
 
 def rail() -> list[NavItem]:
     """The sidebar's own pages, in its order (``_shell.html``): Secrets
-    only where it has no component page of its own."""
-    return [
-        item
-        for item in STANDALONE.values()
-        if item is not overseer_secrets.ITEM or overseer_secrets.url() == item.url
-    ]
+    only where it has no component page of its own, Code only where it is
+    on."""
+    hidden = {
+        overseer_secrets.ITEM.name: overseer_secrets.url() != overseer_secrets.ITEM.url,
+        overseer_code.ITEM.name: not overseer_code.enabled(),
+    }
+    return [item for item in STANDALONE.values() if not hidden.get(item.name)]
 
 
 
@@ -243,6 +246,7 @@ CONCERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
         (
             overseer_secrets.ITEM.name,
             overseer_patterns.ITEM.name,
+            overseer_code.ITEM.name,
             overseer_settings.ITEM.name,
             ComponentName.OBSERVABILITY,
         ),
@@ -366,6 +370,9 @@ def _with_settings(key: tuple[str, str], page: SectionedPage) -> SectionedPage:
 _PAGES: dict[tuple[str, str], SectionedPage] = {
     ("patterns", "patterns"): SectionedPage(
         "patterns", overseer_patterns.SECTIONS, overseer_patterns.section_context
+    ),
+    ("code", "code"): SectionedPage(
+        "code", overseer_code.SECTIONS, overseer_code.section_context, workspace=True
     ),
     ("logs", "logs"): SectionedPage(
         "logs", overseer_logs.SECTIONS, overseer_logs.section_context, workspace=True

@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 import pytest
 
 from app.components.web_frontend import overseer_sections
+from app.components.web_frontend.rendering import templates
 from app.core.constants import ComponentName, ServiceName
 from app.services.system.models import ComponentStatus
 from tests.web.dom import one, select, text
@@ -91,3 +92,13 @@ def test_collapse_sits_in_the_head_and_the_rest_in_one_menu(
             assert select(menu, f"[data-set-{setting}]")
         signed_in = text(one(menu, "summary")) != "Appearance"
         assert bool(select(menu, 'a[href="/logout"]')) == signed_in
+
+
+def test_every_entry_has_an_icon_of_its_own() -> None:
+    """AI and Inference both drew the sparkle: no two names share one."""
+    module = templates.env.get_template("components/macros/layout.html").module
+    names = [*ComponentName, *ServiceName]
+    drawn = {name: str(module.sidebar_icon(name)) for name in names}
+    default = str(module.sidebar_icon("unknown"))
+    own = [icon for icon in drawn.values() if icon != default]
+    assert len(own) == len(set(own))

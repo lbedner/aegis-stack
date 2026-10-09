@@ -45,13 +45,22 @@ HISTORY_COLUMNS = (
 NO_HISTORY = "Deploy history needs the deploy component and a database."
 
 
+def commit() -> str | None:
+    """The live build's commit, saying so when it had uncommitted changes;
+    None for a build no deploy stamped."""
+    if found := _BUILD.match(settings.BUILD_ID):
+        return found["commit"] + (
+            ", with uncommitted changes" if found["dirty"] else ""
+        )
+    return None
+
+
 async def now() -> list[tuple[str, str]]:
     """The live build as ``(label, value)`` facts."""
     build = settings.BUILD_ID
     facts = [("Build", f"{build}, not deployed" if build == LOCAL else build)]
-    if found := _BUILD.match(build):
-        dirty = ", with uncommitted changes" if found["dirty"] else ""
-        facts.append(("Commit", found["commit"] + dirty))
+    if live := commit():
+        facts.append(("Commit", live))
     if by := await _deployed_by(build):
         facts.append(("Deployed by", by))
     if started := await _live_since():

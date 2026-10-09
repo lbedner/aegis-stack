@@ -1,0 +1,22 @@
+{# A name clicked in Overseer > Code (overseer_code.symbol_context), peeking
+   beside it: where it is defined and every line naming it, each a link to
+   its line. #}
+{% from "pages/overseer/_macros.html" import line_link %}
+{% macro place(where) %}<div class="rounded px-2 py-1 text-xs hover:bg-aegis-border/20">{{ line_link(where.path, where.line) }}<span class="block font-mono text-aegis-muted truncate">{{ where.text }}</span></div>{% endmacro %}
+<div id="code-symbol" class="space-y-3">
+  <p class="font-mono text-xs text-aegis-text">{{ symbol_name or "No name here" }}</p>
+  {% if symbol_definition %}
+  <section data-symbol-definition>
+    <h3 class="micro-label text-aegis-muted mb-1">Defined at</h3>
+    {{ place(symbol_definition) }}
+  </section>
+  <section data-symbol-references>
+    <h3 class="micro-label text-aegis-muted mb-1">{{ symbol_references|length }} reference{{ "" if symbol_references|length == 1 else "s" }}</h3>
+    <div class="max-h-64 overflow-y-auto">{% for where in symbol_references %}{{ place(where) }}{% endfor %}</div>
+  </section>
+  {% elif symbol_name %}
+  <p data-symbol-outside>Not defined in the project's source: a library's, Python's own, or one reached through an object, which this index does not follow.</p>
+  {% else %}
+  <p>Click a name in a Python file.</p>
+  {% endif %}
+</div>

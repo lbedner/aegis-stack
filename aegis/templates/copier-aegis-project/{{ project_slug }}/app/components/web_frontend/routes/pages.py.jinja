@@ -38,6 +38,7 @@ from app.components.web_frontend.overseer_access import LOGIN
 from app.components.web_frontend.rendering import with_query
 {%- endif %}
 from app.components.web_frontend.routes import overseer as overseer_routes
+from app.components.web_frontend.routes.partials import overseer_code as overseer_code_partials
 from app.components.web_frontend.routes.partials import overseer_errors as overseer_errors_partials
 from app.components.web_frontend.routes.partials import overseer_runtime as overseer_runtime_partials
 {%- if include_scheduler %}
@@ -213,6 +214,7 @@ router.include_router(overseer_mcp_partials.router)
 router.include_router(overseer_worker_partials.router)
 {%- endif %}
 router.include_router(overseer_errors_partials.router)
+router.include_router(overseer_code_partials.router)
 router.include_router(overseer_routes.router)
 {%- if include_auth %}
 

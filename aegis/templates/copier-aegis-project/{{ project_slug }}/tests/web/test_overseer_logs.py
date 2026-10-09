@@ -9,7 +9,9 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
 
-from app.components.web_frontend import overseer_logs
+from app.components.web_frontend import overseer_code, overseer_logs
+from app.core.config import settings
+from app.services.system.patterns import PROJECT_ROOT
 from app.core.runtime import LogLine, parse_log_line
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_title
@@ -32,12 +34,20 @@ def _at(second: int, text: str) -> LogLine:
     return parse_log_line(f"2026-10-03T20:45:{second:02d}.000000000Z {text}", "stdout")
 
 
+# The error line's traceback: Python's own frame, one in the app's own code,
+# then a library's.
+TRACE = [
+    "Traceback (most recent call last):",
+    '  File "<frozen runpy>", line 88, in _run_code',
+    f'  File "{PROJECT_ROOT}/app/core/log.py", line 36, in put',
+    '  File "/opt/venv/lib/python3.14/site-packages/redis/client.py", line 5, in send',
+    "OSError: disk full",
+]
 LINES = {
     REDIS.name: [
         _at(1, json.dumps({"level": "info", "event": "Ready to accept connections"})),
         _at(2, json.dumps({"level": "error", "event": "Write failed", "key": "jobs"})),
-        _at(3, "Traceback (most recent call last):"),
-        _at(3, "OSError: disk full"),
+        *(_at(3, line) for line in TRACE),
     ]
 }
 
@@ -81,6 +91,17 @@ def test_the_lines_read_newest_first_with_level_fields_and_traceback(
     assert "OSError: disk full" in text(trace)
     assert text(one(trace, ".highlight .gr")) == "OSError"
     none(failed, "details")
+    # The app's own frame links to its line in Overseer > Code; a library's
+    # does not.
+    url = overseer_code.line_url("app/core/log.py", 36)
+    own, frame = select(trace, "a")
+    assert frame.get("href") == url
+    assert "log.py" in text(frame)
+    # The innermost frame in the app's own code, named beside "Traceback",
+    # and the library's frames dimmed in the trace.
+    assert own.get("href") == url and text(own) == "app/core/log.py:36"
+    dimmed = [text(f) for f in select(trace, ".library-frame")]
+    assert ["frozen runpy" in dimmed[0], "redis/client.py" in dimmed[1]] == [True, True]
     # New lines join at the top, where the newest already is.
     assert one(html, "#logs-lines").get("hx-swap") == "afterbegin"
 
@@ -102,7 +123,7 @@ def test_every_cell_copies_what_it_shows(client: TestClient) -> None:
         "20:45:02",
         REDIS.name,
         "Write failed",
-        "Traceback (most recent call last):\nOSError: disk full",
+        "\n".join(TRACE),
     ]
 
 
@@ -558,3 +579,10 @@ def test_attributed_logs_put_dot_first_and_keep_metadata_in_expanded_row(
     details = one(row, "[data-log-metadata]")
     assert "log-trace" in details.get("class")
     assert all(f"{key}={value}" in text(details) for key, value in fields.items())
+
+
+def test_a_frame_links_only_while_code_is_on(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "APP_ENV", "prod")
+    none(one(page_html(client, PAGE), "[data-log-trace]"), "a")

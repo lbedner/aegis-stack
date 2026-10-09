@@ -83,6 +83,48 @@ replace the grouped list. A reconnect rebuilds from retained state, including
 after notification trimming. Server reconciliation every 15 seconds removes
 quietly expired results. An open occurrence is preserved until navigation.
 
+## The project's source in HTMX Overseer
+
+Open **Code** at `/overseer/code` to browse the project's source, read-only.
+The tree on the left holds its folders and files. Click a file to open it
+beside the tree, highlighted, with line numbers. Only the file pane changes, so
+the tree keeps its scroll and the folders you opened. The address names the
+file (`/overseer/code?file=app/main.py`), and every line has its own anchor
+(`#L-42`), so a link can land on a line. An error's drawer on Errors opens with
+**In your code**: every frame of its stack trace in the app's own code
+(`app/...`), where it broke first, each a link to its line here. A traceback on
+Logs names the first of them beside it. In the trace itself those frames are
+links too, and a library's frames are dimmed.
+
+Click a name in a Python file and a small panel opens right beside it: where
+the name is defined and every line that names it, each a link. Click
+elsewhere or press Esc to close it. The index reads the source with
+`ast` (nothing is imported): a name defined at a module's top level, or
+imported, resolves, directly or through its module (`store.put`); one reached
+through an object (`self.store.put`), and a library's, do not.
+
+The chips above the tree narrow it to one component or service: its files
+wherever they live (its service folder, its API, its Overseer page, its
+tests), every folder down to them open, and a count of how many files sit in
+how many folders. A file belongs to one when its name, or the name of the page
+it shows on (the cache's is `redis`), is a whole word in the path. The folders
+in the path above an open file are links too: each narrows the tree to that
+folder. The box above the tree (Cmd-P or
+Ctrl-P) jumps to any file by name. Above the file, its path says which source
+it is: the deployed build's commit (`at abc1234`), or `working tree` in dev,
+where the files are the ones you are editing.
+
+Only source is listed or served: Python, templates, styles, scripts, docs and
+configuration files. Hidden files and folders (`.env`, `.git`) are never
+listed or served, and neither are generated or installed folders
+(`__pycache__`, `node_modules`, `dist`), data, symlinks, files larger than
+512 KB, or anything that is not text.
+
+It is on in dev (`APP_ENV` of `dev`, `development` or `local`). Anywhere else it stays off until
+`OVERSEER_CODE_ENABLED` is turned on, in `.env` or on the Web Frontend page's
+**Settings** section, because the source is a map of the app. Like every
+Overseer page, it is for admins only when the stack has auth.
+
 ## How It Works
 
 ```mermaid

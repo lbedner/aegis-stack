@@ -15,6 +15,7 @@
 {% set paths = {
   "overview": "M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1v-9.5Z",
   "patterns": "M4 4h6v6H4z M14 4h6v6h-6z M4 14h6v6H4z M17 14v6 M14 17h6",
+  "code": "M8 7l-5 5 5 5 M16 7l5 5-5 5 M14 4l-4 16",
   "secrets": "M15.5 7.5a3.5 3.5 0 1 1-4.95 3.18L3 18.25V21h2.75v-1.75h1.75V17.5h1.75l1.6-1.6A3.5 3.5 0 0 1 15.5 7.5Z M16.5 10.5h.01",
   "settings": "M4 6h16 M4 12h16 M4 18h16 M9 4v4 M15 10v4 M7 16v4",
   "logs": "M4 5h16v14H4z M7 9h6 M7 12h10 M7 15h8",
@@ -30,7 +31,7 @@
   "storage": "M4 4h16v4H4z M5 8v12h14V8 M10 12h4",
   "ingress": "M3 7h16 M15 3l4 4-4 4 M21 17H5 M9 13l-4 4 4 4",
   "observability": "M3 20V4 M3 20h18 M6 15l4-4 3 2 5-6 M16 7h2v2",
-  "ollama": "M12 2l2.2 6.8L21 11l-6.8 2.2L12 20l-2.2-6.8L3 11l6.8-2.2L12 2z M19 18v4 M17 20h4",
+  "ollama": "M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z M12 12l8-4.5 M12 12v9 M12 12 4 7.5",
   "auth": "M5 10h14v11H5z M8 10V7a4 4 0 0 1 8 0v3 M12 14v3",
   "ai": "M12 2l2.2 6.8L21 11l-6.8 2.2L12 20l-2.2-6.8L3 11l6.8-2.2L12 2z M19 18v4 M17 20h4",
   "comms": "M4 4h16v12H9l-5 4V4z M7 8h10 M7 12h7",
@@ -524,26 +525,26 @@
 </button>
 {% endmacro %}
 
-{# A block of source in the code block's box: highlighted for ``lang`` by
-   the ``highlight`` filter (``pytb`` a Python traceback), plain without
-   one. ``wrap`` wraps long lines (data such as a response body or a curl
-   command) rather than scrolling them, so the block never widens what
-   holds it. #}
-{% macro highlighted(text, lang=None, wrap=False) %}
+{# A block of source in the code block's box: highlighted by the
+   ``highlight`` filter for ``lang`` (``pytb`` a Python traceback) or for
+   ``filename``, plain without either; ``lines`` numbers it. ``wrap`` wraps
+   long lines (data such as a response body or a curl command) rather than
+   scrolling them, so the block never widens what holds it. #}
+{% macro highlighted(text, lang=None, wrap=False, filename=None, lines=False) %}
 {% set box = "code-block" ~ (" code-block--wrap" if wrap else "") %}
-{% if lang %}<div class="{{ box }}">{{ text|highlight(lang) }}</div>
+{% if lang or filename %}<div class="{{ box }}">{{ text|highlight(lang, filename, lines) }}</div>
 {% else %}<pre class="{{ box }}">{{ text }}</pre>{% endif %}
 {% endmacro %}
 
 {# ``highlighted`` (SQL, Python) with a copy button, which always takes the
    plain text. ``caption`` is a line above it, such as the file it came
    from. #}
-{% macro code_block(text, caption=None, lang=None, wrap=False) %}
+{% macro code_block(text, caption=None, lang=None, wrap=False, filename=None, lines=False) %}
 <div class="space-y-2 min-w-0">
   <div class="flex items-center justify-between gap-3">
     <p class="text-xxs text-aegis-muted truncate">{{ caption or "" }}</p>{{ copy_button(text) }}
   </div>
-  {{ highlighted(text, lang, wrap) }}
+  {{ highlighted(text, lang, wrap, filename, lines) }}
 </div>
 {% endmacro %}
 

@@ -134,20 +134,37 @@ def _safe_markdown() -> Any:
     )
 
 
-def highlight(code: str, lang: str | None = None) -> Markup:
+# The prefix of each numbered line's address: ``L-42`` (``linespans``).
+LINE_ANCHOR = "L"
+
+
+def highlight(
+    code: str, lang: str | None = None, filename: str | None = None, lines: bool = False
+) -> Markup:
     """Source as HTML, highlighted by Pygments (installed with rich) for
-    ``lang`` (``pytb`` a Python traceback), or a guess without one. The
-    one highlighter: markdown's fenced code, and a source on its own."""
+    ``lang`` (``pytb`` a Python traceback), or for ``filename``, or a guess.
+    ``lines`` numbers them, each at its own address (``#L-<n>``). The one
+    highlighter: markdown's fenced code, and a source on its own."""
     from pygments import highlight as render
     from pygments.formatters import HtmlFormatter
-    from pygments.lexers import get_lexer_by_name, guess_lexer
+    from pygments.lexers import get_lexer_by_name, get_lexer_for_filename, guess_lexer
     from pygments.util import ClassNotFound
 
     try:
-        lexer = get_lexer_by_name(lang) if lang else guess_lexer(code)
+        if lang:
+            lexer = get_lexer_by_name(lang)
+        elif filename:
+            lexer = get_lexer_for_filename(filename, code)
+        else:
+            lexer = guess_lexer(code)
     except ClassNotFound:
         lexer = guess_lexer(code)
-    return Markup(render(code, lexer, HtmlFormatter()))
+    formatter = (
+        HtmlFormatter(linenos="inline", linespans=LINE_ANCHOR)
+        if lines
+        else HtmlFormatter()
+    )
+    return Markup(render(code, lexer, formatter))
 
 
 _MARKDOWN = _safe_markdown()

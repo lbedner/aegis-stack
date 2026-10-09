@@ -44,6 +44,16 @@
     display: none;
   }
 
+  /* An Overseer workspace that fills the page below its header down to the
+     viewport's edge, so only its own panes scroll (Chat, Code). From md up
+     the heights subtract the shell's top padding (py-7, lg:py-10) and the
+     page header (6rem with its padding and margin), and the negative margin
+     gives back the shell's bottom padding. Below md the menus stack above
+     the content, so it takes most of a screen and the page scrolls to it. */
+  .overseer-fill {
+    @apply h-[80dvh] md:h-[calc(100dvh-8.5rem)] lg:h-[calc(100dvh-9.25rem)] md:-mb-7 lg:-mb-10 min-h-[24rem];
+  }
+
   /* A sidebar link, in either sidebar. The current page is marked by
      ``aria-current``, so markup never repeats the active/idle recipe. */
   .nav-link {
@@ -152,6 +162,17 @@
   /* A Python traceback: its heading and carets quiet, the exception in red. */
   .code-block .highlight :is(.gt, .pm) { @apply text-aegis-muted; }
   .code-block .highlight .gr { @apply text-error font-semibold; }
+  /* Line numbers (Overseer > Code): beside the source, never copied with it.
+     The line a link landed on (``#L-<n>``) is marked. */
+  .code-block .highlight .linenos { @apply text-aegis-muted select-none pr-4; }
+  .code-block .highlight [id^="L-"]:target { @apply bg-aegis-teal/15; }
+  /* A name in an Overseer > Code Python file: click for its definition. */
+  [data-code-symbol] .highlight :is(.n, .nf, .nc, .nn) { @apply cursor-pointer hover:underline; }
+  /* A traceback's frame in the app's own code, linked to its line. */
+  .code-block .highlight a.code-frame { @apply text-aegis-teal underline-offset-2 hover:underline; }
+  /* A library's frame steps back, so the app's own stand out. */
+  .code-block .highlight .library-frame,
+  .code-block .highlight .library-frame * { @apply text-aegis-muted; }
 
   .micro-label {
     @apply text-xxs;

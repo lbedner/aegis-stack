@@ -1,0 +1,66 @@
+{# Overseer > Code (overseer_code), filling the page below its header
+   (``.overseer-fill``): the tree and the file scroll, the page does not.
+   A click in the tree swaps the file alone, so the tree keeps its scroll
+   and the folders the viewer opened (app.js moves its mark); on a fresh
+   load the folders down to the file start open. The box above the tree
+   jumps to any file by name (Cmd-P, app.js). The chips scope the tree to
+   a component's or service's files, every folder down to them open, and
+   the path above the file to one of its folders: either swaps tree and
+   file together. A name clicked in a Python file peeks beside it: its
+   definition and references (app.js, ``_symbol.html``). #}
+{% from "components/macros/layout.html" import code_block %}
+{% from "components/macros/feedback.html" import empty_state %}
+{% from "components/macros/form.html" import range_form, search_input %}
+{% macro code_tree(nodes) %}
+<ul class="space-y-0.5">
+  {% for node in nodes %}
+  <li>
+    {% if node.children %}
+    <details {% if code_spread or code_path.startswith(node.path ~ "/") or (code_scope.folder ~ "/").startswith(node.path ~ "/") %}open{% endif %}>
+      <summary class="cursor-pointer select-none truncate rounded px-2 py-0.5 text-aegis-muted hover:text-aegis-text">{{ node.name }}</summary>
+      <div class="pl-3">{{ code_tree(node.children) }}</div>
+    </details>
+    {% else %}
+    {% set url = code_scope.url(node.path) %}
+    <a href="{{ url }}" data-path="{{ node.path }}" {{ hx_replace(url, "#" ~ code_page.pane) }}
+       {% if node.path == code_path %}aria-current="page"{% endif %}
+       class="nav-link py-0.5 px-2 text-xs font-mono truncate">{{ node.name }}</a>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% endmacro %}
+<div id="{{ code_page.view }}" class="overseer-fill flex flex-col gap-3">
+  {% if code_nodes is not none %}
+  <div class="shrink-0 flex flex-wrap items-center gap-3">
+    {{ range_form(code_owners(navigation), code_scope.owner, code_unscoped, "#" ~ code_page.view, field=code_page.owner, aria="Scope", id="code-scope") }}
+    {% if code_spread %}<p data-code-spread class="text-xs text-aegis-muted">{{ code_spread[0] }} files in {{ code_spread[1] }} folders</p>{% endif %}
+  </div>
+  {% endif %}
+  <div class="flex-1 min-h-0 flex gap-6">
+    {% if code_nodes is not none %}
+    <div class="w-64 shrink-0 flex flex-col gap-2 min-h-0">
+      <form {{ hx_replace(item.url, "#" ~ code_page.pane) }} hx-trigger="change">
+        {{ search_input(code_page.file, placeholder="Jump to file", attrs='list="code-files" data-code-jump') }}
+        <datalist id="code-files">{% for path in code_files %}<option value="{{ path }}"></option>{% endfor %}</datalist>
+      </form>
+      <nav data-code-tree aria-label="Project files"
+           class="flex-1 min-h-0 overflow-auto text-xs font-mono border border-aegis-border rounded p-2">
+        {{ code_tree(code_nodes) }}
+      </nav>
+    </div>
+    {% endif %}
+    <section id="{{ code_page.pane }}" aria-label="File" class="min-w-0 flex-1 overflow-auto"
+             {% if code_symbol %}data-code-symbol="{{ code_symbol }}" data-line-prefix="{{ code_page.line }}"{% endif %}>
+      {% if code_source is not none %}
+      {% if code_symbol %}<div id="code-peek" popover class="tooltip-panel w-[28rem] max-w-[90vw] p-3"></div>{% endif %}
+      {% set caption %}{% for name, url in code_crumbs %}<a href="{{ url }}" data-code-crumb {{ hx_replace(url, "#" ~ code_page.view) }} class="hover:text-aegis-text">{{ name }}</a>/{% endfor %}{{ code_path.rpartition("/")[2] }} · {{ code_version }}{% endset %}
+      {{ code_block(code_source, caption=caption, filename=code_path, lines=True) }}
+      {% elif code_path %}
+      <div data-code-missing>{{ empty_state(code_path ~ " is not shown here", "Only the project's source is: pick a file in the tree.") }}</div>
+      {% else %}
+      {{ empty_state("No file open", "Pick a file in the tree.") }}
+      {% endif %}
+    </section>
+  </div>
+</div>

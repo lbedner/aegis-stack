@@ -7,9 +7,11 @@
    copy keeps it), and a JSON line's fields as muted keys and their values;
    the page's search marks its matches (``filter_input``). One line each, cut at the edge: a click opens a
    line and Wrap opens them all (``.log-line`` in input.css), which shows its
-   traceback too, highlighted. A warning or worse marks its row's left edge in
-   its tone, and a debug line steps back. #}
+   traceback too, highlighted, named by where it broke in the app's own
+   code. A warning or worse marks its row's left edge in its tone, and a
+   debug line steps back. #}
 {% from "components/macros/layout.html" import badge, copy_icon, highlighted %}
+{% from "pages/overseer/_macros.html" import own_frame %}
 {% set _copy = "ml-1.5 align-middle text-aegis-muted hover:text-aegis-text opacity-0 group-hover/cell:opacity-100 focus:opacity-100" %}
 {% for row in rows %}
 {% set tone = tones.get(row.level) %}
@@ -37,8 +39,9 @@
     {% endif %}
     {% if row.trace %}
     <div data-log-trace class="log-trace mt-1">
-      <p class="text-xxs text-aegis-muted">Traceback{{ copy_icon(row.trace, _copy) }}</p>
-      <div class="mt-1">{{ highlighted(row.trace, "pytb", wrap=True) }}</div>
+      {% set own = own_frames(row.trace) %}
+      <p class="text-xxs text-aegis-muted">Traceback{% if own %} in {{ own_frame(own[0]) }}{% endif %}{{ copy_icon(row.trace, _copy) }}</p>
+      <div class="mt-1">{{ highlighted(row.trace, "pytb", wrap=True)|code_frames }}</div>
     </div>
     {% endif %}
   </td>

@@ -11,13 +11,25 @@ import json
 import re
 
 VERSION = 1
-FRAME = re.compile(r'File "([^"\n]+)", line \d+, in ([^\n]+)')
+# One frame of a Python traceback: its file, line and function.
+FRAME = re.compile(
+    r'File "(?P<path>[^"\n]+)", line (?P<line>\d+), in (?P<function>[^\n]+)'
+)
 UUID = re.compile(r"\b[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}\b")
 REQUEST = re.compile(r"\b(request[_ -]?id[=: ]+)\S+", re.IGNORECASE)
 
 
 def digest(parts: list[object]) -> str:
     return hashlib.sha256(json.dumps(parts, sort_keys=True).encode()).hexdigest()
+
+
+def app_path(path: str) -> str | None:
+    """A frame's file as the app's own (``app/...``), wherever it was
+    deployed; None for a library's or anything else outside ``app/``."""
+    path = path.replace("\\", "/")
+    if "/app/" in path:
+        return "app/" + path.split("/app/", 1)[1]
+    return path if path.startswith("app/") else None
 
 
 def fingerprint(
@@ -30,13 +42,11 @@ def fingerprint(
     app_service: str | None = None,
 ) -> str:
     frames = [
-        (path.replace("\\", "/"), function.strip())
-        for path, function in FRAME.findall(trace or "")
+        (frame["path"].replace("\\", "/"), frame["function"].strip())
+        for frame in FRAME.finditer(trace or "")
     ]
     application = [
-        ("app/" + path.split("/app/", 1)[1] if "/app/" in path else path, function)
-        for path, function in frames
-        if "/app/" in path or path.startswith("app/")
+        (own, function) for path, function in frames if (own := app_path(path))
     ]
     cause: object = (
         application

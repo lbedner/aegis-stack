@@ -8,10 +8,11 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
 
-from app.components.web_frontend import overseer_errors
+from app.components.web_frontend import overseer_code, overseer_errors
 from app.services.system import ui_errors
 from app.services.system.errors.models import ErrorIssue
 from app.services.system.models import ComponentStatus
+from app.services.system.patterns import PROJECT_ROOT
 from tests._error_store import occurrence
 from tests._fake_runtime import REDIS, STOPPED, WORKER, FakeRuntime, use_runtime
 from tests.web.dom import one, select, text
@@ -38,7 +39,7 @@ def errors_client(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> TestClient:
             update={
                 "traceback": (
                     "<script>alert(1)</script>\nTraceback (most recent call last):\n"
-                    '  File "app.py", line 1, in run\nValueError: bad'
+                    f'  File "{PROJECT_ROOT}/app/core/log.py", line 1, in run\nValueError: bad'
                 ),
                 "truncated": True,
                 "app_service": "ai",
@@ -80,6 +81,12 @@ def test_bookmarkable_detail_escapes_trace(errors_client: TestClient) -> None:
     trace = one(html, "#error-detail .code-block--wrap .highlight")
     assert text(one(trace, ".gr")) == "ValueError"
     assert "ValueError: bad" in text(trace)
+    frame = one(trace, "a")
+    assert frame.get("href") == overseer_code.line_url("app/core/log.py", 1)
+    # Named up front, above the trace: where it broke in the app's own code.
+    own = one(html, "#error-detail [data-own-frames] a")
+    assert own.get("href") == frame.get("href")
+    assert text(own) == "app/core/log.py:1"
     facts = [text(dt) for dt in select(html, "#error-detail dl dt")]
     assert "Application service" in facts and "Runtime" in facts
 

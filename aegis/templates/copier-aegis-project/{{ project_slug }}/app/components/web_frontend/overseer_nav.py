@@ -73,6 +73,9 @@ class SectionRequest:
     # its session cookie runs out and renews from the refresh token.
     session_id: str | None = None
     session_expires: datetime | None = None
+    # The element an htmx swap replaces (``HX-Target``), so a section can
+    # leave out what the swap discards; None for a whole page.
+    target: str | None = None
 
 
 @dataclass(frozen=True)

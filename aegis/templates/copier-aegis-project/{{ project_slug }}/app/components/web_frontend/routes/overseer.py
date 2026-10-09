@@ -38,6 +38,7 @@ from app.components.web_frontend.overseer_sections import (
     SECTIONED_PAGES,
     STANDALONE,
     page_for,
+    rail,
 )
 from app.components.web_frontend.rendering import render
 from app.services.system.health import last_system_status
@@ -118,7 +119,8 @@ async def _standalone(
 ) -> Response:
     """A ``STANDALONE`` page on one of its sections, its first by default."""
     page = SECTIONED_PAGES.get((group, group))
-    if page is None:
+    # A page the sidebar leaves out (Code, when it is off) is not served.
+    if page is None or group not in {item.name for item in rail()}:
         raise HTTPException(status_code=404)
     labels = list(page.labels)
     if section and section not in labels[1:]:
@@ -187,6 +189,7 @@ async def _overseer_detail(
             request.app.routes,
             session_id(request),
             session_expires(request),
+            request.headers.get("HX-Target"),
         )
         context |= {"page": page, "current": section}
         context |= await page.context(section, item.component, req)

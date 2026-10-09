@@ -106,11 +106,10 @@ def money_to_cents(raw: str | None) -> int | None:
 # inject markup. The mixin is registered LAST so it sits first in the
 # renderer's MRO, ahead of GFM's own tag filter.
 #
-# Fenced code is highlighted by Pygments (already installed with rich) for
-# its language, or a guess without one. marko's own codehilite extension is
-# not used: it passes ``key=value`` pairs from the fence line to Pygments'
-# formatter, which lets model markdown turn on ``full`` or ``cssfile``. The
-# formatter here takes no options from the text.
+# Fenced code is highlighted by ``highlight``. marko's own codehilite
+# extension is not used: it passes ``key=value`` pairs from the fence line to
+# Pygments' formatter, which lets model markdown turn on ``full`` or
+# ``cssfile``. The formatter here takes no options from the text.
 #
 # Built once at import: marko compiles its parser and renderer per
 # ``Markdown()``, and a chat thread renders one of these per message.
@@ -118,10 +117,6 @@ def _safe_markdown() -> Any:
     from marko import Markdown
     from marko.ext.gfm import GFM
     from marko.helpers import MarkoExtension
-    from pygments import highlight
-    from pygments.formatters import HtmlFormatter
-    from pygments.lexers import get_lexer_by_name, guess_lexer
-    from pygments.util import ClassNotFound
 
     class EscapeHTML:
         def render_html_block(self, element: Any) -> str:
@@ -132,20 +127,27 @@ def _safe_markdown() -> Any:
 
     class Highlight:
         def render_fenced_code(self, element: Any) -> str:
-            code = element.children[0].children
-            try:
-                lexer = (
-                    get_lexer_by_name(element.lang)
-                    if element.lang
-                    else guess_lexer(code)
-                )
-            except ClassNotFound:
-                lexer = guess_lexer(code)
-            return highlight(code, lexer, HtmlFormatter())
+            return highlight(element.children[0].children, element.lang)
 
     return Markdown(
         extensions=[GFM, MarkoExtension(renderer_mixins=[Highlight, EscapeHTML])]
     )
+
+
+def highlight(code: str, lang: str | None = None) -> Markup:
+    """Source as HTML, highlighted by Pygments (installed with rich) for
+    ``lang`` (``pytb`` a Python traceback), or a guess without one. The
+    one highlighter: markdown's fenced code, and a source on its own."""
+    from pygments import highlight as render
+    from pygments.formatters import HtmlFormatter
+    from pygments.lexers import get_lexer_by_name, guess_lexer
+    from pygments.util import ClassNotFound
+
+    try:
+        lexer = get_lexer_by_name(lang) if lang else guess_lexer(code)
+    except ClassNotFound:
+        lexer = guess_lexer(code)
+    return Markup(render(code, lexer, HtmlFormatter()))
 
 
 _MARKDOWN = _safe_markdown()
@@ -258,6 +260,7 @@ FILTERS: dict[str, Callable[..., Any]] = {
     "short_date": short_date,
     "pct": pct,
     "markdown": markdown,
+    "highlight": highlight,
     "docstring": docstring,
     "message": message,
     "health_tone": health_tone,

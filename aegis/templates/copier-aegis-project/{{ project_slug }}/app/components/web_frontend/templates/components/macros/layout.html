@@ -228,24 +228,29 @@
 
 
 {# Steward's theme and mode chooser, shared by navbars and auth pages. #}
-{% macro theme_toggle(placement="down", rail=False) %}
-<details class="relative {{ 'overseer-rail-appearance' if rail else '' }}" x-data="{ ...appearance() }" @click.outside="$el.removeAttribute('open')">
-  <summary data-theme-toggle aria-label="Appearance" class="list-none cursor-pointer select-none inline-flex items-center justify-center h-8 px-3 rounded border border-aegis-border text-xs text-aegis-muted hover:text-aegis-text hover:border-aegis-muted transition-colors {{ 'overseer-rail-row gap-2' if rail else '' }}">
-    {% if rail %}<svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v2 M12 19v2 M3 12h2 M19 12h2 M5.6 5.6 7 7 M17 17l1.4 1.4 M18.4 5.6 17 7 M7 17l-1.4 1.4 M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg><span class="overseer-rail-hide">Appearance</span>{% else %}Appearance{% endif %}
+{# ``label`` names the menu (the viewer's email in Overseer's); ``more``
+   adds choices the server draws the page by (``MenuChoice``: kept in a
+   cookie, the page reloaded), and a ``{% call %}`` adds rows under them. #}
+{% macro theme_toggle(placement="down", rail=False, label="Appearance", more=()) %}
+<details class="relative" x-data="{ ...appearance() }" @click.outside="$el.removeAttribute('open')">
+  <summary data-theme-toggle aria-label="{{ label }}" class="list-none cursor-pointer select-none inline-flex items-center h-8 px-3 rounded border border-aegis-border text-xs text-aegis-muted hover:text-aegis-text hover:border-aegis-muted transition-colors {{ 'overseer-rail-row gap-2 w-full min-w-0' if rail else 'justify-center' }}">
+    {% if rail %}<svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v2 M12 19v2 M3 12h2 M19 12h2 M5.6 5.6 7 7 M17 17l1.4 1.4 M18.4 5.6 17 7 M7 17l-1.4 1.4 M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg><span class="overseer-rail-hide truncate">{{ label }}</span>{% else %}{{ label }}{% endif %}
   </summary>
   <div class="absolute {{ 'left-0 bottom-full mb-1' if placement == 'up' else 'right-0 top-full mt-1 w-64 shadow-lg' }} z-50 bg-aegis-card border border-aegis-border rounded-lg p-3 space-y-3" {% if placement == "up" %}style="width: min(16rem, calc(100vw - 2rem));"{% endif %}>
-    {% for key, legend, choices in [("theme", "Theme", [("aegis", "Aegis"), ("steward", "Steward")]), ("mode", "Mode", [("dark", "Dark"), ("light", "Light"), ("system", "System")])] %}
+    {% for key, legend, choices, cookie, chosen in [("theme", "Theme", [("aegis", "Aegis"), ("steward", "Steward")], none, none), ("mode", "Mode", [("dark", "Dark"), ("light", "Light"), ("system", "System")], none, none)] + more|list %}
     <fieldset>
       <legend class="micro-label text-aegis-muted mb-1">{{ legend }}</legend>
       <div class="flex gap-1">
         {% for value, label in choices %}
-        <button type="button" data-set-{{ key }}="{{ value }}" :aria-pressed="{{ key }} === '{{ value }}'"
-                @click="{{ key }} = '{{ value }}'; setAppearance('{{ key }}', '{{ value }}')"
+        <button type="button" data-set-{{ key }}="{{ value }}"
+                {% if cookie %}aria-pressed="{{ (value == chosen)|lower }}" @click="setAppearance('{{ key }}', '{{ value }}', '{{ cookie }}')"
+                {% else %}:aria-pressed="{{ key }} === '{{ value }}'" @click="{{ key }} = '{{ value }}'; setAppearance('{{ key }}', '{{ value }}')"{% endif %}
                 class="chip flex-1">{{ label }}</button>
         {% endfor %}
       </div>
     </fieldset>
     {% endfor %}
+    {% if caller is defined %}{{ caller() }}{% endif %}
   </div>
 </details>
 {% endmacro %}
@@ -519,23 +524,26 @@
 </button>
 {% endmacro %}
 
-{# A block of source (SQL, Python) with a copy button. ``caption`` is a
-   line above it, such as the file it came from. ``lang`` renders it as a
-   fenced block through the ``markdown`` filter, so it is highlighted for
-   that language; the copy button always takes the plain text. ``wrap``
-   wraps long lines (data such as a response body or a curl command)
-   rather than scrolling them, so the block never widens what holds it. #}
+{# A block of source in the code block's box: highlighted for ``lang`` by
+   the ``highlight`` filter (``pytb`` a Python traceback), plain without
+   one. ``wrap`` wraps long lines (data such as a response body or a curl
+   command) rather than scrolling them, so the block never widens what
+   holds it. #}
+{% macro highlighted(text, lang=None, wrap=False) %}
+{% set box = "code-block" ~ (" code-block--wrap" if wrap else "") %}
+{% if lang %}<div class="{{ box }}">{{ text|highlight(lang) }}</div>
+{% else %}<pre class="{{ box }}">{{ text }}</pre>{% endif %}
+{% endmacro %}
+
+{# ``highlighted`` (SQL, Python) with a copy button, which always takes the
+   plain text. ``caption`` is a line above it, such as the file it came
+   from. #}
 {% macro code_block(text, caption=None, lang=None, wrap=False) %}
-{% set wraps = " code-block--wrap" if wrap else "" %}
 <div class="space-y-2 min-w-0">
   <div class="flex items-center justify-between gap-3">
     <p class="text-xxs text-aegis-muted truncate">{{ caption or "" }}</p>{{ copy_button(text) }}
   </div>
-  {% if lang %}
-  <div class="code-block{{ wraps }}">{{ ("````" ~ lang ~ "\n" ~ text ~ "\n````")|markdown }}</div>
-  {% else %}
-  <pre class="code-block{{ wraps }}">{{ text }}</pre>
-  {% endif %}
+  {{ highlighted(text, lang, wrap) }}
 </div>
 {% endmacro %}
 

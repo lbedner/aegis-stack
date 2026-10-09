@@ -36,7 +36,10 @@ def errors_client(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     ) -> dict[str, Any]:
         event = occurrence("one").model_copy(
             update={
-                "traceback": "<script>alert(1)</script>\nValueError: bad",
+                "traceback": (
+                    "<script>alert(1)</script>\nTraceback (most recent call last):\n"
+                    '  File "app.py", line 1, in run\nValueError: bad'
+                ),
                 "truncated": True,
                 "app_service": "ai",
             }
@@ -73,7 +76,10 @@ def test_bookmarkable_detail_escapes_trace(errors_client: TestClient) -> None:
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
     assert "<script>alert(1)</script>" not in html
     assert "Trace truncated" in html
-    assert "ValueError: bad" in html
+    # Highlighted as a Python traceback, wrapping like any long block.
+    trace = one(html, "#error-detail .code-block--wrap .highlight")
+    assert text(one(trace, ".gr")) == "ValueError"
+    assert "ValueError: bad" in text(trace)
     facts = [text(dt) for dt in select(html, "#error-detail dl dt")]
     assert "Application service" in facts and "Runtime" in facts
 

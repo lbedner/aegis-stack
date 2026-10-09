@@ -59,7 +59,7 @@
     <table class="w-full text-xs table-fixed">
       <colgroup><col class="w-28"><col class="w-52"><col></colgroup>
       <tbody id="logs-lines" sse-swap="logs-lines" hx-swap="{{ 'afterbegin' if newest_first else 'beforeend' }}"
-             x-on:click="$event.target.closest('a, button, summary') || getSelection().toString() || $event.target.closest('tr')?.toggleAttribute('data-open')">
+             x-on:click="$event.target.closest('a, button') || getSelection().toString() || $event.target.closest('tr')?.toggleAttribute('data-open')">
         {% with rows = logs.lines, tones = logs_tones, links = logs_links if logs_links is defined else none %}{% include "pages/overseer/_logs_rows.html" %}{% endwith %}
       </tbody>
     </table>

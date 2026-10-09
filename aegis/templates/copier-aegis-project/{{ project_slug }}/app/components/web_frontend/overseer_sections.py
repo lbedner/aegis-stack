@@ -7,9 +7,12 @@ the generic status page.
 """
 
 from collections.abc import Awaitable, Callable
+from enum import StrEnum
 from typing import Any, NamedTuple
 
-from app.core.constants import ComponentName
+from starlette.requests import Request
+
+from app.core.constants import ComponentName, ServiceName
 from app.services.system import ui_runtime
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import registry_key
@@ -160,7 +163,140 @@ def rail() -> list[NavItem]:
     ]
 
 
-templates.env.globals["overseer_rail"] = rail
+
+class Grouping(StrEnum):
+    """How the sidebar groups its pages, the viewer's choice: by kind
+    (Components, Services) or by concern (each page under the concern it
+    serves, at its own address)."""
+
+    KIND = "kind"
+    CONCERN = "concern"
+
+
+class MenuChoice(NamedTuple):
+    """A choice in the appearance menu (``theme_toggle``) the server draws
+    the page by: kept in ``cookie``, so ``setAppearance`` sets it and
+    reloads."""
+
+    key: str
+    legend: str
+    choices: tuple[tuple[str, str], ...]
+    cookie: str
+    chosen: str
+
+
+GROUPING_COOKIE = "overseer_grouping"
+GROUPINGS = ((Grouping.KIND, "By kind"), (Grouping.CONCERN, "By concern"))
+# Where an entry no concern names goes: a plugin's service, most likely.
+APP = "App"
+# Overview heads the first.
+CONCERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "Stack",
+        tuple(
+            i.name
+            for i in (
+                overseer_logs.ITEM,
+                overseer_errors.ITEM,
+                overseer_resources.ITEM,
+                overseer_deployments.ITEM,
+            )
+        ),
+    ),
+    (
+        "Compute",
+        (
+            ComponentName.BACKEND,
+            ComponentName.WORKER,
+            ComponentName.SCHEDULER,
+            ComponentName.INGRESS,
+        ),
+    ),
+    (
+        "Data",
+        (
+            ComponentName.DATABASE,
+            ComponentName.CACHE,
+            ComponentName.STORAGE,
+            ServiceName.DOCUMENTS,
+        ),
+    ),
+    (
+        "AI",
+        (ServiceName.AI, ComponentName.OLLAMA, ComponentName.MCP, ServiceName.RESEARCH),
+    ),
+    (
+        APP,
+        (
+            ComponentName.WEB_FRONTEND,
+            ComponentName.FRONTEND,
+            ServiceName.AUTH,
+            ServiceName.PAYMENT,
+            ServiceName.COMMS,
+            ServiceName.BLOG,
+            ServiceName.FINANCE,
+            ServiceName.INSIGHTS,
+        ),
+    ),
+    (
+        "Platform",
+        (
+            overseer_secrets.ITEM.name,
+            overseer_patterns.ITEM.name,
+            overseer_settings.ITEM.name,
+            ComponentName.OBSERVABILITY,
+        ),
+    ),
+)
+
+
+def grouping(request: Request) -> Grouping:
+    """The viewer's grouping, by kind unless they chose otherwise."""
+    chosen = request.cookies.get(GROUPING_COOKIE)
+    return Grouping.CONCERN if chosen == Grouping.CONCERN else Grouping.KIND
+
+
+def grouping_choice(request: Request) -> MenuChoice:
+    """The grouping, as the appearance menu offers it."""
+    return MenuChoice(
+        "grouping", "Sidebar", GROUPINGS, GROUPING_COOKIE, grouping(request)
+    )
+
+
+def sidebar_sections(
+    request: Request, navigation: dict[str, list[NavItem]]
+) -> list[tuple[str | None, list[NavItem]]]:
+    """The sidebar's sections, ``(heading, entries)``, in order; empty ones
+    left out. By kind, the rail's own pages head it without a heading; by
+    concern, every entry is under its own (``CONCERNS``), and one no
+    concern names joins ``APP``."""
+    pages = rail()
+    if grouping(request) is Grouping.KIND:
+        sections = [
+            (None, pages),
+            ("Components", navigation["components"]),
+            ("Services", navigation["services"]),
+        ]
+    else:
+        entries = {
+            e.name: e
+            for e in (*pages, *navigation["components"], *navigation["services"])
+        }
+        named = {name for _, names in CONCERNS for name in names}
+        unnamed = [e for name, e in entries.items() if name not in named]
+        sections = [
+            (
+                heading,
+                [entries[n] for n in names if n in entries]
+                + (unnamed if heading == APP else []),
+            )
+            for heading, names in CONCERNS
+        ]
+    return [(heading, found) for heading, found in sections if found]
+
+
+templates.env.globals["sidebar_sections"] = sidebar_sections
+templates.env.globals["grouping_choice"] = grouping_choice
 
 # The sections every page with a container behind it gets, in order: each
 # module has a ``SECTION`` label and ``context(page, query)``.

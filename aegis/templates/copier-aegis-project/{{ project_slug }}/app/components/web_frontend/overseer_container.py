@@ -51,6 +51,8 @@ VIEWS = (
     (FLOW_VIEW, "Flow", "flow"),
 )
 TEMPLATES = {key: f"pages/overseer/_overview_{key}.html" for key, *_ in VIEWS}
+# The window every card's lines cover, named once above them.
+WINDOW = series.DEFAULT_WINDOW
 OVERVIEW_EVENTS = "/overseer/events/overview"
 OVERVIEW_EVENT = "overview"
 # A card's figures for what has no container: a few of its health check's
@@ -170,7 +172,7 @@ async def overview(
             [*pages, host] if host else pages, wait=wait
         )
     )
-    trends = await ui_runtime.trends(pages) if view == CARDS_VIEW else {}
+    trends = await ui_runtime.trends(pages, WINDOW) if view == CARDS_VIEW else {}
     stack = []
     for entry, page in entries:
         rows = found[page]["rows"] if page in found else []
@@ -205,6 +207,7 @@ async def overview(
         "overview_event": OVERVIEW_EVENT,
         "overview_view": view,
         "overview_views": VIEWS,
+        "overview_window": series.phrase(WINDOW),
         "overview_template": TEMPLATES[view],
     }
 

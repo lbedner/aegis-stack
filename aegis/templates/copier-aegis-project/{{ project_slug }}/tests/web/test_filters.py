@@ -210,6 +210,17 @@ class TestMarkdown:
         assert markdown(None) == ""
         assert markdown("") == ""
 
+    def test_a_source_on_its_own_is_highlighted_whole(self) -> None:
+        """A traceback is source, not markdown: a fence it quotes does not
+        end it early, and the HTML in it stays text."""
+        highlight: Callable[..., str] = templates.env.filters["highlight"]
+        out = highlight(
+            "Traceback (most recent call last):\n````\n<b>x</b>\nValueError: bad",
+            "pytb",
+        )
+        assert text(select(out, ".highlight .gr")[-1]) == "ValueError"
+        assert "<b>" not in out
+
     def test_one_set_of_classes_styles_the_output(self) -> None:
         """A heading that looks different in chat than in a report is a bug
         nobody files and everybody notices."""

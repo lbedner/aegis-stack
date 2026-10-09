@@ -4,7 +4,8 @@ Seeds the default ``assistant`` agent so a fresh project behaves exactly
 like pre-registry chat: same system prompt, same sampling defaults. The
 agent loader resolves this row on DB backends and falls back to the same
 in-code definition on the memory backend, so this seed is the single DB
-source of the default agent.
+source of the default agent. Beside it, the ``sentiment`` agent the batch
+scorer runs as, so its model is picked in Agents.
 """
 
 from typing import Any
@@ -18,7 +19,12 @@ from app.services.ai.domains.chat.agent_loader import (
     default_agent_config,
 )
 from app.services.ai.domains.chat.agent_registry import seed_agent
-
+from app.services.ai.domains.chat.sentiment import (
+    SENTIMENT_AGENT_SLUG,
+    SENTIMENT_MAX_TOKENS,
+    SENTIMENT_SYSTEM_PROMPT,
+    SENTIMENT_TEMPERATURE,
+)
 from app.services.ai.models.agents import Agent, Tool
 
 # The registry only holds tools whose module was imported, and seeding runs
@@ -27,7 +33,12 @@ from app.services.ai.models.agents import Agent, Tool
 # no-ops.
 load_tools()
 
-__all__ = ["DEFAULT_AGENT_SLUG", "default_agent_definition", "load_agent_fixtures"]
+__all__ = [
+    "DEFAULT_AGENT_SLUG",
+    "built_in_agents",
+    "default_agent_definition",
+    "load_agent_fixtures",
+]
 
 
 def default_agent_definition() -> dict[str, Any]:
@@ -54,8 +65,32 @@ def default_agent_definition() -> dict[str, Any]:
     }
 
 
+def sentiment_agent_definition() -> dict[str, Any]:
+    """The seed row for the batch sentiment scorer, shaped as the default
+    agent's: the active model until someone picks a faster one, and no
+    memory, knowledge or code of the chat's."""
+    return default_agent_definition() | {
+        "slug": SENTIMENT_AGENT_SLUG,
+        "name": "Sentiment",
+        "description": "Scores finished conversations (the sentiment job)",
+        "category": "analysis",
+        "model_id": None,
+        "system_prompt": SENTIMENT_SYSTEM_PROMPT,
+        "temperature": SENTIMENT_TEMPERATURE,
+        "max_tokens": SENTIMENT_MAX_TOKENS,
+        "memory_modules": [],
+        "knowledge_base_ids": [],
+        "code_mode": False,
+    }
+
+
+def built_in_agents() -> list[dict[str, Any]]:
+    """Every agent the AI service seeds."""
+    return [default_agent_definition(), sentiment_agent_definition()]
+
+
 def load_agent_fixtures(session: Session) -> dict[str, int]:
-    """Seed the default agent, skipping rows that already exist.
+    """Seed the built-in agents, skipping rows that already exist.
 
     Idempotent: re-running against a seeded database adds nothing and
     never mutates an existing (possibly user-edited) agent row.
@@ -67,17 +102,17 @@ def load_agent_fixtures(session: Session) -> dict[str, int]:
         dict with counts: {"agents": N added, "tools": N added}
     """
     added = 0
-    definition = default_agent_definition()
-    existing = session.exec(
-        select(Agent).where(Agent.slug == definition["slug"])
-    ).first()
-    if existing is None:
+    for definition in built_in_agents():
+        existing = session.exec(
+            select(Agent).where(Agent.slug == definition["slug"])
+        ).first()
+        if existing is not None:
+            logger.debug(f"Agent '{definition['slug']}' already present")
+            continue
         seed_agent(session, definition)
         session.commit()
-        added = 1
-        logger.info(f"Seeded default agent '{definition['slug']}'")
-    else:
-        logger.debug(f"Default agent '{definition['slug']}' already present")
+        added += 1
+        logger.info(f"Seeded agent '{definition['slug']}'")
 
     # Sync registered tools into grantable rows: every callable in the
     # Python registry gets a matching ``tool`` row (by name) so the agent

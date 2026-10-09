@@ -1,0 +1,35 @@
+{# The open transactions (db_transactions): on Postgres every connection,
+   with what it waits on and whom it blocks, ended one by one; on SQLite
+   each one held a while (db_activity.SHOWN_AFTER), with where its code is
+   now, ended by restarting its container. Red past the slow threshold. #}
+{% from "components/macros/form.html" import action %}
+{% from "components/macros/layout.html" import badge, card %}
+{% from "components/macros/table.html" import data_table %}
+{% macro open_for(value) %}<span data-open-for>{{ badge(value.label, value.tone) }}</span>{% endmacro %}
+{% macro blocked_by(value) %}<span data-blocked-by>{{ value|join(", ") if value else "-" }}</span>{% endmacro %}
+{% macro end(row) -%}
+{% if row.end_url %}{{ action("End" if row.pid else "Restart", hx_dialog(row.end_url), "warn") }}{% endif %}
+{%- endmacro %}
+{% if transactions_postgres %}
+{% set columns = [
+  {"key": "pid", "label": "PID", "align": "right"},
+  {"key": "process", "label": "Process", "kind": "code"},
+  {"key": "state", "label": "State"},
+  {"key": "open_for", "label": "Open for", "render": open_for},
+  {"key": "wait", "label": "Waiting on"},
+  {"key": "blocked_by", "label": "Blocked by", "render": blocked_by},
+  {"key": "query", "label": "Query", "kind": "code", "wrap": True},
+] %}
+{% else %}
+{% set columns = [
+  {"key": "process", "label": "Process", "kind": "code"},
+  {"key": "container", "label": "Container", "kind": "code"},
+  {"key": "code", "label": "Code", "kind": "code", "wrap": True},
+  {"key": "state", "label": "State"},
+  {"key": "open_for", "label": "Open for", "render": open_for},
+] %}
+{% endif %}
+{% call card("Transactions", subtitle=transactions_summary) %}
+  <p class="text-xs text-aegis-muted mb-2">{% if transactions_postgres %}Every connection to this database, the longest open transaction first. Red past {{ threshold }} s. End rolls its transaction back and closes it.{% else %}SQLite has one writer: a transaction held here makes every other process wait. Each one held past {{ shown_after|round|int }} s, with the code holding it, red past {{ threshold }} s. SQLite cannot end another process's transaction, so Restart restarts the container holding it.{% endif %}</p>
+  {{ data_table(columns, transactions, empty="Nothing held right now", actions=end) }}
+{% endcall %}

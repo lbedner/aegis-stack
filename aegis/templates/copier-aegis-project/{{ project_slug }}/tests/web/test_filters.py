@@ -9,8 +9,8 @@ from collections.abc import Callable
 from datetime import date, datetime, timedelta
 from typing import Any
 
-from fastapi import FastAPI
 import pytest
+from fastapi import FastAPI
 
 from app.components.web_frontend.filters import (
     cents_to_input,
@@ -281,6 +281,16 @@ def test_a_message_sets_the_settings_and_secrets_it_names_as_code() -> None:
     html = f"<p>{message('BUILD_ID not set, OK <now>')}</p>"
     assert [text(code) for code in select(html, "code")] == ["BUILD_ID"]  # not OK
     assert "&lt;now&gt;" in html
+
+
+def test_a_message_keeps_its_own_lines() -> None:
+    """A driver's error is several lines (the statement it ran apart): each
+    stays one, wherever the message shows."""
+    from app.components.web_frontend.filters import message
+
+    found = message("database is locked\n[SQL: BEGIN]")
+    html = f"<p>{found}</p>"
+    assert len(select(html, "br")) == 1
 
 
 def test_every_health_message_on_overseer_shows_the_names_it_mentions(

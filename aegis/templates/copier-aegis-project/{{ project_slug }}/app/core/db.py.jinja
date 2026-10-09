@@ -20,7 +20,7 @@ from typing import Any
 from urllib.parse import urlparse
 {% endif %}
 
-from sqlalchemy import create_engine{% if database_engine == "sqlite" %}, event{% endif %}
+from sqlalchemy import create_engine, event
 
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 {% if database_engine == "sqlite" %}
@@ -256,6 +256,24 @@ async_engine = create_async_engine(
 # Long-held transactions and lock failures, for the Database pages.
 db_activity.watch(engine)
 db_activity.watch(async_engine.sync_engine)
+{% if database_engine != "sqlite" %}
+
+
+# Each connection names the process that opened it, as pg_stat_activity
+# shows it (the Database page's Transactions). Set as it connects, not at
+# import, so a forked process names itself.
+@event.listens_for(engine, "do_connect")
+@event.listens_for(async_engine.sync_engine, "do_connect")
+def _name_connection(
+    dialect: Any, conn_rec: Any, cargs: Any, cparams: dict[str, Any]
+) -> None:
+    """psycopg takes it as a connect argument, asyncpg as a server setting."""
+    name = db_activity.process()
+    if dialect.is_async:
+        cparams.setdefault("server_settings", {})["application_name"] = name
+    else:
+        cparams["application_name"] = name
+{% endif %}
 
 # Configure session factory with SQLModel Session (sync)
 SessionLocal = sessionmaker(
@@ -318,6 +336,17 @@ async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
         except Exception:
             await session.rollback()
             raise
+
+async def release_lock(session: AsyncSession) -> None:
+    """Commit, ending ``session``'s transaction before slow work that needs
+    no database (a model call, a fetch over the network) or before code
+    that opens a connection of its own; its next query begins a new one.
+    On SQLite a transaction holds the one write lock from its first query
+    (the async engine begins IMMEDIATE): one left open across a model that
+    takes minutes stalls every process, and a second connection the same
+    request opens waits out the busy timeout behind it. On Postgres it is
+    a connection idle in a transaction."""
+    await session.commit()
 
 
 def init_database() -> None:

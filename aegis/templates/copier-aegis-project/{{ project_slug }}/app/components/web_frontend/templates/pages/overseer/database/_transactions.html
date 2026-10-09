@@ -1,0 +1,5 @@
+{# Transactions open right now (overseer_database.transactions), re-sent
+   over SSE every tick while the page is open. #}
+<div id="database-transactions" hx-ext="sse" sse-connect="{{ transactions_events }}">
+  <div sse-swap="{{ transactions_event }}" hx-target="this">{% include "pages/overseer/database/_transactions_body.html" %}</div>
+</div>

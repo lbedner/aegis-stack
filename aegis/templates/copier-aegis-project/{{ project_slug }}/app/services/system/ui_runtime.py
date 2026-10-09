@@ -407,6 +407,7 @@ def _row(instance: Instance, stats: Stats | None) -> dict[str, Any]:
     """One instance's row; a stopped one (no stats) has the same keys."""
     return {
         "name": instance.name,
+        "id": instance.id,
         **_state(instance),
         # Its parts too, for a view that shows them apart (htmx's cards).
         "phase": instance.state,

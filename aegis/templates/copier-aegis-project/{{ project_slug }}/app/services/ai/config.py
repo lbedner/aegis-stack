@@ -5,7 +5,7 @@ Configuration management for AI service providers, models, and settings.
 Integrates with main application settings through app.core.config.
 """
 
-from typing import Any, Literal, Self
+from typing import Any, Literal, Protocol, Self
 
 from pydantic import BaseModel, Field
 
@@ -78,6 +78,15 @@ def api_key_env(provider: AIProvider) -> str:
     return API_KEY_ENV.get(provider, f"{provider.value.upper()}_API_KEY")
 
 
+class AgentSampling(Protocol):
+    """What an agent sets on the model it runs (``AgentConfig``): its
+    sampling, and a model it pins (``None`` follows the active model)."""
+
+    temperature: float
+    max_tokens: int
+    model_id: str | None
+
+
 class AIServiceConfig(BaseModel):
     """
     AI service configuration that integrates with main app settings.
@@ -121,6 +130,21 @@ class AIServiceConfig(BaseModel):
             rag_top_k=getattr(settings, "RAG_CHAT_TOP_K", 10),
             rag_min_score=getattr(settings, "RAG_CHAT_MIN_SCORE", 0.1),
         )
+
+    def for_agent(self, agent: AgentSampling | None) -> Self:
+        """This config with ``agent``'s sampling overlaid, and its model when
+        it pins one (assumed served by the current provider). The default
+        agent carries the settings' own values: the identity until its row
+        is edited."""
+        if agent is None:
+            return self
+        update: dict[str, Any] = {
+            "temperature": agent.temperature,
+            "max_tokens": agent.max_tokens,
+        }
+        if agent.model_id:
+            update["model"] = agent.model_id
+        return self.model_copy(update=update)
 
     async def get_provider_config(self, settings: Any) -> ProviderConfig:
         """Get provider-specific configuration. The key is read now through

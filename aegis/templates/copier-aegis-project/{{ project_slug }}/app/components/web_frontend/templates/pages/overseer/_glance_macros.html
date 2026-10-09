@@ -40,7 +40,7 @@
 
 {# A failing entry's failing dependencies (``topology.causes``), named. #}
 {% macro cause(item) -%}
-{% if item.cause %}<span data-cause class="block text-xxs text-aegis-muted truncate">Likely cause: {{ item.cause }}</span>{% endif %}
+{% if item.cause %}<span data-cause class="health-message block text-xxs text-aegis-muted">Likely cause: {{ item.cause }}</span>{% endif %}
 {%- endmacro %}
 
 {# The way to a page's Container and Logs sections (``base``: its URL). #}

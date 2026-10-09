@@ -15,6 +15,7 @@ from typing import Any
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.db import release_lock
 from app.services.insights import queries
 from app.services.insights.adapters.collectors.base import (
     BaseCollector,
@@ -152,6 +153,8 @@ class CollectorService:
         )
 
         logger.info("Running collector for '%s'", source_key)
+        # Collectors fetch over the network: never inside a read's lock.
+        await release_lock(self.db)
 
         try:
             result = await collector.collect(**kwargs)

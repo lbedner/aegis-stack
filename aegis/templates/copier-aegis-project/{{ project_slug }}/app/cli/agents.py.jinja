@@ -73,14 +73,7 @@ async def _run_test_turn(slug: str, message: str) -> tuple[AgentConfig, str]:
     from app.services.ai.config import AIServiceConfig
 
     config = await resolve_agent(slug)
-    service_config = AIServiceConfig.from_settings(settings)
-    update: dict[str, object] = {
-        "temperature": config.temperature,
-        "max_tokens": config.max_tokens,
-    }
-    if config.model_id:
-        update["model"] = config.model_id
-    service_config = service_config.model_copy(update=update)
+    service_config = AIServiceConfig.from_settings(settings).for_agent(config)
 {% if ai_framework == "pydantic-ai" %}
     from app.services.ai.domains.llm.providers import get_agent
 

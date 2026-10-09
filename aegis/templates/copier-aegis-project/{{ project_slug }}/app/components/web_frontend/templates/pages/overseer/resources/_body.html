@@ -1,33 +1,12 @@
-{# The snapshot (ui_resources.overview): the split, the containers and the
-   servers outside Docker. #}
+{# The snapshot (ui_resources.overview) below the charts: the containers,
+   what loads inside the webserver and the servers outside Docker; the
+   split above them is ``_totals.html``. #}
 {% from "components/macros/layout.html" import card, progress, ranked_rows %}
 {% from "components/macros/table.html" import data_table %}
 {% macro share(value) -%}
 <span class="inline-flex items-center gap-2"><span class="w-24">{{ progress(value / 100, "ok", "Share of this stack", "h-1.5") }}</span><span class="w-12">{{ value }}%</span></span>
 {%- endmacro %}
-{% set parts = [("stack", "This stack", "bg-aegis-teal"), ("rest", "Rest of the host", "bg-aegis-muted/60"), ("free", "Free", "bg-aegis-border/40")] %}
 <div class="space-y-4">
-  {% if resources.split %}
-  <div class="grid gap-4 lg:grid-cols-2">
-    {% for split in resources.split %}
-    <div data-split="{{ split.key }}">
-    {% call card(split.label, subtitle=split.text.total ~ " in all", id="resources-" ~ split.key) %}
-      <div class="flex h-3 w-full overflow-hidden rounded bg-aegis-border/40" role="img" aria-label="{{ split.label }}: this stack {{ split.text.stack }}, the rest of the host {{ split.text.rest }}, free {{ split.text.free }}">
-        {% for key, _, color in parts[:2] if split[key] %}<span class="{{ color }}" style="width: {{ (split[key] / split.total * 100)|round(1) }}%"></span>{% endfor %}
-      </div>
-      <dl class="grid grid-cols-3 gap-3 text-sm">
-        {% for key, label, color in parts %}
-        <div data-part="{{ key }}">
-          <dt class="flex items-center gap-1.5 text-xxs caps text-aegis-muted"><span class="inline-block w-2 h-2 rounded-sm {{ color }}" aria-hidden="true"></span>{{ label }}</dt>
-          <dd class="mt-1 tabular-nums {{ 'text-aegis-teal font-semibold' if key == 'stack' else 'text-aegis-text' }}">{{ split.text[key] }}</dd>
-        </div>
-        {% endfor %}
-      </dl>
-    {% endcall %}
-    </div>
-    {% endfor %}
-  </div>
-  {% endif %}
   {% call card("Containers", id="resources-containers") %}
     {% if resources.note %}<p class="text-sm text-aegis-muted">{{ resources.note }}</p>
     {% else %}
@@ -45,7 +24,7 @@
      (ui_resources.load_costs). #}
   {% call card("Inside the webserver", subtitle="To load each service") %}
     {% if resources.load %}
-    {{ ranked_rows(resources.load.rows) }}
+    {{ ranked_rows(resources.load.rows, columns=True) }}
     <p class="text-xs text-aegis-muted">Each part's own cost: loaded on top of Python and the app's core ({{ resources.load.core }}) and the parts it uses, so a library counts with the first part that needs it. Measured once a day.</p>
     {% else %}
     <p data-measuring class="text-sm text-aegis-muted">Measuring what each service costs to load, one at a time.</p>

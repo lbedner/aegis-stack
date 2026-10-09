@@ -11,8 +11,13 @@ from sqlmodel import Session, select
 from app.core.tools import register_tool, unregister_tool
 from app.services.ai.domains.chat.prompts import get_default_system_prompt
 from app.services.ai.domains.chat.tools import resolve_tools
+from app.services.ai.domains.chat.sentiment import (
+    SENTIMENT_AGENT_SLUG,
+    SENTIMENT_SYSTEM_PROMPT,
+)
 from app.services.ai.fixtures.agent_fixtures import (
     DEFAULT_AGENT_SLUG,
+    built_in_agents,
     load_agent_fixtures,
 )
 from app.services.ai.models import Agent, AgentTool, Tool
@@ -35,7 +40,7 @@ class TestAgentSeed:
     def test_seeds_default_agent(self, session: Session) -> None:
         counts = load_agent_fixtures(session)
 
-        assert counts["agents"] == 1
+        assert counts["agents"] == len(built_in_agents())
         agent = session.exec(
             select(Agent).where(Agent.slug == DEFAULT_AGENT_SLUG)
         ).one()
@@ -43,6 +48,16 @@ class TestAgentSeed:
         assert agent.system_prompt == get_default_system_prompt()
         # None = "use the service's active model".
         assert agent.model_id is None
+
+    def test_seeds_the_sentiment_agent(self, session: Session) -> None:
+        """Its own row, so the batch scorer's model is picked in Agents: the
+        active model until someone chooses a faster one."""
+        load_agent_fixtures(session)
+        agent = session.exec(
+            select(Agent).where(Agent.slug == SENTIMENT_AGENT_SLUG)
+        ).one()
+        assert agent.system_prompt == SENTIMENT_SYSTEM_PROMPT
+        assert agent.model_id is None and agent.is_active
 
     def test_every_seeded_agent_records_its_seed(self, session: Session) -> None:
         """The seed is the first recorded change, so an agent's
@@ -66,7 +81,7 @@ class TestAgentSeed:
         assert counts["agents"] == 0
         assert counts["tools"] == 0
         agents = session.exec(select(Agent)).all()
-        assert len(agents) == 1
+        assert len(agents) == len(built_in_agents())
 
     def test_registered_tools_get_grantable_rows(self, session: Session) -> None:
         """Every name in the Python tool registry gets a ``tool`` row."""

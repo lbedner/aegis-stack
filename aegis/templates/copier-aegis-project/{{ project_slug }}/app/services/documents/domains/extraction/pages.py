@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.concurrency import fanout
+from app.core.db import release_lock
 from app.core.log import logger
 from app.core.storage import get_storage
 from app.core.time import utcnow
@@ -99,7 +100,7 @@ async def extract_document(
     # its turn works. The chat writing its usage row at the wrong
     # moment cost a whole document: "database is locked" on the very
     # first UPDATE, before a single page was read.
-    await db.commit()
+    await release_lock(db)
     result = ExtractionResult()
     media_type = (document.media_type or "").lower()
     if media_type == "application/pdf":

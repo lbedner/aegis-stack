@@ -33,10 +33,17 @@
       white-space: nowrap;
     }
     [data-overseer-sidebar="rail"] #overseer-sidebar .overseer-rail-none { display: none; }
-    /* The rail shows icons only; status lives on the wide sidebar and the
-       page's sub-menu. */
-    [data-overseer-sidebar="rail"] #overseer-sidebar .overseer-rail-status { display: none; }
+    /* The rail shows icons, and trouble's dot on its icon's corner. */
+    [data-overseer-sidebar="rail"] #overseer-sidebar .overseer-rail-status {
+      position: absolute;
+      top: 0.25rem;
+      right: 0.75rem;
+    }
   }
+
+  /* A health check's message in full, wrapped (its own lines are the
+     ``message`` filter's): a map node scrolls it, a card grows to it. */
+  .health-message { @apply break-words; }
 
   /* The main sidebar only flags trouble: a healthy entry shows no dot (the
      screen-reader status stays). The sub-menu and pages keep every dot. */

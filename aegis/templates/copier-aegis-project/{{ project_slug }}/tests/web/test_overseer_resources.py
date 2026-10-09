@@ -2,9 +2,9 @@
 
 import asyncio
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-import pytest
 
 from app.components.web_frontend import overseer_resources
 from app.core.formatting import format_bytes
@@ -107,6 +107,33 @@ def test_it_charts_every_figure_over_the_chosen_window(client: TestClient) -> No
     assert "window=3600" in one(html, "#resources").get("sse-connect")
 
 
+def test_the_charts_sit_right_under_the_stacks_totals(client: TestClient) -> None:
+    html = page_html(client, PAGE)
+    order = [
+        html.index(marker)
+        for marker in (
+            'data-split="cpu"',
+            'data-chart-data="chart-resources-cpu',
+            'id="resources-containers"',
+        )
+    ]
+    assert order == sorted(order)
+
+
+async def test_the_stream_sends_the_totals_apart(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Above the charts, so a frame of their own."""
+    use_runtime(monkeypatch, FakeRuntime(REDIS))
+    use_host_checks(monkeypatch)
+    frames = [f async for f in overseer_resources.events(max_frames=1)]
+    sent = {frame.split("\n", 1)[0]: frame for frame in frames}
+    totals = sent[f"event: {overseer_resources.TOTALS_EVENT}"]
+    body = sent[f"event: {overseer_resources.EVENT}"]
+    assert 'data-split="memory"' in totals
+    assert "data-split" not in body and REDIS.name in body
+
+
 async def test_the_stream_sends_each_chart(monkeypatch: pytest.MonkeyPatch) -> None:
     use_runtime(monkeypatch, FakeRuntime(REDIS))
     use_host_checks(monkeypatch)
@@ -122,13 +149,14 @@ def test_it_shows_what_each_service_costs_to_load(
     client: TestClient, monkeypatch: pytest.MonkeyPatch, measured: bool
 ) -> None:
     """Inside the webserver, where Docker sees one container: each service's
-    cost to load, or that it is being measured."""
+    cost to load, in columns (a part a row would run the page long), or
+    that it is being measured."""
 
     use_load_costs(
         monkeypatch, LoadCosts(core=1, parts={"backend": 2}) if measured else None
     )
     card = one(page_html(client, PAGE), "#card-inside-the-webserver")
     if measured:
-        assert "Server" in text(one(card, "ol li"))
+        assert "Server" in text(one(card, "ol[data-columns] li"))
     else:
         one(card, "[data-measuring]")

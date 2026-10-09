@@ -311,3 +311,31 @@ class TestHeadlessResolution:
 
         assert seen["model"] == "chosen-model"
         assert (model, model_name) == ("model-instance", "chosen-model")
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("pinned", "expected"), [(None, "chosen-model"), ("qwen3:4b", "qwen3:4b")]
+    )
+    async def test_an_agent_runs_on_the_stored_selection_unless_it_pins_one(
+        self, monkeypatch: pytest.MonkeyPatch, pinned: str | None, expected: str
+    ) -> None:
+        """A background runner's agent (the analyst, the sentiment scorer):
+        the selection in force, then the agent's own sampling and model."""
+        from types import SimpleNamespace
+
+        settings = _Settings()
+
+        async def _sync(target: object) -> bool:
+            active_model.apply_to_settings(
+                target, model_id="chosen-model", provider="ollama"
+            )
+            return True
+
+        monkeypatch.setattr(active_model, "sync_from_db", _sync)
+        agent = SimpleNamespace(temperature=0.0, max_tokens=400, model_id=pinned)
+        config = await active_model.config_for_active(settings, agent)
+        assert (config.model, config.temperature, config.max_tokens) == (
+            expected,
+            0.0,
+            400,
+        )

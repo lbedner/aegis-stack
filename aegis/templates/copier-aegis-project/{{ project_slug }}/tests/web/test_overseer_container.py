@@ -5,9 +5,9 @@ refreshes over SSE, so opening it never waits on Docker. A page with no containe
 import asyncio
 from typing import Any
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-import pytest
 
 from app.components.web_frontend import overseer_container, overseer_map
 from app.core import runtime, secrets, series
@@ -530,25 +530,32 @@ def _entry(key: str) -> dict[str, Any]:
     return {"key": key, "title": key, "tone": "ok"}
 
 
-@pytest.mark.parametrize(
-    ("installed", "width"),
-    [
-        (["ingress", "backend", "database", "cache", "storage", "ollama"], 20.0),
-        (["backend", "database"], overseer_map.MAX_NODE_WIDTH),
-    ],
-)
-def test_the_map_sizes_its_nodes_to_the_stack(
-    installed: list[str], width: float
-) -> None:
-    """The busiest tier shares the map's width: four data stores get a fifth
-    of it each; a small stack's nodes stop at a node's size. Each tier
-    spreads across the whole width."""
-    found = overseer_map.layout([_entry(key) for key in installed])
-    assert found["map_node_width"] == pytest.approx(width)
+def _widths(found: dict[str, Any]) -> dict[str, float]:
+    return {node["key"]: node["width"] for node in found["map_nodes"]}
+
+
+def test_each_row_sizes_its_own_nodes() -> None:
+    """A row shares the map's width among its own nodes: four data stores
+    are slimmer, and the tiers above them, with more room, stay wider; a
+    small stack's nodes stop at a node's size. Each row spreads across the
+    whole width."""
+    installed = ["ingress", "backend", "worker", "scheduler"]
+    data = ["database", "cache", "storage", "ollama"]
+    found = overseer_map.layout([_entry(key) for key in installed + data])
     bottom = max(n["top"] for n in found["map_nodes"])
-    data = [n["left"] for n in found["map_nodes"] if n["top"] == bottom]
-    gap = 100 / len(data)  # each node centred in an equal share of the width
-    assert data == pytest.approx([gap * (i + 0.5) for i in range(len(data))])
+    row = [n for n in found["map_nodes"] if n["top"] == bottom]
+    assert len(row) == len(data)
+    widths = _widths(found)
+    assert [widths[n["key"]] for n in row] == pytest.approx(
+        [overseer_map.FILL * 100 / len(data)] * len(row)
+    )
+    assert widths["worker"] == pytest.approx(overseer_map.FILL * 100 / 3)
+    assert widths["ingress"] == pytest.approx(overseer_map.MAX_NODE_WIDTH)
+    gap = 100 / len(row)  # each node centred in an equal share of the width
+    lefts = [n["left"] for n in row]
+    assert lefts == pytest.approx([gap * (i + 0.5) for i in range(len(row))])
+    small = overseer_map.layout([_entry("backend"), _entry("database")])
+    assert set(_widths(small).values()) == {overseer_map.MAX_NODE_WIDTH}
 
 
 def test_the_views_switch_by_icon_and_still_say_which(client: TestClient) -> None:
@@ -571,7 +578,9 @@ def test_the_trouble_toggles_are_icons_that_still_say_which(
     html = page_html(_failing(app, monkeypatch), "/overseer?view=cards")
     toggles = select(html, "[data-toggle]")
     labels = [text(one(t, ".sr-only")) for t in toggles]
-    assert [t.get("title") for t in toggles] == labels == ["Trouble first", "Only trouble"]
+    assert (
+        [t.get("title") for t in toggles] == labels == ["Trouble first", "Only trouble"]
+    )
     used = {one(t, "svg use").get("href") for t in toggles}
     defined = {f"#{s.get('id')}" for s in select(html, "svg[data-icons] symbol")}
     assert len(used) == 2 and used <= defined
@@ -616,9 +625,7 @@ def test_a_tier_wider_than_a_row_wraps() -> None:
     shape = topology.Shape(tiers=[[f"s{n}" for n in range(6)]], links=[], hosted=[])
     found = overseer_map.layout([_entry(f"s{n}") for n in range(6)], shape)
     assert len({node["top"] for node in found["map_nodes"]}) == 2
-    assert found["map_node_width"] == pytest.approx(
-        overseer_map.FILL * 100 / overseer_map.ROW
-    )
+    assert _widths(found)["s0"] == pytest.approx(overseer_map.FILL * 100 / 5)
 
 
 def _zoomable(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> TestClient:

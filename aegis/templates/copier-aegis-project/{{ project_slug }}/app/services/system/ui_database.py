@@ -5,8 +5,8 @@ strings, so the Flet modal and the web Overseer render the same values from
 one place. No UI framework imports.
 """
 
-from datetime import datetime
 import re
+from datetime import datetime
 from typing import Any
 
 from app.core import credential
@@ -211,15 +211,17 @@ def _sqlite_settings(metadata: dict[str, Any]) -> list[tuple[str, Any, str]]:
     ]
 
 
+# What each kind of ``db_activity`` record says; a slow one says how long.
+_ACTIVITY_WHAT = {"locked": "Locked", "self_wait": "Waits on itself"}
+
+
 def activity(metadata: dict[str, Any]) -> list[dict[str, str]]:
     """Slow transactions and lock failures (``app.core.db_activity``),
     newest first, for the Activity tab."""
     return [
         {
             "when": format_relative_time(event["at"]),
-            "what": "Locked"
-            if event["kind"] == "locked"
-            else f"Held {event['seconds']} s",
+            "what": _ACTIVITY_WHAT.get(event["kind"]) or f"Held {event['seconds']} s",
             "process": event["process"],
             "caller": event["caller"],
         }

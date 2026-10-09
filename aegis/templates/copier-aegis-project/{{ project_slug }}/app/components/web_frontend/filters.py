@@ -4,11 +4,11 @@ Registered on the environment by ``rendering.py``. Amounts arrive from the
 finance service as integer minor units with a currency code.
 """
 
+import html
+import re
 from collections.abc import Callable, Iterable
 from datetime import date, datetime
 from functools import cache
-import html
-import re
 from typing import Any
 
 from markupsafe import Markup
@@ -203,12 +203,14 @@ def message(text: str | None) -> Markup:
     """A health check's message as HTML: escaped, every setting or secret
     it names (``STRIPE_SECRET_KEY not configured``) set as code, as a
     docstring's literals are. An upper-case word nothing declares (``OK``)
-    is left alone."""
+    is left alone. Its own lines stay lines (a driver's error sets the
+    statement it ran apart)."""
     known = _declared_names()
     escaped = html.escape(text or "", quote=False)
-    return Markup(
-        _NAME.sub(lambda m: _LITERAL.format(m[0]) if m[0] in known else m[0], escaped)
+    named = _NAME.sub(
+        lambda m: _LITERAL.format(m[0]) if m[0] in known else m[0], escaped
     )
+    return Markup(named.replace("\n", "<br>"))
 
 
 @cache

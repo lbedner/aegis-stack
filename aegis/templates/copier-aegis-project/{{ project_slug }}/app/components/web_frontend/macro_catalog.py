@@ -188,6 +188,8 @@ EXAMPLES: dict[str, dict[str, str]] = {
         "copy_icon": """<span class="group inline-flex items-center gap-1.5">redis://localhost:6379/0{{ copy_icon("redis://localhost:6379/0", "opacity-0 group-hover:opacity-100") }}</span>""",
         "code_block": """
             {{ code_block("SELECT id, email FROM user LIMIT 10;", caption="users.sql", lang="sql") }}""",
+        "highlighted": """
+            {{ highlighted("Traceback (most recent call last):\\n  File \\"app.py\\", line 3, in run\\nValueError: bad", "pytb", wrap=True) }}""",
         "facts": """
             {{ facts([("Engine", "taskiq 0.12.6"), ("Processes", 2), ("Queues", ["system", "load_test"])]) }}""",
         "stat_row": """

@@ -26,7 +26,14 @@
     document.dispatchEvent(new CustomEvent('theme-changed', { detail: { ...state } }));
   };
   window.appearance = () => ({ ...state });
-  window.setAppearance = (key, value) => {
+  // A choice the server draws the page by (a MenuChoice) names its cookie:
+  // kept there, and the page redrawn.
+  window.setAppearance = (key, value, cookie) => {
+    if (cookie) {
+      document.cookie = `${cookie}=${encodeURIComponent(value)}; path=/; max-age=31536000; samesite=lax`;
+      location.reload();
+      return;
+    }
     if (!choices[key]?.includes(value)) return;
     state[key] = value;
     try { localStorage.setItem(key === 'sidebar' ? 'overseer_sidebar' : key, value); } catch (_) { /* Session only. */ }

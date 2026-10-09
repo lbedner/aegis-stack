@@ -36,10 +36,6 @@
     /* The rail shows icons only; status lives on the wide sidebar and the
        page's sub-menu. */
     [data-overseer-sidebar="rail"] #overseer-sidebar .overseer-rail-status { display: none; }
-    [data-overseer-sidebar="rail"] #overseer-sidebar .overseer-rail-appearance,
-    [data-overseer-sidebar="rail"] #overseer-sidebar .overseer-rail-appearance summary {
-      width: 100%;
-    }
   }
 
   /* The main sidebar only flags trouble: a healthy entry shows no dot (the
@@ -153,6 +149,9 @@
   /* JSON (a response body): keys as names, numbers with the keywords. */
   .code-block .highlight .nt { @apply text-aegis-text font-semibold; }
   .code-block .highlight :is(.m, .mi, .mf, .mh, .mo, .mb) { @apply text-aegis-teal; }
+  /* A Python traceback: its heading and carets quiet, the exception in red. */
+  .code-block .highlight :is(.gt, .pm) { @apply text-aegis-muted; }
+  .code-block .highlight .gr { @apply text-error font-semibold; }
 
   .micro-label {
     @apply text-xxs;

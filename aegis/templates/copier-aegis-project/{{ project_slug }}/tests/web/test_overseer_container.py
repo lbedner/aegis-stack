@@ -564,6 +564,32 @@ def test_the_views_switch_by_icon_and_still_say_which(client: TestClient) -> Non
     assert len(used) == len(labels) and used <= defined
 
 
+def test_the_trouble_toggles_are_icons_that_still_say_which(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Like the views: an icon each, named for a reader and on hover."""
+    html = page_html(_failing(app, monkeypatch), "/overseer?view=cards")
+    toggles = select(html, "[data-toggle]")
+    labels = [text(one(t, ".sr-only")) for t in toggles]
+    assert [t.get("title") for t in toggles] == labels == ["Trouble first", "Only trouble"]
+    used = {one(t, "svg use").get("href") for t in toggles}
+    defined = {f"#{s.get('id')}" for s in select(html, "svg[data-icons] symbol")}
+    assert len(used) == 2 and used <= defined
+
+
+def test_the_cards_name_their_charts_window_once(client: TestClient) -> None:
+    """Every card's lines cover the same window, so the stack says it once
+    and each chart is named by what it draws."""
+    asyncio.run(ui_runtime.containers("redis"))
+    html = page_html(client, "/overseer?view=cards")
+    labels = [text(p) for p in select(html, "[data-spark] p")]
+    short = dict(series.WINDOWS)[series.DEFAULT_WINDOW]
+    assert labels and not [label for label in labels if short in label]
+    # In the words the charts use for a window.
+    phrase = series.phrase(series.DEFAULT_WINDOW)
+    assert text(one(html, "[data-charts-window]")) == f"Charts, {phrase}"
+
+
 def test_the_servers_services_sit_two_to_a_row() -> None:
     """Room for each name in full, and its cost to load."""
     stack = [_entry(key) for key in ("backend", "auth", "ai", "blog")]

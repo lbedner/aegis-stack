@@ -28,8 +28,8 @@
       {% endfor %}
     </div>
     <div class="grid grid-cols-2 gap-4">
-      <div data-spark="cpu"><p class="text-xxs caps text-aegis-muted">{{ figure_names.cpu }}, 15m</p>{{ sparkline(item.spark.cpu.points, "w-full h-6", item.spark.cpu.tone) }}</div>
-      <div data-spark="memory"><p class="text-xxs caps text-aegis-muted">{{ figure_names.memory }}, 15m</p>{{ sparkline(item.spark.memory.points, "w-full h-6", item.spark.memory.tone) }}</div>
+      <div data-spark="cpu"><p class="text-xxs caps text-aegis-muted">{{ figure_names.cpu }}</p>{{ sparkline(item.spark.cpu.points, "w-full h-6", item.spark.cpu.tone) }}</div>
+      <div data-spark="memory"><p class="text-xxs caps text-aegis-muted">{{ figure_names.memory }}</p>{{ sparkline(item.spark.memory.points, "w-full h-6", item.spark.memory.tone) }}</div>
     </div>
     <div class="flex items-center gap-4">{{ links(item.url) }}</div>
     {% else %}

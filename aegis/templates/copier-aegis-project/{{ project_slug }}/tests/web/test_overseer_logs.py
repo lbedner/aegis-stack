@@ -76,7 +76,11 @@ def test_the_lines_read_newest_first_with_level_fields_and_traceback(
     failed = rows[0]
     assert "error" in text(one(failed, "[data-level]"))
     assert "key=jobs" in text(failed)
-    assert "OSError: disk full" in text(one(failed, "details"))  # folded, not a row
+    # Shown, highlighted, the moment its row opens: not a row, not folded.
+    trace = one(failed, "[data-log-trace]")
+    assert "OSError: disk full" in text(trace)
+    assert text(one(trace, ".highlight .gr")) == "OSError"
+    none(failed, "details")
     # New lines join at the top, where the newest already is.
     assert one(html, "#logs-lines").get("hx-swap") == "afterbegin"
 

@@ -18,9 +18,10 @@
      {% if cards %}x-data="{ first: true, only: false }" data-order="trouble" data-only="false"
      x-bind:data-order="first ? 'trouble' : 'sidebar'" x-bind:data-only="only"{% endif %}>
   {% if cards %}
-  <div class="flex justify-end gap-2 mb-3">
-    {{ action("Trouble first", "data-toggle=\"trouble-first\" x-on:click=\"first = !first\" x-bind:aria-pressed=\"first\"") }}
-    {{ action("Only trouble", "data-toggle=\"only-trouble\" x-on:click=\"only = !only\" x-bind:aria-pressed=\"only\"") }}
+  <div class="flex items-center gap-2 mb-3">
+    <p data-charts-window class="text-xxs caps text-aegis-muted flex-1">Charts, {{ overview_window }}</p>
+    {{ action("Trouble first", "data-toggle=\"trouble-first\" x-on:click=\"first = !first\" x-bind:aria-pressed=\"first\"", glyph="bars-arrow-up") }}
+    {{ action("Only trouble", "data-toggle=\"only-trouble\" x-on:click=\"only = !only\" x-bind:aria-pressed=\"only\"", glyph="funnel") }}
   </div>
   {% endif %}
   <div sse-swap="{{ overview_event }}" hx-target="this">{% include overview_template %}</div>

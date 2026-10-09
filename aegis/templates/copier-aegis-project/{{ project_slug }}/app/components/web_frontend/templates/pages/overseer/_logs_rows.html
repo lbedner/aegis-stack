@@ -6,10 +6,10 @@
    has a tone (info, the normal case, has none), the message (the lead the time cell repeats is left out, a
    copy keeps it), and a JSON line's fields as muted keys and their values;
    the page's search marks its matches (``filter_input``). One line each, cut at the edge: a click opens a
-   line and Wrap opens them all (``.log-line`` in input.css), which shows a
-   folded traceback too. A warning or worse marks its row's left edge in
+   line and Wrap opens them all (``.log-line`` in input.css), which shows its
+   traceback too, highlighted. A warning or worse marks its row's left edge in
    its tone, and a debug line steps back. #}
-{% from "components/macros/layout.html" import badge, copy_icon %}
+{% from "components/macros/layout.html" import badge, copy_icon, highlighted %}
 {% set _copy = "ml-1.5 align-middle text-aegis-muted hover:text-aegis-text opacity-0 group-hover/cell:opacity-100 focus:opacity-100" %}
 {% for row in rows %}
 {% set tone = tones.get(row.level) %}
@@ -36,9 +36,10 @@
     </div>
     {% endif %}
     {% if row.trace %}
-    <details class="log-trace mt-1"><summary class="cursor-pointer text-aegis-muted">Traceback{{ copy_icon(row.trace, _copy) }}</summary>
-      <pre class="mt-1 whitespace-pre-wrap text-aegis-muted">{{ row.trace }}</pre>
-    </details>
+    <div data-log-trace class="log-trace mt-1">
+      <p class="text-xxs text-aegis-muted">Traceback{{ copy_icon(row.trace, _copy) }}</p>
+      <div class="mt-1">{{ highlighted(row.trace, "pytb", wrap=True) }}</div>
+    </div>
     {% endif %}
   </td>
 </tr>

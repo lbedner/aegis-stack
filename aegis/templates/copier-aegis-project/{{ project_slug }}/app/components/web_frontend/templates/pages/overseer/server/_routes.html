@@ -18,7 +18,7 @@
   {% for name, routes in route_groups %}
   <details data-route-group {% if groups_open %}open{% endif %} class="group/g bg-aegis-card border border-aegis-border rounded-lg px-5">
     <summary class="list-none cursor-pointer select-none py-3 flex items-center gap-3">
-      <span aria-hidden="true" class="text-aegis-muted transition-transform group-open/g:rotate-90">&rsaquo;</span>
+      <span aria-hidden="true" class="text-aegis-muted transition-transform group-open/g:rotate-90">›</span>
       <h2 class="text-sm font-semibold text-aegis-text">{{ name }}</h2>
       <span class="text-xs text-aegis-muted">{{ routes|length }} {{ "route" if routes|length == 1 else "routes" }}</span>
       {% if routes|selectattr("auth")|list %}<span class="text-xxs caps text-aegis-amber">Protected</span>{% endif %}

@@ -856,6 +856,38 @@ class TestSyncTemplateChanges:
         assert config_file.read_text() == "# new config"
         assert main_file.read_text() == "# new main"
 
+    def test_no_git_changed_set_still_creates_new_files(self, tmp_path: Path) -> None:
+        """An installed CLI has no template git repo, so the changed set is
+        None. The two renders still say what changed: a file the project
+        lacks whose render changed, or that the old version never had, is
+        created. One the template left alone stays deleted."""
+        project_slug = "my-project"
+
+        def mock_run_copy(**kwargs: object) -> None:
+            dst_path = str(kwargs["dst_path"])
+            rendered_dir = Path(dst_path) / project_slug / "app"
+            rendered_dir.mkdir(parents=True)
+            old = "/old" in dst_path
+            (rendered_dir / "kept_deleted.py").write_text("x = 1\n")
+            (rendered_dir / "icons.html").write_text("old" if old else "new")
+            if not old:
+                (rendered_dir / "added.py").write_text("y = 2\n")
+
+        with patch("copier.run_copy", side_effect=mock_run_copy):
+            result = sync_template_changes(
+                tmp_path,
+                {"project_slug": project_slug},
+                "gh:test/repo",
+                "v1.0.0",
+                template_changed_files=None,
+                old_commit="abc123",
+            )
+
+        assert (tmp_path / "app" / "icons.html").read_text() == "new"
+        assert (tmp_path / "app" / "added.py").read_text() == "y = 2\n"
+        assert not (tmp_path / "app" / "kept_deleted.py").exists()
+        assert sorted(result.synced) == ["app/added.py", "app/icons.html"]
+
     def test_handles_render_failure(self, tmp_path: Path) -> None:
         """A render failure is an error, not an empty result.
 

@@ -283,6 +283,20 @@
 
 ### Fixed
 
+- **`aegis update` from an installed CLI brings files new to a stack.** A
+  `uvx` or pip install has no template repository, so the update could not
+  tell which template files changed and skipped every file the project did
+  not have yet. A 0.14.0 htmx stack without AI updated with no
+  `components/macros/icons.html`, and every Overseer page failed to render.
+  The changed files are now read off the old and new renders when git
+  cannot say.
+
+- **htmx stacks pass `make check`'s frontend lint.** Four `forEach`
+  callbacks in `app.js` returned a value (Biome), and djlint flagged entity
+  references, two `<img>` tags without a size, a non-spaceless tag in an
+  attribute and a duplicate `hx-swap`. A test now runs the project's pinned
+  Biome and djlint over the template.
+
 - **A busy worker is no longer reported dead.** Liveness counted only
   consumers that read the stream in the last 30 seconds; a worker working
   through its claimed jobs reads nothing for a while. It now also counts a

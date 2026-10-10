@@ -3,7 +3,7 @@
 <div data-card="table" class="w-[min(64rem,calc(100vw-4rem))]">
   {{ dialog_title("Page " ~ page.page_number, facts=[page.status, page.method]|join(" . ")) }}
   <div class="grid gap-4 md:grid-cols-2">
-    {% if image %}<img src="{{ image }}" alt="Page {{ page.page_number }}" class="w-full rounded border border-aegis-border">
+    {% if image %}<img src="{{ image }}" alt="Page {{ page.page_number }}" width="850" height="1100" class="w-full h-auto rounded border border-aegis-border">
     {% else %}<p class="text-xs text-aegis-muted">No image for this page.</p>{% endif %}
     <div class="max-h-[70vh] overflow-y-auto rounded border border-aegis-border bg-aegis-bg p-4 text-sm text-aegis-text whitespace-pre-wrap">{{ page.text or page.detail or "Nothing read off this page yet." }}</div>
   </div>

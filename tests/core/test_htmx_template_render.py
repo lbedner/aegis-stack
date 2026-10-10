@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import ast
 import re
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -665,6 +666,52 @@ class TestNodePipeline:
             assert re.search(r"web_frontend/static/js", script), (
                 f"unscoped biome in npm script {name!r}: {script}"
             )
+
+    @pytest.mark.skipif(shutil.which("npx") is None, reason="npx not installed")
+    def test_static_js_passes_the_projects_biome(self) -> None:
+        """A generated project's `make check` lints this JS with the Biome
+        its Makefile pins; an error there fails every htmx stack's check."""
+        import subprocess
+
+        makefile = _render("Makefile.jinja", _ctx(include_htmx=True))
+        match = re.search(r"@biomejs/biome@[\w.]+", makefile)
+        assert match, "Makefile no longer pins Biome"
+        js_dir = self._root() / "app/components/web_frontend/static/js"
+        result = subprocess.run(
+            ["npx", "--yes", match.group(), "lint", str(js_dir)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr[-3000:]
+
+    @pytest.mark.skipif(shutil.which("uvx") is None, reason="uvx not installed")
+    def test_templates_pass_the_projects_djlint(self) -> None:
+        """`make check` also runs djlint, at the version and with the
+        settings the project pins, over every htmx template."""
+        import subprocess
+        import tomllib
+
+        makefile = _render("Makefile.jinja", _ctx(include_htmx=True))
+        match = re.search(r"djlint@[\w.]+", makefile)
+        assert match, "Makefile no longer pins djlint"
+        pyproject = _render("pyproject.toml.jinja", _ctx(include_htmx=True))
+        section = pyproject.split("[tool.djlint]", 1)[1].split("\n[", 1)[0]
+        config = tomllib.loads(section)
+        templates = self._root() / "app/components/web_frontend/templates"
+        result = subprocess.run(
+            [
+                "uvx",
+                match.group(),
+                f"--profile={config['profile']}",
+                f"--ignore={config['ignore']}",
+                str(templates),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stdout[-3000:]
 
     def test_makefile_frontend_targets_are_htmx_only(self) -> None:
         on = _render("Makefile.jinja", _ctx(include_htmx=True))

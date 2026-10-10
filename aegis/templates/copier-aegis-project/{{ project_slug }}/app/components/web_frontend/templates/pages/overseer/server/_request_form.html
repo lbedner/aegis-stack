@@ -3,8 +3,9 @@
    it. One form for Routes and Load Tests. #}
 {% from "components/macros/form.html" import field, number_input, select, text_input, textarea, checkbox, primary_button, action %}
 <form data-request-form
-  {% if mode == "load" %}hx-post="{{ load_partials }}" hx-swap="none"
-  {% else %}hx-post="{{ partials }}/execute" hx-target="next [data-answer]" hx-swap="innerHTML"{% endif %}
+  {% if mode == "load" %}hx-post="{{ load_partials }}"
+  {% else %}hx-post="{{ partials }}/execute" hx-target="next [data-answer]"{% endif %}
+  hx-swap="{{ 'none' if mode == 'load' else 'innerHTML' }}"
   class="space-y-3">
   <input type="hidden" name="route" value="{{ key }}">
   {% if op.summary %}<p class="text-sm text-aegis-text">{{ op.summary }}</p>{% endif %}

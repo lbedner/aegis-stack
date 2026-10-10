@@ -33,7 +33,7 @@
 {%- if row.download %}
 <details data-row-menu class="relative inline-block text-left opacity-0 group-hover:opacity-100 focus-within:opacity-100 open:opacity-100 transition-opacity"
          @click.outside="$el.removeAttribute('open')">
-  <summary aria-label="Options" class="list-none cursor-pointer select-none px-2 py-0.5 rounded text-aegis-muted hover:text-aegis-text hover:bg-aegis-border/30">&hellip;</summary>
+  <summary aria-label="Options" class="list-none cursor-pointer select-none px-2 py-0.5 rounded text-aegis-muted hover:text-aegis-text hover:bg-aegis-border/30">…</summary>
   <ul role="menu" class="absolute right-0 top-full mt-1 z-30 min-w-[9rem] bg-aegis-card border border-aegis-border rounded-lg shadow-lg p-1">
     <li><a href="{{ row.download }}" download @click="$el.closest('details').removeAttribute('open')"
            class="block px-3 py-1.5 text-sm text-aegis-text hover:bg-aegis-border/30 rounded transition-colors">Download</a></li>

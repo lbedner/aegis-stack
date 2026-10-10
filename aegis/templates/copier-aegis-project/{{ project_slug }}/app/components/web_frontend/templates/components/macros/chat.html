@@ -52,7 +52,7 @@ btn btn-outline {{ {"sm": "btn-sm", "xs": "btn-xs"}[size] }} {{ tones.get(tone, 
 
 {# A card under a reply, loaded in place by its own route. #}
 {% macro card_loader(url, what) %}
-<div data-card-load hx-get="{{ url }}" hx-trigger="load" hx-swap="outerHTML" class="my-2 text-xs text-aegis-muted">Loading {{ what }}&hellip;</div>
+<div data-card-load hx-get="{{ url }}" hx-trigger="load" hx-swap="outerHTML" class="my-2 text-xs text-aegis-muted">Loading {{ what }}…</div>
 {% endmacro %}
 
 {# Hear an answer: the stored message, said aloud. Same place and weight

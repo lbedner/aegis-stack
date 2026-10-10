@@ -379,7 +379,9 @@ function rangeBar(event) {
 }
 function markDrag(on) {
   const covered = new Set(on ? spanned(drag.bars, drag.first, drag.last) : []);
-  drag.bars.forEach((bar) => bar.toggleAttribute('data-selecting', covered.has(bar)));
+  drag.bars.forEach((bar) => {
+    bar.toggleAttribute('data-selecting', covered.has(bar));
+  });
 }
 document.addEventListener('pointerdown', (event) => {
   const bar = rangeBar(event);
@@ -441,7 +443,9 @@ const watched = new WeakSet();
 const rowsAdded = typeof MutationObserver === 'undefined' ? null : new MutationObserver((records) => {
   records.forEach((record) => {
     const rows = [...record.addedNodes].filter((node) => node.nodeType === 1);
-    rows.forEach((row) => screenWatch?.observe(row));
+    rows.forEach((row) => {
+      screenWatch?.observe(row);
+    });
     filterRows(rows, searchOf(record.target));
   });
   queueScreen();
@@ -465,7 +469,9 @@ function markInView() {
     const span = times.length ? [Math.min(...times), Math.max(...times)] : [null, null];
     const bars = [...strip.querySelectorAll('[data-to]')];
     const seen = new Set(inView(bars, ...span));
-    bars.forEach((bar) => bar.toggleAttribute('data-in-view', seen.has(bar)));
+    bars.forEach((bar) => {
+      bar.toggleAttribute('data-in-view', seen.has(bar));
+    });
   });
 }
 let screenFrame = 0;
@@ -546,7 +552,9 @@ function highlightOnScreen() {
   document.querySelectorAll('input[data-filter]').forEach((input) => {
     const query = input.value.trim();
     const list = document.querySelector(input.dataset.filter);
-    if (query && list) rowsOnScreen(list).forEach((row) => ranges.push(...rangesIn(row, query)));
+    if (query && list) rowsOnScreen(list).forEach((row) => {
+        ranges.push(...rangesIn(row, query));
+      });
   });
   if (ranges.length) CSS.highlights.set('found', new Highlight(...ranges));
   else CSS.highlights.delete('found');

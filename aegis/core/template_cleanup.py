@@ -521,6 +521,14 @@ def sync_template_changes(
                     f"update again."
                 )
 
+        # No changed set means git could not diff the template (an installed
+        # CLI ships no template repo). Without one, every file the project
+        # lacks is skipped, so a file new to this stack never arrives.
+        if template_changed_files is None and old_rendered_dir is not None:
+            template_changed_files = _changed_between_renders(
+                old_rendered_dir, new_rendered_dir
+            )
+
         # Compare and sync files. Ruff normalizes every .py merge against
         # the project's own config, so the files that carry that config
         # merge LAST: a pyproject.toml merged first can come out of the
@@ -697,6 +705,21 @@ def _flag_unparsable_pyproject(project_path: Path, result: SyncResult) -> None:
         if "pyproject.toml" not in result.conflicts:
             result.conflicts.append("pyproject.toml")
         verbose_print(f"   Conflict: pyproject.toml is not valid TOML after merge: {e}")
+
+
+def _changed_between_renders(old_dir: Path, new_dir: Path) -> set[str]:
+    """What the template changed for this stack, read off its two renders:
+    every file the new render has that the old one lacks or renders
+    differently."""
+    changed: set[str] = set()
+    for new_file in new_dir.rglob("*"):
+        if new_file.is_dir():
+            continue
+        relative = new_file.relative_to(new_dir)
+        old_file = old_dir / relative
+        if not old_file.is_file() or old_file.read_bytes() != new_file.read_bytes():
+            changed.add(relative.as_posix())
+    return changed
 
 
 def _prune_render(rendered_dir: Path, answers: dict[str, Any]) -> None:

@@ -1,4 +1,5 @@
-"""Each call an outside assistant made, one row per call.
+"""Each call an outside assistant made, one row per call, and under a
+``run_code`` call each read its script made inside the sandbox.
 {%- if database_engine == "postgres" %}
 
 Lives in its own ``mcp`` Postgres schema, apart from service tables.
@@ -7,8 +8,8 @@ Lives in its own ``mcp`` Postgres schema, apart from service tables.
 
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, String
-from sqlmodel import Field, SQLModel
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
+from sqlmodel import Field, Relationship, SQLModel
 
 from app.core.time import utcnow
 
@@ -31,5 +32,36 @@ class McpToolCall(SQLModel, table=True):
     tool: str = Field(sa_column=Column(String(128), nullable=False))
     effect: str = Field(sa_column=Column(String(16), nullable=False))
     ok: bool
-    duration_ms: int
+    # None for a read inside the sandbox: the sandbox does not time them.
+    duration_ms: int | None
     result_bytes: int
+    # A read a run_code script made: the run_code call it ran in; None for
+    # a call the client made itself.
+    parent_id: int | None = Field(
+        default=None,
+        sa_column=Column(
+            Integer,
+            ForeignKey("{{ 'mcp.' if database_engine == 'postgres' }}mcp_tool_call.id"),
+            index=True,
+            nullable=True,
+        ),
+    )
+    # What the call sent (``server.TEXT_CAP``); a script's read as its
+    # preview.
+    args: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    # For debugging a client's call (``server.McpCall``); None on a read
+    # inside the sandbox, which rides its run_code call's.
+    transport: str | None = Field(default=None, sa_column=Column(String(16), nullable=True))
+    client_version: str | None = Field(
+        default=None, sa_column=Column(String(64), nullable=True)
+    )
+    session: str | None = Field(default=None, sa_column=Column(String(128), nullable=True))
+    user_id: int | None = None
+    token: str | None = Field(default=None, sa_column=Column(String(128), nullable=True))
+    # What it got back (``server.TEXT_CAP``).
+    response: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    error: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    # The reads under a run_code call, in the order its script made them.
+    steps: list["McpToolCall"] = Relationship(
+        sa_relationship_kwargs={"order_by": "McpToolCall.id"}
+    )

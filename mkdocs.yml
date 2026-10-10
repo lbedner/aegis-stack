@@ -37,6 +37,7 @@ theme:
         name: Switch to light mode
   features:
     - navigation.tabs
+    - navigation.sections
     - navigation.top
     - search.highlight
     - search.suggest
@@ -55,134 +56,142 @@ nav:
     - How I Build: process.md
   - Components:
     - Overview: components/index.md
-    - Backend:
-      - Getting Started: components/backend/index.md
-      - Middleware:
-        - Overview: components/backend/middleware.md
-        - Performance: components/backend/middleware/performance.md
-      - Lifecycle: components/backend/lifecycle.md
-      - Routes: components/backend/routes.md
-      - Cache: components/backend/cache.md
-      - Secrets: components/backend/secrets.md
-      - ASGI Server: components/backend/serving.md
-      - Authentication Integration: components/backend/auth.md
-      - API Load Testing: components/backend/load-testing.md
-    - Database:
-      - Getting Started: components/database.md
-      - Neon: components/database/neon.md
-    - Frontend:
-      - Flet Dashboard:
-        - Getting Started: components/frontend/index.md
-        - Architecture: components/frontend/architecture.md
-        - Routing & Views: components/frontend/routing.md
-        - Session State: components/frontend/state.md
-        - API Client: components/frontend/api-client.md
-        - Events: components/frontend/events.md
-        - Example: components/frontend/example.md
-      - Web Frontend (htmx):
-        - Overview: components/web-frontend/index.md
-        - Templates & Rendering: components/web-frontend/templates-and-partials.md
-        - Styling & Theming: components/web-frontend/styling.md
-        - Asset Pipeline: components/web-frontend/asset-pipeline.md
-        - Auth Pages: components/web-frontend/auth-pages.md
-    - Scheduler:
-      - Getting Started: components/scheduler.md
-      - Examples: components/scheduler/examples.md
-      - CLI Interface: components/scheduler/cli.md
-      - Database Persistence: components/scheduler/persistence.md
-      - Running Jobs: components/scheduler/running-jobs.md
-    - Storage:
-      - Getting Started: components/storage/index.md
-      - Configuration: components/storage/configuration.md
-      - Examples: components/storage/examples.md
-    - Secrets:
-      - Getting Started: components/secrets/index.md
-      - Setting Keys: components/secrets/setting-keys.md
-      - Needed & Verified: components/secrets/needed-and-verified.md
-      - Settings: components/secrets/settings.md
-      - How It Works: components/secrets/how-it-works.md
-    - Worker:
-      - Getting Started: components/worker/index.md
-      - Configuration: components/worker/configuration.md
-      - Background Jobs: components/worker/jobs.md
-      - Examples: components/worker/examples.md
-      - Extras:
-        - Load Testing: components/worker/extras/load-testing.md
-    - Redis: components/redis.md
-    - Deploy: components/deploy.md
-    - MCP: components/mcp.md
-    - Inference: components/inference.md
-    - Ingress: components/ingress.md
-    - Observability: components/observability.md
+    - Compute:
+      - Backend:
+        - Getting Started: components/backend/index.md
+        - Middleware:
+          - Overview: components/backend/middleware.md
+          - Performance: components/backend/middleware/performance.md
+        - Lifecycle: components/backend/lifecycle.md
+        - Routes: components/backend/routes.md
+        - Cache: components/backend/cache.md
+        - Secrets: components/backend/secrets.md
+        - ASGI Server: components/backend/serving.md
+        - Authentication Integration: components/backend/auth.md
+        - API Load Testing: components/backend/load-testing.md
+      - Worker:
+        - Getting Started: components/worker/index.md
+        - Configuration: components/worker/configuration.md
+        - Background Jobs: components/worker/jobs.md
+        - Examples: components/worker/examples.md
+        - Extras:
+          - Load Testing: components/worker/extras/load-testing.md
+      - Scheduler:
+        - Getting Started: components/scheduler.md
+        - Examples: components/scheduler/examples.md
+        - CLI Interface: components/scheduler/cli.md
+        - Database Persistence: components/scheduler/persistence.md
+        - Running Jobs: components/scheduler/running-jobs.md
+      - Ingress: components/ingress.md
+    - Data:
+      - Database:
+        - Getting Started: components/database.md
+        - Neon: components/database/neon.md
+      - Redis: components/redis.md
+      - Storage:
+        - Getting Started: components/storage/index.md
+        - Configuration: components/storage/configuration.md
+        - Examples: components/storage/examples.md
+    - AI:
+      - Inference: components/inference.md
+      - MCP: components/mcp.md
+    - App:
+      - Frontend:
+        - Flet Dashboard:
+          - Getting Started: components/frontend/index.md
+          - Architecture: components/frontend/architecture.md
+          - Routing & Views: components/frontend/routing.md
+          - Session State: components/frontend/state.md
+          - API Client: components/frontend/api-client.md
+          - Events: components/frontend/events.md
+          - Example: components/frontend/example.md
+        - Web Frontend (htmx):
+          - Overview: components/web-frontend/index.md
+          - Templates & Rendering: components/web-frontend/templates-and-partials.md
+          - Styling & Theming: components/web-frontend/styling.md
+          - Asset Pipeline: components/web-frontend/asset-pipeline.md
+          - Auth Pages: components/web-frontend/auth-pages.md
+    - Platform:
+      - Secrets:
+        - Getting Started: components/secrets/index.md
+        - Setting Keys: components/secrets/setting-keys.md
+        - Needed & Verified: components/secrets/needed-and-verified.md
+        - Settings: components/secrets/settings.md
+        - How It Works: components/secrets/how-it-works.md
+      - Deploy: components/deploy.md
+      - Observability: components/observability.md
   - Services:
     - Overview: services/index.md
-    - AI Service:
-      - Getting Started: services/ai/index.md
-      - Illiana: services/ai/illiana.md
-      - Agents: services/ai/agents.md
-      - Memory Modules: services/ai/memory-modules.md
-      - LLM Catalog: services/ai/llm-catalog.md
-      - RAG: services/ai/rag.md
-      - Cost Tracking: services/ai/cost-tracking.md
-      - Voice: services/ai/voice.md
-      - Engines: services/ai/engines.md
-      - Provider Setup: services/ai/providers.md
-      - API Reference: services/ai/api.md
-      - Service Layer: services/ai/integration.md
-      - CLI Commands: services/ai/cli.md
-      - Examples: services/ai/examples.md
-    - Authentication:
-      - Getting Started: services/auth/index.md
-      - Auth Levels: services/auth/levels.md
-      - API Reference: services/auth/api.md
-      - Service Layer: services/auth/integration.md
-      - CLI Commands: services/auth/cli.md
-      - Examples: services/auth/examples.md
-    - Blog (Experimental):
-      - Getting Started: services/blog/index.md
-      - API Reference: services/blog/api.md
-      - Dashboard: services/blog/dashboard.md
-      - CLI Commands: services/blog/cli.md
-      - Examples: services/blog/examples.md
-    - Documents:
-      - Getting Started: services/documents/index.md
-      - API Reference: services/documents/api.md
-      - Extraction: services/documents/extraction.md
-      - Dashboard: services/documents/dashboard.md
-    - Research:
-      - Getting Started: services/research/index.md
-    - Communications:
-      - Getting Started: services/comms/index.md
-      - Provider Setup: services/comms/setup.md
-      - API Reference: services/comms/api.md
-      - CLI Commands: services/comms/cli.md
-      - Examples: services/comms/examples.md
-    - Finance:
-      - Getting Started: services/finance/index.md
-      - Accounts and the Register: services/finance/accounts.md
-      - Bills and Income: services/finance/bills.md
-      - Projected Balances: services/finance/projected.md
-      - Budget: services/finance/budget.md
-      - Review: services/finance/review.md
-      - Investments: services/finance/investments.md
-      - Importing and Connections: services/finance/imports.md
-      - Chat: services/finance/chat.md
-      - API Reference: services/finance/api.md
-      - CLI Commands: services/finance/cli.md
-    - Insights (Experimental):
-      - Getting Started: services/insights/index.md
-      - Data Sources: services/insights/data-sources.md
-      - CLI Commands: services/insights/cli.md
-      - Dashboard: services/insights/dashboard.md
-      - Configuration: services/insights/configuration.md
-      - Examples: services/insights/examples.md
-    - Payment (Experimental):
-      - Getting Started: services/payment/index.md
-      - Provider Setup: services/payment/setup.md
-      - Dashboard: services/payment/dashboard.md
-      - API Reference: services/payment/api.md
-      - CLI Commands: services/payment/cli.md
-      - Examples: services/payment/examples.md
+    - AI:
+      - AI Service:
+        - Getting Started: services/ai/index.md
+        - Illiana: services/ai/illiana.md
+        - Agents: services/ai/agents.md
+        - Memory Modules: services/ai/memory-modules.md
+        - LLM Catalog: services/ai/llm-catalog.md
+        - RAG: services/ai/rag.md
+        - Cost Tracking: services/ai/cost-tracking.md
+        - Voice: services/ai/voice.md
+        - Engines: services/ai/engines.md
+        - Provider Setup: services/ai/providers.md
+        - API Reference: services/ai/api.md
+        - Service Layer: services/ai/integration.md
+        - CLI Commands: services/ai/cli.md
+        - Examples: services/ai/examples.md
+      - Research:
+        - Getting Started: services/research/index.md
+    - Data:
+      - Documents:
+        - Getting Started: services/documents/index.md
+        - API Reference: services/documents/api.md
+        - Extraction: services/documents/extraction.md
+        - Dashboard: services/documents/dashboard.md
+    - App:
+      - Authentication:
+        - Getting Started: services/auth/index.md
+        - Auth Levels: services/auth/levels.md
+        - API Reference: services/auth/api.md
+        - Service Layer: services/auth/integration.md
+        - CLI Commands: services/auth/cli.md
+        - Examples: services/auth/examples.md
+      - Payment (Experimental):
+        - Getting Started: services/payment/index.md
+        - Provider Setup: services/payment/setup.md
+        - Dashboard: services/payment/dashboard.md
+        - API Reference: services/payment/api.md
+        - CLI Commands: services/payment/cli.md
+        - Examples: services/payment/examples.md
+      - Communications:
+        - Getting Started: services/comms/index.md
+        - Provider Setup: services/comms/setup.md
+        - API Reference: services/comms/api.md
+        - CLI Commands: services/comms/cli.md
+        - Examples: services/comms/examples.md
+      - Blog (Experimental):
+        - Getting Started: services/blog/index.md
+        - API Reference: services/blog/api.md
+        - Dashboard: services/blog/dashboard.md
+        - CLI Commands: services/blog/cli.md
+        - Examples: services/blog/examples.md
+      - Finance:
+        - Getting Started: services/finance/index.md
+        - Accounts and the Register: services/finance/accounts.md
+        - Bills and Income: services/finance/bills.md
+        - Projected Balances: services/finance/projected.md
+        - Budget: services/finance/budget.md
+        - Review: services/finance/review.md
+        - Investments: services/finance/investments.md
+        - Importing and Connections: services/finance/imports.md
+        - Chat: services/finance/chat.md
+        - API Reference: services/finance/api.md
+        - CLI Commands: services/finance/cli.md
+      - Insights (Experimental):
+        - Getting Started: services/insights/index.md
+        - Data Sources: services/insights/data-sources.md
+        - CLI Commands: services/insights/cli.md
+        - Dashboard: services/insights/dashboard.md
+        - Configuration: services/insights/configuration.md
+        - Examples: services/insights/examples.md
   - Overseer:
     - Overview: overseer/index.md
     - The Story: overseer/story.md

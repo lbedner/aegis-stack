@@ -41,7 +41,7 @@ class TableTab(ft.Container):
             columns=[*headers, DataTableColumn("", width=60)] if actions else headers,
             rows=[
                 [
-                    TableNameText(row[key]) if index == 0 else _cell(row, key, color_of)
+                    _name(row, key) if index == 0 else _cell(row, key, color_of)
                     for index, (_, key, _) in enumerate(columns)
                 ]
                 + ([actions(row)] if actions else [])
@@ -53,6 +53,15 @@ class TableTab(ft.Container):
         self.content = ft.Column([table], scroll=ft.ScrollMode.AUTO)
         self.padding = ft.padding.all(Theme.Spacing.MD)
         self.expand = True
+
+
+def _name(row: dict[str, str], key: str) -> ft.Control:
+    """The row's name; a row's part (``child``, as htmx's ``data_table``
+    indents it) sits indented under the row it belongs to."""
+    name = TableNameText(row[key])
+    if not row.get("child"):
+        return name
+    return ft.Container(name, padding=ft.padding.only(left=Theme.Spacing.MD))
 
 
 def _cell(

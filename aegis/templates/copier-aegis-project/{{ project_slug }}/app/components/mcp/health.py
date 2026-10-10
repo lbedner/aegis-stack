@@ -17,5 +17,9 @@ async def check_mcp_health() -> ComponentStatus:
             if served
             else ui_mcp.NONE_SERVED
         ),
-        metadata={"served": served, "dropped": dropped, "transport": "stdio"},
+        metadata={
+            "served": served,
+            "dropped": dropped,
+            "transport": "stdio, http" if ui_mcp.has_tokens() else "stdio",
+        },
     )

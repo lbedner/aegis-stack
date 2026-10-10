@@ -4,6 +4,7 @@
    details}, ``role`` a status cell or none. #}
 {% from "components/macros/layout.html" import card, facts %}
 {% from "components/macros/table.html" import data_table %}
+{% from "pages/overseer/_macros.html" import module_link %}
 {% macro entry_detail(row) %}{{ facts(row.details.items()|list) }}{% endmacro %}
 <div class="space-y-4">
   {% for key, title, subtitle, rows in steps %}
@@ -11,7 +12,7 @@
     {{ data_table([
       {"key": "name", "label": "Name"},
       {"key": "role", "label": "Role", "kind": "status"},
-      {"key": "module", "label": "Module"},
+      {"key": "module", "label": "Module", "render": module_link},
     ], rows, empty="No " ~ title|lower ~ " registered", detail=entry_detail) }}
   {% endcall %}
   {% endfor %}

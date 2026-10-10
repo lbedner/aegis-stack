@@ -268,20 +268,6 @@ async def test_the_volume_counts_the_windows_lines_by_level(
     assert all(bar["from"] < bar["to"] for bar in volume)
 
 
-async def test_a_bars_time_range_narrows_the_lines_but_not_the_volume(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    lines = {REDIS.name: [_at(1, "early"), _at(30, "late")]}
-    use_runtime(monkeypatch, FakeRuntime(REDIS, lines=lines))
-    late = lines[REDIS.name][1].timestamp
-    assert late is not None
-    start = ui_logs._ms(late)
-    query = {"window": str(ui_logs.ALL), "from": str(start), "to": str(start + 1000)}
-    view = await ui_logs.recent(["redis"], query, volume=True)
-    assert [row["message"] for row in view["lines"]] == ["late"]
-    assert sum(bar["other"] for bar in view["volume"]) == 2
-
-
 async def test_a_picked_container_narrows_its_page_to_it(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

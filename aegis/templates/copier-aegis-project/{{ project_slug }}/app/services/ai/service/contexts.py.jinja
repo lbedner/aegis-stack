@@ -5,8 +5,6 @@ the prompt layer injects into the system prompt. Failures degrade to
 ``None`` rather than failing the chat turn.
 """
 
-from datetime import datetime
-from typing import Any
 {% if ai_rag %}
 from collections.abc import Sequence
 {% endif %}
@@ -17,14 +15,11 @@ from app.core.db import get_async_session
 from app.services.ai.domains.chat.llm_catalog_context import get_llm_catalog_context
 {% endif %}
 from app.core.log import logger
-# Module-level import for the forward reference used in ``_parse_http_health``
-# (``SystemStatus``). ``ty`` / pyright can't resolve string-forward refs when
-# the symbol is only imported lazily inside a method body.
-from app.services.system.models import SystemStatus as SystemStatus
 
 from app.services.ai.domains.chat.health_context import HealthContext
 from app.services.ai.domains.chat.usage_context import UsageContext
 from app.services.ai.service.usage import UsageMixin
+from app.services.system.live_status import live_status
 {% if ai_rag %}
 from app.services.ai.domains.chat.rag_context import RAGContext
 from app.services.ai.domains.chat.rag_stats_context import RAGStatsContext
@@ -218,80 +213,20 @@ class ContextsMixin(UsageMixin):
         self,
     ) -> tuple[HealthContext | None, str | None]:
         """
-        Build health context by fetching current system status.
-
-        Tries HTTP endpoint first (has all registered components from FastAPI),
-        falls back to local get_system_status() if server not running.
+        Build health context from the app's live status (``live_status``):
+        the webserver's full walk, or this process's partial one.
 
         Returns:
             Tuple of (HealthContext, warning_message):
             - HealthContext with system status, or None if complete failure
-            - Warning message if server unreachable, otherwise None
+            - Warning message when the status is partial, otherwise None
         """
-        # Try HTTP endpoint first - has all registered components
         try:
-            import httpx
-
-            base_url = getattr(self.settings, "API_BASE_URL", "http://localhost:8000")
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.get(f"{base_url}/health/detailed")
-                if resp.status_code == 200:
-                    data = resp.json()
-                    status = self._parse_http_health(data)
-                    return HealthContext(status=status), None  # Success, no warning
-        except Exception as e:
-            # Server not running or other error, falling back to local
-            logger.debug(
-                "ai_service.http_health_check_failed",
-                exc_type=type(e).__name__,
-                exc_message=str(e),
-            )
-
-        # HTTP failed - note this for the prompt
-        warning = (
-            "Backend webserver is not running. I can't check full system health. "
-            "Start it with the run command to get complete status."
-        )
-
-        # Fallback to local (limited components without FastAPI startup)
-        try:
-            from app.services.system.health import get_system_status
-
-            status = await get_system_status()
-            return HealthContext(status=status), warning
+            status, warning = await live_status()
         except Exception as e:
             logger.warning(f"Failed to build health context: {e}")
-            return None, warning
-
-    def _parse_http_health(self, data: dict[str, Any]) -> SystemStatus:
-        """Parse HTTP health response into SystemStatus model."""
-        # ``SystemStatus`` is module-level imported above; ``ComponentStatus``
-        # is only used inside this method so we keep it local.
-        from app.services.system.models import ComponentStatus
-
-        def parse_component(comp: dict[str, Any]) -> ComponentStatus:
-            # ``healthy`` is a ``@computed_field`` on ``ComponentStatus`` derived
-            # from ``status``, not a constructor input — drop the kwarg and
-            # let the property compute itself from the status enum value.
-            return ComponentStatus(
-                name=comp["name"],
-                status=comp["status"],
-                message=comp["message"],
-                response_time_ms=comp.get("response_time_ms"),
-                metadata=comp.get("metadata", {}),
-                sub_components={
-                    k: parse_component(v)
-                    for k, v in comp.get("sub_components", {}).items()
-                },
-            )
-
-        return SystemStatus(
-            overall_healthy=data["healthy"],
-            components={
-                k: parse_component(v) for k, v in data["components"].items()
-            },
-            timestamp=datetime.now(),
-        )
+            return None, None
+        return HealthContext(status=status), warning
 
     async def _build_usage_context(self) -> UsageContext | None:
         """

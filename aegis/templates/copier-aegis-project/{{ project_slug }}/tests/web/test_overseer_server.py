@@ -54,7 +54,7 @@ METADATA: dict[str, Any] = {
         "startup_hooks": [
             {
                 "name": "database_init",
-                "module": "app.startup.db",
+                "module": "app.core.config",
                 "description": "Open the pool",
             }
         ],
@@ -297,6 +297,21 @@ class TestLifecycle:
         assert "CORSMiddleware" in text(middleware)
         assert "Security" in text(middleware)
         one(html, "#lifecycle-shutdown [data-empty]")
+
+    def test_the_apps_own_modules_open_in_code(
+        self, signed_in: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A hook's module is a file in Overseer > Code; a library's
+        middleware has none there, so it stays text."""
+        from app.components.web_frontend import overseer_code
+        from app.core.config import settings
+
+        monkeypatch.setattr(settings, "OVERSEER_CODE_ENABLED", True)
+        html = _get(signed_in, "lifecycle")
+
+        link = one(html, "#lifecycle-startup td a")
+        assert link.get("href") == overseer_code.module_url("app.core.config")
+        none(html, "#lifecycle-middleware td a")
 
 
 class TestCache:

@@ -19,6 +19,9 @@ from .activity import record
 from .server import build_server
 
 PATH = "/mcp"
+# The app ``main.py`` mounted at PATH (``mount_app``), for the backend's
+# lifespan hooks to run (``startup/mcp_lifespan.py``).
+mounted: StarletteWithLifespan | None = None
 
 
 class McpTokens(TokenVerifier):
@@ -34,7 +37,7 @@ class McpTokens(TokenVerifier):
             token=token,
             client_id=f"mcp-token-{row.id}",
             scopes=sorted(tokens.SCOPES[row.scope]),
-            claims={"user_id": row.user_id},
+            claims={"user_id": row.user_id, "token": row.name},
         )
 
 
@@ -45,3 +48,11 @@ def build_http_app() -> StarletteWithLifespan:
     load_tools()
     server = build_server(settings.MCP_TOOLS, record=record, auth=McpTokens())
     return server.http_app(path="/", json_response=True)
+
+
+def mount_app() -> StarletteWithLifespan:
+    """A fresh app to mount at PATH, kept as ``mounted`` so the backend's
+    startup hook runs its lifespan with the webserver's."""
+    global mounted
+    mounted = build_http_app()
+    return mounted

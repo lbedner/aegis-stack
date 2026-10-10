@@ -2,6 +2,7 @@
 call is kept, by client, apart from the chat agents' own tool calls."""
 
 from contextlib import asynccontextmanager
+import json
 from typing import Any
 
 from fastmcp import Client, FastMCP
@@ -10,8 +11,9 @@ import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.components.mcp import activity
-from app.components.mcp.server import build_server
+from app.components.mcp.server import McpCall, McpStep, build_server
 from app.core.tools import register_tool
+from app.services.system import ui_mcp
 
 CLAUDE = Implementation(name="claude-code", version="1")
 DESKTOP = Implementation(name="claude-desktop", version="1")
@@ -78,6 +80,144 @@ async def test_activity_reads_by_client(server: FastMCP) -> None:
         1,
         0,
     )
+
+
+# A run_code call and the two reads its script made inside the sandbox.
+RUN = McpCall(
+    tool="run_code",
+    client="claude-code",
+    effect="read",
+    duration_ms=40,
+    result_bytes=9,
+    ok=True,
+    steps=(
+        McpStep(
+            tool="lookup",
+            args='{"order_id": "A1"}',
+            ok=True,
+            result_bytes=20,
+            response='{"order_id": "A1"}',
+        ),
+        McpStep(tool="lookup", args='{"order_id": "B2"}', ok=False, result_bytes=0),
+    ),
+)
+
+
+async def test_a_runs_reads_are_kept_under_it(server: FastMCP) -> None:
+    """Each read a script made is its own row under the run, untimed (the
+    sandbox does not time them); the client made one call."""
+    await activity.record(RUN)
+
+    [run] = await activity.recent(limit=10)
+
+    assert run.tool == "run_code"
+    assert [(s.tool, s.args, s.ok, s.duration_ms) for s in run.steps] == [
+        ("lookup", '{"order_id": "A1"}', True, None),
+        ("lookup", '{"order_id": "B2"}', False, None),
+    ]
+    # A read's response is kept with it (read when its row is opened).
+    first = await activity.one(run.steps[0].id or 0)
+    assert first is not None and first.response == '{"order_id": "A1"}'
+    [claude] = await activity.by_client()
+    assert (claude.calls, claude.reads) == (1, 1)
+
+
+async def test_overseer_lists_a_runs_reads_under_it(server: FastMCP) -> None:
+    await activity.record(RUN)
+
+    calls = (await ui_mcp.recorded())["calls"]
+
+    assert [(c["tool"], bool(c.get("child"))) for c in calls] == [
+        ("run_code", False),
+        ('lookup {"order_id": "A1"}', True),
+        ('lookup {"order_id": "B2"}', True),
+    ]
+    assert calls[2]["result"] == ui_mcp.FAILED
+
+
+FAILED_CALL = McpCall(
+    tool="lookup",
+    client="claude-code",
+    effect="read",
+    duration_ms=5,
+    result_bytes=0,
+    ok=False,
+    transport="http",
+    client_version="2.1.0",
+    session="abc123",
+    user_id=7,
+    token="laptop",
+    args='{"order_id": "A1"}',
+    error="ValueError: no such order",
+)
+ANSWERED = FAILED_CALL.model_copy(
+    update={"ok": True, "error": None, "response": '{"order_id": "A1"}'}
+)
+
+
+async def test_a_call_keeps_what_debugging_needs(server: FastMCP) -> None:
+    await activity.record(FAILED_CALL)
+
+    [listed] = await activity.recent(limit=10)
+    row = await activity.one(listed.id or 0)
+
+    assert row is not None
+    assert (row.transport, row.client_version, row.session) == ("http", "2.1.0", "abc123")
+    assert (row.user_id, row.token, row.args) == (7, "laptop", '{"order_id": "A1"}')
+    assert row.error == "ValueError: no such order"
+
+
+async def _detail(call: McpCall) -> dict[str, Any]:
+    """What Overseer shows when the call's row is opened."""
+    await activity.record(call)
+    [row] = await activity.recent(limit=10)
+    found = await ui_mcp.call_detail(row.id or 0)
+    assert found is not None
+    return found
+
+
+async def test_overseer_lists_the_transport_and_opens_to_the_rest(
+    server: FastMCP,
+) -> None:
+    """The list carries what its columns show; what a call sent and got
+    back is read when its row is opened (``call_detail``)."""
+    await activity.record(FAILED_CALL)
+
+    [call] = (await ui_mcp.recorded())["calls"]
+    detail = await ui_mcp.call_detail(call["id"])
+
+    assert call["via"] == "http"
+    assert not {"args", "response", "error"} & set(call)
+    assert detail is not None
+    facts = dict(detail["facts"])
+    assert (facts["Client version"], facts["Token"]) == ("2.1.0", "laptop")
+    assert json.loads(detail["args"]) == {"order_id": "A1"}
+    assert detail["error"] == "ValueError: no such order"
+
+
+async def test_an_unknown_call_has_no_detail(server: FastMCP) -> None:
+    assert await ui_mcp.call_detail(404) is None
+
+
+async def test_a_call_keeps_and_shows_its_response(server: FastMCP) -> None:
+    detail = await _detail(ANSWERED)
+
+    assert json.loads(detail["response"]) == {"order_id": "A1"}
+    assert (detail["args_lang"], detail["response_lang"]) == ("json", "json")
+
+
+async def test_a_script_shows_as_python(server: FastMCP) -> None:
+    script = json.dumps({"code": "h = await health()\nh"})
+    detail = await _detail(ANSWERED.model_copy(update={"args": script}))
+
+    assert (detail["args"], detail["args_lang"]) == ("h = await health()\nh", "python")
+
+
+async def test_a_call_without_arguments_shows_them_empty(server: FastMCP) -> None:
+    """So every call opens to the same sections, arguments or none."""
+    detail = await _detail(ANSWERED.model_copy(update={"args": "{}"}))
+
+    assert detail["args"] == "{}"
 {%- if include_ai and ai_backend != "memory" %}
 
 

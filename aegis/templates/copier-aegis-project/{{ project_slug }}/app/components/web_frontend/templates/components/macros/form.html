@@ -91,10 +91,10 @@ bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-
    refreshes as for any tick. #}
 {% macro checklist(id, name, label, options) %}
 {% set ticked = options|selectattr("checked")|list|length %}
-<details id="{{ id }}" hx-preserve class="relative" @click.outside="$el.removeAttribute('open')"
-         x-data="{ full: false, boxes() { return [...$root.querySelectorAll('input[type=checkbox]')] }, sync() { this.full = this.boxes().every((b) => b.checked) } }"
+<details id="{{ id }}" data-checklist hx-preserve class="relative" @click.outside="$el.removeAttribute('open')"
+         x-data="{ full: false, ticked: {{ ticked }}, boxes() { return [...$root.querySelectorAll('input[type=checkbox]')] }, sync() { this.full = this.boxes().every((b) => b.checked); this.ticked = this.boxes().filter((b) => b.checked).length } }"
          x-init="sync()" x-on:change="sync()">
-  <summary class="list-none cursor-pointer text-xs px-2.5 py-1 rounded border border-aegis-border text-aegis-muted hover:text-aegis-text">{{ label }}{% if ticked %}: {{ ticked }}{% endif %}</summary>
+  <summary class="list-none cursor-pointer text-xs px-2.5 py-1 rounded border border-aegis-border text-aegis-muted hover:text-aegis-text">{{ label }}<span x-text="ticked ? ': ' + ticked : ''">{% if ticked %}: {{ ticked }}{% endif %}</span></summary>
   <div class="absolute z-20 mt-1 w-64 max-h-80 overflow-y-auto rounded-lg border border-aegis-border bg-aegis-card shadow-xl p-2 space-y-0.5">
     <div class="flex items-center justify-between px-2 pb-1 mb-1 border-b border-aegis-border/60">
       <span class="text-xxs caps text-aegis-muted">{{ label }}</span>

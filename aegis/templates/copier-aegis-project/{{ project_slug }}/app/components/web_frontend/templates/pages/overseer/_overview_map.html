@@ -44,7 +44,7 @@
       {{ node_title(node) }}
       {% if node.load %}<span data-load class="ml-auto shrink-0 text-xs tabular-nums text-aegis-muted">{{ node.load }}</span>{% endif %}
       {% if node.figure %}<span data-figure class="ml-auto shrink-0 text-xs tabular-nums text-aegis-muted">{{ node.figure }}</span>{% endif %}
-      <span data-hint role="tooltip" class="absolute left-0 {{ 'bottom-full pb-1.5' if node.hint_above else 'top-full pt-1.5' }} z-20 hidden group-hover:block">
+      <span data-hint role="tooltip" class="absolute {{ 'right-0' if node.hint_end else 'left-0' }} {{ 'bottom-full pb-1.5' if node.hint_above else 'top-full pt-1.5' }} z-20 hidden group-hover:block">
         <span class="tooltip-panel block w-max max-w-xs px-2.5 py-1.5">{{ node.message|message }}{% if node.note %}<span class="block">{{ node.note }}</span>{% endif %}{{ cause(node) }}
           {% for fix in node.fix or [] %}<button type="button" data-fix {{ hx_dialog(fix.url) }} class="mt-1 block text-aegis-teal hover:underline">Set {{ fix.name }}</button>{% endfor %}</span>
       </span>

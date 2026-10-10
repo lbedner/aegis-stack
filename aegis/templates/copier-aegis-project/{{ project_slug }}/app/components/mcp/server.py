@@ -9,7 +9,8 @@ API route into a tool, writes included, and give one question two answers.
 
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Sequence
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
-from dataclasses import dataclass
+from contextvars import ContextVar
+import json
 import time
 from typing import Any
 
@@ -21,16 +22,32 @@ from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
 from fastmcp.tools import Tool
 from fastmcp.tools.tool import ToolResult
 from mcp import types
+from pydantic import BaseModel, ConfigDict
 
 from app.core.config import settings
 from app.core.log import logger
 from app.core.tools import acting_as, get_tool, mcp_servable
 
 
-@dataclass(frozen=True)
-class McpCall:
+class McpStep(BaseModel):
+    """A read ``run_code`` made inside its sandbox: the tool, its arguments
+    (``trace.call_args_preview``), whether it returned, its size and what
+    it returned (``TEXT_CAP``). The sandbox does not time them."""
+
+    model_config = ConfigDict(frozen=True)
+
+    tool: str
+    args: str
+    ok: bool
+    result_bytes: int
+    response: str | None = None
+
+
+class McpCall(BaseModel):
     """One tool call, attributed to the client that made it. Measured the
     way the agents' tool-call ledger measures (``tool_telemetry``)."""
+
+    model_config = ConfigDict(frozen=True)
 
     tool: str
     client: str
@@ -38,9 +55,34 @@ class McpCall:
     duration_ms: int
     result_bytes: int
     ok: bool
+    # The reads a run_code script made inside the sandbox, in order.
+    steps: tuple[McpStep, ...] = ()
+    # For debugging a client: how it reached the server ("stdio", "http"),
+    # the version and session it gave, who the call acted for and with
+    # which token (HTTP), what it sent and got back (``TEXT_CAP``) and the
+    # error.
+    transport: str | None = None
+    client_version: str | None = None
+    session: str | None = None
+    user_id: int | None = None
+    token: str | None = None
+    args: str | None = None
+    response: str | None = None
+    error: str | None = None
+
+
+# Where a running call gathers the reads its script makes inside the
+# sandbox (``run_code``), for ``Attribution`` to record with it.
+sandbox_steps: ContextVar[list[McpStep] | None] = ContextVar(
+    "sandbox_steps", default=None
+)
 
 
 Recorder = Callable[[McpCall], Awaitable[None]]
+# The most of a call's arguments or response kept: a run_code script
+# whole, mostly, and the start of a long answer. ``result_bytes`` is
+# always the whole answer's size, so a clipped one shows.
+TEXT_CAP = 8_000
 
 
 async def log_call(call: McpCall) -> None:
@@ -54,22 +96,37 @@ async def log_call(call: McpCall) -> None:
         duration_ms=call.duration_ms,
         result_bytes=call.result_bytes,
         ok=call.ok,
+        transport=call.transport,
+        error=call.error,
+        steps=[f"{step.tool} {step.args}" for step in call.steps],
     )
 
 
-def _client_name(context: MiddlewareContext[Any]) -> str:
-    """The name the client gave at initialize, or ``unknown``."""
-    if context.fastmcp_context is None:
-        return "unknown"
-    params = context.fastmcp_context.session.client_params
-    return params.clientInfo.name if params is not None else "unknown"
+def _client(context: MiddlewareContext[Any]) -> dict[str, Any]:
+    """Who is calling, as it said at initialize (its name, ``unknown``
+    without one, and version), and over what: the transport, any HTTP one
+    as ``http``, and the session."""
+    found = context.fastmcp_context
+    if found is None:
+        return {"client": "unknown"}
+    params = found.session.client_params
+    transport = found.transport
+    return {
+        "client": params.clientInfo.name if params is not None else "unknown",
+        "client_version": params.clientInfo.version if params is not None else None,
+        "transport": "stdio" if transport in (None, "stdio") else "http",
+        "session": found.session_id,
+    }
 
 
-def _result_bytes(result: ToolResult) -> int:
-    return sum(
-        len(block.text.encode())
-        for block in result.content
-        if isinstance(block, types.TextContent)
+def _token_name() -> str | None:
+    token = get_access_token()
+    return token.claims.get("token") if token is not None else None
+
+
+def _text(result: ToolResult) -> str:
+    return "".join(
+        block.text for block in result.content if isinstance(block, types.TextContent)
     )
 
 
@@ -136,23 +193,37 @@ class Attribution(Middleware):
     ) -> ToolResult:
         started = time.perf_counter()
         result: ToolResult | None = None
-        client = _client_name(context)
+        error: str | None = None
+        caller = _client(context)
         owner, reach = _reach()
+        steps: list[McpStep] = []
+        gathering = sandbox_steps.set(steps)
         try:
             if not self._within(context.message.name, reach):
                 raise ToolError(f"{context.message.name} is outside this token's scope")
-            with acting_as(owner, f"mcp:{client}"):
+            with acting_as(owner, f"mcp:{caller['client']}"):
                 result = await call_next(context)
             return result
+        except Exception as exc:
+            error = f"{type(exc).__name__}: {exc}"
+            raise
         finally:
+            sandbox_steps.reset(gathering)
+            text = _text(result) if result else None
             await self._record(
                 McpCall(
+                    **caller,
                     tool=context.message.name,
-                    client=client,
                     effect=self._effects.get(context.message.name, "unknown"),
                     duration_ms=int((time.perf_counter() - started) * 1000),
-                    result_bytes=_result_bytes(result) if result else 0,
+                    result_bytes=len(text.encode()) if text else 0,
                     ok=result is not None,
+                    steps=tuple(steps),
+                    user_id=owner,
+                    token=_token_name(),
+                    args=json.dumps(context.message.arguments or {})[:TEXT_CAP],
+                    response=text[:TEXT_CAP] if text is not None else None,
+                    error=error,
                 )
             )
 

@@ -8,10 +8,11 @@ from typing import Any
 from fastmcp import Client, FastMCP
 import pytest
 
-from app.components.mcp.server import McpCall, build_server
+from app.components.mcp.server import build_server
 from app.core.config import settings
 from app.core.tools import register_tool
 from app.services.system import ui_mcp
+from tests.components.mcp_calls import Recorder
 
 ORDERS = {"A1": 1250, "B2": 4075}
 
@@ -88,14 +89,27 @@ async def test_a_broken_script_says_why(granted: None) -> None:
 
 
 async def test_it_is_a_read_on_the_record(granted: None) -> None:
-    calls: list[McpCall] = []
-
-    async def keep(call: McpCall) -> None:
-        calls.append(call)
-
-    await _run(build_server(GRANT, record=keep), "1 + 1")
+    calls = Recorder()
+    await _run(build_server(GRANT, record=calls), "1 + 1")
 
     assert [(c.tool, c.effect, c.ok) for c in calls] == [("run_code", "read", True)]
+
+
+async def test_the_reads_a_script_made_ride_on_its_record(granted: None) -> None:
+    """What the client looked at, not only that it ran a script: each read
+    the script made inside the sandbox, in order, with its arguments and
+    what it got back."""
+    calls = Recorder()
+    code = "a = await order(order_id='A1')\nb = await order(order_id='B2')\n1"
+    await _run(build_server(GRANT, record=calls), code)
+
+    [run] = calls
+    assert [(s.tool, json.loads(s.args), s.ok) for s in run.steps] == [
+        ("order", {"order_id": "A1"}, True),
+        ("order", {"order_id": "B2"}, True),
+    ]
+    assert all(s.result_bytes > 0 for s in run.steps)
+    assert "B2" in (run.steps[1].response or "")
 
 
 def test_overseer_counts_it_as_served(granted: None) -> None:

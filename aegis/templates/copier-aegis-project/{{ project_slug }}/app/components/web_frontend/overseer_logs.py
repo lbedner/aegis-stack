@@ -1,14 +1,14 @@
 """Logs in Overseer: the Logs section every page with a container behind it
 gets after Container (``overseer_sections`` adds both), and Overseer > Logs,
 every such page's lines in one view with a link to each line's page. Both
-show the window's lines (``ui_logs``), newest first, filtered by window,
-level and text (and, for every page, by service), then follow new lines over
-SSE while open: Docker pushes them, so nothing polls."""
+read the window's lines (``ui_logs``) once, newest first, then follow new
+lines over SSE while open: Docker pushes them, so nothing polls. Only the
+window reads the containers again; levels, services, containers, order, a
+range and the search filter on the page (app.js ``data-facets``), so every
+line comes, carrying what each filter matches."""
 
 from collections.abc import AsyncIterator, Mapping, Sequence
 from typing import Any
-
-from starlette.datastructures import QueryParams
 
 from app.core import series
 from app.services.system import ui_logs
@@ -21,7 +21,7 @@ from .overseer_nav import (
     current_navigation,
     runtime_page_url,
 )
-from .rendering import fragment, with_query
+from .rendering import fragment
 
 SECTION = {"logs": "Logs"}
 EVENTS = "/overseer/events/logs/{page}"
@@ -47,10 +47,8 @@ async def context(page: str, query: Mapping[str, str]) -> dict[str, Any]:
     """One page's Logs section, with a container picker when it has several."""
     found = await ui_logs.containers([page])
     sources = ui_logs.sources(found)
-    _pages, _ticked, picked = _reading(query, sources)
-    shown = await _context(
-        [page], found, query, EVENTS.format(page=page), container=picked
-    )
+    picked = set(ui_logs.listed(query, "container"))
+    shown = await _context([page], found, query, EVENTS.format(page=page))
     return shown | {
         "logs_containers": [
             _option(c["name"], c["label"], c["name"] in picked)
@@ -66,16 +64,7 @@ async def section_context(
     """Overseer > Logs: the services ticked, every one when none is."""
     found = await ui_logs.containers()
     sources = ui_logs.sources(found)
-    pages, ticked, picked = _reading(req.query, sources)
-    every = await _context(
-        pages,
-        found,
-        req.query,
-        EVERY_EVENTS,
-        service=ticked,
-        container=picked,
-        app_service=ui_logs.listed(req.query, "app_service"),
-    )
+    every = await _context(_pages(sources), found, req.query, EVERY_EVENTS)
     return every | {
         "section_subtitle": "Every service's lines in one place.",
         "logs_services": picker(sources, req.query),
@@ -112,25 +101,10 @@ def picker(
     ]
 
 
-def _reading(
-    query: Mapping[str, str], sources: list[dict[str, Any]]
-) -> tuple[list[str], list[str], list[str]]:
-    """The pages to read, and the services and containers a query ticks that
-    this stack has: those pages, or every one when nothing is ticked."""
-    asked = set(ui_logs.listed(query, "service"))
-    wanted = set(ui_logs.listed(query, "container"))
-    ticked = [s["page"] for s in sources if s["page"] in asked]
-    picked = [
-        c["name"] for s in sources for c in s["containers"] if c["name"] in wanted
-    ]
-    pages = [
-        s["page"]
-        for s in sources
-        if s["page"] in asked or any(c["name"] in wanted for c in s["containers"])
-    ]
-    if ui_logs.listed(query, "app_service"):
-        pages = [s["page"] for s in sources]
-    return pages or [s["page"] for s in sources], ticked, picked
+def _pages(sources: list[dict[str, Any]]) -> list[str]:
+    """Every page with a container: Overseer > Logs reads them all, and the
+    Services picker narrows on the page."""
+    return [s["page"] for s in sources]
 
 
 def _option(
@@ -159,27 +133,23 @@ async def _context(
     found: ui_logs.Containers,
     query: Mapping[str, str],
     events: str,
-    **more: Any,
 ) -> dict[str, Any]:
-    """The window's lines and the filters that chose them, and the stream
-    that follows them (with the same level, order and ``more``). The search
-    (``q``) is the page's own (``filter_input``): every line comes, and the
-    text only fills the box."""
+    """Every line in the window, in the order asked for, the filters' state
+    for the page to apply, and the stream that follows every new line."""
     levels = ui_logs.levels_of(query)
     order = ui_logs.order_of(query)
-    # A picked range narrows the stream too: a line after it is not added.
-    span = {key: query.get(key) for key in ("from", "to")}
+    window = series.window_of(
+        query.get("window"), ui_logs.WINDOWS, ui_logs.DEFAULT_WINDOW
+    )
+    read = {"window": str(window), "order": order}
     return {
-        "logs": await ui_logs.recent(
-            pages, _unsearched(query), volume=True, found=found
-        ),
+        "logs": await ui_logs.recent(pages, read, volume=True, found=found),
         "logs_tones": ui_logs.TONES,
         "logs_volume_tones": ui_logs.VOLUME_TONES,
-        "logs_events": with_query(events, level=levels, order=order, **span, **more),
+        "logs_range": _range(query),
+        "logs_events": events,
         "logs_windows": ui_logs.WINDOWS,
-        "logs_window": series.window_of(
-            query.get("window"), ui_logs.WINDOWS, ui_logs.DEFAULT_WINDOW
-        ),
+        "logs_window": window,
         "logs_levels": [
             {"value": value, "label": label, "checked": value in levels}
             for value, label in ui_logs.LEVEL_CHOICES
@@ -190,11 +160,11 @@ async def _context(
     }
 
 
-def _unsearched(query: Mapping[str, str]) -> QueryParams:
-    """``query`` without its search, which the page applies itself."""
-    items = getattr(query, "multi_items", None)
-    pairs = items() if items else list(query.items())
-    return QueryParams([(key, value) for key, value in pairs if key != "q"])
+def _range(query: Mapping[str, str]) -> tuple[int, int] | None:
+    """The range a query picks (``from`` and ``to``, in ms), for the strip
+    to mark; the page narrows the lines to it."""
+    lo, hi = ui_logs.number_of(query, "from"), ui_logs.number_of(query, "to")
+    return (lo, hi) if lo is not None and hi is not None else None
 
 
 def render(
@@ -203,28 +173,28 @@ def render(
     return fragment(ROWS, rows=rows, tones=ui_logs.TONES, links=links)
 
 
-def events(page: str, query: Mapping[str, str]) -> AsyncIterator[str]:
-    """One page's new lines as rows to add, over SSE, while it is open."""
-    return _stream([page], query)
+def events(page: str) -> AsyncIterator[str]:
+    """One page's new lines as rows to add, over SSE, while it is open:
+    every one, which the page filters."""
+    return _stream([page])
 
 
-async def everything_events(query: Mapping[str, str]) -> AsyncIterator[str]:
-    """Overseer > Logs' new lines, each with its service, over SSE."""
+async def everything_events() -> AsyncIterator[str]:
+    """Overseer > Logs' new lines, each with its service, over SSE: every
+    one, which the page filters."""
     found = await ui_logs.containers()
     sources = ui_logs.sources(found)
-    pages, _ticked, _picked = _reading(query, sources)
-    async for sent in _stream(pages, query, _links(sources), found):
+    async for sent in _stream(_pages(sources), _links(sources), found):
         yield sent
 
 
 def _stream(
     pages: Sequence[str],
-    query: Mapping[str, str],
     links: dict[str, dict[str, str]] | None = None,
     found: ui_logs.Containers | None = None,
 ) -> AsyncIterator[str]:
     async def lines() -> AsyncIterator[str]:
-        async for batch in ui_logs.follow(pages, query, found=found):
+        async for batch in ui_logs.follow(pages, {}, found=found):
             yield frame(EVENT, render(batch, links))
 
     return heartbeat(lines())

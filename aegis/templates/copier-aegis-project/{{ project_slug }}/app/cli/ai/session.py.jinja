@@ -20,10 +20,38 @@ from app.cli.status_line import ChatSessionState, create_toolbar_callback
 from app.i18n import t
 
 from ...core.config import settings
+from ...core.log import logger
 from ...services.ai.config import get_ai_config
 from ...services.ai.domains.llm.providers import ProviderNotInstalledError
+from ...services.system import live_status
 
 console = theme.console()
+
+
+async def _print_health() -> None:
+    """The banner's health line: the app's whole health (``live_status``,
+    the webserver's walk), or N/A when only this process can be seen."""
+    console.print(f"  [dim]>[/dim] {t('ai.health_label')} ", end="")
+    try:
+        status, partial = await live_status.live_status()
+    except Exception as exc:
+        logger.warning("ai.chat.health_unavailable", error=str(exc))
+        partial = "unavailable"
+    if partial:
+        console.print(f"[dim]{t('ai.health_na')}[/dim]")
+        return
+    health_pct = status.health_percentage
+    if status.overall_healthy:
+        console.print(
+            f"[{theme.ACCENT}]{t('ai.health_ok', pct=health_pct)}[/{theme.ACCENT}]"
+        )
+        return
+    degraded_label = t(
+        "ai.health_degraded",
+        pct=health_pct,
+        count=len(status.unhealthy_components),
+    )
+    console.print(f"[{theme.WARNING}]{degraded_label}[/{theme.WARNING}]")
 
 
 async def _interactive_chat_session(
@@ -64,27 +92,7 @@ async def _interactive_chat_session(
 
     console.print(f"  [dim]>[/dim] [dim]{t('ai.model_label')}[/dim] {ai_config.model}")
 
-    # Fetch and display health status
-    console.print(f"  [dim]>[/dim] {t('ai.health_label')} ", end="")
-    try:
-        from app.services.system.health import get_system_status
-
-        status = await get_system_status()
-        health_pct = status.health_percentage
-        if status.overall_healthy:
-            console.print(
-                f"[{theme.ACCENT}]{t('ai.health_ok', pct=health_pct)}[/{theme.ACCENT}]"
-            )
-        else:
-            unhealthy_count = len(status.unhealthy_components)
-            degraded_label = t(
-                "ai.health_degraded",
-                pct=health_pct,
-                count=unhealthy_count,
-            )
-            console.print(f"[{theme.WARNING}]{degraded_label}[/{theme.WARNING}]")
-    except Exception:
-        console.print(f"[dim]{t('ai.health_na')}[/dim]")
+    await _print_health()
 
     await asyncio.sleep(0.1)
     console.print()

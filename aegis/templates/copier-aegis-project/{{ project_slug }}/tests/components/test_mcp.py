@@ -13,9 +13,10 @@ from fastmcp import Client
 from mcp.types import Implementation
 import pytest
 
-from app.components.mcp.server import McpCall, build_server, served_effects
+from app.components.mcp.server import build_server, served_effects
 from app.core.config import settings
 from app.core.tools import load_tools, register_tool
+from tests.components.mcp_calls import Recorder
 
 PROJECT = Path(__file__).resolve().parents[2]
 
@@ -74,12 +75,8 @@ async def test_a_call_returns_what_the_tool_returns() -> None:
 
 @pytest.mark.usefixtures("tools")
 async def test_every_call_is_recorded_with_its_client() -> None:
-    calls: list[McpCall] = []
-
-    async def keep(call: McpCall) -> None:
-        calls.append(call)
-
-    server = build_server(["lookup", "broken"], record=keep)
+    calls = Recorder()
+    server = build_server(["lookup", "broken"], record=calls)
     claude = Implementation(name="claude-code", version="1.0")
 
     async with Client(server, client_info=claude) as client:
@@ -91,6 +88,29 @@ async def test_every_call_is_recorded_with_its_client() -> None:
         ("broken", "claude-code", False),
     ]
     assert calls[0].result_bytes > 0
+
+
+@pytest.mark.usefixtures("tools")
+async def test_a_record_carries_what_debugging_needs() -> None:
+    """Enough to tell what a client asked, what it got and why it failed:
+    the arguments it sent, the response, its version and session, and the
+    error it got back."""
+    calls = Recorder()
+    server = build_server(["lookup", "broken"], record=calls)
+    claude = Implementation(name="claude-code", version="1.0")
+
+    async with Client(server, client_info=claude) as client:
+        await client.call_tool("lookup", {"order_id": "A1"})
+        await client.call_tool("broken", {}, raise_on_error=False)
+
+    looked, broke = calls
+    assert looked.args == '{"order_id": "A1"}'
+    assert looked.client_version == "1.0"
+    assert looked.session and looked.session == broke.session
+    assert looked.error is None
+    assert json.loads(looked.response or "") == await lookup("A1")
+    assert broke.response is None
+    assert broke.error and "no such order" in broke.error
 
 
 def test_the_default_grant_names_only_servable_tools() -> None:
@@ -120,6 +140,30 @@ def test_the_grant_view_says_what_is_served_and_why_the_rest_is_not(
     }
 
 
+async def wrapped() -> str:
+    """Look up an order by id, with its lines,
+    its payments and its refunds. Slow on a cold cache."""
+    return ""
+
+
+@pytest.mark.usefixtures("tools")
+def test_a_tool_is_described_by_its_whole_first_sentence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A docstring wraps mid-sentence; the Overseer shows the sentence, not
+    the first line it happens to wrap at."""
+    from app.services.system import ui_mcp
+
+    register_tool("wrapped", wrapped, effect="read")
+    monkeypatch.setattr(settings, "MCP_TOOLS", ["wrapped"])
+
+    [served] = ui_mcp.grant()["served"]
+
+    assert served["about"] == (
+        "Look up an order by id, with its lines, its payments and its refunds"
+    )
+
+
 @pytest.mark.usefixtures("tools")
 async def test_health_counts_the_served_tools(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.components.mcp.health import check_mcp_health
@@ -131,6 +175,20 @@ async def test_health_counts_the_served_tools(monkeypatch: pytest.MonkeyPatch) -
 
     assert status.status == ComponentStatusType.HEALTHY
     assert (status.metadata["served"], status.metadata["dropped"]) == (1, 1)
+
+
+@pytest.mark.parametrize(("tokens", "transport"), [(False, "stdio"), (True, "stdio, http")])
+async def test_health_names_the_transports_served(
+    monkeypatch: pytest.MonkeyPatch, tokens: bool, transport: str
+) -> None:
+    from app.components.mcp.health import check_mcp_health
+    from app.services.system import ui_mcp
+
+    monkeypatch.setattr(ui_mcp, "has_tokens", lambda: tokens)
+
+    status = await check_mcp_health()
+
+    assert status.metadata["transport"] == transport
 
 
 async def test_health_warns_when_nothing_is_served(

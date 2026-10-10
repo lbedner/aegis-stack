@@ -9,9 +9,12 @@ No LLM runs and nothing is billed, and everything the chat agents' run
 carries comes with it unchanged: ``agent_capabilities`` (the sandbox, the
 output cap), the tool-call limit, the sandbox's time and memory limits.
 Proposals and writes are never inside: proposals stay their own MCP tools.
+Each read a script makes is noted for the call's record (``sandbox_steps``),
+so the activity shows what a client looked at, not only that it ran one.
 """
 
 from collections.abc import Sequence
+import json
 from typing import Any
 
 from fastmcp.exceptions import ToolError
@@ -35,6 +38,9 @@ from app.services.ai.domains.chat.agent_loader import (
     agent_capabilities,
 )
 from app.services.ai.domains.chat.tools import resolve_tools
+from app.services.ai.service.trace import call_args_preview, sandbox_calls
+
+from .server import TEXT_CAP, McpStep, sandbox_steps
 
 NAME = "run_code"
 # The harness describes a REPL; each MCP call is its own run.
@@ -89,8 +95,31 @@ async def run(reads: Sequence[str], code: str) -> Any:
     result = await _agent(reads, code, {}).run(NAME, usage_limits=limits)
     outcome = _outcome(result.all_messages())
     if isinstance(outcome, ToolReturnPart):
+        _note_steps(outcome)
         return outcome.content
     raise ToolError(outcome.model_response() if outcome else "The script did not run.")
+
+
+def _note_steps(outcome: ToolReturnPart) -> None:
+    """The reads the script made, for the record of the call running it
+    (``sandbox_steps``; nothing gathers them outside a served call)."""
+    gathered = sandbox_steps.get()
+    if gathered is None:
+        return
+    gathered.extend(
+        _step(call, json.dumps(done.content, default=str) if done else None)
+        for call, done in sandbox_calls(outcome)
+    )
+
+
+def _step(call: ToolCallPart, returned: str | None) -> McpStep:
+    return McpStep(
+        tool=call.tool_name,
+        args=call_args_preview(call.args),
+        ok=returned is not None,
+        result_bytes=len(returned.encode()) if returned else 0,
+        response=returned[:TEXT_CAP] if returned else None,
+    )
 
 
 async def code_tool(reads: Sequence[str]) -> Tool:

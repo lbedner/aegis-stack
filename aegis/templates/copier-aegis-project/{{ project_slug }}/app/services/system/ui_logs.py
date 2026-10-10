@@ -9,8 +9,8 @@ merged by time, newest first. ``follow(pages, query)`` yields new lines in
 batches as the containers write them; Docker pushes them, so following
 polls nothing. Both fold a traceback into the line it belongs to and
 apply the filters a query carries: ``window`` (one of ``WINDOWS``),
-``level`` (the levels picked), ``q`` (text), ``from`` and ``to`` (a
-time range in ms, a volume bar's) and ``order`` (one of ``ORDERS``).
+``level`` (the levels picked), ``q`` (text) and ``order`` (one of
+``ORDERS``).
 ``recent`` also counts the window's lines by tone (``volume``). No UI
 framework imports.
 """
@@ -213,13 +213,10 @@ def levels_of(query: Mapping[str, str]) -> list[str]:
 @dataclass(frozen=True)
 class _Filter:
     """A query's filters, read once: exactly the levels picked (``NO_LEVEL``
-    for a line with none), the text (any of what the row shows), and the
-    ``from``/``to`` range (ms, ``to`` excluded) a volume bar picks."""
+    for a line with none) and the text (any of what the row shows)."""
 
     levels: frozenset[str]
     text: str
-    start: int | None
-    end: int | None
     picked: Picked
 
     @classmethod
@@ -227,8 +224,6 @@ class _Filter:
         return cls(
             frozenset(levels_of(query)),
             query.get("q", "").strip().lower(),
-            number_of(query, "from"),
-            number_of(query, "to"),
             Picked.of(query),
         )
 
@@ -246,16 +241,6 @@ class _Filter:
             return True
         return self.text in " ".join([row.line.text, row.trace or ""]).lower()
 
-    def in_range(self, row: _Row) -> bool:
-        if self.start is None and self.end is None:
-            return True
-        if row.line.timestamp is None:
-            return False
-        at = _ms(row.line.timestamp)
-        return (self.start is None or at >= self.start) and (
-            self.end is None or at < self.end
-        )
-
 
 def order_of(query: Mapping[str, str]) -> str:
     """The order a query asks for, the newest first unless it names another."""
@@ -271,13 +256,9 @@ def _ordered(rows: list[_Row], order: str) -> list[dict[str, Any]]:
     return [row.view() for row in rows]
 
 
-def _volume(
-    kept: list[_Row], since: datetime | None, picked: _Filter
-) -> list[dict[str, Any]]:
+def _volume(kept: list[_Row], since: datetime | None) -> list[dict[str, Any]]:
     """The window in ``VOLUME_BARS`` bars (``from`` and ``to`` in ms), each
-    counting the lines the level and text filters keep, by tone, whatever
-    range a bar narrowed the lines to; a bar inside that range is
-    ``picked``."""
+    counting the lines the level and text filters keep, by tone."""
     end = utcnow()
     first = min((r.line.timestamp for r in kept if r.line.timestamp), default=end)
     start = (
@@ -286,11 +267,9 @@ def _volume(
         else min(first, end - timedelta(seconds=DEFAULT_WINDOW))
     )
     step = max((end - start) / VOLUME_BARS, timedelta(milliseconds=1))
-    lo, hi = picked.start, picked.end
     bars = []
     for i in range(VOLUME_BARS):
         frm, to = _ms(start + i * step), _ms(start + (i + 1) * step)
-        middle = (frm + to) // 2
         bars.append(
             {
                 "from": frm,
@@ -299,7 +278,6 @@ def _volume(
                 "at": format_relative_time(
                     start + i * step, now=end.replace(tzinfo=UTC)
                 ),
-                "picked": lo is not None and hi is not None and lo <= middle < hi,
                 **dict.fromkeys(VOLUME_TONES, 0),
             }
         )
@@ -422,8 +400,8 @@ async def recent(
     picked = _Filter.of(query)
     kept = [row for row in rows if picked.keeps(row)]
     return {
-        "lines": _ordered([r for r in kept if picked.in_range(r)], order_of(query)),
-        "volume": _volume(kept, since, picked) if volume else [],
+        "lines": _ordered(kept, order_of(query)),
+        "volume": _volume(kept, since) if volume else [],
         "note": None,
     }
 
@@ -450,9 +428,7 @@ async def follow(
             _Row(page_by_name[r.source], r.source, r.line, source[r.source], r.trace)
             for r in records
         ]
-        return _ordered(
-            [r for r in rows if picked.keeps(r) and picked.in_range(r)], order
-        )
+        return _ordered([r for r in rows if picked.keeps(r)], order)
 
     arrived: asyncio.Queue[tuple[str, LogLine | None]] = asyncio.Queue()
     pumps = [asyncio.create_task(_pump(name, arrived)) for _, name in names]

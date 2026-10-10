@@ -114,7 +114,6 @@ def test_oldest_first_on_request(client: TestClient) -> None:
     assert (
         one(html, '#logs select[name="order"] option[selected]').get("value") == "asc"
     )
-    assert "order=asc" in one(html, "#logs").get("sse-connect")
 
 
 def test_every_cell_copies_what_it_shows(client: TestClient) -> None:
@@ -145,23 +144,34 @@ def test_buttons_scroll_to_either_end(client: TestClient) -> None:
     assert targets == ["#logs-lines > tr:first-child", "#logs-lines > tr:last-child"]
 
 
-def test_the_filters_narrow_the_lines_and_keep_their_state(client: TestClient) -> None:
-    html = page_html(client, f"{PAGE}?level=error&window=3600&q=write")
-    assert _messages(html) == ["Write failed"]
+def test_every_line_comes_and_the_filters_keep_their_state(client: TestClient) -> None:
+    """Only the window reads the containers again: levels, containers,
+    order and a range filter on the page (app.js ``data-facets``), so every
+    line in the window comes, carrying what each filter matches, and the
+    stream follows every new one."""
+    html = page_html(client, f"{PAGE}?level=error&window=3600&q=write&order=desc")
+    assert _messages(html) == ["Write failed", "Ready to accept connections"]
+    failed, ready = select(html, "#logs-lines tr")
+    assert (failed.get("data-facet-level"), ready.get("data-facet-level")) == (
+        "error",
+        "info",
+    )
+    assert failed.get("data-facet-container") == REDIS.name
     assert one(html, '#logs input[name="q"]').get("value") == "write"
     assert checked(html, '#logs input[name="window"]') == ["3600"]
     assert [
         i.get("value") for i in select(html, '#logs input[name="level"][checked]')
     ] == ["error"]
-    assert one(html, "#logs").get("sse-connect") == (
-        "/overseer/events/logs/redis?level=error&order=desc"
-    )
+    assert one(html, "#logs").get("sse-connect") == "/overseer/events/logs/redis"
+    form = one(html, "#logs form")
+    assert form.get("data-facets") == "#logs-lines"
+    assert "window" in form.get("hx-trigger")
 
 
 async def test_the_stream_appends_new_lines(monkeypatch: pytest.MonkeyPatch) -> None:
     followed = {REDIS.name: [_at(4, json.dumps({"level": "info", "event": "Saved"}))]}
     use_runtime(monkeypatch, FakeRuntime(REDIS, followed=followed))
-    frames = [f async for f in overseer_logs.events("redis", {})]
+    frames = [f async for f in overseer_logs.events("redis")]
     sent = [f for f in frames if f.startswith(f"event: {overseer_logs.EVENT}")]
     assert len(sent) == 1 and "Saved" in sent[0]
 
@@ -219,17 +229,24 @@ def test_every_services_lines_merge_with_a_link_to_their_page(
     assert one(rows[1], "[data-service] a").get("href") == "/overseer/components/cache"
 
 
-def test_the_service_filter_narrows_the_lines_and_the_stream(
+def test_the_service_filter_keeps_its_ticks_and_every_line_comes(
     everything: TestClient,
 ) -> None:
     html = page_html(everything, f"{ALL}?service=worker")
-    assert _messages(html) == ["Task done"]
+    assert _messages(html) == [
+        "Task done",
+        "Write failed",
+        "Ready to accept connections",
+    ]
+    assert [r.get("data-facet-service") for r in select(html, "#logs-lines tr")] == [
+        "worker",
+        "redis",
+        "redis",
+    ]
     assert [
         i.get("value") for i in select(html, '#logs input[name="service"][checked]')
     ] == ["worker"]
-    assert one(html, "#logs").get("sse-connect") == (
-        "/overseer/events/logs?order=desc&service=worker"
-    )
+    assert one(html, "#logs").get("sse-connect") == "/overseer/events/logs"
 
 
 def test_following_can_be_paused(everything: TestClient) -> None:
@@ -245,7 +262,7 @@ async def test_the_whole_stream_names_each_lines_service(
 ) -> None:
     followed = {WORKER.name: [_at(6, json.dumps({"level": "info", "event": "Again"}))]}
     use_runtime(monkeypatch, FakeRuntime(REDIS, WORKER, followed=followed))
-    frames = [f async for f in overseer_logs.everything_events({})]
+    frames = [f async for f in overseer_logs.everything_events()]
     sent = [f for f in frames if f.startswith(f"event: {overseer_logs.EVENT}")]
     assert (
         len(sent) == 1
@@ -282,7 +299,7 @@ def test_the_search_filters_the_lines_on_the_page_without_a_request(
     search = one(html, "#logs input[data-filter]")
     assert (search.get("data-filter"), search.get("value")) == ("#logs-lines", "write")
     assert len(select(html, "#logs-lines tr")) == 2  # not filtered on the server
-    assert "data-filter" in one(html, "#logs form").get("hx-trigger")
+    assert one(html, "#logs form").get("hx-trigger") == "change[target.name=='window']"
 
 
 def test_a_field_reads_as_a_muted_key_and_its_value(client: TestClient) -> None:
@@ -368,17 +385,18 @@ def test_the_volume_shows_the_window_and_a_bar_narrows_to_its_time(
 ) -> None:
     from app.services.system import ui_logs
 
-    html = page_html(client, f"{PAGE}?window=0&level=error")
-    bars = select(html, "#logs-volume a")
+    html = page_html(client, f"{PAGE}?window=0")
+    bars = select(html, "#logs-volume [data-to]")
     assert len(bars) == ui_logs.VOLUME_BARS
-    hot = [b for b in bars if select(b, '[data-tone="error"]')]
-    assert len(hot) == 1
-    href = hot[0].get("href")
-    assert "from=" in href and "to=" in href and "level=error" in href
-    narrowed = page_html(client, href)
-    assert _messages(narrowed) == ["Write failed"]
+    hot = [b for b in bars if one(b, '[data-tone="error"]').get("data-count") != "0"]
+    assert len(hot) == 1 and hot[0].get("type") == "button"
+    lo, hi = hot[0].get("data-from"), hot[0].get("data-to")
+    narrowed = page_html(client, f"{PAGE}?window=0&from={lo}&to={hi}")
+    strip = one(narrowed, "#logs-volume")
+    assert (strip.get("data-picked-from"), strip.get("data-picked-to")) == (lo, hi)
     one(narrowed, "#logs-volume [aria-current]")
-    one(narrowed, "#logs [data-clear-range]")
+    assert one(narrowed, "#logs [data-clear-range]").get("hidden") is None
+    assert one(html, "#logs [data-clear-range]").get("hidden") is not None
 
 
 @pytest.mark.parametrize("window", ["0", "900", "86400"])
@@ -388,25 +406,26 @@ def test_the_volume_says_when_it_runs_from(client: TestClient, window: str) -> N
     html = page_html(client, f"{PAGE}?window={window}")
     start, end = (text(s) for s in select(html, "#logs-volume-scale span"))
     assert start and start != end and end == "now"
-    assert "lines" in select(html, "#logs-volume a")[0].get("title")
+    assert "lines" in select(html, "#logs-volume [data-to]")[0].get("title")
 
 
 def test_a_range_marks_every_bar_it_covers(client: TestClient) -> None:
     """A drag's range (several bars) shows all of them picked."""
-    bars = select(page_html(client, f"{PAGE}?window=0"), "#logs-volume a")
+    bars = select(page_html(client, f"{PAGE}?window=0"), "#logs-volume [data-to]")
     narrowed = page_html(
         client,
         f"{PAGE}?window=0&from={bars[3].get('data-from')}&to={bars[5].get('data-to')}",
     )
-    assert len(select(narrowed, "#logs-volume a[aria-current]")) == 3
+    assert len(select(narrowed, "#logs-volume [data-to][aria-current]")) == 3
 
 
 def test_the_volume_can_be_dragged_across(client: TestClient) -> None:
-    """Each bar carries where it ends, for a drag over several (app.js)."""
+    """Each bar carries where it starts and ends, for a drag over several
+    (app.js)."""
     html = page_html(client, f"{PAGE}?window=0")
     one(html, "#logs-volume[data-range]")
-    bar = select(html, "#logs-volume a")[0]
-    assert bar.get("data-to") and bar.get("draggable") == "false"
+    bar = select(html, "#logs-volume [data-to]")[0]
+    assert bar.get("data-from") and bar.get("data-to")
 
 
 def test_the_volume_follows_the_lines_it_counts(client: TestClient) -> None:
@@ -423,8 +442,12 @@ def test_a_worker_can_be_picked_by_its_container(workers: TestClient) -> None:
     picks = select(html, '#logs-services input[name="container"]')
     assert sorted(i.get("value") for i in picks) == sorted([WORKER.name, STOPPED.name])
     narrowed = page_html(workers, f"{ALL}?container={WORKER.name}")
-    assert _messages(narrowed) == ["a"]
-    assert f"container={WORKER.name}" in one(narrowed, "#logs").get("sse-connect")
+    rows = {
+        text(one(r, "[data-message]")): r for r in select(narrowed, "#logs-lines tr")
+    }
+    assert rows["a"].get("data-facet-container") == WORKER.name
+    assert rows["b"].get("data-facet-container") == STOPPED.name
+    assert one(narrowed, "#logs").get("sse-connect") == "/overseer/events/logs"
     assert (
         one(narrowed, f'#logs-services input[value="{WORKER.name}"]').get("checked")
         is not None
@@ -453,19 +476,22 @@ def test_a_pages_own_logs_pick_among_its_containers(
     picks = select(page_html(client, page), '#logs-containers input[name="container"]')
     assert sorted(i.get("value") for i in picks) == sorted([WORKER.name, STOPPED.name])
     narrowed = page_html(client, f"{page}?container={STOPPED.name}")
-    rows = select(narrowed, "#logs-lines tr")
-    assert [text(one(r, "[data-message]")) for r in rows] == ["b"]
-    assert f"container={STOPPED.name}" in one(narrowed, "#logs").get("sse-connect")
+    assert checked(narrowed, '#logs-containers input[name="container"]') == [
+        STOPPED.name
+    ]
+    assert sorted(_messages(narrowed)) == ["a", "b"]
+    assert one(narrowed, "#logs").get("sse-connect") == "/overseer/events/logs/worker"
     none(page_html(client, PAGE), "#logs-containers")  # the cache has one
 
 
-def test_a_picked_range_narrows_the_stream_too(client: TestClient) -> None:
-    """A line written after a picked bar's range is not added to it."""
-    bars = select(page_html(client, f"{PAGE}?window=0"), "#logs-volume a")
-    narrowed = page_html(client, bars[0].get("href"))
-    stream = one(narrowed, "#logs").get("sse-connect")
-    assert f"from={bars[0].get('data-from')}" in stream
-    assert f"to={bars[0].get('data-to')}" in stream
+def test_a_picked_range_rides_on_the_strip_not_the_stream(client: TestClient) -> None:
+    """The page narrows to a picked range, new lines included (app.js): the
+    stream sends every line."""
+    bars = select(page_html(client, f"{PAGE}?window=0"), "#logs-volume [data-to]")
+    lo, hi = bars[0].get("data-from"), bars[0].get("data-to")
+    narrowed = page_html(client, f"{PAGE}?window=0&from={lo}&to={hi}")
+    assert one(narrowed, "#logs-volume").get("data-picked-from") == lo
+    assert one(narrowed, "#logs").get("sse-connect") == "/overseer/events/logs/redis"
 
 
 @pytest.mark.parametrize("path", [ALL, PAGE])
@@ -483,7 +509,7 @@ async def test_a_stream_looks_its_containers_up_once(
 ) -> None:
     use_runtime(monkeypatch, FakeRuntime(REDIS, WORKER))
     seen = container_lookups(monkeypatch)
-    [f async for f in overseer_logs.everything_events({})]
+    [f async for f in overseer_logs.everything_events()]
     assert len(seen) == 1
 
 
@@ -511,21 +537,28 @@ def test_application_service_picker_and_runtime_label(
     use_runtime(monkeypatch, FakeRuntime(REDIS, WORKER, lines=lines))
     client = TestClient(app)
     html = page_html(client, ALL + "?app_service=ai")
-    assert _messages(html) == ["AI ready"]
+    assert _messages(html) == ["old unattributed log", "Auth ready", "AI ready"]
+    assert [
+        r.get("data-facet-app_service") for r in select(html, "#logs-lines tr")
+    ] == [None, "auth", "ai"]
     assert checked(html, '#logs-services input[name="app_service"]') == ["ai"]
     assert {
         i.get("value") for i in select(html, '#logs-services input[name="app_service"]')
     } >= {"ai", "auth"}
-    assert "app_service=ai" in one(html, "#logs").get("sse-connect")
-    source = one(html, "#logs-lines [data-service]")
+    assert one(html, "#logs").get("sse-connect") == "/overseer/events/logs"
+    rows = select(html, "#logs-lines tr")
+    ai = next(r for r in rows if r.get("data-facet-app_service") == "ai")
+    source = one(ai, "[data-service]")
     # The service's title as this stack names it (a gated one is title-cased).
     assert AI_TITLE in text(source) and "Worker" in text(source)
     assert "old unattributed log" in _messages(page_html(client, ALL))
 
 
-async def test_application_service_filter_reaches_live_rows(
+async def test_live_rows_carry_their_application_service(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """The stream sends every new line; each carries its application
+    service, so a tick on the page keeps or hides it (app.js)."""
     followed = {
         WORKER.name: [
             _at(
@@ -541,11 +574,10 @@ async def test_application_service_filter_reaches_live_rows(
         ]
     }
     use_runtime(monkeypatch, FakeRuntime(REDIS, WORKER, followed=followed))
-    frames = [
-        frame async for frame in overseer_logs.everything_events({"app_service": "ai"})
-    ]
+    frames = [frame async for frame in overseer_logs.everything_events()]
     html = "".join(frames)
-    assert "AI live" in html and "Auth live" not in html
+    assert "AI live" in html and "Auth live" in html
+    assert 'data-facet-app_service="ai"' in html
     assert "Worker" in html
 
 

@@ -17,7 +17,8 @@ import typer
 from .. import __version__ as aegis_version
 from ..cli import brand
 from ..config.defaults import GITHUB_TEMPLATE_URL
-from ..constants import AnswerKeys, OllamaMode
+from ..constants import AnswerKeys, Messages, OllamaMode
+from ..core import project_deps
 from ..core.behavior_changes import behavior_changes_for
 from ..core.copier_manager import is_copier_project, load_copier_answers
 from ..core.copier_updater import (
@@ -290,8 +291,10 @@ def _record_pending_update(
     template_root: Path,
     backup_tag: str | None,
     target_commit: str,
+    installed: frozenset[str],
 ) -> None:
-    """Remember a conflicted update so ``--finish`` can complete it (#1018).
+    """Remember a conflicted update so ``--finish`` can complete it (#1018),
+    with the dependencies the project had before it (``installed``).
 
     On conflicts the baseline advance and post-gen are skipped on purpose;
     this is what lets a later run pick them up instead of re-merging.
@@ -303,9 +306,16 @@ def _record_pending_update(
                 "template_root": str(template_root),
                 "backup_tag": backup_tag,
                 "target_commit": target_commit,
+                "installed": sorted(installed),
             }
         )
     )
+
+
+def _installed_before(pending: dict[str, Any]) -> frozenset[str]:
+    """The dependencies a pending update started from; none for a record
+    written before they were kept (so the rebuild step shows)."""
+    return frozenset(pending.get("installed", []))
 
 
 def _load_pending_update(project_path: Path) -> dict[str, Any] | None:
@@ -395,6 +405,9 @@ def _finish_update(target_path: Path, pending: dict[str, Any]) -> None:
         typer.echo(t("update.partial_detail"))
     typer.echo("")
     typer.echo(t("update.next_steps"))
+    Messages.print_rebuild(
+        project_deps.dependencies(target_path) != _installed_before(pending)
+    )
     typer.echo(t("update.next_review"))
     typer.echo(t("update.next_test"))
     typer.echo(t("update.next_commit"))
@@ -815,6 +828,7 @@ def update_command(
         brand.error(t("update.target_unresolved", ref=target_ref), err=True)
         raise typer.Exit(1)
 
+    installed = project_deps.dependencies(target_path)
     # Create backup point before update
     typer.echo("")
     typer.echo(t("update.creating_backup"))
@@ -1069,6 +1083,7 @@ def update_command(
                 template_root=template_root,
                 backup_tag=backup_tag,
                 target_commit=target_commit,
+                installed=installed,
             )
         else:
             tasks_success = _run_postgen(target_path, answers)
@@ -1166,6 +1181,7 @@ def update_command(
 
         typer.echo("")
         typer.echo(t("update.next_steps"))
+        Messages.print_rebuild(project_deps.dependencies(target_path) != installed)
         typer.echo(t("update.next_review"))
         typer.echo(t("update.next_conflicts"))
         typer.echo(t("update.next_test"))

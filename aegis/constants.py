@@ -402,11 +402,21 @@ class Messages:
         from .i18n import t
 
         typer.echo(f"\n{t('shared.next_steps')}")
-        if rebuild:
-            typer.echo(t("shared.next_rebuild"))
+        cls.print_rebuild(rebuild)
         typer.echo(t("shared.next_make_check"))
         typer.echo(t("shared.next_test"))
         typer.echo(t("shared.next_commit"))
+
+    @classmethod
+    def print_rebuild(cls, rebuild: bool) -> None:
+        """The rebuild step, when a command changed what the project's image
+        installs (``aegis.core.project_deps``)."""
+        import typer
+
+        from .i18n import t
+
+        if rebuild:
+            typer.echo(t("shared.next_rebuild"))
 
     @classmethod
     def print_review_changes(cls) -> None:

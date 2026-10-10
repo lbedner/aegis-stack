@@ -69,11 +69,15 @@ async def test_the_modal_shows_the_grant_and_how_to_connect() -> None:
 async def test_a_call_opens_to_what_it_sent_and_got_back(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """As on the htmx page (``ui_mcp.call_detail``), read when opened."""
+    """As on the htmx page (``ui_mcp.call_detail``), read when first
+    opened: the table keeps the built detail, and opening it again (a
+    re-mount) reads nothing."""
     from app.services.system import ui_mcp
 
+    reads: list[int] = []
+
     async def call_detail(call_id: int) -> dict[str, Any] | None:
-        assert call_id == 7
+        reads.append(call_id)
         return {
             "args": '{\n  "order_id": "A1"\n}',
             "args_lang": "json",
@@ -86,7 +90,10 @@ async def test_a_call_opens_to_what_it_sent_and_got_back(
     monkeypatch.setattr(ui_mcp, "call_detail", call_detail)
     detail = CallDetail({"id": 7})
     await detail.load()
+    await detail.load()
     shown = rendered(detail)
+
+    assert reads == [7]
 
     assert "order_id" in shown
     assert "no such order" in shown

@@ -15,8 +15,8 @@ from sqlalchemy import case
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import defer, selectinload
 from sqlmodel import col, delete, func, select
-from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.concurrency import background
 from app.core.db import get_async_session
 from app.core.log import logger
 from app.core.time import utcnow
@@ -39,17 +39,24 @@ class ClientActivity(BaseModel):
     last_at: datetime
 
 
-# How long a call is kept: older ones go on a write, with the reads under
-# them. ponytail: a constant, and pruned at most hourly per process on a
-# write; a setting and a scheduled job if a quiet app must shed rows too.
+# How long a call is kept: older ones go after a write, with the reads
+# under them. ponytail: a constant, and pruned at most hourly per process
+# after a write; a setting and a scheduled job if a quiet app must shed
+# rows too.
 KEEP = timedelta(days=30)
 PRUNE_EVERY = 3600.0
-# When this process last pruned (``time.monotonic``, which starts at boot,
-# not at zero); None until it first does.
-_pruned_at: float | None = None
+# The most runs one prune transaction deletes: a backlog (the first prune
+# after an upgrade) drains in short transactions, never one long lock.
+BATCH = 500
+# When this process last started a prune (``time.monotonic``).
+_pruned_at = float("-inf")
 
 
 async def record(call: McpCall) -> None:
+    """Keep ``call`` (its script's reads under it), then, at most every
+    ``PRUNE_EVERY`` seconds, start a prune off the client's call: a prune
+    that fails never takes the record with it."""
+    global _pruned_at
     await log_call(call)
     try:
         async with get_async_session() as db:
@@ -62,24 +69,34 @@ async def record(call: McpCall) -> None:
                 for step in call.steps
             ]
             db.add(parent)
-            await _prune(db)
     except SQLAlchemyError:
         logger.exception("mcp.record_failed", tool=call.tool, client=call.client)
-
-
-async def _prune(db: AsyncSession) -> None:
-    """Delete calls older than ``KEEP``, the reads under them first (each
-    points at its run), at most once every ``PRUNE_EVERY`` seconds."""
-    global _pruned_at
     now = time.monotonic()
-    if _pruned_at is not None and now - _pruned_at < PRUNE_EVERY:
-        return
-    _pruned_at = now
-    old = select(McpToolCall.id).where(
-        col(McpToolCall.parent_id).is_(None), col(McpToolCall.called_at) < utcnow() - KEEP
+    if now - _pruned_at >= PRUNE_EVERY:
+        _pruned_at = now
+        background(_prune())
+
+
+async def _prune() -> None:
+    """Delete the runs older than ``KEEP``, the reads under them first (each
+    points at its run), ``BATCH`` runs per transaction."""
+    old = (
+        select(McpToolCall.id)
+        .where(
+            col(McpToolCall.parent_id).is_(None),
+            col(McpToolCall.called_at) < utcnow() - KEEP,
+        )
+        .order_by(col(McpToolCall.id))
+        .limit(BATCH)
     )
-    await db.exec(delete(McpToolCall).where(col(McpToolCall.parent_id).in_(old)))
-    await db.exec(delete(McpToolCall).where(col(McpToolCall.id).in_(old)))
+    while True:
+        async with get_async_session() as db:
+            ids = list((await db.exec(old)).all())
+            if ids:
+                await db.exec(delete(McpToolCall).where(col(McpToolCall.parent_id).in_(ids)))
+                await db.exec(delete(McpToolCall).where(col(McpToolCall.id).in_(ids)))
+        if len(ids) < BATCH:
+            return
 
 
 # A call's text, up to ``server.TEXT_CAP`` each: read with ``one`` when its

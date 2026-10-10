@@ -2,7 +2,7 @@
 call is kept, by client, apart from the chat agents' own tool calls."""
 
 from contextlib import asynccontextmanager
-from datetime import timedelta
+from datetime import datetime, timedelta
 import json
 from typing import Any
 
@@ -44,6 +44,8 @@ def server(
         yield async_db_session
 
     monkeypatch.setattr(activity, "get_async_session", test_session)
+    # No prune is due: one would run beside the next call, on its session.
+    monkeypatch.setattr(activity, "_pruned_at", float("inf"))
     register_tool("lookup", lookup, effect="read")
     register_tool("file_it", file_it, effect="proposes")
     return build_server(["lookup", "file_it"], record=activity.record)
@@ -169,17 +171,20 @@ async def test_a_call_keeps_what_debugging_needs(server: FastMCP) -> None:
     assert row.error == "ValueError: no such order"
 
 
-async def test_a_call_past_the_keep_is_deleted_with_its_reads(
-    server: FastMCP,
-    async_db_session: AsyncSession,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The record is not forever: on a write, calls older than ``KEEP`` go,
-    the reads a script made with them."""
-    from app.core.time import utcnow
+def test_a_prune_finds_old_calls_by_an_index() -> None:
+    """Pruning reads calls by age: indexed, not a scan of every call."""
+    table = activity.McpToolCall.__table__  # type: ignore[attr-defined]
 
-    old = activity.McpToolCall(
-        called_at=utcnow() - activity.KEEP - timedelta(days=1),
+    assert any(
+        [column.name for column in index.columns] == ["called_at"]
+        for index in table.indexes
+    )
+
+
+def _old_run(at: datetime) -> Any:
+    """A run_code call from ``at``, with the read its script made."""
+    run = activity.McpToolCall(
+        called_at=at,
         client="claude-code",
         tool="run_code",
         effect="read",
@@ -187,9 +192,9 @@ async def test_a_call_past_the_keep_is_deleted_with_its_reads(
         duration_ms=1,
         result_bytes=1,
     )
-    old.steps = [
+    run.steps = [
         activity.McpToolCall(
-            called_at=old.called_at,
+            called_at=at,
             client="claude-code",
             tool="lookup",
             effect="read",
@@ -198,13 +203,32 @@ async def test_a_call_past_the_keep_is_deleted_with_its_reads(
             result_bytes=1,
         )
     ]
-    async_db_session.add(old)
+    return run
+
+
+@pytest.mark.queryspy(threshold=4)  # a select and two deletes per batch, by design
+async def test_a_call_past_the_keep_is_deleted_with_its_reads(
+    server: FastMCP,
+    async_db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The record is not forever: after a write, calls older than ``KEEP``
+    go, the reads a script made with them, a batch at a time, off the
+    client's call (``background``)."""
+    from app.core.time import utcnow
+
+    old = utcnow() - activity.KEEP - timedelta(days=1)
+    async_db_session.add_all([_old_run(old), _old_run(old)])
     await async_db_session.commit()
-    monkeypatch.setattr(activity, "_pruned_at", None)
-    # A machine up for less than PRUNE_EVERY: a fresh CI runner, a new VM.
-    monkeypatch.setattr(activity.time, "monotonic", lambda: 60.0)
+    pruning: list[Any] = []
+    monkeypatch.setattr(activity, "background", pruning.append)
+    monkeypatch.setattr(activity, "_pruned_at", float("-inf"))
+    # Two full batches, then the empty one that ends the prune.
+    monkeypatch.setattr(activity, "BATCH", 1)
 
     await activity.record(ANSWERED)
+    [prune] = pruning
+    await prune
 
     kept = (await async_db_session.exec(select(activity.McpToolCall))).all()
     assert [row.tool for row in kept] == ["lookup"] and kept[0].parent_id is None

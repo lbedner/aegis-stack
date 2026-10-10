@@ -108,6 +108,7 @@ def test_pending_update_in_linked_worktree(tmp_path: Path) -> None:
         template_root=repo,
         backup_tag="backup",
         target_commit="a" * 40,
+        installed=frozenset({"fastapi"}),
     )
 
     assert _load_pending_update(linked) == {
@@ -115,6 +116,7 @@ def test_pending_update_in_linked_worktree(tmp_path: Path) -> None:
         "template_root": str(repo),
         "backup_tag": "backup",
         "target_commit": "a" * 40,
+        "installed": ["fastapi"],
     }
 
 

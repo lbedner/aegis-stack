@@ -2,6 +2,7 @@
 what an outside assistant is served, how to connect one, and what each
 client did (``app.components.mcp.activity``, where there is a database)."""
 
+import json
 from typing import Any
 
 from app.core.config import settings
@@ -27,6 +28,7 @@ CLIENT_COLUMNS = (
 CALL_COLUMNS = (
     ("when", "When"),
     ("client", "Client"),
+    ("via", "Via"),
     ("tool", "Tool"),
     ("effect", "Effect"),
     ("result", "Result"),
@@ -51,9 +53,12 @@ NOT_KEPT = (
 
 
 def _about(tool: RegisteredTool) -> str:
-    """The registry's one-liner, else the docstring's first line."""
-    doc = (tool.func.__doc__ or "").strip().splitlines()
-    return tool.description or (doc[0] if doc else "")
+    """The registry's one-liner, else the docstring's first sentence, however
+    its lines wrap."""
+    if tool.description:
+        return tool.description
+    lead = " ".join((tool.func.__doc__ or "").strip().split("\n\n")[0].split())
+    return lead.split(". ")[0].rstrip(".")
 
 
 def _why_not(name: str) -> str:
@@ -95,11 +100,13 @@ def connect() -> list[dict[str, str]]:
         },
     ]
     if has_tokens():
+        from app.components.mcp.http import PATH
+
         commands.append(
             {
                 "label": "Over HTTP",
                 "command": f"claude mcp add --transport http {app} "
-                f"{settings.API_BASE_URL}/mcp/ "
+                f"{settings.API_BASE_URL}{PATH}/ "
                 '--header "Authorization: Bearer <token>"',
             }
         )
@@ -124,19 +131,77 @@ async def recorded(limit: int = 50) -> dict[str, Any]:
         for c in await activity.by_client()
     ]
     calls = [
-        {
-            "when": format_relative_time(call.called_at),
-            "client": call.client,
-            "tool": call.tool,
-            "effect": call.effect,
-            "result": OK if call.ok else FAILED,
-            "time": format_duration_ms(call.duration_ms),
-            "size": format_bytes(call.result_bytes),
-        }
+        row
         for call in await activity.recent(limit=limit)
+        for row in [_call_row(call), *(_call_row(step) for step in call.steps)]
     ]
     note = "" if clients else "No MCP client has called a tool yet."
     return {"note": note, "clients": clients, "calls": calls}
+
+
+def _call_row(call: Any) -> dict[str, Any]:
+    """One call as the Recent calls table shows it (its detail is read when
+    the row is opened, ``call_detail``); a read a script made sits under its
+    run_code call (``child``), named with its arguments."""
+    row: dict[str, Any] = {
+        "id": call.id,
+        "when": format_relative_time(call.called_at),
+        "client": call.client,
+        "via": call.transport or "",
+        "tool": call.tool,
+        "effect": call.effect,
+        "result": OK if call.ok else FAILED,
+        "time": format_duration_ms(call.duration_ms),
+        "size": format_bytes(call.result_bytes),
+    }
+    if call.parent_id is None:
+        return row
+    shown = call.args if call.args and call.args != "{}" else ""
+    return row | {
+        "when": "",
+        "client": "",
+        "tool": f"{call.tool} {shown}".strip(),
+        "child": True,
+    }
+
+
+async def call_detail(call_id: int) -> dict[str, Any] | None:
+    """What a call sent and got back (or its error), and who made it how:
+    its row's detail, read when opened. None for no such call, or where
+    nothing is kept."""
+    try:
+        from app.components.mcp import activity
+    except ImportError:
+        return None
+    call = await activity.one(call_id)
+    if call is None:
+        return None
+    return {
+        **_shown("args", call.args),
+        **_shown("response", call.response),
+        "error": call.error,
+        "facts": [
+            ("Client version", call.client_version),
+            ("Session", call.session),
+            ("Acting for", f"user {call.user_id}" if call.user_id else None),
+            ("Token", call.token),
+        ],
+    }
+
+
+def _shown(key: str, text: str | None) -> dict[str, str | None]:
+    """A call's arguments or response to read, and the language to
+    highlight it in (``<key>_lang``): a script as its Python, JSON
+    indented, anything else (or JSON clipped past parsing) as sent."""
+    try:
+        parsed = json.loads(text) if text else None
+    except ValueError:
+        return {key: text, f"{key}_lang": None}
+    if isinstance(parsed, dict) and isinstance(parsed.get("code"), str):
+        return {key: parsed["code"], f"{key}_lang": "python"}
+    if parsed is None:
+        return {key: None, f"{key}_lang": None}
+    return {key: json.dumps(parsed, indent=2), f"{key}_lang": "json"}
 
 
 def has_tokens() -> bool:

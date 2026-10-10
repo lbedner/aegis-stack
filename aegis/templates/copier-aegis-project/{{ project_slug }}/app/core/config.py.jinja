@@ -189,11 +189,11 @@ class Settings(
 {%- if include_mcp %}
 
     # The tools an MCP client may call (``<app> mcp``), by registered name; a
-    # write is never served (``app.core.tools.mcp_servable``). ``run_code``
-    # runs a client's script against the read tools, where the AI service's
-    # code mode is. In ``.env``: a JSON list.
+    # write is never served (``app.core.tools.mcp_servable``). Every stack
+    # gets Overseer's reads (health, errors, logs); ``run_code`` runs a script
+    # on the read tools where AI's code mode is. In ``.env``: a JSON list.
 {%- set mcp_code = include_ai and ai_framework == "pydantic-ai" and ai_backend != "memory" %}
-    MCP_TOOLS: list[str] = {{ ('["ledger", "accounts", "quote", "categories", "bills", "bill_candidates", "tags"' ~ (', "run_code"' if mcp_code else '') ~ ']') if include_finance else "[]" }}
+    MCP_TOOLS: list[str] = {{ (["health", "errors", "logs"] + (["ledger", "accounts", "quote", "categories", "bills", "bill_candidates", "tags"] if include_finance else []) + (["run_code"] if mcp_code else [])) | tojson }}
     # Whose data an MCP call reads and whose cards it files; None reads
     # every row (a single-tenant install). With auth, proposals need it.
     MCP_OWNER_USER_ID: int | None = None

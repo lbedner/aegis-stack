@@ -105,6 +105,10 @@ class TestEffect:
 # new tool's effect is a decision, not the (write) default.
 EXPECTED_EFFECTS = {
     "context": "read",
+    # Overseer's reads, on every stack.
+    "health": "read",
+    "errors": "read",
+    "logs": "read",
     "research_search": "read",
     "research_thread": "read",
     "research_history": "read",

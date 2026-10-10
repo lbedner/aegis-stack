@@ -40,18 +40,16 @@ async def glance_events(page: str) -> StreamingResponse:
 
 
 @router.get(overseer_logs.EVENTS, include_in_schema=False)
-async def logs_events(page: str, request: Request) -> StreamingResponse:
-    """The page's new log lines over SSE, through its level and text
-    filters."""
+async def logs_events(page: str) -> StreamingResponse:
+    """The page's new log lines over SSE, every one: the page filters them."""
     _known(page)
-    return event_stream(overseer_logs.events(page, request.query_params))
+    return event_stream(overseer_logs.events(page))
 
 
 @router.get(overseer_logs.EVERY_EVENTS, include_in_schema=False)
-async def every_logs_events(request: Request) -> StreamingResponse:
-    """Overseer > Logs' new lines over SSE, through its service, level and
-    text filters."""
-    return event_stream(overseer_logs.everything_events(request.query_params))
+async def every_logs_events() -> StreamingResponse:
+    """Overseer > Logs' new lines over SSE, every one: the page filters them."""
+    return event_stream(overseer_logs.everything_events())
 
 
 @router.get(overseer_container.OVERVIEW_EVENTS, include_in_schema=False)

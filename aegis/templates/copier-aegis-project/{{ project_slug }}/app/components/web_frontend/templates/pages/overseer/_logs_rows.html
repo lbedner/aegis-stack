@@ -9,13 +9,15 @@
    line and Wrap opens them all (``.log-line`` in input.css), which shows its
    traceback too, highlighted, named by where it broke in the app's own
    code. A warning or worse marks its row's left edge in its tone, and a
-   debug line steps back. #}
+   debug line steps back. Each row carries what the page's filters match
+   (``data-facet-*``: its level, service, container and application
+   service), so they narrow it with no request (app.js). #}
 {% from "components/macros/layout.html" import badge, copy_icon, highlighted %}
 {% from "pages/overseer/_macros.html" import own_frame %}
 {% set _copy = "ml-1.5 align-middle text-aegis-muted hover:text-aegis-text opacity-0 group-hover/cell:opacity-100 focus:opacity-100" %}
 {% for row in rows %}
 {% set tone = tones.get(row.level) %}
-<tr{% if row.ms %} data-at="{{ row.ms }}"{% endif %} class="log-row border-t border-aegis-border/40 hover:bg-aegis-card align-top cursor-pointer{% if tone == 'muted' %} opacity-60{% endif %}"{% if tone %} data-tone="{{ tone }}"{% endif %}>
+<tr{% if row.ms %} data-at="{{ row.ms }}"{% endif %} data-facet-level="{{ row.level or 'none' }}" data-facet-service="{{ row.page }}" data-facet-container="{{ row.instance }}"{% if row.app_service %} data-facet-app_service="{{ row.app_service }}"{% endif %} class="log-row border-t border-aegis-border/40 hover:bg-aegis-card align-top cursor-pointer{% if tone == 'muted' %} opacity-60{% endif %}"{% if tone %} data-tone="{{ tone }}"{% endif %}>
   <td class="group/cell px-3 py-1 whitespace-nowrap text-aegis-muted font-mono border-l-2 border-l-transparent">{{ row.at }}{{ copy_icon(row.at, _copy) }}</td>
   <td class="group/cell px-3 py-1 whitespace-nowrap truncate" data-service title="{{ row.instance }}">
     <span data-dot class="inline-block w-2 h-2 mr-1.5 rounded-full align-middle" style="background: var(--aegis-chart-{{ row.color + 1 }})"></span>

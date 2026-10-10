@@ -812,6 +812,32 @@ def test_a_bottom_rows_hint_opens_above_it() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("across", "tiers"),
+    [
+        (False, [["service_payment", "outside:Stripe"]]),
+        (True, [["service_payment"], ["outside:Stripe"]]),
+    ],
+)
+def test_a_right_hand_hint_opens_toward_the_middle(
+    across: bool, tiers: list[list[str]]
+) -> None:
+    """The map clips what runs past its right edge too: a node in the right
+    half opens its hint from its own right edge, leftward."""
+    shape = topology.Shape(tiers=tiers, links=[], hosted=[])
+    stack = [_entry("service_payment"), _entry("outside:Stripe")]
+    nodes = {
+        n["key"]: n
+        for n in overseer_map.layout(stack, shape, compact=True, across=across)[
+            "map_nodes"
+        ]
+    }
+    assert (
+        nodes["service_payment"]["hint_end"],
+        nodes["outside:Stripe"]["hint_end"],
+    ) == (False, True)
+
+
 def test_a_store_stands_taller_than_a_line_of_compute() -> None:
     """A cylinder or a bucket squeezed to one line reads as a slab: data
     stands taller (and, opened up, narrower), and its row makes room."""

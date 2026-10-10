@@ -27,7 +27,7 @@ from app.components.backend.security.trusted_proxies import (  # noqa: E402
 from app.components.frontend.main import create_frontend_app  # noqa: E402
 {%- if include_mcp and include_auth %}
 from app.components.mcp.http import PATH as MCP_PATH  # noqa: E402
-from app.components.mcp.http import build_http_app as build_mcp_app  # noqa: E402
+from app.components.mcp.http import mount_app as mount_mcp_app  # noqa: E402
 {%- endif %}
 {%- if include_htmx %}
 from app.components.web_frontend.assets import CachedStaticFiles  # noqa: E402
@@ -106,14 +106,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
     logger.info("--- Application startup complete ---")
 
-{%- if include_mcp and include_auth %}
-    # The mounted MCP app's own lifespan: a mount's does not run on its
-    # own, and without it no MCP session starts.
-    async with app.state.mcp.lifespan(app.state.mcp):
-        yield
-{%- else %}
     yield
-{%- endif %}
 
     # --- SHUTDOWN ---
     logger.info("--- Running application shutdown ---")
@@ -159,10 +152,9 @@ def create_integrated_app() -> FastAPI:
 
     create_backend_app(app)
 {%- if include_mcp and include_auth %}
-    # MCP over HTTP, token required. Mounted before the pages so no page
-    # route answers for it.
-    app.state.mcp = build_mcp_app()
-    app.mount(MCP_PATH, app.state.mcp)
+    # MCP over HTTP, token required (its lifespan runs from the backend's
+    # hooks). Mounted before the pages so no page route answers for it.
+    app.mount(MCP_PATH, mount_mcp_app())
 {%- endif %}
 {%- if include_htmx %}
     # Server-rendered pages at /. Registered as routes rather than a mount so

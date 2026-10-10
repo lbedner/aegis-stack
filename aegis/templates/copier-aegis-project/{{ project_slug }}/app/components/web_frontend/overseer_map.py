@@ -97,7 +97,8 @@ def _down(
                 items[key]
                 | {"left": x / WIDTH * 100, "top": top, "height": heights[key]}
                 | {"width": width, "hosted": hosted if key == topology.HOST else []}
-                | {"hint_above": last, "tall": _tall(items[key], compact)}
+                | {"hint_above": last, "hint_end": _right_half(x)}
+                | {"tall": _tall(items[key], compact)}
             )
         top += max(heights.values()) + TIER_GAP
     return nodes, place, max(top - TIER_GAP, 0)
@@ -125,9 +126,16 @@ def _across(
                 items[key]
                 | {"left": x / WIDTH * 100, "top": top, "height": heights[key]}
                 | {"width": width, "tall": _tall(items[key], compact)}
+                | {"hint_end": _right_half(x)}
             )
             top += heights[key] + ACROSS_GAP
     return nodes, place, tallest + HINT_ROOM
+
+
+def _right_half(x: float) -> bool:
+    """The map clips what runs past its right edge too: a node right of the
+    middle opens its hint from its own right edge, leftward."""
+    return x > WIDTH / 2
 
 
 def _tall(item: dict[str, Any], compact: bool) -> bool:

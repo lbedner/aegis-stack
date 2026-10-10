@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
 
+from app.components.web_frontend import overseer_mcp
 from app.core.config import settings
 from app.core.tools import load_tools, register_tool
 from app.services.system.models import ComponentStatus, ComponentStatusType
@@ -86,11 +87,21 @@ def test_activity_shows_each_client(
     when = datetime(2026, 10, 5, 9, 30, tzinfo=UTC)
 
     async def by_client() -> list[activity.ClientActivity]:
-        return [activity.ClientActivity("claude-code", 3, 2, 1, 0, when)]
+        return [
+            activity.ClientActivity(
+                client="claude-code",
+                calls=3,
+                reads=2,
+                proposals=1,
+                failed=0,
+                last_at=when,
+            )
+        ]
 
     async def recent(*, limit: int = 50) -> list[Any]:
         return [
             activity.McpToolCall(
+                id=1,
                 called_at=when,
                 client="claude-code",
                 tool="lookup",
@@ -110,6 +121,35 @@ def test_activity_shows_each_client(
     assert "claude-code" in clients and "3" in clients
     calls = text(one(html, "#mcp-calls"))
     assert "lookup" in calls and "OK" in calls and "'tone'" not in calls
+    # Its detail is read when the row is opened, not with the page.
+    one(html, f'#mcp-calls [hx-get="{overseer_mcp.PARTIALS}/calls/1"]')
+
+
+def test_a_calls_detail_is_read_when_its_row_opens(
+    signed_in: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.services.system import ui_mcp
+
+    async def call_detail(call_id: int) -> dict[str, Any] | None:
+        if call_id != 7:
+            return None
+        return {
+            "args": '{\n  "order_id": "A1"\n}',
+            "args_lang": "json",
+            "response": None,
+            "response_lang": None,
+            "error": None,
+            "facts": [("Token", "laptop")],
+        }
+
+    monkeypatch.setattr(ui_mcp, "call_detail", call_detail)
+
+    found = signed_in.get(f"{overseer_mcp.PARTIALS}/calls/7")
+
+    assert found.status_code == 200
+    one(found.text, ".highlight")
+    assert "Not recorded" in text(one(found.text, "[data-call-detail]"))
+    assert signed_in.get(f"{overseer_mcp.PARTIALS}/calls/8").status_code == 404
 {%- else %}
 
 

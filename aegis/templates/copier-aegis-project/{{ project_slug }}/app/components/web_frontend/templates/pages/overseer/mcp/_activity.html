@@ -2,6 +2,10 @@
    newest calls, or why none are kept (ui_mcp.recorded). #}
 {% from "components/macros/layout.html" import card %}
 {% from "components/macros/table.html" import data_table %}
+{# A call's detail (``_call.html``), read when its row is first opened. #}
+{% macro call_detail(row) %}
+<div hx-get="{{ partials }}/calls/{{ row.id }}" hx-trigger="intersect once" hx-swap="innerHTML" class="text-xs text-aegis-muted">Loading…</div>
+{% endmacro %}
 <div id="mcp-activity" class="space-y-4">
   {% if not activity.clients %}
   <p class="text-sm text-aegis-muted">{{ activity.note }}</p>
@@ -10,7 +14,7 @@
   <div id="mcp-clients">{{ data_table(client_columns, activity.clients) }}</div>
   {% endcall %}
   {% call card("Recent calls") %}
-  <div id="mcp-calls">{{ data_table(call_columns, activity.calls) }}</div>
+  <div id="mcp-calls">{{ data_table(call_columns, activity.calls, detail=call_detail) }}</div>
   {% endcall %}
   {% endif %}
 </div>

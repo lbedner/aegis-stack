@@ -1,8 +1,10 @@
-"""The Overseer MCP page's token dialogs: make one (its value shown once),
-and the revoke confirmation, whose button calls the token API. Mounted by
-``routes/pages.py`` at ``overseer_mcp.PARTIALS`` behind Overseer's gate.
+"""The Overseer MCP page's parts: a recorded call's detail, read when its
+row on Activity is opened, and the token dialogs: make one (its value shown
+once), and the revoke confirmation, whose button calls the token API.
+Mounted by ``routes/pages.py`` at ``overseer_mcp.PARTIALS`` behind
+Overseer's gate.
 
-Tokens belong to people, so every route here is 404 without auth.
+Tokens belong to people, so every token route here is 404 without auth.
 """
 
 from types import ModuleType
@@ -14,16 +16,26 @@ from fastapi.responses import HTMLResponse, Response
 from app.components.web_frontend import overseer_mcp
 from app.components.web_frontend.overseer_access import overseer_actor, overseer_db
 from app.components.web_frontend.overseer_nav import page_url
-from app.components.web_frontend.rendering import dialog
+from app.components.web_frontend.rendering import dialog, fragment
 from app.services.shared.deps import Actor
 from app.services.system import ui_mcp
 
 router = APIRouter(prefix=overseer_mcp.PARTIALS)
 
+CALL = "pages/overseer/mcp/_call.html"
 NEW = "pages/overseer/mcp/_new_token.html"
 MADE = "pages/overseer/mcp/_token_made.html"
 PAGE = page_url("components", ui_mcp.NAME) + "/tokens"
 SCOPES = [{"id": key, "name": label} for key, label in ui_mcp.SCOPE_LABELS.items()]
+
+
+@router.get("/calls/{call_id}", response_class=HTMLResponse)
+async def call(call_id: int) -> HTMLResponse:
+    """A recorded call's detail; 404 for no such call."""
+    found = await ui_mcp.call_detail(call_id)
+    if found is None:
+        raise HTTPException(status_code=404)
+    return HTMLResponse(fragment(CALL, call=found))
 
 
 def _tokens() -> ModuleType:

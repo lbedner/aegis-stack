@@ -367,6 +367,21 @@ def test_no_symbol_while_code_is_off(
     assert client.get(url).status_code == 404
 
 
+def test_a_module_opens_as_its_file_or_its_package(
+    client: TestClient, project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A module Overseer names (a hook's, a middleware's) opens here as the
+    file the tree shows; a library's has none, and none while it is off."""
+    _write(project, {"app/core/store.py": "x = 1\n", "app/core/__init__.py": ""})
+    scope = overseer_code.Scope()
+
+    assert overseer_code.module_url("app.core.store") == scope.url("app/core/store.py")
+    assert overseer_code.module_url("app.core") == scope.url("app/core/__init__.py")
+    assert overseer_code.module_url("starlette.middleware.cors") is None
+    monkeypatch.setattr(settings, "APP_ENV", AppEnv.PROD)
+    assert overseer_code.module_url("app.core.store") is None
+
+
 def test_a_frame_is_the_apps_only_when_it_is_a_file_the_tree_shows(
     client: TestClient, project: Path
 ) -> None:

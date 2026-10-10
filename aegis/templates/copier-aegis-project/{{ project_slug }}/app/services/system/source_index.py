@@ -59,6 +59,13 @@ def module_name(path: str) -> str:
     return ".".join(parts[:-1] if parts[-1] == "__init__" else parts)
 
 
+def module_paths(name: str) -> tuple[str, str]:
+    """``module_name`` the other way: the files ``app.core.store`` can be,
+    a module's own or its package's ``__init__.py``."""
+    base = name.replace(".", "/")
+    return f"{base}.py", f"{base}/__init__.py"
+
+
 def _target(node: ast.ImportFrom, name: str) -> str:
     """The module an ``from ... import`` reads from, relative ones
     resolved against the importing module ``name``."""

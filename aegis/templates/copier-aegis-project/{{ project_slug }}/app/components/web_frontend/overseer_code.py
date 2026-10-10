@@ -119,6 +119,16 @@ def line_url(path: str, line: int) -> str:
     return f"{Scope().url(path)}#{LINE_ANCHOR}-{line}"
 
 
+def module_url(module: str) -> str | None:
+    """Where one of the app's own modules (``app.core.log``) opens here
+    (``source_index.module_paths``); None for a library's, one the tree
+    does not show, or while the page is off."""
+    if not enabled():
+        return None
+    found = next((p for p in source_index.module_paths(module) if shown(p)), None)
+    return Scope().url(found) if found else None
+
+
 @dataclass(frozen=True)
 class Frame:
     """A traceback's frame in the app's own code."""
@@ -176,6 +186,7 @@ templates.env.filters["code_frames"] = code_frames
 templates.env.globals.update(
     own_frames=own_frames,
     line_url=line_url,
+    module_url=module_url,
     code_owners=owners,
     # The page's fixed names, for its templates: no template spells them.
     code_page={

@@ -11,7 +11,17 @@ The server is [FastMCP](https://gofastmcp.com). It runs over stdio as a CLI comm
 
 ## What a client sees
 
-A client sees the tools listed in `MCP_TOOLS`, by registered name, and nothing else. A tool that writes is never served, whatever the list says (see [tool effects](../services/ai/agents.md#proposals-writes-the-user-approves)), and a name with no registered tool is dropped. With the finance service, the default grant is finance's read tools. Set it in `.env` as a JSON list to narrow it, for example `MCP_TOOLS=["ledger","accounts"]`; `MCP_TOOLS=[]` serves nothing.
+A client sees the tools listed in `MCP_TOOLS`, by registered name, and nothing else. A tool that writes is never served, whatever the list says (see [tool effects](../services/ai/agents.md#proposals-writes-the-user-approves)), and a name with no registered tool is dropped.
+
+Every stack's default grant is Overseer's reads, the same ones its pages make:
+
+| Tool | Answers |
+|---|---|
+| `health` | What is wrong now: every component's status and message; name one for everything it reports (a worker's queues, the scheduler's jobs) |
+| `errors` | What broke: retained errors grouped into issues; name one for its traceback |
+| `logs` | What led up to it: container logs by service, level, text and window |
+
+Health checks register when the webserver starts, so over stdio `health` asks the running webserver for its full walk, and says so when it can only see the CLI's own process. With the finance service, finance's read tools join the grant. Set it in `.env` as a JSON list to narrow it, for example `MCP_TOOLS=["ledger","accounts"]`; `MCP_TOOLS=[]` serves nothing.
 
 The tools are the registry's own functions, registered by name. FastMCP builds each tool's schema from the type hints and docstring the app's agents already read, so a read over MCP and the same read by a chat agent are one computation. The server is never built with `FastMCP.from_fastapi`, which would turn every API route into a tool, writes included.
 
@@ -95,9 +105,11 @@ MCP_OWNER_USER_ID=1
 
 One middleware records each call: the tool, the client that made it, its effect (a read or a proposal), the duration, the size of the result in bytes, and whether it succeeded. No tool has to know it was reached over MCP.
 
+For debugging a client, each call also keeps how it arrived (stdio or HTTP), the client's version and session, who it acted for and with which token, the arguments it sent, the response it got and the error when it failed. Arguments and responses are kept up to 8,000 characters each; the size column is always the whole answer's. A `run_code` call keeps each read its script made, with its arguments and response.
+
 With the database component the record is kept, in the component's own `mcp_tool_call` table, apart from the chat agents' tool calls. Without one it is a log line (`mcp.call` on stderr).
 
-Overseer shows it on its MCP page (htmx) and MCP card (Flet): the tools a client is served, each granted name it is not (and why), the commands that start the server, then each client's reads and proposals and the newest calls. Adding the database to a project later brings the record; removing it takes the record away.
+Overseer shows it on its MCP page (htmx) and MCP card (Flet): the tools a client is served, each granted name it is not (and why), the commands that start the server, then each client's reads and proposals and the newest calls (on the htmx page each opens to its arguments, response, error and who made it how). Adding the database to a project later brings the record; removing it takes the record away.
 
 A client's proposals are approved where every card is, and each one names the client that proposed it.
 

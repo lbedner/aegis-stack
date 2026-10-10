@@ -294,13 +294,12 @@ def test_the_sidebar_marks_the_page_it_leads_to() -> None:
 RANGE_HARNESS = (
     STUBS
     + """
-const { rangeUrl, spanned, inView } = require(APP_JS);
+const { spanned, inView } = require(APP_JS);
 const bars = ['a', 'b', 'c', 'd'];
 const timed = [[0, 10], [10, 20], [20, 30], [30, 40]].map(([f, t]) => ({ dataset: { from: String(f), to: String(t) } }));
 console.log(JSON.stringify({
   seen: inView(timed, 12, 25).map((b) => b.dataset.from),
   none: inView(timed, null, null).length,
-  url: rangeUrl('/overseer/logs?window=900&service=worker&service=redis&from=1&to=2', 9),
   forward: spanned(bars, 'b', 'd'),
   backward: spanned(bars, 'd', 'b'),
 }));
@@ -308,14 +307,60 @@ console.log(JSON.stringify({
 )
 
 
-def test_dragging_across_the_volume_narrows_to_every_bar_it_covers() -> None:
-    """The first bar's request (every filter it carries) with the last bar's
-    end, whichever way the drag ran."""
+def test_dragging_across_the_volume_covers_every_bar_between() -> None:
+    """From the first bar to the last, whichever way the drag ran."""
     out = run(RANGE_HARNESS, APP_JS=APP_JS)
-    assert out["url"] == (
-        "/overseer/logs?window=900&service=worker&service=redis&from=1&to=9"
-    )
     assert out["forward"] == out["backward"] == ["b", "c", "d"]
+
+
+FACETS_HARNESS = (
+    STUBS
+    + """
+const { kept, volumeOf } = require(APP_JS);
+const row = { level: 'error', service: 'worker', container: 'w-1', app_service: 'ai' };
+const of = (name) => row[name];
+const bars = [{ from: 0, to: 10 }, { from: 10, to: 20 }];
+const rows = [
+  { at: -5, tone: 'error' }, { at: 5, tone: 'error' }, { at: 12, tone: 'warn' },
+  { at: 15, tone: '' }, { at: 25, tone: 'muted' },
+];
+console.log(JSON.stringify({
+  nothing: kept([], of),
+  oneOf: kept([[['level', 'error'], ['level', 'critical']]], of),
+  missed: kept([[['level', 'info']]], of),
+  anySource: kept([[['service', 'redis'], ['app_service', 'ai']]], of),
+  everyList: kept([[['level', 'error']], [['service', 'redis']]], of),
+  volume: volumeOf(bars, rows),
+}));
+"""
+)
+
+
+def test_each_list_narrows_and_any_tick_in_it_keeps() -> None:
+    """The Logs filters on the page (``data-facets``): a list with nothing
+    ticked keeps every row; one with ticks keeps a row any of them matches
+    (a service, a container or an application service); every list must
+    keep it."""
+    out = run(FACETS_HARNESS, APP_JS=APP_JS)
+    assert [
+        out[k] for k in ("nothing", "oneOf", "missed", "anySource", "everyList")
+    ] == [
+        True,
+        True,
+        False,
+        True,
+        False,
+    ]
+
+
+def test_the_volume_recounts_the_rows_the_filters_keep() -> None:
+    """``ui_logs._volume``'s twin: each bar counts its rows by tone; one
+    before the window is left out, one after it lands in the last bar."""
+    out = run(FACETS_HARNESS, APP_JS=APP_JS)
+    assert out["volume"] == [
+        {"error": 1, "warn": 0, "other": 0, "total": 1},
+        {"error": 0, "warn": 1, "other": 2, "total": 3},
+    ]
 
 
 def test_the_bars_behind_the_lines_on_screen_are_marked() -> None:

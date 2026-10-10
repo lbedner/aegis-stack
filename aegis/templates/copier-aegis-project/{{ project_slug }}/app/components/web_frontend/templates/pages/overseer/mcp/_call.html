@@ -1,0 +1,19 @@
+{# One MCP call's detail, read when its row on Activity is opened
+   (ui_mcp.call_detail): what it sent and got back (its error when it
+   failed), and who made it how. The same sections for every call. #}
+{% from "components/macros/layout.html" import code_block, facts %}
+{# One part, highlighted in ``lang`` and capped in height (a response runs
+   long); empty, it says it was not recorded. #}
+{% macro block(label, text, lang=None) %}
+{% if text %}<div class="max-h-96 overflow-auto">{{ code_block(text, label, lang=lang, wrap=True) }}</div>
+{% else %}<div class="space-y-1"><p class="text-xxs text-aegis-muted">{{ label }}</p><p class="text-xs text-aegis-muted">Not recorded</p></div>{% endif %}
+{% endmacro %}
+<div data-call-detail class="space-y-3">
+  {{ block("Arguments", call.args, call.args_lang) }}
+  {% if call.error %}
+  {{ block("Error", call.error) }}
+  {% else %}
+  {{ block("Response", call.response, call.response_lang) }}
+  {% endif %}
+  {{ facts(call.facts) }}
+</div>

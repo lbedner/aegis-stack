@@ -565,6 +565,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 "tests/cli/test_ai_provider_commands.py",
                 "tests/cli/test_agents_cli.py",
                 "tests/cli/test_ai_streaming_gate.py",
+                "tests/cli/test_ai_session_health.py",
                 "tests/cli/test_slash_commands.py",
                 "tests/cli/test_status_line.py",
                 "tests/services/ai",

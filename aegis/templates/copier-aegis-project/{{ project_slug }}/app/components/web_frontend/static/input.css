@@ -311,6 +311,8 @@
   .logs-wrap .log-row .log-trace { @apply block; }
   .volume-bar span { @apply block w-full bg-current; }
   .volume-bar span[data-tone="muted"] { @apply opacity-40; }
+  /* Every bar holds each tone, so the page can recount it as filters change. */
+  .volume-bar span[data-count="0"] { @apply hidden; }
   .volume-bar:hover span, .volume-bar:is([aria-current], [data-selecting]) span { @apply opacity-80 outline outline-1 outline-aegis-teal; }
   /* The lines on screen, like a minimap's viewport: a dark wash of the
      accent; a picked or dragged range is outlined in it. */

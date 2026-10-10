@@ -14,6 +14,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.components.mcp import http, tokens
 from app.core.config import settings
 from app.core.tools import current_owner_user_id, register_tool
+from tests.components.mcp_calls import Recorder
 
 # A client's session is several HTTP requests (initialize, initialized, then
 # the call), and each checks its token: one lookup per request, not a loop.
@@ -183,6 +184,24 @@ async def test_a_call_acts_for_the_tokens_owner(
     assert answer["result"]["structuredContent"]["owner"] == user.id
 
 
+async def test_a_call_is_recorded_with_its_transport_token_and_owner(
+    granted: None,
+    async_db_session: AsyncSession,
+    user_factory: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = Recorder()
+    monkeypatch.setattr(http, "record", calls)
+    user, value = await _token(async_db_session, user_factory, "read")
+    async with serving() as served:
+        rpc = Rpc(served, value)
+        await rpc.open()
+        await rpc.call("tools/call", {"name": "look", "arguments": {"order_id": "A1"}})
+
+    [call] = calls
+    assert (call.transport, call.token, call.user_id) == ("http", "laptop", user.id)
+
+
 async def test_a_call_outside_the_scope_is_refused(
     granted: None, async_db_session: AsyncSession, user_factory: Any
 ) -> None:
@@ -197,9 +216,34 @@ async def test_a_call_outside_the_scope_is_refused(
     assert answer.get("error") or answer["result"]["isError"]
 
 
+async def test_the_backend_hooks_run_the_mounted_apps_lifespan(
+    granted: None,
+    async_db_session: AsyncSession,
+    user_factory: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A mount's lifespan does not run on its own: the backend's startup
+    hook enters the app ``main.py`` mounted, and its shutdown hook leaves
+    it, so a session starts without ``main.py``'s lifespan knowing MCP."""
+    from app.components.backend.shutdown import mcp_lifespan as stop
+    from app.components.backend.startup import mcp_lifespan as start
+
+    _, value = await _token(async_db_session, user_factory, "read")
+    # The session's app keeps its own mount once this test is done.
+    monkeypatch.setattr(http, "mounted", http.mounted)
+    app = http.mount_app()
+    await start.startup_hook()
+    try:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
+            assert (await Rpc(c, value).open()).status_code == 200
+    finally:
+        await stop.shutdown_hook()
+
+
 def test_the_webserver_serves_it_at_mcp(client: TestClient) -> None:
-    """Mounted in the app, its lifespan running with the app's: a request
-    without a token is answered (401), not left without a session."""
+    """Mounted in the app: a request without a token is refused (401).
+    The lifespan is the hooks' test's, above."""
     response = client.post(f"{http.PATH}/", json=INITIALIZE, headers=HEADERS)
 
     assert response.status_code == 401

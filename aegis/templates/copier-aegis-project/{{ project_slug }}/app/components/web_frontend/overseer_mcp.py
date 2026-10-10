@@ -50,6 +50,7 @@ async def section_context(
             "activity": found | {"calls": [_badges(c) for c in found["calls"]]},
             "client_columns": columns(ui_mcp.CLIENT_COLUMNS),
             "call_columns": columns(ui_mcp.CALL_COLUMNS, status=("effect", "result")),
+            "partials": PARTIALS,
         }
     grant = ui_mcp.grant()
     return {

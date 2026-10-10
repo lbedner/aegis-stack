@@ -359,14 +359,9 @@ window.addEventListener('pageshow', () => {
 });
 
 // A range strip (``data-range``: the Logs volume): a click on a bar narrows
-// to it (its own link), and a drag across several narrows to all of them:
-// the first bar's request, every filter it carries, with the last bar's
-// end (``data-to``), whichever way the drag ran.
-function rangeUrl(href, to) {
-  const url = new URL(href, 'http://local');
-  url.searchParams.set('to', to);
-  return url.pathname + url.search;
-}
+// its list (``data-range-of``) to the bar's time, and a drag across several
+// to all of them, whichever way it ran; "Whole window"
+// (``data-clear-range``) lets it go. The page does it: no request.
 function spanned(bars, a, b) {
   const [i, j] = [bars.indexOf(a), bars.indexOf(b)].sort((x, y) => x - y);
   return bars.slice(i, j + 1);
@@ -399,20 +394,61 @@ document.addEventListener('pointerover', (event) => {
 document.addEventListener('pointerup', () => {
   if (!drag) return;
   const covered = spanned(drag.bars, drag.first, drag.last);
+  const strip = drag.first.closest('[data-range]');
   markDrag(false);
   drag = null;
-  if (covered.length < 2) return; // a click: the bar's own link
-  const [from, to] = [covered[0], covered[covered.length - 1]];
+  if (covered.length < 2) return; // a click: the click handler's
   dragged = true;
-  htmx.ajax('GET', rangeUrl(from.getAttribute('href'), to.dataset.to), { source: from });
+  setRange(strip, covered[0].dataset.from, covered[covered.length - 1].dataset.to);
 });
 document.addEventListener('click', (event) => {
-  if (!dragged) return;
-  dragged = false;
-  if (!event.target.closest || !event.target.closest('[data-range]')) return;
-  event.preventDefault();
-  event.stopImmediatePropagation();
-}, true);
+  if (dragged) {
+    // The click that ends a drag: the drag already picked the range.
+    dragged = false;
+    return;
+  }
+  if (!event.target.closest) return;
+  const bar = rangeBar(event);
+  if (bar) {
+    setRange(bar.closest('[data-range]'), bar.dataset.from, bar.dataset.to);
+    return;
+  }
+  const clear = event.target.closest('[data-clear-range]');
+  if (clear) setRange(document.getElementById(clear.dataset.clearRange), null, null);
+});
+// The range a strip picked (``data-picked-from`` and ``-to``, in ms), or null.
+function pickedRange(strip) {
+  if (!strip || strip.dataset.pickedFrom === undefined) return null;
+  return [Number(strip.dataset.pickedFrom), Number(strip.dataset.pickedTo)];
+}
+function stripOf(list) {
+  return list.id ? document.querySelector(`[data-range-of="${list.id}"]`) : null;
+}
+// Picks (or, with null, lets go of) a strip's range: its bars marked, its
+// list narrowed, the URL kept.
+function setRange(strip, from, to) {
+  if (!strip) return;
+  if (from === null) {
+    delete strip.dataset.pickedFrom;
+    delete strip.dataset.pickedTo;
+  } else {
+    strip.dataset.pickedFrom = from;
+    strip.dataset.pickedTo = to;
+  }
+  const range = pickedRange(strip);
+  strip.querySelectorAll('[data-to]').forEach((bar) => {
+    const middle = Math.floor((Number(bar.dataset.from) + Number(bar.dataset.to)) / 2);
+    bar.toggleAttribute('aria-current', range !== null && range[0] <= middle && middle < range[1]);
+  });
+  document.querySelectorAll(`[data-clear-range="${strip.id}"]`).forEach((button) => {
+    button.hidden = range === null;
+  });
+  const list = document.getElementById(strip.dataset.rangeOf);
+  if (!list) return;
+  showRows(list, [...list.children]);
+  keepFacetsInUrl(list);
+  queueScreen();
+}
 
 // The bars behind what is on screen: a strip that names a list
 // (``data-range-of``, its rows' times in ``data-at``) marks the bars from
@@ -435,7 +471,8 @@ const screenWatch = typeof IntersectionObserver === 'undefined' ? null : new Int
 function watchedLists() {
   const ranged = [...document.querySelectorAll('[data-range-of]')].map((strip) => document.getElementById(strip.dataset.rangeOf));
   const searched = [...document.querySelectorAll('input[data-filter]')].map((input) => document.querySelector(input.dataset.filter));
-  return [...new Set([...ranged, ...searched].filter(Boolean))];
+  const faceted = [...document.querySelectorAll('form[data-facets]')].map((form) => document.querySelector(form.dataset.facets));
+  return [...new Set([...ranged, ...searched, ...faceted].filter(Boolean))];
 }
 // Each list is watched once, and then only the rows that arrive (a stream's
 // batch) are: nothing re-walks a list that only grows.
@@ -446,7 +483,7 @@ const rowsAdded = typeof MutationObserver === 'undefined' ? null : new MutationO
     rows.forEach((row) => {
       screenWatch?.observe(row);
     });
-    filterRows(rows, searchOf(record.target));
+    showRows(record.target, rows);
   });
   queueScreen();
 });
@@ -456,7 +493,8 @@ function watchLists() {
     watched.add(list);
     for (const row of list.children) screenWatch?.observe(row);
     rowsAdded?.observe(list, { childList: true });
-    filterRows([...list.children], searchOf(list));
+    showRows(list, [...list.children]);
+    recount(list);
   });
 }
 function rowsOnScreen(list) {
@@ -573,11 +611,19 @@ function keepInUrl(input, query) {
 function searchOf(list) {
   return [...document.querySelectorAll('input[data-filter]')].find((input) => list.matches(input.dataset.filter));
 }
-// ``rows`` shown or hidden by ``input``'s text, touching only those that change.
-function filterRows(rows, input) {
+// ``rows`` shown or hidden by everything over ``list``: its search's text,
+// its filters (``data-facets``) and its strip's picked range, touching only
+// those that change. A row with no time is outside any range.
+function showRows(list, rows) {
+  const input = searchOf(list);
   const needle = input ? input.value.trim().toLowerCase() : '';
+  const groups = groupsOf(facetsOf(list));
+  const range = pickedRange(stripOf(list));
   rows.forEach((row) => {
-    const hide = Boolean(needle) && !textOf(row).includes(needle);
+    const at = Number(row.dataset.at);
+    const hide = (Boolean(needle) && !textOf(row).includes(needle))
+      || !facetsKeep(row, groups)
+      || (range !== null && !(at >= range[0] && at < range[1]));
     if (row.hidden !== hide) row.hidden = hide;
   });
 }
@@ -590,10 +636,113 @@ document.addEventListener('input', (event) => {
   filterFrame = requestAnimationFrame(() => {
     const list = document.querySelector(input.dataset.filter);
     if (!list) return;
-    filterRows([...list.children], input);
+    showRows(list, [...list.children]);
     keepInUrl(input, input.value.trim());
     queueScreen();
   });
+});
+
+// The filters over a list (``data-facets``: a form naming it, the Logs
+// page's): only the window asks the server; everything else narrows the
+// rows already here, new ones included (``showRows``), with no request.
+// Each checklist (``data-checklist``) keeps a row any of its ticks match
+// (``data-facet-<name>`` on the row: a level, a service, a container); an
+// empty one keeps every row; every one must keep it. ``kept`` is that rule
+// on a row's values (``of(name)``).
+function kept(groups, of) {
+  return groups.every((ticks) => ticks.some(([name, value]) => of(name) === value));
+}
+function facetsOf(list) {
+  return [...document.querySelectorAll('form[data-facets]')].find((form) => list.matches(form.dataset.facets));
+}
+function groupsOf(form) {
+  if (!form) return [];
+  return [...form.querySelectorAll('[data-checklist]')]
+    .map((checklist) => [...checklist.querySelectorAll('input[type=checkbox]:checked')].map((box) => [box.name, box.value]))
+    .filter((ticks) => ticks.length);
+}
+function facetsKeep(row, groups) {
+  return kept(groups, (name) => row.getAttribute(`data-facet-${name}`));
+}
+// ``ui_logs._volume``'s twin: each bar's rows by tone (warn, error, the
+// rest); a row before the first bar is left out, one after the last lands
+// in it.
+function volumeOf(bars, rows) {
+  const counts = bars.map(() => ({ error: 0, warn: 0, other: 0, total: 0 }));
+  if (!bars.length) return counts;
+  rows.forEach(({ at, tone }) => {
+    if (!(at >= bars[0].from)) return;
+    const found = bars.findIndex((bar) => at < bar.to);
+    const count = counts[found === -1 ? bars.length - 1 : found];
+    count[tone === 'error' || tone === 'warn' ? tone : 'other'] += 1;
+    count.total += 1;
+  });
+  return counts;
+}
+// A list's strip recounted over the rows its filters keep (not its search
+// or range, as the server counts), each tone's height against the tallest
+// bar.
+function recount(list) {
+  const strip = stripOf(list);
+  if (!strip) return;
+  const groups = groupsOf(facetsOf(list));
+  const bars = [...strip.querySelectorAll('[data-to]')];
+  const rows = [...list.children]
+    .filter((row) => facetsKeep(row, groups))
+    .map((row) => ({ at: Number(row.dataset.at), tone: row.dataset.tone || '' }));
+  const counts = volumeOf(bars.map((bar) => ({ from: Number(bar.dataset.from), to: Number(bar.dataset.to) })), rows);
+  const peak = Math.max(1, ...counts.map((count) => count.total));
+  bars.forEach((bar, i) => {
+    bar.querySelectorAll('[data-tone]').forEach((span) => {
+      const n = counts[i][span.dataset.tone === 'muted' ? 'other' : span.dataset.tone];
+      span.dataset.count = String(n);
+      span.style.height = `${Math.round((n / peak) * 1000) / 10}%`;
+    });
+    bar.title = `${bar.dataset.label} · ${counts[i].total} lines`;
+  });
+}
+// The order flips the rows in place, the end new ones join at, and the end
+// the scroller keeps in view.
+function reorder(list, order) {
+  const newest = order === 'desc';
+  if ((list.getAttribute('hx-swap') === 'afterbegin') === newest) return;
+  list.append(...[...list.children].reverse());
+  list.setAttribute('hx-swap', newest ? 'afterbegin' : 'beforeend');
+  const scroller = list.closest('[data-scroll]');
+  scroller?.classList.toggle('flex-col', newest);
+  scroller?.classList.toggle('flex-col-reverse', !newest);
+}
+// The filters ride in the URL, as the search does, so a reload or a shared
+// link opens the page as it was left.
+function keepFacetsInUrl(list) {
+  const url = new URL(window.location.href);
+  const form = facetsOf(list);
+  if (form) {
+    const fields = [...form.elements].filter((el) => el.name && el.name !== 'window' && !el.matches('[data-filter]'));
+    new Set(fields.map((el) => el.name)).forEach((name) => {
+      url.searchParams.delete(name);
+    });
+    fields.forEach((el) => {
+      if (el.type === 'checkbox' ? el.checked : el.value) url.searchParams.append(el.name, el.value);
+    });
+  }
+  const range = pickedRange(stripOf(list));
+  ['from', 'to'].forEach((key, i) => {
+    if (range) url.searchParams.set(key, String(range[i]));
+    else url.searchParams.delete(key);
+  });
+  window.history.replaceState(window.history.state, '', url);
+}
+document.addEventListener('change', (event) => {
+  const form = event.target.closest && event.target.closest('form[data-facets]');
+  if (!form || event.target.name === 'window' || event.target.matches('[data-filter]')) return;
+  const list = document.querySelector(form.dataset.facets);
+  if (!list) return;
+  if (event.target.name === 'order') reorder(list, event.target.value);
+  showRows(list, [...list.children]);
+  recount(list);
+  keepFacetsInUrl(list);
+  queueScreen();
 });
 
 // The dismissal rules, for the node tests (tests/web/test_app_js.py).
@@ -651,4 +800,4 @@ document.body.addEventListener('htmx:afterSwap', () => {
   applyMapFocus(document.getElementById('overview-stack'));
 });
 
-if (typeof module !== 'undefined') module.exports = { outsideClick, dismiss, navigates, markCurrent, rangeUrl, spanned, inView, splitMatches, mapFocus, sourceColumn };
+if (typeof module !== 'undefined') module.exports = { outsideClick, dismiss, navigates, markCurrent, spanned, inView, splitMatches, mapFocus, sourceColumn, kept, volumeOf };

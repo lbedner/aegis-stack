@@ -32,9 +32,16 @@
 {# A column's cell renderer for data_table: a row's HTTP method(s). #}
 {% macro method_cell(value) %}{% for method in (value if value is not string else [value]) %}{{ method_tag(method) }}{% endfor %}{% endmacro %}
 
+{# A link into Overseer > Code, as every page draws one. #}
+{% macro code_link(url, label) %}<a href="{{ url }}" class="font-mono text-aegis-teal hover:underline">{{ label }}</a>{% endmacro %}
+
 {# A line of the project's source, linked to it in Overseer > Code:
    ``app/core/storage.py:36`` (``overseer_code.line_url``). #}
-{% macro line_link(path, line) %}<a href="{{ line_url(path, line) }}" class="font-mono text-aegis-teal hover:underline">{{ path }}:{{ line }}</a>{% endmacro %}
+{% macro line_link(path, line) %}{{ code_link(line_url(path, line), path ~ ":" ~ line) }}{% endmacro %}
+
+{# A module of the app's own, linked to its file in Overseer > Code
+   (``overseer_code.module_url``); a library's stays text. #}
+{% macro module_link(module) %}{% set url = module_url(module) %}{% if url %}{{ code_link(url, module) }}{% else %}{{ module }}{% endif %}{% endmacro %}
 
 {# A traceback's frame in the app's own code (``overseer_code.own_frames``). #}
 {% macro own_frame(frame) %}{{ line_link(frame.path, frame.line) }}{% endmacro %}

@@ -78,6 +78,9 @@ TOKEN_FILES = (
     "app/components/mcp/models/tokens.py",
     "app/components/mcp/tokens.py",
     "app/components/mcp/http.py",
+    # The HTTP app's lifespan, run by the backend's hooks (not main.py).
+    "app/components/backend/startup/mcp_lifespan.py",
+    "app/components/backend/shutdown/mcp_lifespan.py",
     "app/components/backend/api/mcp_tokens.py",
     "app/cli/mcp_tokens_cli.py",
     "tests/components/test_mcp_tokens.py",
@@ -114,6 +117,32 @@ def test_run_code_comes_with_ai() -> None:
     assert "app/components/mcp/run_code.py" in by_ai
 
 
+def _granted(**answers: Any) -> str:
+    """The rendered ``MCP_TOOLS`` line for these answers."""
+    env = Environment(loader=FileSystemLoader(str(get_template_path())))
+    context = {
+        **get_copier_defaults(),
+        "project_slug": "demo",
+        "include_mcp": True,
+        **answers,
+    }
+    config = env.get_template("{{ project_slug }}/app/core/config.py.jinja").render(
+        context
+    )
+    return next(row for row in config.splitlines() if "MCP_TOOLS:" in row)
+
+
+@pytest.mark.parametrize("finance", [True, False])
+def test_every_stack_grants_the_overseer_reads(finance: bool) -> None:
+    """MCP never starts empty: what is wrong, what broke and what led up to
+    it are on every stack, finance or not."""
+    line = _granted(include_finance=finance)
+
+    assert all(f'"{name}"' in line for name in ("health", "errors", "logs"))
+    assert ('"ledger"' in line) is finance
+
+
+@pytest.mark.parametrize("finance", [True, False])
 @pytest.mark.parametrize(
     ("answers", "granted"),
     [
@@ -133,20 +162,62 @@ def test_run_code_comes_with_ai() -> None:
     ],
 )
 def test_run_code_is_granted_by_default_only_where_it_can_run(
-    answers: dict[str, Any], granted: bool
+    answers: dict[str, Any], granted: bool, finance: bool
 ) -> None:
-    """The sandbox is the AI service's code mode: pydantic-ai, kept agents."""
-    env = Environment(loader=FileSystemLoader(str(get_template_path())))
+    """The sandbox is the AI service's code mode: pydantic-ai, kept agents.
+    It chains the Overseer reads, so it needs no finance."""
+    line = _granted(include_finance=finance, **answers)
+
+    assert ('"run_code"' in line) is granted
+
+
+def _lifespan(**answers: Any) -> str:
+    env = Environment(
+        loader=FileSystemLoader(str(get_template_path())), keep_trailing_newline=True
+    )
+    context = {**get_copier_defaults(), "project_slug": "demo", **answers}
+    rendered = env.get_template(
+        "{{ project_slug }}/app/integrations/main.py.jinja"
+    ).render(context)
+    start = rendered.index("async def lifespan(")
+    return rendered[start : rendered.index("\ndef ", start)]
+
+
+def test_mcp_leaves_the_lifespan_alone() -> None:
+    """``aegis add mcp`` merges against the installed template rendered with
+    the project's old answers, so a gate near the lifespan's ``yield``
+    conflicts on projects made by one version or another (0.15.0 shipped
+    without the blank line before it). MCP's lifespan runs from its own
+    startup and shutdown hooks instead, and the lifespan renders the same
+    with MCP on or off."""
+    off = _lifespan(include_auth=True, include_mcp=False)
+
+    assert _lifespan(include_auth=True, include_mcp=True) == off
+    assert "\n\n    yield\n" in off
+
+
+@pytest.mark.parametrize(
+    ("auth", "label"),
+    [
+        (False, "Outside assistants, over stdio"),
+        (True, "Outside assistants, over stdio and HTTP"),
+    ],
+)
+def test_its_subtitle_names_the_transports_it_is_served_over(
+    auth: bool, label: str
+) -> None:
+    """HTTP is served only with auth (each token is someone's)."""
+    env = Environment(
+        loader=FileSystemLoader(str(get_template_path())), keep_trailing_newline=True
+    )
     context = {
         **get_copier_defaults(),
         "project_slug": "demo",
         "include_mcp": True,
-        "include_finance": True,
-        **answers,
+        "include_auth": auth,
     }
-    config = env.get_template("{{ project_slug }}/app/core/config.py.jinja").render(
-        context
-    )
-    line = next(row for row in config.splitlines() if "MCP_TOOLS:" in row)
+    rendered = env.get_template(
+        "{{ project_slug }}/app/services/system/ui.py.jinja"
+    ).render(context)
 
-    assert ('"run_code"' in line) is granted
+    assert f'ComponentName.MCP: "{label}",' in rendered

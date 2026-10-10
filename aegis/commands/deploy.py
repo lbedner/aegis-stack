@@ -757,6 +757,31 @@ def _rolling_running_services(host: str, user: str, deploy_path: str) -> set[str
     return {line.strip() for line in result.stdout.splitlines() if line.strip()}
 
 
+def _rolling_new_services(host: str, user: str, deploy_path: str) -> list[str]:
+    """Return the prod services the compose files define but no container exists for.
+
+    A rolling deploy only recreates what is already running, so a service this
+    release added (for example ``socket-proxy`` after ``aegis add deploy``)
+    would never start. Containers that exist but exited are left alone: a
+    one-shot service that already ran must not run again on a code-only deploy.
+    """
+    prefix = _rolling_compose_prefix(deploy_path)
+    defined = _run_remote_capture(
+        host, user, f"{prefix} --profile prod config --services"
+    )
+    if defined.returncode != 0:
+        return []
+    known = _run_remote_capture(host, user, f"{prefix} ps --services --all")
+    if known.returncode != 0:
+        return []
+    existing = {line.strip() for line in known.stdout.splitlines() if line.strip()}
+    return sorted(
+        name
+        for name in (line.strip() for line in defined.stdout.splitlines())
+        if name and name not in existing
+    )
+
+
 def _rolling_clear_pause(host: str, user: str, deploy_path: str) -> None:
     """Best-effort clear of the queue-pause flag. Safe to call repeatedly."""
     prefix = _rolling_compose_prefix(deploy_path)
@@ -981,6 +1006,17 @@ def _run_rolling_deploy(
             typer.echo(t("deploy.rolling_webserver", seconds=rollout_timeout))
             if not _rolling_swap_webserver(host, user, deploy_path, rollout_timeout):
                 brand.error(t("deploy.rolling_rollout_failed"), err=True)
+                raise typer.Exit(1)
+
+        # Step 7b: start services this release added; the steps above only
+        # touch what was already running. Leaves postgres, redis and traefik be.
+        new_services = _rolling_new_services(host, user, deploy_path)
+        if new_services:
+            started = _run_remote(
+                host, user, f"{prefix} up -d --no-deps {' '.join(new_services)}"
+            )
+            if started.returncode != 0:
+                brand.error(t("deploy.start_failed"), err=True)
                 raise typer.Exit(1)
     finally:
         # Step 8: always clear the pause flag — never wedge workers

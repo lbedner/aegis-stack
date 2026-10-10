@@ -29,6 +29,7 @@ from aegis.commands.deploy import (
     _rollback_to_backup,
     _rolling_health_verdict,
     _rolling_inspect_health_command,
+    _rolling_new_services,
     _rolling_scale_command,
 )
 
@@ -540,3 +541,80 @@ def test_upload_env_stamps_even_without_a_local_env_file(
 
     assert len(remote) == 1
     assert "BUILD_ID=" in remote[0]
+
+
+def _fake_compose_listing(defined: str, known: str, calls: list[str]):
+    def _fake(host: str, user: str, command: str) -> subprocess.CompletedProcess:
+        calls.append(command)
+        stdout = defined if "config --services" in command else known
+        return subprocess.CompletedProcess([], returncode=0, stdout=stdout, stderr="")
+
+    return _fake
+
+
+def test_rolling_new_services_lists_services_without_a_container(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+    monkeypatch.setattr(
+        deploy_mod,
+        "_run_remote_capture",
+        _fake_compose_listing(
+            "webserver\npostgres\nsocket-proxy\nmigrate\n",
+            "webserver\npostgres\nmigrate\n",
+            calls,
+        ),
+    )
+
+    assert _rolling_new_services("h", "u", "/srv/app") == ["socket-proxy"]
+    # ``--all`` keeps an exited one-shot service (migrate) from counting as new.
+    assert any("ps --services --all" in c for c in calls)
+    assert any("--profile prod config --services" in c for c in calls)
+
+
+def test_rolling_new_services_is_empty_when_compose_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def failing(host: str, user: str, command: str) -> subprocess.CompletedProcess:
+        return subprocess.CompletedProcess([], returncode=1, stdout="x\n", stderr="")
+
+    monkeypatch.setattr(deploy_mod, "_run_remote_capture", failing)
+
+    assert _rolling_new_services("h", "u", "/srv/app") == []
+
+
+def test_rolling_deploy_starts_services_the_release_added(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[str] = []
+    monkeypatch.setattr(
+        deploy_mod.subprocess,
+        "run",
+        lambda *a, **k: subprocess.CompletedProcess([], returncode=0),
+    )
+    monkeypatch.setattr(deploy_mod, "_upload_env", lambda *a, **k: "build1")
+    monkeypatch.setattr(
+        deploy_mod, "_rolling_running_services", lambda *a, **k: {"webserver"}
+    )
+    monkeypatch.setattr(deploy_mod, "_rolling_swap_webserver", lambda *a, **k: True)
+    monkeypatch.setattr(
+        deploy_mod, "_rolling_new_services", lambda *a, **k: ["socket-proxy"]
+    )
+    monkeypatch.setattr(deploy_mod, "_run_remote", _record_remote(calls))
+    monkeypatch.setattr(deploy_mod, "_record_deploy", lambda *a, **k: None)
+    monkeypatch.setattr(deploy_mod, "_prune_docker", lambda *a, **k: None)
+
+    deploy_mod._run_rolling_deploy(
+        "h",
+        "u",
+        "/srv/app",
+        tmp_path,
+        build=False,
+        health_check=False,
+        health_cfg={},
+        health_command="",
+        drain_timeout=1,
+        rollout_timeout=1,
+    )
+
+    assert any(c.endswith("up -d --no-deps socket-proxy") for c in calls)

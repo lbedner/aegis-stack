@@ -14,7 +14,7 @@
     {% for p in pages %}
     <button type="button" {{ hx_dialog(p.preview) }} title="Page {{ p.number }}: {{ p.status }}"
             class="w-16 h-20 rounded border border-aegis-border bg-aegis-bg overflow-hidden flex items-center justify-center text-xs text-aegis-muted hover:border-aegis-teal transition-colors{{ ' opacity-50' if p.status != 'read' }}">
-      {% if p.image %}<img src="{{ p.image }}" alt="Page {{ p.number }}" loading="lazy" class="w-full h-full object-cover object-top">{% else %}{{ p.number }}{% endif %}
+      {% if p.image %}<img src="{{ p.image }}" alt="Page {{ p.number }}" width="64" height="80" loading="lazy" class="w-full h-full object-cover object-top">{% else %}{{ p.number }}{% endif %}
     </button>
     {% else %}
     <p class="text-xs text-aegis-muted">Not read yet. Read pages hands it to the worker.</p>
@@ -36,7 +36,7 @@
   <div class="flex flex-wrap items-center gap-2">
     {% for label in tags %}
     <span class="inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded border border-aegis-border text-aegis-text">{{ label }}
-      <button type="button" aria-label="Remove {{ label }}" hx-delete="{{ urls.tags }}/{{ label|urlencode }}" hx-swap="none" data-api-done="Tag removed" class="text-aegis-muted hover:text-error">&times;</button></span>
+      <button type="button" aria-label="Remove {{ label }}" hx-delete="{{ urls.tags }}/{{ label|urlencode }}" hx-swap="none" data-api-done="Tag removed" class="text-aegis-muted hover:text-error">×</button></span>
     {% endfor %}
     <form hx-post="{{ urls.tags }}" hx-swap="none" class="inline-flex items-center gap-2">
       <input type="text" name="label" required placeholder="Add a tag" class="bg-aegis-bg border border-aegis-border rounded px-2 py-1 text-xs text-aegis-text w-32">

@@ -87,7 +87,7 @@
       {# A document (Overview, Settings) keeps a reading column; a workspace
          (Logs, Deployments, the Map), where the data is the page, runs to
          the gutters. A page says which in ``overseer_width``. #}
-      <div data-width="{% block overseer_width %}document{% endblock %}" class="overseer-page px-5 sm:px-8 lg:px-10 py-7 lg:py-10">
+      <div data-width="{%- block overseer_width -%}document{%- endblock -%}" class="overseer-page px-5 sm:px-8 lg:px-10 py-7 lg:py-10">
         {% block overseer_content %}{% endblock %}
       </div>
     </div>

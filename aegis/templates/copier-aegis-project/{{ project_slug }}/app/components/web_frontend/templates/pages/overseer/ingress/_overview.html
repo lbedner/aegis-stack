@@ -19,7 +19,7 @@
             <p class="text-xxs caps {{ 'text-aegis-amber' if step.tone == 'warn' else 'text-aegis-muted' }}">{{ step.detail }}</p>
             <p data-step-label class="text-sm font-mono text-aegis-text break-words">{{ step.label }}</p>
           </div>
-          {% if not loop.last %}<span aria-hidden="true" class="text-aegis-muted">&rarr;</span>{% endif %}
+          {% if not loop.last %}<span aria-hidden="true" class="text-aegis-muted">→</span>{% endif %}
         </li>
         {% endfor %}
       </ol>

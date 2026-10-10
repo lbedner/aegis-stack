@@ -46,7 +46,7 @@
           <div class="worker-pile">{% for i in range(40) %}<span {% if i < q.pile.lit %}data-lit{% endif %}></span>{% endfor %}</div>
           <p class="worker-stage__note">{% if q.pile.per_block > 1 %}1 block ≈ {{ "{:,}".format(q.pile.per_block) }} jobs{% else %}each block is a job{% endif %}{% if q.oldest %} · <span class="text-aegis-text">oldest {{ q.oldest }}</span>{% endif %}</p>
         </div>
-        <span class="worker-flow__arrow" aria-hidden="true">&rarr;</span>
+        <span class="worker-flow__arrow" aria-hidden="true">→</span>
         <div class="worker-stage">
           <div class="worker-stage__head"><span>Running</span><strong>{{ q.busy }}</strong></div>
           {% if q.processes|length > 1 %}
@@ -64,7 +64,7 @@
           {% endif %}
           <p class="worker-stage__note" title="A slot holds a job that has started. I/O work in slots overlaps; CPU-bound work runs one at a time per process, the rest waiting their turn.">{{ q.busy }} of {{ q.slots }} slots taken · {{ q.busy_pct }}% of capacity</p>
         </div>
-        <span class="worker-flow__arrow" aria-hidden="true">&rarr;</span>
+        <span class="worker-flow__arrow" aria-hidden="true">→</span>
         <div data-outcome class="worker-stage">
           <div class="worker-stage__head"><span>Done</span><strong>{{ "{:,}".format(q.completed) }}</strong></div>
           <div class="worker-outcome">{% if finished %}<span data-ok style="width: {{ (q.completed / finished * 100)|round(1) }}%"></span><span data-failed style="width: {{ (q.failed / finished * 100)|round(1) }}%"></span>{% endif %}</div>

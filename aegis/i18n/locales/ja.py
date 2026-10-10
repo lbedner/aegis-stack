@@ -236,6 +236,7 @@ MESSAGES: dict[str, str] = {
     "shared.empty_service": "サービス名を空にすることはできません",
     # ── 共通：次のステップ／レビュー ──────────────────────────────────
     "shared.next_steps": "次のステップ：",
+    "shared.next_rebuild": "   まず、新しい依存関係のためにイメージを再ビルド: make rebuild",
     "shared.next_make_check": "   1. 'make check' で更新を検証",
     "shared.next_test": "   2. アプリケーションをテスト",
     "shared.next_commit": "   3. 変更をコミット：git add . && git commit",

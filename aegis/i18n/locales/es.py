@@ -246,6 +246,7 @@ MESSAGES: dict[str, str] = {
     "shared.empty_service": "Nombre de servicio vacío no permitido",
     # ── Shared: next steps / review ──────────────────────────────────
     "shared.next_steps": "Próximos pasos:",
+    "shared.next_rebuild": "   Primero, reconstruye la imagen para sus nuevas dependencias: make rebuild",
     "shared.next_make_check": "   1. Ejecuta 'make check' para verificar la actualización",
     "shared.next_test": "   2. Prueba tu aplicación",
     "shared.next_commit": "   3. Confirma los cambios con: git add . && git commit",

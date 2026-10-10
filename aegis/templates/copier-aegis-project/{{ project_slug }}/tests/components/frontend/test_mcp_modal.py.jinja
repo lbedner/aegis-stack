@@ -8,6 +8,7 @@ import pytest
 
 from app.components.frontend.dashboard.cards.mcp_card import McpCard
 from app.components.frontend.dashboard.modals.mcp_modal import (
+    CallDetail,
     McpDetailDialog,
     McpSection,
 )
@@ -63,6 +64,33 @@ async def test_the_modal_shows_the_grant_and_how_to_connect() -> None:
     assert "lookup" in shown
     assert "Writes are never served" in shown
     assert f"{settings.PROJECT_NAME} mcp" in shown
+
+
+async def test_a_call_opens_to_what_it_sent_and_got_back(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """As on the htmx page (``ui_mcp.call_detail``), read when opened."""
+    from app.services.system import ui_mcp
+
+    async def call_detail(call_id: int) -> dict[str, Any] | None:
+        assert call_id == 7
+        return {
+            "args": '{\n  "order_id": "A1"\n}',
+            "args_lang": "json",
+            "response": None,
+            "response_lang": None,
+            "error": "ValueError: no such order",
+            "facts": [("Token", "laptop"), ("Session", None)],
+        }
+
+    monkeypatch.setattr(ui_mcp, "call_detail", call_detail)
+    detail = CallDetail({"id": 7})
+    await detail.load()
+    shown = rendered(detail)
+
+    assert "order_id" in shown
+    assert "no such order" in shown
+    assert "laptop" in shown
 
 
 def test_the_dialog_holds_the_section() -> None:

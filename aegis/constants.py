@@ -394,13 +394,16 @@ class Messages:
         typer.echo(cls.SEPARATOR)
 
     @classmethod
-    def print_next_steps(cls) -> None:
-        """Print standard next steps message."""
+    def print_next_steps(cls, rebuild: bool = False) -> None:
+        """Print standard next steps message; ``rebuild`` first when what
+        was added brings Python dependencies the image does not have."""
         import typer
 
         from .i18n import t
 
         typer.echo(f"\n{t('shared.next_steps')}")
+        if rebuild:
+            typer.echo(t("shared.next_rebuild"))
         typer.echo(t("shared.next_make_check"))
         typer.echo(t("shared.next_test"))
         typer.echo(t("shared.next_commit"))

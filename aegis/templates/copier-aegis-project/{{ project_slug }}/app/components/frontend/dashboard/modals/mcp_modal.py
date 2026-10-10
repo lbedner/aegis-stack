@@ -2,10 +2,13 @@
 client activity and (with auth) tokens as the htmx page (``ui_mcp``), read
 when it opens."""
 
+from typing import Any
+
 import flet as ft
 
 from app.components.frontend.controls import H3Text, SecondaryText
 from app.components.frontend.controls.buttons import IconCopyButton
+from app.components.frontend.controls.markdown import markdown_control
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system import ui_mcp
 from app.services.system.models import ComponentStatus
@@ -25,6 +28,48 @@ def _command(value: str) -> ft.Control:
         [SecondaryText(value, selectable=True), IconCopyButton(lambda: value)],
         spacing=Theme.Spacing.XS,
     )
+
+
+class CallDetail(ft.Column):
+    """What a recorded call opens to, as on the htmx page's Activity
+    (``ui_mcp.call_detail``, read when opened): what it sent and got back
+    (its error when it failed), highlighted, and who made it how."""
+
+    def __init__(self, row: dict[str, Any]) -> None:
+        super().__init__(spacing=Theme.Spacing.SM)
+        self._id = int(row["id"])
+        self.controls = [SecondaryText("Loading the call.")]
+
+    def did_mount(self) -> None:
+        self.page.run_task(self.load)
+
+    async def load(self) -> None:
+        found = await ui_mcp.call_detail(self._id)
+        if found is None:
+            self.controls = [SecondaryText("This call is no longer kept.")]
+        else:
+            failed = found["error"]
+            self.controls = [
+                _block("Arguments", found["args"], found["args_lang"]),
+                _block("Error", failed)
+                if failed
+                else _block("Response", found["response"], found["response_lang"]),
+                StatRowsSection(
+                    "Caller", {label: value for label, value in found["facts"] if value}
+                ),
+            ]
+        if self.page is not None:
+            self.update()
+
+
+def _block(label: str, text: str | None, lang: str | None = None) -> ft.Control:
+    """One part of a call, highlighted in ``lang``; empty, not recorded."""
+    body: ft.Control = (
+        markdown_control(f"````{lang or ''}\n{text}\n````")
+        if text
+        else SecondaryText("Not recorded")
+    )
+    return ft.Column([SecondaryText(label), body], spacing=Theme.Spacing.XS)
 
 
 class McpSection(ft.Column):
@@ -62,7 +107,12 @@ class McpSection(ft.Column):
                 H3Text("By client"),
                 TableTab(recorded["clients"], columns_of(ui_mcp.CLIENT_COLUMNS), ""),
                 H3Text("Recent calls"),
-                TableTab(recorded["calls"], columns_of(ui_mcp.CALL_COLUMNS), ""),
+                TableTab(
+                    recorded["calls"],
+                    columns_of(ui_mcp.CALL_COLUMNS),
+                    "",
+                    detail=CallDetail,
+                ),
             ]
         else:
             controls.append(SecondaryText(recorded["note"]))

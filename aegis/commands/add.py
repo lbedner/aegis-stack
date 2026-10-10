@@ -302,7 +302,8 @@ def _install_plugin(
     brand.success(f"\n{t('add.plugin_success', name=plugin_spec.name)}")
     typer.echo()
     render_project_map(target_path, highlight=[plugin_spec.name])
-    Messages.print_next_steps()
+    # A plugin is a package of its own: the image never has it yet.
+    Messages.print_next_steps(rebuild=True)
 
 
 def _translated_desc(name: str, fallback: str) -> str:
@@ -783,7 +784,13 @@ def add_command(
         if len(components_to_add) > 0:
             Messages.print_review_changes()
 
-        Messages.print_next_steps()
+        Messages.print_next_steps(
+            rebuild=any(
+                COMPONENTS[c].pyproject_deps
+                for c in components_to_add
+                if c in COMPONENTS
+            )
+        )
 
     except Exception as e:
         brand.error(f"\n{t('add.failed', error=e)}", err=True)

@@ -2,12 +2,14 @@
 call is kept, by client, apart from the chat agents' own tool calls."""
 
 from contextlib import asynccontextmanager
+from datetime import timedelta
 import json
 from typing import Any
 
 from fastmcp import Client, FastMCP
 from mcp.types import Implementation
 import pytest
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.components.mcp import activity
@@ -165,6 +167,47 @@ async def test_a_call_keeps_what_debugging_needs(server: FastMCP) -> None:
     assert (row.transport, row.client_version, row.session) == ("http", "2.1.0", "abc123")
     assert (row.user_id, row.token, row.args) == (7, "laptop", '{"order_id": "A1"}')
     assert row.error == "ValueError: no such order"
+
+
+async def test_a_call_past_the_keep_is_deleted_with_its_reads(
+    server: FastMCP,
+    async_db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The record is not forever: on a write, calls older than ``KEEP`` go,
+    the reads a script made with them."""
+    from app.core.time import utcnow
+
+    old = activity.McpToolCall(
+        called_at=utcnow() - activity.KEEP - timedelta(days=1),
+        client="claude-code",
+        tool="run_code",
+        effect="read",
+        ok=True,
+        duration_ms=1,
+        result_bytes=1,
+    )
+    old.steps = [
+        activity.McpToolCall(
+            called_at=old.called_at,
+            client="claude-code",
+            tool="lookup",
+            effect="read",
+            ok=True,
+            duration_ms=None,
+            result_bytes=1,
+        )
+    ]
+    async_db_session.add(old)
+    await async_db_session.commit()
+    monkeypatch.setattr(activity, "_pruned_at", None)
+    # A machine up for less than PRUNE_EVERY: a fresh CI runner, a new VM.
+    monkeypatch.setattr(activity.time, "monotonic", lambda: 60.0)
+
+    await activity.record(ANSWERED)
+
+    kept = (await async_db_session.exec(select(activity.McpToolCall))).all()
+    assert [row.tool for row in kept] == ["lookup"] and kept[0].parent_id is None
 
 
 async def _detail(call: McpCall) -> dict[str, Any]:

@@ -612,7 +612,10 @@ def add_service_command(
         if len(services_to_add) > 0 or len(missing_components) > 0:
             Messages.print_review_changes()
 
-        Messages.print_next_steps()
+        added = [SERVICES[service_base_map[s]] for s in services_to_add] + [
+            COMPONENTS[c] for c in missing_components if c in COMPONENTS
+        ]
+        Messages.print_next_steps(rebuild=any(spec.pyproject_deps for spec in added))
 
         # Service-specific guidance (use base service names for comparison)
         base_services_added = [service_base_map[s] for s in services_to_add]

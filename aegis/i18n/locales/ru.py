@@ -232,6 +232,7 @@ MESSAGES: dict[str, str] = {
     "shared.empty_service": "Пустое имя сервиса недопустимо",
     # ── Общее: следующие шаги / ревью ──────────────────────────────────
     "shared.next_steps": "Следующие шаги:",
+    "shared.next_rebuild": "   Сначала пересоберите образ под новые зависимости: make rebuild",
     "shared.next_make_check": "   1. Выполните «make check» для проверки обновления",
     "shared.next_test": "   2. Протестируйте приложение",
     "shared.next_commit": "   3. Закоммитьте изменения: git add . && git commit",

@@ -189,6 +189,7 @@ MESSAGES: dict[str, str] = {
     "shared.empty_service": "服務名稱不能為空",
     # ── 通用：後續步驟 ──────────────────────────────────────────────
     "shared.next_steps": "下一步：",
+    "shared.next_rebuild": "   先重新建置映像以安裝新相依套件：make rebuild",
     "shared.next_make_check": "   1. 執行 make check 驗證更新",
     "shared.next_test": "   2. 測試應用",
     "shared.next_commit": "   3. 提交變更：git add . && git commit",

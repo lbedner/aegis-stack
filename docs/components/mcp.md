@@ -107,9 +107,9 @@ One middleware records each call: the tool, the client that made it, its effect 
 
 For debugging a client, each call also keeps how it arrived (stdio or HTTP), the client's version and session, who it acted for and with which token, the arguments it sent, the response it got and the error when it failed. Arguments and responses are kept up to 8,000 characters each; the size column is always the whole answer's. A `run_code` call keeps each read its script made, with its arguments and response.
 
-With the database component the record is kept, in the component's own `mcp_tool_call` table, apart from the chat agents' tool calls. Without one it is a log line (`mcp.call` on stderr).
+With the database component the record is kept, in the component's own `mcp_tool_call` table, apart from the chat agents' tool calls, for 30 days: older calls are deleted as new ones are written. Without one it is a log line (`mcp.call` on stderr).
 
-Overseer shows it on its MCP page (htmx) and MCP card (Flet): the tools a client is served, each granted name it is not (and why), the commands that start the server, then each client's reads and proposals and the newest calls (on the htmx page each opens to its arguments, response, error and who made it how). Adding the database to a project later brings the record; removing it takes the record away.
+Overseer shows it on its MCP page (htmx) and MCP card (Flet): the tools a client is served, each granted name it is not (and why), the commands that start the server, then each client's reads and proposals and the newest calls, each opening to its arguments, response, error and who made it how. Adding the database to a project later brings the record; removing it takes the record away.
 
 A client's proposals are approved where every card is, and each one names the client that proposed it.
 

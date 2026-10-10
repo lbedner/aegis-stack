@@ -225,6 +225,7 @@ MESSAGES: dict[str, str] = {
     "shared.empty_service": "빈 서비스 이름은 허용되지 않습니다",
     # ── Shared: next steps / review ──────────────────────────────────
     "shared.next_steps": "다음 단계:",
+    "shared.next_rebuild": "   먼저 새 의존성을 위해 이미지를 다시 빌드: make rebuild",
     "shared.next_make_check": "   1. 'make check'를 실행하여 업데이트 확인",
     "shared.next_test": "   2. 애플리케이션 테스트",
     "shared.next_commit": "   3. 변경 사항 커밋: git add . && git commit",

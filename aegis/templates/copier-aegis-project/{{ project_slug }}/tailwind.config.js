@@ -127,6 +127,7 @@ module.exports = {
           muted: daisy("n"),
           teal: daisy("p"),
           amber: daisy("wa"),
+          accent: daisy("a"),
           error: daisy("er"),
           scrim: "rgb(0 0 0 / <alpha-value>)",
         },

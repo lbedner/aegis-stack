@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import re
+from typing import Any
 
 from fastapi.testclient import TestClient
 import pytest
@@ -22,14 +23,33 @@ THEME_BLIND = re.compile(
 )
 
 
-def theme_config() -> dict[str, dict[str, str]]:
-    script = (
+# An ``aegis-*`` color as a utility names it: text-aegis-teal, bg-aegis-card/60.
+AEGIS_COLOR = re.compile(
+    r"\b(?:text|bg|border|ring|divide|fill|stroke|outline|from|via|to)-aegis-([a-z]+)\b"
+)
+
+
+def tailwind(path: str) -> Any:
+    """``path`` of the Tailwind config (``.daisyui.themes``), with DaisyUI
+    stubbed out: the config only names the plugin, it never calls it."""
+    return run(
         "const M = require('module'); const load = M.prototype.require;"
         " M.prototype.require = function (id) {"
         " return id === 'daisyui' ? {} : load.apply(this, arguments); };"
-        " console.log(JSON.stringify(require('./tailwind.config.js').daisyui.themes))"
+        f" console.log(JSON.stringify(require('./tailwind.config.js'){path}))"
     )
-    return {name: body for entry in run(script) for name, body in entry.items()}
+
+
+def aegis_colors() -> set[str]:
+    return set(tailwind(".theme.extend.colors.aegis"))
+
+
+def theme_config() -> dict[str, dict[str, str]]:
+    return {
+        name: body
+        for entry in tailwind(".daisyui.themes")
+        for name, body in entry.items()
+    }
 
 
 class TestTokens:
@@ -52,6 +72,16 @@ class TestTokens:
         for name in ("bg", "card", "border", "text", "muted", "teal", "amber", "error"):
             assert re.search(rf'{name}: daisy\("[\w-]+"\)', config), name
         assert "[data-theme" not in INPUT_CSS.read_text()
+
+    def test_every_aegis_color_in_use_is_defined(self) -> None:
+        """An undefined one renders nothing in a template and fails the CSS
+        build in an ``@apply``: ``aegis-accent`` did both, unnoticed until a
+        page used the scheduler clock."""
+        sources = [INPUT_CSS, *WEB.joinpath("templates").rglob("*.html")]
+        used = {
+            name for path in sources for name in AEGIS_COLOR.findall(path.read_text())
+        }
+        assert used - aegis_colors() == set()
 
     def test_shape_and_voice_tokens(self) -> None:
         config = TAILWIND.read_text()

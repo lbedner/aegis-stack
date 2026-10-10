@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-10-09
+
 ### Added
 
 - **The research service.** `aegis add-service research`: outside posts and
@@ -214,7 +216,119 @@
   webserver container. Without a database the component
   still reads containers and logs, with no history.
 
+- **Live voice from Steward.** Voice is priced and metered from the model
+  catalog: transcription, speech and realtime land in `llm_usage` beside
+  chat, and AI Costs counts them once. The chat surface mounts anywhere
+  (`ChatSurface`, `chat_router`), with voice profiles, cards an agent draws
+  mid-answer (trend, bar, compare, pie, table), and live calls: every
+  realtime engine is reached through Pydantic AI over the mount's
+  WebSocket, each finished turn is saved, and a cut-off call resumes
+  within 15 minutes.
+
+- **Session renewal.** The sign-in page renews a lapsed session from its
+  refresh token and returns to the page asked for; htmx requests get a
+  plain 401 so `auth.js` refreshes. Signing in retires the browser's
+  previous session, so sessions no longer pile up per device. Admins can
+  end any user's session or sign them out everywhere
+  (`DELETE /users/{id}/sessions/{session_id}`, `DELETE /users/{id}/sessions`,
+  both audited).
+
+- **Worker load tests without an orchestrator.** The process that starts a
+  run (CLI, API or Overseer) sends the tasks itself and records the run in
+  Redis; progress and results are read from those tasks' history, the same
+  on arq, TaskIQ and Dramatiq. One `LoadTestService` replaces three. The
+  CLI is unchanged; `POST /tasks/load-test` returns at once.
+
+- **`cpu_bound` for CPU work inside a task.** `app.core.concurrency.cpu_bound`
+  runs CPU work in a thread, one at a time per event loop, so a task that
+  computes no longer stalls the worker's other tasks, its claim keep-alive
+  and its heartbeat.
+
+- **A memory budget per service.** `tests/core/test_service_memory_budget.py`
+  imports each installed service in a fresh interpreter and holds the
+  memory it adds to a per-service budget, raised in the change that adds
+  the weight.
+
+- **`release_lock(session)`.** `app.core.db.release_lock` ends a transaction
+  before slow work or a second connection. A request that opens a second
+  locking transaction while holding one is recorded as "Waits on itself",
+  naming the line.
+
+- **The sentiment job is an agent.** It runs as a seeded `sentiment` agent,
+  so its model, sampling and prompt are picked in Agents, and each verdict
+  records the model that scored it. `AIServiceConfig.for_agent` is the one
+  overlay of an agent's model and sampling.
+
+- **`RateLimiter.check_key(key)`** limits by something other than the
+  caller. Buckets whose window has passed are swept.
+
+### Security
+
+- **`X-Forwarded-For` is believed only from trusted proxies.** With
+  `TRUST_PROXY_HEADERS` on, anyone reaching the app's port directly could
+  send their own header for a fresh rate-limit bucket on every request, or
+  a made-up IP in audit and session records. `TrustedProxyMiddleware` now
+  believes the header only from a sender in `TRUSTED_PROXIES` (loopback
+  and private ranges by default), and rate limits, session IPs, audit,
+  traffic and the connections panel all read the same address.
+  `TRUST_PROXY_HEADERS=true` keeps working.
+
+- **No open redirect after sign-in.** `next=//host` and backslash paths
+  passed the redirect check. One rule, `is_local_path`, now covers the
+  sign-in, register, OAuth and payment redirects.
+
+- **Refresh tokens are stored as digests.** Only their SHA-256 is kept.
+  Refresh tokens issued before the upgrade stop validating, so those users
+  sign in once more.
+
 ### Fixed
+
+- **A busy worker is no longer reported dead.** Liveness counted only
+  consumers that read the stream in the last 30 seconds; a worker working
+  through its claimed jobs reads nothing for a while. It now also counts a
+  fresh heartbeat.
+
+- **Workers claim only what they run, and keep a running job's claim.**
+  Each TaskIQ queue reads at most its concurrency instead of 100, and
+  Dramatiq prefetches as many messages as it has threads, not twice that.
+  A running job's claim is refreshed until it finishes, so a job longer
+  than 10 minutes is no longer handed to another worker and run again.
+  arq marks its workers busy and honours a deploy's pause, so a rolling
+  deploy's drain ends.
+
+- **Worker processes fit their containers.** The load-test and system
+  queues default to one process; a test checks every worker's processes
+  fit its memory limit.
+
+- **Workers no longer load the system service or AI voice.** `KeyFamily`
+  moved to `app.core.key_family`, and `app.services.ai` no longer
+  re-exports voice.
+
+- **The reload supervisor holds no app.** The webserver entrypoint no
+  longer imports the app on the reload path: 201 MB down to 49 MB, and an
+  out-of-memory server no longer leaves the supervisor holding the port.
+
+- **Slow work no longer holds the SQLite write lock.** The sentiment job
+  held it across a model call (about 6 minutes every hour); it and the
+  finance analyst now release it first.
+
+- **Every Redis client connects where this process reaches Redis.** The
+  job store and arq's `WorkerSettings` used the compose hostname, so a
+  webserver or `make worker-test` on the host could not reach the worker's
+  Redis. All of them now use `redis_url_effective`.
+
+- **Tests never write to your live database or Redis.** On the host, the
+  suite ran startup migrations through `DATABASE_URL_LOCAL` and counted
+  its requests in the dev stack's traffic panel. Both are blanked or held
+  in memory, with guard tests.
+
+- **One clock for today's date.** `app.core.time.today()` is the one
+  source; the Flet finance modals and insights event dates were on the
+  host's local date. A guard test fails any other calendar read in `app/`.
+
+- **Research: a thread a source can't give is skipped, not the watch.** One
+  unreadable thread no longer throws away every other find, and its stored
+  replies are not marked deleted.
 
 - **The chart island passes Biome.** Three `forEach` callbacks in
   `static/js/charts.js` returned a value (`useIterableCallbackReturn`).

@@ -40,6 +40,7 @@ from app.components.frontend.dashboard.modals.modal_sections.chart_primitives im
 from app.components.frontend.dashboard.modals.modal_sections.formatting import (
     date_cell,
     headline_stat_color,
+    health_dot,
     ledger_amount_color,
     status_dot,
 )
@@ -94,5 +95,6 @@ __all__ = [
     "headline_stat_color",
     "ledger_amount_color",
     "row_matches",
+    "health_dot",
     "status_dot",
 ]

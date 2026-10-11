@@ -7,6 +7,9 @@ from typing import Any
 from fastapi.testclient import TestClient
 import pytest
 
+from app.components.frontend.dashboard.modals.modal_sections.chart_primitives import (
+    ChartColors,
+)
 from tests.web.dom import one, select
 from tests.web.node import run
 
@@ -58,7 +61,8 @@ class TestTokens:
         assert set(themes) == set(THEMES)
         assert len({frozenset(body) for body in themes.values()}) == 1
         for body in themes.values():
-            assert len([key for key in body if key.startswith("--aegis-chart-")]) == 8
+            chart = [key for key in body if key.startswith("--aegis-chart-")]
+            assert len(chart) == len(ChartColors.RAMP)
         assert (
             themes["aegis-dark"]["--rounded-box"]
             != themes["steward-dark"]["--rounded-box"]

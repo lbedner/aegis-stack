@@ -4,6 +4,7 @@ Tests for the 'aegis add' command that adds components to existing projects.
 Uses manual updater (Copier-lite) approach instead of Copier's update mechanism.
 """
 
+import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
@@ -14,6 +15,7 @@ from aegis.core.copier_manager import (
     is_copier_project,
     load_copier_answers,
 )
+from aegis.core.template_cleanup import project_env
 
 from .test_utils import format_file_like_regen, run_aegis_command
 
@@ -233,7 +235,18 @@ class TestAddCommand:
         )
 
         assert result.success, f"Command failed: {result.stderr}"
-        assert list((project_path / "alembic" / "versions").glob("*_secrets.py"))
+        revisions = list((project_path / "alembic" / "versions").glob("*_secrets.py"))
+        assert revisions
+        # Written after the add's format pass would leave it failing the
+        # project's own lint, as init never does.
+        lint = subprocess.run(
+            ["uv", "run", "ruff", "check", *(str(p) for p in revisions)],
+            cwd=project_path,
+            capture_output=True,
+            text=True,
+            env=project_env(),
+        )
+        assert lint.returncode == 0, lint.stdout + lint.stderr
         env = (project_path / ".env").read_text()
         assert any(
             line.startswith("ENCRYPTION_KEY=") and len(line) > len("ENCRYPTION_KEY=")
@@ -423,6 +436,28 @@ class TestAddCommand:
         ):
             assert (project_path / rel).exists(), rel
         assert "seaweedfs" in (project_path / "docker-compose.yml").read_text()
+
+    def test_add_browser_to_base_project(self, project_factory: ProjectFactory) -> None:
+        """Adding the browser brings its package, settings, service and client."""
+        project_path = project_factory("base")
+        assert load_copier_answers(project_path).get("include_browser") is False
+
+        result = run_aegis_command(
+            "add", "browser", "--project-path", str(project_path), "--yes"
+        )
+
+        assert result.success, f"Command failed: {result.stderr}"
+        assert load_copier_answers(project_path).get("include_browser") is True
+        for rel in (
+            "app/components/browser/client.py",
+            "app/components/browser/settings.py",
+            "app/components/browser/health.py",
+            "tests/components/test_browser.py",
+        ):
+            assert (project_path / rel).exists(), rel
+        assert "browser:" in (project_path / "docker-compose.yml").read_text()
+        assert "BrowserSettings" in (project_path / "app/core/config.py").read_text()
+        assert "playwright==" in (project_path / "pyproject.toml").read_text()
 
     def test_add_database_already_enabled(
         self, project_factory: ProjectFactory

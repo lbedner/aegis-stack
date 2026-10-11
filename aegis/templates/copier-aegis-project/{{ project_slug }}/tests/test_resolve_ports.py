@@ -153,6 +153,7 @@ class TestResolvePorts:
             postgres=True,
             redis=True,
             ollama=False,
+            browser=False,
             ports_file=ports_file,
         )
 
@@ -179,6 +180,7 @@ class TestResolvePorts:
             postgres=False,
             redis=False,
             ollama=False,
+            browser=False,
             ports_file=ports_file,
         )
 
@@ -201,6 +203,7 @@ class TestResolvePorts:
             postgres=False,
             redis=False,
             ollama=False,
+            browser=False,
             ports_file=ports_file,
         )
 
@@ -219,6 +222,7 @@ class TestResolvePorts:
             postgres=False,
             redis=True,
             ollama=False,
+            browser=False,
             ports_file=ports_file,
         )
 

@@ -41,6 +41,7 @@ class ComponentName(StrEnum):
     SECRETS = "secrets"
     OBSERVABILITY = "observability"
     MCP = "mcp"
+    BROWSER = "browser"
     OLLAMA = "ollama"
 
 

@@ -9,6 +9,7 @@ from app.components.frontend.controls import (
     StatusDot,
 )
 from app.components.frontend.theme import AegisTheme as Theme
+from app.services.system.models import ComponentStatus, ComponentStatusType
 
 
 def headline_stat_color(cents: int) -> str:
@@ -52,6 +53,17 @@ def status_dot(label: str, color: str, tooltip: str) -> StatusDot:
     directly.
     """
     return StatusDot(label, color, tooltip)
+
+
+def health_dot(component_data: ComponentStatus, tooltip: str) -> StatusDot:
+    """A component's health check as the house dot: its message, accent
+    when healthy, red otherwise."""
+    healthy = component_data.status == ComponentStatusType.HEALTHY
+    return status_dot(
+        component_data.message,
+        Theme.Colors.ACCENT if healthy else Theme.Colors.ERROR,
+        tooltip,
+    )
 
 
 def ledger_amount_color(cents: int) -> str:

@@ -78,14 +78,17 @@ class TestIngressInConstants:
         assert ComponentNames.INGRESS in ComponentNames.INFRASTRUCTURE_ORDER
 
     def test_ingress_is_near_end_of_infrastructure_order(self) -> None:
-        """Test that ingress is near the end of the component prompt order.
-
-        Ingress and observability close out the infrastructure questions;
-        the htmx frontend, inference, secrets, deploy and mcp trail the
-        whole list, so "near the end" means within the last seven.
-        """
-        idx = ComponentNames.INFRASTRUCTURE_ORDER.index(ComponentNames.INGRESS)
-        assert idx >= len(ComponentNames.INFRASTRUCTURE_ORDER) - 7
+        """Ingress is asked after every data component: the front door
+        comes once what sits behind it is chosen."""
+        order = ComponentNames.INFRASTRUCTURE_ORDER
+        data = [
+            ComponentNames.WORKER,
+            ComponentNames.SCHEDULER,
+            ComponentNames.DATABASE,
+            ComponentNames.REDIS,
+            ComponentNames.STORAGE,
+        ]
+        assert order.index(ComponentNames.INGRESS) > max(map(order.index, data))
 
     def test_ingress_in_answer_keys(self) -> None:
         """Test that INGRESS is defined in AnswerKeys."""

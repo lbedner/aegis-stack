@@ -61,6 +61,12 @@ services:
     ports:
       - "${SEAWEEDFS_HOST_PORT:-8333}:8333"
 {%- endif %}
+{%- if include_browser %}
+
+  browser:
+    ports:
+      - "${BROWSER_HOST_PORT:-3000}:3000"
+{%- endif %}
 {%- if database_engine == "postgres" %}
 
   postgres:

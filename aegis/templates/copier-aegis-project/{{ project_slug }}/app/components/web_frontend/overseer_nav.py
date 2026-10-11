@@ -38,6 +38,7 @@ ORDER = {
         ComponentName.INGRESS,
         ComponentName.OBSERVABILITY,
         ComponentName.OLLAMA,
+        ComponentName.BROWSER,
     ),
     "services": (
         ServiceName.AUTH,

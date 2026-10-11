@@ -68,6 +68,8 @@ from ..dashboard.cards import (
     SecretsCard,
 {% endif %}{% if include_mcp %}
     McpCard,
+{% endif %}{% if include_browser %}
+    BrowserCard,
 {% endif %}
 {% if ollama_mode != "none" %}
     OllamaCard,
@@ -212,6 +214,9 @@ def create_component_card(
 {% endif %}{% if include_mcp %}
         elif component_name == ComponentName.MCP:
             return McpCard(component_data).build()
+{% endif %}{% if include_browser %}
+        elif component_name == ComponentName.BROWSER:
+            return BrowserCard(component_data).build()
 {% endif %}
 {% if ollama_mode != "none" %}
         elif component_name == ComponentName.OLLAMA:

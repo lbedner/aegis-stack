@@ -27,6 +27,7 @@ class ComponentNames:
     SECRETS = "secrets"
     DEPLOY = "deploy"
     MCP = "mcp"
+    BROWSER = "browser"
 
     # Ordered list for interactive selection. Worker leads and redis
     # follows the steps that auto-add it (worker bundles redis), so most
@@ -46,6 +47,7 @@ class ComponentNames:
         SECRETS,
         DEPLOY,
         MCP,
+        BROWSER,
     ]
 
 
@@ -251,6 +253,7 @@ class AnswerKeys:
     INGRESS = "include_ingress"
     OBSERVABILITY = "include_observability"
     STORAGE = "include_storage"
+    BROWSER = "include_browser"
 
     # Service include flags
     AUTH = "include_auth"

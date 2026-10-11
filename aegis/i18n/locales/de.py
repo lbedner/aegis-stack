@@ -77,6 +77,7 @@ MESSAGES: dict[str, str] = {
     "component.secrets": "Encrypted credential store (keys editable, live)",
     "component.deploy": "Deployment-Ziel (Docker Compose), vom Overseer gelesen",
     "component.mcp": "MCP server: an outside assistant reads the app's tools",
+    "component.browser": "Remote-driven browser (Playwright server)",
     "component.storage": "S3 object storage, SeaweedFS in dev",
     "component.htmx": "Server-rendered htmx web frontend",
     # ── Service descriptions ────────────────────────────────────────────
@@ -351,6 +352,7 @@ MESSAGES: dict[str, str] = {
     "updater.running_postgen": "Führe Nachgenerierungsaufgaben aus...",
     "updater.deps_synced": "Abhängigkeiten synchronisiert (uv sync)",
     "updater.code_formatted": "Code formatiert (make fix)",
+    "migrations.unformatted": "New migrations could not be formatted; run make fix.",
     # ── Project map ──────────────────────────────────────────────────
     "projectmap.new": "NEU",
     # ── Post-generation: setup tasks ──────────────────────────────────
@@ -1198,6 +1200,7 @@ MESSAGES: dict[str, str] = {
     "component.secrets.long": "Makes credentials writable without a restart: keys are stored encrypted in the database, read live by the webserver, worker and scheduler, and never shown again after saving (only their last four characters). A key set in .env still wins. Swap the backend later (Vault, a cloud secrets manager) without touching the code that reads keys.",
     "component.deploy.long": "Wo die App läuft, als Komponente: heute Docker Compose auf einem Host. Fügt einen Socket-Proxy hinzu, den einzigen Container, der den Docker-Socket berührt. Er beantwortet nur lesende Anfragen (Container, Statistiken, Logs, Speicher), damit der Overseer zeigen kann, was läuft, ohne dass der Webserver je den Socket hält.",
     "component.mcp.long": "Serves the app's own registered tools to an outside assistant (Claude Desktop, Claude Code, a local model) over MCP, through FastMCP. A client sees only the tools granted in MCP_TOOLS, and never a write; every call is recorded with the client that made it.",
+    "component.browser.long": "A Chromium the app drives over Playwright's remote protocol, in its own container: pages that need JavaScript, sign-ins, a bot that joins a meeting. The app ships only the Playwright client; the browser and its system libraries stay in the container.",
     "component.storage.long": "An S3 backend for the object store every stack already has: documents, chat attachments, anything addressed by its content hash. Talks to any S3-compatible endpoint; the dev stack ships SeaweedFS in a container. Switching from the filesystem is a byte copy, never a migration.",
     "component.htmx.long": "Server-rendered pages with Jinja2, htmx, and Alpine.js, styled with Tailwind and DaisyUI, served at / by the existing webserver alongside the Flet dashboard at /dashboard. Ships a generic landing page ready to grow into your own pages.",
     "service.auth.long": "Vollständige Benutzerverwaltung mit JWT-Authentifizierung, Session-Cookies und Refresh-Token-Rotation. Drei Stufen: einfache E-Mail/Passwort, RBAC-Rollen und -Berechtigungen oder mandantenfähige Organisationen. Enthält Registrierung, Login und einen Admin-Dashboard-Tab.",

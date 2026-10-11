@@ -83,6 +83,9 @@ def get_component_title(component_name: str) -> str:
         {%- if include_storage %}
         ComponentName.STORAGE: "Storage",
         {%- endif %}
+        {%- if include_browser %}
+        ComponentName.BROWSER: "Browser",
+        {%- endif %}
         {%- if include_mcp %}
         ComponentName.MCP: "MCP",
         {%- endif %}
@@ -182,6 +185,9 @@ def get_component_label(component_name: str) -> str:
         {%- endif %}
         {%- if include_storage %}
         ComponentName.STORAGE: "S3 object store",
+        {%- endif %}
+        {%- if include_browser %}
+        ComponentName.BROWSER: "Playwright server",
         {%- endif %}
         {%- if include_secrets %}
         ComponentName.SECRETS: "Encrypted store",

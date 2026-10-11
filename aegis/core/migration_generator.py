@@ -23,7 +23,6 @@ Usage:
         generate_migration(project_path, "ai")
 """
 
-import os
 import re
 import subprocess
 from dataclasses import dataclass, field
@@ -33,11 +32,14 @@ from typing import Any
 
 from jinja2 import Environment, TemplateNotFound
 
+from ..cli import brand
 from ..constants import (
     AnswerKeys,
     AuthLevels,
     StorageBackends,
 )
+from ..i18n import t
+from .template_cleanup import project_env, ruff_fix_files
 
 
 @dataclass
@@ -512,13 +514,7 @@ def _run_in_project(
     versions_dir = get_versions_dir(project_path)
     versions_dir.mkdir(parents=True, exist_ok=True)
     before = set(versions_dir.glob("*.py"))
-    env = os.environ.copy()
-    env.pop("VIRTUAL_ENV", None)
-    # UV_PYTHON pins the interpreter for the *aegis* tool (3.11 in CI and
-    # the release jobs). The generated project has its own requires-python
-    # and must be allowed to resolve its own; inheriting the pin fails the
-    # run outright on a project that asks for 3.14.
-    env.pop("UV_PYTHON", None)
+    env = project_env()
     env.update(extra_env or {})
     cmd = ["uv", "run", "--project", str(project_path)]
     if python_version:
@@ -538,6 +534,15 @@ def _run_in_project(
             f"{result.stderr[-2000:]}{_replay_hint(result.stderr)}"
         )
     return sorted(set(versions_dir.glob("*.py")) - before)
+
+
+def _formatted(project_path: Path, written: list[Path]) -> list[Path]:
+    """``written``, run through the project's ruff as init leaves every
+    file: a revision lands after any format pass of the command that asked
+    for it. A failed format leaves a working revision, so it only warns."""
+    if not ruff_fix_files(project_path, [str(p) for p in written]):
+        brand.warn(t("migrations.unformatted"))
+    return written
 
 
 def generate_revisions(
@@ -575,7 +580,7 @@ def generate_revisions(
         extra_env=extra_env,
     )
     written.extend(_place_data_statements(project_path, services, written))
-    return sorted(written)
+    return _formatted(project_path, sorted(written))
 
 
 def generate_drop_revision(project_path: Path, message: str) -> list[Path]:
@@ -585,7 +590,9 @@ def generate_drop_revision(project_path: Path, message: str) -> list[Path]:
     ``migrate_drop`` then writes one revision that exports each orphaned
     table and drops it (none when nothing is orphaned).
     """
-    return _run_in_project(project_path, "app.cli.migrate_drop", [message])
+    return _formatted(
+        project_path, _run_in_project(project_path, "app.cli.migrate_drop", [message])
+    )
 
 
 _DATA_REVISION = '''"""{description}

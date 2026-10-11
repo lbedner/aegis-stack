@@ -44,6 +44,7 @@ class TestAIProviderSelection:
             False,  # secrets
             False,  # deploy
             False,  # mcp
+            False,  # browser
             False,  # auth service
             False,  # payment
             True,  # AI service
@@ -94,6 +95,7 @@ class TestAIProviderSelection:
             False,  # secrets
             False,  # deploy
             False,  # mcp
+            False,  # browser
             False,  # auth service
             False,  # payment
             True,  # AI service
@@ -145,6 +147,7 @@ class TestAIProviderSelection:
             False,  # secrets
             False,  # deploy
             False,  # mcp
+            False,  # browser
             False,  # auth service
             False,  # payment
             True,  # AI service
@@ -196,6 +199,7 @@ class TestAIProviderSelection:
             False,  # secrets
             False,  # deploy
             False,  # mcp
+            False,  # browser
             False,  # auth service
             False,  # payment
             False,  # AI service
@@ -250,6 +254,7 @@ class TestAIBackendSelection:
                 False,  # secrets
                 False,  # deploy
                 False,  # mcp
+                False,  # browser
                 False,  # auth service
                 False,  # payment
                 True,  # AI service
@@ -315,6 +320,7 @@ class TestAIBackendSelection:
                 False,  # secrets
                 False,  # deploy
                 False,  # mcp
+                False,  # browser
                 False,  # auth service
                 False,  # payment
                 True,  # AI service
@@ -371,6 +377,7 @@ class TestAIBackendSelection:
             False,  # secrets
             False,  # deploy
             False,  # mcp
+            False,  # browser
             False,  # auth service
             False,  # payment
             True,  # AI service
@@ -545,6 +552,7 @@ class TestAIConfigurationEndToEnd:
             False,  # secrets
             False,  # deploy
             False,  # mcp
+            False,  # browser
             False,  # No auth service
             False,  # payment
             True,  # Yes AI service
@@ -658,6 +666,7 @@ class TestOllamaModeSelection:
             False,  # secrets
             False,  # deploy
             False,  # mcp
+            False,  # browser
             False,  # auth service
             False,  # payment
             True,  # AI service

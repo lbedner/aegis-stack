@@ -1,5 +1,6 @@
 """``generate_revisions`` runs the project's own generator, in its venv."""
 
+from collections.abc import Iterator
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -11,6 +12,30 @@ from aegis.core.migration_generator import (
     generate_plugin_migrations,
     generate_revisions,
 )
+
+
+@pytest.fixture(autouse=True)
+def formatted() -> Iterator[Mock]:
+    """The formatter shares ``subprocess``; these tests watch the generator."""
+    with patch(
+        "aegis.core.migration_generator.ruff_fix_files", return_value=True
+    ) as ruff:
+        yield ruff
+
+
+def test_what_it_writes_is_formatted(tmp_path: Path, formatted: Mock) -> None:
+    """A revision lands after the asking command's format pass, so the
+    generator formats its own output, as init leaves every file."""
+    versions = _versions(tmp_path)
+
+    def fake_run(cmd: list[str], **_kw: object) -> Mock:
+        (versions / "001_auth.py").write_text("")
+        return Mock(returncode=0, stderr="", stdout="")
+
+    with patch("aegis.core.migration_generator.subprocess.run", side_effect=fake_run):
+        written = generate_revisions(tmp_path, ["auth"])
+
+    formatted.assert_called_once_with(tmp_path, [str(p) for p in written])
 
 
 def _versions(tmp_path: Path) -> Path:

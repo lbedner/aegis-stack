@@ -43,7 +43,7 @@ from .copier_manager import is_copier_project, load_copier_answers
 from .plugins.composer import PLUGINS_ANSWER_KEY
 from .plugins.template_resolver import plugin_tree_files
 from .render_diff import FilePolicy, RenderDiffEngine, build_template_env
-from .template_cleanup import run_ruff_on_text
+from .template_cleanup import ruff_fix_files, run_ruff_on_text
 from .verbosity import verbose_print
 
 if TYPE_CHECKING:  # import cycle at runtime; see _spec_for
@@ -1845,25 +1845,17 @@ class ManualUpdater:
         # (``ruff format .``) rewrote them on every add.
         changed = _changed_files(self.project_path)
         if changed is None:
-            commands = [["make", "fix"]]
-        else:
-            python = [p for p in changed if p.endswith(".py")]
-            commands = (
-                [
-                    ["uv", "run", "ruff", "check", "--fix", "--exit-zero", *python],
-                    ["uv", "run", "ruff", "format", *python],
-                ]
-                if python
-                else []
-            )
-        try:
-            for command in commands:
+            formatted = (
                 subprocess.run(
-                    command, cwd=self.project_path, check=True, capture_output=True
-                )
-            if commands:
-                print(f"   {t('updater.code_formatted')}")
-        except subprocess.CalledProcessError:
+                    ["make", "fix"], cwd=self.project_path, capture_output=True
+                ).returncode
+                == 0
+            )
+        else:
+            formatted = ruff_fix_files(self.project_path, changed)
+        if formatted:
+            print(f"   {t('updater.code_formatted')}")
+        else:
             typer.echo(
                 "   "
                 + brand.warn_text("Warning:")

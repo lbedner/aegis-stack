@@ -51,6 +51,9 @@ from .secrets_card import SecretsCard
 {%- if include_mcp %}
 from .mcp_card import McpCard
 {%- endif %}
+{%- if include_browser %}
+from .browser_card import BrowserCard
+{%- endif %}
 {%- if ollama_mode != "none" %}
 from .ollama_card import OllamaCard
 {%- endif %}
@@ -119,6 +122,9 @@ __all__ = [
 {%- endif %}
 {%- if include_mcp %}
     "McpCard",
+{%- endif %}
+{%- if include_browser %}
+    "BrowserCard",
 {%- endif %}
 {%- if ollama_mode != "none" %}
     "OllamaCard",

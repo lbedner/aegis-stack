@@ -76,6 +76,7 @@ jobs:
           - documents_worker
           - research
           - storage
+          - browser
           - finance
           - finance_auth
           - finance_ai_rbac

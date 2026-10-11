@@ -6,6 +6,7 @@ Extracted from the system health module; registered via the same
 register_health_check machinery.
 """
 {% if include_observability %}
+from datetime import UTC, datetime, timedelta
 import hashlib
 import json
 import os
@@ -207,6 +208,11 @@ async def _query_logfire_trace_data(read_token: str) -> dict[str, Any]:
     return result
 
 
+def _since(hours: int) -> datetime:
+    """The start of a query's window: Logfire reads only records after it."""
+    return datetime.now(UTC) - timedelta(hours=hours)
+
+
 async def _query_aggregate_stats(client: Any) -> dict[str, Any] | None:
     """Query aggregate span stats for the last hour. Returns None on failure."""
     try:
@@ -219,8 +225,8 @@ async def _query_aggregate_stats(client: Any) -> dict[str, Any] | None:
                     max(duration) as max_duration_sec,
                     count(DISTINCT trace_id) as total_traces
                 FROM records
-                WHERE start_timestamp > now() - interval '1 hour'
-            """
+            """,
+            min_timestamp=_since(hours=1),
         )
         rows = results.get("rows", [])
         if rows:
@@ -255,12 +261,12 @@ async def _query_slowest_spans(client: Any) -> list[dict[str, Any]] | None:
                     count(*) FILTER (WHERE is_exception) as errors,
                     sum(duration) as total_sec
                 FROM records
-                WHERE start_timestamp > now() - interval '1 hour'
-                  AND duration IS NOT NULL
+                WHERE duration IS NOT NULL
                 GROUP BY span_name
                 ORDER BY avg_sec DESC
-                LIMIT 20
-            """
+            """,
+            min_timestamp=_since(hours=1),
+            limit=20,
         )
         rows = results.get("rows", [])
         spans = []
@@ -299,10 +305,11 @@ async def _query_recent_exceptions(client: Any) -> list[dict[str, Any]] | None:
                     trace_id,
                     service_name
                 FROM records
-                WHERE is_exception AND start_timestamp > now() - interval '24 hours'
+                WHERE is_exception
                 ORDER BY start_timestamp DESC
-                LIMIT 200
-            """
+            """,
+            min_timestamp=_since(hours=24),
+            limit=200,
         )
         exceptions = []
         for row in results.get("rows", []):

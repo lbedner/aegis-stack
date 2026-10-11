@@ -10,10 +10,11 @@ from enum import Enum
 from pathlib import Path
 
 import typer
+import yaml
 from packaging.version import Version, parse
 
 from aegis import __version__ as cli_version  # noqa: N813
-from aegis.core.copier_manager import load_copier_answers
+from aegis.core.copier_manager import NO_AEGIS_VERSION, load_copier_answers
 from aegis.core.copier_updater import (
     get_available_versions,
     get_commit_for_version,
@@ -54,7 +55,9 @@ def get_project_template_version(project_path: Path) -> str | None:
         project_path: Path to the project directory
 
     Returns:
-        Version string if found, None if cannot determine
+        Version string if found, None if cannot determine. This is the raw
+        stamp, possibly ``HEAD`` or ``dev``: ``aegis update`` needs it as is,
+        and the version gate reads ``_comparable_version`` instead.
     """
     try:
         # First, check for explicit _template_version in answers
@@ -212,6 +215,26 @@ def format_version_warning(
     return "\n".join(lines)
 
 
+def _comparable_version(project_path: Path) -> str | None:
+    """The project's template version, or, when that is no version (a ``dev``
+    or ``HEAD`` stamp, an untagged commit), the CLI version that generated it.
+
+    A 0.12 project stamped ``HEAD`` otherwise passes a 0.15 CLI's gate, and
+    an ``add`` there carries the whole version gap with it (#1532).
+    """
+    recorded = get_project_template_version(project_path)
+    if recorded and parse_version_safe(recorded):
+        return recorded
+    try:
+        answers = load_copier_answers(project_path)
+    except (FileNotFoundError, yaml.YAMLError):
+        return recorded
+    generated = str(answers.get("aegis_version") or "")
+    if generated != NO_AEGIS_VERSION and parse_version_safe(generated):
+        return generated
+    return recorded
+
+
 def validate_version_compatibility(
     project_path: Path, command_name: str = "add", force: bool = False
 ) -> None:
@@ -232,7 +255,7 @@ def validate_version_compatibility(
         typer.Exit: If versions are incompatible
     """
     cli_version = get_cli_version()
-    project_version = get_project_template_version(project_path)
+    project_version = _comparable_version(project_path)
 
     # Skip check if we can't determine project version
     if not project_version:

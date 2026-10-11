@@ -6,7 +6,9 @@ nothing and queried again, and the three queries ran at once against the
 token's concurrency limit: 429s through a normal working day.
 """
 
+from datetime import UTC, datetime, timedelta
 import importlib
+import inspect
 from pathlib import Path
 from types import ModuleType
 from typing import Any, Self
@@ -22,6 +24,7 @@ class FakeClient:
     """Stands in for ``AsyncLogfireQueryClient``; records every query."""
 
     queries: list[str] = []
+    since: list[datetime] = []
     in_flight = 0
     max_in_flight = 0
     fail = False
@@ -35,9 +38,12 @@ class FakeClient:
     async def __aexit__(self, *exc: object) -> None:
         return None
 
-    async def query_json_rows(self, sql: str) -> dict[str, Any]:
+    async def query_json_rows(
+        self, sql: str, *, min_timestamp: datetime, limit: int | None = None
+    ) -> dict[str, Any]:
         cls = type(self)
         cls.queries.append(sql)
+        cls.since.append(min_timestamp)
         cls.in_flight += 1
         cls.max_in_flight = max(cls.max_in_flight, cls.in_flight)
         try:
@@ -57,6 +63,7 @@ def fresh(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> ModuleType:
     from logfire import query_client
 
     FakeClient.queries = []
+    FakeClient.since = []
     FakeClient.max_in_flight = 0
     FakeClient.fail = False
     monkeypatch.setattr(query_client, "AsyncLogfireQueryClient", FakeClient)
@@ -69,6 +76,39 @@ def _restart(module: ModuleType, cache_dir: Path) -> ModuleType:
     reloaded = importlib.reload(module)
     reloaded._CACHE_DIR = cache_dir
     return reloaded
+
+
+def _required(function: Any) -> set[str]:
+    return {
+        name
+        for name, param in inspect.signature(function).parameters.items()
+        if param.default is inspect.Parameter.empty and name != "self"
+    }
+
+
+def test_the_fake_asks_what_the_real_client_requires() -> None:
+    """A fake looser than the SDK hid that Logfire 5 requires a window."""
+    from logfire.query_client import AsyncLogfireQueryClient
+
+    assert _required(FakeClient.query_json_rows) == _required(
+        AsyncLogfireQueryClient.query_json_rows
+    )
+
+
+async def test_each_query_names_the_window_it_reads(fresh: ModuleType) -> None:
+    before = datetime.now(UTC)
+    await fresh._query_logfire_trace_data(TOKEN)
+
+    assert len(FakeClient.since) == 3
+    assert all(before - timedelta(days=2) < t < before for t in FakeClient.since)
+
+
+async def test_row_caps_go_to_the_sdk_not_the_sql(fresh: ModuleType) -> None:
+    """The SDK returns at most 100 rows unless told otherwise, so a LIMIT in
+    the SQL above that is silently cut to 100."""
+    await fresh._query_logfire_trace_data(TOKEN)
+
+    assert not [sql for sql in FakeClient.queries if "LIMIT" in sql.upper()]
 
 
 async def test_the_three_queries_run_one_at_a_time(fresh: ModuleType) -> None:

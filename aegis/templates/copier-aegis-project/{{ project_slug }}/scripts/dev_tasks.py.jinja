@@ -158,7 +158,11 @@ def status() -> None:
 {% if include_database %}
 def migrate_reset() -> None:
     print("WARNING: This will destroy all data in the database!")
-    if input("Are you sure? Type 'yes' to continue: ") != "yes":
+    try:
+        answer = input("Are you sure? Type 'yes' to continue: ")
+    except EOFError:
+        answer = ""
+    if answer != "yes":
         sys.exit(1)
     subprocess.run(
         [

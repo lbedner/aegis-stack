@@ -69,9 +69,9 @@ FLUSH_SECONDS = 0.5
 # counted in its tone's stack.
 VOLUME_BARS = 60
 VOLUME_TONES = ("error", "warn", "other")
-# The chart ramp both UIs draw with (--aegis-chart-1..8, ChartColors.RAMP):
+# The chart ramp both UIs draw with (--aegis-chart-1..9, ChartColors.RAMP):
 # a service's lines take one of its colors.
-RAMP = 8
+RAMP = 9
 _PAGES = sorted(runtime.PAGES)
 
 

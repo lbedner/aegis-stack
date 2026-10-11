@@ -215,7 +215,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
             extras={
                 # The Overseer page's and the maps' queue tests: need the
                 # web frontend too.
-                "include_htmx": [
+                AnswerKeys.HTMX: [
                     "tests/web/test_overseer_worker.py",
                     "tests/web/test_overseer_queue.py",
                     "tests/web/test_overseer_worker_load_tests.py",
@@ -286,7 +286,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
             # cleanup_components() (gated on scheduler_backend, not a toggle).
             extras={
                 # The Overseer page's test: needs the web frontend too.
-                "include_htmx": ["tests/web/test_overseer_scheduler.py"],
+                AnswerKeys.HTMX: ["tests/web/test_overseer_scheduler.py"],
                 # Every file gated by ``scheduler_backend != "memory"``.
                 # Excluded from the memory add base (they would render empty),
                 # added for the sqlite backend, and always part of the full
@@ -348,7 +348,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
             ],
             extras={
                 # The Overseer page's test: needs the web frontend too.
-                "include_htmx": [
+                AnswerKeys.HTMX: [
                     "tests/web/test_overseer_database.py",
                     "app/components/web_frontend/routes/partials/overseer_database.py",
                 ],
@@ -380,7 +380,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
             ],
             extras={
                 # The Overseer page's test: needs the web frontend too.
-                "include_htmx": ["tests/web/test_overseer_redis.py"],
+                AnswerKeys.HTMX: ["tests/web/test_overseer_redis.py"],
             },
         ),
     ),
@@ -479,6 +479,9 @@ COMPONENTS: dict[str, ComponentSpec] = {
             "generic landing page ready to grow into your own pages."
         ),
         pyproject_deps=["jinja2>=3.1.0,<4"],
+        # Overseer's container stats, logs and disk read Docker through
+        # deploy's socket proxy; without it those pages stay empty.
+        required_components=[ComponentNames.DEPLOY],
         # The htmx tree renders under app/components/web_frontend; the
         # directory is the on-disk marker. Docker watcher services and
         # docs_path land with the asset pipeline and the docs page.
@@ -556,7 +559,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
             extras={
                 # The Overseer's Inference page, only where the htmx frontend
                 # is.
-                "include_htmx": [
+                AnswerKeys.HTMX: [
                     "app/components/web_frontend/overseer_inference.py",
                     "app/components/web_frontend/routes/partials/overseer_inference.py",
                     "app/components/web_frontend/templates/pages/overseer/inference",
@@ -725,13 +728,43 @@ COMPONENTS: dict[str, ComponentSpec] = {
                     "tests/components/test_mcp_run_code.py",
                 ],
                 # The Overseer page, where the htmx frontend is.
-                "include_htmx": [
+                AnswerKeys.HTMX: [
                     "app/components/web_frontend/overseer_mcp.py",
                     "app/components/web_frontend/routes/partials/overseer_mcp.py",
                     "app/components/web_frontend/templates/pages/overseer/mcp",
                     "tests/web/test_overseer_mcp.py",
                 ],
             },
+        ),
+    ),
+    ComponentNames.BROWSER: ComponentSpec(
+        readme=ReadmeWiring(
+            reach="browser:3000 in the compose network; BROWSER_URL from the host",
+            env_groups=["COMPONENT SETTINGS"],
+        ),
+        name=ComponentNames.BROWSER,
+        docs_path="components/browser",
+        type=ComponentType.INFRASTRUCTURE,
+        description="Remote-driven browser (Playwright server)",
+        long_description=(
+            "A Chromium the app drives over Playwright's remote protocol, in "
+            "its own container: pages that need JavaScript, sign-ins, a bot "
+            "that joins a meeting. The app ships only the Playwright client; "
+            "the browser and its system libraries stay in the container."
+        ),
+        docker_services=[ComponentNames.BROWSER],
+        # Must match the browser image; tests/core/test_browser_component.py checks.
+        pyproject_deps=["playwright==1.63.0"],
+        marker_path="app/components/browser",
+        files=FileManifest(
+            primary=[
+                "app/components/browser",
+                "app/components/frontend/dashboard/cards/browser_card.py",
+                "app/components/frontend/dashboard/modals/browser_modal.py",
+                "tests/components/test_browser.py",
+                "tests/components/frontend/test_browser_modal.py",
+            ],
+            extras={AnswerKeys.HTMX: ["tests/web/test_overseer_browser.py"]},
         ),
     ),
 }

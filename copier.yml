@@ -201,6 +201,11 @@ include_storage:
   help: "Include S3 object storage (SeaweedFS container in dev)?"
   default: false
 
+include_browser:
+  type: bool
+  help: "Include a remote-driven browser (Playwright server container)?"
+  default: false
+
 ingress_tls:
   type: bool
   help: "Enable TLS with Let's Encrypt?"

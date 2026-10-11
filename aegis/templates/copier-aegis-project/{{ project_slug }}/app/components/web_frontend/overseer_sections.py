@@ -213,6 +213,7 @@ CONCERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
             ComponentName.WORKER,
             ComponentName.SCHEDULER,
             ComponentName.INGRESS,
+            ComponentName.BROWSER,
         ),
     ),
     (

@@ -71,6 +71,9 @@ def modal_registry() -> dict[str, type[ft.Container]]:
     {%- if include_mcp %}
     from app.components.frontend.dashboard.modals.mcp_modal import McpDetailDialog
     {%- endif %}
+    {%- if include_browser %}
+    from app.components.frontend.dashboard.modals.browser_modal import BrowserDetailDialog
+    {%- endif %}
     {%- if ollama_mode != "none" %}
     from app.components.frontend.dashboard.modals.ollama_modal import OllamaDetailDialog
     {%- endif %}
@@ -133,6 +136,9 @@ def modal_registry() -> dict[str, type[ft.Container]]:
         {%- endif %}
         {%- if include_mcp %}
         ComponentName.MCP: McpDetailDialog,
+        {%- endif %}
+        {%- if include_browser %}
+        ComponentName.BROWSER: BrowserDetailDialog,
         {%- endif %}
         {%- if ollama_mode != "none" %}
         ComponentName.OLLAMA: OllamaDetailDialog,

@@ -76,6 +76,7 @@ def serve(*, detach: bool = False) -> None:
         postgres={% if database_engine == "postgres" %}True{% else %}False{% endif %},
         redis={% if include_redis %}True{% else %}False{% endif %},
         ollama={% if ollama_mode == "docker" %}True{% else %}False{% endif %},
+        browser={% if include_browser %}True{% else %}False{% endif %},
     )
     env = {**os.environ, **{key: str(value) for key, value in ports.items()}}
     # `make serve ENGINE=granian`: make exports command-line variables, so

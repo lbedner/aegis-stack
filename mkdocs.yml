@@ -95,6 +95,7 @@ nav:
     - AI:
       - Inference: components/inference.md
       - MCP: components/mcp.md
+      - Browser: components/browser.md
     - App:
       - Frontend:
         - Flet Dashboard:

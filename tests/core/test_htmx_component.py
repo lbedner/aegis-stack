@@ -50,12 +50,6 @@ class TestHtmxComponentRegistry:
         spec = COMPONENTS["htmx"]
         assert spec.marker_path == "app/components/web_frontend"
 
-    def test_htmx_has_no_hard_requirements(self) -> None:
-        """Test that htmx has no hard dependencies (rides the webserver)."""
-        spec = COMPONENTS["htmx"]
-        assert spec.requires is not None
-        assert len(spec.requires) == 0
-
 
 class TestHtmxInConstants:
     """Test htmx constants in aegis.constants."""
@@ -221,15 +215,15 @@ class TestHtmxIsNotCalledInfrastructure:
 class TestHtmxDependencyResolution:
     """Test htmx through the dependency resolver."""
 
-    def test_htmx_resolves_alone(self) -> None:
-        """htmx has no hard dependencies, so it resolves to itself only."""
+    def test_htmx_brings_deploy(self) -> None:
+        """Overseer's container stats and logs come through deploy's socket
+        proxy, so htmx pulls deploy in."""
         from aegis.core.dependency_resolver import DependencyResolver
 
         resolver = DependencyResolver()
-        resolved = resolver.resolve_dependencies(["htmx"])
+        resolved = resolver.resolve_dependencies([ComponentNames.HTMX])
 
-        assert "htmx" in resolved
-        assert len(resolved) == 1
+        assert set(resolved) == {ComponentNames.HTMX, ComponentNames.DEPLOY}
 
 
 class TestHtmxI18n:

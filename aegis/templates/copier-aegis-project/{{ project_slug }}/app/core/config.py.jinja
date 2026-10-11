@@ -14,6 +14,7 @@ from app.core.configurable import Configurable, timezones
 from app.core.constants import DEV_ENVS, AppEnv, ComponentName{% if include_worker %}, QueueName{% endif %}
 from app.core.settings_base import SettingsBase
 {% if include_ai and ai_voice %}from app.core.voice_settings import VoiceSettings{% endif %}
+{% if include_browser %}from app.components.browser.settings import BrowserSettings{% endif %}
 {% if include_worker %}from app.core.queue_workers import DEFAULT_QUEUES, QueueWorker{% endif %}
 {%- for p in _plugins | default([]) %}
 {%- for s in p.wiring.settings_mixins %}
@@ -38,7 +39,8 @@ class Settings(
 {%- endfor %}
 {%- if include_ai and ai_voice %}
     VoiceSettings,
-{%- endif %}
+{%- endif %}{%- if include_browser %}
+    BrowserSettings,{%- endif %}
     SettingsBase,
 ):
     """
@@ -48,10 +50,8 @@ class Settings(
 
     # Project identity
     PROJECT_NAME: str = "{{ project_slug }}"
-    # Friendly display name shown to humans (email FROM/body, browser
-    # titles, etc.). PROJECT_NAME above is the URL-safe slug; this is
-    # the marketing-friendly form. Defaults to the value you typed when
-    # generating the project; override per-environment via env var.
+    # Friendly display name for humans (email FROM/body, browser titles);
+    # PROJECT_NAME above is the URL-safe slug. Override via env var.
     PROJECT_DISPLAY_NAME: str = "{{ project_name }}"
 
     # Public-facing base URL (used to build absolute links in outgoing
@@ -293,7 +293,7 @@ class Settings(
     REDIS_URL: str = "redis://redis:6379"  # Docker service name by default
     REDIS_URL_LOCAL: str | None = None  # Manual override for local CLI usage
     # Host publish port chosen by `make serve` (loaded from .env.ports).
-    # None = use the container port. See `_localhost_url`.
+    # None = use the container port. See `localhost_url`.
     REDIS_HOST_PORT: int | None = None
     REDIS_DB: int = 0
     # Logical Redis DB for the application cache (view caches, bulk
@@ -308,7 +308,7 @@ class Settings(
         if self.REDIS_URL_LOCAL and not self.is_docker:
             return self.REDIS_URL_LOCAL
         if not self.is_docker:
-            return self._localhost_url(self.REDIS_URL, {"redis"}, self.REDIS_HOST_PORT)
+            return self.localhost_url(self.REDIS_URL, {"redis"}, self.REDIS_HOST_PORT)
         return self.REDIS_URL
 {% endif %}
 
@@ -346,7 +346,7 @@ class Settings(
     DATABASE_URL: str = "postgresql://postgres:postgres@postgres:5432/{{ project_slug }}"
     DATABASE_URL_LOCAL: str | None = None  # Manual override for local CLI usage
     # Host publish port chosen by `make serve` (loaded from .env.ports).
-    # None = use the container port. See `_localhost_url`.
+    # None = use the container port. See `localhost_url`.
     POSTGRES_HOST_PORT: int | None = None
     DATABASE_ENGINE_ECHO: bool = False
 {% if postgres_provider == "neon" %}
@@ -362,7 +362,7 @@ class Settings(
         if self.DATABASE_URL_LOCAL and not self.is_docker:
             return self.DATABASE_URL_LOCAL
         if not self.is_docker:
-            return self._localhost_url(
+            return self.localhost_url(
                 self.DATABASE_URL, {"postgres"}, self.POSTGRES_HOST_PORT
             )
         return self.DATABASE_URL
@@ -374,7 +374,7 @@ class Settings(
         if self.DATABASE_URL_UNPOOLED:
             url = self.DATABASE_URL_UNPOOLED
             if not self.is_docker:
-                url = self._localhost_url(
+                url = self.localhost_url(
                     url, {"postgres"}, self.POSTGRES_HOST_PORT
                 )
             return url
@@ -434,7 +434,7 @@ class Settings(
 {% endif %}
     OLLAMA_BASE_URL_LOCAL: str | None = None  # Manual override for local CLI usage
     # Host publish port chosen by `make serve` (loaded from .env.ports).
-    # None = use the container port. See `_localhost_url`.
+    # None = use the container port. See `localhost_url`.
     OLLAMA_HOST_PORT: int | None = None
     OLLAMA_API_KEY: str | None = None  # Optional, usually not needed
 {%- endif %}{%- if include_ai %}
@@ -613,7 +613,7 @@ class Settings(
     TRAEFIK_API_URL: str = "http://traefik:8080"  # Docker service name
     TRAEFIK_API_URL_LOCAL: str | None = None  # Manual override for local CLI usage
     # Host publish port chosen by `make serve` (loaded from .env.ports).
-    # None = use the container port. See `_localhost_url`.
+    # None = use the container port. See `localhost_url`.
     INGRESS_DASHBOARD_PORT: int | None = None
 {% endif %}
 
@@ -634,9 +634,8 @@ class Settings(
     RAG_CHAT_TOP_K: Annotated[int, Field(gt=0, le=50), Configurable("service_ai", "Chunks a chat answer draws on")] = 15
 {% endif %}
 
-{% if include_redis or database_engine == "postgres" or ollama_mode != "none" or include_ingress %}
     @staticmethod
-    def _localhost_url(
+    def localhost_url(
         url: str, docker_hostnames: set[str], host_port: int | None = None
     ) -> str:
         """Rewrite a Docker-network URL for access from the host.
@@ -666,7 +665,6 @@ class Settings(
         if port:
             netloc = f"{netloc}:{port}"
         return urlunparse(parsed._replace(netloc=netloc))
-{% endif %}
 
 {% if ollama_mode != "none" %}
     @property
@@ -675,7 +673,7 @@ class Settings(
         if self.OLLAMA_BASE_URL_LOCAL and not self.is_docker:
             return self.OLLAMA_BASE_URL_LOCAL
         if not self.is_docker:
-            return self._localhost_url(
+            return self.localhost_url(
                 self.OLLAMA_BASE_URL,
                 {"ollama", "host.docker.internal"},
                 self.OLLAMA_HOST_PORT,
@@ -694,7 +692,7 @@ class Settings(
         if self.TRAEFIK_API_URL_LOCAL and not self.is_docker:
             return self.TRAEFIK_API_URL_LOCAL
         if not self.is_docker:
-            return self._localhost_url(
+            return self.localhost_url(
                 self.TRAEFIK_API_URL, {"traefik"}, self.INGRESS_DASHBOARD_PORT
             )
         return self.TRAEFIK_API_URL

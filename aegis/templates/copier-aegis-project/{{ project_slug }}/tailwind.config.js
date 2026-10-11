@@ -43,6 +43,7 @@ const PALETTES = {
     "--aegis-chart-6": "#10B981",
     "--aegis-chart-7": "#F97316",
     "--aegis-chart-8": "#06B6D4",
+    "--aegis-chart-9": "#84CC16",
   },
   light: {
     "color-scheme": "light",
@@ -66,6 +67,7 @@ const PALETTES = {
     "--aegis-chart-6": "#059669",
     "--aegis-chart-7": "#EA580C",
     "--aegis-chart-8": "#0891B2",
+    "--aegis-chart-9": "#65A30D",
   },
 };
 

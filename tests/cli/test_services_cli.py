@@ -289,6 +289,7 @@ class TestInteractiveServiceSelection:
                 False,  # secrets
                 False,  # deploy
                 False,  # mcp
+                False,  # browser
                 True,  # auth service
                 True,  # database confirmation for auth
                 False,  # payment service
@@ -328,6 +329,7 @@ class TestInteractiveServiceSelection:
                 False,  # secrets
                 False,  # deploy
                 False,  # mcp
+                False,  # browser
                 False,  # auth service
                 False,  # payment service
                 False,  # AI service

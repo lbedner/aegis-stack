@@ -49,6 +49,9 @@ dependencies = [
 {%- if include_storage %}
     "boto3>=1.35,<2",
 {%- endif %}
+{%- if include_browser %}
+    "playwright==1.63.0",
+{%- endif %}
 {%- if include_worker %}
 {%- if worker_backend == "taskiq" %}
     # Capped to < 0.13: taskiq 0.13 dropped ``taskiq.compat.model_dump``,

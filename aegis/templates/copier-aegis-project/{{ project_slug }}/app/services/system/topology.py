@@ -27,6 +27,7 @@ TIERS: tuple[tuple[str, ...], ...] = (
         ComponentName.CACHE,
         ComponentName.STORAGE,
         ComponentName.OLLAMA,
+        ComponentName.BROWSER,
     ),
 )
 # Who talks to whom: requests in through the ingress; the app's processes
@@ -38,6 +39,7 @@ LINKS: tuple[tuple[str, str], ...] = (
     (ComponentName.BACKEND, ComponentName.CACHE),
     (ComponentName.BACKEND, ComponentName.STORAGE),
     (ComponentName.BACKEND, ComponentName.OLLAMA),
+    (ComponentName.BACKEND, ComponentName.BROWSER),
     (ComponentName.WORKER, QUEUE),
     (ComponentName.WORKER, ComponentName.DATABASE),
     (ComponentName.SCHEDULER, ComponentName.DATABASE),

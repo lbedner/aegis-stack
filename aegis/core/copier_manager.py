@@ -51,6 +51,9 @@ from .verbosity import is_verbose, verbose_print
 AEGIS_GIT_NAME = "Aegis Stack"
 AEGIS_GIT_EMAIL = "noreply@aegis-stack.dev"
 
+# Recorded as ``aegis_version`` when the generating CLI did not say.
+NO_AEGIS_VERSION = "0.0.0"
+
 
 def ensure_commit_identity(project_path: Path) -> None:
     """Let init commit on a machine where git knows nobody (CI), without
@@ -155,7 +158,7 @@ def generate_with_copier(
         "github_username": template_context.get("github_username", "your-username"),
         "version": template_context.get("version", "0.1.0"),
         "python_version": python_version,  # Uses override for RAG + Python 3.14
-        "aegis_version": template_context.get("aegis_version", "0.0.0"),
+        "aegis_version": template_context.get("aegis_version", NO_AEGIS_VERSION),
         # include_<name> bools, one per optional component/service, derived
         # from the plugin registries (yes/no strings -> Copier booleans).
         **derive_include_flags(template_context),

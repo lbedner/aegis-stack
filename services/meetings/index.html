@@ -3965,10 +3965,32 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#how-the-bot-runs-a-meeting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How the bot runs a meeting
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#cli" class="md-nav__link">
     <span class="md-ellipsis">
       
         CLI
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#api" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        API
       
     </span>
   </a>
@@ -6311,10 +6333,32 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#how-the-bot-runs-a-meeting" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How the bot runs a meeting
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#cli" class="md-nav__link">
     <span class="md-ellipsis">
       
         CLI
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#api" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        API
       
     </span>
   </a>
@@ -6343,26 +6387,45 @@
 
 
 <h1 id="meetings-service">Meetings Service</h1>
-<p>A bot that joins a call as a visible, announced participant, and keeps who was there and what each of them said. This release ships the records: the meetings the bot is asked to join, their participants and the transcript. Joining a call comes next.</p>
+<p>A bot that joins a call as a visible, announced participant, and keeps who was there and what each of them said. It joins Google Meet today; Teams and Zoom come next.</p>
 <div class="admonition info">
 <p class="admonition-title">Quick Start</p>
 <p>Generate a project with the meetings service:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>aegis<span class="w"> </span>init<span class="w"> </span>my-app<span class="w"> </span>--services<span class="w"> </span>meetings
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nb">cd</span><span class="w"> </span>my-app
-</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>my-app<span class="w"> </span>meetings<span class="w"> </span>add<span class="w"> </span>https://meet.google.com/abc-defg-hij
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>my-app<span class="w"> </span>meetings<span class="w"> </span>join<span class="w"> </span>https://meet.google.com/abc-defg-hij
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>my-app<span class="w"> </span>meetings<span class="w"> </span>list
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>my-app<span class="w"> </span>meetings<span class="w"> </span>show<span class="w"> </span><span class="m">1</span>
 </span></code></pre></div>
 <p>Meetings requires the <code>database</code> component and brings the <code>browser</code> component, the browser the bot joins through.</p>
 </div>
+<div class="admonition warning">
+<p class="admonition-title">The bot needs a Google account</p>
+<p>Meet turns away a browser that is not signed in to Google. Until the bot's own account is signed in (a coming release), it can join only meetings that admit guests.</p>
+</div>
 <h2 id="what-you-get">What You Get</h2>
 <ul>
-<li><strong>Meetings</strong> - one row per call the bot is asked to join: the link, its platform, the name the bot joins as, and its status (<code>requested</code>, <code>joining</code>, <code>waiting</code> to be admitted, <code>in_call</code>, <code>left</code>, or <code>failed</code> with a reason), with when it joined and left.</li>
+<li><strong>Meetings</strong> - one row per call the bot is asked to join: the link, its platform, the name the bot joins as, and its status, with when it joined and left.</li>
 <li><strong>Platforms</strong> - the platform comes from the link: Google Meet (<code>meet.google.com</code>), Microsoft Teams (<code>teams.microsoft.com</code>, <code>teams.live.com</code>) and Zoom's web links (<code>zoom.us/j/...</code>). Any other link is refused before anything is stored.</li>
 <li><strong>Participants</strong> - whoever the call names, by display name and the platform's own id when it gives one. A participant can be linked to a user, to say "this speaker is me".</li>
 <li><strong>Transcript</strong> - one line per thing a participant said, timed in seconds from when the bot joined.</li>
 <li><strong>Owners</strong> - a meeting belongs to whoever asked for the bot. Without an owner (no auth, the CLI) every meeting is in reach.</li>
 </ul>
+<h2 id="how-the-bot-runs-a-meeting">How the bot runs a meeting</h2>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>requested -&gt; joining -&gt; waiting -&gt; in_call -&gt; left
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>                           |          |
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>                           +----------+--&gt; failed (with the reason)
+</span></code></pre></div>
+<ol>
+<li>It opens the meeting in the browser container, gives its name and asks to join.</li>
+<li>It waits up to five minutes for the host to let it in. Refused or never admitted, the meeting ends as <code>failed</code> with the reason.</li>
+<li>Once in, it posts in the meeting chat that it is taking notes. Some places require everyone's consent to record, so this is not optional.</li>
+<li>It leaves when the call ends, when it is removed, when it has been alone for two minutes, or when asked (<code>meetings leave</code>, <code>POST /api/v1/meetings/{id}/leave</code>), within ten seconds. Asked before it joins, it never does.</li>
+</ol>
+<p>The browser closes whatever happens, so no Chrome outlives its meeting.</p>
+<p>The bot runs inside the process that starts it: <code>meetings join</code> waits for it, and the API runs it in the background of the webserver, which takes it out of the call (<code>left</code>) when the webserver shuts down. While it runs it writes a heartbeat on the meeting every ten seconds, and reads back whether it has been asked to leave. A process that dies mid-call stops the heartbeat: a minute after the next startup, that meeting is marked <code>failed</code> ("The app stopped during the meeting"). A call another process is still in keeps beating, so a restart never touches it.</p>
+<p>Every status change moves only from the status the bot expects, so a leave request (or a failure recorded elsewhere) is never overwritten by the bot's next step: it stops instead.</p>
+<p>Everything the bot knows about Meet's page (its buttons, its chat, how it says you were turned away) lives in <code>app/services/meetings/meet.py</code>. When Meet changes its page, that module is the fix.</p>
 <h2 id="cli">CLI</h2>
 <table>
 <thead>
@@ -6373,8 +6436,12 @@
 </thead>
 <tbody>
 <tr>
-<td><code>meetings add &lt;link&gt; [--bot-name NAME]</code></td>
-<td>Record a meeting for the bot to join</td>
+<td><code>meetings join &lt;link&gt; [--bot-name NAME]</code></td>
+<td>Send the bot into a meeting and wait until it leaves (Ctrl-C takes it out)</td>
+</tr>
+<tr>
+<td><code>meetings leave &lt;id&gt;</code></td>
+<td>Ask the bot to leave</td>
 </tr>
 <tr>
 <td><code>meetings list [-n LIMIT]</code></td>
@@ -6383,6 +6450,29 @@
 <tr>
 <td><code>meetings show &lt;id&gt;</code></td>
 <td>One meeting: its status and its transcript</td>
+</tr>
+</tbody>
+</table>
+<h2 id="api">API</h2>
+<table>
+<thead>
+<tr>
+<th>Route</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>POST /api/v1/meetings</code></td>
+<td><code>{"url": ..., "bot_name": ...}</code>: record the meeting and start the bot; answers <code>202</code> before it joins</td>
+</tr>
+<tr>
+<td><code>GET /api/v1/meetings/{id}</code></td>
+<td>The meeting and its status</td>
+</tr>
+<tr>
+<td><code>POST /api/v1/meetings/{id}/leave</code></td>
+<td>Ask the bot to leave</td>
 </tr>
 </tbody>
 </table>

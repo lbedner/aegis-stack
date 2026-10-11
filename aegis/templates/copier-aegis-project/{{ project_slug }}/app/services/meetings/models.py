@@ -29,6 +29,7 @@ class MeetingStatus(StrEnum):
     JOINING = "joining"
     WAITING = "waiting"  # in the lobby, waiting to be admitted
     IN_CALL = "in_call"
+    LEAVING = "leaving"  # asked to leave; the bot goes on its next look
     LEFT = "left"
     FAILED = "failed"
 
@@ -54,6 +55,9 @@ class Meeting(SQLModel, table=True):
     created_at: datetime = Field(default_factory=utcnow)
     joined_at: datetime | None = None
     left_at: datetime | None = None
+    # The run's heartbeat: how ``fail_interrupted`` tells a live run from a
+    # stopped one.
+    seen_at: datetime | None = None
 
 
 class MeetingParticipant(SQLModel, table=True):

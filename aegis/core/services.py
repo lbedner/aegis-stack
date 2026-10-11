@@ -1461,9 +1461,9 @@ SERVICES: dict[str, ServiceSpec] = {
     ),
     "meetings": ServiceSpec(
         readme=ReadmeWiring(
-            reach="the `meetings` CLI",
+            reach="/api/v1/meetings and the `meetings` CLI",
             cli_groups=["meetings"],
-            first_steps=["Record a meeting: meetings add <meeting link>"],
+            first_steps=["Send the bot into a call: meetings join <meeting link>"],
         ),
         name="meetings",
         docs_path="services/meetings",
@@ -1482,14 +1482,38 @@ SERVICES: dict[str, ServiceSpec] = {
             ComponentNames.DATABASE,
             ComponentNames.BROWSER,
         ],
+        wiring=PluginWiring(
+            routers=[
+                RouterWiring(
+                    module="app.components.backend.api.meetings.router",
+                    symbol="router",
+                    alias="meetings_router",
+                    prefix="/api/v1",
+                ),
+            ],
+            deps_providers=[
+                SymbolWiring(
+                    module="app.services.meetings.deps",
+                    symbol="get_meetings_service",
+                ),
+            ],
+        ),
         migrations=[MEETINGS_MIGRATION],
         pyproject_deps=["alembic==1.16.5"],
-        template_files=["app/services/meetings/"],
+        template_files=[
+            "app/services/meetings/",
+            "app/components/backend/api/meetings/",
+        ],
         files=FileManifest(
             primary=[
                 "app/services/meetings",
+                "app/components/backend/api/meetings",
+                "app/components/backend/startup/meetings_recovery.py",
                 "app/cli/meetings.py",
                 "tests/services/test_meetings_service.py",
+                "tests/services/test_meetings_bot.py",
+                "tests/services/test_meet_page.py",
+                "tests/api/test_meetings_endpoints.py",
             ],
         ),
     ),

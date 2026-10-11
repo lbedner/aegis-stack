@@ -1,0 +1,166 @@
+"""The meeting bot's run: ask to join, wait to be admitted, say who it is,
+stay until there is a reason to leave, and write each step on the meeting
+row.
+
+It runs inside whichever process starts it: the CLI waits for it
+(``meetings join``), the app runs it with ``background`` (``start_meeting``)
+and cancels it at shutdown, when it records itself as left. While it runs
+it beats (``heartbeat``); a run whose process died stops beating, and the
+next startup's ``fail_interrupted`` records it as failed. Every status
+change is a ``transition``, so a leave request or a failure written
+elsewhere stops the run instead of being overwritten by it. Each step opens
+its own short session, so an hour-long call holds no database connection.
+"""
+
+import asyncio
+
+from app.core.concurrency import background
+from app.core.db import get_async_session
+from app.core.log import logger
+from app.services.meetings.meet import CallState, MeetPage, open_meet
+from app.services.meetings.models import Meeting, MeetingStatus, Platform
+from app.services.meetings.service import (
+    NOT_DONE,
+    MeetingsService,
+    heartbeat,
+    transition,
+)
+
+POLL_SECONDS = 2.0
+ADMIT_TIMEOUT_SECONDS = 300.0
+# How long the bot stays once everyone else has gone.
+ALONE_SECONDS = 120.0
+# How often the run beats and reads back its status: a leave request waits
+# at most this long, and on SQLite each beat takes the write lock.
+BEAT_SECONDS = 10.0
+
+STILL_WANTED = (MeetingStatus.JOINING, MeetingStatus.WAITING, MeetingStatus.IN_CALL)
+
+
+class _RunEnded(Exception):  # noqa: N818 - control flow, not an error
+    """The run ends here, as ``status``; a row already done (failed by
+    another process) keeps what it says."""
+
+    def __init__(self, status: MeetingStatus, reason: str | None = None) -> None:
+        self.status, self.reason = status, reason
+
+
+class _Pulse:
+    """The run's heartbeat, every ``BEAT_SECONDS``: False once the meeting
+    is no longer one the run should be in (asked to leave, or failed by
+    another process)."""
+
+    def __init__(self, meeting_id: int) -> None:
+        self.meeting_id = meeting_id
+        self.last = float("-inf")
+
+    async def still_wanted(self) -> bool:
+        now = asyncio.get_running_loop().time()
+        if now - self.last < BEAT_SECONDS:
+            return True
+        self.last = now
+        async with get_async_session() as session:
+            return await heartbeat(session, self.meeting_id) in STILL_WANTED
+
+
+async def _move(
+    meeting_id: int,
+    to: MeetingStatus,
+    from_: tuple[MeetingStatus, ...],
+    reason: str | None = None,
+) -> bool:
+    async with get_async_session() as session:
+        return await transition(session, meeting_id, to, from_=from_, reason=reason)
+
+
+async def _step(meeting_id: int, to: MeetingStatus, from_: MeetingStatus) -> None:
+    """The next step, or the end of the run when the row moved elsewhere
+    (a leave request: it leaves; a failure: it stays failed)."""
+    if not await _move(meeting_id, to, (from_,)):
+        raise _RunEnded(MeetingStatus.LEFT)
+
+
+async def _admitted(call: MeetPage, pulse: _Pulse) -> None:
+    """Back once the host lets the bot in; ends the run otherwise."""
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + ADMIT_TIMEOUT_SECONDS
+    while True:
+        state = await call.state()
+        if state == CallState.IN_CALL:
+            return
+        if state == CallState.REFUSED:
+            raise _RunEnded(MeetingStatus.FAILED, "The host refused the bot's request")
+        if state == CallState.ENDED or not await pulse.still_wanted():
+            raise _RunEnded(MeetingStatus.LEFT)
+        if loop.time() >= deadline:
+            raise _RunEnded(
+                MeetingStatus.FAILED,
+                f"Nobody admitted the bot within {ADMIT_TIMEOUT_SECONDS:.0f} seconds",
+            )
+        await asyncio.sleep(POLL_SECONDS)
+
+
+async def _stay(call: MeetPage, pulse: _Pulse) -> None:
+    """Back when the bot should leave: asked to, or alone too long. Ends
+    the run when the call ends on its own (any page but the call's)."""
+    loop = asyncio.get_running_loop()
+    alone_since: float | None = None
+    while True:
+        if await call.state() != CallState.IN_CALL:
+            raise _RunEnded(MeetingStatus.LEFT)
+        if not await pulse.still_wanted():
+            return
+        people = await call.people()
+        if people is None or people > 1:
+            alone_since = None
+        elif alone_since is None:
+            alone_since = loop.time()
+        elif loop.time() - alone_since >= ALONE_SECONDS:
+            return
+        await asyncio.sleep(POLL_SECONDS)
+
+
+async def _join(meeting: Meeting) -> None:
+    meeting_id: int = meeting.id  # type: ignore[assignment]
+    await _step(meeting_id, MeetingStatus.JOINING, MeetingStatus.REQUESTED)
+    pulse = _Pulse(meeting_id)
+    async with open_meet(meeting.url) as call:
+        await call.ask_to_join(meeting.bot_name)
+        await _step(meeting_id, MeetingStatus.WAITING, MeetingStatus.JOINING)
+        await _admitted(call, pulse)
+        await _step(meeting_id, MeetingStatus.IN_CALL, MeetingStatus.WAITING)
+        await call.say(
+            f"{meeting.bot_name} is taking notes in this meeting: "
+            "what is said here is transcribed."
+        )
+        await _stay(call, pulse)
+        await call.leave()
+
+
+async def run_meeting(meeting_id: int) -> None:
+    """Take the bot through one meeting, start to finish."""
+    async with get_async_session() as session:
+        meeting = await MeetingsService(session, None).get(meeting_id)
+    try:
+        if meeting.platform != Platform.MEET:
+            raise _RunEnded(
+                MeetingStatus.FAILED,
+                f"The bot joins Google Meet so far, not {meeting.platform.title()}",
+            )
+        await _join(meeting)
+        await _move(meeting_id, MeetingStatus.LEFT, NOT_DONE)
+    except _RunEnded as ended:
+        await _move(meeting_id, ended.status, NOT_DONE, ended.reason)
+    except asyncio.CancelledError:
+        # Stopped from outside (Ctrl-C, the app shutting down): the browser
+        # closed on the way out, so the bot has left the call.
+        await _move(meeting_id, MeetingStatus.LEFT, NOT_DONE)
+        raise
+    except Exception as exc:
+        logger.exception("Meeting bot failed", meeting_id=meeting_id)
+        await _move(meeting_id, MeetingStatus.FAILED, NOT_DONE, str(exc))
+
+
+def start_meeting(meeting_id: int) -> asyncio.Task[None]:
+    """Run the bot without waiting for it, in this process."""
+    return background(run_meeting(meeting_id))

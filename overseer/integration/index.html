@@ -6936,9 +6936,14 @@ each in its own namespace:</p>
 </span></code></pre></div>
 <h2 id="automatic-error-attribution">Automatic error attribution</h2>
 <p>Keep using <code>from app.core.log import logger</code>. The shared logging processor derives
-<code>app_service</code> from <code>app/services/&lt;name&gt;/...</code> only when the name belongs to the
-shared <code>ServiceName</code> registry, checked against the generator’s <code>ServiceSpec</code> list; runtime-registered plugin services are also accepted. Shared
-folders such as <code>system</code> and <code>change_queue</code> are not application services.
+<code>app_service</code> from who owns the code (<code>app.core.ownership.owner</code>): a file under
+<code>app/services/&lt;name&gt;/</code>, a route under <code>app/components/backend/api/&lt;name&gt;/</code> (by its
+name, or the one service it imports), or a service's CLI, only when the name belongs
+to the shared <code>ServiceName</code> registry, checked against the generator’s <code>ServiceSpec</code>
+list; runtime-registered plugin services are also accepted. Shared folders such as
+<code>system</code> and <code>change_queue</code> are not application services. A line or exception from
+a component's own code also names it as <code>app_component</code> (<code>app/components/&lt;name&gt;/</code>,
+or a core client such as <code>app/core/cache.py</code> by the component it fronts).
 Existing logger calls need no per-function context manager. <code>emitting_service</code>
 records the service that wrote the log. For exceptions, the processor inspects
 traceback frames and chained causes before formatting, allowing an AI failure
@@ -6954,8 +6959,9 @@ process/thread handoffs outside those wrappers do not automatically inherit it.<
 <p>Both development console logs and production JSON logs carry attribution into
 retained errors. The runtime <code>service</code> and container identity remain separate
 from <code>app_service</code>. The Errors checklist is the Logs one, with the same query
-parameters (<code>service</code>, <code>container</code>, <code>app_service</code>), so a filter carries between
-the two pages. Grouping includes the application service.</p>
+parameters (<code>service</code>, <code>container</code>, <code>app_service</code>, <code>app_component</code>), so a filter
+carries between the two pages. Grouping includes the application service, never
+the component, so naming components regrouped no existing issue.</p>
 
 
 

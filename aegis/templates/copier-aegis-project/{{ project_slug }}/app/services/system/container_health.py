@@ -18,6 +18,7 @@ from collections.abc import Iterator
 from typing import Any
 
 from app.core import series
+from app.core.ownership import component_of
 from app.services.system import ui_runtime
 
 from .models import ComponentStatus, ComponentStatusType
@@ -32,7 +33,7 @@ async def overlay(checks: dict[str, ComponentStatus]) -> dict[str, ComponentStat
     tables = await series.latest(ui_runtime.SAMPLER) or {}
     troubles: dict[str, list[_Trouble]] = {}
     for page, view in tables.items():
-        troubles.setdefault(ui_runtime.component_of(page), []).extend(
+        troubles.setdefault(component_of(page), []).extend(
             trouble for row in view["rows"] for trouble in _troubles(row)
         )
     return {

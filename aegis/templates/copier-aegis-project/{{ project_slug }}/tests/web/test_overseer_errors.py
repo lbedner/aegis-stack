@@ -4,9 +4,9 @@ picker, and unavailable states."""
 from collections.abc import Mapping
 from typing import Any
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-import pytest
 
 from app.components.web_frontend import overseer_code, overseer_errors
 from app.services.system import ui_errors
@@ -103,7 +103,8 @@ def test_the_services_picker_is_the_logs_one(errors_client: TestClient) -> None:
     """The same checklist as Logs, the same names: a filter carries across."""
     html = page_html(
         errors_client,
-        "/overseer/errors?service=redis&container=app-worker-system-1&app_service=auth",
+        "/overseer/errors?service=redis&container=app-worker-system-1&app_service=auth"
+        "&app_component=cache",
     )
     picks = {
         (o.get("name"), o.get("value")): o.get("checked") is not None
@@ -112,8 +113,10 @@ def test_the_services_picker_is_the_logs_one(errors_client: TestClient) -> None:
     assert picks[("service", "redis")] and not picks[("service", "worker")]
     assert picks[("container", WORKER.name)] and not picks[("container", STOPPED.name)]
     assert picks[("app_service", "auth")]
+    assert picks[("app_component", "cache")]
     events = one(html, "#errors [sse-connect]").get("sse-connect")
     assert "service=redis" in events and "app_service=auth" in events
+    assert "app_component=cache" in events
     form = one(html, "#errors form")
     assert "change" in (form.get("hx-trigger") or "")
     assert form.get("hx-target") == "#errors"

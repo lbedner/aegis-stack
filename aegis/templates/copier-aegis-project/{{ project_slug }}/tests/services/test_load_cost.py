@@ -103,6 +103,20 @@ def test_every_service_and_the_webservers_components_are_measured() -> None:
     assert not load_cost.OWN_PROCESS & set(found)
 
 
+def test_only_a_component_can_be_its_own_process(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The scheduler service shares the scheduler component's name, and
+    runs in the webserver: it is measured."""
+    monkeypatch.setattr(
+        load_cost.service_links, "packages", lambda parent: ["scheduler", "worker"]
+    )
+    assert load_cost.parts() == {
+        "service_scheduler": "app.services.scheduler",
+        "service_worker": "app.services.worker",
+    }
+
+
 def test_a_part_is_measured_on_top_of_the_parts_it_uses() -> None:
     """The web frontend's Overseer pages import every service: loaded
     alone it would count them all again. On top of what it uses, it is its
@@ -130,4 +144,4 @@ def test_the_way_of_measuring_covers_which_parts_count_as_used() -> None:
 
     method = load_cost._SCRIPT + inspect.getsource(load_cost.uses)
     expected = hashlib.sha1(method.encode(), usedforsecurity=False).hexdigest()[:8]
-    assert load_cost._METHOD == expected
+    assert expected == load_cost._METHOD

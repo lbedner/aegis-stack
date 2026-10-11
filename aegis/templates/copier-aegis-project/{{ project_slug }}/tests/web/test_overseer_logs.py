@@ -5,15 +5,15 @@ text, and follows new ones over SSE while it is open."""
 
 import json
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-import pytest
 
 from app.components.web_frontend import overseer_code, overseer_logs
 from app.core.config import settings
-from app.services.system.patterns import PROJECT_ROOT
 from app.core.runtime import LogLine, parse_log_line
 from app.services.system.models import ComponentStatus
+from app.services.system.patterns import PROJECT_ROOT
 from app.services.system.ui import get_component_title
 from tests._fake_runtime import (
     REDIS,
@@ -552,6 +552,31 @@ def test_application_service_picker_and_runtime_label(
     # The service's title as this stack names it (a gated one is title-cased).
     assert AI_TITLE in text(source) and "Worker" in text(source)
     assert "old unattributed log" in _messages(page_html(client, ALL))
+
+
+def test_a_component_is_picked_like_a_service(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A line from a component's code names it (``app_component``): ticked,
+    its lines are kept from any container, as a service's are."""
+    sign_in(app, monkeypatch, status_with(CACHE))
+    lines = {
+        WORKER.name: [
+            _at(
+                1,
+                json.dumps(
+                    {"level": "info", "event": "Cache hit", "app_component": "cache"}
+                ),
+            ),
+            _at(2, "unattributed"),
+        ]
+    }
+    use_runtime(monkeypatch, FakeRuntime(REDIS, WORKER, lines=lines))
+    html = page_html(TestClient(app), ALL + "?app_component=cache")
+    assert [
+        r.get("data-facet-app_component") for r in select(html, "#logs-lines tr")
+    ] == [None, "cache"]
+    assert checked(html, '#logs-services input[name="app_component"]') == ["cache"]
 
 
 async def test_live_rows_carry_their_application_service(

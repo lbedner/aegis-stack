@@ -17,17 +17,17 @@ build and per way of measuring. No UI framework imports.
 import asyncio
 import hashlib
 import inspect
-from pathlib import Path
 import sys
 import time
 
 from pydantic import ValidationError
 
 import app.components
+import app.services
+from app.core import source_index
 from app.core.cache import get_cache
 from app.core.config import settings
 from app.core.log import logger
-import app.services
 from app.services.system import service_links
 from app.services.system.ui import registry_key
 
@@ -39,7 +39,7 @@ CORE = ("app.core.config", "app.core.log")
 OWN_PROCESS = frozenset({"worker", "scheduler"})
 KEEP_SECONDS = 24 * 3600
 CLAIM_SECONDS = 600
-_ROOT = Path(app.services.__file__).parents[2]  # where ``app`` imports from
+_ROOT = source_index.ROOT  # where ``app`` imports from
 # Run in a Python of its own: the memory in use once the core and the parts
 # ``module`` (argv[1]) uses (argv[2:]) are loaded, then once it and every
 # module in it are too. A module that needs what this stack left out does
@@ -79,7 +79,7 @@ def parts() -> dict[str, str]:
     found = {}
     for group, package in (("services", app.services), ("components", app.components)):
         for name in service_links.packages(package):
-            if name not in OWN_PROCESS:
+            if group == "services" or name not in OWN_PROCESS:
                 found[registry_key(group, name)] = f"{package.__name__}.{name}"
     return dict(sorted(found.items()))
 
@@ -115,7 +115,8 @@ async def measure() -> None:
     found = LoadCosts()
     befores = []
     every = parts()
-    imported = {m: service_links.imports(_path(m)) for m in every.values()}
+    index = source_index.project()
+    imported = {m: index.imports_under(m) for m in every.values()}
     for key, module in every.items():
         used = uses(module, imported)
         try:
@@ -136,7 +137,7 @@ def uses(module: str, imported: dict[str, set[str]]) -> list[str]:
     server first would load the part being measured)."""
 
     def imports(part: str, other: str) -> bool:
-        return any(service_links.within(n, other) for n in imported[part])
+        return any(source_index.within(n, other) for n in imported[part])
 
     return sorted(
         other
@@ -151,10 +152,6 @@ def uses(module: str, imported: dict[str, set[str]]) -> list[str]:
 _METHOD = hashlib.sha1(
     (_SCRIPT + inspect.getsource(uses)).encode(), usedforsecurity=False
 ).hexdigest()[:8]
-
-
-def _path(module: str) -> Path:
-    return _ROOT.joinpath(*module.split("."))
 
 
 def _key() -> str:

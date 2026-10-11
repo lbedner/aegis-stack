@@ -21,6 +21,7 @@ class ErrorOccurrence(BaseModel):
     page: str
     service: str
     app_service: str | None = None
+    app_component: str | None = None
     container_id: str
     container_name: str
     stream: str
@@ -45,6 +46,7 @@ class ErrorSearch(BaseModel):
     page: str
     service: str
     app_service: str | None = None
+    app_component: str | None = None
     container_name: str | None = None
     level: str
     message: str
@@ -62,6 +64,7 @@ class ErrorIssue(BaseModel):
     page: str
     service: str
     app_service: str | None = None
+    app_component: str | None = None
     container_name: str | None = None
     message: str
     exception_type: str | None

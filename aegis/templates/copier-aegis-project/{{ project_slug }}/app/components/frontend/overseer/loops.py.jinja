@@ -15,6 +15,7 @@ else from the bootstrap.
 import asyncio
 from collections.abc import Awaitable, Callable
 {%- if include_worker and include_redis %}
+from concurrent.futures import Future
 import json
 from typing import Any
 
@@ -190,21 +191,26 @@ class WorkerStream:
         self._loops = loops
         self._page = page
         self._api_client = api_client
-        self._tasks: list[asyncio.Task[None]] = []
+        self._tasks: list[Future[None]] = []
 
     @property
     def running(self) -> bool:
         return any(not task.done() for task in self._tasks)
 
     def start(self) -> None:
-        """Connect and start rendering; a second call while running is a no-op."""
+        """Connect and start rendering; a second call while running is a no-op.
+
+        Through ``page.run_task``, not ``asyncio.create_task``: the modal
+        opens from a sync click handler, which Flet runs in a thread with
+        no event loop. ``run_task`` hands the loops to the page's own.
+        """
         if self.running:
             return
         self._tasks = [
-            asyncio.create_task(
-                listen_for_worker_events(self._loops, self._page, self._api_client)
+            self._page.run_task(
+                listen_for_worker_events, self._loops, self._page, self._api_client
             ),
-            asyncio.create_task(flush_worker_modal(self._loops, self._page)),
+            self._page.run_task(flush_worker_modal, self._loops, self._page),
         ]
 
     def stop(self) -> None:

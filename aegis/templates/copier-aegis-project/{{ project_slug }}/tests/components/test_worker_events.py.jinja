@@ -639,16 +639,26 @@ def feed(monkeypatch: pytest.MonkeyPatch) -> dict[str, int]:
 
 
 def _stream() -> Any:
+    """A stream on a page that runs tasks the way Flet's does: handed to the
+    page's loop from whatever thread asks."""
+    loop = asyncio.get_running_loop()
     page = MagicMock()
     page.session_id = "tab-1"
+    page.run_task = lambda fn, *args: asyncio.run_coroutine_threadsafe(fn(*args), loop)
     return overseer_loops.WorkerStream(MagicMock(), page, MagicMock())
+
+
+async def _settle() -> None:
+    """Let work handed over from another thread reach the loop and run."""
+    for _ in range(5):
+        await asyncio.sleep(0)
 
 
 async def test_the_feed_does_not_run_until_the_modal_opens(
     feed: dict[str, int],
 ) -> None:
     stream = _stream()
-    await asyncio.sleep(0)
+    await _settle()
 
     assert not stream.running
     assert feed["listen"] == feed["flush"] == 0
@@ -660,7 +670,7 @@ async def test_opening_starts_one_listener_and_one_flush(
     stream = _stream()
     stream.start()
     stream.start()
-    await asyncio.sleep(0)
+    await _settle()
 
     assert stream.running
     assert feed["listen"] == feed["flush"] == 1
@@ -672,16 +682,28 @@ async def test_closing_ends_both_and_reopening_starts_again(
 ) -> None:
     stream = _stream()
     stream.start()
-    await asyncio.sleep(0)
+    await _settle()
     stream.stop()
-    await asyncio.sleep(0)
+    await _settle()
 
     assert not stream.running
     assert feed["cancelled"] == 2
 
     stream.start()
-    await asyncio.sleep(0)
+    await _settle()
     assert feed["listen"] == feed["flush"] == 2
+    stream.stop()
+
+
+async def test_a_click_handler_thread_can_open_it(feed: dict[str, int]) -> None:
+    """Flet runs sync click handlers in a thread pool, where there is no
+    running loop: ``start`` from there must still start both loops."""
+    stream = _stream()
+    await asyncio.to_thread(stream.start)
+    await _settle()
+
+    assert stream.running
+    assert feed["listen"] == feed["flush"] == 1
     stream.stop()
 
 

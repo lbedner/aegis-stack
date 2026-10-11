@@ -11,6 +11,7 @@ import flet as ft
 
 from app.components.frontend.controls import ConfirmDialog, H3Text, SecondaryText
 from app.components.frontend.controls.snack_bar import ErrorSnackBar, SuccessSnackBar
+from app.components.frontend.core.session_health import SessionLoops, page_is_connected
 from app.components.frontend.dashboard.cards.card_utils import get_status_color
 from app.components.frontend.dashboard.modals.modal_sections import (
     DateRangeChips,
@@ -66,7 +67,10 @@ class ContainerSection(ft.Column):
         self._open = False
 
     async def _keep_reading(self) -> None:
-        while self._open:
+        """Re-read while the modal is open and its tab is there
+        (``SessionLoops``: Flet keeps a closed tab's session for an hour)."""
+        loops = SessionLoops(self.page, lambda: page_is_connected(self.page))
+        while self._open and loops.alive():
             await self.load()
             await asyncio.sleep(REFRESH_SECONDS)
 

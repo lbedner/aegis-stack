@@ -355,6 +355,11 @@ include_research:
   help: "Include research service (outside posts and threads, collected by saved searches)?"
   default: false
 
+include_meetings:
+  type: bool
+  help: "Include meetings service (a bot that joins calls and keeps the transcript)?"
+  default: false
+
 include_insights:
   type: bool
   help: "Include insights service (adoption metrics and analytics)?"

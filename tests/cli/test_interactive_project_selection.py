@@ -142,7 +142,7 @@ class TestAuthDatabaseDance:
             [False, False, True, False, False, False, False, False, False, False]
             + [False, False, False]
             + [True]
-            + [False] * 8
+            + [False] * (_prompt_count() - 14)  # the other services
         )
         components, _, services, _ = interactive_project_selection()
         assert "database" in components
@@ -255,12 +255,12 @@ class TestEngineWithScriptedUI:
         # (backend via choose_scheduler_backend, db auto-added and skipped),
         # storage=n, ingress=n, observability=n, htmx=n, inference=n, secrets=n,
         # deploy=n, mcp=n, browser=n, then services in ServiceType
-        # order: auth=y, payment=n, ai=y, comms=n, insights=n, research=n,
-        # documents=n, blog=y, finance=n
+        # order: auth=y, payment=n, ai=y, meetings=n, comms=n, insights=n,
+        # research=n, documents=n, blog=y, finance=n
         ui = ScriptedUI(
             confirms=[True, True, False, False, False, False, False, False, False]
             + [False, False]
-            + [True, False, True, False, False, False, False, True, False],
+            + [True, False, True, False, False, False, False, False, True, False],
             worker_backend="taskiq",
             scheduler_backend="postgres",
             database_engine="postgres",

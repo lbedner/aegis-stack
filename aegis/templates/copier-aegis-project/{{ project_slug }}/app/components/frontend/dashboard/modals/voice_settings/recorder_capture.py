@@ -9,6 +9,7 @@ from app.components.frontend.dashboard.modals.voice_settings.recorder_state impo
     RecordingState,
 )
 from app.components.frontend.theme import AegisTheme as Theme
+from app.core.formatting import format_clock
 
 
 class RecordingCaptureMixin(RecorderState):
@@ -167,10 +168,9 @@ class RecordingCaptureMixin(RecorderState):
         import time
 
         while self._state == RecordingState.RECORDING:
-            elapsed = time.time() - self._recording_start_time
-            minutes = int(elapsed // 60)
-            seconds = int(elapsed % 60)
-            self._duration_text.value = f"{minutes:02d}:{seconds:02d}"
+            self._duration_text.value = format_clock(
+                time.time() - self._recording_start_time
+            )
             if self.page:
                 self._duration_text.update()
             await asyncio.sleep(0.1)

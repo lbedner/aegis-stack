@@ -7,6 +7,16 @@
 
 ## [Unreleased]
 
+### Added
+
+- **The meetings service.** `aegis add-service meetings` keeps the calls a
+  meeting bot is asked to join, who was in each and what they said: a
+  meeting's link, platform (Google Meet, Teams or Zoom, read from the link;
+  any other link is refused), the name the bot joins as and its status;
+  its participants, optionally linked to a user; and the transcript, timed
+  from when the bot joined. `meetings add`, `list` and `show` from the
+  CLI. It brings the browser component. Nothing joins a call yet (#1508).
+
 ## [0.15.1] - 2026-10-11
 
 ### Added

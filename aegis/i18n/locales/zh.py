@@ -73,6 +73,7 @@ MESSAGES: dict[str, str] = {
     "service.comms": "通信服务（邮件、短信、语音）",
     "service.documents": "Document store: keep the paper, deduped and findable",
     "service.research": "Outside posts and threads, collected by saved searches",
+    "service.meetings": "A bot that joins calls and keeps the transcript",
     "service.blog": "支持草稿、发布和标签的 Markdown 博客",
     # ── 交互：组件选择提示 ────────────────────────────────────────────
     "interactive.add_prompt": "添加{description}？",
@@ -361,6 +362,7 @@ MESSAGES: dict[str, str] = {
     "projectmap.payment": "Payments and subscriptions",
     "projectmap.documents": "Document store",
     "projectmap.research": "Saved searches",
+    "projectmap.meetings": "Meeting bot",
     "projectmap.blog": "Markdown blog",
     "projectmap.finance": "Personal finance",
     "projectmap.docs": "文档",

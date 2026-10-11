@@ -185,6 +185,14 @@ except ImportError:
     # Research service not available, skip research commands
     pass
 
+# Conditionally register meetings command if meetings service is available
+try:
+    meetings_module = importlib.import_module("app.cli.meetings")
+    app.add_typer(meetings_module.app, name="meetings")
+except ImportError:
+    # Meetings service not available, skip meetings commands
+    pass
+
 # Conditionally register rag command if ai_rag is enabled
 try:
     rag_module = importlib.import_module("app.cli.rag")

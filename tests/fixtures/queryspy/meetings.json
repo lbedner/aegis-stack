@@ -1,0 +1,18 @@
+{
+  "tool": "queryspy",
+  "version": "0.4.1",
+  "entries": [
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM deployment",
+      "file": "tests/components/test_deploy_history.py",
+      "function": "_rows"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM deployment WHERE deployment.build_id = :pk_1",
+      "file": "app/components/deploy/history.py",
+      "function": "record_start"
+    }
+  ]
+}

@@ -265,6 +265,7 @@ class AnswerKeys:
     FINANCE = "include_finance"
     DOCUMENTS = "include_documents"
     RESEARCH = "include_research"
+    MEETINGS = "include_meetings"
 
     # Service names (used for selection/lookup)
     SERVICE_AUTH = "auth"

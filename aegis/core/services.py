@@ -32,6 +32,7 @@ from .migration_generator import (
     FINANCE_MIGRATION,
     INSIGHTS_MIGRATION,
     KNOWLEDGE_MIGRATION,
+    MEETINGS_MIGRATION,
     ORG_MIGRATION,
     PAYMENT_AUTH_LINK_MIGRATION,
     PAYMENT_MIGRATION,
@@ -1455,6 +1456,40 @@ SERVICES: dict[str, ServiceSpec] = {
                 "tests/services/test_research_service.py",
                 "tests/api/test_research_endpoints.py",
                 "tests/_research.py",
+            ],
+        ),
+    ),
+    "meetings": ServiceSpec(
+        readme=ReadmeWiring(
+            reach="the `meetings` CLI",
+            cli_groups=["meetings"],
+            first_steps=["Record a meeting: meetings add <meeting link>"],
+        ),
+        name="meetings",
+        docs_path="services/meetings",
+        marker_path="app/services/meetings",
+        type=ServiceType.AI,
+        description="A bot that joins calls and keeps the transcript",
+        long_description=(
+            "A bot that joins a Google Meet, Teams or Zoom call as a visible, "
+            "announced participant, and keeps who was there and what each "
+            "of them said. The calls it is asked to join, their "
+            "participants and the transcript are this service's; the "
+            "browser component runs the browser it joins through."
+        ),
+        required_components=[
+            ComponentNames.BACKEND,
+            ComponentNames.DATABASE,
+            ComponentNames.BROWSER,
+        ],
+        migrations=[MEETINGS_MIGRATION],
+        pyproject_deps=["alembic==1.16.5"],
+        template_files=["app/services/meetings/"],
+        files=FileManifest(
+            primary=[
+                "app/services/meetings",
+                "app/cli/meetings.py",
+                "tests/services/test_meetings_service.py",
             ],
         ),
     ),

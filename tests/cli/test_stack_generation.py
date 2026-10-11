@@ -440,6 +440,29 @@ STACK_COMBINATIONS = [
         expected_pyproject_deps=["fastapi", "flet", "sqlmodel", "alembic"],
     ),
     StackCombination(
+        name="meetings",
+        # The service on its own: no auth (every meeting unowned). It brings
+        # the browser component the bot joins through.
+        components=["database", "htmx", "browser"],
+        services=["meetings"],
+        description="Meetings service (calls, participants, transcript) + database",
+        expected_files=[
+            "app/services/meetings/",
+            "app/cli/meetings.py",
+            "app/components/browser/client.py",
+            "app/core/db.py",
+            "alembic/versions/001_meetings.py",
+        ],
+        expected_docker_services=["webserver", "browser"],
+        expected_pyproject_deps=[
+            "fastapi",
+            "flet",
+            "sqlmodel",
+            "alembic",
+            "playwright",
+        ],
+    ),
+    StackCombination(
         name="documents_auth",
         # Paired with auth deliberately: the documents routes sit behind
         # ``get_current_active_user`` whenever the auth service is present,
@@ -597,7 +620,7 @@ STACK_COMBINATIONS = [
     ),
     StackCombination(
         name="everything",
-        components=["database", "scheduler", "worker", "redis"],
+        components=["database", "scheduler", "worker", "redis", "browser"],
         # Every service, which is the point of the row: `documents` sits in
         # 6 of the 10 service pairs nothing used to build and `finance` in 5,
         # so carrying both here closes all ten at no new runner. See
@@ -612,6 +635,7 @@ STACK_COMBINATIONS = [
             "documents",
             "finance",
             "research",
+            "meetings",
         ],
         description="Kitchen sink: every service + all processing infra",
         expected_files=[
@@ -624,6 +648,7 @@ STACK_COMBINATIONS = [
             "app/services/documents/",
             "app/services/finance/",
             "app/services/research/",
+            "app/services/meetings/",
             "app/core/db.py",
             "app/components/scheduler/",
             "app/components/worker/",

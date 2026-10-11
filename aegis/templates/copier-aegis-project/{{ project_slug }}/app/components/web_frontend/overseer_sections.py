@@ -227,7 +227,13 @@ CONCERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
     (
         "AI",
-        (ServiceName.AI, ComponentName.OLLAMA, ComponentName.MCP, ServiceName.RESEARCH),
+        (
+            ServiceName.AI,
+            ComponentName.OLLAMA,
+            ComponentName.MCP,
+            ServiceName.RESEARCH,
+            ServiceName.MEETINGS,
+        ),
     ),
     (
         APP,

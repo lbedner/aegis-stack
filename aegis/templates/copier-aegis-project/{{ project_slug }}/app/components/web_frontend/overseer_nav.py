@@ -46,6 +46,7 @@ ORDER = {
         ServiceName.COMMS,
         ServiceName.DOCUMENTS,
         ServiceName.RESEARCH,
+        ServiceName.MEETINGS,
         ServiceName.INSIGHTS,
         ServiceName.PAYMENT,
         ServiceName.FINANCE,

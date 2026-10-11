@@ -86,6 +86,7 @@ MESSAGES: dict[str, str] = {
     "service.comms": "Сервис коммуникаций: email, SMS и голос",
     "service.documents": "Document store: keep the paper, deduped and findable",
     "service.research": "Outside posts and threads, collected by saved searches",
+    "service.meetings": "A bot that joins calls and keeps the transcript",
     "service.blog": "Markdown-блог с черновиками, публикацией и тегами",
     # ── Интерактив: запросы для компонентов ─────────────────────────────
     "interactive.add_prompt": "Добавить {description}?",
@@ -435,6 +436,7 @@ MESSAGES: dict[str, str] = {
     "projectmap.payment": "Payments and subscriptions",
     "projectmap.documents": "Document store",
     "projectmap.research": "Saved searches",
+    "projectmap.meetings": "Meeting bot",
     "projectmap.blog": "Markdown blog",
     "projectmap.finance": "Personal finance",
     "projectmap.docs": "Документация",

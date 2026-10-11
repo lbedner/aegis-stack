@@ -1740,20 +1740,15 @@ class ManualUpdater:
         # Services
         if auth_module("service.py", "auth_service.py") is not None:
             inferred[AnswerKeys.AUTH] = True
-        if has_nonstub_dir("app", "services", "ai"):
-            inferred[AnswerKeys.AI] = True
-        if has_nonstub_dir("app", "services", "insights"):
-            inferred[AnswerKeys.INSIGHTS] = True
-        if has_nonstub_dir("app", "services", "blog"):
-            inferred[AnswerKeys.BLOG] = True
-        if has_nonstub_dir("app", "services", "documents"):
-            inferred[AnswerKeys.DOCUMENTS] = True
-        if has_nonstub_dir("app", "services", "research"):
-            inferred[AnswerKeys.RESEARCH] = True
-        if has_nonstub_dir("app", "services", "payment"):
-            inferred[AnswerKeys.PAYMENT] = True
-        if has_nonstub_dir("app", "services", "comms"):
-            inferred[AnswerKeys.COMMS] = True
+        # Every other service by its spec's marker: one declared in the
+        # registry is inferred without a line here.
+        from .services import SERVICES
+
+        for name, spec in SERVICES.items():
+            if name != AnswerKeys.SERVICE_AUTH and has_nonstub_dir(
+                *spec.marker_path.split("/")
+            ):
+                inferred[AnswerKeys.include_key(name)] = True
 
         # Components
         if (proj / "alembic").is_dir() or has_nonstub_dir("app", "models"):

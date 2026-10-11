@@ -301,6 +301,12 @@ def format_timestamp(iso_str: str | None) -> str:
         return "\u2014"
 
 
+def format_clock(seconds: float) -> str:
+    """Elapsed time as a stopwatch reads it: ``65.9`` -> ``"01:05"``."""
+    minutes, rest = divmod(int(seconds), 60)
+    return f"{minutes:02d}:{rest:02d}"
+
+
 def format_span(seconds: float | None) -> str | None:
     """A length of time in its two largest units: ``90061`` -> ``"1d 1h"``."""
     if seconds is None or seconds < 0:

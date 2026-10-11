@@ -160,7 +160,7 @@ NAMED_PROJECT_SPECS: dict[str, ProjectTemplateSpec] = {
         components=("htmx", "database"), services=("auth",)
     ),
     "everything": ProjectTemplateSpec(
-        components=("database", "scheduler", "worker", "redis", "htmx"),
+        components=("database", "scheduler", "worker", "redis", "htmx", "browser"),
         services=(
             "auth[org]",
             "ai[sqlite]",
@@ -169,6 +169,7 @@ NAMED_PROJECT_SPECS: dict[str, ProjectTemplateSpec] = {
             "blog",
             "comms",
             "research",
+            "meetings",
         ),
     ),
 }

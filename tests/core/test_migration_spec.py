@@ -138,6 +138,7 @@ class TestInTreeRegistry:
             "blog",
             "documents",
             "research",
+            "meetings",
             "finance",
             "finance_auth_link",
             "change_queue",

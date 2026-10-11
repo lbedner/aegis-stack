@@ -285,6 +285,7 @@ class TestCopierAnswersTemplate:
             "include_blog",
             "include_insights",
             "include_research",
+            "include_meetings",
         ]
 
         for flag in required_service_flags:

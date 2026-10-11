@@ -25,8 +25,9 @@ class McpToolCall(SQLModel, table=True):
 {%- endif %}
 
     id: int | None = Field(default=None, primary_key=True)
+    # Indexed: the record is pruned by age (``activity.KEEP``).
     called_at: datetime = Field(
-        default_factory=utcnow, sa_column=Column(DateTime, nullable=False)
+        default_factory=utcnow, sa_column=Column(DateTime, nullable=False, index=True)
     )
     client: str = Field(sa_column=Column(String(128), nullable=False))
     tool: str = Field(sa_column=Column(String(128), nullable=False))

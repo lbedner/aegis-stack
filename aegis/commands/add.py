@@ -22,6 +22,7 @@ from ..constants import (
     StorageBackends,
     WorkerBackends,
 )
+from ..core import project_deps
 from ..core.component_utils import extract_base_component_name, extract_engine_info
 from ..core.components import COMPONENTS, CORE_COMPONENTS, component_option_answers
 from ..core.copier_manager import load_copier_answers
@@ -253,6 +254,7 @@ def _install_plugin(
     # adding a plugin with N transitive deps doesn't trigger N+1
     # syncs. Recursive calls pass ``yes=True`` because the user
     # already confirmed the full plan.
+    installed = project_deps.dependencies(target_path)
     for dep in plan.to_install:
         typer.echo(f"\n→ Installing dependency: {dep.variant or dep.name}")
         # A variant dep (``auth[org]``) carries the answers it changes;
@@ -302,8 +304,9 @@ def _install_plugin(
     brand.success(f"\n{t('add.plugin_success', name=plugin_spec.name)}")
     typer.echo()
     render_project_map(target_path, highlight=[plugin_spec.name])
-    # A plugin is a package of its own: the image never has it yet.
-    Messages.print_next_steps(rebuild=True)
+    Messages.print_next_steps(
+        rebuild=project_deps.dependencies(target_path) != installed
+    )
 
 
 def _translated_desc(name: str, fallback: str) -> str:
@@ -653,6 +656,7 @@ def add_command(
     # Add components using ManualUpdater
     # This is the standard approach for adding components at the same template version
     # (Copier's run_update is designed for template VERSION upgrades, not component additions)
+    installed = project_deps.dependencies(target_path)
     try:
         updater = ManualUpdater(target_path)
 
@@ -785,11 +789,7 @@ def add_command(
             Messages.print_review_changes()
 
         Messages.print_next_steps(
-            rebuild=any(
-                COMPONENTS[c].pyproject_deps
-                for c in components_to_add
-                if c in COMPONENTS
-            )
+            rebuild=project_deps.dependencies(target_path) != installed
         )
 
     except Exception as e:

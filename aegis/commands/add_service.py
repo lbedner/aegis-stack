@@ -22,6 +22,7 @@ from ..constants import (
     Messages,
     StorageBackends,
 )
+from ..core import project_deps
 from ..core.component_utils import (
     extract_base_component_name,
     extract_base_service_name,
@@ -376,6 +377,7 @@ def add_service_command(
     # conflict markers all go back, and the add can simply be run again.
     backup_tag = create_backup_point(target_path)
     succeeded = False
+    installed = project_deps.dependencies(target_path)
     try:
         updater = ManualUpdater(target_path)
 
@@ -612,10 +614,9 @@ def add_service_command(
         if len(services_to_add) > 0 or len(missing_components) > 0:
             Messages.print_review_changes()
 
-        added = [SERVICES[service_base_map[s]] for s in services_to_add] + [
-            COMPONENTS[c] for c in missing_components if c in COMPONENTS
-        ]
-        Messages.print_next_steps(rebuild=any(spec.pyproject_deps for spec in added))
+        Messages.print_next_steps(
+            rebuild=project_deps.dependencies(target_path) != installed
+        )
 
         # Service-specific guidance (use base service names for comparison)
         base_services_added = [service_base_map[s] for s in services_to_add]

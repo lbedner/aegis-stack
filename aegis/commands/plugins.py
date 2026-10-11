@@ -34,7 +34,8 @@ import typer
 from rich.markup import escape as _escape
 
 from ..cli import brand
-from ..constants import AnswerKeys
+from ..constants import AnswerKeys, Messages
+from ..core import project_deps
 from ..core.components import COMPONENTS
 from ..core.plugins.compat import CompatStatus, check_compat
 from ..core.plugins.discovery import discover_plugin_cli_apps, discover_plugins
@@ -513,6 +514,7 @@ def plugins_update_command(
     updated: list[str] = []
     skipped: list[str] = []
     failed: list[tuple[str, str]] = []
+    rebuild = False
 
     for entry in targets:
         name = entry.get("name", "")
@@ -574,6 +576,7 @@ def plugins_update_command(
             skipped.append(t("plugins.update_skipped_by_user", name=name))
             continue
 
+        installed = project_deps.dependencies(target_path)
         updater = ManualUpdater(target_path)
         # ``add_plugin`` is idempotent: a same-named entry replaces
         # the old one, shared files regenerate, plugin templates re-render.
@@ -585,6 +588,7 @@ def plugins_update_command(
         )
         if result.success:
             updated.append(f"{name} → {installed_version}")
+            rebuild = rebuild or project_deps.dependencies(target_path) != installed
         else:
             failed.append((name, result.error_message or "unknown error"))
 
@@ -594,6 +598,7 @@ def plugins_update_command(
         brand.success(t("plugins.update_summary_updated", count=len(updated)))
         for line in updated:
             typer.echo(f"   • {line}")
+        Messages.print_rebuild(rebuild)
     if skipped:
         typer.echo(t("plugins.update_summary_skipped", count=len(skipped)))
         for line in skipped:

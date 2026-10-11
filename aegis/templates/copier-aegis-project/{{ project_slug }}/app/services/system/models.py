@@ -9,7 +9,9 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, Field, computed_field, field_validator
+
+from app.core.credential import hide_passwords
 
 
 class ComponentStatusType(str, Enum):
@@ -40,6 +42,13 @@ class ComponentStatus(BaseModel):
         default_factory=dict,
         description="Sub-components (e.g., system metrics under backend)",
     )
+
+    @field_validator("message", "metadata")
+    @classmethod
+    def _without_passwords(cls, value: Any) -> Any:
+        """Health goes out unauthenticated (``/health/detailed``, the MCP
+        health tool), so no check can send a connection URL's password."""
+        return hide_passwords(value)
 
     @computed_field  # type: ignore[prop-decorator]
     @property

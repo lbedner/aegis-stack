@@ -384,6 +384,22 @@ class TestWorkerHealthLogic:
 class TestComponentMetadata:
     """Test component metadata handling and serialization."""
 
+    def test_a_status_never_carries_a_password(self) -> None:
+        """Health goes out unauthenticated (``/health/detailed``, the MCP
+        health tool): a connection URL's password is hidden however deep a
+        check put it, the message included."""
+        status = ComponentStatus(
+            name="database",
+            message="could not connect to postgresql://app:hunter2@db:5432/app",
+            metadata={
+                "url": "postgresql://app:hunter2@db:5432/app",
+                "replicas": [{"url": "redis://:hunter2@cache:6379/0"}],
+            },
+        )
+
+        assert "hunter2" not in status.model_dump_json()
+        assert status.metadata["url"] == "postgresql://app:***@db:5432/app"
+
     def test_component_status_with_complex_metadata(self) -> None:
         """Test ComponentStatus with complex metadata for different component types."""
 

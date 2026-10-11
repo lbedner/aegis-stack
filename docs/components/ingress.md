@@ -61,6 +61,9 @@ Sensitive endpoints are protected by an IP allowlist middleware. By default, the
 - `/docs` - FastAPI Swagger UI
 - `/redoc` - FastAPI ReDoc
 - `/openapi.json` - OpenAPI schema
+- `/health/detailed` - every component's health, versions and tables (the bare `/health/` stays public for load balancers)
+
+The app gates the same paths itself, with HTTP Basic (`DOCS_USERNAME`/`DOCS_PASSWORD`), so they stay closed on a stack without ingress.
 
 ```yaml
 # Docker labels on webserver service

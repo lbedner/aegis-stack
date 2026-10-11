@@ -1,12 +1,13 @@
 from datetime import UTC, datetime
 from typing import Any
 
+from app.components.backend.security.operator_auth import require_operator
 from app.services.system import (
     DetailedHealthResponse,
     HealthResponse,
     get_system_status,
 )
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from starlette import status
 
 router = APIRouter()
@@ -29,7 +30,11 @@ async def health_check() -> HealthResponse:
     )
 
 
-@router.get("/detailed", response_model=DetailedHealthResponse)
+@router.get(
+    "/detailed",
+    response_model=DetailedHealthResponse,
+    dependencies=[Depends(require_operator)],
+)
 async def detailed_health() -> DetailedHealthResponse:
     """
     Detailed health check with component information.

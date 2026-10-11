@@ -25,9 +25,9 @@ services:
       - "traefik.http.routers.webserver.tls.certresolver=letsencrypt"
       # Admin paths - IP restricted
 {%- if ingress_domain %}
-      - "traefik.http.routers.webserver-admin.rule=Host(`{{ ingress_domain }}`) && (PathPrefix(`/dashboard`) || PathPrefix(`/docs`) || PathPrefix(`/redoc`) || PathPrefix(`/openapi.json`))"
+      - "traefik.http.routers.webserver-admin.rule=Host(`{{ ingress_domain }}`) && (PathPrefix(`/dashboard`) || PathPrefix(`/docs`) || PathPrefix(`/redoc`) || PathPrefix(`/openapi.json`) || PathPrefix(`/health/detailed`))"
 {%- else %}
-      - "traefik.http.routers.webserver-admin.rule=PathPrefix(`/dashboard`) || PathPrefix(`/docs`) || PathPrefix(`/redoc`) || PathPrefix(`/openapi.json`)"
+      - "traefik.http.routers.webserver-admin.rule=PathPrefix(`/dashboard`) || PathPrefix(`/docs`) || PathPrefix(`/redoc`) || PathPrefix(`/openapi.json`) || PathPrefix(`/health/detailed`)"
 {%- endif %}
       - "traefik.http.routers.webserver-admin.entrypoints=websecure"
       - "traefik.http.routers.webserver-admin.tls.certresolver=letsencrypt"

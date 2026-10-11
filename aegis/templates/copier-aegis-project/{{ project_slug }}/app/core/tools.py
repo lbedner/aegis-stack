@@ -94,6 +94,9 @@ class RegisteredTool:
     func: ToolFunc
     description: str | None = None
     effect: ToolEffect = "writes"
+    # Shown to admins only, as Overseer shows it: an MCP token reaches it
+    # only when its owner is an admin (``mcp.server``).
+    admin: bool = False
 
 
 _registry: dict[str, RegisteredTool] = {}
@@ -105,6 +108,7 @@ def register_tool(
     *,
     description: str | None = None,
     effect: ToolEffect | None = None,
+    admin: bool = False,
     replace: bool = False,
 ) -> None:
     """Register a callable under a tool name.
@@ -129,7 +133,7 @@ def register_tool(
             f"may not change its effect to {effect!r}"
         )
     _registry[name] = RegisteredTool(
-        name=name, func=func, description=description, effect=effect
+        name=name, func=func, description=description, effect=effect, admin=admin
     )
 
 

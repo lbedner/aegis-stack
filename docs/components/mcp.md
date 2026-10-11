@@ -125,6 +125,8 @@ my-app mcp-tokens revoke --email you@example.com 3
 
 A token's scope is its grant: `read` reaches the read tools in `MCP_TOOLS`, `propose` the proposals too. A client sees only the tools its scope reaches, and a call outside it is refused. There is no second permission system, and a token never reaches a write. People start read-only and grant proposals later.
 
+`health`, `errors` and `logs` are Overseer's reads, and Overseer shows them to admins only, so a token reaches them only when its owner is an admin (`ADMIN_USER_EMAILS`, or the admin role). Anyone else's token, and a script it runs with `run_code`, sees the other tools in its scope.
+
 Only a hash of the token is kept, so its value is shown once, when it is made. It works until it is revoked: each request checks it, so a revoked token fails on its next request, and each use is noted as its last use. Sessions in the browser are unaffected.
 
 The API is the signed-in person's own: `GET /api/v1/mcp/tokens` lists them (never their values), `POST` makes one (its value in that answer only), and `DELETE /api/v1/mcp/tokens/{id}` revokes one.

@@ -7,11 +7,11 @@ are one computation. Never ``FastMCP.from_fastapi``: that would turn every
 API route into a tool, writes included, and give one question two answers.
 """
 
+import json
+import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Sequence
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 from contextvars import ContextVar
-import json
-import time
 from typing import Any
 
 from fastmcp import FastMCP
@@ -21,12 +21,12 @@ from fastmcp.server.dependencies import get_access_token
 from fastmcp.server.middleware import CallNext, Middleware, MiddlewareContext
 from fastmcp.tools import Tool
 from fastmcp.tools.tool import ToolResult
-from mcp import types
 from pydantic import BaseModel, ConfigDict
 
 from app.core.config import settings
 from app.core.log import logger
 from app.core.tools import acting_as, get_tool, mcp_servable
+from mcp import types
 
 
 class McpStep(BaseModel):
@@ -130,14 +130,31 @@ def _text(result: ToolResult) -> str:
     )
 
 
-def _reach() -> tuple[int | None, frozenset[str] | None]:
-    """Who a call acts for, and the effects it may reach: over HTTP, the
-    token's owner and scope (its scopes are effects, ``tokens.SCOPES``);
-    over stdio there is no token, so MCP_OWNER_USER_ID and the grant."""
+def _reach() -> tuple[int | None, frozenset[str] | None, bool]:
+    """Who a call acts for, the effects it may reach, and whether it may
+    reach the admin tools: over HTTP, the token's owner, scope (its scopes
+    are effects, ``tokens.SCOPES``) and admin claim; over stdio there is no
+    token, so MCP_OWNER_USER_ID, the grant, and the operator's shell."""
     token = get_access_token()
     if token is None:
-        return settings.MCP_OWNER_USER_ID, None
-    return token.claims["user_id"], frozenset(token.scopes)
+        return settings.MCP_OWNER_USER_ID, None, True
+    return (
+        token.claims["user_id"],
+        frozenset(token.scopes),
+        bool(token.claims.get("admin")),
+    )
+
+
+def _admin_only(name: str) -> bool:
+    tool = get_tool(name)
+    return tool is not None and tool.admin
+
+
+def reachable(names: Iterable[str]) -> list[str]:
+    """``names`` this call may reach: the admin tools only for an admin
+    (``run_code`` runs its script against these)."""
+    _, _, admin = _reach()
+    return [name for name in names if admin or not _admin_only(name)]
 
 
 RUN_CODE = "run_code"
@@ -158,7 +175,9 @@ def served_effects(grant: Iterable[str]) -> dict[str, str]:
     reads and proposals (``mcp_servable``), and ``run_code`` (a read: only
     reads run inside it) where it can run."""
     names = list(grant)
-    effects = {name: tool.effect for name in mcp_servable(names) if (tool := get_tool(name))}
+    effects = {
+        name: tool.effect for name in mcp_servable(names) if (tool := get_tool(name))
+    }
     if RUN_CODE in names and code_tool_builder() is not None:
         effects[RUN_CODE] = "read"
     return effects
@@ -175,16 +194,22 @@ class Attribution(Middleware):
         self._record = record
         self._effects = effects
 
-    def _within(self, name: str, reach: frozenset[str] | None) -> bool:
-        return reach is None or self._effects.get(name) in reach
+    def _within(self, name: str, reach: frozenset[str] | None, admin: bool) -> bool:
+        if reach is None:
+            return True
+        return self._effects.get(name) in reach and (admin or not _admin_only(name))
 
     async def on_list_tools(
         self,
         context: MiddlewareContext[types.ListToolsRequest],
         call_next: CallNext[types.ListToolsRequest, Sequence[Tool]],
     ) -> Sequence[Tool]:
-        _, reach = _reach()
-        return [tool for tool in await call_next(context) if self._within(tool.name, reach)]
+        _, reach, admin = _reach()
+        return [
+            tool
+            for tool in await call_next(context)
+            if self._within(tool.name, reach, admin)
+        ]
 
     async def on_call_tool(
         self,
@@ -195,11 +220,11 @@ class Attribution(Middleware):
         result: ToolResult | None = None
         error: str | None = None
         caller = _client(context)
-        owner, reach = _reach()
+        owner, reach, admin = _reach()
         steps: list[McpStep] = []
         gathering = sandbox_steps.set(steps)
         try:
-            if not self._within(context.message.name, reach):
+            if not self._within(context.message.name, reach, admin):
                 raise ToolError(f"{context.message.name} is outside this token's scope")
             with acting_as(owner, f"mcp:{caller['client']}"):
                 result = await call_next(context)

@@ -15,6 +15,7 @@ traceback, a failing assert): a field named like one, and a URL's password.
 ``tests/test_secrets.py`` holds every declared credential to the names.
 """
 
+import re
 from collections.abc import Iterable
 from typing import Annotated, Any
 
@@ -42,6 +43,21 @@ def hide_password(url: str) -> str:
         return url
     user = credentials.split(":", 1)[0]
     return f"{scheme}://{user}:***@{host}{query_sep}{tail}"
+
+
+URL = re.compile(r"\b[a-z][a-z0-9+.-]*://\S+", re.I)
+
+
+def hide_passwords(value: Any) -> Any:
+    """``value`` with every URL's password hidden (``hide_password``), in
+    free text and at any depth of a dict or list."""
+    if isinstance(value, str):
+        return URL.sub(lambda url: hide_password(url.group()), value)
+    if isinstance(value, dict):
+        return {key: hide_passwords(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [hide_passwords(item) for item in value]
+    return value
 
 
 def shown(fields: Iterable[tuple[str | None, Any]]) -> list[tuple[str | None, Any]]:

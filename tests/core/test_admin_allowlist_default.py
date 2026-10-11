@@ -1,7 +1,7 @@
 """The admin paths are closed to the public internet unless opened on purpose.
 
 Traefik's ``webserver-admin`` router (``/dashboard``, ``/docs``, ``/redoc``,
-``/openapi.json``) sits behind an IP allowlist. Its default was
+``/openapi.json``, ``/health/detailed``) sits behind an IP allowlist. Its default was
 ``0.0.0.0/0``, which admits every address, so every deployed app shipped
 those paths open. The default is now loopback and the private ranges:
 local development still reaches them (Docker hands Traefik the browser's
@@ -23,6 +23,7 @@ COMPOSE_FILES = [
 ]
 PRIVATE = "127.0.0.1/32,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
 _DEFAULT = re.compile(r"\$\{ADMIN_IP_ALLOWLIST:-([^}]*)\}")
+_ADMIN_RULE = re.compile(r"traefik\.http\.routers\.webserver-admin\.rule=(.*)\"")
 
 
 @pytest.mark.parametrize("name", COMPOSE_FILES)
@@ -36,3 +37,15 @@ def test_the_admin_allowlist_defaults_to_private_ranges(name: str) -> None:
 def test_no_default_admits_every_address(name: str) -> None:
     for default in _DEFAULT.findall((PROJECT / name).read_text()):
         assert not {"0.0.0.0/0", "::/0"} & set(default.split(","))
+
+
+@pytest.mark.parametrize("name", COMPOSE_FILES)
+def test_the_detailed_health_tree_is_an_admin_path(name: str) -> None:
+    """``/health/detailed`` describes every component, its versions and
+    tables: an operator's view, so it sits with ``/docs``. Callers inside
+    the stack reach the webserver directly, not through Traefik; the bare
+    ``/health/`` stays public for load balancers."""
+    rules = _ADMIN_RULE.findall((PROJECT / name).read_text())
+    assert rules, f"{name} has no webserver-admin router"
+    for rule in rules:
+        assert "PathPrefix(`/health/detailed`)" in rule, rule

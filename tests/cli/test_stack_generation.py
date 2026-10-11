@@ -139,6 +139,21 @@ STACK_COMBINATIONS = [
         expected_pyproject_deps=["fastapi", "flet", "boto3"],
     ),
     StackCombination(
+        name="browser",
+        components=["browser"],
+        description="Base stack with a remote-driven browser (Playwright server)",
+        expected_files=[
+            "app/components/backend/",
+            "app/components/browser/client.py",
+            "app/components/browser/settings.py",
+            "app/components/browser/health.py",
+            "tests/components/test_browser.py",
+            "docker-compose.yml",
+        ],
+        expected_docker_services=["webserver", "browser"],
+        expected_pyproject_deps=["fastapi", "flet", "playwright"],
+    ),
+    StackCombination(
         name="documents_worker",
         components=["worker", "database"],
         services=["documents"],
@@ -538,8 +553,9 @@ STACK_COMBINATIONS = [
             "app/components/frontend/main.py",
             "package.json",
             "tailwind.config.js",
+            "app/components/deploy/",
         ],
-        expected_docker_services=["webserver"],
+        expected_docker_services=["webserver", "socket-proxy"],
         expected_pyproject_deps=["fastapi", "flet", "jinja2"],
     ),
     StackCombination(

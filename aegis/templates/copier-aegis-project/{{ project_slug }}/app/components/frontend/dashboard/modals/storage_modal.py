@@ -16,7 +16,7 @@ from app.services.system.ui import get_component_subtitle, get_component_title
 
 from ..cards.card_utils import get_status_detail
 from .base_detail_popup import BaseDetailPopup
-from .modal_sections import MetricCard, StatRowsSection, status_dot
+from .modal_sections import MetricCard, StatRowsSection, health_dot
 
 
 class OverviewSection(ft.Container):
@@ -68,12 +68,8 @@ class StorageDetailDialog(BaseDetailPopup):
                 "Endpoint": str(metadata.get("endpoint") or "AWS S3"),
                 "Bucket": str(metadata.get("bucket") or "-"),
                 "Region": str(metadata.get("region") or "-"),
-                "Status": status_dot(
-                    component_data.message,
-                    Theme.Colors.ACCENT
-                    if component_data.status == ComponentStatusType.HEALTHY
-                    else Theme.Colors.ERROR,
-                    str(metadata.get("endpoint") or ""),
+                "Status": health_dot(
+                    component_data, str(metadata.get("endpoint") or "")
                 ),
             },
         )

@@ -8,9 +8,8 @@ test, only the key->action wiring. Quick mode and guided mode converge on the
 same state object.
 
 Confirm prompts accept ``y``/``n`` shortcuts; the engine asks about each
-optional component in INFRASTRUCTURE_ORDER (worker, scheduler, database,
-redis, storage, ingress, observability, htmx, inference, secrets, deploy, mcp) then every service grouped by
-ServiceType order (auth, payment, ai, comms, insights, blog, finance).
+optional component in INFRASTRUCTURE_ORDER, then every service grouped by
+ServiceType order.
 """
 
 from __future__ import annotations
@@ -24,6 +23,8 @@ from aegis.cli.guided import (
     run_guided_selection,
 )
 from aegis.cli.interactive import run_project_selection
+from aegis.constants import ComponentNames
+from aegis.core.services import SERVICES
 
 
 def _ui(keys: list[str]) -> GuidedSelectionUI:
@@ -42,16 +43,6 @@ def _drive(keys: list[str]):
     return run_guided_selection(_ui(keys))
 
 
-# worker scheduler database redis storage ingress observability htmx inference secrets deploy mcp |
-# auth payment ai comms insights research documents blog finance
-# (redis is skipped entirely when an accepted worker already bundled it)
-_DECLINE_ALL = ["n"] * 21
-
-# The full init flow opens with the starting-point screen; enter selects
-# Blank canvas. (run_guided_selection alone never shows it.)
-_BLANK = ["\r"]
-
-
 def _expected_screen_count() -> int:
     """One journal entry per screen the guided flow asks about.
 
@@ -59,10 +50,19 @@ def _expected_screen_count() -> int:
     service adds a screen, and a literal count turns that into a failing
     test in an unrelated file with a number for a message.
     """
-    from aegis.constants import ComponentNames
-    from aegis.core.services import SERVICES
-
     return len(ComponentNames.INFRASTRUCTURE_ORDER) + len(SERVICES)
+
+
+# Every component in INFRASTRUCTURE_ORDER, then every service. (redis is
+# skipped entirely when an accepted worker already bundled it.)
+_DECLINE_ALL = ["n"] * _expected_screen_count()
+
+# One "no" per optional component: where the service screens start.
+_DECLINE_COMPONENTS = ["n"] * len(ComponentNames.INFRASTRUCTURE_ORDER)
+
+# The full init flow opens with the starting-point screen; enter selects
+# Blank canvas. (run_guided_selection alone never shows it.)
+_BLANK = ["\r"]
 
 
 class TestGuidedDrivesEngine:
@@ -129,7 +129,7 @@ class TestGuidedDrivesEngine:
     def test_auth_configures_level(self) -> None:
         # decline all 8 components, accept auth, pick RBAC (right+enter), then
         # confirm the "auth needs a database" prompt (y), decline the rest.
-        keys = _DECLINE_ALL[:12] + ["y", "right", "\r", "y"] + ["n"] * 7
+        keys = _DECLINE_COMPONENTS + ["y", "right", "\r", "y"] + ["n"] * 7
         state = _drive(keys)
         assert "auth[rbac]" in state.services
 
@@ -137,7 +137,7 @@ class TestGuidedDrivesEngine:
         # comms, insights, and payment were silently skipped by the old
         # hand-written AUTH/AI/CONTENT trio; accepting their confirms must
         # now land them in the selection.
-        keys = _DECLINE_ALL[:12] + ["n", "y", "n", "y", "y", "n", "n"]
+        keys = _DECLINE_COMPONENTS + ["n", "y", "n", "y", "y", "n", "n"]
         state = _drive(keys)
         assert state.services == ["payment", "comms", "insights"]
 
@@ -145,7 +145,7 @@ class TestGuidedDrivesEngine:
         # Accept AI: framework chip (enter = pydantic-ai), storage chip
         # (enter = memory), providers (up wraps to Continue, enter keeps
         # the recommended default), rag yes, voice no; rest declined.
-        keys = _DECLINE_ALL[:12] + ["n", "n", "y", "\r", "\r", "up", "\r", "y", "n"]
+        keys = _DECLINE_COMPONENTS + ["n", "n", "y", "\r", "\r", "up", "\r", "y", "n"]
         keys += ["n", "n", "n", "n"]
         state = _drive(keys)
         assert state.services == ["ai[memory,pydantic-ai,public,rag]"]
@@ -155,7 +155,7 @@ class TestGuidedDrivesEngine:
         # = PostgreSQL, then after the AI screens the host question fires —
         # right+enter picks Neon for the auto-added database.
         keys = (
-            _DECLINE_ALL[:12]
+            _DECLINE_COMPONENTS
             + ["n", "n", "y", "\r"]  # auth n, payment n, ai y -> framework
             + ["right", "right", "\r"]  # storage: PostgreSQL
             + ["up", "\r"]  # providers: Continue with the default
@@ -175,9 +175,7 @@ class TestGuidedDrivesEngine:
         keys = (
             ["n", "y", "right", "right", "\r", "\r"]  # worker n, scheduler ->
             # postgres, host -> local container
-            + ["n"]
-            * 9  # redis, storage, ingress, observability, htmx, inference, secrets,
-            # deploy, mcp
+            + _DECLINE_COMPONENTS[3:]  # every component after the database
             # (db auto-skipped)
             + ["n", "n", "y", "\r", "up", "\r", "n", "n"]  # auth n, payment n,
             # ai y -> framework, providers (Continue), rag n, voice n
@@ -198,18 +196,8 @@ class TestGuidedDrivesEngine:
                 "n",
                 "y",
                 "\r",
-                "n",
-                "n",
-                "n",
-                "n",
-                "n",
-                "n",
-                "n",
-                "n",
-                "n",
-            ]  # database accepted,
-            # engine=sqlite; then redis, storage, ingress, observability, htmx,
-            # inference, secrets, deploy, mcp
+            ]  # database accepted, engine=sqlite
+            + _DECLINE_COMPONENTS[3:]  # every component after the database
             + ["n", "n", "y", "\r", "up", "\r", "n", "n"]  # ai: framework,
             # providers (Continue), rag, voice — no storage screen
             + ["n", "n", "n", "n"]
@@ -222,7 +210,7 @@ class TestGuidedDrivesEngine:
         # LLM7.io is pre-checked (recommended); enter on a focused row
         # TOGGLES it (OpenAI here), and only Continue advances.
         keys = (
-            _DECLINE_ALL[:12]
+            _DECLINE_COMPONENTS
             + ["n", "n", "y", "\r", "\r"]  # ai y, framework, storage memory
             + ["down", "\r", "up", "up", "\r"]  # toggle openai via enter,
             # wrap up to Continue, accept
@@ -235,7 +223,7 @@ class TestGuidedDrivesEngine:
     def test_ai_provider_none_selected_falls_back_to_default(self) -> None:
         # Unchecking everything still yields the free tier, like quick mode.
         keys = (
-            _DECLINE_ALL[:12]
+            _DECLINE_COMPONENTS
             + ["n", "n", "y", "\r", "\r"]
             + [" ", "up", "\r"]  # uncheck LLM7.io, Continue with none
             + ["n", "n"]
@@ -334,7 +322,7 @@ class TestReviewScreen:
     def test_review_enter_confirms_plan(self) -> None:
         # database accepted (engine screen -> enter = SQLite), everything else
         # declined, enter on REVIEW.
-        keys = _BLANK + ["n", "n", "y", "\r"] + ["n"] * 18 + ["\r"]
+        keys = _BLANK + ["n", "n", "y", "\r"] + _DECLINE_ALL[3:] + ["\r"]
         ui = _ui(keys)
         plan, _ = run_guided_init_flow("demo", "3.13", ui=ui)
         assert "database" in plan.components
@@ -352,7 +340,7 @@ class TestReviewScreen:
         assert plan.services == []
 
     def test_review_detail_panes_toggle_harmlessly(self) -> None:
-        keys = _BLANK + ["n", "n", "y"] + ["n"] * 18 + ["f", "d", "f", "\r"]
+        keys = _BLANK + ["n", "n", "y"] + _DECLINE_ALL[3:] + ["f", "d", "f", "\r"]
         ui = _ui(keys)
         plan, _ = run_guided_init_flow("demo", "3.13", ui=ui)
         assert "database" in plan.components
@@ -367,7 +355,7 @@ class TestReviewScreen:
     def test_plan_includes_dependency_auto_adds(self) -> None:
         # Worker accepted -> the resolved plan carries the auto-added redis
         # (same resolution quick mode runs; REVIEW shows it tagged "auto").
-        keys = _BLANK + ["y", "\r"] + ["n"] * 19 + ["\r"]
+        keys = _BLANK + ["y", "\r"] + _DECLINE_ALL[2:] + ["\r"]
         ui = _ui(keys)
         plan, _ = run_guided_init_flow("demo", "3.13", ui=ui)
         bases = [c.split("[", 1)[0] for c in plan.components]
@@ -388,7 +376,7 @@ class TestInExperienceBuild:
             calls.append(plan.project_name)
             return "/tmp/demo"
 
-        keys = _BLANK + ["n", "n", "y", "\r"] + ["n"] * 18 + ["\r", "\r"]
+        keys = _BLANK + ["n", "n", "y", "\r"] + _DECLINE_ALL[3:] + ["\r", "\r"]
         ui = _ui(keys)
         plan, _ = run_guided_init_flow(
             "demo",
@@ -486,7 +474,7 @@ class TestBreadcrumbs:
     def test_crumbs_record_each_component_decision(self) -> None:
         # Worker leads now; accepting it amends its crumb with the backend
         # and pushes the auto-added redis crumb (capability-first name).
-        ui = GuidedSelectionUI(keys=["y", "\r"] + ["n"] * 19)
+        ui = GuidedSelectionUI(keys=["y", "\r"] + _DECLINE_ALL[2:])
         run_guided_selection(ui)
         assert ui.breadcrumbs[0] == "Worker ✓ arq"
         assert "Cache/Broker/Pubsub ✓" in ui.breadcrumbs
@@ -560,7 +548,7 @@ class TestBreadcrumbs:
     def test_ai_persistent_storage_pushes_database_crumb(self) -> None:
         # AI alone choosing sqlite storage auto-adds Database — sidebar too.
         keys = (
-            _DECLINE_ALL[:12]
+            _DECLINE_COMPONENTS
             + ["n", "n", "y", "\r", "right", "\r", "up", "\r", "n", "n"]
             # ai -> framework, storage right (sqlite), providers Continue,
             # rag n, voice n
@@ -574,7 +562,7 @@ class TestBreadcrumbs:
         from rich.console import Console
 
         keys = (
-            _DECLINE_ALL[:12]
+            _DECLINE_COMPONENTS
             + ["n", "n", "y", "\r", "right", "\r", "up", "\r", "n", "n"]
             + ["n", "n", "n", "n"]
         )
@@ -804,7 +792,7 @@ class TestBreadcrumbs:
     def test_back_rewinds_the_trail(self) -> None:
         # Worker accepted then revised to declined via esc on the backend
         # chips: the trail must show the revised answer, not the original.
-        ui = GuidedSelectionUI(keys=["y", "esc"] + ["n"] * 21)
+        ui = GuidedSelectionUI(keys=["y", "esc"] + _DECLINE_ALL)
         run_guided_selection(ui)
         assert ui.breadcrumbs[0] == "Worker ✗"
         assert all("✓" not in crumb for crumb in ui.breadcrumbs)

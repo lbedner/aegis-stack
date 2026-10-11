@@ -6,6 +6,7 @@ dealing with nested directory structures created during template updates.
 """
 
 import ast
+import os
 import shutil
 import subprocess
 import sys
@@ -108,6 +109,40 @@ def ruff_executable(project_path: Path | None = None) -> str | None:
     if candidate.is_file():
         return str(candidate)
     return shutil.which("ruff")
+
+
+def project_env() -> dict[str, str]:
+    """This process's environment, minus what pins the aegis tool's own
+    interpreter, for a ``uv run`` inside a generated project.
+
+    UV_PYTHON pins the interpreter for the *aegis* tool (3.11 in CI and the
+    release jobs). The generated project has its own requires-python and
+    must be allowed to resolve its own; inheriting the pin fails the run
+    outright on a project that asks for 3.14.
+    """
+    env = os.environ.copy()
+    env.pop("VIRTUAL_ENV", None)
+    env.pop("UV_PYTHON", None)
+    return env
+
+
+def ruff_fix_files(project_path: Path, paths: list[str]) -> bool:
+    """Run the project's ruff fix + format over the Python files in
+    ``paths``, leaving them as init's ``make fix`` would. False when ruff
+    fails, so the caller can say the files still need it."""
+    python = [p for p in paths if p.endswith(".py")]
+    for args in (["check", "--fix", "--exit-zero"], ["format"]):
+        if not python:
+            break
+        done = subprocess.run(
+            ["uv", "run", "ruff", *args, *python],
+            cwd=project_path,
+            capture_output=True,
+            env=project_env(),
+        )
+        if done.returncode != 0:
+            return False
+    return True
 
 
 def run_ruff_on_text(

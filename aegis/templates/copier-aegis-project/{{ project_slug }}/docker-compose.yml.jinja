@@ -328,6 +328,29 @@ services:
       - dev
 {%- endif %}
 
+{%- if include_browser %}
+
+  browser:
+    build: ./app/components/browser
+    init: true
+    shm_size: 2gb
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:3000"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+    profiles:
+      - dev
+      - prod
+{%- endif %}
+
 {%- if database_engine == "postgres" %}
   # POSTGRESQL SERVICE
 

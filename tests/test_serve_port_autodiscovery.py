@@ -84,6 +84,7 @@ def test_resolve_ports_writes_only_allowlisted_keys(tmp_path: Path) -> None:
         postgres=True,
         redis=True,
         ollama=True,
+        browser=True,
         ports_file=ports_file,
     )
     content = ports_file.read_text()
@@ -96,6 +97,7 @@ def test_resolve_ports_writes_only_allowlisted_keys(tmp_path: Path) -> None:
         "POSTGRES_HOST_PORT",
         "REDIS_HOST_PORT",
         "OLLAMA_HOST_PORT",
+        "BROWSER_HOST_PORT",
         "INGRESS_DASHBOARD_PORT",
     ):
         assert key in content
@@ -114,6 +116,7 @@ def test_resolve_ports_backing_services_off_by_default(tmp_path: Path) -> None:
         postgres=False,
         redis=False,
         ollama=False,
+        browser=False,
         ports_file=tmp_path / ".env.ports",
     )
     assert set(ports) == {"WEBSERVER_HOST_PORT"}

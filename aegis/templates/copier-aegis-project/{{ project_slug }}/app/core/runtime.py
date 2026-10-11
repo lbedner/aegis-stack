@@ -26,6 +26,7 @@ from typing import Protocol
 
 import psutil
 
+from app.core.constants import ComponentName
 from app.core.time import as_stored, utcnow
 
 # Where the deploy component keeps its backend; absent in stacks without it.
@@ -41,6 +42,7 @@ _PAGES = {
     "seaweedfs": "storage",
     "traefik": "ingress",
     "ollama": "inference",
+    ComponentName.BROWSER: ComponentName.BROWSER,
 }
 
 # Every page some container belongs on: the Container section shows there.

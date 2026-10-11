@@ -44,6 +44,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # secrets
                 False,  # deploy
                 False,  # mcp
+                False,  # browser
                 False,  # auth service
                 False,  # payment
                 False,  # AI service
@@ -83,6 +84,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # secrets
                 False,  # deploy
                 False,  # mcp
+                False,  # browser
                 False,  # auth service
                 False,  # payment
                 False,  # AI service
@@ -122,6 +124,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # secrets
                 False,  # deploy
                 False,  # mcp
+                False,  # browser
                 False,  # auth service
                 False,  # payment
                 False,  # AI service
@@ -163,6 +166,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # secrets
                 False,  # deploy
                 False,  # mcp
+                False,  # browser
                 False,  # auth service
                 False,  # payment
                 False,  # AI service
@@ -205,6 +209,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # secrets
                 False,  # deploy
                 False,  # mcp
+                False,  # browser
                 False,  # auth service
                 False,  # payment
                 False,  # AI service
@@ -252,6 +257,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # secrets
                 False,  # deploy
                 False,  # mcp
+                False,  # browser
                 False,  # auth service
                 False,  # payment
                 False,  # AI service
@@ -297,6 +303,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # secrets
                 False,  # deploy
                 False,  # mcp
+                False,  # browser
                 False,  # auth service
                 False,  # payment
                 False,  # AI service
@@ -472,6 +479,7 @@ class TestSchedulerPersistenceLogic:
                 False,  # secrets
                 False,  # deploy
                 False,  # mcp
+                False,  # browser
                 False,  # auth service
                 False,  # payment
                 False,  # AI service
@@ -513,6 +521,7 @@ class TestSchedulerPersistenceLogic:
                     False,  # secrets
                     False,  # deploy
                     False,  # mcp
+                    False,  # browser
                     False,  # auth service
                     False,  # payment
                     False,  # AI service

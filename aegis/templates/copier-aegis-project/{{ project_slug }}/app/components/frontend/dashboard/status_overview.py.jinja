@@ -294,6 +294,8 @@ class StatusOverviewPanel(ft.Container):
             ComponentName.SECRETS,
 {% endif %}{% if include_mcp %}
             ComponentName.MCP,
+{% endif %}{% if include_browser %}
+            ComponentName.BROWSER,
 {% endif %}
         ]
 

@@ -7,7 +7,7 @@
    swap into a chart page still works. */
 
 const CHART_JS = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.js';
-const RAMP = 8; // --aegis-chart-1 .. -8 in tailwind.config.js; cycles past that
+const RAMP = 9; // --aegis-chart-1 .. -9 in tailwind.config.js; cycles past that
 
 // Colors come from the active theme's tokens, read at mount time so a
 // theme switch repaints charts in the new palette.

@@ -23,6 +23,7 @@ _PERSISTED_KEYS = {
     "POSTGRES_HOST_PORT",
     "REDIS_HOST_PORT",
     "OLLAMA_HOST_PORT",
+    "BROWSER_HOST_PORT",
     "INGRESS_DASHBOARD_PORT",
 }
 
@@ -98,6 +99,7 @@ def resolve_ports(
     postgres: bool,
     redis: bool,
     ollama: bool,
+    browser: bool,
     ports_file: Path | None = None,
 ) -> dict[str, int]:
     """Resolve host ports for the requested services and persist them.
@@ -141,6 +143,12 @@ def resolve_ports(
         ports["OLLAMA_HOST_PORT"] = _resolve_one(
             int(os.environ.get("OLLAMA_PORT_BASE", "11434")),
             "ollama",
+            "",
+        )
+    if browser:
+        ports["BROWSER_HOST_PORT"] = _resolve_one(
+            int(os.environ.get("BROWSER_PORT_BASE", "3000")),
+            "browser",
             "",
         )
 

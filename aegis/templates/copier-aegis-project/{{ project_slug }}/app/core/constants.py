@@ -57,6 +57,7 @@ class ServiceName(StrEnum):
     FINANCE = "finance"
     DOCUMENTS = "documents"
     RESEARCH = "research"
+    MEETINGS = "meetings"
 
 
 class QueueName(StrEnum):

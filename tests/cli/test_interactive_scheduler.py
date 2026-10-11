@@ -60,6 +60,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # auth
                 False,  # payment
                 False,  # AI
+                False,  # meetings
                 False,  # comms
                 False,  # insights
                 False,  # research
@@ -110,6 +111,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # auth
                 False,  # payment
                 False,  # AI
+                False,  # meetings
                 False,  # comms
                 False,  # insights
                 False,  # research
@@ -153,6 +155,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # no auth
                 False,  # payment
                 False,  # no AI
+                False,  # meetings
                 False,  # comms
                 False,  # insights
                 False,  # research
@@ -192,6 +195,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # no auth
                 False,  # payment
                 False,  # no AI
+                False,  # meetings
                 False,  # comms
                 False,  # insights
                 False,  # research
@@ -237,6 +241,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # no auth
                 False,  # payment
                 False,  # no AI
+                False,  # meetings
                 False,  # comms
                 False,  # insights
                 False,  # research
@@ -290,6 +295,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # no auth
                 False,  # payment
                 False,  # no AI
+                False,  # meetings
                 False,  # comms
                 False,  # insights
                 False,  # research
@@ -335,6 +341,7 @@ class TestInteractiveSchedulerFlow:
                 False,  # no auth
                 False,  # payment
                 False,  # no AI
+                False,  # meetings
                 False,  # comms
                 False,  # insights
                 False,  # research

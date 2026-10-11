@@ -26,6 +26,7 @@ from pathlib import Path
 import pytest
 
 from aegis.core.manual_updater import ManualUpdater, sweep_empty_stubs
+from aegis.core.services import SERVICES
 
 COPIER_ANSWERS_MINIMAL = """\
 # Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
@@ -247,6 +248,20 @@ class TestReconcileAnswersFromDisk:
         inferred = updater.reconcile_answers_from_disk()
 
         assert inferred.get("include_ai") is True
+
+    @pytest.mark.parametrize("service", [name for name in SERVICES if name != "auth"])
+    def test_every_service_on_disk_is_inferred(
+        self, fake_project: Path, service: str
+    ) -> None:
+        """Read from each spec's ``marker_path``, so a new service is
+        covered by declaring it (finance once had no line here at all)."""
+        marker = fake_project / SERVICES[service].marker_path
+        marker.mkdir(parents=True)
+        (marker / "service.py").write_text("x = 1\n")
+
+        inferred = ManualUpdater(fake_project).reconcile_answers_from_disk()
+
+        assert inferred.get(f"include_{service}") is True
 
     def test_never_demotes_existing_true_flag(self, fake_project: Path) -> None:
         """Disk has no insights marker, but answers say True. Reconcile must

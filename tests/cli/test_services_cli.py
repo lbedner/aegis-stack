@@ -294,6 +294,7 @@ class TestInteractiveServiceSelection:
                 True,  # database confirmation for auth
                 False,  # payment service
                 False,  # AI service
+                False,  # meetings service
                 False,  # comms service
                 False,  # insights service
                 False,  # research service
@@ -333,6 +334,7 @@ class TestInteractiveServiceSelection:
                 False,  # auth service
                 False,  # payment service
                 False,  # AI service
+                False,  # meetings service
                 False,  # comms service
                 False,  # insights service
                 False,  # research service

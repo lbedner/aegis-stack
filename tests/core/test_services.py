@@ -301,6 +301,16 @@ class TestServicesRegistry:
         ):
             assert path in spec.files.primary
 
+    def test_meetings_service_wiring(self):
+        """Meetings owns its tables and its CLI, and brings the browser the
+        bot joins through. Its page and API come with the Meetings page."""
+        spec = SERVICES["meetings"]
+
+        assert "browser" in spec.required_components
+        assert spec.migrations[0].service_name == "meetings"
+        for path in ("app/services/meetings", "app/cli/meetings.py"):
+            assert path in spec.files.primary
+
 
 class TestServiceRegistryFunctions:
     """Test service registry helper functions."""

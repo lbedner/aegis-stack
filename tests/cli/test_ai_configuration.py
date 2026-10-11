@@ -60,6 +60,7 @@ class TestAIProviderSelection:
             False,  # ollama
             True,  # Enable RAG? Yes (default)
             True,  # Enable voice?
+            False,  # meetings
             False,  # comms
             False,  # insights
             False,  # research
@@ -111,6 +112,7 @@ class TestAIProviderSelection:
             False,  # ollama
             True,  # Enable RAG? Yes (default)
             True,  # Enable voice?
+            False,  # meetings
             False,  # comms
             False,  # insights
             False,  # research
@@ -163,6 +165,7 @@ class TestAIProviderSelection:
             False,  # ollama
             True,  # Enable RAG? Yes (default)
             True,  # Enable voice?
+            False,  # meetings
             False,  # comms
             False,  # insights
             False,  # research
@@ -203,6 +206,7 @@ class TestAIProviderSelection:
             False,  # auth service
             False,  # payment
             False,  # AI service
+            False,  # meetings
             False,  # comms
             False,  # insights
             False,  # research
@@ -271,6 +275,7 @@ class TestAIBackendSelection:
                 False,  # ollama
                 True,  # Enable RAG? Yes (default)
                 True,  # Enable voice?
+                False,  # meetings
                 False,  # comms
                 False,  # insights
                 False,  # research
@@ -337,6 +342,7 @@ class TestAIBackendSelection:
                 False,  # ollama
                 True,  # Enable RAG? Yes (default)
                 True,  # Enable voice?
+                False,  # meetings
                 False,  # comms
                 False,  # insights
                 False,  # research
@@ -393,6 +399,7 @@ class TestAIBackendSelection:
             False,  # ollama
             True,  # Enable RAG? Yes (default)
             True,  # Enable voice?
+            False,  # meetings
             False,  # comms
             False,  # insights
             False,  # research
@@ -568,6 +575,7 @@ class TestAIConfigurationEndToEnd:
             False,  # Provider selection (openai yes, anthropic no, google yes, groq yes, mistral no, cohere no, ollama no)
             True,  # Enable RAG? Yes (default)
             True,  # Enable voice?
+            False,  # meetings
             False,  # comms
             False,  # insights
             False,  # research
@@ -683,6 +691,7 @@ class TestOllamaModeSelection:
             True,  # Ollama mode: connect to host (True = HOST)
             True,  # Enable RAG
             True,  # Enable voice?
+            False,  # meetings
             False,  # comms
             False,  # insights
             False,  # research

@@ -75,6 +75,7 @@ jobs:
           - documents_auth
           - documents_worker
           - research
+          - meetings
           - storage
           - browser
           - finance

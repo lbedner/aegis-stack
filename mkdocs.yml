@@ -141,6 +141,8 @@ nav:
         - Examples: services/ai/examples.md
       - Research:
         - Getting Started: services/research/index.md
+      - Meetings:
+        - Getting Started: services/meetings/index.md
     - Data:
       - Documents:
         - Getting Started: services/documents/index.md

@@ -11,6 +11,7 @@ from app.cli.ai.shared import (
     app,
     console,
 )
+from app.core.formatting import format_clock
 from app.i18n import lazy_t, t
 
 from ...core.config import settings
@@ -138,11 +139,8 @@ def record(
                     dtype="float32",
                 ):
                     while not stop_event.is_set():
-                        elapsed = time.time() - start_time
-                        minutes = int(elapsed // 60)
-                        seconds = int(elapsed % 60)
+                        timer_str = format_clock(time.time() - start_time)
                         # Use regular print with \r for proper carriage return
-                        timer_str = f"{minutes:02d}:{seconds:02d}"
                         print(
                             f"\r  \033[91m●\033[0m Recording: {timer_str}",
                             end="",

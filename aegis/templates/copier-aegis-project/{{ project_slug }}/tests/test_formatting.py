@@ -138,6 +138,14 @@ def test_format_span_reads_in_its_two_largest_units() -> None:
     assert format_span(None) is None
 
 
+def test_format_clock_reads_as_a_stopwatch() -> None:
+    from app.core.formatting import format_clock
+
+    assert format_clock(0) == "00:00"
+    assert format_clock(65.9) == "01:05"
+    assert format_clock(3725) == "62:05"
+
+
 class TestSafeFilename:
     """A name bound for Content-Disposition cannot end the header or the
     quoted value: a newline there is header injection."""

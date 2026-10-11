@@ -137,7 +137,7 @@ class TestGuidedDrivesEngine:
         # comms, insights, and payment were silently skipped by the old
         # hand-written AUTH/AI/CONTENT trio; accepting their confirms must
         # now land them in the selection.
-        keys = _DECLINE_COMPONENTS + ["n", "y", "n", "y", "y", "n", "n"]
+        keys = _DECLINE_COMPONENTS + ["n", "y", "n", "n", "y", "y", "n", "n"]
         state = _drive(keys)
         assert state.services == ["payment", "comms", "insights"]
 
@@ -568,8 +568,10 @@ class TestBreadcrumbs:
         )
         ui = _ui(keys)
         run_guided_selection(ui)
-        ui._console = Console(width=100, height=60)
-        console = Console(width=100, height=60, record=True)
+        # Tall enough for every component and service: the sidebar grows
+        # with the registry, and a short console clips its top.
+        ui._console = Console(width=100, height=80)
+        console = Console(width=100, height=80, record=True)
         console.print(ui._sidebar())
         out = console.export_text()
         comp_at = out.index("COMPONENTS")

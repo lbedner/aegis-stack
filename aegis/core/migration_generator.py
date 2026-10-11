@@ -217,6 +217,11 @@ RESEARCH_MIGRATION = ServiceMigrationSpec(
     description="Research: saved searches, the outside items they found",
 )
 
+MEETINGS_MIGRATION = ServiceMigrationSpec(
+    service_name="meetings",
+    description="Meetings: calls the bot joins, who spoke, what they said",
+)
+
 FINANCE_MIGRATION = ServiceMigrationSpec(
     service_name="finance",
     description="Finance service tables (currencies, fx rates)",
@@ -952,6 +957,11 @@ def get_services_needing_migrations(context: dict[str, Any]) -> list[str]:
     include_research = context.get(AnswerKeys.RESEARCH)
     if include_research == "yes" or include_research is True:
         services.append("research")
+
+    # Meetings service (always needs database)
+    include_meetings = context.get(AnswerKeys.MEETINGS)
+    if include_meetings == "yes" or include_meetings is True:
+        services.append("meetings")
 
     # Finance service (always needs database).
     include_finance = context.get(AnswerKeys.FINANCE)

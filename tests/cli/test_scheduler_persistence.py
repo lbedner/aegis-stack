@@ -48,6 +48,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # auth service
                 False,  # payment
                 False,  # AI service
+                False,  # meetings
                 False,  # comms
                 False,  # insights
                 False,  # research
@@ -88,6 +89,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # auth service
                 False,  # payment
                 False,  # AI service
+                False,  # meetings
                 False,  # comms
                 False,  # insights
                 False,  # research
@@ -128,6 +130,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # auth service
                 False,  # payment
                 False,  # AI service
+                False,  # meetings
                 False,  # comms
                 False,  # insights
                 False,  # research
@@ -170,6 +173,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # auth service
                 False,  # payment
                 False,  # AI service
+                False,  # meetings
                 False,  # comms
                 False,  # insights
                 False,  # research
@@ -213,6 +217,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # auth service
                 False,  # payment
                 False,  # AI service
+                False,  # meetings
                 False,  # comms
                 False,  # insights
                 False,  # research
@@ -261,6 +266,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # auth service
                 False,  # payment
                 False,  # AI service
+                False,  # meetings
                 False,  # comms
                 False,  # insights
                 False,  # research
@@ -307,6 +313,7 @@ class TestSchedulerPersistenceTracking:
                 False,  # auth service
                 False,  # payment
                 False,  # AI service
+                False,  # meetings
                 False,  # comms
                 False,  # insights
                 False,  # research
@@ -483,6 +490,7 @@ class TestSchedulerPersistenceLogic:
                 False,  # auth service
                 False,  # payment
                 False,  # AI service
+                False,  # meetings
                 False,  # comms
                 False,  # insights
                 False,  # research
@@ -525,6 +533,7 @@ class TestSchedulerPersistenceLogic:
                     False,  # auth service
                     False,  # payment
                     False,  # AI service
+                    False,  # meetings
                     False,  # comms
                     False,  # insights
                     False,  # research

@@ -13,13 +13,13 @@ pieces and the function helpers below.
 """
 
 import ast
+import inspect
+import textwrap
+import typing
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-import inspect
 from pathlib import Path
-import textwrap
 from types import ModuleType
-import typing
 from typing import Any, NamedTuple
 
 from fastapi.routing import APIRoute
@@ -27,11 +27,12 @@ from pydantic import BaseModel
 from starlette.responses import StreamingResponse
 from starlette.routing import BaseRoute
 
+from app.core import source_index
 from app.core.route_auth import route_requires_auth
 
 API_PACKAGE = "app.components.backend.api"
 SERVICE_PACKAGE = "app.services"
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+PROJECT_ROOT = source_index.ROOT
 # Past this many statements a handler or task is doing work a service
 # should own. From the shipped routes: audited admin actions take four or
 # five, the token and registration handlers ten or more.

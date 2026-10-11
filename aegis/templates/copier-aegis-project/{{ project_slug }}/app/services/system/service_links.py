@@ -7,18 +7,16 @@ providers it calls. What Overseer's Server map draws. No UI framework
 imports.
 """
 
-import ast
-from collections.abc import Iterable
-from functools import cache
-from importlib import import_module
-from pathlib import Path
 import pkgutil
 import re
+from collections.abc import Iterable
+from functools import cache
+from pathlib import Path
 from types import ModuleType
 
-from app.core import secrets
-from app.core.secrets import Secret
 import app.services
+from app.core import secrets, source_index
+from app.core.secrets import Secret
 from app.services.system import topology
 from app.services.system.ui import get_component_title, registry_key
 
@@ -36,8 +34,9 @@ def links() -> dict[str, list[str]]:
     outside provider's ``outside:<name>``. Read once: it is the code."""
     root = Path(app.services.__file__).parent
     declared = secrets.declared()
+    index = source_index.project()
     return {
-        registry_key("services", name): talks_to(root / name, declared)
+        registry_key("services", name): talks_to(root / name, declared, index)
         for name in packages(app.services)
         if name not in PLUMBING
     }
@@ -49,10 +48,24 @@ def packages(parent: ModuleType) -> list[str]:
     return sorted(m.name for m in pkgutil.iter_modules(parent.__path__) if m.ispkg)
 
 
-def talks_to(package: Path, declared: Iterable[Secret]) -> list[str]:
-    """What the service whose package is at ``package`` talks to, sorted."""
+def talks_to(
+    package: Path,
+    declared: Iterable[Secret],
+    index: source_index.Index | None = None,
+) -> list[str]:
+    """What the service whose package is at ``package`` talks to, sorted;
+    read from ``index``, else the source around ``package`` (the
+    project's, or the folder it is in)."""
+    if index is None:
+        root = source_index.ROOT
+        index = source_index.at(
+            root if package.is_relative_to(root) else package.parent
+        )
     service = package.name
-    found = {t for name in imports(package) if (t := _target(name, service))}
+    imported = index.imports_under(
+        source_index.module_name(package.relative_to(index.root).as_posix())
+    )
+    found = {t for name in imported if (t := _target(name, service))}
     found |= {key for key, _ in _called_with(declared, service)}
     return sorted(found)
 
@@ -88,18 +101,6 @@ def title(key: str) -> str:
     return get_component_title(key)
 
 
-def imports(package: Path) -> set[str]:
-    """Every absolute module the package's code imports, read, not run."""
-    found: set[str] = set()
-    for path in package.rglob("*.py"):
-        for node in ast.walk(ast.parse(path.read_text())):
-            if isinstance(node, ast.Import):
-                found.update(alias.name for alias in node.names)
-            elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
-                found.add(node.module)
-    return found
-
-
 def _target(module: str, service: str) -> str | None:
     """What importing ``module`` says the service talks to, if anything."""
     parts = module.split(".")
@@ -114,21 +115,10 @@ def _target(module: str, service: str) -> str | None:
             return registry_key("services", other)
         return None
     if parts[:2] == ["app", "core"] and len(parts) > 2:
-        return _fronts(".".join(parts[:3]))
+        # The component a core client says it fronts, read, not imported.
+        client = source_index.project().get(".".join(parts[:3]))
+        return client.fronts if client else None
     return None
-
-
-def _fronts(module: str) -> str | None:
-    """The component a core client says it fronts (its ``FRONTS``)."""
-    try:
-        return getattr(import_module(module), "FRONTS", None)
-    except ImportError:
-        return None
-
-
-def within(module: str, package: str) -> bool:
-    """Whether ``module`` is ``package`` or in it."""
-    return module == package or module.startswith(f"{package}.")
 
 
 def _service_of(module: str) -> str | None:

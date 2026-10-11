@@ -1,6 +1,8 @@
 """Overseer > Code (``overseer_code``): the project's source, read-only, as
 a tree of folders and one file open beside it."""
 
+import asyncio
+import contextlib
 from pathlib import Path
 
 import pytest
@@ -12,6 +14,7 @@ from app.components.web_frontend.rendering import with_query
 from app.core.config import settings
 from app.core.constants import AppEnv
 from app.services.system.models import ComponentStatus
+from tests._files import write_tree
 from tests.web.dom import none, one, select, text
 from tests.web.overseer import CACHE, page_html, reported_only, sign_in, status_with
 
@@ -32,15 +35,9 @@ FILES = {
 }
 
 
-def _write(project: Path, files: dict[str, str]) -> None:
-    for name, body in files.items():
-        (project / name).parent.mkdir(parents=True, exist_ok=True)
-        (project / name).write_text(body)
-
-
 @pytest.fixture
 def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    _write(tmp_path, FILES)
+    write_tree(tmp_path, FILES)
     monkeypatch.setattr(overseer_code, "PROJECT_ROOT", tmp_path)
     return tmp_path
 
@@ -196,7 +193,8 @@ REDIS = "app/components/web_frontend/overseer_redis.py"
 
 
 def _add(project: Path, *paths: str) -> None:
-    _write(project, dict.fromkeys(paths, "x = 1\n"))
+    # Each imports auth's service: a test is its owner's by what it tests.
+    write_tree(project, dict.fromkeys(paths, "from app.services.auth import service\n"))
 
 
 def test_a_component_or_service_keeps_only_its_files_and_their_folders(
@@ -275,7 +273,7 @@ def test_a_name_leads_to_its_definition_and_every_use(
 ) -> None:
     """Click ``put`` where it is called: where it is defined, and each line
     that names it, imported or through its module."""
-    _write(project, SYMBOLS)
+    write_tree(project, SYMBOLS)
     html = _symbol(client, "app/services/use.py", 7, 4)
     defined = one(html, "[data-symbol-definition] a")
     assert defined.get("href") == overseer_code.line_url("app/core/store.py", 1)
@@ -297,7 +295,7 @@ def test_a_name_leads_to_its_definition_and_every_use(
 
 
 def test_a_module_name_leads_to_its_file(client: TestClient, project: Path) -> None:
-    _write(project, SYMBOLS)
+    write_tree(project, SYMBOLS)
     html = _symbol(client, "app/services/use.py", 2, 5)
     link = one(html, "[data-symbol-definition] a")
     assert link.get("href") == overseer_code.line_url("app/core/store.py", 1)
@@ -306,7 +304,7 @@ def test_a_module_name_leads_to_its_file(client: TestClient, project: Path) -> N
 def test_a_name_from_outside_the_project_says_so(
     client: TestClient, project: Path
 ) -> None:
-    _write(project, SYMBOLS)
+    write_tree(project, SYMBOLS)
     html = _symbol(client, "app/services/use.py", 9, 11)
     none(html, "[data-symbol-definition] a")
     one(html, "[data-symbol-outside]")
@@ -316,7 +314,7 @@ def test_a_python_file_offers_its_names(client: TestClient, project: Path) -> No
     """Its names can be clicked (``app.js`` asks where the click was), the
     answer peeking beside the name, not in the drawer; a file that is not
     Python has none to offer."""
-    _write(project, SYMBOLS)
+    write_tree(project, SYMBOLS)
     pane = one(page_html(client, f"{PAGE}?file=app/services/use.py"), "#code-file")
     assert pane.get("data-code-symbol") == with_query(
         SYMBOL, file="app/services/use.py"
@@ -342,12 +340,29 @@ def test_opening_the_page_warms_the_index_and_a_swap_does_not(
     assert started == [True]
 
 
+async def test_a_warm_up_cut_short_starts_again(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Warmed once a process, but one cancelled (its loop ended, as each
+    test client's does) is started again, never asked for its error."""
+    cut = asyncio.get_running_loop().create_task(asyncio.sleep(60))
+    cut.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await cut
+    monkeypatch.setattr(overseer_code, "_warming", cut)
+    monkeypatch.setattr(overseer_code, "warm", lambda: None)
+    overseer_code.warm_in_background()
+    again = overseer_code._warming
+    assert again is not None and again is not cut
+    await again
+
+
 def test_a_click_after_warming_reads_nothing(
     client: TestClient, monkeypatch: pytest.MonkeyPatch, project: Path
 ) -> None:
     """The first click's every-use look-up reads the whole source: warming
     has read it already."""
-    _write(project, SYMBOLS)
+    write_tree(project, SYMBOLS)
     overseer_code.warm()
 
     def unread(*_: object, **__: object) -> str:
@@ -361,7 +376,7 @@ def test_a_click_after_warming_reads_nothing(
 def test_no_symbol_while_code_is_off(
     client: TestClient, monkeypatch: pytest.MonkeyPatch, project: Path
 ) -> None:
-    _write(project, SYMBOLS)
+    write_tree(project, SYMBOLS)
     monkeypatch.setattr(settings, "APP_ENV", AppEnv.PROD)
     url = with_query(SYMBOL, file="app/services/use.py", line="7", col="4")
     assert client.get(url).status_code == 404
@@ -372,7 +387,7 @@ def test_a_module_opens_as_its_file_or_its_package(
 ) -> None:
     """A module Overseer names (a hook's, a middleware's) opens here as the
     file the tree shows; a library's has none, and none while it is off."""
-    _write(project, {"app/core/store.py": "x = 1\n", "app/core/__init__.py": ""})
+    write_tree(project, {"app/core/store.py": "x = 1\n", "app/core/__init__.py": ""})
     scope = overseer_code.Scope()
 
     assert overseer_code.module_url("app.core.store") == scope.url("app/core/store.py")
@@ -387,7 +402,7 @@ def test_a_frame_is_the_apps_only_when_it_is_a_file_the_tree_shows(
 ) -> None:
     """A library can have an ``app`` folder of its own: only a frame in
     this project's files, as the tree shows them, is the app's."""
-    _write(project, {"app/y.py": "x = 1\n"})
+    write_tree(project, {"app/y.py": "x = 1\n"})
     library = 'File "/opt/venv/lib/python3.14/site-packages/foo/app/y.py", line 1, in f'
     own = f'File "{project}/app/y.py", line 1, in f'
     assert overseer_code.own_frames(library) == []

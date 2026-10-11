@@ -37,7 +37,9 @@ class Search:
 
     def keeps(self, row: ErrorSearch) -> bool:
         return (
-            self.picked.keeps(row.page, row.container_name, row.app_service)
+            self.picked.keeps(
+                row.page, row.container_name, row.app_service, row.app_component
+            )
             and (not self.level or row.level == self.level)
             and (self.since is None or row.timestamp.timestamp() >= self.since)
             and row_matches(self.text, (row.message, row.exception_type))
@@ -71,17 +73,8 @@ async def search(
 
 def _issue(latest: ErrorSearch, count: int, first: datetime) -> ErrorIssue:
     return ErrorIssue(
-        **latest.model_dump(
-            include={
-                "fingerprint",
-                "page",
-                "service",
-                "app_service",
-                "container_name",
-                "message",
-                "exception_type",
-            }
-        ),
+        # What an issue shares with each occurrence's search projection.
+        **latest.model_dump(include=set(ErrorIssue.model_fields)),
         count=count,
         first_seen=first,
         last_seen=latest.timestamp,

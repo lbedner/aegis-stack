@@ -1,55 +1,64 @@
-"""Automatic service attribution, using the existing app/services convention.
+"""Automatic service and component attribution, by who owns the code a
+line or an exception came from (``ownership``).
 
 The emitting service and exception origin are separate. Inspect live exception
 objects before formatting destroys frame metadata; follow explicit causes and
 unsuppressed contexts. Job wrappers preserve ownership when frames are shared.
 """
 
-import re
 import sys
+from types import TracebackType
 from typing import Any
 
-from app.core.constants import ServiceName
+from app.core.ownership import SERVICE, installed, owner
 
-NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_-]*")
 ORIGIN_ATTRIBUTE = "_aegis_error_service"
+# The service and the component a file or a traceback belongs to.
+Owners = tuple[str | None, str | None]
 
 
-def registered_service(name: object) -> bool:
-    """Built-in specs and registered plugin services, without booting health checks."""
-    if not isinstance(name, str):
-        return False
-    if name in ServiceName:
-        return True
-    health = sys.modules.get("app.services.system.health")
-    registry = getattr(health, "registered_health_names", None)
-    return registry is not None and name in registry()["services"]
+def _owners(pathname: str) -> Owners:
+    """Who owns a file, wherever the app is deployed: its service or its
+    component (``ownership.owner``), each None if not that kind."""
+    found = owner(pathname)
+    if found is None:
+        return None, None
+    return (found.name, None) if found.kind == SERVICE else (None, found.name)
 
 
 def service_from_path(pathname: str) -> str | None:
-    """Extract app/services/<owner>/<file>, independent of deployment root."""
-    parts = pathname.replace("\\", "/").split("/")
-    for index in range(len(parts) - 3):
-        if parts[index : index + 2] == ["app", "services"]:
-            name = parts[index + 2]
-            if NAME.fullmatch(name) and registered_service(name):
-                return name
-    return None
+    return _owners(pathname)[0]
+
+
+def _deepest(trace: TracebackType | None) -> Owners:
+    """The innermost frame's service, and the innermost frame's component,
+    in ``trace``: each frame's owner looked up once."""
+    service = component = None
+    while trace is not None:
+        here, there = _owners(trace.tb_frame.f_code.co_filename)
+        service, component = here or service, there or component
+        trace = trace.tb_next
+    return service, component
 
 
 def exception_origin(error: BaseException) -> str | None:
     """Deepest chained cause with service evidence; guard against chain cycles."""
+    return _origins(error)[0]
+
+
+def _origins(error: BaseException) -> Owners:
+    """The deepest chained cause's service (one a job kept wins), and the
+    component ``error`` itself broke in or passed through last; chain
+    cycles guarded."""
     seen: set[int] = set()
-    origin = None
+    origin = component = None
     while id(error) not in seen and len(seen) < 64:
-        seen.add(id(error))
         current = getattr(error, ORIGIN_ATTRIBUTE, None)
-        trace = error.__traceback__ if not isinstance(current, str) else None
-        while trace is not None:
-            owner = service_from_path(trace.tb_frame.f_code.co_filename)
-            if owner:
-                current = owner
-            trace = trace.tb_next
+        if not seen or not isinstance(current, str):
+            service, found = _deepest(error.__traceback__)
+            component = found if not seen else component
+            current = current if isinstance(current, str) else service
+        seen.add(id(error))
         if isinstance(current, str):
             origin = current
         cause = error.__cause__ or (
@@ -58,7 +67,7 @@ def exception_origin(error: BaseException) -> str | None:
         if cause is None:
             break
         error = cause
-    return origin
+    return origin, component
 
 
 def remember_exception_origin(error: Exception, owner: str | None) -> None:
@@ -72,7 +81,7 @@ def add_service_attribution(
     logger: Any, method_name: str, event_dict: dict[str, Any]
 ) -> dict[str, Any]:
     """A processor shared by structlog and standard-library logging."""
-    emitter = service_from_path(str(event_dict.get("pathname", "")))
+    emitter, emitting_component = _owners(str(event_dict.get("pathname", "")))
     if emitter:
         event_dict["emitting_service"] = emitter
     error = event_dict.get("exc_info")
@@ -80,11 +89,15 @@ def add_service_attribution(
         error = sys.exc_info()[1]
     elif isinstance(error, tuple) and len(error) == 3:
         error = error[1]
-    origin = exception_origin(error) if isinstance(error, BaseException) else None
+    origin, component = (
+        _origins(error) if isinstance(error, BaseException) else (None, None)
+    )
+    if component := component or emitting_component:
+        event_dict["app_component"] = component
     scoped = event_dict.get("app_service")
-    owner = origin or (scoped if registered_service(scoped) else None) or emitter
-    if registered_service(owner):
-        event_dict["app_service"] = owner
+    chosen = origin or (scoped if installed(SERVICE, scoped) else None) or emitter
+    if installed(SERVICE, chosen):
+        event_dict["app_service"] = chosen
     else:
         event_dict.pop("app_service", None)
     return event_dict

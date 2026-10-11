@@ -2,7 +2,9 @@
 rather than imported (no side effects): where each module defines its
 top-level names, what it imports, and the lines each name is used on.
 Overseer > Code goes from a name to its definition and lists every line
-that names it.
+that names it; the Server map, the load costs, the Service pattern and
+``ownership`` read what each module imports, fronts and defines. Each file
+is parsed once per change, whoever asks.
 
 Static and shallow on purpose: a name defined at a module's top level, or
 imported, resolves, directly or through its module (``store.put``); one
@@ -11,10 +13,22 @@ not. ponytail: jedi or a language server when method calls must resolve.
 """
 
 import ast
-from collections.abc import Iterator
+import os
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
-from functools import lru_cache
+from functools import cache
 from pathlib import Path
+from typing import TypeVar
+
+from app.core.constants import ComponentName
+from app.core.source_functions import Function, functions
+
+ROOT = Path(__file__).resolve().parents[2]  # the project's: where ``app`` is
+# Folders never read, nor shown on Overseer > Code: generated, installed or
+# holding data (hidden ones, ``.venv`` among them, never either).
+SKIPPED = frozenset(
+    {"__pycache__", "node_modules", "site-packages", "dist", "build", "data", "site"}
+)
 
 # A name's identity: its module (dotted), and the member it names there;
 # None names the module itself.
@@ -47,6 +61,12 @@ class Module:
     defined: dict[str, int]  # top-level name -> its line
     imported: dict[str, Symbol]  # local name -> (module, member or None)
     uses: dict[Chain, tuple[int, ...]]  # each name as written -> its lines
+    # Every module it imports, relative, lazy and TYPE_CHECKING ones too, and
+    # each name imported from one by its full name (``from app.core import
+    # cache`` is ``app.core.cache``), whether a module or not.
+    imports: frozenset[str]
+    fronts: str | None  # the component it says it fronts (``FRONTS``)
+    functions: tuple[Function, ...]
 
     def place(self, line: int) -> Place:
         return Place(self.path, line, self.lines[line - 1].strip())
@@ -75,10 +95,10 @@ def _target(node: ast.ImportFrom, name: str) -> str:
     return ".".join([*package, *([node.module] if node.module else [])])
 
 
-def _spans(tree: ast.Module) -> Iterator[tuple[Named, Chain]]:
-    """Every name in ``tree`` with the chain it ends: ``store.put`` is
-    ``("store", "put")``; an import's name too."""
-    for node in ast.walk(tree):
+def _spans(nodes: Iterable[ast.AST]) -> Iterator[tuple[Named, Chain]]:
+    """Every name in ``nodes`` (a tree, walked) with the chain it ends:
+    ``store.put`` is ``("store", "put")``; an import's name too."""
+    for node in nodes:
         if isinstance(node, ast.Name):
             yield node, (node.id,)
         elif isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
@@ -99,80 +119,135 @@ def _parse(path: str, source: str) -> Module:
             defined.update(
                 {t.id: node.lineno for t in targets if isinstance(t, ast.Name)}
             )
+    nodes = list(ast.walk(tree))  # walked once, for imports and for names
     imported: dict[str, Symbol] = {}
-    for node in ast.walk(tree):
+    imports: set[str] = set()
+    for node in nodes:
         if isinstance(node, ast.Import):
             for alias in node.names:
                 local = alias.asname or alias.name.split(".")[0]
                 imported[local] = (alias.name if alias.asname else local, None)
+                imports.add(alias.name)
         elif isinstance(node, ast.ImportFrom):
             source_module = _target(node, name)
+            imports.add(source_module)
             for alias in node.names:
                 imported[alias.asname or alias.name] = (source_module, alias.name)
+                if alias.name != "*":
+                    imports.add(f"{source_module}.{alias.name}")
     uses: dict[Chain, set[int]] = {}
-    for node, chain in _spans(tree):
+    for node, chain in _spans(nodes):
         uses.setdefault(chain, set()).add(node.lineno)
+    lines = tuple(source.splitlines())
     return Module(
         path,
         name,
-        tuple(source.splitlines()),
+        lines,
         defined,
         imported,
         {chain: tuple(sorted(lines)) for chain, lines in uses.items()},
+        frozenset(imports - {""}),
+        _fronts(tree),
+        tuple(functions(tree, lines)),
     )
 
 
-@lru_cache(maxsize=2048)
+def _fronts(tree: ast.Module) -> str | None:
+    """A top-level ``FRONTS``: a string, or a ``ComponentName`` member's."""
+    for node in tree.body:
+        if not (
+            isinstance(node, ast.Assign)
+            and any(isinstance(t, ast.Name) and t.id == "FRONTS" for t in node.targets)
+        ):
+            continue
+        value = node.value
+        if isinstance(value, ast.Constant) and isinstance(value.value, str):
+            return value.value
+        if (
+            isinstance(value, ast.Attribute)
+            and isinstance(value.value, ast.Name)
+            and value.value.id == ComponentName.__name__
+            and value.attr in ComponentName.__members__
+        ):
+            return ComponentName[value.attr].value
+    return None
+
+
+Kept = TypeVar("Kept")
+# Each file's source and what it says, as of its last change: one entry a
+# file, replaced when the file changes, so as many as there are files.
+_texts: dict[tuple[Path, str], tuple[float, str]] = {}
+_modules: dict[tuple[Path, str], tuple[float, Module | None]] = {}
+
+
+def _kept(
+    store: dict[tuple[Path, str], tuple[float, Kept]],
+    key: tuple[Path, str],
+    mtime: float,
+    make: Callable[[], Kept],
+) -> Kept:
+    found = store.get(key)
+    if found is None or found[0] != mtime:
+        found = store[key] = (mtime, make())
+    return found[1]
+
+
 def _text(root: Path, path: str, mtime: float) -> str:
-    """``path``'s source; ``mtime`` keys the cache, so a change reads it again."""
-    return (root / path).read_text(encoding="utf-8", errors="replace")
+    """``path``'s source, read again only once it changes (``mtime``)."""
+    return _kept(
+        _texts,
+        (root, path),
+        mtime,
+        lambda: (root / path).read_text(encoding="utf-8", errors="replace"),
+    )
 
 
-@lru_cache(maxsize=2048)
 def _cached(root: Path, path: str, mtime: float) -> Module | None:
     """``path`` parsed, once per change (``mtime``)."""
-    try:
-        return _parse(path, _text(root, path, mtime))
-    except (OSError, SyntaxError, ValueError):
-        return None  # unreadable or not valid Python: no names to offer
+
+    def parse() -> Module | None:
+        try:
+            return _parse(path, _text(root, path, mtime))
+        except (OSError, SyntaxError, ValueError):
+            return None  # unreadable or not valid Python: no names to offer
+
+    return _kept(_modules, (root, path), mtime, parse)
 
 
 class Index:
     """The project's modules by name, each parsed only when a lookup reaches
     it, and again only once its file changes: a click reads a handful of
-    files, not the project. Each file is looked at (``stat``) once."""
+    files, not the project."""
 
     def __init__(self, root: Path, paths: list[str]) -> None:
         self.root = root
         self.paths = {module_name(path): path for path in paths}
-        self._mtimes: dict[str, float | None] = {}
 
     def __contains__(self, name: object) -> bool:
         return name in self.paths
 
     def _mtime(self, path: str) -> float | None:
-        if path not in self._mtimes:
-            try:
-                self._mtimes[path] = (self.root / path).stat().st_mtime
-            except OSError:
-                self._mtimes[path] = None
-        return self._mtimes[path]
+        try:
+            return (self.root / path).stat().st_mtime
+        except OSError:
+            return None
 
-    def get(self, name: str) -> Module | None:
+    def _stamp(self, name: str) -> tuple[str, float] | None:
+        """A module's file and when it last changed, while it is there."""
         path = self.paths.get(name)
         mtime = self._mtime(path) if path else None
-        return (
-            None if path is None or mtime is None else _cached(self.root, path, mtime)
-        )
+        return None if path is None or mtime is None else (path, mtime)
+
+    def get(self, name: str) -> Module | None:
+        stamp = self._stamp(name)
+        return _cached(self.root, *stamp) if stamp else None
 
     def tree(self, name: str) -> ast.Module | None:
         """A module's syntax tree, parsed afresh: only the clicked file needs one."""
-        path = self.paths.get(name)
-        mtime = self._mtime(path) if path else None
-        if path is None or mtime is None:
+        if (stamp := self._stamp(name)) is None:
             return None
         try:
-            return ast.parse(_text(self.root, path, mtime))
+            return ast.parse(_text(self.root, *stamp))
         except (OSError, SyntaxError, ValueError):
             return None
 
@@ -193,12 +268,47 @@ class Index:
         for _ in self._texts():
             pass
 
+    def imports_under(self, package: str) -> set[str]:
+        """Every module ``package``'s modules import, it and those in it."""
+        found: set[str] = set()
+        for name in self.paths:
+            if within(name, package):
+                module = self.get(name)
+                found |= module.imports if module else set()
+        return found
+
     def naming(self, word: str) -> Iterator[Module]:
         """The modules whose source has ``word`` in it, the only ones a
         reference to it can be in."""
         for name, text in self._texts():
             if word in text and (module := self.get(name)) is not None:
                 yield module
+
+
+def within(module: str, package: str) -> bool:
+    """Whether ``module`` is ``package`` or in it."""
+    return module == package or module.startswith(f"{package}.")
+
+
+def at(root: Path, folder: str = "") -> Index:
+    """The Python files under ``root``'s ``folder`` (all of ``root``, given
+    none), named from ``root``; hidden and ``SKIPPED`` folders left out."""
+    paths = []
+    for here, folders, names in os.walk(root / folder):
+        folders[:] = [f for f in folders if not f.startswith(".") and f not in SKIPPED]
+        base = Path(here).relative_to(root).as_posix()
+        paths += [
+            n if base == "." else f"{base}/{n}" for n in names if n.endswith(".py")
+        ]
+    return Index(root, paths)
+
+
+@cache
+def project() -> Index:
+    """This project's Python files, listed once per process (each one is
+    still read again once it changes). ponytail: a file added since is not
+    in it; list again per ask if a reader ever needs new files live."""
+    return at(ROOT)
 
 
 def resolve(modules: Index, module: str, name: str) -> Symbol | None:
@@ -265,7 +375,7 @@ def _at(
             start = lines[line - 1].find(node.module)
             if start <= col < start + len(node.module):
                 return Hit(module=_target(node, name))
-    for node, chain in _spans(tree):
+    for node, chain in _spans(ast.walk(tree)):
         if node.lineno != line:
             continue
         end = node.end_col_offset or 0

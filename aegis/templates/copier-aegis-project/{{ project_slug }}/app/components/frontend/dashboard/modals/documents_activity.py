@@ -15,6 +15,7 @@ import flet as ft
 from app.components.frontend.controls import DataTable, DataTableColumn, SecondaryText
 from app.components.frontend.controls.busy_bar import busy_bar
 from app.components.frontend.controls.jobs import follow_jobs
+from app.components.frontend.core.session_health import SessionLoops, page_is_connected
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.documents.domains.extraction.activity import (
     ActivityRow,
@@ -74,7 +75,8 @@ class ActivityTab(ft.Container):
         self._render()
 
     async def _follow(self) -> None:
-        await follow_jobs(self._api(), on_snapshot=self._on_snapshot)
+        loops = SessionLoops(self.page, lambda: page_is_connected(self.page))
+        await follow_jobs(self._api(), on_snapshot=self._on_snapshot, alive=loops.alive)
 
     def _on_snapshot(self, snapshot: dict[str, Any]) -> None:
         job_id = str(snapshot.get("job_id"))

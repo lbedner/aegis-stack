@@ -75,3 +75,12 @@ def test_following_every_job_hands_each_snapshot_over() -> None:
     asyncio.run(follow_jobs(api, on_snapshot=seen.append))
 
     assert [s["job_id"] for s in seen] == ["a", "b"]
+
+
+def test_following_every_job_ends_with_the_tab() -> None:
+    seen: list[dict[str, Any]] = []
+    api = _Api(200, [{"job_id": "a", "status": "running", "label": "page 1"}])
+
+    asyncio.run(follow_jobs(api, on_snapshot=seen.append, alive=lambda: False))
+
+    assert seen == []

@@ -156,16 +156,19 @@ register_tool(
     health,
     description="What is wrong now: every component's status and message",
     effect="read",
+    admin=True,
 )
 register_tool(
     "errors",
     errors,
     description="What broke: retained errors grouped into issues, with tracebacks",
     effect="read",
+    admin=True,
 )
 register_tool(
     "logs",
     logs,
     description="What led up to it: container logs by service, level and text",
     effect="read",
+    admin=True,
 )

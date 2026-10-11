@@ -122,7 +122,7 @@ services:
       - "traefik.http.middlewares.webserver-retry.retry.initialinterval=2s"
 {%- if not ingress_tls %}
       # Admin paths - IP restricted (set ADMIN_IP_ALLOWLIST in .env)
-      - "traefik.http.routers.webserver-admin.rule=PathPrefix(`/dashboard`) || PathPrefix(`/docs`) || PathPrefix(`/redoc`) || PathPrefix(`/openapi.json`)"
+      - "traefik.http.routers.webserver-admin.rule=PathPrefix(`/dashboard`) || PathPrefix(`/docs`) || PathPrefix(`/redoc`) || PathPrefix(`/openapi.json`) || PathPrefix(`/health/detailed`)"
       - "traefik.http.routers.webserver-admin.entrypoints=web"
       - "traefik.http.routers.webserver-admin.service=webserver"
       - "traefik.http.routers.webserver-admin.middlewares=admin-ipallowlist,webserver-retry"

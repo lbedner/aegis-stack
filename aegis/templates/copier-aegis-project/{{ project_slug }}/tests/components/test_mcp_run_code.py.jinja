@@ -6,8 +6,10 @@ import json
 from typing import Any
 
 from fastmcp import Client, FastMCP
+from fastmcp.server.auth import AccessToken
 import pytest
 
+from app.components.mcp import server as mcp_server
 from app.components.mcp.server import build_server
 from app.core.config import settings
 from app.core.tools import register_tool
@@ -32,7 +34,12 @@ async def save(note: str) -> str:
     return note
 
 
-GRANT = ["order", "file_it", "save", "run_code"]
+async def peek() -> str:
+    """What only an admin sees in Overseer."""
+    return "logs"
+
+
+GRANT = ["order", "file_it", "save", "peek", "run_code"]
 
 
 @pytest.fixture
@@ -40,6 +47,7 @@ def granted(clean_registry: None, monkeypatch: pytest.MonkeyPatch) -> None:
     register_tool("order", order, effect="read")
     register_tool("file_it", file_it, effect="proposes")
     register_tool("save", save, effect="writes")
+    register_tool("peek", peek, effect="read", admin=True)
     monkeypatch.setattr(settings, "MCP_TOOLS", GRANT)
 
 
@@ -65,6 +73,21 @@ async def test_nothing_that_writes_or_proposes_is_callable_inside(
         result = await _run(build_server(GRANT), code)
 
         assert result.is_error, code
+
+
+async def test_a_script_reaches_no_admin_read_its_token_does_not(
+    granted: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A non-admin's token cannot call an admin read, so neither can its
+    script."""
+    token = AccessToken(
+        token="t", client_id="c", scopes=["read"], claims={"user_id": 1, "admin": False}
+    )
+    monkeypatch.setattr(mcp_server, "get_access_token", lambda: token)
+
+    result = await _run(build_server(GRANT), "await peek()")
+
+    assert result.is_error
 
 
 async def test_its_description_lists_the_reads_and_nothing_else(

@@ -36,11 +36,8 @@ class OverviewTab(ft.Container):
             alignment=ft.MainAxisAlignment.SPACE_AROUND,
         )
 
-        # Statistics section. The URL keeps its password: it is what the
-        # copy button puts on the clipboard.
-        self.db_url_local = ui_database.display_url(
-            str(metadata.get("url", "Unknown")), hide_password=False
-        )
+        # Statistics section. Health carries the URL without its password.
+        self.db_url_local = ui_database.display_url(str(metadata.get("url", "Unknown")))
 
         # Statistics table
         stats_columns = [

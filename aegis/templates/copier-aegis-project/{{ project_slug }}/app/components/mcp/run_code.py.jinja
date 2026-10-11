@@ -40,7 +40,7 @@ from app.services.ai.domains.chat.agent_loader import (
 from app.services.ai.domains.chat.tools import resolve_tools
 from app.services.ai.service.trace import call_args_preview, sandbox_calls
 
-from .server import TEXT_CAP, McpStep, sandbox_steps
+from .server import TEXT_CAP, McpStep, reachable, sandbox_steps
 
 NAME = "run_code"
 # The harness describes a REPL; each MCP call is its own run.
@@ -129,7 +129,7 @@ async def code_tool(reads: Sequence[str]) -> Tool:
     await _agent(reads, None, seen).run(NAME)
 
     async def run_code(code: str) -> Any:
-        return await run(reads, code)
+        return await run(reachable(reads), code)
 
     return Tool.from_function(
         run_code, name=NAME, description=f"{seen[NAME].description}\n\n{FRESH}"

@@ -15,6 +15,7 @@
 ### Detailed Health Check  
 - **URL**: `GET /health/detailed`
 - **Purpose**: Comprehensive system health with metrics
+- **Access**: gated like `/docs`: open in dev, then HTTP Basic (`DOCS_USERNAME`/`DOCS_PASSWORD`), 404 outside dev until those are set{% if include_ingress %}, and behind Traefik admin IPs only (`ADMIN_IP_ALLOWLIST`){% endif %}. The CLI's `health` and the dashboard ask from inside the webserver container, which needs neither
 - **Response Time**: < 500ms
 
 ## CLI Health Commands

@@ -51,6 +51,11 @@ async def save(note: str) -> str:
     return note
 
 
+async def peek() -> str:
+    """What only an admin sees in Overseer."""
+    return "logs"
+
+
 class Rpc:
     """A client's JSON-RPC over HTTP, signed in with ``token``."""
 
@@ -100,10 +105,11 @@ def granted(
 
     monkeypatch.setattr(http, "get_async_session", test_session)
     monkeypatch.setattr(http, "record", keep)
-    monkeypatch.setattr(settings, "MCP_TOOLS", ["look", "file_it", "save"])
+    monkeypatch.setattr(settings, "MCP_TOOLS", ["look", "file_it", "save", "peek"])
     register_tool("look", look, effect="read")
     register_tool("file_it", file_it, effect="proposes")
     register_tool("save", save, effect="writes")
+    register_tool("peek", peek, effect="read", admin=True)
 
 
 @asynccontextmanager
@@ -168,6 +174,36 @@ async def test_a_propose_token_also_sees_the_proposals_never_a_write(
         tools = await _tools(rpc)
 
     assert tools == ["file_it", "look"]
+
+
+async def test_an_admins_token_also_sees_the_admin_reads(
+    granted: None,
+    async_db_session: AsyncSession,
+    user_factory: Any,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user, value = await _token(async_db_session, user_factory, "read")
+    monkeypatch.setattr(settings, "ADMIN_USER_EMAILS", [user.email])
+    async with serving() as served:
+        rpc = Rpc(served, value)
+        await rpc.open()
+        tools = await _tools(rpc)
+
+    assert tools == ["look", "peek"]
+
+
+async def test_an_admin_read_is_refused_to_anyone_else(
+    granted: None, async_db_session: AsyncSession, user_factory: Any
+) -> None:
+    """Overseer shows its reads (health, errors, logs) to admins only, and
+    any user may make a token: the token reaches no further."""
+    _, value = await _token(async_db_session, user_factory, "propose")
+    async with serving() as served:
+        rpc = Rpc(served, value)
+        await rpc.open()
+        answer = await rpc.call("tools/call", {"name": "peek", "arguments": {}})
+
+    assert answer.get("error") or answer["result"]["isError"]
 
 
 async def test_a_call_acts_for_the_tokens_owner(

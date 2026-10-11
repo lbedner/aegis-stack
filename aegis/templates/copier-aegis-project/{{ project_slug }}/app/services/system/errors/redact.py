@@ -8,7 +8,7 @@ Applications must still avoid logging secrets or personal data in arbitrary text
 import json
 import re
 
-from app.core.credential import hide_password
+from app.core.credential import hide_passwords
 
 # A key or an assignment naming one of these holds a credential.
 KEYWORDS = r"password|passwd|secret|token|api[_-]?key|authorization|cookie|credential"
@@ -18,13 +18,12 @@ ASSIGN = re.compile(
     rf"(?i)\b({KEYWORDS})([\"' ]*[:=]\s*)(?:\"[^\"]*\"|'[^']*'|[^\s,;]+)"
 )
 AUTH = re.compile(r"(?i)\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]+")
-URL = re.compile(r"\b[a-z][a-z0-9+.-]*://\S+", re.I)
 
 
 def text(value: str) -> str:
     value = AUTH.sub(r"\1 [redacted]", value)
     value = ASSIGN.sub(r"\1\2[redacted]", value)
-    return URL.sub(lambda url: hide_password(url.group()), value)
+    return hide_passwords(value)
 
 
 def clean(value: object) -> object:

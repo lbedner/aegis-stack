@@ -13,6 +13,8 @@ from fastmcp.server.http import StarletteWithLifespan
 from app.core.config import settings
 from app.core.db import get_async_session
 from app.core.tools import load_tools
+from app.models.user import User
+from app.services.auth.deps import is_admin
 
 from . import tokens
 from .activity import record
@@ -31,13 +33,18 @@ class McpTokens(TokenVerifier):
     async def verify_token(self, token: str) -> AccessToken | None:
         async with get_async_session() as db:
             row = await tokens.resolve(db, token)
-        if row is None:
+            owner = await db.get(User, row.user_id) if row is not None else None
+        if row is None or owner is None:
             return None
         return AccessToken(
             token=token,
             client_id=f"mcp-token-{row.id}",
             scopes=sorted(tokens.SCOPES[row.scope]),
-            claims={"user_id": row.user_id, "token": row.name},
+            claims={
+                "user_id": row.user_id,
+                "token": row.name,
+                "admin": is_admin(owner),
+            },
         )
 
 

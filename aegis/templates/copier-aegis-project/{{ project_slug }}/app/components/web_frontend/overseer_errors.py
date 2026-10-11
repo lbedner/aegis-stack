@@ -3,9 +3,9 @@ occurrences in a drawer, the list kept current over SSE (one reader per
 viewer, reloading only when something changed)."""
 
 import asyncio
+import time
 from collections.abc import AsyncIterator, Mapping
 from datetime import datetime
-import time
 from typing import Any
 
 from pydantic import BaseModel
@@ -41,7 +41,6 @@ RECONCILE_SECONDS = 15
 ROWS = "pages/overseer/errors/_rows.html"
 # The filters a query carries, one value each, then the pickers' lists.
 FILTERS = ("level", "window", "q")
-PICKS = ("service", "container", "app_service")
 
 
 class ErrorCell(BaseModel):
@@ -69,7 +68,7 @@ class ErrorRow(BaseModel):
 def parameters(query: Mapping[str, str]) -> dict[str, str | list[str]]:
     """The list's filters, which every link and the stream carry."""
     return {key: query.get(key, "") for key in FILTERS} | {
-        key: ui_logs.listed(query, key) for key in PICKS
+        key: ui_logs.listed(query, key) for key in ui_logs.PICKS
     }
 
 
@@ -93,7 +92,7 @@ def row(issue: ErrorIssue, query: Mapping[str, str], names: dict[str, str]) -> E
             type=issue.exception_type or "Error", message=issue.message, url=url
         ),
         source=SourceCell(
-            service=issue.app_service or "Unattributed",
+            service=issue.app_service or issue.app_component or "Unattributed",
             runtime=names.get(issue.container_name or "")
             or ui_logs.title_of(issue.page),
         ),

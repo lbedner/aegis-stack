@@ -402,9 +402,14 @@ AEGIS_ERROR_TRACKING_REDIS_URL=redis://127.0.0.1:6390 uv run pytest tests/servic
 ## Automatic error attribution
 
 Keep using `from app.core.log import logger`. The shared logging processor derives
-`app_service` from `app/services/<name>/...` only when the name belongs to the
-shared `ServiceName` registry, checked against the generator’s `ServiceSpec` list; runtime-registered plugin services are also accepted. Shared
-folders such as `system` and `change_queue` are not application services.
+`app_service` from who owns the code (`app.core.ownership.owner`): a file under
+`app/services/<name>/`, a route under `app/components/backend/api/<name>/` (by its
+name, or the one service it imports), or a service's CLI, only when the name belongs
+to the shared `ServiceName` registry, checked against the generator’s `ServiceSpec`
+list; runtime-registered plugin services are also accepted. Shared folders such as
+`system` and `change_queue` are not application services. A line or exception from
+a component's own code also names it as `app_component` (`app/components/<name>/`,
+or a core client such as `app/core/cache.py` by the component it fronts).
 Existing logger calls need no per-function context manager. `emitting_service`
 records the service that wrote the log. For exceptions, the processor inspects
 traceback frames and chained causes before formatting, allowing an AI failure
@@ -422,5 +427,6 @@ process/thread handoffs outside those wrappers do not automatically inherit it.
 Both development console logs and production JSON logs carry attribution into
 retained errors. The runtime `service` and container identity remain separate
 from `app_service`. The Errors checklist is the Logs one, with the same query
-parameters (`service`, `container`, `app_service`), so a filter carries between
-the two pages. Grouping includes the application service.
+parameters (`service`, `container`, `app_service`, `app_component`), so a filter
+carries between the two pages. Grouping includes the application service, never
+the component, so naming components regrouped no existing issue.

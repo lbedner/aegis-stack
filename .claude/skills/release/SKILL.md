@@ -67,7 +67,10 @@ Gate-relevant files (read, not edited, unless a gate fails):
 5. Run the three gates (see Gates). Fix anything red before proceeding.
 6. Tag the release commit as a release candidate: `git tag vX.Y.Z-rcN && git
    push origin vX.Y.Z-rcN`. This is what actually triggers the publish
-   workflow; merging the version-bump PR alone publishes nothing.
+   workflow; merging the version-bump PR alone publishes nothing. Name the
+   version-bump branch `release-X.Y.Z-rcN`, never `vX.Y.Z-rcN`: a branch
+   with the tag's name makes `git push origin vX.Y.Z-rcN` fail with "src
+   refspec matches more than one".
 7. Once the workflow is green, verify the rc via the TestPyPI upgrade-path
    recipe (see Gates, gate 3) run against the published rc rather than a
    local wheel.

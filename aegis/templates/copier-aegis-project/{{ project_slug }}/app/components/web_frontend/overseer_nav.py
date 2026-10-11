@@ -14,7 +14,7 @@ from urllib.parse import quote
 from starlette.routing import BaseRoute
 
 from app.core.constants import ComponentName, ServiceName
-from app.services.system import ui_runtime
+from app.core.ownership import component_of
 from app.services.system.health import last_system_status, registered_health_names
 from app.services.system.models import (
     ComponentStatus,
@@ -173,4 +173,4 @@ def find_installed(group: str, name: str) -> NavItem | None:
 def runtime_page_url(page: str) -> str:
     """The Overseer page a runtime page's containers show on (``redis`` is
     the Cache component's)."""
-    return page_url("components", ui_runtime.component_of(page))
+    return page_url("components", component_of(page))

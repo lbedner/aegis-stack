@@ -14,14 +14,14 @@ reached raises ``RuntimeUnavailableError`` rather than inventing numbers.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator
-from dataclasses import dataclass, field
-from datetime import UTC, datetime
-from importlib import import_module
 import json
 import os
 import re
 import socket
+from collections.abc import AsyncIterator
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from importlib import import_module
 from typing import Protocol
 
 import psutil
@@ -187,7 +187,7 @@ _TAGGED = re.compile(
 
 # The attribution the development console prints as ``key=value``
 # (``log_attribution``): read into a line's fields here, once.
-METADATA_KEYS = ("app_service", "emitting_service", "pathname")
+METADATA_KEYS = ("app_service", "app_component", "emitting_service", "pathname")
 _METADATA = re.compile(r"(?<!\S)(" + "|".join(METADATA_KEYS) + r")=(\S+)")
 
 

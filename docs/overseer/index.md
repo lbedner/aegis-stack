@@ -45,6 +45,10 @@ combined selections include any matching service or container. The same filter
 applies to history, live updates, and the volume chart. Rows show the application
 service alongside its runtime, for example `AI · Worker`.
 
+Components are in the checklist too, as their code (`Worker code`, `Cache
+code`), apart from the runtimes above them: a line written or raised in a
+component's own code names it.
+
 Normal logs use the same automatic attribution as errors. Older lines without
 attribution remain available under their runtime/container or with all filters
 cleared. Logs continue to come from Docker; no additional Redis pipeline is used.
@@ -108,8 +112,14 @@ rest.
 The chips above the tree narrow it to one component or service: its files
 wherever they live (its service folder, its API, its Overseer page, its
 tests), every folder down to them open, and a count of how many files sit in
-how many folders. A file belongs to one when its name, or the name of the page
-it shows on (the cache's is `redis`), is a whole word in the path. The folders
+how many folders. Under `app/` and `tests/` a file belongs to whoever owns it
+(`app.core.ownership`): a service's folder, an API route by its name or by the
+one service it imports (`api/llm` is AI's, `api/orgs` is Auth's), a core client
+by the component it fronts (`app/core/cache.py` is the cache's), an Overseer page
+by what it shows, a service's CLI, and a test by the one service (else the one
+component) whose code it imports. A test importing several stays shared.
+Elsewhere (docs, migrations) a file belongs to one when its name, or the name of
+the page it shows on (the cache's is `redis`), is a whole word in the path. The folders
 in the path above an open file are links too: each narrows the tree to that
 folder. The box above the tree (Cmd-P or
 Ctrl-P) jumps to any file by name. Above the file, its path says which source

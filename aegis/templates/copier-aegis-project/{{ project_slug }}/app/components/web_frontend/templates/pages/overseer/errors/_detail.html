@@ -9,6 +9,7 @@
     ("When", event.timestamp),
     ("Level", event.level),
     ("Application service", event.app_service or "Unattributed"),
+    ("Component", event.app_component or "Unattributed"),
     ("Runtime", event.service ~ " · " ~ event.container_name),
   ]) }}
   {% if event.truncated %}<p class="text-sm text-aegis-muted">Trace truncated to the retained payload limit.</p>{% endif %}{% if event.incomplete %}<p class="text-sm text-aegis-muted">Trace may be incomplete: collection ended or the source did not provide a terminal exception.</p>{% endif %}

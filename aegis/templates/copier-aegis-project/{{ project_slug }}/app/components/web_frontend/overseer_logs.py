@@ -77,7 +77,8 @@ def picker(
 ) -> list[dict[str, Any]]:
     """The Services checklist Logs and Errors share: each page with a
     container, its containers when it has several, then the application
-    services (``ui_logs.Picked`` reads what it ticks)."""
+    services and components whose code a line came from (``ui_logs.Picked``
+    reads what it ticks)."""
     picked = ui_logs.Picked.of(query)
     options: list[dict[str, Any]] = []
     for s in sources:
@@ -93,11 +94,15 @@ def picker(
             | {"indent": True}
             for c in s["containers"]
         ]
+    navigation = current_navigation()
+    # A component's code, told apart from its runtime above (``Worker``).
     return options + [
-        _option(
-            item.name, item.title, item.name in picked.app_services, name="app_service"
+        _option(item.name, label.format(item.title), item.name in chosen, name=name)
+        for name, group, label, chosen in (
+            ("app_service", "services", "{}", picked.app_services),
+            ("app_component", "components", "{} code", picked.app_components),
         )
-        for item in current_navigation().get("services", [])
+        for item in navigation.get(group, [])
     ]
 
 

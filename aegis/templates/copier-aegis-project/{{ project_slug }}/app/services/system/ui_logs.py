@@ -16,12 +16,12 @@ framework imports.
 """
 
 import asyncio
+import os
+import time
 from collections import defaultdict
 from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
-import os
-import time
 from typing import Any, Self
 
 from app.core import runtime, series
@@ -29,6 +29,7 @@ from app.core.formatting import format_relative_time, format_timestamp
 from app.core.log import logger
 from app.core.log_records import LogAssembler, LogRecord
 from app.core.log_records import split_lead as _split_lead
+from app.core.ownership import component_of
 from app.core.runtime import (
     METADATA_KEYS,
     LogLine,
@@ -96,7 +97,7 @@ def color_of(page: str) -> int:
 
 def title_of(page: str) -> str:
     """A page's name, as its component's (``redis`` is the Cache)."""
-    return get_component_title(ui_runtime.component_of(page))
+    return get_component_title(component_of(page))
 
 
 @dataclass
@@ -121,7 +122,7 @@ class _Row:
             "at": format_timestamp(when.isoformat()) if when else "-",
             "ms": _ms(when) if when else None,
             "page": self.page,
-            "app_service": dict(self.line.fields).get("app_service"),
+            **{key: dict(self.line.fields).get(key) for key in OWNER_PICKS},
             "color": color_of(self.page),
             "instance": self.instance,
             "source": self.source,
@@ -175,32 +176,49 @@ def number_of(query: Mapping[str, str], key: str) -> int | None:
     return int(value) if value.isdigit() else None
 
 
+# What a line or error is picked by, as a query names it: its runtime (a
+# page), its container, and who owns the code it came from.
+OWNER_PICKS = ("app_service", "app_component")
+PICKS = ("service", "container", *OWNER_PICKS)
+
+
 @dataclass(frozen=True)
 class Picked:
-    """The services (pages), containers and application services a query
-    ticks: a line or error from any of them is kept, every one when none is."""
+    """The services (pages), containers and application services and
+    components a query ticks: a line or error from any of them is kept,
+    every one when none is."""
 
     services: frozenset[str]
     containers: frozenset[str]
     app_services: frozenset[str]
+    app_components: frozenset[str]
 
     @classmethod
     def of(cls, query: Mapping[str, str]) -> Self:
-        return cls(
-            frozenset(listed(query, "service")),
-            frozenset(listed(query, "container")),
-            frozenset(listed(query, "app_service")),
-        )
+        return cls(*(frozenset(listed(query, key)) for key in PICKS))
 
     def __bool__(self) -> bool:
-        return bool(self.services or self.containers or self.app_services)
+        return bool(self.services or self.containers or self.by_owner)
 
-    def keeps(self, page: str, container: str | None, app_service: str | None) -> bool:
+    @property
+    def by_owner(self) -> bool:
+        """Whether it ticks an application service or component, which
+        can be in any container."""
+        return bool(self.app_services or self.app_components)
+
+    def keeps(
+        self,
+        page: str,
+        container: str | None,
+        app_service: str | None,
+        app_component: str | None,
+    ) -> bool:
         return (
             not self
             or page in self.services
             or container in self.containers
             or app_service in self.app_services
+            or app_component in self.app_components
         )
 
 
@@ -228,11 +246,14 @@ class _Filter:
         )
 
     def keeps(self, row: _Row) -> bool:
-        """The level and text filters, and with application services ticked,
-        the sources (the pages read and their containers narrow the rest)."""
-        app_service = dict(row.line.fields).get("app_service")
-        if self.picked.app_services and not self.picked.keeps(
-            row.page, row.instance, app_service
+        """The level and text filters, and with application services or
+        components ticked, the sources (the pages read and their containers narrow the rest)."""
+        fields = dict(row.line.fields)
+        if self.picked.by_owner and not self.picked.keeps(
+            row.page,
+            row.instance,
+            fields.get("app_service"),
+            fields.get("app_component"),
         ):
             return False
         if self.levels and (row.line.level or NO_LEVEL) not in self.levels:
@@ -339,8 +360,8 @@ def _narrowed(
 ) -> list[tuple[str, str]]:
     """``names`` with a page that has a ``container`` picked keeping only the
     picked ones."""
-    if listed(query, "app_service"):
-        return names  # Service origins can occur in any container; filter rows below.
+    if Picked.of(query).by_owner:
+        return names  # Owners can occur in any container; filter rows below.
     picked = set(listed(query, "container"))
     narrowed = {page for page, name in names if name in picked}
     return [(p, n) for p, n in names if p not in narrowed or n in picked]

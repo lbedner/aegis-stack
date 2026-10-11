@@ -22,7 +22,8 @@ local function summary(fp)
     local a = cjson.decode(redis.call('HGET', p .. 'search', first[1]))
     local b = cjson.decode(redis.call('HGET', p .. 'search', last[1]))
     local row = {fingerprint=fp, page=b.page, service=b.service,
-        app_service=b.app_service, container_name=b.container_name,
+        app_service=b.app_service, app_component=b.app_component,
+        container_name=b.container_name,
         message=b.message, exception_type=b.exception_type,
         count=redis.call('ZCARD', group), first_seen=a.timestamp,
         last_seen=b.timestamp, latest_id=b.id}

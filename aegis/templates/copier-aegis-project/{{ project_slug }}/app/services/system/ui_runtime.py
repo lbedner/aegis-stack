@@ -18,6 +18,7 @@ from typing import Any, Literal
 from app.core import runtime, series, thresholds
 from app.core.config import settings
 from app.core.formatting import format_bytes, format_percentage, format_span
+from app.core.ownership import COMPONENT_PAGES
 from app.core.runtime import Instance, RuntimeUnavailableError, Stats
 from app.core.series import Sample, Sampler
 
@@ -38,8 +39,6 @@ NET_IN, NET_OUT, DISK_READ, DISK_WRITE = "net_in", "net_out", "disk_read", "disk
 FIGURES = {CPU: "CPU", MEMORY: "Memory", "network": "Network", "disk": "Disk I/O"}
 # Shown only before the containers sampler's first reading.
 PENDING = {"rows": [], "note": "Reading the containers.", "pending": True}
-# Health component -> its Overseer page, where the two names differ.
-_COMPONENT_PAGES = {"backend": "server", "cache": "redis", "ollama": "inference"}
 
 
 @dataclass(frozen=True)
@@ -142,13 +141,8 @@ def host_of(page: str) -> Host | None:
 
 def page_of(component: str) -> str | None:
     """The page a health component's containers show on, if any has one."""
-    page = _COMPONENT_PAGES.get(component, component)
+    page = COMPONENT_PAGES.get(component, component)
     return page if page in runtime.PAGES else None
-
-
-def component_of(page: str) -> str:
-    """The health component a page shows (``page_of`` the other way)."""
-    return next((c for c, p in _COMPONENT_PAGES.items() if p == page), page)
 
 
 async def sample() -> Sample:

@@ -58,6 +58,8 @@ def normalize(
     app_service = fields.get("app_service")
     return ErrorOccurrence(
         app_service=app_service,
+        # Not in the fingerprint: naming components regroups no issue.
+        app_component=fields.get("app_component"),
         id=digest(identity),
         fingerprint=fingerprint(
             service, page, exception, trace, logger, message, app_service

@@ -82,10 +82,22 @@ Gate-relevant files (read, not edited, unless a gate fails):
    `pyproject.toml` carries, so tagging the rc commit as `vX.Y.Z` would
    publish an `X.Y.ZrcN` wheel under a final tag. This publishes to PyPI
    and drafts a GitHub release.
-10. Post-publish, repeat the TestPyPI-style upgrade recipe once more against
-    the now-published PyPI package (init the previous release, `update` to
-    the new version) and grep the resulting project for conflict markers to
-    confirm a clean upgrade path for real users.
+10. Post-publish, run the upgrade recipe once more against the published
+    PyPI package (`INDEX=pypi`) to confirm real users get a clean upgrade.
+
+Process follow-ups (a gap in this skill, a missing gate, a doc that should
+change) belong in the release they were found in. Raise them before the final
+tag (step 9), never after publishing.
+
+Before the final tag, list the bugs filed since the previous release tag, and
+for each one ask the user whether to fix it in this release or ship without
+it. Bugs often get filed from other sessions while a release is in progress:
+#1523 (`aegis add mcp` conflicts) was filed between rc1 and rc2, and 0.15.0
+shipped without it.
+
+```bash
+gh issue list --state open --label bug --search "created:>=<prev-tag date>"
+```
 
 ## Gates
 
@@ -108,20 +120,33 @@ others miss.
   Confirm `tests/test_runtime_dependencies.py` exists and passes; it guards
   `ruff` specifically for this exact failure mode.
 
-TestPyPI upgrade-path verification recipe (used in Procedure steps 7 and 10):
+Upgrade-path verification recipe (used in Procedure steps 7 and 10). Run it
+on several stack shapes, not one base project. A base project has too few
+files to catch most update bugs: 0.15.0rc1 passed on base but never brought
+files new to a stack to htmx projects.
+`upgrade_stacks.sh` (next to this file) creates five stacks at the previous
+release: base, everything, htmx-auth, finance-pg and worker-ai. It updates
+each one, then reports conflict markers, `.rej` files and the `make check`
+result for each:
 
 ```bash
-uvx --index-url https://test.pypi.org/simple/ \
-    --extra-index-url https://pypi.org/simple/ \
-    --index-strategy unsafe-best-match \
-    aegis-stack@<prev-version> init test-upgrade-project --no-interactive -y
-
-cd test-upgrade-project
-uvx --index-url https://test.pypi.org/simple/ \
-    --extra-index-url https://pypi.org/simple/ \
-    --index-strategy unsafe-best-match \
-    aegis-stack@<rc-version> update -y
+# step 7: the rc on TestPyPI
+FROM=<prev-version> TO=<rc-version> .claude/skills/release/upgrade_stacks.sh <scratch-dir>
+# step 10: the final release on PyPI
+FROM=<prev-version> TO=<version> INDEX=pypi .claude/skills/release/upgrade_stacks.sh <scratch-dir>
 ```
+
+Also pass every component and service that is new in this release, as
+`ADD=mcp ADD_SERVICES=research`. Each stack then runs `aegis add` after its
+update. A new component is merged into files that were rendered before it
+existed, and the update check alone never tests that: 0.15.0 shipped with
+`aegis add mcp` conflicting in `main.py` (#1523). List only things new in this
+release. No stack made with the previous version can already have them, so
+the add never fails because the stack already has one.
+
+Every line must read `markers=0 rej=0 check_exit=0`. The everything stack
+takes about 7 minutes, so run the script in the background. Delete
+`<scratch-dir>` afterwards.
 
 ## Pitfalls
 

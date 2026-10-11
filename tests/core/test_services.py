@@ -302,11 +302,17 @@ class TestServicesRegistry:
             assert path in spec.files.primary
 
     def test_meetings_service_wiring(self):
-        """Meetings owns its tables and its CLI, and brings the browser the
-        bot joins through. Its page and API come with the Meetings page."""
+        """Meetings owns its tables, its API and CLI, and the startup check
+        that closes out meetings a restart interrupted; it brings the
+        browser the bot joins through."""
         spec = SERVICES["meetings"]
 
         assert "browser" in spec.required_components
+        assert spec.wiring.routers[0].alias == "meetings_router"
+        assert spec.wiring.deps_providers[0].symbol == "get_meetings_service"
+        assert "app/components/backend/startup/meetings_recovery.py" in (
+            spec.files.primary
+        )
         assert spec.migrations[0].service_name == "meetings"
         for path in ("app/services/meetings", "app/cli/meetings.py"):
             assert path in spec.files.primary

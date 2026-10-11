@@ -5,6 +5,7 @@ Auto-discovered cleanup shutdown hook.
 This hook performs cleanup when the backend shuts down.
 """
 
+from app.core.concurrency import drain
 from app.core.log import logger
 
 
@@ -18,4 +19,5 @@ async def shutdown_hook() -> None:
     - Cancel background tasks
     """
     logger.info("Running backend cleanup...")
+    await drain(timeout=5)
     logger.info("Backend shutdown cleanup complete")

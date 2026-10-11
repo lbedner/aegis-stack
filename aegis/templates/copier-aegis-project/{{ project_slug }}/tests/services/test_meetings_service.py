@@ -2,9 +2,12 @@
 it, and what they said. Nothing joins a call yet; these are the records
 the bot will write."""
 
+from datetime import timedelta
+
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.time import utcnow
 from app.services.meetings.models import (
     MeetingParticipant,
     MeetingStatus,
@@ -12,11 +15,14 @@ from app.services.meetings.models import (
     TranscriptLine,
 )
 from app.services.meetings.service import (
+    STALE_SECONDS,
     MeetingNotFoundError,
     MeetingsService,
     UnsupportedMeetingLinkError,
     detect_platform,
+    fail_interrupted,
     meetings_counts,
+    transition,
 )
 from tests._cli import invoke
 
@@ -156,8 +162,58 @@ async def test_the_counts_cover_every_owner(async_db_session: AsyncSession) -> N
     assert await meetings_counts(async_db_session) == {"meetings": 2, "in_call": 0}
 
 
+async def test_a_status_moves_only_from_where_it_is_expected(
+    async_db_session: AsyncSession,
+) -> None:
+    meeting = await MeetingsService(async_db_session, None).request(
+        "https://meet.google.com/abc-defg-hij"
+    )
+    meeting_id: int = meeting.id  # type: ignore[assignment]
+
+    wrong = await transition(
+        async_db_session,
+        meeting_id,
+        MeetingStatus.IN_CALL,
+        from_=(MeetingStatus.WAITING,),
+    )
+    right = await transition(
+        async_db_session,
+        meeting_id,
+        MeetingStatus.JOINING,
+        from_=(MeetingStatus.REQUESTED,),
+    )
+
+    await async_db_session.refresh(meeting)
+    assert (wrong, right) == (False, True)
+    assert meeting.status == MeetingStatus.JOINING and meeting.seen_at
+
+
+async def test_only_a_run_that_stopped_beating_is_failed(
+    async_db_session: AsyncSession,
+) -> None:
+    """A restart fails the meetings its runs died in, never one another
+    process (``meetings join``) is still beating for."""
+    svc = MeetingsService(async_db_session, None)
+    live = await svc.request("https://meet.google.com/aaa-bbbb-ccc")
+    dead = await svc.request("https://meet.google.com/ddd-eeee-fff")
+    done = await svc.request("https://meet.google.com/ggg-hhhh-iii")
+    live.status = dead.status = MeetingStatus.IN_CALL
+    done.status = MeetingStatus.LEFT
+    live.seen_at = utcnow()
+    dead.seen_at = utcnow() - timedelta(seconds=STALE_SECONDS + 1)
+    await async_db_session.commit()
+
+    assert await fail_interrupted(async_db_session) == 1
+
+    async_db_session.expire_all()
+    await svc.list_meetings()  # one read brings all three back
+    assert dead.status == MeetingStatus.FAILED and "stopped" in dead.failure_reason  # type: ignore[operator]
+    assert live.status == MeetingStatus.IN_CALL
+    assert done.status == MeetingStatus.LEFT
+
+
 def test_the_cli_refuses_a_link_it_cannot_join() -> None:
-    result = invoke(["meetings", "add", "https://example.com/meeting"])
+    result = invoke(["meetings", "join", "https://example.com/meeting"])
 
     assert result.exit_code == 1
     assert "Google Meet, Microsoft Teams or Zoom" in result.output

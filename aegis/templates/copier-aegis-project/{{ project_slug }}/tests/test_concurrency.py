@@ -184,3 +184,23 @@ class TestBackground:
         await asyncio.gather(task, return_exceptions=True)
         await asyncio.sleep(0)
         assert [type(e) for e in logged] == [ValueError]
+
+    async def test_drain_ends_what_is_still_running(self) -> None:
+        """At shutdown: work still in flight is cancelled and given the time
+        to finish its own cleanup (a meeting marks itself left)."""
+        cleaned: list[str] = []
+
+        async def long_work() -> None:
+            try:
+                await asyncio.Event().wait()
+            except asyncio.CancelledError:
+                await asyncio.sleep(0)
+                cleaned.append("done")
+                raise
+
+        concurrency.background(long_work())
+        await asyncio.sleep(0)
+
+        await concurrency.drain(timeout=1)
+
+        assert cleaned == ["done"] and not concurrency._background

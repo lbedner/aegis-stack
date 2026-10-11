@@ -14,8 +14,22 @@
   meeting's link, platform (Google Meet, Teams or Zoom, read from the link;
   any other link is refused), the name the bot joins as and its status;
   its participants, optionally linked to a user; and the transcript, timed
-  from when the bot joined. `meetings add`, `list` and `show` from the
-  CLI. It brings the browser component. Nothing joins a call yet (#1508).
+  from when the bot joined. It brings the browser component (#1508).
+- **The meeting bot joins Google Meet.** `meetings join <link>` (or
+  `POST /api/v1/meetings`, which runs it in the background) opens the call
+  in the browser container, asks to join, waits up to five minutes to be
+  admitted, says in the chat that it is taking notes, and leaves when the
+  call ends, when it is removed, when it is alone, or when asked
+  (`meetings leave`). Each step is on the meeting row, moved only from
+  the status the bot expects, so a leave request is never lost; a refused
+  or unanswered join ends as `failed` with the reason. The run writes a
+  heartbeat: a meeting whose process died is marked failed after the next
+  startup, and one another process is still in is left alone. Meet's page
+  is known in one module, `meetings/meet.py`. Until the bot's own Google
+  account is signed in, it joins only meetings that admit guests (#1509).
+- **Background work ends cleanly at shutdown.** The webserver cancels what
+  `background()` still has running and gives it five seconds to finish its
+  own cleanup, instead of leaving it to the event loop's teardown.
 
 ## [0.15.1] - 2026-10-11
 

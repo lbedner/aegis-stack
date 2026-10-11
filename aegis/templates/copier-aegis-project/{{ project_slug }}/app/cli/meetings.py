@@ -10,6 +10,7 @@ import typer
 from app.cli import theme
 from app.core.db import get_async_session
 from app.core.formatting import format_clock, format_relative_time
+from app.services.meetings.bot import run_meeting
 from app.services.meetings.service import (
     DEFAULT_BOT_NAME,
     MeetingNotFoundError,
@@ -44,13 +45,14 @@ async def list_meetings(
 
 
 @app.command()
-async def add(
+async def join(
     url: str = typer.Argument(..., help="The meeting link"),
     bot_name: str = typer.Option(
         DEFAULT_BOT_NAME, "--bot-name", help="The name the bot joins as"
     ),
 ) -> None:
-    """Record a meeting for the bot to join."""
+    """Send the bot into a meeting and stay with it until it leaves (Ctrl-C
+    takes it out)."""
     async with get_async_session() as session:
         try:
             meeting = await MeetingsService(session, owner_user_id=None).request(
@@ -58,7 +60,26 @@ async def add(
             )
         except UnsupportedMeetingLinkError as exc:
             theme.fail(str(exc))
-    console.print(f"Meeting {meeting.id} recorded ({meeting.platform}).")
+    console.print(f"Meeting {meeting.id}: joining as {bot_name}...")
+    await run_meeting(meeting.id)  # type: ignore[arg-type]
+    async with get_async_session() as session:
+        done = await MeetingsService(session, owner_user_id=None).get(meeting.id)  # type: ignore[arg-type]
+    console.print(f"Meeting {done.id}: {done.status}")
+    if done.failure_reason:
+        theme.fail(done.failure_reason)
+
+
+@app.command()
+async def leave(meeting_id: int = typer.Argument(..., help="The meeting's id")) -> None:
+    """Ask the bot to leave a meeting it is in."""
+    async with get_async_session() as session:
+        try:
+            meeting = await MeetingsService(session, owner_user_id=None).ask_to_leave(
+                meeting_id
+            )
+        except MeetingNotFoundError as exc:
+            theme.fail(str(exc))
+    console.print(f"Meeting {meeting.id}: {meeting.status}")
 
 
 @app.command()

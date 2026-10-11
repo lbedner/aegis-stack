@@ -1,0 +1,130 @@
+"""The Meet page module (``meet.MeetPage``) against a fake Meet page: the
+lobby, the waiting room, the call, chat, being turned away and the call
+ending. It runs in the browser container, so it is skipped where none is
+up. The fake is shaped like Meet as of the MT-02 spike; when Meet changes,
+``meet.py`` and this page change together."""
+
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
+import pytest
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.components.browser import health
+from app.components.browser.client import connect
+from app.services.meetings import bot
+from app.services.meetings.meet import CallState, MeetPage
+from app.services.meetings.models import MeetingStatus
+from app.services.meetings.service import MeetingsService
+from app.services.system.models import ComponentStatusType
+from tests._session import opens
+
+# The bot beats on every look in the full run, by design.
+pytestmark = pytest.mark.queryspy(allow_n_plus_one=True)
+
+# ``window.said`` is what the bot last sent in chat; the host is played by
+# ``admit()``, ``deny()`` and ``end()``.
+FAKE_MEET = """
+<html><body>
+<div><button onclick="this.parentNode.remove()">
+  Continue without microphone and camera</button></div>
+<div id="lobby">
+  <input type="text" aria-label="Your name">
+  <button onclick="lobby.hidden = true; note.textContent = 'Asking to be let in...'">
+    Ask to join</button>
+</div>
+<div id="note"></div>
+<div id="call" hidden>
+  <button aria-label="People"><span>3</span></button>
+  <button aria-label="Chat with everyone" onclick="chat.hidden = false">Chat</button>
+  <button aria-label="Leave call" onclick="end('You left the meeting')">Leave</button>
+  <textarea id="chat" hidden aria-label="Send a message"
+    onkeydown="if (event.key === 'Enter') { window.said = this.value; this.value = ''; }">
+  </textarea>
+</div>
+<script>
+  function admit() { note.textContent = ''; call.hidden = false; }
+  function deny() { note.textContent = 'Someone in the call denied your request to join'; }
+  function end(text) { call.remove(); note.textContent = text; }
+</script>
+</body></html>
+"""
+
+
+@pytest.fixture
+async def meet() -> AsyncIterator[MeetPage]:
+    if (await health.check_browser_health()).status != ComponentStatusType.HEALTHY:
+        pytest.skip("browser server not running (start it with `make serve`)")
+    async with connect() as browser:
+        page = await browser.new_page()
+        await page.set_content(FAKE_MEET)
+        yield MeetPage(page)
+
+
+async def test_it_asks_to_join_by_name_and_waits(meet: MeetPage) -> None:
+    await meet.ask_to_join("Notes")
+
+    assert await meet.state() == CallState.WAITING
+    assert await meet.page.input_value("[aria-label='Your name']") == "Notes"
+
+
+async def test_once_admitted_it_counts_people_and_talks_in_chat(
+    meet: MeetPage,
+) -> None:
+    await meet.ask_to_join("Notes")
+    await meet.page.evaluate("admit()")
+
+    await meet.say("Notes is taking notes.")
+
+    assert await meet.state() == CallState.IN_CALL
+    assert await meet.people() == 3
+    assert await meet.page.evaluate("window.said") == "Notes is taking notes."
+
+
+async def test_a_denied_request_reads_as_refused(meet: MeetPage) -> None:
+    await meet.ask_to_join("Notes")
+    await meet.page.evaluate("deny()")
+
+    assert await meet.state() == CallState.REFUSED
+
+
+async def test_leaving_ends_the_call(meet: MeetPage) -> None:
+    await meet.ask_to_join("Notes")
+    await meet.page.evaluate("admit()")
+
+    await meet.leave()
+
+    assert await meet.state() == CallState.ENDED
+
+
+async def test_the_bot_runs_a_whole_meeting_on_the_page(
+    meet: MeetPage, async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The host admits it, it announces itself, the call ends: the row ends
+    left, and the announcement went to the chat."""
+    monkeypatch.setattr(bot, "get_async_session", opens(async_db_session))
+    monkeypatch.setattr(bot, "POLL_SECONDS", 0.05)
+    monkeypatch.setattr(bot, "BEAT_SECONDS", 0)
+
+    @asynccontextmanager
+    async def on_the_fake(url: str) -> AsyncIterator[MeetPage]:
+        yield meet
+
+    monkeypatch.setattr(bot, "open_meet", on_the_fake)
+    # The host lets the bot in, and the call ends once it has spoken.
+    await meet.page.add_script_tag(
+        content="lobby.querySelector('button').addEventListener("
+        "'click', () => setTimeout(admit, 100));"
+        "chat.addEventListener('keydown', (e) => {"
+        " if (e.key === 'Enter') setTimeout(() => end('The call has ended'), 100); });"
+    )
+    meeting = await MeetingsService(async_db_session, None).request(
+        "https://meet.google.com/abc-defg-hij", "Notes"
+    )
+
+    await bot.run_meeting(meeting.id)  # type: ignore[arg-type]
+
+    await async_db_session.refresh(meeting)
+    assert meeting.status == MeetingStatus.LEFT, meeting.failure_reason
+    assert meeting.joined_at and meeting.left_at
+    assert (await meet.page.evaluate("window.said")).startswith("Notes is taking")

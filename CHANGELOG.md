@@ -7,6 +7,66 @@
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-10-11
+
+### Added
+
+- **The browser component.** `aegis add browser` runs Playwright's
+  run-server in its own container (the official image, with the 2 GB
+  `/dev/shm` Chromium needs); the app ships only the client and connects
+  with `connect()`. Its health check makes one request to the server and
+  launches no browser. Overseer shows it in both UIs: a Flet card and
+  modal, and an htmx Compute entry with its own container page (#1507).
+- **Overseer's reads over MCP.** `health`, `errors` and `logs` are tools,
+  granted by default, so an outside assistant reads what Overseer's pages
+  show. Every MCP call records its transport, client, session, the user
+  it acted for, token, arguments, response and error; a `run_code` call
+  keeps each read its script made. Overseer > MCP > Activity opens each
+  call to its detail, in htmx and Flet. Calls older than 30 days are
+  pruned in the background.
+- **`aegis add`, `add-service`, `update` and `plugins update` say when to
+  rebuild.** When a command changes the project's dependencies, its next
+  steps start with `make rebuild`.
+
+### Security
+
+- **`/health/detailed` hides connection passwords.** Postgres and Redis
+  health put their URLs, password included, into the response, which was
+  public in prod. Every health message and metadata value now passes
+  through one password filter, plugin checks included.
+- **`/health/detailed` is gated like `/docs`.** Open in dev, HTTP Basic
+  once `DOCS_USERNAME`/`DOCS_PASSWORD` are set, 404 outside dev until they
+  are. Callers on loopback (the CLI, the dashboard) still pass.
+- **MCP tokens reach Overseer's reads only for admins.**
+
+### Fixed
+
+- **`aegis add mcp` merges cleanly on a 0.15.0 project.** MCP's lifespan
+  moved out of `main.py` into backend startup and shutdown hooks (#1523).
+- **The version gate reads projects stamped `HEAD` or `dev`.** It fell
+  back to a warning, so `aegis add` from a newer CLI ran as a partial
+  upgrade with conflicts across the whole gap. It now compares the CLI
+  release that generated the project and points to `aegis update`;
+  `--force` still goes through (#1532).
+- **Overseer's Logfire panels load with Logfire SDK 5.** The SDK now
+  requires `min_timestamp`, so all three queries failed. Each passes its
+  window, and row caps go through `limit=` (the exceptions list asked
+  for 200 rows and got the SDK's default 100).
+- **htmx brings deploy.** Container stats, logs and disk read Docker
+  through deploy's socket proxy; without it those Overseer pages were
+  empty.
+- **Revisions written by `aegis add` and `add-service` pass the project's
+  lint.** They were written after the format pass; the generator now
+  formats what it writes.
+- **`make migrate-fix` and `make migrate-reset` run without a terminal.**
+  `migrate-fix` applies by default instead of crashing on EOF;
+  `migrate-reset` refuses instead of crashing.
+- **`aegis deploy --rolling` starts services added since the last
+  deploy.** After `aegis add deploy`, `socket-proxy` stayed down (#1519).
+- **The `aegis-accent` colour exists.** It was referenced but never
+  defined, which failed the Tailwind build as soon as a page used the
+  scheduler clock.
+
 ## [0.15.0] - 2026-10-09
 
 ### Added

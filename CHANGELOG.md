@@ -63,6 +63,14 @@
   `migrate-reset` refuses instead of crashing.
 - **`aegis deploy --rolling` starts services added since the last
   deploy.** After `aegis add deploy`, `socket-proxy` stayed down (#1519).
+- **The Flet worker modal opens.** It started its live feed from a click
+  handler's thread, which has no event loop, and crashed (#1522).
+- **A Flet Logs modal left open no longer slows the app.** It kept every
+  followed line, and Flet diffs that list on the event loop, so every
+  request waited longer the longer it stayed open. It now holds the newest
+  1000 lines. The Logs follow, the Container section's re-read and the
+  documents activity feed stop when the tab closes, instead of running for
+  the hour Flet keeps a closed tab's session.
 - **The `aegis-accent` colour exists.** It was referenced but never
   defined, which failed the Tailwind build as soon as a page used the
   scheduler clock.

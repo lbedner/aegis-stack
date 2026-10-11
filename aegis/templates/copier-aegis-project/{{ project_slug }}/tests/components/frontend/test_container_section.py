@@ -26,6 +26,26 @@ from tests.components.frontend._fakes import FakePage
 from tests.components.frontend._tree import texts, walk
 
 
+async def test_it_stops_reading_when_the_tab_goes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Flet keeps a closed tab's session for an hour; nothing reads for it."""
+    monkeypatch.setattr(
+        container_section, "SessionLoops", lambda *_: MagicMock(alive=lambda: False)
+    )
+    section = ContainerSection("redis")
+    section._open = True
+    reads: list[None] = []
+
+    async def load() -> None:
+        reads.append(None)
+
+    monkeypatch.setattr(section, "load", load)
+    await section._keep_reading()
+
+    assert reads == []
+
+
 def test_it_says_it_is_reading_until_the_first_read_lands() -> None:
     assert "Reading the containers." in texts(ContainerSection("redis"))
 

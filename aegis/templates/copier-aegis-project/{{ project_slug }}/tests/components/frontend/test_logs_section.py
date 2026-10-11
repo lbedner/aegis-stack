@@ -9,6 +9,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from app.components.frontend.controls.buttons import IconCopyButton
+from app.components.frontend.dashboard.modals import logs_section
 from app.components.frontend.dashboard.modals.logs_popup import LogsPopup
 from app.components.frontend.dashboard.modals.logs_section import LogsSection, _line
 from app.components.frontend.dashboard.modals.modal_sections.chart_primitives import (
@@ -147,6 +148,36 @@ async def test_paused_it_adds_nothing(monkeypatch: pytest.MonkeyPatch) -> None:
     await section.load()
     section.paused = True
     await section.follow()
+    assert "Saved" not in texts(section)
+
+
+async def test_following_keeps_only_the_newest_lines(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every line is a control Flet diffs on the event loop: a modal left
+    open must not grow without end."""
+    followed = {REDIS.name: [_at(4, json.dumps({"level": "info", "event": "Saved"}))]}
+    use_runtime(monkeypatch, FakeRuntime(REDIS, lines=LINES, followed=followed))
+    monkeypatch.setattr(logs_section, "MAX_LINES", 2)
+    section = LogsSection("redis")
+    await section.load()
+    await section.follow()
+
+    assert len(section._lines.controls) == 2
+    assert "Saved" in texts(section)
+
+
+async def test_following_ends_with_the_tab(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Flet keeps a closed tab's session for an hour; nothing redraws for it."""
+    followed = {REDIS.name: [_at(4, json.dumps({"level": "info", "event": "Saved"}))]}
+    use_runtime(monkeypatch, FakeRuntime(REDIS, lines=LINES, followed=followed))
+    monkeypatch.setattr(
+        logs_section, "SessionLoops", lambda *_: MagicMock(alive=lambda: False)
+    )
+    section = LogsSection("redis")
+    await section.load()
+    await section.follow()
+
     assert "Saved" not in texts(section)
 
 

@@ -61,12 +61,18 @@ async def follow_job(
 
 
 async def follow_jobs(
-    api: Any, *, on_snapshot: Callable[[dict[str, Any]], None]
+    api: Any,
+    *,
+    on_snapshot: Callable[[dict[str, Any]], None],
+    alive: Callable[[], bool] = lambda: True,
 ) -> None:
     """Hand every job's status change to ``on_snapshot`` until the stream
-    ends. The live feed behind an activity view; never raises."""
+    ends or ``alive`` says the view is gone. The live feed behind an
+    activity view; never raises."""
     try:
         async for snapshot in _snapshots(api, "/api/v1/jobs/events"):
+            if not alive():
+                return
             on_snapshot(snapshot)
     except Exception:  # noqa: BLE001 - a lost feed is not the view's problem
         return

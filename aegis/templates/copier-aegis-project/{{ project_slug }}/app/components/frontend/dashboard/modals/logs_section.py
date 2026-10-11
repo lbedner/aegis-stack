@@ -18,6 +18,7 @@ from app.components.frontend.controls import (
     SecondaryText,
 )
 from app.components.frontend.controls.buttons import IconCopyButton
+from app.components.frontend.core.session_health import SessionLoops, page_is_connected
 from app.components.frontend.dashboard.modals.modal_sections import DateRangeChips
 from app.components.frontend.dashboard.modals.modal_sections.chart_primitives import (
     ChartColors,
@@ -34,6 +35,9 @@ LEVEL_COLORS = {level: TONE_COLORS[tone] for level, tone in ui_logs.TONES.items(
 EDGED = tuple(
     level for level, tone in ui_logs.TONES.items() if tone in ("warn", "error")
 )
+# The most lines a section holds while following: each is a control Flet
+# diffs on the event loop, so a modal left open must not grow without end.
+MAX_LINES = 1000
 MUTED = ft.TextStyle(color=ft.Colors.ON_SURFACE_VARIANT)
 MARKED = ft.TextStyle(
     color=Theme.Colors.PRIMARY,
@@ -184,12 +188,17 @@ class LogsSection(ft.Column):
             self.update()
 
     async def follow(self) -> None:
-        """Add new lines at the newest end until the modal closes or a
-        filter changes; paused, a new line is dropped."""
+        """Add new lines at the newest end until the modal closes, a filter
+        changes or the tab goes (``SessionLoops``: Flet keeps a closed tab's
+        session for an hour); paused, a new line is dropped. The oldest
+        lines past ``MAX_LINES`` go."""
         newest_first = ui_logs.order_of(self._query) == "desc"
+        loops = SessionLoops(self.page, lambda: page_is_connected(self.page))
         async for batch in ui_logs.follow(
             self._reading, self._query, found=self._found
         ):
+            if not loops.alive():
+                return
             if self.paused:
                 continue
             lines = [
@@ -197,8 +206,10 @@ class LogsSection(ft.Column):
             ]
             if newest_first:
                 self._lines.controls[:0] = lines
+                del self._lines.controls[MAX_LINES:]
             else:
                 self._lines.controls.extend(lines)
+                del self._lines.controls[:-MAX_LINES]
             if self.page is not None:
                 self.update()
 

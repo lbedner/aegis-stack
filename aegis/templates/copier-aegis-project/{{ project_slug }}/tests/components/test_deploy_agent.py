@@ -3,15 +3,23 @@ it asks for, refuses to ask for, and reads back."""
 
 import asyncio
 import json
+from typing import Any
 
 import pytest
 
 from app.components.deploy import agent
 from app.components.deploy.protocol import RefusedError
+from app.core import secrets
+from app.core.config import settings
+from app.services.system import hosting
 from app.services.system.job_store import RedisJobStore
 from tests._fake_redis import FakeRedis
+from tests._probe import answering
+from tests._secret_settings import FakeStore, use_store
 
 BACKUP = {"backup": "2026-10-01_020000"}
+QUOTE = {"provider": "digitalocean", "size": "s-1vcpu-2gb", "region": "nyc3"}
+TOKEN = "dop_v1_from-the-app-wxyz"
 
 
 @pytest.fixture
@@ -19,6 +27,20 @@ def redis(monkeypatch: pytest.MonkeyPatch) -> FakeRedis:
     fake = FakeRedis()
     monkeypatch.setattr(agent, "_client", lambda: fake)
     return fake
+
+
+@pytest.fixture
+def store(monkeypatch: pytest.MonkeyPatch) -> FakeStore:
+    """No provider token in ``.env``, and a secrets store to set one in."""
+    for p in hosting.PROVISIONABLE:
+        monkeypatch.setitem(settings.__dict__, p.token, None)
+    monkeypatch.setattr(hosting, "deploy_config", lambda *_: {})
+    return use_store(monkeypatch)
+
+
+def _sent(redis: FakeRedis) -> dict[str, Any]:
+    (raw,) = redis.lists[agent.REQUESTS]
+    return json.loads(raw)
 
 
 def test_a_request_is_queued_with_its_job_waiting(redis: FakeRedis) -> None:
@@ -71,3 +93,89 @@ def test_its_keys_are_on_the_redis_map() -> None:
     from app.services.system.redis_keys import OWNERS
 
     assert agent.__name__ in OWNERS
+
+
+def test_each_providers_token_is_a_secret_like_any_other() -> None:
+    """Declared from the provider table, read from ``.env`` (a setting) or
+    the secrets store, and listed on Overseer > Secrets."""
+    tokens = {p.token for p in hosting.PROVISIONABLE}
+    assert tokens and {s.name for s in agent.SECRETS} == tokens
+    assert tokens <= set(type(settings).model_fields)
+    assert agent.__name__ in secrets.OWNERS
+
+
+async def test_a_token_is_checked_with_its_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for entry in agent.SECRETS:
+        assert entry.verify is not None and not entry.is_needed()
+        sent = answering(monkeypatch, 200)
+        await entry.verify(TOKEN)
+        assert sent[0].method == "GET"
+        assert sent[0].headers["authorization"] == f"Bearer {TOKEN}"
+        answering(monkeypatch, 401)
+        with pytest.raises(secrets.SecretRejectedError):
+            await entry.verify(TOKEN)
+
+
+def test_a_quote_carries_the_apps_token_beside_its_args(
+    redis: FakeRedis, store: FakeStore
+) -> None:
+    store.values["DIGITALOCEAN_TOKEN"] = TOKEN
+    asyncio.run(agent.enqueue("quote", QUOTE, "ada"))
+    request = _sent(redis)
+    assert request["token"] == TOKEN and request["args"] == QUOTE
+    assert TOKEN not in json.dumps(redis.hashes)  # the job never holds it
+
+
+def test_a_destroy_carries_the_provisioned_servers_token(
+    redis: FakeRedis, store: FakeStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store.values["DIGITALOCEAN_TOKEN"] = TOKEN
+    record = {"provision": {"provider": "digitalocean", "server_name": "my-app"}}
+    monkeypatch.setattr(hosting, "deploy_config", lambda *_: record)
+    asyncio.run(agent.enqueue("destroy", {"confirm": "my-app"}, "ada"))
+    assert _sent(redis)["token"] == TOKEN
+
+
+@pytest.mark.parametrize(
+    ("action", "args", "held"),
+    [
+        ("deploy", {}, TOKEN),  # needs no token
+        ("rollback", BACKUP, TOKEN),
+        ("quote", QUOTE, None),  # the app has none: the agent's own, if any
+    ],
+)
+def test_no_token_is_sent_where_none_is_needed_or_held(
+    redis: FakeRedis, store: FakeStore, action: str, args: dict[str, str], held: Any
+) -> None:
+    if held:
+        store.values["DIGITALOCEAN_TOKEN"] = held
+    asyncio.run(agent.enqueue(action, args, "ada"))
+    assert "token" not in _sent(redis)
+
+
+def test_a_malformed_token_is_refused_before_it_is_sent(
+    redis: FakeRedis, store: FakeStore
+) -> None:
+    store.values["DIGITALOCEAN_TOKEN"] = "pasted with a space"
+    with pytest.raises(RefusedError) as refused:
+        asyncio.run(agent.enqueue("quote", QUOTE, "ada"))
+    assert "pasted" not in str(refused.value)
+    assert not redis.lists
+
+
+def test_a_queued_request_is_never_peeked(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A provision's request carries the provider token until the agent
+    takes it, so Overseer > Redis names the list but never reads it."""
+    from app.services.system import redis_keys
+
+    def no_client(db: int = 0) -> Any:
+        raise AssertionError("the requests list was read")
+
+    monkeypatch.setattr(redis_keys, "redis_client", no_client)
+    index = next(
+        i for i, f in enumerate(redis_keys.families()) if f.pattern == agent.REQUESTS
+    )
+    peeked = asyncio.run(redis_keys.peek(index))
+    assert peeked is not None and peeked["rows"] == []

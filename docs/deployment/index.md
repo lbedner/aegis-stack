@@ -43,23 +43,27 @@ does the same from the page: a new server (live price, typed back to
 confirm), deploy, back up, list backups, roll back, destroy. Each streams its
 output on the page and is audited. `make serve` starts the agent that runs
 them, `aegis deploy-agent`, beside the stack and stops it with the stack, when
-the aegis CLI is installed (`uv tool install aegis-stack`). It reads the cloud
-token from your shell, so export it where your shell profile keeps such things:
+the aegis CLI is installed (`uv tool install aegis-stack`). With the stack
+started another way, run `aegis deploy-agent` in the project directory
+yourself.
 
-```bash
-export DIGITALOCEAN_TOKEN=...   # or HCLOUD_TOKEN
-```
-
-With the stack started another way, run `aegis deploy-agent` in the project
-directory yourself.
+The cloud token is a secret like the app's other credentials: set
+`DIGITALOCEAN_TOKEN` (or `HCLOUD_TOKEN`) on Overseer > Secrets, with the
+[secrets component](../components/secrets/index.md), or in `.env`. The Overseer
+offers a new server on each provider it has a token for, and sends the token
+with the one request that needs it (a price, a new server, a destroy), beside
+its arguments rather than in them, so it is never audited or shown. The agent
+hands it to the command in its environment, masks it in the output, and keeps
+it nowhere. An exported variable where the agent runs works too (for CI, say),
+and the Overseer offers that provider as well; a token sent with a request
+wins over it.
 
 Why a host runner: every step needs what the app's container does not have
-and should not hold (the aegis CLI, the working tree it ships, your SSH key,
-the cloud token). So the Overseer only asks, through the project's Redis, and
-`aegis deploy-agent` runs the same commands you would type, with the token
-and key staying on your machine; they never enter the image, the database or
-Redis. A deployed server's Overseer offers no deploy actions: redeploy from
-the dev Overseer or from CI ([`aegis deploy-cd-setup`](../cli-reference.md#aegis-deploy-cd-setup)).
+and should not hold (the aegis CLI, the working tree it ships, your SSH key).
+So the Overseer only asks, through the project's Redis, and
+`aegis deploy-agent` runs the same commands you would type, with the key
+staying on your machine. A deployed server's Overseer offers no deploy
+actions: redeploy from the dev Overseer or from CI ([`aegis deploy-cd-setup`](../cli-reference.md#aegis-deploy-cd-setup)).
 The Flet dashboard shows the commands only.
 
 ## Configuration

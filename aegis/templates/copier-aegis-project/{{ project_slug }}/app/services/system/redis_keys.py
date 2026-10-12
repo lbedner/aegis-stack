@@ -249,6 +249,8 @@ async def peek(index: int) -> dict[str, Any] | None:
     if not 0 <= index < len(declared):
         return None
     family = declared[index]
+    if not family.peek:
+        return {"key": None, "columns": list(family.columns), "rows": []}
     client = redis_client(int(getattr(settings, family.db, 0)))
     try:
         keys = await _scan(client, family.pattern)

@@ -746,8 +746,11 @@ server, a deploy, a backup, the backup list, a rollback, a destroy. The
 Overseer puts each request on the project's Redis; this takes them one at a
 time and runs the matching `aegis deploy-*` command, streaming its output back
 to the page. Run it in the project directory with the stack up, where your
-cloud tokens and SSH key are: they never leave this machine (the heartbeat
-names the providers it holds a token for, never the token).
+SSH key is. A cloud token comes with the request that needs it (set on
+Overseer > Secrets, or in the app's `.env`), or from this machine's
+environment; a sent one wins. It reaches the command only through the
+environment, is masked in the output, and is kept nowhere (the heartbeat
+names the providers this machine holds a token for, never the token).
 
 It finds Redis as the app's host-side settings do: `REDIS_URL_LOCAL`, else
 the port `make serve` published (`.env.ports`). Requests older than five

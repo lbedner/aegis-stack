@@ -104,6 +104,12 @@ def test_it_says_how_values_change(page: str) -> None:
     assert "restart" in text(one(page, "#secrets-backend")).lower()
 
 
+def test_without_a_store_it_says_how_to_get_one(page: str) -> None:
+    """Its own line, in the body's colour, not the note's muted one."""
+    line = text(one(page, "#secrets-backend [data-add-store]"))
+    assert line == "Add the secrets component to set them here instead."
+
+
 @pytest.fixture
 def writable(
     app: FastAPI, monkeypatch: pytest.MonkeyPatch

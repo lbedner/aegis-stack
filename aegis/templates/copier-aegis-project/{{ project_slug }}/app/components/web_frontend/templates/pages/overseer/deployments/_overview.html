@@ -39,7 +39,7 @@
     {% for p in providers %}
     <div data-provider-detail="{{ p.key }}" x-show="pick === '{{ p.key }}'"{% if p.key != picked %} x-cloak{% endif %} class="text-xs text-aegis-muted space-y-1">
       <p class="flex items-center gap-2">{{ command(p.command) }}</p>
-      {% if p.token %}<p>Reads <code class="font-mono text-aegis-text">{{ p.token }}</code> from your environment; the token never leaves your machine.</p>{% endif %}
+      {% if p.token %}<p>Reads <code class="font-mono text-aegis-text">{{ p.token }}</code> from your environment. Deploy from here takes it from Overseer &gt; Secrets too.</p>{% endif %}
     </div>
     {% endfor %}
   </div>

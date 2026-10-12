@@ -14,7 +14,7 @@
 </div>
 {% elif actions.state == "no-redis" %}
 <div data-deploy-state="no-redis" class="{{ note }}">
-  <p>Deploying from here needs Redis: the Overseer hands each action to <code class="font-mono text-aegis-text">aegis deploy-agent</code> on your machine through the project's Redis, so your cloud token and SSH key never enter the app.</p>
+  <p>Deploying from here needs Redis: the Overseer hands each action to <code class="font-mono text-aegis-text">aegis deploy-agent</code> on your machine through the project's Redis, so your SSH key never enters the app.</p>
   <p class="flex items-center gap-2">{{ command("aegis add redis") }}</p>
 </div>
 {% elif actions.state == "unreachable" %}
@@ -23,7 +23,7 @@
 <div data-deploy-state="no-agent" class="{{ note }}">
   <p>No deploy agent is listening. <code class="font-mono text-aegis-text">make serve</code> starts one when the aegis CLI is installed (<code class="font-mono text-aegis-text">uv tool install aegis-stack</code>); with the stack started another way, run it in the project directory, then reload.</p>
   <p class="flex items-center gap-2">{{ command(actions.command) }}</p>
-  <p>It runs what you ask here with your cloud token (from your shell's environment) and SSH key: both stay on your machine.</p>
+  <p>It runs what you ask here with your SSH key, which stays on your machine. The cloud token comes from Overseer &gt; Secrets (or <code class="font-mono text-aegis-text">.env</code>), or from the agent's own environment.</p>
 </div>
 {% else %}
 <div data-deploy-state="ready" class="space-y-4">
@@ -53,9 +53,9 @@
     {{ primary_button("Get price", "submit") }}
   </form>
   {% endfor %}
-  {% if not actions.server and not actions.providers %}
-  <p class="{{ note }}">No cloud token reached the agent: set your provider's (see Where it can run) where you start it.</p>
-  {% endif %}
+  {% for p in actions.missing %}
+  <p data-token-missing="{{ p.key }}" class="{{ note }}">To create a server on {{ p.name }}, set <code class="font-mono text-aegis-text">{{ p.token }}</code> {% if actions.secrets_page %}in <a href="{{ actions.secrets_page }}" {{ hx_replace(actions.secrets_page, "#app-content") }} class="text-aegis-teal hover:underline">Overseer &gt; Secrets</a>{% else %}in <code class="font-mono text-aegis-text">.env</code>{% endif %}, or export it where the deploy agent runs.</p>
+  {% endfor %}
   <div hx-ext="sse" sse-connect="{{ actions.events }}">
     <div id="deploy-job" sse-swap="{{ actions.event }}" hx-target="this">{% with job=actions.job %}{% include "pages/overseer/deployments/_job.html" %}{% endwith %}</div>
   </div>

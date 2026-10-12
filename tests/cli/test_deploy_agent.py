@@ -31,6 +31,7 @@ from aegis.core.provision import digitalocean
 from tests.cli.test_utils import strip_ansi_codes
 
 DO_TOKEN = "do-secret-token-5678"
+SENT_TOKEN = "dop_v1_sent-by-the-app-wxyz"  # one the Overseer sends
 SYSTEM = get_template_path() / PROJECT_SLUG_PLACEHOLDER / "app" / "services" / "system"
 FAKE_AEGIS = """\
 import os, sys
@@ -141,6 +142,7 @@ def _request(
     action: str,
     args: dict[str, str] | None = None,
     at: datetime | None = None,
+    token: Any = None,
 ) -> str:
     """What the app's ``enqueue`` does: the job record, then the request."""
     job_id = uuid.uuid4().hex
@@ -150,6 +152,8 @@ def _request(
     )
     when = (at or datetime.now(UTC)).isoformat()
     request = {"job_id": job_id, "action": action, "args": args or {}, "by": "ada"}
+    if token is not None:
+        request["token"] = token
     redis.rpush(agent.PROTOCOL["requests"], json.dumps(request | {"at": when}))
     return job_id
 
@@ -372,6 +376,82 @@ def test_provisioning_at_the_confirmed_price_runs(
         f"ran deploy-provision --project-path {project} --yes --provider "
         "digitalocean --size s-1vcpu-2gb --region nyc3 --domain app.example.com"
     )
+
+
+def _nowhere(redis: FakeRedis, token: str) -> None:
+    """The token is in no job, list or key the agent left behind."""
+    assert token not in json.dumps([redis.hashes, redis.lists, redis.strings])
+
+
+def test_a_token_the_app_sends_is_used_over_the_environments(
+    project: Path, app_store: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tokens = _price_api(monkeypatch, 12)
+    redis = FakeRedis()
+    job_id = _request(redis, app_store, "quote", QUOTED, token=SENT_TOKEN)
+    _serve(redis, project)
+    assert _job(redis, app_store, job_id).status == "done"
+    assert tokens == [SENT_TOKEN]
+    _nowhere(redis, SENT_TOKEN)
+
+
+def test_a_sent_token_reaches_the_command_in_its_environment_never_its_args(
+    project: Path, app_store: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _price_api(monkeypatch, 12)
+    redis = FakeRedis()
+    args = QUOTED | {"price": "12.00"}
+    job_id = _request(redis, app_store, "provision", args, token=SENT_TOKEN)
+    _serve(redis, project)
+    ran, token = _job(redis, app_store, job_id).result["lines"][:2]
+    assert ran.startswith("ran deploy-provision") and SENT_TOKEN not in ran
+    assert token == "token ...wxyz"  # masked in the line the job keeps
+    _nowhere(redis, SENT_TOKEN)
+
+
+def test_a_destroy_sends_the_token_of_the_provisioned_servers_provider(
+    project: Path, app_store: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("DIGITALOCEAN_TOKEN")
+    (project / ".aegis").mkdir()
+    (project / ".aegis" / "deploy.yml").write_text(
+        "provision:\n  provider: digitalocean\n"
+    )
+    redis = FakeRedis()
+    args = {"confirm": "my-app"}
+    job_id = _request(redis, app_store, "destroy", args, token=SENT_TOKEN)
+    _serve(redis, project)
+    assert _job(redis, app_store, job_id).result["lines"][1] == "token ...wxyz"
+    _nowhere(redis, SENT_TOKEN)
+
+
+@pytest.mark.parametrize(
+    ("action", "args", "token"),
+    [
+        ("quote", QUOTED, "has a space in it"),
+        ("quote", QUOTED, "short"),
+        ("quote", QUOTED, "x" * 600),
+        ("quote", QUOTED, "line\nbreak-token"),
+        ("quote", QUOTED, ["dop_v1_in-a-list"]),
+        ("deploy", {}, SENT_TOKEN),  # an action that takes no token
+    ],
+)
+def test_a_malformed_or_unwanted_token_is_refused_and_nothing_runs(
+    project: Path,
+    app_store: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    action: str,
+    args: dict[str, str],
+    token: Any,
+) -> None:
+    tokens = _price_api(monkeypatch, 12)
+    redis = FakeRedis()
+    job_id = _request(redis, app_store, action, args, token=token)
+    _serve(redis, project)
+    job = _job(redis, app_store, job_id)
+    assert job.status == "failed" and "token" in job.error
+    assert not job.result["lines"] and not tokens
+    assert str(token) not in job.error
 
 
 # ---------------------------------------------------------------------------

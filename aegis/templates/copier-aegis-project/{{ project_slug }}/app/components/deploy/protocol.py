@@ -1,6 +1,11 @@
 """The deploy agent's protocol: the Redis keys, the actions it runs and
 each argument's pattern, and the one check a request must pass.
 
+An action marked ``token`` acts on a cloud provider's account (the one it
+names, or the provisioned server's), and its request may carry the app's
+token for it (``app.core.secrets``) as its own field, never in ``args``,
+which are audited and echoed. The agent prefers it to its own environment's.
+
 The app (``agent.py``) checks a request before queueing it and ``aegis
 deploy-agent`` checks it again before running it; both use this module,
 which the CLI loads out of the template it ships. So it imports nothing
@@ -16,6 +21,9 @@ PROTOCOL: dict[str, Any] = {
     "last": "deploy:last",
     "beat_seconds": 10,
     "stale_seconds": 300,
+    # A provider API token: its own characters only, so it can travel in an
+    # environment variable and nothing else rides along with it.
+    "token": r"[A-Za-z0-9._~+/=:-]{8,512}",
     "args": {
         "provider": "[a-z0-9][a-z0-9-]{0,31}",
         "size": "[a-z0-9][a-z0-9-]{0,39}",
@@ -28,11 +36,13 @@ PROTOCOL: dict[str, Any] = {
     },
     "actions": {
         "quote": {
+            "token": True,
             "required": ["provider", "size", "region"],
             "optional": ["domain", "email"],
         },
         "provision": {
             "command": ["deploy-provision", "--yes"],
+            "token": True,
             "required": ["provider", "size", "region", "price"],
             "optional": ["domain", "email"],
         },
@@ -51,6 +61,7 @@ PROTOCOL: dict[str, Any] = {
         },
         "destroy": {
             "command": ["deploy-destroy"],
+            "token": True,
             "required": ["confirm"],
         },
     },
@@ -79,3 +90,27 @@ def validate(action: Any, args: Any) -> dict[str, str]:
         if not isinstance(value, str) or not re.fullmatch(PROTOCOL["args"][key], value):
             raise RefusedError(f"Refused: {key} is not a valid value.")
     return given
+
+
+def checked_token(action: str, token: Any) -> str | None:
+    """A request's provider token, None when it carries none; RefusedError
+    for one ``action`` does not take, or anything but a token. The message
+    never repeats it."""
+    if token is None:
+        return None
+    if not PROTOCOL["actions"][action].get("token"):
+        raise RefusedError(f"{action} refused: it takes no provider token.")
+    if not isinstance(token, str) or not re.fullmatch(PROTOCOL["token"], token):
+        raise RefusedError("Refused: the provider token is not a valid token.")
+    return token
+
+
+def token_provider(
+    action: str, args: dict[str, str], record: dict[str, Any]
+) -> str | None:
+    """Whose token ``action`` needs: the provider it names, else the one
+    the provisioned server is on (``record``, the provision record in
+    ``.aegis/deploy.yml``); None for an action that needs none."""
+    if not PROTOCOL["actions"][action].get("token"):
+        return None
+    return args.get("provider") or record.get("provider")

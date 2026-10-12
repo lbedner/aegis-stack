@@ -59,7 +59,10 @@ async def _load_modules(
 
 
 async def _render_module(
-    module: MemoryModule, user_id: str, session: AsyncSession | None
+    module: MemoryModule,
+    user_id: str,
+    session: AsyncSession | None,
+    subject: str | None = None,
 ) -> str | None:
     """Static block first, then the live fetcher data."""
     parts: list[str] = []
@@ -70,6 +73,7 @@ async def _render_module(
             module.fetch_function,
             FetchContext(
                 user_id=user_id,
+                subject=subject,
                 days_back=(
                     module.default_days_back if module.supports_days_back else None
                 ),
@@ -117,6 +121,7 @@ async def render_memory_modules(
     user_id: str,
     token_budget: int | None = None,
     session: AsyncSession | None = None,
+    subject: str | None = None,
 ) -> str | None:
     """Render an agent's memory modules into one labeled block, or None."""
     if not module_slugs:
@@ -131,13 +136,14 @@ async def render_memory_modules(
                 user_id=user_id,
                 token_budget=token_budget,
                 session=owned_session,
+                subject=subject,
             )
 
     modules = await _load_modules(session, module_slugs)
 
     rendered: list[_RenderedModule] = []
     for module in modules:
-        content = await _render_module(module, user_id, session)
+        content = await _render_module(module, user_id, session, subject)
         if content is None:
             continue
         rendered.append(

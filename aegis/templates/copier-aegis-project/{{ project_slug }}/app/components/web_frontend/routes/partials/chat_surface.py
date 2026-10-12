@@ -1,11 +1,13 @@
 """The chat surface's routes, for any mount (``ChatSurface``): the surface
 itself, conversation history and loading one, a turn's bubbles, a settled
 message, what one tool run did, a stored image, the model chip and its
-picker, and the two ends of a spoken turn (the microphone's recording
-transcribed, a sentence or a stored answer said aloud).
+picker, the turn's stream, and the two ends of a spoken turn (the
+microphone's recording transcribed, a sentence or a stored answer said
+aloud).
 
 ``chat_router(mount, guard)`` builds them under the mount's path; ``guard``
-is the dependency every route runs first (who may use this mount). The live
+is the dependency every route runs first (who may use this mount), and
+each route serves the mount its ``bind`` returns for the request. The live
 call's socket is its own router (``chat_live.live_router``): a socket has no
 HTTP request for a page guard to read. The Overseer mounts both once
 (``overseer_ai_chat``, which adds the reply's agent drawer); an app's own
@@ -15,6 +17,9 @@ chat page mounts them again with its own agent and user.
 from collections.abc import Callable
 from typing import Annotated, Any
 
+from app.components.backend.api.ai.chat import ChatTurn
+from app.components.backend.api.ai.service import ai_service
+from app.components.backend.api.ai.sse import refused, turn_stream
 from app.components.web_frontend import chat_surface as chat
 from app.components.web_frontend.chat_surface import ChatSurface
 from app.components.web_frontend.rendering import (
@@ -23,6 +28,7 @@ from app.components.web_frontend.rendering import (
     templates,
     with_toast,
 )
+from app.services.shared.deps import get_optional_owner_user_id
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 
@@ -45,28 +51,30 @@ def chat_router(mount: ChatSurface, guard: Callable[..., Any]) -> APIRouter:
     models_path = f"{mount.path}/models"
     # Live calls are picked with the models where calls are on offer.
     calls = chat.HAS_VOICE and chat.PERSISTED
+    # The mount this request is served (``ChatSurface.bind``).
+    Mount = Annotated[ChatSurface, Depends(chat.resolver(mount))]  # noqa: N806
 
-    async def owned(conversation_id: str) -> Any:
-        found = await chat.find_conversation(mount, conversation_id)
+    async def owned(bound: ChatSurface, conversation_id: str) -> Any:
+        found = await chat.find_conversation(bound, conversation_id)
         if found is None:
             raise HTTPException(status_code=404)
         return found
 
-    async def stored(conversation_id: str, message_id: str) -> Any:
-        found = chat.find_message(await owned(conversation_id), message_id)
+    async def stored(bound: ChatSurface, conversation_id: str, message_id: str) -> Any:
+        found = chat.find_message(await owned(bound, conversation_id), message_id)
         if found is None:
             raise HTTPException(status_code=404)
         return found
 
     @router.get("/drawer", response_class=HTMLResponse)
-    async def drawer(request: Request) -> Response:
+    async def drawer(request: Request, bound: Mount) -> Response:
         """The surface for a drawer: the partial a page includes."""
-        context = await chat.surface_context(mount)
+        context = await chat.surface_context(bound)
         return _fragment(request, "partials/chat/surface.html", **context)
 
     @router.get("/conversations", response_class=HTMLResponse)
-    async def history(request: Request) -> Response:
-        conversations = (await chat.conversations(mount))[: chat.HISTORY_LIMIT]
+    async def history(request: Request, bound: Mount) -> Response:
+        conversations = (await chat.conversations(bound))[: chat.HISTORY_LIMIT]
         return dialog(
             request,
             "partials/chat/history.html",
@@ -75,30 +83,64 @@ def chat_router(mount: ChatSurface, guard: Callable[..., Any]) -> APIRouter:
         )
 
     @router.get("/conversations/new", response_class=HTMLResponse)
-    async def new_conversation(request: Request) -> Response:
+    async def new_conversation(request: Request, bound: Mount) -> Response:
         """An empty thread; the id arrives on the first turn's first frame."""
-        context = await chat.transcript(mount, None)
+        context = await chat.transcript(bound, None)
         return _fragment(request, "partials/chat/transcript.html", oob=True, **context)
 
     @router.get("/conversations/{conversation_id}", response_class=HTMLResponse)
-    async def load_conversation(request: Request, conversation_id: str) -> Response:
+    async def load_conversation(
+        request: Request, bound: Mount, conversation_id: str
+    ) -> Response:
         """A conversation picked from history, replacing the thread in place;
         the dialog closes on the way."""
-        context = await chat.transcript(mount, await owned(conversation_id))
+        context = await chat.transcript(bound, await owned(bound, conversation_id))
         response = _fragment(
             request, "partials/chat/transcript.html", oob=True, **context
         )
         return close_dialog(response)
 
     @router.get("/conversations/{conversation_id}/earlier", response_class=HTMLResponse)
-    async def earlier(request: Request, conversation_id: str, before: str) -> Response:
+    async def earlier(
+        request: Request, bound: Mount, conversation_id: str, before: str
+    ) -> Response:
         """The page before ``before``, in place of the row that asked for it."""
-        context = await chat.transcript(mount, await owned(conversation_id), before)
+        found = await owned(bound, conversation_id)
+        context = await chat.transcript(bound, found, before)
         return _fragment(request, "partials/chat/transcript.html", page=True, **context)
+
+    @router.post("/stream")
+    async def stream(
+        bound: Mount,
+        turn: ChatTurn,
+        refusal: Annotated[str | None, Depends(chat.gatekeeper(mount))],
+        owner_user_id: Annotated[int | None, Depends(get_optional_owner_user_id)],
+    ) -> Response:
+        """The turn, answered as SSE (``sse.turn_stream``). The client sends
+        only the turn; whose it is and what it is about are the mount's,
+        and a conversation it continues must be the mount's own."""
+        if refusal:
+            return refused(refusal)
+        if turn.conversation_id:
+            await owned(bound, turn.conversation_id)
+        return turn_stream(
+            ai_service.stream_chat(
+                message=turn.message,
+                conversation_id=turn.conversation_id,
+                user_id=bound.user,
+                owner_user_id=owner_user_id,
+                stream_delta=True,
+                agent_slug=bound.agent_slug,
+                surface=bound.surface,
+                attachments=turn.attachments,
+                subject=bound.subject,
+            )
+        )
 
     @router.post("/turns", response_class=HTMLResponse)
     async def start_turn(
         request: Request,
+        bound: Mount,
         message: Annotated[str, Form()] = "",
         conversation_id: Annotated[str, Form()] = "",
         attachment_names: Annotated[list[str] | None, Form()] = None,
@@ -107,7 +149,7 @@ def chat_router(mount: ChatSurface, guard: Callable[..., Any]) -> APIRouter:
         reaches the model until the script posts the bubble's text to the
         stream."""
         context = await chat.turn_context(
-            mount, message, conversation_id, attachment_names or []
+            bound, message, conversation_id, attachment_names or []
         )
         if context is None:
             return Response(status_code=422)
@@ -115,12 +157,12 @@ def chat_router(mount: ChatSurface, guard: Callable[..., Any]) -> APIRouter:
 
     @router.get("/messages/{conversation_id}/{message_id}", response_class=HTMLResponse)
     async def message(
-        request: Request, conversation_id: str, message_id: str
+        request: Request, bound: Mount, conversation_id: str, message_id: str
     ) -> Response:
         """The settled bubble, swapped over the streaming one when the turn
         completes (the message is stored before the stream's final frame)."""
-        found = await stored(conversation_id, message_id)
-        context = await chat.message_context(mount, conversation_id, found)
+        found = await stored(bound, conversation_id, message_id)
+        context = await chat.message_context(bound, conversation_id, found)
         return _fragment(request, "partials/chat/message.html", **context)
 
     @router.get(
@@ -128,9 +170,13 @@ def chat_router(mount: ChatSurface, guard: Callable[..., Any]) -> APIRouter:
         response_class=HTMLResponse,
     )
     async def run_detail(
-        request: Request, conversation_id: str, message_id: str, index: int
+        request: Request,
+        bound: Mount,
+        conversation_id: str,
+        message_id: str,
+        index: int,
     ) -> Response:
-        found = await stored(conversation_id, message_id)
+        found = await stored(bound, conversation_id, message_id)
         entries = (found.metadata or {}).get("tool_trace") or []
         if not 0 <= index < len(entries):
             raise HTTPException(status_code=404)
@@ -237,9 +283,11 @@ def chat_router(mount: ChatSurface, guard: Callable[..., Any]) -> APIRouter:
             return _audio(await chat.synthesize(words))
 
         @router.get("/messages/{conversation_id}/{message_id}/speech")
-        async def speak(conversation_id: str, message_id: str) -> Response:
+        async def speak(
+            bound: Mount, conversation_id: str, message_id: str
+        ) -> Response:
             """A stored answer said aloud."""
-            found = await stored(conversation_id, message_id)
+            found = await stored(bound, conversation_id, message_id)
             return _audio(await chat.synthesize(chat.spoken(found.content)))
 
     # A drawn card is a row: no card route without a database.

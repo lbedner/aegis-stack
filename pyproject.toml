@@ -64,6 +64,9 @@ dependencies = [
     # issue #715). Without it in the installed env (uvx/pip), merges silently
     # degrade to raw byte diffs and pristine projects get spurious conflicts.
     "ruff>=0.9.0",
+    # `aegis deploy-agent` takes the Overseer's deploy requests off the
+    # project's Redis.
+    "redis>=5.0",
 ]
 
 [project.urls]

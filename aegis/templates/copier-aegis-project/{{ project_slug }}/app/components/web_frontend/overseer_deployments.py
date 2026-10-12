@@ -1,14 +1,16 @@
 """Overseer > Deployments: where it runs (the provider, ``hosting``) and
 where it can, what is live (build, commit, when it went live, health), the
 host it runs on, and the database backups beside it, from
-``ui_deployments``. Read-only; the deploy history joins it with deploy
-records."""
+``ui_deployments``; the deploy history joins it with deploy records. Its
+actions (a new server, deploy, back up, roll back, destroy) are
+``overseer_deploy_actions``."""
 
 from typing import Any
 
 from app.services.system import hosting, ui_deployments
 from app.services.system.models import ComponentStatus
 
+from . import overseer_deploy_actions
 from .overseer_nav import NavItem, SectionRequest
 from .rendering import columns, status_cell
 
@@ -66,4 +68,5 @@ async def section_context(
         "providers": hosting.providers(current),
         "now": await ui_deployments.now(),
         "host": await ui_deployments.host(),
+        "actions": await overseer_deploy_actions.context(),
     }

@@ -867,6 +867,13 @@ MESSAGES: dict[str, str] = {
     ),
     "deploy.backup_created": "Respaldo creado: {timestamp}",
     "deploy.backup_pruned": "Respaldo antiguo eliminado: {name}",
+    "deploy.backup_sqlite": "Snapshotting SQLite database...",
+    "deploy.backup_sqlite_failed": (
+        "Warning: SQLite snapshot failed; copying the live database file instead"
+    ),
+    "deploy.backup_storage_failed": "Warning: Object storage backup failed",
+    "deploy.backup_offsite": "Copying backup off the server (restic)...",
+    "deploy.backup_offsite_failed": "Warning: Off-box copy failed: {error}",
     "deploy.disk_low": "Solo quedan {free}GB libres en {host}, se necesitan {need}GB. Libera espacio con: docker image prune -af && docker builder prune -af",
     "deploy.pruning": "Liberando disco de Docker (imágenes huérfanas y caché de compilación antigua)...",
     "deploy.prune_failed": "No se pudo liberar el disco de Docker; el despliegue sí se completó.",
@@ -936,6 +943,7 @@ MESSAGES: dict[str, str] = {
     "deploy.rollback_stopping": "Deteniendo servicios...",
     "deploy.rollback_restoring": "Restaurando archivos desde respaldo {timestamp}...",
     "deploy.rollback_restore_failed": "Error al restaurar archivos: {error}",
+    "deploy.rollback_data_failed": "Failed to restore data: {error}",
     "deploy.rollback_db": "Restaurando base de datos...",
     "deploy.rollback_db_neon": "La recuperación de la base de datos la gestiona Neon (ramas / restauración a un punto en el tiempo); se omite la restauración local",
     "deploy.rollback_pg_wait": "Esperando que PostgreSQL esté listo...",
@@ -1264,11 +1272,9 @@ MESSAGES: dict[str, str] = {
     "build.step.llm": "Sincronizando catálogo de LLM",
     "build.step.format": "Formateando el código",
     # ── Deploy provision ──────────────────────────────────────────────
-    "provision.help_opt_provider": "Proveedor cloud donde crear el servidor (hetzner)",
-    "provision.help_opt_size": "Tipo de servidor, p. ej. cx23",
-    "provision.help_opt_region": (
-        "Ubicación del proveedor, p. ej. nbg1, fsn1, hel1, ash"
-    ),
+    "provision.help_opt_provider": "Proveedor cloud donde crear el servidor ({providers})",
+    "provision.help_opt_size": "Tipo de servidor, p. ej. {sizes}",
+    "provision.help_opt_region": ("Ubicación del proveedor, p. ej. {regions}"),
     "provision.help_opt_domain": (
         "Nombre de host que apunta al servidor mediante Cloudflare (por defecto: un nombre sslip.io)"
     ),
@@ -1287,12 +1293,14 @@ MESSAGES: dict[str, str] = {
         "Este proyecto ya tiene un servidor aprovisionado ({ip}). Ejecuta 'aegis deploy' para desplegar o 'aegis deploy-destroy' para eliminarlo."
     ),
     "provision.resuming": "Reanudando el aprovisionamiento de {name}",
-    "provision.price": (
+    "provision.price.hetzner": (
         "{size} en {region}: EUR {price}/mes con IVA, más la tarifa de IPv4 de Hetzner"
     ),
-    "provision.confirm": "¿Crear este servidor en tu cuenta de Hetzner?",
+    "provision.price.digitalocean": "{size} in {region}: USD {price}/month before tax",
+    "provision.confirm": "¿Crear este servidor en tu cuenta de {provider}?",
     "provision.cancelled": "Cancelado. No se creó nada.",
     "provision.ssh_key_created": "Clave SSH {id} subida",
+    "provision.firewall_created": "Created cloud firewall {id} (in: SSH, HTTP, HTTPS)",
     "provision.server_created": (
         "Servidor {id} creado en {ip} (registrado en .aegis/deploy.yml)"
     ),
@@ -1315,6 +1323,7 @@ MESSAGES: dict[str, str] = {
     ),
     "provision.created_server": "servidor {id} '{name}' en {ip} ({size}, {region})",
     "provision.created_ssh_key": "clave SSH {id}",
+    "provision.created_firewall": "cloud firewall {id}",
     "provision.created_dns": "registro DNS A {hostname}",
     "provision.offer_delete": "¿Eliminarlos ahora?",
     "provision.cleanup_failed": "La limpieza falló: {error}",
@@ -1333,4 +1342,26 @@ MESSAGES: dict[str, str] = {
     "provision.destroyed": (
         "Eliminado. El registro en .aegis/deploy.yml está marcado como eliminado."
     ),
+    "provision.help_opt_confirm": (
+        "The server name, typed in advance: skips the prompt, and must still match"
+    ),
+    # ── Deploy agent ──────────────────────────────────────────────────
+    "deploy_agent.no_redis": (
+        "Waiting for the project's Redis at {url} ({error}). It answers once the stack is up (make serve); elsewhere, set REDIS_URL_LOCAL."
+    ),
+    "deploy_agent.listening": (
+        "Listening for Overseer deploy requests on {url} (tokens here for: {providers}). Ctrl-C stops."
+    ),
+    "deploy_agent.stopping": "Stopped listening.",
+    "deploy_agent.request": "{action}, asked by {by}",
+    "deploy_agent.done": "{action} done",
+    "deploy_agent.unreadable": "Skipped a request that could not be read.",
+    "deploy_agent.stale": (
+        "This request waited {minutes} minutes for the deploy agent; ask again from the Overseer."
+    ),
+    "deploy_agent.price_changed": (
+        "The price is now {price}, not the {confirmed} you confirmed. Nothing was created; get a new price."
+    ),
+    "deploy_agent.command_failed": "{command} failed (exit {code})",
+    "deploy_agent.stopped": "The deploy agent stopped before this finished.",
 }

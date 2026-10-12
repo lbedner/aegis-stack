@@ -1,0 +1,38 @@
+[
+  {
+    "key": "hetzner",
+    "name": "Hetzner Cloud",
+    "domain": "hetzner.com",
+    "can": ["Detect", "Deploy", "Provision"],
+    "command": "aegis deploy-provision --provider hetzner",
+    "token": "HCLOUD_TOKEN",
+    "size": "cx23",
+    "region": "nbg1",
+    "currency": "EUR"
+  },
+  {
+    "key": "digitalocean",
+    "name": "DigitalOcean",
+    "domain": "digitalocean.com",
+    "can": ["Detect", "Deploy", "Provision"],
+    "command": "aegis deploy-provision --provider digitalocean",
+    "token": "DIGITALOCEAN_TOKEN",
+    "size": "s-1vcpu-2gb",
+    "region": "nyc3",
+    "currency": "USD"
+  },
+  {
+    "key": "aws",
+    "name": "AWS",
+    "domain": "aws.amazon.com",
+    "can": ["Detect", "Deploy"],
+    "command": "aegis deploy"
+  },
+  {
+    "key": "server",
+    "name": "Any server",
+    "domain": null,
+    "can": ["Deploy"],
+    "command": "aegis deploy"
+  }
+]

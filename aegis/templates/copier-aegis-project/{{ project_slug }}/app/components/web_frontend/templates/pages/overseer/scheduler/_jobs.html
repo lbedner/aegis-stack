@@ -9,7 +9,7 @@
   </div>
   <div class="flex items-center gap-2">
     {{ chip("History", False, row.history, hx_replace(row.history, "#overseer-main"), "data-history") }}
-    {{ action("Run now", hx_dialog(partials ~ "/confirm/run/" ~ row.id), "primary") }}
+    {{ action("Run now", hx_dialog(partials ~ "/confirm/run/" ~ row.id, "data-write"), "primary") }}
   </div>
 </div>
 <div data-stats class="mt-3">

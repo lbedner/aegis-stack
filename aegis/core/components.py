@@ -650,6 +650,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
             primary=[
                 "app/components/deploy",
                 "tests/components/test_deploy_runtime.py",
+                "tests/components/test_deploy_agent.py",
                 "app/components/backend/api/deploy",
                 "tests/api/test_deploy_endpoints.py",
             ],

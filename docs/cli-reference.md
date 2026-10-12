@@ -626,9 +626,9 @@ aegis deploy-setup
 ### aegis deploy-provision
 
 !!! warning "Experimental Feature"
-    `deploy-provision` and `deploy-destroy` have run end to end against a live Hetzner account with an `sslip.io` name (server, HTTPS certificate, deploy, destroy). The `--domain` path through Cloudflare is tested only against a mocked API. Expect rough edges, and check your Hetzner console after a failed run.
+    `deploy-provision` and `deploy-destroy` have run end to end against a live Hetzner account with an `sslip.io` name (server, HTTPS certificate, deploy, destroy). The `--domain` path through Cloudflare and the whole `--provider digitalocean` path are tested only against a mocked API. Expect rough edges, and check your provider's console after a failed run.
 
-Create a server in your own Hetzner Cloud account and deploy to it. Shows the
+Create a server in your own Hetzner Cloud or DigitalOcean account and deploy to it. Shows the
 monthly price and asks before creating anything. The server boots with the
 project's `scripts/server-setup.sh` as cloud-init user-data, so it arrives with
 Docker and the firewall ready. Provisioning then waits for SSH and cloud-init,
@@ -644,14 +644,21 @@ command stops before creating anything.
 Tokens are read from the environment at call time and never stored or printed
 (at most the last four characters are shown):
 
-- `HCLOUD_TOKEN`, a Hetzner Cloud API token with read/write access. It can
-  create and delete every server in its project, so use a project dedicated to
-  this app.
+- `HCLOUD_TOKEN` (`--provider hetzner`), a Hetzner Cloud API token with
+  read/write access. It can create and delete every server in its project, so
+  use a project dedicated to this app.
+- `DIGITALOCEAN_TOKEN` (`--provider digitalocean`), a DigitalOcean API token
+  with write scope.
 - `CLOUDFLARE_API_TOKEN`, only with `--domain`: a token with DNS edit rights on
   the zone that owns the name.
 
 Without `--domain` the app gets an `sslip.io` name (`203-0-113-7.sslip.io`),
 so a first deploy needs no domain at all.
+
+On DigitalOcean the droplet also gets a cloud firewall allowing only SSH,
+HTTP and HTTPS in: Docker-published ports bypass the server's own ufw, so the
+firewall outside the droplet is the one that holds. It is deleted with the
+droplet.
 
 Every resource is recorded under `provision:` in `.aegis/deploy.yml` the moment
 it exists. If a later step fails, the command lists what was created and offers
@@ -664,9 +671,9 @@ aegis deploy-provision [OPTIONS]
 
 **Options:**
 
-- `--provider TEXT`, Cloud provider (default: `hetzner`)
-- `--size TEXT`, Server type (default: `cx23`)
-- `--region TEXT`, Provider location (default: `nbg1`)
+- `--provider TEXT`, Cloud provider: `hetzner` (default) or `digitalocean`
+- `--size TEXT`, Server type (default: `cx23` on Hetzner, `s-1vcpu-2gb` on DigitalOcean)
+- `--region TEXT`, Provider location (default: `nbg1` on Hetzner, `nyc3` on DigitalOcean)
 - `--domain TEXT`, Hostname to point at the server through Cloudflare
 - `--email TEXT`, Address Let's Encrypt registers the certificate to (default: the project's `author_email`)
 - `--ssh-key TEXT`, Public key installed for root (default: the first of `~/.ssh/id_ed25519.pub`, `id_ecdsa.pub`, `id_rsa.pub` that exists)
@@ -677,6 +684,7 @@ aegis deploy-provision [OPTIONS]
 ```bash
 aegis deploy-provision
 aegis deploy-provision --size cx33 --region fsn1
+aegis deploy-provision --provider digitalocean --region fra1
 aegis deploy-provision --domain app.example.com
 ```
 
@@ -684,9 +692,9 @@ aegis deploy-provision --domain app.example.com
 
 ### aegis deploy-destroy
 
-Delete the provisioned server, its DNS record and the SSH key provisioning
-uploaded, then mark the record in `.aegis/deploy.yml` destroyed. Asks you to
-type the server name to confirm.
+Delete the provisioned server, its DNS record, its cloud firewall and the SSH
+key provisioning uploaded, then mark the record in `.aegis/deploy.yml` destroyed. Asks you to
+type the server name to confirm, or takes it as `--confirm`.
 
 **Usage:**
 ```bash
@@ -695,6 +703,7 @@ aegis deploy-destroy [OPTIONS]
 
 **Options:**
 
+- `--confirm TEXT`, The server name, typed in advance: skips the prompt, and must still match
 - `--project-path TEXT`, Path to the project (default: current directory)
 
 ---
@@ -727,6 +736,32 @@ aegis deploy-cd-setup
 aegis deploy-cd-setup --on-tag
 aegis deploy-cd-setup --force  # rotate the deploy key
 ```
+
+---
+
+### aegis deploy-agent
+
+Run what Overseer > Deployments asks for on this machine: a price, a new
+server, a deploy, a backup, the backup list, a rollback, a destroy. The
+Overseer puts each request on the project's Redis; this takes them one at a
+time and runs the matching `aegis deploy-*` command, streaming its output back
+to the page. Run it in the project directory with the stack up, where your
+cloud tokens and SSH key are: they never leave this machine (the heartbeat
+names the providers it holds a token for, never the token).
+
+It finds Redis as the app's host-side settings do: `REDIS_URL_LOCAL`, else
+the port `make serve` published (`.env.ports`). Requests older than five
+minutes are failed, not run. A new server is created only at the price you
+typed back in the Overseer, which it asks the provider for again first.
+
+**Usage:**
+```bash
+aegis deploy-agent [OPTIONS]
+```
+
+**Options:**
+
+- `--project-path TEXT`, Path to the project (default: current directory)
 
 ---
 

@@ -1,7 +1,8 @@
 """
 ``aegis deploy-provision`` and ``aegis deploy-destroy``.
 
-Creates a server in the user's own Hetzner account, points a name at it and
+Creates a server in the user's own cloud account (any provider in
+``core/provision/registry.py``), points a name at it and
 hands off to ``aegis deploy``. The box, the bill and the data stay the
 user's; tokens are read from the environment at call time and never stored
 or printed beyond their last four characters.
@@ -25,9 +26,9 @@ import typer
 from ..cli import brand
 from ..core.provision.cloudflare import API_URL as CLOUDFLARE_API
 from ..core.provision.cloudflare import CloudflareDNS
-from ..core.provision.hetzner import API_URL as HETZNER_API
-from ..core.provision.hetzner import HetznerClient, cloud_init_user_data
 from ..core.provision.http import ProvisionError, json_requester, mask_token
+from ..core.provision.provider import ProviderClient, cloud_init_user_data
+from ..core.provision.registry import PROVIDERS, Provider
 from ..core.provision.wait import (
     sslip_name,
     wait_for_dns,
@@ -48,8 +49,6 @@ from .deploy import (
 )
 from .ingress import enable_tls, known_email
 
-PROVIDERS = ("hetzner",)
-HCLOUD_TOKEN_ENV = "HCLOUD_TOKEN"
 CLOUDFLARE_TOKEN_ENV = "CLOUDFLARE_API_TOKEN"
 SERVER_RUNNING_ATTEMPTS = 60
 SERVER_RUNNING_INTERVAL = 5
@@ -68,7 +67,7 @@ def _token(env: str) -> str:
 
 
 def _server_name(project_name: str) -> str:
-    """Hetzner names must be valid hostnames: no underscores, lower case."""
+    """Server names must be valid hostnames: no underscores, lower case."""
     return re.sub(r"[^a-z0-9-]+", "-", project_name.lower()).strip("-")
 
 
@@ -88,6 +87,20 @@ def _cloud_init_ok(ip: str) -> bool:
     return result.returncode in CLOUD_INIT_OK
 
 
+def _provider(key: str | None) -> Provider:
+    if key in PROVIDERS:
+        return PROVIDERS[key]
+    supported = ", ".join(PROVIDERS)
+    brand.error(
+        t("provision.unknown_provider", provider=key, supported=supported), err=True
+    )
+    raise typer.Exit(1)
+
+
+def _client(provider: Provider) -> ProviderClient:
+    return provider.client(json_requester(provider.api_url, _token(provider.token_env)))
+
+
 def _created_lines(record: dict[str, Any]) -> list[str]:
     """What this record says exists in the user's accounts, one line each."""
     lines = []
@@ -97,11 +110,13 @@ def _created_lines(record: dict[str, Any]) -> list[str]:
                 "provision.created_server",
                 id=record["server_id"],
                 name=record["server_name"],
-                ip=record["ipv4"],
+                ip=record.get("ipv4") or "?",
                 size=record["size"],
                 region=record["region"],
             )
         )
+    if "firewall_id" in record:
+        lines.append(t("provision.created_firewall", id=record["firewall_id"]))
     if "ssh_key_id" in record:
         lines.append(t("provision.created_ssh_key", id=record["ssh_key_id"]))
     if "dns" in record:
@@ -110,7 +125,7 @@ def _created_lines(record: dict[str, Any]) -> list[str]:
 
 
 def _destroy(
-    hcloud: HetznerClient,
+    cloud: ProviderClient,
     dns: CloudflareDNS | None,
     root: Path,
     config: dict[str, Any],
@@ -119,10 +134,12 @@ def _destroy(
     """Delete everything the record lists, then mark it destroyed."""
     if "dns" in record and dns is not None:
         dns.delete_record(record["dns"]["zone_id"], record["dns"]["record_id"])
+    if "firewall_id" in record:
+        cloud.delete_firewall(record["firewall_id"])
     if "server_id" in record:
-        hcloud.delete_server(record["server_id"])
+        cloud.delete_server(record["server_id"])
     if "ssh_key_id" in record:
-        hcloud.delete_ssh_key(record["ssh_key_id"])
+        cloud.delete_ssh_key(record["ssh_key_id"])
     record["status"] = "destroyed"
     # A recycled IP may become someone else's box; stop deploying to it.
     if (config.get("server") or {}).get("host") == record.get("ipv4"):
@@ -147,28 +164,62 @@ def _point_name(
 
 
 def _create(
-    hcloud: HetznerClient,
+    cloud: ProviderClient,
     record: dict[str, Any],
     user_data: str,
     public_key: str,
     persist: Callable[[], None],
 ) -> None:
     """SSH key, then server; each recorded the moment it exists."""
-    key_id, created = hcloud.ensure_ssh_key(record["server_name"], public_key)
+    key_id, created = cloud.ensure_ssh_key(record["server_name"], public_key)
     if created:
         record["ssh_key_id"] = key_id
         persist()
         typer.echo(t("provision.ssh_key_created", id=key_id))
-    server_id, ip = hcloud.create_server(
+    record["server_id"] = cloud.create_server(
         record["server_name"], record["size"], record["region"], key_id, user_data
     )
-    record.update(server_id=server_id, ipv4=ip)
     persist()
-    brand.success(t("provision.server_created", id=server_id, ip=ip))
+
+
+def _wait_running(
+    cloud: ProviderClient, record: dict[str, Any], persist: Callable[[], None]
+) -> str:
+    """Wait for the server and record its IP (some clouds give it only now)."""
+    typer.echo(t("provision.waiting_running"))
+    seen: list[str | None] = []
+
+    def running() -> bool:
+        seen.append(cloud.running_ipv4(record["server_id"]))
+        return bool(seen[-1])
+
+    _require(
+        wait_until(running, SERVER_RUNNING_ATTEMPTS, SERVER_RUNNING_INTERVAL),
+        "provision.not_running",
+    )
+    ip = str(seen[-1])
+    if record.get("ipv4") != ip:
+        record["ipv4"] = ip
+        persist()
+        brand.success(t("provision.server_created", id=record["server_id"], ip=ip))
+    return ip
+
+
+def _firewall(
+    cloud: ProviderClient, record: dict[str, Any], persist: Callable[[], None]
+) -> None:
+    """The cloud firewall in front of the server, where the provider makes one."""
+    if "firewall_id" in record:
+        return
+    firewall_id = cloud.create_firewall(record["server_name"], record["server_id"])
+    if firewall_id:
+        record["firewall_id"] = firewall_id
+        persist()
+        typer.echo(t("provision.firewall_created", id=firewall_id))
 
 
 def _provision(
-    hcloud: HetznerClient,
+    cloud: ProviderClient,
     dns: CloudflareDNS | None,
     root: Path,
     config: dict[str, Any],
@@ -181,16 +232,9 @@ def _provision(
         _persist(root, config, record)
 
     if "server_id" not in record:
-        _create(hcloud, record, user_data, public_key, persist)
-    ip = record["ipv4"]
-
-    typer.echo(t("provision.waiting_running"))
-    running = wait_until(
-        lambda: hcloud.server_status(record["server_id"]) == "running",
-        SERVER_RUNNING_ATTEMPTS,
-        SERVER_RUNNING_INTERVAL,
-    )
-    _require(running, "provision.not_running")
+        _create(cloud, record, user_data, public_key, persist)
+    ip = _wait_running(cloud, record, persist)
+    _firewall(cloud, record, persist)
     typer.echo(t("provision.waiting_ssh", ip=ip))
     _require(wait_for_host_key(ip), "provision.ssh_timeout", ip=ip)
     typer.echo(t("provision.waiting_cloud_init"))
@@ -224,7 +268,7 @@ def _provision(
 
 def _on_failure(
     exc: BaseException,
-    hcloud: HetznerClient,
+    cloud: ProviderClient,
     dns: CloudflareDNS | None,
     root: Path,
     config: dict[str, Any],
@@ -244,7 +288,7 @@ def _on_failure(
         typer.echo(t("provision.resume_hint"))
         return
     try:
-        _destroy(hcloud, dns, root, config, record)
+        _destroy(cloud, dns, root, config, record)
     except ProvisionError as cleanup_exc:
         brand.error(t("provision.cleanup_failed", error=cleanup_exc), err=True)
         typer.echo(t("provision.resume_hint"))
@@ -298,28 +342,43 @@ def _read_inputs(root: Path, ssh_key: str | None) -> tuple[str, str]:
     ), pubkey_path.read_text().strip()
 
 
-def _confirm_price(hcloud: HetznerClient, record: dict[str, Any], yes: bool) -> None:
+def _confirm_price(
+    cloud: ProviderClient, provider: Provider, record: dict[str, Any], yes: bool
+) -> None:
     try:
-        price = hcloud.monthly_price(record["size"], record["region"])
+        price = cloud.monthly_price(record["size"], record["region"])
     except ProvisionError as exc:
         brand.error(str(exc), err=True)
         raise typer.Exit(1) from None
-    brand.accent(
-        t("provision.price", size=record["size"], region=record["region"], price=price),
-        bold=True,
-    )
-    if not yes and not typer.confirm(t("provision.confirm"), default=False):
+    size, region = record["size"], record["region"]
+    price_key = f"provision.price.{provider.key}"
+    brand.accent(t(price_key, size=size, region=region, price=price), bold=True)
+    confirm = t("provision.confirm", provider=provider.name)
+    if not yes and not typer.confirm(confirm, default=False):
         typer.echo(t("provision.cancelled"))
         raise typer.Exit(0)
 
 
+def _per_provider(field: str) -> str:
+    """``hetzner cx23, digitalocean s-1vcpu-2gb``: a default for each provider."""
+    return ", ".join(f"{key} {getattr(p, field)}" for key, p in PROVIDERS.items())
+
+
 def deploy_provision_command(
     provider: str = typer.Option(
-        "hetzner", "--provider", help=lazy_t("provision.help_opt_provider")
+        "hetzner",
+        "--provider",
+        help=lazy_t("provision.help_opt_provider", providers=", ".join(PROVIDERS)),
     ),
-    size: str = typer.Option("cx23", "--size", help=lazy_t("provision.help_opt_size")),
-    region: str = typer.Option(
-        "nbg1", "--region", help=lazy_t("provision.help_opt_region")
+    size: str | None = typer.Option(
+        None,
+        "--size",
+        help=lazy_t("provision.help_opt_size", sizes=_per_provider("size")),
+    ),
+    region: str | None = typer.Option(
+        None,
+        "--region",
+        help=lazy_t("provision.help_opt_region", regions=_per_provider("region")),
     ),
     domain: str | None = typer.Option(
         None, "--domain", help=lazy_t("provision.help_opt_domain")
@@ -338,26 +397,19 @@ def deploy_provision_command(
     """
     Create a server in your own cloud account and deploy to it.
 
-    Reads HCLOUD_TOKEN (and CLOUDFLARE_API_TOKEN with --domain) from the
-    environment. Re-run to resume an interrupted run.
+    Reads the provider's API token (and CLOUDFLARE_API_TOKEN with --domain)
+    from the environment; a missing one is named. Re-run to resume an
+    interrupted run.
 
     Examples:
         - aegis deploy-provision
         - aegis deploy-provision --size cx33 --region fsn1
+        - aegis deploy-provision --provider digitalocean --region fra1
         - aegis deploy-provision --domain app.example.com
         - aegis deploy-provision --email ops@example.com
     """
-    if provider not in PROVIDERS:
-        brand.error(
-            t(
-                "provision.unknown_provider",
-                provider=provider,
-                supported=", ".join(PROVIDERS),
-            ),
-            err=True,
-        )
-        raise typer.Exit(1)
-    hcloud = HetznerClient(json_requester(HETZNER_API, _token(HCLOUD_TOKEN_ENV)))
+    spec = _provider(provider)
+    cloud = _client(spec)
     root = _get_project_root(project_path)
     user_data, public_key = _read_inputs(root, ssh_key)
     acme_email = _acme_email(root, email)
@@ -372,8 +424,8 @@ def deploy_provision_command(
         record = {
             "provider": provider,
             "server_name": _server_name(_get_project_name(str(root))),
-            "region": region,
-            "size": size,
+            "region": region or spec.region,
+            "size": size or spec.size,
             "domain": domain,
             "status": "provisioning",
         }
@@ -386,12 +438,12 @@ def deploy_provision_command(
     if resuming:
         brand.accent(t("provision.resuming", name=record["server_name"]), bold=True)
     else:
-        _confirm_price(hcloud, record, yes)
+        _confirm_price(cloud, spec, record, yes)
 
     try:
-        _provision(hcloud, dns, root, config, record, user_data, public_key, acme_email)
+        _provision(cloud, dns, root, config, record, user_data, public_key, acme_email)
     except (Exception, KeyboardInterrupt) as exc:
-        _on_failure(exc, hcloud, dns, root, config, record, yes)
+        _on_failure(exc, cloud, dns, root, config, record, yes)
         if isinstance(exc, ProvisionError | typer.Exit):
             raise typer.Exit(1) from None
         raise
@@ -401,14 +453,18 @@ def deploy_destroy_command(
     project_path: str | None = typer.Option(
         None, "--project-path", help=lazy_t("common.help_project_path")
     ),
+    confirm: str | None = typer.Option(
+        None, "--confirm", help=lazy_t("provision.help_opt_confirm")
+    ),
 ) -> None:
     """
     Delete the provisioned server, its DNS record and its SSH key.
 
-    Asks you to type the server name to confirm.
+    Asks you to type the server name to confirm, or takes it as --confirm.
 
     Examples:
         - aegis deploy-destroy
+        - aegis deploy-destroy --confirm my-app
     """
     root = _get_project_root(project_path)
     config = _load_deploy_config(str(root)) or {}
@@ -416,7 +472,7 @@ def deploy_destroy_command(
     if not record or record.get("status") == "destroyed":
         brand.error(t("provision.nothing_to_destroy"), err=True)
         raise typer.Exit(1)
-    hcloud = HetznerClient(json_requester(HETZNER_API, _token(HCLOUD_TOKEN_ENV)))
+    cloud = _client(_provider(record.get("provider")))
     dns = None
     if "dns" in record:
         dns = CloudflareDNS(
@@ -427,14 +483,16 @@ def deploy_destroy_command(
     for line in _created_lines(record):
         typer.echo(f"  {line}")
     name = record["server_name"]
-    typed = typer.prompt(
-        t("provision.destroy_confirm", name=name), default="", show_default=False
-    )
+    typed = confirm
+    if typed is None:
+        typed = typer.prompt(
+            t("provision.destroy_confirm", name=name), default="", show_default=False
+        )
     if typed.strip() != name:
         brand.error(t("provision.destroy_cancelled"), err=True)
         raise typer.Exit(1)
     try:
-        _destroy(hcloud, dns, root, config, record)
+        _destroy(cloud, dns, root, config, record)
     except ProvisionError as exc:
         brand.error(str(exc), err=True)
         typer.echo(t("provision.resume_hint"))

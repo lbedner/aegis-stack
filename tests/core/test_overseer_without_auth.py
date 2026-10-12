@@ -1,6 +1,6 @@
 """Overseer ships with the web frontend, not with auth: auth adds sign-in
-and admins-only when it is there, and without it Overseer is open, its
-writes (Restart, Secrets) included."""
+and admins-only when it is there. Without it Overseer is open to read, and
+its writes are the local dev build's alone (``operator_refusal``)."""
 
 from __future__ import annotations
 
@@ -54,7 +54,7 @@ def test_the_pages_mount_overseer_without_auth() -> None:
     assert "Depends(overseer_gate)" in pages
 
 
-def test_without_auth_the_gate_lets_everyone_in() -> None:
+def test_without_auth_the_gate_reads_open_and_refuses_writes_by_one_rule() -> None:
     access = _render(f"{WEB}/overseer_access.py.jinja", include_auth=False)
     tree = ast.parse(access)
     gate = next(
@@ -62,7 +62,10 @@ def test_without_auth_the_gate_lets_everyone_in() -> None:
         for n in tree.body
         if isinstance(n, ast.AsyncFunctionDef) and n.name == "overseer_gate"
     )
-    assert not [n for n in ast.walk(gate) if isinstance(n, ast.Raise)]
+    source = ast.get_source_segment(access, gate) or ""
+    assert "request.method in SAFE_METHODS" in source
+    assert "operator_refusal(request)" in source
+    assert len([n for n in ast.walk(gate) if isinstance(n, ast.Raise)]) == 1
 
 
 def test_the_write_apis_mount_without_auth() -> None:

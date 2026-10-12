@@ -36,6 +36,32 @@ aegis deploy-provision --email you@example.com
 
 This replaces steps 1 and 2 above. It creates a server in your own Hetzner account (showing the monthly price first), points a name at it (`<ip>.sslip.io`, or yours with `--domain` and a Cloudflare token), turns on HTTPS for that name with Let's Encrypt, and runs `aegis deploy`. The server, the bill and the data stay yours. `aegis deploy-destroy` removes the server and its DNS record. All options: [`aegis deploy-provision`](../cli-reference.md#aegis-deploy-provision).
 
+## From the Overseer
+
+With the htmx frontend and Redis, Overseer > Deployments on your dev build
+does the same from the page: a new server (live price, typed back to
+confirm), deploy, back up, list backups, roll back, destroy. Each streams its
+output on the page and is audited. `make serve` starts the agent that runs
+them, `aegis deploy-agent`, beside the stack and stops it with the stack, when
+the aegis CLI is installed (`uv tool install aegis-stack`). It reads the cloud
+token from your shell, so export it where your shell profile keeps such things:
+
+```bash
+export DIGITALOCEAN_TOKEN=...   # or HCLOUD_TOKEN
+```
+
+With the stack started another way, run `aegis deploy-agent` in the project
+directory yourself.
+
+Why a host runner: every step needs what the app's container does not have
+and should not hold (the aegis CLI, the working tree it ships, your SSH key,
+the cloud token). So the Overseer only asks, through the project's Redis, and
+`aegis deploy-agent` runs the same commands you would type, with the token
+and key staying on your machine; they never enter the image, the database or
+Redis. A deployed server's Overseer offers no deploy actions: redeploy from
+the dev Overseer or from CI ([`aegis deploy-cd-setup`](../cli-reference.md#aegis-deploy-cd-setup)).
+The Flet dashboard shows the commands only.
+
 ## Configuration
 
 Deployment settings are stored in `.aegis/deploy.yml`, created by `deploy-init`:
@@ -68,7 +94,7 @@ health_check:
 | `server.path` | Application directory on server (default: `/opt/{project-name}`) |
 | `docker.context` | Docker context name (used by generated Makefile `deploy-*` targets) |
 | `backup.keep_count` | Number of backups to keep on server (default: `5`) |
-| `backup.include_database` | Include PostgreSQL dump in backup (default: `true`) |
+| `backup.include_database` | Include the database (SQLite snapshot or PostgreSQL dump) in backup (default: `true`) |
 | `health_check.retries` | Number of health check attempts (default: `3`) |
 | `health_check.auto_rollback` | Auto-rollback on failed health check (default: `true`) |
 
@@ -137,6 +163,7 @@ aegis deploy-setup [OPTIONS]
     - Sets up Docker daemon with log rotation
     - Creates application directory with proper permissions
     - Applies system optimizations (file limits, TCP BBR)
+    - Under 4 GB of RAM, adds a swapfile (RAM-sized, capped at 2 GB) in `/etc/fstab` with `vm.swappiness=10`, unless the box already has swap
 4. If `--public-key` was passed, appends that key to the deploy user's `~/.ssh/authorized_keys` (idempotent — re-running with the same key is a no-op).
 
 **Examples:**
@@ -229,7 +256,7 @@ aegis deploy [OPTIONS]
 
 **What it does:**
 
-1. **Creates a backup** of the current deployment (files + database)
+1. **Creates a backup** of the current deployment (files, database, object storage; see [`aegis deploy-backup`](#aegis-deploy-backup))
 2. **Syncs files** to the server via `rsync --delete`, so a file removed from the project is removed from the server too. Only files git tracks are sent: untracked files (`.env.backup-*`, notes, local dumps) stay on your machine, and one an earlier deploy left on the server is removed. Outside git, or before anything is tracked, the directory is sent as it is
 3. **Copies `.env`** file separately (excluded from rsync for safety)
 4. **Stops existing services** with `docker compose down`
@@ -288,12 +315,53 @@ aegis deploy-backup [OPTIONS]
 
 **What it does:**
 
-1. Creates a timestamped backup directory on the server
-2. Copies all deployed files into the backup via server-side `rsync`
-3. Dumps the PostgreSQL database if a postgres container is running
-4. Prunes old backups beyond the retention count (default: 5)
+1. Creates a timestamped backup directory on the server, `backups/<timestamp>/`
+2. Snapshots a SQLite database into `data/` through SQLite's online backup API, run in the webserver container: a consistent copy while the app keeps writing. If the snapshot fails, the live file is copied with the rest instead
+3. Copies all deployed files into `files/` via server-side `rsync` (the code and the server's `.env`)
+4. Dumps the PostgreSQL database to `db_backup.sql` if a postgres container is running
+5. Archives the object store (the `storage-data` volume) to `storage.tar.gz`
+6. Pushes the backup off the box when the server is configured for it (see below)
+7. Prunes old backups beyond the retention count (default: 5)
 
-SQLite databases are automatically included in the file backup since they live in the deploy directory.
+**Off-box copy (optional):** backups on the server die with the server. To keep
+a copy elsewhere, point [restic](https://restic.net) at S3-compatible storage
+(DigitalOcean Spaces, Backblaze B2, AWS S3). restic encrypts on the server
+before anything is uploaded, and everything but `files/` is pushed, so the
+`.env`, keys and the restic password never reach the bucket. Keep a copy of
+`.env` and the restic password somewhere else (a password manager): without
+them the backup cannot be read, nor the app's encrypted fields.
+
+On the server, once (`app` is the last part of the deploy path, `/opt/app`):
+
+```bash
+apt-get install -y restic
+mkdir -p /etc/aegis && install -m 600 /dev/null /etc/aegis/app.restic.env
+cat > /etc/aegis/app.restic.env <<'EOF'
+RESTIC_REPOSITORY=s3:https://nyc3.digitaloceanspaces.com/<bucket>/app
+RESTIC_PASSWORD=<long random password>
+AWS_ACCESS_KEY_ID=<Spaces access key>
+AWS_SECRET_ACCESS_KEY=<Spaces secret key>
+EOF
+```
+
+From then on every backup (each `aegis deploy` and `aegis deploy-backup`) is
+pushed after it is taken, tagged with its timestamp; the first push creates the
+repository. Copies are only as frequent as backups: run `aegis deploy-backup`
+on a schedule (cron, CI) for a cadence. restic keeps every snapshot until told
+otherwise; thin them with `restic forget --keep-daily 7 --keep-weekly 4 --prune`.
+
+To restore, on the server (a fresh one: `aegis deploy-setup`, `aegis deploy`,
+then the env file above):
+
+```bash
+set -a && . /etc/aegis/app.restic.env && set +a
+restic snapshots                      # the tag is the backup timestamp
+restic restore latest --target /      # back to /opt/app/backups/<timestamp>/
+```
+
+then, locally, `aegis deploy-rollback --backup <timestamp>`. An off-box copy
+has no `files/`, so the rollback leaves the deployed code alone and restores
+the data.
 
 **Examples:**
 ```bash
@@ -347,10 +415,11 @@ aegis deploy-rollback [OPTIONS]
 **What it does:**
 
 1. Stops all running services
-2. Restores files from the backup snapshot
-3. Restores the PostgreSQL database if a dump exists in the backup
-4. Rebuilds and starts all services
-5. Restarts Traefik if present
+2. Restores files from the backup snapshot (skipped for a backup without `files/`, such as one restored from off-box)
+3. Restores the SQLite snapshot and the object store if the backup has them
+4. Restores the PostgreSQL database if a dump exists in the backup
+5. Rebuilds and starts all services
+6. Restarts Traefik if present
 
 **Examples:**
 ```bash

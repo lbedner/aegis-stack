@@ -12,9 +12,9 @@
     {% if post %}
     <span class="flex items-center gap-2">
       {% if post.status == "published" %}
-      {{ action("Archive", 'hx-post="' ~ partials ~ '/posts/' ~ post.id ~ '/archive" hx-swap="none" data-api-done="Archived"', "danger") }}
+      {{ action("Archive", 'hx-post="' ~ partials ~ '/posts/' ~ post.id ~ '/archive" hx-swap="none" data-api-done="Archived" data-write', "danger") }}
       {% else %}
-      {{ action("Publish", 'hx-post="' ~ partials ~ '/posts/' ~ post.id ~ '/publish" hx-swap="none" data-api-done="Published"', "primary") }}
+      {{ action("Publish", 'hx-post="' ~ partials ~ '/posts/' ~ post.id ~ '/publish" hx-swap="none" data-api-done="Published" data-write', "primary") }}
       {% endif %}
     </span>
     {% endif %}
@@ -26,5 +26,5 @@
   {% call field("Excerpt") %}{{ text_input("excerpt", post.excerpt if post else "", placeholder="One line for cards and the meta description") }}{% endcall %}
   {% call field("Tags") %}{{ text_input("tags", tags, placeholder="Comma or space separated") }}{% endcall %}
   {% call field("Content") %}{{ textarea("content", post.content if post else "", rows=20, placeholder="Markdown") }}{% endcall %}
-  {{ primary_button("Save" if post else "Create draft", type="submit") }}
+  {{ primary_button("Save" if post else "Create draft", type="submit", attrs="data-write") }}
 </form>

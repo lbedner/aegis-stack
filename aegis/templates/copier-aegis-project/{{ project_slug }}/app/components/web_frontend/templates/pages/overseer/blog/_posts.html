@@ -7,9 +7,9 @@
 {% macro row_actions(row) -%}
 <span class="flex items-center justify-end gap-2">
   {% if row.is_published %}
-  {{ action("Archive", 'hx-post="' ~ partials ~ '/posts/' ~ row.id ~ '/archive" hx-swap="none" data-api-done="Archived"', "danger") }}
+  {{ action("Archive", 'hx-post="' ~ partials ~ '/posts/' ~ row.id ~ '/archive" hx-swap="none" data-api-done="Archived" data-write', "danger") }}
   {% else %}
-  {{ action("Publish", 'hx-post="' ~ partials ~ '/posts/' ~ row.id ~ '/publish" hx-swap="none" data-api-done="Published"', "primary") }}
+  {{ action("Publish", 'hx-post="' ~ partials ~ '/posts/' ~ row.id ~ '/publish" hx-swap="none" data-api-done="Published" data-write', "primary") }}
   {% endif %}
 </span>
 {%- endmacro %}
@@ -17,7 +17,7 @@
   <nav aria-label="Status" class="flex items-center gap-1.5">
     {% for c in chips %}{{ chip(c.label, c.active, c.url, hx_replace(c.url, "#overseer-main")) }}{% endfor %}
   </nav>
-  {{ action("New post", hx_replace(new_post_url, "#overseer-main"), "primary") }}
+  {{ action("New post", hx_replace(new_post_url, "#overseer-main") ~ " data-write", "primary") }}
 </div>
 {% call card(None, id="blog-posts") %}
   {{ data_table([

@@ -114,6 +114,12 @@ ENV PORT=$PORT
 # declares its own list replaces the anchor's wholesale, and this was
 # quietly dropping to the code directory in every container.
 ENV STORAGE_ROOT=/data/storage
+{%- if include_scheduler and include_database %}
+# Where the scheduled database backup writes (the backup-data volume). The
+# scheduler enqueues it and a worker runs it, so every container needs it,
+# for the same reason as STORAGE_ROOT above.
+ENV DATABASE_BACKUP_DIR=/var/backups/app
+{%- endif %}
 
 # Expose the port
 EXPOSE $PORT

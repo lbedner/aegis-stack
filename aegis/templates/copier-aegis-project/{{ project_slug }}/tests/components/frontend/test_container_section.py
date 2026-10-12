@@ -2,6 +2,7 @@
 (``ui_runtime.containers``), added to every component modal that has a
 container behind it by ``BaseDetailPopup`` itself."""
 
+from importlib.util import find_spec
 from unittest.mock import MagicMock
 
 import flet as ft
@@ -19,6 +20,8 @@ from app.components.frontend.dashboard.modals.modal_sections import (
 )
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core import series
+from app.core.config import settings
+from app.services.shared.deps import NO_AUTH_REFUSAL
 from app.services.system import ui_runtime
 from app.services.system.models import ComponentStatus
 from tests._fake_runtime import REDIS, FakeRuntime, use_runtime
@@ -185,6 +188,22 @@ async def test_each_container_has_a_restart(
     section = ContainerSection("redis")
     await section.load()
     assert _restarts(section)
+
+
+@pytest.mark.skipif(
+    find_spec("app.services.auth") is not None, reason="with auth: admins only"
+)
+async def test_without_auth_a_deployed_build_hides_restart_and_says_why(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The restart API refuses it there (``refusal_at`` the address this
+    dashboard calls the API at), so the button is not offered."""
+    use_runtime(monkeypatch, FakeRuntime(REDIS))
+    monkeypatch.setattr(settings, "BUILD_ID", "abc1234")
+    section = ContainerSection("redis")
+    await section.load()
+    assert not _restarts(section)
+    assert NO_AUTH_REFUSAL in texts(section)
 
 
 def _restarts(section: ContainerSection) -> list[ft.IconButton]:

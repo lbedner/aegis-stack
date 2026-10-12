@@ -3,7 +3,7 @@
 {% from "components/macros/form.html" import field, text_input, select, primary_button %}
 {% from "components/macros/feedback.html" import error_banner %}
 {{ dialog_title("New token", "For a client beyond stdio. Its value is shown once.") }}
-<form {{ hx_dialog_post(partials ~ "/tokens") }} class="space-y-4">
+<form data-write {{ hx_dialog_post(partials ~ "/tokens") }} class="space-y-4">
   {{ error_banner(errors) }}
   {% call field("Name") %}{{ text_input("name", form.name, "What it is for: laptop, CI", required=True, autofocus=True) }}{% endcall %}
   {% call field("Reaches") %}{{ select("scope", scopes, form.scope or "read", blank=None, block=True) }}{% endcall %}

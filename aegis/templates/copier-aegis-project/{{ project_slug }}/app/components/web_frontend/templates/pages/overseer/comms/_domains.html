@@ -4,7 +4,7 @@
 {% from "components/macros/table.html" import data_table %}
 {% from "components/macros/form.html" import action %}
 {% macro domain_actions(row) -%}
-{{ action("Check", 'hx-post="' ~ row.check_url ~ '" hx-swap="none"') }}
+{{ action("Check", 'hx-post="' ~ row.check_url ~ '" hx-swap="none" data-write') }}
 {%- endmacro %}
 <div id="comms-domains" class="mt-4">
 {% call card("Sending domains", "Resend sends only from a verified domain") %}
@@ -15,7 +15,7 @@
     {"key": "name", "label": "Domain", "kind": "code"},
     {"key": "status", "label": "Status", "kind": "status"},
   ], domains.rows, actions=domain_actions, empty="No domains yet") }}
-  <div class="mt-3">{{ action("Add domain", hx_dialog(domains.new_url), "primary") }}</div>
+  <div class="mt-3">{{ action("Add domain", hx_dialog(domains.new_url, "data-write"), "primary") }}</div>
   {% endif %}
 {% endcall %}
 </div>

@@ -1,6 +1,6 @@
-"""Overseer's write actions through the socket proxy: an admin (anyone,
-without auth) restarts one of this app's containers, and every attempt is
-audited (who, what, when, and how it went)."""
+"""Overseer's write actions through the socket proxy: an admin (without
+auth, the local dev build: ``operator_refusal``) restarts one of this app's
+containers, and every attempt is audited (who, what, when, and how it went)."""
 
 from fastapi.testclient import TestClient
 import pytest
@@ -94,11 +94,20 @@ def test_only_an_admin_can_restart(
     assert response.status_code in (401, 403)
     assert fake.restarted == []
 {%- else %}
-def test_without_auth_anyone_may(
+def test_without_auth_another_host_is_refused(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fake = use_runtime(monkeypatch, FakeRuntime(REDIS))
+    assert client.post(URL.format(name=REDIS.name)).status_code == 403
+    assert fake.restarted == []
+
+
+def test_without_auth_the_local_dev_build_may(
     client: TestClient, audit: Recorded, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     fake = use_runtime(monkeypatch, FakeRuntime(REDIS))
-    assert client.post(URL.format(name=REDIS.name)).status_code == 200
+    local = TestClient(client.app, base_url="http://localhost:8000")
+    assert local.post(URL.format(name=REDIS.name)).status_code == 200
     assert fake.restarted == [REDIS.name]
     assert audit.events[0]["actor_email"] is None
 {%- endif %}

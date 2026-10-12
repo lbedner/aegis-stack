@@ -12,8 +12,11 @@ shared with the route's, so it costs no query; the session it opens closes
 when the handler returns, before a stream's body is sent (FastAPI 0.116,
 pinned in pyproject), so a stream holds no connection.
 
-Without auth, Overseer is open: whoever reaches the app may use it, its
-writes included, like any route a stack serves without auth.
+Without auth, Overseer is open to read: whoever reaches the app may use
+it, like any route a stack serves without auth. Its writes (every method
+but a read, ``overseer_gate``; ``overseer_actor`` and the API's
+``get_admin_actor`` too) are made only on the local dev build
+(``operator_refusal``), and their controls hidden elsewhere.
 """
 
 {%- if include_auth %}
@@ -24,10 +27,12 @@ from typing import Any
 from urllib.parse import quote
 {%- endif %}
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import FastAPI, Request
 {%- if include_auth %}
-from fastapi import Cookie, HTTPException, WebSocketException, status
+from fastapi import Cookie, Depends, HTTPException, WebSocketException, status
 from fastapi.responses import Response
+{%- else %}
+from fastapi import HTTPException, status
 {%- endif %}
 {%- if include_database %}
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,11 +47,11 @@ from app.models.user import User
 from app.services.auth.deps import get_optional_user, get_user_service, is_admin
 from app.services.auth.service import session_id_of
 from app.services.auth.users import UserService
-{%- endif %}
 from app.services.shared.deps import Actor, actor_of
-{%- if include_auth %}
 
 from .rendering import is_htmx, templates
+{%- else %}
+from app.services.shared.deps import get_admin_actor, operator_refusal
 {%- endif %}
 {%- if include_database %}
 
@@ -152,6 +157,13 @@ async def user_names(db: Any, ids: list[str]) -> dict[str, str]:
     """``{id: name}`` for the ids (as text) that are this app's users."""
     known = await UserService(db).get_users_by_ids([int(i) for i in ids if i.isdigit()])
     return {str(uid): user.display_name for uid, user in known.items()}
+
+
+async def overseer_actor(user: Viewer = Depends(viewer)) -> Actor:
+    """Who makes an Overseer change (a secret set, a post written): the
+    page-side twin of the API's ``get_admin_actor`` (the gate has already
+    let only admins through), reading the viewer the gate read."""
+    return actor_of(user)
 {%- else %}
 
 Viewer = None
@@ -162,9 +174,18 @@ async def viewer() -> None:
     return None
 
 
-async def overseer_gate() -> None:
-    """No auth service: everyone may use Overseer."""
-    return None
+# What only reads: anything else is a write.
+SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+
+async def overseer_gate(request: Request) -> None:
+    """No auth service: everyone may read Overseer; every write (any other
+    method, on every page and partial) only where ``operator_refusal``
+    allows it, 403 elsewhere, saying why."""
+    if request.method in SAFE_METHODS:
+        return
+    if refused := operator_refusal(request):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail=refused)
 
 
 async def overseer_socket_gate() -> None:
@@ -189,10 +210,9 @@ def add_refusal_page(app: FastAPI) -> None:
 async def user_names(db: Any, ids: list[str]) -> dict[str, str]:
     """No auth service, so no users to name."""
     return {}
+
+
+# Who makes an Overseer change (a secret set, a post written): the API's
+# rule itself, the local dev build's operator or nobody (403).
+overseer_actor = get_admin_actor
 {%- endif %}
-
-
-async def overseer_actor(user: Viewer = Depends(viewer)) -> Actor:
-    """Who makes an Overseer change (a secret set, a post written): the
-    page-side twin of the API's ``get_admin_actor``."""
-    return actor_of(user)

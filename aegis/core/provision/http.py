@@ -31,14 +31,23 @@ def mask_token(token: str) -> str:
 
 
 def _error_message(data: dict[str, Any]) -> str:
-    """Pull the message out of a Hetzner or Cloudflare error body."""
+    """Pull the message out of a Hetzner, Cloudflare or DigitalOcean error body."""
     error = data.get("error")
     if isinstance(error, dict) and error.get("message"):
         return str(error["message"])
     errors = data.get("errors")
     if isinstance(errors, list) and errors and isinstance(errors[0], dict):
         return str(errors[0].get("message", ""))
-    return ""
+    return str(data.get("message") or "")
+
+
+def delete(request: Requester, path: str) -> None:
+    """Delete, treating "already gone" as done so cleanup can be re-run."""
+    try:
+        request("DELETE", path)
+    except ProvisionError as exc:
+        if exc.status != 404:
+            raise
 
 
 def json_requester(base_url: str, token: str, pool: _Pool | None = None) -> Requester:

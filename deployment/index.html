@@ -7117,7 +7117,7 @@ This generates a fresh key, replaces the public key on the server, overwrites th
 <p><strong>What it does:</strong></p>
 <ol>
 <li><strong>Creates a backup</strong> of the current deployment (files + database)</li>
-<li><strong>Syncs files</strong> to the server via <code>rsync --delete</code>, so a file removed from the project is removed from the server too</li>
+<li><strong>Syncs files</strong> to the server via <code>rsync --delete</code>, so a file removed from the project is removed from the server too. Only files git tracks are sent: untracked files (<code>.env.backup-*</code>, notes, local dumps) stay on your machine, and one an earlier deploy left on the server is removed. Outside git, or before anything is tracked, the directory is sent as it is</li>
 <li><strong>Copies <code>.env</code></strong> file separately (excluded from rsync for safety)</li>
 <li><strong>Stops existing services</strong> with <code>docker compose down</code></li>
 <li><strong>Builds and starts services</strong> with production compose overrides</li>

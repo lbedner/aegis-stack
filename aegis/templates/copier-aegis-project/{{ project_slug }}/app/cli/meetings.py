@@ -8,9 +8,18 @@ from rich.table import Table
 import typer
 
 from app.cli import theme
+from app.core import secrets
+from app.core.audit import cli_actor
 from app.core.db import get_async_session
 from app.core.formatting import format_clock, format_relative_time
 from app.services.meetings.bot import run_meeting
+from app.services.meetings.login import (
+    LOGIN,
+    LoginError,
+    capture_login,
+    find_chrome,
+    save_login,
+)
 from app.services.meetings.service import (
     DEFAULT_BOT_NAME,
     MeetingNotFoundError,
@@ -104,3 +113,30 @@ async def show(meeting_id: int = typer.Argument(..., help="The meeting's id")) -
         console.print(
             f"[dim]{format_clock(line.start_seconds)}[/dim] {speaker}: {line.text}"
         )
+
+
+@app.command()
+async def login(
+    chrome: str | None = typer.Option(
+        None, "--chrome", help="The Chrome to sign in with (found if not given)"
+    ),
+) -> None:
+    """Sign the bot's own Google account in, once: Meet turns away a bot
+    that is not signed in."""
+    try:
+        secrets.writable_store(LOGIN)
+    except secrets.SecretsReadOnlyError as exc:
+        theme.fail(str(exc))
+    chrome = chrome or find_chrome()
+    if chrome is None:
+        theme.fail("No Chrome found: give its path with --chrome.")
+    console.print(
+        "In the Chrome window that opens, sign in to the bot's own Google "
+        "account (never your own), then quit Chrome (Cmd+Q / Ctrl+Q)."
+    )
+    try:
+        state = await capture_login(chrome)
+    except LoginError as exc:
+        theme.fail(str(exc))
+    await save_login(state, actor=cli_actor())
+    console.print("Kept. The bot joins signed in from now on.")

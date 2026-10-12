@@ -8,11 +8,17 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.meetings import bot
 from app.services.meetings.meet import CallState
-from app.services.meetings.models import Meeting, MeetingStatus
+from app.services.meetings.models import (
+    Caption,
+    Meeting,
+    MeetingParticipant,
+    MeetingStatus,
+)
 from app.services.meetings.service import MeetingsService, transition
 from tests._meetings import MEET, bot_on
 
@@ -29,9 +35,12 @@ class FakeCall:
         states: list[CallState],
         people: list[int] | None = None,
         during: dict[str, Callable[[], Any]] | None = None,
+        captions: list[list[Caption]] | None = None,
     ):
         self.states = states
         self.counts = people or [3]
+        self.shown = captions or [[]]
+        self.captions_on = False
         self.during = during or {}
         self.said: list[str] = []
         self.asked_as: str | None = None
@@ -57,6 +66,13 @@ class FakeCall:
 
     async def leave(self) -> None:
         self.left = True
+
+    async def turn_on_captions(self) -> bool:
+        self.captions_on = True
+        return True
+
+    async def captions(self) -> list[Caption]:
+        return self.shown.pop(0) if len(self.shown) > 1 else self.shown[0]
 
 
 @pytest.fixture
@@ -234,3 +250,32 @@ async def test_only_meet_is_joined_for_now(
     assert meeting.status == MeetingStatus.FAILED
     assert "Zoom" in (meeting.failure_reason or "")
     assert call.asked_as is None
+
+
+async def test_what_is_said_is_kept_line_by_line(
+    run: Callable[..., Any], async_db_session: AsyncSession
+) -> None:
+    """A caption block Meet is still writing updates its line; each speaker
+    is a participant once."""
+    talking = [Caption("1", "Leonard", "Okay.")]
+    more = [Caption("1", "Leonard", "Okay. Testing."), Caption("2", "Ada", "Hi.")]
+    again = [*more, Caption("3", "Leonard", "Bye.")]
+    call = FakeCall(
+        [CallState.IN_CALL] * 4 + [CallState.ENDED], captions=[talking, more, again]
+    )
+
+    meeting: Meeting = await run(call)
+
+    lines = await MeetingsService(async_db_session, None).transcript(meeting)
+    assert call.captions_on
+    assert [(speaker, line.text) for speaker, line in lines] == [
+        ("Leonard", "Okay. Testing."),
+        ("Ada", "Hi."),
+        ("Leonard", "Bye."),
+    ]
+    people = await async_db_session.exec(
+        select(MeetingParticipant.display_name).where(
+            MeetingParticipant.meeting_id == meeting.id
+        )
+    )
+    assert sorted(people.all()) == ["Ada", "Leonard"]

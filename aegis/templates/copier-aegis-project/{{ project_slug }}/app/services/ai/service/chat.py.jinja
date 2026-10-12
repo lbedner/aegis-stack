@@ -96,6 +96,7 @@ class ChatMixin(PromptMixin):
         agent_slug: str | None = None,
         surface: str | None = None,
         attachments: list[ChatAttachment] | None = None,
+        subject: str | None = None,
 {% if ai_rag %}
         use_rag: bool = False,
         rag_collection: str | None = None,
@@ -115,6 +116,8 @@ class ChatMixin(PromptMixin):
                 history
             attachments: Image parts riding this turn (screenshots,
                 receipts); the model sees them alongside the message
+            subject: What the turn is about (``current_subject``): an
+                app's scope key, kept on a new conversation
 {% if ai_rag %}
             use_rag: Enable RAG context injection from indexed codebase
             rag_collection: Collection to search (uses config default if None)
@@ -139,6 +142,7 @@ class ChatMixin(PromptMixin):
                 agent_slug=agent_slug,
                 surface=surface,
                 attachments=attachments,
+                subject=subject,
 {% if ai_rag %}
                 use_rag=use_rag,
                 rag_collection=rag_collection,
@@ -165,6 +169,7 @@ class ChatMixin(PromptMixin):
                     owner_user_id=owner_user_id,
                     agent_slug=agent_slug,
                     conversation_id=conversation.id,
+                    subject=subject,
                 ),
                 reading_stage() as staged_readings,
             ):
@@ -261,6 +266,7 @@ class ChatMixin(PromptMixin):
         agent_slug: str | None,
         surface: str | None,
         attachments: list[ChatAttachment] | None,
+        subject: str | None = None,
 {% if ai_rag %}
         use_rag: bool = False,
         rag_collection: str | None = None,
@@ -293,6 +299,7 @@ class ChatMixin(PromptMixin):
             config=current,
             surface=surface,
             metadata=stored_metadata,
+            subject=subject,
         )
 
 {% if ai_rag %}
@@ -348,7 +355,7 @@ class ChatMixin(PromptMixin):
         # LangChain's runtime takes neither: its prompt is the persona,
         # the contexts and the history, clipped by message count.
         agent_modules_context = await render_memory_modules(
-            agent_config.memory_modules, user_id=user_id
+            agent_config.memory_modules, user_id=user_id, subject=subject
         )
 {%- endif %}
 {% endif %}
@@ -406,6 +413,7 @@ class ChatMixin(PromptMixin):
         config: AIServiceConfig | None = None,
         surface: str | None = None,
         metadata: dict[str, Any] | None = None,
+        subject: str | None = None,
     ) -> Conversation:
         """
         Get or create conversation and add user message.
@@ -440,6 +448,7 @@ class ChatMixin(PromptMixin):
                 model=cfg.model,
                 user_id=user_id,
                 surface=surface,
+                subject=subject,
             )
             # First message names the conversation; history lists need a
             # human hook, not a UUID.

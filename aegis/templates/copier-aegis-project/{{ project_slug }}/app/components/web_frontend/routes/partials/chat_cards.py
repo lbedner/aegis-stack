@@ -10,7 +10,9 @@ quietly: 200, never 404, because a transcript is a record.
 router does, where there is a database to keep cards in.
 """
 
-from fastapi import APIRouter, Request
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, Response
 from pydantic import ValidationError
 
@@ -25,14 +27,19 @@ MISSING = "partials/chat/card_missing.html"
 def add_card_routes(router: APIRouter, mount: ChatSurface) -> None:
     """A drawn card under ``mount.path``/cards, small or opened larger."""
 
+    # The mount this request is served (``ChatSurface.bind``).
+    Mount = Annotated[ChatSurface, Depends(chat.resolver(mount))]  # noqa: N806
+
     @router.get("/cards/{card_id}", response_class=HTMLResponse)
-    async def card(request: Request, card_id: str, size: str = "") -> Response:
+    async def card(
+        request: Request, bound: Mount, card_id: str, size: str = ""
+    ) -> Response:
         row = await cards.stored_card(card_id)
         kind = cards.lookup(row.kind) if row else None
         if (
             row is None
             or kind is None
-            or await chat.find_conversation(mount, row.conversation_id) is None
+            or await chat.find_conversation(bound, row.conversation_id) is None
         ):
             return templates.TemplateResponse(request=request, name=MISSING)
         try:

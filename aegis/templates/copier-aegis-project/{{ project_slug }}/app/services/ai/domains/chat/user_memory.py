@@ -24,7 +24,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.core.db import get_async_session
 from app.core.log import logger
 from app.core.time import utcnow
-from app.core.tools import acting_as, register_tool
+from app.core.tools import acting_as, current_subject, register_tool
 from app.services.ai.domains.chat import queries
 from app.services.ai.models.agents import AgentUserMemory
 
@@ -54,9 +54,11 @@ def memory_user(
     owner_user_id: int | None = None,
     agent_slug: str | None = None,
     conversation_id: str | None = None,
+    subject: str | None = None,
 ) -> Iterator[None]:
     """Bind the turn's identity: whose turn, whose cards
-    (``current_owner_user_id``), which agent, which chat.
+    (``current_owner_user_id``), which agent, which chat, and what it is
+    about (``current_subject``).
 
     Every chat runtime wraps its model call in this. Without it a
     memory write has no owner (the tool declines and the model reads
@@ -64,10 +66,12 @@ def memory_user(
     the audit trail.
     """
     token = current_user_id.set(user_id)
+    about = current_subject.set(subject)
     try:
         with acting_as(owner_user_id, agent_slug, conversation_id):
             yield
     finally:
+        current_subject.reset(about)
         current_user_id.reset(token)
 
 

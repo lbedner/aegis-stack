@@ -47,6 +47,10 @@ current_agent_slug: ContextVar[str | None] = ContextVar(
 current_conversation_id: ContextVar[str | None] = ContextVar(
     "current_conversation_id", default=None
 )
+# What the turn is about, beside whose it is: an app's own scope key (a
+# project's id, say), decided by the server like the user and bound by
+# ``memory_user``. None when the app has no such scope.
+current_subject: ContextVar[str | None] = ContextVar("current_subject", default=None)
 
 
 @contextmanager

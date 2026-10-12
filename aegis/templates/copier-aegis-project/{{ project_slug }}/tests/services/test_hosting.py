@@ -137,3 +137,7 @@ def test_every_provider_says_what_aegis_can_do_there() -> None:
     assert hetzner["token"] == "HCLOUD_TOKEN"
     assert hetzner["logo"] and "hetzner.com" in hetzner["logo"]
     assert not cards[1]["current"] and cards[3]["logo"] is None
+    droplet = cards[1]
+    assert "Provision" in droplet["can"]
+    assert droplet["command"] == "aegis deploy-provision --provider digitalocean"
+    assert droplet["token"] == "DIGITALOCEAN_TOKEN"

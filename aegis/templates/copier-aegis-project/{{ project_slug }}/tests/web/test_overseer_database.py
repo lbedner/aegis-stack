@@ -268,6 +268,7 @@ class TestTransactions:
         assert restart.get("hx-get") == overseer_container.RESTART.format(
             name="app-worker-system-1"
         )
+        assert restart.get("data-write") is not None  # ``operator_refusal``
         assert not select(short, "button")
         assert one(short, "[data-open-for] [data-tone]").get("data-tone") != "error"
 
@@ -291,9 +292,9 @@ class TestTransactions:
         _transactions(monkeypatch, rows, postgres=True)
         html = _get(postgres, "transactions")
         holder, waiter = select(html, "#database-transactions tbody tr")
-        assert one(holder, "button").get(
-            "hx-get"
-        ) == overseer_database.END_CONFIRM.format(pid=41)
+        end = one(holder, "button")
+        assert end.get("hx-get") == overseer_database.END_CONFIRM.format(pid=41)
+        assert end.get("data-write") is not None  # ``operator_refusal``
         assert "41" in text(one(waiter, "[data-blocked-by]"))
         assert "UPDATE llm_model" in text(waiter)
         assert "2 connections" in text(one(html, "#database-transactions"))

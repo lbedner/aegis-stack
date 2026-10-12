@@ -31,6 +31,7 @@ OWNERS = (
     "app.components.worker.runtime",
     "app.services.load_test.worker.runs",
     "app.services.system.errors.store",
+    "app.components.deploy.agent",
     # Last: the shared cache claims whatever is left in its database.
     "app.services.system.ui_cache",
 )

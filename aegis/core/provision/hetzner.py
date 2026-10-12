@@ -1,30 +1,12 @@
 """Hetzner Cloud: price lookup, SSH key, server create/get/delete."""
 
-import base64
-import hashlib
 from typing import Any
 
-from .http import ProvisionError, Requester
+from .http import ProvisionError, Requester, delete
+from .provider import ssh_fingerprint, ssh_key_name
 
 API_URL = "https://api.hetzner.cloud/v1"
 IMAGE = "ubuntu-24.04"
-
-
-def ssh_fingerprint(public_key: str) -> str:
-    """MD5 fingerprint in Hetzner's colon form, used to find an uploaded key."""
-    blob = base64.b64decode(public_key.split()[1])
-    digest = hashlib.md5(blob, usedforsecurity=False).hexdigest()
-    return ":".join(digest[i : i + 2] for i in range(0, len(digest), 2))
-
-
-def cloud_init_user_data(setup_script: str) -> str:
-    """The project's ``scripts/server-setup.sh`` as first-boot user-data.
-
-    cloud-init runs a ``#!`` user-data as root on first boot, so the box
-    arrives in the state ``aegis deploy-setup`` would leave it in. HOME is
-    set first: cloud-init does not export it and the script runs ``set -u``.
-    """
-    return f"#!/bin/bash\nexport HOME=/root\n{setup_script}"
 
 
 class HetznerClient:
@@ -52,18 +34,16 @@ class HetznerClient:
         )["ssh_keys"]
         if found:
             return found[0]["id"], False
-        suffix = ssh_fingerprint(public_key).replace(":", "")[:8]
         created = self._request(
             "POST",
             "/ssh_keys",
-            {"name": f"aegis-{name}-{suffix}", "public_key": public_key},
+            {"name": ssh_key_name(name, public_key), "public_key": public_key},
         )
         return created["ssh_key"]["id"], True
 
     def create_server(
         self, name: str, size: str, region: str, ssh_key_id: int, user_data: str
-    ) -> tuple[int, str]:
-        """Create the server; return ``(server_id, ipv4)``."""
+    ) -> int:
         body: dict[str, Any] = {
             "name": name,
             "server_type": size,
@@ -73,22 +53,24 @@ class HetznerClient:
             "user_data": user_data,
             "labels": {"managed-by": "aegis", "aegis-project": name},
         }
-        server = self._request("POST", "/servers", body)["server"]
-        return server["id"], server["public_net"]["ipv4"]["ip"]
+        return self._request("POST", "/servers", body)["server"]["id"]
 
-    def server_status(self, server_id: int) -> str:
-        return self._request("GET", f"/servers/{server_id}")["server"]["status"]
+    def running_ipv4(self, server_id: int) -> str | None:
+        server = self._request("GET", f"/servers/{server_id}")["server"]
+        if server["status"] != "running":
+            return None
+        return server["public_net"]["ipv4"]["ip"]
+
+    def create_firewall(self, name: str, server_id: int) -> str | None:
+        # ponytail: no cloud firewall on Hetzner yet, so Docker-published ports
+        # skip ufw there; add one as DigitalOcean does when that matters.
+        return None
 
     def delete_server(self, server_id: int) -> None:
-        self._delete(f"/servers/{server_id}")
+        delete(self._request, f"/servers/{server_id}")
 
     def delete_ssh_key(self, key_id: int) -> None:
-        self._delete(f"/ssh_keys/{key_id}")
+        delete(self._request, f"/ssh_keys/{key_id}")
 
-    def _delete(self, path: str) -> None:
-        """Delete, treating "already gone" as done so cleanup can be re-run."""
-        try:
-            self._request("DELETE", path)
-        except ProvisionError as exc:
-            if exc.status != 404:
-                raise
+    def delete_firewall(self, firewall_id: str) -> None:
+        delete(self._request, f"/firewalls/{firewall_id}")

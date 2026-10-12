@@ -30,6 +30,7 @@ from .commands.deploy import (
     deploy_status_command,
     deploy_stop_command,
 )
+from .commands.deploy_agent import deploy_agent_command
 from .commands.deploy_provision import deploy_destroy_command, deploy_provision_command
 from .commands.ingress import ingress_enable_command
 from .commands.init import init_command
@@ -147,6 +148,7 @@ app.command(name="deploy-setup")(deploy_setup_command)
 app.command(name="deploy-provision")(deploy_provision_command)
 app.command(name="deploy-destroy")(deploy_destroy_command)
 app.command(name="deploy-cd-setup")(deploy_cd_setup_command)
+app.command(name="deploy-agent")(deploy_agent_command)
 app.command(name="deploy")(deploy_command)
 app.command(name="deploy-backup")(deploy_backup_command)
 app.command(name="deploy-backups")(deploy_backups_command)

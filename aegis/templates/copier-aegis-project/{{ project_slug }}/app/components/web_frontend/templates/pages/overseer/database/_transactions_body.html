@@ -8,7 +8,7 @@
 {% macro open_for(value) %}<span data-open-for>{{ badge(value.label, value.tone) }}</span>{% endmacro %}
 {% macro blocked_by(value) %}<span data-blocked-by>{{ value|join(", ") if value else "-" }}</span>{% endmacro %}
 {% macro end(row) -%}
-{% if row.end_url %}{{ action("End" if row.pid else "Restart", hx_dialog(row.end_url), "warn") }}{% endif %}
+{% if row.end_url %}{{ action("End" if row.pid else "Restart", hx_dialog(row.end_url, "data-write"), "warn") }}{% endif %}
 {%- endmacro %}
 {% if transactions_postgres %}
 {% set columns = [

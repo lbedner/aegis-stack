@@ -2,7 +2,9 @@
 gets (``BaseDetailPopup`` adds it): the same rows as the htmx Container section
 (``ui_runtime.containers``), read again while the modal is open. Each row
 has a Restart that confirms, then calls the restart API (behind
-``get_admin_actor``; it audits every attempt), as the htmx section's does."""
+``get_admin_actor``; it audits every attempt), as the htmx section's does.
+Where that API refuses this dashboard (``refusal_at`` the address it calls
+the API at), no Restart, and a line saying why."""
 
 import asyncio
 from typing import Any
@@ -20,6 +22,8 @@ from app.components.frontend.dashboard.modals.modal_sections import (
 from app.components.frontend.state.session_state import get_session_state
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core import series
+from app.core.config import settings
+from app.services.shared.deps import refusal_at
 from app.services.system import ui_runtime
 
 from .table_tab import TableTab
@@ -98,6 +102,7 @@ class ContainerSection(ft.Column):
     def _show(
         self, view: dict[str, Any], charts: list[dict[str, Any]] | None = None
     ) -> None:
+        refused = refusal_at(settings.API_BASE_URL)
         body: ft.Control = (
             SecondaryText(view["note"])
             if view["note"]
@@ -105,11 +110,13 @@ class ContainerSection(ft.Column):
                 view["rows"],
                 COLUMNS,
                 "No containers",
-                actions=self._restart_button,
+                actions=None if refused else self._restart_button,
                 color_of=_figure_color,
             )
         )
         self.controls = [H3Text("Container"), body]
+        if refused and view["rows"]:
+            self.controls.append(SecondaryText(refused))
         if charts:
             self.controls.append(self._chips)
             self.controls.append(

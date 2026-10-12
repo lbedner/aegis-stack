@@ -41,9 +41,9 @@
   {% endif %}
   <div class="flex flex-wrap items-center gap-2">
     {% if mode == "load" %}
-    {{ primary_button("Start", "submit") }}
+    {{ primary_button("Start", "submit", "data-write") }}
     {% else %}
-    {{ primary_button("Execute", "submit") }}
+    {{ primary_button("Execute", "submit", "data-write") }}
     {{ action("Load test this", load_test_this) }}
     {% endif %}
   </div>

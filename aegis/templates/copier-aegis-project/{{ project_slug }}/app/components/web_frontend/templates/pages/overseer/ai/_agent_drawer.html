@@ -25,7 +25,7 @@
     </div>
     {% call field("System prompt") %}{{ textarea("system_prompt", agent.system_prompt or "", rows=10) }}{% endcall %}
     {{ checkbox("is_active", agent.is_active, "Active") }}
-    {{ primary_button("Save", type="submit") }}
+    {{ primary_button("Save", type="submit", attrs="data-write") }}
   </form>
   {% call card("Grants", id="ai-agent-grants") %}{{ facts(grants) }}{% endcall %}
 </div>

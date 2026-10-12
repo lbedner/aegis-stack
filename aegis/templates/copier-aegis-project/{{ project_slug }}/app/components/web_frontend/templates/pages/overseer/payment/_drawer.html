@@ -8,7 +8,7 @@
   {% call card("Details", id="payment-transaction-facts") %}{{ fact_list(facts) }}{% endcall %}
   {% if refund %}
   {% call card("Refund", id="payment-refund") %}
-  <form hx-post="{{ refund.url }}" hx-swap="none" data-refund class="space-y-4">
+  <form data-write hx-post="{{ refund.url }}" hx-swap="none" data-refund class="space-y-4">
     <input type="hidden" name="original" value="{{ txn.amount }}">
     {% call field("Amount") %}{{ money_input("amount", refund.amount) }}{% endcall %}
     {% call field("Reason") %}{{ select("reason", refund.reasons, refund.reason, blank=None, block=True) }}{% endcall %}

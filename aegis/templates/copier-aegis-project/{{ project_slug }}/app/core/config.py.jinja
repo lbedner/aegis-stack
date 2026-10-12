@@ -166,9 +166,8 @@ class Settings(
     # Where the scheduled backup job writes dumps. A relative path resolves
     # against the process cwd, which inside a container is the writable
     # layer - fine for local dev, but there the dumps are destroyed by the
-    # next `up --force-recreate`, i.e. every deploy. The compose files point
-    # the scheduler at a mounted absolute path so prod dumps outlive the
-    # container; restore from the scheduler, which is where they are visible.
+    # next `up --force-recreate`, i.e. every deploy. The Dockerfile points
+    # every container at the mounted backup volume so dumps outlive them.
     DATABASE_BACKUP_DIR: str = "backups"
     DATABASE_BACKUP_KEEP: Annotated[int, Configurable(ComponentName.DATABASE, "Backups kept; older ones are removed")] = 7
 {%- endif %}

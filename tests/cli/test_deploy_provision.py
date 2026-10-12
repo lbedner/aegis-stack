@@ -15,18 +15,20 @@ from typer.testing import CliRunner
 
 from aegis.__main__ import app
 from aegis.commands import deploy_provision as cmd
-from aegis.core.provision import wait
+from aegis.core.provision import digitalocean, hetzner, wait
 from aegis.core.provision.cloudflare import CloudflareDNS
-from aegis.core.provision.hetzner import HetznerClient, cloud_init_user_data
+from aegis.core.provision.hetzner import HetznerClient
 from aegis.core.provision.http import (
     ProvisionError,
     json_requester,
     mask_token,
 )
+from aegis.core.provision.provider import cloud_init_user_data, ssh_fingerprint
 from tests.cli.test_utils import strip_ansi_codes
 
 RUNNER = CliRunner()
 HCLOUD = "hcloud-secret-token-1234"
+DO_TOKEN = "do-secret-token-5678"
 CF = "cf-secret-token-9876"
 PUBKEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl me@laptop"
 IP = "203.0.113.7"
@@ -76,9 +78,54 @@ def _hetzner_routes() -> dict[tuple[str, str], Any]:
                 "public_net": {"ipv4": {"ip": IP}},
             }
         },
-        ("GET", "/servers/42"): {"server": {"id": 42, "status": "running"}},
+        ("GET", "/servers/42"): {
+            "server": {
+                "id": 42,
+                "status": "running",
+                "public_net": {"ipv4": {"ip": IP}},
+            }
+        },
         ("DELETE", "/servers/42"): {"action": {"id": 1}},
         ("DELETE", "/ssh_keys/11"): {},
+    }
+
+
+def _do_routes() -> dict[tuple[str, str], Any]:
+    return {
+        ("GET", "/sizes?per_page=200"): {
+            "sizes": [
+                {
+                    "slug": "s-1vcpu-2gb",
+                    "price_monthly": 12.0,
+                    "regions": ["nyc3", "fra1"],
+                    "available": True,
+                }
+            ]
+        },
+        ("GET", f"/account/keys/{_fingerprint()}"): ProvisionError(
+            "not found", status=404
+        ),
+        ("POST", "/account/keys"): {"ssh_key": {"id": 21}},
+        # The IP arrives after create, once the droplet is up.
+        ("POST", "/droplets"): {
+            "droplet": {"id": 77, "status": "new", "networks": {"v4": []}}
+        },
+        ("GET", "/droplets/77"): {
+            "droplet": {
+                "id": 77,
+                "status": "active",
+                "networks": {
+                    "v4": [
+                        {"ip_address": "10.10.0.5", "type": "private"},
+                        {"ip_address": IP, "type": "public"},
+                    ]
+                },
+            }
+        },
+        ("POST", "/firewalls"): {"firewall": {"id": "fw-1"}},
+        ("DELETE", "/firewalls/fw-1"): {},
+        ("DELETE", "/droplets/77"): {},
+        ("DELETE", "/account/keys/21"): {},
     }
 
 
@@ -92,8 +139,6 @@ def _cloudflare_routes() -> dict[tuple[str, str], Any]:
 
 
 def _fingerprint() -> str:
-    from aegis.core.provision.hetzner import ssh_fingerprint
-
     return ssh_fingerprint(PUBKEY)
 
 
@@ -140,10 +185,10 @@ def test_ensure_ssh_key_creates_when_missing() -> None:
 
 def test_create_server_sends_user_data_key_and_labels() -> None:
     api = FakeAPI(_hetzner_routes())
-    server_id, ip = HetznerClient(api).create_server(
+    server_id = HetznerClient(api).create_server(
         name="my-app", size="cx23", region="nbg1", ssh_key_id=11, user_data="#!x"
     )
-    assert (server_id, ip) == (42, IP)
+    assert server_id == 42
     body = api.calls[-1][2]
     assert body is not None
     assert body["server_type"] == "cx23"
@@ -151,6 +196,14 @@ def test_create_server_sends_user_data_key_and_labels() -> None:
     assert body["ssh_keys"] == [11]
     assert body["user_data"] == "#!x"
     assert body["labels"]["managed-by"] == "aegis"
+
+
+def test_running_ipv4_waits_for_running() -> None:
+    routes = _hetzner_routes()
+    client = HetznerClient(FakeAPI(routes))
+    assert client.running_ipv4(42) == IP
+    routes[("GET", "/servers/42")]["server"]["status"] = "initializing"
+    assert client.running_ipv4(42) is None
 
 
 def test_delete_server_tolerates_already_gone() -> None:
@@ -281,11 +334,12 @@ def project(tmp_path: Path) -> Path:
 def apis(monkeypatch: pytest.MonkeyPatch) -> dict[str, FakeAPI]:
     """Fake Hetzner + Cloudflare, no-op waits, recorded deploy hand-off."""
     fakes = {
-        cmd.HETZNER_API: FakeAPI(_hetzner_routes()),
+        hetzner.API_URL: FakeAPI(_hetzner_routes()),
+        digitalocean.API_URL: FakeAPI(_do_routes()),
         cmd.CLOUDFLARE_API: FakeAPI(_cloudflare_routes()),
     }
     monkeypatch.setattr(cmd, "json_requester", lambda base, _token: fakes[base])
-    monkeypatch.setattr(cmd, "wait_until", lambda *_a, **_k: True)
+    monkeypatch.setattr(cmd, "wait_until", lambda check, *_a, **_k: check())
     monkeypatch.setattr(cmd, "wait_for_host_key", lambda _ip: True)
     monkeypatch.setattr(cmd, "wait_for_dns", lambda _h, _ip: True)
     monkeypatch.setattr(cmd, "_cloud_init_ok", lambda _ip: True)
@@ -307,6 +361,7 @@ def apis(monkeypatch: pytest.MonkeyPatch) -> dict[str, FakeAPI]:
     )
     fakes["steps"] = steps  # type: ignore[assignment]
     monkeypatch.setenv("HCLOUD_TOKEN", HCLOUD)
+    monkeypatch.setenv("DIGITALOCEAN_TOKEN", DO_TOKEN)
     monkeypatch.delenv("CLOUDFLARE_API_TOKEN", raising=False)
     fakes["deployed"] = deployed  # type: ignore[assignment]
     return fakes
@@ -342,15 +397,15 @@ def test_provision_requires_token(
     result = _provision(project)
     assert result.exit_code == 1
     assert "HCLOUD_TOKEN" in result.output
-    assert not apis[cmd.HETZNER_API].calls
+    assert not apis[hetzner.API_URL].calls
 
 
 def test_provision_rejects_unknown_provider(
     project: Path, apis: dict[str, FakeAPI]
 ) -> None:
-    result = _provision(project, "--provider", "digitalocean")
+    result = _provision(project, "--provider", "linode")
     assert result.exit_code != 0
-    assert not apis[cmd.HETZNER_API].calls
+    assert not apis[hetzner.API_URL].calls
 
 
 def test_provision_happy_path_sslip(project: Path, apis: dict[str, FakeAPI]) -> None:
@@ -368,7 +423,7 @@ def test_provision_happy_path_sslip(project: Path, apis: dict[str, FakeAPI]) -> 
     assert record["size"] == "cx23"
     assert record["ssh_key_id"] == 11
     assert record["status"] == "ready"
-    body = apis[cmd.HETZNER_API].calls[3][2]
+    body = apis[hetzner.API_URL].calls[3][2]
     assert body is not None and "echo hi" in body["user_data"]
     assert body["name"] == "my-app"
     assert apis["deployed"] == [str(project)]  # type: ignore[comparison-overlap]
@@ -379,7 +434,7 @@ def test_provision_declined_price_creates_nothing(
 ) -> None:
     result = _provision(project, input="n\n")
     assert result.exit_code == 0
-    assert not apis[cmd.HETZNER_API].called("POST", "/servers")
+    assert not apis[hetzner.API_URL].called("POST", "/servers")
     assert not (project / ".aegis" / "deploy.yml").exists()
 
 
@@ -401,7 +456,7 @@ def test_provision_domain_without_cloudflare_token_fails_before_creating(
     result = _provision(project, "--domain", "app.example.com")
     assert result.exit_code == 1
     assert "CLOUDFLARE_API_TOKEN" in result.output
-    assert not apis[cmd.HETZNER_API].calls
+    assert not apis[hetzner.API_URL].calls
 
 
 def test_failure_after_create_records_server_and_keeps_it_when_declined(
@@ -414,7 +469,7 @@ def test_failure_after_create_records_server_and_keeps_it_when_declined(
     record = _deploy_yml(project)["provision"]
     assert record["server_id"] == 42
     assert record["status"] == "provisioning"
-    assert not apis[cmd.HETZNER_API].called("DELETE", "/servers/42")
+    assert not apis[hetzner.API_URL].called("DELETE", "/servers/42")
 
 
 def test_failure_after_create_deletes_when_accepted(
@@ -423,9 +478,9 @@ def test_failure_after_create_deletes_when_accepted(
     monkeypatch.setattr(cmd, "_cloud_init_ok", lambda _ip: False)
     result = _provision(project, input="y\ny\n")
     assert result.exit_code == 1
-    hetzner = apis[cmd.HETZNER_API]
-    assert hetzner.called("DELETE", "/servers/42")
-    assert hetzner.called("DELETE", "/ssh_keys/11")
+    hz = apis[hetzner.API_URL]
+    assert hz.called("DELETE", "/servers/42")
+    assert hz.called("DELETE", "/ssh_keys/11")
     assert _deploy_yml(project)["provision"]["status"] == "destroyed"
 
 
@@ -438,7 +493,7 @@ def test_unexpected_error_after_create_still_offers_cleanup(
     monkeypatch.setattr(cmd, "wait_for_host_key", boom)
     result = _provision(project, input="y\ny\n")
     assert isinstance(result.exception, OSError)
-    assert apis[cmd.HETZNER_API].called("DELETE", "/servers/42")
+    assert apis[hetzner.API_URL].called("DELETE", "/servers/42")
 
 
 def test_rerun_resumes_without_creating_a_second_server(
@@ -447,11 +502,11 @@ def test_rerun_resumes_without_creating_a_second_server(
     monkeypatch.setattr(cmd, "wait_for_host_key", lambda _ip: False)
     _provision(project, input="y\nn\n")
     monkeypatch.setattr(cmd, "wait_for_host_key", lambda _ip: True)
-    hetzner = apis[cmd.HETZNER_API]
-    hetzner.calls.clear()
+    hz = apis[hetzner.API_URL]
+    hz.calls.clear()
     result = _provision(project, input="")
     assert result.exit_code == 0, result.output
-    assert not hetzner.called("POST", "/servers")
+    assert not hz.called("POST", "/servers")
     assert _deploy_yml(project)["provision"]["status"] == "ready"
 
 
@@ -459,10 +514,10 @@ def test_provision_refuses_when_already_ready(
     project: Path, apis: dict[str, FakeAPI]
 ) -> None:
     _provision(project)
-    apis[cmd.HETZNER_API].calls.clear()
+    apis[hetzner.API_URL].calls.clear()
     result = _provision(project)
     assert result.exit_code == 1
-    assert not apis[cmd.HETZNER_API].calls
+    assert not apis[hetzner.API_URL].calls
 
 
 def test_destroy_requires_typed_name(project: Path, apis: dict[str, FakeAPI]) -> None:
@@ -471,7 +526,7 @@ def test_destroy_requires_typed_name(project: Path, apis: dict[str, FakeAPI]) ->
         app, ["deploy-destroy", "--project-path", str(project)], input="nope\n"
     )
     assert result.exit_code == 1
-    assert not apis[cmd.HETZNER_API].called("DELETE", "/servers/42")
+    assert not apis[hetzner.API_URL].called("DELETE", "/servers/42")
     assert _deploy_yml(project)["provision"]["status"] == "ready"
 
 
@@ -484,16 +539,31 @@ def test_destroy_deletes_server_dns_and_key(
         app, ["deploy-destroy", "--project-path", str(project)], input="my-app\n"
     )
     assert result.exit_code == 0, result.output
-    assert apis[cmd.HETZNER_API].called("DELETE", "/servers/42")
-    assert apis[cmd.HETZNER_API].called("DELETE", "/ssh_keys/11")
+    assert apis[hetzner.API_URL].called("DELETE", "/servers/42")
+    assert apis[hetzner.API_URL].called("DELETE", "/ssh_keys/11")
     assert apis[cmd.CLOUDFLARE_API].called("DELETE", "/zones/zone1/dns_records/rec1")
     assert _deploy_yml(project)["provision"]["status"] == "destroyed"
+
+
+def test_destroy_takes_the_name_as_an_option_without_asking(
+    project: Path, apis: dict[str, FakeAPI]
+) -> None:
+    """``--confirm`` is the typed name, for a run with nobody at the prompt
+    (the Overseer's deploy agent); it must still match."""
+    _provision(project)
+    args = ["deploy-destroy", "--project-path", str(project), "--confirm"]
+    result = RUNNER.invoke(app, [*args, "nope"])
+    assert result.exit_code == 1
+    assert not apis[hetzner.API_URL].called("DELETE", "/servers/42")
+    result = RUNNER.invoke(app, [*args, "my-app"])
+    assert result.exit_code == 0, result.output
+    assert apis[hetzner.API_URL].called("DELETE", "/servers/42")
 
 
 def test_destroy_without_record_fails(project: Path, apis: dict[str, FakeAPI]) -> None:
     result = RUNNER.invoke(app, ["deploy-destroy", "--project-path", str(project)])
     assert result.exit_code == 1
-    assert not apis[cmd.HETZNER_API].calls
+    assert not apis[hetzner.API_URL].calls
 
 
 def _home_with_keys(tmp_path: Path, *names: str) -> Path:
@@ -518,7 +588,7 @@ def test_without_ssh_key_the_first_existing_key_is_used(
 
     assert result.exit_code == 0, result.output
     uploaded = [
-        c for c in apis[cmd.HETZNER_API].calls if c[:2] == ("POST", "/ssh_keys")
+        c for c in apis[hetzner.API_URL].calls if c[:2] == ("POST", "/ssh_keys")
     ]
     assert uploaded and uploaded[0][2]["public_key"] == PUBKEY
 
@@ -537,7 +607,7 @@ def test_without_any_ssh_key_it_says_what_it_looked_for(
     assert result.exit_code == 1
     assert "id_ed25519.pub" in result.output and "id_rsa.pub" in result.output
     assert "--ssh-key" in result.output
-    assert not apis[cmd.HETZNER_API].calls
+    assert not apis[hetzner.API_URL].calls
 
 
 def test_provision_turns_tls_on_for_the_name_before_deploying(
@@ -565,7 +635,7 @@ def test_without_an_email_nothing_is_created(
 
     assert result.exit_code == 1
     assert "--email" in result.output
-    assert not apis[cmd.HETZNER_API].calls
+    assert not apis[hetzner.API_URL].calls
 
 
 def test_the_project_email_is_used_when_it_is_real(
@@ -580,3 +650,71 @@ def test_the_project_email_is_used_when_it_is_real(
     assert result.exit_code == 0, result.output
     tls = [step for step in apis["steps"] if step[0] == "tls"]  # type: ignore[index]
     assert tls[0][1][2] == "me@real.dev"
+
+
+# ---------------------------------------------------------------------------
+# DigitalOcean through the seam
+# ---------------------------------------------------------------------------
+
+
+def test_provider_digitalocean_uses_its_client_token_and_defaults(
+    project: Path,
+    apis: dict[str, FakeAPI],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("HCLOUD_TOKEN")
+    result = _provision(project, "--provider", "digitalocean")
+    assert result.exit_code == 0, result.output
+    assert "12.00" in result.output and "DigitalOcean" in result.output
+    assert DO_TOKEN not in result.output and HCLOUD not in result.output
+    assert not apis[hetzner.API_URL].calls
+    record = _deploy_yml(project)["provision"]
+    assert record["provider"] == "digitalocean"
+    assert (record["size"], record["region"]) == ("s-1vcpu-2gb", "nyc3")
+    assert (record["server_id"], record["ipv4"]) == (77, IP)
+    assert (record["ssh_key_id"], record["firewall_id"]) == (21, "fw-1")
+    assert _deploy_yml(project)["server"]["host"] == IP
+
+
+def test_provider_digitalocean_requires_its_token(
+    project: Path,
+    apis: dict[str, FakeAPI],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("DIGITALOCEAN_TOKEN")
+    result = _provision(project, "--provider", "digitalocean")
+    assert result.exit_code == 1
+    assert "DIGITALOCEAN_TOKEN" in result.output
+    assert not apis[digitalocean.API_URL].calls
+
+
+def test_failure_after_the_firewall_lists_and_deletes_it(
+    project: Path,
+    apis: dict[str, FakeAPI],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(cmd, "wait_for_host_key", lambda _ip: False)
+    result = _provision(project, "--provider", "digitalocean", input="y\ny\n")
+    assert result.exit_code == 1
+    assert "fw-1" in result.output
+    do = apis[digitalocean.API_URL]
+    for path in ("/firewalls/fw-1", "/droplets/77", "/account/keys/21"):
+        assert do.called("DELETE", path)
+    assert _deploy_yml(project)["provision"]["status"] == "destroyed"
+
+
+def test_destroy_picks_the_client_from_the_record(
+    project: Path,
+    apis: dict[str, FakeAPI],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _provision(project, "--provider", "digitalocean")
+    monkeypatch.delenv("HCLOUD_TOKEN")
+    result = RUNNER.invoke(
+        app, ["deploy-destroy", "--project-path", str(project)], input="my-app\n"
+    )
+    assert result.exit_code == 0, result.output
+    do = apis[digitalocean.API_URL]
+    for path in ("/firewalls/fw-1", "/droplets/77", "/account/keys/21"):
+        assert do.called("DELETE", path)
+    assert not apis[hetzner.API_URL].calls

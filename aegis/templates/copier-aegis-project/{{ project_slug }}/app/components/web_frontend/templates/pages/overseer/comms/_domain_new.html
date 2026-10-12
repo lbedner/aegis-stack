@@ -3,7 +3,7 @@
 {% from "components/macros/form.html" import field, text_input, primary_button %}
 {% from "components/macros/feedback.html" import error_banner %}
 {{ dialog_title("Add a sending domain", "Resend lists the DNS records to create at your registrar.") }}
-<form {{ hx_dialog_post(partials ~ "/domains") }} class="space-y-4">
+<form data-write {{ hx_dialog_post(partials ~ "/domains") }} class="space-y-4">
   {{ error_banner(errors) }}
   {% call field("Domain") %}{{ text_input("domain", None, "mail.example.com", required=True, autofocus=True) }}{% endcall %}
   <div class="flex items-center gap-3">

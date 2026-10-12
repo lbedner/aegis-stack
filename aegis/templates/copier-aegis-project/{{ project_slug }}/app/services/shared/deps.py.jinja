@@ -4,13 +4,17 @@
 the authenticated user's id when the auth service is present, else ``None``
 (single-user / standalone) - so route handlers stay auth-agnostic and never
 repeat the auth guard per endpoint. ``get_admin_actor`` does the same for
-an operator's change: an admin with auth, anyone without.
+an operator's change (a restart, a secret set, a deploy): an admin with
+auth; without it, only where ``operator_refusal`` allows. Every write action
+depends on it (or on Overseer's page-side twin, ``overseer_actor``), and a
+UI hides its write controls where ``operator_refusal`` says why not.
 """
 
 from dataclasses import dataclass
+from urllib.parse import urlsplit
 
+from fastapi import Request
 {%- if include_auth %}
-
 from fastapi import Depends
 
 from app.models.user import User
@@ -19,13 +23,27 @@ from app.services.auth.deps import (
     get_optional_user,
     require_admin,
 )
+{%- else %}
+from fastapi import HTTPException, status
+
+from app.core.config import settings
+from app.services.system.hosting import LOCAL
+
+# Without auth, an operator's change is asked only at these (``refusal_at``).
+LOOPBACK = frozenset({"localhost", "127.0.0.1", "::1"})
 {%- endif %}
+
+NO_AUTH_REFUSAL = (
+    "Read only: with no auth service, operator changes are made only on the "
+    "local dev build, at localhost. Add auth (aegis add auth) to make them "
+    "here as an admin."
+)
 
 
 @dataclass(frozen=True)
 class Actor:
     """Who made a change: the signed-in user with the auth service; nobody
-    in particular without it, since whoever reaches the app may make it."""
+    in particular without it (the local dev build's own operator)."""
 
     id: int | None = None
     email: str | None = None
@@ -35,6 +53,14 @@ class Actor:
     def label(self) -> str:
         """Who to name in a record of the change."""
         return self.email or "anonymous"
+
+
+def operator_refusal(request: Request) -> str | None:
+    """Why ``request`` may not make an operator's change, None when it may
+    (``refusal_at`` the address it was sent to, from its page's
+    ``Origin``). A page hides its write controls with this line; the
+    write itself is refused by ``get_admin_actor``."""
+    return refusal_at(str(request.url), request.headers.get("origin"))
 {%- if include_auth %}
 
 
@@ -43,6 +69,12 @@ def actor_of(user: User | None) -> Actor:
     if user is None:
         return Actor()
     return Actor(user.id, user.email, user.display_name)
+
+
+def refusal_at(url: str, origin: str | None = None) -> str | None:
+    """With auth, an operator's change is an admin's wherever they are
+    (``require_admin``): nothing is refused here."""
+    return None
 
 
 async def get_admin_actor(admin: User = Depends(require_admin)) -> Actor:
@@ -71,8 +103,27 @@ def actor_of(user: None = None) -> Actor:
     return Actor()
 
 
-async def get_admin_actor() -> Actor:
-    """No auth service: whoever reaches the app may make an operator's change."""
+def refusal_at(url: str, origin: str | None = None) -> str | None:
+    """Why an operator's change asked at ``url`` (from a page at ``origin``,
+    when a browser names one) is refused, None when it may be made: no
+    auth service, so only the undeployed dev build (``BUILD_ID`` not yet
+    stamped by ``aegis deploy``), asked at a loopback name. The address
+    asked at, not the caller's: in Docker a browser on the laptop arrives
+    from the bridge gateway, and so does one on the LAN. A LAN address, a
+    domain, a rebound DNS name or another site's page is refused."""
+    asked = [url] if origin is None else [url, origin]
+    if settings.BUILD_ID == LOCAL and all(
+        urlsplit(u).hostname in LOOPBACK for u in asked
+    ):
+        return None
+    return NO_AUTH_REFUSAL
+
+
+async def get_admin_actor(request: Request) -> Actor:
+    """No auth service: an operator's change only where ``operator_refusal``
+    allows it (403 elsewhere, saying why), by nobody in particular."""
+    if refused := operator_refusal(request):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail=refused)
     return Actor()
 
 

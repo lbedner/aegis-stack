@@ -26,8 +26,7 @@ from app.core.formatting import (
 from app.core.log import logger
 from app.core.runtime import RuntimeUnavailableError
 from app.services.system import health
-
-LOCAL = "dev"  # BUILD_ID before any deploy stamps it
+from app.services.system.hosting import LOCAL
 # What ``aegis deploy`` stamps: a short commit, and for a tree with
 # uncommitted changes, ``-dirty-<unix time>`` after it.
 _BUILD = re.compile(r"^(?P<commit>[0-9a-f]{7,40})(?P<dirty>-dirty-\d+)?$")

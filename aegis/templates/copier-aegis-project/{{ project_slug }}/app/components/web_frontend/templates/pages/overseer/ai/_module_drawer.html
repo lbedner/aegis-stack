@@ -23,6 +23,6 @@
     {% call field("Content") %}{{ textarea("prompt_content", module.prompt_content or "", rows=8) }}{% endcall %}
     {% endif %}
     {{ checkbox("is_active", module.is_active, "Active") }}
-    {{ primary_button("Save", type="submit") }}
+    {{ primary_button("Save", type="submit", attrs="data-write") }}
   </form>
 </div>

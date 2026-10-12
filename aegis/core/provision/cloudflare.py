@@ -1,6 +1,6 @@
 """Cloudflare DNS: one A record for the provisioned server."""
 
-from .http import ProvisionError, Requester
+from .http import ProvisionError, Requester, delete
 
 API_URL = "https://api.cloudflare.com/client/v4"
 
@@ -33,8 +33,4 @@ class CloudflareDNS:
         return zone_id, record["id"]
 
     def delete_record(self, zone_id: str, record_id: str) -> None:
-        try:
-            self._request("DELETE", f"/zones/{zone_id}/dns_records/{record_id}")
-        except ProvisionError as exc:
-            if exc.status != 404:
-                raise
+        delete(self._request, f"/zones/{zone_id}/dns_records/{record_id}")

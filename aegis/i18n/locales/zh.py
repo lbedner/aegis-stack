@@ -711,6 +711,13 @@ MESSAGES: dict[str, str] = {
     "deploy.backup_db_failed": "提示：数据库备份失败，继续执行",
     "deploy.backup_created": "备份已创建：{timestamp}",
     "deploy.backup_pruned": "已清理旧备份：{name}",
+    "deploy.backup_sqlite": "Snapshotting SQLite database...",
+    "deploy.backup_sqlite_failed": (
+        "Warning: SQLite snapshot failed; copying the live database file instead"
+    ),
+    "deploy.backup_storage_failed": "Warning: Object storage backup failed",
+    "deploy.backup_offsite": "Copying backup off the server (restic)...",
+    "deploy.backup_offsite_failed": "Warning: Off-box copy failed: {error}",
     "deploy.disk_low": "{host} 上仅剩 {free}GB 可用空间，需要 {need}GB。清理命令：docker image prune -af && docker builder prune -af",
     "deploy.pruning": "正在回收 Docker 磁盘空间（悬空镜像和旧构建缓存）……",
     "deploy.prune_failed": "无法回收 Docker 磁盘空间；但部署本身已成功。",
@@ -774,6 +781,7 @@ MESSAGES: dict[str, str] = {
     "deploy.rollback_stopping": "正在停止服务……",
     "deploy.rollback_restoring": "正在从备份 {timestamp} 恢复文件……",
     "deploy.rollback_restore_failed": "恢复文件失败：{error}",
+    "deploy.rollback_data_failed": "Failed to restore data: {error}",
     "deploy.rollback_db": "正在恢复数据库……",
     "deploy.rollback_db_neon": "数据库恢复由 Neon 管理（分支 / 时间点还原）；跳过本地恢复",
     "deploy.rollback_pg_wait": "等待 PostgreSQL 就绪……",
@@ -1097,9 +1105,9 @@ MESSAGES: dict[str, str] = {
     "build.step.llm": "正在同步 LLM 目录",
     "build.step.format": "正在格式化代码",
     # ── Deploy provision ──────────────────────────────────────────────
-    "provision.help_opt_provider": "创建服务器的云服务商 (hetzner)",
-    "provision.help_opt_size": "服务器类型，例如 cx23",
-    "provision.help_opt_region": "服务商机房位置，例如 nbg1、fsn1、hel1、ash",
+    "provision.help_opt_provider": "创建服务器的云服务商 ({providers})",
+    "provision.help_opt_size": "服务器类型，例如 {sizes}",
+    "provision.help_opt_region": "服务商机房位置，例如 {regions}",
     "provision.help_opt_domain": "通过 Cloudflare 指向服务器的主机名 (默认：sslip.io 名称)",
     "provision.help_opt_ssh_key": "为新服务器 root 用户安装的公钥（默认：~/.ssh/id_ed25519.pub、id_ecdsa.pub、id_rsa.pub 中第一个存在的）",
     "provision.no_ssh_key": "在 {dir} 中未找到 SSH 公钥（查找了 {names}）。请用 --ssh-key 指定。",
@@ -1112,10 +1120,12 @@ MESSAGES: dict[str, str] = {
         "该项目已有一台创建好的服务器 ({ip})。运行 'aegis deploy' 部署，或运行 'aegis deploy-destroy' 删除。"
     ),
     "provision.resuming": "继续创建 {name}",
-    "provision.price": "{size}（{region}）：每月 EUR {price}（含增值税），另加 Hetzner 的 IPv4 地址费用",
-    "provision.confirm": "在你的 Hetzner 账户中创建这台服务器？",
+    "provision.price.hetzner": "{size}（{region}）：每月 EUR {price}（含增值税），另加 Hetzner 的 IPv4 地址费用",
+    "provision.price.digitalocean": "{size} in {region}: USD {price}/month before tax",
+    "provision.confirm": "在你的 {provider} 账户中创建这台服务器？",
     "provision.cancelled": "已取消，未创建任何资源。",
     "provision.ssh_key_created": "已上传 SSH 密钥 {id}",
+    "provision.firewall_created": "Created cloud firewall {id} (in: SSH, HTTP, HTTPS)",
     "provision.server_created": "已创建服务器 {id}，地址 {ip}（已记录到 .aegis/deploy.yml）",
     "provision.waiting_running": "等待服务器启动...",
     "provision.not_running": "服务器未能按时进入 'running' 状态。",
@@ -1132,6 +1142,7 @@ MESSAGES: dict[str, str] = {
     "provision.partial_title": "创建已中止。你的账户中现有以下资源：",
     "provision.created_server": "服务器 {id} '{name}'，地址 {ip}（{size}，{region}）",
     "provision.created_ssh_key": "SSH 密钥 {id}",
+    "provision.created_firewall": "cloud firewall {id}",
     "provision.created_dns": "DNS A 记录 {hostname}",
     "provision.offer_delete": "现在删除它们吗？",
     "provision.cleanup_failed": "清理失败：{error}",
@@ -1144,4 +1155,26 @@ MESSAGES: dict[str, str] = {
     "provision.destroy_confirm": "输入服务器名称 ({name}) 以确认",
     "provision.destroy_cancelled": "名称不匹配，未删除任何资源。",
     "provision.destroyed": "已删除。.aegis/deploy.yml 中的记录已标记为已删除。",
+    "provision.help_opt_confirm": (
+        "The server name, typed in advance: skips the prompt, and must still match"
+    ),
+    # ── Deploy agent ──────────────────────────────────────────────────
+    "deploy_agent.no_redis": (
+        "Waiting for the project's Redis at {url} ({error}). It answers once the stack is up (make serve); elsewhere, set REDIS_URL_LOCAL."
+    ),
+    "deploy_agent.listening": (
+        "Listening for Overseer deploy requests on {url} (tokens here for: {providers}). Ctrl-C stops."
+    ),
+    "deploy_agent.stopping": "Stopped listening.",
+    "deploy_agent.request": "{action}, asked by {by}",
+    "deploy_agent.done": "{action} done",
+    "deploy_agent.unreadable": "Skipped a request that could not be read.",
+    "deploy_agent.stale": (
+        "This request waited {minutes} minutes for the deploy agent; ask again from the Overseer."
+    ),
+    "deploy_agent.price_changed": (
+        "The price is now {price}, not the {confirmed} you confirmed. Nothing was created; get a new price."
+    ),
+    "deploy_agent.command_failed": "{command} failed (exit {code})",
+    "deploy_agent.stopped": "The deploy agent stopped before this finished.",
 }

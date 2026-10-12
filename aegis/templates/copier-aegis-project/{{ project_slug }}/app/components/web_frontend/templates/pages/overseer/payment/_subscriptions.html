@@ -4,7 +4,7 @@
 {% from "components/macros/table.html" import data_table %}
 {% from "components/macros/form.html" import action %}
 {% macro row_actions(row) -%}
-{% if row.cancel_url %}<span class="flex justify-end">{{ action("Cancel", hx_dialog(row.cancel_url), "danger") }}</span>{% endif %}
+{% if row.cancel_url %}<span class="flex justify-end">{{ action("Cancel", hx_dialog(row.cancel_url, "data-write"), "danger") }}</span>{% endif %}
 {%- endmacro %}
 <div class="mb-4">{% with chips_label = "Status" %}{% include "pages/overseer/_chips.html" %}{% endwith %}</div>
 {% call card(None, id="payment-subscriptions") %}

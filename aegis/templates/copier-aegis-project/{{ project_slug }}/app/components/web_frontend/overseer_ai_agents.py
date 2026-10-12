@@ -201,8 +201,10 @@ async def memory_context(db: Any, query: Any) -> dict[str, Any]:
                 "fact": f["fact"],
                 "category": f.get("category"),
                 "saved": format_relative_time(f.get("saved_at")),
-                "edit": hx_dialog(f"{PARTIALS}/facts/{f['index']}/edit"),
-                "forget": hx_dialog(f"{PARTIALS}/facts/{f['index']}/confirm-forget"),
+                "edit": hx_dialog(f"{PARTIALS}/facts/{f['index']}/edit", "data-write"),
+                "forget": hx_dialog(
+                    f"{PARTIALS}/facts/{f['index']}/confirm-forget", "data-write"
+                ),
             }
             for f in await fact_rows(db)
         ],

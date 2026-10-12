@@ -2,4 +2,4 @@
    ``data-api-done`` is the toast app.js shows when it succeeds, after which
    it closes the dialog and re-requests the section. #}
 {% from "components/macros/layout.html" import confirm %}
-{{ confirm(title, body, url, label, method, attrs='data-api-done="' ~ (done|e) ~ '"', tone=tone|default("danger")) }}
+{{ confirm(title, body, url, label, method, attrs='data-write data-api-done="' ~ (done|e) ~ '"', tone=tone|default("danger")) }}

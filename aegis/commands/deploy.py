@@ -16,6 +16,7 @@ import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 
 import typer
@@ -25,8 +26,15 @@ from ..cli import brand
 from ..constants import AnswerKeys, PostgresProviders
 from ..core.copier_manager import AEGIS_GIT_EMAIL, load_copier_answers
 from ..i18n import lazy_t, t
-
-_BACKUP_TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{6}$")
+from .deploy_backup import (
+    archive_storage,
+    backup_config,
+    is_sqlite,
+    prune_backups,
+    push_offsite,
+    restore_data,
+    snapshot_sqlite,
+)
 
 # Headroom the image build needs. Below this a deploy is refused up front
 # rather than dying inside the Dockerfile with "No space left on device".
@@ -381,15 +389,6 @@ def _remove_pubkey_from_server(
     )
 
 
-def _get_backup_config(config: dict) -> dict:
-    """Extract backup config with defaults."""
-    backup = config.get("backup", {}) or {}
-    return {
-        "keep_count": backup.get("keep_count", 5),
-        "include_database": backup.get("include_database", True),
-    }
-
-
 def _get_health_config(config: dict) -> dict:
     """Extract health check config with defaults."""
     hc = config.get("health_check", {}) or {}
@@ -405,8 +404,11 @@ def _create_backup(
     deploy_path: str,
     include_db: bool = True,
     neon: bool = False,
+    sqlite: bool = False,
+    keep_count: int = 5,
 ) -> str | None:
-    """Create a timestamped backup on the remote server.
+    """Create a timestamped backup on the remote server (see deploy_backup),
+    then prune all but the newest ``keep_count``.
 
     Returns the backup timestamp on success, None on failure.
     """
@@ -414,13 +416,18 @@ def _create_backup(
     safe_path = shlex.quote(deploy_path)
     backup_dir = f"{deploy_path}/backups/{timestamp}"
     safe_backup = shlex.quote(backup_dir)
+    run = partial(_run_remote_capture, host, user)
+    compose_prefix = _compose_prefix(deploy_path)
 
     typer.echo(t("deploy.creating_backup", timestamp=timestamp))
 
-    # Create backup directory and copy files
+    snapshot = (
+        include_db and sqlite and snapshot_sqlite(run, compose_prefix, backup_dir)
+    )
+    skip_live = " --exclude /data" if snapshot else ""
     commands = [
         f"mkdir -p {safe_backup}/files",
-        f"rsync -a --exclude backups {safe_path}/ {safe_backup}/files/",
+        f"rsync -a --exclude backups{skip_live} {safe_path}/ {safe_backup}/files/",
     ]
     result = _run_remote_capture(host, user, " && ".join(commands))
     if result.returncode != 0:
@@ -433,7 +440,6 @@ def _create_backup(
     if include_db and neon:
         typer.echo(t("deploy.backup_db_neon"))
     elif include_db:
-        compose_prefix = _compose_prefix(deploy_path)
         # Check if postgres service exists and is running
         pg_check = _run_remote_capture(
             host, user, f"{compose_prefix} ps postgres --quiet 2>/dev/null"
@@ -448,6 +454,7 @@ def _create_backup(
             db_result = _run_remote_capture(host, user, db_cmd)
             if db_result.returncode != 0:
                 brand.warn(t("deploy.backup_db_failed"))
+    archive_storage(run, compose_prefix, backup_dir)
 
     # Write manifest
     manifest = (
@@ -458,29 +465,11 @@ def _create_backup(
     _run_remote_capture(
         host, user, f"echo -e {shlex.quote(manifest)} > {safe_backup}/manifest.yml"
     )
+    push_offsite(run, deploy_path, backup_dir, timestamp)
+    prune_backups(run, deploy_path, keep_count)
 
     brand.success(t("deploy.backup_created", timestamp=timestamp))
     return timestamp
-
-
-def _prune_backups(host: str, user: str, deploy_path: str, keep_count: int) -> None:
-    """Remove old backups, keeping only the most recent N."""
-    safe_path = shlex.quote(f"{deploy_path}/backups")
-    result = _run_remote_capture(host, user, f"ls -1t {safe_path} 2>/dev/null")
-    if result.returncode != 0 or not result.stdout.strip():
-        return
-
-    backups = [b.strip() for b in result.stdout.strip().splitlines() if b.strip()]
-    if len(backups) <= keep_count:
-        return
-
-    to_remove = backups[keep_count:]
-    for old_backup in to_remove:
-        if not _BACKUP_TIMESTAMP_RE.match(old_backup):
-            continue  # skip unexpected directory names
-        safe_old = shlex.quote(f"{deploy_path}/backups/{old_backup}")
-        _run_remote_capture(host, user, f"rm -rf {safe_old}")
-        typer.echo(t("deploy.backup_pruned", name=old_backup))
 
 
 def _free_disk_gb(host: str, user: str, deploy_path: str) -> int | None:
@@ -569,15 +558,20 @@ def _rollback_to_backup(
     _run_remote(host, user, f"{compose_prefix} down --remove-orphans")
 
     typer.echo(t("deploy.rollback_restoring", timestamp=backup_timestamp))
+    # An off-box copy comes back without files/: restore its data alone.
     restore_result = _run_remote_capture(
         host,
         user,
-        f"rsync -a --delete --exclude backups {safe_backup}/files/ {safe_path}/",
+        f"[ ! -d {safe_backup}/files ] || rsync -a --delete --exclude backups"
+        f" {safe_backup}/files/ {safe_path}/",
     )
     if restore_result.returncode != 0:
         brand.error(
             t("deploy.rollback_restore_failed", error=restore_result.stderr), err=True
         )
+        return False
+    run = partial(_run_remote_capture, host, user)
+    if not restore_data(run, compose_prefix, deploy_path, backup_dir):
         return False
 
     # Database restore. Neon manages recovery (branches / point-in-time
@@ -1294,11 +1288,12 @@ def deploy_command(
     host = config["server"]["host"]
     user = config["server"]["user"]
     deploy_path = config["server"]["path"]
-    backup_cfg = _get_backup_config(config)
+    backup_cfg = backup_config(config)
     health_cfg = _get_health_config(config)
     neon = _is_neon_database(project_path)
 
     project_root = Path(project_path) if project_path else _get_project_root()
+    sqlite = is_sqlite(_project_answers(project_root))
     name, tls = _public_address(config, project_root)
     health_command = _health_check_command(name, tls=tls)
 
@@ -1339,9 +1334,9 @@ def deploy_command(
                 deploy_path,
                 include_db=backup_cfg["include_database"],
                 neon=neon,
+                sqlite=sqlite,
+                keep_count=backup_cfg["keep_count"],
             )
-            if backup_timestamp:
-                _prune_backups(host, user, deploy_path, backup_cfg["keep_count"])
         else:
             typer.echo(t("deploy.no_existing"))
 
@@ -1457,7 +1452,7 @@ def deploy_backup_command(
     host = config["server"]["host"]
     user = config["server"]["user"]
     deploy_path = config["server"]["path"]
-    backup_cfg = _get_backup_config(config)
+    backup_cfg = backup_config(config)
 
     brand.accent(t("deploy.creating_backup_on", host=host), bold=True)
 
@@ -1467,11 +1462,11 @@ def deploy_backup_command(
         deploy_path,
         include_db=backup_cfg["include_database"],
         neon=_is_neon_database(project_path),
+        sqlite=is_sqlite(_project_answers(_get_project_root(project_path))),
+        keep_count=backup_cfg["keep_count"],
     )
     if not timestamp:
         raise typer.Exit(1)
-
-    _prune_backups(host, user, deploy_path, backup_cfg["keep_count"])
     brand.success(f"\n{t('deploy.backup_complete')}", bold=True)
 
 
@@ -1526,7 +1521,9 @@ def deploy_backups_command(
         size = size_result.stdout.strip() if size_result.returncode == 0 else "?"
 
         # Check for DB dump
-        db_check = _run_remote_capture(host, user, f"test -f {safe_dir}/db_backup.sql")
+        db_check = _run_remote_capture(
+            host, user, f"test -f {safe_dir}/db_backup.sql -o -d {safe_dir}/data"
+        )
         has_db = "yes" if db_check.returncode == 0 else "no"
 
         typer.echo(f"  {backup_name:<24} {size:<12} {has_db}")

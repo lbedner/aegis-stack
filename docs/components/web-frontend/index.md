@@ -62,9 +62,12 @@ delegates to the existing auth endpoint.
 
 The Overseer is operator access to the deployment: it shows its routes,
 source and live data, and runs user administration, scheduler jobs and model
-loads. Without the auth service it is open: whoever reaches the app may use
-it, its writes (Restart, Secrets) included, like any route a stack serves
-without auth. With auth, every Overseer page, live stream and action is open
+loads. Without the auth service it is open to read: whoever reaches the app
+may use it, like any route a stack serves without auth. Every write it makes
+(Restart, Secrets, a refund, a test send, an upload, a saved edit) is made
+only on the local dev build (`BUILD_ID` not yet stamped by `aegis deploy`),
+opened at `localhost`, `127.0.0.1` or `[::1]`; anywhere else it is refused
+and its controls hidden, with a line saying why. With auth, every Overseer page, live stream and action is open
 to admins only, not to every signed-in account. An admin is:
 
 - an account whose email is in `ADMIN_USER_EMAILS`, or

@@ -27,7 +27,10 @@
 </a>
 {%- endmacro %}
 {% block app_content %}
-<div x-data="{ mobileNav: false, sidebar: appearance().sidebar }" class="min-h-screen md:flex">
+{# Where the operator's changes are refused (``operator_refusal``), every
+   write control (``data-write``) is hidden (input.css), and this says why. #}
+{% set refused = operator_refusal(request) %}
+<div x-data="{ mobileNav: false, sidebar: appearance().sidebar }" {% if refused %}data-read-only {% endif %}class="min-h-screen md:flex">
   <aside id="overseer-sidebar" aria-label="Overseer navigation"
          class="w-full md:w-64 lg:w-72 md:shrink-0 md:h-screen md:sticky md:top-0 md:z-30 md:transition-[width] border-b md:border-b-0 md:border-r border-aegis-border bg-aegis-bg flex flex-col">
     <div data-sidebar-head class="overseer-rail-row px-5 py-5 border-b border-aegis-border flex items-center justify-between gap-3">
@@ -87,6 +90,7 @@
       {# A document (Overview, Settings) keeps a reading column; a workspace
          (Logs, Deployments, the Map), where the data is the page, runs to
          the gutters. A page says which in ``overseer_width``. #}
+      {% if refused %}<p data-operator-refusal role="note" class="px-5 sm:px-8 lg:px-10 pt-4 text-xs text-aegis-muted">{{ refused }}</p>{% endif %}
       <div data-width="{%- block overseer_width -%}document{%- endblock -%}" class="overseer-page px-5 sm:px-8 lg:px-10 py-7 lg:py-10">
         {% block overseer_content %}{% endblock %}
       </div>

@@ -7,9 +7,9 @@
 <span class="flex items-center justify-end">
   {% if row.moving %}
   {% elif row.loaded %}
-  {{ action("Unload", 'hx-post="' ~ partials ~ '/unload" hx-swap="none" hx-disabled-elt="this" data-api-done="Unloading"', "warn", vals={"model": row.model}) }}
+  {{ action("Unload", 'hx-post="' ~ partials ~ '/unload" hx-swap="none" hx-disabled-elt="this" data-api-done="Unloading" data-write', "warn", vals={"model": row.model}) }}
   {% else %}
-  {{ action("Load", 'hx-post="' ~ partials ~ '/load" hx-swap="none" hx-disabled-elt="this" data-api-done="Loading"', "primary", vals={"model": row.model}) }}
+  {{ action("Load", 'hx-post="' ~ partials ~ '/load" hx-swap="none" hx-disabled-elt="this" data-api-done="Loading" data-write', "primary", vals={"model": row.model}) }}
   {% endif %}
 </span>
 {%- endmacro %}

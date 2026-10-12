@@ -98,7 +98,9 @@ async def collection_context(name: str) -> dict[str, Any] | None:
     return {
         "name": name,
         "files": [{"source": f.source, "chunks": f.chunks} for f in files],
-        "delete": hx_dialog(f"{PARTIALS}/collections/{name}/confirm-delete"),
+        "delete": hx_dialog(
+            f"{PARTIALS}/collections/{name}/confirm-delete", "data-write"
+        ),
     }
 
 

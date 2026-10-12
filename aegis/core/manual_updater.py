@@ -6,6 +6,7 @@ Copier's git-dependent update mechanism. It directly renders Jinja2 templates
 and copies files to the target project.
 """
 
+import json
 import re
 import shutil
 import subprocess
@@ -100,6 +101,11 @@ def _true_flags(answers: dict[str, Any]) -> dict[str, Any]:
     """Marker inference only ever asserts what it can see; a flag it
     cannot confirm stays as the project recorded it."""
     return {k: v for k, v in answers.items() if v is not False}
+
+
+# The project's queryspy baseline, and the key queryspy sorts its entries by.
+QUERYSPY_BASELINE_FILE = ".queryspy-baseline.json"
+_QUERYSPY_ENTRY_ORDER = ("kind", "label", "file", "function")
 
 
 def _is_empty_stub(path: Path) -> bool:
@@ -558,6 +564,11 @@ class ManualUpdater:
             # auth's deps.py going from gated-off to gated-on). See
             # issue #686 — Failure A.
             files_deleted = sweep_empty_stubs(self.project_path)
+
+            # The template baselines the known repeated queries of the code
+            # this add just wrote (and kept); the project's own baseline has not seen it.
+            if self._merge_queryspy_baseline(updated_answers, files_modified):
+                files_modified.append(QUERYSPY_BASELINE_FILE)
 
             # Plugin trees are vendored and re-rendered wholesale. Other
             # in-tree specs' files went through the shared regen above with
@@ -1096,6 +1107,40 @@ class ManualUpdater:
         self._write_rendered(output_path, content)
         verbose_print(f"   Created cross-spec file: {SERVICES_CARD_FILE}")
         return SERVICES_CARD_FILE
+
+    def _merge_queryspy_baseline(
+        self, answers: dict[str, Any], written: list[str]
+    ) -> bool:
+        """Add the template baseline's entries for ``written`` files to the
+        project's ``.queryspy-baseline.json``.
+
+        The project's entries stay as they are; the result keeps queryspy's
+        own order. A project without a baseline (no database) is left alone.
+        Returns whether the file changed.
+        """
+        path = self.project_path / QUERYSPY_BASELINE_FILE
+        rendered = self._render_template_file(
+            f"{PROJECT_SLUG_PLACEHOLDER}/{QUERYSPY_BASELINE_FILE}", answers
+        )
+        if not path.exists() or rendered is None:
+            return False
+        doc = json.loads(path.read_text())
+        entries = doc.get("entries", [])
+        kept = {f for f in written if (self.project_path / f).is_file()}
+        added = [
+            e
+            for e in json.loads(rendered)["entries"]
+            if e.get("file") in kept and e not in entries
+        ]
+        if not added:
+            return False
+        doc["entries"] = sorted(
+            [*entries, *added],
+            key=lambda e: tuple(e.get(k) or "" for k in _QUERYSPY_ENTRY_ORDER),
+        )
+        path.write_text(json.dumps(doc, indent=2) + "\n")
+        verbose_print(f"   Merged {len(added)} queryspy baseline entries")
+        return True
 
     def _renders(self, rel_path: str, answers: dict[str, Any]) -> bool:
         """Whether ``rel_path``'s template renders anything for ``answers``."""

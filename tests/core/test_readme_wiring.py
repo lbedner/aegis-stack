@@ -14,8 +14,11 @@ check.
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
+from aegis.core.component_files import PROJECT_SLUG_PLACEHOLDER, get_template_path
 from aegis.core.components import COMPONENTS
 from aegis.core.plugins.spec import PluginSpec, ReadmeWiring
 from aegis.core.services import SERVICES
@@ -74,3 +77,72 @@ class TestWiringShape:
             assert spec.readme.env_groups, (
                 f"{name} names required env vars but no env group to print them under"
             )
+
+
+CLI_DIR = get_template_path() / PROJECT_SLUG_PLACEHOLDER / "app" / "cli"
+PROJECT_CLI = "uv run <project_slug> "
+# ``@x.command(...)`` (any other decorators) ``def fn``: x, its args, fn.
+# Each further decorator is one line (``[^\n]``): under DOTALL a ``.*``
+# there could span lines and backtrack exponentially (CodeQL py/redos).
+COMMAND_DEF = re.compile(
+    r"@(\w+)\.command\((.*?)\)[ \t]*\n(?:@[^\n]*\n)*(?:async )?def (\w+)", re.DOTALL
+)
+SUB_TYPER = re.compile(r"(\w+)\.add_typer\((\w+), name=\"([^\"]+)\"\)")
+EXPLICIT_NAME = re.compile(r"^\s*(?:name=)?\"([^\"]+)\"|\bname=\"([^\"]+)\"")
+
+
+def _group_source(group: str) -> str:
+    """The template source of the typer app ``app/cli/main.py`` mounts
+    as ``group``: its module, or every file of its package."""
+    main = (CLI_DIR / "main.py.jinja").read_text()
+    var = re.search(rf"add_typer\((\w+)_module\.app, name=\"{group}\"\)", main)
+    assert var, f"no CLI group {group!r} in app/cli/main.py"
+    module = re.search(
+        rf"{var.group(1)}_module = importlib\.import_module\(\"app\.cli\.(\w+)\"\)",
+        main,
+    )
+    assert module, f"CLI group {group!r} has no module import in main.py"
+    name = module.group(1)
+    files = [*CLI_DIR.glob(f"{name}.py*"), *(CLI_DIR / name).glob("*.py*")]
+    return "\n".join(f.read_text() for f in files)
+
+
+def _resolves(words: list[str]) -> bool:
+    """Whether ``group cmd [sub ...]`` names a command the generated CLI
+    has, walking sub-typers; arguments (``<x>``) and options end the path."""
+    source = _group_source(words[0])
+    subs = {(m[0], m[2]): m[1] for m in SUB_TYPER.findall(source)}
+    commands = set()
+    for typer_var, args, func in COMMAND_DEF.findall(source):
+        named = EXPLICIT_NAME.search(args)
+        name = (named.group(1) or named.group(2)) if named else func
+        commands.add((typer_var, name.replace("_", "-")))
+    typer_var = "app"
+    for word in words[1:]:
+        if (typer_var, word) in commands:
+            return True
+        if (typer_var, word) not in subs:
+            return False
+        typer_var = subs[(typer_var, word)]
+    return False
+
+
+FIRST_STEP_COMMANDS = [
+    (name, span)
+    for name, spec in SERVICES.items()
+    for step in spec.readme.first_steps
+    for span in re.findall(r"`([^`]+)`", step)
+]
+
+
+class TestFirstStepsAreRealCommands:
+    @pytest.mark.parametrize(("service", "command"), FIRST_STEP_COMMANDS)
+    def test_it_runs_in_a_generated_project(self, service: str, command: str) -> None:
+        """A first step is the first thing a reader types. ``make cli``
+        never existed and neither did ``auth create-user``."""
+        assert command.startswith(PROJECT_CLI), (
+            f"{service} first step `{command}` is not a project CLI command "
+            f"({PROJECT_CLI}<group> <command>)"
+        )
+        words = command.removeprefix(PROJECT_CLI).split()
+        assert _resolves(words), f"{service} first step `{command}` does not exist"

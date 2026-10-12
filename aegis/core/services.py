@@ -1483,6 +1483,8 @@ SERVICES: dict[str, ServiceSpec] = {
             ComponentNames.DATABASE,
             ComponentNames.BROWSER,
         ],
+        # Keeps the bot's Google sign-in; without it the bot joins as a guest.
+        recommended_components=[ComponentNames.SECRETS],
         wiring=PluginWiring(
             routers=[
                 RouterWiring(
@@ -1515,6 +1517,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 "tests/services/test_meetings_service.py",
                 "tests/services/test_meetings_bot.py",
                 "tests/services/test_meet_page.py",
+                "tests/services/test_meetings_login.py",
                 "tests/api/test_meetings_endpoints.py",
                 "tests/_meetings.py",
             ],

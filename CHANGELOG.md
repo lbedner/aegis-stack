@@ -26,8 +26,17 @@
   heartbeat: the webserver checks every minute and marks failed a meeting
   whose process died (a crash, or a killed `meetings join`), and leaves
   one another process is still in alone. Meet's page
-  is known in one module, `meetings/meet.py`. Until the bot's own Google
-  account is signed in, it joins only meetings that admit guests (#1509).
+  is known in one module, `meetings/meet.py` (#1509).
+- **The meeting bot signs in to Google.** `meetings login` opens Chrome
+  on your machine at Google's sign-in; sign in as the bot's own account,
+  quit Chrome, and the sign-in is kept encrypted in the secrets store
+  (`MEETINGS_BOT_LOGIN_SECRET`), where every bot run finds it, so Meet
+  lets the bot into calls that turn guests away. It needs the secrets
+  component. Without a sign-in the bot joins as a guest.
+- **The meeting bot keeps a transcript.** It turns on Meet's captions in
+  its own view and keeps them, one line per speaker's turn, named and
+  timed (`meetings show <id>`). Nobody else's view changes; the chat
+  message still says it is taking notes.
 - **Background work ends cleanly at shutdown.** The webserver cancels what
   `background()` still has running and gives it five seconds to finish its
   own cleanup, instead of leaving it to the event loop's teardown.

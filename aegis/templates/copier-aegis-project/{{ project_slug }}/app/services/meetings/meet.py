@@ -4,8 +4,8 @@ is the fix.
 The recipe is the MT-02 spike's: headless Chromium with fake media
 devices, dismiss the "see and hear you?" dialog, give the bot's name, and
 click whichever join button Meet shows. A signed-in Google account is
-what gets the bot past Meet's guest check; until the bot's login is
-stored, ``open_meet`` joins as a guest.
+what gets the bot past Meet's guest check: ``open_meet`` joins with the
+bot's stored sign-in (``login``), as a guest until there is one.
 """
 
 from collections.abc import AsyncIterator
@@ -17,6 +17,8 @@ from playwright.async_api import Page
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from app.components.browser.client import connect
+from app.services.meetings.login import stored_login
+from app.services.meetings.models import Caption
 
 # A fake camera and microphone granted without a prompt: the bot joins with
 # both off.
@@ -27,17 +29,30 @@ BROWSER_ARGS = [
 
 CONTINUE_WITHOUT_MEDIA = 'button:has-text("Continue without microphone and camera")'
 NAME_INPUT = 'input[type="text"]'
-JOIN_BUTTONS = (
-    'button:has-text("Join now")',
-    'button:has-text("Ask to join")',
-    'button:has-text("Switch here")',
+JOIN_BUTTON = (
+    'button:has-text("Join now"), button:has-text("Ask to join"), '
+    'button:has-text("Switch here")'
 )
+# Meet draws its lobby a while after the page loads.
+LOBBY_TIMEOUT_MS = 30_000
 LEAVE_BUTTON = 'button[aria-label*="Leave call"]'
-PEOPLE_BUTTON = 'button[aria-label^="People"]'
+# The participant count badge: named "People" by aria-labelledby, not a label.
+PEOPLE_BUTTON = 'role=button[name="People"]'
 CHAT_BUTTON = 'button[aria-label*="Chat with everyone"]'
 CHAT_INPUT = 'textarea[aria-label*="Send a message"]'
-REFUSED_TEXTS = ("denied your request", "can't join this video call")
-ENDED_TEXTS = ("You left the meeting", "removed from the meeting", "call has ended")
+CAPTIONS_BUTTON = 'button[aria-label^="Turn on captions"]'
+CAPTIONS_REGION = 'role=region[name="Captions"]'
+# Each block is a speaker's name, then what they said. A block is tagged
+# the first time it is read, so one Meet is still writing reads as the same
+# line on the next look; the counter is the page's, so blocks never share
+# a tag. A block with a button is the region's own control, not a caption.
+READ_CAPTIONS = """(region) => [...region.children].flatMap((block) => {
+  if (block.querySelector('button')) return [];
+  const [speaker, ...words] = block.innerText.split('\\n');
+  if (!speaker || !words.length) return [];
+  block.dataset.line ??= String((window.captionLines = (window.captionLines || 0) + 1));
+  return [{line: block.dataset.line, speaker: speaker.trim(), text: words.join(' ').trim()}];
+})"""
 
 
 class CallState(StrEnum):
@@ -45,6 +60,18 @@ class CallState(StrEnum):
     IN_CALL = "in_call"
     REFUSED = "refused"
     ENDED = "ended"
+
+
+# What the page says, read before the Leave button: the waiting room shows
+# that button too.
+PAGE_TEXTS = (
+    (CallState.REFUSED, ("denied your request", "can't join this video call")),
+    (
+        CallState.ENDED,
+        ("You left the meeting", "removed from the meeting", "call has ended"),
+    ),
+    (CallState.WAITING, ("until a meeting host brings you in", "Asking to be let in")),
+)
 
 
 class MeetPageError(RuntimeError):
@@ -71,23 +98,25 @@ class MeetPage:
         return True
 
     async def ask_to_join(self, bot_name: str) -> None:
-        """Past the media dialog, named, and the join button clicked."""
+        """Once Meet has drawn its lobby: past the media dialog, named, and
+        the join button clicked."""
+        join = self.page.locator(JOIN_BUTTON).first
+        try:
+            await join.wait_for(timeout=LOBBY_TIMEOUT_MS)
+        except PlaywrightTimeoutError:
+            raise MeetPageError("No join button on the meeting page") from None
         await self._click_if_visible(CONTINUE_WITHOUT_MEDIA)
         if await self._shown(NAME_INPUT):
             await self.page.locator(NAME_INPUT).first.fill(bot_name)
-        for button in JOIN_BUTTONS:
-            if await self._click_if_visible(button):
-                return
-        raise MeetPageError("No join button on the meeting page")
+        await join.click(timeout=5000)
 
     async def state(self) -> CallState:
+        body = await self.page.inner_text("body")
+        for state, texts in PAGE_TEXTS:
+            if any(text in body for text in texts):
+                return state
         if await self._shown(LEAVE_BUTTON):
             return CallState.IN_CALL
-        body = await self.page.inner_text("body")
-        if any(text in body for text in REFUSED_TEXTS):
-            return CallState.REFUSED
-        if any(text in body for text in ENDED_TEXTS):
-            return CallState.ENDED
         return CallState.WAITING
 
     async def people(self) -> int | None:
@@ -110,12 +139,25 @@ class MeetPage:
     async def leave(self) -> None:
         await self._click_if_visible(LEAVE_BUTTON)
 
+    async def turn_on_captions(self) -> bool:
+        """Captions on in the bot's own view (nobody else's); False when
+        Meet offers none."""
+        return await self._click_if_visible(CAPTIONS_BUTTON)
+
+    async def captions(self) -> list[Caption]:
+        """The caption blocks on screen now, oldest first."""
+        region = self.page.locator(CAPTIONS_REGION)
+        if not await region.count():
+            return []
+        return [Caption(**c) for c in await region.first.evaluate(READ_CAPTIONS)]
+
 
 @asynccontextmanager
 async def open_meet(url: str) -> AsyncIterator[MeetPage]:
     """A Meet page at ``url`` in the browser container; the browser closes
     on exit, whatever happened, so no Chrome outlives its meeting."""
     async with connect(BROWSER_ARGS) as browser:
-        page = await browser.new_page()
+        context = await browser.new_context(storage_state=await stored_login())
+        page = await context.new_page()
         await page.goto(url, wait_until="domcontentloaded")
         yield MeetPage(page)

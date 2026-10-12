@@ -9,6 +9,7 @@ joined.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 
@@ -89,4 +90,14 @@ class TranscriptLine(SQLModel, table=True):
     )
     start_seconds: float
     end_seconds: float
+    text: str
+
+
+@dataclass(frozen=True)
+class Caption:
+    """One caption block as the call shows it now. ``line`` stays the same
+    while the speaker's block grows, so it names the transcript line."""
+
+    line: str
+    speaker: str
     text: str

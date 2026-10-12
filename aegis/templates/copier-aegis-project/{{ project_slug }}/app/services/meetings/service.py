@@ -11,6 +11,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.time import utcnow
 from app.services.meetings.models import (
+    Caption,
     Meeting,
     MeetingParticipant,
     MeetingStatus,
@@ -202,3 +203,62 @@ async def fail_interrupted(db: AsyncSession) -> int:
     )
     await db.commit()
     return result.rowcount
+
+
+async def write_captions(
+    db: AsyncSession,
+    meeting_id: int,
+    captions: list[Caption],
+    rows: dict[str, int],
+    at_seconds: float,
+) -> None:
+    """Each caption as its transcript line: a caption already in ``rows``
+    (caption line -> row id) updates its row, a new one adds a row (and
+    its id to ``rows``), its speaker becoming a participant the first time
+    they speak."""
+    new = [c for c in captions if c.line not in rows]
+    speakers = await _participants(db, meeting_id, {c.speaker for c in new})
+    added = {
+        c.line: TranscriptLine(
+            meeting_id=meeting_id,
+            participant_id=speakers[c.speaker],
+            start_seconds=at_seconds,
+            end_seconds=at_seconds,
+            text=c.text,
+        )
+        for c in new
+    }
+    db.add_all(added.values())
+    changed = [
+        {"id": rows[c.line], "text": c.text, "end_seconds": at_seconds}
+        for c in captions
+        if c.line in rows
+    ]
+    if changed:
+        await db.exec(update(TranscriptLine), params=changed)
+    await db.flush()
+    rows |= {line: row.id for line, row in added.items()}
+    await db.commit()
+
+
+async def _participants(
+    db: AsyncSession, meeting_id: int, names: set[str]
+) -> dict[str, int]:
+    """The meeting's participant id for each display name, adding those it
+    does not have yet."""
+    if not names:
+        return {}
+    found = await db.exec(
+        select(MeetingParticipant).where(
+            MeetingParticipant.meeting_id == meeting_id,
+            col(MeetingParticipant.display_name).in_(names),
+        )
+    )
+    known = {p.display_name: p for p in found.all()}
+    fresh = [
+        MeetingParticipant(meeting_id=meeting_id, display_name=name)
+        for name in names - known.keys()
+    ]
+    db.add_all(fresh)
+    await db.flush()
+    return {p.display_name: p.id for p in [*known.values(), *fresh]}

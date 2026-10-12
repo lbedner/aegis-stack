@@ -15,6 +15,7 @@ from app.core.constants import DEV_ENVS, AppEnv, ComponentName{% if include_work
 from app.core.settings_base import SettingsBase
 {% if include_ai and ai_voice %}from app.core.voice_settings import VoiceSettings{% endif %}
 {% if include_browser %}from app.components.browser.settings import BrowserSettings{% endif %}
+{% if include_meetings %}from app.services.meetings.settings import MeetingsSettings{% endif %}
 {% if include_worker %}from app.core.queue_workers import DEFAULT_QUEUES, QueueWorker{% endif %}
 {%- for p in _plugins | default([]) %}
 {%- for s in p.wiring.settings_mixins %}
@@ -40,7 +41,8 @@ class Settings(
 {%- if include_ai and ai_voice %}
     VoiceSettings,
 {%- endif %}{%- if include_browser %}
-    BrowserSettings,{%- endif %}
+    BrowserSettings,{%- endif %}{%- if include_meetings %}
+    MeetingsSettings,{%- endif %}
     SettingsBase,
 ):
     """

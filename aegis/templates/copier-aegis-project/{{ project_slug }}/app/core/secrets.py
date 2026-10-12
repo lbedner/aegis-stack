@@ -37,8 +37,7 @@ from app.core.config import settings
 from app.core.credential import CREDENTIAL
 from app.core.log import logger
 
-# Modules that declare ``SECRETS``. Absent ones (a service this stack does
-# not have) are skipped.
+# Modules that declare ``SECRETS``; ones this stack does not have are skipped.
 OWNERS = (
     "app.services.ai.domains.llm.provider_management",
     "app.services.comms.email",
@@ -51,6 +50,7 @@ OWNERS = (
     "app.services.finance.adapters.providers.plaid_keys",
     "app.services.finance.adapters.providers.snaptrade",
     "app.services.insights.adapters.collectors.base",
+    "app.services.meetings.login",
 )
 # Shorter than this, the last four characters are most of the value.
 HINT_MIN_LENGTH = 12
@@ -326,7 +326,7 @@ def _declared(name: str) -> Secret:
     return entry
 
 
-def _writable_store(name: str) -> tuple[Secret, SecretStore]:
+def writable_store(name: str) -> tuple[Secret, SecretStore]:
     """The declaration and the store a write to ``name`` goes to, or the
     reason it cannot."""
     entry = _declared(name)
@@ -355,7 +355,7 @@ async def put(name: str, value: str, actor: str) -> Verdict | None:
     A value the provider refuses raises ``SecretRejectedError`` and is not
     stored; one it could not be asked about is stored unverified. Returns
     the check's verdict, None where the name has no check."""
-    entry, store = _writable_store(name)
+    entry, store = writable_store(name)
     if entry.parse is not None:
         value = entry.parse(value)
     verdict = await _verify(entry, value)
@@ -442,7 +442,7 @@ async def probe(
 
 async def delete(name: str, actor: str) -> None:
     """Remove the stored value for ``name``, or refuse with the reason."""
-    _, store = _writable_store(name)
+    _, store = writable_store(name)
     await store.delete(name, actor)
 
 

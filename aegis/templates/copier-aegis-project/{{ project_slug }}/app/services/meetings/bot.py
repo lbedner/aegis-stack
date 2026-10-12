@@ -16,13 +16,14 @@ from app.core.concurrency import background
 from app.core.db import get_async_session
 from app.core.log import logger
 from app.services.meetings.meet import CallState, MeetPage, open_meet
-from app.services.meetings.models import Meeting, MeetingStatus, Platform
+from app.services.meetings.models import Caption, Meeting, MeetingStatus, Platform
 from app.services.meetings.service import (
     NOT_DONE,
     STILL_WANTED,
     MeetingsService,
     heartbeat,
     transition,
+    write_captions,
 )
 
 POLL_SECONDS = 2.0
@@ -58,6 +59,43 @@ class _Pulse:
         self.last = now
         async with get_async_session() as session:
             return await heartbeat(session, self.meeting_id) in STILL_WANTED
+
+
+class _Transcript:
+    """The call's captions as transcript lines, timed from when the bot got
+    in. What changed is written every ``BEAT_SECONDS`` (each write takes
+    SQLite's write lock), and what is left by ``flush`` on the way out."""
+
+    def __init__(self, meeting_id: int) -> None:
+        self.meeting_id = meeting_id
+        self.started = self.written_at = asyncio.get_running_loop().time()
+        self.rows: dict[str, int] = {}  # caption line -> transcript row
+        self.seen: dict[str, str] = {}  # caption line -> its text, last look
+        self.pending: dict[str, Caption] = {}
+
+    async def take(self, captions: list[Caption]) -> None:
+        for c in captions:
+            if self.seen.get(c.line) != c.text:
+                self.seen[c.line] = c.text
+                self.pending[c.line] = c
+        now = asyncio.get_running_loop().time()
+        if now - self.written_at >= BEAT_SECONDS:
+            await self.flush()
+
+    async def flush(self) -> None:
+        loop = asyncio.get_running_loop()
+        self.written_at = loop.time()
+        if not self.pending:
+            return
+        async with get_async_session() as session:
+            await write_captions(
+                session,
+                self.meeting_id,
+                list(self.pending.values()),
+                self.rows,
+                self.written_at - self.started,
+            )
+        self.pending = {}
 
 
 async def _move(
@@ -97,24 +135,29 @@ async def _admitted(call: MeetPage, pulse: _Pulse) -> None:
         await asyncio.sleep(POLL_SECONDS)
 
 
-async def _stay(call: MeetPage, pulse: _Pulse) -> None:
+async def _stay(call: MeetPage, pulse: _Pulse, transcript: _Transcript) -> None:
     """Back when the bot should leave: asked to, or alone too long. Ends
-    the run when the call ends on its own (any page but the call's)."""
+    the run when the call ends on its own (any page but the call's). Each
+    look keeps what was said since the last."""
     loop = asyncio.get_running_loop()
     alone_since: float | None = None
-    while True:
-        if await call.state() != CallState.IN_CALL:
-            raise _RunEnded(MeetingStatus.LEFT)
-        if not await pulse.still_wanted():
-            return
-        people = await call.people()
-        if people is None or people > 1:
-            alone_since = None
-        elif alone_since is None:
-            alone_since = loop.time()
-        elif loop.time() - alone_since >= ALONE_SECONDS:
-            return
-        await asyncio.sleep(POLL_SECONDS)
+    try:
+        while True:
+            if await call.state() != CallState.IN_CALL:
+                raise _RunEnded(MeetingStatus.LEFT)
+            await transcript.take(await call.captions())
+            if not await pulse.still_wanted():
+                return
+            people = await call.people()
+            if people is None or people > 1:
+                alone_since = None
+            elif alone_since is None:
+                alone_since = loop.time()
+            elif loop.time() - alone_since >= ALONE_SECONDS:
+                return
+            await asyncio.sleep(POLL_SECONDS)
+    finally:
+        await transcript.flush()
 
 
 async def _join(meeting: Meeting) -> None:
@@ -128,11 +171,14 @@ async def _join(meeting: Meeting) -> None:
         await _step(meeting_id, MeetingStatus.WAITING, MeetingStatus.JOINING)
         await _admitted(call, pulse)
         await _step(meeting_id, MeetingStatus.IN_CALL, MeetingStatus.WAITING)
+        transcript = _Transcript(meeting_id)
         await call.say(
             f"{meeting.bot_name} is taking notes in this meeting: "
             "what is said here is transcribed."
         )
-        await _stay(call, pulse)
+        if not await call.turn_on_captions():
+            logger.warning("No captions in this call", meeting_id=meeting_id)
+        await _stay(call, pulse, transcript)
         await call.leave()
 
 

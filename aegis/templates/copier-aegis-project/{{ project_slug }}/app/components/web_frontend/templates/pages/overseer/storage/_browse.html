@@ -37,7 +37,7 @@
   <ul role="menu" class="absolute right-0 top-full mt-1 z-30 min-w-[9rem] bg-aegis-card border border-aegis-border rounded-lg shadow-lg p-1">
     <li><a href="{{ row.download }}" download @click="$el.closest('details').removeAttribute('open')"
            class="block px-3 py-1.5 text-sm text-aegis-text hover:bg-aegis-border/30 rounded transition-colors">Download</a></li>
-    {% if row.delete %}{{ menu_item("Delete", hx_dialog(row.delete), danger=True) }}{% endif %}
+    {% if row.delete %}{{ menu_item("Delete", hx_dialog(row.delete, "data-write"), danger=True) }}{% endif %}
   </ul>
 </details>
 {%- endif -%}
@@ -56,9 +56,9 @@
   <div class="flex items-center gap-2">
     <span x-show="selected > 0" x-cloak class="inline-flex items-center gap-2">
       <span class="text-xs text-aegis-muted"><span x-text="selected"></span> selected</span>
-      {{ action("Delete selected", hx_dialog(browse.bulk_delete_url, 'hx-include="[name=\'key\']:checked"'), "danger") }}
+      {{ action("Delete selected", hx_dialog(browse.bulk_delete_url, 'hx-include="[name=\'key\']:checked" data-write'), "danger") }}
     </span>
-    <form id="storage-upload" hx-post="{{ browse.upload_url }}" hx-encoding="multipart/form-data" hx-swap="none" class="flex items-center">
+    <form id="storage-upload" data-write hx-post="{{ browse.upload_url }}" hx-encoding="multipart/form-data" hx-swap="none" class="flex items-center">
       <input type="hidden" name="bucket" value="{{ browse.bucket }}">
       <input type="hidden" name="prefix" value="{{ browse.prefix }}">
       <input id="storage-upload-file" type="file" name="file" required class="sr-only" @change="$el.form.requestSubmit()">

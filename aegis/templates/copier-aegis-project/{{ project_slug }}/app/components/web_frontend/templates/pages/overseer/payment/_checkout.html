@@ -9,7 +9,7 @@
     {% elif not prices %}
     <p class="text-sm text-aegis-muted">The Stripe account has no active prices. Add a product with a price in the Stripe dashboard.</p>
     {% else %}
-    <form hx-post="{{ partials }}/checkout" hx-target="#payment-checkout-result" hx-swap="innerHTML" class="space-y-4">
+    <form data-write hx-post="{{ partials }}/checkout" hx-target="#payment-checkout-result" hx-swap="innerHTML" class="space-y-4">
       {% call field("Price") %}{{ select("price", prices, blank=None, block=True) }}{% endcall %}
       {% call field("Quantity") %}{{ text_input("quantity", "1") }}{% endcall %}
       {% call field("Success URL") %}{{ text_input("success_url", None, success_url) }}{% endcall %}

@@ -1,0 +1,444 @@
+"""``aegis deploy-agent``: the host runner behind the Overseer's deploy actions.
+
+No test reaches a real Redis, cloud or server: Redis is ``FakeRedis``, a
+provider is a fake ``Requester``, and the ``aegis`` the agent runs is a
+small script that prints its arguments.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import importlib.util
+import json
+import logging
+import sys
+import threading
+import types
+import uuid
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from typing import Any
+
+import pytest
+import typer
+from typer.testing import CliRunner
+
+from aegis.__main__ import app
+from aegis.commands import deploy_agent as agent
+from aegis.commands.deploy_backup import BACKUP_TIMESTAMP_RE
+from aegis.core.component_files import PROJECT_SLUG_PLACEHOLDER, get_template_path
+from aegis.core.provision import digitalocean
+from tests.cli.test_utils import strip_ansi_codes
+
+DO_TOKEN = "do-secret-token-5678"
+SYSTEM = get_template_path() / PROJECT_SLUG_PLACEHOLDER / "app" / "services" / "system"
+FAKE_AEGIS = """\
+import os, sys
+print("ran " + " ".join(sys.argv[1:]))
+print("token " + os.environ.get("DIGITALOCEAN_TOKEN", ""))
+sys.exit(int(os.environ.get("FAKE_EXIT", "0")))
+"""
+
+
+class FakeRedis:
+    """The sync calls the agent makes, over dicts. ``on_empty`` runs when a
+    BLPOP finds nothing, so a test can stop the loop once it is drained."""
+
+    def __init__(self, on_empty: Any = None) -> None:
+        self.lists: dict[str, list[str]] = {}
+        self.strings: dict[str, str] = {}
+        self.hashes: dict[str, dict[str, str]] = {}
+        self.ttl: dict[str, int] = {}
+        self.on_empty = on_empty
+
+    def rpush(self, key: str, *values: str) -> None:
+        self.lists.setdefault(key, []).extend(values)
+
+    def blpop(self, keys: list[str], timeout: int = 0) -> tuple[str, str] | None:
+        for key in keys:
+            if self.lists.get(key):
+                return key, self.lists[key].pop(0)
+        if self.on_empty:
+            self.on_empty()
+        return None
+
+    def set(self, key: str, value: str, ex: int | None = None) -> None:
+        self.strings[key] = value
+        if ex:
+            self.ttl[key] = ex
+
+    def get(self, key: str) -> str | None:
+        return self.strings.get(key)
+
+    def delete(self, *keys: str) -> None:
+        for key in keys:
+            self.strings.pop(key, None)
+
+    def hset(self, key: str, mapping: dict[str, Any]) -> None:
+        self.hashes.setdefault(key, {}).update({k: str(v) for k, v in mapping.items()})
+
+    def hgetall(self, key: str) -> dict[str, str]:
+        return dict(self.hashes.get(key, {}))
+
+    def expire(self, key: str, seconds: int) -> None:
+        self.ttl[key] = seconds
+
+
+class _Async:
+    """``FakeRedis`` as the app's ``redis.asyncio`` client."""
+
+    def __init__(self, redis: FakeRedis) -> None:
+        self._redis = redis
+
+    def __getattr__(self, name: str) -> Any:
+        call = getattr(self._redis, name)
+
+        async def awaited(*args: Any, **kwargs: Any) -> Any:
+            return call(*args, **kwargs)
+
+        return awaited
+
+
+def _load(name: str, path: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    monkeypatch.setitem(sys.modules, name, module)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.fixture
+def app_store(monkeypatch: pytest.MonkeyPatch) -> Any:
+    """The app's own ``RedisJobStore`` class, out of the template, so the
+    record the agent writes is read the way the jobs API reads it."""
+    for name in ("app", "app.core", "app.services", "app.services.system"):
+        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
+    log = types.ModuleType("app.core.log")
+    log.logger = logging.getLogger("app")  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "app.core.log", log)
+    _load("app.services.system.jobs", SYSTEM / "jobs.py", monkeypatch)
+    return _load(
+        "app.services.system.job_store", SYSTEM / "job_store.py", monkeypatch
+    ).RedisJobStore
+
+
+@pytest.fixture
+def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    script = tmp_path / "fake_aegis.py"
+    script.write_text(FAKE_AEGIS)
+    monkeypatch.setattr(agent, "AEGIS", [sys.executable, str(script)])
+    monkeypatch.setenv("DIGITALOCEAN_TOKEN", DO_TOKEN)
+    monkeypatch.delenv("HCLOUD_TOKEN", raising=False)
+    root = tmp_path / "my-app"
+    root.mkdir()
+    return root
+
+
+def _request(
+    redis: FakeRedis,
+    store_class: Any,
+    action: str,
+    args: dict[str, str] | None = None,
+    at: datetime | None = None,
+) -> str:
+    """What the app's ``enqueue`` does: the job record, then the request."""
+    job_id = uuid.uuid4().hex
+    store = store_class(_Async(redis))
+    asyncio.run(
+        store.create(job_id, f"deploy:{action}", "Waiting for the deploy agent")
+    )
+    when = (at or datetime.now(UTC)).isoformat()
+    request = {"job_id": job_id, "action": action, "args": args or {}, "by": "ada"}
+    redis.rpush(agent.PROTOCOL["requests"], json.dumps(request | {"at": when}))
+    return job_id
+
+
+def _serve(redis: FakeRedis, root: Path) -> None:
+    """Run the agent until the queue is empty."""
+    stop = threading.Event()
+    redis.on_empty = stop.set
+    agent.serve(redis, root, stop=stop)
+
+
+def _job(redis: FakeRedis, store_class: Any, job_id: str) -> Any:
+    return asyncio.run(store_class(_Async(redis)).get(job_id))
+
+
+# ---------------------------------------------------------------------------
+# The allowlist
+# ---------------------------------------------------------------------------
+
+
+def test_a_valid_request_passes_with_its_empty_optionals_dropped() -> None:
+    args = {"provider": "digitalocean", "size": "s-1vcpu-2gb", "region": "nyc3"}
+    assert agent.validate("quote", args | {"domain": ""}) == args
+
+
+@pytest.mark.parametrize(
+    ("action", "args"),
+    [
+        ("shell", {}),  # not an action
+        ("deploy", {"rolling": "1"}),  # not one of its arguments
+        ("destroy", {}),  # its confirmation missing
+        ("rollback", {"backup": "latest; rm -rf /"}),
+        ("rollback", {"backup": "--help"}),
+        ("quote", {"provider": "digitalocean", "size": "--yes", "region": "nyc3"}),
+        ("quote", {"provider": "linode", "size": "g6", "region": "us-east"}),
+        ("destroy", {"confirm": ["my-app"]}),
+    ],
+)
+def test_anything_else_is_refused(action: str, args: dict[str, Any]) -> None:
+    with pytest.raises(agent.RefusedError):
+        agent.validate(action, args)
+
+
+def test_a_rollback_takes_the_backups_own_timestamps() -> None:
+    assert agent.PROTOCOL["args"]["backup"] == BACKUP_TIMESTAMP_RE.pattern.strip("^$")
+
+
+# ---------------------------------------------------------------------------
+# Where Redis is
+# ---------------------------------------------------------------------------
+
+
+def test_redis_is_found_on_the_published_port(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for key in ("REDIS_URL_LOCAL", "REDIS_HOST_PORT", "REDIS_URL"):
+        monkeypatch.delenv(key, raising=False)
+    assert agent.redis_url(project) == "redis://127.0.0.1:6379"
+    (project / ".env").write_text("REDIS_URL=redis://redis:6379/2\nREDIS_HOST_PORT=1\n")
+    (project / ".env.ports").write_text("REDIS_HOST_PORT=6380\n")
+    assert agent.redis_url(project) == "redis://127.0.0.1:6380/2"
+    monkeypatch.setenv("REDIS_URL_LOCAL", "redis://10.0.0.5:7000")
+    assert agent.redis_url(project) == "redis://10.0.0.5:7000"
+
+
+# ---------------------------------------------------------------------------
+# The loop
+# ---------------------------------------------------------------------------
+
+
+def test_the_heartbeat_names_the_providers_it_has_tokens_for(project: Path) -> None:
+    redis = FakeRedis()
+    seen: list[str | None] = []
+    stop = threading.Event()
+
+    def drained() -> None:
+        seen.append(redis.get(agent.PROTOCOL["heartbeat"]))
+        stop.set()
+
+    redis.on_empty = drained
+    agent.serve(redis, project, stop=stop)
+    beat = json.loads(seen[0] or "{}")
+    assert beat["providers"] == ["digitalocean"]
+    assert beat["pid"] and beat["host"] and beat["version"]
+    assert DO_TOKEN not in (seen[0] or "")
+    assert redis.ttl[agent.PROTOCOL["heartbeat"]] > 0
+    # Stopping takes it down: the Overseer stops offering the actions.
+    assert redis.get(agent.PROTOCOL["heartbeat"]) is None
+
+
+def test_a_request_runs_and_its_output_streams_into_the_job(
+    project: Path, app_store: Any
+) -> None:
+    redis = FakeRedis()
+    job_id = _request(redis, app_store, "rollback", {"backup": "2026-10-01_020000"})
+    _serve(redis, project)
+    job = _job(redis, app_store, job_id)
+    assert job.status == "done"
+    ran = f"ran deploy-rollback --project-path {project} --backup 2026-10-01_020000"
+    assert job.result["lines"][0] == ran
+    assert job.label == job.result["lines"][-1]
+    # The token reached the command, and only its last four the job.
+    assert job.result["lines"][1] == "token ...5678"
+    assert DO_TOKEN not in json.dumps(redis.hashes)
+
+
+def test_the_job_record_is_the_apps(app_store: Any) -> None:
+    store = sys.modules[app_store.__module__]
+    assert (agent.JOB_PREFIX, agent.JOB_KEEP_SECONDS) == (
+        store.KEY_PREFIX,
+        store.KEEP_SECONDS,
+    )
+
+
+def test_a_command_that_fails_fails_the_job(
+    project: Path, app_store: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("FAKE_EXIT", "3")
+    redis = FakeRedis()
+    job_id = _request(redis, app_store, "deploy")
+    _serve(redis, project)
+    job = _job(redis, app_store, job_id)
+    assert job.status == "failed"
+    assert "aegis deploy" in job.error and "3" in job.error
+    assert job.result["lines"][0] == f"ran deploy --project-path {project}"
+
+
+def test_a_destroy_carries_the_typed_name(project: Path, app_store: Any) -> None:
+    redis = FakeRedis()
+    job_id = _request(redis, app_store, "destroy", {"confirm": "my-app"})
+    _serve(redis, project)
+    line = _job(redis, app_store, job_id).result["lines"][0]
+    assert line == f"ran deploy-destroy --project-path {project} --confirm my-app"
+
+
+def test_a_stale_request_is_failed_not_run(project: Path, app_store: Any) -> None:
+    redis = FakeRedis()
+    old = datetime.now(UTC) - timedelta(minutes=30)
+    job_id = _request(redis, app_store, "deploy", at=old)
+    _serve(redis, project)
+    job = _job(redis, app_store, job_id)
+    assert job.status == "failed" and "30" in job.error
+    assert not job.result["lines"]
+
+
+def test_a_refused_request_says_why(project: Path, app_store: Any) -> None:
+    redis = FakeRedis()
+    job_id = _request(redis, app_store, "rollback", {"backup": "$(reboot)"})
+    _serve(redis, project)
+    job = _job(redis, app_store, job_id)
+    assert job.status == "failed" and "backup" in job.error
+
+
+def _price_api(monkeypatch: pytest.MonkeyPatch, price: float) -> list[str]:
+    tokens: list[str] = []
+
+    def requester(base: str, token: str) -> Any:
+        assert base == digitalocean.API_URL
+        tokens.append(token)
+        sizes = [{"slug": "s-1vcpu-2gb", "regions": ["nyc3"], "price_monthly": price}]
+        return lambda method, path, body=None: {"sizes": sizes}
+
+    monkeypatch.setattr(agent, "json_requester", requester)
+    return tokens
+
+
+QUOTED = {"provider": "digitalocean", "size": "s-1vcpu-2gb", "region": "nyc3"}
+
+
+def test_a_quote_answers_with_the_providers_price(
+    project: Path, app_store: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    tokens = _price_api(monkeypatch, 12)
+    redis = FakeRedis()
+    job_id = _request(redis, app_store, "quote", QUOTED)
+    _serve(redis, project)
+    job = _job(redis, app_store, job_id)
+    assert job.status == "done"
+    assert job.result | {"lines": []} == QUOTED | {
+        "price": "12.00",
+        "currency": "USD",
+        "lines": [],
+    }
+    assert tokens == [DO_TOKEN] and DO_TOKEN not in json.dumps(redis.hashes)
+
+
+def test_a_quote_without_the_token_says_which(
+    project: Path, app_store: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("DIGITALOCEAN_TOKEN")
+    redis = FakeRedis()
+    job_id = _request(redis, app_store, "quote", QUOTED)
+    _serve(redis, project)
+    job = _job(redis, app_store, job_id)
+    assert job.status == "failed" and "DIGITALOCEAN_TOKEN" in job.error
+
+
+def test_provisioning_rechecks_the_price_first(
+    project: Path, app_store: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _price_api(monkeypatch, 14)
+    redis = FakeRedis()
+    job_id = _request(redis, app_store, "provision", QUOTED | {"price": "12.00"})
+    _serve(redis, project)
+    job = _job(redis, app_store, job_id)
+    assert job.status == "failed" and "14.00" in job.error
+    assert not job.result["lines"]  # nothing ran
+
+
+def test_provisioning_at_the_confirmed_price_runs(
+    project: Path, app_store: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _price_api(monkeypatch, 12)
+    redis = FakeRedis()
+    args = QUOTED | {"price": "12.00", "domain": "app.example.com"}
+    job_id = _request(redis, app_store, "provision", args)
+    _serve(redis, project)
+    line = _job(redis, app_store, job_id).result["lines"][0]
+    assert line == (
+        f"ran deploy-provision --project-path {project} --yes --provider "
+        "digitalocean --size s-1vcpu-2gb --region nyc3 --domain app.example.com"
+    )
+
+
+# ---------------------------------------------------------------------------
+# The command
+# ---------------------------------------------------------------------------
+
+
+def test_every_action_runs_a_command_that_takes_its_arguments() -> None:
+    """The protocol and the commands cannot drift: each argument the agent
+    passes is one of its command's options (the price it checks itself)."""
+    commands = typer.main.get_command(app).commands  # type: ignore[attr-defined]
+    for action, spec in agent.PROTOCOL["actions"].items():
+        if "command" not in spec:  # answered by the agent itself
+            continue
+        name, *flags = spec["command"]
+        options = {o for param in commands[name].params for o in param.opts}
+        args = (*spec.get("required", ()), *spec.get("optional", ()))
+        wanted = {"--project-path", *flags, *(f"--{a}" for a in args if a != "price")}
+        assert wanted <= options, f"{action}: {wanted - options}"
+
+
+def test_help() -> None:
+    result = CliRunner().invoke(app, ["deploy-agent", "--help"])
+    assert result.exit_code == 0
+    assert "--project-path" in strip_ansi_codes(result.output)
+
+
+class _Flaky:
+    """A Redis that is not up for its first ``down`` calls."""
+
+    def __init__(self, down: int) -> None:
+        self.down = down
+        self.calls = 0
+
+    def ping(self) -> bool:
+        self.calls += 1
+        if self.calls <= self.down:
+            raise agent.redis.ConnectionError("Connection refused")
+        return True
+
+
+def test_it_waits_for_redis_saying_where_once(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Started beside the stack (make serve), the agent is usually up
+    before Redis is."""
+    client, naps = _Flaky(down=2), []
+    agent.wait_for_redis(client, "redis://127.0.0.1:1", sleep=naps.append)
+    assert client.calls == 3
+    assert len(naps) == 2
+    assert strip_ansi_codes(capsys.readouterr().out).count("redis://127.0.0.1:1") == 1
+
+
+def test_it_rides_out_redis_going_away(project: Path) -> None:
+    """The stack restarting takes Redis down for a moment; the agent keeps
+    listening rather than dying with it."""
+    redis = FakeRedis()
+    stop = threading.Event()
+    blips = iter([agent.redis.ConnectionError("gone")])
+    real = redis.blpop
+
+    def blpop(keys: list[str], timeout: int) -> Any:
+        for blip in blips:
+            raise blip
+        stop.set()
+        return real(keys, timeout=timeout)
+
+    redis.blpop = blpop  # type: ignore[method-assign]
+    agent.serve(redis, project, stop=stop)
+    assert stop.is_set()

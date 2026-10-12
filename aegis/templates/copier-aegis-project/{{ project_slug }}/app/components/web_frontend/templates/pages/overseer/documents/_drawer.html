@@ -6,9 +6,9 @@
 <div class="space-y-4">
   {{ dialog_title(document.title, facts=[document.kind, details[2][1], (document.page_count or 0) ~ " pages"]|join(" . ")) }}
   <div class="flex flex-wrap items-center gap-2">
-    {{ action("Read pages", 'hx-post="' ~ urls.read ~ '" hx-swap="none" data-api-done="Reading started"', "primary") }}
+    {{ action("Read pages", 'hx-post="' ~ urls.read ~ '" hx-swap="none" data-api-done="Reading started" data-write', "primary") }}
     <a href="{{ urls.download }}" download class="px-2.5 py-1 text-xs rounded border border-aegis-border text-aegis-muted hover:text-aegis-text hover:border-aegis-muted transition-colors">Download</a>
-    {{ action("Delete", hx_dialog(urls.delete), "danger") }}
+    {{ action("Delete", hx_dialog(urls.delete, "data-write"), "danger") }}
   </div>
   <section id="document-pages" aria-label="Pages" class="flex flex-wrap gap-2">
     {% for p in pages %}
@@ -29,16 +29,16 @@
       {% call field("Dated") %}{{ date_input("document_date", document.document_date, block=True) }}{% endcall %}
     </div>
     {% call field("Note") %}{{ textarea("note", document.note or "", rows=3) }}{% endcall %}
-    {{ primary_button("Save", type="submit") }}
+    {{ primary_button("Save", type="submit", attrs="data-write") }}
   </form>
   {% endcall %}
   {% call card("Tags", id="document-tags") %}
   <div class="flex flex-wrap items-center gap-2">
     {% for label in tags %}
     <span class="inline-flex items-center gap-1.5 text-xs px-2 py-0.5 rounded border border-aegis-border text-aegis-text">{{ label }}
-      <button type="button" aria-label="Remove {{ label }}" hx-delete="{{ urls.tags }}/{{ label|urlencode }}" hx-swap="none" data-api-done="Tag removed" class="text-aegis-muted hover:text-error">×</button></span>
+      <button type="button" aria-label="Remove {{ label }}" hx-delete="{{ urls.tags }}/{{ label|urlencode }}" hx-swap="none" data-api-done="Tag removed" data-write class="text-aegis-muted hover:text-error">×</button></span>
     {% endfor %}
-    <form hx-post="{{ urls.tags }}" hx-swap="none" class="inline-flex items-center gap-2">
+    <form data-write hx-post="{{ urls.tags }}" hx-swap="none" class="inline-flex items-center gap-2">
       <input type="text" name="label" required placeholder="Add a tag" class="bg-aegis-bg border border-aegis-border rounded px-2 py-1 text-xs text-aegis-text w-32">
     </form>
   </div>

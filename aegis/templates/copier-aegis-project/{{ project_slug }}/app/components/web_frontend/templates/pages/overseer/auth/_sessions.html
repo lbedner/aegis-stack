@@ -24,7 +24,7 @@
       <p data-lifetimes class="text-xs text-aegis-muted">{{ lifetimes }}</p>
     </div>
     <div class="flex gap-2">
-      {{ action("Sign out everywhere else", hx_dialog(partials ~ "/confirm/revoke-others/all", "disabled" if own_sessions <= 1 else ""), "danger") }}
+      {{ action("Sign out everywhere else", hx_dialog(partials ~ "/confirm/revoke-others/all", "data-write disabled" if own_sessions <= 1 else "data-write"), "danger") }}
       {{ action("Refresh", hx_replace(here, "#overseer-main")) }}
     </div>
   </div>
@@ -41,7 +41,7 @@
     {% if row.current %}
     <span class="text-xs text-aegis-muted">This browser</span>
     {% elif row.can_sign_out %}
-    {{ action("Sign out", hx_dialog(partials ~ "/confirm/revoke/" ~ row.id), "danger") }}
+    {{ action("Sign out", hx_dialog(partials ~ "/confirm/revoke/" ~ row.id, "data-write"), "danger") }}
     {% endif %}
   {% endcall %}
   {{ page_links(pager, "#overseer-main") }}

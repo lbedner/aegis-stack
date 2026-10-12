@@ -179,6 +179,8 @@ def test_each_container_restarts_after_a_confirm(client: TestClient) -> None:
     opener = one(html, f'#container [data-container="{REDIS.name}"] [hx-get]')
     assert text(opener) == "Restart"
     assert opener.get("hx-get") == overseer_container.RESTART.format(name=REDIS.name)
+    # Hidden where the operator's changes are refused (``operator_refusal``).
+    assert opener.get("data-write") is not None
     dialog = page_html(client, opener.get("hx-get"))
     button = one(dialog, "[hx-post]")
     assert button.get("hx-post") == f"/api/v1/runtime/containers/{REDIS.name}/restart"

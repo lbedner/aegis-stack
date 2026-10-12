@@ -849,6 +849,13 @@ MESSAGES: dict[str, str] = {
     ),
     "deploy.backup_created": "バックアップ作成：{timestamp}",
     "deploy.backup_pruned": "古いバックアップを削除：{name}",
+    "deploy.backup_sqlite": "Snapshotting SQLite database...",
+    "deploy.backup_sqlite_failed": (
+        "Warning: SQLite snapshot failed; copying the live database file instead"
+    ),
+    "deploy.backup_storage_failed": "Warning: Object storage backup failed",
+    "deploy.backup_offsite": "Copying backup off the server (restic)...",
+    "deploy.backup_offsite_failed": "Warning: Off-box copy failed: {error}",
     "deploy.disk_low": "{host} の空き容量が {free}GB しかありません（{need}GB 必要）。回収方法：docker image prune -af && docker builder prune -af",
     "deploy.pruning": "Docker のディスク領域を回収中（未使用イメージと古いビルドキャッシュ）...",
     "deploy.prune_failed": "Docker のディスク領域を回収できませんでした。デプロイ自体は成功しています。",
@@ -917,6 +924,7 @@ MESSAGES: dict[str, str] = {
     "deploy.rollback_stopping": "サービスを停止中...",
     "deploy.rollback_restoring": "バックアップ {timestamp} からファイルを復元中...",
     "deploy.rollback_restore_failed": "ファイル復元失敗：{error}",
+    "deploy.rollback_data_failed": "Failed to restore data: {error}",
     "deploy.rollback_db": "データベースを復元中...",
     "deploy.rollback_db_neon": "データベースの復旧は Neon が管理しています（ブランチ / ポイントインタイムリストア）。ローカル復元をスキップします",
     "deploy.rollback_pg_wait": "PostgreSQL の準備完了を待機中...",
@@ -1245,9 +1253,9 @@ MESSAGES: dict[str, str] = {
     "build.step.llm": "LLM カタログを同期中",
     "build.step.format": "コードを整形中",
     # ── Deploy provision ──────────────────────────────────────────────
-    "provision.help_opt_provider": "サーバーを作成するクラウドプロバイダー (hetzner)",
-    "provision.help_opt_size": "サーバータイプ (例: cx23)",
-    "provision.help_opt_region": "プロバイダーのロケーション (例: nbg1, fsn1, hel1, ash)",
+    "provision.help_opt_provider": "サーバーを作成するクラウドプロバイダー ({providers})",
+    "provision.help_opt_size": "サーバータイプ (例: {sizes})",
+    "provision.help_opt_region": "プロバイダーのロケーション (例: {regions})",
     "provision.help_opt_domain": "Cloudflare でサーバーに向けるホスト名 (既定: sslip.io の名前)",
     "provision.help_opt_ssh_key": "新しいサーバーの root に登録する公開鍵（既定：~/.ssh/id_ed25519.pub、id_ecdsa.pub、id_rsa.pub のうち最初にあるもの）",
     "provision.no_ssh_key": "{dir} に SSH 公開鍵が見つかりません（{names} を探しました）。--ssh-key で指定してください。",
@@ -1260,12 +1268,14 @@ MESSAGES: dict[str, str] = {
         "このプロジェクトには作成済みのサーバー ({ip}) があります。デプロイは 'aegis deploy'、削除は 'aegis deploy-destroy' を実行してください。"
     ),
     "provision.resuming": "{name} の作成を再開します",
-    "provision.price": (
+    "provision.price.hetzner": (
         "{size} ({region}): 月額 EUR {price} (税込)、別途 Hetzner の IPv4 アドレス料金"
     ),
-    "provision.confirm": "このサーバーを Hetzner アカウントに作成しますか?",
+    "provision.price.digitalocean": "{size} in {region}: USD {price}/month before tax",
+    "provision.confirm": "このサーバーを {provider} アカウントに作成しますか?",
     "provision.cancelled": "キャンセルしました。何も作成されていません。",
     "provision.ssh_key_created": "SSH 鍵 {id} をアップロードしました",
+    "provision.firewall_created": "Created cloud firewall {id} (in: SSH, HTTP, HTTPS)",
     "provision.server_created": "サーバー {id} を {ip} に作成しました (.aegis/deploy.yml に記録)",
     "provision.waiting_running": "サーバーの起動を待っています...",
     "provision.not_running": "サーバーが時間内に 'running' になりませんでした。",
@@ -1282,6 +1292,7 @@ MESSAGES: dict[str, str] = {
     "provision.partial_title": "作成を中断しました。アカウントには次のリソースがあります:",
     "provision.created_server": "サーバー {id} '{name}' ({ip}, {size}, {region})",
     "provision.created_ssh_key": "SSH 鍵 {id}",
+    "provision.created_firewall": "cloud firewall {id}",
     "provision.created_dns": "DNS A レコード {hostname}",
     "provision.offer_delete": "今すぐ削除しますか?",
     "provision.cleanup_failed": "クリーンアップに失敗しました: {error}",
@@ -1294,4 +1305,26 @@ MESSAGES: dict[str, str] = {
     "provision.destroy_confirm": "確認のためサーバー名 ({name}) を入力してください",
     "provision.destroy_cancelled": "名前が一致しません。何も削除されていません。",
     "provision.destroyed": "削除しました。.aegis/deploy.yml の記録は削除済みになっています。",
+    "provision.help_opt_confirm": (
+        "The server name, typed in advance: skips the prompt, and must still match"
+    ),
+    # ── Deploy agent ──────────────────────────────────────────────────
+    "deploy_agent.no_redis": (
+        "Waiting for the project's Redis at {url} ({error}). It answers once the stack is up (make serve); elsewhere, set REDIS_URL_LOCAL."
+    ),
+    "deploy_agent.listening": (
+        "Listening for Overseer deploy requests on {url} (tokens here for: {providers}). Ctrl-C stops."
+    ),
+    "deploy_agent.stopping": "Stopped listening.",
+    "deploy_agent.request": "{action}, asked by {by}",
+    "deploy_agent.done": "{action} done",
+    "deploy_agent.unreadable": "Skipped a request that could not be read.",
+    "deploy_agent.stale": (
+        "This request waited {minutes} minutes for the deploy agent; ask again from the Overseer."
+    ),
+    "deploy_agent.price_changed": (
+        "The price is now {price}, not the {confirmed} you confirmed. Nothing was created; get a new price."
+    ),
+    "deploy_agent.command_failed": "{command} failed (exit {code})",
+    "deploy_agent.stopped": "The deploy agent stopped before this finished.",
 }

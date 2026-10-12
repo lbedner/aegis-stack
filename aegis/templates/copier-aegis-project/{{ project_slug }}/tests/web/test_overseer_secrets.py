@@ -124,9 +124,8 @@ def test_a_settable_secret_offers_set_and_one_in_env_does_not(
 ) -> None:
     client, _ = writable
     html = client.get("/overseer/secrets").text
-    assert (
-        one(html, f'#secrets button[hx-get="{PARTIALS}/ANTHROPIC_API_KEY"]') is not None
-    )
+    setter = one(html, f'#secrets button[hx-get="{PARTIALS}/ANTHROPIC_API_KEY"]')
+    assert setter.get("data-write") is not None  # ``operator_refusal``
     assert not select(html, f'#secrets button[hx-get="{PARTIALS}/OPENAI_API_KEY"]')
     assert "change it in .env" in _row(html, "OPENAI_API_KEY").lower()
 

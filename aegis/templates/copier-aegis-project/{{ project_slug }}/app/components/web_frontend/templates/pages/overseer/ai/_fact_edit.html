@@ -5,5 +5,5 @@
 <form hx-post="{{ url }}" hx-swap="none" class="space-y-4">
   {% call field("Fact") %}{{ textarea("fact", fact.fact, rows=3) }}{% endcall %}
   {% call field("Category") %}{{ text_input("category", fact.category) }}{% endcall %}
-  {{ primary_button("Save", "submit") }}
+  {{ primary_button("Save", "submit", "data-write") }}
 </form>

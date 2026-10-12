@@ -33,7 +33,7 @@
     </div>
     {% endcall %}
     {% call card("Transcribe a file", id="ai-voice-transcribe") %}
-    <form hx-post="{{ transcribe_url }}" hx-encoding="multipart/form-data" hx-target="#ai-voice-result" hx-swap="innerHTML" class="space-y-3">
+    <form data-write hx-post="{{ transcribe_url }}" hx-encoding="multipart/form-data" hx-target="#ai-voice-result" hx-swap="innerHTML" class="space-y-3">
       <input type="file" name="audio" accept="audio/*" required class="file-input file-input-sm w-full">
       {{ primary_button("Transcribe", "submit") }}
     </form>

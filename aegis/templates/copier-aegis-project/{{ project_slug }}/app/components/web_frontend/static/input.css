@@ -45,6 +45,10 @@
      ``message`` filter's): a map node scrolls it, a card grows to it. */
   .health-message { @apply break-words; }
 
+  /* Where Overseer's writes are refused (``operator_refusal``: its shell
+     says why), no write control is offered, in a dialog or drawer too. */
+  body:has([data-read-only]) [data-write] { display: none; }
+
   /* The main sidebar only flags trouble: a healthy entry shows no dot (the
      screen-reader status stays). The sub-menu and pages keep every dot. */
   #overseer-sidebar .status-dot:not([data-tone="warn"]):not([data-tone="error"]) {

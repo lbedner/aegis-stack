@@ -822,6 +822,13 @@ MESSAGES: dict[str, str] = {
     "deploy.backup_db_failed": ("경고: 데이터베이스 백업 실패, 백업 없이 계속 진행"),
     "deploy.backup_created": "백업 생성 완료: {timestamp}",
     "deploy.backup_pruned": "오래된 백업 정리됨: {name}",
+    "deploy.backup_sqlite": "Snapshotting SQLite database...",
+    "deploy.backup_sqlite_failed": (
+        "Warning: SQLite snapshot failed; copying the live database file instead"
+    ),
+    "deploy.backup_storage_failed": "Warning: Object storage backup failed",
+    "deploy.backup_offsite": "Copying backup off the server (restic)...",
+    "deploy.backup_offsite_failed": "Warning: Off-box copy failed: {error}",
     "deploy.disk_low": "{host}에 {free}GB만 남았습니다. {need}GB가 필요합니다. 정리 방법: docker image prune -af && docker builder prune -af",
     "deploy.pruning": "Docker 디스크 공간 회수 중(미사용 이미지 및 오래된 빌드 캐시)...",
     "deploy.prune_failed": "Docker 디스크 공간을 회수하지 못했습니다. 배포 자체는 성공했습니다.",
@@ -885,6 +892,7 @@ MESSAGES: dict[str, str] = {
     "deploy.rollback_stopping": "서비스 중지 중...",
     "deploy.rollback_restoring": "백업 {timestamp}에서 파일 복원 중...",
     "deploy.rollback_restore_failed": "파일 복원 실패: {error}",
+    "deploy.rollback_data_failed": "Failed to restore data: {error}",
     "deploy.rollback_db": "데이터베이스 복원 중...",
     "deploy.rollback_db_neon": "데이터베이스 복구는 Neon이 관리합니다(브랜치 / 특정 시점 복원). 로컬 복원을 건너뜁니다",
     "deploy.rollback_pg_wait": "PostgreSQL 준비 대기 중...",
@@ -1210,9 +1218,9 @@ MESSAGES: dict[str, str] = {
     "build.step.llm": "LLM 카탈로그 동기화 중",
     "build.step.format": "코드 포매팅 중",
     # ── Deploy provision ──────────────────────────────────────────────
-    "provision.help_opt_provider": "서버를 만들 클라우드 제공자 (hetzner)",
-    "provision.help_opt_size": "서버 유형 (예: cx23)",
-    "provision.help_opt_region": "제공자 위치 (예: nbg1, fsn1, hel1, ash)",
+    "provision.help_opt_provider": "서버를 만들 클라우드 제공자 ({providers})",
+    "provision.help_opt_size": "서버 유형 (예: {sizes})",
+    "provision.help_opt_region": "제공자 위치 (예: {regions})",
     "provision.help_opt_domain": "Cloudflare로 서버를 가리킬 호스트명 (기본값: sslip.io 이름)",
     "provision.help_opt_ssh_key": "새 서버의 root에 설치할 공개 키(기본값: ~/.ssh/id_ed25519.pub, id_ecdsa.pub, id_rsa.pub 중 처음 있는 것)",
     "provision.no_ssh_key": "{dir}에서 SSH 공개 키를 찾지 못했습니다({names}을(를) 찾았습니다). --ssh-key로 지정하세요.",
@@ -1225,12 +1233,14 @@ MESSAGES: dict[str, str] = {
         "이 프로젝트에는 이미 생성된 서버({ip})가 있습니다. 배포하려면 'aegis deploy', 삭제하려면 'aegis deploy-destroy'를 실행하세요."
     ),
     "provision.resuming": "{name} 생성을 이어서 진행합니다",
-    "provision.price": (
+    "provision.price.hetzner": (
         "{size} ({region}): 월 EUR {price} (VAT 포함), Hetzner IPv4 주소 요금 별도"
     ),
-    "provision.confirm": "Hetzner 계정에 이 서버를 만들까요?",
+    "provision.price.digitalocean": "{size} in {region}: USD {price}/month before tax",
+    "provision.confirm": "{provider} 계정에 이 서버를 만들까요?",
     "provision.cancelled": "취소했습니다. 아무것도 만들지 않았습니다.",
     "provision.ssh_key_created": "SSH 키 {id} 업로드됨",
+    "provision.firewall_created": "Created cloud firewall {id} (in: SSH, HTTP, HTTPS)",
     "provision.server_created": "서버 {id}를 {ip}에 만들었습니다 (.aegis/deploy.yml에 기록됨)",
     "provision.waiting_running": "서버가 시작되기를 기다리는 중...",
     "provision.not_running": "서버가 제시간에 'running' 상태가 되지 않았습니다.",
@@ -1247,6 +1257,7 @@ MESSAGES: dict[str, str] = {
     "provision.partial_title": "생성이 중단되었습니다. 계정에 다음 리소스가 있습니다:",
     "provision.created_server": "서버 {id} '{name}' ({ip}, {size}, {region})",
     "provision.created_ssh_key": "SSH 키 {id}",
+    "provision.created_firewall": "cloud firewall {id}",
     "provision.created_dns": "DNS A 레코드 {hostname}",
     "provision.offer_delete": "지금 삭제할까요?",
     "provision.cleanup_failed": "정리 실패: {error}",
@@ -1259,4 +1270,26 @@ MESSAGES: dict[str, str] = {
     "provision.destroy_confirm": "확인하려면 서버 이름({name})을 입력하세요",
     "provision.destroy_cancelled": "이름이 일치하지 않습니다. 아무것도 삭제하지 않았습니다.",
     "provision.destroyed": "삭제했습니다. .aegis/deploy.yml의 기록은 삭제됨으로 표시됩니다.",
+    "provision.help_opt_confirm": (
+        "The server name, typed in advance: skips the prompt, and must still match"
+    ),
+    # ── Deploy agent ──────────────────────────────────────────────────
+    "deploy_agent.no_redis": (
+        "Waiting for the project's Redis at {url} ({error}). It answers once the stack is up (make serve); elsewhere, set REDIS_URL_LOCAL."
+    ),
+    "deploy_agent.listening": (
+        "Listening for Overseer deploy requests on {url} (tokens here for: {providers}). Ctrl-C stops."
+    ),
+    "deploy_agent.stopping": "Stopped listening.",
+    "deploy_agent.request": "{action}, asked by {by}",
+    "deploy_agent.done": "{action} done",
+    "deploy_agent.unreadable": "Skipped a request that could not be read.",
+    "deploy_agent.stale": (
+        "This request waited {minutes} minutes for the deploy agent; ask again from the Overseer."
+    ),
+    "deploy_agent.price_changed": (
+        "The price is now {price}, not the {confirmed} you confirmed. Nothing was created; get a new price."
+    ),
+    "deploy_agent.command_failed": "{command} failed (exit {code})",
+    "deploy_agent.stopped": "The deploy agent stopped before this finished.",
 }

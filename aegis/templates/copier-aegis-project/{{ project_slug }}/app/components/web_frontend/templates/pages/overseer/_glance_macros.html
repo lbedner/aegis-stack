@@ -12,9 +12,9 @@
 <span class="text-xs text-aegis-muted">up {{ row.uptime }}</span>
 {%- endmacro %}
 
-{# Its Restart, which confirms first. #}
+{# Its Restart, which confirms first: a write (``data-write``). #}
 {% macro restart(row) -%}
-{{ action("Restart", hx_dialog(row.restart_url), "warn") }}
+{{ action("Restart", hx_dialog(row.restart_url, "data-write"), "warn") }}
 {%- endmacro %}
 
 {# A live figure past its threshold takes its tone (``tone`` in input.css):

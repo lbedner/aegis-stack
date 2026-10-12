@@ -17,6 +17,7 @@ from app.services.scheduler import (
     import_job_function,
     run_triggered_job,
 )
+from app.services.shared.deps import Actor, get_admin_actor
 {%- if include_auth %}
 {%- if include_auth_rbac %}
 from app.services.auth.service import require_role
@@ -209,6 +210,8 @@ async def trigger_scheduled_job(
     job_id: str,
     background_tasks: BackgroundTasks,
     manager: ScheduledTaskManager = Depends(get_task_manager),
+    # An operator's change: admins with auth, the local dev build without.
+    _actor: Actor = Depends(get_admin_actor),
 ) -> TriggerJobResponse:
     """Manually trigger a scheduled job to run now, in the background.
 

@@ -6,7 +6,7 @@
 {% call card("Your tokens") %}
 <div id="mcp-tokens">
   {% call(row) data_table(token_columns, tokens, empty=no_tokens) %}
-  {{ action("Revoke", hx_dialog(partials ~ "/tokens/" ~ row.id ~ "/revoke"), "danger") }}
+  {{ action("Revoke", hx_dialog(partials ~ "/tokens/" ~ row.id ~ "/revoke", "data-write"), "danger") }}
   {% endcall %}
 </div>
 {% endcall %}

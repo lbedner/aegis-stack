@@ -20,6 +20,7 @@ from app.components.web_frontend.assets import COMPONENT_DIR, static_url
 from app.components.web_frontend.filters import FILTERS
 from app.core import series
 from app.core.config import settings
+from app.services.shared.deps import operator_refusal
 from app.services.system import topology, ui_runtime
 
 templates = Jinja2Templates(directory=str(COMPONENT_DIR / "templates"))
@@ -42,6 +43,9 @@ def registration_enabled() -> bool:
 
 
 templates.env.globals["registration_enabled"] = registration_enabled
+# Why this request may not make an operator's change (None: it may); the
+# Overseer shell hides every write control with it.
+templates.env.globals["operator_refusal"] = operator_refusal
 templates.env.globals["email_flows_enabled"] = (
     settings.AUTH_ENABLED and settings.AUTH_LEVEL != "basic"
 )

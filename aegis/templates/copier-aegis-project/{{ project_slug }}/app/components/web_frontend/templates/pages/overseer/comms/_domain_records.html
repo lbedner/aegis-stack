@@ -17,6 +17,6 @@
   </tbody>
 </table>
 <div class="mt-4 flex items-center gap-3">
-  {{ action("Check", 'hx-post="' ~ check_url ~ '" hx-swap="none"', "primary") }}
+  {{ action("Check", 'hx-post="' ~ check_url ~ '" hx-swap="none" data-write', "primary") }}
   <button type="button" @click="$el.closest('dialog').close()" class="text-xs text-aegis-muted hover:text-aegis-text">Close</button>
 </div>

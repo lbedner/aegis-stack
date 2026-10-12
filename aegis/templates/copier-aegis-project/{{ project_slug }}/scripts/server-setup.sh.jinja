@@ -205,6 +205,29 @@ if ! sysctl net.ipv4.tcp_congestion_control 2>/dev/null | grep -q bbr; then
     sysctl -p 2>/dev/null || true
 fi
 
+# Swap on small boxes. The image builds here beside the running stack; under
+# 4 GB of RAM that can exhaust memory, and without swap the OOM killer has
+# nothing to fall back on. Sized to RAM, capped at 2 GB; skipped when the box
+# already has swap of its own.
+SWAPFILE=/swapfile
+MEM_MB=$(awk '/^MemTotal:/ {print int($2 / 1024)}' /proc/meminfo)
+if [ "$MEM_MB" -lt 4096 ]; then
+    if [ ! -f "$SWAPFILE" ] && [ -z "$(swapon --show --noheadings)" ]; then
+        SWAP_MB=$(( MEM_MB < 2048 ? MEM_MB : 2048 ))
+        echo "Creating a ${SWAP_MB} MB swapfile (${MEM_MB} MB RAM)..."
+        fallocate -l "${SWAP_MB}M" "$SWAPFILE" || dd if=/dev/zero of="$SWAPFILE" bs=1M count="$SWAP_MB"
+        chmod 600 "$SWAPFILE"
+        mkswap "$SWAPFILE"
+    fi
+    if [ -f "$SWAPFILE" ]; then
+        swapon --show=NAME --noheadings | grep -qx "$SWAPFILE" || swapon "$SWAPFILE"
+        grep -q "^$SWAPFILE " /etc/fstab || echo "$SWAPFILE none swap sw 0 0" >> /etc/fstab
+    fi
+    # Swap as a last resort, not a place to park the app's working set.
+    echo "vm.swappiness=10" > /etc/sysctl.d/99-swappiness.conf
+    sysctl -q -p /etc/sysctl.d/99-swappiness.conf
+fi
+
 #=============================================================================
 # VERIFICATION
 #=============================================================================

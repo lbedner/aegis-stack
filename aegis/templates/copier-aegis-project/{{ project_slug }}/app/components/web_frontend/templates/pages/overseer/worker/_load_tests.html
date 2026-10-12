@@ -4,7 +4,7 @@
 {% from "components/macros/form.html" import field, number_input, select, primary_button %}
 <div class="space-y-4">
   {% call card("New run", "Sent from this server, counted from task history") %}
-  <form hx-post="{{ partials }}/load-tests" hx-swap="none" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-6 items-end">
+  <form data-write hx-post="{{ partials }}/load-tests" hx-swap="none" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-6 items-end">
     <div class="lg:col-span-2">{% call field("Type") %}{{ select("task_type", types, blank=None, block=True) }}{% endcall %}</div>
     {% call field("Tasks") %}{{ number_input("num_tasks", 100, min=1, max=max_tasks) }}{% endcall %}
     {% call field("Batch") %}{{ number_input("batch_size", 10, min=1, max=100) }}{% endcall %}

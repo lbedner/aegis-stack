@@ -1,0 +1,19 @@
+{# Overseer > Deployments' asks of ``aegis deploy-agent``
+   (overseer_deploy_actions): one recipe for a control that asks (a write,
+   answered by its job, which swaps into the card's job panel), and the
+   destroy form that the card and a failed provision both offer. #}
+{% from "components/macros/form.html" import action, field, text_input, primary_button %}
+
+{% macro asks(url) %}data-write hx-post="{{ url }}" hx-target="#deploy-job" hx-swap="innerHTML"{% endmacro %}
+
+{% macro ask(label, partials, verb, tone="default") %}
+{% set attrs %}{{ asks(partials ~ "/" ~ verb) }} data-ask="{{ verb }}"{% endset %}
+{{ action(label, attrs, tone) }}
+{% endmacro %}
+
+{% macro destroy_form(partials, name) %}
+<form data-ask="destroy" {{ asks(partials ~ "/destroy") }} class="flex flex-wrap items-end gap-2">
+  {% call field("Type " ~ name ~ " to delete the server, its firewall, DNS record and SSH key") %}{{ text_input("confirm", required=True) }}{% endcall %}
+  {{ primary_button("Destroy", "submit") }}
+</form>
+{% endmacro %}

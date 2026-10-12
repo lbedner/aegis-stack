@@ -30,6 +30,8 @@ class TestSchedulerEndpoints:
         actually live) instead of the real asyncpg pool.
         """
         from app.core.db import get_async_db
+        from app.services.shared.deps import get_admin_actor
+        from tests._audit import ADMIN
 
         app = create_integrated_app()
 
@@ -37,6 +39,8 @@ class TestSchedulerEndpoints:
             yield async_db_session
 
         app.dependency_overrides[get_async_db] = _get_test_async_db
+        # Run-now is an operator's change: admins only.
+        app.dependency_overrides[get_admin_actor] = lambda: ADMIN
 
         # Manually trigger startup for component registration
         from app.components.backend.hooks import backend_hooks
@@ -58,7 +62,8 @@ class TestSchedulerEndpoints:
     async def async_client(self) -> AsyncGenerator[AsyncClient, None]:
         """Async HTTP client for testing.
 
-        No auth or no DB in this stack, so no override needed.
+        No auth or no DB in this stack, so no override needed. Addressed
+        to localhost: without auth, run-now is the local dev build's alone.
         """
         app = create_integrated_app()
 
@@ -69,7 +74,7 @@ class TestSchedulerEndpoints:
 
         transport = ASGITransport(app=app)
         async with AsyncClient(
-            transport=transport, base_url="http://test"
+            transport=transport, base_url="http://localhost"
         ) as client:
             yield client
 

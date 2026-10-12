@@ -5,9 +5,9 @@
 {% macro user_actions(row) %}
   {% set toggle = "deactivate" if row.active else "activate" %}
   <span class="inline-flex gap-2">
-    {{ action("Disable" if row.active else "Enable", hx_dialog(partials ~ "/confirm/" ~ toggle ~ "/" ~ row.id), "warn" if row.active else "default") }}
-    {% if row.signed_in %}{{ action("Sign out everywhere", hx_dialog(partials ~ "/confirm/revoke-user/" ~ row.id), "warn") }}{% endif %}
-    {{ action("Delete", hx_dialog(partials ~ "/confirm/delete/" ~ row.id), "danger") }}
+    {{ action("Disable" if row.active else "Enable", hx_dialog(partials ~ "/confirm/" ~ toggle ~ "/" ~ row.id, "data-write"), "warn" if row.active else "default") }}
+    {% if row.signed_in %}{{ action("Sign out everywhere", hx_dialog(partials ~ "/confirm/revoke-user/" ~ row.id, "data-write"), "warn") }}{% endif %}
+    {{ action("Delete", hx_dialog(partials ~ "/confirm/delete/" ~ row.id, "data-write"), "danger") }}
   </span>
 {% endmacro %}
 
@@ -19,7 +19,7 @@
 {% set here = item.url ~ "/users" %}
 {% call card("Users", users|length ~ " " ~ ("account" if users|length == 1 else "accounts")) %}
   <div class="flex justify-end gap-2">
-    {% if can_admin %}{{ action("Add user", hx_dialog(partials ~ "/users/new"), "primary") }}{% endif %}
+    {% if can_admin %}{{ action("Add user", hx_dialog(partials ~ "/users/new", "data-write"), "primary") }}{% endif %}
     {{ action("Refresh", hx_replace(here, "#overseer-main")) }}
   </div>
   {% set columns = [

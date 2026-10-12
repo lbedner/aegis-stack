@@ -1,0 +1,64 @@
+{# Overseer > Deployments: what can be asked of ``aegis deploy-agent``
+   from here (overseer_deploy_actions), or why nothing can: a deployed
+   server, no Redis to carry the asking, no agent listening. Each ask's
+   job streams into the panel at the bottom (_job.html). #}
+{% from "components/macros/layout.html" import card, command %}
+{% from "components/macros/form.html" import field, text_input, primary_button %}
+{% from "pages/overseer/deployments/_macros.html" import asks, ask, destroy_form %}
+{% set note = "text-sm text-aegis-muted space-y-2" %}
+{% call card("Deploy from here") %}
+{% if actions.state == "deployed" %}
+<div data-deploy-state="deployed" class="{{ note }}">
+  <p>This is a deployed server. Redeploys come from the dev Overseer, or from CI:</p>
+  <p class="flex items-center gap-2">{{ command(actions.command) }}</p>
+</div>
+{% elif actions.state == "no-redis" %}
+<div data-deploy-state="no-redis" class="{{ note }}">
+  <p>Deploying from here needs Redis: the Overseer hands each action to <code class="font-mono text-aegis-text">aegis deploy-agent</code> on your machine through the project's Redis, so your cloud token and SSH key never enter the app.</p>
+  <p class="flex items-center gap-2">{{ command("aegis add redis") }}</p>
+</div>
+{% elif actions.state == "unreachable" %}
+<p data-deploy-state="unreachable" class="{{ note }}">Redis did not answer: {{ actions.error }}</p>
+{% elif actions.state == "no-agent" %}
+<div data-deploy-state="no-agent" class="{{ note }}">
+  <p>No deploy agent is listening. <code class="font-mono text-aegis-text">make serve</code> starts one when the aegis CLI is installed (<code class="font-mono text-aegis-text">uv tool install aegis-stack</code>); with the stack started another way, run it in the project directory, then reload.</p>
+  <p class="flex items-center gap-2">{{ command(actions.command) }}</p>
+  <p>It runs what you ask here with your cloud token (from your shell's environment) and SSH key: both stay on your machine.</p>
+</div>
+{% else %}
+<div data-deploy-state="ready" class="space-y-4">
+  <p class="text-xs text-aegis-muted">The deploy agent is listening on {{ actions.agent.host }} (aegis {{ actions.agent.version }}).</p>
+  {% if actions.server %}
+  <div class="flex flex-wrap items-center gap-2">
+    {{ ask("Deploy", actions.partials, "deploy", "primary") }}
+    {{ ask("Back up now", actions.partials, "backup") }}
+    {{ ask("List backups", actions.partials, "backups") }}
+  </div>
+  <form data-ask="rollback" {{ asks(actions.partials ~ "/rollback") }} class="flex flex-wrap items-end gap-2">
+    {% call field("Roll back to (blank: the newest backup)") %}{{ text_input("backup", placeholder="2026-10-01_020000") }}{% endcall %}
+    {{ primary_button("Roll back", "submit") }}
+  </form>
+  {% endif %}
+  {% if actions.destroy %}{{ destroy_form(actions.partials, actions.destroy) }}{% endif %}
+  {% for p in actions.providers %}
+  <form data-provision="{{ p.key }}" {{ asks(actions.partials ~ "/quote") }} class="space-y-3">
+    <p class="text-sm font-semibold text-aegis-text">New server on {{ p.name }}</p>
+    <input type="hidden" name="provider" value="{{ p.key }}">
+    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {% call field("Size") %}{{ text_input("size", p.size, required=True) }}{% endcall %}
+      {% call field("Region") %}{{ text_input("region", p.region, required=True) }}{% endcall %}
+      {% call field("Domain (optional)") %}{{ text_input("domain", placeholder="an sslip.io name") }}{% endcall %}
+      {% call field("Email (optional)") %}{{ text_input("email", placeholder="the project's author email") }}{% endcall %}
+    </div>
+    {{ primary_button("Get price", "submit") }}
+  </form>
+  {% endfor %}
+  {% if not actions.server and not actions.providers %}
+  <p class="{{ note }}">No cloud token reached the agent: set your provider's (see Where it can run) where you start it.</p>
+  {% endif %}
+  <div hx-ext="sse" sse-connect="{{ actions.events }}">
+    <div id="deploy-job" sse-swap="{{ actions.event }}" hx-target="this">{% with job=actions.job %}{% include "pages/overseer/deployments/_job.html" %}{% endwith %}</div>
+  </div>
+</div>
+{% endif %}
+{% endcall %}

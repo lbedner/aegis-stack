@@ -867,6 +867,13 @@ MESSAGES: dict[str, str] = {
     ),
     "deploy.backup_created": "Sauvegarde créée : {timestamp}",
     "deploy.backup_pruned": "Ancienne sauvegarde supprimée : {name}",
+    "deploy.backup_sqlite": "Snapshotting SQLite database...",
+    "deploy.backup_sqlite_failed": (
+        "Warning: SQLite snapshot failed; copying the live database file instead"
+    ),
+    "deploy.backup_storage_failed": "Warning: Object storage backup failed",
+    "deploy.backup_offsite": "Copying backup off the server (restic)...",
+    "deploy.backup_offsite_failed": "Warning: Off-box copy failed: {error}",
     "deploy.disk_low": "Seulement {free} Go libres sur {host}, il en faut {need}. Libérez de l'espace avec : docker image prune -af && docker builder prune -af",
     "deploy.pruning": "Libération de l'espace disque Docker (images orphelines et ancien cache de build)...",
     "deploy.prune_failed": "Impossible de libérer l'espace disque Docker ; le déploiement lui-même a réussi.",
@@ -936,6 +943,7 @@ MESSAGES: dict[str, str] = {
     "deploy.rollback_stopping": "Arrêt des services...",
     "deploy.rollback_restoring": "Restauration des fichiers depuis la sauvegarde {timestamp}...",
     "deploy.rollback_restore_failed": "Échec de la restauration des fichiers : {error}",
+    "deploy.rollback_data_failed": "Failed to restore data: {error}",
     "deploy.rollback_db": "Restauration de la base de données...",
     "deploy.rollback_db_neon": "La récupération de la base de données est gérée par Neon (branches / restauration à un instant donné) ; restauration locale ignorée",
     "deploy.rollback_pg_wait": "Attente de la disponibilité de PostgreSQL...",
@@ -1265,11 +1273,9 @@ MESSAGES: dict[str, str] = {
     "build.step.llm": "Synchronisation du catalogue LLM",
     "build.step.format": "Formatage du code",
     # ── Deploy provision ──────────────────────────────────────────────
-    "provision.help_opt_provider": "Fournisseur cloud où créer le serveur (hetzner)",
-    "provision.help_opt_size": "Type de serveur, par ex. cx23",
-    "provision.help_opt_region": (
-        "Emplacement chez le fournisseur, par ex. nbg1, fsn1, hel1, ash"
-    ),
+    "provision.help_opt_provider": "Fournisseur cloud où créer le serveur ({providers})",
+    "provision.help_opt_size": "Type de serveur, par ex. {sizes}",
+    "provision.help_opt_region": ("Emplacement chez le fournisseur, par ex. {regions}"),
     "provision.help_opt_domain": (
         "Nom d'hôte pointé vers le serveur via Cloudflare (par défaut : un nom sslip.io)"
     ),
@@ -1288,12 +1294,14 @@ MESSAGES: dict[str, str] = {
         "Ce projet a déjà un serveur provisionné ({ip}). Lancez 'aegis deploy' pour déployer, ou 'aegis deploy-destroy' pour le supprimer."
     ),
     "provision.resuming": "Reprise du provisionnement de {name}",
-    "provision.price": (
+    "provision.price.hetzner": (
         "{size} à {region} : EUR {price}/mois TTC, plus les frais d'adresse IPv4 de Hetzner"
     ),
-    "provision.confirm": "Créer ce serveur dans votre compte Hetzner ?",
+    "provision.price.digitalocean": "{size} in {region}: USD {price}/month before tax",
+    "provision.confirm": "Créer ce serveur dans votre compte {provider} ?",
     "provision.cancelled": "Annulé. Rien n'a été créé.",
     "provision.ssh_key_created": "Clé SSH {id} envoyée",
+    "provision.firewall_created": "Created cloud firewall {id} (in: SSH, HTTP, HTTPS)",
     "provision.server_created": (
         "Serveur {id} créé à {ip} (enregistré dans .aegis/deploy.yml)"
     ),
@@ -1316,6 +1324,7 @@ MESSAGES: dict[str, str] = {
     ),
     "provision.created_server": "serveur {id} '{name}' à {ip} ({size}, {region})",
     "provision.created_ssh_key": "clé SSH {id}",
+    "provision.created_firewall": "cloud firewall {id}",
     "provision.created_dns": "enregistrement DNS A {hostname}",
     "provision.offer_delete": "Les supprimer maintenant ?",
     "provision.cleanup_failed": "Échec du nettoyage : {error}",
@@ -1334,4 +1343,26 @@ MESSAGES: dict[str, str] = {
     "provision.destroyed": (
         "Supprimé. L'enregistrement dans .aegis/deploy.yml est marqué comme supprimé."
     ),
+    "provision.help_opt_confirm": (
+        "The server name, typed in advance: skips the prompt, and must still match"
+    ),
+    # ── Deploy agent ──────────────────────────────────────────────────
+    "deploy_agent.no_redis": (
+        "Waiting for the project's Redis at {url} ({error}). It answers once the stack is up (make serve); elsewhere, set REDIS_URL_LOCAL."
+    ),
+    "deploy_agent.listening": (
+        "Listening for Overseer deploy requests on {url} (tokens here for: {providers}). Ctrl-C stops."
+    ),
+    "deploy_agent.stopping": "Stopped listening.",
+    "deploy_agent.request": "{action}, asked by {by}",
+    "deploy_agent.done": "{action} done",
+    "deploy_agent.unreadable": "Skipped a request that could not be read.",
+    "deploy_agent.stale": (
+        "This request waited {minutes} minutes for the deploy agent; ask again from the Overseer."
+    ),
+    "deploy_agent.price_changed": (
+        "The price is now {price}, not the {confirmed} you confirmed. Nothing was created; get a new price."
+    ),
+    "deploy_agent.command_failed": "{command} failed (exit {code})",
+    "deploy_agent.stopped": "The deploy agent stopped before this finished.",
 }

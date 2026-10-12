@@ -163,13 +163,6 @@ services:
 {%- if include_redis %}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
 {%- endif %}
-{%- if include_database %}
-      # The scheduled backup job writes here. Without the volume below the
-      # dumps land in the container's writable layer and are destroyed by
-      # the next `up --force-recreate` - i.e. every deploy - so they are
-      # not restorable and only cost disk.
-      - DATABASE_BACKUP_DIR=/var/backups/app
-{%- endif %}
     restart: unless-stopped
     deploy:
       resources:

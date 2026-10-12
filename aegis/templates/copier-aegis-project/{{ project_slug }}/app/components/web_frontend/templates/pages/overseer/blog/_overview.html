@@ -9,6 +9,6 @@
       {"key": "status", "label": "Status", "kind": "status"},
       {"key": "updated", "label": "Updated"},
     ], recent, empty="No posts yet") }}
-    <div>{{ action("New post", hx_replace(new_post_url, "#overseer-main"), "primary") }}</div>
+    <div>{{ action("New post", hx_replace(new_post_url, "#overseer-main") ~ " data-write", "primary") }}</div>
   {% endcall %}
 </div>

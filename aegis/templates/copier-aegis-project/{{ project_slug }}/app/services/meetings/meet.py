@@ -18,10 +18,9 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from app.components.browser.client import connect
 
-# No sandbox (the container has none to give), and a fake camera and
-# microphone granted without a prompt: the bot joins with both off.
+# A fake camera and microphone granted without a prompt: the bot joins with
+# both off.
 BROWSER_ARGS = [
-    "--no-sandbox",
     "--use-fake-ui-for-media-stream",
     "--use-fake-device-for-media-stream",
 ]

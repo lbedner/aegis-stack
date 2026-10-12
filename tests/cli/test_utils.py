@@ -135,12 +135,14 @@ def run_command(
             step=step_name,
         )
 
-    except subprocess.TimeoutExpired:
+    except subprocess.TimeoutExpired as e:
         duration = time.time() - start_time
         return CLITestResult(
             returncode=1,
-            stdout="",
-            stderr=f"Command timed out after {timeout}s",
+            # What it printed before it hung: the last lines name the step
+            # (or test) it was stuck in.
+            stdout=_tail(e.stdout),
+            stderr=f"Command timed out after {timeout}s\n{_tail(e.stderr)}",
             project_path=project_path,
             duration=duration,
             step=step_name,
@@ -192,6 +194,14 @@ def run_aegis_command(
         step=f"aegis {subcommand}",
         project_path=None,
     )
+
+
+def _tail(output: bytes | str | None, lines: int = 200) -> str:
+    """The last ``lines`` of a timed-out command's output (bytes, whatever
+    ``text`` was)."""
+    if isinstance(output, bytes):
+        output = output.decode(errors="replace")
+    return "\n".join((output or "").splitlines()[-lines:])
 
 
 def run_project_command(
@@ -296,7 +306,9 @@ def run_quality_checks(project_path: Path, timeout: int = 120) -> list[CLITestRe
     # stack that lacks a file just reports the entry as stale. Run against
     # the copy the project itself ships, which is what its own CI gates on;
     # ``make queryspy-baseline`` writes it and the repo fixture together.
-    pytest_command = ["uv", "run", "pytest", "-v"]
+    # A test stuck for two minutes prints every thread's stack, so a suite
+    # that runs out the clock says where it hung.
+    pytest_command = ["uv", "run", "pytest", "-v", "-o", "faulthandler_timeout=120"]
     if "queryspy" in (project_path / "pyproject.toml").read_text():
         pytest_command += [
             "--queryspy-strict",

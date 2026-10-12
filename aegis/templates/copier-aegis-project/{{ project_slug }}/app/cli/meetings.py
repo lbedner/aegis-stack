@@ -91,7 +91,7 @@ async def show(meeting_id: int = typer.Argument(..., help="The meeting's id")) -
             meeting = await svc.get(meeting_id)
         except MeetingNotFoundError as exc:
             theme.fail(str(exc))
-        lines = await svc.transcript(meeting_id)
+        lines = await svc.transcript(meeting)
     console.print(f"Meeting {meeting.id}  {meeting.platform}  {meeting.url}")
     console.print(f"Status: {meeting.status}")
     if meeting.failure_reason:

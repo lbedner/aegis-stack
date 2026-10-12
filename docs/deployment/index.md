@@ -230,7 +230,7 @@ aegis deploy [OPTIONS]
 **What it does:**
 
 1. **Creates a backup** of the current deployment (files + database)
-2. **Syncs files** to the server via `rsync --delete`, so a file removed from the project is removed from the server too
+2. **Syncs files** to the server via `rsync --delete`, so a file removed from the project is removed from the server too. Only files git tracks are sent: untracked files (`.env.backup-*`, notes, local dumps) stay on your machine, and one an earlier deploy left on the server is removed. Outside git, or before anything is tracked, the directory is sent as it is
 3. **Copies `.env`** file separately (excluded from rsync for safety)
 4. **Stops existing services** with `docker compose down`
 5. **Builds and starts services** with production compose overrides

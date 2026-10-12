@@ -430,6 +430,57 @@ class TestWorkingTreeRsync:
         assert (server / ".env").read_text() == "SECRET=production\n"
 
 
+class TestTrackedTree:
+    """A deploy ships what git tracks, not whatever sits in the directory.
+
+    The rsync excludes named ``.env`` exactly, so ``.env.backup-*`` (a copy
+    of the production secrets), scratch notes and local dumps all went to
+    the server (aegis-stack#1557).
+    """
+
+    def _project(self, tmp_path: Path) -> Path:
+        source = tmp_path / "project"
+        (source / "app").mkdir(parents=True)
+        (source / "app" / "kept.py").write_text("kept\n")
+        (source / "app" / "gone.py").write_text("gone\n")
+        subprocess.run(["git", "-C", str(source), "init", "-q"], check=True)
+        subprocess.run(["git", "-C", str(source), "add", "app"], check=True)
+        (source / "app" / "gone.py").unlink()  # deleted, not yet committed
+        (source / ".env.backup-20260911").write_text("SECRET=production\n")
+        (source / "notes.md").write_text("scratch\n")
+        return source
+
+    def test_only_tracked_files_reach_the_server(self, tmp_path: Path) -> None:
+        source = self._project(tmp_path)
+        server = tmp_path / "server"
+        server.mkdir()
+        # Leaked by an earlier deploy: the next one takes it back off.
+        (server / ".env.backup-20260101").write_text("SECRET=old\n")
+        (server / ".env").write_text("SECRET=production\n")
+
+        with deploy_mod._tracked_tree(source) as shipped:
+            command = deploy_mod._working_tree_rsync(shipped, f"{server}/")
+            result = subprocess.run(command, capture_output=True, text=True)
+        assert result.returncode == 0, result.stderr
+
+        on_server = sorted(
+            str(p.relative_to(server)) for p in server.rglob("*") if p.is_file()
+        )
+        assert on_server == [".env", "app/kept.py"]
+
+    def test_a_tree_outside_git_ships_as_it_is(self, tmp_path: Path) -> None:
+        (tmp_path / "app.py").write_text("x\n")
+        with deploy_mod._tracked_tree(tmp_path) as shipped:
+            assert shipped == tmp_path
+
+    def test_a_repo_tracking_nothing_ships_the_tree(self, tmp_path: Path) -> None:
+        """An empty shipped tree would ``--delete`` the server's code."""
+        (tmp_path / "app.py").write_text("x\n")
+        subprocess.run(["git", "-C", str(tmp_path), "init", "-q"], check=True)
+        with deploy_mod._tracked_tree(tmp_path) as shipped:
+            assert shipped == tmp_path
+
+
 def test_both_deploy_paths_sync_the_same_way() -> None:
     """Standard and rolling deploy built identical rsync argv by hand.
 

@@ -5,11 +5,16 @@ Provides commands for deploying Aegis projects to remote servers,
 with backup/rollback strategy and post-deploy health checks.
 """
 
+import os
 import re
 import shlex
+import shutil
 import socket
 import subprocess
+import tempfile
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -942,9 +947,10 @@ def _run_rolling_deploy(
 
     # Step 1: rsync working tree
     typer.echo(t("deploy.syncing"))
-    rsync_result = subprocess.run(
-        _working_tree_rsync(project_root, f"{user}@{host}:{deploy_path}/")
-    )
+    with _tracked_tree(project_root) as shipped:
+        rsync_result = subprocess.run(
+            _working_tree_rsync(shipped, f"{user}@{host}:{deploy_path}/")
+        )
     if rsync_result.returncode != 0:
         brand.error(t("deploy.sync_failed"), err=True)
         raise typer.Exit(1)
@@ -1348,9 +1354,10 @@ def deploy_command(
         brand.error(t("deploy.mkdir_failed", path=deploy_path), err=True)
         raise typer.Exit(1)
 
-    rsync_result = subprocess.run(
-        _working_tree_rsync(project_root, f"{user}@{host}:{deploy_path}/")
-    )
+    with _tracked_tree(project_root) as shipped:
+        rsync_result = subprocess.run(
+            _working_tree_rsync(shipped, f"{user}@{host}:{deploy_path}/")
+        )
     if rsync_result.returncode != 0:
         brand.error(t("deploy.sync_failed"), err=True)
         raise typer.Exit(1)
@@ -1852,6 +1859,39 @@ def _working_tree_rsync(project_root: Path, destination: str) -> list[str]:
         command.extend(["--exclude", pattern])
     command.extend([f"{project_root}/", destination])
     return command
+
+
+@contextmanager
+def _tracked_tree(project_root: Path) -> Iterator[Path]:
+    """The files git tracks, copied aside: what a deploy ships.
+
+    Syncing the directory itself shipped everything in it that the excludes
+    did not name, ``.env.backup-*`` copies of the production secrets
+    included (aegis-stack#1557). The image builds its own assets, so the
+    tracked tree is complete; ``--delete`` then also takes anything an
+    earlier deploy leaked back off the server. Outside git, or with nothing
+    tracked yet, there is nothing to go by (an empty tree would ``--delete``
+    the server's code), so the directory ships as it is, minus
+    ``_RSYNC_EXCLUDES``.
+    """
+    listed = subprocess.run(
+        ["git", "-C", str(project_root), "ls-files", "-z"], capture_output=True
+    )
+    if listed.returncode != 0 or not listed.stdout:
+        yield project_root
+        return
+    with tempfile.TemporaryDirectory(prefix="aegis-deploy-") as staging:
+        for name in filter(None, listed.stdout.split(b"\0")):
+            source = project_root / os.fsdecode(name)
+            # A tracked file deleted but not yet committed; a submodule.
+            if not os.path.lexists(source) or (
+                source.is_dir() and not source.is_symlink()
+            ):
+                continue
+            target = Path(staging) / os.fsdecode(name)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target, follow_symlinks=False)
+        yield Path(staging)
 
 
 def _detect_github_repo(project_root: Path) -> str | None:

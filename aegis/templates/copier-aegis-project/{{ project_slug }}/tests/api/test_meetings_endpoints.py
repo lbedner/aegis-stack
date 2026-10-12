@@ -7,8 +7,7 @@ from fastapi.testclient import TestClient
 import pytest
 
 from app.components.backend.api.meetings import router as meetings_router
-
-MEET = "https://meet.google.com/abc-defg-hij"
+from tests._meetings import MEET
 
 
 @pytest.fixture

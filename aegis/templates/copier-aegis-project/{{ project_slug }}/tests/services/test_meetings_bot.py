@@ -4,8 +4,7 @@ writes each step on the meeting row, never over a leave request or a
 failure written elsewhere. A scripted call stands in for the browser; the
 Meet page itself is tested against a fake page (``test_meet_page``)."""
 
-from collections.abc import AsyncIterator, Callable
-from contextlib import asynccontextmanager
+from collections.abc import Callable
 from typing import Any
 
 import pytest
@@ -15,12 +14,10 @@ from app.services.meetings import bot
 from app.services.meetings.meet import CallState
 from app.services.meetings.models import Meeting, MeetingStatus
 from app.services.meetings.service import MeetingsService, transition
-from tests._session import opens
+from tests._meetings import MEET, bot_on
 
 # The run beats on every look here (BEAT_SECONDS is 0), by design.
 pytestmark = pytest.mark.queryspy(allow_n_plus_one=True)
-
-MEET = "https://meet.google.com/abc-defg-hij"
 
 
 class FakeCall:
@@ -68,21 +65,13 @@ def run(
 ) -> Callable[..., Any]:
     """Run the bot against ``call`` on a meeting (a new Meet meeting unless
     given), without waiting between looks; returns the meeting after."""
-    monkeypatch.setattr(bot, "get_async_session", opens(async_db_session))
-    monkeypatch.setattr(bot, "POLL_SECONDS", 0)
-    monkeypatch.setattr(bot, "BEAT_SECONDS", 0)
 
     async def go(call: FakeCall, meeting: Meeting | None = None) -> Meeting:
         if meeting is None:
             meeting = await MeetingsService(async_db_session, None).request(
                 MEET, "Notes"
             )
-
-        @asynccontextmanager
-        async def open_meet(url: str) -> AsyncIterator[FakeCall]:
-            yield call
-
-        monkeypatch.setattr(bot, "open_meet", open_meet)
+        bot_on(monkeypatch, async_db_session, call)
         await bot.run_meeting(meeting.id)  # type: ignore[arg-type]
         await async_db_session.refresh(meeting)
         return meeting

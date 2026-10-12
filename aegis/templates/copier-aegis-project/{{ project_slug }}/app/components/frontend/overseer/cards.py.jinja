@@ -24,6 +24,9 @@ from app.services.blog.constants import BLOG_COMPONENT_NAME
 {% if include_documents %}
 from app.services.documents.health import DOCUMENTS_MODAL_ID
 {% endif %}
+{% if include_meetings %}
+from app.services.meetings.health import MEETINGS_MODAL_ID
+{% endif %}
 {% if include_finance %}
 from app.services.finance.constants import FINANCE_COMPONENT_NAME
 {% endif %}
@@ -45,6 +48,9 @@ from ..dashboard.cards import (
 {% endif %}
 {% if include_documents %}
     DocumentsCard,
+{% endif %}
+{% if include_meetings %}
+    MeetingsCard,
 {% endif %}
 {% if include_database %}
     DatabaseCard,
@@ -250,6 +256,10 @@ def create_component_card(
 {% if include_documents %}
         elif component_name == DOCUMENTS_MODAL_ID:
             return DocumentsCard(component_data).build()
+{% endif %}
+{% if include_meetings %}
+        elif component_name == MEETINGS_MODAL_ID:
+            return MeetingsCard(component_data).build()
 {% endif %}
 {% if include_insights %}
         elif component_name == f"{SERVICE_PREFIX}{INSIGHT_COMPONENT_NAME}":

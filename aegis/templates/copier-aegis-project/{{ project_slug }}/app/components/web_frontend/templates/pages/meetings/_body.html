@@ -1,0 +1,46 @@
+{# One meeting: how it is going, its notes (my action items first, then
+   everyone's, the decisions and open questions, each item jumping to the
+   line it came from), and the transcript. While something is still
+   happening (the bot in the call, the notes being written) it re-reads
+   itself every few seconds. #}
+{% from "components/macros/layout.html" import card, page_header %}
+{% from "components/macros/form.html" import action, select %}
+{% from "pages/meetings/_macros.html" import failure, heading, items, notes_view, status_line, transcript %}
+{% set hx_body = 'hx-target="#meeting-body" hx-swap="outerHTML"' %}
+<div id="meeting-body" class="grid gap-6"
+     {% if under_way or writing %}hx-get="/meetings/{{ meeting.id }}/body" hx-trigger="every 3s" hx-swap="outerHTML"{% endif %}>
+  {% call page_header("Meeting " ~ meeting.id, meeting.url) %}
+    {{ status_line(status, length) }}
+    {% if can_leave %}{{ action("Ask it to leave", 'data-leave hx-post="/meetings/' ~ meeting.id ~ '/leave" ' ~ hx_body, tone="warn") }}{% endif %}
+  {% endcall %}
+  {{ failure(meeting) }}
+
+  {% if notes or notes_error or can_write %}
+  {% call card("Notes", id="meeting-notes") %}
+    {% if under_way %}
+    <p class="text-sm text-aegis-muted">The notes are written once the bot has left.</p>
+    {% elif writing %}
+    <p class="text-sm text-aegis-muted">Writing the notes…</p>
+    {% else %}
+    {% call notes_view(notes, notes_error, clock, "No notes yet." if lines else "Nothing was said, so there is nothing to note.") %}
+    <section id="my-items" class="grid gap-2">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        {{ heading("Yours") }}
+        <form hx-post="/meetings/{{ meeting.id }}/me" hx-trigger="change" {{ hx_body|safe }}>
+          {{ select("name", people, selected=meeting.me, blank="Nobody here", label="I am") }}
+        </form>
+      </div>
+      {{ items(mine, "Nothing for you." if meeting.me else "Say which speaker you are to see yours.", clock) }}
+    </section>
+    {% endcall %}
+    {% endif %}
+    {% if can_rewrite %}
+    <div>{{ action("Write them again" if notes or notes_error else "Write the notes", 'hx-post="/meetings/' ~ meeting.id ~ '/notes" ' ~ hx_body) }}</div>
+    {% endif %}
+  {% endcall %}
+  {% endif %}
+
+  {% call card("Transcript", id="meeting-transcript") %}
+  {{ transcript(lines, clock) }}
+  {% endcall %}
+</div>

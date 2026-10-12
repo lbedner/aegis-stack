@@ -69,6 +69,7 @@
     <a href="/" class="text-sm font-semibold text-aegis-teal tracking-wide">{{ project_name }}</a>
     <div class="flex items-center gap-2">
       {{ theme_toggle() }}
+      {% if meetings_page is defined %}<a href="{{ meetings_page }}" class="text-xs text-aegis-muted border border-aegis-border rounded px-3 py-1 hover:text-aegis-text hover:border-aegis-muted">Meetings</a>{% endif %}
       {% if auth_enabled %}<a href="/overseer" class="text-xs text-aegis-muted border border-aegis-border rounded px-3 py-1 hover:text-aegis-text hover:border-aegis-muted">Overseer</a>{% endif %}
       <a href="/dashboard" class="text-xs text-aegis-muted border border-aegis-border rounded px-3 py-1 hover:text-aegis-text hover:border-aegis-muted">Dashboard</a>
     </div>

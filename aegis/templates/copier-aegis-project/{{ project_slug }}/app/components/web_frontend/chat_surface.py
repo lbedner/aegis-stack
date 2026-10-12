@@ -78,7 +78,7 @@ class ChatSurface:
     # app's signed-in user and active project) returning the mount with
     # ``user`` and ``subject`` set. None serves the mount as declared. The
     # live call's socket keeps the declared mount.
-    bind: Callable[..., Awaitable[ChatSurface]] | None = None
+    bind: Callable[..., Awaitable["ChatSurface"]] | None = None
     # A FastAPI dependency run before a turn reaches the model (a plan's
     # entitlement, a daily budget): the reason it is refused, or None.
     gate: Callable[..., Awaitable[str | None]] | None = None

@@ -18,6 +18,9 @@ from app.components.frontend.dashboard.cards.comms_card import CommsCard
 {%- if include_documents %}
 from app.components.frontend.dashboard.cards.documents_card import DocumentsCard
 {%- endif %}
+{%- if include_meetings %}
+from app.components.frontend.dashboard.cards.meetings_card import MeetingsCard
+{%- endif %}
 {%- if include_insights %}
 from app.components.frontend.dashboard.cards.insights_card import InsightsCard
 {%- endif %}
@@ -87,6 +90,9 @@ __all__ = [
 {%- endif %}
 {%- if include_documents %}
     "DocumentsCard",
+{%- endif %}
+{%- if include_meetings %}
+    "MeetingsCard",
 {%- endif %}
 {%- if include_insights %}
     "InsightsCard",

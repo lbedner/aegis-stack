@@ -308,7 +308,13 @@ class TestServicesRegistry:
         spec = SERVICES["meetings"]
 
         assert "browser" in spec.required_components
-        assert spec.wiring.routers[0].alias == "meetings_router"
+        # The admin's routes first: /meetings/admin is not a meeting id.
+        assert [r.alias for r in spec.wiring.routers] == [
+            "meetings_admin_router",
+            "meetings_router",
+        ]
+        assert spec.wiring.dashboard_cards[0].modal_id == "service_meetings"
+        assert spec.wiring.dashboard_modals[0].modal_id == "service_meetings"
         assert spec.wiring.deps_providers[0].symbol == "get_meetings_service"
         assert "app/components/backend/startup/meetings_recovery.py" in (
             spec.files.primary

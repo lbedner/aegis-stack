@@ -5,10 +5,12 @@ The recipe is the MT-02 spike's: headless Chromium with fake media
 devices, dismiss the "see and hear you?" dialog, give the bot's name, and
 click whichever join button Meet shows. A signed-in Google account is
 what gets the bot past Meet's guest check: ``open_meet`` joins with the
-bot's stored sign-in (``login``), as a guest until there is one.
+bot's stored sign-in (``login``), as a guest until there is one, and
+hands the call's audio to whoever asks (``audio.listen``).
 """
 
-from collections.abc import AsyncIterator
+import asyncio
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from enum import StrEnum
 import re
@@ -17,6 +19,7 @@ from playwright.async_api import Page
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from app.components.browser.client import connect
+from app.services.meetings.audio import listen
 from app.services.meetings.login import stored_login
 from app.services.meetings.models import Caption
 
@@ -41,6 +44,23 @@ PEOPLE_BUTTON = 'role=button[name="People"]'
 CHAT_BUTTON = 'button[aria-label*="Chat with everyone"]'
 CHAT_INPUT = 'textarea[aria-label*="Send a message"]'
 CAPTIONS_BUTTON = 'button[aria-label^="Turn on captions"]'
+# What Meet puts over the call once the bot is in, each covering the chat,
+# captions and Leave until answered: that a notetaker (Gemini) is on,
+# accepted with "Join now" (the bot is one itself), and tips about its
+# camera ("Got it"). Answered in one look, the click going to the button
+# itself so one prompt stacked over another cannot block it. Only ever run
+# in the call: in the lobby "Join now" is the join button.
+ANSWER_PROMPTS = """() => {
+  for (const button of document.querySelectorAll('button, [role=button]')) {
+    const said = (button.innerText || button.getAttribute('aria-label') || '').trim();
+    if ((said === 'Join now' || said === 'Got it') && button.checkVisibility()) {
+      button.click();
+    }
+  }
+}"""
+# How long the bot keeps trying to post in the chat: a prompt can come a
+# moment after it is let in.
+SAY_TRIES = 30
 CAPTIONS_REGION = 'role=region[name="Captions"]'
 # Each block is a speaker's name, then what they said. A block is tagged
 # the first time it is read, so one Meet is still writing reads as the same
@@ -53,6 +73,27 @@ READ_CAPTIONS = """(region) => [...region.children].flatMap((block) => {
   block.dataset.line ??= String((window.captionLines = (window.captionLines || 0) + 1));
   return [{line: block.dataset.line, speaker: speaker.trim(), text: words.join(' ').trim()}];
 })"""
+
+
+# How much of what Meet shows has to match what was already heard to find
+# where a trimmed block picks up.
+ANCHOR = 24
+
+
+def merge_caption(kept: str, shown: str) -> str:
+    """A caption block as heard so far, from what was kept of it and what
+    Meet shows now. Meet keeps a long turn short on screen by trimming its
+    start as it grows: the start already heard stays, and from where the
+    block picks up Meet's text wins (it corrects words as it goes)."""
+    if not kept or shown.startswith(kept[:ANCHOR]):
+        return shown
+    at = kept.rfind(shown[:ANCHOR])
+    if at >= 0:
+        return kept[:at] + shown
+    # ponytail: no overlap found. Longer is Meet correcting the block's
+    # start: take it. Shorter is a long gap between looks: keep both rather
+    # than lose either; a fuzzy match would join them if this shows up.
+    return shown if len(shown) >= len(kept) else f"{kept} {shown}"
 
 
 class CallState(StrEnum):
@@ -128,24 +169,37 @@ class MeetPage:
         found = re.search(r"\d+", texts[0]) if texts else None
         return int(found.group()) if found else None
 
+    async def _answer_prompts(self) -> None:
+        """Answer whatever Meet has put over the call, before any in-call
+        step: one look, nothing to do on most."""
+        await self.page.evaluate(ANSWER_PROMPTS)
+
     async def say(self, text: str) -> None:
         """Post ``text`` in the meeting chat."""
-        if not await self._shown(CHAT_INPUT):
-            await self._click_if_visible(CHAT_BUTTON)
         box = self.page.locator(CHAT_INPUT).first
-        await box.fill(text)
-        await box.press("Enter")
+        for _ in range(SAY_TRIES):
+            await self._answer_prompts()
+            if await self._shown(CHAT_INPUT):
+                await box.fill(text)
+                await box.press("Enter")
+                return
+            await self._click_if_visible(CHAT_BUTTON)
+            await asyncio.sleep(1)
+        raise MeetPageError("The meeting chat never opened")
 
     async def leave(self) -> None:
+        await self._answer_prompts()
         await self._click_if_visible(LEAVE_BUTTON)
 
     async def turn_on_captions(self) -> bool:
         """Captions on in the bot's own view (nobody else's); False when
         Meet offers none."""
+        await self._answer_prompts()
         return await self._click_if_visible(CAPTIONS_BUTTON)
 
     async def captions(self) -> list[Caption]:
         """The caption blocks on screen now, oldest first."""
+        await self._answer_prompts()
         region = self.page.locator(CAPTIONS_REGION)
         if not await region.count():
             return []
@@ -153,11 +207,16 @@ class MeetPage:
 
 
 @asynccontextmanager
-async def open_meet(url: str) -> AsyncIterator[MeetPage]:
-    """A Meet page at ``url`` in the browser container; the browser closes
-    on exit, whatever happened, so no Chrome outlives its meeting."""
+async def open_meet(
+    url: str, on_audio: Callable[[str], None] | None = None
+) -> AsyncIterator[MeetPage]:
+    """A Meet page at ``url`` in the browser container, its audio handed to
+    ``on_audio``; the browser closes on exit, whatever happened, so no
+    Chrome outlives its meeting."""
     async with connect(BROWSER_ARGS) as browser:
         context = await browser.new_context(storage_state=await stored_login())
         page = await context.new_page()
+        if on_audio is not None:
+            await listen(page, on_audio)
         await page.goto(url, wait_until="domcontentloaded")
         yield MeetPage(page)

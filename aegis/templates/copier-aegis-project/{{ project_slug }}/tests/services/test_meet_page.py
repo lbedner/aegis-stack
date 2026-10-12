@@ -10,11 +10,11 @@ import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.meetings import bot
-from app.services.meetings.meet import CallState, MeetPage
+from app.services.meetings.meet import CallState, MeetPage, merge_caption
 from app.services.meetings.models import MeetingStatus
 from app.services.meetings.service import MeetingsService
 from tests._browser import live_browser
-from tests._meetings import MEET, bot_on
+from tests._meetings import MEET, SAID, SHOWN, bot_on
 
 # The bot beats on every look in the full run, by design.
 pytestmark = pytest.mark.queryspy(allow_n_plus_one=True)
@@ -58,9 +58,35 @@ FAKE_MEET = """
   function admit() { note.textContent = ''; call.hidden = false; }
   function deny() { note.textContent = 'Someone in the call denied your request to join'; }
   function end(text) { call.remove(); note.textContent = text; }
+  // What Meet puts over the call once someone is in: that a notetaker is
+  // on (answered "Join now"), then a tip about the camera ("Got it"), each
+  // covering everything under it.
+  function prompts() {
+    for (const answer of ['Join now', 'Got it']) {
+      const prompt = document.createElement('div');
+      prompt.setAttribute('role', 'dialog');
+      prompt.className = 'prompt';
+      prompt.style = 'position: fixed; inset: 0; background: #000; z-index: 9';
+      prompt.innerHTML = '<button>Leave</button><button>' + answer + '</button>';
+      prompt.lastElementChild.onclick = () => prompt.remove();
+      document.body.appendChild(prompt);
+    }
+  }
 </script>
 </body></html>
 """
+
+
+def test_a_block_meet_trimmed_keeps_the_start_already_heard() -> None:
+    assert merge_caption(SAID, SHOWN) == SAID + " Let me just"
+
+
+def test_a_block_that_grows_or_is_corrected_is_what_meet_shows() -> None:
+    assert merge_caption("Hello", "Hello there.") == "Hello there."
+    assert merge_caption("Okay testing one", "Okay, testing one two.") == (
+        "Okay, testing one two."
+    )
+    assert merge_caption("", "Hi.") == "Hi."
 
 
 @pytest.fixture
@@ -113,6 +139,22 @@ async def test_once_admitted_it_counts_people_and_talks_in_chat(
     assert await meet.page.evaluate("window.said") == "Notes is taking notes."
 
 
+async def test_meets_prompts_over_the_call_are_answered_before_it_talks(
+    meet: MeetPage,
+) -> None:
+    """A notetaker's notice and a camera tip cover the chat and the
+    captions button: answered, both still work."""
+    await meet.ask_to_join("Notes")
+    await meet.page.evaluate("admit(); prompts()")
+
+    await meet.say("Notes is taking notes.")
+    assert await meet.page.evaluate("window.said") == "Notes is taking notes."
+
+    await meet.page.evaluate("prompts()")
+    assert await meet.turn_on_captions()
+    assert await meet.page.locator(".prompt").count() == 0
+
+
 async def test_captions_read_as_lines_that_grow(meet: MeetPage) -> None:
     """Meet writes a speaker's block as they talk: it stays one line."""
     await meet.ask_to_join("Notes")
@@ -137,6 +179,15 @@ async def test_a_denied_request_reads_as_refused(meet: MeetPage) -> None:
     await meet.page.evaluate("deny()")
 
     assert await meet.state() == CallState.REFUSED
+
+
+async def test_a_prompt_over_the_call_does_not_keep_it_in(meet: MeetPage) -> None:
+    await meet.ask_to_join("Notes")
+    await meet.page.evaluate("admit(); prompts()")
+
+    await meet.leave()
+
+    assert await meet.state() == CallState.ENDED
 
 
 async def test_leaving_ends_the_call(meet: MeetPage) -> None:

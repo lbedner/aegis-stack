@@ -154,6 +154,7 @@ class TestResolvePorts:
             redis=True,
             ollama=False,
             browser=False,
+            storage=False,
             ports_file=ports_file,
         )
 
@@ -181,6 +182,7 @@ class TestResolvePorts:
             redis=False,
             ollama=False,
             browser=False,
+            storage=False,
             ports_file=ports_file,
         )
 
@@ -191,6 +193,28 @@ class TestResolvePorts:
         assert "INGRESS_DASHBOARD_PORT" in content
         assert ports["INGRESS_HTTP_PORT"] == 41411
         assert ports["INGRESS_DASHBOARD_PORT"] == 41412
+
+    def test_storage_gets_a_host_port_compose_alone_needs(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("WEBSERVER_PORT_BASE", "41440")
+        monkeypatch.setenv("SEAWEEDFS_PORT_BASE", "41441")
+        ports_file = tmp_path / ".env.ports"
+
+        ports = resolve_ports(
+            ingress=False,
+            postgres=False,
+            redis=False,
+            ollama=False,
+            browser=False,
+            storage=True,
+            ports_file=ports_file,
+        )
+
+        # A second stack's S3 shifts off 8333 like every other publish;
+        # ``Settings`` has no field for it, so it stays out of the file.
+        assert ports["SEAWEEDFS_HOST_PORT"] == 41441
+        assert "SEAWEEDFS_HOST_PORT" not in ports_file.read_text()
 
     def test_only_resolves_requested_resources(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
@@ -204,6 +228,7 @@ class TestResolvePorts:
             redis=False,
             ollama=False,
             browser=False,
+            storage=False,
             ports_file=ports_file,
         )
 
@@ -223,6 +248,7 @@ class TestResolvePorts:
             redis=True,
             ollama=False,
             browser=False,
+            storage=False,
             ports_file=ports_file,
         )
 

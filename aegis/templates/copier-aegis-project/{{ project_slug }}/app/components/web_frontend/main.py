@@ -15,6 +15,7 @@ from fastapi.routing import APIRoute
 
 CHANGES = "app.components.web_frontend.routes.partials.changes"
 OVERSEER_CHAT = "app.components.web_frontend.routes.partials.overseer_ai_chat"
+MEETINGS = "app.components.web_frontend.routes.meetings"
 
 
 def create_web_frontend_app() -> APIRouter:
@@ -33,6 +34,11 @@ def create_web_frontend_app() -> APIRouter:
     if importlib.util.find_spec(CHANGES) is not None:
         changes = importlib.import_module(CHANGES)
         router.include_router(changes.router, include_in_schema=False)
+    # The Meetings page (an app page, each meeting its owner's), on the
+    # stacks with the meetings service.
+    if importlib.util.find_spec(MEETINGS) is not None:
+        meetings = importlib.import_module(MEETINGS)
+        router.include_router(meetings.router, include_in_schema=False)
     # The Overseer chat's live call: a socket, outside the pages' gate,
     # behind its own (routes/partials/overseer_ai_chat.py).
     if importlib.util.find_spec(OVERSEER_CHAT) is not None:

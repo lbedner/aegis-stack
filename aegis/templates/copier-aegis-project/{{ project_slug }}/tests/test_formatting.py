@@ -224,22 +224,30 @@ def test_a_noun_whose_plural_is_not_an_s_names_it() -> None:
 
 
 @pytest.mark.parametrize(
-    ("target", "local"),
+    ("target", "lands"),
     [
-        ("/notes", True),
-        ("/overseer/components/worker?view=map", True),
-        ("//evil.example", False),
-        ("/\\evil.example", False),  # browsers read a backslash as a slash
-        ("/notes\\..\\evil", False),
-        ("https://evil.example", False),
-        ("javascript:alert(1)", False),
-        ("", False),
-        (None, False),
+        ("/notes", "/notes"),
+        (
+            "/overseer/components/worker?view=map",
+            "/overseer/components/worker?view=map",
+        ),
+        ("//evil.example", "/home"),
+        ("/\\evil.example", "/home"),  # browsers read a backslash as a slash
+        ("/notes\\..\\elsewhere", "/notes/../elsewhere"),  # still this site
+        ("/\t/evil.example", "/home"),  # browsers drop tabs and newlines: //evil
+        ("/\n/evil.example", "/home"),
+        ("/\x00/evil.example", "/home"),
+        ("https://evil.example", "/home"),
+        ("javascript:alert(1)", "/home"),
+        ("", "/home"),
+        (None, "/home"),
     ],
 )
-def test_only_a_path_on_this_site_is_local(target: str | None, local: bool) -> None:
+def test_only_a_path_on_this_site_is_local(target: str | None, lands: str) -> None:
     """What a ``next`` or a redirect may send someone to: a path here, never
-    an address that leaves the site, however it is spelled."""
-    from app.core.formatting import is_local_path
+    an address that leaves the site, however it is spelled. A backslash is
+    read the way a browser reads it, as a slash."""
+    from app.core.formatting import is_local_path, site_path
 
-    assert is_local_path(target) is local
+    assert site_path(target, "/home") == lands
+    assert is_local_path(target) is (lands == target)

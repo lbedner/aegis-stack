@@ -972,8 +972,8 @@ class TestAuthPages:
             _ctx(include_auth=True),
         )
         # The one local-path rule; its cases live in test_formatting.
-        assert "_safe_next" in on
-        assert "is_local_path(target)" in on
+        assert "from app.core.formatting import site_path" in on
+        assert 'site_path(next, "/overseer")' in on
 
     def test_no_default_deny_middleware(self) -> None:
         """Page protection is opt-in via _current_user_or_redirect, matching

@@ -29,7 +29,7 @@ function _loginUrlWithNext() {
 }
 
 // The page asked for: the form's hidden ``next``, which the server has
-// already kept to a path on this site (``is_local_path``), so the rule
+// already kept to a path on this site (``site_path``), so the rule
 // lives in one place.
 function _next() {
   const field = document.querySelector('input[name=next]');

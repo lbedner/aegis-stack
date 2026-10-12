@@ -79,6 +79,7 @@ def test_a_page_signed_out_takes_the_whole_page_to_login() -> None:
         ("", "/overseer"),
         ("//evil.example", "/overseer"),  # never off the site
         ("/\\evil.example", "/overseer"),
+        ("/\t/evil.example", "/overseer"),
     ],
 )
 def test_overseer_sign_in_returns_to_the_page_asked_for(

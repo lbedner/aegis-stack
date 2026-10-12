@@ -6400,8 +6400,11 @@
 <p>Meetings requires the <code>database</code> component and brings the <code>browser</code> component, the browser the bot joins through.</p>
 </div>
 <div class="admonition warning">
-<p class="admonition-title">The bot needs a Google account</p>
-<p>Meet turns away a browser that is not signed in to Google. Until the bot's own account is signed in (a coming release), it can join only meetings that admit guests.</p>
+<p class="admonition-title">The bot needs its own Google account</p>
+<p>Meet turns away a browser that is not signed in to Google. Make the bot a Google account of its own (never yours: the bot acts as whoever it is signed in as), then sign it in once:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>my-app<span class="w"> </span>meetings<span class="w"> </span>login
+</span></code></pre></div>
+<p>This opens Chrome on this machine at Google's sign-in. Sign in as the bot, then quit Chrome (Cmd+Q / Ctrl+Q), and the sign-in is kept, encrypted, in the secrets store, where the bot finds it from the CLI and the webserver alike. It needs the <code>secrets</code> component (<code>aegis add secrets</code>) and an <code>ENCRYPTION_KEY</code> in <code>.env</code>. Until it is signed in, the bot joins as a guest, which only meetings that admit guests let in.</p>
 </div>
 <h2 id="what-you-get">What You Get</h2>
 <ul>
@@ -6412,20 +6415,21 @@
 <li><strong>Owners</strong> - a meeting belongs to whoever asked for the bot. Without an owner (no auth, the CLI) every meeting is in reach.</li>
 </ul>
 <h2 id="how-the-bot-runs-a-meeting">How the bot runs a meeting</h2>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>requested -&gt; joining -&gt; waiting -&gt; in_call -&gt; left
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>                           |          |
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>                           +----------+--&gt; failed (with the reason)
+<div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>requested -&gt; joining -&gt; waiting -&gt; in_call -&gt; left
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>                           |          |
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>                           +----------+--&gt; failed (with the reason)
 </span></code></pre></div>
 <ol>
 <li>It opens the meeting in the browser container, gives its name and asks to join.</li>
 <li>It waits up to five minutes for the host to let it in. Refused or never admitted, the meeting ends as <code>failed</code> with the reason.</li>
 <li>Once in, it posts in the meeting chat that it is taking notes. Some places require everyone's consent to record, so this is not optional.</li>
+<li>It turns on Meet's captions, in its own view only (nobody else sees them), and keeps them as the transcript: one line per turn, under the speaker's name, timed from when it joined. A line Meet is still writing (it corrects words as it goes) is updated in place.</li>
 <li>It leaves when the call ends, when it is removed, when it has been alone for two minutes, or when asked (<code>meetings leave</code>, <code>POST /api/v1/meetings/{id}/leave</code>), within ten seconds. Asked before it joins, it never does.</li>
 </ol>
 <p>The browser closes whatever happens, so no Chrome outlives its meeting.</p>
 <p>The bot runs inside the process that starts it: <code>meetings join</code> waits for it, and the API runs it in the background of the webserver, which takes it out of the call (<code>left</code>) when the webserver shuts down. While it runs it writes a heartbeat on the meeting every ten seconds, and reads back whether it has been asked to leave. A process that dies mid-call stops the heartbeat, and the webserver checks for that every minute: a meeting whose heartbeat is over a minute old is marked <code>failed</code> ("The app stopped during the meeting"). A call another process is still in keeps beating, so the check never touches it.</p>
 <p>Every status change moves only from the status the bot expects, so a leave request (or a failure recorded elsewhere) is never overwritten by the bot's next step: it stops instead.</p>
-<p>Everything the bot knows about Meet's page (its buttons, its chat, how it says you were turned away) lives in <code>app/services/meetings/meet.py</code>. When Meet changes its page, that module is the fix.</p>
+<p>Everything the bot knows about Meet's page (its buttons, its chat, its captions, how it says you were turned away) lives in <code>app/services/meetings/meet.py</code>. When Meet changes its page, that module is the fix.</p>
 <h2 id="cli">CLI</h2>
 <table>
 <thead>
@@ -6435,6 +6439,10 @@
 </tr>
 </thead>
 <tbody>
+<tr>
+<td><code>meetings login [--chrome PATH]</code></td>
+<td>Sign the bot's Google account in, once, in Chrome on this machine</td>
+</tr>
 <tr>
 <td><code>meetings join &lt;link&gt; [--bot-name NAME]</code></td>
 <td>Send the bot into a meeting and wait until it leaves (Ctrl-C takes it out)</td>

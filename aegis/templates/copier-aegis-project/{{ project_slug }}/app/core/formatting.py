@@ -3,6 +3,7 @@
 from collections.abc import Iterable
 from datetime import UTC, datetime
 import re
+from urllib.parse import urlparse
 
 
 def format_number(num: int) -> str:
@@ -336,16 +337,26 @@ def safe_filename(name: str, fallback: str = "document") -> str:
     return _UNSAFE_FILENAME.sub("", name).strip() or fallback
 
 
+def site_path(target: str | None, home: str = "/") -> str:
+    """``target`` if a browser would keep it on this site, else ``home``: a
+    control character refuses it (``/<tab>/host`` is ``//host``), a
+    backslash is read as a slash, then one ``/`` with no scheme or host."""
+    if not target or any(ord(c) < 0x20 or c == "\x7f" for c in target):
+        return home
+    target = target.replace("\\", "/")
+    if (
+        target.startswith("/")
+        and not urlparse(target).netloc
+        and not urlparse(target).scheme
+    ):
+        return target
+    return home
+
+
 def is_local_path(target: str | None) -> bool:
-    """Whether ``target`` is a path on this site, the only thing a ``next``
-    or a redirect may send someone to: it starts with one ``/``, and holds
-    no backslash (browsers read ``/\\host`` as ``//host``, off the site)."""
-    return bool(
-        target
-        and target.startswith("/")
-        and not target.startswith("//")
-        and "\\" not in target
-    )
+    """Whether ``target`` is a path on this site (``site_path``), for a
+    check that refuses rather than replaces."""
+    return bool(target) and site_path(target, "") == target
 
 
 def row_matches(query: str, values: Iterable[object]) -> bool:

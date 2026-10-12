@@ -29,7 +29,7 @@ from typing import Any
 import httpx
 from app.components.backend.security.rate_limit import get_session_metadata
 from app.core.db import get_async_db
-from app.core.formatting import is_local_path
+from app.core.formatting import site_path
 from app.core.time import utcnow
 from app.services.auth.deps import get_refresh_service, get_user_service
 from app.core.log import logger
@@ -142,7 +142,7 @@ def _safe_next(candidate: str | None) -> str:
     Rejects anything that could redirect off-site (protocol-relative
     URLs, escaped backslashes, etc.).
     """
-    return candidate if is_local_path(candidate) else ""
+    return site_path(candidate, "")
 
 
 # The refresh cookie is SameSite=Strict, so the provider's redirect back to

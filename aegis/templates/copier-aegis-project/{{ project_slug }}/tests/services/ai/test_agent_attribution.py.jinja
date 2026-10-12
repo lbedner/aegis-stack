@@ -215,6 +215,100 @@ class TestTheTurnCarriesItsUser:
         assert current_user_id.get() is None
 
 
+class TestTheTurnCarriesItsSubject:
+    """What a turn is about, beside whose it is: an app's scope key (a
+    project, say), decided by the server like the user. A tool reads it to
+    know which project's data to look at, as it reads the user."""
+
+    async def test_streaming_path_sets_the_subject_for_the_turn(
+        self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
+    ) -> None:
+        from app.core.tools import current_subject
+
+        service, _recorder, _captured, monkeypatch = harness
+        _stub_resolve(monkeypatch, _custom_config())
+        seen: dict[str, Any] = {}
+
+        class _RecordingAgent(_FakeAgent):
+            @asynccontextmanager
+            async def run_stream_events(self, prompt: str) -> AsyncIterator[Any]:
+                seen["subject"] = current_subject.get()
+                yield _FakeEventStream()
+
+        monkeypatch.setattr(prompt_module, "get_agent", _built(_RecordingAgent()))
+
+        async for _chunk in service.stream_chat("downloads?", user_id="7", subject="3"):
+            pass
+
+        assert seen["subject"] == "3"
+        assert current_subject.get() is None
+
+    async def test_chat_path_sets_the_subject_for_the_turn(
+        self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
+    ) -> None:
+        from app.core.tools import current_subject
+
+        service, _recorder, _captured, monkeypatch = harness
+        _stub_resolve(monkeypatch, _custom_config())
+        seen: dict[str, Any] = {}
+
+        class _RecordingAgent(_FakeAgent):
+            async def run(self, prompt: str) -> Any:
+                seen["subject"] = current_subject.get()
+                return await super().run(prompt)
+
+        monkeypatch.setattr(prompt_module, "get_agent", _built(_RecordingAgent()))
+
+        await service.chat("downloads?", user_id="7", subject="3")
+
+        assert seen["subject"] == "3"
+
+    async def test_a_briefing_is_fetched_for_the_subject(
+        self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
+    ) -> None:
+        """An agent's memory module reads the turn's subject: a project's
+        briefing, not only a user's."""
+        service, _recorder, _captured, monkeypatch = harness
+        _stub_resolve(monkeypatch, _custom_config(memory_modules=("briefing",)))
+        asked: dict[str, Any] = {}
+
+        async def render(modules: Any, **kwargs: Any) -> str:
+            asked.update(kwargs)
+            return ""
+
+        monkeypatch.setattr(chat_module, "render_memory_modules", render)
+
+        async for _chunk in service.stream_chat("downloads?", user_id="7", subject="3"):
+            pass
+
+        assert (asked["user_id"], asked["subject"]) == ("7", "3")
+
+    # Two listings on purpose: one subject finds it, another does not.
+    @pytest.mark.queryspy(allow_n_plus_one=True)
+    async def test_a_new_conversation_keeps_its_subject(
+        self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
+    ) -> None:
+        service, _recorder, _captured, monkeypatch = harness
+        _stub_resolve(monkeypatch, _custom_config())
+        monkeypatch.setattr(prompt_module, "get_agent", _built(_FakeAgent()))
+
+        chunks = [
+            c
+            async for c in service.stream_chat(
+                "downloads?", user_id="7", surface="metrics", subject="3"
+            )
+        ]
+        conversation = await service.get_conversation(chunks[-1].conversation_id)
+
+        assert conversation is not None
+        assert conversation.metadata["subject"] == "3"
+        listed = await service.list_conversations("7", surface="metrics", subject="3")
+        assert [c.id for c in listed] == [conversation.id]
+        assert (
+            await service.list_conversations("7", surface="metrics", subject="4") == []
+        )
+
+
 class _CutOffResponse:
     finish_reason = "length"
 

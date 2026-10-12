@@ -109,6 +109,7 @@ class StreamingMixin(ChatMixin):
         agent_slug: str | None = None,
         surface: str | None = None,
         attachments: list[ChatAttachment] | None = None,
+        subject: str | None = None,
 {% if ai_rag %}
         use_rag: bool = False,
         rag_collection: str | None = None,
@@ -152,6 +153,7 @@ class StreamingMixin(ChatMixin):
                 agent_slug=agent_slug,
                 surface=surface,
                 attachments=attachments,
+                subject=subject,
 {% if ai_rag %}
                 use_rag=use_rag,
                 rag_collection=rag_collection,
@@ -206,6 +208,7 @@ class StreamingMixin(ChatMixin):
                     owner_user_id=owner_user_id,
                     agent_slug=agent_slug,
                     conversation_id=conversation.id,
+                    subject=subject,
                 ),
                 reading_stage() as staged_readings,
                 card_stage() as drawn_cards,

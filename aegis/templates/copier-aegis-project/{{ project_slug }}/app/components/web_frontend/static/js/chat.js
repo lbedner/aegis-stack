@@ -2,7 +2,7 @@
 
    The page is server HTML; this owns only the live turn. The composer's
    post appends a user bubble and a streaming bubble carrying the text to
-   send; this reads that bubble, POSTs to the API's SSE endpoint and
+   send; this reads that bubble, POSTs to the mount's SSE route and
    renders the frames into it: `chunk` text through a typewriter, `tool`
    calls as trail rows, `error` as a line. When the stream completes the
    stored message is swapped in over the bubble (server-rendered), so the
@@ -306,7 +306,7 @@ function chatComposer() {
   };
 
   async function run(bubble) {
-    const { stream, defaults, path } = config();
+    const { path } = config();
     const body = bubble.querySelector('[data-body]');
     const trail = bubble.querySelector('[data-trail]');
     const busy = bubble.querySelector('[data-busy]');
@@ -325,12 +325,13 @@ function chatComposer() {
     follow(true);
     let failed = null;
     try {
-      const resp = await fetch(stream, {
+      // Who the turn is for and what it is about are the server's to say
+      // (the mount's bind): the body carries only the turn.
+      const resp = await fetch(`${path}/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
         body: JSON.stringify({
-          ...defaults,
           message: bubble.dataset.text,
           conversation_id: ids.conversation,
           attachments,

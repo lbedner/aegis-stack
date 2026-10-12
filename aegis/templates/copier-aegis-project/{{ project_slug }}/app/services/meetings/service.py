@@ -22,14 +22,10 @@ from app.services.shared.queries import owner_filters
 DEFAULT_BOT_NAME = "Notetaker"
 
 
-# A meeting the bot is on its way into, in, or on its way out of: its run
-# writes a heartbeat (``seen_at``) while it lasts.
-IN_PROGRESS = (
-    MeetingStatus.JOINING,
-    MeetingStatus.WAITING,
-    MeetingStatus.IN_CALL,
-    MeetingStatus.LEAVING,
-)
+# A meeting the bot is on its way into or in, and not asked to leave.
+STILL_WANTED = (MeetingStatus.JOINING, MeetingStatus.WAITING, MeetingStatus.IN_CALL)
+# Those, and one it is on its way out of: its run beats (``seen_at``) meanwhile.
+IN_PROGRESS = (*STILL_WANTED, MeetingStatus.LEAVING)
 NOT_DONE = (MeetingStatus.REQUESTED, *IN_PROGRESS)
 # A run whose heartbeat is older than this is gone (the process stopped).
 STALE_SECONDS = 60
@@ -110,19 +106,14 @@ class MeetingsService:
             self.db,
             meeting_id,
             MeetingStatus.LEAVING,
-            from_=(
-                MeetingStatus.REQUESTED,
-                MeetingStatus.JOINING,
-                MeetingStatus.WAITING,
-                MeetingStatus.IN_CALL,
-            ),
+            from_=(MeetingStatus.REQUESTED, *STILL_WANTED),
         )
         await self.db.refresh(meeting)
         return meeting
 
-    async def transcript(self, meeting_id: int) -> list[tuple[str, TranscriptLine]]:
-        """Each line with its speaker's name, in the order it was said."""
-        await self.get(meeting_id)
+    async def transcript(self, meeting: Meeting) -> list[tuple[str, TranscriptLine]]:
+        """Each line of ``meeting`` (one ``get`` returned) with its speaker's
+        name, in the order it was said."""
         query = (
             select(MeetingParticipant.display_name, TranscriptLine)
             .join(
@@ -130,7 +121,7 @@ class MeetingsService:
                 col(TranscriptLine.participant_id) == MeetingParticipant.id,
                 isouter=True,
             )
-            .where(TranscriptLine.meeting_id == meeting_id)
+            .where(TranscriptLine.meeting_id == meeting.id)
             .order_by(col(TranscriptLine.start_seconds))
         )
         return [(name or "Unknown", line) for name, line in await self.db.exec(query)]
@@ -160,16 +151,15 @@ async def transition(
     """Move a meeting to ``to`` only from one of ``from_``, in one statement,
     and say whether it moved. Every status change goes through here, so a
     leave request or a failure written by one process is never overwritten
-    by a run in another."""
+    by a run in another. A move is a heartbeat too (``seen_at``): a run's
+    slow browser steps each sit between two moves or beats."""
     now = utcnow()
-    values: dict[str, Any] = {"status": to}
-    if to == MeetingStatus.JOINING:
-        values["seen_at"] = now
+    values: dict[str, Any] = {"status": to, "seen_at": now}
     if to == MeetingStatus.IN_CALL:
         values["joined_at"] = now
     if to == MeetingStatus.LEFT:
         values["left_at"] = now
-    if to in (MeetingStatus.LEFT, MeetingStatus.FAILED):
+    if to == MeetingStatus.FAILED:
         values["failure_reason"] = reason
     result = await db.exec(  # type: ignore[call-overload]
         update(Meeting)

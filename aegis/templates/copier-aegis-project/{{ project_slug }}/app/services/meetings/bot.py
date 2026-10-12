@@ -4,12 +4,10 @@ row.
 
 It runs inside whichever process starts it: the CLI waits for it
 (``meetings join``), the app runs it with ``background`` (``start_meeting``)
-and cancels it at shutdown, when it records itself as left. While it runs
-it beats (``heartbeat``); a run whose process died stops beating, and the
-next startup's ``fail_interrupted`` records it as failed. Every status
-change is a ``transition``, so a leave request or a failure written
-elsewhere stops the run instead of being overwritten by it. Each step opens
-its own short session, so an hour-long call holds no database connection.
+and cancels it at shutdown, when it records itself as left. It writes the
+row only through the service's ``transition`` and ``heartbeat``. Each step
+opens its own short session, so an hour-long call holds no database
+connection.
 """
 
 import asyncio
@@ -21,6 +19,7 @@ from app.services.meetings.meet import CallState, MeetPage, open_meet
 from app.services.meetings.models import Meeting, MeetingStatus, Platform
 from app.services.meetings.service import (
     NOT_DONE,
+    STILL_WANTED,
     MeetingsService,
     heartbeat,
     transition,
@@ -33,8 +32,6 @@ ALONE_SECONDS = 120.0
 # How often the run beats and reads back its status: a leave request waits
 # at most this long, and on SQLite each beat takes the write lock.
 BEAT_SECONDS = 10.0
-
-STILL_WANTED = (MeetingStatus.JOINING, MeetingStatus.WAITING, MeetingStatus.IN_CALL)
 
 
 class _RunEnded(Exception):  # noqa: N818 - control flow, not an error
@@ -125,6 +122,8 @@ async def _join(meeting: Meeting) -> None:
     await _step(meeting_id, MeetingStatus.JOINING, MeetingStatus.REQUESTED)
     pulse = _Pulse(meeting_id)
     async with open_meet(meeting.url) as call:
+        if not await pulse.still_wanted():
+            raise _RunEnded(MeetingStatus.LEFT)
         await call.ask_to_join(meeting.bot_name)
         await _step(meeting_id, MeetingStatus.WAITING, MeetingStatus.JOINING)
         await _admitted(call, pulse)

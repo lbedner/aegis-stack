@@ -136,7 +136,7 @@ def background(work: Coroutine[object, object, None]) -> asyncio.Task[None]:
 
 async def drain(timeout: float) -> None:
     """At shutdown: cancel the work still in flight and give it ``timeout``
-    seconds to finish its own cleanup (a meeting records itself as left)."""
+    seconds to finish its own cleanup."""
     tasks = list(_background)
     for task in tasks:
         task.cancel()

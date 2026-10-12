@@ -5,19 +5,16 @@ up. The fake is shaped like Meet as of the MT-02 spike; when Meet changes,
 ``meet.py`` and this page change together."""
 
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
 
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.components.browser import health
-from app.components.browser.client import connect
 from app.services.meetings import bot
 from app.services.meetings.meet import CallState, MeetPage
 from app.services.meetings.models import MeetingStatus
 from app.services.meetings.service import MeetingsService
-from app.services.system.models import ComponentStatusType
-from tests._session import opens
+from tests._browser import live_browser
+from tests._meetings import MEET, bot_on
 
 # The bot beats on every look in the full run, by design.
 pytestmark = pytest.mark.queryspy(allow_n_plus_one=True)
@@ -53,9 +50,7 @@ FAKE_MEET = """
 
 @pytest.fixture
 async def meet() -> AsyncIterator[MeetPage]:
-    if (await health.check_browser_health()).status != ComponentStatusType.HEALTHY:
-        pytest.skip("browser server not running (start it with `make serve`)")
-    async with connect() as browser:
+    async with live_browser() as browser:
         page = await browser.new_page()
         await page.set_content(FAKE_MEET)
         yield MeetPage(page)
@@ -102,15 +97,7 @@ async def test_the_bot_runs_a_whole_meeting_on_the_page(
 ) -> None:
     """The host admits it, it announces itself, the call ends: the row ends
     left, and the announcement went to the chat."""
-    monkeypatch.setattr(bot, "get_async_session", opens(async_db_session))
-    monkeypatch.setattr(bot, "POLL_SECONDS", 0.05)
-    monkeypatch.setattr(bot, "BEAT_SECONDS", 0)
-
-    @asynccontextmanager
-    async def on_the_fake(url: str) -> AsyncIterator[MeetPage]:
-        yield meet
-
-    monkeypatch.setattr(bot, "open_meet", on_the_fake)
+    bot_on(monkeypatch, async_db_session, meet, poll_seconds=0.05)
     # The host lets the bot in, and the call ends once it has spoken.
     await meet.page.add_script_tag(
         content="lobby.querySelector('button').addEventListener("
@@ -118,9 +105,7 @@ async def test_the_bot_runs_a_whole_meeting_on_the_page(
         "chat.addEventListener('keydown', (e) => {"
         " if (e.key === 'Enter') setTimeout(() => end('The call has ended'), 100); });"
     )
-    meeting = await MeetingsService(async_db_session, None).request(
-        "https://meet.google.com/abc-defg-hij", "Notes"
-    )
+    meeting = await MeetingsService(async_db_session, None).request(MEET, "Notes")
 
     await bot.run_meeting(meeting.id)  # type: ignore[arg-type]
 

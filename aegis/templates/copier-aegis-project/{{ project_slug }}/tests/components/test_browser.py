@@ -14,6 +14,7 @@ import pytest
 
 from app.components.browser import client, health
 from app.services.system.models import ComponentStatusType
+from tests._browser import live_browser
 
 
 async def test_connect_sends_the_launch_options(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -86,10 +87,7 @@ async def test_health_is_unhealthy_when_the_server_is_down(
 
 
 async def test_a_page_opened_through_the_server_reads_its_title() -> None:
-    if (await health.check_browser_health()).status != ComponentStatusType.HEALTHY:
-        pytest.skip("browser server not running (start it with `make serve`)")
-
-    async with client.connect() as browser:
+    async with live_browser() as browser:
         page = await browser.new_page()
         await page.goto("data:text/html,<title>aegis browser</title>")
         assert await page.title() == "aegis browser"

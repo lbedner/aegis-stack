@@ -763,6 +763,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 "app/components/frontend/dashboard/modals/browser_modal.py",
                 "tests/components/test_browser.py",
                 "tests/components/frontend/test_browser_modal.py",
+                "tests/_browser.py",
             ],
             extras={AnswerKeys.HTMX: ["tests/web/test_overseer_browser.py"]},
         ),

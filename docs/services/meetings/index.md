@@ -41,7 +41,7 @@ requested -> joining -> waiting -> in_call -> left
 
 The browser closes whatever happens, so no Chrome outlives its meeting.
 
-The bot runs inside the process that starts it: `meetings join` waits for it, and the API runs it in the background of the webserver, which takes it out of the call (`left`) when the webserver shuts down. While it runs it writes a heartbeat on the meeting every ten seconds, and reads back whether it has been asked to leave. A process that dies mid-call stops the heartbeat: a minute after the next startup, that meeting is marked `failed` ("The app stopped during the meeting"). A call another process is still in keeps beating, so a restart never touches it.
+The bot runs inside the process that starts it: `meetings join` waits for it, and the API runs it in the background of the webserver, which takes it out of the call (`left`) when the webserver shuts down. While it runs it writes a heartbeat on the meeting every ten seconds, and reads back whether it has been asked to leave. A process that dies mid-call stops the heartbeat, and the webserver checks for that every minute: a meeting whose heartbeat is over a minute old is marked `failed` ("The app stopped during the meeting"). A call another process is still in keeps beating, so the check never touches it.
 
 Every status change moves only from the status the bot expects, so a leave request (or a failure recorded elsewhere) is never overwritten by the bot's next step: it stops instead.
 

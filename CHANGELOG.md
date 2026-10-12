@@ -23,8 +23,9 @@
   (`meetings leave`). Each step is on the meeting row, moved only from
   the status the bot expects, so a leave request is never lost; a refused
   or unanswered join ends as `failed` with the reason. The run writes a
-  heartbeat: a meeting whose process died is marked failed after the next
-  startup, and one another process is still in is left alone. Meet's page
+  heartbeat: the webserver checks every minute and marks failed a meeting
+  whose process died (a crash, or a killed `meetings join`), and leaves
+  one another process is still in alone. Meet's page
   is known in one module, `meetings/meet.py`. Until the bot's own Google
   account is signed in, it joins only meetings that admit guests (#1509).
 - **Background work ends cleanly at shutdown.** The webserver cancels what

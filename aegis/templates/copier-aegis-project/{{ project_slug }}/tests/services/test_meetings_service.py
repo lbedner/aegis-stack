@@ -2,11 +2,13 @@
 it, and what they said. Nothing joins a call yet; these are the records
 the bot will write."""
 
+import asyncio
 from datetime import timedelta
 
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.components.backend.startup import meetings_recovery
 from app.core.time import utcnow
 from app.services.meetings.models import (
     MeetingParticipant,
@@ -25,6 +27,8 @@ from app.services.meetings.service import (
     transition,
 )
 from tests._cli import invoke
+from tests._meetings import MEET
+from tests._session import opens
 
 
 @pytest.mark.parametrize(
@@ -66,7 +70,7 @@ async def test_a_requested_meeting_waits_for_the_bot(
 ) -> None:
     svc = MeetingsService(async_db_session, owner_user_id=7)
 
-    meeting = await svc.request("https://meet.google.com/abc-defg-hij", "Notes")
+    meeting = await svc.request(MEET, "Notes")
 
     assert meeting.platform == Platform.MEET
     assert meeting.status == MeetingStatus.REQUESTED
@@ -119,7 +123,7 @@ async def test_the_transcript_reads_in_order_with_its_speakers(
     async_db_session: AsyncSession,
 ) -> None:
     svc = MeetingsService(async_db_session, owner_user_id=None)
-    meeting = await svc.request("https://meet.google.com/abc-defg-hij")
+    meeting = await svc.request(MEET)
     ana = MeetingParticipant(meeting_id=meeting.id, display_name="Ana")  # type: ignore[arg-type]
     async_db_session.add(ana)
     await async_db_session.flush()
@@ -143,7 +147,7 @@ async def test_the_transcript_reads_in_order_with_its_speakers(
     )
     await async_db_session.flush()
 
-    lines = await svc.transcript(meeting.id)  # type: ignore[arg-type]
+    lines = await svc.transcript(meeting)
 
     assert [(speaker, line.text) for speaker, line in lines] == [
         ("Ana", "First"),
@@ -165,9 +169,7 @@ async def test_the_counts_cover_every_owner(async_db_session: AsyncSession) -> N
 async def test_a_status_moves_only_from_where_it_is_expected(
     async_db_session: AsyncSession,
 ) -> None:
-    meeting = await MeetingsService(async_db_session, None).request(
-        "https://meet.google.com/abc-defg-hij"
-    )
+    meeting = await MeetingsService(async_db_session, None).request(MEET)
     meeting_id: int = meeting.id  # type: ignore[assignment]
 
     wrong = await transition(
@@ -186,6 +188,55 @@ async def test_a_status_moves_only_from_where_it_is_expected(
     await async_db_session.refresh(meeting)
     assert (wrong, right) == (False, True)
     assert meeting.status == MeetingStatus.JOINING and meeting.seen_at
+
+
+async def test_every_move_is_a_heartbeat(async_db_session: AsyncSession) -> None:
+    """A run's slow browser steps sit between two moves, so a run is never
+    stale for longer than one step."""
+    meeting = await MeetingsService(async_db_session, None).request(MEET)
+    meeting_id: int = meeting.id  # type: ignore[assignment]
+    await transition(
+        async_db_session,
+        meeting_id,
+        MeetingStatus.JOINING,
+        from_=(MeetingStatus.REQUESTED,),
+    )
+    stale = utcnow() - timedelta(seconds=STALE_SECONDS + 1)
+    meeting.seen_at = stale
+    await async_db_session.commit()
+
+    await transition(
+        async_db_session,
+        meeting_id,
+        MeetingStatus.WAITING,
+        from_=(MeetingStatus.JOINING,),
+    )
+
+    await async_db_session.refresh(meeting)
+    assert meeting.seen_at and meeting.seen_at > stale
+
+
+async def test_the_app_keeps_sweeping_for_stopped_runs(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Not only at startup: a ``meetings join`` killed while the app runs
+    is failed on a later sweep."""
+    sweeps: list[int] = []
+
+    async def sweep(db: AsyncSession) -> int:
+        sweeps.append(1)
+        if len(sweeps) == 3:
+            raise asyncio.CancelledError
+        return 0
+
+    monkeypatch.setattr(meetings_recovery, "STALE_SECONDS", 0)
+    monkeypatch.setattr(meetings_recovery, "get_async_session", opens(async_db_session))
+    monkeypatch.setattr(meetings_recovery, "fail_interrupted", sweep)
+
+    with pytest.raises(asyncio.CancelledError):
+        await meetings_recovery.sweep_forever()
+
+    assert len(sweeps) == 3
 
 
 async def test_only_a_run_that_stopped_beating_is_failed(

@@ -38,6 +38,9 @@ class FetchContext:
     user_id: str
     days_back: int | None = None
     session: Any | None = None
+    # What the turn is about (``current_subject``): a project's briefing
+    # reads its project here, as a user's reads ``user_id``.
+    subject: str | None = None
 
 
 FetcherFunc = Callable[[FetchContext], Awaitable[str | None]]

@@ -1,6 +1,6 @@
 """The chat surface: what it renders from, wherever it is mounted.
 
-The turn itself streams from ``POST /api/v1/ai/chat/stream`` straight to
+The turn itself streams from the mount's ``/stream`` route straight to
 the browser (static/js/chat.js); everything around it is server HTML. A
 turn starts with the question and an empty bubble the script streams into
 (``turn_context``) and settles as the stored message (``settled``), so a
@@ -11,11 +11,13 @@ One surface, mounted as many times as an app needs (``ChatSurface``): the
 Overseer's AI page and drawer are one mount; an app's own chat page, with
 its own agent and its own user's conversations, is another. Every route
 (``routes/partials/chat_surface.py``) and every helper here takes the
-mount it serves.
+mount it serves. Who a turn is for and what it is about come from the
+mount (``bind``, per request), never from the browser.
 """
 
 import importlib
 import json
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from importlib.util import find_spec
 from typing import Any
@@ -42,7 +44,6 @@ HAS_VOICE = find_spec("app.services.ai.domains.voice") is not None
 # The Overseer's helpers, where the Overseer ships (it serves logos).
 OVERSEER_COMMON = "app.components.web_frontend.overseer_ai_common"
 
-STREAM_URL = "/api/v1/ai/chat/stream"
 HISTORY_LIMIT = 25
 # A thread opens on its latest messages; earlier ones load a page at a time.
 THREAD_PAGE = 40
@@ -69,14 +70,18 @@ class ChatSurface:
     # A reply's drawer edits the agent behind it (the Overseer's agent
     # editor); a mount without one leaves the link out.
     agent_drawer: bool = False
-
-    @property
-    def turn_defaults(self) -> dict[str, Any]:
-        """What every turn's stream request carries for this mount."""
-        defaults = {"user_id": self.user, "surface": self.surface}
-        if self.agent_slug:
-            defaults["agent_slug"] = self.agent_slug
-        return defaults
+    # What its conversations are about, within the surface: an app's
+    # scope key (a project's id, say). The turn binds it for tools and
+    # briefings (``current_subject``), and the history lists only its own.
+    subject: str | None = None
+    # This request's mount: a FastAPI dependency (so it may depend on the
+    # app's signed-in user and active project) returning the mount with
+    # ``user`` and ``subject`` set. None serves the mount as declared. The
+    # live call's socket keeps the declared mount.
+    bind: Callable[..., Awaitable[ChatSurface]] | None = None
+    # A FastAPI dependency run before a turn reaches the model (a plan's
+    # entitlement, a daily budget): the reason it is refused, or None.
+    gate: Callable[..., Awaitable[str | None]] | None = None
 
 
 async def assistant_name(chat: ChatSurface, session: Any = None) -> str:
@@ -92,16 +97,45 @@ async def assistant_name(chat: ChatSurface, session: Any = None) -> str:
     return agent.name
 
 
+def resolver(mount: ChatSurface) -> Callable[..., Awaitable[ChatSurface]]:
+    """The dependency every route takes its mount from: the mount's
+    ``bind``, else the mount as declared."""
+    if mount.bind is not None:
+        return mount.bind
+
+    async def declared() -> ChatSurface:
+        return mount
+
+    return declared
+
+
+def gatekeeper(mount: ChatSurface) -> Callable[..., Awaitable[str | None]]:
+    """The dependency a turn passes before the model: the mount's ``gate``,
+    else none (every turn goes through)."""
+    if mount.gate is not None:
+        return mount.gate
+
+    async def open_gate() -> None:
+        return None
+
+    return open_gate
+
+
 async def conversations(chat: ChatSurface) -> list[Any]:
     """The mount's conversations, newest first."""
-    return await ai_service.list_conversations(chat.user, surface=chat.surface)
+    return await ai_service.list_conversations(
+        chat.user, surface=chat.surface, subject=chat.subject
+    )
 
 
 async def find_conversation(chat: ChatSurface, conversation_id: str) -> Any | None:
-    """The conversation, if it is the mount's user's: another user's is as
-    absent as a missing one."""
+    """The conversation, if it is the mount's user's, about the mount's
+    subject: another's is as absent as a missing one."""
     conversation = await ai_service.get_conversation(conversation_id)
-    if conversation is None or conversation.metadata.get("user_id") != chat.user:
+    if conversation is None:
+        return None
+    meta = conversation.metadata
+    if meta.get("user_id") != chat.user or meta.get("subject") != chat.subject:
         return None
     return conversation
 
@@ -334,8 +368,6 @@ async def surface_context(chat: ChatSurface) -> dict[str, Any]:
     return thread | {
         "section_subtitle": f"Ask {thread['assistant']} anything",
         "chat_path": chat.path,
-        "stream_url": STREAM_URL,
-        "turn_defaults": chat.turn_defaults,
         "voice": _voice() if HAS_VOICE else None,
         "picker": PERSISTED,
         # Voice profiles are rows: the voice chip needs a database.

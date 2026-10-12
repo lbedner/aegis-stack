@@ -1,10 +1,7 @@
 """Talking to the model, and reading a conversation back."""
 
-import json
-from collections.abc import AsyncIterator
 from typing import Any
 from app.services.ai.domains.chat.attachments import ChatAttachment
-from app.core.chat_transcript import tool_label
 from app.core.log import logger
 from app.services.ai.service import (
     AIServiceError,
@@ -20,22 +17,30 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.components.backend.api.ai.service import ai_service
+from app.components.backend.api.ai.sse import turn_stream
 from app.services.shared.deps import get_optional_owner_user_id
 
 router = APIRouter()
 
 
-class ChatRequest(BaseModel):
-    """Request model for chat messages."""
+class ChatTurn(BaseModel):
+    """What a turn carries from the client: the message, the conversation
+    it continues, and its images. A chat surface's stream takes only this;
+    who it is for comes from the mount."""
 
     message: str
     conversation_id: str | None = None
-    user_id: str = "api-user"
-    agent_slug: str | None = None
-    surface: str | None = None
     # Image parts riding this turn (screenshots, receipts) - generic
     # across every agent and surface; see domains/chat/attachments.py.
     attachments: list[ChatAttachment] = Field(default_factory=list)
+
+
+class ChatRequest(ChatTurn):
+    """Request model for chat messages."""
+
+    user_id: str = "api-user"
+    agent_slug: str | None = None
+    surface: str | None = None
 
 
 class ChatResponse(BaseModel):
@@ -127,110 +132,18 @@ async def chat_stream(
     request: ChatRequest,
     owner_user_id: int | None = Depends(get_optional_owner_user_id),
 ) -> StreamingResponse:
-    """
-    Stream a chat message with real-time Server-Sent Events.
-
-    Args:
-        request: Chat request with message and optional conversation ID
-
-    Returns:
-        StreamingResponse: SSE stream with real-time AI response
-
-    Raises:
-        HTTPException: If streaming fails
-    """
-
-    async def generate_sse_stream() -> AsyncIterator[str]:
-        """Generate Server-Sent Events stream for chat response."""
-        try:
-            # Send initial connection event
-            connect_data = {"status": "connected", "message": "Streaming started"}
-            yield f"event: connect\ndata: {json.dumps(connect_data)}\n\n"
-
-            # Stream the AI response
-            async for chunk in ai_service.stream_chat(
-                message=request.message,
-                conversation_id=request.conversation_id,
-                user_id=request.user_id,
-                owner_user_id=owner_user_id,
-                stream_delta=True,
-                agent_slug=request.agent_slug,
-                surface=request.surface,
-                attachments=request.attachments,
-            ):
-                # Tool-use notice: no content, just which tool started, so
-                # the frontend can caption the pause in the token stream.
-                if (chunk.metadata or {}).get("event") == "tool":
-                    # The trail line is computed here, once: the browser
-                    # shows this label live and the stored trace renders
-                    # the same words later (chat_transcript.trace_label).
-                    tool_data = {
-                        "tool": chunk.metadata.get("tool", ""),
-                        "args": chunk.metadata.get("args", ""),
-                        "label": tool_label(
-                            str(chunk.metadata.get("tool", "")),
-                            str(chunk.metadata.get("args", "") or ""),
-                        ),
-                    }
-                    yield f"event: tool\ndata: {json.dumps(tool_data)}\n\n"
-                    continue
-
-                # Format chunk as SSE event
-                event_data = {
-                    "content": chunk.content,
-                    "is_final": chunk.is_final,
-                    "is_delta": chunk.is_delta,
-                    "message_id": chunk.message_id,
-                    "conversation_id": chunk.conversation_id,
-                    "timestamp": chunk.timestamp.isoformat(),
-                }
-
-                # Add metadata for final chunk
-                if chunk.is_final:
-                    event_data.update(chunk.metadata)
-
-                # Send chunk as SSE event
-                event_type = "final" if chunk.is_final else "chunk"
-                yield f"event: {event_type}\ndata: {json.dumps(event_data)}\n\n"
-
-                # Break after final chunk
-                if chunk.is_final:
-                    break
-
-            # Send stream complete event
-            complete_data = {"status": "completed", "message": "Stream finished"}
-            yield f"event: complete\ndata: {json.dumps(complete_data)}\n\n"
-
-        # Subclasses before AIServiceError, or their branches never run.
-        # Same rule as the plain route: only a conversation error's text
-        # is the caller's to read.
-        except ProviderError:
-            logger.exception("Chat stream provider error")
-            error_data = {"error": "AI provider error"}
-            yield f"event: error\ndata: {json.dumps(error_data)}\n\n"
-        except ConversationError as e:
-            error_data = {"error": "Conversation error", "detail": str(e)}
-            yield f"event: error\ndata: {json.dumps(error_data)}\n\n"
-        except AIServiceError:
-            logger.exception("Chat stream service error")
-            error_data = {"error": "AI service error"}
-            yield f"event: error\ndata: {json.dumps(error_data)}\n\n"
-        except Exception:
-            # Logged, not sent: the text can carry paths, keys or SQL.
-            logger.exception("Chat stream failed")
-            error_data = {"error": "Unexpected error"}
-            yield f"event: error\ndata: {json.dumps(error_data)}\n\n"
-
-    # Create streaming response with proper SSE headers
-    return StreamingResponse(
-        generate_sse_stream(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Headers": "Content-Type",
-        },
+    """Stream a chat message as Server-Sent Events (``sse.turn_stream``)."""
+    return turn_stream(
+        ai_service.stream_chat(
+            message=request.message,
+            conversation_id=request.conversation_id,
+            user_id=request.user_id,
+            owner_user_id=owner_user_id,
+            stream_delta=True,
+            agent_slug=request.agent_slug,
+            surface=request.surface,
+            attachments=request.attachments,
+        )
     )
 
 

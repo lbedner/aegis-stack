@@ -91,6 +91,7 @@ class ConversationManager:
         user_id: str = "default",
         conversation_id: str | None = None,
         surface: str | None = None,
+        subject: str | None = None,
     ) -> Conversation:
         """
         Create a new conversation.
@@ -102,6 +103,8 @@ class ConversationManager:
             conversation_id: Optional custom conversation ID
             surface: Originating chat surface (e.g. "finance"); scopes
                 history listings so each embedded chat shows its own past
+            subject: What it is about (a project, say); scopes listings
+                within the surface the same way
 
         Returns:
             Conversation: The created conversation
@@ -112,6 +115,8 @@ class ConversationManager:
         metadata: dict = {"user_id": user_id, "created_by": "ai_service"}
         if surface:
             metadata["surface"] = surface
+        if subject:
+            metadata["subject"] = subject
         conversation = Conversation(
             id=conversation_id,
             provider=provider,
@@ -166,14 +171,18 @@ class ConversationManager:
 {% endif %}
 
     async def list_conversations(
-        self, user_id: str | None = None, surface: str | None = None
+        self,
+        user_id: str | None = None,
+        surface: str | None = None,
+        subject: str | None = None,
     ) -> list[Conversation]:
         """
-        List conversations, optionally filtered by user and surface.
+        List conversations, optionally filtered by user, surface and subject.
 
         Args:
             user_id: Optional user ID to filter by
             surface: Optional originating surface to filter by
+            subject: Optional subject (a project, say) to filter by
 
         Returns:
             list[Conversation]: List of conversations
@@ -193,6 +202,12 @@ class ConversationManager:
                 for conv in conversations
                 if conv.metadata.get("surface") == surface
             ]
+        if subject:
+            conversations = [
+                conv
+                for conv in conversations
+                if conv.metadata.get("subject") == subject
+            ]
 
         # Sort by most recent activity
         conversations.sort(key=lambda c: c.updated_at, reverse=True)
@@ -209,6 +224,8 @@ class ConversationManager:
                 if user_id and meta_data.get("user_id") != user_id:
                     continue
                 if surface and meta_data.get("surface") != surface:
+                    continue
+                if subject and meta_data.get("subject") != subject:
                     continue
 
                 # Messages already loaded via selectinload

@@ -30,6 +30,19 @@
 - **Background work ends cleanly at shutdown.** The webserver cancels what
   `background()` still has running and gives it five seconds to finish its
   own cleanup, instead of leaving it to the event loop's teardown.
+- **A chat turn's scope comes from the server, and carries a subject.**
+  A turn has a `subject` beside its user: an app's own scope key, a
+  project's id say. The AI service keeps it on a new conversation, lists
+  conversations by it, binds it for the turn's tools (`current_subject`)
+  and hands it to memory-module fetchers (`FetchContext.subject`), so a
+  project's briefing works the way a user's does. Each chat surface mount
+  now streams through its own `/stream` route: who the turn is for and
+  what it is about come from the mount, never from the browser, and a
+  conversation it continues must be the mount's own. A mount decides them
+  per request with `bind` (a FastAPI dependency: the signed-in user, the
+  active project) and can refuse a turn before the model with `gate` (a
+  plan, a daily budget). The API's `/chat/stream` and the mounts share one
+  SSE writer (`api/ai/sse.py`) (#1566).
 
 ## [0.15.1] - 2026-10-11
 

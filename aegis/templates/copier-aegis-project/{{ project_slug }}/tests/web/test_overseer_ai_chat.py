@@ -549,13 +549,9 @@ def test_an_app_mounts_the_surface_again_for_its_own_agent(
     html = TestClient(app).get("/chat/drawer").text
 
     assert asked == [mine]
+    # The page names only its path: who a turn is for is the mount's.
     surface = json.loads(one(html, "[data-chat]").get("data-chat"))
-    assert surface["path"] == "/chat"
-    assert surface["defaults"] == {
-        "user_id": "7",
-        "surface": "app",
-        "agent_slug": "helper",
-    }
+    assert surface == {"path": "/chat"}
     assert one(html, "form[hx-post]").get("hx-post") == "/chat/turns"
     # The agent drawer is the Overseer's editor; this mount has none.
     response = TestClient(app).get("/chat/messages/c1/m2/agent")

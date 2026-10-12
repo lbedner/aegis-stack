@@ -105,7 +105,9 @@ SERVICES: dict[str, ServiceSpec] = {
         readme=ReadmeWiring(
             reach="/api/v1/auth, sign-in page at /login, CLI group `auth`",
             cli_groups=["auth"],
-            first_steps=["Register the first user: `make cli auth create-user`"],
+            first_steps=[
+                "Create a first user: `uv run <project_slug> auth create-test-user`"
+            ],
         ),
         name="auth",
         docs_path="services/auth",
@@ -380,7 +382,7 @@ SERVICES: dict[str, ServiceSpec] = {
             cli_groups=["ai", "llm", "agents", "memory-modules"],
             env_groups=["AI SERVICE CONFIGURATION", "RAG SERVICE CONFIGURATION"],
             first_steps=[
-                "Pick a provider and model: `make cli ai config`",
+                "Pick a provider: `uv run <project_slug> ai use-provider <provider>`",
                 "Ask it something from the dashboard chat panel",
             ],
         ),
@@ -668,7 +670,12 @@ SERVICES: dict[str, ServiceSpec] = {
             cli_groups=["comms"],
             env_groups=["COMMUNICATIONS SERVICE CONFIGURATION"],
             setup_notes=["RESEND_API_KEY and TWILIO_* are optional until you send"],
-            first_steps=["Send a test email: `make cli comms send-email`"],
+            first_steps=[
+                (
+                    "Send a test email: "
+                    "`uv run <project_slug> comms email send <address> --subject Hello`"
+                )
+            ],
         ),
         name="comms",
         docs_path="services/comms",
@@ -744,7 +751,7 @@ SERVICES: dict[str, ServiceSpec] = {
             reach="/api/v1/insights, Insights tab on the dashboard, CLI group `insights`",
             cli_groups=["insights"],
             env_groups=["INSIGHTS SERVICE CONFIGURATION"],
-            first_steps=["Collect once: `make cli insights collect`"],
+            first_steps=["Collect once: `uv run <project_slug> insights collect`"],
         ),
         name="insights",
         docs_path="services/insights",
@@ -994,7 +1001,9 @@ SERVICES: dict[str, ServiceSpec] = {
         readme=ReadmeWiring(
             reach="/api/v1/blog, posts at /blog, CLI group `blog`",
             cli_groups=["blog"],
-            first_steps=["Write the first post: `make cli blog create`"],
+            first_steps=[
+                "Import Markdown posts: `uv run <project_slug> blog import <path>`"
+            ],
         ),
         name="blog",
         docs_path="services/blog",
@@ -1089,7 +1098,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 "Plaid and SnapTrade keys are optional; file import works without them"
             ],
             first_steps=[
-                "Import a CSV or OFX file: `make cli finance import`",
+                "Import a CSV or OFX file: `uv run <project_slug> finance import <file>`",
                 "Open the Finance tab to see net worth and recurring spend",
             ],
         ),
@@ -1464,7 +1473,9 @@ SERVICES: dict[str, ServiceSpec] = {
         readme=ReadmeWiring(
             reach="/api/v1/meetings and the `meetings` CLI",
             cli_groups=["meetings"],
-            first_steps=["Send the bot into a call: meetings join <meeting link>"],
+            first_steps=[
+                "Send the bot into a call: `uv run <project_slug> meetings join <meeting link>`"
+            ],
         ),
         name="meetings",
         docs_path="services/meetings",

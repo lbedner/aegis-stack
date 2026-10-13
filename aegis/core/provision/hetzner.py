@@ -2,30 +2,37 @@
 
 from typing import Any
 
-from .http import ProvisionError, Requester, delete
-from .provider import ssh_fingerprint, ssh_key_name
+from .http import Requester, delete
+from .provider import amount, ssh_fingerprint, ssh_key_name
 
 API_URL = "https://api.hetzner.cloud/v1"
 IMAGE = "ubuntu-24.04"
+PROJECT_LABEL = "aegis-project"  # which project made a server
 
 
 class HetznerClient:
     def __init__(self, request: Requester) -> None:
         self._request = request
 
-    def monthly_price(self, size: str, region: str) -> str:
-        """Gross monthly price of ``size`` in ``region``, e.g. ``"4.15"``."""
-        types = self._request("GET", f"/server_types?name={size}")["server_types"]
-        if not types:
-            raise ProvisionError(f"Unknown Hetzner server type: {size}")
-        prices = types[0]["prices"]
-        for price in prices:
-            if price["location"] == region:
-                return f"{float(price['price_monthly']['gross']):.2f}"
-        available = ", ".join(p["location"] for p in prices)
-        raise ProvisionError(
-            f"{size} is not offered in {region}; available: {available}"
-        )
+    def account(self) -> dict[str, Any]:
+        """Servers, each priced (gross) where it is; Hetzner has no billing
+        API, so no spend."""
+        servers = []
+        for s in self._request("GET", "/servers?per_page=50")["servers"]:
+            where = s["datacenter"]["location"]["name"]
+            prices = {p["location"]: p for p in s["server_type"]["prices"]}
+            price = prices.get(where, {}).get("price_monthly", {}).get("gross")
+            servers.append(
+                {
+                    "name": s["name"],
+                    "size": s["server_type"]["name"],
+                    "region": where,
+                    "price": amount(price) if price else None,
+                    "created": s["created"],
+                    "project": (s.get("labels") or {}).get(PROJECT_LABEL),
+                }
+            )
+        return {"servers": servers, "month_to_date": None, "missing": []}
 
     def catalog(self) -> dict[str, Any]:
         """Server types still sold, priced (gross) per location, grouped as
@@ -40,7 +47,7 @@ class HetznerClient:
                 "vcpus": t["cores"],
                 "disk_gb": t["disk"],
                 "prices": {
-                    p["location"]: f"{float(p['price_monthly']['gross']):.2f}"
+                    p["location"]: amount(p["price_monthly"]["gross"])
                     for p in t["prices"]
                 },
             }
@@ -78,7 +85,7 @@ class HetznerClient:
             "image": IMAGE,
             "ssh_keys": [ssh_key_id],
             "user_data": user_data,
-            "labels": {"managed-by": "aegis", "aegis-project": name},
+            "labels": {"managed-by": "aegis", PROJECT_LABEL: name},
         }
         return self._request("POST", "/servers", body)["server"]["id"]
 

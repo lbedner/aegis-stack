@@ -21,7 +21,6 @@ arguments, is masked in every line sent, and is never written anywhere.
 """
 
 import contextlib
-import importlib.util
 import json
 import os
 import re
@@ -42,27 +41,19 @@ import typer
 from .. import __version__
 from ..cli import brand
 from ..cli.validation import validate_copier_project
-from ..core.component_files import PROJECT_SLUG_PLACEHOLDER, get_template_path
+from ..core.component_files import template_module
 from ..core.footprint import DockerError, measure
 from ..core.provision.http import ProvisionError, json_requester, mask_token
+from ..core.provision.provider import monthly_price
 from ..core.provision.registry import PROVIDERS
 from ..core.template_cleanup import env_value
 from ..i18n import lazy_t, t
 from .deploy import _get_project_root, _load_deploy_config
 from .deploy_provision import CLOUDFLARE_TOKEN_ENV
 
-_SPEC = importlib.util.spec_from_file_location(
-    "aegis_deploy_protocol",
-    get_template_path()
-    / PROJECT_SLUG_PLACEHOLDER
-    / "app"
-    / "components"
-    / "deploy"
-    / "protocol.py",
+_protocol = template_module(
+    "aegis_deploy_protocol", "app", "components", "deploy", "protocol.py"
 )
-assert _SPEC is not None and _SPEC.loader is not None
-_protocol = importlib.util.module_from_spec(_SPEC)
-_SPEC.loader.exec_module(_protocol)
 PROTOCOL: dict[str, Any] = _protocol.PROTOCOL
 RefusedError = _protocol.RefusedError
 checked_token = _protocol.checked_token
@@ -114,13 +105,15 @@ def redis_url(root: Path) -> str:
 
 
 def presence() -> dict[str, Any]:
-    """The heartbeat: who is listening, and the providers it holds tokens for
+    """The heartbeat: who is listening, the actions it runs (an app newer
+    than it asks for one it lacks), and the providers it holds tokens for
     (their names only)."""
     return {
         "host": socket.gethostname(),
         "pid": os.getpid(),
         "started_at": datetime.now(UTC).isoformat(),
         "version": __version__,
+        "actions": list(PROTOCOL["actions"]),
         "providers": [
             key
             for key, p in PROVIDERS.items()
@@ -133,6 +126,13 @@ def _tokens() -> list[str]:
     """Every token this process holds, to mask wherever one would be sent."""
     names = [p.token_env for p in PROVIDERS.values()] + [CLOUDFLARE_TOKEN_ENV]
     return [value for name in names if (value := os.environ.get(name, "").strip())]
+
+
+def _masked(text: str, tokens: list[str]) -> str:
+    """``text`` with every one of ``tokens`` masked."""
+    for token in tokens:
+        text = text.replace(token, mask_token(token))
+    return text
 
 
 class Job:
@@ -187,9 +187,7 @@ def run(
         env=os.environ | env | {"PYTHONUNBUFFERED": "1"},
     ) as process:
         for raw in process.stdout or ():
-            line = raw.rstrip()
-            for token in tokens:
-                line = line.replace(token, mask_token(token))
+            line = _masked(raw.rstrip(), tokens)
             if line:
                 job.line(line)
         return process.wait()
@@ -211,15 +209,24 @@ def _ask(provider: str, env: dict[str, str], call: Callable[[Any], Any]) -> Any:
 def quote(args: dict[str, str], env: dict[str, str]) -> str:
     """The provider's monthly price for the size and region now."""
     return _ask(
-        args["provider"], env, lambda c: c.monthly_price(args["size"], args["region"])
+        args["provider"], env, lambda c: monthly_price(c, args["size"], args["region"])
     )
 
 
-def catalog(provider: str, env: dict[str, str]) -> dict[str, Any]:
-    """What the provider sells where (its client's ``catalog``), in its
-    currency."""
-    found = _ask(provider, env, lambda c: c.catalog())
-    return found | {"currency": PROVIDERS[provider].currency}
+def _found(
+    root: Path, action: str, args: dict[str, str], env: dict[str, str]
+) -> dict[str, Any]:
+    """What a ``kept`` action answers: a provider's catalog or account (in
+    its currency), or the stack's footprint (``aegis.core.footprint``); a
+    refusal says why not."""
+    if action in ("catalog", "account"):  # the client's method of that name
+        provider = args["provider"]
+        found = _ask(provider, env, lambda c: getattr(c, action)())
+        return found | {"currency": PROVIDERS[provider].currency}
+    try:
+        return measure(root)
+    except DockerError as exc:
+        raise RefusedError(str(exc)) from None
 
 
 def _fresh(at: Any) -> None:
@@ -253,18 +260,12 @@ def _execute(
     job: Job, root: Path, action: str, args: dict[str, str], token: str | None
 ) -> None:
     env = _token_env(root, action, args, token)
-    if action == "footprint":
-        try:
-            found = json.dumps(measure(root))
-        except DockerError as exc:
-            raise RefusedError(str(exc)) from None
-        job.client.set(PROTOCOL["footprint"], found, ex=PROTOCOL["footprint_seconds"])
-        job.done({})
-        return
-    if action == "catalog":
-        key = f"{PROTOCOL['catalog']}{args['provider']}"
-        found = json.dumps(catalog(args["provider"], env))
-        job.client.set(key, found, ex=PROTOCOL["catalog_seconds"])
+    spec = PROTOCOL["actions"][action]
+    if "kept" in spec:
+        key = _protocol.kept_key(action, args)
+        if not job.client.exists(key):  # asked twice, found once
+            found = _found(root, action, args, env)
+            job.client.set(key, json.dumps(found), ex=spec["seconds"])
         job.done({})
         return
     if action == "provision":
@@ -275,8 +276,12 @@ def _execute(
             raise RefusedError(
                 t("deploy_agent.price_changed", price=price, confirmed=confirmed)
             )
-    command = PROTOCOL["actions"][action]["command"]
-    if code := run(job, root, command, args, env):
+    command = spec["command"]
+    code = run(job, root, command, args, env)
+    if spec.get("token"):  # it may have changed what the account runs
+        for key in PROVIDERS:
+            job.client.delete(_protocol.kept_key("account", {"provider": key}))
+    if code:
         raise RefusedError(
             t("deploy_agent.command_failed", command=f"aegis {command[0]}", code=code)
         )
@@ -309,6 +314,11 @@ def handle(client: Any, root: Path, raw: str) -> None:
     except KeyboardInterrupt:
         job.fail(t("deploy_agent.stopped"))
         raise
+    except Exception as exc:  # noqa: BLE001 - this job's failure, not the agent's
+        error = _masked(f"{type(exc).__name__}: {exc}", _tokens())
+        job.fail(error)
+        brand.warn(error)
+        return
     brand.success(t("deploy_agent.done", action=action))
 
 
@@ -332,12 +342,13 @@ def serve(client: Any, root: Path, stop: threading.Event | None = None) -> None:
         while not stop.is_set():
             try:
                 item = client.blpop([PROTOCOL["requests"]], timeout=POLL_SECONDS)
+                if item:
+                    handle(client, root, item[1])
             except redis.RedisError:
-                # The stack restarting; listen again once Redis is back.
+                # The stack restarting, between requests or during one (its
+                # job could not even record failing); listen again once
+                # Redis is back.
                 stop.wait(REDIS_RETRY_SECONDS)
-                continue
-            if item:
-                handle(client, root, item[1])
     finally:
         stopped.set()
         thread.join()

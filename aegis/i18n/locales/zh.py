@@ -718,6 +718,7 @@ MESSAGES: dict[str, str] = {
     "deploy.backup_storage_failed": "Warning: Object storage backup failed",
     "deploy.backup_offsite": "Copying backup off the server (restic)...",
     "deploy.backup_offsite_failed": "Warning: Off-box copy failed: {error}",
+    "deploy.env_unsafe": "{file} 会让应用在没有保护的情况下上线。请在其中修正 {settings}（AUTH_ENABLED=true、APP_ENV=prod、用 openssl rand -hex 32 生成新的 SECRET_KEY），然后重新部署；.env.deploy.example 说明了每一项。",
     "deploy.disk_low": "{host} 上仅剩 {free}GB 可用空间，需要 {need}GB。清理命令：docker image prune -af && docker builder prune -af",
     "deploy.pruning": "正在回收 Docker 磁盘空间（悬空镜像和旧构建缓存）……",
     "deploy.prune_failed": "无法回收 Docker 磁盘空间；但部署本身已成功。",

@@ -258,6 +258,17 @@ def color_tone(color: str) -> str:
 _WORST_FIRST = ("error", "warn")
 
 
+# What a ``pattern`` attribute escapes: the browser compiles it with the v
+# flag, where escaping anything else is a syntax error that drops the check.
+_PATTERN_SYNTAX = re.compile(r"[\^$\\.*+?()[\]{}|/]")
+
+
+def exactly(text: str) -> str:
+    """A ``pattern`` attribute matching ``text`` and nothing else: a typed
+    confirmation the browser holds its form for."""
+    return _PATTERN_SYNTAX.sub(lambda found: "\\" + found.group(), text)
+
+
 def worst_tone(tones: Iterable[str]) -> str:
     """The worst of ``tones``: error, then warn, else ok."""
     found = set(tones)
@@ -274,6 +285,7 @@ def health_tone(state: str) -> str:
 
 FILTERS: dict[str, Callable[..., Any]] = {
     "money": money,
+    "exactly": exactly,
     "dollars": dollars,
     "cents_to_input": cents_to_input,
     "short_date": short_date,

@@ -1,7 +1,7 @@
-"""Overseer > Deployments in Flet, opened from the dashboard header: the
-same provider (``hosting``: where it runs, where it can), live build, host,
-history and database backups as the htmx page (``ui_deployments``), read
-when the popup opens."""
+"""Overseer > Deployments in Flet, opened from the dashboard header: where
+it runs and can (``hosting``, every provider as a card with its command),
+the live build, host, history and database backups (``ui_deployments``),
+read when the popup opens. Deploying is the htmx page's (or the CLI's)."""
 
 import asyncio
 from typing import Any

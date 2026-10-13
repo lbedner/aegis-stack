@@ -5,9 +5,11 @@ This module provides functionality to identify which files belong to which
 components by parsing the Copier template's exclusion rules.
 """
 
+import importlib.util
 import re
 from collections.abc import Callable, Iterable
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 import yaml
@@ -59,6 +61,18 @@ def _is_skippable_template_file(file_path: Path) -> bool:
 def get_template_path() -> Path:
     """Get path to Copier template directory."""
     return Path(__file__).parent.parent / "templates" / "copier-aegis-project"
+
+
+def template_module(name: str, *parts: str) -> ModuleType:
+    """A module of the generated app (``parts`` under the project, its
+    imports the standard library's only), loaded from the template this
+    CLI ships: the CLI reads the app's one copy instead of keeping its own."""
+    path = get_template_path() / PROJECT_SLUG_PLACEHOLDER
+    spec = importlib.util.spec_from_file_location(name, path.joinpath(*parts))
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def load_copier_config() -> dict[str, Any]:

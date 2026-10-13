@@ -1,14 +1,11 @@
 {# Overseer > Deployments: this build (where it runs, the live build, the
    host it is on), then the way to a server or the server itself
    (_actions.html), from overseer_deployments. #}
-{% from "components/macros/layout.html" import avatar, card, facts %}
+{% from "components/macros/layout.html" import card, facts %}
+{% from "pages/overseer/deployments/_macros.html" import place %}
 <div class="space-y-4">
   {% call card("This build") %}
-  <div class="flex items-center gap-3">
-    {{ avatar(running.name, running.logo, "lg") }}
-    <span class="text-sm font-semibold text-aegis-text">{{ running.name }}</span>
-    {% if running.console %}<a href="{{ running.console }}" target="_blank" rel="noopener" class="ml-auto text-xs text-aegis-muted hover:text-aegis-teal">Open console</a>{% endif %}
-  </div>
+  {{ place(running) }}
   <div class="grid gap-x-8 gap-y-2 lg:grid-cols-2">
     {{ facts(running.facts + now) }}
     {% if host.note %}<p class="text-sm text-aegis-muted">{{ host.note }}</p>{% else %}{{ facts(host.facts) }}{% endif %}

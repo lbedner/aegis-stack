@@ -8,10 +8,16 @@ import base64
 import hashlib
 from typing import Any, Protocol
 
+from .http import ProvisionError
+
 
 class ProviderClient(Protocol):
-    def monthly_price(self, size: str, region: str) -> str:
-        """Monthly price of ``size`` in ``region``, e.g. ``"4.15"``."""
+    def account(self) -> dict[str, Any]:
+        """What the account runs now: ``servers`` (name, size, region,
+        monthly ``price``, ``created``, and the aegis ``project`` that made
+        it, else None), this month's spend (``month_to_date``, None where
+        the provider does not say), and the token scopes it lacked to say
+        more (``missing``)."""
         ...
 
     def catalog(self) -> dict[str, Any]:
@@ -43,6 +49,26 @@ class ProviderClient(Protocol):
     def delete_ssh_key(self, key_id: int) -> None: ...
 
     def delete_firewall(self, firewall_id: str) -> None: ...
+
+
+def amount(value: Any) -> str:
+    """A provider's money as every client reports it: ``"12.00"``."""
+    return f"{float(value):.2f}"
+
+
+def monthly_price(client: ProviderClient, size: str, region: str) -> str:
+    """Monthly price of ``size`` in ``region`` (``"12.00"``), from the
+    client's ``catalog``: the one place a price is read, so what the
+    Overseer shows and what provisioning checks cannot differ."""
+    found = next((s for s in client.catalog()["sizes"] if s["slug"] == size), None)
+    if found is None:
+        raise ProvisionError(f"Unknown size: {size}")
+    if region not in found["prices"]:
+        available = ", ".join(found["prices"])
+        raise ProvisionError(
+            f"{size} is not offered in {region}; available: {available}"
+        )
+    return found["prices"][region]
 
 
 def ssh_fingerprint(public_key: str) -> str:

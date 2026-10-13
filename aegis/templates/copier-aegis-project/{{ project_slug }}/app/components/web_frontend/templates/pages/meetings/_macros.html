@@ -1,7 +1,7 @@
 {# What one meeting came to, drawn the same on the Meetings page and in
    Overseer's drawer. ``clock`` maps a transcript line's id to its time. #}
 {% from "components/macros/feedback.html" import empty_state %}
-{% from "components/macros/layout.html" import badge %}
+{% from "components/macros/layout.html" import badge, chart_dot %}
 
 {# Where the bot is with the call, and how long it was in. #}
 {% macro status_line(status, length) %}
@@ -15,11 +15,11 @@
 
 {# The notes, or why there are none: the summary, then what the caller
    puts first (the Meetings page puts my items there), then the lists. #}
-{% macro notes_view(notes, notes_error, clock, empty) %}
+{% macro notes_view(notes, notes_error, clock, empty, voices) %}
 {% if notes %}
 <p id="meeting-summary" class="text-sm text-aegis-text">{{ notes.summary }}</p>
 {% if caller is defined %}{{ caller() }}{% endif %}
-{{ notes_lists(notes, clock) }}
+{{ notes_lists(notes, clock, voices) }}
 {% elif notes_error %}
 <p role="alert" class="text-sm text-error">The notes could not be written: {{ notes_error }}</p>
 {% else %}
@@ -27,12 +27,22 @@
 {% endif %}
 {% endmacro %}
 
-{% macro items(list, empty, clock, owners=False) %}
+{# A speaker as the theme marks a source (the logs page's dot): their name
+   in text, after a small dot in their color in this meeting (``voices``). #}
+{% macro speaker(name, voices, attr="data-speaker") -%}
+<span {{ attr }} class="font-semibold text-aegis-text">{{ chart_dot(voices.get(name, 1)) }}{{ name }}</span>
+{%- endmacro %}
+
+{% macro items(list, empty, clock, voices=None) %}
 {% if list %}
-<ul class="space-y-2 text-sm">
+<ul class="space-y-3 text-sm">
   {% for item in list %}
   <li class="flex items-baseline gap-3">
-    <span class="flex-1 min-w-0">{{ item.text }}{% if owners and item.owner %} <span class="text-aegis-muted">· {{ item.owner }}</span>{% endif %}{% if item.due %} <span class="text-aegis-muted">· {{ item.due }}</span>{% endif %}</span>
+    <span class="flex-1 min-w-0 leading-relaxed">
+      {%- if voices and item.owner %}{{ speaker(item.owner, voices, "data-owner") }} <span class="text-aegis-muted">·</span> {% endif -%}
+      {{ item.text }}
+      {%- if item.due %} <span class="whitespace-nowrap rounded bg-aegis-bg px-1.5 py-0.5 text-xs text-aegis-muted">{{ item.due }}</span>{% endif %}
+    </span>
     {% if item.lines %}<a href="#line-{{ item.lines[0] }}" class="shrink-0 text-xs tabular-nums text-aegis-muted hover:text-aegis-teal">{{ clock.get(item.lines[0], "Said") }}</a>{% endif %}
   </li>
   {% endfor %}
@@ -45,10 +55,10 @@
 {% macro heading(label) %}<h3 class="text-xs font-semibold caps text-aegis-muted">{{ label }}</h3>{% endmacro %}
 
 {# Everyone's action items, the decisions and the open questions. #}
-{% macro notes_lists(notes, clock) %}
+{% macro notes_lists(notes, clock, voices) %}
 <section id="all-items" class="grid gap-2">
   {{ heading("Everyone's") }}
-  {{ items(notes.action_items, "No action items.", clock, owners=True) }}
+  {{ items(notes.action_items, "No action items.", clock, voices) }}
 </section>
 <section id="decisions" class="grid gap-2">
   {{ heading("Decisions") }}
@@ -60,14 +70,20 @@
 </section>
 {% endmacro %}
 
-{% macro transcript(lines, clock) %}
-{% if lines %}
-<ol class="space-y-2 text-sm">
-  {% for line in lines %}
-  <li id="line-{{ line.id }}" class="scroll-mt-20 rounded px-2 -mx-2 target:bg-aegis-teal/10">
-    <span class="text-xs tabular-nums text-aegis-muted">{{ clock[line.id] }}</span>
-    <span class="font-medium text-aegis-text">{{ line.speaker }}</span>
-    <span class="text-aegis-text">{{ line.text }}</span>
+{# Who said what: one speaker's lines in a row under their name, each line
+   with its time and its own anchor (an item jumps to it). #}
+{% macro transcript(turns, clock, voices) %}
+{% if turns %}
+<ol class="space-y-4 text-sm">
+  {% for name, rows in turns %}
+  <li data-turn class="grid scroll-mt-12 gap-1">
+    {{ speaker(name, voices) }}
+    {% for line in rows %}
+    <p id="line-{{ line.id }}" class="flex gap-3 scroll-mt-20 rounded px-2 -mx-2 target:bg-aegis-teal/10">
+      <span class="w-10 shrink-0 pt-0.5 text-xs tabular-nums text-aegis-muted">{{ clock[line.id] }}</span>
+      <span class="leading-relaxed text-aegis-text">{{ line.text }}</span>
+    </p>
+    {% endfor %}
   </li>
   {% endfor %}
 </ol>

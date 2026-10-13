@@ -23,6 +23,7 @@ from app.services.meetings.audio import Hearing
 from app.services.meetings.meet import CallState, MeetPage, merge_caption, open_meet
 from app.services.meetings.models import Caption, Meeting, MeetingStatus, Platform
 from app.services.meetings.service import (
+    DEFAULT_BOT_NAME,
     NOT_DONE,
     STILL_WANTED,
     MeetingsService,
@@ -248,3 +249,11 @@ async def run_meeting(meeting_id: int) -> None:
 def start_meeting(meeting_id: int) -> asyncio.Task[None]:
     """Run the bot without waiting for it, in this process."""
     return background(run_meeting(meeting_id))
+
+
+async def send_bot(svc: MeetingsService, url: str, bot_name: str) -> Meeting:
+    """Record the meeting and start the bot on it, without waiting: the one
+    way in for the Meetings page, Overseer and the API."""
+    meeting = await svc.request(url, bot_name.strip() or DEFAULT_BOT_NAME)
+    start_meeting(meeting.id)  # type: ignore[arg-type]
+    return meeting

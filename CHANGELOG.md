@@ -9,6 +9,15 @@
 
 ### Added
 
+- **Run meetings from Overseer.** Send the bot from Overseer's Meetings
+  page (htmx and Flet); the drawer and the Flet pane follow a meeting live
+  while the bot is in or the notes are being written, and have what the
+  Meetings page has: which speaker the owner is, their action items first,
+  and the notes written again. Each speaker has a color of their own in
+  the meeting, in the transcript and on the action items they own (shown
+  first). Both pages share one read of a meeting (`MeetingsService.read`)
+  and one way to send the bot (`send_bot`).
+
 - **The meetings service.** `aegis add-service meetings` keeps the calls a
   meeting bot is asked to join, who was in each and what they said: a
   meeting's link, platform (Google Meet, Teams or Zoom, read from the link;

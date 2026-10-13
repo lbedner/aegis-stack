@@ -7,11 +7,10 @@ from fastapi.testclient import TestClient
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.components.backend.api.meetings import router as meetings_router
 from app.services.meetings.models import MeetingStatus, Notes
 from app.services.meetings.service import MeetingsService, save_heard, transition
 from tests._audit import as_admin
-from tests._meetings import MEET, ended
+from tests._meetings import MEET, docs_meeting, ended, hold_the_bot, hold_the_writer
 
 ADMIN = "/api/v1/meetings/admin"
 
@@ -19,9 +18,7 @@ ADMIN = "/api/v1/meetings/admin"
 @pytest.fixture
 def started(monkeypatch: pytest.MonkeyPatch) -> list[int]:
     """The meetings the bot was started on, without starting it."""
-    ids: list[int] = []
-    monkeypatch.setattr(meetings_router, "start_meeting", ids.append)
-    return ids
+    return hold_the_bot(monkeypatch)
 
 
 def test_asking_the_bot_in_starts_it_and_answers_at_once(
@@ -128,3 +125,18 @@ async def test_the_admin_deletes_a_meeting_but_not_one_the_bot_is_in(
     assert admin.delete(f"{ADMIN}/{live_id}").status_code == 409
     left = admin.post(f"{ADMIN}/{live_id}/leave")
     assert left.json()["status"] == "leaving"
+
+
+async def test_the_admin_says_who_the_owner_is_and_rewrites_the_notes(
+    admin: TestClient, async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """What the Flet Overseer does from its pane, as the htmx drawer does."""
+    _, runs = hold_the_writer(monkeypatch)
+    meeting_id = await docs_meeting(async_db_session, 4242)
+
+    picked = admin.post(f"{ADMIN}/{meeting_id}/me", json={"name": "Ada"})
+    assert [item["text"] for item in picked.json()["mine"]] == ["Write the docs"]
+    rewritten = admin.post(f"{ADMIN}/{meeting_id}/notes")
+    assert rewritten.status_code == 202 and rewritten.json()["writing"]
+    assert admin.post(f"{ADMIN}/{meeting_id}/notes").status_code == 409
+    await runs[0]

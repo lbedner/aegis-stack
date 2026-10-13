@@ -1,17 +1,24 @@
 """The Meetings card and modal in the Flet Overseer, minus the runtime:
 the card's counts, a meeting's row, and one meeting read in full."""
 
+import asyncio
 from typing import Any
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from app.components.frontend.dashboard.cards.meetings_card import MeetingsCard
+from app.components.frontend.dashboard.modals import meetings_modal
 from app.components.frontend.dashboard.modals.meetings_modal import (
+    MeetingPane,
     actions_for,
+    following,
     meeting_cells,
     record_view,
 )
 from app.services.meetings.health import MEETINGS_MODAL_ID
 from app.services.system.models import ComponentStatus, ComponentStatusType
-from tests._meetings import MEET
+from tests._meetings import MEET, record
 from tests.components.frontend._tree import texts
 
 MEETING = {
@@ -29,19 +36,8 @@ MEETING = {
 
 
 def _record(**fields: Any) -> dict[str, Any]:
-    """A meeting as the admin API reads it (``MeetingRecord``)."""
-    return {
-        "meeting": MEETING,
-        "notes": None,
-        "notes_error": None,
-        "model_name": None,
-        "transcript": [],
-        "status": "Left",
-        "length": "30:30",
-        "heard": "Ada 42s",
-        "can_leave": False,
-        "can_delete": True,
-    } | fields
+    """A meeting as the admin API reads it (``MeetingRecord``, as JSON)."""
+    return record().model_dump(mode="json") | {"meeting": MEETING} | fields
 
 
 def test_card_shows_the_counts_the_health_check_reports() -> None:
@@ -99,3 +95,40 @@ def test_the_actions_are_the_ones_the_read_allows() -> None:
     assert actions_for(_record(can_leave=True)) == ["leave", "delete"]
     assert actions_for(_record(can_delete=False)) == []
     assert actions_for(_record()) == ["delete"]
+    assert actions_for(_record(can_rewrite=True)) == ["delete", "rewrite"]
+
+
+def test_my_items_come_first_once_i_say_which_speaker_i_am() -> None:
+    mine = [{"text": "Write the docs", "owner": "Ada", "due": None, "lines": []}]
+    notes = {"summary": "Docs.", "decisions": [], "action_items": mine}
+
+    shown = " | ".join(texts(record_view(_record(notes=notes, mine=mine))))
+    unsaid = " | ".join(
+        texts(record_view(_record(notes=notes, meeting=MEETING | {"me": None})))
+    )
+
+    assert shown.index("Write the docs") < shown.index("Action items")
+    assert "Say which speaker you are" in unsaid
+
+
+def test_it_follows_a_meeting_while_something_is_happening() -> None:
+    assert following(_record(under_way=True))
+    assert following(_record(writing=True))
+    assert not following(_record())
+
+
+async def test_following_stops_once_the_modal_is_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A closed modal stops reading its meeting; a closed tab stops it too,
+    after ``SessionLoops``' grace (that rule is the helper's, tested there)."""
+    reads: list[Any] = []
+    monkeypatch.setattr(meetings_modal, "_api", lambda page: reads.append(page))
+    monkeypatch.setattr(meetings_modal, "FOLLOW_SECONDS", 0.01)
+    pane = MeetingPane(MagicMock(expires_at=None), on_change=AsyncMock())
+    pane._showing = 7
+
+    pane.will_unmount()
+    await asyncio.wait_for(pane._follow(7), timeout=1)
+
+    assert reads == []

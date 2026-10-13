@@ -1,17 +1,20 @@
 """Meetings, read and requested for one owner (``owner_user_id``; ``None``
 on a project without auth reads every meeting)."""
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable
 from datetime import datetime, timedelta
 import importlib
 from importlib.util import find_spec
 from typing import Any
 from urllib.parse import urlsplit
+import zlib
 
 from sqlalchemy import delete, func, or_, update
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.concurrency import background
+from app.core.constants import CHART_RAMP
 from app.core.formatting import format_clock, format_span
 from app.core.time import utcnow
 from app.services.meetings.models import (
@@ -60,6 +63,11 @@ class MeetingInProgressError(RuntimeError):
 
 class NotASpeakerError(ValueError):
     """Nobody by that name spoke in the meeting."""
+
+
+class NothingToWriteError(RuntimeError):
+    """The notes cannot be written now: no model to, the bot is still in,
+    nothing was said, or a writer is already at it."""
 
 
 def detect_platform(url: str) -> Platform:
@@ -147,18 +155,42 @@ class MeetingsService:
             )
             for speaker, line in await self.transcript(meeting)
         ]
+        notes = kept.notes() if kept else None
+        under_way = meeting.status in NOT_DONE
+        writing = meeting_id in WRITING
+        can_write = notes_writer() is not None
         return MeetingRecord(
             meeting=meeting,
-            notes=kept.notes() if kept else None,
+            notes=notes,
             notes_error=kept.error if kept else None,
             model_name=kept.model_name if kept else None,
             transcript=transcript,
             status=status_label(meeting.status),
             length=call_length(meeting.joined_at, meeting.left_at),
             heard=heard_line(meeting.heard),
+            # Only a speaker has a participant row: the transcript names them.
+            people=sorted({row.speaker for row in transcript}),
+            mine=notes.mine(meeting.me) if notes else [],
+            under_way=under_way,
+            writing=writing,
             can_leave=meeting.status in LEAVABLE,
             can_delete=meeting.status not in IN_PROGRESS,
+            can_write=can_write,
+            can_rewrite=(
+                can_write and bool(transcript) and not under_way and not writing
+            ),
         )
+
+    async def write_notes_again(self, meeting_id: int) -> MeetingRecord:
+        """Start writing the notes over the old ones, in the background; the
+        read it returns says they are being written."""
+        record = await self.read(meeting_id)
+        write = notes_writer()
+        if write is None or not record.can_rewrite:
+            raise NothingToWriteError("No notes to write now")
+        WRITING.add(meeting_id)
+        background(write(meeting_id))
+        return record.model_copy(update={"writing": True, "can_rewrite": False})
 
     async def transcript(self, meeting: Meeting) -> list[tuple[str, TranscriptLine]]:
         """Each line of ``meeting`` (one ``get`` returned) with its speaker's
@@ -267,6 +299,26 @@ async def save_heard(
     await db.commit()
 
 
+def voice(name: str) -> int:
+    """The theme's color a speaker's name points at, 1 to ``CHART_RAMP``: the
+    same in every meeting, unless someone in it already has it
+    (``voices``)."""
+    return zlib.crc32(name.encode()) % CHART_RAMP + 1
+
+
+def voices(names: Iterable[str]) -> dict[str, int]:
+    """A color for each speaker in one meeting, none shared while the
+    colors last: each keeps their name's (``voice``) unless someone already
+    has it, then takes the next free one."""
+    taken: dict[str, int] = {}
+    for name in sorted(set(names)):
+        color = voice(name)
+        while color in taken.values() and len(taken) < CHART_RAMP:
+            color = color % CHART_RAMP + 1
+        taken[name] = color
+    return taken
+
+
 def status_label(status: str) -> str:
     """A meeting's status as the pages say it: "in_call" -> "In call"."""
     return status.replace("_", " ").capitalize()
@@ -280,13 +332,22 @@ def call_length(joined: datetime | None, left: datetime | None) -> str | None:
     return format_clock((left - joined).total_seconds())
 
 
-def heard_line(heard: dict[str, float] | None) -> str | None:
-    """How long each speaker was heard, most heard first: "Ada 4m 10s ·
-    Leonard 2m 30s"; None when nobody was."""
-    if not heard:
-        return None
+def heard_rows(heard: dict[str, float] | None) -> list[tuple[str, str, float]]:
+    """How long each speaker was heard, most heard first: their name, the
+    time ("4m 10s") and how it compares with the most heard (1.0)."""
+    heard = heard or {}
+    most = max(heard.values(), default=0) or 1
     ranked = sorted(heard.items(), key=lambda item: -item[1])
-    return " · ".join(f"{name} {format_span(seconds)}" for name, seconds in ranked)
+    return [
+        (name, format_span(seconds) or "0s", seconds / most) for name, seconds in ranked
+    ]
+
+
+def heard_line(heard: dict[str, float] | None) -> str | None:
+    """``heard_rows`` on one line: "Ada 4m 10s · Leonard 2m 30s"; None when
+    nobody was heard."""
+    rows = heard_rows(heard)
+    return " · ".join(f"{name} {span}" for name, span, _ in rows) or None
 
 
 async def meetings_counts(db: AsyncSession) -> dict[str, Any]:

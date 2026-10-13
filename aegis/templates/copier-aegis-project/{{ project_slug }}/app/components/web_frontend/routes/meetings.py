@@ -7,9 +7,11 @@ something is still happening (the bot on its way in or in the call, the
 notes being written), and stops once nothing is.
 """
 
+from collections.abc import Callable
+from itertools import groupby
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, Response
 
 from app.components.web_frontend.rendering import (
@@ -19,20 +21,18 @@ from app.components.web_frontend.rendering import (
     status_cell,
     templates,
 )
-from app.core.concurrency import background
 from app.core.formatting import format_clock, format_relative_time
-from app.services.meetings.bot import start_meeting
+from app.services.meetings.bot import send_bot
 from app.services.meetings.deps import as_http, get_meetings_service
-from app.services.meetings.models import Meeting, MeetingStatus
+from app.services.meetings.models import Meeting, MeetingRecord, MeetingStatus
 from app.services.meetings.service import (
     DEFAULT_BOT_NAME,
-    NOT_DONE,
-    WRITING,
     MeetingsService,
     UnsupportedMeetingLinkError,
     call_length,
-    notes_writer,
+    heard_rows,
     status_label,
+    voices,
 )
 
 router = APIRouter(prefix="/meetings")
@@ -43,6 +43,7 @@ Service = Annotated[MeetingsService, Depends(get_meetings_service)]
 LIST = "pages/meetings/index.html"
 PAGE = "pages/meetings/meeting.html"
 BODY = "pages/meetings/_body.html"
+SEND = "pages/meetings/_send.html"
 TONES = {
     MeetingStatus.JOINING: "accent",
     MeetingStatus.WAITING: "warn",
@@ -68,7 +69,34 @@ def row_of(meeting: Meeting, url: str) -> dict[str, Any]:
     }
 
 
-async def _list(request: Request, svc: MeetingsService, **form: Any) -> Response:
+def send_form(
+    send_url: str,
+    url: str = "",
+    bot_name: str = DEFAULT_BOT_NAME,
+    error: str | None = None,
+) -> dict[str, Any]:
+    """The send form's context (_send.html), posting to ``send_url``."""
+    return {"send_url": send_url, "url": url, "bot_name": bot_name, "error": error}
+
+
+async def send_and_open(
+    svc: MeetingsService,
+    url: str,
+    bot_name: str,
+    send_url: str,
+    opened: Callable[[int], str],
+) -> Response:
+    """Send the bot, then open its meeting at ``opened(id)``; a link it
+    cannot join is the form again, saying why (422)."""
+    try:
+        meeting = await send_bot(svc, url, bot_name)
+    except UnsupportedMeetingLinkError as exc:
+        form = send_form(send_url, url, bot_name, str(exc))
+        return HTMLResponse(fragment(SEND, **form), status_code=422)
+    return navigate(Response(), opened(meeting.id))  # type: ignore[arg-type]
+
+
+async def _list(request: Request, svc: MeetingsService) -> Response:
     meetings = await svc.list_meetings()
     notes = await svc.notes_for([m.id for m in meetings])  # type: ignore[misc]
     rows = []
@@ -76,45 +104,45 @@ async def _list(request: Request, svc: MeetingsService, **form: Any) -> Response
         kept = notes[m.id].notes() if m.id in notes else None  # type: ignore[index]
         mine = len(kept.mine(m.me)) if kept else None
         rows.append(row_of(m, f"/meetings/{m.id}") | {"mine": mine})
-    context = {"rows": rows, "url": "", "bot_name": DEFAULT_BOT_NAME, "error": None}
-    context |= form
-    return render(request, LIST, context, status_code=422 if "error" in form else 200)
+    return render(request, LIST, {"rows": rows} | send_form("/meetings"))
+
+
+def body_context(record: MeetingRecord) -> dict[str, Any]:
+    """What one meeting's body shows (and Overseer's drawer): the service's
+    read of it, as it is, and how these pages draw it."""
+    tone = TONES.get(record.meeting.status, "muted")
+    owners = [i.owner for i in (record.notes.action_items if record.notes else [])]
+    colors = voices([*record.people, *(owner for owner in owners if owner)])
+    return dict(record) | {
+        "status": status_cell(record.status, tone),
+        # Each speaker's color (--aegis-chart-N), in the transcript, on the
+        # action items they own, and in who talked (none: heard, not named).
+        "voices": colors,
+        # Who talked, as the house's ranked rows: audio no caption named
+        # stands apart, unmarked.
+        "talk": [
+            {
+                "label": name,
+                "value": span,
+                "ratio": ratio,
+                "dot": colors.get(name),
+                "tone": None if name in colors else "muted",
+            }
+            for name, span, ratio in heard_rows(record.meeting.heard)
+        ],
+        # One speaker's lines in a row, under their name once.
+        "turns": [
+            (speaker, list(rows))
+            for speaker, rows in groupby(record.transcript, key=lambda r: r.speaker)
+        ],
+        "clock": {row.id: format_clock(row.at) for row in record.transcript},
+        "people": [{"id": name, "name": name} for name in record.people],
+    }
 
 
 async def meeting_context(svc: MeetingsService, meeting_id: int) -> dict[str, Any]:
-    """Everything one meeting's body shows (and Overseer's drawer): the
-    service's read of it (``MeetingsService.read``, which Overseer's API
-    returns as it is), and what only these pages need."""
     with as_http():
-        record = await svc.read(meeting_id)
-    meeting, notes = record.meeting, record.notes
-    writing = meeting_id in WRITING
-    under_way = meeting.status in NOT_DONE
-    lines = record.transcript
-    can_write = notes_writer() is not None
-    # Only a speaker has a participant row, so the transcript names them all.
-    people = sorted({row.speaker for row in record.transcript})
-    return {
-        "meeting": meeting,
-        "status": status_cell(record.status, TONES.get(meeting.status, "muted")),
-        "length": record.length,
-        "heard": record.heard,
-        "can_leave": record.can_leave,
-        "can_delete": record.can_delete,
-        "lines": lines,
-        "clock": {row.id: format_clock(row.at) for row in lines},
-        "people": [{"id": name, "name": name} for name in people],
-        "notes": notes,
-        "mine": notes.mine(meeting.me) if notes else [],
-        "notes_error": record.notes_error,
-        "model_name": record.model_name,
-        "writing": writing,
-        "can_write": can_write,
-        # Written again now: the call is over, something was said, and no
-        # writer is already at it.
-        "can_rewrite": can_write and bool(lines) and not under_way and not writing,
-        "under_way": under_way,
-    }
+        return body_context(await svc.read(meeting_id))
 
 
 @router.get("", response_class=HTMLResponse)
@@ -127,52 +155,63 @@ async def join(
     request: Request,
     svc: Service,
     url: Annotated[str, Form()],
-    bot_name: Annotated[str, Form()] = DEFAULT_BOT_NAME,
+    bot_name: Annotated[str, Form()] = "",
 ) -> Response:
     """Send the bot in, then open its meeting."""
-    try:
-        meeting = await svc.request(url, bot_name.strip() or DEFAULT_BOT_NAME)
-    except UnsupportedMeetingLinkError as exc:
-        return await _list(request, svc, error=str(exc), url=url, bot_name=bot_name)
-    start_meeting(meeting.id)  # type: ignore[arg-type]
-    return navigate(Response(), f"/meetings/{meeting.id}")
+    return await send_and_open(
+        svc, url, bot_name, "/meetings", lambda meeting_id: f"/meetings/{meeting_id}"
+    )
 
 
 @router.get("/{meeting_id}", response_class=HTMLResponse)
 async def meeting_page(request: Request, svc: Service, meeting_id: int) -> Response:
-    return render(request, PAGE, await meeting_context(svc, meeting_id))
+    context = await meeting_context(svc, meeting_id) | {"prefix": "/meetings"}
+    return render(request, PAGE, context)
 
 
-@router.get("/{meeting_id}/body", response_class=HTMLResponse)
-async def meeting_body(svc: Service, meeting_id: int) -> HTMLResponse:
-    return HTMLResponse(fragment(BODY, **await meeting_context(svc, meeting_id)))
+def meeting_routes(
+    router: APIRouter, service: Callable[..., Any], body: str, prefix: str
+) -> None:
+    """The routes one meeting's live body answers: it re-reads itself, asks
+    the bot to leave, says which speaker the owner is, writes the notes
+    again. The Meetings page and Overseer's drawer register the same ones,
+    each with its own service scope, body template and URL ``prefix`` (the
+    router's own)."""
+    scoped = Annotated[MeetingsService, Depends(service)]
+
+    def drawn(record: MeetingRecord) -> HTMLResponse:
+        return HTMLResponse(fragment(body, **body_context(record), prefix=prefix))
+
+    async def read(svc: MeetingsService, meeting_id: int) -> HTMLResponse:
+        with as_http():
+            return drawn(await svc.read(meeting_id))
+
+    @router.get("/{meeting_id}/body", response_class=HTMLResponse)
+    async def live(svc: scoped, meeting_id: int) -> HTMLResponse:  # type: ignore[valid-type]
+        return await read(svc, meeting_id)
+
+    @router.post("/{meeting_id}/leave", response_class=HTMLResponse)
+    async def leave(svc: scoped, meeting_id: int) -> HTMLResponse:  # type: ignore[valid-type]
+        with as_http():
+            await svc.ask_to_leave(meeting_id)
+        return await read(svc, meeting_id)
+
+    @router.post("/{meeting_id}/me", response_class=HTMLResponse)
+    async def set_me(
+        svc: scoped,  # type: ignore[valid-type]
+        meeting_id: int,
+        name: Annotated[str, Form()] = "",
+    ) -> HTMLResponse:
+        """Which speaker the meeting's owner is; their action items follow."""
+        with as_http():
+            await svc.set_me(meeting_id, name or None)
+        return await read(svc, meeting_id)
+
+    @router.post("/{meeting_id}/notes", response_class=HTMLResponse)
+    async def write_notes(svc: scoped, meeting_id: int) -> HTMLResponse:  # type: ignore[valid-type]
+        """Write the notes again, over the old ones."""
+        with as_http():
+            return drawn(await svc.write_notes_again(meeting_id))
 
 
-@router.post("/{meeting_id}/leave", response_class=HTMLResponse)
-async def leave(svc: Service, meeting_id: int) -> HTMLResponse:
-    with as_http():
-        await svc.ask_to_leave(meeting_id)
-    return await meeting_body(svc, meeting_id)
-
-
-@router.post("/{meeting_id}/me", response_class=HTMLResponse)
-async def set_me(
-    svc: Service, meeting_id: int, name: Annotated[str, Form()] = ""
-) -> HTMLResponse:
-    """Which speaker the owner is; my action items follow."""
-    with as_http():
-        await svc.set_me(meeting_id, name or None)
-    return await meeting_body(svc, meeting_id)
-
-
-@router.post("/{meeting_id}/notes", response_class=HTMLResponse)
-async def write_notes(svc: Service, meeting_id: int) -> HTMLResponse:
-    """Write the notes again, over the old ones."""
-    context = await meeting_context(svc, meeting_id)
-    write = notes_writer()
-    if write is None or not context["can_rewrite"]:
-        raise HTTPException(status.HTTP_409_CONFLICT, "No notes to write now")
-    WRITING.add(meeting_id)
-    background(write(meeting_id))
-    context |= {"writing": True, "can_rewrite": False}
-    return HTMLResponse(fragment(BODY, **context))
+meeting_routes(router, get_meetings_service, BODY, "/meetings")

@@ -87,9 +87,9 @@ Each meeting is its owner's: with the auth service a user sees only the meetings
 
 ## In Overseer
 
-Overseer > Services > Meetings is the admin's view: every owner's meetings, newest first, with how many there are and how many the bot is in now. A row opens the meeting in the drawer: its status, owner, how long each speaker was heard, its notes and transcript. From there the admin asks the bot to leave a meeting it is still in, or deletes a meeting it is out of, with its transcript, notes and speakers.
+Overseer > Services > Meetings runs meetings as fully as the Meetings page does, across every owner: send the bot to a call from there (the meeting is the admin's own), and every owner's meetings are listed, newest first, with how many there are and how many the bot is in now. A row opens the meeting in the drawer: its status, owner and how long each speaker was heard, then the same notes and transcript as the page, with "I am" (which speaker the owner is, their action items first) and "Write them again". The drawer re-reads itself every few seconds while the bot is in or the notes are being written. From there the admin also asks the bot to leave a meeting it is still in, or deletes a meeting it is out of, with its transcript, notes and speakers.
 
-The Flet dashboard (`/dashboard`) has the same: a Meetings card with the counts, opening a modal that lists every owner's meetings beside the selected one, read in full, with the same two actions.
+The Flet dashboard (`/dashboard`) has the same: a Meetings card with the counts, opening a modal that sends the bot and lists every owner's meetings beside the selected one, read in full and followed while something is happening, with the same actions.
 
 ## CLI
 
@@ -116,4 +116,6 @@ Overseer's routes, across every owner. Reading them takes an admin where the sta
 | `GET /api/v1/meetings/admin` | Every owner's meetings, newest first |
 | `GET /api/v1/meetings/admin/{id}` | One meeting with its notes (or why there are none), transcript, and how long each speaker was heard |
 | `POST /api/v1/meetings/admin/{id}/leave` | Ask the bot to leave |
+| `POST /api/v1/meetings/admin/{id}/me` | `{"name": ...}`: which speaker the owner is (`null`: nobody); returns the meeting read in full |
+| `POST /api/v1/meetings/admin/{id}/notes` | Write the notes again, in the background; `409` while the bot is in, when nothing was said, or while a writer is at it |
 | `DELETE /api/v1/meetings/admin/{id}` | Delete the meeting with its transcript, notes and speakers; `409` while the bot is in it |

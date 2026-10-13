@@ -161,6 +161,12 @@ EXAMPLES: dict[str, dict[str, str]] = {
               {"label": "Running", "value": "48"},
               {"label": "Done", "value": "18,420", "tone": "ok"},
             ]) }}""",
+        "chart_dot": """
+            <span class="inline-flex items-center gap-4 text-sm">
+              <span class="inline-flex items-center gap-2">{{ chart_dot(1) }} Ada</span>
+              <span class="inline-flex items-center gap-2">{{ chart_dot(4) }} Grace</span>
+              <span class="inline-flex items-center gap-2">{{ chart_dot(7) }} Linus</span>
+            </span>""",
         "ranked_rows": """
             {{ ranked_rows([
               {"label": "load_test", "count": "3 workers", "value": "1,204", "ratio": 1.0},

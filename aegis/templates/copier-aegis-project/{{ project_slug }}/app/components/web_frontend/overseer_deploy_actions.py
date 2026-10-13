@@ -2,9 +2,11 @@
 provision), then deploy, back up, list backups, roll back and destroy.
 
 Each is asked of ``aegis deploy-agent`` on the developer's machine through
-the project's Redis (``app.components.deploy.agent``), so the cloud token
-and SSH key never enter the app, and comes back as its job, whose output
-the card streams. Offered on the dev build only: a deployed server is
+the project's Redis (``app.components.deploy.agent``), so the SSH key
+never enters the app, and comes back as its job, whose output the card
+streams. A new server is offered on each provider whose token the app
+holds (Overseer > Secrets, or ``.env``) or the agent does (its own
+environment). Offered on the dev build only: a deployed server is
 redeployed from the dev Overseer or CI. The htmx Overseer only; the Flet
 dashboard shows the commands.
 """
@@ -18,6 +20,7 @@ from app.core.config import settings
 from app.core.log import logger
 from app.services.system import hosting
 
+from . import overseer_secrets
 from .overseer_live import fragment_events
 from .rendering import fragment
 
@@ -45,15 +48,16 @@ def _deployed() -> bool:
     return settings.BUILD_ID != hosting.LOCAL
 
 
-def _provisionable(beat: dict[str, Any]) -> list[dict[str, Any]]:
-    """The providers the agent can create a server on: aegis provisions
-    there, and the agent holds its token."""
-    held = set(beat.get("providers") or ())
-    return [
-        {"key": p.key, "name": p.name, "size": p.size, "region": p.region}
-        for p in hosting.PROVIDERS
-        if "Provision" in p.can and p.key in held
-    ]
+async def _held(beat: dict[str, Any]) -> set[str]:
+    """The providers a server can be created on: their token is the app's
+    (``app.core.secrets``) or the agent's (its heartbeat)."""
+    return set(beat.get("providers") or ()) | await deploy_agent.tokens_here()
+
+
+def _secrets_page() -> str | None:
+    """Where a token can be set from here: the Secrets page, with the
+    secrets component to keep it; None where only ``.env`` can."""
+    return overseer_secrets.url() if overseer_secrets.has_component() else None
 
 
 def _server_name() -> str | None:
@@ -77,13 +81,25 @@ async def context() -> dict[str, Any]:
         return {"state": "no-agent", "command": AGENT_COMMAND}
     config = hosting.deploy_config()
     ready = (config.get("provision") or {}).get("status") == "ready"
+    held = await _held(beat)
+    open_to = [] if ready else hosting.PROVISIONABLE
     return {
         "state": "ready",
         "agent": beat,
         "partials": PARTIALS,
         "events": EVENTS,
         "event": EVENT,
-        "providers": [] if ready else _provisionable(beat),
+        "providers": [
+            {"key": p.key, "name": p.name, "size": p.size, "region": p.region}
+            for p in open_to
+            if p.key in held
+        ],
+        "missing": [
+            {"key": p.key, "name": p.name, "token": p.token}
+            for p in open_to
+            if p.key not in held
+        ],
+        "secrets_page": _secrets_page(),
         "server": bool(config.get("server")),
         "destroy": _server_name(),
         "job": await job_context(),
@@ -153,10 +169,10 @@ async def request_args(action: str, form: dict[str, str]) -> dict[str, str]:
     if action == "provision":
         return await _confirmed(form)
     args = validate(action, form)
-    offered = {p["key"] for p in _provisionable(beat)}
-    if action == "quote" and args["provider"] not in offered:
+    if action == "quote" and args["provider"] not in await _held(beat):
         raise RefusedError(
-            f"The deploy agent has no token to create a server on {args['provider']}."
+            f"No token to create a server on {args['provider']}: set it in "
+            "Overseer > Secrets (or .env), or where the deploy agent runs."
         )
     if action == "destroy" and args["confirm"] != _server_name():
         raise RefusedError("Type the server's name exactly to destroy it.")

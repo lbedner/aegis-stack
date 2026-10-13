@@ -12,11 +12,13 @@ import pytest
 
 from app.components.deploy import agent
 from app.components.web_frontend import overseer_deploy_actions as actions
+from app.components.web_frontend import overseer_secrets
 from app.core.config import settings
 from app.services.system import hosting
 from app.services.system.job_store import RedisJobStore
 from tests._audit import recording
 from tests._fake_redis import FakeRedis
+from tests._secret_settings import FakeStore, use_store
 from tests._fake_runtime import SERVER, FakeRuntime, use_runtime
 from tests.web.dom import none, one, select, text, triggers
 from tests.web.overseer import page_html, sent_events, sign_in, status_with
@@ -32,12 +34,21 @@ QUOTE = {
     "price": "12.00",
     "currency": "USD",
 }
+TOKEN = "dop_v1_from-the-app-wxyz"
 
 
 @pytest.fixture
-def redis(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> FakeRedis:
+def store(monkeypatch: pytest.MonkeyPatch) -> FakeStore:
+    """No provider token in ``.env``, and a secrets store to set one in."""
+    for p in hosting.PROVISIONABLE:
+        monkeypatch.setitem(settings.__dict__, p.token, None)
+    return use_store(monkeypatch)
+
+
+@pytest.fixture
+def redis(app: FastAPI, monkeypatch: pytest.MonkeyPatch, store: FakeStore) -> FakeRedis:
     """The dev build, Redis present, an agent listening with a DigitalOcean
-    token, and no deploy record yet."""
+    token, the app holding none, and no deploy record yet."""
     sign_in(app, monkeypatch, status_with())
     monkeypatch.setattr(settings, "BUILD_ID", hosting.LOCAL)
     monkeypatch.setattr(agent, "has_redis", lambda: True)
@@ -47,6 +58,11 @@ def redis(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> FakeRedis:
     fake.strings[agent.HEARTBEAT] = json.dumps(beat)
     deployed(monkeypatch, {})
     return fake
+
+
+def _agent_holds(redis: FakeRedis, *providers: str) -> None:
+    beat = json.loads(redis.strings[agent.HEARTBEAT])
+    redis.strings[agent.HEARTBEAT] = json.dumps(beat | {"providers": providers})
 
 
 def deployed(monkeypatch: pytest.MonkeyPatch, config: dict[str, Any]) -> None:
@@ -115,7 +131,7 @@ def test_without_an_agent_it_shows_how_to_start_one(
     card = _card(TestClient(app))
     said = text(one(card, '[data-deploy-state="no-agent"]'))
     assert "make serve" in said and "aegis deploy-agent" in said
-    assert "stay on your machine" in said
+    assert "SSH key, which stays on your machine" in said
     none(card, "[data-write]")
 
 
@@ -158,8 +174,50 @@ def test_get_price_asks_the_agent_and_is_audited(
     assert event["job"] == request["job_id"]
 
 
+def test_a_provider_is_offered_when_only_the_app_has_its_token(
+    redis: FakeRedis, store: FakeStore, app: FastAPI
+) -> None:
+    _agent_holds(redis)
+    store.values["HCLOUD_TOKEN"] = "hetzner-token-from-the-app"
+    card = _card(TestClient(app))
+    (form,) = select(card, "form[data-provision]")
+    assert form.get("data-provision") == "hetzner"
+    none(card, '[data-token-missing="hetzner"]')
+
+
+def test_with_no_token_anywhere_it_says_where_to_set_it(
+    redis: FakeRedis, store: FakeStore, app: FastAPI
+) -> None:
+    _agent_holds(redis)
+    card = _card(TestClient(app))
+    none(card, "form[data-provision]")
+    for p in hosting.PROVISIONABLE:
+        missing = one(card, f'[data-token-missing="{p.key}"]')
+        assert p.token in text(missing)
+        if overseer_secrets.has_component():
+            assert "Overseer > Secrets" in text(missing)
+            assert one(missing, "a").get("href") == overseer_secrets.url()
+        else:
+            assert ".env" in text(missing)
+            none(missing, "a")
+
+
+def test_get_price_sends_the_apps_token_outside_the_args_and_audit(
+    redis: FakeRedis, store: FakeStore, app: FastAPI
+) -> None:
+    store.values["DIGITALOCEAN_TOKEN"] = TOKEN
+    client = TestClient(app)
+    audit = recording(client)
+    form = {"provider": "digitalocean", "size": "s-1vcpu-2gb", "region": "nyc3"}
+    client.post(f"{actions.PARTIALS}/quote", data=form)
+    (request,) = _queued(redis)
+    assert request["token"] == TOKEN and request["args"] == form
+    assert TOKEN not in json.dumps(audit.events, default=str)
+    assert TOKEN not in json.dumps(redis.hashes)
+
+
 def test_a_provider_without_a_token_here_is_refused(
-    redis: FakeRedis, app: FastAPI
+    redis: FakeRedis, store: FakeStore, app: FastAPI
 ) -> None:
     client = TestClient(app)
     audit = recording(client)

@@ -6,6 +6,7 @@
     "can": ["Detect", "Deploy", "Provision"],
     "command": "aegis deploy-provision --provider hetzner",
     "token": "HCLOUD_TOKEN",
+    "check": "https://api.hetzner.cloud/v1/server_types?per_page=1",
     "size": "cx23",
     "region": "nbg1",
     "currency": "EUR"
@@ -17,6 +18,7 @@
     "can": ["Detect", "Deploy", "Provision"],
     "command": "aegis deploy-provision --provider digitalocean",
     "token": "DIGITALOCEAN_TOKEN",
+    "check": "https://api.digitalocean.com/v2/account",
     "size": "s-1vcpu-2gb",
     "region": "nyc3",
     "currency": "USD"

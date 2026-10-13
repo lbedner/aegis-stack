@@ -47,6 +47,7 @@ OWNERS = (
     "app.services.ops.adapters.porkbun_keys",
     "app.services.rag.config",
     "app.components.storage.s3",
+    "app.components.deploy.agent",
     "app.services.finance.adapters.providers.plaid_keys",
     "app.services.finance.adapters.providers.snaptrade",
     "app.services.insights.adapters.collectors.base",
@@ -88,10 +89,9 @@ class Secret:
     # Read with ``secrets.get``, so a stored value takes effect. False for a
     # key read through ``settings`` (a ``Credential``, only ever ``.env``).
     live: bool = True
-    # A ``Configurable`` setting rather than a credential
-    # (``app.core.saved_settings``): its own page, its default shown, and a
-    # value checked against its type: ``parse`` returns the text to store,
-    # or raises SecretRejectedError.
+    # A ``Configurable`` setting rather than a credential (``app.core.saved_settings``):
+    # its own page, its default shown, and a value checked against its type: ``parse``
+    # returns the text to store, or raises SecretRejectedError.
     setting: bool = False
     default: str | None = None
     parse: Callable[[str], str] | None = None

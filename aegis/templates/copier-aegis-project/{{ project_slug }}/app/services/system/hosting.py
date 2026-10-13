@@ -41,6 +41,7 @@ class Provider:
     can: tuple[str, ...]  # what aegis does there: Detect, Deploy, Provision
     command: str
     token: str | None = None  # the environment variable the command reads
+    check: str | None = None  # a cheap authenticated GET that tells a token works
     size: str | None = None  # deploy-provision's default, where it provisions
     region: str | None = None
     currency: str | None = None  # what its prices are in
@@ -51,6 +52,8 @@ PROVIDERS = tuple(
     for p in json.loads(Path(__file__).with_name("providers.json").read_text())
 )
 _BY_KEY = {p.key: p for p in PROVIDERS}
+# Where aegis creates servers, each with the token it needs.
+PROVISIONABLE = tuple(p for p in PROVIDERS if "Provision" in p.can)
 
 _running: dict[str, Any] | None = None
 

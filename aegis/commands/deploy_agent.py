@@ -1,8 +1,8 @@
 """
 ``aegis deploy-agent``: the host runner behind the Overseer's deploy actions.
 
-The app cannot deploy itself: the aegis CLI, the SSH key and the cloud
-token are on the developer's machine, not in its container. So the
+The app cannot deploy itself: the aegis CLI and the SSH key are on the
+developer's machine, not in its container. So the
 Overseer queues a request on the project's own Redis and this command, run
 on that machine in the project directory, takes it: one at a time, through
 the same ``aegis deploy-*`` commands a person would type, their output
@@ -12,8 +12,12 @@ record) for the page to show.
 The protocol (key names, the actions, each argument's pattern, the check
 a request must pass) has one home, ``app/components/deploy/protocol.py``
 in the project template; this loads it out of the template shipped in
-this package, as the provider table is read. Tokens stay here: read from this process's environment,
-never written to Redis, and masked in every line sent.
+this package, as the provider table is read.
+
+A provider token comes with the request that needs it (the app's secret)
+or from this process's environment; the request's wins. It reaches a
+command only through the provider's environment variable, never its
+arguments, is masked in every line sent, and is never written anywhere.
 """
 
 import contextlib
@@ -43,7 +47,7 @@ from ..core.provision.http import ProvisionError, json_requester, mask_token
 from ..core.provision.registry import PROVIDERS
 from ..core.template_cleanup import env_value
 from ..i18n import lazy_t, t
-from .deploy import _get_project_root
+from .deploy import _get_project_root, _load_deploy_config
 from .deploy_provision import CLOUDFLARE_TOKEN_ENV
 
 _SPEC = importlib.util.spec_from_file_location(
@@ -60,6 +64,7 @@ _protocol = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_protocol)
 PROTOCOL: dict[str, Any] = _protocol.PROTOCOL
 RefusedError = _protocol.RefusedError
+checked_token = _protocol.checked_token
 # The app's job record (``RedisJobStore``): its key prefix and lifetime.
 JOB_PREFIX = "jobs:"
 JOB_KEEP_SECONDS = 6 * 3600
@@ -155,13 +160,21 @@ class Job:
         )
 
 
-def run(job: Job, root: Path, command: list[str], args: dict[str, str]) -> int:
+def run(
+    job: Job,
+    root: Path,
+    command: list[str],
+    args: dict[str, str],
+    env: dict[str, str] | None = None,
+) -> int:
     """``aegis <command>`` on the project, each argument its own ``--flag``
-    (never through a shell), its output streamed into ``job``. Its exit code."""
+    (never through a shell), ``env`` (a request's token) added to its
+    environment, its output streamed into ``job``. Its exit code."""
+    env = env or {}
     argv = [*AEGIS, command[0], "--project-path", str(root), *command[1:]]
     for key, value in args.items():
         argv += [f"--{key}", value]
-    tokens = _tokens()
+    tokens = [*env.values(), *_tokens()]
     with subprocess.Popen(
         argv,
         cwd=root,
@@ -170,7 +183,7 @@ def run(job: Job, root: Path, command: list[str], args: dict[str, str]) -> int:
         stderr=subprocess.STDOUT,
         text=True,
         errors="replace",
-        env=os.environ | {"PYTHONUNBUFFERED": "1"},
+        env=os.environ | env | {"PYTHONUNBUFFERED": "1"},
     ) as process:
         for raw in process.stdout or ():
             line = raw.rstrip()
@@ -181,11 +194,12 @@ def run(job: Job, root: Path, command: list[str], args: dict[str, str]) -> int:
         return process.wait()
 
 
-def quote(args: dict[str, str]) -> dict[str, str]:
-    """The provider's monthly price for the size and region, asked here,
-    with the request's arguments beside it."""
+def quote(args: dict[str, str], env: dict[str, str]) -> dict[str, str]:
+    """The provider's monthly price for the size and region, asked here
+    with the request's token (``env``) or this process's, with the
+    request's arguments beside it."""
     spec = PROVIDERS[args["provider"]]
-    token = os.environ.get(spec.token_env, "").strip()
+    token = env.get(spec.token_env) or os.environ.get(spec.token_env, "").strip()
     if not token:
         raise RefusedError(t("provision.token_missing", env=spec.token_env))
     client = spec.client(json_requester(spec.api_url, token))
@@ -209,20 +223,37 @@ def _fresh(at: Any) -> None:
         raise RefusedError(t("deploy_agent.stale", minutes=minutes))
 
 
-def _execute(job: Job, root: Path, action: str, args: dict[str, str]) -> None:
+def _token_env(
+    root: Path, action: str, args: dict[str, str], token: str | None
+) -> dict[str, str]:
+    """The request's token under its provider's variable (the provider it
+    names, else the provisioned server's); empty when it brought none."""
+    if token is None:
+        return {}
+    record = (_load_deploy_config(str(root)) or {}).get("provision") or {}
+    key = _protocol.token_provider(action, args, record)
+    if key not in PROVIDERS:
+        raise RefusedError(t("deploy_agent.no_provider"))
+    return {PROVIDERS[key].token_env: token}
+
+
+def _execute(
+    job: Job, root: Path, action: str, args: dict[str, str], token: str | None
+) -> None:
+    env = _token_env(root, action, args, token)
     if action == "quote":
-        job.done(quote(args))
+        job.done(quote(args, env))
         return
     if action == "provision":
         # The price confirmed in the Overseer, asked again before anything
         # is created; checked here, so it is not one of the command's flags.
         confirmed = args.pop("price")
-        if (price := quote(args)["price"]) != confirmed:
+        if (price := quote(args, env)["price"]) != confirmed:
             raise RefusedError(
                 t("deploy_agent.price_changed", price=price, confirmed=confirmed)
             )
     command = PROTOCOL["actions"][action]["command"]
-    if code := run(job, root, command, args):
+    if code := run(job, root, command, args, env):
         raise RefusedError(
             t("deploy_agent.command_failed", command=f"aegis {command[0]}", code=code)
         )
@@ -245,7 +276,9 @@ def handle(client: Any, root: Path, raw: str) -> None:
     typer.echo(t("deploy_agent.request", action=action, by=request.get("by") or "?"))
     try:
         _fresh(request.get("at"))
-        _execute(job, root, action, validate(action, request.get("args")))
+        args = validate(action, request.get("args"))
+        token = checked_token(action, request.get("token"))
+        _execute(job, root, action, args, token)
     except RefusedError as exc:
         job.fail(str(exc))
         brand.warn(str(exc))
@@ -316,8 +349,9 @@ def deploy_agent_command(
 
     Listens on the project's Redis for what Overseer > Deployments asks for
     (a price, a new server, a deploy, a backup, a rollback, a destroy) and
-    runs it with the aegis deploy commands, one at a time. Cloud tokens and
-    your SSH key stay here: run it where they are, with the stack up.
+    runs it with the aegis deploy commands, one at a time, with your SSH
+    key: run it where that is, with the stack up. A cloud token comes with
+    the request (Overseer > Secrets) or from this shell's environment.
 
     Examples:
         - aegis deploy-agent

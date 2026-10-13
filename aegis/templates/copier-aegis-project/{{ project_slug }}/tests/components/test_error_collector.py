@@ -15,9 +15,11 @@ from app.core.runtime import Instance, RuntimeUnavailableError, parse_log_line
 def test_same_timestamp_ordinals_survive_replay() -> None:
     instance = Instance("id", "server", "webserver", "running")
     identities = []
+    # One stamp for both reads: a replay is the same lines, and a second
+    # ticking over between reads would make them different lines.
+    stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S") + ".123456789Z"
     for _ in range(2):
         reader = SourceReader(instance, "server")
-        stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S") + ".123456789Z"
         for raw in ("INFO: hello", "ERROR: failed", "ERROR: failed"):
             identities.extend(
                 reader.feed(parse_log_line(stamp + " " + raw, "stderr"), now=0)

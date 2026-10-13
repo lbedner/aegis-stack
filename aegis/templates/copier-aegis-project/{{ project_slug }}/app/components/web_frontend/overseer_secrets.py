@@ -9,7 +9,7 @@ here (``routes/partials/overseer_secrets.py``). An unset key reads Missing
 when something enabled needs it, Not used when it is only a choice, and a
 key with a provider check can be tested wherever it is set."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from importlib.util import find_spec
 from itertools import groupby
 from typing import Any
@@ -126,6 +126,20 @@ def _row(row: secrets.SecretStatus, writable: bool) -> dict[str, Any]:
         "env_only": writable and not row.live and row.source != secrets.ENV,
         "testable": row.is_set and row.verifiable,
     }
+
+
+async def rows_for(names: Iterable[str], back: str) -> dict[str, dict[str, Any]]:
+    """This page's rows for ``names``, to show on another page (``back``,
+    where each set dialog returns): held or not, and set here, or changed
+    in .env. A name nothing declares is held by nobody."""
+    wanted = set(names)
+    writable = secrets.writable()
+    found = {
+        r.name: _row(r, writable) | {"held": r.is_set, "dialog": set_url(r.name, back)}
+        for r in await secrets.status()
+        if r.name in wanted
+    }
+    return {name: found.get(name, {"name": name, "held": False}) for name in wanted}
 
 
 def _summary(rows: list[secrets.SecretStatus]) -> str:

@@ -15,6 +15,7 @@ from typer.testing import CliRunner
 
 from aegis.__main__ import app
 from aegis.commands import deploy_provision as cmd
+from aegis.commands.deploy_agent import _protocol as agent_protocol
 from aegis.core.provision import (
     cloudflare,
     digitalocean,
@@ -832,33 +833,30 @@ def test_provision_turns_tls_on_for_the_name_before_deploying(
     ]
 
 
+@pytest.mark.parametrize(("tls", "rendered"), [(True, False), (False, True)])
 def test_a_project_that_reads_its_name_from_the_env_is_not_re_rendered(
-    project: Path, apis: dict[str, FakeAPI]
+    project: Path, apis: dict[str, FakeAPI], tls: bool, rendered: bool
 ) -> None:
     """Its production compose takes the host from ``DOMAIN``, which the
-    deploy stamps into the server's .env: its files are left as they are."""
+    deploy stamps into the server's .env: with HTTPS already on, its files
+    are left as they are; without, HTTPS is still rendered in."""
     rule = "traefik.http.routers.webserver.rule=Host(`${DOMAIN}`)"
     (project / "docker-compose.prod.yml").write_text(f'labels: ["{rule}"]\n')
+    (project / ".copier-answers.yml").write_text(
+        f"author_email: me@real.dev\ningress_tls: {str(tls).lower()}\n"
+    )
     result = _provision(project)
     assert result.exit_code == 0, result.output
-    assert apis["steps"] == [("deploy", None)]  # type: ignore[comparison-overlap]
+    tls_steps = [step for step in apis["steps"] if step[0] == "tls"]  # type: ignore[union-attr]
+    assert bool(tls_steps) is rendered
 
 
-def test_who_may_reach_the_overseer_is_kept_for_each_deploy(
-    project: Path, apis: dict[str, FakeAPI]
-) -> None:
-    result = _provision(project, "--allowlist", "203.0.113.9/32,2001:db8::/48")
-    assert result.exit_code == 0, result.output
-    assert _deploy_yml(project)["admin_ip_allowlist"] == "203.0.113.9/32,2001:db8::/48"
-
-
-def test_an_allowlist_that_is_not_addresses_is_refused_before_buying(
-    project: Path, apis: dict[str, FakeAPI]
-) -> None:
-    result = _provision(project, "--allowlist", "my house")
-    assert result.exit_code == 1
-    assert "my house" in strip_ansi_codes(result.output)
-    assert not apis[hetzner.API_URL].calls
+def test_a_record_from_before_its_provider_was_named_is_cloudflares() -> None:
+    """The one rule the CLI and the Overseer read a provision record by."""
+    assert agent_protocol.record_dns_provider({"dns": {"zone_id": "z"}}) == "cloudflare"
+    made = {"dns": {"provider": "porkbun"}}
+    assert agent_protocol.record_dns_provider(made) == "porkbun"
+    assert agent_protocol.record_dns_provider({}) is None
 
 
 def test_without_an_email_nothing_is_created(

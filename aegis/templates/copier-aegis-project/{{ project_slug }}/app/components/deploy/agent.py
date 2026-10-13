@@ -31,6 +31,7 @@ from app.components.deploy.protocol import (
     RefusedError,
     checked_token,
     kept_key,
+    record_dns_provider,
     token_provider,
     validate,
 )
@@ -114,7 +115,7 @@ def _verify(url: str) -> Callable[[str], Awaitable[None]]:
 SECRETS = tuple(
     Secret(
         p.token,
-        owner="DNS" if "DNS" in p.can else "Deploy",
+        owner=f"DNS ({p.name})" if "DNS" in p.can else "Deploy",
         label=f"{p.name} API token",
         verify=_verify(p.check) if p.check else None,
     )
@@ -168,25 +169,27 @@ async def _token(action: str, args: dict[str, str]) -> str | None:
     agent will check it; None where it needs none or the app has none."""
     record = hosting.deploy_config().get("provision") or {}
     key = token_provider(action, args, record)
-    provider = next((p for p in hosting.PROVISIONABLE if p.key == key), None)
-    if provider is None or provider.token is None:
+    found = hosting.provider(key)
+    if found is None or found not in hosting.PROVISIONABLE or found.token is None:
         return None
-    return checked_token(action, await secrets.get(provider.token))
+    return checked_token(action, await secrets.get(found.token))
 
 
 async def _dns_keys(action: str, args: dict[str, str]) -> dict[str, str]:
     """The DNS provider's keys ``action`` carries: the provider a provision
-    names (``dns``), else the one the provisioned server's record was made
-    at; nothing for an action that needs none, or keys the app lacks."""
+    on a domain names (``dns``), else the one the provisioned server's
+    record was made at; nothing for an action that needs none (a provision
+    with no domain), or keys the app lacks."""
     if not PROTOCOL["actions"][action].get("dns"):
         return {}
-    record = hosting.deploy_config().get("provision") or {}
-    key = args.get("dns") or (record.get("dns") or {}).get("provider")
-    provider = next((p for p in hosting.DNS if p.key == key), None)
-    if provider is None:
+    if action == "provision" and not args.get("domain"):
         return {}
-    found = await secrets.get_many(*provider.secrets)
-    return {name: value for name in provider.secrets if (value := found.get(name))}
+    record = hosting.deploy_config().get("provision") or {}
+    found = hosting.provider(args.get("dns") or record_dns_provider(record))
+    if found is None or found not in hosting.DNS:
+        return {}
+    held = await secrets.get_many(*found.secrets)
+    return {name: value for name in found.secrets if (value := held.get(name))}
 
 
 async def enqueue(action: str, args: dict[str, str], by: str) -> str:

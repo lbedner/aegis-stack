@@ -163,6 +163,14 @@ def kept_key(action: str, args: dict[str, str]) -> str:
     return PROTOCOL["actions"][action]["kept"].format(**args)
 
 
+def record_dns_provider(record: dict[str, Any]) -> str | None:
+    """The DNS provider a provision record's name was made at; a record from
+    before the provider was written down is Cloudflare's (the only one
+    then). None without a record made."""
+    made = record.get("dns")
+    return (made.get("provider") or "cloudflare") if made else None
+
+
 def token_provider(
     action: str, args: dict[str, str], record: dict[str, Any]
 ) -> str | None:

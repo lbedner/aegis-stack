@@ -6,8 +6,10 @@ to one, step by step; History joins deploys with their records; Backups
 the database's. The actions (a new server, deploy, back up, roll back,
 destroy) are ``overseer_deploy_actions``."""
 
+from collections.abc import Iterable, Set
 from typing import Any
 
+from app.core import secrets
 from app.core.parts import Category
 from app.services.system import hosting, ui_deployments
 from app.services.system.models import ComponentStatus
@@ -76,6 +78,8 @@ async def section_context(
             "section_subtitle": "From this machine to a server of its own.",
             "actions": await _steps_context(),
             "overview_url": ITEM.url,
+            # Whether a key can be set here (the Secrets rows' actions read it).
+            "writable": secrets.writable(),
         }
     return {
         "section_subtitle": "What is deployed, and where.",
@@ -104,23 +108,12 @@ async def _deployed() -> dict[str, Any]:
     }
 
 
-# The way from this machine to a server, in order. Provisioning deploys,
-# so the server step ends with the app live there. A domain of your own is
-# optional: without one the server gets an sslip.io name.
-STEPS = (
-    ("agent", "Deploy agent"),
-    ("where", "Where"),
-    ("domain", "Domain"),
-    ("server", "Server"),
-)
+# The way from this machine to a server, in order: the agent that runs it,
+# a domain of your own (optional: without one the server gets an sslip.io
+# name), then the server: its cloud, that cloud's keys, and the server.
+# Provisioning deploys, so the server step ends with the app live there.
+STEPS = (("agent", "Deploy agent"), ("domain", "Domain"), ("server", "Server"))
 OPTIONAL = {"domain"}
-OWN_SERVER = "aegis deploy-init --host <your server's address>"
-
-
-def _secrets_page() -> str | None:
-    """Where a token can be set from here: the Secrets page, with the
-    secrets component to keep it; None where only ``.env`` can."""
-    return overseer_secrets.url() if overseer_secrets.has_component() else None
 
 
 def _steps(summaries: dict[str, str]) -> list[dict[str, Any]]:
@@ -142,31 +135,35 @@ def _steps(summaries: dict[str, str]) -> list[dict[str, Any]]:
                 "title": title,
                 "status": status,
                 "summary": summaries.get(key),
+                # Its body shown: at hand, or optional (its provider can
+                # still change once done).
+                "open": status == "current" or key in OPTIONAL,
             }
         )
     return found
 
 
-async def _dns(back: str) -> list[dict[str, Any]]:
-    """Each DNS provider and its keys: whether the app holds each (Overseer
-    > Secrets, or ``.env``), and the dialog that sets it, which comes back
-    to ``back``."""
-    held = await actions.dns_held()
+def _choices(
+    providers: Iterable[hosting.Provider],
+    rows: dict[str, dict[str, Any]],
+    elsewhere: Set[str] = frozenset(),
+) -> list[dict[str, Any]]:
+    """Each of ``providers`` to pick from: its terminal way (``command``,
+    and the keys it ``reads``), its keys as Overseer > Secrets shows them
+    (``rows``), and whether it is held, by the app, or, for one in
+    ``elsewhere``, where the deploy agent runs."""
     return [
         {
             "key": p.key,
             "name": p.name,
             "logo": p.logo,
-            "secrets": [
-                {
-                    "name": name,
-                    "held": held[name],
-                    "url": overseer_secrets.set_url(name, back),
-                }
-                for name in p.secrets
-            ],
+            "command": p.command,
+            "reads": list(p.secrets),
+            "elsewhere": p.key in elsewhere,
+            "held": p.key in elsewhere or all(rows[n]["held"] for n in p.secrets),
+            "secrets": [rows[n] for n in p.secrets],
         }
-        for p in hosting.DNS
+        for p in providers
     ]
 
 
@@ -180,31 +177,29 @@ async def _steps_context() -> dict[str, Any]:
         return found | {"view": "has-server", "server": hosting.deploys_to()}
     agent = found["agent"]
     listening = agent["state"] == "ready"
-    held = await actions.held(agent.get("beat") or {})
-    providers = [p for p in hosting.PROVISIONABLE if p.key in held]
     summaries = {}
     if listening:
         beat = agent["beat"]
         summaries["agent"] = f"Listening on {beat['host']} (aegis {beat['version']})"
-    if providers:
-        summaries["where"] = ", ".join(p.name for p in providers) + ": token set"
-    dns = await _dns(NEW_URL)
-    if named := [d["name"] for d in dns if all(k["held"] for k in d["secrets"])]:
-        summaries["domain"] = ", ".join(named) + ": keys set"
+    # Every key on the page in one read: the clouds' and the DNS providers'.
+    names = [n for p in (*hosting.PROVISIONABLE, *hosting.DNS) for n in p.secrets]
+    rows = await overseer_secrets.rows_for(names, NEW_URL)
+    agents = set((agent.get("beat") or {}).get("providers") or ())
+    clouds = _choices(hosting.PROVISIONABLE, rows, agents)
+    for cloud, p in zip(clouds, hosting.PROVISIONABLE, strict=True):
+        # Its new-server form, where the agent can be asked with its token.
+        cloud["form"] = actions.waiting(p) if listening and cloud["held"] else None
+    dns = _choices(hosting.DNS, rows)
+    ready = [d for d in dns if d["held"]]
+    if ready:
+        summaries["domain"] = ", ".join(d["name"] for d in ready) + ": keys set"
     return found | {
         "view": "steps",
         "steps": _steps(summaries),
+        # Each picker opens on a provider whose keys are set: the first
+        # cloud otherwise, no DNS provider (an sslip.io name).
+        "clouds": clouds,
+        "cloud_choice": next((c["key"] for c in clouds if c["held"]), clouds[0]["key"]),
         "dns": dns,
-        "providers": [actions.waiting(p) for p in providers] if listening else [],
-        "missing": [
-            {"key": p.key, "name": p.name, "token": p.token}
-            for p in hosting.PROVISIONABLE
-            if p.key not in held
-        ],
-        "secrets_page": _secrets_page(),
-        "own_server": OWN_SERVER,
-        "terminal": [
-            {"name": p.name, "command": p.command, "token": p.token}
-            for p in hosting.PROVIDERS
-        ],
+        "dns_choice": ready[0]["key"] if ready else "",
     }

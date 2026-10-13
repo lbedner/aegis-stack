@@ -7874,8 +7874,14 @@ command stops before creating anything.</p>
   use a project dedicated to this app.</li>
 <li><code>DIGITALOCEAN_TOKEN</code> (<code>--provider digitalocean</code>), a DigitalOcean API token
   with write scope.</li>
-<li><code>CLOUDFLARE_API_TOKEN</code>, only with <code>--domain</code>: a token with DNS edit rights on
-  the zone that owns the name.</li>
+<li>Only with <code>--domain</code>, the DNS provider's keys (<code>--dns</code> names one; by default
+  the first whose keys are set):<ul>
+<li><code>CLOUDFLARE_API_TOKEN</code>: a token with DNS edit rights on the zone that
+  owns the name.</li>
+<li><code>PORKBUN_API_KEY</code> and <code>PORKBUN_SECRET_KEY</code>, with API ACCESS on for the
+  domain (its details page on porkbun.com).</li>
+</ul>
+</li>
 </ul>
 <p>Without <code>--domain</code> the app gets an <code>sslip.io</code> name (<code>203-0-113-7.sslip.io</code>),
 so a first deploy needs no domain at all.</p>
@@ -7883,6 +7889,12 @@ so a first deploy needs no domain at all.</p>
 HTTP and HTTPS in: Docker-published ports bypass the server's own ufw, so the
 firewall outside the droplet is the one that holds. It is deleted with the
 droplet.</p>
+<p>A project whose <code>docker-compose.prod.yml</code> takes its host from <code>${DOMAIN}</code> is
+left as it is: each deploy stamps into the server's <code>.env</code>, beside
+<code>BUILD_ID</code>, what provisioning recorded in <code>.aegis/deploy.yml</code>: the server's
+name as <code>DOMAIN</code>, the certificate's address as <code>ACME_EMAIL</code>, and <code>--allowlist</code>
+as <code>ADMIN_IP_ALLOWLIST</code>. Any other project has HTTPS rendered into its
+files for the name, as <code>aegis ingress-enable</code> does.</p>
 <p>Every resource is recorded under <code>provision:</code> in <code>.aegis/deploy.yml</code> the moment
 it exists. If a later step fails, the command lists what was created and offers
 to delete it; run it again to resume instead.</p>
@@ -7894,8 +7906,10 @@ to delete it; run it again to resume instead.</p>
 <li><code>--provider TEXT</code>, Cloud provider: <code>hetzner</code> (default) or <code>digitalocean</code></li>
 <li><code>--size TEXT</code>, Server type (default: <code>cx23</code> on Hetzner, <code>s-1vcpu-2gb</code> on DigitalOcean)</li>
 <li><code>--region TEXT</code>, Provider location (default: <code>nbg1</code> on Hetzner, <code>tor1</code> on DigitalOcean)</li>
-<li><code>--domain TEXT</code>, Hostname to point at the server through Cloudflare</li>
+<li><code>--domain TEXT</code>, Hostname to point at the server through its DNS provider</li>
+<li><code>--dns TEXT</code>, DNS provider for <code>--domain</code>: <code>porkbun</code> or <code>cloudflare</code> (default: the first whose keys are set)</li>
 <li><code>--email TEXT</code>, Address Let's Encrypt registers the certificate to (default: the project's <code>author_email</code>)</li>
+<li><code>--allowlist TEXT</code>, Networks that may reach the Overseer and admin paths, comma-separated (e.g. <code>203.0.113.9/32</code>)</li>
 <li><code>--ssh-key TEXT</code>, Public key installed for root (default: the first of <code>~/.ssh/id_ed25519.pub</code>, <code>id_ecdsa.pub</code>, <code>id_rsa.pub</code> that exists)</li>
 <li><code>--project-path TEXT</code>, Path to the project (default: current directory)</li>
 <li><code>--yes, -y</code>, Skip the price confirmation</li>
@@ -7905,6 +7919,7 @@ to delete it; run it again to resume instead.</p>
 </span><span id="__span-31-2"><a id="__codelineno-31-2" name="__codelineno-31-2" href="#__codelineno-31-2"></a>aegis<span class="w"> </span>deploy-provision<span class="w"> </span>--size<span class="w"> </span>cx33<span class="w"> </span>--region<span class="w"> </span>fsn1
 </span><span id="__span-31-3"><a id="__codelineno-31-3" name="__codelineno-31-3" href="#__codelineno-31-3"></a>aegis<span class="w"> </span>deploy-provision<span class="w"> </span>--provider<span class="w"> </span>digitalocean<span class="w"> </span>--region<span class="w"> </span>fra1
 </span><span id="__span-31-4"><a id="__codelineno-31-4" name="__codelineno-31-4" href="#__codelineno-31-4"></a>aegis<span class="w"> </span>deploy-provision<span class="w"> </span>--domain<span class="w"> </span>app.example.com
+</span><span id="__span-31-5"><a id="__codelineno-31-5" name="__codelineno-31-5" href="#__codelineno-31-5"></a>aegis<span class="w"> </span>deploy-provision<span class="w"> </span>--domain<span class="w"> </span>app.example.com<span class="w"> </span>--dns<span class="w"> </span>porkbun
 </span></code></pre></div></p>
 <hr />
 <h3 id="aegis-deploy-destroy">aegis deploy-destroy</h3>
@@ -7954,14 +7969,17 @@ SSH key is. A cloud token comes with the request that needs it (set on
 Overseer &gt; Secrets, or in the app's <code>.env</code>), or from this machine's
 environment; a sent one wins. It reaches the command only through the
 environment, is masked in the output, and is kept nowhere (the heartbeat
-names the providers this machine holds a token for, never the token).</p>
+names the providers this machine holds a token for, never the token). A new
+server on a domain, and its destroy, carry the DNS provider's keys the same
+way; only a DNS provider's own variables are accepted (anything else, such as
+<code>PATH</code>, is refused).</p>
 <p>It finds Redis as the app's host-side settings do: <code>REDIS_URL_LOCAL</code>, else
 the port <code>make serve</code> published (<code>.env.ports</code>). Requests older than five
 minutes are failed, not run. A new server is created only at the price you
 typed back in the Overseer, which it asks the provider for again first.
-The heartbeat also names the actions this agent runs: one started before the
-CLI learned an action the page asks for is shown as older than the app, to
-restart, and is not asked.</p>
+The heartbeat also names the actions this agent runs and the protocol
+revision it speaks: one started before the CLI learned what the page asks
+for is shown as older than the app, to restart, and is not asked.</p>
 <p><strong>Usage:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-35-1"><a id="__codelineno-35-1" name="__codelineno-35-1" href="#__codelineno-35-1"></a>aegis<span class="w"> </span>deploy-agent<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
 </span></code></pre></div></p>

@@ -673,7 +673,7 @@ aegis deploy-provision [OPTIONS]
 
 - `--provider TEXT`, Cloud provider: `hetzner` (default) or `digitalocean`
 - `--size TEXT`, Server type (default: `cx23` on Hetzner, `s-1vcpu-2gb` on DigitalOcean)
-- `--region TEXT`, Provider location (default: `nbg1` on Hetzner, `nyc3` on DigitalOcean)
+- `--region TEXT`, Provider location (default: `nbg1` on Hetzner, `tor1` on DigitalOcean)
 - `--domain TEXT`, Hostname to point at the server through Cloudflare
 - `--email TEXT`, Address Let's Encrypt registers the certificate to (default: the project's `author_email`)
 - `--ssh-key TEXT`, Public key installed for root (default: the first of `~/.ssh/id_ed25519.pub`, `id_ecdsa.pub`, `id_rsa.pub` that exists)
@@ -741,8 +741,8 @@ aegis deploy-cd-setup --force  # rotate the deploy key
 
 ### aegis deploy-agent
 
-Run what Overseer > Deployments asks for on this machine: a price, a new
-server, a deploy, a backup, the backup list, a rollback, a destroy. The
+Run what Overseer > Deployments asks for on this machine: a provider's sizes
+and regions, what the account already runs, the stack's footprint, a new server, a deploy, a backup, the backup list, a rollback, a destroy. The
 Overseer puts each request on the project's Redis; this takes them one at a
 time and runs the matching `aegis deploy-*` command, streaming its output back
 to the page. Run it in the project directory with the stack up, where your
@@ -756,6 +756,9 @@ It finds Redis as the app's host-side settings do: `REDIS_URL_LOCAL`, else
 the port `make serve` published (`.env.ports`). Requests older than five
 minutes are failed, not run. A new server is created only at the price you
 typed back in the Overseer, which it asks the provider for again first.
+The heartbeat also names the actions this agent runs: one started before the
+CLI learned an action the page asks for is shown as older than the app, to
+restart, and is not asked.
 
 **Usage:**
 ```bash

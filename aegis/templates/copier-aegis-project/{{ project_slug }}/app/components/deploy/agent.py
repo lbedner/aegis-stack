@@ -19,7 +19,8 @@ CLI loads out of the template it ships. Without Redis there is no queue,
 and the Overseer says so.
 """
 
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 import json
 from typing import Any
@@ -27,7 +28,9 @@ import uuid
 
 from app.components.deploy.protocol import (
     PROTOCOL,
+    RefusedError,
     checked_token,
+    kept_key,
     token_provider,
     validate,
 )
@@ -42,10 +45,12 @@ from app.services.system.jobs import JobSnapshot
 REQUESTS = PROTOCOL["requests"]
 HEARTBEAT = PROTOCOL["heartbeat"]
 LAST = PROTOCOL["last"]
-CATALOG = PROTOCOL["catalog"]
-FOOTPRINT = PROTOCOL["footprint"]
 JOB_PREFIX = "deploy:"  # a job's name: ``deploy:<action>``
 WAITING = "Waiting for the deploy agent"
+STALE = (
+    "The deploy agent listening is older than this app. Restart it with "
+    "make serve (after uv tool upgrade aegis-stack, if the CLI is older too)."
+)
 
 REDIS_KEYS = (
     KeyFamily(
@@ -72,17 +77,24 @@ REDIS_KEYS = (
         "Deploy agent",
     ),
     KeyFamily(
-        f"{CATALOG}*",
+        kept_key("catalog", {"provider": "*"}),
         "string",
         "Provider catalog",
-        "A provider's sizes and regions, for the new-server form, kept an hour",
+        "A provider's sizes and regions, for the new-server form",
         "Deploy agent",
     ),
     KeyFamily(
-        FOOTPRINT,
+        kept_key("account", {"provider": "*"}),
+        "string",
+        "Provider account",
+        "What a provider account runs now and has cost this month",
+        "Deploy agent",
+    ),
+    KeyFamily(
+        kept_key("footprint", {}),
         "string",
         "Stack footprint",
-        "What the production services take, measured by the agent, kept ten minutes",
+        "What the production services take, measured by the agent",
         "Deploy agent",
     ),
 )
@@ -121,6 +133,29 @@ def _client() -> Any:
     return redis_client()
 
 
+def _redis_errors() -> tuple[type[Exception], ...]:
+    """What Redis raises when it does not answer; nothing in a stack
+    without Redis (no package to raise it)."""
+    try:
+        from redis.exceptions import RedisError
+    except ImportError:
+        return ()
+    return (RedisError,)
+
+
+@asynccontextmanager
+async def _redis() -> AsyncIterator[Any]:
+    """A client for one exchange, closed after it. Redis not answering is a
+    refusal saying so, which every caller already shows (never a 500)."""
+    client = _client()
+    try:
+        yield client
+    except _redis_errors() as exc:
+        raise RefusedError(f"Redis is not answering: {exc}") from None
+    finally:
+        await client.aclose()
+
+
 async def tokens_here() -> set[str]:
     """The providers whose token the app holds (``.env`` or the store)."""
     found = await secrets.get_many(*(entry.name for entry in SECRETS))
@@ -141,7 +176,7 @@ async def _token(action: str, args: dict[str, str]) -> str | None:
 async def enqueue(action: str, args: dict[str, str], by: str) -> str:
     """Ask the agent for ``action``: its job, waiting, then the request,
     with the app's provider token beside its arguments where it needs one;
-    the newest job the page shows unless it runs in the background. The
+    the newest job the page shows unless what it finds is ``kept``. The
     job's id."""
     args = validate(action, args)
     job_id = uuid.uuid4().hex
@@ -154,14 +189,11 @@ async def enqueue(action: str, args: dict[str, str], by: str) -> str:
     }
     if token := await _token(action, args):
         request["token"] = token
-    client = _client()
-    try:
+    async with _redis() as client:
         await RedisJobStore(client).create(job_id, f"{JOB_PREFIX}{action}", WAITING)
         await client.rpush(REQUESTS, json.dumps(request))
-        if not PROTOCOL["actions"][action].get("background"):
+        if "kept" not in PROTOCOL["actions"][action]:
             await client.set(LAST, job_id, ex=KEEP_SECONDS)
-    finally:
-        await client.aclose()
     return job_id
 
 
@@ -171,43 +203,35 @@ def _text(value: Any) -> str | None:
 
 async def agent() -> dict[str, Any] | None:
     """The listening agent's heartbeat, or None when none is listening."""
-    client = _client()
-    try:
-        beat = _text(await client.get(HEARTBEAT))
-    finally:
-        await client.aclose()
-    return json.loads(beat) if beat else None
+    return await _kept(HEARTBEAT)
+
+
+def stale(beat: dict[str, Any]) -> bool:
+    """Whether the listening agent (``beat``) is older than this app: it
+    does not name an action the app asks for."""
+    return not set(PROTOCOL["actions"]) <= set(beat.get("actions") or ())
 
 
 async def _kept(key: str) -> dict[str, Any] | None:
     """What the agent left under ``key``; None once it has expired, or
     before the agent has been asked."""
-    client = _client()
-    try:
+    async with _redis() as client:
         found = _text(await client.get(key))
-    finally:
-        await client.aclose()
     return json.loads(found) if found else None
 
 
-async def catalog(provider: str) -> dict[str, Any] | None:
-    """What ``provider`` sells where, as the agent last fetched it."""
-    return await _kept(f"{CATALOG}{provider}")
-
-
-async def footprint() -> dict[str, Any] | None:
-    """What the stack's production services take, as last measured."""
-    return await _kept(FOOTPRINT)
+async def kept(action: str, args: dict[str, str]) -> dict[str, Any] | None:
+    """What the agent found for a ``kept`` action (a provider's catalog or
+    account, the stack's footprint) as it last looked; None once expired,
+    or before it was asked."""
+    return await _kept(kept_key(action, args))
 
 
 async def job(job_id: str | None = None) -> JobSnapshot | None:
     """A deploy job (the newest when no id is given), or None."""
-    client = _client()
-    try:
+    async with _redis() as client:
         job_id = job_id or _text(await client.get(LAST))
         found = await RedisJobStore(client).get(job_id) if job_id else None
-    finally:
-        await client.aclose()
     if found is None or not found.name.startswith(JOB_PREFIX):
         return None
     return found

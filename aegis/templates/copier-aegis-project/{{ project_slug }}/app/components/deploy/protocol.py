@@ -1,12 +1,15 @@
 """The deploy agent's protocol: the Redis keys, the actions it runs and
 each argument's pattern, and the one check a request must pass.
 
-A ``catalog`` (what a provider sells, where) is kept under the
-``catalog`` key plus the provider for ``catalog_seconds``, and the
-stack's ``footprint`` (what its production services take, measured where
-it is built) for ``footprint_seconds``, for the Overseer's new-server form
-and whether a size has room. An action marked ``background`` is not the
-newest job the Overseer shows (``last``).
+An action that ``kept`` answers rather than runs a command: the agent
+keeps what it found under that key (``kept_key``) for ``seconds``, for the
+Overseer to read (a provider's ``catalog``, what it sells where; its
+``account``, what runs there now and what it has cost this month; the
+stack's ``footprint``, what its production services take). It is asked
+in the background: not the newest job the Overseer shows (``last``), and
+never from its buttons. An action that acts on an account (``token``) and
+runs a command changes what it runs, so the agent forgets the kept
+``account`` after it.
 
 An action marked ``token`` acts on a cloud provider's account (the one it
 names, or the provisioned server's), and its request may carry the app's
@@ -28,10 +31,6 @@ PROTOCOL: dict[str, Any] = {
     "last": "deploy:last",
     "beat_seconds": 10,
     "stale_seconds": 300,
-    "catalog": "deploy:catalog:",
-    "catalog_seconds": 3600,
-    "footprint": "deploy:footprint",
-    "footprint_seconds": 600,
     # A provider API token: its own characters only, so it can travel in an
     # environment variable and nothing else rides along with it.
     "token": r"[A-Za-z0-9._~+/=:-]{8,512}",
@@ -48,11 +47,19 @@ PROTOCOL: dict[str, Any] = {
     "actions": {
         "catalog": {
             "token": True,
-            "background": True,
             "required": ["provider"],
+            "kept": "deploy:catalog:{provider}",
+            "seconds": 3600,
+        },
+        "account": {
+            "token": True,
+            "required": ["provider"],
+            "kept": "deploy:account:{provider}",
+            "seconds": 300,
         },
         "footprint": {
-            "background": True,
+            "kept": "deploy:footprint",
+            "seconds": 600,
         },
         "provision": {
             "command": ["deploy-provision", "--yes"],
@@ -117,6 +124,11 @@ def checked_token(action: str, token: Any) -> str | None:
     if not isinstance(token, str) or not re.fullmatch(PROTOCOL["token"], token):
         raise RefusedError("Refused: the provider token is not a valid token.")
     return token
+
+
+def kept_key(action: str, args: dict[str, str]) -> str:
+    """Where the agent keeps what a ``kept`` action found."""
+    return PROTOCOL["actions"][action]["kept"].format(**args)
 
 
 def token_provider(

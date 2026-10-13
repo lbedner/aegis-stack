@@ -888,6 +888,7 @@ MESSAGES: dict[str, str] = {
     "deploy.backup_storage_failed": "Warning: Object storage backup failed",
     "deploy.backup_offsite": "Copying backup off the server (restic)...",
     "deploy.backup_offsite_failed": "Warning: Off-box copy failed: {error}",
+    "deploy.env_unsafe": "{file} would put the app online unprotected. Fix {settings} there (AUTH_ENABLED=true, APP_ENV=prod, a new SECRET_KEY from openssl rand -hex 32), then deploy again; .env.deploy.example explains each.",
     "deploy.disk_low": "Only {free}GB free on {host}, need {need}GB. Reclaim with: docker image prune -af && docker builder prune -af",
     "deploy.pruning": "Reclaiming Docker disk (dangling images + old build cache)...",
     "deploy.prune_failed": "Could not reclaim Docker disk; the deploy itself succeeded.",

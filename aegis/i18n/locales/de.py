@@ -870,6 +870,7 @@ MESSAGES: dict[str, str] = {
     "deploy.backup_storage_failed": "Warning: Object storage backup failed",
     "deploy.backup_offsite": "Copying backup off the server (restic)...",
     "deploy.backup_offsite_failed": "Warning: Off-box copy failed: {error}",
+    "deploy.env_unsafe": "{file} würde die App ungeschützt online stellen. Korrigiere dort {settings} (AUTH_ENABLED=true, APP_ENV=prod, ein neuer SECRET_KEY aus openssl rand -hex 32) und deploye erneut; .env.deploy.example erklärt jede Einstellung.",
     "deploy.disk_low": "Nur {free}GB frei auf {host}, benötigt werden {need}GB. Aufräumen mit: docker image prune -af && docker builder prune -af",
     "deploy.pruning": "Docker-Speicher wird freigegeben (verwaiste Images und alter Build-Cache)...",
     "deploy.prune_failed": "Docker-Speicher konnte nicht freigegeben werden; das Deployment selbst war erfolgreich.",

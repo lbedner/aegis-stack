@@ -40,6 +40,39 @@
   background: currentColor;
   border-radius: 9999px;
 }
+/* Without a value (progress(none)): a band sweeping the track, still
+   where motion is reduced. */
+.aegis-progress:indeterminate {
+  background: linear-gradient(
+      90deg,
+      transparent 0 35%,
+      currentColor 45% 55%,
+      transparent 65% 100%
+    )
+    oklch(var(--b3));
+  background-size: 300% 100%;
+  animation: aegis-sweep 1.4s ease-in-out infinite;
+}
+.aegis-progress:indeterminate::-webkit-progress-bar {
+  background: transparent;
+}
+.aegis-progress:indeterminate::-moz-progress-bar {
+  background: transparent;
+}
+@keyframes aegis-sweep {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .aegis-progress:indeterminate {
+    animation: none;
+    background-position: 50% 0;
+  }
+}
 
 /* The bar along the top while a page or an htmx request loads (app.js sets
    is-loading). It creeps towards the end and holds there until the page

@@ -14,11 +14,13 @@ from app.components.web_frontend.overseer_access import overseer_actor
 from app.components.web_frontend.overseer_live import event_stream
 from app.components.web_frontend.rendering import (
     form_fields,
+    fragment,
     toast_response,
     with_toast,
 )
 from app.core.audit import AuditEmitter, get_audit
 from app.services.shared.deps import Actor
+from app.services.system import hosting
 
 router = APIRouter()
 
@@ -29,32 +31,35 @@ async def job_events() -> StreamingResponse:
     return event_stream(actions.events())
 
 
-@router.get(actions.catalog_url("{provider}"), response_class=HTMLResponse)
-async def provision_form(
-    request: Request, provider: str, actor: Actor = Depends(overseer_actor)
-) -> HTMLResponse:
-    """A provider's new-server form, from its catalog; the agent asked for
-    the catalog when there is none (a read: not audited)."""
-    form = dict(request.query_params)
+def _provisionable(provider: str) -> hosting.Provider:
+    """The provider in the path, if servers are created on it from here."""
     try:
-        page = await actions.render_provision_form(provider, form, actor.label)
-    except RefusedError:  # not a provider servers are created on from here
+        return actions.provisionable(provider)
+    except RefusedError:
         raise HTTPException(status_code=404) from None
-    return HTMLResponse(page)
 
 
-@router.get(f"{actions.PARTIALS}/fit/{{provider}}", response_class=HTMLResponse)
-async def fit(
-    request: Request, provider: str, actor: Actor = Depends(overseer_actor)
-) -> HTMLResponse:
-    """Whether the size picked has room for the stack; the agent asked to
-    measure it when it has not (a read: not audited)."""
+@router.get(actions.panel_path("{panel}", "{provider}"), response_class=HTMLResponse)
+async def panel(
+    request: Request,
+    panel: str,
+    # Refused before anything is looked up (``operator_refusal``).
+    actor: Actor = Depends(overseer_actor),
+    chosen: hosting.Provider = Depends(_provisionable),
+) -> Response:
+    """A part of the new-server form (``PANELS``: the form from the
+    provider's catalog, whether it fits, what the account runs); the agent
+    asked for what it needs when it has not (a read: not audited). A poll
+    still waiting gets no content: htmx swaps nothing, so the bar on the
+    page keeps moving."""
+    if panel not in actions.PANELS:
+        raise HTTPException(status_code=404)
     form = dict(request.query_params)
-    try:
-        page = await actions.render_fit(provider, form, actor.label)
-    except RefusedError:  # not a provider servers are created on from here
-        raise HTTPException(status_code=404) from None
-    return HTMLResponse(page)
+    build, template, name = actions.PANELS[panel]
+    built = await build(chosen, form, actor.label)
+    if "job" in form and built["state"] == "loading":
+        return Response(status_code=204)
+    return HTMLResponse(fragment(template, **{name: built}))
 
 
 @router.post(f"{actions.PARTIALS}/{{action}}", response_class=HTMLResponse)
@@ -65,7 +70,7 @@ async def ask(
     audit: AuditEmitter = Depends(get_audit),
 ) -> Response:
     """Ask the deploy agent for ``action``; the answer is its job."""
-    if action not in actions.TITLES:
+    if not actions.asked_from_card(action):
         raise HTTPException(status_code=404)
     event = f"deploy.{action}"
     try:

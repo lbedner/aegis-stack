@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 
 from app.components.deploy import agent
-from app.components.deploy.protocol import RefusedError
+from app.components.deploy.protocol import RefusedError, kept_key
 from app.core import secrets
 from app.core.config import settings
 from app.services.system import hosting
@@ -91,11 +91,11 @@ def test_a_catalog_fetch_leaves_the_newest_job_alone(redis: FakeRedis) -> None:
     assert redis.strings[agent.LAST] == shown
 
 
-def test_a_catalog_is_read_back_while_it_lasts(redis: FakeRedis) -> None:
-    assert asyncio.run(agent.catalog("digitalocean")) is None
+def test_what_the_agent_keeps_is_read_back_while_it_lasts(redis: FakeRedis) -> None:
+    assert asyncio.run(agent.kept("catalog", CATALOG)) is None
     sold = {"currency": "USD", "sizes": [], "regions": []}
-    redis.strings[f"{agent.CATALOG}digitalocean"] = json.dumps(sold)
-    assert asyncio.run(agent.catalog("digitalocean")) == sold
+    redis.strings[kept_key("catalog", CATALOG)] = json.dumps(sold)
+    assert asyncio.run(agent.kept("catalog", CATALOG)) == sold
 
 
 def test_only_a_deploy_job_is_shown(redis: FakeRedis) -> None:

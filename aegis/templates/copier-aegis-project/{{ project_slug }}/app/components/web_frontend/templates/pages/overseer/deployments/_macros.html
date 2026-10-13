@@ -2,9 +2,58 @@
    for a control that asks ``aegis deploy-agent`` (a write, answered by its
    job, which swaps into the card's job panel); the destroy form that the
    server and a failed provision both offer; a step on the way to a
-   server; why the agent cannot be asked; and the job panel. #}
+   server; why the agent cannot be asked; the job panel; where something
+   runs (``place``: a provider's mark and name); a fragment's reload while
+   it waits on the agent; a part of the new-server form (``panel``: waiting
+   on the agent, why it failed, or what it found); and ``note``, the muted
+   paragraph's classes. #}
 {% from "components/macros/form.html" import action, field, text_input, primary_button %}
-{% from "components/macros/layout.html" import command %}
+{% from "components/macros/icons.html" import icon %}
+{% from "components/macros/layout.html" import avatar, command, progress %}
+{% macro note() %}text-sm text-aegis-muted space-y-2{% endmacro %}
+
+{# ``reload`` (overseer_deploy_actions: url, trigger) as the hx attributes
+   a fragment asks again with, or nothing once it is ready. #}
+{% macro reloads(reload) %}{% if reload %} hx-get="{{ reload.url }}" hx-trigger="{{ reload.trigger }}"{% endif %}{% endmacro %}
+
+{# What a part of the new-server form waits on the agent for, over a
+   moving bar. #}
+{% macro waiting(said) %}
+<div data-waiting class="space-y-2">
+  <p class="text-xs text-aegis-muted">{{ said }}</p>
+  {{ progress(none, label=said) }}
+</div>
+{% endmacro %}
+
+{# Why a part of the new-server form could not be had (``f.error``, after
+   ``said``), and asking for it again (``f.retry``) in its place. #}
+{% macro failed(said, f) %}
+<p data-error class="text-xs text-error">{{ said }}{{ f.error }}</p>
+{{ action("Try again", 'data-retry hx-get="' ~ f.retry ~ '" hx-target="closest [data-part]" hx-swap="outerHTML"') }}
+{% endmacro %}
+
+{# A panel of the new-server form (``f``, from overseer_deploy_actions'
+   PANELS): waiting on the agent, why it could not be had, or what it
+   found (the caller's body). ``name`` is its data attribute. #}
+{% macro panel(name, f, said_waiting, said_failed) %}
+<div data-{{ name }} data-part hx-target="this" hx-swap="outerHTML" class="space-y-3 rounded border border-aegis-border p-3"{{ reloads(f.reload) }}>
+  {% if f.state == "loading" %}
+  {{ waiting(said_waiting) }}
+  {% elif f.state == "failed" %}
+  {{ failed(said_failed, f) }}
+  {% else %}
+  {{ caller() }}
+  {% endif %}
+</div>
+{% endmacro %}
+
+{% macro place(where) %}
+<div class="flex items-center gap-3">
+  {{ avatar(where.name, where.logo, "lg") }}
+  <span class="text-sm font-semibold text-aegis-text">{{ where.name }}</span>
+  {% if where.console %}<a href="{{ where.console }}" target="_blank" rel="noopener" class="ml-auto text-xs text-aegis-muted hover:text-aegis-teal">Open console</a>{% endif %}
+</div>
+{% endmacro %}
 
 {% macro asks(url) %}data-write hx-post="{{ url }}" hx-target="#deploy-job" hx-swap="innerHTML"{% endmacro %}
 
@@ -15,7 +64,7 @@
 
 {% macro destroy_form(partials, name) %}
 <form data-ask="destroy" {{ asks(partials ~ "/destroy") }} class="flex flex-wrap items-end gap-2">
-  {% call field("Type " ~ name ~ " to delete the server, its firewall, DNS record and SSH key") %}{{ text_input("confirm", required=True) }}{% endcall %}
+  {% call field("Type " ~ name ~ " to delete the server, its firewall, DNS record and SSH key") %}{{ text_input("confirm", required=True, pattern=name|exactly) }}{% endcall %}
   {{ primary_button("Destroy", "submit") }}
 </form>
 {% endmacro %}
@@ -27,7 +76,7 @@
 {% set tone = {"done": "border-aegis-teal text-aegis-teal", "current": "border-aegis-teal text-aegis-text"}.get(s.status, "border-aegis-border text-aegis-muted") %}
 <li data-step="{{ s.key }}" data-status="{{ s.status }}" class="flex gap-3">
   <span class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs {{ tone }}" aria-hidden="true">
-    {%- if s.status == "done" %}<svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>{% else %}{{ n }}{% endif -%}
+    {%- if s.status == "done" %}{{ icon("check", "h-3.5 w-3.5", stroke=2.5) }}{% else %}{{ n }}{% endif -%}
   </span>
   <div class="min-w-0 flex-1 space-y-3">
     <p class="text-sm"><span class="font-semibold {{ 'text-aegis-muted' if s.status == 'todo' else 'text-aegis-text' }}">{{ s.title }}</span>{% if s.summary %} <span data-summary class="text-aegis-muted">{{ s.summary }}</span>{% endif %}</p>
@@ -39,19 +88,25 @@
 {# Why the deploy agent cannot be asked (``agent``, its state), or nothing
    when it can. #}
 {% macro agent_note(agent) %}
-{% set note = "text-sm text-aegis-muted space-y-2" %}
 {% if agent.state == "no-redis" %}
-<div data-deploy-state="no-redis" class="{{ note }}">
+<div data-deploy-state="no-redis" class="{{ note() }}">
   <p>Deploying from here needs Redis: the Overseer hands each action to <code class="font-mono text-aegis-text">aegis deploy-agent</code> on your machine through the project's Redis, so your SSH key never enters the app.</p>
   <p class="flex items-center gap-2">{{ command("aegis add redis") }}</p>
 </div>
 {% elif agent.state == "unreachable" %}
-<p data-deploy-state="unreachable" class="{{ note }}">Redis did not answer: {{ agent.error }}</p>
+<p data-deploy-state="unreachable" class="{{ note() }}">Redis did not answer: {{ agent.error }}</p>
+{% elif agent.state == "stale" %}
+<p data-deploy-state="stale" class="{{ note() }}">{{ agent.error }}</p>
 {% elif agent.state == "no-agent" %}
-<div data-deploy-state="no-agent" class="{{ note }}">
-  <p>No deploy agent is listening. <code class="font-mono text-aegis-text">make serve</code> starts one when the aegis CLI is installed (<code class="font-mono text-aegis-text">uv tool install aegis-stack</code>); with the stack started another way, run it in the project directory, then reload.</p>
-  <p class="flex items-center gap-2">{{ command(agent.command) }}</p>
-  <p>It runs what you ask here with your SSH key, which stays on your machine. The cloud token comes from Overseer &gt; Secrets (or <code class="font-mono text-aegis-text">.env</code>), or from the agent's own environment.</p>
+<div data-deploy-state="no-agent" class="{{ note() }}">
+  <p class="flex flex-wrap items-center gap-2">No deploy agent is running: restart <code class="font-mono text-aegis-text">make serve</code>, or run {{ command(agent.command) }} in the project directory.</p>
+  <details data-agent-why class="text-xs">
+    <summary class="cursor-pointer hover:text-aegis-text">What is the deploy agent?</summary>
+    <div class="mt-2 space-y-1">
+      <p>A small process on your machine that does what you ask on this page: create a server, deploy, back up, roll back, destroy. <code class="font-mono text-aegis-text">make serve</code> starts it beside the stack when the aegis CLI is installed (<code class="font-mono text-aegis-text">uv tool install aegis-stack</code>).</p>
+      <p>It runs there, not in the app, so your SSH key never leaves your machine. The cloud token comes from Overseer &gt; Secrets (or <code class="font-mono text-aegis-text">.env</code>), or from the agent's own environment.</p>
+    </div>
+  </details>
 </div>
 {% endif %}
 {% endmacro %}

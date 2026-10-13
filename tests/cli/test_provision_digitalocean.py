@@ -14,6 +14,7 @@ import pytest
 from aegis.core.provision import digitalocean, hetzner
 from aegis.core.provision.digitalocean import DigitalOceanClient
 from aegis.core.provision.http import ProvisionError, json_requester
+from aegis.core.provision.provider import monthly_price
 from aegis.core.provision.registry import FACTS, PROVIDERS
 from tests.cli.test_deploy_provision import (
     DO_TOKEN,
@@ -37,17 +38,17 @@ def _client(routes: dict[tuple[str, str], Any] | None = None) -> DigitalOceanCli
 
 
 def test_monthly_price_reads_the_size_list() -> None:
-    assert _client().monthly_price("s-1vcpu-2gb", "nyc3") == "12.00"
+    assert monthly_price(_client(), "s-1vcpu-2gb", "tor1") == "12.00"
 
 
 def test_monthly_price_rejects_a_region_the_size_is_not_in() -> None:
-    with pytest.raises(ProvisionError, match="nyc3, fra1"):
-        _client().monthly_price("s-1vcpu-2gb", "sgp1")
+    with pytest.raises(ProvisionError, match="tor1, fra1"):
+        monthly_price(_client(), "s-1vcpu-2gb", "sgp1")
 
 
 def test_monthly_price_rejects_an_unknown_size() -> None:
     with pytest.raises(ProvisionError, match="s-9vcpu"):
-        _client().monthly_price("s-9vcpu", "nyc3")
+        monthly_price(_client(), "s-9vcpu", "tor1")
 
 
 def _catalog_routes() -> dict[tuple[str, str], Any]:
@@ -105,6 +106,79 @@ def test_the_catalog_lists_what_can_be_created_where() -> None:
             {"slug": "nyc3", "name": "New York 3"},
         ],
     }
+
+
+DROPLETS = {
+    "droplets": [
+        {
+            "name": "my-app",
+            "size_slug": "s-1vcpu-2gb",
+            "size": {"price_monthly": 12.0},
+            "region": {"slug": "tor1"},
+            "created_at": "2026-09-01T10:00:00Z",
+            "tags": ["managed-by-aegis", "aegis-project:my-app"],
+        },
+        {
+            "name": "old-box",
+            "size_slug": "s-1vcpu-1gb",
+            "size": {"price_monthly": 6.0},
+            "region": {"slug": "nyc1"},
+            "created_at": "2025-01-05T08:00:00Z",
+            "tags": [],
+        },
+    ]
+}
+
+
+def test_the_account_lists_its_droplets_and_this_months_spend() -> None:
+    """Each droplet with what it costs a month, aegis's own marked; and
+    what the account has spent this month, from billing."""
+    found = _client(
+        {
+            ("GET", "/droplets?per_page=200"): DROPLETS,
+            ("GET", "/customers/my/balance"): {"month_to_date_usage": "23.17"},
+        }
+    ).account()
+    assert found == {
+        "servers": [
+            {
+                "name": "my-app",
+                "size": "s-1vcpu-2gb",
+                "region": "tor1",
+                "price": "12.00",
+                "created": "2026-09-01T10:00:00Z",
+                "project": "my-app",
+            },
+            {
+                "name": "old-box",
+                "size": "s-1vcpu-1gb",
+                "region": "nyc1",
+                "price": "6.00",
+                "created": "2025-01-05T08:00:00Z",
+                "project": None,
+            },
+        ],
+        "month_to_date": "23.17",
+        "missing": [],
+    }
+
+
+def test_without_billing_read_the_spend_is_unknown_and_says_why() -> None:
+    found = _client(
+        {
+            ("GET", "/droplets?per_page=200"): DROPLETS,
+            ("GET", "/customers/my/balance"): ProvisionError("forbidden", status=403),
+        }
+    ).account()
+    assert (found["month_to_date"], found["missing"]) == (None, ["billing:read"])
+
+
+def test_without_droplet_read_it_says_which_scope() -> None:
+    client = _client(
+        {("GET", "/droplets?per_page=200"): ProvisionError("forbidden", status=403)}
+    )
+    with pytest.raises(ProvisionError, match="droplet:read"):
+        client.account()
 
 
 def test_ensure_ssh_key_reuses_the_key_with_this_fingerprint() -> None:
@@ -208,7 +282,7 @@ def test_each_provider_knows_its_token_and_defaults() -> None:
     assert (do.token_env, do.size, do.region) == (
         "DIGITALOCEAN_TOKEN",
         "s-1vcpu-2gb",
-        "nyc3",
+        "tor1",  # nyc3 no longer offers s-1vcpu-2gb
     )
     assert (hz.token_env, hz.size, hz.region) == ("HCLOUD_TOKEN", "cx23", "nbg1")
     assert (do.api_url, hz.api_url) == (digitalocean.API_URL, hetzner.API_URL)

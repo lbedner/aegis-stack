@@ -856,6 +856,7 @@ MESSAGES: dict[str, str] = {
     "deploy.backup_storage_failed": "Warning: Object storage backup failed",
     "deploy.backup_offsite": "Copying backup off the server (restic)...",
     "deploy.backup_offsite_failed": "Warning: Off-box copy failed: {error}",
+    "deploy.env_unsafe": "{file} のままではアプリが無防備な状態で公開されます。{settings} を修正してください（AUTH_ENABLED=true、APP_ENV=prod、openssl rand -hex 32 で新しい SECRET_KEY）。その後もう一度デプロイしてください。各設定は .env.deploy.example に説明があります。",
     "deploy.disk_low": "{host} の空き容量が {free}GB しかありません（{need}GB 必要）。回収方法：docker image prune -af && docker builder prune -af",
     "deploy.pruning": "Docker のディスク領域を回収中（未使用イメージと古いビルドキャッシュ）...",
     "deploy.prune_failed": "Docker のディスク領域を回収できませんでした。デプロイ自体は成功しています。",

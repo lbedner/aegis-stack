@@ -14,6 +14,7 @@ from fastapi import FastAPI
 
 from app.components.web_frontend.filters import (
     cents_to_input,
+    exactly,
     money_to_cents,
 )
 from app.components.web_frontend.rendering import templates
@@ -309,3 +310,11 @@ def test_every_health_message_on_overseer_shows_the_names_it_mentions(
     ):
         html = page_html(TestClient(app), path)
         assert "BUILD_ID" in [text(code) for code in select(html, "code")], path
+
+
+def test_exactly_is_a_pattern_for_that_text_alone() -> None:
+    """Regex syntax escaped, nothing else: the browser compiles a pattern
+    with the v flag, where a needless escape (``\\-``) is an error that
+    drops the check."""
+    assert exactly("12.00") == r"12\.00"
+    assert exactly("my-app (1)") == r"my-app \(1\)"

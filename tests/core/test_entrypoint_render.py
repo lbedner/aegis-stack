@@ -8,6 +8,8 @@ backend rather than left to whichever branch someone last touched.
 
 from __future__ import annotations
 
+import os
+import subprocess
 from typing import Any
 
 import pytest
@@ -50,6 +52,35 @@ def test_the_worker_reloads_in_dev(backend: str) -> None:
         f"the {backend} worker has no reloader in dev:\n{branch}"
     )
     assert "WORKER_WATCH" in branch, f"the {backend} worker cannot be told to watch"
+
+
+@pytest.mark.parametrize("backend", ["arq", "dramatiq", "taskiq"])
+@pytest.mark.parametrize(
+    ("env", "watches"),
+    [
+        ({"APP_ENV": "dev"}, True),
+        ({"WORKER_WATCH": "true"}, True),
+        ({}, False),
+        # The meetings worker: its jobs are calls an hour long, and a
+        # reload on every edit would end them.
+        ({"APP_ENV": "dev", "WORKER_WATCH": "false"}, False),
+    ],
+)
+def test_a_worker_can_be_kept_from_reloading_in_dev(
+    backend: str, env: dict[str, str], watches: bool
+) -> None:
+    branch = _worker_branch(_render(_ctx(worker_backend=backend)))
+    start = branch.index("worker_watch() {")
+    function = branch[start : branch.index("\n    }\n", start) + 6]
+
+    result = subprocess.run(
+        ["sh", "-c", f"{function}\nworker_watch"],
+        env={"PATH": os.environ["PATH"], **env},
+        check=False,
+    )
+
+    assert (result.returncode == 0) == watches
+    assert branch.count("worker_watch") >= 2, f"the {backend} worker ignores it"
 
 
 def test_the_scheduler_reloads_in_dev() -> None:

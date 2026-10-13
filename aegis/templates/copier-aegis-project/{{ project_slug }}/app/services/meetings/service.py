@@ -130,15 +130,16 @@ class MeetingsService:
         return meeting
 
     async def ask_to_leave(self, meeting_id: int) -> Meeting:
-        """Ask the bot to leave; it goes on its next look, or never joins.
-        A meeting it is done with is left as it is."""
+        """Ask the bot to leave; it goes on its next look. One no run has
+        taken yet is left at once, so a run that comes for it later finds it
+        taken. A meeting it is done with is left as it is."""
         meeting = await self.get(meeting_id)
-        await transition(
-            self.db,
-            meeting_id,
-            MeetingStatus.LEAVING,
-            from_=LEAVABLE,
-        )
+        if not await transition(
+            self.db, meeting_id, MeetingStatus.LEFT, from_=(MeetingStatus.REQUESTED,)
+        ):
+            await transition(
+                self.db, meeting_id, MeetingStatus.LEAVING, from_=STILL_WANTED
+            )
         return meeting
 
     async def read(self, meeting_id: int) -> MeetingRecord:

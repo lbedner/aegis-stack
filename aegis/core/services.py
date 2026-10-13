@@ -1588,6 +1588,13 @@ SERVICES: dict[str, ServiceSpec] = {
                     "tests/web/test_meetings_page.py",
                     "tests/web/test_overseer_meetings.py",
                 ],
+                # The bot's own queue, where the stack has a worker: a call
+                # outlives any webserver restart.
+                "include_worker": [
+                    "app/components/worker/queues/meetings.py",
+                    "app/components/worker/queues/meetings_dramatiq.py",
+                    "app/components/worker/queues/meetings_taskiq.py",
+                ],
             },
         ),
     ),

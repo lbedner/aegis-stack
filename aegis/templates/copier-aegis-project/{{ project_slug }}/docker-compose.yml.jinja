@@ -270,6 +270,39 @@ services:
     profiles:
       - dev
       - prod
+{%- if include_meetings %}
+
+  worker-meetings:
+    <<: *app
+    command:
+      - worker
+      - meetings
+    healthcheck:
+      disable: true
+    depends_on:
+      redis:
+        condition: service_healthy
+      browser:
+        condition: service_started
+    restart: unless-stopped
+    tty: true
+    environment:
+      - DOCKER_CONTAINER=1
+      - WORKER_QUEUE_TYPE=meetings
+      - WORKER_WATCH=false
+{%- if worker_backend != "arq" %}
+      - WORKER_PROCESSES=${MEETINGS_WORKER_PROCESSES:-1}
+{%- endif %}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+    deploy:
+      resources:
+        limits:
+          memory: ${MEETINGS_WORKER_MEMORY:-512M}
+          cpus: '${MEETINGS_WORKER_CPUS:-0.5}'
+    profiles:
+      - dev
+      - prod
+{%- endif %}
 {%- endif %}
 
 

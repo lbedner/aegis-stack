@@ -161,7 +161,8 @@ async def test_asking_it_to_leave_from_the_page(
 
     body = _ok(authenticated_client.post(f"/meetings/{meeting.id}/leave", headers=HX))
 
-    assert "Leaving" in text(one(body, "[data-status]"))
+    # Not started yet, so there is no call to leave: it is over at once.
+    assert "Left" in text(one(body, "[data-status]"))
 
 
 async def test_the_notes_can_be_written_again(

@@ -46,6 +46,12 @@ services:
   worker-system:
     volumes:
       - .:/code
+{%- if include_meetings %}
+
+  worker-meetings:
+    volumes:
+      - .:/code
+{%- endif %}
 {%- endif %}
 {%- if include_redis %}
 

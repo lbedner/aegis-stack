@@ -9,6 +9,16 @@
 
 ### Added
 
+- **The meeting bot runs on the worker.** Where the stack has a worker, each call
+  is a job on the worker's own `meetings` queue (arq, Dramatiq or TaskIQ),
+  run by a `worker-meetings` container that does not reload on code changes,
+  so editing the app, restarting the webserver or deploying no longer ends
+  a call, and several calls run side by side. A stack without a worker runs
+  the bot in the webserver, as before. A bot that cannot be started fails
+  its meeting with the reason, a meeting left before the bot starts is over
+  at once, and a call delivered twice is never joined twice. `WORKER_WATCH=false`
+  keeps any worker from reloading in dev.
+
 - **Run meetings from Overseer.** Send the bot from Overseer's Meetings
   page (htmx and Flet); the drawer and the Flet pane follow a meeting live
   while the bot is in or the notes are being written, and have what the

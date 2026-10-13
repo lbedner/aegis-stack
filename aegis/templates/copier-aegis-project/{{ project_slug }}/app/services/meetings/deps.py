@@ -13,6 +13,7 @@ from app.services.meetings.service import (
     MeetingNotFoundError,
     MeetingsService,
     NotASpeakerError,
+    NothingToWriteError,
     UnsupportedMeetingLinkError,
 )
 from app.services.shared.deps import get_owner_user_id
@@ -37,13 +38,14 @@ def get_every_owners_meetings(
 def as_http() -> Iterator[None]:
     """The service's refusals as HTTP, for every route over meetings (the
     API's, the Meetings page's and Overseer's): a meeting the caller
-    cannot see is a 404, one the bot is still in a 409, a link it cannot
-    join or a speaker who was not there a 422."""
+    cannot see is a 404, one the bot is still in (or notes that cannot be
+    written now) a 409, a link it cannot join or a speaker who was not
+    there a 422."""
     try:
         yield
     except MeetingNotFoundError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
-    except MeetingInProgressError as exc:
+    except (MeetingInProgressError, NothingToWriteError) as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
     except (UnsupportedMeetingLinkError, NotASpeakerError) as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc

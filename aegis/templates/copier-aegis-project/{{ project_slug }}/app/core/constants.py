@@ -227,3 +227,8 @@ class HTTP:
     # Headers
     CONTENT_TYPE_JSON = "application/json"
     USER_AGENT = "AegisStack-CLI/1.0"
+
+
+# The chart ramp both UIs draw with (--aegis-chart-1..9, ChartColors.RAMP):
+# a logs page's services, a meeting's speakers.
+CHART_RAMP = 9

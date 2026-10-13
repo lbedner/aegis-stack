@@ -1,0 +1,50 @@
+{# A meeting's notes (my action items first, then everyone's, the
+   decisions and open questions, each jumping to the line it came from)
+   and its transcript: the Meetings page's body and Overseer's drawer, each
+   setting ``base``, where its own routes for the meeting are. #}
+{% from "components/macros/form.html" import action, select %}
+{% from "components/macros/layout.html" import card, ranked_rows %}
+{% from "pages/meetings/_macros.html" import heading, items, notes_view, transcript %}
+{% set hx_body = 'hx-target="#meeting-body" hx-swap="outerHTML"' %}
+{% set has_notes = notes or notes_error or can_write %}
+{% if talk %}
+{% call card("Who talked", id="meeting-heard") %}{{ ranked_rows(talk) }}{% endcall %}
+{% endif %}
+{% if has_notes %}
+{% call card("Notes", id="meeting-notes") %}
+  {% if under_way %}
+  <p class="text-sm text-aegis-muted">The notes are written once the bot has left.</p>
+  {% elif writing %}
+  <p class="text-sm text-aegis-muted">Writing the notes…</p>
+  {% else %}
+  {% call notes_view(notes, notes_error, clock, "No notes yet." if turns else "Nothing was said, so there is nothing to note.", voices) %}
+  <section id="my-items" class="grid gap-2">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      {{ heading("Yours") }}
+      {# Only my items are redrawn: the page or drawer stays where it is. #}
+      <form data-write hx-post="{{ base }}/me" hx-trigger="change" hx-target="#my-items" hx-select="#my-items" hx-swap="outerHTML">
+        {{ select("name", people, selected=meeting.me, blank="Nobody here", label="I am") }}
+      </form>
+    </div>
+    {{ items(mine, "Nothing for you." if meeting.me else "Say which speaker you are to see yours.", clock) }}
+  </section>
+  {% endcall %}
+  {% endif %}
+  {% if can_rewrite %}
+  <div>{{ action("Write them again" if notes or notes_error else "Write the notes", 'data-write hx-post="' ~ base ~ '/notes" ' ~ hx_body) }}</div>
+  {% endif %}
+{% endcall %}
+{% endif %}
+
+{% call card("Transcript", id="meeting-transcript") %}
+{% if turns %}
+{# Kept in view while reading: back to the notes, to the start, to the
+   latest line (app.js's ``data-scroll-to``). #}
+<div class="sticky top-0 z-10 -mx-2 mb-2 flex justify-end gap-1.5 bg-aegis-card/95 px-2 py-1.5 backdrop-blur">
+  {% if has_notes %}{{ action("Notes", 'data-scroll-to="#meeting-notes"') }}{% endif %}
+  {{ action("Start of the transcript", 'data-scroll-to="#meeting-transcript [data-turn]:first-child"', glyph="arrow-up") }}
+  {{ action("Latest line", 'data-scroll-to="#meeting-transcript [data-turn]:last-child"', glyph="arrow-down") }}
+</div>
+{% endif %}
+{{ transcript(turns, clock, voices) }}
+{% endcall %}

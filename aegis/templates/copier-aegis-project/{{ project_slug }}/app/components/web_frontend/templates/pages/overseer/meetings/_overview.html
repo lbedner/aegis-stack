@@ -1,9 +1,11 @@
-{# Every owner's meetings, newest first; a row opens its meeting in the
+{# Every owner's meetings, newest first, and the bot sent from here (as
+   the Meetings page sends it, _send.html); a row opens its meeting in the
    drawer (_drawer.html). #}
 {% from "components/macros/layout.html" import card, drawer_sync, stats_strip %}
 {% from "components/macros/table.html" import data_table %}
 <div class="space-y-4">
   {{ stats_strip(figures, id="meetings-figures") }}
+  {% call card("Send the bot") %}{% include "pages/meetings/_send.html" %}{% endcall %}
   {% call card(None, id="overseer-meetings") %}
     {{ data_table([
       {"key": "meeting", "label": "Meeting", "kind": "link", "target": "#overseer-main"},

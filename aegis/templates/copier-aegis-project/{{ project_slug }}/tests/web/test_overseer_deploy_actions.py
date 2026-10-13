@@ -913,6 +913,26 @@ def test_a_new_server_on_a_domain_carries_its_dns_providers_keys(
     assert not set(PORKBUN.values()) & set(request["args"].values())
 
 
+def test_who_may_reach_the_overseer_is_asked_on_the_form(
+    redis: FakeRedis, app: FastAPI
+) -> None:
+    """Networks, checked as the agent checks them; stamped on the server's
+    .env at each deploy, so the Overseer there answers you."""
+    _sold(redis)
+    one(_form(TestClient(app)), "input[name=allowlist]")
+    url = f"{actions.PARTIALS}/provision"
+    response = TestClient(app).post(
+        url, data=PICKED | {"typed": "12.00", "allowlist": "my house"}
+    )
+    assert triggers(response)["toast"]["tone"] == "error"
+    assert not _queued(redis)
+    TestClient(app).post(
+        url, data=PICKED | {"typed": "12.00", "allowlist": "203.0.113.9/32"}
+    )
+    (request,) = _queued(redis)
+    assert request["args"]["allowlist"] == "203.0.113.9/32"
+
+
 def test_a_destroy_carries_the_keys_its_record_was_made_with(
     redis: FakeRedis, store: FakeStore, app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> None:

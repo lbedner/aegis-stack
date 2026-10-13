@@ -43,6 +43,8 @@ PROTOCOL: dict[str, Any] = {
         "region": "[a-z0-9][a-z0-9-]{0,31}",
         "domain": r"(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}",
         "dns": "[a-z0-9][a-z0-9-]{0,31}",
+        # Who may reach the Overseer: networks, comma-separated (IPv4, IPv6).
+        "allowlist": r"[0-9A-Fa-f.:]{2,39}/\d{1,3}(?:,[0-9A-Fa-f.:]{2,39}/\d{1,3}){0,15}",
         "email": r"[A-Za-z0-9][A-Za-z0-9._%+-]{0,63}@(?:[A-Za-z0-9-]{1,63}\.)+[A-Za-z]{2,63}",
         "price": r"\d{1,6}\.\d{2}",
         "backup": r"\d{4}-\d{2}-\d{2}_\d{6}",
@@ -70,7 +72,7 @@ PROTOCOL: dict[str, Any] = {
             "token": True,
             "dns": True,
             "required": ["provider", "size", "region", "price"],
-            "optional": ["domain", "email", "dns"],
+            "optional": ["domain", "email", "dns", "allowlist"],
         },
         "deploy": {
             "command": ["deploy"],

@@ -1277,6 +1277,8 @@ MESSAGES: dict[str, str] = {
     "provision.help_opt_size": "Tipo de servidor, p. ej. {sizes}",
     "provision.help_opt_region": ("Ubicación del proveedor, p. ej. {regions}"),
     "provision.help_opt_domain": "Nombre de host que apunta al servidor mediante su proveedor DNS (por defecto: un nombre sslip.io)",
+    "provision.help_opt_allowlist": "Redes que pueden llegar al Overseer y a las rutas de administración, separadas por comas (p. ej. 203.0.113.9/32); se escriben en el servidor en cada despliegue",
+    "provision.bad_allowlist": "No es una lista de redes: {value} (separadas por comas, como 203.0.113.9/32)",
     "provision.help_opt_dns": "Proveedor DNS para --domain: {providers} (por defecto: el primero con sus claves definidas)",
     "provision.help_opt_ssh_key": "Clave pública instalada para root en el nuevo servidor (por defecto: la primera de ~/.ssh/id_ed25519.pub, id_ecdsa.pub, id_rsa.pub)",
     "provision.no_ssh_key": "No se encontró ninguna clave pública SSH en {dir} (se buscó {names}). Indica una con --ssh-key.",

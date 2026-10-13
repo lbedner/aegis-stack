@@ -1242,6 +1242,8 @@ MESSAGES: dict[str, str] = {
     "provision.help_opt_size": "Тип сервера, например {sizes}",
     "provision.help_opt_region": "Локация провайдера, например {regions}",
     "provision.help_opt_domain": "Имя хоста, направляемое на сервер через его DNS-провайдера (по умолчанию: имя sslip.io)",
+    "provision.help_opt_allowlist": "Сети, которым доступен Overseer и админ-пути, через запятую (напр. 203.0.113.9/32); записываются на сервер при каждом развёртывании",
+    "provision.bad_allowlist": "Не список сетей: {value} (через запятую, например 203.0.113.9/32)",
     "provision.help_opt_dns": "DNS-провайдер для --domain: {providers} (по умолчанию первый с заданными ключами)",
     "provision.help_opt_ssh_key": "Публичный ключ для root на новом сервере (по умолчанию первый из ~/.ssh/id_ed25519.pub, id_ecdsa.pub, id_rsa.pub)",
     "provision.no_ssh_key": "В {dir} не найден публичный SSH-ключ (искали {names}). Укажите ключ через --ssh-key.",

@@ -15,6 +15,7 @@ DR-06 deploy record gains; when that record lands, ``aegis deploy`` reads
 them from here.
 """
 
+import ipaddress
 import os
 import re
 from collections.abc import Callable
@@ -127,6 +128,19 @@ def _dns(key: str | None) -> DnsProvider:
 def _connect(spec: DnsProvider) -> tuple[str, DnsClient]:
     """``spec``'s key and its client, its keys from the environment."""
     return spec.key, spec.connect(*(_token(name) for name in spec.secrets))
+
+
+def _allowlist(value: str | None) -> str | None:
+    """``--allowlist`` as comma-separated networks (``203.0.113.9/32``);
+    anything else is refused before a server is bought."""
+    if not value:
+        return None
+    try:
+        nets = [ipaddress.ip_network(part.strip()) for part in value.split(",")]
+    except ValueError:
+        brand.error(t("provision.bad_allowlist", value=value), err=True)
+        raise typer.Exit(1) from None
+    return ",".join(str(net) for net in nets)
 
 
 def _names_itself(root: Path) -> bool:
@@ -436,6 +450,9 @@ def deploy_provision_command(
     email: str | None = typer.Option(
         None, "--email", help=lazy_t("provision.help_opt_email")
     ),
+    allowlist: str | None = typer.Option(
+        None, "--allowlist", help=lazy_t("provision.help_opt_allowlist")
+    ),
     project_path: str | None = typer.Option(
         None, "--project-path", help=lazy_t("common.help_project_path")
     ),
@@ -456,6 +473,7 @@ def deploy_provision_command(
         - aegis deploy-provision --domain app.example.com
         - aegis deploy-provision --domain app.example.com --dns porkbun
         - aegis deploy-provision --email ops@example.com
+        - aegis deploy-provision --allowlist 203.0.113.9/32
     """
     spec = _provider(provider)
     cloud = _client(spec)
@@ -463,8 +481,13 @@ def deploy_provision_command(
     refuse_unsafe_env(root)  # its deploy would refuse it after the purchase
     user_data, public_key = _read_inputs(root, ssh_key)
     acme_email = _acme_email(root, email)
+    admins = _allowlist(allowlist)
 
     config = _load_deploy_config(str(root)) or {}
+    # Stamped into the server's .env at each deploy (``deploy.STAMPED``).
+    config["acme_email"] = acme_email
+    if admins:
+        config["admin_ip_allowlist"] = admins
     record: dict[str, Any] = config.get("provision") or {}
     if record.get("status") == "ready":
         brand.error(t("provision.already_ready", ip=record.get("ipv4")), err=True)

@@ -588,6 +588,8 @@ def test_provision_happy_path_sslip(project: Path, apis: dict[str, FakeAPI]) -> 
     config = _deploy_yml(project)
     assert config["server"] == {"host": IP, "user": "root", "path": "/opt/my_app"}
     assert config["domain"] == "203-0-113-7.sslip.io"
+    assert config["acme_email"] == EMAIL  # stamped on the server at each deploy
+    assert "admin_ip_allowlist" not in config
     record = config["provision"]
     assert record["provider"] == "hetzner"
     assert record["server_id"] == 42
@@ -840,6 +842,23 @@ def test_a_project_that_reads_its_name_from_the_env_is_not_re_rendered(
     result = _provision(project)
     assert result.exit_code == 0, result.output
     assert apis["steps"] == [("deploy", None)]  # type: ignore[comparison-overlap]
+
+
+def test_who_may_reach_the_overseer_is_kept_for_each_deploy(
+    project: Path, apis: dict[str, FakeAPI]
+) -> None:
+    result = _provision(project, "--allowlist", "203.0.113.9/32,2001:db8::/48")
+    assert result.exit_code == 0, result.output
+    assert _deploy_yml(project)["admin_ip_allowlist"] == "203.0.113.9/32,2001:db8::/48"
+
+
+def test_an_allowlist_that_is_not_addresses_is_refused_before_buying(
+    project: Path, apis: dict[str, FakeAPI]
+) -> None:
+    result = _provision(project, "--allowlist", "my house")
+    assert result.exit_code == 1
+    assert "my house" in strip_ansi_codes(result.output)
+    assert not apis[hetzner.API_URL].calls
 
 
 def test_without_an_email_nothing_is_created(

@@ -1223,6 +1223,8 @@ MESSAGES: dict[str, str] = {
     "provision.help_opt_size": "서버 유형 (예: {sizes})",
     "provision.help_opt_region": "제공자 위치 (예: {regions})",
     "provision.help_opt_domain": "DNS 공급자로 서버를 가리킬 호스트명 (기본값: sslip.io 이름)",
+    "provision.help_opt_allowlist": "Overseer와 관리 경로에 접근할 수 있는 네트워크, 쉼표로 구분 (예: 203.0.113.9/32); 배포할 때마다 서버에 기록됨",
+    "provision.bad_allowlist": "네트워크 목록이 아닙니다: {value} (쉼표로 구분, 예: 203.0.113.9/32)",
     "provision.help_opt_dns": "--domain의 DNS 공급자: {providers} (기본값: 키가 설정된 첫 번째)",
     "provision.help_opt_ssh_key": "새 서버의 root에 설치할 공개 키(기본값: ~/.ssh/id_ed25519.pub, id_ecdsa.pub, id_rsa.pub 중 처음 있는 것)",
     "provision.no_ssh_key": "{dir}에서 SSH 공개 키를 찾지 못했습니다({names}을(를) 찾았습니다). --ssh-key로 지정하세요.",

@@ -595,7 +595,12 @@ def test_a_provisions_dns_keys_reach_its_command_masked_never_its_args(
 ) -> None:
     _price_api(monkeypatch, 12)
     redis = FakeRedis()
-    args = QUOTED | {"price": "12.00", "domain": "app.example.com", "dns": "porkbun"}
+    args = QUOTED | {
+        "price": "12.00",
+        "domain": "app.example.com",
+        "dns": "porkbun",
+        "allowlist": "203.0.113.9/32",
+    }
     keys = {"PORKBUN_API_KEY": PK, "PORKBUN_SECRET_KEY": SK}
     job_id = _request(
         redis, app_store, "provision", args, token=SENT_TOKEN, dns_keys=keys
@@ -603,6 +608,7 @@ def test_a_provisions_dns_keys_reach_its_command_masked_never_its_args(
     _serve(redis, project)
     ran, _, dns = _job(redis, app_store, job_id).result["lines"][:3]
     assert "--dns porkbun" in ran and PK not in ran
+    assert "--allowlist 203.0.113.9/32" in ran
     assert dns == "dns ...pkey"
     _nowhere(redis, PK)
     _nowhere(redis, SK)

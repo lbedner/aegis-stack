@@ -1110,6 +1110,8 @@ MESSAGES: dict[str, str] = {
     "provision.help_opt_size": "伺服器類型，例如 {sizes}",
     "provision.help_opt_region": "供應商機房位置，例如 {regions}",
     "provision.help_opt_domain": "透過 DNS 服務商指向伺服器的主機名稱 (預設：sslip.io 名稱)",
+    "provision.help_opt_allowlist": "可存取 Overseer 與管理路徑的網路，逗號分隔 (如 203.0.113.9/32)；每次部署時寫入伺服器",
+    "provision.bad_allowlist": "不是網路清單：{value} (逗號分隔，如 203.0.113.9/32)",
     "provision.help_opt_dns": "--domain 的 DNS 服務商：{providers} (預設：第一個已設定金鑰的)",
     "provision.help_opt_ssh_key": "為新伺服器 root 使用者安裝的公鑰（預設：~/.ssh/id_ed25519.pub、id_ecdsa.pub、id_rsa.pub 中第一個存在的）",
     "provision.no_ssh_key": "在 {dir} 中找不到 SSH 公鑰（尋找了 {names}）。請用 --ssh-key 指定。",

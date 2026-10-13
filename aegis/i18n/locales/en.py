@@ -1377,6 +1377,8 @@ MESSAGES: dict[str, str] = {
     "provision.help_opt_size": "Server type (defaults: {sizes})",
     "provision.help_opt_region": "Provider location (defaults: {regions})",
     "provision.help_opt_domain": "Hostname to point at the server through its DNS provider (default: an sslip.io name)",
+    "provision.help_opt_allowlist": "Networks that may reach the Overseer and admin paths, comma-separated (e.g. 203.0.113.9/32); stamped on the server at each deploy",
+    "provision.bad_allowlist": "Not a network list: {value} (comma-separated, like 203.0.113.9/32)",
     "provision.help_opt_dns": "DNS provider for --domain: {providers} (default: the first whose keys are set)",
     "provision.help_opt_ssh_key": "Public key installed for root on the new server (default: the first of ~/.ssh/id_ed25519.pub, id_ecdsa.pub, id_rsa.pub)",
     "provision.no_ssh_key": "No SSH public key found in {dir} (looked for {names}). Pass one with --ssh-key.",

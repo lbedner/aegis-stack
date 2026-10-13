@@ -1278,6 +1278,8 @@ MESSAGES: dict[str, str] = {
     "provision.help_opt_size": "Type de serveur, par ex. {sizes}",
     "provision.help_opt_region": ("Emplacement chez le fournisseur, par ex. {regions}"),
     "provision.help_opt_domain": "Nom d'hôte pointé vers le serveur via son fournisseur DNS (par défaut : un nom sslip.io)",
+    "provision.help_opt_allowlist": "Réseaux autorisés à joindre l'Overseer et les chemins d'administration, séparés par des virgules (ex. 203.0.113.9/32) ; écrits sur le serveur à chaque déploiement",
+    "provision.bad_allowlist": "Pas une liste de réseaux : {value} (séparés par des virgules, comme 203.0.113.9/32)",
     "provision.help_opt_dns": "Fournisseur DNS pour --domain : {providers} (par défaut : le premier dont les clés sont définies)",
     "provision.help_opt_ssh_key": "Clé publique installée pour root sur le nouveau serveur (par défaut : la première parmi ~/.ssh/id_ed25519.pub, id_ecdsa.pub, id_rsa.pub)",
     "provision.no_ssh_key": "Aucune clé publique SSH trouvée dans {dir} (recherché : {names}). Indiquez-en une avec --ssh-key.",

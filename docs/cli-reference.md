@@ -665,8 +665,10 @@ firewall outside the droplet is the one that holds. It is deleted with the
 droplet.
 
 A project whose `docker-compose.prod.yml` takes its host from `${DOMAIN}` is
-left as it is: each deploy stamps the server's name into the server's `.env`
-as `DOMAIN` (beside `BUILD_ID`). Any other project has HTTPS rendered into its
+left as it is: each deploy stamps into the server's `.env`, beside
+`BUILD_ID`, what provisioning recorded in `.aegis/deploy.yml`: the server's
+name as `DOMAIN`, the certificate's address as `ACME_EMAIL`, and `--allowlist`
+as `ADMIN_IP_ALLOWLIST`. Any other project has HTTPS rendered into its
 files for the name, as `aegis ingress-enable` does.
 
 Every resource is recorded under `provision:` in `.aegis/deploy.yml` the moment
@@ -686,6 +688,7 @@ aegis deploy-provision [OPTIONS]
 - `--domain TEXT`, Hostname to point at the server through its DNS provider
 - `--dns TEXT`, DNS provider for `--domain`: `porkbun` or `cloudflare` (default: the first whose keys are set)
 - `--email TEXT`, Address Let's Encrypt registers the certificate to (default: the project's `author_email`)
+- `--allowlist TEXT`, Networks that may reach the Overseer and admin paths, comma-separated (e.g. `203.0.113.9/32`)
 - `--ssh-key TEXT`, Public key installed for root (default: the first of `~/.ssh/id_ed25519.pub`, `id_ecdsa.pub`, `id_rsa.pub` that exists)
 - `--project-path TEXT`, Path to the project (default: current directory)
 - `--yes, -y`, Skip the price confirmation

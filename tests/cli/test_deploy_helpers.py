@@ -591,12 +591,20 @@ def test_upload_env_stamps_the_build_id(
     )
     remote.clear()
     (tmp_path / ".aegis").mkdir()
-    (tmp_path / ".aegis" / "deploy.yml").write_text("domain: app.example.com\n")
+    (tmp_path / ".aegis" / "deploy.yml").write_text(
+        "domain: app.example.com\nacme_email: ops@example.org\n"
+        "admin_ip_allowlist: 203.0.113.9/32\n"
+    )
     deploy_mod._upload_env(tmp_path, "h", "u", "/opt/app")
     assert remote == [
         deploy_mod._stamp_env_command(
             "/opt/app/.env",
-            {"BUILD_ID": deploy_mod._build_id(tmp_path), "DOMAIN": "app.example.com"},
+            {
+                "BUILD_ID": deploy_mod._build_id(tmp_path),
+                "DOMAIN": "app.example.com",
+                "ACME_EMAIL": "ops@example.org",
+                "ADMIN_IP_ALLOWLIST": "203.0.113.9/32",
+            },
         )
     ]
 

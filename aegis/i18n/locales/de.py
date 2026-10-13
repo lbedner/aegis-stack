@@ -870,6 +870,7 @@ MESSAGES: dict[str, str] = {
     "deploy.backup_storage_failed": "Warning: Object storage backup failed",
     "deploy.backup_offsite": "Copying backup off the server (restic)...",
     "deploy.backup_offsite_failed": "Warning: Off-box copy failed: {error}",
+    "deploy.env_unsafe": "{file} würde die App ungeschützt online stellen. Korrigiere dort {settings} (AUTH_ENABLED=true, APP_ENV=prod, ein neuer SECRET_KEY aus openssl rand -hex 32) und deploye erneut; .env.deploy.example erklärt jede Einstellung.",
     "deploy.disk_low": "Nur {free}GB frei auf {host}, benötigt werden {need}GB. Aufräumen mit: docker image prune -af && docker builder prune -af",
     "deploy.pruning": "Docker-Speicher wird freigegeben (verwaiste Images und alter Build-Cache)...",
     "deploy.prune_failed": "Docker-Speicher konnte nicht freigegeben werden; das Deployment selbst war erfolgreich.",
@@ -1273,9 +1274,10 @@ MESSAGES: dict[str, str] = {
     ),
     "provision.help_opt_size": "Servertyp, z. B. {sizes}",
     "provision.help_opt_region": "Standort beim Anbieter, z. B. {regions}",
-    "provision.help_opt_domain": (
-        "Hostname, der per Cloudflare auf den Server zeigt (Standard: ein sslip.io-Name)"
-    ),
+    "provision.help_opt_domain": "Hostname, der über seinen DNS-Anbieter auf den Server zeigt (Standard: ein sslip.io-Name)",
+    "provision.help_opt_allowlist": "Netze, die Overseer und Admin-Pfade erreichen dürfen, kommagetrennt (z. B. 203.0.113.9/32); bei jedem Deploy auf den Server geschrieben",
+    "provision.bad_allowlist": "Keine Netzliste: {value} (kommagetrennt, etwa 203.0.113.9/32)",
+    "provision.help_opt_dns": "DNS-Anbieter für --domain: {providers} (Standard: der erste mit gesetzten Schlüsseln)",
     "provision.help_opt_ssh_key": "Öffentlicher Schlüssel für root auf dem neuen Server (Standard: der erste von ~/.ssh/id_ed25519.pub, id_ecdsa.pub, id_rsa.pub)",
     "provision.no_ssh_key": "Kein öffentlicher SSH-Schlüssel in {dir} gefunden (gesucht: {names}). Gib einen mit --ssh-key an.",
     "provision.help_opt_email": "Adresse, unter der Let's Encrypt das HTTPS-Zertifikat registriert (Standard: die author_email des Projekts)",

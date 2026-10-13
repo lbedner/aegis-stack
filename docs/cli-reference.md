@@ -649,8 +649,12 @@ Tokens are read from the environment at call time and never stored or printed
   use a project dedicated to this app.
 - `DIGITALOCEAN_TOKEN` (`--provider digitalocean`), a DigitalOcean API token
   with write scope.
-- `CLOUDFLARE_API_TOKEN`, only with `--domain`: a token with DNS edit rights on
-  the zone that owns the name.
+- Only with `--domain`, the DNS provider's keys (`--dns` names one; by default
+  the first whose keys are set):
+    - `CLOUDFLARE_API_TOKEN`: a token with DNS edit rights on the zone that
+      owns the name.
+    - `PORKBUN_API_KEY` and `PORKBUN_SECRET_KEY`, with API ACCESS on for the
+      domain (its details page on porkbun.com).
 
 Without `--domain` the app gets an `sslip.io` name (`203-0-113-7.sslip.io`),
 so a first deploy needs no domain at all.
@@ -659,6 +663,13 @@ On DigitalOcean the droplet also gets a cloud firewall allowing only SSH,
 HTTP and HTTPS in: Docker-published ports bypass the server's own ufw, so the
 firewall outside the droplet is the one that holds. It is deleted with the
 droplet.
+
+A project whose `docker-compose.prod.yml` takes its host from `${DOMAIN}` is
+left as it is: each deploy stamps into the server's `.env`, beside
+`BUILD_ID`, what provisioning recorded in `.aegis/deploy.yml`: the server's
+name as `DOMAIN`, the certificate's address as `ACME_EMAIL`, and `--allowlist`
+as `ADMIN_IP_ALLOWLIST`. Any other project has HTTPS rendered into its
+files for the name, as `aegis ingress-enable` does.
 
 Every resource is recorded under `provision:` in `.aegis/deploy.yml` the moment
 it exists. If a later step fails, the command lists what was created and offers
@@ -673,9 +684,11 @@ aegis deploy-provision [OPTIONS]
 
 - `--provider TEXT`, Cloud provider: `hetzner` (default) or `digitalocean`
 - `--size TEXT`, Server type (default: `cx23` on Hetzner, `s-1vcpu-2gb` on DigitalOcean)
-- `--region TEXT`, Provider location (default: `nbg1` on Hetzner, `nyc3` on DigitalOcean)
-- `--domain TEXT`, Hostname to point at the server through Cloudflare
+- `--region TEXT`, Provider location (default: `nbg1` on Hetzner, `tor1` on DigitalOcean)
+- `--domain TEXT`, Hostname to point at the server through its DNS provider
+- `--dns TEXT`, DNS provider for `--domain`: `porkbun` or `cloudflare` (default: the first whose keys are set)
 - `--email TEXT`, Address Let's Encrypt registers the certificate to (default: the project's `author_email`)
+- `--allowlist TEXT`, Networks that may reach the Overseer and admin paths, comma-separated (e.g. `203.0.113.9/32`)
 - `--ssh-key TEXT`, Public key installed for root (default: the first of `~/.ssh/id_ed25519.pub`, `id_ecdsa.pub`, `id_rsa.pub` that exists)
 - `--project-path TEXT`, Path to the project (default: current directory)
 - `--yes, -y`, Skip the price confirmation
@@ -686,6 +699,7 @@ aegis deploy-provision
 aegis deploy-provision --size cx33 --region fsn1
 aegis deploy-provision --provider digitalocean --region fra1
 aegis deploy-provision --domain app.example.com
+aegis deploy-provision --domain app.example.com --dns porkbun
 ```
 
 ---
@@ -741,8 +755,8 @@ aegis deploy-cd-setup --force  # rotate the deploy key
 
 ### aegis deploy-agent
 
-Run what Overseer > Deployments asks for on this machine: a price, a new
-server, a deploy, a backup, the backup list, a rollback, a destroy. The
+Run what Overseer > Deployments asks for on this machine: a provider's sizes
+and regions, what the account already runs, the stack's footprint, a new server, a deploy, a backup, the backup list, a rollback, a destroy. The
 Overseer puts each request on the project's Redis; this takes them one at a
 time and runs the matching `aegis deploy-*` command, streaming its output back
 to the page. Run it in the project directory with the stack up, where your
@@ -750,12 +764,18 @@ SSH key is. A cloud token comes with the request that needs it (set on
 Overseer > Secrets, or in the app's `.env`), or from this machine's
 environment; a sent one wins. It reaches the command only through the
 environment, is masked in the output, and is kept nowhere (the heartbeat
-names the providers this machine holds a token for, never the token).
+names the providers this machine holds a token for, never the token). A new
+server on a domain, and its destroy, carry the DNS provider's keys the same
+way; only a DNS provider's own variables are accepted (anything else, such as
+`PATH`, is refused).
 
 It finds Redis as the app's host-side settings do: `REDIS_URL_LOCAL`, else
 the port `make serve` published (`.env.ports`). Requests older than five
 minutes are failed, not run. A new server is created only at the price you
 typed back in the Overseer, which it asks the provider for again first.
+The heartbeat also names the actions this agent runs and the protocol
+revision it speaks: one started before the CLI learned what the page asks
+for is shown as older than the app, to restart, and is not asked.
 
 **Usage:**
 ```bash

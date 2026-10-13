@@ -16,7 +16,6 @@ from app.services.meetings.models import (
     Meeting,
     MeetingNotes,
     MeetingParticipant,
-    MeetingRecord,
     MeetingStatus,
     Notes,
     Platform,
@@ -29,6 +28,7 @@ from app.services.meetings.service import (
     MeetingNotFoundError,
     MeetingsService,
     NotASpeakerError,
+    NothingToWriteError,
     UnsupportedMeetingLinkError,
     detect_platform,
     fail_interrupted,
@@ -39,9 +39,12 @@ from app.services.meetings.service import (
     save_notes,
     speakers,
     transition,
+    voice,
+    voices,
 )
 from tests._cli import invoke
-from tests._meetings import MEET, said
+from tests._meetings import MEET, ended, hold_the_writer, said
+from tests._meetings import record as shared_record
 from tests._session import opens
 
 
@@ -407,20 +410,84 @@ def test_the_cli_shows_a_meeting_as_the_pages_read_it() -> None:
         left_at=joined + timedelta(seconds=90),
         heard={"Ada": 42.0},
     )
-    record = MeetingRecord(
-        meeting=meeting,
-        notes=None,
-        notes_error=None,
-        model_name=None,
+    record = shared_record(
+        meeting,
         transcript=[TranscriptRow(id=1, speaker="Ada", at=61.0, text="Hello.")],
-        status="Left",
         length="01:30",
-        heard="Ada 42s",
-        can_leave=False,
-        can_delete=True,
     )
 
     shown = "\n".join(describe(record))
 
     for part in ("Status: Left", "01:30", "Ada 42s", "01:01", "Ada: Hello."):
         assert part in shown
+
+
+async def test_the_read_says_who_spoke_what_is_mine_and_what_can_be_done(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """What both Overseers and the page need, from one read."""
+    hold_the_writer(monkeypatch)
+    meeting_id, _ = await ended(
+        async_db_session,
+        None,
+        ("Leonard", "I'll book the room."),
+        ("Ada", "And I write the docs."),
+        notes=lambda ids: Notes(
+            summary="Room and docs.",
+            action_items=[ActionItem(text="Book the room", owner="Leonard")],
+        ),
+    )
+    svc = MeetingsService(async_db_session, None)
+    await svc.set_me(meeting_id, "Leonard")
+
+    record = await svc.read(meeting_id)
+
+    assert record.people == ["Ada", "Leonard"]
+    assert [item.text for item in record.mine] == ["Book the room"]
+    assert record.can_rewrite
+    assert not (record.writing or record.under_way)
+
+
+async def test_notes_are_written_again_only_when_they_can_be(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Not while the bot is in, nor while a writer is at it: then it starts
+    one, in the background, and the read says the notes are being written."""
+    started, runs = hold_the_writer(monkeypatch)
+    svc = MeetingsService(async_db_session, None)
+    under_way = await svc.request(MEET)
+    meeting_id, _ = await ended(
+        async_db_session, None, ("Ada", "Hi."), notes=lambda _: Notes(summary="Hi.")
+    )
+
+    with pytest.raises(NothingToWriteError):
+        await svc.write_notes_again(under_way.id)  # type: ignore[arg-type]
+    record = await svc.write_notes_again(meeting_id)
+
+    assert record.writing and not record.can_rewrite
+    with pytest.raises(NothingToWriteError):
+        await svc.write_notes_again(meeting_id)
+    await runs[0]
+    assert started == [meeting_id]
+
+
+def test_every_speaker_in_a_meeting_has_a_color_of_their_own() -> None:
+    """Up to the theme's nine colors none is shared, the eight speakers of a
+    real call included; a speaker keeps their name's color unless someone
+    in the meeting already has it."""
+    names = [
+        "Lawrence Casely-Hayford",
+        "William Ferro",
+        "Lisa Atalese",
+        "Leonard Bedner",
+        "Moises J",
+        "Susan Griffin-Herrera",
+        "Vishal Singh",
+        "Ada",
+    ]
+
+    colors = voices(names)
+
+    assert len(set(colors.values())) == len(names)
+    assert set(colors.values()) <= set(range(1, 10))
+    assert voices(["Ada"]) == {"Ada": voice("Ada")}

@@ -34,8 +34,10 @@ QUALITY_CHECK_TIMEOUTS = {
     # than a dev machine, so the margin has to be read in that ratio:
     # ``finance_ai_rbac`` at ~160s locally lands near 245s here, which
     # left too little room under 300. 480s keeps a genuine hang bounded
-    # while ending the reactive bump each time a suite grows.
-    "tests": 480,
+    # while ending the reactive bump each time a suite grows. It did not:
+    # meetings plus the deploy pages put ``everything`` over 480s on slow
+    # runners (6.5 to 9.3 minutes for the same commit), so 720s.
+    "tests": 720,
 }
 
 STANDARD_ENV_OVERRIDES = {

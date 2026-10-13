@@ -874,6 +874,7 @@ MESSAGES: dict[str, str] = {
     "deploy.backup_storage_failed": "Warning: Object storage backup failed",
     "deploy.backup_offsite": "Copying backup off the server (restic)...",
     "deploy.backup_offsite_failed": "Warning: Off-box copy failed: {error}",
+    "deploy.env_unsafe": "{file} mettrait l'app en ligne sans protection. Corrigez {settings} dans ce fichier (AUTH_ENABLED=true, APP_ENV=prod, un nouveau SECRET_KEY via openssl rand -hex 32), puis redéployez ; .env.deploy.example explique chaque réglage.",
     "deploy.disk_low": "Seulement {free} Go libres sur {host}, il en faut {need}. Libérez de l'espace avec : docker image prune -af && docker builder prune -af",
     "deploy.pruning": "Libération de l'espace disque Docker (images orphelines et ancien cache de build)...",
     "deploy.prune_failed": "Impossible de libérer l'espace disque Docker ; le déploiement lui-même a réussi.",
@@ -1276,9 +1277,10 @@ MESSAGES: dict[str, str] = {
     "provision.help_opt_provider": "Fournisseur cloud où créer le serveur ({providers})",
     "provision.help_opt_size": "Type de serveur, par ex. {sizes}",
     "provision.help_opt_region": ("Emplacement chez le fournisseur, par ex. {regions}"),
-    "provision.help_opt_domain": (
-        "Nom d'hôte pointé vers le serveur via Cloudflare (par défaut : un nom sslip.io)"
-    ),
+    "provision.help_opt_domain": "Nom d'hôte pointé vers le serveur via son fournisseur DNS (par défaut : un nom sslip.io)",
+    "provision.help_opt_allowlist": "Réseaux autorisés à joindre l'Overseer et les chemins d'administration, séparés par des virgules (ex. 203.0.113.9/32) ; écrits sur le serveur à chaque déploiement",
+    "provision.bad_allowlist": "Pas une liste de réseaux : {value} (séparés par des virgules, comme 203.0.113.9/32)",
+    "provision.help_opt_dns": "Fournisseur DNS pour --domain : {providers} (par défaut : le premier dont les clés sont définies)",
     "provision.help_opt_ssh_key": "Clé publique installée pour root sur le nouveau serveur (par défaut : la première parmi ~/.ssh/id_ed25519.pub, id_ecdsa.pub, id_rsa.pub)",
     "provision.no_ssh_key": "Aucune clé publique SSH trouvée dans {dir} (recherché : {names}). Indiquez-en une avec --ssh-key.",
     "provision.help_opt_email": "Adresse à laquelle Let's Encrypt enregistre le certificat HTTPS (par défaut : l'author_email du projet)",

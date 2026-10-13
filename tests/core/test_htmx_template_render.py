@@ -378,6 +378,7 @@ class TestWebFrontendScaffolding:
                 "avatar",
                 "chart",
                 "chart_data",
+                "chart_dot",
                 "chart_panel",
                 "chip",
                 "code_block",

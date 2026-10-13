@@ -1,12 +1,14 @@
 """Meetings for Overseer, across every owner: the list, one meeting read in
-full (its notes, transcript and how long each speaker was heard), the bot
-asked to leave, and a meeting deleted. Reading is the admin's
-(``get_admin_reader``), a change an operator's (``get_admin_actor``); an
-owner's own meetings are ``router``'s."""
+full (its notes, transcript and how long each speaker was heard), which
+speaker its owner is, its notes written again, the bot asked to leave,
+and a meeting deleted. Reading is the admin's (``get_admin_reader``), a
+change an operator's (``get_admin_actor``); an owner's own meetings are
+``router``'s."""
 
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response, status
+from pydantic import BaseModel
 
 from app.services.meetings.deps import as_http, get_every_owners_meetings
 from app.services.meetings.models import Meeting, MeetingRecord
@@ -44,6 +46,31 @@ async def leave(meeting_id: int, svc: Every) -> Meeting:
     """Ask the bot to leave; it goes on its next look."""
     with as_http():
         return await svc.ask_to_leave(meeting_id)
+
+
+class Speaker(BaseModel):
+    name: str | None = None
+
+
+@router.post("/{meeting_id}/me", response_model=MeetingRecord, dependencies=CHANGE)
+async def set_me(meeting_id: int, body: Speaker, svc: Every) -> MeetingRecord:
+    """Which speaker the meeting's owner is (none: nobody); their action
+    items follow."""
+    with as_http():
+        await svc.set_me(meeting_id, body.name or None)
+        return await svc.read(meeting_id)
+
+
+@router.post(
+    "/{meeting_id}/notes",
+    response_model=MeetingRecord,
+    status_code=status.HTTP_202_ACCEPTED,
+    dependencies=CHANGE,
+)
+async def write_notes(meeting_id: int, svc: Every) -> MeetingRecord:
+    """Write the notes again, over the old ones, in the background."""
+    with as_http():
+        return await svc.write_notes_again(meeting_id)
 
 
 @router.delete(

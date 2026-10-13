@@ -145,9 +145,9 @@ bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-
 </div>
 {% endmacro %}
 
-{% macro text_input(name, value=None, placeholder="", required=False, autofocus=False) %}
+{% macro text_input(name, value=None, placeholder="", required=False, autofocus=False, pattern=None) %}
 <input type="text" name="{{ name }}" value="{{ value or '' }}" placeholder="{{ placeholder }}"
-       {% if required %}required{% endif %} {% if autofocus %}autofocus{% endif %}
+       {% if required %}required{% endif %} {% if autofocus %}autofocus{% endif %} {% if pattern %}pattern="{{ pattern }}"{% endif %}
        class="{{ _control_classes }} w-full mt-1">
 {% endmacro %}
 

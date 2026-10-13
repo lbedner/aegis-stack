@@ -1,12 +1,15 @@
 """The deploy agent's protocol: the Redis keys, the actions it runs and
 each argument's pattern, and the one check a request must pass.
 
-A ``catalog`` (what a provider sells, where) is kept under the
-``catalog`` key plus the provider for ``catalog_seconds``, and the
-stack's ``footprint`` (what its production services take, measured where
-it is built) for ``footprint_seconds``, for the Overseer's new-server form
-and whether a size has room. An action marked ``background`` is not the
-newest job the Overseer shows (``last``).
+An action that ``kept`` answers rather than runs a command: the agent
+keeps what it found under that key (``kept_key``) for ``seconds``, for the
+Overseer to read (a provider's ``catalog``, what it sells where; its
+``account``, what runs there now and what it has cost this month; the
+stack's ``footprint``, what its production services take). It is asked
+in the background: not the newest job the Overseer shows (``last``), and
+never from its buttons. An action that acts on an account (``token``) and
+runs a command changes what it runs, so the agent forgets the kept
+``account`` after it.
 
 An action marked ``token`` acts on a cloud provider's account (the one it
 names, or the provisioned server's), and its request may carry the app's
@@ -28,10 +31,9 @@ PROTOCOL: dict[str, Any] = {
     "last": "deploy:last",
     "beat_seconds": 10,
     "stale_seconds": 300,
-    "catalog": "deploy:catalog:",
-    "catalog_seconds": 3600,
-    "footprint": "deploy:footprint",
-    "footprint_seconds": 600,
+    # Raised when a request carries something an older agent would drop
+    # (2: a DNS provider's keys): the heartbeat says which it speaks.
+    "revision": 2,
     # A provider API token: its own characters only, so it can travel in an
     # environment variable and nothing else rides along with it.
     "token": r"[A-Za-z0-9._~+/=:-]{8,512}",
@@ -40,6 +42,9 @@ PROTOCOL: dict[str, Any] = {
         "size": "[a-z0-9][a-z0-9-]{0,39}",
         "region": "[a-z0-9][a-z0-9-]{0,31}",
         "domain": r"(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}",
+        "dns": "[a-z0-9][a-z0-9-]{0,31}",
+        # Who may reach the Overseer: networks, comma-separated (IPv4, IPv6).
+        "allowlist": r"[0-9A-Fa-f.:]{2,39}/\d{1,3}(?:,[0-9A-Fa-f.:]{2,39}/\d{1,3}){0,15}",
         "email": r"[A-Za-z0-9][A-Za-z0-9._%+-]{0,63}@(?:[A-Za-z0-9-]{1,63}\.)+[A-Za-z]{2,63}",
         "price": r"\d{1,6}\.\d{2}",
         "backup": r"\d{4}-\d{2}-\d{2}_\d{6}",
@@ -48,17 +53,26 @@ PROTOCOL: dict[str, Any] = {
     "actions": {
         "catalog": {
             "token": True,
-            "background": True,
             "required": ["provider"],
+            "kept": "deploy:catalog:{provider}",
+            "seconds": 3600,
+        },
+        "account": {
+            "token": True,
+            "required": ["provider"],
+            "kept": "deploy:account:{provider}",
+            "seconds": 300,
         },
         "footprint": {
-            "background": True,
+            "kept": "deploy:footprint",
+            "seconds": 600,
         },
         "provision": {
             "command": ["deploy-provision", "--yes"],
             "token": True,
+            "dns": True,
             "required": ["provider", "size", "region", "price"],
-            "optional": ["domain", "email"],
+            "optional": ["domain", "email", "dns", "allowlist"],
         },
         "deploy": {
             "command": ["deploy"],
@@ -76,6 +90,7 @@ PROTOCOL: dict[str, Any] = {
         "destroy": {
             "command": ["deploy-destroy"],
             "token": True,
+            "dns": True,
             "required": ["confirm"],
         },
     },
@@ -117,6 +132,35 @@ def checked_token(action: str, token: Any) -> str | None:
     if not isinstance(token, str) or not re.fullmatch(PROTOCOL["token"], token):
         raise RefusedError("Refused: the provider token is not a valid token.")
     return token
+
+
+# A DNS key's variable name, as a provider table names them.
+_KEY_NAME = r"[A-Z][A-Z0-9_]{2,63}"
+
+
+def checked_dns_keys(action: str, keys: Any) -> dict[str, str]:
+    """A request's DNS provider keys (``{variable: value}``), empty when it
+    carries none; RefusedError for an action that takes none, or anything
+    but names and tokens. Which names a DNS provider reads is the agent's
+    to check (its provider table). The message never repeats a value."""
+    if keys is None:
+        return {}
+    if not PROTOCOL["actions"][action].get("dns"):
+        raise RefusedError(f"{action} refused: it takes no DNS keys.")
+    if not isinstance(keys, dict) or not all(
+        isinstance(name, str)
+        and re.fullmatch(_KEY_NAME, name)
+        and isinstance(value, str)
+        and re.fullmatch(PROTOCOL["token"], value)
+        for name, value in keys.items()
+    ):
+        raise RefusedError("Refused: the DNS keys are not valid keys.")
+    return keys
+
+
+def kept_key(action: str, args: dict[str, str]) -> str:
+    """Where the agent keeps what a ``kept`` action found."""
+    return PROTOCOL["actions"][action]["kept"].format(**args)
 
 
 def token_provider(

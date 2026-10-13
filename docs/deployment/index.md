@@ -34,7 +34,7 @@ export HCLOUD_TOKEN=...      # Hetzner Cloud API token, read & write
 aegis deploy-provision --email you@example.com
 ```
 
-This replaces steps 1 and 2 above. It creates a server in your own Hetzner account (showing the monthly price first), points a name at it (`<ip>.sslip.io`, or yours with `--domain` and a Cloudflare token), turns on HTTPS for that name with Let's Encrypt, and runs `aegis deploy`. The server, the bill and the data stay yours. `aegis deploy-destroy` removes the server and its DNS record. All options: [`aegis deploy-provision`](../cli-reference.md#aegis-deploy-provision).
+This replaces steps 1 and 2 above. It creates a server in your own Hetzner account (showing the monthly price first), points a name at it (`<ip>.sslip.io`, or yours with `--domain` and its DNS provider's keys, Porkbun's or Cloudflare's), turns on HTTPS for that name with Let's Encrypt, and runs `aegis deploy`. The server, the bill and the data stay yours. `aegis deploy-destroy` removes the server and its DNS record. All options: [`aegis deploy-provision`](../cli-reference.md#aegis-deploy-provision).
 
 ## From the Overseer
 
@@ -69,7 +69,11 @@ where, at its price. The agent prices the server again before creating it,
 and refuses if the price has changed since. Beside the price, "Will it fit?"
 puts the stack against the size picked: its production services' memory (in
 use now, and their limits), CPU limits and disk (images and data), measured
-by the agent on your machine, each bar toned and saying why.
+by the agent on your machine, each bar toned and saying why. Beside it,
+what the account already runs: its servers with what each costs a month
+(aegis's own marked), the total with the new one, and on DigitalOcean this
+month's spend. Listing needs the token's `droplet:read` scope, and the
+spend `billing:read`; without one, the page says which to add.
 
 Why a host runner: every step needs what the app's container does not have
 and should not hold (the aegis CLI, the working tree it ships, your SSH key).

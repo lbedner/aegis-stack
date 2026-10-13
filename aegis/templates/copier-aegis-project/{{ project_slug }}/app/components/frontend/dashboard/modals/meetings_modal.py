@@ -1,12 +1,15 @@
-"""Meetings service detail modal: every owner's meetings beside a pane that
-reads the selected one in full (its notes, transcript and how long each
-speaker was heard), where the bot is asked to leave or the meeting is
-deleted. The same reads and changes as the htmx Overseer's drawer, over
-the admin API (``api/meetings/admin.py``).
+"""Meetings service detail modal: the bot sent to a call, and every owner's
+meetings beside a pane that reads the selected one in full (my action
+items once I say which speaker I am, the notes, the transcript, how long
+each speaker was heard), following it while the bot is in or the notes
+are being written, where the notes are written again, the bot asked to
+leave or the meeting deleted. The same as the htmx Overseer's drawer, over
+the owner's send route and the admin API (``api/meetings/admin.py``).
 """
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from datetime import datetime
 from typing import Any
@@ -17,12 +20,18 @@ from app.components.frontend.controls import (
     ConfirmDialog,
     DataTable,
     DataTableColumn,
+    NativeDropdown,
     PrimaryText,
     SecondaryText,
 )
 from app.components.frontend.controls.buttons import PulseButton
+from app.components.frontend.controls.inputs import StyledTextField
 from app.components.frontend.controls.record_detail import build_field_blocks
-from app.components.frontend.controls.snack_bar import SuccessSnackBar
+from app.components.frontend.controls.snack_bar import ErrorSnackBar, SuccessSnackBar
+from app.components.frontend.core.session_health import (
+    SessionLoops,
+    page_is_connected,
+)
 from app.components.frontend.state.session_state import get_session_state
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.formatting import format_clock, format_date
@@ -36,6 +45,10 @@ from .base_detail_popup import BaseDetailPopup
 from .modal_sections import EmptyStatePlaceholder, SectionHeader
 
 API = "/api/v1/meetings/admin"
+# Where a meeting is sent from: the owner's route, so the admin's own.
+SEND = "/api/v1/meetings"
+# How often the pane reads a meeting again while it is being followed.
+FOLLOW_SECONDS = 3
 
 
 def _api(page: ft.Page) -> Any:
@@ -60,11 +73,19 @@ def meeting_cells(meeting: dict[str, Any]) -> list[str]:
 
 def actions_for(record: dict[str, Any]) -> list[str]:
     """What the admin can do to it now, as the service's read says
-    (``MeetingRecord``): ask the bot to leave, delete it."""
+    (``MeetingRecord``): ask the bot to leave, delete it, write the notes
+    again."""
     return [
         *(["leave"] if record.get("can_leave") else []),
         *(["delete"] if record.get("can_delete") else []),
+        *(["rewrite"] if record.get("can_rewrite") else []),
     ]
+
+
+def following(record: dict[str, Any]) -> bool:
+    """Read again every few seconds: the bot is in or on its way, or the
+    notes are being written."""
+    return bool(record.get("under_way") or record.get("writing"))
 
 
 def _items(items: list[dict[str, Any]], empty: str) -> list[ft.Control]:
@@ -85,9 +106,19 @@ def _items(items: list[dict[str, Any]], empty: str) -> list[ft.Control]:
 
 def _notes(record: dict[str, Any]) -> list[ft.Control]:
     notes = record.get("notes")
+    if record.get("under_way"):
+        return [_hint("The notes are written once the bot has left.")]
+    if record.get("writing"):
+        return [_hint("Writing the notes…")]
     if notes:
+        me = record["meeting"].get("me")
         return [
             PrimaryText(str(notes.get("summary") or ""), size=Theme.Typography.BODY),
+            SectionHeader("Yours"),
+            *_items(
+                record.get("mine") or [],
+                "Nothing for you." if me else "Say which speaker you are to see yours.",
+            ),
             SectionHeader("Action items"),
             *_items(notes.get("action_items") or [], "No action items."),
             SectionHeader("Decisions"),
@@ -103,7 +134,17 @@ def _notes(record: dict[str, Any]) -> list[ft.Control]:
                 color=Theme.Colors.ERROR,
             )
         ]
-    return [SecondaryText("No notes.", size=Theme.Typography.BODY_SMALL)]
+    return [
+        _hint(
+            "No notes yet."
+            if record.get("transcript")
+            else "Nothing was said, so there is nothing to note."
+        )
+    ]
+
+
+def _hint(text: str) -> ft.Control:
+    return SecondaryText(text, size=Theme.Typography.BODY_SMALL)
 
 
 def _transcript(lines: list[dict[str, Any]]) -> list[ft.Control]:
@@ -148,27 +189,67 @@ def record_view(record: dict[str, Any]) -> ft.Column:
 
 
 class MeetingPane(ft.Container):
-    """The selected meeting, read from the API, with what can be done to it."""
+    """The selected meeting, read from the API, with what can be done to it,
+    followed while something is happening."""
 
     def __init__(self, page: ft.Page, on_change: Callable[[], Awaitable[None]]) -> None:
         super().__init__()
         self.page = page
         self._on_change = on_change
+        self._showing: int | None = None
+        self._following: int | None = None
         self.width = 520
         self.padding = ft.padding.all(Theme.Spacing.MD)
         self.border = ft.border.all(1, ft.Colors.OUTLINE_VARIANT)
         self.border_radius = Theme.Components.CARD_RADIUS
         self.content = EmptyStatePlaceholder("Select a meeting")
 
+    def will_unmount(self) -> None:
+        """The modal closed: stop following."""
+        self._showing = None
+
     def clear(self) -> None:
+        self._showing = None
         self.content = EmptyStatePlaceholder("Select a meeting")
         if self.page:
             self.update()
 
     async def show(self, meeting_id: int) -> None:
-        record = await _api(self.page).get(f"{API}/{meeting_id}")
+        self._present(await _api(self.page).get(f"{API}/{meeting_id}"))
+
+    def _present(self, record: Any) -> None:
+        """A meeting read in full (the API's ``MeetingRecord``, from a read
+        or from the change that returned it), followed while something is
+        happening."""
         if not isinstance(record, dict):
             return self.clear()
+        meeting_id = int(record["meeting"]["id"])
+        self._showing = meeting_id
+        self._draw(record)
+        if following(record) and self._following != meeting_id:
+            self._following = meeting_id
+            self.page.run_task(self._follow, meeting_id)
+
+    async def _follow(self, meeting_id: int) -> None:
+        """Read the meeting again while it is the one shown, its tab is
+        there (``SessionLoops``: Flet keeps a closed tab's session for an
+        hour) and something is still happening; then stop."""
+        loops = SessionLoops(self.page, lambda: page_is_connected(self.page))
+        try:
+            while self._showing == meeting_id and loops.alive():
+                await asyncio.sleep(FOLLOW_SECONDS)
+                record = await _api(self.page).get(f"{API}/{meeting_id}")
+                if not isinstance(record, dict) or self._showing != meeting_id:
+                    return
+                self._draw(record)
+                if not following(record):
+                    await self._on_change()
+                    return
+        finally:
+            self._following = None
+
+    def _draw(self, record: dict[str, Any]) -> None:
+        meeting_id = int(record["meeting"]["id"])
         buttons = {
             "leave": PulseButton(
                 on_click_callable=lambda: self._leave(meeting_id),
@@ -182,10 +263,31 @@ class MeetingPane(ft.Container):
                 variant="stop",
                 compact=True,
             ),
+            "rewrite": PulseButton(
+                on_click_callable=lambda: self._rewrite(meeting_id),
+                text="Write the notes again",
+                variant="muted",
+                compact=True,
+            ),
         }
+        speaker = NativeDropdown(
+            label="I am",
+            value=record["meeting"].get("me") or "",
+            options=[
+                ft.dropdown.Option(key="", text="Nobody here"),
+                *[ft.dropdown.Option(key=name) for name in record.get("people") or []],
+            ],
+            width=220,
+            enable_filter=False,
+            enable_search=False,
+            on_change=lambda e: self.page.run_task(
+                self._set_me, meeting_id, str(e.control.value or "")
+            ),
+        )
         self.content = ft.Column(
             [
                 ft.Row([buttons[a] for a in actions_for(record)], spacing=8),
+                *([speaker] if record.get("people") else []),
                 record_view(record),
             ],
             spacing=Theme.Spacing.MD,
@@ -193,6 +295,21 @@ class MeetingPane(ft.Container):
         )
         if self.page:
             self.update()
+
+    async def _set_me(self, meeting_id: int, name: str) -> None:
+        """Which speaker the owner is (blank: nobody); the read it returns
+        is drawn as it is."""
+        record = await _api(self.page).post(
+            f"{API}/{meeting_id}/me", json={"name": name}
+        )
+        self._present(record)
+
+    async def _rewrite(self, meeting_id: int) -> None:
+        record = await _api(self.page).post(f"{API}/{meeting_id}/notes")
+        if record is None:
+            ErrorSnackBar("No notes to write now").launch(self.page)
+            return await self.show(meeting_id)
+        self._present(record)
 
     async def _leave(self, meeting_id: int) -> None:
         await _api(self.page).post(f"{API}/{meeting_id}/leave")
@@ -218,17 +335,36 @@ class MeetingPane(ft.Container):
 
 
 class MeetingsTab(ft.Container):
-    """Every owner's meetings, newest first, beside the selected one."""
+    """The bot sent to a call, and every owner's meetings, newest first,
+    beside the selected one."""
 
     def __init__(self, page: ft.Page) -> None:
         super().__init__()
         self.page = page
+        self._link = StyledTextField(
+            compact=True,
+            hint_text="https://meet.google.com/abc-defg-hij",
+            expand=True,
+            on_submit=lambda _: self.page.run_task(self._send),
+        )
         self._table = ft.Container(
             content=EmptyStatePlaceholder("Loading meetings..."), expand=True
         )
         self._pane = MeetingPane(page, on_change=self._load)
+        toolbar = ft.Row(
+            [
+                self._link,
+                PulseButton(on_click_callable=self._send, text="Send", compact=True),
+            ],
+            spacing=Theme.Spacing.SM,
+        )
         self.content = ft.Row(
-            [self._table, self._pane],
+            [
+                ft.Column(
+                    [toolbar, self._table], spacing=Theme.Spacing.MD, expand=True
+                ),
+                self._pane,
+            ],
             spacing=Theme.Spacing.MD,
             vertical_alignment=ft.CrossAxisAlignment.STRETCH,
             expand=True,
@@ -236,6 +372,21 @@ class MeetingsTab(ft.Container):
         self.padding = ft.padding.all(Theme.Spacing.MD)
         self.expand = True
         page.run_task(self._load)
+
+    async def _send(self) -> None:
+        """Send the bot as the admin, then follow its meeting in the pane."""
+        url = str(self._link.value or "").strip()
+        if not url:
+            return
+        sent = await _api(self.page).post(SEND, json={"url": url})
+        if not isinstance(sent, dict):
+            ErrorSnackBar("Not a meeting link the bot can join").launch(self.page)
+            return
+        self._link.value = ""
+        if self._link.page:
+            self._link.update()
+        await self._load()
+        await self._pane.show(int(sent["id"]))
 
     async def _load(self) -> None:
         data = await _api(self.page).get(API)
@@ -249,7 +400,7 @@ class MeetingsTab(ft.Container):
                 DataTableColumn("Length", width=80, style="secondary"),
             ],
             rows=[meeting_cells(m) for m in meetings],
-            scroll_height=640,
+            scroll_height=600,
             empty_message="No meetings yet",
             on_row_click=lambda i: self.page.run_task(
                 self._pane.show, int(meetings[i]["id"])

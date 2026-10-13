@@ -24,7 +24,10 @@ import yaml
 
 from ..cli import brand
 from ..constants import AnswerKeys, PostgresProviders
+from ..core.component_files import template_module
 from ..core.copier_manager import AEGIS_GIT_EMAIL, load_copier_answers
+from ..core.footprint import COMPOSE_FILES
+from ..core.template_cleanup import deploy_env_file, env_value
 from ..i18n import lazy_t, t
 from .deploy_backup import (
     archive_storage,
@@ -143,22 +146,13 @@ def _project_answers(project_root: Path) -> dict:
         return {}
 
 
-def _deploy_env_file(project_root: Path) -> Path | None:
-    """The env file a deploy ships to the server: ``.env.deploy`` over ``.env``."""
-    candidates = (project_root / ".env.deploy", project_root / ".env")
-    return next((path for path in candidates if path.exists()), None)
-
-
 def _admin_allowlist_set(project_root: Path) -> bool:
-    """The shipped env file sets ``ADMIN_IP_ALLOWLIST`` to something."""
-    env_file = _deploy_env_file(project_root)
-    if env_file is None:
-        return False
-    for line in env_file.read_text().splitlines():
-        key, _, value = line.partition("=")
-        if key.strip() == "ADMIN_IP_ALLOWLIST" and value.strip():
-            return True
-    return False
+    """``ADMIN_IP_ALLOWLIST`` reaches the server: provisioning recorded one
+    (stamped at deploy), or the shipped env file sets it."""
+    if (_load_deploy_config(str(project_root)) or {}).get("admin_ip_allowlist"):
+        return True
+    env_file = deploy_env_file(project_root)
+    return bool(env_file and env_value(env_file, "ADMIN_IP_ALLOWLIST"))
 
 
 def _print_deployed(config: dict, *, allowlist_set: bool, tls: bool = False) -> None:
@@ -179,12 +173,7 @@ def _print_deployed(config: dict, *, allowlist_set: bool, tls: bool = False) -> 
 
 def _compose_prefix(deploy_path: str) -> str:
     """Return the docker compose command prefix for remote execution."""
-    safe_path = shlex.quote(deploy_path)
-    return (
-        f"cd {safe_path} && "
-        f"docker compose -f docker-compose.yml -f docker-compose.prod.yml"
-        f" --profile prod"
-    )
+    return f"{_rolling_compose_prefix(deploy_path)} --profile prod"
 
 
 def _run_remote(host: str, user: str, command: str) -> subprocess.CompletedProcess:
@@ -223,14 +212,63 @@ def _build_id(project_root: Path) -> str:
     return build
 
 
+# The APP_ENV values the app treats as development (its ``DEV_ENVS``).
+DEV_ENVS = template_module(
+    "aegis_app_constants", "app", "core", "constants.py"
+).DEV_ENVS
+_OFF = frozenset({"false", "0", "no", "off", "f", "n"})  # pydantic's false
+
+
+def unsafe_settings(project_root: Path) -> list[str]:
+    """The settings in the env file a deploy ships (``deploy_env_file``)
+    that would put the app online open: sign-in off (projects with auth),
+    a development APP_ENV (unset is the app's default, dev, which also
+    skips its own SECRET_KEY check), no SECRET_KEY. Nothing without an env
+    file: the server keeps the one it has."""
+    env_file = deploy_env_file(project_root)
+    if env_file is None:
+        return []
+    auth = _project_answers(project_root).get(AnswerKeys.AUTH)
+    checks = {
+        "AUTH_ENABLED": bool(auth)
+        and (env_value(env_file, "AUTH_ENABLED") or "").lower() in _OFF,
+        "APP_ENV": (env_value(env_file, "APP_ENV") or "dev").lower() in DEV_ENVS,
+        "SECRET_KEY": not env_value(env_file, "SECRET_KEY"),
+    }
+    return [name for name, unsafe in checks.items() if unsafe]
+
+
+def refuse_unsafe_env(project_root: Path) -> None:
+    """Stop, naming what to fix, before a deploy reaches the server (or a
+    provision buys one) when ``unsafe_settings`` names anything."""
+    if unsafe := unsafe_settings(project_root):
+        shipped = deploy_env_file(project_root)
+        assert shipped is not None  # what unsafe_settings read
+        named = ", ".join(unsafe)
+        brand.error(t("deploy.env_unsafe", file=shipped.name, settings=named), err=True)
+        raise typer.Exit(1)
+
+
+# ``.aegis/deploy.yml`` keys a deploy stamps into the server's .env, by the
+# variable each becomes.
+STAMPED = {
+    "domain": "DOMAIN",
+    "acme_email": "ACME_EMAIL",
+    "admin_ip_allowlist": "ADMIN_IP_ALLOWLIST",
+}
+
+
 def _upload_env(project_root: Path, host: str, user: str, deploy_path: str) -> str:
-    """Copy the deploy env file to the server and stamp BUILD_ID into it.
+    """Copy the deploy env file to the server and stamp BUILD_ID into it,
+    with what provisioning recorded in ``.aegis/deploy.yml`` (``STAMPED``:
+    the name the server answers on, the certificate's email, who may reach
+    the Overseer) for the files that read them.
 
     ``.env.deploy`` wins over ``.env``; neither existing is not an error
     (the server may already hold one). Both deploy paths call this so the
     stamp cannot be added to one and forgotten in the other.
     """
-    env_file = _deploy_env_file(project_root)
+    env_file = deploy_env_file(project_root)
 
     remote_env = shlex.quote(f"{deploy_path}/.env")
     if env_file is not None:
@@ -241,25 +279,31 @@ def _upload_env(project_root: Path, host: str, user: str, deploy_path: str) -> s
             raise typer.Exit(1)
 
     build = _build_id(project_root)
-    typer.echo(f"Stamping BUILD_ID={build}")
-    _run_remote(host, user, _stamp_build_id_command(f"{deploy_path}/.env", build))
+    config = _load_deploy_config(str(project_root)) or {}
+    stamps = {"BUILD_ID": build} | {
+        name: str(config[key]) for key, name in STAMPED.items() if config.get(key)
+    }
+    typer.echo("Stamping " + " ".join(f"{k}={v}" for k, v in stamps.items()))
+    _run_remote(host, user, _stamp_env_command(f"{deploy_path}/.env", stamps))
     # A dirty tree's id carries the time: the deploy record names this one.
     return build
 
 
-def _stamp_build_id_command(env_path: str, build: str) -> str:
-    """Shell that leaves exactly one ``BUILD_ID=<build>`` line in ``env_path``.
+def _stamp_env_command(env_path: str, values: dict[str, str]) -> str:
+    """Shell that leaves exactly one ``KEY=value`` line in ``env_path`` for
+    each of ``values``.
 
     Rewritten through ``grep -v``, whose output ends every line with a
     newline: a bare ``>>`` joined an ``.env`` that ends without one, and the
     build id landed inside a comment. Portable (no ``sed -i``).
     """
     env = shlex.quote(env_path)
-    tmp = shlex.quote(f"{env_path}.build-id")
-    line = shlex.quote(f"BUILD_ID={build}")
+    tmp = shlex.quote(f"{env_path}.stamped")
+    keys = shlex.quote("^(" + "|".join(values) + ")=")
+    lines = " ".join(shlex.quote(f"{k}={v}") for k, v in values.items())
     return (
-        f"touch {env} && {{ grep -v '^BUILD_ID=' {env}; echo {line}; }} > {tmp} "
-        f"&& cat {tmp} > {env} && rm -f {tmp}"
+        f"touch {env} && {{ grep -Ev {keys} {env}; printf '%s\\n' {lines}; }} "
+        f"> {tmp} && cat {tmp} > {env} && rm -f {tmp}"
     )
 
 
@@ -698,11 +742,8 @@ def _rolling_compose_prefix(deploy_path: str) -> str:
     ``up -d --no-deps`` targeting works for prod profile and
     profile-less services alike.
     """
-    safe_path = shlex.quote(deploy_path)
-    return (
-        f"cd {safe_path} && "
-        f"docker compose -f docker-compose.yml -f docker-compose.prod.yml"
-    )
+    files = " ".join(f"-f {name}" for name in COMPOSE_FILES)
+    return f"cd {shlex.quote(deploy_path)} && docker compose {files}"
 
 
 def _rolling_scale_command(deploy_path: str, replicas: int) -> str:
@@ -1297,7 +1338,9 @@ def deploy_command(
     name, tls = _public_address(config, project_root)
     health_command = _health_check_command(name, tls=tls)
 
-    # Before either path touches the server: a build needs room to land.
+    # Before either path touches the server: nothing ships open, and a
+    # build needs room to land.
+    refuse_unsafe_env(project_root)
     _check_disk_space(host, user, deploy_path)
 
     if rolling:
@@ -2051,7 +2094,7 @@ jobs:
       run: uv sync
 
     - name: Deploy
-      run: uv run aegis deploy --yes
+      run: uv run aegis deploy
 """
 
 

@@ -86,9 +86,10 @@
 {% endmacro %}
 
 
-{# A thin native progress bar; ``tone`` colours it (see badge). #}
+{# A thin native progress bar; ``tone`` colours it (see badge). No
+   ``ratio`` is work under way for as long as it takes: a band sweeps it. #}
 {% macro progress(ratio, tone="ok", label=None, size="h-1") %}
-<progress value="{{ [1, [0, ratio]|max]|min }}" max="1" {% if label %}aria-label="{{ label }}"{% endif %} data-tone="{{ tone }}" class="aegis-progress toned w-full {{ size }}"></progress>
+<progress {% if ratio is not none %}value="{{ [1, [0, ratio]|max]|min }}" {% endif %}max="1" {% if label %}aria-label="{{ label }}"{% endif %} data-tone="{{ tone }}" class="aegis-progress toned w-full {{ size }}"></progress>
 {% endmacro %}
 
 
@@ -347,6 +348,13 @@
 
 {# A health status as a dot in its tone, its word for a reader: the
    sidebar's, the sub-menu's, a map chip's, and a healthy badge. #}
+{# A chart-ramp color as a small dot (--aegis-chart-``n``, 1 to 9): how a
+   list marks whose a row is (a service's log lines, a meeting's speaker),
+   leaving the text itself plain. #}
+{% macro chart_dot(n) -%}
+<span data-dot class="mr-1.5 inline-block h-2 w-2 rounded-full align-middle" style="background: var(--aegis-chart-{{ n }})" aria-hidden="true"></span>
+{%- endmacro %}
+
 {% macro status_dot(status) -%}
 {% set tone = status|health_tone %}<span data-tone="{{ tone }}" class="status-dot w-2 h-2 shrink-0 rounded-full {{ {"ok": "bg-aegis-teal", "warn": "bg-aegis-amber", "error": "bg-aegis-error"}.get(tone, "bg-aegis-muted") }}" aria-hidden="true"></span><span class="sr-only">{{ status }}</span>
 {%- endmacro %}
@@ -474,18 +482,21 @@
 {% endmacro %}
 
 {# Ranked rows: name, a small count, the amount, and a thin bar scaled to
-   the largest row (the Overview's payees and bills). ``rows`` are
-   ``{"label", "count", "value", "ratio", "tone"}``; ``columns`` sets a long
-   list in columns, read down each, so it does not run the page long. #}
+   the largest row (the Overview's payees and bills, a meeting's speakers).
+   ``rows`` are ``{"label", "count", "value", "ratio", "tone"}``, and a
+   ``dot`` (a chart-ramp color, ``chart_dot``) marks whose a row is;
+   ``tone`` is "accent" or "muted" (a row standing apart), else teal;
+   ``columns`` sets a long list in columns, read down each, so it does not
+   run the page long. #}
 {% macro ranked_rows(rows, columns=False) %}
 <ol class="ranked {{ 'sm:columns-2 xl:columns-3 gap-x-8' if columns else 'space-y-3' }}"{% if columns %} data-columns{% endif %}>
   {% for row in rows %}
   <li{% if columns %} class="break-inside-avoid pb-3"{% endif %}>
     <div class="flex items-baseline justify-between gap-3 text-sm">
-      <span class="text-aegis-text truncate">{{ row.label }}</span>
+      <span class="{{ 'text-aegis-muted' if row.tone == 'muted' else 'text-aegis-text' }} truncate">{% if row.dot %}{{ chart_dot(row.dot) }}{% endif %}{{ row.label }}</span>
       <span class="shrink-0 tabular-nums">{% if row.count %}<span class="text-aegis-muted mr-2">{{ row.count }}</span>{% endif %}<span class="text-aegis-text font-medium">{{ row.value }}</span></span>
     </div>
-    <div class="mt-1 h-1 rounded bg-aegis-border/60"><div class="h-1 rounded {{ 'bg-aegis-accent' if row.tone == 'accent' else 'bg-aegis-teal' }}" style="width: {{ (row.ratio * 100)|round|int }}%"></div></div>
+    <div class="mt-1 h-1 rounded bg-aegis-border/60"><div class="h-1 rounded {{ {'accent': 'bg-aegis-accent', 'muted': 'bg-aegis-muted'}.get(row.tone, 'bg-aegis-teal') }}" style="width: {{ (row.ratio * 100)|round|int }}%"></div></div>
   </li>
   {% endfor %}
 </ol>

@@ -1167,6 +1167,12 @@ def _settings_field_names(config_path: Path) -> set[str] | None:
     return None
 
 
+def deploy_env_file(project_root: Path) -> Path | None:
+    """The env file a deploy ships to the server: ``.env.deploy`` over ``.env``."""
+    candidates = (project_root / ".env.deploy", project_root / ".env")
+    return next((path for path in candidates if path.exists()), None)
+
+
 def env_value(env_path: Path, key: str) -> str | None:
     """The value ``key`` is set to in an env file, or None if it is not set.
 

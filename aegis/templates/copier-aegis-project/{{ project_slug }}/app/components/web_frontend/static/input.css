@@ -8,6 +8,12 @@
 }
 
 @layer components {
+  /* A form held until something is typed as asked (a ``pattern``: a price,
+     a server's name, see the ``exactly`` filter): the browser will not
+     send it, and its button says so. */
+  form:has([pattern]:invalid) [type="submit"] {
+    @apply opacity-50 cursor-not-allowed pointer-events-none;
+  }
   /* A brand mark's tile (the avatar macro): light in every theme, since
      plenty of logos are dark on transparency. */
   .brand-tile {

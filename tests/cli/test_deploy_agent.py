@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import redis as redis_lib
 import typer
 from typer.testing import CliRunner
 
@@ -32,11 +33,13 @@ from tests.cli.test_utils import strip_ansi_codes
 
 DO_TOKEN = "do-secret-token-5678"
 SENT_TOKEN = "dop_v1_sent-by-the-app-wxyz"  # one the Overseer sends
+PK, SK = "pk1_" + "c" * 24 + "pkey", "sk1_" + "d" * 24 + "skey"  # Porkbun's
 SYSTEM = get_template_path() / PROJECT_SLUG_PLACEHOLDER / "app" / "services" / "system"
 FAKE_AEGIS = """\
 import os, sys
 print("ran " + " ".join(sys.argv[1:]))
 print("token " + os.environ.get("DIGITALOCEAN_TOKEN", ""))
+print("dns " + os.environ.get("PORKBUN_API_KEY", ""))
 sys.exit(int(os.environ.get("FAKE_EXIT", "0")))
 """
 
@@ -70,6 +73,9 @@ class FakeRedis:
 
     def get(self, key: str) -> str | None:
         return self.strings.get(key)
+
+    def exists(self, key: str) -> int:
+        return int(key in self.strings)
 
     def delete(self, *keys: str) -> None:
         for key in keys:
@@ -143,6 +149,7 @@ def _request(
     args: dict[str, str] | None = None,
     at: datetime | None = None,
     token: Any = None,
+    dns_keys: Any = None,
 ) -> str:
     """What the app's ``enqueue`` does: the job record, then the request."""
     job_id = uuid.uuid4().hex
@@ -154,6 +161,8 @@ def _request(
     request = {"job_id": job_id, "action": action, "args": args or {}, "by": "ada"}
     if token is not None:
         request["token"] = token
+    if dns_keys is not None:
+        request["dns_keys"] = dns_keys
     redis.rpush(agent.PROTOCOL["requests"], json.dumps(request | {"at": when}))
     return job_id
 
@@ -250,6 +259,8 @@ def test_the_heartbeat_names_the_providers_it_has_tokens_for(project: Path) -> N
     agent.serve(redis, project, stop=stop)
     beat = json.loads(seen[0] or "{}")
     assert beat["providers"] == ["digitalocean"]
+    assert beat["revision"] == agent.PROTOCOL["revision"]
+    assert beat["actions"] == list(agent.PROTOCOL["actions"])
     assert beat["pid"] and beat["host"] and beat["version"]
     assert DO_TOKEN not in (seen[0] or "")
     assert redis.ttl[agent.PROTOCOL["heartbeat"]] > 0
@@ -320,6 +331,52 @@ def test_a_refused_request_says_why(project: Path, app_store: Any) -> None:
     assert job.status == "failed" and "backup" in job.error
 
 
+def test_an_unexpected_error_fails_its_job_and_the_agent_listens_on(
+    project: Path, app_store: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One request going wrong (here, a docker line it cannot read) fails
+    that job saying what happened, with any token masked, and the next
+    request still runs: the agent never dies under make serve unseen."""
+    monkeypatch.setenv("DIGITALOCEAN_TOKEN", DO_TOKEN)
+
+    def broken(root: Path) -> dict[str, Any]:
+        raise ValueError(f"Not a size: -- ({DO_TOKEN})")
+
+    monkeypatch.setattr(agent, "measure", broken)
+    redis = FakeRedis()
+    first = _request(redis, app_store, "footprint", {})
+    then = _request(redis, app_store, "deploy")
+    _serve(redis, project)
+    job = _job(redis, app_store, first)
+    assert job.status == "failed" and "Not a size: --" in job.error
+    _nowhere(redis, DO_TOKEN)
+    assert _job(redis, app_store, then).status == "done"
+
+
+def test_redis_dropping_mid_job_leaves_the_agent_listening(
+    project: Path, app_store: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The stack restarting while a job writes its record: the write, and
+    the failure it would record, both raise. The agent waits for Redis and
+    takes the next request, as it does when Redis drops between them."""
+    monkeypatch.setattr(agent, "REDIS_RETRY_SECONDS", 0)
+    redis = FakeRedis()
+    first = _request(redis, app_store, "deploy")
+    then = _request(redis, app_store, "deploy")
+    writes = redis.hset
+    down = {"left": 2}  # the job's first line, then its failure
+
+    def flaky(key: str, mapping: dict[str, Any]) -> None:
+        if first in key and down["left"]:
+            down["left"] -= 1
+            raise redis_lib.ConnectionError("Connection refused")
+        writes(key, mapping)
+
+    monkeypatch.setattr(redis, "hset", flaky)
+    _serve(redis, project)
+    assert _job(redis, app_store, then).status == "done"
+
+
 def _nowhere(redis: FakeRedis, token: str) -> None:
     """The token is in no job, list or key the agent left behind."""
     assert token not in json.dumps([redis.hashes, redis.lists, redis.strings])
@@ -374,7 +431,7 @@ def test_a_catalog_is_kept_in_redis_for_the_overseer(
     assert [(s["slug"], s["prices"]) for s in found["sizes"]] == [
         ("s-1vcpu-2gb", {"nyc3": "12.00"})
     ]
-    assert redis.ttl[CATALOG_KEY] == agent.PROTOCOL["catalog_seconds"]
+    assert redis.ttl[CATALOG_KEY] == agent.PROTOCOL["actions"]["catalog"]["seconds"]
     assert tokens == [DO_TOKEN]
     _nowhere(redis, DO_TOKEN)
 
@@ -390,9 +447,26 @@ def test_the_stacks_footprint_is_kept_in_redis_for_the_overseer(
     job_id = _request(redis, app_store, "footprint", {})
     _serve(redis, project)
     assert _job(redis, app_store, job_id).status == "done"
-    key = agent.PROTOCOL["footprint"]
+    key = "deploy:footprint"
     assert json.loads(redis.strings[key]) == measured
-    assert redis.ttl[key] == agent.PROTOCOL["footprint_seconds"]
+    assert redis.ttl[key] == agent.PROTOCOL["actions"]["footprint"]["seconds"]
+
+
+def test_what_is_already_kept_is_not_fetched_again(
+    project: Path, app_store: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two pages asking at once queue two requests; the second finds the
+    first's answer and is done without asking the provider."""
+    tokens = _price_api(monkeypatch, 12)
+    redis = FakeRedis()
+    first = _request(redis, app_store, "catalog", CATALOGUED)
+    second = _request(redis, app_store, "catalog", CATALOGUED)
+    _serve(redis, project)
+    assert [_job(redis, app_store, j).status for j in (first, second)] == [
+        "done",
+        "done",
+    ]
+    assert tokens == [DO_TOKEN]  # asked once
 
 
 def test_docker_failing_fails_the_footprint_saying_why(
@@ -407,6 +481,49 @@ def test_docker_failing_fails_the_footprint_saying_why(
     _serve(redis, project)
     job = _job(redis, app_store, job_id)
     assert job.status == "failed" and "Docker daemon" in job.error
+
+
+def test_the_account_is_kept_with_its_currency(
+    project: Path, app_store: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """What the account runs now, as its client lists it, for a while."""
+    tokens: list[str] = []
+
+    def requester(base: str, token: str) -> Any:
+        tokens.append(token)
+        answers = {
+            "/droplets?per_page=200": {"droplets": []},
+            "/customers/my/balance": {"month_to_date_usage": "3.10"},
+        }
+        return lambda method, path, body=None: answers[path]
+
+    monkeypatch.setattr(agent, "json_requester", requester)
+    redis = FakeRedis()
+    job_id = _request(redis, app_store, "account", CATALOGUED)
+    _serve(redis, project)
+    assert _job(redis, app_store, job_id).status == "done"
+    key = "deploy:account:digitalocean"
+    found = json.loads(redis.strings[key])
+    assert found == {
+        "servers": [],
+        "month_to_date": "3.10",
+        "missing": [],
+        "currency": "USD",
+    }
+    assert redis.ttl[key] == agent.PROTOCOL["actions"]["account"]["seconds"]
+    assert tokens == [DO_TOKEN]
+
+
+def test_a_provision_forgets_the_kept_account(
+    project: Path, app_store: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """It changed what the account runs: the next look asks again."""
+    _price_api(monkeypatch, 12)
+    redis = FakeRedis()
+    redis.strings["deploy:account:digitalocean"] = json.dumps({"servers": []})
+    _request(redis, app_store, "provision", QUOTED | {"price": "12.00"})
+    _serve(redis, project)
+    assert "deploy:account:digitalocean" not in redis.strings
 
 
 def test_a_catalog_without_the_token_says_which(
@@ -471,6 +588,55 @@ def test_a_sent_token_reaches_the_command_in_its_environment_never_its_args(
     assert ran.startswith("ran deploy-provision") and SENT_TOKEN not in ran
     assert token == "token ...wxyz"  # masked in the line the job keeps
     _nowhere(redis, SENT_TOKEN)
+
+
+def test_a_provisions_dns_keys_reach_its_command_masked_never_its_args(
+    project: Path, app_store: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _price_api(monkeypatch, 12)
+    redis = FakeRedis()
+    args = QUOTED | {
+        "price": "12.00",
+        "domain": "app.example.com",
+        "dns": "porkbun",
+        "allowlist": "203.0.113.9/32",
+    }
+    keys = {"PORKBUN_API_KEY": PK, "PORKBUN_SECRET_KEY": SK}
+    job_id = _request(
+        redis, app_store, "provision", args, token=SENT_TOKEN, dns_keys=keys
+    )
+    _serve(redis, project)
+    ran, _, dns = _job(redis, app_store, job_id).result["lines"][:3]
+    assert "--dns porkbun" in ran and PK not in ran
+    assert "--allowlist 203.0.113.9/32" in ran
+    assert dns == "dns ...pkey"
+    _nowhere(redis, PK)
+    _nowhere(redis, SK)
+
+
+@pytest.mark.parametrize(
+    "keys",
+    [
+        {"PATH": "/tmp/evil:/usr/bin"},  # a name no DNS provider reads
+        {"PORKBUN_API_KEY": "not a key; rm -rf"},
+        "PORKBUN_API_KEY=pk1_x",
+    ],
+)
+def test_dns_keys_other_than_a_dns_providers_are_refused(
+    project: Path, app_store: Any, monkeypatch: pytest.MonkeyPatch, keys: Any
+) -> None:
+    """Only a DNS provider's own variables reach the command: anything else
+    (``PATH``, ``LD_PRELOAD``) would change what it runs."""
+    _price_api(monkeypatch, 12)
+    redis = FakeRedis()
+    args = QUOTED | {"price": "12.00", "domain": "app.example.com", "dns": "porkbun"}
+    job_id = _request(
+        redis, app_store, "provision", args, token=SENT_TOKEN, dns_keys=keys
+    )
+    _serve(redis, project)
+    job = _job(redis, app_store, job_id)
+    assert job.status == "failed" and "DNS" in job.error
+    assert not job.result["lines"]
 
 
 def test_a_destroy_sends_the_token_of_the_provisioned_servers_provider(

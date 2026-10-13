@@ -20,8 +20,25 @@
     "token": "DIGITALOCEAN_TOKEN",
     "check": "https://api.digitalocean.com/v2/account",
     "size": "s-1vcpu-2gb",
-    "region": "nyc3",
+    "region": "tor1",
     "currency": "USD"
+  },
+  {
+    "key": "porkbun",
+    "name": "Porkbun",
+    "domain": "porkbun.com",
+    "can": ["DNS"],
+    "command": "aegis deploy-provision --domain <name> --dns porkbun",
+    "keys": ["PORKBUN_API_KEY", "PORKBUN_SECRET_KEY"]
+  },
+  {
+    "key": "cloudflare",
+    "name": "Cloudflare",
+    "domain": "cloudflare.com",
+    "can": ["DNS"],
+    "command": "aegis deploy-provision --domain <name> --dns cloudflare",
+    "token": "CLOUDFLARE_API_TOKEN",
+    "check": "https://api.cloudflare.com/client/v4/user/tokens/verify"
   },
   {
     "key": "aws",

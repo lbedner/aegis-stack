@@ -16,15 +16,16 @@ framework imports.
 """
 
 import asyncio
-import os
-import time
 from collections import defaultdict
 from collections.abc import AsyncIterator, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
+import os
+import time
 from typing import Any, Self
 
 from app.core import runtime, series
+from app.core.constants import CHART_RAMP
 from app.core.formatting import format_relative_time, format_timestamp
 from app.core.log import logger
 from app.core.log_records import LogAssembler, LogRecord
@@ -70,9 +71,8 @@ FLUSH_SECONDS = 0.5
 # counted in its tone's stack.
 VOLUME_BARS = 60
 VOLUME_TONES = ("error", "warn", "other")
-# The chart ramp both UIs draw with (--aegis-chart-1..9, ChartColors.RAMP):
-# a service's lines take one of its colors.
-RAMP = 9
+# A service's lines take one of the chart ramp's colors.
+RAMP = CHART_RAMP
 _PAGES = sorted(runtime.PAGES)
 
 

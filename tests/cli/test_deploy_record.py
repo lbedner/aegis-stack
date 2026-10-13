@@ -176,26 +176,27 @@ def test_the_live_build_is_read_from_the_server_env(
     "before",
     [
         "A=1\n# a comment with no newline",
-        "A=1\nBUILD_ID=old\n",
+        "A=1\nBUILD_ID=old\nDOMAIN=old.example.com\n",
         "",
     ],
 )
-def test_the_build_id_stamp_lands_on_its_own_line(tmp_path: Path, before: str) -> None:
+def test_each_stamp_lands_on_its_own_line(tmp_path: Path, before: str) -> None:
     """The generated .env ends without a newline, so an appended
-    ``BUILD_ID=`` joined the last comment and was never set."""
+    ``BUILD_ID=`` joined the last comment and was never set; a stamp
+    replaces its old line."""
     env = tmp_path / ".env"
     env.write_text(before)
+    stamps = {"BUILD_ID": "a1b2c3d", "DOMAIN": "app.example.com"}
 
     subprocess.run(
-        ["bash", "-c", deploy._stamp_build_id_command(str(env), "a1b2c3d")],
-        check=True,
+        ["bash", "-c", deploy._stamp_env_command(str(env), stamps)], check=True
     )
 
     lines = env.read_text().splitlines()
-    assert lines.count("BUILD_ID=a1b2c3d") == 1
-    assert not [
-        line for line in lines if "BUILD_ID=" in line and line != "BUILD_ID=a1b2c3d"
-    ]
+    for key, value in stamps.items():
+        assert [line for line in lines if line.startswith(f"{key}=")] == [
+            f"{key}={value}"
+        ]
 
 
 def _repo_with_identity(path: Path, name: str, email: str) -> Path:

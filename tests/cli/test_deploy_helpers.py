@@ -97,6 +97,22 @@ def test_render_deploy_workflow_on_tag_adds_v_star_trigger() -> None:
     assert "- 'v*'" in out
 
 
+def test_the_workflows_deploy_step_runs_a_command_deploy_accepts() -> None:
+    """It once passed ``--yes``, which ``aegis deploy`` has no option for:
+    every CD run failed before deploying."""
+    from typer.testing import CliRunner
+
+    from aegis.__main__ import app
+
+    step = next(
+        line.split("run: uv run aegis ", 1)[1]
+        for line in _render_deploy_workflow(on_tag=False).splitlines()
+        if "run: uv run aegis deploy" in line
+    )
+    result = CliRunner().invoke(app, [*step.split(), "--help"])
+    assert result.exit_code == 0, result.output
+
+
 def test_render_deploy_workflow_pins_python_when_version_provided() -> None:
     out = _render_deploy_workflow(on_tag=False, python_version="3.13")
     yaml.safe_load(out)  # must remain valid YAML
@@ -570,9 +586,27 @@ def test_upload_env_stamps_the_build_id(
     command = remote[0]
     # Replacing, not appending, on its own line: run for real against a file
     # in tests/cli/test_deploy_record.py (the stamp's own test).
-    assert command == deploy_mod._stamp_build_id_command(
-        "/opt/app/.env", deploy_mod._build_id(tmp_path)
+    assert command == deploy_mod._stamp_env_command(
+        "/opt/app/.env", {"BUILD_ID": deploy_mod._build_id(tmp_path)}
     )
+    remote.clear()
+    (tmp_path / ".aegis").mkdir()
+    (tmp_path / ".aegis" / "deploy.yml").write_text(
+        "domain: app.example.com\nacme_email: ops@example.org\n"
+        "admin_ip_allowlist: 203.0.113.9/32\n"
+    )
+    deploy_mod._upload_env(tmp_path, "h", "u", "/opt/app")
+    assert remote == [
+        deploy_mod._stamp_env_command(
+            "/opt/app/.env",
+            {
+                "BUILD_ID": deploy_mod._build_id(tmp_path),
+                "DOMAIN": "app.example.com",
+                "ACME_EMAIL": "ops@example.org",
+                "ADMIN_IP_ALLOWLIST": "203.0.113.9/32",
+            },
+        )
+    ]
 
 
 def test_upload_env_stamps_even_without_a_local_env_file(
@@ -669,3 +703,64 @@ def test_rolling_deploy_starts_services_the_release_added(
     )
 
     assert any(c.endswith("up -d --no-deps socket-proxy") for c in calls)
+
+
+# ---------------------------------------------------------------------------
+# The env a deploy ships: never one that puts the app online open.
+# ---------------------------------------------------------------------------
+
+SAFE = "APP_ENV=prod\nSECRET_KEY=k3y\n"
+
+
+@pytest.mark.parametrize(
+    ("env", "unsafe"),
+    [
+        (SAFE, []),
+        (SAFE + "AUTH_ENABLED=true\n", []),
+        (SAFE + "AUTH_ENABLED=false\n", ["AUTH_ENABLED"]),
+        (SAFE + "AUTH_ENABLED=0\n", ["AUTH_ENABLED"]),
+        ("APP_ENV=dev\nSECRET_KEY=k3y\n", ["APP_ENV"]),
+        ("SECRET_KEY=k3y\n", ["APP_ENV"]),  # unset: the app's default, dev
+        ("APP_ENV=prod\nSECRET_KEY=\n", ["SECRET_KEY"]),
+        ("AUTH_ENABLED=false\n", ["AUTH_ENABLED", "APP_ENV", "SECRET_KEY"]),
+    ],
+)
+def test_the_settings_that_would_ship_the_app_open_are_named(
+    tmp_path: Path, env: str, unsafe: list[str]
+) -> None:
+    (tmp_path / ".copier-answers.yml").write_text("include_auth: true\n")
+    (tmp_path / ".env.deploy").write_text(env)
+    (tmp_path / ".env").write_text("AUTH_ENABLED=false\n")  # local, not shipped
+    assert deploy_mod.unsafe_settings(tmp_path) == unsafe
+
+
+def test_sign_in_off_is_only_unsafe_where_there_is_sign_in(tmp_path: Path) -> None:
+    (tmp_path / ".copier-answers.yml").write_text("include_auth: false\n")
+    (tmp_path / ".env.deploy").write_text(SAFE + "AUTH_ENABLED=false\n")
+    assert deploy_mod.unsafe_settings(tmp_path) == []
+
+
+def test_without_an_env_file_the_servers_own_is_kept(tmp_path: Path) -> None:
+    assert deploy_mod.unsafe_settings(tmp_path) == []
+
+
+def test_deploy_refuses_an_open_env_before_touching_the_server(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from typer.testing import CliRunner
+
+    from aegis.__main__ import app
+
+    (tmp_path / ".aegis").mkdir()
+    server = {"host": "203.0.113.7", "user": "root", "path": "/opt/my-app"}
+    (tmp_path / ".aegis" / "deploy.yml").write_text(yaml.safe_dump({"server": server}))
+    (tmp_path / ".env").write_text("APP_ENV=dev\nAUTH_ENABLED=false\n")
+
+    def touched(*_a: object, **_k: object) -> None:
+        raise AssertionError("the server was reached")
+
+    monkeypatch.setattr(deploy_mod, "_check_disk_space", touched)
+    monkeypatch.setattr(deploy_mod, "_run_remote", touched)
+    result = CliRunner().invoke(app, ["deploy", "--project-path", str(tmp_path)])
+    assert result.exit_code == 1
+    assert "AUTH_ENABLED" in result.output and ".env" in result.output

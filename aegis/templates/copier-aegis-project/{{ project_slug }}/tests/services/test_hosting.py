@@ -128,6 +128,21 @@ def test_where_it_deploys_to_comes_from_the_provision_record(tmp_path: Path) -> 
     assert hosting.deploys_to(tmp_path / "missing.yml") is None
 
 
+def test_a_server_named_without_provisioning_is_where_it_deploys_to(
+    tmp_path: Path,
+) -> None:
+    """``aegis deploy-init --host`` names a server and records no provider:
+    it is the place, by its address."""
+    config = tmp_path / "deploy.yml"
+    config.write_text(
+        "server:\n  host: 203.0.113.7\n  user: deploy\n  path: /opt/app\n"
+    )
+    found = hosting.deploys_to(config)
+    assert found is not None
+    assert (found["key"], found["name"]) == (None, "203.0.113.7")
+    assert dict(found["facts"]) == {"User": "deploy", "Path": "/opt/app"}
+
+
 def test_every_provider_says_what_aegis_can_do_there() -> None:
     cards = hosting.providers(current="hetzner")
     assert [c["key"] for c in cards] == ["hetzner", "digitalocean", "aws", "server"]

@@ -1,58 +1,21 @@
-{# Overseer > Deployments' card (overseer_deploy_actions.context), one of
-   three views. A deployed server says where redeploys come from. Without
-   a server yet, the steps to one, each read from what is true (the
-   agent's heartbeat, a token, the records): done ones in a line, the one
-   at hand open. With a server, the server, what can be asked of
-   ``aegis deploy-agent`` for it, its newest job, and destroying it apart. #}
-{% from "components/macros/layout.html" import avatar, card, command, facts %}
+{# Overseer > Deployments > Overview's card (overseer_deployments._deployed),
+   one of three views. A deployed server says where redeploys come from.
+   Without a server yet, the way to one (New server). With a server, the
+   server, what can be asked of ``aegis deploy-agent`` for it, its newest
+   job, and destroying it apart. Then each connected cloud account's
+   servers and what they cost, as the agent last found them. #}
+{% from "components/macros/layout.html" import card, command, facts %}
 {% from "components/macros/form.html" import field, text_input, primary_button %}
-{% from "pages/overseer/deployments/_macros.html" import agent_note, asks, ask, destroy_form, job_panel, step %}
-{% set note = "text-sm text-aegis-muted space-y-2" %}
+{% from "pages/overseer/deployments/_macros.html" import agent_note, asks, ask, deployed_card, destroy_form, job_panel, note, place, step %}
 {% if actions.view == "deployed" %}
-{% call card("Deploys", id="card-deploy") %}
-<div data-deploy-state="deployed" class="{{ note }}">
-  <p>This is a deployed server. Redeploys come from the dev Overseer, or from CI:</p>
-  <p class="flex items-center gap-2">{{ command(actions.command) }}</p>
-</div>
-{% endcall %}
-{% elif actions.view == "steps" %}
-{% call card("Put it on a server", id="card-deploy") %}
-<ol data-steps class="space-y-5">
-  {% for s in actions.steps %}
-  {% call step(loop.index, s) %}
-  {% if s.key == "agent" %}
-  {{ agent_note(actions.agent) }}
-  {% elif s.key == "where" %}
-  {% for p in actions.missing %}
-  <p data-token-missing="{{ p.key }}" class="{{ note }}">To create a server on {{ p.name }}, set <code class="font-mono text-aegis-text">{{ p.token }}</code> {% if actions.secrets_page %}in <a href="{{ actions.secrets_page }}" {{ hx_replace(actions.secrets_page, "#app-content") }} class="text-aegis-teal hover:underline">Overseer &gt; Secrets</a>{% else %}in <code class="font-mono text-aegis-text">.env</code>{% endif %}, or export it where the deploy agent runs.</p>
-  {% endfor %}
-  <div data-own-server class="{{ note }}">
-    <p>Already have a server (AWS, or any machine you can SSH into)? Name it, and this page offers it deploys:</p>
-    <p class="flex items-center gap-2">{{ command(actions.own_server) }}</p>
-  </div>
-  <details data-terminal class="text-xs text-aegis-muted">
-    <summary class="cursor-pointer hover:text-aegis-text">Prefer the terminal?</summary>
-    <ul class="mt-2 space-y-2">
-      {% for p in actions.terminal %}
-      <li class="space-y-1"><span class="text-aegis-text">{{ p.name }}</span>{% if p.token %} reads <code class="font-mono">{{ p.token }}</code> from your environment{% endif %}<p class="flex items-center gap-2">{{ command(p.command) }}</p></li>
-      {% endfor %}
-    </ul>
-  </details>
-  {% elif s.key == "server" %}
-  {% for p in actions.providers %}{% include "pages/overseer/deployments/_provision.html" %}{% endfor %}
-  <p class="text-xs text-aegis-muted">Creating it also deploys the app there, with HTTPS.</p>
-  {{ job_panel(actions) }}
-  {% endif %}
-  {% endcall %}
-  {% endfor %}
-</ol>
+{{ deployed_card(actions) }}
+{% elif actions.view == "no-server" %}
+{% call card("Your server", id="card-deploy") %}
+<p data-deploy-state="no-server" class="{{ note() }}">No server yet: <a href="{{ new_url }}" {{ hx_replace(new_url, "#overseer-main") }} class="text-aegis-teal hover:underline">New server</a> walks you to one.</p>
 {% endcall %}
 {% else %}
 {% call card("Your server", id="card-deploy") %}
-<div class="flex items-center gap-3">
-  {{ avatar(actions.server.name, actions.server.logo, "lg") }}
-  <span class="text-sm font-semibold text-aegis-text">{{ actions.server.name }}</span>
-</div>
+{{ place(actions.server) }}
 {{ facts(actions.server.facts) }}
 {% if actions.agent.state == "ready" %}
 <div class="flex flex-wrap items-center gap-2">
@@ -72,4 +35,9 @@
 {% if actions.destroy and actions.agent.state == "ready" %}
 {% call card("Destroy") %}{{ destroy_form(actions.partials, actions.destroy) }}{% endcall %}
 {% endif %}
+{% endif %}
+{% if actions.accounts %}
+{% call card("In your cloud accounts") %}
+<div class="space-y-3">{% for f in actions.accounts %}{% include "pages/overseer/deployments/_account.html" %}{% endfor %}</div>
+{% endcall %}
 {% endif %}

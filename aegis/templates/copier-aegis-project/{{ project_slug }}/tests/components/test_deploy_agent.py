@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 
 from app.components.deploy import agent
-from app.components.deploy.protocol import RefusedError
+from app.components.deploy.protocol import RefusedError, kept_key
 from app.core import secrets
 from app.core.config import settings
 from app.services.system import hosting
@@ -91,11 +91,11 @@ def test_a_catalog_fetch_leaves_the_newest_job_alone(redis: FakeRedis) -> None:
     assert redis.strings[agent.LAST] == shown
 
 
-def test_a_catalog_is_read_back_while_it_lasts(redis: FakeRedis) -> None:
-    assert asyncio.run(agent.catalog("digitalocean")) is None
+def test_what_the_agent_keeps_is_read_back_while_it_lasts(redis: FakeRedis) -> None:
+    assert asyncio.run(agent.kept("catalog", CATALOG)) is None
     sold = {"currency": "USD", "sizes": [], "regions": []}
-    redis.strings[f"{agent.CATALOG}digitalocean"] = json.dumps(sold)
-    assert asyncio.run(agent.catalog("digitalocean")) == sold
+    redis.strings[kept_key("catalog", CATALOG)] = json.dumps(sold)
+    assert asyncio.run(agent.kept("catalog", CATALOG)) == sold
 
 
 def test_only_a_deploy_job_is_shown(redis: FakeRedis) -> None:
@@ -111,10 +111,12 @@ def test_its_keys_are_on_the_redis_map() -> None:
 
 
 def test_each_providers_token_is_a_secret_like_any_other() -> None:
-    """Declared from the provider table, read from ``.env`` (a setting) or
-    the secrets store, and listed on Overseer > Secrets."""
-    tokens = {p.token for p in hosting.PROVISIONABLE}
-    assert tokens and {s.name for s in agent.SECRETS} == tokens
+    """Declared from the provider table (a cloud's, and a DNS provider's
+    with one token: Porkbun's pair is ``porkbun_keys``), read from ``.env``
+    (a setting) or the secrets store, and listed on Overseer > Secrets."""
+    tokens = {p.token for p in hosting.PROVIDERS if p.token}
+    assert {"DIGITALOCEAN_TOKEN", "HCLOUD_TOKEN", "CLOUDFLARE_API_TOKEN"} <= tokens
+    assert {s.name for s in agent.SECRETS} == tokens
     assert tokens <= set(type(settings).model_fields)
     assert agent.__name__ in secrets.OWNERS
 

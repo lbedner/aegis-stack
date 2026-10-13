@@ -888,6 +888,7 @@ MESSAGES: dict[str, str] = {
     "deploy.backup_storage_failed": "Warning: Object storage backup failed",
     "deploy.backup_offsite": "Copying backup off the server (restic)...",
     "deploy.backup_offsite_failed": "Warning: Off-box copy failed: {error}",
+    "deploy.env_unsafe": "{file} would put the app online unprotected. Fix {settings} there (AUTH_ENABLED=true, APP_ENV=prod, a new SECRET_KEY from openssl rand -hex 32), then deploy again; .env.deploy.example explains each.",
     "deploy.disk_low": "Only {free}GB free on {host}, need {need}GB. Reclaim with: docker image prune -af && docker builder prune -af",
     "deploy.pruning": "Reclaiming Docker disk (dangling images + old build cache)...",
     "deploy.prune_failed": "Could not reclaim Docker disk; the deploy itself succeeded.",
@@ -1375,9 +1376,10 @@ MESSAGES: dict[str, str] = {
     "provision.help_opt_provider": "Cloud provider to create the server in ({providers})",
     "provision.help_opt_size": "Server type (defaults: {sizes})",
     "provision.help_opt_region": "Provider location (defaults: {regions})",
-    "provision.help_opt_domain": (
-        "Hostname to point at the server through Cloudflare (default: an sslip.io name)"
-    ),
+    "provision.help_opt_domain": "Hostname to point at the server through its DNS provider (default: an sslip.io name)",
+    "provision.help_opt_allowlist": "Networks that may reach the Overseer and admin paths, comma-separated (e.g. 203.0.113.9/32); stamped on the server at each deploy",
+    "provision.bad_allowlist": "Not a network list: {value} (comma-separated, like 203.0.113.9/32)",
+    "provision.help_opt_dns": "DNS provider for --domain: {providers} (default: the first whose keys are set)",
     "provision.help_opt_ssh_key": "Public key installed for root on the new server (default: the first of ~/.ssh/id_ed25519.pub, id_ecdsa.pub, id_rsa.pub)",
     "provision.no_ssh_key": "No SSH public key found in {dir} (looked for {names}). Pass one with --ssh-key.",
     "provision.help_opt_email": "Address Let's Encrypt registers the HTTPS certificate to (default: the project's author_email)",

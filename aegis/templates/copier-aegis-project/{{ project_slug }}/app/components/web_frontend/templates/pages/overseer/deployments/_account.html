@@ -1,0 +1,27 @@
+{# What the cloud account already runs and costs
+   (overseer_deploy_actions.account_panel, deploy_spend): its servers
+   dearest first, aegis's own marked by the project that made them, what
+   they cost a month (with the server being bought, on the steps), and this month's spend
+   where the provider says (or the token scope it needs to). Loading, it
+   asks again until the deploy agent has looked. #}
+{% from "components/macros/table.html" import data_table %}
+{% from "pages/overseer/deployments/_macros.html" import panel %}
+{% macro server_cell(server) -%}
+{{ server.name }}{% if server.project %} <span data-aegis-project class="text-aegis-muted">aegis: {{ server.project }}</span>{% endif %}
+{%- endmacro %}
+{% call panel("account", f, "Asking " ~ f.name ~ " what is already running…", "Could not see what is running: ") %}
+  <p class="text-sm"><span class="font-semibold text-aegis-text">Already in your {{ f.name }} account:</span>
+    {% if f.servers %}{{ f.servers|length }} server{{ "s" if f.servers|length != 1 }}, {{ f.running|money(f.currency) }} a month{% else %}nothing running{% endif %}.
+    {% if f.with is not none %}<span class="text-aegis-muted">With this one: {{ f.with|money(f.currency) }} a month.</span>{% endif %}</p>
+  {% if f.month_to_date is not none %}<p data-month-to-date class="text-xs text-aegis-muted">Spent so far this month: {{ f.month_to_date|money(f.currency) }}, everything in the account, not only servers.</p>{% endif %}
+  {% for scope in f.missing %}<p data-missing-scope class="text-xs text-aegis-muted">To see this month's spend too, give the token <code class="font-mono text-aegis-text">{{ scope }}</code>.</p>{% endfor %}
+  {% if f.servers %}
+  {{ data_table([
+    {"key": "server", "label": "Server", "render": server_cell},
+    {"key": "size", "label": "Size"},
+    {"key": "region", "label": "Region"},
+    {"key": "price", "label": "A month", "kind": "money", "align": "right"},
+    {"key": "age", "label": "Created", "align": "right"},
+  ], f.servers, flush=False) }}
+  {% endif %}
+{% endcall %}

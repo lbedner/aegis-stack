@@ -39,7 +39,8 @@ def _row(
     **marks: float | None,
 ) -> dict[str, Any]:
     """A bar: ``solid`` (in use), ``dashed`` (the limits), ``line`` (the
-    server), each a percentage of ``scale``."""
+    server), each a percentage of ``scale``; the limits may come as
+    ``segments`` instead, one per service."""
     bars = {
         name: _bar(marks.get(name), scale or 1) for name in ("solid", "dashed", "line")
     }
@@ -52,11 +53,28 @@ def _row(
     } | bars
 
 
+def _segments(ceilings: list[tuple[str, int]], scale: float) -> list[dict[str, Any]]:
+    """Each service's limit as its own piece of the dashed outline, end to
+    end from the left (``x``, ``width``: percentages of ``scale``)."""
+    found, x = [], 0.0
+    for name, ceiling in ceilings:
+        width = _bar(ceiling, scale) or 0.0
+        title = f"{name}: up to {format_bytes(ceiling)}"
+        found.append({"name": name, "title": title, "x": round(x, 1), "width": width})
+        x += width
+    return found
+
+
 def _memory(services: list[dict[str, Any]], size: dict[str, Any]) -> dict[str, Any]:
     room = size["memory_mb"] * MIB - SYSTEM_MEMORY
     used = sum(s["used"] or 0 for s in services)
-    # A service without a limit can take what it uses, at the least.
-    limits = sum(s["memory"] or s["used"] or 0 for s in services)
+    # Each service's ceiling, biggest first: its limit, or, without one,
+    # what it uses (it can take that much, at the least); none, left out.
+    named = ((s["name"], s["memory"] or s["used"] or 0) for s in services)
+    ceilings = sorted(
+        ((name, c) for name, c in named if c), key=lambda found: found[1], reverse=True
+    )
+    limits = sum(ceiling for _, ceiling in ceilings)
     if used > room:
         tone = "error"
         why = (
@@ -64,22 +82,19 @@ def _memory(services: list[dict[str, Any]], size: dict[str, Any]) -> dict[str, A
             f"{format_bytes(room)} for it."
         )
     elif limits > room:
-        biggest = sorted(
-            (s for s in services if s["memory"]),
-            key=lambda s: s["memory"],
-            reverse=True,
-        )[:2]
-        named = " and ".join(
-            f"{s['name']} ({format_bytes(s['memory'])})" for s in biggest
-        )
+        named = " and ".join(f"{n} ({format_bytes(c)})" for n, c in ceilings[:2])
         tone = "warn"
         why = (
-            f"Fits today ({format_bytes(used)} of {format_bytes(room)}), but the "
-            f"limits add up to {format_bytes(limits)}: {named} could push it over."
+            f"Fits today ({format_bytes(used)} of {format_bytes(room)}). If every "
+            f"service grew to its limit, together they would need "
+            f"{format_bytes(limits)}; the biggest limits are {named}."
         )
     else:
         tone = "ok"
-        why = f"Room to spare: the limits ({format_bytes(limits)}) fit in {format_bytes(room)}."
+        why = (
+            "Room to spare: even if every service grew to its limit, together "
+            f"they would need {format_bytes(limits)} of {format_bytes(room)}."
+        )
     figures = (
         f"{format_bytes(used)} in use · {format_bytes(limits)} limits · "
         f"{format_bytes(room)} on this server"
@@ -87,17 +102,8 @@ def _memory(services: list[dict[str, Any]], size: dict[str, Any]) -> dict[str, A
     if unseen := [s["name"] for s in services if s["used"] is None]:
         figures += f" · not running here: {', '.join(unseen)}"
     scale = max(room, limits, used)
-    return _row(
-        "memory",
-        "Memory",
-        tone,
-        why,
-        figures,
-        scale,
-        solid=used,
-        dashed=limits,
-        line=room,
-    )
+    row = _row("memory", "Memory", tone, why, figures, scale, solid=used, line=room)
+    return row | {"segments": _segments(ceilings, scale or 1)}
 
 
 def _cpu(services: list[dict[str, Any]], size: dict[str, Any]) -> dict[str, Any]:
@@ -120,7 +126,7 @@ def _cpu(services: list[dict[str, Any]], size: dict[str, Any]) -> dict[str, Any]
 
 def _disk(found: dict[str, Any], size: dict[str, Any]) -> dict[str, Any]:
     room = size["disk_gb"] * GIB - SYSTEM_DISK
-    needed = found["images"] + sum(v["size"] for v in found["volumes"])
+    needed = found["images"] + found["data"]
     if needed > room:
         tone = "error"
         why = f"Images and data take {format_bytes(needed)}; this server has {format_bytes(room)}."
@@ -146,4 +152,15 @@ def fit(found: dict[str, Any], size: dict[str, Any]) -> dict[str, Any]:
     ]
     tones = {row["tone"] for row in rows}  # muted counts as fitting
     verdict = "error" if "error" in tones else "warn" if "warn" in tones else "ok"
-    return {"rows": rows, "verdict": verdict, "headline": VERDICTS[verdict]}
+    note = (
+        "Solid: in use now, on this machine. Dashed: the services' limits in "
+        "production. Line: this server, less about "
+        f"{format_bytes(SYSTEM_MEMORY)} of memory and {format_bytes(SYSTEM_DISK)} "
+        "of disk for its own system."
+    )
+    return {
+        "rows": rows,
+        "verdict": verdict,
+        "headline": VERDICTS[verdict],
+        "note": note,
+    }

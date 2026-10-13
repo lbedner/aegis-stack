@@ -4,7 +4,7 @@ ask it to leave. Scoped to the caller (``get_meetings_service``)."""
 from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel
 
-from app.services.meetings.bot import start_meeting
+from app.services.meetings.bot import send_bot
 from app.services.meetings.deps import as_http, get_meetings_service
 from app.services.meetings.models import Meeting
 from app.services.meetings.service import (
@@ -26,9 +26,7 @@ async def join_meeting(
 ) -> Meeting:
     """Record the meeting and start the bot on it; answers before it joins."""
     with as_http():
-        meeting = await svc.request(body.url, body.bot_name)
-    start_meeting(meeting.id)  # type: ignore[arg-type]
-    return meeting
+        return await send_bot(svc, body.url, body.bot_name)
 
 
 @router.get("/{meeting_id}", response_model=Meeting)

@@ -10,8 +10,18 @@ import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.meetings import bot
+from app.services.meetings import service as meetings_service
 from app.services.meetings.audio import RATE
-from app.services.meetings.models import Caption, MeetingNotes, MeetingStatus, Notes
+from app.services.meetings.models import (
+    ActionItem,
+    Caption,
+    Meeting,
+    MeetingNotes,
+    MeetingRecord,
+    MeetingStatus,
+    Notes,
+    Platform,
+)
 from app.services.meetings.service import (
     NOT_DONE,
     MeetingsService,
@@ -59,6 +69,29 @@ def bot_on(
     monkeypatch.setattr(bot, "open_meet", open_meet)
 
 
+def hold_the_bot(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    """The meetings the bot is sent to, without starting it."""
+    ids: list[int] = []
+    monkeypatch.setattr(bot, "start_meeting", ids.append)
+    return ids
+
+
+def hold_the_writer(monkeypatch: pytest.MonkeyPatch) -> tuple[list[int], list[Any]]:
+    """A notes writer that only says which meetings it wrote, its runs held
+    rather than started, and no notes being written yet: the meetings
+    written, and the runs to await."""
+    written: list[int] = []
+
+    async def write(meeting_id: int) -> None:
+        written.append(meeting_id)
+
+    runs: list[Any] = []
+    monkeypatch.setattr(meetings_service, "notes_writer", lambda: write)
+    monkeypatch.setattr(meetings_service, "background", runs.append)
+    monkeypatch.setattr(meetings_service, "WRITING", set())
+    return written, runs
+
+
 async def said(
     session: AsyncSession, meeting_id: int, *lines: tuple[str, str]
 ) -> list[int]:
@@ -89,3 +122,49 @@ async def ended(
     content = notes(ids).model_dump()
     await save_notes(session, MeetingNotes(meeting_id=meeting_id, content=content))
     return meeting_id, ids
+
+
+async def docs_meeting(session: AsyncSession, owner: int | None) -> int:
+    """An owner's meeting the bot has left, where Ada said she would write
+    the docs, and the notes give it to her."""
+    meeting_id, _ = await ended(
+        session,
+        owner,
+        ("Ada", "I'll write the docs."),
+        notes=lambda _: Notes(
+            summary="Docs.",
+            action_items=[ActionItem(text="Write the docs", owner="Ada")],
+        ),
+    )
+    return meeting_id
+
+
+def record(meeting: Meeting | None = None, **fields: Any) -> MeetingRecord:
+    """A meeting read in full, as ``MeetingsService.read`` returns it: one
+    the bot has left, Ada heard for 42 s, ``fields`` over that."""
+    meeting = meeting or Meeting(
+        id=7,
+        url=MEET,
+        platform=Platform.MEET,
+        status=MeetingStatus.LEFT,
+        bot_name="Notes",
+        heard={"Ada": 42.0},
+    )
+    read: dict[str, Any] = {
+        "notes": None,
+        "notes_error": None,
+        "model_name": None,
+        "transcript": [],
+        "status": "Left",
+        "length": "30:30",
+        "heard": "Ada 42s",
+        "people": ["Ada"],
+        "mine": [],
+        "under_way": False,
+        "writing": False,
+        "can_leave": False,
+        "can_delete": True,
+        "can_write": True,
+        "can_rewrite": False,
+    }
+    return MeetingRecord(meeting=meeting, **(read | fields))

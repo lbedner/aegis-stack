@@ -45,15 +45,28 @@ class Provider:
     size: str | None = None  # deploy-provision's default, where it provisions
     region: str | None = None
     currency: str | None = None  # what its prices are in
+    keys: tuple[str, ...] = ()  # a DNS provider's, where one token will not do
+
+    @property
+    def secrets(self) -> tuple[str, ...]:
+        """The environment variables (and stored secrets) it is reached with."""
+        return (self.token,) if self.token else self.keys
+
+    @property
+    def logo(self) -> str | None:
+        """Its mark (``domain``'s favicon); None draws its initial."""
+        return favicon_url(self.domain) if self.domain else None
 
 
 PROVIDERS = tuple(
-    Provider(**{**p, "can": tuple(p["can"])})
+    Provider(**{**p, "can": tuple(p["can"]), "keys": tuple(p.get("keys", ()))})
     for p in json.loads(Path(__file__).with_name("providers.json").read_text())
 )
 _BY_KEY = {p.key: p for p in PROVIDERS}
-# Where aegis creates servers, each with the token it needs.
+# Where aegis creates servers, each with the token it needs; and where it
+# names them (a DNS record for a domain of your own).
 PROVISIONABLE = tuple(p for p in PROVIDERS if "Provision" in p.can)
+DNS = tuple(p for p in PROVIDERS if "DNS" in p.can)
 
 _running: dict[str, Any] | None = None
 
@@ -65,7 +78,7 @@ def _where(
     return {
         "key": key,
         "name": name,
-        "logo": favicon_url(provider.domain) if provider and provider.domain else None,
+        "logo": provider.logo if provider else None,
         "facts": [
             (label, str(value)) for label, value in facts if value not in (None, "")
         ],
@@ -181,13 +194,19 @@ def deploy_config(path: Path = DEPLOY_CONFIG) -> dict[str, Any]:
 
 
 def deploys_to(path: Path = DEPLOY_CONFIG) -> dict[str, Any] | None:
-    """Where this project deploys to, from the provision record, or None
-    where there is no record (on the server, or before provisioning)."""
-    record = deploy_config(path).get("provision") or {}
+    """Where this project deploys to: the provisioned server (its record),
+    else the server ``aegis deploy-init`` named, by its address; None where
+    there is neither (on the server, or before either)."""
+    config = deploy_config(path)
+    record = config.get("provision") or {}
     key = record.get("provider")
     provider = _BY_KEY.get(key or "")
     if provider is None:
-        return None
+        box = config.get("server") or {}
+        if not box.get("host"):
+            return None
+        facts = [("User", box.get("user")), ("Path", box.get("path"))]
+        return _where(None, box["host"], facts, None)
     return _where(
         key,
         provider.name,
@@ -203,17 +222,19 @@ def deploys_to(path: Path = DEPLOY_CONFIG) -> dict[str, Any] | None:
 
 
 def providers(current: str | None) -> list[dict[str, Any]]:
-    """Every provider as a card: what aegis can do there, the command and
-    token to start, and whether it is the one in use (``current``)."""
+    """Every place it can run as a card (a DNS provider only names it):
+    what aegis can do there, the command and token to start, and whether
+    it is the one in use (``current``)."""
     return [
         {
             "key": p.key,
             "name": p.name,
-            "logo": favicon_url(p.domain) if p.domain else None,
+            "logo": p.logo,
             "can": list(p.can),
             "command": p.command,
             "token": p.token,
             "current": p.key == current,
         }
         for p in PROVIDERS
+        if p not in DNS
     ]

@@ -76,6 +76,8 @@ class FakeDocker:
 @pytest.fixture
 def root(tmp_path: Path) -> Path:
     (tmp_path / ".env").write_text("SYSTEM_WORKER_MEMORY=2G\n")
+    for name in footprint.COMPOSE_FILES:
+        (tmp_path / name).write_text("services: {}\n")
     return tmp_path
 
 
@@ -104,30 +106,28 @@ def test_each_services_limits_as_a_deploy_resolves_them(root: Path) -> None:
     assert (found["redis"]["memory"], found["redis"]["cpus"]) == (None, None)
 
 
-def test_images_volumes_and_what_runs_now(root: Path) -> None:
+def test_images_data_and_what_runs_now(root: Path) -> None:
+    """Images each once, the data volumes production keeps, and what each
+    service uses now (None where it is not running here)."""
     measured = footprint.measure(root, FakeDocker())
+    assert (measured["images"], measured["data"]) == (1_241_000_000, 336_200_000)
     found = _by_name(measured)
-    assert found["webserver"]["image_size"] == 1_200_000_000
-    assert found["redis"]["image_size"] == 41_000_000
-    assert measured["volumes"] == [{"name": "app-data", "size": 336_200_000}]
     assert found["webserver"]["used"] == round(385.2 * MIB)
-    assert found["worker-system"]["used"] is None  # not running here
-    assert measured["images"] == 1_241_000_000  # each image once
+    assert found["worker-system"]["used"] is None
 
 
 def test_an_image_not_built_here_counts_nothing(root: Path) -> None:
-    docker = FakeDocker()
     IMAGES.pop("redis:7-alpine")
     try:
-        found = _by_name(footprint.measure(root, docker))
+        measured = footprint.measure(root, FakeDocker())
     finally:
         IMAGES["redis:7-alpine"] = 41_000_000
-    assert found["redis"]["image_size"] is None
+    assert measured["images"] == 1_200_000_000
 
 
-def test_the_compose_files_a_deploy_uses() -> None:
+def test_the_compose_files_a_deploy_uses(root: Path) -> None:
     docker = FakeDocker()
-    footprint.measure(Path("."), docker)
+    footprint.measure(root, docker)
     (config,) = [a for a in docker.asked if "config" in a]
     assert config[:5] == (
         "compose",
@@ -137,6 +137,15 @@ def test_the_compose_files_a_deploy_uses() -> None:
         "docker-compose.prod.yml",
     )
     assert "--no-interpolate" in config  # DOMAIN is required only at deploy
+
+
+def test_without_a_production_file_the_base_is_production(root: Path) -> None:
+    """A stack without ingress has no docker-compose.prod.yml."""
+    (root / "docker-compose.prod.yml").unlink()
+    docker = FakeDocker()
+    footprint.measure(root, docker)
+    (config,) = [a for a in docker.asked if "config" in a]
+    assert config[:4] == ("compose", "-f", "docker-compose.yml", "--profile")
 
 
 @pytest.mark.parametrize(

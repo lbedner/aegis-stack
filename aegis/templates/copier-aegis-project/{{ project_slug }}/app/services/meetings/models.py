@@ -178,5 +178,14 @@ class MeetingRecord(BaseModel):
     status: str
     length: str | None
     heard: str | None
+    # Who spoke (the speakers "me" can be), and the action items of the one
+    # the owner is.
+    people: list[str]
+    mine: list[ActionItem]
+    under_way: bool
+    writing: bool
     can_leave: bool
     can_delete: bool
+    # A model to write notes with, and whether they can be written again now.
+    can_write: bool
+    can_rewrite: bool

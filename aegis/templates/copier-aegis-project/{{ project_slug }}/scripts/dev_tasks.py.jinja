@@ -96,11 +96,12 @@ def serve(*, detach: bool = False) -> None:
         storage={% if include_storage %}True{% else %}False{% endif %},
     )
     env = {**os.environ, **{key: str(value) for key, value in ports.items()}}
-    # `make serve ENGINE=granian`: make exports command-line variables, so
-    # the short name arrives here and becomes the setting the app reads.
-    engine = os.environ.get("ENGINE")
-    if engine:
-        env["WEBSERVER_ENGINE"] = engine
+    # `make serve ENGINE=granian LOOP=rloop`: make exports command-line
+    # variables, so each short name arrives here and becomes the setting
+    # the app reads.
+    for flag, setting in (("ENGINE", "WEBSERVER_ENGINE"), ("LOOP", "WEBSERVER_LOOP")):
+        if value := os.environ.get(flag):
+            env[setting] = value
     profiles = ["--profile", "dev"]
 {%- if include_finance and finance_plaid %}
     if _plaid_configured():

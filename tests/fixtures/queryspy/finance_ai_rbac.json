@@ -111,28 +111,40 @@
       "function": "_admin_and_target"
     },
     {
+      "kind": "lazy_load",
+      "label": "Agent.tools",
+      "file": "tests/services/ai/test_agent_models.py",
+      "function": "test_the_default_agent_reads_the_app_from_the_ontology"
+    },
+    {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM \"user\"",
-      "file": "app/services/auth/users.py",
+      "file": "app/services/auth/domains/users/accounts.py",
       "function": "create_user"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM \"user\" WHERE \"user\".email = :email_1 AND \"user\".deleted_at IS NULL",
-      "file": "app/services/auth/users.py",
+      "file": "app/services/auth/domains/users/accounts.py",
       "function": "get_user_by_email"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM \"user\" WHERE \"user\".id = :id_1",
-      "file": "app/services/auth/user_deletion.py",
+      "file": "app/services/auth/domains/users/deletion.py",
       "function": "hard_delete_user"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM \"user\" WHERE \"user\".id = :id_1",
-      "file": "app/services/auth/user_deletion.py",
+      "file": "app/services/auth/domains/users/deletion.py",
       "function": "restore_user"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM agent AS agent_1 JOIN agent_tool AS agent_tool_1 ON agent_1.id = agent_tool_1.agent_id JOIN tool ON tool.id = agent_tool_1.tool_id WHERE agent_1.id IN (__[POSTCOMPILE_primary_keys])",
+      "file": "app/services/ai/fixtures/agent_fixtures.py",
+      "function": "attach_tools"
     },
     {
       "kind": "repeated_statement",
@@ -160,12 +172,6 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM agent_tool WHERE agent_tool.agent_id = :agent_id_1",
-      "file": "app/services/finance/domains/detection/analyst/seeds.py",
-      "function": "_attach_chat_tools"
-    },
-    {
-      "kind": "repeated_statement",
       "label": "SELECT ... FROM agent_user_memory WHERE agent_user_memory.user_id = :user_id_1",
       "file": "app/services/ai/domains/chat/queries.py",
       "function": "user_memory_for"
@@ -175,6 +181,12 @@
       "label": "SELECT ... FROM conversation LEFT OUTER JOIN sentiment_analysis ON sentiment_analysis.conversation_id = conversation.id WHERE sentiment_analysis.id IS NULL ORDER BY conversation.updated_at LIMIT :param_1",
       "file": "app/services/ai/domains/chat/queries.py",
       "function": "unscored_conversations"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM conversation ORDER BY conversation.updated_at DESC",
+      "file": "app/services/ai/domains/chat/queries.py",
+      "function": "conversations_with_messages"
     },
     {
       "kind": "repeated_statement",
@@ -196,9 +208,27 @@
     },
     {
       "kind": "repeated_statement",
+      "label": "SELECT ... FROM conversation_message WHERE conversation_message.conversation_id IN (__[POSTCOMPILE_primary_keys])",
+      "file": "app/services/ai/domains/chat/queries.py",
+      "function": "conversations_with_messages"
+    },
+    {
+      "kind": "repeated_statement",
       "label": "SELECT ... FROM conversation_message WHERE conversation_message.id IN (__[POSTCOMPILE_id_1])",
       "file": "app/services/ai/domains/chat/queries.py",
       "function": "existing_message_ids"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM deployment",
+      "file": "tests/components/test_deploy_history.py",
+      "function": "_rows"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM deployment WHERE deployment.build_id = :pk_1",
+      "file": "app/components/deploy/history.py",
+      "function": "record_start"
     },
     {
       "kind": "repeated_statement",
@@ -209,7 +239,7 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM email_verification_token WHERE email_verification_token.user_id = :user_id_1 AND email_verification_token.used = false",
-      "file": "app/services/auth/user_verification.py",
+      "file": "app/services/auth/domains/users/verification.py",
       "function": "_invalidate_prior_email_verification_tokens"
     },
     {
@@ -1540,6 +1570,12 @@
     },
     {
       "kind": "repeated_statement",
+      "label": "SELECT ... FROM llm_org WHERE (llm_org.slug IN (__[POSTCOMPILE_slug_1]) OR llm_org.name IN (__[POSTCOMPILE_name_1])) AND llm_org.icon_b64 IS NOT NULL",
+      "file": "app/services/ai/domains/llm/queries.py",
+      "function": "org_icons"
+    },
+    {
+      "kind": "repeated_statement",
       "label": "SELECT ... FROM llm_org WHERE llm_org.id IN (__[POSTCOMPILE_primary_keys])",
       "file": "tests/services/ai/test_llm_service.py",
       "function": "all"
@@ -1613,13 +1649,13 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM refresh_token WHERE refresh_token.family_id = :family_id_1 AND refresh_token.revoked_at IS NULL AND refresh_token.expires_at > :expires_at_1 LIMIT :param_1",
-      "file": "app/services/auth/refresh_tokens.py",
+      "file": "app/services/auth/domains/sessions/tokens.py",
       "function": "is_live_session"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM refresh_token WHERE refresh_token.token = :pk_1",
-      "file": "app/services/auth/refresh_tokens.py",
+      "file": "app/services/auth/domains/sessions/tokens.py",
       "function": "row_of"
     },
     {
@@ -1631,7 +1667,7 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM refresh_token WHERE refresh_token.user_id = :user_id_1 AND refresh_token.revoked_at IS NULL AND refresh_token.expires_at > :expires_at_1",
-      "file": "app/services/auth/refresh_tokens.py",
+      "file": "app/services/auth/domains/sessions/devices.py",
       "function": "list_active_for_user"
     },
     {
@@ -1642,9 +1678,9 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM tool WHERE tool.name = :name_1",
-      "file": "app/services/finance/domains/detection/analyst/seeds.py",
-      "function": "_attach_chat_tools"
+      "label": "SELECT ... FROM tool WHERE tool.name IN (__[POSTCOMPILE_name_1])",
+      "file": "app/services/ai/fixtures/agent_fixtures.py",
+      "function": "attach_tools"
     },
     {
       "kind": "repeated_statement",

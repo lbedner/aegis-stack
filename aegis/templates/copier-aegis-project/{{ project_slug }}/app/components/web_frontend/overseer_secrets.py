@@ -18,6 +18,7 @@ from urllib.parse import urlencode
 from app.core import secrets
 from app.core.constants import ComponentName
 from app.core.formatting import format_relative_time
+from app.core.parts import Category
 from app.services.system.models import ComponentStatus
 
 from .overseer_nav import NavItem, SectionRequest, page_url
@@ -33,6 +34,7 @@ ITEM = NavItem(
     url="/overseer/secrets",
     status="",
     component=ComponentStatus(name=ComponentName.SECRETS, message=""),
+    concern=Category.PLATFORM,
 )
 # With the secrets component installed, its page under Components holds
 # all of this (one home); without it, the page stays at the top level.

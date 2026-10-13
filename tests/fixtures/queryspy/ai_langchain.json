@@ -105,6 +105,18 @@
       "function": "test_only_active_tools_are_exposed"
     },
     {
+      "kind": "lazy_load",
+      "label": "Agent.tools",
+      "file": "tests/services/ai/test_agent_models.py",
+      "function": "test_the_default_agent_reads_the_app_from_the_ontology"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM agent AS agent_1 JOIN agent_tool AS agent_tool_1 ON agent_1.id = agent_tool_1.agent_id JOIN tool ON tool.id = agent_tool_1.tool_id WHERE agent_1.id IN (__[POSTCOMPILE_primary_keys])",
+      "file": "app/services/ai/fixtures/agent_fixtures.py",
+      "function": "attach_tools"
+    },
+    {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM agent AS agent_1 JOIN agent_tool AS agent_tool_1 ON agent_1.id = agent_tool_1.agent_id JOIN tool ON tool.id = agent_tool_1.tool_id WHERE agent_1.id IN (__[POSTCOMPILE_primary_keys])",
       "file": "app/services/ai/domains/chat/queries.py",
@@ -127,12 +139,6 @@
       "label": "SELECT ... FROM agent WHERE agent.slug = :slug_1",
       "file": "app/services/finance/domains/detection/analyst/seeds.py",
       "function": "load_finance_agent_fixtures"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM agent_tool WHERE agent_tool.agent_id = :agent_id_1",
-      "file": "app/services/finance/domains/detection/analyst/seeds.py",
-      "function": "_attach_chat_tools"
     },
     {
       "kind": "repeated_statement",
@@ -1636,9 +1642,9 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM tool WHERE tool.name = :name_1",
-      "file": "app/services/finance/domains/detection/analyst/seeds.py",
-      "function": "_attach_chat_tools"
+      "label": "SELECT ... FROM tool WHERE tool.name IN (__[POSTCOMPILE_name_1])",
+      "file": "app/services/ai/fixtures/agent_fixtures.py",
+      "function": "attach_tools"
     },
     {
       "kind": "repeated_statement",

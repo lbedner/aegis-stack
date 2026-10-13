@@ -205,7 +205,7 @@ async def run_deep_dive(
     from app.services.ai.domains.chat.agent_loader import resolve_agent
     from app.services.ai.domains.llm import active_model
     from app.services.ai.domains.llm.providers import model_for
-    from app.services.ai.usage_recording import extract_usage, record_usage
+    from app.services.ai.domains.spend.recording import extract_usage, record_usage
 
     agent_config = await resolve_agent(DEEP_DIVE_AGENT_SLUG, session=db)
     if agent_config.slug != DEEP_DIVE_AGENT_SLUG:

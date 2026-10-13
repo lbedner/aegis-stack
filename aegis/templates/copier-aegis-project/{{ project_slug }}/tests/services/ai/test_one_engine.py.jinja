@@ -18,7 +18,7 @@ from app.services.ai.domains.chat import conversation
 {%- endif %}
 from app.services.ai.service import contexts, status, usage
 {%- if ai_backend != "memory" %}
-from app.services.ai import usage_recording
+from app.services.ai.domains.spend import recording as usage_recording
 {%- endif %}
 
 

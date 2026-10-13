@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.comms.calls import (
+from app.services.comms.domains.telephony.calls import (
     CallConfigurationError,
     get_call_status,
     make_call,
@@ -76,7 +76,9 @@ class TestMakeCall:
         """Test successful call initiation."""
         with (
             secret_settings() as mock_settings,
-            patch("app.services.comms.twilio.Client") as mock_client_class,
+            patch(
+                "app.services.comms.domains.telephony.client.Client"
+            ) as mock_client_class,
         ):
             mock_settings.TWILIO_ACCOUNT_SID = "ACtest123"
             mock_settings.TWILIO_AUTH_TOKEN = "auth_token"
@@ -104,7 +106,9 @@ class TestMakeCall:
         """Test call initiation with custom timeout."""
         with (
             secret_settings() as mock_settings,
-            patch("app.services.comms.twilio.Client") as mock_client_class,
+            patch(
+                "app.services.comms.domains.telephony.client.Client"
+            ) as mock_client_class,
         ):
             mock_settings.TWILIO_ACCOUNT_SID = "ACtest123"
             mock_settings.TWILIO_AUTH_TOKEN = "auth_token"
@@ -152,7 +156,7 @@ class TestMakeCall:
         """Test call fails when phone number is missing."""
         with (
             secret_settings() as mock_settings,
-            patch("app.services.comms.twilio.Client"),
+            patch("app.services.comms.domains.telephony.client.Client"),
         ):
             mock_settings.TWILIO_ACCOUNT_SID = "ACtest123"
             mock_settings.TWILIO_AUTH_TOKEN = "auth_token"
@@ -178,7 +182,9 @@ class TestMakeCallSimple:
         """Test simple call initiation."""
         with (
             secret_settings() as mock_settings,
-            patch("app.services.comms.twilio.Client") as mock_client_class,
+            patch(
+                "app.services.comms.domains.telephony.client.Client"
+            ) as mock_client_class,
         ):
             mock_settings.TWILIO_ACCOUNT_SID = "ACtest123"
             mock_settings.TWILIO_AUTH_TOKEN = "auth_token"

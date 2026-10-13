@@ -15,7 +15,7 @@ from typing import Annotated, Any
 import typer
 
 from app.i18n import lazy_t
-from app.services.system import patterns
+from app.services.system import pattern_findings, patterns
 
 app = typer.Typer(
     name="patterns", help=lazy_t("patterns.help"), invoke_without_command=True
@@ -57,6 +57,7 @@ def _pattern(report: patterns.Report) -> dict[str, Any]:
             {"label": i.label, "findings": [titles[k] for k in i.findings]}
             for i in report.instances
         ],
+        "findings": [f.model_dump() for f in pattern_findings.findings(report)],
     }
 
 

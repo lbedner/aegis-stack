@@ -191,6 +191,16 @@ class TestBuildWatchPolls:
 
         assert issubclass(build_watch.OBSERVER, PollingObserver)
 
+    def test_a_dist_folder_made_again_is_still_watched(self) -> None:
+        """Regenerating a project makes ``static/dist/`` again: a watch on
+        that folder follows the one deleted and never sees Tailwind's next
+        write, so the manifest names a stale, half-written stylesheet. The
+        watch is on ``static/`` itself, which outlives it."""
+        from app.components.web_frontend import build_watch
+        from app.components.web_frontend.build import STATIC_DIR
+
+        assert build_watch._watched_dirs() == [(STATIC_DIR, True)]
+
 
 class TestBuildWatchSourceFilter:
     """The watcher must react to sources and ignore its own output — the

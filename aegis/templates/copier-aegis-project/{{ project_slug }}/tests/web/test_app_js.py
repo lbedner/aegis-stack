@@ -408,31 +408,49 @@ def test_hovering_a_map_node_keeps_it_and_its_neighbours_lit() -> None:
     ]
 
 
-PIN_HARNESS = (
+LIT_HARNESS = (
+    STUBS
+    + """
+const c = require(APP_JS);
+console.log(JSON.stringify([...c.pathFocus('service_blog,database')].sort()));
+"""
+)
+
+
+def test_a_dry_path_keeps_the_parts_it_crosses_lit() -> None:
+    """Its parts lit (``?lit=``), and with them the lines between two of
+    them (``applyMapFocus``); the rest dims."""
+    assert run(LIT_HARNESS, APP_JS=APP_JS) == ["database", "service_blog"]
+
+
+LET_GO_HARNESS = (
     STUBS
     + """
 const root = { dataset: {}, querySelector: () => null };
 document.getElementById = (id) => (id === 'overview-stack' ? root : null);
 require(APP_JS);
 const node = { dataset: { node: 'database' } };
-const at = (sel) => (sel === '[data-map] [data-node]' ? node : sel === '[data-map]' ? {} : null);
+const over = (sel) => (sel === '[data-map] [data-node]' ? node : sel === '[data-map]' ? {} : null);
 const seen = [];
-fire('click', { target: { closest: at } }); seen.push(root.dataset.pinned || '');
-fire('mouseover', { target: { closest: (sel) => (sel === '[data-map] [data-node]' ? { dataset: { node: 'cache' } } : null) } });
-seen.push(root.dataset.pinned || '');
-fire('keydown', { key: 'Escape' }); seen.push(root.dataset.pinned || '');
-fire('click', { target: { closest: at } });
-fire('click', { target: { closest: (sel) => (sel === '[data-map]' ? {} : null) } });
-seen.push(root.dataset.pinned || '');
+const focus = () => root.dataset.pinned || root.dataset.hover || '';
+fire('mouseover', { target: { closest: over } }); seen.push(focus());
+// A click holds nothing: off the node, nothing stays lit.
+fire('click', { target: { closest: over } });
+fire('mouseover', { target: { closest: (sel) => (sel === '[data-map]' ? {} : null) } });
+seen.push(focus());
+// Out of the window straight from a node: no mouseover follows to clear it.
+fire('mouseover', { target: { closest: over } });
+fire('mouseout', { relatedTarget: null });
+seen.push(focus());
 console.log(JSON.stringify(seen));
 """
 )
 
 
-def test_a_click_pins_a_map_nodes_focus_until_escape_or_the_canvas() -> None:
-    """Hover is a glance; a click keeps it while the pointer moves on.
-    Escape, or a click on the empty canvas, lets it go."""
-    assert run(PIN_HARNESS, APP_JS=APP_JS) == ["database", "database", "", ""]
+def test_a_maps_focus_follows_the_pointer_and_nothing_holds_it() -> None:
+    """A node lights while hovered and lets go when the pointer leaves it,
+    the window included; a click holds nothing, so nothing stays dimmed."""
+    assert run(LET_GO_HARNESS, APP_JS=APP_JS) == ["database", "", ""]
 
 
 COLUMN = (

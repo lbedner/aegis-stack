@@ -9,6 +9,10 @@ from .models import (
     ErrorResponse,
 )
 
+# The stack's own code, not a service (``ownership``).
+PART_OF = "stack"
+
+
 __all__ = [
     "BaseResponse",
     "ErrorResponse",

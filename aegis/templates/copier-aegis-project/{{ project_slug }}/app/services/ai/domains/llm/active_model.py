@@ -24,7 +24,7 @@ from app.services.ai.domains.llm import queries
 from app.services.ai.models.llm import LLMActiveSelection
 
 if TYPE_CHECKING:
-    from app.services.ai.config import AgentSampling, AIServiceConfig
+    from app.services.ai.domains.llm.config import AgentSampling, AIServiceConfig
 
 # The .env-sourced model/provider, captured before the first override mutates
 # the live settings object. Without this, "back to .env" is impossible inside
@@ -192,7 +192,7 @@ async def config_for_active(
     through here, or it runs on the .env bootstrap model while the dashboard
     shows the model the user picked.
     """
-    from app.services.ai.config import AIServiceConfig
+    from app.services.ai.domains.llm.config import AIServiceConfig
 
     await sync_from_db(settings)
     return AIServiceConfig.from_settings(settings).for_agent(agent)

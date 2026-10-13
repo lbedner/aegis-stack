@@ -17,7 +17,7 @@ from app.components.frontend.controls import (
     SecondaryText,
 )
 from app.components.frontend.theme import AegisTheme as Theme
-from app.services.insights.views.formatting import pct as pct_change
+from app.services.insights.service import pct as pct_change
 
 from app.components.frontend.dashboard.modals.insights_modal.traffic_tables import (
     TrafficTable,
@@ -163,7 +163,7 @@ class GitHubTrafficTab(InsightsTab):
         )
 
         # Previous period avg stars (from bulk data)
-        from app.services.insights.domains.metrics import InsightQueryService
+        from app.services.insights.service import InsightQueryService
 
         cutoff, prev_cutoff = InsightQueryService.compute_cutoffs(self._days)
         prev_star_rows = [

@@ -134,11 +134,12 @@ def _granted(**answers: Any) -> str:
 
 @pytest.mark.parametrize("finance", [True, False])
 def test_every_stack_grants_the_overseer_reads(finance: bool) -> None:
-    """MCP never starts empty: what is wrong, what broke and what led up to
-    it are on every stack, finance or not."""
+    """MCP never starts empty: what is wrong, what broke, what led up to
+    it and what the app is are on every stack, finance or not."""
     line = _granted(include_finance=finance)
 
-    assert all(f'"{name}"' in line for name in ("health", "errors", "logs"))
+    reads = ("health", "errors", "logs", "ontology")
+    assert all(f'"{name}"' in line for name in reads)
     assert ('"ledger"' in line) is finance
 
 

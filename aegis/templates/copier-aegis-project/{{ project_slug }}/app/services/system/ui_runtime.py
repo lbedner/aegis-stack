@@ -18,7 +18,7 @@ from typing import Any, Literal
 from app.core import runtime, series, thresholds
 from app.core.config import settings
 from app.core.formatting import format_bytes, format_percentage, format_span
-from app.core.ownership import COMPONENT_PAGES
+from app.core.ownership import page_of_part
 from app.core.runtime import Instance, RuntimeUnavailableError, Stats
 from app.core.series import Sample, Sampler
 
@@ -141,7 +141,7 @@ def host_of(page: str) -> Host | None:
 
 def page_of(component: str) -> str | None:
     """The page a health component's containers show on, if any has one."""
-    page = COMPONENT_PAGES.get(component, component)
+    page = page_of_part(component)
     return page if page in runtime.PAGES else None
 
 

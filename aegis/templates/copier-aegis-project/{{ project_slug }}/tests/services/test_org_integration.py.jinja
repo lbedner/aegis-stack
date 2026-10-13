@@ -19,10 +19,10 @@ from app.models.org import (
     ORG_ROLE_MEMBER,
     ORG_ROLE_OWNER,
 )
-from app.services.auth.invites import InviteService
-from app.services.auth.memberships import MembershipService
-from app.services.auth.orgs import OrgService, RestoreConflictError
-from app.services.auth.users import UserService
+from app.services.auth.domains.orgs.invites import InviteService
+from app.services.auth.domains.orgs.memberships import MembershipService
+from app.services.auth.domains.orgs.organizations import OrgService, RestoreConflictError
+from app.services.auth.domains.users.accounts import UserService
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 

@@ -70,7 +70,7 @@ async def _run_test_turn(slug: str, message: str) -> tuple[AgentConfig, str]:
     """One turn through the loader: resolved config -> configured model."""
     from app.core.config import settings
     from app.services.ai.domains.chat.agent_loader import resolve_agent
-    from app.services.ai.config import AIServiceConfig
+    from app.services.ai.domains.llm.config import AIServiceConfig
 
     config = await resolve_agent(slug)
     service_config = AIServiceConfig.from_settings(settings).for_agent(config)

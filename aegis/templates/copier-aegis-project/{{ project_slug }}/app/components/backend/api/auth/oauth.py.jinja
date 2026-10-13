@@ -42,8 +42,11 @@ from app.core.security import (
 )
 from app.models.user import OAuthProvider, User, UserOAuthIdentity
 from app.services.auth.deps import get_current_active_user
-from app.services.auth.refresh_tokens import RefreshService
-from app.services.auth.users import RegistrationClosedError, UserService
+from app.services.auth.service import (
+    RefreshService,
+    RegistrationClosedError,
+    UserService,
+)
 from authlib.integrations.starlette_client import OAuth, OAuthError
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse, Response

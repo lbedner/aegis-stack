@@ -58,10 +58,10 @@ asyncio.run(main())
 
 ## Configuration
 
-**Location:** `app/services/ai/config.py`
+**Location:** `app/services/ai/domains/llm/config.py`
 
 ```python
-from app.services.ai.config import get_ai_config
+from app.services.ai.domains.llm.config import get_ai_config
 
 config = get_ai_config(settings)
 

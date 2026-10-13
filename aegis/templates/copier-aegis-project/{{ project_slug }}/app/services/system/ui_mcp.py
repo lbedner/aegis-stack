@@ -5,9 +5,14 @@ client did (``app.components.mcp.activity``, where there is a database)."""
 import json
 from typing import Any
 
-from app.core.config import settings
-from app.core.formatting import format_bytes, format_duration_ms, format_relative_time
 from app.components.mcp.server import RUN_CODE, served_effects
+from app.core.config import settings
+from app.core.formatting import (
+    first_sentence,
+    format_bytes,
+    format_duration_ms,
+    format_relative_time,
+)
 from app.core.tools import RegisteredTool, get_tool, load_tools
 
 NAME = "mcp"
@@ -57,14 +62,15 @@ def _about(tool: RegisteredTool) -> str:
     its lines wrap."""
     if tool.description:
         return tool.description
-    lead = " ".join((tool.func.__doc__ or "").strip().split("\n\n")[0].split())
-    return lead.split(". ")[0].rstrip(".")
+    return first_sentence(tool.func.__doc__).rstrip(".")
 
 
 def _why_not(name: str) -> str:
     if name == RUN_CODE:
         return "Needs the AI service's code mode"
-    return "No tool by that name" if get_tool(name) is None else "Writes are never served"
+    return (
+        "No tool by that name" if get_tool(name) is None else "Writes are never served"
+    )
 
 
 def grant() -> dict[str, list[dict[str, str]]]:

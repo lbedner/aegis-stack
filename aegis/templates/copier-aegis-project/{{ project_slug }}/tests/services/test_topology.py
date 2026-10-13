@@ -2,6 +2,7 @@
 as its own process, in tiers (the edge, the app, its data), the connections
 between them, and everything that runs inside the webserver instead."""
 
+from app.core import ownership
 from app.core.constants import ComponentName
 from app.services.system import topology
 
@@ -124,3 +125,82 @@ def test_each_tier_sits_under_what_reaches_it() -> None:
         ["service_payment", "service_blog", "service_auth"], links
     )
     assert flipped.tiers[-1] == ["outside:Stripe", "database"]
+
+
+# Every part the map can place, and the hosted ones it cannot.
+EVERY = (
+    "ingress",
+    "backend",
+    "worker",
+    "scheduler",
+    "database",
+    "queue",
+    "cache",
+    "storage",
+    "ollama",
+    "browser",
+    "web_frontend",
+    "frontend",
+    "mcp",
+    "secrets",
+    "observability",
+)
+
+
+def test_the_full_stack_is_drawn_as_it_always_was() -> None:
+    """Pinned before the tiers and lines moved into the parts' own specs."""
+    found = topology.shape(list(EVERY))
+    assert found.tiers == [
+        ["ingress"],
+        ["backend", "worker", "scheduler"],
+        ["database", "queue", "cache", "storage", "ollama", "browser"],
+    ]
+    assert found.links == [
+        ("ingress", "backend"),
+        ("backend", "database"),
+        ("backend", "queue"),
+        ("backend", "cache"),
+        ("backend", "storage"),
+        ("backend", "ollama"),
+        ("backend", "browser"),
+        ("worker", "queue"),
+        ("worker", "database"),
+        ("scheduler", "database"),
+        ("scheduler", "queue"),
+    ]
+    assert found.hosted == [
+        "web_frontend",
+        "frontend",
+        "mcp",
+        "secrets",
+        "observability",
+    ]
+
+
+def test_the_full_stacks_flow_is_as_it_always_was() -> None:
+    found = topology.flow(list(EVERY))
+    assert found.tiers == [
+        ["ingress"],
+        ["backend", "scheduler"],
+        ["queue"],
+        ["worker"],
+        ["cache", "storage", "ollama", "browser", "database"],
+    ]
+    assert ("queue", "worker") in found.links and ("worker", "queue") not in found.links
+
+
+def test_each_parts_shape_and_keys_are_as_they_always_were() -> None:
+    assert {k: str(v) for k, v in topology.ROLES.items()} == {
+        "database": "store",
+        "cache": "store",
+        "queue": "queue",
+        "storage": "bucket",
+    }
+    assert (topology.KEYS, ownership.HOST) == ("secrets", "backend")
+
+
+def test_causes_end_on_a_cycle() -> None:
+    """Two services importing each other (a seed loader can) both failing:
+    each is the other's cause, and the walk ends."""
+    found = topology.causes({"ai", "finance"}, [("ai", "finance"), ("finance", "ai")])
+    assert found == {"ai": ["finance"], "finance": ["ai"]}

@@ -21,7 +21,7 @@ from app.components.backend.shutdown import (
     payment_webhook_forwarder as shutdown_mod,
 )
 from app.components.backend.startup import payment_webhook_forwarder as startup_mod
-from app.services.payment.providers import stripe as stripe_provider_mod
+from app.services.payment.domains.providers import stripe as stripe_provider_mod
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -232,7 +232,7 @@ class TestStripeProviderVerifyWebhook:
         import json
         from unittest.mock import MagicMock, patch
 
-        from app.services.payment.providers.stripe import StripeProvider
+        from app.services.payment.domains.providers.stripe import StripeProvider
 
         payload_dict = {
             "id": "evt_test",
@@ -256,7 +256,7 @@ class TestStripeProviderVerifyWebhook:
         provider._webhook_secret = "whsec_test"
 
         with patch(
-            "app.services.payment.providers.stripe.stripe.Webhook.construct_event",
+            "app.services.payment.domains.providers.stripe.stripe.Webhook.construct_event",
             return_value=fake_event,
         ):
             import asyncio
@@ -274,7 +274,7 @@ class TestStripeProviderRuntimeOverride:
     one in effect from ``app.core.secrets``."""
 
     async def _secret_used(self) -> str:
-        from app.services.payment.providers.stripe import StripeProvider
+        from app.services.payment.domains.providers.stripe import StripeProvider
 
         seen: dict[str, str] = {}
 
@@ -298,7 +298,9 @@ class TestStripeProviderRuntimeOverride:
         return seen["secret"]
 
     async def test_provider_prefers_runtime_secret(self) -> None:
-        from app.services.payment.providers.stripe import set_runtime_webhook_secret
+        from app.services.payment.domains.providers.stripe import (
+            set_runtime_webhook_secret,
+        )
 
         set_runtime_webhook_secret("whsec_from_runtime")
         assert await self._secret_used() == "whsec_from_runtime"

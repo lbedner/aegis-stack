@@ -16,10 +16,14 @@ from typing import Any
 
 from arq.worker import Function, func
 {%- elif worker_backend == "taskiq" %}
-
+{% if include_scheduler %}
+import functools
+{%- endif %}
 from typing import Any
 {%- else %}
-
+{% if include_scheduler %}
+import functools
+{%- endif %}
 from typing import Any
 
 import dramatiq
@@ -71,6 +75,7 @@ def as_task(job: ServiceJob, broker: Any) -> Any:
     function is shared with the scheduler, which enqueues by its name.
     """
 
+    @functools.wraps(job.func)  # the job's own code: what it goes into
     async def run() -> Any:
         return await job.run()
 
@@ -98,6 +103,8 @@ def service_job_tasks(broker: Any) -> dict[str, Any]:
 
 def as_task(job: ServiceJob) -> Any:
     """One job as a Dramatiq actor under the job's own name and time limit."""
+
+    @functools.wraps(job.func)  # the job's own code: what it goes into
     async def run() -> Any:
         return await job.run()
 

@@ -149,10 +149,12 @@ def _seed_answers(project: Path, body: str) -> None:
     (project / ".copier-answers.yml").write_text(body)
 
 
-# (service module, orgs module) at the current names and at the names the
-# auth restructure replaced, so an older project still infers on update.
+# (service module, orgs module) at the current paths and at the ones the
+# domains move and the auth restructure replaced, so an older project still
+# infers on update.
 AUTH_LAYOUTS = [
-    pytest.param("service.py", "orgs.py", id="current-layout"),
+    pytest.param("service.py", "domains/orgs/organizations.py", id="current-layout"),
+    pytest.param("service.py", "orgs.py", id="pre-domains-layout"),
     pytest.param("auth_service.py", "org_service.py", id="pre-restructure-layout"),
 ]
 
@@ -193,6 +195,7 @@ class TestReconcileAnswersFromDisk:
         auth_svc.parent.mkdir(parents=True)
         auth_svc.write_text("class AuthService: ...\n")
         org_svc = fake_project / "app" / "services" / "auth" / orgs_name
+        org_svc.parent.mkdir(parents=True, exist_ok=True)
         org_svc.write_text("class OrgService: ...\n")
 
         updater = ManualUpdater(fake_project)

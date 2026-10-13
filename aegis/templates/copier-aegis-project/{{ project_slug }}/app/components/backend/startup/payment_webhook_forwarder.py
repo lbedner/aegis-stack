@@ -34,7 +34,7 @@ from typing import Any
 from app.core import secrets
 from app.core.config import settings
 from app.core.log import logger
-from app.services.payment.providers.stripe import set_runtime_webhook_secret
+from app.services.payment.service import set_runtime_webhook_secret
 
 # Public for the shutdown hook. A ``Popen[str]`` on success, ``None``
 # when the gate didn't pass.

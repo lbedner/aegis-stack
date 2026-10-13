@@ -4,7 +4,8 @@ What an owner may read: the items its watches found and, for a watch that
 reads threads, the replies under them. Items are stored once per source, so
 this is the one rule that keeps one owner's research from another's. A
 service with no owner (``None``: no auth, the CLI, the health check) reads
-every watch, as ``owner_filters`` has it everywhere.
+every watch, as ``owner_filters`` has it everywhere. Callers outside the
+service import from here (``__all__``), never from ``domains``.
 """
 
 from __future__ import annotations
@@ -21,12 +22,23 @@ from app.services.research.models import (
     ResearchMatch,
     ResearchWatch,
 )
-from app.services.research.refresh import refresh_watches
+from app.services.research.domains.watches.refresh import (
+    refresh_every_watch,
+    refresh_watches,
+)
 from app.services.research.registry import source_for, validated
 from app.services.shared.queries import owner_filters
 
 # The most one search returns.
 MAX_RESULTS = 200
+
+
+__all__ = [
+    "ResearchService",
+    "SourceFailedError",
+    "WatchNotFoundError",
+    "refresh_every_watch",
+]
 
 
 class WatchNotFoundError(Exception):

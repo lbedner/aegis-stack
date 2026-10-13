@@ -13,13 +13,13 @@ pieces and the function helpers below.
 """
 
 import ast
-import inspect
-import textwrap
-import typing
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
+import inspect
 from pathlib import Path
+import textwrap
 from types import ModuleType
+import typing
 from typing import Any, NamedTuple
 
 from fastapi.routing import APIRoute
@@ -59,6 +59,10 @@ class Rule:
     # Enforced rules are held at zero violations by the test suite; the
     # rest are reported on the page and left to judgement.
     enforced: bool = False
+    # The ``path:line``s that show an instance breaks it (where the
+    # instance is, when None), and what to do about it (its title, when "").
+    evidence: Callable[[Any], list[str]] | None = None
+    action: str = ""
 
 
 @dataclass(frozen=True)
@@ -70,6 +74,8 @@ class Step:
     # counted but not scored: every protected route has a current user.
     applies: Check | None = None
     follows: Check | None = None
+    # An optional step (a router, jobs) is inventory: counted, never missed.
+    expected: bool = True
 
 
 @dataclass(frozen=True)
@@ -86,6 +92,11 @@ class Pattern:
     function: Callable[[Any], Any]
     # Orders clean instances; the highest is the canonical example.
     rank: Callable[[Any], tuple[Any, ...]] = field(default=_no_rank)
+    # The system model's node an instance's findings are about (its
+    # function's owner, when None).
+    subject: Callable[[Any], str] | None = None
+    # What is exempt by decision, with why: shown beside the rules.
+    exemptions: tuple[tuple[str, str], ...] = ()
 
 
 class SourceText(NamedTuple):
@@ -94,12 +105,14 @@ class SourceText(NamedTuple):
 
     text: str
     path: str
+    line: int = 1
 
 
 class Instance(NamedTuple):
     label: str
     target: Any
-    findings: list[str]
+    findings: list[str]  # the rules it breaks, by key
+    missed: list[str]  # the steps that apply to it it does not follow
 
 
 class RuleReport(NamedTuple):
@@ -373,12 +386,15 @@ ROUTE = Pattern(
 # Reports --------------------------------------------------------------------
 
 
-def _follows_steps(steps: tuple[Step, ...], target: Any) -> bool:
-    return all(
-        s.follows(target)
+def _missed(steps: tuple[Step, ...], target: Any) -> list[str]:
+    return [
+        s.label
         for s in steps
-        if s.follows and (s.applies is None or s.applies(target))
-    )
+        if s.follows
+        and s.expected
+        and (s.applies is None or s.applies(target))
+        and not s.follows(target)
+    ]
 
 
 def report(pattern: Pattern, source: Any = ()) -> Report:
@@ -395,6 +411,7 @@ def report(pattern: Pattern, source: Any = ()) -> Report:
                 for rule in pattern.rules
                 if not rule.exempt(target) and not rule.check(target)
             ],
+            _missed(pattern.steps, target),
         )
         for name, target in pattern.discover(source)
     ]
@@ -416,9 +433,7 @@ def report(pattern: Pattern, source: Any = ()) -> Report:
         ]
         followed = None if step.follows is None else sum(map(step.follows, relevant))
         steps.append(StepReport(step.label, step.detail, len(relevant), followed))
-    clean = [
-        i for i in listed if not i.findings and _follows_steps(pattern.steps, i.target)
-    ]
+    clean = [i for i in listed if not i.findings and not i.missed]
     canonical = max(
         clean, key=lambda i: (pattern.rank(i.target), i.label), default=None
     )
@@ -438,11 +453,12 @@ def source(func: Any) -> tuple[str, str]:
 
 
 def installed_patterns() -> dict[str, Pattern]:
-    """Every pattern this project has: routes and services always, worker
-    tasks when the worker component is installed."""
+    """Every pattern this project has: routes, services and their parts
+    always, worker tasks when the worker component is installed."""
+    from app.services.system.service_parts import PARTS
     from app.services.system.service_patterns import SERVICE
 
-    found = {"route": ROUTE, "service": SERVICE}
+    found = {"route": ROUTE, "service": SERVICE, "parts": PARTS}
     try:
         from app.components.worker.patterns import TASK
     except ImportError:  # no worker component in this project

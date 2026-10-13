@@ -105,7 +105,9 @@ class FinanceAccount(SQLModel, table=True):
     currency: str = Field(
         default="usd", foreign_key=f"{_FK}finance_currency.code", max_length=16
     )
-    current_balance: int | None = _bigint("current_balance")
+    current_balance: int | None = _bigint(
+        "current_balance", description="Integer cents; a liability's is negative."
+    )
     available_balance: int | None = _bigint("available_balance")
     credit_limit: int | None = _bigint("credit_limit")
     balance_as_of: datetime | None = Field(default=None)

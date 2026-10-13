@@ -18,6 +18,7 @@ from apscheduler.events import (
 )
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
+from app.core import edges
 from app.core.boot import apply_saved_overrides
 from app.core.constants import ComponentName{% if include_worker %}, QueueName{% endif %}
 {% if scheduler_backend != "memory" %}
@@ -215,6 +216,10 @@ async def run_scheduler() -> None:
         """Emit activity events (and persist execution history) for jobs."""
         if is_heartbeat_event(event):
             return
+        if event.code in (EVENT_JOB_EXECUTED, EVENT_JOB_ERROR):
+            job = scheduler.get_job(event.job_id)
+            error = event.code == EVENT_JOB_ERROR
+            edges.into(job.func if job else None, source=edges.SCHEDULER, error=error)
 {%- if scheduler_backend != "memory" %}
         # JobSubmissionEvent uses `scheduled_run_times` (list); JobExecutionEvent
         # uses `scheduled_run_time` (singular). Normalise to a single value so

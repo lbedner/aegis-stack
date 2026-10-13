@@ -3,11 +3,20 @@ transaction the same way."""
 
 from __future__ import annotations
 
+from typing import Annotated
+
+from pydantic import Field
+
 from app.core.formatting import format_date
 from app.services.finance.domains.detection.insights.formatting import format_usd
 from app.services.finance.domains.ledger.queries import transactions as queries
 from app.services.finance.models import FinanceTransaction
 from sqlmodel.ext.asyncio.session import AsyncSession
+
+# A payload's transaction, and where an agent finds its id.
+TransactionId = Annotated[
+    int, Field(description='The transaction, from ledger(detail="transactions") rows.')
+]
 
 
 async def live_transactions(

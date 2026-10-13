@@ -23,7 +23,7 @@ from app.core.audit import AuditEmitter, get_audit
 from app.core.db import get_async_db
 from app.models.user import User, UserCreate
 from app.services.auth.deps import get_optional_user, get_user_service
-from app.services.auth.users import UserService
+from app.services.auth.service import UserService
 
 router = APIRouter(prefix=overseer_auth.PARTIALS)
 

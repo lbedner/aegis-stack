@@ -8,7 +8,7 @@ from fastapi import FastAPI, Response
 from fastapi.responses import StreamingResponse
 import pytest
 
-from app.services.system import patterns
+from app.services.system import pattern_findings, patterns
 from app.services.system.patterns import ROUTE
 
 
@@ -43,6 +43,16 @@ class TestRouteRules:
         assert findings["api-package"] == ["GET /partials/thing"]
         assert findings["versioned"] == ["GET /partials/thing"]
         assert findings["tagged"] == ["GET /partials/thing"]
+
+    def test_a_routes_findings_say_where_and_how_bad(self) -> None:
+        report = patterns.report(ROUTE, _app_with("/partials/thing").routes)
+        found = {f.check: f for f in pattern_findings.findings(report)}
+        assert {"route.api-package", "route.versioned", "route.tagged"} <= set(found)
+        assert found["route.api-package"].severity == "error"
+        assert found["route.tagged"].severity == "warn"
+        (where,) = found["route.tagged"].evidence
+        path, _, line = where.rpartition(":")
+        assert path == "tests/services/test_patterns.py" and int(line) > 1
 
     def test_routes_kept_out_of_the_schema_are_not_instances(self) -> None:
         report = patterns.report(

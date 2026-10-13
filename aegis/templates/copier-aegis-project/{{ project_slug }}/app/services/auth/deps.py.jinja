@@ -4,12 +4,12 @@ from app.core.db import get_async_db
 from app.core.security import SESSION_COOKIE_NAME
 from app.models.user import User
 from app.services.auth.service import get_current_user_from_token
-from app.services.auth.refresh_tokens import RefreshService
-from app.services.auth.users import UserService
+from app.services.auth.domains.sessions.tokens import RefreshService
+from app.services.auth.domains.users.accounts import UserService
 {%- if include_auth_org %}
-from app.services.auth.invites import InviteService
-from app.services.auth.memberships import MembershipService
-from app.services.auth.orgs import OrgService
+from app.services.auth.domains.orgs.invites import InviteService
+from app.services.auth.domains.orgs.memberships import MembershipService
+from app.services.auth.domains.orgs.organizations import OrgService
 {%- endif %}
 from app.core.config import settings
 from fastapi import Cookie, Depends, HTTPException, status

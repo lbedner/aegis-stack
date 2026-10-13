@@ -14,7 +14,7 @@
    map or the flow of work, kept live. The cards can put trouble first (the default) or
    show only it, client side (input.css orders them by tone). #}
 {% set cards = overview_cards %}
-<div id="overview-stack" hx-ext="sse" sse-connect="{{ overview_events }}"
+<div id="overview-stack" hx-ext="sse" sse-connect="{{ overview_events }}"{% if overview_lit %} data-lit="{{ overview_lit }}"{% endif %}
      {% if cards %}x-data="{ first: true, only: false }" data-order="trouble" data-only="false"
      x-bind:data-order="first ? 'trouble' : 'sidebar'" x-bind:data-only="only"{% endif %}>
   {% if cards %}

@@ -28,8 +28,7 @@ from app.core.formatting import (
 from app.core.security import access_token_minutes
 from app.models.refresh_token import SessionEnd, SessionHistory
 from app.models.user import User, UserResponse
-from app.services.auth import session_history
-from app.services.auth.users import UserService
+from app.services.auth.service import UserService, session_history
 from app.services.system import ui_auth
 from app.services.system.models import ComponentStatus
 

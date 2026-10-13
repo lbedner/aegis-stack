@@ -8,6 +8,7 @@ destroy) are ``overseer_deploy_actions``."""
 
 from typing import Any
 
+from app.core.parts import Category
 from app.services.system import hosting, ui_deployments
 from app.services.system.models import ComponentStatus
 
@@ -34,6 +35,7 @@ ITEM = NavItem(
     url="/overseer/deployments",
     status="",
     component=ComponentStatus(name="deployments", message=""),
+    concern=Category.STACK,
 )
 NEW_URL = f"{ITEM.url}/new"
 BACKUP_COLUMNS = columns(ui_deployments.BACKUP_COLUMNS)

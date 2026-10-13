@@ -22,6 +22,8 @@ KEY_LENGTH = 48
 
 
 class LiveEngine(SQLModel, table=True):
+    """How the assistant uses a catalog model on a live call."""
+
     __tablename__ = "live_engine"
 
     id: int | None = Field(default=None, primary_key=True)

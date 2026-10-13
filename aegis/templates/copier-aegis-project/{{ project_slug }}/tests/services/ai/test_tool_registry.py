@@ -16,7 +16,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.core.tools import register_tool
+from app.core.tools import ADMIN_ONLY, acting_as, register_tool
 from app.services.ai.domains.chat.tools import resolve_tools
 
 
@@ -60,3 +60,21 @@ class TestResolution:
         register_tool("first", first, effect="read")
 
         assert unwrapped(resolve_tools(["first", "second"])) == [first, second]
+
+
+async def peek() -> str:
+    """An admin's tool."""
+    return "the logs"
+
+
+@pytest.mark.usefixtures("clean_registry")
+async def test_an_admin_tool_answers_only_an_admin() -> None:
+    """Chat checks a tool's ``admin`` as MCP does, at the call: an agent
+    granted it serves whoever is chatting, admin or not."""
+    register_tool("peek", peek, effect="read", admin=True)
+    (tool,) = resolve_tools(["peek"])
+
+    with acting_as(None, "assistant", admin=False):
+        assert await tool() == ADMIN_ONLY
+    with acting_as(None, "assistant", admin=True):
+        assert await tool() == "the logs"

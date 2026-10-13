@@ -31,8 +31,8 @@ from app.components.frontend.controls.data_table import (
 )
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.insights.schemas import BulkInsightsResponse
-from app.services.insights.views import InsightViewService
-from app.services.insights.views.formatting import pct as pct_change
+from app.services.insights.service import InsightViewService
+from app.services.insights.service import pct as pct_change
 
 from ..modal_sections import (
     ChartColors,

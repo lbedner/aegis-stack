@@ -8,14 +8,16 @@ Also the glance above a page's Overview (a line per container, with its own
 stream), and Overseer's home: every sidebar entry as cards or a map, kept
 live by one stream for the whole stack."""
 
+import asyncio
 from collections.abc import Mapping, Sequence
-from dataclasses import replace
-from typing import Any
+from typing import Any, TypedDict
 
-from app.core import secrets, series
+from app.core import ownership, series
 from app.core.constants import ComponentName
+from app.core.ontology import EdgeKind, SystemModel, current
+from app.core.ontology.model import parse_node_id
+from app.core.ownership import HOST
 from app.services.system import (
-    service_links,
     topology,
     ui_resources,
     ui_runtime,
@@ -25,10 +27,12 @@ from app.services.system.models import ComponentStatusType
 from app.services.system.ui import (
     get_component_label,
     get_component_title,
+    is_service,
+    registry_entry,
     registry_key,
 )
 
-from . import overseer_map, overseer_secrets
+from . import overseer_conformance, overseer_heat, overseer_map, overseer_zoom
 from .filters import health_tone, worst_tone
 from .overseer_live import chart_frames, chart_panel, fragments_events
 from .overseer_nav import NavItem, current_navigation, runtime_page_url
@@ -138,36 +142,82 @@ def glance_events(page: str, max_frames: int | None = None):  # noqa: ANN201 - a
     return fragments_events(frame, series.TICK_SECONDS, max_frames)
 
 
+class MapState(TypedDict):
+    view: str
+    zoom: str | None
+    overlay: str | None
+    lit: str | None  # the map keys a route's dry path crosses, kept lit
+
+
+def map_state(query: Mapping[str, str]) -> MapState:
+    """The home page's view, and on the Map its zoom (into the Server, or
+    a service in it by its map key) and its overlay, each kept only where
+    it means something: what every link and the stream carry."""
+    view = query.get("view")
+    view = view if view in TEMPLATES else VIEWS[0][0]
+    zoom = query.get("zoom") if view == MAP_VIEW else None
+    if zoom != HOST and not (zoom and _opens(zoom)):
+        zoom = None
+    overlay = query.get("overlay")
+    return {
+        "view": view,
+        "zoom": zoom,
+        "overlay": overlay if overlay in _overlays(view, zoom) else None,
+        "lit": query.get("lit") if view == MAP_VIEW else None,
+    }
+
+
+def _opens(key: str) -> bool:
+    """Whether ``key`` is a service the stack has: a level of its own (a
+    sub-service, or one since removed, has none)."""
+    return is_service(key) and ownership.installed(
+        ownership.SERVICE, registry_entry(key)[1]
+    )
+
+
+def zoom_url(key: str, lit: str | None = None) -> str:
+    """The Map opened up into ``key``: the Server, or a service in it;
+    ``lit``, the map keys to keep lit there (``MapState``)."""
+    return with_query(HOME, view=MAP_VIEW, zoom=key, lit=lit)
+
+
+def _overlays(view: str, zoom: str | None) -> dict[str, tuple[str, str]]:
+    """The overlays a view offers, by key: its label and what it shows.
+    Traffic is counted by part, so a service opened up offers none."""
+    if view != MAP_VIEW or zoom not in (None, HOST):
+        return {}
+    return {overseer_heat.TRAFFIC: ("Traffic", overseer_heat.SAYS)}
+
+
 async def overview(
     navigation: dict[str, list[NavItem]],
-    view: str | None = None,
-    zoom: str | None = None,
+    query: Mapping[str, str] | None = None,
     *,
     wait: bool = False,
 ) -> dict[str, Any]:
     """Every sidebar entry, in its order: as cards (a page with containers
     behind it with their glance and trend, anything else with its health
     check's line and a few figures; the default, and where an old link to
-    the list it once had lands), or as a map, placed, or, zoomed
-    into the Server (``zoom``), what runs inside it as its own map
-    (``_opened``). One read of the containers and one of their trends,
-    whatever the stack's size. A failing entry names the failing ones it
-    depends on (``cause``)."""
-    view = view if view in TEMPLATES else VIEWS[0][0]
+    the list it once had lands), or as a map, placed, or, zoomed into the
+    Server, what runs inside it as its own map (``overseer_zoom``), toned
+    by an overlay when one is asked for (``map_state``). One read of the
+    containers and one of their trends, whatever the stack's size. A
+    failing entry names the failing ones it depends on (``cause``)."""
+    state = map_state(query or {})
+    view = state["view"]
     entries = [
         (entry, ui_runtime.page_of(entry.name) if group == "components" else None)
         for group in ("components", "services")
         for entry in navigation[group]
     ]
-    host = ui_runtime.page_of(topology.HOST)
+    host = ui_runtime.page_of(HOST)
     pages = [page for _, page in entries if page]
     drawn = view in (MAP_VIEW, FLOW_VIEW)
-    zoomed = view == MAP_VIEW and zoom == topology.HOST
-    compact = zoomed or view == FLOW_VIEW
-    # A compact map (one line a node) shows no glance: no containers read.
+    # Opened up or the Flow, a map shows no glance: no containers read.
+    bare = state["zoom"] is not None or view == FLOW_VIEW
     found = (
         {}
-        if compact
+        if bare
         else await ui_runtime.containers_of(
             [*pages, host] if host else pages, wait=wait
         )
@@ -191,17 +241,17 @@ async def overview(
             item |= _card(trend, item["glance"], entry.details)
         stack.append(item)
     if drawn:
-        placed = await _drawn(stack, [entry for entry, _ in entries], view, zoomed)
+        placed = await _drawn(stack, [e for e, _ in entries], state)
     else:
-        _name_causes(stack, topology.LINKS)
+        model = await asyncio.to_thread(current)
+        _name_causes(stack, _cause_links(model, stack))
         placed = {"overview_stack": stack}
     server = found[host]["rows"] if host in found else []
     return placed | {
         # What has no container of its own runs in the webserver.
         "overview_host": server[0]["name"] if server else None,
-        "overview_events": with_query(
-            OVERVIEW_EVENTS, view=view, zoom=topology.HOST if zoomed else None
-        ),
+        "overview_events": with_query(OVERVIEW_EVENTS, **state),
+        "overview_lit": state["lit"],
         "overview_wide": drawn,
         "overview_cards": view == CARDS_VIEW,
         "overview_event": OVERVIEW_EVENT,
@@ -213,39 +263,103 @@ async def overview(
 
 
 async def _drawn(
-    stack: list[dict[str, Any]], entries: list[NavItem], view: str, zoomed: bool
+    stack: list[dict[str, Any]], entries: list[NavItem], state: MapState
 ) -> dict[str, Any]:
     """The Map's or the Flow's entries placed (``overseer_map.layout``):
-    with the worker's queue; opened up into the Server when ``zoomed`` (its
-    own links, outside providers, unset keys); each entry's role and cause;
-    the Map's costs to load, the Flow's way of work and its key."""
+    with the worker's queue; opened up into the Server when zoomed (its
+    own links, outside providers, unset keys) and toned by its overlay;
+    each entry's role and cause; the Map's costs to load, the Flow's way
+    of work and its key."""
+    zoom, overlay = state["zoom"], state["overlay"]
+    zoomed = zoom is not None
+    service = zoom if zoom != HOST else None  # a service opened up, by its key
     worker = next((e for e in entries if e.name == ComponentName.WORKER), None)
     if worker:
         stack.append(_queue(worker))
     _inherit(stack)
-    shape = None
-    if zoomed:
-        stack, shape = _opened(stack)
-        await _name_unkeyed(stack)
-        shape = _with_key_lines(stack, shape)
-    _name_causes(stack, shape.links if shape else topology.LINKS)
-    flow = view == FLOW_VIEW
+    model = await asyncio.to_thread(current)
+    shape, pieces, links, tones = None, [], [], {}
+    if zoom == HOST:
+        stack, shape = overseer_zoom.opened(stack, model)
+        await overseer_zoom.name_unkeyed(stack)
+        keys = await asyncio.to_thread(overseer_zoom.openable, stack, model)
+        for item in stack:
+            if item["key"] in keys:
+                item["zoom"] = zoom_url(item["key"])
+    # The parts report, read once opened up: what each part should fix.
+    found = (
+        await asyncio.to_thread(overseer_conformance.conformance)
+        if zoomed
+        else overseer_conformance.Conformance({}, {})
+    )
+    if service:
+        subject = overseer_zoom.subject_of(service)
+        pieces, lines = await asyncio.to_thread(overseer_zoom.pieces_of, subject, model)
+        stack, links, tones = await asyncio.to_thread(
+            overseer_zoom.service_opened, stack, model, pieces, lines
+        )
+        stack += overseer_zoom.missing(found.lacks.get(service, []))
+    # A key line says why an outside provider cannot be used; no failure
+    # follows it, so causes are named before it is drawn.
+    drawn = links if service else shape.links if shape else None
+    _name_causes(stack, drawn if drawn is not None else _cause_links(model, stack))
+    if service:
+        overseer_conformance.mark_pieces(stack, found, service, pieces)
+    elif zoomed:
+        overseer_conformance.mark(stack, found)
+    if overlay:
+        await overseer_heat.heat(stack)
+    if zoom == HOST and shape is not None:
+        shape = overseer_zoom.with_key_lines(stack, shape)
+    flow = state["view"] == FLOW_VIEW
     if flow:
         shape = topology.flow([item["key"] for item in stack])
     else:
         await _name_loads(stack)
     for item in stack:
         item.setdefault("role", topology.ROLES.get(item["key"]))
-        if item["key"] == topology.HOST and not (zoomed or flow):
-            item["zoom"] = with_query(HOME, view=MAP_VIEW, zoom=topology.HOST)
-    placed = overseer_map.layout(stack, shape, compact=zoomed, across=flow)
+        if item["key"] == HOST and not (zoomed or flow):
+            item["zoom"] = zoom_url(HOST)
+    placed = (
+        overseer_map.lanes(stack, links, tones)
+        if service
+        else overseer_map.layout(
+            stack, shape, compact=zoomed, across=flow, opened=zoomed
+        )
+    )
     return placed | {
         "overview_stack": stack,
-        # The way back out of the Server opened up.
-        "map_zoom": get_component_title(topology.HOST) if zoomed else None,
+        "map_line_key": overseer_zoom.LINE_KEY,
+        # The way back up, a level at a time.
+        "map_trail": _trail(zoom),
         "map_back": with_query(HOME, view=MAP_VIEW),
+        # Each overlay the view offers, as a chip that switches it on or off.
+        "map_overlays": [
+            {
+                "key": key,
+                "label": label,
+                "says": says,
+                "on": key == overlay,
+                "url": with_query(
+                    HOME, **state | {"overlay": None if key == overlay else key}
+                ),
+            }
+            for key, (label, says) in _overlays(state["view"], zoom).items()
+        ],
         "map_legend": _legend(placed) if flow else [],
     }
+
+
+def _trail(zoom: str | None) -> list[dict[str, Any]]:
+    """The levels under the stack's own, the last the one shown: the
+    Server, and a service opened up in it."""
+    if zoom is None:
+        return []
+    server = {"title": get_component_title(HOST), "url": None}
+    if zoom == HOST:
+        return [server]
+    opened = {"title": get_component_title(zoom), "url": None}
+    return [server | {"url": zoom_url(HOST)}, opened]
 
 
 def _queue(worker: NavItem) -> dict[str, Any]:
@@ -296,79 +410,18 @@ async def _name_loads(stack: list[dict[str, Any]]) -> None:
         item["load"] = loads.get(item["registry"])
 
 
-def _opened(
-    stack: list[dict[str, Any]],
-) -> tuple[list[dict[str, Any]], topology.Shape]:
-    """The Server opened up (``topology.zoomed``): what runs inside it, by
-    its registry key (a service and a component may share a name), and what
-    each reaches (``service_links``): an installed component as itself, an
-    outside provider as a plain node."""
-    hosted = set(topology.shape([item["key"] for item in stack]).hosted)
-    inside = [
-        item | {"key": item["registry"]} for item in stack if item["key"] in hosted
-    ]
-    components = {item["registry"]: item for item in stack if item["key"] not in hosted}
-    keys = {item["key"] for item in inside}
-    reach = service_links.links()
-    links = {
-        key: [
-            t
-            for t in reach.get(key, [])
-            if t in components or t in keys or t.startswith(service_links.OUTSIDE)
-        ]
-        for key in keys
-    }
-    shape = topology.zoomed([item["key"] for item in inside], links)
-    reached = [key for tier in shape.tiers for key in tier if key not in keys]
-    return inside + [components.get(key) or _outside(key) for key in reached], shape
-
-
-async def _name_unkeyed(stack: list[dict[str, Any]]) -> None:
-    """An outside provider a service needs a key for that is not set: the
-    connection cannot be used, so the node (and the line into it) warns,
-    and offers each key's set dialog (``fix``), one click away."""
-    wanted = service_links.provider_keys()
-    if not any(item["key"] in wanted for item in stack):
-        return
-    # Whether each is set, not its value: nothing decrypted every frame.
-    keyed = {row.name for row in await secrets.status() if row.is_set}
-    for item in stack:
-        unset = [n for n in wanted.get(item["key"], []) if n not in keyed]
-        if item.get("role") == topology.Role.OUTSIDE and unset:
-            item |= {
-                "tone": "warn",
-                "message": "Not usable: a key it needs is not set.",
-                "fix": [{"name": n, "url": overseer_secrets.set_url(n)} for n in unset],
-            }
-
-
-def _with_key_lines(
-    stack: list[dict[str, Any]], shape: topology.Shape
-) -> topology.Shape:
-    """A line from where the keys live (``topology.KEYS``) to each outside
-    provider whose key is not set (``_name_unkeyed``): the core of why it
-    cannot be used, drawn."""
-    keys = {item["key"] for item in stack}
-    unkeyed = [item["key"] for item in stack if item.get("fix")]
-    if topology.KEYS not in keys or not unkeyed:
-        return shape
-    lines = [(topology.KEYS, key) for key in unkeyed]
-    return replace(shape, links=[*shape.links, *lines])
-
-
-def _outside(key: str) -> dict[str, Any]:
-    """An outside provider's node: no page, no health check of ours."""
-    return {
-        "key": key,
-        "registry": key,
-        "title": service_links.title(key),
-        "url": None,
-        "status": None,
-        "tone": "muted",
-        "message": topology.ROLE_LABELS[topology.Role.OUTSIDE],
-        "glance": None,
-        "role": topology.Role.OUTSIDE,
-    }
+def _cause_links(
+    model: SystemModel, stack: list[dict[str, Any]]
+) -> list[tuple[str, str]]:
+    """What a failing entry can fail because of: what it depends on and
+    what its code calls (the model's edges), by the entries' own names."""
+    names = {item["key"] for item in stack}
+    pairs = (
+        (parse_node_id(edge.source)[1], parse_node_id(edge.target)[1])
+        for edge in model.edges
+        if edge.kind in (EdgeKind.DEPENDS_ON, EdgeKind.CALLS)
+    )
+    return [(a, b) for a, b in pairs if {a, b} <= names]
 
 
 def _name_causes(stack: list[dict[str, Any]], links: Sequence[tuple[str, str]]) -> None:
@@ -413,13 +466,13 @@ def facts(details: list[tuple[str, str]]) -> list[tuple[str, str]]:
 
 
 def overview_events(  # noqa: ANN201 - async iterator
-    view: str | None = None, zoom: str | None = None, max_frames: int | None = None
+    query: Mapping[str, str] | None = None, max_frames: int | None = None
 ):
-    """The home page's stack over SSE, in its view (and zoom), sent again
-    only when it changes."""
+    """The home page's stack over SSE, as its query asks (``map_state``),
+    sent again only when it changes."""
 
     async def frame() -> dict[str, str]:
-        found = await overview(current_navigation(), view, zoom, wait=True)
+        found = await overview(current_navigation(), query, wait=True)
         return {OVERVIEW_EVENT: fragment(found["overview_template"], **found)}
 
     return fragments_events(frame, series.TICK_SECONDS, max_frames)

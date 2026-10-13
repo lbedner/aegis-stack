@@ -9,7 +9,7 @@ contexts + the agent row into something the framework can run.
 from typing import Any
 
 from app.core.log import logger
-from app.services.ai.config import AIServiceConfig
+from app.services.ai.domains.llm.config import AIServiceConfig
 {% if ai_framework == "pydantic-ai" and ai_backend != "memory" %}
 from app.services.ai.domains.chat.agent_loader import AgentConfig, agent_capabilities
 from app.services.ai.domains.chat.tools import resolve_tools

@@ -29,7 +29,7 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM blog_post WHERE blog_post.slug = :slug_1",
-      "file": "app/services/blog/transfer.py",
+      "file": "app/services/blog/domains/transfer/payloads.py",
       "function": "_get_post_by_slug_any_status"
     },
     {
@@ -77,7 +77,7 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM blog_tag WHERE blog_tag.slug = :slug_1",
-      "file": "app/services/blog/tags.py",
+      "file": "app/services/blog/domains/posts/tags.py",
       "function": "get_or_create_tag"
     }
   ]

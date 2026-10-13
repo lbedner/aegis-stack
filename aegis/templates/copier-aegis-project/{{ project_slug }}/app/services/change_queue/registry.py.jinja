@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from pydantic import BaseModel
+from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.discovery import import_modules_named
@@ -51,6 +52,8 @@ class ChangeExecutor:
     # When an agent should propose it; the payload's own fields (and their
     # ``Field(description=...)``) say what it holds.
     description: str = ""
+    # The table it changes (the system model's ``object:<table>``).
+    object: type[SQLModel] | None = None
 
 
 _EXECUTORS: dict[str, ChangeExecutor] = {}
@@ -79,11 +82,13 @@ def registered_change_types() -> tuple[str, ...]:
 
 def change_type_contracts() -> dict[str, dict[str, Any]]:
     """Every registered type as an agent reads it: its title, when to use
-    it, and the payload's JSON schema, straight from the payload model."""
+    it, the table it changes, and the payload's JSON schema, straight from
+    the payload model."""
     return {
         name: {
             "title": executor.title,
             "description": executor.description,
+            "object": executor.object.__tablename__ if executor.object else None,
             "schema": executor.payload_model.model_json_schema(),
         }
         for name, executor in sorted(_EXECUTORS.items())

@@ -8,6 +8,7 @@ observability auto-tracing hook in a process that serves nothing.
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
 import sys
 
@@ -58,6 +59,28 @@ def resolve_loop(choice: str | None = None) -> str:
         return chosen
     # Never zuvloop: it is 0.0.x, so it stays something you ask for.
     return "uvloop" if importlib.util.find_spec("uvloop") else "asyncio"
+
+
+def offered_engines() -> list[str]:
+    """The ASGI servers Overseer > Settings offers: each installed. uvicorn
+    always is; granian could be gone from an image, and a saved engine
+    that cannot import would keep the server from starting."""
+    return [e for e in ENGINE_LOOPS if e == "uvicorn" or importlib.util.find_spec(e)]
+
+
+def offered_loops() -> list[str]:
+    """The loops Overseer > Settings offers: ``auto``, and each the engine
+    takes that this environment can start (``resolve_loop`` says), zuvloop
+    not under reload. A saved value is checked against these as it applies,
+    with the engine first, so a saved loop is one the saved engine takes."""
+    engine = settings.WEBSERVER_ENGINE
+    offered = ["auto"]
+    for loop in ENGINE_LOOPS[engine]:
+        if loop == "zuvloop" and settings.AUTO_RELOAD:
+            continue
+        with contextlib.suppress(ValueError):
+            offered.append(resolve_loop(loop))
+    return offered
 
 
 def check_engine_loop(engine: str, loop: str) -> None:

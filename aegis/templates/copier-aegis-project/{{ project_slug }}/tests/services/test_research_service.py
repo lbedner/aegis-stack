@@ -15,7 +15,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.research import registry
 from app.services.research.models import ResearchItem, ResearchItemSnapshot
-from app.services.research.refresh import refresh_every_watch
+from app.services.research.domains.watches.refresh import refresh_every_watch
 from app.services.research.registry import UnknownSourceError
 from app.services.research.service import (
     ResearchService,
@@ -273,7 +273,7 @@ async def test_a_watch_on_an_uninstalled_source_sits_out(
 
 def _on(monkeypatch: pytest.MonkeyPatch, day: int, hour: int = 3) -> None:
     """Refreshes run on September ``day``, 2026, at ``hour`` UTC."""
-    from app.services.research import refresh
+    from app.services.research.domains.watches import refresh
 
     monkeypatch.setattr(refresh, "utcnow", lambda: datetime(2026, 9, day, hour))
 

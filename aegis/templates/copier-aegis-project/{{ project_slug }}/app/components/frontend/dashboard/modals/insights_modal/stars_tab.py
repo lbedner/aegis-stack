@@ -11,7 +11,7 @@ from app.components.frontend.controls import (
     SecondaryText,
 )
 from app.components.frontend.theme import AegisTheme as Theme
-from app.services.insights.views.events import (
+from app.services.insights.service import (
     GITHUB_EVENT_TYPES,
 )
 
@@ -173,7 +173,7 @@ class StarsTab(InsightsTab):
 
     def _load_data(self, days: int = 9999) -> dict[str, Any]:
         """Load star data from bulk pre-loaded data with date cutoff."""
-        from app.services.insights.domains.metrics import InsightQueryService
+        from app.services.insights.service import InsightQueryService
 
         cutoff, _ = InsightQueryService.compute_cutoffs(days)
 

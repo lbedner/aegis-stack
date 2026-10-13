@@ -31,7 +31,7 @@ from app.services.ai.domains.llm.model_factory import (
 {%- endif %}
 
 from app.core.log import logger
-from app.services.ai.config import AIServiceConfig, api_key_env
+from app.services.ai.domains.llm.config import AIServiceConfig, api_key_env
 from app.services.ai.models import PROVIDERS, AIProvider
 {% if ai_framework == "pydantic-ai" %}
 {#- The ``openai`` package + pydantic-ai's OpenAI model ship only with the

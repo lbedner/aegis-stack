@@ -74,6 +74,26 @@ class TestAgentSeed:
             (c.agent_id, c.system_prompt, c.source) for c in changes
         ) == sorted((a.id, a.system_prompt, "seed") for a in agents)
 
+    def test_the_default_agent_reads_the_app_from_the_ontology(
+        self, session: Session
+    ) -> None:
+        """Granted on a fresh seed, and on a re-seed of a database seeded
+        before the grant existed: a grant is additive by name."""
+        load_agent_fixtures(session)
+        agent = session.exec(
+            select(Agent).where(Agent.slug == DEFAULT_AGENT_SLUG)
+        ).one()
+        assert "ontology" in {t.name for t in agent.tools}
+
+        for link in session.exec(
+            select(AgentTool).where(AgentTool.agent_id == agent.id)
+        ).all():
+            session.delete(link)
+        session.commit()
+        assert load_agent_fixtures(session)["tool_links"] == 1
+        session.refresh(agent)
+        assert "ontology" in {t.name for t in agent.tools}
+
     def test_seed_is_idempotent(self, session: Session) -> None:
         load_agent_fixtures(session)
         counts = load_agent_fixtures(session)
@@ -207,7 +227,7 @@ class TestAgentToolLink:
         session.commit()
 
         session.refresh(agent)
-        assert [t.name for t in agent.tools] == ["save_memory"]
+        assert "save_memory" in [t.name for t in agent.tools]
 
     def test_attached_tool_resolves_to_registered_callable(
         self, session: Session
@@ -233,7 +253,7 @@ class TestAgentToolLink:
             names = [t.name for t in agent.tools if t.is_active]
             # ``resolve_tools`` wraps for the tool-call ledger, so compare
             # what the wrapper wraps.
-            assert [inspect.unwrap(t) for t in resolve_tools(names)] == [greet]
+            assert greet in [inspect.unwrap(t) for t in resolve_tools(names)]
         finally:
             unregister_tool("greet")
 {% endif %}

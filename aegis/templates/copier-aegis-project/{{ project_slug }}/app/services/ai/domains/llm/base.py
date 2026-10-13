@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from app.services.ai.config import AIServiceConfig, api_key_env
+from app.services.ai.domains.llm.config import AIServiceConfig, api_key_env
 from app.services.ai.models import PROVIDERS, AIProvider
 
 # Every provider the registry describes. A tuple of its own could fall

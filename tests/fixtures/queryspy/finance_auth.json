@@ -89,19 +89,19 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM \"user\" WHERE \"user\".email = :email_1 AND \"user\".deleted_at IS NULL",
-      "file": "app/services/auth/users.py",
+      "file": "app/services/auth/domains/users/accounts.py",
       "function": "get_user_by_email"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM \"user\" WHERE \"user\".id = :id_1",
-      "file": "app/services/auth/user_deletion.py",
+      "file": "app/services/auth/domains/users/deletion.py",
       "function": "hard_delete_user"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM \"user\" WHERE \"user\".id = :id_1",
-      "file": "app/services/auth/user_deletion.py",
+      "file": "app/services/auth/domains/users/deletion.py",
       "function": "restore_user"
     },
     {
@@ -113,7 +113,7 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM email_verification_token WHERE email_verification_token.user_id = :user_id_1 AND email_verification_token.used = false",
-      "file": "app/services/auth/user_verification.py",
+      "file": "app/services/auth/domains/users/verification.py",
       "function": "_invalidate_prior_email_verification_tokens"
     },
     {
@@ -1391,13 +1391,13 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM refresh_token WHERE refresh_token.family_id = :family_id_1 AND refresh_token.revoked_at IS NULL AND refresh_token.expires_at > :expires_at_1 LIMIT :param_1",
-      "file": "app/services/auth/refresh_tokens.py",
+      "file": "app/services/auth/domains/sessions/tokens.py",
       "function": "is_live_session"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM refresh_token WHERE refresh_token.token = :pk_1",
-      "file": "app/services/auth/refresh_tokens.py",
+      "file": "app/services/auth/domains/sessions/tokens.py",
       "function": "row_of"
     },
     {
@@ -1409,7 +1409,7 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM refresh_token WHERE refresh_token.user_id = :user_id_1 AND refresh_token.revoked_at IS NULL AND refresh_token.expires_at > :expires_at_1",
-      "file": "app/services/auth/refresh_tokens.py",
+      "file": "app/services/auth/domains/sessions/devices.py",
       "function": "list_active_for_user"
     },
     {

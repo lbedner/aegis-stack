@@ -16,7 +16,7 @@ from app.components.frontend.controls import (
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.insights.models import EVENT_TYPE_LABELS
 from app.services.insights.schemas import BulkInsightsResponse
-from app.services.insights.views.events import (
+from app.services.insights.service import (
     group_events,
 )
 

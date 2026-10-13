@@ -231,7 +231,10 @@ def test_a_worker_project_gets_the_task_registered(
     dispatch = (
         project / "app/services/documents/domains/extraction/dispatch.py"
     ).read_text()
-    assert "kiq(" in dispatch, "dispatch does not enqueue through TaskIQ"
+    # The worker's path: the one front door work reaches the queue by.
+    assert "enqueue_task" in dispatch and "extract_document_task" in dispatch, (
+        "dispatch does not hand the extraction to the worker"
+    )
 
     assert (project / "app/services/system/job_relay.py").exists(), (
         "the jobs relay a worker's progress is read through is missing"

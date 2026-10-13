@@ -248,7 +248,7 @@ STACK_COMBINATIONS = [
             "app/services/auth/",
             "app/core/db.py",
             "app/models/org.py",
-            "app/services/auth/orgs.py",
+            "app/services/auth/domains/orgs/organizations.py",
         ],
         expected_docker_services=["webserver"],
         expected_pyproject_deps=["fastapi", "flet", "sqlmodel"],

@@ -12,7 +12,10 @@ from typing import Any, NamedTuple
 
 from starlette.requests import Request
 
-from app.core.constants import ComponentName, ServiceName
+from app.core.constants import ComponentName
+from app.core.ontology import Kind
+from app.core.ontology.parts import concern_of
+from app.core.parts import Category
 from app.services.system import ui_runtime
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import registry_key
@@ -174,7 +177,6 @@ def rail() -> list[NavItem]:
     return [item for item in STANDALONE.values() if not hidden.get(item.name)]
 
 
-
 class Grouping(StrEnum):
     """How the sidebar groups its pages, the viewer's choice: by kind
     (Components, Services) or by concern (each page under the concern it
@@ -198,75 +200,8 @@ class MenuChoice(NamedTuple):
 
 GROUPING_COOKIE = "overseer_grouping"
 GROUPINGS = ((Grouping.KIND, "By kind"), (Grouping.CONCERN, "By concern"))
-# Where an entry no concern names goes: a plugin's service, most likely.
-APP = "App"
-# Overview heads the first.
-CONCERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    (
-        "Stack",
-        tuple(
-            i.name
-            for i in (
-                overseer_logs.ITEM,
-                overseer_errors.ITEM,
-                overseer_resources.ITEM,
-                overseer_deployments.ITEM,
-            )
-        ),
-    ),
-    (
-        "Compute",
-        (
-            ComponentName.BACKEND,
-            ComponentName.WORKER,
-            ComponentName.SCHEDULER,
-            ComponentName.INGRESS,
-            ComponentName.BROWSER,
-        ),
-    ),
-    (
-        "Data",
-        (
-            ComponentName.DATABASE,
-            ComponentName.CACHE,
-            ComponentName.STORAGE,
-            ServiceName.DOCUMENTS,
-        ),
-    ),
-    (
-        "AI",
-        (
-            ServiceName.AI,
-            ComponentName.OLLAMA,
-            ComponentName.MCP,
-            ServiceName.RESEARCH,
-            ServiceName.MEETINGS,
-        ),
-    ),
-    (
-        APP,
-        (
-            ComponentName.WEB_FRONTEND,
-            ComponentName.FRONTEND,
-            ServiceName.AUTH,
-            ServiceName.PAYMENT,
-            ServiceName.COMMS,
-            ServiceName.BLOG,
-            ServiceName.FINANCE,
-            ServiceName.INSIGHTS,
-        ),
-    ),
-    (
-        "Platform",
-        (
-            overseer_secrets.ITEM.name,
-            overseer_patterns.ITEM.name,
-            overseer_code.ITEM.name,
-            overseer_settings.ITEM.name,
-            ComponentName.OBSERVABILITY,
-        ),
-    ),
-)
+# Each concern's heading, in the sidebar's order (Overview heads the first).
+HEADINGS = {c: "AI" if c is Category.AI else c.value.title() for c in Category}
 
 
 def grouping(request: Request) -> Grouping:
@@ -287,8 +222,8 @@ def sidebar_sections(
 ) -> list[tuple[str | None, list[NavItem]]]:
     """The sidebar's sections, ``(heading, entries)``, in order; empty ones
     left out. By kind, the rail's own pages head it without a heading; by
-    concern, every entry is under its own (``CONCERNS``), and one no
-    concern names joins ``APP``."""
+    concern, every entry is under its own (a page's own ``concern``, a
+    part's declared one), and a part no spec places joins the app's."""
     pages = rail()
     if grouping(request) is Grouping.KIND:
         sections = [
@@ -297,19 +232,15 @@ def sidebar_sections(
             ("Services", navigation["services"]),
         ]
     else:
-        entries = {
-            e.name: e
-            for e in (*pages, *navigation["components"], *navigation["services"])
-        }
-        named = {name for _, names in CONCERNS for name in names}
-        unnamed = [e for name, e in entries.items() if name not in named]
+        tagged = [(e, e.concern or Category.APP) for e in pages]
+        tagged += [
+            (e, concern_of(Kind(group.removesuffix("s")), e.name))
+            for group in ("components", "services")
+            for e in navigation[group]
+        ]
         sections = [
-            (
-                heading,
-                [entries[n] for n in names if n in entries]
-                + (unnamed if heading == APP else []),
-            )
-            for heading, names in CONCERNS
+            (heading, [e for e, c in tagged if c is concern])
+            for concern, heading in HEADINGS.items()
         ]
     return [(heading, found) for heading, found in sections if found]
 

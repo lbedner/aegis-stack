@@ -14,39 +14,39 @@ reached raises ``RuntimeUnavailableError`` rather than inventing numbers.
 from __future__ import annotations
 
 import asyncio
-import json
-import os
-import re
-import socket
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from importlib import import_module
+import json
+import os
+import re
+import socket
 from typing import Protocol
 
 import psutil
 
-from app.core.constants import ComponentName
+from app.core import ownership
+from app.core.parts import PARTS
 from app.core.time import as_stored, utcnow
 
 # Where the deploy component keeps its backend; absent in stacks without it.
 BACKEND_MODULE = "app.components.deploy.docker"
 
-# Compose service -> the Overseer page that shows it. Workers are named
-# per queue (``worker-system``), so they match on the prefix.
+# Compose service -> the Overseer page that shows it: each process's own
+# containers, on its page (``parts.PARTS``).
 _PAGES = {
-    "webserver": "server",
-    "scheduler": "scheduler",
-    "redis": "redis",
-    "postgres": "database",
-    "seaweedfs": "storage",
-    "traefik": "ingress",
-    "ollama": "inference",
-    ComponentName.BROWSER: ComponentName.BROWSER,
+    container: ownership.page_of_part(name)
+    for name, part in PARTS.items()
+    if part.tier is not None
+    for container in part.containers
 }
 
 # Every page some container belongs on: the Container section shows there.
-PAGES = frozenset({*_PAGES.values(), "worker"})
+# The part taking queued work runs a container per queue, each named for it
+# (``worker-system``, a plugin's ``worker-media``): matched on that name.
+_PER_QUEUE = next(iter(ownership.TAKES))
+PAGES = frozenset({*_PAGES.values(), ownership.page_of_part(_PER_QUEUE)})
 
 _ANSI = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
 _STAMPED = re.compile(r"^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(?:\.(\d+))?Z ?(.*)$", re.S)
@@ -161,8 +161,8 @@ class Runtime(Protocol):
 
 def page_for(service: str) -> str | None:
     """The Overseer page a compose service belongs on, or None."""
-    if service.startswith("worker"):
-        return "worker"
+    if service.startswith(_PER_QUEUE):
+        return ownership.page_of_part(_PER_QUEUE)
     return _PAGES.get(service)
 
 

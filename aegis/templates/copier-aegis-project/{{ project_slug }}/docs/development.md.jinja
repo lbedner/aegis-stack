@@ -46,7 +46,10 @@ make serve                  # back to uvicorn
 ```
 
 Deployments set `WEBSERVER_ENGINE=granian` in the env file instead, the
-same way any other deploy setting is set.
+same way any other deploy setting is set, or pick it (and the loop) in
+Overseer > Settings under the Server: a saved choice applies on the next
+restart, only where the env file does not set it, and only one this
+environment can start is offered.
 
 ### Choosing the event loop
 

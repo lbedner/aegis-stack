@@ -1,0 +1,369 @@
+{% if include_auth -%}
+"""Refresh-token service: mint, rotate, revoke, reuse-detect.
+
+Rotation invariants:
+
+- Every ``rotate`` revokes the inbound row and inserts a new row
+  sharing the same ``family_id``. All persistence is committed by the
+  service methods themselves — callers don't need to commit.
+- A refresh arriving with a row that is **already** revoked
+  (``revoked_at IS NOT NULL``) is read two ways. Within
+  ``REUSE_GRACE_SECONDS`` of the revocation it's a benign race —
+  parallel requests from the same browser carrying the same cookie
+  raced rotation (a page fires many fetches at once when the access
+  token expires; without the grace, sibling #2 would "replay" the
+  token sibling #1 just rotated and nuke the session). The racer
+  gets a token of its own in the same family (the table keeps digests,
+  so the successor's token cannot be handed out a second time). After
+  the grace it's a replay: ``rotate`` revokes every live row in that
+  family and returns ``None`` so the caller can 401 + force re-auth.
+- An expired row is treated as just "not valid"; no family revocation.
+  (Expiration is normal; replay is suspicious.)
+
+The token itself is opaque to the client: a 32-byte url-safe random
+string with no embedded claims. The table keeps only its SHA-256
+(``token_digest``), so reading the table yields no usable token; every
+lookup hashes what it is handed and finds the row by PK.
+
+Signing in from a browser that still holds a refresh cookie ends the
+session that cookie belonged to (``start_session(replaces=<its family>)``):
+the new cookie overwrites it, and the old session would otherwise sit live,
+held by nobody, for its whole lifetime.
+
+A session is one family, and every access token minted for it carries
+the family id as its ``sid`` claim. That is how a request knows which
+session it belongs to without the refresh cookie (scoped to the auth
+API), and how revoking a session ends its access tokens at once:
+``get_current_user_from_token`` refuses a ``sid`` whose family has no
+live row left.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import secrets
+import uuid
+from datetime import datetime, timedelta
+from typing import NamedTuple
+
+from sqlmodel import delete, select, update
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.core.config import settings
+from app.core.log import logger
+from app.core.security import create_access_token
+from app.core.time import utcnow
+from app.models.refresh_token import RefreshToken
+from app.models.user import User
+from app.services.auth.domains.sessions.devices import DevicesMixin
+
+
+# Shared with ``cleanup_jobs.cleanup_expired_refresh_tokens_job``. Rows
+# older than this are deleted; revoked rows stay visible for that grace
+# window so audit / forensic queries ("who-signed-out-when") still work.
+REFRESH_TOKEN_RETENTION_DAYS = 7
+
+# Reuse of a just-revoked token within this window is treated as a benign
+# concurrency race (same browser, parallel requests) rather than theft —
+# the racer is handed a live token of its own in the same family. Industry-standard
+# pattern (Auth0 calls it the "reuse interval"); 30s comfortably covers
+# request fan-out + retries without meaningfully widening the replay
+# window an attacker would need to hit.
+REUSE_GRACE_SECONDS = 30
+
+# Minimum interval between opportunistic sweeps from ``rotate`` in
+# scheduler-less builds. One hour is a reasonable upper bound on table
+# growth without paying the delete cost on every rotation.
+_LAZY_SWEEP_INTERVAL = timedelta(hours=1)
+
+
+
+def _new_token_value() -> str:
+    return secrets.token_urlsafe(32)
+
+
+def token_digest(token: str) -> str:
+    """What the table keeps for a refresh token: its SHA-256, never the
+    token, so reading the table gives nobody a usable one. A random
+    32-byte token needs no salt or slow hash to stay unguessable."""
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+class Issued(NamedTuple):
+    """A refresh token just issued: the token itself, for the cookie (the
+    table keeps only its digest), and the session it belongs to."""
+
+    token: str
+    user_id: int
+    family_id: str
+
+
+def _new_family_id() -> str:
+    return str(uuid.uuid4())
+
+
+def access_token(user: User, session_id: str) -> str:
+    """An access token for ``user`` in the session (family) ``session_id``."""
+{%- if include_auth_rbac %}
+    return create_access_token({"sub": user.email, "role": user.role, "sid": session_id})
+{%- else %}
+    return create_access_token({"sub": user.email, "sid": session_id})
+{%- endif %}
+
+
+class RefreshService(DevicesMixin):
+    """DB-backed refresh-token store with rotation + reuse detection."""
+
+    # Class-level cache for the lazy-sweep gate so the interval is
+    # shared across per-request service instances. ``None`` means the
+    # sweep has never run; the first eligible rotation primes it.
+    _last_sweep_at: datetime | None = None
+
+    def __init__(self, db: AsyncSession) -> None:
+        self.db = db
+
+    async def mint(
+        self,
+        user_id: int,
+        family_id: str | None = None,
+        *,
+        source: str | None = None,
+        user_agent: str | None = None,
+        ip: str | None = None,
+        last_used_at: datetime | None = None,
+    ) -> str:
+        """Issue a new refresh token for ``user_id``.
+
+        ``family_id`` is forwarded by ``rotate`` so descendants of a
+        single sign-in share a family. Callers minting a fresh
+        sign-in (login / register / OAuth callback) leave it ``None``.
+
+        ``source`` / ``user_agent`` / ``ip`` populate the session-list
+        UI. They're all optional so paths without request
+        context (tests, internal flows) still work.
+        """
+        token = self._add(
+            user_id,
+            family_id or _new_family_id(),
+            source=source,
+            user_agent=user_agent,
+            ip=ip,
+            last_used_at=last_used_at,
+        )
+        await self.db.commit()
+        return token
+
+    def _add(
+        self, user_id: int, family_id: str, **metadata: str | datetime | None
+    ) -> str:
+        """Stage a new row, keyed by the new token's digest; the caller
+        commits. Returns the token itself, which is kept nowhere else."""
+        token = _new_token_value()
+        self.db.add(
+            RefreshToken(
+                token=token_digest(token),
+                user_id=user_id,
+                family_id=family_id,
+                expires_at=utcnow()
+                + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+                **metadata,
+            )
+        )
+        return token
+
+    async def start_session(
+        self,
+        user: User,
+        *,
+        source: str,
+        user_agent: str | None = None,
+        ip: str | None = None,
+        replaces: str | None = None,
+    ) -> tuple[str, str]:
+        """Sign ``user`` in: a new session's ``(access_token, refresh_token)``.
+
+        Every sign-in (password login, registration, OAuth) starts here, so
+        each access token names the session it belongs to. ``replaces`` is
+        the session (family) the browser held: it ends, since the new cookie
+        overwrites its refresh token and nothing could renew it again.
+        """
+        if replaces:
+            await self.revoke_family(replaces)
+        session_id = _new_family_id()
+        refresh = await self.mint(
+            user.id, session_id, source=source, user_agent=user_agent, ip=ip
+        )
+        return access_token(user, session_id), refresh
+
+    async def is_live_session(self, session_id: str) -> bool:
+        """Whether the session still has a live (unrevoked, unexpired) row."""
+        stmt = (
+            select(RefreshToken.token)
+            .where(RefreshToken.family_id == session_id)
+            .where(RefreshToken.revoked_at.is_(None))  # type: ignore[union-attr]
+            .where(RefreshToken.expires_at > utcnow())
+            .limit(1)
+        )
+        return (await self.db.exec(stmt)).first() is not None
+
+    async def rotate(
+        self,
+        token: str,
+        *,
+        user_agent: str | None = None,
+        ip: str | None = None,
+    ) -> Issued | None:
+        """Validate ``token``, revoke it, mint a successor in the same family.
+
+        Returns the successor (its token, for the cookie) on success.
+        Returns ``None`` if the token is missing, expired, or already revoked
+        (the revoked-already case ALSO triggers family-wide revocation as a
+        replay-attack defense).
+
+        ``user_agent`` / ``ip`` come from the rotating request and land
+        on the new row so the active-sessions UI can show the most
+        recent device fingerprint. ``source`` is sticky — copied
+        forward from the parent row — because the way a session was
+        originally created doesn't change on rotation.
+        """
+        row = await self.row_of(token)
+        if row is None:
+            return None
+
+        # Already-revoked path. Within the grace window this is the benign
+        # concurrent-rotation race (parallel requests sharing one cookie),
+        # not theft: the racer gets a live token of its own in the same
+        # family (the successor's token is kept nowhere to hand out twice).
+        # Past the window — or once the family is dead — treat as replay
+        # and nuke the family.
+        if row.revoked_at is not None:
+            if (utcnow() - row.revoked_at) <= timedelta(seconds=REUSE_GRACE_SECONDS):
+                if await self.is_live_session(row.family_id):
+                    racer = self._successor(row, user_agent, ip)
+                    await self.db.commit()
+                    return racer
+            await self.revoke_family(row.family_id)
+            return None
+
+        # Expired path: not malicious, just stale. Revoke this row, no
+        # family-wide nuke.
+        if row.expires_at <= utcnow():
+            row.revoked_at = utcnow()
+            self.db.add(row)
+            await self.db.commit()
+            return None
+
+        # Happy path: revoke inbound, mint successor in the same family, in
+        # one commit, so the family is never without a live row: a request
+        # authenticating in between would read the session as signed out.
+        row.revoked_at = utcnow()
+        self.db.add(row)
+        successor = self._successor(row, user_agent, ip)
+        await self.db.commit()
+{% if not include_scheduler %}
+        # No scheduler component — sweep expired rows opportunistically
+        # from the rotation path. The scheduled job (see
+        # ``cleanup_jobs.cleanup_expired_refresh_tokens_job``) owns this
+        # when the scheduler IS installed.
+        await self._maybe_sweep_expired()
+{% endif %}
+        return successor
+
+{% if not include_scheduler %}
+    async def _maybe_sweep_expired(self) -> None:
+        """Opportunistic cleanup for builds without a scheduler.
+
+        ``cleanup_expired_refresh_tokens_job`` is the canonical path
+        when the scheduler component is installed. In its absence we
+        ride the refresh hot path: at most one delete every hour,
+        guarded by a class-level timestamp so concurrent rotations
+        don't pile up the same DELETE. Matches the retention window
+        of the scheduled job.
+        """
+        now = utcnow()
+        last = RefreshService._last_sweep_at
+        if last is not None and (now - last) < _LAZY_SWEEP_INTERVAL:
+            return
+        RefreshService._last_sweep_at = now
+        cutoff = now - timedelta(days=REFRESH_TOKEN_RETENTION_DAYS)
+        try:
+            stmt = delete(RefreshToken).where(
+                RefreshToken.expires_at < cutoff,
+            )
+            await self.db.exec(stmt)  # type: ignore[call-overload]
+            await self.db.commit()
+        except Exception:  # pragma: no cover — sweep must never break rotation
+            logger.exception("Lazy refresh-token sweep failed; will retry next interval")
+
+{% endif %}
+    def _successor(
+        self, row: RefreshToken, user_agent: str | None, ip: str | None
+    ) -> Issued:
+        """Stage the next token of ``row``'s session (the caller commits):
+        its ``source`` carried forward, the rotating request's device."""
+        token = self._add(
+            row.user_id,
+            row.family_id,
+            source=row.source,
+            user_agent=user_agent,
+            ip=ip,
+            last_used_at=utcnow(),
+        )
+        return Issued(token, row.user_id, row.family_id)
+
+    async def row_of(self, token: str) -> RefreshToken | None:
+        """The row behind ``token``, found by its digest (the table never
+        holds the token itself)."""
+        return await self.db.get(RefreshToken, token_digest(token))
+
+    async def family_of(self, token: str) -> str | None:
+        """The session (family) ``token`` belongs to, live or not; None for
+        a token the table never issued."""
+        row = await self.row_of(token)
+        return row.family_id if row else None
+
+    async def revoke(self, token: str) -> None:
+        """Revoke a single refresh token.
+
+        No-op when the token is missing or already revoked — logout
+        should never 500 because the cookie is stale.
+        """
+        row = await self.row_of(token)
+        if row is None or row.revoked_at is not None:
+            return
+        row.revoked_at = utcnow()
+        self.db.add(row)
+        await self.db.commit()
+
+    async def revoke_family(self, family_id: str) -> None:
+        """Revoke every live row in ``family_id``.
+
+        Used on reuse detection and (eventually) on "log out everywhere".
+        """
+        now = utcnow()
+        stmt = (
+            update(RefreshToken)
+            .where(
+                RefreshToken.family_id == family_id,  # type: ignore[arg-type]
+                RefreshToken.revoked_at.is_(None),  # type: ignore[union-attr]
+            )
+            .values(revoked_at=now)
+        )
+        await self.db.exec(stmt)  # type: ignore[call-overload]
+        await self.db.commit()
+
+    async def validate(self, token: str) -> int | None:
+        """Return ``user_id`` if ``token`` is live (not expired, not revoked).
+
+        Read-only; doesn't trigger rotation or revocation. Intended for
+        diagnostic paths (tests, debugging) rather than the hot refresh
+        path, which should use ``rotate``.
+        """
+        row = await self.row_of(token)
+        if row is None or row.revoked_at is not None:
+            return None
+        if row.expires_at <= utcnow():
+            return None
+        return row.user_id
+
+{%- endif %}

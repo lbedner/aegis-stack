@@ -6,60 +6,109 @@
    a glyph here, the outline opened up); what runs in the webserver as chips in
    the Server's node, two to a row, each with its cost to load
    (load_cost). Rendered in the page and again for each frame. #}
-{% from "components/macros/layout.html" import health_badge, status_dot %}
+{% from "components/macros/layout.html" import chip, health_badge, hint_panel, status_dot %}
 {% from "components/macros/icons.html" import icon %}
 {% from "pages/overseer/_glance_macros.html" import cause, figures %}
-{# A node's name, linking to its page; plain for what has none (outside). #}
+{% from "pages/overseer/_macros.html" import line_link %}
+{# A node's name, linking to its page; plain for what has none: a piece of
+   a service opened up in full, an outside provider muted. #}
 {% macro node_title(node, size="") -%}
 {% if node.url %}<a data-title href="{{ node.url }}" {{ hx_replace(node.url, "#overseer-main") }} class="{{ size }} min-w-0 font-semibold text-aegis-text hover:text-aegis-teal truncate">{{ node.title }}</a>
-{%- else %}<span data-title class="{{ size }} min-w-0 text-aegis-muted truncate">{{ node.title }}</span>{% endif %}
+{%- else %}<span data-title class="{{ size }} min-w-0 {{ 'font-semibold text-aegis-text' if node.place and node.place != 'outside' and not node.missing else 'text-aegis-muted' }} truncate">{{ node.title }}</span>{% endif %}
 {%- endmacro %}
-{% if map_zoom %}
-{# Zoomed into the Server (overseer_container._opened): the way back out. #}
+{# Open a node up: the Server into what runs in it, a service into its pieces. #}
+{% macro zoom_link(node) -%}
+{% if node.zoom %}<a data-zoom href="{{ node.zoom }}" {{ hx_replace(node.zoom, "#overseer-main") }} title="Open up: what is inside it" class="shrink-0 text-aegis-muted hover:text-aegis-teal">{{ icon("zoom-in", "w-4 h-4") }}<span class="sr-only">Open up {{ node.title }}</span></a>{% endif %}
+{%- endmacro %}
+{% if map_trail %}
+{# Opened up (overseer_zoom: the Server, a service in it): the way back
+   up a level at a time. #}
 <nav data-breadcrumb aria-label="Map level" class="mb-3 flex items-center gap-2 text-sm">
-  <a href="{{ map_back }}" {{ hx_replace(map_back, "#overseer-main") }} class="text-aegis-muted hover:text-aegis-teal">{{ project_name }}</a>
-  <span class="text-aegis-muted" aria-hidden="true">›</span><span class="text-aegis-text">{{ map_zoom }}</span>
+  <a data-back href="{{ map_back }}" {{ hx_replace(map_back, "#overseer-main") }} class="text-aegis-muted hover:text-aegis-teal">{{ project_name }}</a>
+  {% for level in map_trail %}<span class="text-aegis-muted" aria-hidden="true">›</span>
+  {% if level.url %}<a href="{{ level.url }}" {{ hx_replace(level.url, "#overseer-main") }} class="text-aegis-muted hover:text-aegis-teal">{{ level.title }}</a>
+  {% else %}<span aria-current="page" class="text-aegis-text">{{ level.title }}</span>{% endif %}{% endfor %}
 </nav>
 {% endif %}
+{% if map_overlays %}
+{# What tones the nodes instead of their health (overseer_heat), and what it shows. #}
+<nav data-overlays aria-label="Overlays" class="mb-3 flex flex-wrap items-center gap-1.5">
+  {% for overlay in map_overlays %}{{ chip(overlay.label, overlay.on, overlay.url, hx_replace(overlay.url, "#overseer-main"), 'data-overlay="' ~ overlay.key ~ '"') }}{% endfor %}
+  {% for overlay in map_overlays if overlay.on %}<p data-overlay-key class="text-xs text-aegis-muted">{{ overlay.says }}</p>{% endfor %}
+</nav>
+{% endif %}
+{% if map_rail %}
+{# What nearly every piece uses (overseer_zoom.RAIL): a rail, not a line
+   from each; hovering one outlines every piece that uses it. #}
+<style>{% for dep in map_rail %}:root:has([data-rail-item="{{ dep.key }}"]:hover) [data-uses~="{{ dep.key }}"] { box-shadow: 0 0 0 2px oklch(var(--p)); }{% endfor %}</style>
+<div data-rail class="mb-3 flex flex-wrap items-center gap-2 border-b-2 border-aegis-teal/50 pb-2 text-xs">
+  <span class="micro-label font-semibold text-aegis-muted">Used throughout</span>
+  {% for dep in map_rail %}<a data-rail-item="{{ dep.key }}"{% if dep.url %} href="{{ dep.url }}" {{ hx_replace(dep.url, "#overseer-main") }}{% endif %} class="chip flex items-center gap-1.5 text-aegis-text hover:border-aegis-teal">{% if dep.status %}{{ status_dot(dep.status) }}{% endif %}{{ dep.title }}</a>{% endfor %}
+</div>
+{% endif %}
+{% set flagged = map_links|selectattr("why", "defined")|map(attribute="tone")|unique|sort|list %}
+{% if flagged %}
+{# What a red or amber line means (overseer_zoom.LINE_KEY), only those drawn;
+   each line says its own why on hover. #}
+<p data-line-key class="mb-3 flex flex-wrap items-center gap-3 text-xs text-aegis-muted">
+  {% for tone in flagged %}<span class="flex items-center gap-1.5"><span data-tone="{{ tone }}" class="toned inline-block h-0.5 w-4 bg-current" aria-hidden="true"></span>{{ map_line_key[tone] }}</span>{% endfor %}
+  <span>Hover a line for why</span>
+</p>
+{% endif %}
+{# At least the rest of the window (map-fill; the Flow scrolls sideways,
+   so keeps its own height), the lines' viewBox stretching with it. #}
 <div class="overflow-x-auto">
-  <div data-map{% if map_compact %} data-compact{% endif %}{% if map_across %} data-across{% endif %} class="relative min-w-[960px]" style="height: {{ map_height }}px">
+  <div data-map{% if map_compact %} data-compact{% endif %}{% if map_across %} data-across{% endif %} class="relative min-w-[960px] {{ '' if map_across else 'map-fill' }}" style="height: {{ map_height }}px">
     <svg class="absolute inset-0 w-full h-full" viewBox="0 0 {{ map_width }} {{ map_height }}" preserveAspectRatio="none" aria-hidden="true">
-      {% for link in map_links %}<path data-link data-from="{{ link.start }}" data-to="{{ link.end }}"{% if link.queued %} data-queued{% endif %}{% if link.key %} data-key{% endif %} class="map-link" data-tone="{{ link.tone }}" d="{{ link.d }}" />{% endfor %}
+      {% if map_lanes %}<defs><marker id="map-arrow" viewBox="0 0 6 6" refX="5" refY="3" markerUnits="userSpaceOnUse" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L6,3 L0,6 z" class="fill-aegis-teal" /></marker></defs>{% endif %}
+      {% for link in map_links %}<path data-link data-from="{{ link.start }}" data-to="{{ link.end }}"{% if link.queued %} data-queued{% endif %}{% if link.key %} data-key{% endif %} class="map-link" data-tone="{{ link.tone }}" d="{{ link.d }}"{% if link.arrow %} marker-end="url(#map-arrow)"{% endif %} />{% if link.why %}<path data-hit="{{ loop.index }}" class="map-hit" d="{{ link.d }}" />{% endif %}{% endfor %}
     </svg>
+    {# A flagged line's why, in a panel at its middle while it is hovered. #}
+    {% for link in map_links %}{% if link.why %}
+    <style>[data-map]:has([data-hit="{{ loop.index }}"]:hover) [data-line-hint="{{ loop.index }}"] { display: block; }</style>
+    {% call hint_panel('data-line-hint="' ~ loop.index ~ '"', "-translate-x-1/2 pt-1.5 pointer-events-none", "left: " ~ link.mid.left ~ "%; top: " ~ (link.mid.top / map_height * 100) ~ "%") %}{{ link.why }}{% endcall %}
+    {% endif %}{% endfor %}
+    {% for lane in map_lanes %}<p data-lane class="micro-label absolute top-0 -translate-x-1/2 font-semibold text-aegis-muted" style="left: {{ lane.left }}%">{{ lane.label }}</p>{% endfor %}
     {% for node in map_nodes %}
     {% if map_compact %}
-    {# One line: its dot, its name, its cost to load; data in its outline
+    {# Its dot and name, under them its cost to load and what it carries
+       (a heat's figure); data in its outline
        (the stroke takes the tone, as a border does), an outside provider a
        dashed pill. What it says, why it fails and the fix (a key's set
        dialog), under it on hover (CSS, so a live frame cannot close it;
        padded, not spaced, so the pointer can move into it). #}
     {% set outside = node.role == map_roles.OUTSIDE %}
     {% set shaped = node.role and not outside %}
-    {% set outline = "" if shaped else ("rounded-full justify-center border border-dashed bg-aegis-card" if outside else "rounded-lg border bg-aegis-card") %}
-    <section data-node="{{ node.key }}"{% if node.role %} data-role="{{ node.role }}"{% endif %}{% if node.tall %} data-tall{% endif %} data-tone="{{ node.tone }}"
-             class="group absolute -translate-x-1/2 hover:z-30 tone-border {{ outline }} {{ 'justify-center pt-3' if node.tall }} px-3 flex items-center gap-2 text-sm"
-             style="left: {{ node.left }}%; top: {{ node.top }}px; width: {{ node.width }}%; height: {{ node.height }}px">
+    {% set outline = "" if shaped else ("rounded-full items-center border border-dashed bg-aegis-card" if outside else ("rounded-lg border border-dashed" if node.missing else "rounded-lg border bg-aegis-card")) %}
+    <section data-node="{{ node.key }}"{% if node.role %} data-role="{{ node.role }}"{% endif %}{% if node.missing %} data-missing{% endif %}{% if node.uses %} data-uses="{{ node.uses|join(' ') }}"{% endif %}{% if node.tall %} data-tall{% endif %}{% if node.heat %} data-heat{% endif %} data-tone="{{ node.tone }}"
+             class="group absolute -translate-x-1/2 hover:z-30 tone-border {{ outline }} {{ 'pt-3' if node.tall }} px-3 flex flex-col justify-center gap-1"
+             style="left: {{ node.left }}%; top: {{ node.top / map_height * 100 }}%; width: {{ node.width }}%; height: {{ node.height / map_height * 100 }}%">
       {% if shaped %}<svg data-shape class="map-shape absolute inset-0 -z-10 w-full h-full overflow-visible" aria-hidden="true"><use href="#shape-{{ node.role }}" width="100%" height="100%"/></svg>{% endif %}
-      {% if node.status %}{{ status_dot(node.status) }}{% endif %}
-      {{ node_title(node) }}
-      {% if node.load %}<span data-load class="ml-auto shrink-0 text-xs tabular-nums text-aegis-muted">{{ node.load }}</span>{% endif %}
-      {% if node.figure %}<span data-figure class="ml-auto shrink-0 text-xs tabular-nums text-aegis-muted">{{ node.figure }}</span>{% endif %}
-      <span data-hint role="tooltip" class="absolute {{ 'right-0' if node.hint_end else 'left-0' }} {{ 'bottom-full pb-1.5' if node.hint_above else 'top-full pt-1.5' }} z-20 hidden group-hover:block">
-        <span class="tooltip-panel block w-max max-w-xs px-2.5 py-1.5">{{ node.message|message }}{% if node.note %}<span class="block">{{ node.note }}</span>{% endif %}{{ cause(node) }}
-          {% for fix in node.fix or [] %}<button type="button" data-fix data-write {{ hx_dialog(fix.url) }} class="mt-1 block text-aegis-teal hover:underline">Set {{ fix.name }}</button>{% endfor %}</span>
-      </span>
+      <span class="flex max-w-full items-center gap-2">{% if node.status %}{{ status_dot(node.status) }}{% endif %}{{ node_title(node, "text-base") }}{{ zoom_link(node) }}</span>
+      {% if node.load or node.figure %}<span class="flex max-w-full items-center gap-3 whitespace-nowrap text-xs tabular-nums text-aegis-muted">
+        {% if node.load %}<span data-load>{{ node.load }}</span>{% endif %}
+        {% if node.figure %}<span data-figure{% if node.heat %} class="toned font-semibold" data-tone="{{ node.tone }}"{% endif %}>{{ node.figure }}</span>{% endif %}
+      </span>{% endif %}
+      {% if node.badges %}<span class="flex max-w-full flex-wrap gap-1">{% for badge_title in node.badges %}<span data-badge class="rounded border border-aegis-teal/40 px-1 text-xxs text-aegis-teal">{{ badge_title }}</span>{% endfor %}</span>{% endif %}
+      {% if node.todo %}<span data-to-fix data-tone="{{ node.todo_tone }}" class="toned text-xxs font-semibold">{{ node.todo_count }} to fix</span>{% endif %}
+      {% call hint_panel("data-hint", ("right-0" if node.hint_end else "left-0") ~ " " ~ ("bottom-full pb-1.5" if node.hint_above else "top-full pt-1.5") ~ " group-hover:block") %}{{ node.message|message }}{% if node.holds %}
+          <ul data-holds class="mt-1 font-mono text-aegis-text">{% for held in node.holds %}<li class="truncate">{% if held.url %}<a data-held="{{ held.name }}" href="{{ held.url }}" {{ hx_replace(held.url, "#overseer-main") }} class="hover:text-aegis-teal">{{ held.name }}</a>{% else %}{{ held.name }}{% endif %}</li>{% endfor %}{% if node.holds_more %}<li class="text-aegis-muted">{{ node.holds_more }} more</li>{% endif %}</ul>{% endif %}{% if node.reaches %}<span class="block">Uses {{ node.reaches|join(", ") }}</span>{% endif %}{% if node.note %}<span class="block">{{ node.note }}</span>{% endif %}{{ cause(node) }}
+          {% for todo in node.todo or [] %}<div data-todo class="mt-1"><p data-tone="{{ todo.tone }}" class="toned">{{ todo.action }}</p>
+            <ul class="mt-0.5 space-y-0.5">{% for place in todo.places %}<li class="break-words">{{ line_link(place.path, place.line) }} <span class="text-aegis-muted">{{ place.note }}</span></li>{% endfor %}</ul></div>{% endfor %}
+          {% for fix in node.fix or [] %}<button type="button" data-fix data-write {{ hx_dialog(fix.url) }} class="mt-1 block text-aegis-teal hover:underline">Set {{ fix.name }}</button>{% endfor %}{% endcall %}
     </section>
     {% else %}
-    <section data-node="{{ node.key }}"{% if node.role %} data-role="{{ node.role }}"{% endif %} class="absolute -translate-x-1/2 tone-border rounded-lg border bg-aegis-card p-4 space-y-3 overflow-hidden flex flex-col" data-tone="{{ node.tone }}"
-             style="left: {{ node.left }}%; top: {{ node.top }}px; width: {{ node.width }}%; height: {{ node.height }}px">
+    <section data-node="{{ node.key }}"{% if node.role %} data-role="{{ node.role }}"{% endif %}{% if node.heat %} data-heat{% endif %} class="absolute -translate-x-1/2 tone-border rounded-lg border bg-aegis-card p-4 space-y-3 overflow-hidden flex flex-col" data-tone="{{ node.tone }}"
+             style="left: {{ node.left }}%; top: {{ node.top / map_height * 100 }}%; width: {{ node.width }}%; height: {{ node.height / map_height * 100 }}%">
       <header class="flex items-center justify-between gap-2">
         {% if node.role %}{{ icon(node.role, "w-4 h-4 shrink-0 text-aegis-muted") }}{% endif %}
         {{ node_title(node, "text-base") }}
         <span class="ml-auto flex items-center gap-2 shrink-0">
-          {% if node.zoom %}<a data-zoom href="{{ node.zoom }}" {{ hx_replace(node.zoom, "#overseer-main") }} title="Open up: what runs inside it" class="text-aegis-muted hover:text-aegis-teal">{{ icon("tiers", "w-4 h-4") }}<span class="sr-only">Open up {{ node.title }}</span></a>{% endif %}
+          {{ zoom_link(node) }}
           {% if node.status %}{{ health_badge(node.status) }}{% endif %}
         </span>
       </header>
+      {% if node.heat %}<p data-heat-value data-tone="{{ node.tone }}" class="toned text-2xl font-semibold tabular-nums leading-none">{{ node.figure }}</p>{% endif %}
       {{ cause(node) }}
       {% if node.glance %}
       {% for row in node.glance.rows[:2] %}

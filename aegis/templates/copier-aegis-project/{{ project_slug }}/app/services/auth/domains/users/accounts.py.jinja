@@ -1,0 +1,341 @@
+"""User management service."""
+
+import secrets
+from datetime import datetime, timedelta
+
+{% if include_auth_rbac %}
+from sqlalchemy import func
+{% endif %}
+from sqlmodel import delete, select, update
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.core.config import settings
+from app.core.security import get_password_hash, verify_password
+from app.core.time import utcnow
+from app.services.auth.domains.users.base import (
+    RegistrationClosedError as RegistrationClosedError,
+    RestoreConflictError as RestoreConflictError,
+    UserServiceBase,
+)
+from app.services.auth.domains.users.deletion import DeletionMixin
+from app.services.auth.domains.users.hooks import run_post_user_created
+from app.services.auth.domains.users.passwords import PasswordsMixin
+from app.services.auth.domains.users.verification import VerificationMixin
+{% if include_auth_org %}
+from app.models.org import (
+    ORG_ROLE_OWNER,
+    Organization,
+    OrganizationMember,
+    OrgInvite,
+)
+{% endif %}
+from app.models.refresh_token import RefreshToken
+from app.models.user import EmailVerificationToken, PasswordResetToken, User, UserCreate
+{% if include_oauth %}
+from app.models.user import OAuthProvider, UserOAuthIdentity
+
+
+{% endif %}
+
+
+
+
+class UserService(
+    DeletionMixin,
+    PasswordsMixin,
+    VerificationMixin,
+    UserServiceBase,
+):
+    """Service for managing users with async database operations."""
+
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    async def create_user(self, user_data: UserCreate) -> User:
+        """Create a new user asynchronously.
+{%- if include_auth_rbac %}
+
+        The very first user in the system is auto-promoted to ``admin`` so
+        the operator who runs ``aegis init`` and registers can reach the
+        admin-gated tabs (Users, Orgs) without a manual SQL update.
+{%- endif %}
+        """
+        # Hash the password
+        hashed_password = get_password_hash(user_data.password)
+
+{%- if include_auth_rbac %}
+        # First user becomes admin
+        count_result = await self.db.exec(select(func.count()).select_from(User))
+        is_first_user = count_result.one() == 0
+
+{%- endif %}
+        # Create user object.
+        #
+        # ``is_active`` is hardcoded True rather than read from input: the
+        # narrowed ``UserCreate`` no longer exposes it, and a fresh signup
+        # is by definition active. Deactivation is an admin action that
+        # goes through ``deactivate_user``.
+        user = User(
+            email=user_data.email.lower(),
+            full_name=user_data.full_name,
+            hashed_password=hashed_password,
+            is_active=True,
+{%- if auth_level == "basic" %}
+            is_verified=True,
+{%- endif %}
+{%- if include_auth_rbac %}
+            role="admin" if is_first_user else "user",
+{%- endif %}
+            created_at=utcnow(),
+        )
+
+        # Save to database. Flush so ``user.id`` is populated before
+        # hooks run; they get a real id (e.g. for FK rows they stage).
+        self.db.add(user)
+        await self.db.flush()
+        await run_post_user_created(self.db, user)
+        await self.db.commit()
+
+        return user
+
+    async def get_user_by_email(self, email: str) -> User | None:
+        """Get user by email address asynchronously. Skips soft-deleted users."""
+        statement = select(User).where(
+            User.email == email.lower(),
+            User.deleted_at.is_(None),
+        )
+        result = await self.db.exec(statement)
+        return result.first()
+
+    async def get_user_by_id(self, user_id: int) -> User | None:
+        """Get user by ID, skipping soft-deleted rows.
+
+        ``Session.get`` not ``select()``: the identity map answers a repeat PK
+        lookup without SQL, and ``deleted_at`` is filtered here instead.
+        """
+        user = await self.db.get(User, user_id)
+        return None if user is None or user.deleted_at is not None else user
+
+    async def get_users_by_ids(self, user_ids: list[int]) -> dict[int, User]:
+        """``{id: user}`` for the given ids in one query; soft-deleted and
+        unknown ids are absent."""
+        if not user_ids:
+            return {}
+        statement = select(User).where(
+            User.id.in_(user_ids),  # type: ignore[union-attr]
+            User.deleted_at.is_(None),
+        )
+        result = await self.db.exec(statement)
+        return {user.id: user for user in result.all() if user.id is not None}
+
+    async def update_user(self, user_id: int, **updates) -> User | None:
+        """Update user data asynchronously."""
+        user = await self.get_user_by_id(user_id)
+        if not user:
+            return None
+
+        for field, value in updates.items():
+            if hasattr(user, field):
+                setattr(user, field, value)
+
+        user.updated_at = utcnow()
+        self.db.add(user)
+        await self.db.commit()
+
+        return user
+
+    async def deactivate_user(self, user_id: int) -> User | None:
+        """Deactivate a user account asynchronously."""
+        return await self.update_user(user_id, is_active=False)
+
+    async def activate_user(self, user_id: int) -> User | None:
+        """Activate a user account asynchronously."""
+        return await self.update_user(user_id, is_active=True)
+
+{% if include_auth_org %}
+{% endif %}
+
+    async def list_users(self) -> list[User]:
+        """List all users in the system asynchronously. Skips soft-deleted users."""
+        statement = (
+            select(User)
+            .where(User.deleted_at.is_(None))
+            .order_by(User.created_at.desc())
+        )
+        result = await self.db.exec(statement)
+        return list(result.all())
+
+
+    async def find_existing_emails_with_prefix(
+        self, prefix: str, domain: str
+    ) -> list[str]:
+        """Find existing emails matching ``prefix{number}@domain``.
+
+        Filters out soft-deleted users so callers using this to pick a
+        unique email don't get blocked by a stale row.
+        """
+        pattern = f"{prefix}%@{domain}"
+        statement = select(User.email).where(
+            User.email.like(pattern),
+            User.deleted_at.is_(None),
+        )
+        result = await self.db.exec(statement)
+        return list(result.all())
+
+
+
+
+
+
+
+
+
+
+{% if include_oauth %}
+    async def upsert_from_oauth(
+        self,
+        *,
+        provider: OAuthProvider,
+        provider_user_id: str,
+        email: str,
+        provider_username: str | None = None,
+        avatar_url: str | None = None,
+    ) -> User:
+        """Resolve an OAuth callback to a local user, creating one if needed.
+
+        Three paths:
+        1. ``(provider, provider_user_id)`` already linked → return the linked
+           user, opportunistically refreshing display metadata.
+        2. Identity is new but ``email`` matches an existing user → link the
+           identity to that user. Bridges previously password-only accounts
+           into OAuth without forcing a separate sign-up.
+        3. Neither exists → create a new user (no password,
+           ``is_verified=True`` since the provider already confirmed the
+           email) and link. Refused with ``RegistrationClosedError`` when
+           ``settings.REGISTRATION_ENABLED`` is False.
+        """
+        email = email.lower().strip()
+
+        # Path 1: existing linked identity.
+        stmt = select(UserOAuthIdentity).where(
+            UserOAuthIdentity.provider == provider,
+            UserOAuthIdentity.provider_user_id == provider_user_id,
+        )
+        result = await self.db.exec(stmt)
+        identity = result.first()
+        if identity is not None:
+            user = await self.get_user_by_id(identity.user_id)
+            if user is None:
+                # ``get_user_by_id`` filters out soft-deleted rows. Look the
+                # user up directly to distinguish the two cases:
+                #
+                # - soft-deleted user → auto-restore on OAuth re-sign-in
+                #   so "deleted my account, changed my mind" recovers
+                #   the original account cleanly (avatar, history, etc.).
+                # - truly missing (hard delete or never existed) → delete
+                #   the orphan identity row and fall through to Path 2/3
+                #   for a fresh signup.
+                raw_user = (
+                    await self.db.exec(
+                        select(User).where(User.id == identity.user_id)
+                    )
+                ).first()
+                if raw_user is not None and raw_user.deleted_at is not None:
+                    # Same conflict guard as ``restore_user``: if someone
+                    # re-registered with this email while the user was
+                    # soft-deleted, we can't restore the old row without
+                    # violating the partial unique index. Drop the orphan
+                    # identity and fall through so Path 2/3 produces a
+                    # fresh account (best-effort UX; admin can hard-delete
+                    # the soft-deleted row later if needed).
+                    conflict_stmt = select(User).where(
+                        User.email == raw_user.email,
+                        User.deleted_at.is_(None),
+                        User.id != raw_user.id,
+                    )
+                    conflict = (await self.db.exec(conflict_stmt)).first()
+                    if conflict is None:
+                        raw_user.deleted_at = None
+                        raw_user.updated_at = utcnow()
+                        self.db.add(raw_user)
+                        identity.provider_username = provider_username
+                        identity.provider_email = email
+                        identity.avatar_url = avatar_url
+                        identity.updated_at = utcnow()
+                        self.db.add(identity)
+                        await self.db.commit()
+                        return raw_user
+                await self.db.delete(identity)
+                await self.db.commit()
+            else:
+                # Refresh display metadata (username can change on GitHub,
+                # avatar definitely can).
+                identity.provider_username = provider_username
+                identity.provider_email = email
+                identity.avatar_url = avatar_url
+                identity.updated_at = utcnow()
+                self.db.add(identity)
+                await self.db.commit()
+                return user
+
+        # Path 2: email matches an existing account — link into it.
+        user = await self.get_user_by_email(email)
+        if user is not None:
+            self.db.add(
+                UserOAuthIdentity(
+                    user_id=user.id,
+                    provider=provider,
+                    provider_user_id=provider_user_id,
+                    provider_username=provider_username,
+                    provider_email=email,
+                    avatar_url=avatar_url,
+                )
+            )
+            # Provider already verified the email; flip the local account if
+            # it hasn't been verified yet.
+            if not user.is_verified:
+                user.is_verified = True
+                self.db.add(user)
+            await self.db.commit()
+            return user
+
+        # Path 3: brand-new user.
+        if not settings.REGISTRATION_ENABLED:
+            raise RegistrationClosedError()
+{%- if include_auth_rbac %}
+        # First user becomes admin (matches password-registration behavior).
+        count_result = await self.db.exec(select(func.count()).select_from(User))
+        is_first_user = count_result.one() == 0
+{%- endif %}
+        user = User(
+            email=email,
+            full_name=provider_username or email.split("@")[0],
+            # OAuth-only accounts can't password-login; the column is
+            # NOT NULL so we store an empty string as a sentinel.
+            hashed_password="",
+            is_active=True,
+            is_verified=True,  # provider guarantees email ownership
+{%- if include_auth_rbac %}
+            role="admin" if is_first_user else "user",
+{%- endif %}
+        )
+        self.db.add(user)
+        await self.db.flush()  # need user.id for the identity row
+        self.db.add(
+            UserOAuthIdentity(
+                user_id=user.id,
+                provider=provider,
+                provider_user_id=provider_user_id,
+                provider_username=provider_username,
+                provider_email=email,
+                avatar_url=avatar_url,
+            )
+        )
+        # OAuth signup creates a new local user — same hook fires as
+        # password signup so downstream tenancy/onboarding logic only
+        # has one place to subscribe.
+        await run_post_user_created(self.db, user)
+        await self.db.commit()
+        return user
+
+{% endif %}

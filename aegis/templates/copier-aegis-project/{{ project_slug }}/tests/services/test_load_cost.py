@@ -108,9 +108,14 @@ def test_only_a_component_can_be_its_own_process(
 ) -> None:
     """The scheduler service shares the scheduler component's name, and
     runs in the webserver: it is measured."""
-    monkeypatch.setattr(
-        load_cost.service_links, "packages", lambda parent: ["scheduler", "worker"]
-    )
+
+    class Both:
+        """A tree with a scheduler and a worker in each group."""
+
+        def packages_in(self, package: str) -> list[str]:
+            return ["scheduler", "worker"]
+
+    monkeypatch.setattr(load_cost.source_index, "project", Both)
     assert load_cost.parts() == {
         "service_scheduler": "app.services.scheduler",
         "service_worker": "app.services.worker",

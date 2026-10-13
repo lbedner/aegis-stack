@@ -20,8 +20,9 @@ Every stack's default grant is Overseer's reads, the same ones its pages make:
 | `health` | What is wrong now: every component's status and message; name one for everything it reports (a worker's queues, the scheduler's jobs) |
 | `errors` | What broke: retained errors grouped into issues; name one for its traceback |
 | `logs` | What led up to it: container logs by service, level, text and window |
+| `ontology` | What the app is: its tables (fields, allowed values, links) and the changes an agent may propose to them; for an admin also its parts, routes, jobs and tools. A summary; nodes by kind, category or text; one node with its edges and neighbours; the shortest paths between two (how a route reaches the database); and, for an admin, a route's dry path (`route="GET /api/v1/..."`): every hop it can take, read from the code, each at its file and line |
 
-Health checks register when the webserver starts, so over stdio `health` asks the running webserver for its full walk, and says so when it can only see the CLI's own process. With the finance service, finance's read tools join the grant. Set it in `.env` as a JSON list to narrow it, for example `MCP_TOOLS=["ledger","accounts"]`; `MCP_TOOLS=[]` serves nothing.
+Health checks register when the webserver starts, so over stdio `health` asks the running webserver for its full walk, and says so when it can only see the CLI's own process. Over stdio `ontology` is built from what is on disk, without the routes, and says it is partial. The whole model is also `GET /api/v1/ontology` (admins only), as JSON. Every edge there, and in `ontology`'s answers, carries what the running app did along it this build (`observed`: count, errors, mean and max time) and a `state`: `both` (declared and seen), `observed_only` (seen but never declared: one service reaching another's table, say), `bypass` (a model provider reached around the AI service) or, after a day of traffic, `declared_only` (declared and never used). With the finance service, finance's read tools join the grant. Set it in `.env` as a JSON list to narrow it, for example `MCP_TOOLS=["ledger","accounts"]`; `MCP_TOOLS=[]` serves nothing.
 
 The tools are the registry's own functions, registered by name. FastMCP builds each tool's schema from the type hints and docstring the app's agents already read, so a read over MCP and the same read by a chat agent are one computation. The server is never built with `FastMCP.from_fastapi`, which would turn every API route into a tool, writes included.
 
@@ -125,7 +126,7 @@ my-app mcp-tokens revoke --email you@example.com 3
 
 A token's scope is its grant: `read` reaches the read tools in `MCP_TOOLS`, `propose` the proposals too. A client sees only the tools its scope reaches, and a call outside it is refused. There is no second permission system, and a token never reaches a write. People start read-only and grant proposals later.
 
-`health`, `errors` and `logs` are Overseer's reads, and Overseer shows them to admins only, so a token reaches them only when its owner is an admin (`ADMIN_USER_EMAILS`, or the admin role). Anyone else's token, and a script it runs with `run_code`, sees the other tools in its scope.
+`health`, `errors` and `logs` are Overseer's reads, and Overseer shows them to admins only, so a token reaches them only when its owner is an admin (`ADMIN_USER_EMAILS`, or the admin role). Anyone else's token, and a script it runs with `run_code`, sees the other tools in its scope. `ontology` answers anyone with the app's tables and the changes to them, and only an admin with the rest. Chat holds an agent's admin tools to the same rule: granted to an agent everyone chats with, they answer only the admins.
 
 Only a hash of the token is kept, so its value is shown once, when it is made. It works until it is revoked: each request checks it, so a revoked token fails on its next request, and each use is noted as its last use. Sessions in the browser are unaffected.
 

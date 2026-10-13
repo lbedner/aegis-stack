@@ -59,9 +59,14 @@ app.add_typer(call_app, name="call")
 
 @app.command(help=lazy_t("comms.help_status"))
 async def status() -> None:
-    from app.services.comms.calls import get_call_status, validate_call_config
-    from app.services.comms.email import get_email_status, validate_email_config
-    from app.services.comms.sms import get_sms_status, validate_sms_config
+    from app.services.comms.service import (
+        get_call_status,
+        get_email_status,
+        get_sms_status,
+        validate_call_config,
+        validate_email_config,
+        validate_sms_config,
+    )
 
     theme.title(t("comms.service_status_title"))
 
@@ -233,7 +238,7 @@ async def _email_send(
     html: str | None,
 ) -> None:
     """Async implementation of email send."""
-    from app.services.comms.email import (
+    from app.services.comms.service import (
         EmailConfigurationError,
         EmailError,
         send_email_simple,
@@ -279,7 +284,11 @@ async def sms_send(
 
 async def _sms_send(to: str, body: str) -> None:
     """Async implementation of SMS send."""
-    from app.services.comms.sms import SMSConfigurationError, SMSError, send_sms_simple
+    from app.services.comms.service import (
+        SMSConfigurationError,
+        SMSError,
+        send_sms_simple,
+    )
 
     try:
         result = await send_sms_simple(to=to, body=body)
@@ -317,8 +326,8 @@ async def call_make(
 
 async def _call_make(to: str, twiml_url: str, timeout: int) -> None:
     """Async implementation of make call."""
-    from app.services.comms.calls import CallConfigurationError, CallError, make_call
     from app.services.comms.models import MakeCallRequest
+    from app.services.comms.service import CallConfigurationError, CallError, make_call
 
     try:
         request = MakeCallRequest(to=to, twiml_url=twiml_url, timeout=timeout)

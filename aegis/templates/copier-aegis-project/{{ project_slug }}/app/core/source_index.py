@@ -3,8 +3,9 @@ rather than imported (no side effects): where each module defines its
 top-level names, what it imports, and the lines each name is used on.
 Overseer > Code goes from a name to its definition and lists every line
 that names it; the Server map, the load costs, the Service pattern and
-``ownership`` read what each module imports, fronts and defines. Each file
-is parsed once per change, whoever asks.
+``ownership`` read what each module imports, declares (``Declared``) and
+defines, and its docstring's first line. Each file is parsed once per
+change, whoever asks.
 
 Static and shallow on purpose: a name defined at a module's top level, or
 imported, resolves, directly or through its module (``store.put``); one
@@ -13,17 +14,25 @@ not. ponytail: jedi or a language server when method calls must resolve.
 """
 
 import ast
-import os
 from collections.abc import Callable, Iterable, Iterator
-from dataclasses import dataclass
-from functools import cache
+from dataclasses import dataclass, fields
+from enum import StrEnum
+from functools import cache, lru_cache
+from importlib.util import resolve_name
+import os
 from pathlib import Path
 from typing import TypeVar
 
-from app.core.constants import ComponentName
+from app.core.config import settings
+from app.core.constants import ComponentName, ServiceName
+from app.core.parts import Category
 from app.core.source_functions import Function, functions
 
 ROOT = Path(__file__).resolve().parents[2]  # the project's: where ``app`` is
+# The enums a ``Declared`` constant may name a member of.
+DECLARED_IN: dict[str, type[StrEnum]] = {
+    e.__name__: e for e in (ComponentName, ServiceName, Category)
+}
 # Folders never read, nor shown on Overseer > Code: generated, installed or
 # holding data (hidden ones, ``.venv`` among them, never either).
 SKIPPED = frozenset(
@@ -51,6 +60,22 @@ class Place:
 
 
 @dataclass(frozen=True)
+class Declared:
+    """What a module says it is, read without importing it: the component
+    a core client fronts (``FRONTS``), the part a folder belongs to
+    (``PART_OF``, for ``ownership``), and a plugin's concern
+    (``CATEGORY``). Each a string or a member of one of ``DECLARED_IN``."""
+
+    fronts: str | None = None
+    part_of: str | None = None
+    category: str | None = None
+
+
+# The constants themselves, as a module spells them.
+DECLARED = frozenset(f.name.upper() for f in fields(Declared))
+
+
+@dataclass(frozen=True)
 class Module:
     """What one file says about names: kept small (no syntax tree), since
     every file the lookups reach stays cached."""
@@ -65,11 +90,25 @@ class Module:
     # each name imported from one by its full name (``from app.core import
     # cache`` is ``app.core.cache``), whether a module or not.
     imports: frozenset[str]
-    fronts: str | None  # the component it says it fronts (``FRONTS``)
+    declared: Declared
     functions: tuple[Function, ...]
+    summary: str  # its docstring's first line
+    classes: frozenset[str]  # its top-level classes
+
+    @property
+    def public(self) -> list[str]:
+        """Its top-level functions and classes not named private, in the
+        order it defines them."""
+        tops = {f.qualname for f in self.functions} | self.classes
+        return [n for n in self.defined if n in tops and not n.startswith("_")]
 
     def place(self, line: int) -> Place:
         return Place(self.path, line, self.lines[line - 1].strip())
+
+
+def visible() -> bool:
+    """Whether the source may be shown: in dev, or ``OVERSEER_CODE_ENABLED``."""
+    return settings.is_dev or bool(getattr(settings, "OVERSEER_CODE_ENABLED", False))
 
 
 def module_name(path: str) -> str:
@@ -86,13 +125,18 @@ def module_paths(name: str) -> tuple[str, str]:
     return f"{base}.py", f"{base}/__init__.py"
 
 
-def _target(node: ast.ImportFrom, name: str) -> str:
-    """The module an ``from ... import`` reads from, relative ones
-    resolved against the importing module ``name``."""
+def _target(node: ast.ImportFrom, path: str) -> str:
+    """The module an ``from ... import`` reads from, relative ones resolved
+    against the importing file's package (an ``__init__.py`` its own)."""
     if not node.level:
         return node.module or ""
-    package = name.split(".")[: -node.level]
-    return ".".join([*package, *([node.module] if node.module else [])])
+    package = module_name(path)
+    if not path.endswith("__init__.py"):
+        package = package.rpartition(".")[0]
+    try:
+        return resolve_name("." * node.level + (node.module or ""), package)
+    except ImportError:
+        return ""  # above the project's top package
 
 
 def _spans(nodes: Iterable[ast.AST]) -> Iterator[tuple[Named, Chain]]:
@@ -129,7 +173,7 @@ def _parse(path: str, source: str) -> Module:
                 imported[local] = (alias.name if alias.asname else local, None)
                 imports.add(alias.name)
         elif isinstance(node, ast.ImportFrom):
-            source_module = _target(node, name)
+            source_module = _target(node, path)
             imports.add(source_module)
             for alias in node.names:
                 imported[alias.asname or alias.name] = (source_module, alias.name)
@@ -147,30 +191,36 @@ def _parse(path: str, source: str) -> Module:
         imported,
         {chain: tuple(sorted(lines)) for chain, lines in uses.items()},
         frozenset(imports - {""}),
-        _fronts(tree),
+        _declared(tree),
         tuple(functions(tree, lines)),
+        (ast.get_docstring(tree) or "").partition("\n")[0].strip(),
+        frozenset(n.name for n in tree.body if isinstance(n, ast.ClassDef)),
     )
 
 
-def _fronts(tree: ast.Module) -> str | None:
-    """A top-level ``FRONTS``: a string, or a ``ComponentName`` member's."""
-    for node in tree.body:
-        if not (
-            isinstance(node, ast.Assign)
-            and any(isinstance(t, ast.Name) and t.id == "FRONTS" for t in node.targets)
-        ):
-            continue
-        value = node.value
-        if isinstance(value, ast.Constant) and isinstance(value.value, str):
-            return value.value
-        if (
-            isinstance(value, ast.Attribute)
-            and isinstance(value.value, ast.Name)
-            and value.value.id == ComponentName.__name__
-            and value.attr in ComponentName.__members__
-        ):
-            return ComponentName[value.attr].value
+def _value(node: ast.expr) -> str | None:
+    """A string as written, or a ``DECLARED_IN`` enum member's value."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
+        names = DECLARED_IN.get(node.value.id)
+        if names is not None and node.attr in names.__members__:
+            return names[node.attr].value
     return None
+
+
+def _declared(tree: ast.Module) -> Declared:
+    """What the module's top-level ``FRONTS``, ``PART_OF`` and
+    ``CATEGORY`` say."""
+    found: dict[str, str] = {}
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and (value := _value(node.value)):
+            found |= {
+                t.id.lower(): value
+                for t in node.targets
+                if isinstance(t, ast.Name) and t.id in DECLARED
+            }
+    return Declared(**found)
 
 
 Kept = TypeVar("Kept")
@@ -214,6 +264,15 @@ def _cached(root: Path, path: str, mtime: float) -> Module | None:
     return _kept(_modules, (root, path), mtime, parse)
 
 
+@lru_cache(maxsize=256)
+def _tree(root: Path, path: str, mtime: float) -> ast.Module | None:
+    """``path``'s syntax tree, once per change: only the files read lately."""
+    try:
+        return ast.parse(_text(root, path, mtime))
+    except (OSError, SyntaxError, ValueError):
+        return None
+
+
 class Index:
     """The project's modules by name, each parsed only when a lookup reaches
     it, and again only once its file changes: a click reads a handful of
@@ -243,13 +302,9 @@ class Index:
         return _cached(self.root, *stamp) if stamp else None
 
     def tree(self, name: str) -> ast.Module | None:
-        """A module's syntax tree, parsed afresh: only the clicked file needs one."""
-        if (stamp := self._stamp(name)) is None:
-            return None
-        try:
-            return ast.parse(_text(self.root, *stamp))
-        except (OSError, SyntaxError, ValueError):
-            return None
+        """A module's syntax tree (``_tree``), for a reader that leaves it be."""
+        stamp = self._stamp(name)
+        return _tree(self.root, *stamp) if stamp else None
 
     def _texts(self) -> Iterator[tuple[str, str]]:
         """Each module's name and source; one gone or unreadable is skipped."""
@@ -267,6 +322,18 @@ class Index:
         them all: the reads, not the parsing, are most of a cold click."""
         for _ in self._texts():
             pass
+
+    def packages_in(self, package: str) -> list[str]:
+        """The packages directly in ``package`` (``app.services``), by
+        name: the services, or the components."""
+        depth = package.count(".") + 1
+        return sorted(
+            name.rpartition(".")[2]
+            for name, path in self.paths.items()
+            if within(name, package)
+            and name.count(".") == depth
+            and path.endswith("/__init__.py")
+        )
 
     def imports_under(self, package: str) -> set[str]:
         """Every module ``package``'s modules import, it and those in it."""
@@ -360,7 +427,7 @@ class Hit:
 
 
 def _at(
-    tree: ast.Module, lines: tuple[str, ...], name: str, line: int, col: int
+    tree: ast.Module, lines: tuple[str, ...], path: str, line: int, col: int
 ) -> Hit | None:
     """What is at ``line``:``col`` (1-based line, 0-based column)."""
     for node in ast.walk(tree):
@@ -374,7 +441,7 @@ def _at(
         if isinstance(node, ast.ImportFrom) and node.lineno == line and node.module:
             start = lines[line - 1].find(node.module)
             if start <= col < start + len(node.module):
-                return Hit(module=_target(node, name))
+                return Hit(module=_target(node, path))
     for node, chain in _spans(ast.walk(tree)):
         if node.lineno != line:
             continue
@@ -396,7 +463,7 @@ def symbol_at(
     None when no name is there."""
     name = module_name(path)
     module, tree = modules.get(name), modules.tree(name)
-    hit = _at(tree, module.lines, name, line, col) if module and tree else None
+    hit = _at(tree, module.lines, path, line, col) if module and tree else None
     if hit is None:
         return None
     if hit.module:

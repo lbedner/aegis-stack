@@ -28,6 +28,7 @@ from app.services.load_test.worker.service import (
     quick_memory_test,
 )
 
+
 __all__ = [
     "LoadTestAnalysis",
     "LoadTestConfiguration",
@@ -45,3 +46,6 @@ __all__ = [
 {%- else %}
 __all__: list[str] = []
 {%- endif %}
+
+# The stack's own code, not a service (``ownership``).
+PART_OF = "stack"

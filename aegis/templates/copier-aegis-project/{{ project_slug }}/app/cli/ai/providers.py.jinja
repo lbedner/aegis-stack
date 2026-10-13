@@ -15,7 +15,7 @@ from app.i18n import lazy_t, t
 from ...core import secrets
 from ...core.audit import cli_actor
 from ...core.config import settings
-from ...services.ai.config import get_ai_config
+from ...services.ai.domains.llm.config import get_ai_config
 from ...services.ai.models import (
     AIProvider,
     get_free_providers,

@@ -5,6 +5,9 @@ declares its own ``environment`` replaces the ``x-app`` anchor's entirely.
 The webserver declares one as soon as redis, storage or observability is
 in the stack, so the passthrough has to be stated in both places or the
 flag silently does nothing on exactly the stacks people run.
+
+Passed by name, with no default: set only when the shell or ``.env`` sets
+it, so an engine saved in the Overseer applies when nothing else does.
 """
 
 from __future__ import annotations
@@ -18,7 +21,7 @@ from jinja2 import Environment, FileSystemLoader
 from aegis.core.component_files import get_copier_defaults, get_template_path
 
 COMPOSE = "docker-compose.yml.jinja"
-PASSTHROUGH = "WEBSERVER_ENGINE=${WEBSERVER_ENGINE:-uvicorn}"
+PASSTHROUGH = "WEBSERVER_ENGINE"
 
 
 def _render(overrides: dict[str, Any]) -> dict[str, Any]:
@@ -48,3 +51,4 @@ def test_the_webserver_sees_the_engine_setting(overrides: dict[str, Any]) -> Non
     # Whether it arrives through the anchor or the service's own list, the
     # container must end up with the variable.
     assert PASSTHROUGH in webserver["environment"]
+    assert "WEBSERVER_LOOP" in webserver["environment"]  # `make serve LOOP=`

@@ -9,8 +9,8 @@ from sqlalchemy import func
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.services.ai.domains.spend.recording import VOICE_ACTIONS
 from app.services.ai.models.llm import LLMUsage
-from app.services.ai.usage_recording import VOICE_ACTIONS
 from app.services.shared.queries import within
 
 from .schemas import ActionSpend

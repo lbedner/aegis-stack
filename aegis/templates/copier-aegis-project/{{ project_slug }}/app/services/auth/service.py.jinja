@@ -1,11 +1,26 @@
-"""Authentication service utilities."""
+"""Authentication service: who the caller is, and the one way in to its
+domains (``auth.domains``) for callers outside it."""
 
 from app.core.config import settings
 from app.core.db import release_lock
 from app.core.security import verify_token
 from app.models.user import User
-from app.services.auth.refresh_tokens import RefreshService
-from app.services.auth.users import UserService
+from app.services.auth.domains.sessions import history as session_history
+from app.services.auth.domains.sessions.tokens import RefreshService, access_token
+from app.services.auth.domains.users.accounts import (
+    RegistrationClosedError,
+    RestoreConflictError,
+    UserService,
+)
+from app.services.auth.domains.users.hooks import register_post_user_created
+{% if include_auth_org %}
+from app.services.auth.domains.orgs.invites import InviteService
+from app.services.auth.domains.orgs.memberships import MembershipService
+from app.services.auth.domains.orgs.organizations import (
+    OrgService,
+    RestoreConflictError as OrgRestoreConflictError,
+)
+{% endif %}
 from fastapi import HTTPException, status
 {% if include_auth_rbac %}
 from fastapi import Cookie, Depends
@@ -13,6 +28,24 @@ from fastapi.security import OAuth2PasswordBearer
 
 from app.core.security import SESSION_COOKIE_NAME, VALID_ROLES
 {% endif %}
+
+# What callers outside the service use of its domains.
+__all__ = [
+    "RefreshService",
+    "RegistrationClosedError",
+    "RestoreConflictError",
+    "UserService",
+    "access_token",
+    "register_post_user_created",
+    "session_history",
+{%- if include_auth_org %}
+    "InviteService",
+    "MembershipService",
+    "OrgRestoreConflictError",
+    "OrgService",
+{%- endif %}
+]
+
 
 def _build_dev_user() -> User:
     """Build a synthetic dev user with role from settings."""

@@ -38,7 +38,15 @@ Registry (`ComponentSpec` is a thin alias of `PluginSpec` pinned to
 `kind=COMPONENT`; see `aegis/core/plugins/spec.py`):
 
 - `aegis/core/components.py`: add a `ComponentSpec` entry to the `COMPONENTS`
-  dict. Set `type` (`ComponentType.INFRASTRUCTURE`; `ComponentType.CORE` is
+  dict. Set `category` (its concern: `PartCategory`) and, where its health
+  check is named differently from the spec (`redis` is `cache`),
+  `health_name`. Its place on Overseer's map and sidebar is declared there
+  too: `tier` (0 edge, 1 app, 2 data; none runs in the webserver), `page`
+  (where not its health name), `role` (`store`, `bucket`), `depends_on` (the
+  map's lines, by health name), `consumes`, `hosts`, `holds_keys`, `order`.
+  Then run `make parts`, which writes every spec's into the
+  template's `app/core/parts.py` (`tests/core/test_parts_file.py` fails while
+  stale). Set `type` (`ComponentType.INFRASTRUCTURE`; `ComponentType.CORE` is
   reserved for `backend`/`frontend` in `CORE_COMPONENTS` - core components are
   never prompted, never removable, and skipped by cleanup entirely),
   `description`/`long_description`, `required_components` (hard deps, e.g.

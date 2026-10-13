@@ -14,7 +14,14 @@ from fastapi import (
 )
 from fastapi.responses import StreamingResponse
 
-from app.services.blog.service import BlogService
+from app.services.blog.service import (
+    BlogService,
+    json_to_posts,
+    markdown_to_post,
+    posts_to_json,
+    posts_to_zip,
+    zip_to_posts,
+)
 from app.services.blog.constants import ImportConflictPolicy
 from app.services.blog.deps import get_blog_service
 from app.services.blog.schemas import (
@@ -27,13 +34,6 @@ from app.services.blog.schemas import (
     BlogTagResponse,
     BlogTagUpdate,
     ImportResult,
-)
-from app.services.blog.serialization import (
-    json_to_posts,
-    markdown_to_post,
-    posts_to_json,
-    posts_to_zip,
-    zip_to_posts,
 )
 {% if include_auth %}
 from app.models.user import User

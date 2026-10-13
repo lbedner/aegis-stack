@@ -5,15 +5,24 @@ refreshes over SSE, so opening it never waits on Docker. A page with no containe
 import asyncio
 from typing import Any
 
-import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+import pytest
 
-from app.components.web_frontend import overseer_container, overseer_map
-from app.core import runtime, secrets, series
+from app.components.web_frontend import (
+    overseer_code,
+    overseer_conformance,
+    overseer_container,
+    overseer_heat,
+    overseer_map,
+)
+from app.components.web_frontend.overseer_zoom import registry_of
+from app.core import edges, runtime, secrets, series
 from app.core.config import settings
+from app.core.ontology import calls
+from app.core.ontology.model import Edge, EdgeKind
 from app.core.runtime import Instance
-from app.services.system import service_links, topology, ui_runtime
+from app.services.system import topology, ui_runtime
 from app.services.system.models import (
     ComponentStatus,
     ComponentStatusType,
@@ -26,11 +35,11 @@ from tests._fake_runtime import (
     use_load_costs,
     use_runtime,
 )
+from tests._ontology import model_of
 from tests._secret_settings import secret_settings, use_store
 from tests.web.dom import chart_json, checked, none, one, select, text
 from tests.web.overseer import CACHE, page_html, reported_only, sign_in, status_with
-
-AUTH = ComponentStatus(name="auth", message="Ready", metadata={})
+from tests.web.zoomed import AUTH, finding_of, zoomable
 
 
 @pytest.fixture
@@ -373,6 +382,14 @@ def _failing(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> TestClient:
         ),
     )
     use_runtime(monkeypatch, FakeRuntime(REDIS))
+    # What the Server depends on, as the model has it on a stack with a
+    # database (this one may have none to read it from).
+    needs = Edge(
+        source="component:backend",
+        target="component:database",
+        kind=EdgeKind.DEPENDS_ON,
+    )
+    monkeypatch.setattr(overseer_container, "current", lambda: model_of(edges=[needs]))
     return TestClient(app)
 
 
@@ -630,27 +647,10 @@ def test_a_tier_wider_than_a_row_wraps() -> None:
     assert _widths(found)["s0"] == pytest.approx(overseer_map.FILL * 100 / 5)
 
 
-def _zoomable(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    """A Server with Auth and Secrets inside it; Auth talks to the Database
-    and Stripe, whose key is set unless a test says otherwise."""
-    server = ComponentStatus(name="backend", message="FastAPI", metadata={})
-    database = ComponentStatus(name="database", message="Connected", metadata={})
-    keys = ComponentStatus(name="secrets", message="Stored", metadata={})
-    sign_in(app, monkeypatch, status_with(server, database, keys, services=[AUTH]))
-    monkeypatch.setattr(service_links, "provider_keys", lambda: {})
-    use_runtime(monkeypatch, FakeRuntime(REDIS))
-    monkeypatch.setattr(
-        service_links,
-        "links",
-        lambda: {"service_auth": ["database", "outside:Stripe"]},
-    )
-    return TestClient(app)
-
-
 def test_the_servers_node_zooms_in(
     app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    html = page_html(_zoomable(app, monkeypatch), "/overseer?view=map")
+    html = page_html(zoomable(app, monkeypatch), "/overseer?view=map")
     zoom = one(html, '[data-node="backend"] [data-zoom]')
     assert zoom.get("href") == "/overseer?view=map&zoom=backend"
 
@@ -660,7 +660,7 @@ def test_zoomed_in_the_servers_services_are_its_map(
 ) -> None:
     """Each service a node, what it talks to below it, in the same lines,
     and the way back out."""
-    html = page_html(_zoomable(app, monkeypatch), "/overseer?view=map&zoom=backend")
+    html = page_html(zoomable(app, monkeypatch), "/overseer?view=map&zoom=backend")
     for key in ("service_auth", "database", "outside:Stripe"):
         one(html, f'[data-node="{key}"]')
     lines = {
@@ -668,27 +668,88 @@ def test_zoomed_in_the_servers_services_are_its_map(
         for p in select(html, "svg path[data-link]")
     }
     assert lines == {("service_auth", "database"), ("service_auth", "outside:Stripe")}
-    back = one(html, "[data-breadcrumb] a")
+    back = one(html, "[data-breadcrumb] [data-back]")
     assert back.get("href") == "/overseer?view=map"
     assert "zoom=backend" in one(html, "#overview-stack").get("sse-connect")
 
 
-def test_a_compact_map_fits_more_to_a_row() -> None:
-    """The Server opened up: one-line nodes, eight to a row."""
-    shape = topology.Shape(tiers=[[f"s{n}" for n in range(8)]], links=[], hosted=[])
-    found = overseer_map.layout(
-        [_entry(f"s{n}") for n in range(8)], shape, compact=True
-    )
-    assert len({node["top"] for node in found["map_nodes"]}) == 1
-    assert {node["height"] for node in found["map_nodes"]} == {
-        overseer_map.COMPACT_HEIGHT
-    }
-
-
-def test_zoomed_in_nodes_are_one_line_and_outside_ones_are_pills(
+def test_what_a_service_should_fix_is_marked_on_it(
     app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    html = page_html(_zoomable(app, monkeypatch), "/overseer?view=map&zoom=backend")
+    """Opened up, a service that breaks the service standard says so on its
+    node, always (no overlay to find): how many places to fix, in the rule's
+    tone, and on hover what to do and where, each place a link to its line.
+    Its own tone stays its health."""
+    client = zoomable(app, monkeypatch)
+    finding = finding_of(
+        "parts.has-health", "Has a health check", ("app/services/auth/__init__.py:1",)
+    )
+    found = overseer_conformance.Conformance(
+        {"service_auth": [finding]}, {"service_auth": ["Health"]}
+    )
+    monkeypatch.setattr(overseer_conformance, "conformance", lambda: found)
+    html = page_html(client, "/overseer?view=map&zoom=backend")
+    none(html, '[data-overlay="conformance"]')
+    auth = one(html, '[data-node="service_auth"]')
+    assert auth.get("data-tone") != "error"
+    marker = one(auth, "[data-to-fix]")
+    assert text(marker) == "1 to fix" and marker.get("data-tone") == "error"
+    hint = one(auth, "[data-hint]")
+    assert "Fix it." in text(hint) and "Lacks: Health" in text(hint)
+    place = one(hint, "[data-todo] a").get("href")
+    assert place == overseer_code.line_url("app/services/auth/__init__.py", 1)
+
+
+def test_the_traffic_heat_tones_each_node_by_what_ran_through_it(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The busiest the hottest, each saying how much: from the edges the
+    running app counted, the map's one heat. A query is one call, though
+    it is counted to the database and to its table; a part a call passes
+    through (served once, querying nine times) made nine, not ten."""
+    client = zoomable(app, monkeypatch)
+    counted = {
+        (edges.SERVER, "service:auth"): edges.Seen(count=1),
+        ("service:auth", "component:database"): edges.Seen(count=9),
+        ("service:auth", "object:user"): edges.Seen(count=9),
+    }
+
+    async def observed() -> dict[edges.Key, edges.Seen]:
+        return counted
+
+    monkeypatch.setattr(edges, "observed", observed)
+    monkeypatch.setattr(overseer_heat, "_read", (0.0, {}))  # another test's
+    html = page_html(client, "/overseer?view=map&overlay=traffic")
+    database = one(html, '[data-node="database"]')
+    assert database.get("data-tone") == "error"
+    assert database.get("data-heat") is not None  # filled in its tone
+    assert text(one(database, "[data-heat-value]")) == "9 calls"
+    chips = select(html, "[data-overlays] [data-overlay]")
+    assert [chip.get("data-overlay") for chip in chips] == ["traffic"]
+    assert chips[0].get("aria-current") == "page"
+    values = asyncio.run(overseer_heat._traffic())
+    assert values[registry_of("service:auth")] == 9
+    assert max(values.values()) == 9
+
+
+def test_the_server_opened_up_fits_a_tier_to_a_row() -> None:
+    """Opened up, a tier is one row of eight, so the map fits a screen:
+    its small nodes, and its cards."""
+    shape = topology.Shape(tiers=[[f"s{n}" for n in range(8)]], links=[], hosted=[])
+    entries = [_entry(f"s{n}") for n in range(8)]
+    small = overseer_map.layout(entries, shape, compact=True, opened=True)
+    assert len({node["top"] for node in small["map_nodes"]}) == 1
+    assert {node["height"] for node in small["map_nodes"]} == {
+        overseer_map.COMPACT_HEIGHT
+    }
+    cards = overseer_map.layout(entries, shape, opened=True)
+    assert len({node["top"] for node in cards["map_nodes"]}) == 1
+
+
+def test_zoomed_in_nodes_are_small_and_outside_ones_are_pills(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    html = page_html(zoomable(app, monkeypatch), "/overseer?view=map&zoom=backend")
     one(html, "[data-map][data-compact]")
     stripe = one(html, '[data-node="outside:Stripe"]')
     assert stripe.get("data-role") == topology.Role.OUTSIDE
@@ -718,13 +779,11 @@ def test_an_outside_provider_without_its_key_is_amber(
 
 
 def _stripe_keyed(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    """``_zoomable``, with Stripe called with a declared key."""
-    client = _zoomable(app, monkeypatch)
+    """``zoomable``, with Stripe called with a declared key."""
+    client = zoomable(app, monkeypatch)
     entry = secrets.Secret("STRIPE_SECRET_KEY", owner="Payment (Stripe)")
     monkeypatch.setattr(secrets, "declared", lambda: (entry,))
-    monkeypatch.setattr(
-        service_links, "provider_keys", lambda: {"outside:Stripe": [entry.name]}
-    )
+    monkeypatch.setattr(calls, "provider_keys", lambda: {"Stripe": [entry.name]})
     return client
 
 
@@ -778,13 +837,13 @@ def test_data_takes_its_shape_on_the_map(
     """Compute stays a box; a store, the queue and an outside provider
     each take their own shape, the same size, so the layout holds. On the
     main map a glyph in the card's header; opened up, the node's outline."""
-    html = page_html(_zoomable(app, monkeypatch), "/overseer?view=map")
+    html = page_html(zoomable(app, monkeypatch), "/overseer?view=map")
     store = topology.Role.STORE
     database = one(html, '[data-node="database"]')
     assert database.get("data-role") == store
     assert one(database, "header svg use").get("href") == f"#i-{store}"
     assert one(html, '[data-node="backend"]').get("data-role") is None
-    opened = page_html(_zoomable(app, monkeypatch), "/overseer?view=map&zoom=backend")
+    opened = page_html(zoomable(app, monkeypatch), "/overseer?view=map&zoom=backend")
     outline = one(opened, '[data-node="database"] svg[data-shape]')
     assert one(outline, "use").get("href") == f"#shape-{store}"
     stripe = one(opened, '[data-node="outside:Stripe"]')
@@ -841,8 +900,8 @@ def test_a_right_hand_hint_opens_toward_the_middle(
 
 
 def test_a_store_stands_taller_than_a_line_of_compute() -> None:
-    """A cylinder or a bucket squeezed to one line reads as a slab: data
-    stands taller (and, opened up, narrower), and its row makes room."""
+    """A cylinder or a bucket squeezed small reads as a slab: data stands
+    taller, and its row makes room."""
     store, queue = topology.Role.STORE, topology.Role.QUEUE
     shape = topology.Shape(
         tiers=[["service_auth"], ["database", topology.QUEUE]], links=[], hosted=[]

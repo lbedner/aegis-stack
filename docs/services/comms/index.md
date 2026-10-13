@@ -184,9 +184,11 @@ curl -X POST http://localhost:8000/api/v1/comms/sms/send \
 ### Python
 
 ```python
-from app.services.comms.email import send_email_simple
-from app.services.comms.sms import send_sms_simple
-from app.services.comms.calls import make_call_simple
+from app.services.comms.service import (
+    make_call_simple,
+    send_email_simple,
+    send_sms_simple,
+)
 
 # Send email
 result = await send_email_simple(

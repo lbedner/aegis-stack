@@ -83,7 +83,9 @@ def _function(
         typed=any("Session" in (p.annotation or "") for p in params),
         statements=function.statements,
         source=SourceText(
-            "\n".join(lines[function.start - 1 : function.end]), f"{SERVICES}/{path}"
+            "\n".join(lines[function.start - 1 : function.end]),
+            f"{SERVICES}/{path}",
+            function.start,
         ),
     )
 

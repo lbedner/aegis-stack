@@ -17,6 +17,9 @@ from fastapi import Request
 {%- if include_auth %}
 from fastapi import Depends, HTTPException, status
 
+from app.core.config import settings
+from app.core.db import get_async_session
+from app.core.tools import current_admin, current_owner_user_id
 from app.models.user import User
 from app.services.auth.deps import (
     get_current_active_user,
@@ -28,6 +31,7 @@ from app.services.auth.deps import (
 from fastapi import HTTPException, status
 
 from app.core.config import settings
+from app.core.tools import current_admin
 from app.services.system.hosting import LOCAL
 
 # Without auth, an operator's change is asked only at these (``refusal_at``).
@@ -148,4 +152,24 @@ async def get_owner_user_id() -> int | None:
 # Nobody signs in, so a route that also serves anonymous callers scopes
 # the same way.
 get_optional_owner_user_id = get_owner_user_id
+{%- endif %}
+
+
+async def caller_is_admin() -> bool:
+    """Whether the tool call being run acts for an admin: what its runner
+    bound (``current_admin``: MCP's token, the CLI's shell, an admin-only
+    socket), else {% if include_auth %}its owner by ``is_admin``. Where sign-in is off,
+    everyone is one; nobody signed in is not{% else %}anyone, with no one to sign in{% endif %}."""
+    bound = current_admin.get()
+    if bound is not None:
+        return bound
+{%- if include_auth %}
+    owner = current_owner_user_id.get()
+    if not settings.AUTH_ENABLED or owner is None:
+        return not settings.AUTH_ENABLED
+    async with get_async_session() as session:
+        user = await session.get(User, owner)
+    return user is not None and is_admin(user)
+{%- else %}
+    return True
 {%- endif %}

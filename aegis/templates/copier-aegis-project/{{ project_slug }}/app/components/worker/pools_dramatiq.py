@@ -15,6 +15,7 @@ from app.components.worker.events import (
     publish_event,
 )
 from app.components.worker.registry import queue_tasks
+from app.core import edges
 from app.core.config import (
     get_available_queues,
     get_default_queue,
@@ -113,6 +114,7 @@ async def enqueue_task(
         msg = await asyncio.to_thread(task.send, *args, **kwargs)
 
     logger.debug(f"Task enqueued with ID: {msg.message_id}")
+    edges.hop(edges.QUEUE)
 
     # Publish enqueue event for real-time dashboard updates
     try:

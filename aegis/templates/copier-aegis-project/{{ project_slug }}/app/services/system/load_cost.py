@@ -23,12 +23,11 @@ import time
 from pydantic import ValidationError
 
 import app.components
-import app.services
 from app.core import source_index
 from app.core.cache import get_cache
 from app.core.config import settings
 from app.core.log import logger
-from app.services.system import service_links
+import app.services
 from app.services.system.ui import registry_key
 
 from .models import LoadCosts, LoadReading
@@ -78,7 +77,7 @@ def parts() -> dict[str, str]:
     webserver runs, keyed as the name registry keys them (``registry_key``)."""
     found = {}
     for group, package in (("services", app.services), ("components", app.components)):
-        for name in service_links.packages(package):
+        for name in source_index.project().packages_in(package.__name__):
             if group == "services" or name not in OWN_PROCESS:
                 found[registry_key(group, name)] = f"{package.__name__}.{name}"
     return dict(sorted(found.items()))

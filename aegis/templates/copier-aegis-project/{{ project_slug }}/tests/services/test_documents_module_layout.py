@@ -15,11 +15,13 @@ from __future__ import annotations
 
 import ast
 import importlib
+import importlib.util
 from pathlib import Path
 
 import pytest
 
 SPINE = {"service.py", "models.py", "queries.py", "health.py", "deps.py"}
+WORKER = "app.components.worker"
 
 # Public callable -> the module that must DEFINE it.
 OWNERS = {
@@ -35,7 +37,8 @@ OWNERS = {
     ],
     "app.services.documents.domains.extraction.jobs": [
         "run_extraction",
-        "run_extraction_job",
+        # The worker's entry, only where a worker runs it.
+        *(["run_extraction_job"] if importlib.util.find_spec(WORKER) else []),
     ],
 }
 

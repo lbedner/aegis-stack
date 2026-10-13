@@ -43,6 +43,7 @@ from .migration_generator import (
 from .option_spec import OptionMode, OptionSpec
 from .plugins.spec import (
     FrontendWidgetWiring,
+    PartCategory,
     PluginKind,
     PluginSpec,
     PluginWiring,
@@ -110,6 +111,8 @@ SERVICES: dict[str, ServiceSpec] = {
             ],
         ),
         name="auth",
+        category=PartCategory.APP,
+        order=10,
         docs_path="services/auth",
         marker_path="app/services/auth",
         type=ServiceType.AUTH,
@@ -336,13 +339,11 @@ SERVICES: dict[str, ServiceSpec] = {
             # basic/non-htmx projects (issue #814).
             extras={
                 # Org sub-feature files. The narrower "auth ON but auth_org
-                # OFF" cleanup stays inline in cleanup_components() (it gates
-                # on two answers).
+                # OFF" cleanup in cleanup_components() gates inline (on two
+                # answers) and removes this list.
                 "include_auth_org": [
                     "app/models/org.py",
-                    "app/services/auth/orgs.py",
-                    "app/services/auth/memberships.py",
-                    "app/services/auth/invites.py",
+                    "app/services/auth/domains/orgs",
                     "app/components/backend/api/orgs",
                     "app/components/frontend/dashboard/modals/auth_orgs_tab.py",
                     "tests/services/test_org_integration.py",
@@ -387,6 +388,8 @@ SERVICES: dict[str, ServiceSpec] = {
             ],
         ),
         name="ai",
+        category=PartCategory.AI,
+        order=20,
         docs_path="services/ai",
         marker_path="app/services/ai",
         type=ServiceType.AI,
@@ -678,6 +681,8 @@ SERVICES: dict[str, ServiceSpec] = {
             ],
         ),
         name="comms",
+        category=PartCategory.APP,
+        order=30,
         docs_path="services/comms",
         marker_path="app/services/comms",
         type=ServiceType.NOTIFICATION,
@@ -754,6 +759,8 @@ SERVICES: dict[str, ServiceSpec] = {
             first_steps=["Collect once: `uv run <project_slug> insights collect`"],
         ),
         name="insights",
+        category=PartCategory.APP,
+        order=60,
         docs_path="services/insights",
         marker_path="app/services/insights",
         type=ServiceType.ANALYTICS,
@@ -888,6 +895,8 @@ SERVICES: dict[str, ServiceSpec] = {
             first_steps=["Run a sandbox checkout from /payment"],
         ),
         name="payment",
+        category=PartCategory.APP,
+        order=70,
         docs_path="services/payment",
         marker_path="app/services/payment",
         type=ServiceType.PAYMENT,
@@ -1006,6 +1015,8 @@ SERVICES: dict[str, ServiceSpec] = {
             ],
         ),
         name="blog",
+        category=PartCategory.APP,
+        order=90,
         docs_path="services/blog",
         marker_path="app/services/blog",
         type=ServiceType.CONTENT,
@@ -1055,7 +1066,7 @@ SERVICES: dict[str, ServiceSpec] = {
             # (python-multipart, once here for the /import UploadFile
             # endpoint, is core now - the pastebox ships it.)
             # YAML-frontmatter parser used by the export/import pipeline
-            # (see app/services/blog/serialization.py).
+            # (see app/services/blog/domains/transfer/formats.py).
             "python-frontmatter>=1.1.0,<2",
         ],
         template_files=[
@@ -1103,6 +1114,8 @@ SERVICES: dict[str, ServiceSpec] = {
             ],
         ),
         name="finance",
+        category=PartCategory.APP,
+        order=80,
         docs_path="services/finance",
         marker_path="app/services/finance",
         type=ServiceType.FINANCE,
@@ -1309,6 +1322,8 @@ SERVICES: dict[str, ServiceSpec] = {
             first_steps=["Upload a PDF and watch it get OCR'd and paged"],
         ),
         name="documents",
+        category=PartCategory.DATA,
+        order=40,
         docs_path="services/documents",
         marker_path="app/services/documents",
         type=ServiceType.STORAGE,
@@ -1418,6 +1433,8 @@ SERVICES: dict[str, ServiceSpec] = {
             ],
         ),
         name="research",
+        category=PartCategory.AI,
+        order=50,
         docs_path="services/research",
         marker_path="app/services/research",
         type=ServiceType.ANALYTICS,
@@ -1478,6 +1495,8 @@ SERVICES: dict[str, ServiceSpec] = {
             ],
         ),
         name="meetings",
+        category=PartCategory.AI,
+        order=55,
         docs_path="services/meetings",
         marker_path="app/services/meetings",
         type=ServiceType.AI,

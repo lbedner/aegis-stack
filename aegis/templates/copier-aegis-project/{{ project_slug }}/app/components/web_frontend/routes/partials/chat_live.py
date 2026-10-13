@@ -138,9 +138,12 @@ async def _carry(
         await session.close()
 
 
-def live_router(mount: ChatSurface, socket_guard: Callable[..., Any]) -> APIRouter:
+def live_router(
+    mount: ChatSurface, socket_guard: Callable[..., Any], *, admin: bool = False
+) -> APIRouter:
     """The call's socket, under ``mount.path``/live/ws, behind
-    ``socket_guard``."""
+    ``socket_guard``; ``admin`` when that guard lets only admins in, so the
+    call's agent reaches the admin tools."""
     router = APIRouter(prefix=mount.path, dependencies=[Depends(socket_guard)])
     agent_slug = mount.voice_agent_slug or mount.agent_slug
 
@@ -201,6 +204,7 @@ def live_router(mount: ChatSurface, socket_guard: Callable[..., Any]) -> APIRout
             model=live_engines.realtime_model(engine),
             agent_slug=agent_slug,
             user_id=mount.user,
+            admin=admin,
         )
         try:
             await ws.close()

@@ -2,7 +2,7 @@
 
 import pytest
 
-from app.services.ai.config import AIServiceConfig
+from app.services.ai.domains.llm.config import AIServiceConfig
 from app.services.ai.models import AIProvider
 
 

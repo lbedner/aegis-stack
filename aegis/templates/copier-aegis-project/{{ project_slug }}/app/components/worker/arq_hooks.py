@@ -35,6 +35,8 @@ from app.components.worker.task_history import (
     record_task_started,
     resolve_arq_task_name,
 )
+from app.components.worker.registry import queue_tasks
+from app.core import edges
 from app.core.boot import apply_saved_overrides
 from app.core.config import settings
 from app.core.log import logger
@@ -111,6 +113,8 @@ def for_queue(queue: str, max_jobs: int) -> tuple[Hook, Hook, Hook, Hook]:
         await publish_event(redis, "job.started", queue, {"job_id": job_id})
         task_name = await resolve_arq_task_name(redis, job_id)
         await record_task_started(redis, job_id, task_name=task_name, queue_name=queue)
+        if task_name:
+            edges.into(queue_tasks(queue).get(task_name), source=edges.QUEUE)
 
     async def after_job_end(ctx: dict[str, Any]) -> None:
         """Publish job.completed or job.failed, record how it ended, and mark

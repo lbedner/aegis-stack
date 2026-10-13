@@ -15,7 +15,7 @@ def counted(count: int, noun: str, plural: str | None = None) -> str:
     """``count`` and its noun, singular for exactly one: ``1 draft``,
     ``2 drafts``; ``plural`` where it is not the noun and an s
     (``watches``)."""
-    return f"{count} {noun if count == 1 else plural or noun + 's'}"
+    return f"{count:,} {noun if count == 1 else plural or noun + 's'}"
 
 
 def format_cost(cost: float) -> str:
@@ -159,6 +159,12 @@ def format_relative_time(
         return dt.strftime(CLOCK)
     except (ValueError, TypeError, IndexError):
         return str(iso_str)
+
+
+def first_sentence(doc: str | None) -> str:
+    """A docstring's first sentence on one line, however its lines wrap."""
+    lead = " ".join((doc or "").strip().split("\n\n")[0].split())
+    return re.split(r"(?<=\.)\s", lead, maxsplit=1)[0]
 
 
 def slugify(value: str) -> str:

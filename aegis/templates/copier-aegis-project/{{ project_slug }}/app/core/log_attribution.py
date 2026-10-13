@@ -10,7 +10,7 @@ import sys
 from types import TracebackType
 from typing import Any
 
-from app.core.ownership import SERVICE, installed, owner
+from app.core.ownership import SERVICE, STACK, installed, owner
 
 ORIGIN_ATTRIBUTE = "_aegis_error_service"
 # The service and the component a file or a traceback belongs to.
@@ -21,7 +21,7 @@ def _owners(pathname: str) -> Owners:
     """Who owns a file, wherever the app is deployed: its service or its
     component (``ownership.owner``), each None if not that kind."""
     found = owner(pathname)
-    if found is None:
+    if found is None or found.kind == STACK:
         return None, None
     return (found.name, None) if found.kind == SERVICE else (None, found.name)
 

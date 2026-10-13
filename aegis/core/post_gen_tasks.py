@@ -396,19 +396,11 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(project_path, "tests/api/test_oauth_endpoints.py")
         remove_file(project_path, "tests/services/test_oauth_user_service.py")
 
-    # Remove auth org files if org level not selected (but auth is enabled)
+    # Remove auth org files if org level not selected (but auth is enabled):
+    # what the auth spec lists under ``include_auth_org``.
     if is_enabled(AnswerKeys.AUTH) and not is_enabled(AnswerKeys.AUTH_ORG):
-        remove_file(project_path, "app/models/org.py")
-        remove_file(project_path, "app/services/auth/orgs.py")
-        remove_file(project_path, "app/services/auth/memberships.py")
-        remove_file(project_path, "app/services/auth/invites.py")
-        remove_dir(project_path, "app/components/backend/api/orgs")
-        remove_file(
-            project_path,
-            "app/components/frontend/dashboard/modals/auth_orgs_tab.py",
-        )
-        remove_file(project_path, "tests/services/test_org_integration.py")
-        remove_file(project_path, "tests/api/test_org_endpoints.py")
+        for _rel_path in SERVICES["auth"].files.extras[AnswerKeys.AUTH_ORG]:
+            apply_cleanup_path(project_path, _rel_path)
 
     # (AI primary cleanup handled by the Pattern A loop above.)
 
@@ -509,10 +501,10 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         # (Chroma is file-based and works without a database).
         remove_file(project_path, "app/services/rag/models/knowledge.py")
         remove_file(project_path, "tests/services/rag/test_knowledge_models.py")
-        # chat_kit + usage_recording ledger the LLM catalog + conversation
-        # tables removed above, so they only work with a persistent backend.
+        # chat_kit + the spend domain's recording ledger the LLM catalog +
+        # conversation tables removed above, so they only work with a
+        # persistent backend (spend goes with its domain, above).
         remove_dir(project_path, "app/services/ai/domains/chat/chat_kit")
-        remove_file(project_path, "app/services/ai/usage_recording.py")
         remove_file(project_path, "tests/services/ai/test_price_memo.py")
         remove_file(project_path, "tests/services/ai/test_llm_pricing_lookup.py")
         remove_dir(project_path, "tests/services/ai/chat_kit")
@@ -579,7 +571,7 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_dir(project_path, "app/components/frontend/dashboard/modals/rag_tab")
 
     # chat_kit is a pydantic-ai chat engine (imports ``pydantic_ai``); it has
-    # no langchain path, so strip it on langchain. ``usage_recording`` stays:
+    # no langchain path, so strip it on langchain. ``spend.recording`` stays:
     # pricing and the ledger write are framework-neutral and both chat
     # paths delegate to it.
     if (

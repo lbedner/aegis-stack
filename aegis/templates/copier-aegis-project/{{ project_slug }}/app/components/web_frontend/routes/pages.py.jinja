@@ -22,11 +22,9 @@ from app.services.auth.deps import get_optional_user
 {%- endif %}
 {%- if include_auth_org %}
 from app.services.auth.deps import get_invite_service
-from app.services.auth.invites import InviteService
+from app.services.auth.service import InviteService
 {%- endif %}
-from app.services.auth.refresh_tokens import RefreshService
-from app.services.auth.service import session_id_of
-from app.services.auth.users import UserService
+from app.services.auth.service import RefreshService, UserService, session_id_of
 from fastapi import Form, HTTPException
 from fastapi.responses import RedirectResponse, Response
 from fastapi.security import OAuth2PasswordRequestForm

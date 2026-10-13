@@ -9,8 +9,8 @@ is what these tests pin.
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.ai.config import get_ai_config
 from app.services.ai.domains.llm import active_model
+from app.services.ai.domains.llm.config import get_ai_config
 
 
 class _Settings:

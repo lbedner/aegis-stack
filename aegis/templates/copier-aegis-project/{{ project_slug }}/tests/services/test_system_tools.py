@@ -10,7 +10,18 @@ from typing import Any
 import httpx
 import pytest
 
-from app.core.tools import get_tool
+from app.core.config import settings
+from app.core.ontology.model import (
+    Edge,
+    EdgeKind,
+    Kind,
+    ObjectNode,
+    PartNode,
+    RouteNode,
+    SystemModel,
+)
+from app.core.parts import Category
+from app.core.tools import acting_as, get_tool
 from app.services.system import health as health_module
 from app.services.system import live_status, tools, ui_errors, ui_logs
 from app.services.system.errors.models import ErrorIssue
@@ -19,6 +30,7 @@ from app.services.system.models import (
     ComponentStatusType,
     SystemStatus,
 )
+from tests._ontology import model_of
 
 UNHEALTHY = ComponentStatusType.UNHEALTHY
 # What the registry holds in the webserver, and in any other process.
@@ -321,3 +333,161 @@ async def test_logs_of_an_unknown_service_names_the_known_ones(
 ) -> None:
     with pytest.raises(ValueError, match="worker"):
         await tools.logs(service="nope")
+
+
+# ---------------------------------------------------------------------------
+# ontology: what the app is (``app.core.ontology``), in small pieces
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def model(monkeypatch: pytest.MonkeyPatch) -> SystemModel:
+    """A payment service whose route reaches the database through it, and
+    many routes besides, as ``current`` answers."""
+    parts = [
+        PartNode(kind=Kind.COMPONENT, name="backend", category=Category.COMPUTE),
+        PartNode(kind=Kind.COMPONENT, name="database", category=Category.DATA),
+        PartNode(kind=Kind.SERVICE, name="payment", category=Category.APP),
+    ]
+    routes = [
+        RouteNode(
+            name=f"GET /api/v1/r{i}",
+            method="GET",
+            path=f"/r{i}",
+            owner="component:backend",
+        )
+        for i in range(150)
+    ]
+    charge = RouteNode(
+        name="POST /api/v1/charge",
+        method="POST",
+        path="/charge",
+        owner="service:payment",
+    )
+    edges = [
+        Edge(
+            source="service:payment", target="component:database", kind=EdgeKind.CALLS
+        ),
+        Edge(
+            source="component:backend",
+            target="component:database",
+            kind=EdgeKind.DEPENDS_ON,
+        ),
+        Edge(source="service:payment", target=charge.id, kind=EdgeKind.CONTAINS),
+    ]
+    table = ObjectNode(
+        name="payment_charge",
+        class_name="Charge",
+        owner="service:payment",
+        module="app.services.payment.models",
+    )
+    found = model_of([*parts, *routes, charge, table], edges)
+    monkeypatch.setattr("app.core.ontology.system.current", lambda: found)
+    # Read as an admin unless a test binds otherwise: sign-in off.
+    monkeypatch.setattr(settings, "AUTH_ENABLED", False)
+    return found
+
+
+@pytest.mark.usefixtures("model")
+async def test_the_ontology_summary_fits_one_call_record() -> None:
+    """The stack, counts by kind and concern, and every part: whole under
+    the MCP call record's cap, so nothing a reader saw is clipped."""
+    cap = pytest.importorskip("app.components.mcp.server").TEXT_CAP
+    result = await tools.ontology()
+
+    assert result["counts"]["route"] == 151
+    assert {p["id"] for p in result["parts"]} == {
+        "component:backend",
+        "component:database",
+        "service:payment",
+    }
+    assert len(json.dumps(result)) < cap
+
+
+@pytest.mark.usefixtures("model")
+async def test_a_filter_lists_the_first_hundred_and_says_how_many() -> None:
+    result = await tools.ontology(kind="route")
+
+    assert len(result["nodes"]) == 100
+    assert result["total"] == 151
+
+
+@pytest.mark.usefixtures("model")
+async def test_a_node_comes_with_its_edges_and_neighbours() -> None:
+    result = await tools.ontology(node="service:payment")
+
+    assert result["node"]["name"] == "payment"
+    assert {n["id"] for n in result["neighbors"]} >= {
+        "component:database",
+        "route:POST /api/v1/charge",
+    }
+    assert {e["kind"] for e in result["edges"]} >= {"calls", "contains"}
+    ids = [n["id"] for n in result["neighbors"]]
+    assert ids == sorted(ids)  # the same answer every call
+
+
+@pytest.mark.usefixtures("model")
+async def test_the_path_between_two_nodes_names_each_edge() -> None:
+    """Where does the charge route touch the database? Through Payment."""
+    result = await tools.ontology(
+        node="route:POST /api/v1/charge", to="component:database"
+    )
+
+    (path,) = result["paths"]
+    assert [step["kind"] for step in path] == ["contains", "calls"]
+    assert path[0]["source"] == "service:payment"
+
+
+@pytest.mark.usefixtures("model")
+async def test_an_unknown_node_names_the_close_ones() -> None:
+    with pytest.raises(ValueError, match="service:payment"):
+        await tools.ontology(node="service:paymnt")
+
+
+def test_the_ontology_is_a_read_any_granted_agent_may_use() -> None:
+    tool = get_tool("ontology")
+    assert tool is not None and tool.effect == "read" and not tool.admin
+
+
+@pytest.mark.usefixtures("model")
+async def test_anyone_but_an_admin_reads_only_the_apps_data() -> None:
+    """The tables and the changes to them are anyone's to ask about; the
+    routes, containers and providers behind them an admin's."""
+    with acting_as(None, "assistant", admin=False):
+        summary = await tools.ontology()
+        routes = await tools.ontology(kind="route")
+        table = await tools.ontology(node="object:payment_charge")
+    assert summary["counts"] == {"object": 1}
+    assert [n["id"] for n in summary["nodes"]] == ["object:payment_charge"]
+    assert routes["total"] == 0
+    assert table["node"]["class_name"] == "Charge"
+    assert table["node"]["module"] is None  # where the code lives: an admin's
+    with acting_as(None, "assistant", admin=False), pytest.raises(ValueError):
+        await tools.ontology(node="service:payment")
+
+    with acting_as(None, "assistant", admin=True):
+        assert (await tools.ontology(kind="route"))["total"] == 151
+
+
+async def test_a_routes_dry_path_is_an_admins(app: object) -> None:
+    """Every hop it can take, each at its line: the code's, so an admin's."""
+    with acting_as(None, "assistant", admin=True):
+        result = await tools.ontology(route="GET /health/detailed")
+    hops = result["dry_path"]["hops"]
+    assert hops[0]["kind"] == "handler" and hops[0]["path"].startswith("app/")
+    with acting_as(None, "assistant", admin=False), pytest.raises(ValueError):
+        await tools.ontology(route="GET /health/detailed")
+    with acting_as(None, "assistant", admin=True), pytest.raises(ValueError):
+        await tools.ontology(route="GET /nowhere")
+
+
+async def test_a_routes_dry_path_is_hidden_with_the_code(
+    app: object, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Outside dev the source is off until an admin turns it on: the dry
+    path is its lines, so an admin's token does not get them either."""
+    monkeypatch.setattr(settings, "APP_ENV", "production")
+    if hasattr(settings, "OVERSEER_CODE_ENABLED"):  # a stack with the Overseer
+        monkeypatch.setattr(settings, "OVERSEER_CODE_ENABLED", False)
+    with acting_as(None, "assistant", admin=True), pytest.raises(ValueError):
+        await tools.ontology(route="GET /health/detailed")

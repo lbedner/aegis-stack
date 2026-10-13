@@ -147,7 +147,12 @@ class FinanceTransaction(SQLModel, table=True):
         default=None, foreign_key=f"{_FK}finance_transaction.id"
     )
     source_precedence: int = Field(default=0)
-    amount: int = _bigint("amount", nullable=False, default=0)
+    amount: int = _bigint(
+        "amount",
+        nullable=False,
+        default=0,
+        description="Integer cents, signed: negative is money out.",
+    )
     raw_amount: int | None = _bigint("raw_amount")
     raw_sign_convention: str | None = Field(default=None)
     currency: str = Field(

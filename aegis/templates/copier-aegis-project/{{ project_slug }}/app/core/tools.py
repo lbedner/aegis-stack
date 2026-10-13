@@ -51,6 +51,11 @@ current_conversation_id: ContextVar[str | None] = ContextVar(
 # project's id, say), decided by the server like the user and bound by
 # ``memory_user``. None when the app has no such scope.
 current_subject: ContextVar[str | None] = ContextVar("current_subject", default=None)
+# Whether it acts for an admin, where its runner knows (MCP: the token's
+# admin claim); ``None`` leaves it to the owner (``caller_is_admin`` in
+# ``app.services.shared.deps``). An ``admin`` tool answers anyone else so.
+current_admin: ContextVar[bool | None] = ContextVar("current_admin", default=None)
+ADMIN_ONLY = "Only an admin can use this tool."
 
 
 @contextmanager
@@ -58,6 +63,7 @@ def acting_as(
     owner_user_id: int | None,
     agent_slug: str | None,
     conversation_id: str | None = None,
+    admin: bool | None = None,
 ) -> Iterator[None]:
     """Bind who the tool calls in the block act for, and restore the outer
     binding after. Every field is set, so nothing leaks in from outside:
@@ -65,9 +71,11 @@ def acting_as(
     owner = current_owner_user_id.set(owner_user_id)
     agent = current_agent_slug.set(agent_slug)
     conversation = current_conversation_id.set(conversation_id)
+    is_admin = current_admin.set(admin)
     try:
         yield
     finally:
+        current_admin.reset(is_admin)
         current_conversation_id.reset(conversation)
         current_agent_slug.reset(agent)
         current_owner_user_id.reset(owner)

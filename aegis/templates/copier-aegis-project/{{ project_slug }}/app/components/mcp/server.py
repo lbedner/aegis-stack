@@ -226,7 +226,7 @@ class Attribution(Middleware):
         try:
             if not self._within(context.message.name, reach, admin):
                 raise ToolError(f"{context.message.name} is outside this token's scope")
-            with acting_as(owner, f"mcp:{caller['client']}"):
+            with acting_as(owner, f"mcp:{caller['client']}", admin=admin):
                 result = await call_next(context)
             return result
         except Exception as exc:

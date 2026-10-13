@@ -7,8 +7,7 @@ import zipfile
 import pytest
 
 from app.services.blog.constants import BlogPostStatus
-from app.services.blog.schemas import ExportedPost
-from app.services.blog.serialization import (
+from app.services.blog.domains.transfer.formats import (
     json_to_posts,
     markdown_to_post,
     post_to_markdown,
@@ -16,6 +15,7 @@ from app.services.blog.serialization import (
     posts_to_zip,
     zip_to_posts,
 )
+from app.services.blog.schemas import ExportedPost
 
 
 class TestPostToMarkdown:

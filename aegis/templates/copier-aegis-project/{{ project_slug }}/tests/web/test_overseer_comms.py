@@ -114,7 +114,7 @@ def test_a_provider_error_is_the_toast(
     comms: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from app.components.web_frontend.routes.partials import overseer_comms
-    from app.services.comms.email import EmailError
+    from app.services.comms.service import EmailError
 
     async def fail(to: str, subject: str, text: str | None = None) -> object:
         raise EmailError("Domain not verified")
@@ -185,7 +185,9 @@ def test_the_email_section_lists_resend_domains_with_a_check(
     )
     page = _get(comms, "email")
     domains = one(page, "#comms-domains")
-    assert "mail.example.com" in text(domains) and "pending" in text(domains).lower()
+    cells = [text(cell) for cell in select(domains, "td")]
+    assert cells.count("mail.example.com") == 1  # a domain is a cell of its own
+    assert "pending" in text(domains).lower()
     check = f'#comms-domains button[hx-post="{PARTIALS}/domains/new.example.com/check"]'
     assert one(page, check) is not None
     assert (

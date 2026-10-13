@@ -13,7 +13,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.tools import current_owner_user_id, registered_tool_names
 import app.services.finance.tools as tools
-import app.services.finance.write_tools as write_tools
+from app.services.finance.domains.writes import lookups
 from app.services.finance.domains.ledger.properties import set_property_metadata
 from app.services.finance.domains.planning.envelopes import create_envelope
 from app.services.finance.domains.planning.goals import set_goal_metadata
@@ -56,7 +56,7 @@ def _tools_use_test_session(
 
     # The id lookups live in their own module, with its own session import.
     monkeypatch.setattr(tools, "get_async_session", test_session)
-    monkeypatch.setattr(write_tools, "get_async_session", test_session)
+    monkeypatch.setattr(lookups, "get_async_session", test_session)
 
 
 def test_finance_tools_register_on_import() -> None:
@@ -502,7 +502,7 @@ async def test_categories_lists_the_assignable_targets(
     )
     await session.commit()
 
-    result = await tools.categories()
+    result = await lookups.categories()
 
     match = next(
         c for c in result["categories"] if c["name"] == "Food & Dining:Groceries"
@@ -593,7 +593,7 @@ async def test_bills_lists_the_recurring_surface(
     )
     await session.commit()
 
-    result = await tools.bills()
+    result = await lookups.bills()
 
     rows = {b["name"]: b for b in result["bills"]}
     eleanor = rows["Eleanor Nursing Care"]
@@ -626,7 +626,7 @@ async def test_a_bill_the_user_never_priced_still_reports_an_amount(
     session.add(stream)
     await session.commit()
 
-    result = await tools.bills()
+    result = await lookups.bills()
 
     row = {b["name"]: b for b in result["bills"]}["Detected Bill"]
     assert row["amount"] == 2_918
@@ -667,7 +667,7 @@ async def test_bill_candidates_returns_the_ranked_shortlist(
     )
     await session.commit()
 
-    result = await tools.bill_candidates(stream.id)
+    result = await lookups.bill_candidates(stream.id)
 
     ids = [c["id"] for c in result["candidates"]]
     assert payment.id in ids
@@ -713,7 +713,7 @@ async def test_tags_tool_lists_the_directory_with_counts(
     await tag_transactions(session, [a.id, b.id], "Business", owner_user_id=None)
     await session.commit()
 
-    result = await tools.tags()
+    result = await lookups.tags()
 
     assert {"name": "Business", "count": 2} in [
         {"name": t["name"], "count": t["count"]} for t in result["tags"]
@@ -742,7 +742,7 @@ async def test_a_signed_in_turn_reads_only_its_owners_ledger(
     try:
         ledger = await tools.ledger(months=1, detail="transactions")
         accounts = await tools.accounts()
-        bills = await write_tools.bills()
+        bills = await lookups.bills()
     finally:
         current_owner_user_id.reset(token)
 

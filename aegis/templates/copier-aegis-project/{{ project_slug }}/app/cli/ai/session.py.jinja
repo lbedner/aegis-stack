@@ -21,7 +21,7 @@ from app.i18n import t
 
 from ...core.config import settings
 from ...core.log import logger
-from ...services.ai.config import get_ai_config
+from ...services.ai.domains.llm.config import get_ai_config
 from ...services.ai.domains.llm.providers import ProviderNotInstalledError
 from ...services.system import live_status
 
@@ -265,6 +265,7 @@ async def _interactive_chat_session(
                             message=user_message,
                             conversation_id=current_conversation_id,
                             user_id="cli-user",
+                            admin=True,  # the operator's own shell, as MCP's stdio
                         )
                     finally:
                         spinner_live.stop()

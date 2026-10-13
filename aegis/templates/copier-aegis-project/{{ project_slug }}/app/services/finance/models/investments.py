@@ -12,6 +12,7 @@ from typing import Any
 from app.core.time import utcnow
 from app.services.finance.models.base import (
     _FK,
+    PRICE_SCALED,
     _SCHEMA,
     _bigint,
     _OWNER_FK,
@@ -100,7 +101,7 @@ class FinanceSecurity(SQLModel, table=True):
     coingecko_id: str | None = Field(default=None)
     onchain_contract: str | None = Field(default=None)
     onchain_chain: str | None = Field(default=None)
-    close_price: int | None = _bigint("close_price")
+    close_price: int | None = _bigint("close_price", description=PRICE_SCALED)
     price_scale: int = Field(default=2)
     close_price_as_of: date | None = Field(default=None)
     metadata_: dict[str, Any] = Field(
@@ -135,7 +136,9 @@ class FinanceSecurityPrice(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     security_id: int = Field(foreign_key=f"{_FK}finance_security.id")
     price_date: date
-    close_price: int = _bigint("close_price", nullable=False, default=0)
+    close_price: int = _bigint(
+        "close_price", nullable=False, default=0, description=PRICE_SCALED
+    )
     price_scale: int = Field(default=2)
     currency: str = Field(
         default="usd", foreign_key=f"{_FK}finance_currency.code", max_length=16
@@ -171,10 +174,12 @@ class FinanceHolding(SQLModel, table=True):
     account_id: int = Field(foreign_key=f"{_FK}finance_account.id")
     security_id: int = Field(foreign_key=f"{_FK}finance_security.id")
     as_of_date: date
-    quantity_e8: int = _bigint("quantity_e8", nullable=False, default=0)
+    quantity_e8: int = _bigint(
+        "quantity_e8", nullable=False, default=0
+    )
     cost_basis: int | None = _bigint("cost_basis")
     average_cost: int | None = _bigint("average_cost")
-    price: int | None = _bigint("price")
+    price: int | None = _bigint("price", description=PRICE_SCALED)
     price_scale: int = Field(default=2)
     institution_value: int | None = _bigint("institution_value")
     vested_quantity_e8: int | None = _bigint("vested_quantity_e8")
@@ -276,7 +281,7 @@ class FinanceTrade(SQLModel, table=True):
     type: str = Field(max_length=16)
     subtype: str | None = Field(default=None)
     quantity_e8: int | None = _bigint("quantity_e8")
-    price: int | None = _bigint("price")
+    price: int | None = _bigint("price", description=PRICE_SCALED)
     price_scale: int = Field(default=2)
     amount: int = _bigint("amount", nullable=False, default=0)
     raw_amount: int | None = _bigint("raw_amount")

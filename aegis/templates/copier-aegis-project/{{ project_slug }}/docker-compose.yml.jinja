@@ -17,7 +17,8 @@ x-app: &app
     # Dockerfile's ENV (PORT, STORAGE_ROOT), not here.
     - DOCKER_CONTAINER=1
     - PORT=${PORT:-8000}
-    - WEBSERVER_ENGINE=${WEBSERVER_ENGINE:-uvicorn}
+    - WEBSERVER_ENGINE
+    - WEBSERVER_LOOP
   volumes:
     # Every process that runs the app shares one object store. Compose
     # merges volume lists across override files by target path, so the
@@ -78,7 +79,8 @@ services:
     environment:
       # Docker container marker
       - DOCKER_CONTAINER=1
-      - WEBSERVER_ENGINE=${WEBSERVER_ENGINE:-uvicorn}
+      - WEBSERVER_ENGINE
+      - WEBSERVER_LOOP
 {%- if include_redis %}
       # Redis connection for health checks
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}

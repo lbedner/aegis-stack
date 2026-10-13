@@ -27,6 +27,18 @@
       "function": "test_only_active_tools_are_exposed"
     },
     {
+      "kind": "lazy_load",
+      "label": "Agent.tools",
+      "file": "tests/services/ai/test_agent_models.py",
+      "function": "test_the_default_agent_reads_the_app_from_the_ontology"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM agent AS agent_1 JOIN agent_tool AS agent_tool_1 ON agent_1.id = agent_tool_1.agent_id JOIN tool ON tool.id = agent_tool_1.tool_id WHERE agent_1.id IN (__[POSTCOMPILE_primary_keys])",
+      "file": "app/services/ai/fixtures/agent_fixtures.py",
+      "function": "attach_tools"
+    },
+    {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM agent AS agent_1 JOIN agent_tool AS agent_tool_1 ON agent_1.id = agent_tool_1.agent_id JOIN tool ON tool.id = agent_tool_1.tool_id WHERE agent_1.id IN (__[POSTCOMPILE_primary_keys])",
       "file": "app/services/ai/domains/chat/queries.py",
@@ -52,15 +64,15 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM conversation",
-      "file": "app/services/ai/domains/chat/queries.py",
-      "function": "conversation_count"
-    },
-    {
-      "kind": "repeated_statement",
       "label": "SELECT ... FROM conversation LEFT OUTER JOIN sentiment_analysis ON sentiment_analysis.conversation_id = conversation.id WHERE sentiment_analysis.id IS NULL ORDER BY conversation.updated_at LIMIT :param_1",
       "file": "app/services/ai/domains/chat/queries.py",
       "function": "unscored_conversations"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM conversation ORDER BY conversation.updated_at DESC",
+      "file": "app/services/ai/domains/chat/queries.py",
+      "function": "conversations_with_messages"
     },
     {
       "kind": "repeated_statement",
@@ -76,21 +88,15 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM conversation WHERE conversation.meta_data[:meta_data_1] IS NOT NULL",
-      "file": "app/services/ai/domains/chat/queries.py",
-      "function": "distinct_user_count"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM conversation_message",
-      "file": "app/services/ai/domains/chat/queries.py",
-      "function": "message_count"
-    },
-    {
-      "kind": "repeated_statement",
       "label": "SELECT ... FROM conversation_message WHERE conversation_message.conversation_id = :conversation_id_1",
       "file": "app/services/ai/domains/chat/queries.py",
       "function": "latest_message_timestamp"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM conversation_message WHERE conversation_message.conversation_id IN (__[POSTCOMPILE_primary_keys])",
+      "file": "app/services/ai/domains/chat/queries.py",
+      "function": "conversations_with_messages"
     },
     {
       "kind": "repeated_statement",
@@ -166,24 +172,6 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM llm_usage",
-      "file": "app/services/ai/domains/llm/queries.py",
-      "function": "usage_totals"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM llm_usage LEFT OUTER JOIN large_language_model ON llm_usage.model_id = large_language_model.model_id LEFT OUTER JOIN llm_org ON large_language_model.served_by_org_id = llm_org.id GROUP BY llm_usage.model_id, large_language_model.title, llm_org.name, llm_org.color ORDER BY count(llm_usage.id) DESC",
-      "file": "app/services/ai/domains/llm/queries.py",
-      "function": "usage_by_model"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM llm_usage ORDER BY llm_usage.timestamp DESC LIMIT :param_1",
-      "file": "app/services/ai/domains/llm/queries.py",
-      "function": "recent_usage"
-    },
-    {
-      "kind": "repeated_statement",
       "label": "SELECT ... FROM llm_usage WHERE llm_usage.user_id = :user_id_1",
       "file": "tests/services/ai/test_usage_tracking.py",
       "function": "test_a_turn_that_used_no_tools_records_zero_not_null"
@@ -211,6 +199,12 @@
       "label": "SELECT ... FROM tool",
       "file": "app/services/ai/fixtures/agent_fixtures.py",
       "function": "load_agent_fixtures"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM tool WHERE tool.name IN (__[POSTCOMPILE_name_1])",
+      "file": "app/services/ai/fixtures/agent_fixtures.py",
+      "function": "attach_tools"
     }
   ]
 }

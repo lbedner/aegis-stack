@@ -28,6 +28,10 @@ Registry (`ServiceSpec` is a thin alias of `PluginSpec` pinned to
 `kind=SERVICE`; see `aegis/core/plugins/spec.py`):
 
 - `aegis/core/services.py`: add a `ServiceSpec` entry to the `SERVICES` dict.
+  Set `category` (its concern: `PartCategory`, as Overseer groups the app)
+  and, where the app names it differently, `health_name`; then run
+  `make parts` (`order` places it in the sidebar), which writes every spec's into the template's
+  `app/core/parts.py` (`tests/core/test_parts_file.py` fails while stale).
   Set `type` (add a new `ServiceType` member only if none fit),
   `description`/`long_description`, `required_components`,
   `recommended_components`, `pyproject_deps`, `template_files` (display list),
@@ -110,7 +114,10 @@ CLI (framework commands, not the generated project's CLI):
 Template (`aegis/templates/copier-aegis-project/{{ project_slug }}/`):
 
 - `app/services/<name>/`: the service package (business logic, `deps.py` for
-  the FastAPI dependency provider referenced by `wiring.deps_providers`).
+  the FastAPI dependency provider referenced by `wiring.deps_providers`),
+  laid out as the service standard says (`docs/services/index.md`, Service
+  Structure): its standard files at the top, logic under `domains/`, and
+  callers outside it going through `service.py`.
 - `app/components/backend/api/<name>/`: routes, registered in
   `app/components/backend/api/routing.py.jinja` behind a full-body
   `{%- if include_<name> %}` import + `app.include_router(...)` block.

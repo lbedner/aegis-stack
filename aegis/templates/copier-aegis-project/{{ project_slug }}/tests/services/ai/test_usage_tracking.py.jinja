@@ -127,7 +127,7 @@ def _store_session(session: AsyncSession) -> Generator[None]:
     with ExitStack() as stack:
         for target in (
             "app.services.ai.service.usage.get_async_session",
-            "app.services.ai.usage_recording.get_async_session",
+            "app.services.ai.domains.spend.recording.get_async_session",
         ):
             stack.enter_context(patch(target, opened))
         yield
@@ -151,7 +151,7 @@ class TestWhatTheLedgerKeeps:
         llm: LargeLanguageModel,
         price: LLMPrice,
     ) -> None:
-        from app.services.ai import usage_recording
+        from app.services.ai.domains.spend import recording as usage_recording
 
         with _store_session(async_db_session):
             await usage_recording.record_usage(
@@ -175,7 +175,7 @@ class TestWhatTheLedgerKeeps:
     ) -> None:
         """A live call and the turns taken during it share a conversation,
         so what a call cost can be read back from the ledger."""
-        from app.services.ai import usage_recording
+        from app.services.ai.domains.spend import recording as usage_recording
 
         with _store_session(async_db_session):
             await usage_recording.record_usage(
@@ -200,7 +200,7 @@ class TestWhatTheLedgerKeeps:
         """Pushed as it happens, so throughput and latency chart with no
         polling: per model, seconds and output tokens a second."""
         from app.core import series
-        from app.services.ai import usage_recording
+        from app.services.ai.domains.spend import recording as usage_recording
 
         with _store_session(async_db_session):
             await usage_recording.record_usage(
@@ -224,7 +224,7 @@ class TestWhatTheLedgerKeeps:
     ) -> None:
         """A path that does not time itself must be distinguishable from
         one that ran instantly, or the averages quietly lie."""
-        from app.services.ai import usage_recording
+        from app.services.ai.domains.spend import recording as usage_recording
 
         with _store_session(async_db_session):
             await usage_recording.record_usage(
@@ -247,7 +247,7 @@ class TestWhatTheLedgerKeeps:
     ) -> None:
         """They are already in the usage dict and already in the log line;
         only the columns were missing."""
-        from app.services.ai import usage_recording
+        from app.services.ai.domains.spend import recording as usage_recording
 
         with _store_session(async_db_session):
             await usage_recording.record_usage(
@@ -276,7 +276,7 @@ class TestWhatTheLedgerKeeps:
     ) -> None:
         """An absent key stays None. Reading it as 0 would claim the
         provider offered a cache and missed every time."""
-        from app.services.ai import usage_recording
+        from app.services.ai.domains.spend import recording as usage_recording
 
         with _store_session(async_db_session):
             await usage_recording.record_usage(
@@ -299,7 +299,7 @@ class TestWhatTheLedgerKeeps:
         price: LLMPrice,
     ) -> None:
         """Zero tool calls is a measurement. Not having counted is not."""
-        from app.services.ai import usage_recording
+        from app.services.ai.domains.spend import recording as usage_recording
 
         with _store_session(async_db_session):
             await usage_recording.record_usage(
@@ -510,7 +510,7 @@ class TestRecordUsage:
             raise Exception("Database connection failed")
             yield  # pragma: no cover
 
-        with patch("app.services.ai.usage_recording.get_async_session", failing):
+        with patch("app.services.ai.domains.spend.recording.get_async_session", failing):
             # Should not raise, just log error
             await service._record_usage(
                 action="chat",
@@ -737,7 +737,7 @@ class TestTheLedgerRowIsStoredNaive:
     ) -> None:
         from sqlalchemy import event
 
-        from app.services.ai.usage_recording import record_usage
+        from app.services.ai.domains.spend.recording import record_usage
 
         seen: list[datetime] = []
 

@@ -7,12 +7,16 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.change_queue.schemas import ChangeDisplayRow
 from app.services.finance.domains.ledger import categories, merchants, transactions
-from app.services.finance.domains.writes.display import live_transactions, txn_subject
+from app.services.finance.domains.writes.display import (
+    TransactionId,
+    live_transactions,
+    txn_subject,
+)
 from app.services.shared.queries import stored_owner
 
 
@@ -23,8 +27,8 @@ class CategorizePayload(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    transaction_id: int
-    category_id: int
+    transaction_id: TransactionId
+    category_id: int = Field(description="The category, from categories().")
 
 
 async def categorize_execute(
@@ -83,8 +87,11 @@ class AssignPayeePayload(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    transaction_id: int
-    payee: str
+    transaction_id: TransactionId
+    payee: str = Field(
+        description="Who it was really with, by name: reuse a spelling the "
+        "ledger rows already carry; a new name is made on first approval."
+    )
 
     @field_validator("payee")
     @classmethod
@@ -150,8 +157,11 @@ class TagPayload(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    transaction_id: int
-    tag: str
+    transaction_id: TransactionId
+    tag: str = Field(
+        description="The tag, by name: check tags() and reuse a spelling; a "
+        "new name is made on first approval."
+    )
 
 
 async def _tag_cards(

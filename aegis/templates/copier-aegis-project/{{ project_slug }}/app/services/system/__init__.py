@@ -31,6 +31,10 @@ from .models import (
     SystemStatus,
 )
 
+# The stack's own code, not a service (``ownership``).
+PART_OF = "stack"
+
+
 __all__ = [
     # Health functions
     "check_system_status",

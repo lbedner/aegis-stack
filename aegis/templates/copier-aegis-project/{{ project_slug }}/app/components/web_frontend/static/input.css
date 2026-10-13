@@ -71,6 +71,15 @@
     @apply h-[80dvh] md:h-[calc(100dvh-8.5rem)] lg:h-[calc(100dvh-9.25rem)] md:-mb-7 lg:-mb-10 min-h-[24rem];
   }
 
+  /* The map, at least the rest of the window (``.overseer-fill``'s sums,
+     plus its breadcrumb and overlay rows, 2rem and 2.5rem, and the shell's
+     bottom padding it keeps); taller when its nodes need it, and below md
+     its own height. Its nodes sit by share of its height, so it stretches
+     as one. */
+  .map-fill {
+    @apply md:min-h-[calc(100dvh-14.75rem)] lg:min-h-[calc(100dvh-16.25rem)];
+  }
+
   /* A sidebar link, in either sidebar. The current page is marked by
      ``aria-current``, so markup never repeats the active/idle recipe. */
   .nav-link {
@@ -289,6 +298,14 @@
   .tone-border { @apply border-aegis-border stroke-aegis-border; }
   .tone-border[data-tone="warn"] { @apply border-aegis-amber/70 stroke-aegis-amber/70; }
   .tone-border[data-tone="error"] { @apply border-aegis-error/70 stroke-aegis-error/70; }
+  /* A map node under a heat (overseer_heat): filled in its tone, so the
+     hot ones read across the room, a data shape's outline filled too. */
+  [data-heat][data-tone="ok"] { @apply bg-aegis-teal/10; }
+  [data-heat][data-tone="warn"] { @apply bg-aegis-amber/20; }
+  [data-heat][data-tone="error"] { @apply bg-aegis-error/25; }
+  [data-heat][data-tone="ok"] .map-shape { @apply fill-aegis-teal/10; }
+  [data-heat][data-tone="warn"] .map-shape { @apply fill-aegis-amber/20; }
+  [data-heat][data-tone="error"] .map-shape { @apply fill-aegis-error/25; }
   /* Overseer's home cards, client side so a live frame keeps the choice:
      trouble first, or only trouble. */
   [data-order="trouble"] [data-card][data-tone="error"] { order: -2; }
@@ -302,6 +319,8 @@
   /* Every hover hint's panel (popover_panel, the map's hints). */
   .tooltip-panel { @apply bg-aegis-card border border-aegis-border rounded-lg shadow-lg text-xxs normal-case tracking-normal text-aegis-muted text-left; }
   .map-link:is([data-tone="warn"], [data-tone="error"]) { @apply opacity-100; }
+  /* A flagged line's hover target (opening its why): wider than it, unseen. */
+  .map-hit { fill: none; stroke: transparent; stroke-width: 12; vector-effect: non-scaling-stroke; pointer-events: stroke; }
   .map-link[data-queued] { stroke-dasharray: 5 4; }
   .map-link[data-key] { stroke-dasharray: 1 4; stroke-linecap: round; }
   /* A data node's outline: its tone's stroke (inherited from .tone-border),

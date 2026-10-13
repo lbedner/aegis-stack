@@ -61,12 +61,11 @@ from app.services.auth.deps import get_session_token
 {% if auth_level != "basic" %}
 from app.services.auth.deps import get_current_active_user
 {% endif %}
-from app.services.auth.refresh_tokens import RefreshService
 from app.components.backend.api.auth import admin, sessions
 from app.components.backend.api.auth.sessions import sign_in_metadata
-from app.services.auth.users import RestoreConflictError, UserService
+from app.services.auth.service import RefreshService, RestoreConflictError, UserService
 {% if include_auth_org %}
-from app.services.auth.invites import InviteService
+from app.services.auth.service import InviteService
 {% endif %}
 {% if include_auth_rbac %}
 from pydantic import BaseModel

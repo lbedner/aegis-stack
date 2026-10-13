@@ -30,12 +30,12 @@ from sqlalchemy.orm import sessionmaker
 from sqlmodel import Session, SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.core import db_activity
+from app.core import db_activity{% if database_engine != "sqlite" %}, frames{% endif %}
 from app.core.config import settings
 from app.core.constants import ComponentName
 from app.core.log import logger
 
-# The component this client fronts (``service_links``).
+# The component this client fronts (``ownership``, ``ontology.calls``).
 FRONTS = ComponentName.DATABASE
 
 {% if database_engine == "sqlite" %}
@@ -268,7 +268,7 @@ def _name_connection(
     dialect: Any, conn_rec: Any, cargs: Any, cparams: dict[str, Any]
 ) -> None:
     """psycopg takes it as a connect argument, asyncpg as a server setting."""
-    name = db_activity.process()
+    name = frames.process()
     if dialect.is_async:
         cparams.setdefault("server_settings", {})["application_name"] = name
     else:

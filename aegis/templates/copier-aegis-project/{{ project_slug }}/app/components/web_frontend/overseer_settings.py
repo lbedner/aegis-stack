@@ -11,6 +11,7 @@ there."""
 from typing import Any
 
 from app.core import saved_settings, secrets
+from app.core.parts import Category
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_title
 
@@ -31,6 +32,7 @@ ITEM = NavItem(
     url="/overseer/settings",
     status="",
     component=ComponentStatus(name="settings", message=""),
+    concern=Category.PLATFORM,
 )
 
 

@@ -15,7 +15,6 @@ from typing import Any
 from app.core import secrets
 from app.core.config import settings
 from app.core.formatting import format_relative_time, page_number
-from app.services.payment.catalog import get_catalog
 from app.services.payment.constants import (
     DisputeStatus,
     RefundReason,
@@ -29,8 +28,7 @@ from app.services.payment.models import (
     PaymentSubscription,
     PaymentTransaction,
 )
-from app.services.payment.providers.base import CatalogEntry
-from app.services.payment.service import PaymentService
+from app.services.payment.service import CatalogEntry, PaymentService, get_catalog
 from app.services.system.models import ComponentStatus
 
 from .filters import cents_to_input, dollars, money

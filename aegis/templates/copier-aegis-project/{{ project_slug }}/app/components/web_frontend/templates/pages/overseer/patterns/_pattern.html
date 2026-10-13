@@ -16,7 +16,7 @@
         <p data-step-count class="pt-1 text-xs tabular-nums"><span class="font-semibold {{ 'text-aegis-teal' if step.followed == step.applicable else 'text-aegis-amber' }}">{{ step.followed }}</span><span class="text-aegis-muted"> of {{ step.applicable }}</span></p>
         {{ progress(step.followed / step.applicable if step.applicable else 1, "ok" if step.followed == step.applicable else "warn", label=step.label ~ " conformance") }}
         {% elif step.applicable != total %}
-        <p data-step-count class="pt-1 text-xs tabular-nums text-aegis-muted"><span class="font-semibold text-aegis-text">{{ step.applicable }}</span> routes</p>
+        <p data-step-count class="pt-1 text-xs tabular-nums text-aegis-muted"><span class="font-semibold text-aegis-text">{{ step.applicable }}</span> of {{ total }}</p>
         {% endif %}
       </div>
       {% if not loop.last %}<span aria-hidden="true" class="text-aegis-muted">→</span>{% endif %}
@@ -43,6 +43,14 @@
     </li>
     {% endfor %}
   </ul>
+  {% if exemptions %}
+  <div id="pattern-exemptions" class="mt-4 pt-3 border-t border-aegis-border/60 space-y-1.5">
+    <p class="text-xxs uppercase tracking-wider text-aegis-muted">Exempt by decision</p>
+    <ul class="space-y-1">
+      {% for what, why in exemptions %}<li data-exemption class="text-xs"><span class="font-medium text-aegis-text">{{ what }}</span> <span data-why class="text-aegis-muted">{{ why }}</span></li>{% endfor %}
+    </ul>
+  </div>
+  {% endif %}
   {% endcall %}
 
   {% if canonical %}

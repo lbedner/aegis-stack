@@ -152,7 +152,7 @@ class TestOAuthRetiresTheSessionItReplaces:
         self, async_db_session, user_factory
     ) -> None:
         from app.components.backend.api.auth.oauth import _remember_session
-        from app.services.auth.refresh_tokens import RefreshService
+        from app.services.auth.domains.sessions.tokens import RefreshService
 
         user = await user_factory()
         service = RefreshService(async_db_session)
@@ -166,8 +166,8 @@ class TestOAuthRetiresTheSessionItReplaces:
         self, async_db_session, user_factory
     ) -> None:
         from app.components.backend.api.auth.oauth import _finalize_oauth_signin
-        from app.services.auth.refresh_tokens import RefreshService
-        from app.services.auth.users import UserService
+        from app.services.auth.domains.sessions.tokens import RefreshService
+        from app.services.auth.domains.users.accounts import UserService
 
         user = await user_factory()
         service = RefreshService(async_db_session)

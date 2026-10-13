@@ -8,6 +8,7 @@ destroy) are ``overseer_deploy_actions``."""
 
 from typing import Any
 
+from app.core import secrets
 from app.services.system import hosting, ui_deployments
 from app.services.system.models import ComponentStatus
 
@@ -35,6 +36,7 @@ ITEM = NavItem(
     status="",
     component=ComponentStatus(name="deployments", message=""),
 )
+NEW_URL = f"{ITEM.url}/new"
 BACKUP_COLUMNS = columns(ui_deployments.BACKUP_COLUMNS)
 HISTORY_COLUMNS = columns(ui_deployments.HISTORY_COLUMNS, status=("health",))
 # A deploy's health check, as a status cell's tone.
@@ -80,7 +82,7 @@ async def section_context(
         "now": await ui_deployments.now(),
         "host": await ui_deployments.host(),
         "actions": await _deployed(),
-        "new_url": f"{ITEM.url}/new",
+        "new_url": NEW_URL,
     }
 
 
@@ -102,8 +104,15 @@ async def _deployed() -> dict[str, Any]:
 
 
 # The way from this machine to a server, in order. Provisioning deploys,
-# so the server step ends with the app live there.
-STEPS = (("agent", "Deploy agent"), ("where", "Where"), ("server", "Server"))
+# so the server step ends with the app live there. A domain of your own is
+# optional: without one the server gets an sslip.io name.
+STEPS = (
+    ("agent", "Deploy agent"),
+    ("where", "Where"),
+    ("domain", "Domain"),
+    ("server", "Server"),
+)
+OPTIONAL = {"domain"}
 OWN_SERVER = "aegis deploy-init --host <your server's address>"
 
 
@@ -115,11 +124,16 @@ def _secrets_page() -> str | None:
 
 def _steps(summaries: dict[str, str]) -> list[dict[str, Any]]:
     """``STEPS``, each done (it has a summary), the one at hand (the first
-    not done), or still to come."""
+    not done), still to come, or, not done but ``OPTIONAL``, open without
+    holding up the next."""
     found = []
     for key, title in STEPS:
         status = "done" if key in summaries else "todo"
-        if status == "todo" and all(s["status"] == "done" for s in found):
+        if status == "todo" and key in OPTIONAL:
+            status = "optional"
+        elif status == "todo" and all(
+            s["status"] in ("done", "optional") for s in found
+        ):
             status = "current"
         found.append(
             {
@@ -130,6 +144,30 @@ def _steps(summaries: dict[str, str]) -> list[dict[str, Any]]:
             }
         )
     return found
+
+
+async def _dns(back: str) -> list[dict[str, Any]]:
+    """Each DNS provider and its keys: whether the app holds each (Overseer
+    > Secrets, or ``.env``), and the dialog that sets it, which comes back
+    to ``back``."""
+    names = [name for p in hosting.DNS for name in p.secrets]
+    found = await secrets.get_many(*names)
+    return [
+        {
+            "key": p.key,
+            "name": p.name,
+            "logo": p.logo,
+            "secrets": [
+                {
+                    "name": name,
+                    "held": bool(found.get(name)),
+                    "url": overseer_secrets.set_url(name, back),
+                }
+                for name in p.secrets
+            ],
+        }
+        for p in hosting.DNS
+    ]
 
 
 async def _steps_context() -> dict[str, Any]:
@@ -150,9 +188,13 @@ async def _steps_context() -> dict[str, Any]:
         summaries["agent"] = f"Listening on {beat['host']} (aegis {beat['version']})"
     if providers:
         summaries["where"] = ", ".join(p.name for p in providers) + ": token set"
+    dns = await _dns(NEW_URL)
+    if named := [d["name"] for d in dns if all(k["held"] for k in d["secrets"])]:
+        summaries["domain"] = ", ".join(named) + ": keys set"
     return found | {
         "view": "steps",
         "steps": _steps(summaries),
+        "dns": dns,
         "providers": [actions.waiting(p) for p in providers] if listening else [],
         "missing": [
             {"key": p.key, "name": p.name, "token": p.token}

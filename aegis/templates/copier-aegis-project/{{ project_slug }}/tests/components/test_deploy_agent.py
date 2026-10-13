@@ -111,10 +111,12 @@ def test_its_keys_are_on_the_redis_map() -> None:
 
 
 def test_each_providers_token_is_a_secret_like_any_other() -> None:
-    """Declared from the provider table, read from ``.env`` (a setting) or
-    the secrets store, and listed on Overseer > Secrets."""
-    tokens = {p.token for p in hosting.PROVISIONABLE}
-    assert tokens and {s.name for s in agent.SECRETS} == tokens
+    """Declared from the provider table (a cloud's, and a DNS provider's
+    with one token: Porkbun's pair is ``porkbun_keys``), read from ``.env``
+    (a setting) or the secrets store, and listed on Overseer > Secrets."""
+    tokens = {p.token for p in hosting.PROVIDERS if p.token}
+    assert {"DIGITALOCEAN_TOKEN", "HCLOUD_TOKEN", "CLOUDFLARE_API_TOKEN"} <= tokens
+    assert {s.name for s in agent.SECRETS} == tokens
     assert tokens <= set(type(settings).model_fields)
     assert agent.__name__ in secrets.OWNERS
 

@@ -109,15 +109,16 @@ def _verify(url: str) -> Callable[[str], Awaitable[None]]:
     return verify
 
 
-# What this module reads (``app.core.secrets``): each provider's API token.
+# What this module reads (``app.core.secrets``): each provider's API token,
+# a cloud's or a DNS provider's (Porkbun's pair is ``porkbun_keys``).
 SECRETS = tuple(
     Secret(
         p.token,
-        owner="Deploy",
+        owner="DNS" if "DNS" in p.can else "Deploy",
         label=f"{p.name} API token",
         verify=_verify(p.check) if p.check else None,
     )
-    for p in hosting.PROVISIONABLE
+    for p in hosting.PROVIDERS
     if p.token
 )
 

@@ -301,7 +301,7 @@ def test_without_redis_it_says_the_actions_need_it(
     monkeypatch.setattr(agent, "has_redis", lambda: False)
     card = _card(TestClient(app))
     assert "aegis add redis" in text(one(card, '[data-deploy-state="no-redis"]'))
-    none(card, "[data-write]")
+    none(card, "[data-ask], [data-provision]")  # keys may still be set
 
 
 def test_without_an_agent_it_shows_how_to_start_one(
@@ -316,7 +316,7 @@ def test_without_an_agent_it_shows_how_to_start_one(
     why = one(note, "details[data-agent-why]")
     assert why.get("open") is None
     assert "SSH key" in text(why)
-    none(card, "[data-write]")
+    none(card, "[data-ask], [data-provision]")  # keys may still be set
 
 
 def test_an_agent_older_than_the_app_is_named_stale(
@@ -347,12 +347,41 @@ def test_the_steps_are_read_from_what_is_true(redis: FakeRedis, app: FastAPI) ->
     assert _steps(card) == [
         ("agent", "done"),
         ("where", "done"),
+        ("domain", "optional"),
         ("server", "current"),
     ]
     assert "laptop" in text(one(_step(card, "agent"), "[data-summary]"))
     assert "DigitalOcean" in text(one(_step(card, "where"), "[data-summary]"))
     none(_step(card, "where"), "[data-step-body]")
     one(_step(card, "server"), "[data-step-body] [data-provision]")
+
+
+def test_the_domain_step_asks_each_dns_providers_keys(
+    redis: FakeRedis, app: FastAPI
+) -> None:
+    """Optional: without one the server gets an sslip.io name. Each key
+    opens the Secrets dialog (saved where .env values are read), which
+    comes back here."""
+    step = _step(_card(TestClient(app)), "domain")
+    assert step.get("data-status") == "optional"
+    for provider, keys in (
+        ("porkbun", ("PORKBUN_API_KEY", "PORKBUN_SECRET_KEY")),
+        ("cloudflare", ("CLOUDFLARE_API_TOKEN",)),
+    ):
+        dns = one(step, f'[data-dns="{provider}"]')
+        for key in keys:
+            setter = one(dns, f'[data-dns-key="{key}"] button')
+            assert setter.get("hx-get") == overseer_secrets.set_url(key, NEW)
+    assert "sslip.io" in text(step)
+
+
+def test_with_a_dns_providers_keys_the_domain_step_is_done(
+    redis: FakeRedis, store: FakeStore, app: FastAPI
+) -> None:
+    store.values |= {"PORKBUN_API_KEY": "pk1_" + "a" * 20, "PORKBUN_SECRET_KEY": "sk1_" + "b" * 20}
+    step = _step(_card(TestClient(app)), "domain")
+    assert step.get("data-status") == "done"
+    assert "Porkbun" in text(one(step, "[data-summary]"))
 
 
 def test_without_an_agent_the_steps_after_it_wait(
@@ -364,6 +393,7 @@ def test_without_an_agent_the_steps_after_it_wait(
     assert _steps(card) == [
         ("agent", "current"),
         ("where", "done"),
+        ("domain", "optional"),
         ("server", "todo"),
     ]
     none(card, "[data-provision]")
@@ -374,7 +404,11 @@ def test_without_a_token_the_where_step_says_how_and_offers_a_server_of_your_own
 ) -> None:
     _agent_holds(redis)
     card = _card(TestClient(app))
-    assert _steps(card)[1:] == [("where", "current"), ("server", "todo")]
+    assert _steps(card)[1:] == [
+        ("where", "current"),
+        ("domain", "optional"),
+        ("server", "todo"),
+    ]
     where = one(_step(card, "where"), "[data-step-body]")
     assert "aegis deploy-init --host" in text(one(where, "[data-own-server]"))
     terminal = one(where, "details[data-terminal]")

@@ -17,6 +17,7 @@ from app.components.web_frontend import overseer_secrets, overseer_settings
 from app.components.web_frontend.overseer_access import overseer_actor
 from app.components.web_frontend.rendering import dialog, dialog_done, toast_response
 from app.core import saved_settings, secrets
+from app.core.formatting import site_path
 from app.services.shared.deps import Actor
 
 router = APIRouter(prefix=overseer_secrets.PARTIALS)
@@ -24,15 +25,22 @@ router = APIRouter(prefix=overseer_secrets.PARTIALS)
 FORM = "pages/overseer/secrets/_set.html"
 
 
-def _home(name: str) -> str:
-    """The page a dialog returns to: Settings for a setting, else Secrets."""
+def _home(name: str, back: str = "") -> str:
+    """The page a dialog returns to: the one it was opened from (``back``,
+    on this site), else Settings for a setting, else Secrets."""
     if secrets.is_setting(name):
-        return overseer_settings.ITEM.url
-    return overseer_secrets.url()
+        home = overseer_settings.ITEM.url
+    else:
+        home = overseer_secrets.url()
+    return site_path(back, home)
 
 
 async def _form(
-    request: Request, name: str, errors: list[str], status_code: int = 200
+    request: Request,
+    name: str,
+    errors: list[str],
+    status_code: int = 200,
+    back: str = "",
 ) -> Response:
     row = await secrets.status_of(name)
     if row is None:
@@ -45,6 +53,7 @@ async def _form(
         row=row,
         errors=errors,
         url=f"{overseer_secrets.PARTIALS}/{name}",
+        back=back,
         stored=row.is_set and row.source == secrets.store_name(),
         # What the provider offers, for a field shown in the clear: a hint
         # list for provider config, the only values for a setting.
@@ -54,9 +63,10 @@ async def _form(
 
 
 @router.get("/{name}", response_class=HTMLResponse)
-async def set_form(request: Request, name: str) -> Response:
-    """The set dialog, empty whatever is stored."""
-    return await _form(request, name, [])
+async def set_form(request: Request, name: str, next: str = "") -> Response:
+    """The set dialog, empty whatever is stored; ``next`` is the page that
+    opened it, where saving returns."""
+    return await _form(request, name, [], back=next)
 
 
 @router.post("/{name}", response_class=HTMLResponse)
@@ -64,20 +74,21 @@ async def save(
     request: Request,
     name: str,
     value: Annotated[str, Form()] = "",
+    next: Annotated[str, Form()] = "",
     actor: Actor = Depends(overseer_actor),
 ) -> Response:
     if not value.strip():
-        return await _form(request, name, ["Paste a value."], 422)
+        return await _form(request, name, ["Paste a value."], 422, next)
     try:
         verdict = await secrets.put(name, value.strip(), actor=actor.label)
     except (secrets.SecretsReadOnlyError, secrets.SecretRejectedError) as exc:
-        return await _form(request, name, [str(exc)], 422)
+        return await _form(request, name, [str(exc)], 422, next)
     except secrets.UnknownSecretError:
         raise HTTPException(status_code=404) from None
     if verdict is None:
-        return dialog_done(_home(name), saved_settings.saved(name))
+        return dialog_done(_home(name, next), saved_settings.saved(name))
     return dialog_done(
-        _home(name),
+        _home(name, next),
         saved_settings.saved(name, verdict.result, verdict.message),
         overseer_secrets.VERDICT_TONES[verdict.result],
     )
@@ -97,12 +108,15 @@ async def check_key(name: str) -> Response:
 
 @router.post("/{name}/remove", response_class=HTMLResponse)
 async def remove(
-    request: Request, name: str, actor: Actor = Depends(overseer_actor)
+    request: Request,
+    name: str,
+    next: Annotated[str, Form()] = "",
+    actor: Actor = Depends(overseer_actor),
 ) -> Response:
     try:
         await secrets.delete(name, actor=actor.label)
     except secrets.SecretsReadOnlyError as exc:
-        return await _form(request, name, [str(exc)], 422)
+        return await _form(request, name, [str(exc)], 422, next)
     except secrets.UnknownSecretError:
         raise HTTPException(status_code=404) from None
-    return dialog_done(_home(name), saved_settings.removed(name))
+    return dialog_done(_home(name, next), saved_settings.removed(name))

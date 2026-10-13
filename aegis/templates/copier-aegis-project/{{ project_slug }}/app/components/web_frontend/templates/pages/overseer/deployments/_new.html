@@ -3,8 +3,8 @@
    a token, the records): done ones in a line, the one at hand open. A
    deployed server, or a project with a server already, says where to go
    instead. #}
-{% from "components/macros/layout.html" import card, command, facts %}
-{% from "components/macros/form.html" import field, text_input, primary_button %}
+{% from "components/macros/layout.html" import avatar, badge, card, command, facts %}
+{% from "components/macros/form.html" import action, field, text_input, primary_button %}
 {% from "pages/overseer/deployments/_macros.html" import agent_note, asks, ask, deployed_card, destroy_form, job_panel, note, place, step %}
 {% if actions.view == "deployed" %}
 {{ deployed_card(actions) }}
@@ -35,6 +35,16 @@
       {% endfor %}
     </ul>
   </details>
+  {% elif s.key == "domain" %}
+  <p class="{{ note() }}">A name of your own (like <code class="font-mono text-aegis-text">app.example.com</code>) needs its DNS provider's keys, so the server's record is made for you. Without one, it gets an sslip.io name.</p>
+  {% for d in actions.dns %}
+  <div data-dns="{{ d.key }}" class="space-y-2">
+    <p class="flex items-center gap-2 text-sm font-semibold text-aegis-text">{{ avatar(d.name, d.logo) }}{{ d.name }}</p>
+    {% for k in d.secrets %}
+    <p data-dns-key="{{ k.name }}" class="flex flex-wrap items-center gap-2 text-sm">{{ badge("set" if k.held else "not set", "ok" if k.held else "muted") }}<code class="font-mono text-aegis-text">{{ k.name }}</code>{{ action("Replace" if k.held else "Set", hx_dialog(k.url, "data-write")) }}</p>
+    {% endfor %}
+  </div>
+  {% endfor %}
   {% elif s.key == "server" %}
   {% for p in actions.providers %}{% include "pages/overseer/deployments/_provision.html" %}{% endfor %}
   <p class="text-xs text-aegis-muted">Creating it also deploys the app there, with HTTPS.</p>

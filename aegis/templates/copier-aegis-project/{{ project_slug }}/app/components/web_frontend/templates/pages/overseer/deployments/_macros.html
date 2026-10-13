@@ -70,17 +70,17 @@
 {% endmacro %}
 
 {# A step (``s``: key, title, status, summary), numbered ``n``: done shows
-   its answer in a line, the one at hand its body (the caller), one still
-   to come only its name. #}
+   its answer in a line, the one at hand (or an optional one) its body
+   (the caller), one still to come only its name. #}
 {% macro step(n, s) %}
-{% set tone = {"done": "border-aegis-teal text-aegis-teal", "current": "border-aegis-teal text-aegis-text"}.get(s.status, "border-aegis-border text-aegis-muted") %}
+{% set tone = {"done": "border-aegis-teal text-aegis-teal", "current": "border-aegis-teal text-aegis-text", "optional": "border-dashed border-aegis-border text-aegis-text"}.get(s.status, "border-aegis-border text-aegis-muted") %}
 <li data-step="{{ s.key }}" data-status="{{ s.status }}" class="flex gap-3">
   <span class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs {{ tone }}" aria-hidden="true">
     {%- if s.status == "done" %}{{ icon("check", "h-3.5 w-3.5", stroke=2.5) }}{% else %}{{ n }}{% endif -%}
   </span>
   <div class="min-w-0 flex-1 space-y-3">
     <p class="text-sm"><span class="font-semibold {{ 'text-aegis-muted' if s.status == 'todo' else 'text-aegis-text' }}">{{ s.title }}</span>{% if s.summary %} <span data-summary class="text-aegis-muted">{{ s.summary }}</span>{% endif %}</p>
-    {% if s.status == "current" %}<div data-step-body class="space-y-3">{{ caller() }}</div>{% endif %}
+    {% if s.status in ("current", "optional") %}<div data-step-body class="space-y-3">{{ caller() }}</div>{% endif %}
   </div>
 </li>
 {% endmacro %}

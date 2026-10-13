@@ -12,3 +12,6 @@ via Let's Encrypt, object storage via R2 / S3, etc.) — one protocol per
 concern, vendor-specific adapter implementing it, thin orchestrator on
 top.
 """
+
+# Part of deploy: provisioning what a deployment needs (``ownership``).
+PART_OF = "deploy"

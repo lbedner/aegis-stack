@@ -441,10 +441,5 @@ register_tool(
 # here keeps "import tools" the one line that registers the whole
 # finance tool surface. Filing a proposal is the shared queue's job
 # (``change_queue.tools``), which ``load_tools`` registers.
-from app.services.finance.write_tools import (  # noqa: E402,F401
-    bill_candidates,
-    bills,
-    categories,
-    tags,
-)
+from app.services.finance.domains.writes import lookups  # noqa: E402,F401
 

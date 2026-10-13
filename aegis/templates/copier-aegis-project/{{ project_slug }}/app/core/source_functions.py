@@ -57,6 +57,13 @@ def _params(
     )
 
 
+def called(func: ast.expr) -> str | None:
+    """The name a call is made by: ``f()`` and ``x.f()`` are ``f``."""
+    if isinstance(func, ast.Name):
+        return func.id
+    return func.attr if isinstance(func, ast.Attribute) else None
+
+
 def _function(
     node: ast.FunctionDef | ast.AsyncFunctionDef, qualname: str, lines: tuple[str, ...]
 ) -> Function:
@@ -67,10 +74,9 @@ def _function(
         and isinstance(body[0].value, ast.Constant)
     )
     calls = {
-        call.func.id if isinstance(call.func, ast.Name) else call.func.attr
+        name
         for call in ast.walk(node)
-        if isinstance(call, ast.Call)
-        and isinstance(call.func, ast.Name | ast.Attribute)
+        if isinstance(call, ast.Call) and (name := called(call.func))
     }
     return Function(
         qualname,

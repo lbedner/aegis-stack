@@ -237,7 +237,7 @@ class STTService:
         """The transcription's row in the usage ledger, priced by the second
         at the catalog's rate. Never fails the request."""
         try:
-            from app.services.ai import usage_recording
+            from app.services.ai.domains.spend import recording as usage_recording
         except ImportError:
             # A project generated without a database has no ledger (and no
             # app.core.db at all). The recording call stays in the path so

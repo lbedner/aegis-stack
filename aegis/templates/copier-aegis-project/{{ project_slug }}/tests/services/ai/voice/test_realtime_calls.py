@@ -25,7 +25,7 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.components.backend.api.ai.service import ai_service
-from app.services.ai import usage_recording
+from app.services.ai.domains.spend import recording as usage_recording
 from app.services.ai.domains.voice.realtime_calls import (
     CALL_TOOLS,
     END_CALL,

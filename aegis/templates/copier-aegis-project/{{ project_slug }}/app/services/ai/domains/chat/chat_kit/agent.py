@@ -46,7 +46,7 @@ from app.core.chat_transcript import as_markers, card_component, tool_label
 from app.core.log import logger
 from app.services.ai.domains.chat.tool_telemetry import tool_turn
 from app.services.ai.domains.chat.user_memory import memory_user
-from app.services.ai.usage_recording import extract_usage, record_usage
+from app.services.ai.domains.spend.recording import extract_usage, record_usage
 
 from .context import ContextProvider, compose_context, gather_context
 from .models import (
@@ -229,7 +229,7 @@ class ToolChatAgent(Generic[DepsT]):
             return
 
         answer = "".join(answer_parts)
-        # The ledger write is async (usage_recording); a test's recorder
+        # The ledger write is async (spend.recording); a test's recorder
         # may be a plain function returning the cost.
         cost = self._recorder(
             action=self._action,

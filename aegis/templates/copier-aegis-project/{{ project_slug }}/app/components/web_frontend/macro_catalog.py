@@ -112,6 +112,11 @@ EXAMPLES: dict[str, dict[str, str]] = {
             <p class="text-sm">Queue empties in
               {% call hover_hint("Drain", "Waiting jobs over the net rate.") %}4 min{% endcall %}
             </p>""",
+        "hint_panel": """
+            <span class="group relative inline-block">
+              <span class="text-sm underline decoration-dotted">Hover me</span>
+              {% call hint_panel("", "left-0 top-full pt-1.5 group-hover:block") %}Shown on hover by CSS alone, so a live frame cannot close it.{% endcall %}
+            </span>""",
         "info_tooltip": """
             {% call info_tooltip() %}<p>Any markup can go in the body.</p>{% endcall %}""",
         "badge": """

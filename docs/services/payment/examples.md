@@ -178,7 +178,7 @@ The standard play is to refund proactively before the chargeback lands. Fighting
 
 ```python
 from app.services.payment.constants import DisputeStatus
-from app.services.payment.payment_service import PaymentService
+from app.services.payment.service import PaymentService
 
 class FraudAwarePaymentService(PaymentService):
     async def _handle_early_fraud_warning(self, event) -> None:
@@ -283,7 +283,7 @@ Both patterns keep the base-class persistence and dispatch intact.
 
 The service is designed for multi-provider support. To add Paddle, PayPal, or any other:
 
-1. Create `app/services/payment/providers/paddle.py` (or similar) implementing `BasePaymentProvider`.
+1. Create `app/services/payment/domains/providers/paddle.py` (or similar) implementing `BasePaymentProvider`.
 2. Register it in `PaymentService._get_provider()` based on a new `PAYMENT_PROVIDER` env var.
 3. Add its env vars to `app/core/config.py` and `.env.example`.
 

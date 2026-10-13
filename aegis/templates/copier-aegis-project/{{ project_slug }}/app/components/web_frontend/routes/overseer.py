@@ -51,9 +51,7 @@ async def overseer_page(request: Request, user: Viewer = Depends(viewer)) -> Res
     """Overseer's home: every page's glance at its containers."""
     status = last_system_status()
     navigation = build_navigation(status)
-    overview = await overseer_container.overview(
-        navigation, request.query_params.get("view"), request.query_params.get("zoom")
-    )
+    overview = await overseer_container.overview(navigation, request.query_params)
     return render(
         request,
         name="pages/overseer/index.html",

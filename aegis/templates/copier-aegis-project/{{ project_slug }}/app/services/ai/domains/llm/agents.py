@@ -11,11 +11,11 @@ from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
 from app.core.log import logger
-from app.services.ai.config import AIServiceConfig
 from app.services.ai.domains.llm.base import (
     ProviderError,
     ProviderNotInstalledError,
 )
+from app.services.ai.domains.llm.config import AIServiceConfig
 from app.services.ai.domains.llm.model_factory import (
     _grant_kwargs,
     _model_settings,

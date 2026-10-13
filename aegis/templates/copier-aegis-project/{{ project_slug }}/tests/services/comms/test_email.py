@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.services.comms.email import (
+from app.services.comms.domains.email.messages import (
     EmailConfigurationError,
     EmailError,
     get_email_status,
@@ -87,7 +87,7 @@ class TestSendEmail:
         """Test successful email send."""
         with (
             secret_settings() as mock_settings,
-            patch("app.services.comms.email.resend") as mock_resend,
+            patch("app.services.comms.domains.email.messages.resend") as mock_resend,
         ):
             mock_settings.RESEND_API_KEY = "re_test_key"
             mock_settings.RESEND_FROM_EMAIL = "test@example.com"
@@ -110,7 +110,7 @@ class TestSendEmail:
         """Test email send with HTML body."""
         with (
             secret_settings() as mock_settings,
-            patch("app.services.comms.email.resend") as mock_resend,
+            patch("app.services.comms.domains.email.messages.resend") as mock_resend,
         ):
             mock_settings.RESEND_API_KEY = "re_test_key"
             mock_settings.RESEND_FROM_EMAIL = "test@example.com"
@@ -196,7 +196,7 @@ class TestSendEmailSimple:
         """Test simple send with single string recipient."""
         with (
             secret_settings() as mock_settings,
-            patch("app.services.comms.email.resend") as mock_resend,
+            patch("app.services.comms.domains.email.messages.resend") as mock_resend,
         ):
             mock_settings.RESEND_API_KEY = "re_test_key"
             mock_settings.RESEND_FROM_EMAIL = "test@example.com"
@@ -216,7 +216,7 @@ class TestSendEmailSimple:
         """Test simple send with list of recipients."""
         with (
             secret_settings() as mock_settings,
-            patch("app.services.comms.email.resend") as mock_resend,
+            patch("app.services.comms.domains.email.messages.resend") as mock_resend,
         ):
             mock_settings.RESEND_API_KEY = "re_test_key"
             mock_settings.RESEND_FROM_EMAIL = "test@example.com"

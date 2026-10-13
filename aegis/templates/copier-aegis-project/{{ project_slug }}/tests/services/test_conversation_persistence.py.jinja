@@ -93,7 +93,7 @@ def _fake_runtime(reply: str) -> Iterator[None]:
     ``reply`` without a provider. Which runtime is faked follows the
     framework the project was generated with."""
     with (
-        patch("app.services.ai.config.get_ai_config") as mock_config,
+        patch("app.services.ai.domains.llm.config.get_ai_config") as mock_config,
 {%- if ai_framework == "pydantic-ai" %}
         patch("app.services.ai.service.prompt.get_agent") as runtime,
 {%- else %}
@@ -246,7 +246,7 @@ class TestAIServiceConversationMemory:
 
     def test_ai_service_initialization(self, mock_settings):
         """Test AIService initializes with conversation manager."""
-        with patch("app.services.ai.config.get_ai_config") as mock_config:
+        with patch("app.services.ai.domains.llm.config.get_ai_config") as mock_config:
             mock_config.return_value.enabled = True
             mock_config.return_value.provider = AIProvider.OPENAI
 
@@ -311,7 +311,7 @@ class TestAIServiceConversationMemory:
         In-memory mode: Each instance has isolated storage (retrieved is None)
         SQLite mode: Instances share database storage (retrieved is not None)
         """
-        with patch("app.services.ai.config.get_ai_config") as mock_config:
+        with patch("app.services.ai.domains.llm.config.get_ai_config") as mock_config:
             mock_config.return_value.enabled = True
             mock_config.return_value.provider = AIProvider.OPENAI
 

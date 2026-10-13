@@ -33,6 +33,9 @@ In the plugin repository (created by `aegis plugins create <name>`):
   tables.
 - `src/aegis_stack_<name>/templates/{{ project_slug }}/`: the files a project
   receives. Convention modules in `app/services/<service>/`:
+  - `__init__.py`: `CATEGORY = Category.<X>` (`app.core.parts`), the
+    service's concern in the system model (`app.core.ontology`); App when
+    left out. First-party parts declare it on their spec instead.
   - `models.py` (or `models/`): tables, picked up by the model registry.
   - `change_types.py`: changes a model proposes and a user approves.
   - `scheduled_jobs.py`: `JOBS`, a tuple of `ServiceJob` (`app.core.schedule`).

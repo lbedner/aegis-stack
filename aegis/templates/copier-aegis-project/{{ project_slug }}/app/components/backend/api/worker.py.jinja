@@ -21,8 +21,7 @@ from app.components.backend.api.models import (
     TaskStatusResponse,
 )
 from app.components.backend.api.worker_load_test import router as load_test_router
-from app.components.worker.events import publish_event
-from app.components.worker.pools import get_queue_pool
+from app.components.worker.pools import enqueue_task as enqueue, get_queue_pool
 from app.components.worker.tasks import get_task_by_name, list_available_tasks
 from app.core.config import get_default_queue
 from app.core.log import logger
@@ -106,13 +105,12 @@ async def enqueue_task(task_request: TaskRequest) -> TaskResponse:
         )
 
     try:
-        pool, queue_name = await get_queue_pool(task_request.queue_type)
-
-        job = await pool.enqueue_job(
+        # The one way work reaches the queue: its feed, its history, its edge.
+        job = await enqueue(
             task_request.task_name,
+            task_request.queue_type,
             *task_request.args,
-            _queue_name=queue_name,
-            _defer_by=task_request.delay_seconds,
+            delay_seconds=task_request.delay_seconds,
             **task_request.task_kwargs,
         )
 
@@ -120,30 +118,6 @@ async def enqueue_task(task_request: TaskRequest) -> TaskResponse:
         estimated_start = None
         if task_request.delay_seconds:
             estimated_start = queued_at + timedelta(seconds=task_request.delay_seconds)
-
-        if job is None:
-            await pool.aclose()
-            raise HTTPException(status_code=500, detail="Failed to enqueue task")
-
-        # Publish enqueue event for real-time dashboard updates
-        await publish_event(
-            pool, "job.enqueued", task_request.queue_type,
-            {"job_id": job.job_id, "task": task_request.task_name},
-        )
-
-        # Record task enqueued in history
-        from app.components.worker.task_history import record_task_enqueued
-        from app.core.config import settings as app_settings
-
-        await record_task_enqueued(
-            pool,
-            job.job_id,
-            task_request.task_name,
-            task_request.queue_type,
-            ttl_seconds=app_settings.TASK_HISTORY_TTL_SECONDS,
-        )
-
-        await pool.aclose()
 
         logger.info(f"Task enqueued: {job.job_id} ({task_request.task_name})")
 

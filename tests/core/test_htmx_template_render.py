@@ -395,6 +395,7 @@ class TestWebFrontendScaffolding:
                 "facts",
                 "figures",
                 "health_badge",
+                "hint_panel",
                 "hover_hint",
                 "info_tooltip",
                 "menu_item",

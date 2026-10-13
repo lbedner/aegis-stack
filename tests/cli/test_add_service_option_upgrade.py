@@ -79,4 +79,4 @@ def test_an_auth_level_upgrade_takes_too(project_factory: ProjectFactory) -> Non
     text = user.read_text()
     assert "role" in text
     assert "# kept by the project" in text
-    assert (project / "app/services/auth/orgs.py").exists()
+    assert (project / "app/services/auth/domains/orgs/organizations.py").exists()

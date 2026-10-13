@@ -19,7 +19,7 @@ from app.components.frontend.dashboard.modals.insights_modal.constants import (
     RANGE_OPTIONS,
 )
 from app.components.frontend.theme import AegisTheme as Theme
-from app.services.insights.views.formatting import pct as pct_change
+from app.services.insights.service import pct as pct_change
 
 from ..modal_sections import (
     ChartColors,

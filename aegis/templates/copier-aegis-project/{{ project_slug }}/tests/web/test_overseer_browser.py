@@ -7,9 +7,11 @@ from fastapi.testclient import TestClient
 import pytest
 
 from app.components.browser.health import BrowserFact
-from app.components.web_frontend.overseer_sections import CONCERNS
 from app.components.web_frontend.rendering import templates
 from app.core.constants import ComponentName
+from app.core.ontology.model import Kind
+from app.core.ontology.parts import concern_of
+from app.core.parts import Category
 from app.services.system.models import ComponentStatus, ComponentStatusType
 from tests.web.dom import one, select, text
 from tests.web.overseer import sign_in, status_with
@@ -39,7 +41,7 @@ def test_the_page_shows_the_server_and_the_client(
 
 
 def test_it_sits_under_compute_with_an_icon_of_its_own() -> None:
-    assert ComponentName.BROWSER in dict(CONCERNS)["Compute"]
+    assert concern_of(Kind.COMPONENT, ComponentName.BROWSER) is Category.COMPUTE
     module = templates.env.get_template("components/macros/layout.html").module
     assert str(module.sidebar_icon(ComponentName.BROWSER)) != str(
         module.sidebar_icon("unknown")

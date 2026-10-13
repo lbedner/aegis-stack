@@ -9,13 +9,13 @@ link, or a file that is not source. Outside dev it is off until an admin
 turns it on (``OVERSEER_CODE_ENABLED``): the source is a map of the app."""
 
 import asyncio
-import html
-import os
-import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from functools import cache
+import html
+import os
 from pathlib import PurePosixPath
+import re
 from typing import Any
 
 from markupsafe import Markup, escape
@@ -23,6 +23,7 @@ from markupsafe import Markup, escape
 from app.core import ownership, source_index
 from app.core.concurrency import background
 from app.core.config import settings
+from app.core.parts import Category
 from app.core.source_index import SKIPPED
 from app.services.system import ui_deployments, ui_runtime
 from app.services.system.errors.fingerprint import FRAME
@@ -41,6 +42,7 @@ ITEM = NavItem(
     url="/overseer/code",
     status="",
     component=ComponentStatus(name="code", message=""),
+    concern=Category.PLATFORM,
 )
 FILE = "file"  # the query parameter naming the open file
 OWNER = "owner"  # ... scoping the tree to a component's or service's files
@@ -210,7 +212,7 @@ templates.env.globals.update(
 
 
 def enabled() -> bool:
-    return settings.is_dev or settings.OVERSEER_CODE_ENABLED
+    return source_index.visible()
 
 
 def _source(name: str) -> bool:

@@ -15,7 +15,7 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 import app.core.db as db_module
-from app.services.ai import usage_recording
+from app.services.ai.domains.spend import recording as usage_recording
 from app.services.ai.domains.voice.stt import STTService
 from app.services.ai.domains.voice.tts import TTSService
 from app.services.ai.models.llm import LLMUsage

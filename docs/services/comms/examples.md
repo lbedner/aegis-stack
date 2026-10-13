@@ -7,7 +7,7 @@ Real-world usage patterns for the Communications Service.
 ### Send Welcome Email
 
 ```python
-from app.services.comms.email import send_email_simple
+from app.services.comms.service import send_email_simple
 
 async def send_welcome_email(user_email: str, user_name: str) -> None:
     """Send welcome email to new user."""
@@ -30,7 +30,7 @@ async def send_welcome_email(user_email: str, user_name: str) -> None:
 ### Send Verification Code
 
 ```python
-from app.services.comms.sms import send_sms_simple
+from app.services.comms.service import send_sms_simple
 
 async def send_verification_code(phone: str, code: str) -> None:
     """Send SMS verification code."""
@@ -43,7 +43,7 @@ async def send_verification_code(phone: str, code: str) -> None:
 ### Password Reset Flow
 
 ```python
-from app.services.comms.email import send_email_simple
+from app.services.comms.service import send_email_simple
 
 async def send_password_reset(email: str, reset_token: str) -> None:
     """Send password reset email."""
@@ -91,7 +91,7 @@ Create a worker task for sending emails:
 ```python
 # app/components/worker/tasks/comms.py
 from arq import Retry
-from app.services.comms.email import send_email
+from app.services.comms.service import send_email
 from app.services.comms.models import SendEmailRequest
 from app.core.log import logger
 
@@ -156,7 +156,7 @@ async def send_sms_task(
     Returns:
         Result with message SID and status
     """
-    from app.services.comms.sms import send_sms
+    from app.services.comms.service import send_sms
     from app.services.comms.models import SendSMSRequest
 
     logger.info(f"Sending SMS to {to}")
@@ -334,7 +334,7 @@ Use the scheduler component with comms:
 
 ```python
 # app/services/digest/jobs.py
-from app.services.comms.email import send_email_simple
+from app.services.comms.service import send_email_simple
 
 async def send_daily_digest() -> None:
     """Send daily digest email to all users."""
@@ -361,8 +361,7 @@ ServiceJob(
 Send to multiple channels based on user preferences:
 
 ```python
-from app.services.comms.email import send_email_simple
-from app.services.comms.sms import send_sms_simple
+from app.services.comms.service import send_email_simple, send_sms_simple
 
 async def notify_user(
     user: User,
@@ -490,7 +489,7 @@ async def schedule_appointment_reminder(
 ### Graceful Degradation
 
 ```python
-from app.services.comms.email import send_email_simple, EmailError
+from app.services.comms.service import send_email_simple, EmailError
 
 async def send_notification_with_fallback(
     email: str,

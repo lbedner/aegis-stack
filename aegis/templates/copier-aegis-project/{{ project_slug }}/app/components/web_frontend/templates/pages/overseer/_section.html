@@ -12,8 +12,9 @@
 {# A page of one section heads it with its own name: it has no sub-menu. #}
 {% call page_header(item.title if page.single else page.labels[current], subtitle) %}{% include "pages/overseer/" ~ page.folder ~ "/_" ~ current|replace("-", "_") ~ "_actions.html" ignore missing %}{% endcall %}
 {# A section every page may have (the Container section) falls back to one
-   shared ``_<section>.html``. #}
-{% set partial = ["pages/overseer/" ~ page.folder ~ "/_" ~ current|replace("-", "_") ~ ".html", "pages/overseer/_" ~ current|replace("-", "_") ~ ".html"] %}
+   shared ``_<section>.html``; a page whose sections share one partial
+   (Patterns) names it, ``section_partial``. #}
+{% set partial = [section_partial] if section_partial is defined else ["pages/overseer/" ~ page.folder ~ "/_" ~ current|replace("-", "_") ~ ".html", "pages/overseer/_" ~ current|replace("-", "_") ~ ".html"] %}
 {# The Overview's glance at the containers behind the page, kept live by its
    own stream (overseer_container.glance). #}
 {% if glance is defined %}

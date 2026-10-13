@@ -298,7 +298,7 @@ class TTSService:
         catalog's rates (by the character, or by the second of speech).
         Never fails the request."""
         try:
-            from app.services.ai import usage_recording
+            from app.services.ai.domains.spend import recording as usage_recording
         except ImportError:
             # A project generated without a database has no ledger (and no
             # app.core.db at all). The recording call stays in the path so

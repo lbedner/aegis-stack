@@ -1,4 +1,5 @@
-"""Blog service business logic."""
+"""Blog service business logic, and the one way in: callers outside the
+service import from here (``__all__``), never from ``domains``."""
 
 from sqlalchemy import func
 from sqlmodel import delete, select
@@ -8,6 +9,19 @@ from app.core.time import utcnow
 
 from . import queries as blog_queries
 from .constants import BlogPostStatus, ImportConflictPolicy
+from .domains.posts.slugs import slugify
+from .domains.posts.summary import blog_health_summary
+from .domains.posts.tags import set_post_tags
+from .domains.transfer.formats import (
+    json_to_posts,
+    markdown_to_post,
+    post_to_markdown,
+    posts_to_json,
+    posts_to_zip,
+    zip_to_posts,
+)
+from .domains.transfer.payloads import export_posts as _export_posts
+from .domains.transfer.payloads import import_posts as _import_posts
 from .models import (
     BlogHealthSummary,
     BlogPost,
@@ -26,11 +40,16 @@ from .schemas import (
     ImportedPost,
     ImportResult,
 )
-from .slugs import slugify
-from .summary import blog_health_summary
-from .tags import set_post_tags
-from .transfer import export_posts as _export_posts
-from .transfer import import_posts as _import_posts
+
+__all__ = [
+    "BlogService",
+    "json_to_posts",
+    "markdown_to_post",
+    "post_to_markdown",
+    "posts_to_json",
+    "posts_to_zip",
+    "zip_to_posts",
+]
 
 
 class BlogService:

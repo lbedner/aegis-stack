@@ -139,6 +139,23 @@ and stay out of their history.
 you filled in. Load Tests' route picker shows this same form, with requests
 and clients added, so a route is filled in the same way on both pages.
 
+**Dry path** walks the route without sending it: every hop it can take,
+read from the code. It starts at the handler and the dependencies FastAPI
+injects, then follows each call through the service it is handed, its own
+methods, the tables a query names (reads and writes), the components a
+core client fronts, work handed to the queue (and on into the task, marked
+as running on the worker) and the outside providers whose keys the code
+holds. Each hop is set in under the one that makes it and opens at its line
+in Overseer > Code; a hop under an `if` shows the condition, never
+evaluated. Where the walk cannot see further it stops at that line and says
+why: a parameter with no type, a function handed in as a value, a chain
+past what it follows, a registry it cannot read, or more than 12 calls deep.
+ORM lazy loads and cascades, raw `text()` SQL, middleware and events are
+not seen by reading the code, and the page says so. **Show on the map**
+opens the Server with the parts the route crosses lit. The button shows
+only where Overseer > Code does (dev, or `OVERSEER_CODE_ENABLED`): it is
+the code's map.
+
 Because the Routes tab reads from cached metadata built by the
 `component_health` startup hook, anything you add at runtime (rare, but
 possible via the FastAPI app object) will not appear until the next

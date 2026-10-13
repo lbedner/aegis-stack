@@ -22,7 +22,7 @@ from app.components.frontend.controls.data_table import (
 )
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.constants import country_label
-from app.services.insights.views.formatting import pct as pct_change
+from app.services.insights.service import pct as pct_change
 
 from ..modal_sections import (
     ChartColors,

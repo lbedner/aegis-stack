@@ -3,6 +3,7 @@
 The queue itself lives in ``app.services.change_queue``; finance is one
 of its registrants. Importing this package registers finance's types -
 an executor that is never imported does not exist to the queue.
+``lookups`` is the agent side: the ids a proposal is built from.
 """
 
 from app.services.finance.domains.writes import executors as executors

@@ -81,6 +81,14 @@
   plan, a daily budget). The API's `/chat/stream` and the mounts share one
   SSE writer (`api/ai/sse.py`) (#1566).
 
+- **A route's dry path.** Overseer > Server > Routes has **Dry path** beside
+  Execute: every hop a route can take, read from the code without sending a
+  request (handler, injected dependencies, service methods, tables read and
+  written, components, queued tasks, outside providers), each opening at its
+  line in Code, with the parts it crosses lit on the map and a stop, with
+  its reason, wherever the walk cannot see further. Admins can ask the
+  `ontology` tool for the same with `route="GET /api/v1/..."`.
+
 ### Fixed
 
 - **A Python 3.13 project starts again.** The chat surface named its own
@@ -89,6 +97,39 @@
 - **Two stacks with storage run side by side.** `make serve` now moves the
   storage (S3) host port off 8333 when another stack has it, as it already
   does for Postgres, Redis and the browser.
+
+- **Overseer > Code resolves a name re-exported from a package.** A relative
+  import in an `__init__.py` was read one package too high, so a name a
+  package re-exports (`from app.services.system import get_system_status`)
+  did not lead to its definition.
+
+### Changed
+
+- **Every service keeps its logic in `domains/`.** A service's top level
+  is now only the standard files (`service.py`, `models.py`, `queries.py`,
+  `health.py`, `tools.py`...), its subsystems are packages under
+  `domains/`, what it talks to stays under `adapters/`, and callers outside
+  a service import from its `service.py` (update imports):
+  - auth: `users`, `user_*`, `refresh_tokens`, `session_history`, `orgs`,
+    `memberships`, `invites` -> `domains/users/`, `domains/sessions/`,
+    `domains/orgs/`; import from `auth.service`.
+  - blog: `slugs`, `tags`, `summary` -> `domains/posts/`; `transfer`,
+    `serialization` -> `domains/transfer/payloads`, `.../formats`.
+  - comms: `email` -> `domains/email/messages`; `twilio`, `sms`, `calls`
+    -> `domains/telephony/client`, `.../sms`, `.../calls`; `webhooks` ->
+    `domains/inbound/webhooks`; a new `comms.service` is the way in.
+  - payment: `service_base` -> `domains/base`; `providers/` ->
+    `domains/providers/`; `refunds`, `disputes` -> `domains/charges/`;
+    `subscriptions` -> `domains/subscriptions/plans`; `webhooks_billing`,
+    `webhooks_subscription`, `stripe_events` -> `domains/webhooks/`
+    (`billing`, `invoices`, `subscriptions`, `events`); `reporting` ->
+    `domains/reporting/revenue`; `catalog` -> `domains/catalog/cache`;
+    `email_helpers` -> `domains/notifications/emails`.
+  - ai: `config` -> `domains/llm/config`; `usage_recording` ->
+    `domains/spend/recording`.
+  - insights: `views/` -> `domains/views/`. finance: `write_tools` ->
+    `domains/writes/lookups`. research: `refresh` ->
+    `domains/watches/refresh` (`registry` stays: plugins register there).
 
 ## [0.15.1] - 2026-10-11
 

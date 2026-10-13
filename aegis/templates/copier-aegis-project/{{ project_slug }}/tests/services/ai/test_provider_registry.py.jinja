@@ -60,7 +60,7 @@ class TestTheOldLookupsReadTheRegistry:
 
     @pytest.mark.parametrize("provider", list(AIProvider))
     def test_api_key_env_matches_the_registry(self, provider: AIProvider) -> None:
-        from app.services.ai.config import api_key_env
+        from app.services.ai.domains.llm.config import api_key_env
 
         assert api_key_env(provider) == PROVIDERS[provider].env_var
 
@@ -102,7 +102,7 @@ class TestOneClientForEveryOpenAICompatibleProvider:
     ) -> None:
         """The regression guard: construction, not just configuration."""
         from app.core.config import settings
-        from app.services.ai.config import get_ai_config
+        from app.services.ai.domains.llm.config import get_ai_config
         from app.services.ai.domains.llm.providers import model_for
 
         config = get_ai_config(settings)
@@ -126,7 +126,7 @@ class TestOneClientForEveryOpenAICompatibleProvider:
         import os
 
         from app.core.config import settings
-        from app.services.ai.config import get_ai_config
+        from app.services.ai.domains.llm.config import get_ai_config
         from app.services.ai.domains.llm.providers import model_for
 
         monkeypatch.setenv("OPENAI_API_KEY", "the-real-openai-key")
@@ -149,7 +149,7 @@ class TestOneClientForEveryOpenAICompatibleProvider:
         import os
 
         from app.core.config import settings
-        from app.services.ai.config import get_ai_config
+        from app.services.ai.domains.llm.config import get_ai_config
         from app.services.ai.domains.llm.providers import model_for
 
         env_var = PROVIDERS[provider].env_var
@@ -178,7 +178,7 @@ class TestOpenRouterOnLangChain:
 
     async def test_it_builds_through_the_openai_client(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from app.core.config import settings
-        from app.services.ai.config import get_ai_config
+        from app.services.ai.domains.llm.config import get_ai_config
         from app.services.ai.domains.llm.providers import get_llm
 
         config = get_ai_config(settings)
@@ -195,7 +195,7 @@ class TestOpenRouterOnLangChain:
         import os
 
         from app.core.config import settings
-        from app.services.ai.config import get_ai_config
+        from app.services.ai.domains.llm.config import get_ai_config
         from app.services.ai.domains.llm.providers import get_llm
 
         monkeypatch.setenv("OPENAI_API_KEY", "the-real-openai-key")

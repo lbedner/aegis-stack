@@ -1,0 +1,53 @@
+"""Whether a tool call acts for an admin (``shared.deps.caller_is_admin``):
+what its runner bound (MCP: the token's admin claim), else its owner by
+the one admin rule (``is_admin``), else, with no auth service, whoever
+reaches the app."""
+
+{% if include_auth -%}
+import pytest
+
+from app.core.config import settings
+from app.core.tools import acting_as
+from app.services.shared.deps import caller_is_admin
+{% else -%}
+from app.core.tools import acting_as
+from app.services.shared.deps import caller_is_admin
+{% endif %}
+
+async def test_what_the_runner_bound_decides() -> None:
+    with acting_as(None, "mcp:cli", admin=True):
+        assert await caller_is_admin()
+    with acting_as(None, "mcp:cli", admin=False):
+        assert not await caller_is_admin()
+{%- if include_auth %}
+
+
+@pytest.mark.parametrize(
+    ("owner", "admin"),
+    [(1, True), (2, False), (None, False)],  # None: nobody signed in
+)
+async def test_a_chat_owner_is_an_admin_by_the_admin_rule(
+    monkeypatch: pytest.MonkeyPatch, owner: int | None, admin: bool
+) -> None:
+    """Owners 1 and 2 are the suite's seeded users (``KNOWN_OWNER_IDS``);
+    one lookup a call, so one owner a case."""
+    monkeypatch.setattr(settings, "AUTH_ENABLED", True)
+    monkeypatch.setattr(settings, "ADMIN_USER_EMAILS", ["owner1@test.local"])
+    with acting_as(owner, "assistant"):
+        assert await caller_is_admin() is admin
+
+
+async def test_where_sign_in_is_off_everyone_is_an_admin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Dev's synthetic user is in no table, and is an admin all the same."""
+    monkeypatch.setattr(settings, "AUTH_ENABLED", False)
+    with acting_as(0, "assistant"):
+        assert await caller_is_admin()
+{%- else %}
+
+
+async def test_without_auth_whoever_reaches_the_app_is_the_operator() -> None:
+    with acting_as(None, "assistant"):
+        assert await caller_is_admin()
+{%- endif %}

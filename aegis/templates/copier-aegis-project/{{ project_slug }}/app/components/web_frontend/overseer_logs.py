@@ -11,6 +11,7 @@ from collections.abc import AsyncIterator, Mapping, Sequence
 from typing import Any
 
 from app.core import series
+from app.core.parts import Category
 from app.services.system import ui_logs
 from app.services.system.models import ComponentStatus
 
@@ -40,6 +41,7 @@ ITEM = NavItem(
     url="/overseer/logs",
     status="",
     component=ComponentStatus(name="logs", message=""),
+    concern=Category.STACK,
 )
 
 

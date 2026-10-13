@@ -41,8 +41,8 @@ def serve_kwargs(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     monkeypatch.setattr(dev_tasks, "_DOTENV", tmp_path / ".env")
     monkeypatch.delenv("AEGIS_STACK_ENV_FILE", raising=False)
 {%- endif %}
-    monkeypatch.delenv("ENGINE", raising=False)
-    monkeypatch.delenv("WEBSERVER_ENGINE", raising=False)
+    for name in ("ENGINE", "WEBSERVER_ENGINE", "LOOP", "WEBSERVER_LOOP"):
+        monkeypatch.delenv(name, raising=False)
 {%- if include_deploy and include_redis %}
     # No aegis CLI unless a test puts one there: never a real deploy agent.
     monkeypatch.setattr(dev_tasks.shutil, "which", lambda _: None)
@@ -58,6 +58,17 @@ def test_engine_becomes_the_webserver_setting(
     dev_tasks.serve()
 
     assert serve_kwargs["env"]["WEBSERVER_ENGINE"] == "granian"
+
+
+def test_loop_becomes_the_webserver_setting(
+    serve_kwargs: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`make serve LOOP=rloop`, the same way."""
+    monkeypatch.setenv("LOOP", "rloop")
+
+    dev_tasks.serve()
+
+    assert serve_kwargs["env"]["WEBSERVER_LOOP"] == "rloop"
 
 
 def test_plain_serve_pins_no_engine(serve_kwargs: dict[str, Any]) -> None:

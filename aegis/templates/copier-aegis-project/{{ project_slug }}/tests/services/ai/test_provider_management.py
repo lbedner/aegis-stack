@@ -226,7 +226,7 @@ class TestGetEnvVarName:
         OpenRouter's key is OPEN_ROUTER_API_KEY, not the upper-cased slug —
         deriving it reports the key missing while the model works.
         """
-        from app.services.ai.config import api_key_env
+        from app.services.ai.domains.llm.config import api_key_env
         from app.services.ai.models import AIProvider
 
         mismatched = {

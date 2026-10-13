@@ -8,9 +8,11 @@ source of the default agent. Beside it, the ``sentiment`` agent the batch
 scorer runs as, so its model is picked in Agents.
 """
 
+from collections.abc import Sequence
 from typing import Any
 
-from sqlmodel import Session, select
+from sqlalchemy.orm import selectinload
+from sqlmodel import Session, col, select
 
 from app.core.log import logger
 from app.core.tools import get_tool, load_tools, registered_tool_names
@@ -35,10 +37,41 @@ load_tools()
 
 __all__ = [
     "DEFAULT_AGENT_SLUG",
+    "attach_tools",
     "built_in_agents",
     "default_agent_definition",
     "load_agent_fixtures",
 ]
+
+
+def attach_tools(session: Session, slug: str, names: Sequence[str]) -> int:
+    """Grant agent ``slug`` the tools ``names`` it lacks, by their rows,
+    and say how many: additive and by name, so a re-seed grants what a
+    newer seed added and never takes back what someone else attached. A
+    missing row (its tool not registered here) is skipped with a warning.
+    The caller commits."""
+    agent = session.exec(
+        select(Agent).where(Agent.slug == slug).options(selectinload(Agent.tools))
+    ).first()
+    if agent is None or agent.id is None:
+        return 0
+    have = {tool.name for tool in agent.tools}
+    missing = [name for name in names if name not in have]
+    if not missing:
+        return 0  # a re-seed: nothing to look up
+    rows = {
+        t.name: t
+        for t in session.exec(select(Tool).where(col(Tool.name).in_(missing)))
+    }
+    attached = 0
+    for name in missing:
+        tool = rows.get(name)
+        if tool is None or tool.id is None:
+            logger.warning(f"Tool row missing, not granted to {slug}: {name}")
+            continue
+        agent.tools.append(tool)
+        attached += 1
+    return attached
 
 
 def default_agent_definition() -> dict[str, Any]:
@@ -130,4 +163,9 @@ def load_agent_fixtures(session: Session) -> dict[str, int]:
         session.commit()
         logger.info(f"Seeded {tools_added} tool row(s) from the registry")
 
-    return {"agents": added, "tools": tools_added}
+    tool_links = attach_tools(
+        session, DEFAULT_AGENT_SLUG, default_agent_config().tool_names
+    )
+    if tool_links:
+        session.commit()
+    return {"agents": added, "tools": tools_added, "tool_links": tool_links}

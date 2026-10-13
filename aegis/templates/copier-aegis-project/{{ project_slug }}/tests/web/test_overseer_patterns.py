@@ -146,3 +146,9 @@ class TestMacroCatalog:
         html = _get(client, "layout")
         assert not select(one(html, "#macro-dialog"), "[data-preview] dialog")
         assert len(select(html, "dialog#dialog")) <= 1
+
+
+def test_the_parts_section_says_what_is_exempt_and_why(client: TestClient) -> None:
+    html = _get(client, "parts")
+    exempt = select(html, "#pattern-exemptions [data-exemption]")
+    assert exempt and all(text(one(e, "[data-why]")) for e in exempt)

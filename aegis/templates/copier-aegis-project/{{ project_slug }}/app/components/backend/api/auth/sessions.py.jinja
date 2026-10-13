@@ -31,8 +31,12 @@ from app.models.user import (
 )
 from app.services.auth.service import get_current_user_from_token, session_id_of
 from app.services.auth.deps import get_current_active_user, get_session_token
-from app.services.auth.refresh_tokens import RefreshService, access_token
-from app.services.auth.users import RestoreConflictError, UserService
+from app.services.auth.service import (
+    RefreshService,
+    RestoreConflictError,
+    UserService,
+    access_token,
+)
 from app.components.backend.api.auth.admin import require_user_admin
 
 router = APIRouter()

@@ -11,9 +11,7 @@ from app.core.log import logger
 from app.services.ai.domains.chat.agent_registry import seed_agent
 from app.services.ai.models.agents import (
     Agent,
-    AgentTool,
     MemoryModule,
-    Tool,
 )
 
 from app.core.tools import load_tools
@@ -146,6 +144,9 @@ FINANCE_CHAT_TOOL_NAMES = (
     # be recorded before it is answered from - the recording is what
     # later turns get instead of the pixels.
     "record_reading",
+    # What each table and change type is, read from the code, instead of
+    # a prompt restating the schema.
+    "ontology",
 )
 
 
@@ -170,32 +171,6 @@ def finance_chat_agent_definition() -> dict[str, Any]:
         "is_active": True,
         "code_mode": True,
     }
-
-
-def _attach_chat_tools(session: Session) -> int:
-    """Link the chat agent to the finance tool rows, idempotently."""
-    agent = session.exec(
-        select(Agent).where(Agent.slug == FINANCE_CHAT_AGENT_SLUG)
-    ).first()
-    if agent is None or agent.id is None:
-        return 0
-    linked = {
-        link.tool_id
-        for link in session.exec(
-            select(AgentTool).where(AgentTool.agent_id == agent.id)
-        ).all()
-    }
-    attached = 0
-    for name in FINANCE_CHAT_TOOL_NAMES:
-        tool = session.exec(select(Tool).where(Tool.name == name)).first()
-        if tool is None or tool.id is None:
-            logger.warning(f"Finance chat tool row missing, skipping: {name}")
-            continue
-        if tool.id in linked:
-            continue
-        session.add(AgentTool(agent_id=agent.id, tool_id=tool.id))
-        attached += 1
-    return attached
 
 
 def load_finance_agent_fixtures(session: Session) -> dict[str, int]:
@@ -239,7 +214,12 @@ def load_finance_agent_fixtures(session: Session) -> dict[str, int]:
     if any(counts.values()):
         session.commit()
 
-    counts["finance_tool_links"] = _attach_chat_tools(session)
+    # Here, not at the top: the AI fixtures package loads finance's seeds.
+    from app.services.ai.fixtures.agent_fixtures import attach_tools
+
+    counts["finance_tool_links"] = attach_tools(
+        session, FINANCE_CHAT_AGENT_SLUG, FINANCE_CHAT_TOOL_NAMES
+    )
     if counts["finance_tool_links"]:
         session.commit()
         logger.info(

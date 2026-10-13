@@ -50,6 +50,7 @@ disk, and picks up a plugin's the same way as its own.
 
 | File in `app/services/<your service>/` | What it holds |
 |---|---|
+| `__init__.py` | `CATEGORY = Category.DATA` (from `app.core.parts`): where the service sits in Overseer's grouping; App when left out |
 | `models.py` (or a `models/` package) | the plugin's tables |
 | `change_types.py` | changes a model proposes and the user approves |
 | `scheduled_jobs.py` | `JOBS`, the jobs that run on a schedule |

@@ -12,7 +12,7 @@ import pytest
 from queryspy import assert_max_queries
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.auth.users import UserService
+from app.services.auth.domains.users.accounts import UserService
 
 
 class TestUserByIdUsesTheIdentityMap:

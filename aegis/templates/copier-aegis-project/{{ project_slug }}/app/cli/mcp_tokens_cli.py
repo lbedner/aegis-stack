@@ -10,7 +10,7 @@ from app.components.mcp import tokens
 from app.core.db import get_async_session
 from app.core.formatting import format_relative_time
 from app.models.user import User
-from app.services.auth.users import UserService
+from app.services.auth.service import UserService
 
 app = typer.Typer(help="A person's MCP tokens, for clients beyond stdio.")
 console = theme.console()

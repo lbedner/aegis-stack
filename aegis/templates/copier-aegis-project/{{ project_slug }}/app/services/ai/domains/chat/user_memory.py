@@ -55,10 +55,12 @@ def memory_user(
     agent_slug: str | None = None,
     conversation_id: str | None = None,
     subject: str | None = None,
+    admin: bool | None = None,
 ) -> Iterator[None]:
     """Bind the turn's identity: whose turn, whose cards
-    (``current_owner_user_id``), which agent, which chat, and what it is
-    about (``current_subject``).
+    (``current_owner_user_id``), which agent, which chat, what it is about
+    (``current_subject``), and whether it is an admin's, where the runner
+    knows (``current_admin``).
 
     Every chat runtime wraps its model call in this. Without it a
     memory write has no owner (the tool declines and the model reads
@@ -68,7 +70,7 @@ def memory_user(
     token = current_user_id.set(user_id)
     about = current_subject.set(subject)
     try:
-        with acting_as(owner_user_id, agent_slug, conversation_id):
+        with acting_as(owner_user_id, agent_slug, conversation_id, admin):
             yield
     finally:
         current_subject.reset(about)

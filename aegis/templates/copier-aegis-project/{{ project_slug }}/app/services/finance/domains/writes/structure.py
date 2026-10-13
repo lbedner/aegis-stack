@@ -6,13 +6,17 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.change_queue.schemas import ChangeDisplayRow
 from app.services.finance.domains.detection.insights.formatting import format_usd
 from app.services.finance.domains.ledger import categories, splits
-from app.services.finance.domains.writes.display import live_transactions, txn_subject
+from app.services.finance.domains.writes.display import (
+    TransactionId,
+    live_transactions,
+    txn_subject,
+)
 from app.services.finance.models import FinanceTransaction
 from app.services.finance.schemas import SplitPart
 
@@ -22,8 +26,11 @@ class MatchPayload(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    transaction_id: int
-    stream_id: int
+    transaction_id: int = Field(
+        description="The payment, only from bill_candidates(stream_id): never "
+        "a guess of your own."
+    )
+    stream_id: int = Field(description="The bill, from bills().")
 
 
 async def match_execute(
@@ -100,8 +107,11 @@ class SplitChangePayload(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    transaction_id: int
-    parts: list[SplitPart]
+    transaction_id: TransactionId
+    parts: list[SplitPart] = Field(
+        description="The category lines you know; the rest stays a remainder "
+        "line under the transaction's own category."
+    )
 
     @field_validator("parts")
     @classmethod

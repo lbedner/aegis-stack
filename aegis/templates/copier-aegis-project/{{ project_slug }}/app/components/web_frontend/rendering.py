@@ -73,7 +73,7 @@ def hx_dialog(url: str, extra: str = "") -> Markup:
     a row-form's opener ("I can't open a new one until I refresh").
     Saying ``innerHTML`` here costs nothing and cannot be borrowed
     against, and it fixes every opener at once."""
-    return _hx_open(url, "#dialog-body", extra)
+    return hx_into(url, "#dialog-body", extra)
 
 
 def hx_drawer(url: str) -> Markup:
@@ -81,10 +81,12 @@ def hx_drawer(url: str) -> Markup:
     is edited in beside the page, without the address bar naming it (the
     list-driven ``drawer_sync`` does that). Same stated swap as
     ``hx_dialog``, for the same reason."""
-    return _hx_open(url, "#drawer-body")
+    return hx_into(url, "#drawer-body")
 
 
-def _hx_open(url: str, target: str, extra: str = "") -> Markup:
+def hx_into(url: str, target: str, extra: str = "") -> Markup:
+    """The attributes for "get ``url`` into ``target``": its swap stated
+    (``hx_dialog`` says why), ``extra`` riding along."""
     return Markup(
         f'hx-get="{escape(url)}" hx-target="{target}" hx-swap="innerHTML" {extra}'
     )

@@ -73,21 +73,11 @@ def _is_source(raw_path: str) -> bool:
 
 
 def _watched_dirs() -> list[tuple[Path, bool]]:
-    """``(directory, recursive)`` pairs for the observer.
-
-    The source trees are watched recursively so a newly added file is
-    picked up without restarting. ``dist/`` is watched shallowly and only
-    for the Tailwind output; its subdirectories hold generated copies.
-    """
-    dirs: list[tuple[Path, bool]] = []
-    for subdir, _ in SOURCE_TREES:
-        path = STATIC_DIR / subdir
-        if path.is_dir():
-            dirs.append((path, True))
-    dist = STATIC_DIR / (Path(TAILWIND_OUTPUT).parent)
-    if dist.is_dir():
-        dirs.append((dist, False))
-    return dirs
+    """``(directory, recursive)`` pairs for the observer: ``static/`` itself,
+    recursively, with ``_is_source`` telling sources from output. Not its
+    subfolders: regenerating the project makes ``dist/`` again, and a watch
+    on the old one never sees Tailwind's next write."""
+    return [(STATIC_DIR, True)]
 
 
 class _DebouncedRebuild(FileSystemEventHandler):
@@ -127,8 +117,7 @@ class _DebouncedRebuild(FileSystemEventHandler):
 def main() -> int:
     # Bootstrap first: it makes the manifest current before the first event
     # lands (removing a "stale on first load" race when the watcher starts
-    # after Tailwind has already written), and it creates dist/ so the
-    # observer below has a directory to watch.
+    # after Tailwind has already written).
     try:
         build_assets()
         logger.info("initial fingerprint pass complete")

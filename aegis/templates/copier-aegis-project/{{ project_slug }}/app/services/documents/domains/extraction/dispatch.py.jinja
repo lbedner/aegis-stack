@@ -62,28 +62,18 @@ async def start_extraction(
 async def _enqueue(
     job_id: str, document_id: int, owner_user_id: int | None, force: bool
 ) -> None:
-{%- if worker_backend == "arq" %}
-    from app.components.worker.pools import get_queue_pool
+    from app.components.worker.pools import enqueue_task
     from app.core.constants import QueueName
 
-    pool, queue_name = await get_queue_pool(QueueName.SYSTEM)
-    await pool.enqueue_job(
+    # The one way work reaches the queue: its feed, its history, its edge.
+    await enqueue_task(
         "extract_document_task",
+        QueueName.SYSTEM,
         job_id,
         document_id,
         owner_user_id,
         force,
-        _queue_name=queue_name,
     )
-{%- elif worker_backend == "dramatiq" %}
-    from app.components.worker.queues.system import extract_document_task
-
-    extract_document_task.send(job_id, document_id, owner_user_id, force)
-{%- else %}
-    from app.components.worker.queues.system import extract_document_task
-
-    await extract_document_task.kiq(job_id, document_id, owner_user_id, force)
-{%- endif %}
 {%- else %}
 
 

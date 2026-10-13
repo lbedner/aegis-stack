@@ -110,10 +110,6 @@ stats, $0.00 cost is expected and normal for Ollama models.
         "**Philosophy:** Components own infrastructure; services own "
         "business logic. Compose capabilities, don't inherit complexity."
     )
-    architecture_line = (
-        "**Architecture:** Components (backend, frontend, database, "
-        "scheduler, worker) + Services (ai, auth, rag)"
-    )
     if persona is not None:
         prompt = persona.rstrip() + "\n"
     else:
@@ -136,10 +132,6 @@ stats, $0.00 cost is expected and normal for Ollama models.
 A modular platform for containerized Python backends.
 
 {philosophy_line}
-
-{architecture_line}
-
-**Stack:** FastAPI, Flet, SQLModel, ChromaDB, APScheduler, arq/Redis
 """
 
     if rag_context:

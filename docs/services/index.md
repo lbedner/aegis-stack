@@ -143,20 +143,29 @@ Every service follows one layout, so the file you want is where you expect it
 whoever wrote the service. Names are positional - the file says what it *is*,
 not what it is called:
 
-| File | Holds |
-|------|-------|
-| `service.py` | the facade: the entry point callers reach for |
-| `models.py` | the service's tables |
-| `schemas.py` | request and response shapes |
-| `queries.py` | every read, batched; no business logic |
-| `deps.py` | the request-scoped wiring |
-| `health.py` | what the dashboard shows |
-| `jobs.py` | all background jobs |
-| `constants.py`, `utils.py` | shared values and helpers |
+| File | Holds | Part |
+|------|-------|------|
+| `health.py` | what the dashboard shows | required |
+| `queries.py` | every read, batched; no business logic | required once it reads |
+| `jobs.py` | all background jobs, each `*_job` in a `JOBS` list or called | required once it has jobs |
+| `service.py` | the facade: the entry point callers reach for | optional (advised) |
+| `models.py` | the service's tables | optional |
+| `schemas.py` | request and response shapes | optional |
+| `deps.py` | the request-scoped wiring | optional |
+| `tools.py` | what it hands the AI: its chat tools | optional |
+| `change_types.py` | what it hands the change queue: its executors | optional |
+| `sources.py` | what it hands research: the sources a plugin registers | optional |
+| `adapters/` | what it talks to: providers, file formats, collectors, kept apart from what it knows (`domains/`) | optional |
+| `constants.py`, `utils.py` | shared values and helpers | optional |
+
+Its router lives apart, in `app/components/backend/api/<name>`, and leaves the
+database to the service. At least one test imports the service.
 
 A service grows into that layout in three steps, and stops at whichever one
 still fits: a small service keeps its logic in `service.py`; a larger one puts
-each subsystem in a package under `domains/`.
+each subsystem in a package under `domains/`, and what it talks to (a
+provider's API, a file format, a source's collector) under `adapters/`, kept
+apart from what it knows.
 
 ```
 app/services/
@@ -167,10 +176,11 @@ app/services/
 │
 └── finance/                 # several domains, each its own package
     ├── service/ models/ schemas/ health.py jobs.py utils.py
-    └── domains/
-        ├── ledger/          # each with its own queries.py
-        ├── planning/
-        └── detection/
+    ├── domains/
+    │   ├── ledger/          # each with its own queries.py
+    │   ├── planning/
+    │   └── detection/
+    └── adapters/            # what it talks to: providers/, importers/
 ```
 
 Domains are plural nouns with no `_service` suffix, and their functions take
@@ -184,16 +194,25 @@ belongs - so it names each domain and what it owns.
 
 !!! tip "The layout is tested, not just described"
     Behavioural tests cannot see a layout: a service works the same whether it
-    is one flat package or four small ones. Finance and documents each carry a
-    `test_*_module_layout.py` stating which module defines what, so folding a
-    domain back together, or dropping a function into whichever file was open,
-    fails a test rather than passing quietly.
-
-!!! note "Services written before the standard"
-    `auth`, `blog` and `insights` still carry `<name>_service.py` names from
-    before this was settled. They work exactly as they always did; they are
-    moved onto the layout when there is a reason to be in them, not in a
-    sweep for its own sake.
+    is one flat package or four small ones. Every service is checked against
+    this standard as a pattern: **Overseer > Patterns > Service parts** shows
+    which parts each one has and which rules it breaks, with the file and line
+    that shows it, and `patterns --format json` prints the same report. The
+    enforced rules (reads in queries, every job wired, a health check) are held
+    by `tests/services/test_service_layout.py`; reads still outside a queries
+    module are recorded there as debt that may only shrink. A module at a
+    service's top level that the table above does not name is flagged too
+    (**Logic lives in domains**), each loose file listed, and so is a file
+    past the size budget (**Files stay readable**): over 500 lines, 900 for
+    models, schemas and other lists, or the largest file of its package at
+    over 40% of it and 400 lines. On the map, open the Server: a service
+    that breaks a rule says how many places to fix, and hovering it lists
+    each one (the file linked, its size or its line) with what to do. Open
+    the service and each piece says the same about its own files.
+    Finance and documents also carry a `test_*_module_layout.py` stating which
+    module defines what, so folding a domain back together, or dropping a
+    function into whichever file was open, fails a test rather than passing
+    quietly.
 
 ### Service Integration Points
 

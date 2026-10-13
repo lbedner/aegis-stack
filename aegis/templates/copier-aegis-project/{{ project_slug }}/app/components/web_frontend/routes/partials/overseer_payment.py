@@ -15,10 +15,9 @@ from app.components.web_frontend import overseer_payment
 from app.components.web_frontend.filters import money_to_cents
 from app.components.web_frontend.rendering import dialog, go_to, toast_response
 from app.core.config import settings
-from app.services.payment.catalog import get_catalog
 from app.services.payment.constants import PriceType, RefundReason
 from app.services.payment.deps import get_payment_service
-from app.services.payment.service import PaymentService
+from app.services.payment.service import PaymentService, get_catalog
 
 router = APIRouter(prefix=overseer_payment.PARTIALS)
 
@@ -125,7 +124,9 @@ async def checkout(
         entry = next((e for e in catalog if e.price_id == price), None)
         if entry is None:
             return toast_response("That price is not in the catalog.", "error")
-        recurring = entry.price_type == PriceType.RECURRING or entry.interval is not None
+        recurring = (
+            entry.price_type == PriceType.RECURRING or entry.interval is not None
+        )
         result = await service.create_checkout(
             price_id=entry.price_id,
             quantity=1 if recurring else max(1, quantity),

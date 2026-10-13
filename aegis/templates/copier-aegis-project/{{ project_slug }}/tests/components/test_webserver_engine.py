@@ -5,6 +5,8 @@ production path have to honor it, or a developer gets granian in dev and
 uvicorn in prod without being told.
 """
 
+import asyncio
+import importlib.util
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +16,13 @@ import pytest
 from app.core import loops
 from app.core.config import settings
 from app.entrypoints import webserver
+
+
+@pytest.fixture(autouse=True)
+def _nothing_saved(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No store to read: the engine and loop are the settings' own, unless
+    a test saves one (``_saving``)."""
+    monkeypatch.setattr(webserver, "apply_saved", lambda: None)
 
 
 @pytest.fixture
@@ -241,6 +250,135 @@ class TestLoopSelection:
         webserver.main()
 
         assert granian_calls[0]["loop"] == "rloop"
+
+
+def _saving(monkeypatch: pytest.MonkeyPatch, **values: str) -> None:
+    """The Overseer has saved ``values``: applied as the entrypoint starts."""
+
+    def apply() -> None:
+        for name, value in values.items():
+            monkeypatch.setattr(settings, name, value)
+
+    monkeypatch.setattr(webserver, "apply_saved", apply)
+
+
+def _applied(monkeypatch: pytest.MonkeyPatch, **saved: str) -> list[str]:
+    """``saved`` read from a store by the real ``apply_saved``, as every
+    process starts: the names it applied."""
+    from app.core import saved_settings
+
+    for name in ("WEBSERVER_ENGINE", "WEBSERVER_LOOP"):
+        monkeypatch.setattr(settings, name, getattr(settings, name))
+    monkeypatch.setattr(saved_settings, "IN_ENV", frozenset())
+    monkeypatch.setattr(saved_settings.secrets, "store_name", lambda: "database")
+
+    async def get_many(*names: str) -> dict[str, str | None]:
+        return {name: saved.get(name) for name in names}
+
+    monkeypatch.setattr(saved_settings.secrets, "get_many", get_many)
+    return asyncio.run(saved_settings.apply_saved())
+
+
+class TestSavedInTheOverseer:
+    """The engine and loop are settings Overseer > Settings saves: read by
+    the entrypoint before it starts either, so a saved choice applies on
+    the next start, and only one this environment can start is offered or
+    applied."""
+
+    def test_a_saved_engine_is_the_one_started(
+        self, granian_calls: list[dict[str, Any]], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(settings, "WEBSERVER_ENGINE", "uvicorn")
+        monkeypatch.setattr(settings, "AUTO_RELOAD", False)
+        _saving(monkeypatch, WEBSERVER_ENGINE="granian")
+
+        webserver.main()
+
+        assert len(granian_calls) == 1
+
+    def test_a_saved_loop_is_checked_against_the_saved_engine(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The engine applies first, so the loop is one it takes: rloop
+        saved with granian applies; zuvloop (uvicorn's) is skipped, and
+        the loop stays ``auto``. The server still starts."""
+        monkeypatch.setattr(loops.importlib.util, "find_spec", lambda name: object())
+        monkeypatch.setattr(loops.sys, "version_info", (3, 14, 0))
+
+        both = _applied(monkeypatch, WEBSERVER_ENGINE="granian", WEBSERVER_LOOP="rloop")
+        assert both == ["WEBSERVER_ENGINE", "WEBSERVER_LOOP"]
+        assert settings.WEBSERVER_LOOP == "rloop"
+
+        monkeypatch.setattr(settings, "WEBSERVER_LOOP", "auto")
+        one = _applied(
+            monkeypatch, WEBSERVER_ENGINE="granian", WEBSERVER_LOOP="zuvloop"
+        )
+        assert one == ["WEBSERVER_ENGINE"]
+        assert settings.WEBSERVER_LOOP == "auto"
+
+    def test_the_loops_offered_are_the_running_engines(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(loops.importlib.util, "find_spec", lambda name: object())
+        monkeypatch.setattr(loops.sys, "version_info", (3, 14, 0))
+        monkeypatch.setattr(settings, "AUTO_RELOAD", False)
+        monkeypatch.setattr(settings, "WEBSERVER_ENGINE", "granian")
+        assert loops.offered_loops() == ["auto", "asyncio", "uvloop", "rloop"]
+        monkeypatch.setattr(settings, "WEBSERVER_ENGINE", "uvicorn")
+        assert loops.offered_loops() == ["auto", "asyncio", "uvloop", "zuvloop"]
+        # Reload is uvicorn's supervisor: nowhere to hand zuvloop a coroutine.
+        monkeypatch.setattr(settings, "AUTO_RELOAD", True)
+        assert "zuvloop" not in loops.offered_loops()
+        monkeypatch.setattr(loops.importlib.util, "find_spec", lambda name: None)
+        assert loops.offered_loops() == ["auto", "asyncio"]
+
+    def test_only_an_installed_engine_is_offered(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A saved engine gone from the image (granian removed) is skipped
+        as it applies, rather than failing the start on its import."""
+        monkeypatch.setattr(loops.importlib.util, "find_spec", lambda name: None)
+        assert loops.offered_engines() == ["uvicorn"]
+        assert _applied(monkeypatch, WEBSERVER_ENGINE="granian") == []
+
+    def test_both_are_settings_the_overseer_saves(self) -> None:
+        from app.core import saved_settings
+
+        assert saved_settings.options("WEBSERVER_ENGINE") == ["uvicorn", "granian"]
+        assert "auto" in (saved_settings.options("WEBSERVER_LOOP") or [])
+
+    def test_the_connections_a_read_opens_are_closed_before_serving(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The entrypoint reads on one event loop and serves on another:
+        what the read opened (the cache's pool, the database's) is closed
+        first, so serving opens its own instead of reusing dead ones."""
+        from app.core import boot
+        from app.core.cache import get_cache
+
+        closed: list[str] = []
+
+        async def nothing() -> None:
+            return None
+
+        async def close() -> None:
+            closed.append("cache")
+
+        monkeypatch.setattr(boot, "apply_saved_overrides", nothing)
+        monkeypatch.setattr(get_cache(), "aclose", close)
+        database = importlib.util.find_spec("app.core.db") is not None
+        if database:
+            from app.core import db
+
+            class _Engine:
+                async def dispose(self) -> None:
+                    closed.append("database")
+
+            monkeypatch.setattr(db, "async_engine", _Engine())
+
+        asyncio.run(boot.apply_before_serving())
+
+        assert closed == ["cache", "database"] if database else ["cache"]
 
 
 @pytest.fixture

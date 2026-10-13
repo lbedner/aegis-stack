@@ -26,7 +26,7 @@ from typing import Protocol, runtime_checkable
 
 from app.core.constants import ComponentName
 
-# The component this client fronts (``service_links``).
+# The component this client fronts (``ownership``, ``ontology.calls``).
 FRONTS = ComponentName.STORAGE
 
 DIGEST_ALGORITHM = "sha256"

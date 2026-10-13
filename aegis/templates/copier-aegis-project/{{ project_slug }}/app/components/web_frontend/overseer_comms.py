@@ -10,9 +10,14 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from app.core import secrets
-from app.services.comms.calls import get_call_status, validate_call_config
-from app.services.comms.email import get_email_status, validate_email_config
-from app.services.comms.sms import get_sms_status, validate_sms_config
+from app.services.comms.service import (
+    get_call_status,
+    get_email_status,
+    get_sms_status,
+    validate_call_config,
+    validate_email_config,
+    validate_sms_config,
+)
 from app.services.system.models import ComponentStatus
 
 from .overseer_nav import SectionRequest

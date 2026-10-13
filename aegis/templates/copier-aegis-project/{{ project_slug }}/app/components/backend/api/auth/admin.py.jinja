@@ -22,7 +22,7 @@ from app.models.user import (
 )
 from app.services.auth.service import get_current_user_from_token
 from app.services.auth.deps import get_current_active_user, get_session_token
-from app.services.auth.users import RestoreConflictError, UserService
+from app.services.auth.service import RestoreConflictError, UserService
 {% if include_auth_rbac %}
 from pydantic import BaseModel
 {% endif %}

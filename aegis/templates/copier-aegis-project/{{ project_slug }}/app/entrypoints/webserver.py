@@ -4,7 +4,8 @@ Web server entry point for Aegis Stack.
 Runs FastAPI + Flet only (clean separation of concerns).
 
 The ASGI server is chosen at run time by ``WEBSERVER_ENGINE``, which
-``make serve ENGINE=granian`` sets for one run. Both engines serve the
+``make serve ENGINE=granian`` sets for one run, and Overseer > Settings
+saves for the next start (with ``WEBSERVER_LOOP``). Both engines serve the
 same app object; nothing about the application changes with the choice.
 """
 
@@ -14,7 +15,7 @@ from typing import Any
 import uvicorn
 
 from app.core.config import settings
-from app.core.log import logger, setup_logging
+from app.core.log import logger
 from app.core.loops import check_engine_loop, resolve_loop
 
 # Import string rather than the app object: both engines need one to
@@ -53,6 +54,17 @@ def app_package_dir() -> Path:
     the scheduler's and worker's watchers in ``scripts/entrypoint.sh``.
     """
     return Path(__file__).resolve().parents[1]
+
+
+def apply_saved() -> None:
+    """What the Overseer saved, the engine and loop among it, applied before
+    either is read, as every process applies it before its own work; only
+    what this environment can start applies (their ``choices``)."""
+    import asyncio
+
+    from app.core.boot import apply_before_serving
+
+    asyncio.run(apply_before_serving())
 
 
 def uvicorn_settings(loop: str) -> dict[str, Any]:
@@ -174,7 +186,7 @@ def serve_granian(loop: str) -> None:
 
 def main() -> None:
     """Main webserver entry point"""
-    setup_logging()
+    apply_saved()  # logging set up first, as every process's boot does
     engine = settings.WEBSERVER_ENGINE
     # Resolved once, here, and carried. Four separate calls agreed only
     # because the function is deterministic; the log line in particular

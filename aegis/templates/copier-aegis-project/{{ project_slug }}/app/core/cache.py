@@ -46,7 +46,7 @@ from typing import Any, NamedTuple
 
 from app.core.constants import ComponentName
 
-# The component this client fronts (``service_links``).
+# The component this client fronts (``ownership``, ``ontology.calls``).
 FRONTS = ComponentName.CACHE
 
 # Entries the Overseer's Cache view reads before sampling, like the Redis

@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict
 from app.core import secrets
 from app.core.config import settings
 from app.core.secrets import Secret, probe
-from app.services.ai.config import api_key_env
+from app.services.ai.domains.llm.config import api_key_env
 from app.services.ai.models import PROVIDERS, AIProvider, ProviderCapabilities
 from app.services.ai.models.provider_names import KEYLESS_PROVIDERS, provider_label
 

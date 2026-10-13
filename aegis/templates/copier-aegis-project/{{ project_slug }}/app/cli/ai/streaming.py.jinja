@@ -48,6 +48,7 @@ async def _send_message(
                 message=message,
                 conversation_id=conversation_id,
                 user_id=user_id,
+                admin=True,  # the operator's own shell, as MCP's stdio
             )
         finally:
             spinner_live.stop()
@@ -137,6 +138,7 @@ async def _stream_chat_response(
                     message=message,
                     conversation_id=conversation_id,
                     user_id=user_id,
+                    admin=True,  # the operator's own shell, as MCP's stdio
                     stream_delta=True,
                 ):
                     if interrupted:

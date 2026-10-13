@@ -52,14 +52,31 @@ _FK = {% if database_engine == "postgres" %}f"{_SCHEMA}."{% else %}""{% endif %}
 _OWNER_FK: str | None = {% if include_auth %}"user.id"{% else %}None{% endif %}
 
 
-def _bigint(name: str, *, nullable: bool = True, default: Any = None) -> Any:
+def _bigint(
+    name: str,
+    *,
+    nullable: bool = True,
+    default: Any = None,
+    description: str | None = None,
+) -> Any:
     """A BigInteger money / scaled-integer column.
 
     Net worth and brokerage balances (and ``*_e8`` quantities/rates) overflow
     int32, so all money columns are BigInteger. Values are integer minor units
-    (cents), never floats.
+    (cents), never floats, which ``description`` says to whoever reads the
+    model; an ``*_e8`` column says its own scale.
     """
-    return Field(default=default, sa_column=Column(name, BigInteger, nullable=nullable))
+    scale = "Units times 10^8." if name.endswith("_e8") else "Integer cents."
+    return Field(
+        default=default,
+        sa_column=Column(name, BigInteger, nullable=nullable),
+        description=description or scale,
+    )
+
+
+# A price stored at its own precision (``price_scale`` digits), as a column
+# beside it says.
+PRICE_SCALED = "Integer, scaled by price_scale (2 is cents)."
 
 
 def _utcnow() -> datetime:

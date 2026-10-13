@@ -48,8 +48,12 @@ symmetric: `aegis remove htmx` deletes the component tree and regenerates the
 shared files that referenced it.
 
 Overseer comes with it at `/overseer`: every component and service as a list,
-cards or a map of the stack, each linking to its own page. To sign in to it,
-and keep it to admins, add auth:
+cards or a map of the stack, each linking to its own page. The map's Traffic
+chip tones each node by how much ran through it instead of its health:
+every call along the lines touching it, Overseer's own reads included,
+counted as it happens with no tracer needed. Opened up, each service that
+breaks the service standard says how many places it should fix. To sign in
+to it, and keep it to admins, add auth:
 
 ```bash
 aegis init my-app --components htmx --services 'auth[basic]'

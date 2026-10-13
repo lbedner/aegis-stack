@@ -14,6 +14,8 @@ from tests._files import write_tree
 FILES = {
     "app/services/ai/domains/llm/__init__.py": "",
     "app/services/ai/domains/voice/x.py": "",
+    "app/services/ai/domains/spend.py": "",  # a domain that is one module
+    "app/services/ai/domains/__init__.py": "",
     "app/services/auth/service.py": "",
     "app/services/scheduler/jobs.py": "",
     "app/services/random_helper/helper.py": "",
@@ -37,6 +39,17 @@ FILES = {
         "from app.services.auth import service\nimport app.services.ai.domains.llm\n"
     ),
     "tests/components/test_scheduler.py": "from app.components.scheduler import main\n",
+    # A folder that is part of another part says so beside its code.
+    "app/services/rag/__init__.py": "from app.core.constants import ServiceName\n"
+    "PART_OF = ServiceName.AI\n",
+    "app/services/rag/indexer.py": "",
+    "app/services/system/__init__.py": 'PART_OF = "stack"\n',
+    "app/services/system/health.py": "",
+    "app/services/ops/__init__.py": 'PART_OF = "deploy"\n',
+    "app/services/ops/audit.py": "",
+    "app/components/deploy/docker.py": "",
+    "app/components/inference/client.py": "",
+    "app/integrations/main.py": "",
 }
 
 
@@ -57,6 +70,8 @@ def index(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> source_index.Index
     "where, expected",
     [
         ("app/services/ai/domains/voice/x.py", Owner("service", "ai", "voice")),
+        ("app/services/ai/domains/spend.py", Owner("service", "ai", "spend")),
+        ("app/services/ai/domains/__init__.py", Owner("service", "ai")),
         ("app/components/backend/api/llm/routes.py", Owner("service", "ai", "llm")),
         ("app/components/backend/api/orgs/router.py", Owner("service", "auth")),
         # The rest of a route's folder goes with what the folder imports.
@@ -69,6 +84,15 @@ def index(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> source_index.Index
         ("app/components/scheduler/main.py", Owner("component", "scheduler")),
         ("app/services/random_helper/helper.py", None),
         ("app/cli/ai/chat.py", Owner("service", "ai")),
+        ("app/services/rag/indexer.py", Owner("service", "ai", "rag")),
+        ("app/services/system/health.py", Owner("stack", "system")),
+        ("app/services/ops/audit.py", Owner("component", "deploy", "ops")),
+        # A part with no health check, known from its spec (``parts``).
+        ("app/components/deploy/docker.py", Owner("component", "deploy")),
+        # A folder named for its CLI name: inference is Ollama's.
+        ("app/components/inference/client.py", Owner("component", "ollama")),
+        # The app's own assembly: the server's.
+        ("app/integrations/main.py", Owner("component", "backend")),
         # A component's Overseer page goes with what it shows.
         ("app/components/web_frontend/overseer_auth.py", Owner("service", "auth")),
         ("app/components/web_frontend/overseer_redis.py", Owner("component", "cache")),

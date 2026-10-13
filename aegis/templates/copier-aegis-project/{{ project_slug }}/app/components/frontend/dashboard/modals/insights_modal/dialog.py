@@ -51,7 +51,7 @@ from app.components.frontend.dashboard.modals.insights_modal.stars_tab import (
 
 def _build_db_from_bulk(bulk: BulkInsightsResponse) -> dict[str, Any]:
     """Transform bulk-loaded data into the db dict consumed by OverviewTab and SettingsTab."""  # noqa: E501
-    from app.services.insights.domains.metrics import InsightQueryService
+    from app.services.insights.service import InsightQueryService
 
     cutoff_14d, _ = InsightQueryService.compute_cutoffs(14)
 

@@ -3,15 +3,16 @@ occurrences in a drawer, the list kept current over SSE (one reader per
 viewer, reloading only when something changed)."""
 
 import asyncio
-import time
 from collections.abc import AsyncIterator, Mapping
 from datetime import datetime
+import time
 from typing import Any
 
 from pydantic import BaseModel
 
 from app.core.config import settings
 from app.core.formatting import format_relative_time
+from app.core.parts import Category
 from app.services.system import ui_errors, ui_logs
 from app.services.system.errors.client import repository, unavailable_reason
 from app.services.system.errors.models import ErrorIssue
@@ -32,6 +33,7 @@ ITEM = NavItem(
     "/overseer/errors",
     "",
     ComponentStatus(name="errors", message=""),
+    concern=Category.STACK,
 )
 PATH = "/overseer/errors"
 DETAIL = "/partials/overseer/errors/detail"

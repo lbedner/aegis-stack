@@ -7,6 +7,7 @@ import asyncio
 from typing import Any
 
 from app.core import series
+from app.core.parts import Category
 from app.services.system import ui_resources
 from app.services.system.models import ComponentStatus
 
@@ -23,6 +24,7 @@ ITEM = NavItem(
     url="/overseer/resources",
     status="",
     component=ComponentStatus(name="resources", message=""),
+    concern=Category.STACK,
 )
 EVENTS = "/overseer/events/resources"
 EVENT = "resources"

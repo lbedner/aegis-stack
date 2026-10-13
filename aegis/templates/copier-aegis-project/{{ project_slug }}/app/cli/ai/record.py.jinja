@@ -241,6 +241,7 @@ def record(
                         message=result.text,
                         conversation_id=conversation_id,
                         user_id=user_id,
+                        admin=True,  # the operator's own shell, as MCP's stdio
                     )
 
                 console.print(f"[bold]{t('ai.response_label')}[/bold]")

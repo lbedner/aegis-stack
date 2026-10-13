@@ -9,9 +9,9 @@ from app.core.db import get_async_session
 from app.core.formatting import counted
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
-from .constants import PAYMENT_COMPONENT_NAME
-from .service import PaymentService
-from .providers.base import ProviderHealth
+from app.services.payment.constants import PAYMENT_COMPONENT_NAME
+from app.services.payment.service import PaymentService
+from app.services.payment.domains.providers.base import ProviderHealth
 
 logger = logging.getLogger(__name__)
 

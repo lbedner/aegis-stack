@@ -58,7 +58,7 @@ async def test_an_ai_key_is_checked_against_its_provider(
 async def test_a_send_only_resend_key_counts_as_working(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    module = _owner("app.services.comms.email")
+    module = _owner("app.services.comms.domains.email.messages")
     entry = _entry(module, "RESEND_API_KEY")
     assert entry.is_needed() and entry.verify is not None
     answering(monkeypatch, 401, '{"name": "restricted_api_key"}')
@@ -71,7 +71,7 @@ async def test_a_send_only_resend_key_counts_as_working(
 async def test_a_twilio_token_is_checked_with_its_account(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    module = _owner("app.services.comms.twilio")
+    module = _owner("app.services.comms.domains.telephony.client")
     entry = _entry(module, "TWILIO_AUTH_TOKEN")
     assert entry.verify is not None
     monkeypatch.setitem(settings.__dict__, "TWILIO_ACCOUNT_SID", None)
@@ -86,7 +86,7 @@ async def test_a_twilio_token_is_checked_with_its_account(
 async def test_a_restricted_stripe_key_counts_as_working(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    module = _owner("app.services.payment.providers.stripe")
+    module = _owner("app.services.payment.domains.providers.stripe")
     entry = _entry(module, "STRIPE_SECRET_KEY")
     assert entry.is_needed() and entry.verify is not None
     answering(monkeypatch, 403)
@@ -162,7 +162,9 @@ async def test_a_plaid_secret_is_checked_with_its_client_id(
         await entry.verify(KEY)
 
 
-async def test_the_insights_github_token_is_checked(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_the_insights_github_token_is_checked(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     module = _owner("app.services.insights.adapters.collectors.base")
     github = _entry(module, "INSIGHT_GITHUB_TOKEN")
     assert github.verify is not None
@@ -211,10 +213,12 @@ def _resend_domains(monkeypatch: pytest.MonkeyPatch, *domains: tuple[str, str]) 
 async def test_the_from_address_offers_verified_domains_and_checks_its_own(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    module = _owner("app.services.comms.email")
+    module = _owner("app.services.comms.domains.email.messages")
     entry = _entry(module, "RESEND_FROM_EMAIL")
     assert entry.choices is not None and entry.verify is not None
-    _resend_domains(monkeypatch, ("mail.example.com", "verified"), ("new.example.com", "pending"))
+    _resend_domains(
+        monkeypatch, ("mail.example.com", "verified"), ("new.example.com", "pending")
+    )
     assert await entry.choices() == [
         ("hello@mail.example.com", "mail.example.com (verified in Resend)")
     ]
@@ -230,12 +234,14 @@ async def test_twilio_offers_the_accounts_numbers_and_services(
 ) -> None:
     from types import SimpleNamespace
 
-    module = _owner("app.services.comms.twilio")
+    module = _owner("app.services.comms.domains.telephony.client")
     number = SimpleNamespace(phone_number="+15550001111", friendly_name="Main line")
     service = SimpleNamespace(sid="MG123", friendly_name="Alerts")
     client = SimpleNamespace(
         incoming_phone_numbers=SimpleNamespace(list=lambda **_: [number]),
-        messaging=SimpleNamespace(v1=SimpleNamespace(services=SimpleNamespace(list=lambda **_: [service]))),
+        messaging=SimpleNamespace(
+            v1=SimpleNamespace(services=SimpleNamespace(list=lambda **_: [service]))
+        ),
     )
     monkeypatch.setattr(module, "Client", lambda sid, token: client)
     monkeypatch.setitem(settings.__dict__, "TWILIO_ACCOUNT_SID", None)

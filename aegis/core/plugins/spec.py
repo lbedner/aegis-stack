@@ -38,6 +38,18 @@ class PluginKind(Enum):
     """Infrastructure plugin (database, redis, worker, frontend, ...)."""
 
 
+class PartCategory(str, Enum):
+    """The concern a part belongs to, the way Overseer groups the app:
+    written into each generated project (``app/core/parts.py``)."""
+
+    STACK = "stack"
+    COMPUTE = "compute"
+    DATA = "data"
+    AI = "ai"
+    APP = "app"
+    PLATFORM = "platform"
+
+
 # ---------------------------------------------------------------------
 # PluginWiring — declarative injection-point hooks (round 7 of #770/#771)
 # ---------------------------------------------------------------------
@@ -260,6 +272,32 @@ class PluginSpec:
     # ComponentType when kind=COMPONENT.
     type: Any = None
 
+    # The concern it belongs to (``PartCategory``), and the name the
+    # generated app knows it by: its health check's, where that is not its
+    # own (``redis`` is ``cache``). Written into every project as
+    # ``app/core/parts.py`` by ``make parts`` (``aegis.core.parts``).
+    category: PartCategory = PartCategory.APP
+    health_name: str = ""
+
+    # Where Overseer's map draws it, also written into ``parts.py``. ``tier``
+    # is its row, a process of its own (0 the edge, 1 the app, 2 its data);
+    # None runs inside the webserver; such a process's containers
+    # (``docker_services``) show on its page. ``role`` is data's shape (``store``,
+    # ``bucket``; empty: a box). ``depends_on`` are the parts it calls, by
+    # health name, as the map's lines; ``consumes`` the ones it takes work
+    # from (the worker, its queue). ``hosts``: what has no process of its
+    # own runs in it (the backend). ``holds_keys``: every outside provider's
+    # key lives in it (secrets). ``order`` places it, in the sidebar and in
+    # its row; none: after the rest, by name.
+    tier: int | None = None
+    page: str = ""  # its Overseer page, where that is not its health name
+    role: str = ""
+    depends_on: list[str] = field(default_factory=list)
+    consumes: list[str] = field(default_factory=list)
+    hosts: bool = False
+    holds_keys: bool = False
+    order: int | None = None
+
     # Dependencies
     required_components: list[str] = field(default_factory=list)
     recommended_components: list[str] = field(default_factory=list)
@@ -370,6 +408,12 @@ class PluginSpec:
     cli_name: str | None = None
 
     # ----- Read-only legacy aliases -------------------------------------
+
+    @property
+    def app_name(self) -> str:
+        """The name the generated app knows it by (``health_name``, else
+        its own)."""
+        return self.health_name or self.name
 
     @property
     def requires(self) -> list[str]:

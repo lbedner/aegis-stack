@@ -124,9 +124,15 @@ class SplitPart(BaseModel):
     the parent's sign and fills any unclaimed difference with a remainder
     line, so callers only state what they know."""
 
-    amount: int
-    category_id: int | None = None
-    memo: str | None = None
+    amount: int = Field(
+        description="Positive integer cents: the magnitude the user stated."
+    )
+    category_id: int | None = Field(
+        default=None, description="The line's category, from categories()."
+    )
+    memo: str | None = Field(
+        default=None, description="What the line covers (cups, bowls, trash bags)."
+    )
 
 
 class TransactionSplitRequest(BaseModel):

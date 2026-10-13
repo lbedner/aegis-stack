@@ -288,6 +288,18 @@
 {% endmacro %}
 
 
+{# The map's hover hint: the tooltip panel, CSS-only (the caller's hover
+   rule shows it, so a live frame cannot close it), placed by the caller's
+   ``classes`` and ``style``; padded, not spaced, so the pointer can move
+   into it, and a long body scrolls inside it, never the page. The body
+   via {% call %}. #}
+{% macro hint_panel(extra="", classes="", style="") %}
+<span {{ extra|safe }} role="tooltip" class="absolute z-20 hidden {{ classes }}"{% if style %} style="{{ style }}"{% endif %}>
+  <span class="tooltip-panel block w-max max-w-xs max-h-80 overflow-y-auto overscroll-contain px-2.5 py-1.5">{{ caller() }}</span>
+</span>
+{% endmacro %}
+
+
 {# Inline definition hint — wrap a term via {% call %}; hovering (or tapping)
    opens the shared popover panel. Dotted underline signals the affordance
    without a "?" button. ``align='right'`` for terms near the right edge. #}

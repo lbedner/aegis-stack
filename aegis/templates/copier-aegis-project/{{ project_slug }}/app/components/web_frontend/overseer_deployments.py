@@ -7,6 +7,7 @@ actions (a new server, deploy, back up, roll back, destroy) are
 
 from typing import Any
 
+from app.core.parts import Category
 from app.services.system import hosting, ui_deployments
 from app.services.system.models import ComponentStatus
 
@@ -24,6 +25,7 @@ ITEM = NavItem(
     url="/overseer/deployments",
     status="",
     component=ComponentStatus(name="deployments", message=""),
+    concern=Category.STACK,
 )
 BACKUP_COLUMNS = columns(ui_deployments.BACKUP_COLUMNS)
 HISTORY_COLUMNS = columns(ui_deployments.HISTORY_COLUMNS, status=("health",))

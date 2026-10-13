@@ -12,11 +12,11 @@ async def _export(path: str, fmt: str, status_filter: str | None) -> None:
     from pathlib import Path
 
     from app.core.db import get_async_session
-    from app.services.blog.serialization import (
+    from app.services.blog.service import (
+        BlogService,
         post_to_markdown,
         posts_to_json,
     )
-    from app.services.blog.service import BlogService
 
     if fmt not in ("markdown", "json"):
         console.print(
@@ -65,12 +65,12 @@ async def _import(path: str, on_conflict: ImportConflictPolicy) -> None:
 
     from app.core.db import get_async_session
     from app.services.blog.schemas import ImportedPost
-    from app.services.blog.serialization import (
+    from app.services.blog.service import (
+        BlogService,
         json_to_posts,
         markdown_to_post,
         zip_to_posts,
     )
-    from app.services.blog.service import BlogService
 
     source = Path(path)
     if not source.exists():

@@ -17,6 +17,8 @@ from taskiq import TaskiqMessage, TaskiqMiddleware, TaskiqResult
 from app.components.worker import runtime
 from app.components.worker.events import publish_event
 from app.components.worker.heartbeat import mark_busy, mark_idle, worker_id
+from app.components.worker.patterns import unwrap
+from app.core import edges
 from app.core.boot import apply_saved_overrides
 from app.core.config import settings
 from app.core.log import logger
@@ -95,6 +97,8 @@ class EventPublishMiddleware(TaskiqMiddleware):
         """
         if hasattr(broker := getattr(self, "broker", None), "keep_claim"):
             broker.keep_claim(message.task_id)
+        if broker is not None:
+            edges.into(unwrap(broker.find_task(message.task_name)), source=edges.QUEUE)
         if self._redis:
             await mark_busy(self._redis)
             await publish_event(

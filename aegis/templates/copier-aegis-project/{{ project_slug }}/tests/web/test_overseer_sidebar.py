@@ -8,6 +8,7 @@ import pytest
 from app.components.web_frontend import overseer_sections
 from app.components.web_frontend.rendering import templates
 from app.core.constants import ComponentName, ServiceName
+from app.core.parts import Category
 from app.services.system.models import ComponentStatus
 from tests.web.dom import one, select, text
 from tests.web.overseer import page_html, reported_only, sign_in, status_with
@@ -71,7 +72,8 @@ def test_by_concern_every_page_in_its_section_at_its_own_address(
     assert list(sections) == ["Stack", "Compute", "Data", "App", "Platform"]
     assert sections["Stack"][0] == "Overview"
     assert sections["Data"] == ["Cache", "Documents"]
-    assert sections[overseer_sections.APP][-1] == "crm".title()
+    app = overseer_sections.HEADINGS[Category.APP]
+    assert sections[app][-1] == "crm".title()
     assert _hrefs(html) == _hrefs(kind)
     assert _grouping(html) == {overseer_sections.Grouping.CONCERN}
 

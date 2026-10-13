@@ -1773,10 +1773,11 @@ class ManualUpdater:
                     continue
             return False
 
-        def auth_module(name: str, legacy: str) -> Path | None:
-            """The auth module at its current name, else at the name it had
-            before the auth restructure, so an older project still infers."""
-            for candidate in (name, legacy):
+        def auth_module(*candidates: str) -> Path | None:
+            """The auth module at its current path, else at the paths it had
+            before (the domains move, the auth restructure), so an older
+            project still infers."""
+            for candidate in candidates:
                 path = proj / "app" / "services" / "auth" / candidate
                 if path.is_file():
                     return path
@@ -1812,7 +1813,7 @@ class ManualUpdater:
         # in existing files rather than a dedicated module, so we sniff
         # ``def require_role`` in the rendered auth service module — that
         # symbol is only emitted when RBAC is on. Org is detected via
-        # the orgs module (whole-file gated).
+        # the orgs domain (whole-file gated).
         if inferred.get(AnswerKeys.AUTH) or self.answers.get(AnswerKeys.AUTH):
             auth_svc = auth_module("service.py", "auth_service.py")
             has_require_role = False
@@ -1821,7 +1822,10 @@ class ManualUpdater:
                     has_require_role = "def require_role" in auth_svc.read_text()
                 except (OSError, UnicodeDecodeError):
                     has_require_role = False
-            if auth_module("orgs.py", "org_service.py") is not None:
+            orgs = auth_module(
+                "domains/orgs/organizations.py", "orgs.py", "org_service.py"
+            )
+            if orgs is not None:
                 inferred.update(_true_flags(auth_level_answers(AuthLevels.ORG)))
             elif has_require_role:
                 inferred.update(_true_flags(auth_level_answers(AuthLevels.RBAC)))

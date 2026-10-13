@@ -8,7 +8,8 @@ from pathlib import Path
 import pytest
 
 from app.core import source_index
-from app.services.system import service_links, service_patterns
+from app.core.ontology import calls
+from app.services.system import service_patterns
 from tests._files import write_tree
 
 FILES = {
@@ -30,6 +31,13 @@ FILES = {
         "    return session\n"
     ),
     "app/services/notes/helpers.py": "",
+    "app/services/plugin/__init__.py": (
+        '"""A plugin\'s service.\n\nMore about it."""\n'
+        "from app.core.constants import ServiceName\n"
+        "from app.core.parts import Category\n"
+        "PART_OF = ServiceName.AI\n"
+        "CATEGORY = Category.DATA\n"
+    ),
 }
 
 
@@ -55,11 +63,36 @@ def test_a_module_lists_every_module_it_imports(project: Path) -> None:
     } <= found.imports
 
 
+def test_a_packages_relative_import_reads_from_the_package(project: Path) -> None:
+    """In an ``__init__.py`` the package is the module itself: ``from .x``
+    is a module in it, so what it re-exports resolves."""
+    write_tree(
+        project,
+        {
+            "app/services/notes/__init__.py": "from .helpers import tidy\n",
+            "app/services/notes/helpers.py": "def tidy() -> None:\n    return None\n",
+        },
+    )
+    index = source_index.at(project)
+    assert "app.services.notes.helpers" in index.get("app.services.notes").imports
+    assert source_index.resolve(index, "app.services.notes", "tidy") == (
+        "app.services.notes.helpers",
+        "tidy",
+    )
+
+
 def test_a_core_client_says_what_it_fronts_unimported(project: Path) -> None:
     index = source_index.at(project)
-    assert index.get("app.core.cache").fronts == "cache"
-    assert index.get("app.core.storage").fronts == "storage"
-    assert index.get("app.services.notes.store").fronts is None
+    assert index.get("app.core.cache").declared.fronts == "cache"
+    assert index.get("app.core.storage").declared.fronts == "storage"
+    assert index.get("app.services.notes.store").declared.fronts is None
+
+
+def test_a_package_says_what_it_is_part_of_and_its_concern(project: Path) -> None:
+    """Read like ``FRONTS``: an owner's name, or a ``Category``'s value."""
+    found = source_index.at(project).get("app.services.plugin")
+    assert found.declared == source_index.Declared(part_of="ai", category="data")
+    assert found.summary == "A plugin's service."
 
 
 def test_each_file_is_parsed_once_whoever_reads_it(
@@ -79,7 +112,7 @@ def test_each_file_is_parsed_once_whoever_reads_it(
     notes = project / "app" / "services" / "notes"
     for _ in range(2):
         index = source_index.at(project)
-        service_links.talks_to(notes, (), index)
+        calls.talks_to(notes, (), index)
         index.imports_under("app.services.notes")
         index.get("app.core.cache")
         service_patterns.services()
@@ -93,5 +126,6 @@ def test_each_file_is_parsed_once_whoever_reads_it(
             "app/services/notes/__init__.py",
             "app/services/notes/store.py",
             "app/services/notes/helpers.py",
+            "app/services/plugin/__init__.py",
         )
     )

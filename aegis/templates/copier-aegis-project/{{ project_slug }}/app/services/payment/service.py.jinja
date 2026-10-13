@@ -13,25 +13,34 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 if TYPE_CHECKING:
-    from app.services.payment.email_helpers import EmailDeliveryResult
+    from app.services.payment.domains.notifications.emails import EmailDeliveryResult
 
-from .disputes import DisputesMixin
-from .models import (
+from app.services.payment.domains.charges.disputes import DisputesMixin
+from app.services.payment.models import (
     PaymentCustomer,
     PaymentProvider,
     PaymentSubscription,
     PaymentTransaction,
 )
-from .providers.base import BasePaymentProvider, WebhookEvent
-from .providers.stripe import StripeProvider
-from .refunds import RefundsMixin
-from .reporting import ReportingMixin
-from .service_base import (
+from app.services.payment.domains.providers.base import (
+    BasePaymentProvider,
+    CatalogEntry,
+    WebhookEvent,
+)
+from app.services.payment.domains.catalog.cache import get_catalog
+from app.services.payment.domains.providers.stripe import (
+    StripeProvider,
+    set_runtime_webhook_secret,
+)
+from app.services.payment.domains.charges.refunds import RefundsMixin
+from app.services.payment.domains.reporting.revenue import ReportingMixin
+from app.services.payment.domains.base import (
     PaymentServiceBase,
 )
-from .subscriptions import SubscriptionsMixin
-from .webhooks_billing import BillingWebhookMixin
-from .webhooks_subscription import SubscriptionWebhookMixin
+from app.services.payment.domains.subscriptions.plans import SubscriptionsMixin
+from app.services.payment.domains.webhooks.billing import BillingWebhookMixin
+from app.services.payment.domains.webhooks.invoices import InvoiceWebhookMixin
+from app.services.payment.domains.webhooks.subscriptions import SubscriptionWebhookMixin
 
 logger = logging.getLogger(__name__)
 
@@ -41,8 +50,17 @@ def _get_provider() -> BasePaymentProvider:
     return StripeProvider()
 
 
+__all__ = [
+    "CatalogEntry",
+    "PaymentService",
+    "get_catalog",
+    "set_runtime_webhook_secret",
+]
+
+
 class PaymentService(
     BillingWebhookMixin,
+    InvoiceWebhookMixin,
     SubscriptionWebhookMixin,
     DisputesMixin,
     ReportingMixin,
@@ -314,7 +332,7 @@ class PaymentService(
 
     async def _process_event(self, event: WebhookEvent) -> None:
         """Route a webhook event to the appropriate handler."""
-        from .constants import WebhookEventType
+        from app.services.payment.constants import WebhookEventType
 
         handlers: dict[str, Any] = {
             WebhookEventType.CHECKOUT_COMPLETED: self._handle_checkout_completed,

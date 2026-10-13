@@ -8,6 +8,7 @@ separation between client-side enqueueing and worker-side processing.
 
 from typing import Any
 
+from app.core import edges
 from app.core.config import get_default_queue, settings
 from app.core.log import logger
 from arq import create_pool
@@ -100,6 +101,7 @@ async def enqueue_task(
     )
     if job is None:
         raise RuntimeError(f"arq refused to enqueue '{task_name}'")
+    edges.hop(edges.QUEUE)
 
     logger.info(f"Task enqueued: {job.job_id} ({task_name}) on {queue_type}")
     try:

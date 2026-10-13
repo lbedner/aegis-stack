@@ -22,8 +22,8 @@ from app.services.payment.constants import (  # noqa: E402
 )
 from app.services.payment.demo_seed import seed_fake_data  # noqa: E402
 from app.services.payment.deps import get_payment_service  # noqa: E402
+from app.services.payment.domains.providers.base import CatalogEntry  # noqa: E402
 from app.services.payment.health import invalidate_payment_health_cache  # noqa: E402
-from app.services.payment.providers.base import CatalogEntry  # noqa: E402
 from app.services.payment.service import PaymentService  # noqa: E402
 from app.services.system.models import ComponentStatus  # noqa: E402
 from tests.web.dom import location, one, select, text, triggers  # noqa: E402

@@ -20,7 +20,7 @@ authorize-redirect machinery.
 import pytest
 from app.core.config import settings
 from app.models.user import OAuthProvider, User, UserOAuthIdentity
-from app.services.auth.users import RegistrationClosedError, UserService
+from app.services.auth.domains.users.accounts import RegistrationClosedError, UserService
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 

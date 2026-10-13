@@ -52,4 +52,4 @@ sockets: Any = None
 if HAS_VOICE and PERSISTED:
     from .chat_live import live_router
 
-    sockets = live_router(OVERSEER, overseer_socket_gate)
+    sockets = live_router(OVERSEER, overseer_socket_gate, admin=True)

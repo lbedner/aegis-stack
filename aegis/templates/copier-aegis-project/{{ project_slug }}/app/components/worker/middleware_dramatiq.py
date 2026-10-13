@@ -21,6 +21,8 @@ from dramatiq.asyncio import get_event_loop_thread
 import redis
 from app.components.worker import runtime
 from app.components.worker.heartbeat import mark_busy_sync, mark_idle_sync, worker_id
+from app.components.worker.patterns import unwrap
+from app.core import edges
 from app.core.boot import apply_saved_overrides
 from app.core.config import settings
 from app.core.log import logger
@@ -197,6 +199,7 @@ class EventPublishMiddleware(dramatiq.Middleware):
         task as started in the task history. Fires after the message is
         dequeued but before the actor function runs.
         """
+        edges.into(unwrap(broker.get_actor(message.actor_name)), source=edges.QUEUE)
         if self._redis:
             mark_busy_sync(self._redis)
             _sync_publish(

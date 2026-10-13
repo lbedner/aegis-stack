@@ -3,7 +3,7 @@
 import logging
 
 from app.core.db import get_async_session
-from app.services.research.refresh import refresh_every_watch
+from app.services.research.domains.watches.refresh import refresh_every_watch
 
 logger = logging.getLogger(__name__)
 

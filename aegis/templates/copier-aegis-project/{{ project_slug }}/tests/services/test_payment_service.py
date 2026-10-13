@@ -15,19 +15,19 @@ from app.services.payment.constants import (
     TransactionStatus,
     TransactionType,
 )
+from app.services.payment.domains.providers.base import (
+    CheckoutResult,
+    CustomerResult,
+    ProviderHealth,
+    RefundResult,
+    WebhookEvent,
+)
 from app.services.payment.models import (
     PaymentCustomer,
     PaymentDispute,
     PaymentProvider,
     PaymentSubscription,
     PaymentTransaction,
-)
-from app.services.payment.providers.base import (
-    CheckoutResult,
-    CustomerResult,
-    ProviderHealth,
-    RefundResult,
-    WebhookEvent,
 )
 from app.services.payment.service import PaymentService
 

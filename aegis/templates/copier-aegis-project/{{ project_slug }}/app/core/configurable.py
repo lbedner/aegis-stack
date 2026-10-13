@@ -14,10 +14,10 @@ A saved value is loaded into ``settings`` as each process starts
 (``app.core.saved_settings``), so it takes effect on the next restart, and
 only for code that reads ``settings`` when it runs: a value copied at
 import (a class attribute, a module constant) never sees it, so leave
-those unmarked. Never mark what the app needs before the database is
-reachable (``DATABASE_URL``, ``REDIS_URL``, ``SECRET_KEY``,
-``ENCRYPTION_KEY``). Its own module so ``config`` can use it without
-importing ``secrets``, which imports ``config``.
+those unmarked. Never mark what reaching the store itself needs
+(``DATABASE_URL``, ``REDIS_URL``, ``SECRET_KEY``, ``ENCRYPTION_KEY``). Its
+own module so ``config`` can use it without importing ``secrets``, which
+imports ``config``.
 """
 
 from collections.abc import Callable, Iterable
@@ -36,6 +36,21 @@ class Configurable:
     owner: str = "app"
     label: str = ""
     choices: Callable[[], Iterable[str]] | None = None
+
+
+def asgi_engines() -> list[str]:
+    """The ASGI servers the webserver can start (``loops.offered_engines``;
+    imported here, since ``loops`` imports ``config``, which imports this)."""
+    from app.core.loops import offered_engines
+
+    return offered_engines()
+
+
+def event_loops() -> list[str]:
+    """The event loops it can start on (``loops.offered_loops``)."""
+    from app.core.loops import offered_loops
+
+    return offered_loops()
 
 
 def timezones() -> list[str]:

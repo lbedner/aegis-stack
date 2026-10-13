@@ -111,28 +111,40 @@
       "function": "_admin_and_target"
     },
     {
+      "kind": "lazy_load",
+      "label": "Agent.tools",
+      "file": "tests/services/ai/test_agent_models.py",
+      "function": "test_the_default_agent_reads_the_app_from_the_ontology"
+    },
+    {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM \"user\"",
-      "file": "app/services/auth/users.py",
+      "file": "app/services/auth/domains/users/accounts.py",
       "function": "create_user"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM \"user\" WHERE \"user\".email = :email_1 AND \"user\".deleted_at IS NULL",
-      "file": "app/services/auth/users.py",
+      "file": "app/services/auth/domains/users/accounts.py",
       "function": "get_user_by_email"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM \"user\" WHERE \"user\".id = :id_1",
-      "file": "app/services/auth/user_deletion.py",
+      "file": "app/services/auth/domains/users/deletion.py",
       "function": "hard_delete_user"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM \"user\" WHERE \"user\".id = :id_1",
-      "file": "app/services/auth/user_deletion.py",
+      "file": "app/services/auth/domains/users/deletion.py",
       "function": "restore_user"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM agent AS agent_1 JOIN agent_tool AS agent_tool_1 ON agent_1.id = agent_tool_1.agent_id JOIN tool ON tool.id = agent_tool_1.tool_id WHERE agent_1.id IN (__[POSTCOMPILE_primary_keys])",
+      "file": "app/services/ai/fixtures/agent_fixtures.py",
+      "function": "attach_tools"
     },
     {
       "kind": "repeated_statement",
@@ -160,27 +172,9 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM agent_tool WHERE agent_tool.agent_id = :agent_id_1",
-      "file": "app/services/finance/domains/detection/analyst/seeds.py",
-      "function": "_attach_chat_tools"
-    },
-    {
-      "kind": "repeated_statement",
       "label": "SELECT ... FROM agent_user_memory WHERE agent_user_memory.user_id = :user_id_1",
       "file": "app/services/ai/domains/chat/queries.py",
       "function": "user_memory_for"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM blog_post",
-      "file": "app/services/blog/service.py",
-      "function": "list_posts"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM blog_post ORDER BY blog_post.created_at DESC LIMIT :param_1 OFFSET :param_2",
-      "file": "app/services/blog/service.py",
-      "function": "list_posts"
     },
     {
       "kind": "repeated_statement",
@@ -191,14 +185,14 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM blog_post WHERE blog_post.slug = :slug_1",
-      "file": "app/services/blog/service.py",
-      "function": "_ensure_slug_available"
+      "file": "app/services/blog/domains/transfer/payloads.py",
+      "function": "_get_post_by_slug_any_status"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM blog_post WHERE blog_post.slug = :slug_1",
-      "file": "app/services/blog/transfer.py",
-      "function": "_get_post_by_slug_any_status"
+      "file": "app/services/blog/service.py",
+      "function": "_ensure_slug_available"
     },
     {
       "kind": "repeated_statement",
@@ -232,12 +226,6 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM blog_tag ORDER BY blog_tag.name",
-      "file": "app/services/blog/service.py",
-      "function": "list_tags"
-    },
-    {
-      "kind": "repeated_statement",
       "label": "SELECT ... FROM blog_tag WHERE blog_tag.id = :id_1",
       "file": "app/services/blog/service.py",
       "function": "_get_tag_model"
@@ -245,7 +233,7 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM blog_tag WHERE blog_tag.slug = :slug_1",
-      "file": "app/services/blog/tags.py",
+      "file": "app/services/blog/domains/posts/tags.py",
       "function": "get_or_create_tag"
     },
     {
@@ -292,27 +280,9 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM document WHERE document.content_hash = :content_hash_1 AND document.deleted_at IS NULL",
-      "file": "app/services/documents/queries.py",
-      "function": "document_by_content"
-    },
-    {
-      "kind": "repeated_statement",
       "label": "SELECT ... FROM document WHERE document.content_hash = :content_hash_1 AND document.deleted_at IS NULL AND document.owner_user_id = :owner_user_id_1",
       "file": "app/services/documents/queries.py",
       "function": "document_by_content"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM document WHERE document.deleted_at IS NULL AND (document.id NOT IN (SELECT document.supersedes_id FROM document WHERE document.supersedes_id IS NOT NULL AND document.deleted_at IS NULL))",
-      "file": "app/services/documents/queries.py",
-      "function": "documents_page"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM document WHERE document.deleted_at IS NULL AND (document.id NOT IN (SELECT document.supersedes_id FROM document WHERE document.supersedes_id IS NOT NULL AND document.deleted_at IS NULL)) ORDER BY document.created_at DESC, document.id DESC LIMIT :param_1 OFFSET :param_2",
-      "file": "app/services/documents/queries.py",
-      "function": "documents_page"
     },
     {
       "kind": "repeated_statement",
@@ -365,7 +335,7 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM email_verification_token WHERE email_verification_token.user_id = :user_id_1 AND email_verification_token.used = false",
-      "file": "app/services/auth/user_verification.py",
+      "file": "app/services/auth/domains/users/verification.py",
       "function": "_invalidate_prior_email_verification_tokens"
     },
     {
@@ -1672,12 +1642,6 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM insight_metric_type WHERE insight_metric_type.source_id = :source_id_1 AND insight_metric_type.key = :key_1",
-      "file": "app/services/insights/seed.py",
-      "function": "seed_insight_tables"
-    },
-    {
-      "kind": "repeated_statement",
       "label": "SELECT ... FROM insight_record WHERE insight_record.metric_type_id = :metric_type_id_1",
       "file": "app/services/insights/queries/metrics.py",
       "function": "record_for_type"
@@ -1687,12 +1651,6 @@
       "label": "SELECT ... FROM insight_source WHERE insight_source.key = :key_1",
       "file": "app/services/insights/queries/metrics.py",
       "function": "source_by_key"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM insight_source WHERE insight_source.key = :key_1",
-      "file": "app/services/insights/seed.py",
-      "function": "seed_insight_tables"
     },
     {
       "kind": "repeated_statement",
@@ -1747,12 +1705,6 @@
       "label": "SELECT ... FROM llm_org",
       "file": "app/services/ai/domains/llm/etl/queries.py",
       "function": "all_rows"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM llm_org WHERE (llm_org.slug IN (__[POSTCOMPILE_slug_1]) OR llm_org.name IN (__[POSTCOMPILE_name_1])) AND llm_org.icon_b64 IS NOT NULL",
-      "file": "app/services/ai/domains/llm/queries.py",
-      "function": "org_icons"
     },
     {
       "kind": "repeated_statement",
@@ -1829,19 +1781,19 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM org_invite WHERE org_invite.organization_id = :organization_id_1 AND org_invite.email = :email_1 AND org_invite.status = :status_1",
-      "file": "app/services/auth/invites.py",
+      "file": "app/services/auth/domains/orgs/invites.py",
       "function": "_get_pending_invite"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM organization WHERE organization.id = :id_1",
-      "file": "app/services/auth/orgs.py",
+      "file": "app/services/auth/domains/orgs/organizations.py",
       "function": "hard_delete_org"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM organization WHERE organization.id = :id_1",
-      "file": "app/services/auth/orgs.py",
+      "file": "app/services/auth/domains/orgs/organizations.py",
       "function": "restore_org"
     },
     {
@@ -1853,38 +1805,32 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM organization WHERE organization.id = :id_1 AND organization.deleted_at IS NULL",
-      "file": "app/services/auth/orgs.py",
+      "file": "app/services/auth/domains/orgs/organizations.py",
       "function": "get_org_by_id"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM organization_member JOIN organization ON organization.id = organization_member.organization_id WHERE organization_member.user_id = :user_id_1 AND organization_member.role = :role_1 AND organization.deleted_at IS NULL",
-      "file": "app/services/auth/user_deletion.py",
+      "file": "app/services/auth/domains/users/deletion.py",
       "function": "orphaned_sole_owner_org_ids"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM organization_member WHERE organization_member.organization_id = :organization_id_1",
-      "file": "app/services/auth/memberships.py",
+      "file": "app/services/auth/domains/orgs/memberships.py",
       "function": "list_org_members"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM organization_member WHERE organization_member.organization_id = :organization_id_1 AND organization_member.user_id = :user_id_1",
-      "file": "app/services/auth/memberships.py",
+      "file": "app/services/auth/domains/orgs/memberships.py",
       "function": "get_member"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM organization_member WHERE organization_member.organization_id IN (__[POSTCOMPILE_organization_id_1]) GROUP BY organization_member.organization_id",
-      "file": "app/services/auth/user_deletion.py",
+      "file": "app/services/auth/domains/users/deletion.py",
       "function": "orphaned_sole_owner_org_ids"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM payment_customer WHERE payment_customer.id IN (__[POSTCOMPILE_id_1])",
-      "file": "app/services/payment/reporting.py",
-      "function": "get_customers"
     },
     {
       "kind": "repeated_statement",
@@ -1901,25 +1847,25 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM payment_dispute WHERE payment_dispute.id = :id_1 AND payment_dispute.transaction_id IN (__[POSTCOMPILE_transaction_id_1])",
-      "file": "app/services/payment/disputes.py",
+      "file": "app/services/payment/domains/charges/disputes.py",
       "function": "get_dispute_by_id"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM payment_dispute WHERE payment_dispute.provider_dispute_id = :provider_dispute_id_1",
-      "file": "app/services/payment/disputes.py",
+      "file": "app/services/payment/domains/charges/disputes.py",
       "function": "_handle_dispute_event"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM payment_dispute WHERE payment_dispute.provider_dispute_id = :provider_dispute_id_1",
-      "file": "app/services/payment/disputes.py",
+      "file": "app/services/payment/domains/charges/disputes.py",
       "function": "_handle_early_fraud_warning"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM payment_dispute WHERE payment_dispute.transaction_id IN (__[POSTCOMPILE_transaction_id_1]) ORDER BY payment_dispute.created_at DESC",
-      "file": "app/services/payment/disputes.py",
+      "file": "app/services/payment/domains/charges/disputes.py",
       "function": "get_disputes"
     },
     {
@@ -1931,19 +1877,19 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM payment_subscription WHERE payment_subscription.customer_id IN (__[POSTCOMPILE_customer_id_1]) ORDER BY payment_subscription.created_at DESC",
-      "file": "app/services/payment/subscriptions.py",
+      "file": "app/services/payment/domains/subscriptions/plans.py",
       "function": "get_subscriptions"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM payment_transaction",
-      "file": "app/services/payment/reporting.py",
+      "file": "app/services/payment/domains/reporting/revenue.py",
       "function": "get_status_summary"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM payment_transaction WHERE payment_transaction.customer_id IN (__[POSTCOMPILE_customer_id_1])",
-      "file": "app/services/payment/disputes.py",
+      "file": "app/services/payment/domains/charges/disputes.py",
       "function": "_transaction_ids_for_customers"
     },
     {
@@ -1973,13 +1919,13 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM payment_transaction WHERE payment_transaction.provider_transaction_id = :provider_transaction_id_1",
-      "file": "app/services/payment/disputes.py",
+      "file": "app/services/payment/domains/charges/disputes.py",
       "function": "_find_transaction_by_charge_id"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM payment_transaction WHERE payment_transaction.provider_transaction_id = :provider_transaction_id_1",
-      "file": "app/services/payment/webhooks_billing.py",
+      "file": "app/services/payment/domains/webhooks/billing.py",
       "function": "_handle_checkout_completed"
     },
     {
@@ -2015,13 +1961,13 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM refresh_token WHERE refresh_token.family_id = :family_id_1 AND refresh_token.revoked_at IS NULL AND refresh_token.expires_at > :expires_at_1 LIMIT :param_1",
-      "file": "app/services/auth/refresh_tokens.py",
+      "file": "app/services/auth/domains/sessions/tokens.py",
       "function": "is_live_session"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM refresh_token WHERE refresh_token.token = :pk_1",
-      "file": "app/services/auth/refresh_tokens.py",
+      "file": "app/services/auth/domains/sessions/tokens.py",
       "function": "row_of"
     },
     {
@@ -2033,7 +1979,7 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM refresh_token WHERE refresh_token.user_id = :user_id_1 AND refresh_token.revoked_at IS NULL AND refresh_token.expires_at > :expires_at_1",
-      "file": "app/services/auth/refresh_tokens.py",
+      "file": "app/services/auth/domains/sessions/devices.py",
       "function": "list_active_for_user"
     },
     {
@@ -2074,9 +2020,9 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM tool WHERE tool.name = :name_1",
-      "file": "app/services/finance/domains/detection/analyst/seeds.py",
-      "function": "_attach_chat_tools"
+      "label": "SELECT ... FROM tool WHERE tool.name IN (__[POSTCOMPILE_name_1])",
+      "file": "app/services/ai/fixtures/agent_fixtures.py",
+      "function": "attach_tools"
     },
     {
       "kind": "repeated_statement",

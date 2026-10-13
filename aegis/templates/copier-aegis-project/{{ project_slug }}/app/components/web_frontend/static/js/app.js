@@ -748,9 +748,10 @@ document.addEventListener('change', (event) => {
 // The dismissal rules, for the node tests (tests/web/test_app_js.py).
 // The map (_overview_map.html): hovering a node keeps it, its lines and the
 // nodes they join lit, and dims the rest, so "who uses the Database" reads
-// at a glance; a click pins it while the pointer moves on, and Escape or a
-// click on the empty canvas lets it go. Kept on the stream's wrapper
+// at a glance; leaving it (the window too) lets it go. Kept on the stream's wrapper
 // (#overview-stack, outside what each frame swaps), so a live frame keeps it.
+// A route's dry path arrives as ``data-lit`` there (``?lit=``): its parts
+// stay lit, and the lines between two of them, while no node is hovered.
 function mapFocus(lines, key) {
   const lit = new Set([key]);
   lines.forEach(({ from, to }) => {
@@ -759,17 +760,23 @@ function mapFocus(lines, key) {
   });
   return lit;
 }
+function pathFocus(keys) {
+  return new Set(keys.split(','));
+}
 function applyMapFocus(root) {
   const map = root && root.querySelector('[data-map]');
   if (!map) return;
-  const key = root.dataset.pinned || root.dataset.hover;
+  const key = root.dataset.hover;
   const lines = [...map.querySelectorAll('path[data-link]')];
-  const lit = key ? mapFocus(lines.map((line) => line.dataset), key) : new Set();
+  const path = !key && root.dataset.lit ? pathFocus(root.dataset.lit) : null;
+  const lit = key ? mapFocus(lines.map((line) => line.dataset), key) : path || new Set();
   lines.forEach((line) => {
-    line.toggleAttribute('data-dim', Boolean(key) && line.dataset.from !== key && line.dataset.to !== key);
+    const { from, to } = line.dataset;
+    const kept = path ? lit.has(from) && lit.has(to) : from === key || to === key;
+    line.toggleAttribute('data-dim', Boolean(key || path) && !kept);
   });
   map.querySelectorAll('[data-node]').forEach((node) => {
-    node.toggleAttribute('data-dim', Boolean(key) && !lit.has(node.dataset.node));
+    node.toggleAttribute('data-dim', Boolean(key || path) && !lit.has(node.dataset.node));
   });
 }
 document.addEventListener('mouseover', (event) => {
@@ -782,22 +789,15 @@ document.addEventListener('mouseover', (event) => {
   else delete root.dataset.hover;
   applyMapFocus(root);
 });
-document.addEventListener('click', (event) => {
+// Out of the window straight from a node: no mouseover follows to clear it.
+document.addEventListener('mouseout', (event) => {
   const root = document.getElementById('overview-stack');
-  if (!root || !event.target.closest || !event.target.closest('[data-map]') || event.target.closest('a')) return;
-  const node = event.target.closest('[data-map] [data-node]');
-  if (node) root.dataset.pinned = node.dataset.node;
-  else delete root.dataset.pinned;
+  if (event.relatedTarget || !root || !root.dataset.hover) return;
+  delete root.dataset.hover;
   applyMapFocus(root);
 });
-document.addEventListener('keydown', (event) => {
-  const root = document.getElementById('overview-stack');
-  if (event.key !== 'Escape' || !root || !root.dataset.pinned) return;
-  delete root.dataset.pinned;
-  applyMapFocus(root);
-});
-document.body.addEventListener('htmx:afterSwap', () => {
+document.body.addEventListener('htmx:load', () => {
   applyMapFocus(document.getElementById('overview-stack'));
 });
 
-if (typeof module !== 'undefined') module.exports = { outsideClick, dismiss, navigates, markCurrent, spanned, inView, splitMatches, mapFocus, sourceColumn, kept, volumeOf };
+if (typeof module !== 'undefined') module.exports = { outsideClick, dismiss, navigates, markCurrent, spanned, inView, splitMatches, mapFocus, pathFocus, sourceColumn, kept, volumeOf };

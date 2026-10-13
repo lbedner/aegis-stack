@@ -9,13 +9,14 @@ and code only seeds it.
 
 from typing import Any
 
+from sqlmodel import Session
+from sqlmodel.ext.asyncio.session import AsyncSession
+
 from app.core.db import get_async_session
 from app.core.log import logger
 from app.services.ai.domains.chat import queries
 from app.services.ai.domains.chat.agent_loader import invalidate_agent_cache
 from app.services.ai.models.agents import Agent, AgentPromptChange
-from sqlmodel import Session
-from sqlmodel.ext.asyncio.session import AsyncSession
 
 
 class AgentNotFoundError(ValueError):

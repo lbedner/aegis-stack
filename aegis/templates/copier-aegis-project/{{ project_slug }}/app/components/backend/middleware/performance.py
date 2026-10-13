@@ -31,6 +31,7 @@ from fastapi import FastAPI, Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
+from app.core import edges
 from app.core.log import logger
 
 # Recent-sample cap. 100 datapoints is enough for percentile math
@@ -233,6 +234,11 @@ class PerformanceMiddleware(BaseHTTPMiddleware):
                     metrics_service.record(
                         request.method, pattern, duration_ms
                     )
+                    if endpoint := request.scope.get("endpoint"):
+                        failed = response is None or response.status_code >= 500
+                        edges.into(
+                            endpoint, source=edges.SERVER, ms=duration_ms, error=failed
+                        )
             except Exception as e:
                 # Never block the response on bookkeeping.
                 logger.debug(f"PerformanceMiddleware: record failed: {e}")

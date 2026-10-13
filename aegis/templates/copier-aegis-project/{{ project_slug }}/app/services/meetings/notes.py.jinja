@@ -15,7 +15,7 @@ from app.core.config import settings
 from app.core.db import get_async_session
 from app.core.log import logger
 from app.services.ai.domains.llm import active_model
-from app.services.ai.usage_recording import extract_usage, record_usage
+from app.services.ai.domains.spend.recording import extract_usage, record_usage
 from app.services.meetings.models import (
     Meeting,
     MeetingNotes,

@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.core.formatting import is_local_path
 
-from .constants import RefundReason
+from app.services.payment.constants import RefundReason
 
 
 def _validate_redirect_url(value: str | None) -> str | None:

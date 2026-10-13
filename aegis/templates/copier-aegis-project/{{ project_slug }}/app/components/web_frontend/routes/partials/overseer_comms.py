@@ -9,8 +9,12 @@ from fastapi.responses import HTMLResponse, Response
 
 from app.components.web_frontend import overseer_comms
 from app.components.web_frontend.rendering import dialog, toast_response
-from app.services.comms.email import EmailError, send_email_simple
-from app.services.comms.sms import SMSError, send_sms_simple
+from app.services.comms.service import (
+    EmailError,
+    SMSError,
+    send_email_simple,
+    send_sms_simple,
+)
 
 router = APIRouter(prefix=overseer_comms.PARTIALS)
 

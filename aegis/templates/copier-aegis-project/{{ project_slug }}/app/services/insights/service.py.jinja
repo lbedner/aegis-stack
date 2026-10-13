@@ -1,7 +1,9 @@
 """
 Insight service — query layer for all insight data.
 
-Provides methods to read metrics, manage records, and generate summaries.
+Provides methods to read metrics, manage records, and generate summaries,
+and is the one way in: callers outside the service import from here
+(``__all__``), never from ``domains``.
 """
 
 import logging
@@ -22,7 +24,39 @@ from .models import (
     InsightRecord,
     InsightSource,
 )
+from .adapters.collectors.base import CollectionResult
+from .adapters.collectors.collection import CollectorService
+from .adapters.collectors.reddit import RedditCollector
+from .domains.metrics import InsightQueryService
+{%- if insights_per_user %}
+from .domains.projects import ProjectService
+{%- endif %}
+from .domains.views import InsightViewService
+from .domains.views.events import (
+    DOCS_EVENT_TYPES,
+    GITHUB_EVENT_TYPES,
+    PYPI_EVENT_TYPES,
+    group_events,
+)
+from .domains.views.formatting import pct
 from .utils import day_end, day_start
+
+__all__ = [
+    "DOCS_EVENT_TYPES",
+    "GITHUB_EVENT_TYPES",
+    "PYPI_EVENT_TYPES",
+    "CollectionResult",
+    "CollectorService",
+    "InsightQueryService",
+    "InsightService",
+    "InsightViewService",
+{%- if insights_per_user %}
+    "ProjectService",
+{%- endif %}
+    "RedditCollector",
+    "group_events",
+    "pct",
+]
 
 logger = logging.getLogger(__name__)
 

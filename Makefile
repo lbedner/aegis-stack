@@ -42,6 +42,9 @@ check: lint typecheck test ## Run all checks (fast tests only)
 check-all: lint typecheck test-all ## Run comprehensive checks (includes slow tests)
 
 # Install dependencies
+parts: ## Write each part's PluginSpec facts into the template (app/core/parts.py)
+	@uv run python -m aegis.core.parts
+
 install: ## Install dependencies with uv
 	uv sync --all-extras
 

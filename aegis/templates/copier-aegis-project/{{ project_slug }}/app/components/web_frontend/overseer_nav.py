@@ -13,8 +13,9 @@ from urllib.parse import quote
 
 from starlette.routing import BaseRoute
 
-from app.core.constants import ComponentName, ServiceName
+from app.core.ontology.parts import placement
 from app.core.ownership import component_of
+from app.core.parts import Category
 from app.services.system.health import last_system_status, registered_health_names
 from app.services.system.models import (
     ComponentStatus,
@@ -24,35 +25,6 @@ from app.services.system.models import (
 from app.services.system.ui import get_component_title, registry_key
 
 from .overseer_access import Db, Viewer
-
-ORDER = {
-    "components": (
-        ComponentName.BACKEND,
-        ComponentName.WEB_FRONTEND,
-        ComponentName.FRONTEND,
-        ComponentName.DATABASE,
-        ComponentName.WORKER,
-        ComponentName.SCHEDULER,
-        ComponentName.CACHE,
-        ComponentName.STORAGE,
-        ComponentName.INGRESS,
-        ComponentName.OBSERVABILITY,
-        ComponentName.OLLAMA,
-        ComponentName.BROWSER,
-    ),
-    "services": (
-        ServiceName.AUTH,
-        ServiceName.AI,
-        ServiceName.COMMS,
-        ServiceName.DOCUMENTS,
-        ServiceName.RESEARCH,
-        ServiceName.MEETINGS,
-        ServiceName.INSIGHTS,
-        ServiceName.PAYMENT,
-        ServiceName.FINANCE,
-        ServiceName.BLOG,
-    ),
-}
 
 
 def _shown(value: str | int | float | bool) -> str:
@@ -88,6 +60,9 @@ class NavItem:
     url: str
     status: str
     component: ComponentStatus
+    # The concern an Overseer page of its own serves in the sidebar; a
+    # part's is its declared one (``ontology.parts.concern_of``).
+    concern: Category | None = None
 
     @property
     def checks(self) -> list[tuple[str, str]]:
@@ -129,12 +104,9 @@ def build_navigation(status: SystemStatus | None) -> dict[str, list[NavItem]]:
     for group in result:
         parent = groups.get(group)
         children = parent.sub_components if parent else {}
-        order = ORDER[group]
         names = set(registered[group]) | set(children)
-        for name in sorted(
-            names,
-            key=lambda key: (order.index(key) if key in order else len(order), key),
-        ):
+        # In each part's declared order (``ontology.parts.placement``).
+        for name in sorted(names, key=placement):
             component = children.get(name) or ComponentStatus(
                 name=name,
                 status=ComponentStatusType.INFO,

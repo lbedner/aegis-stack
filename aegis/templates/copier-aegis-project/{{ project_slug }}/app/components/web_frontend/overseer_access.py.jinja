@@ -45,8 +45,7 @@ from app.core.db import get_async_db
 from app.core.security import SESSION_COOKIE_NAME, verify_token
 from app.models.user import User
 from app.services.auth.deps import get_optional_user, get_user_service, is_admin
-from app.services.auth.service import session_id_of
-from app.services.auth.users import UserService
+from app.services.auth.service import UserService, session_id_of
 from app.services.shared.deps import Actor, actor_of
 
 from .rendering import is_htmx, templates

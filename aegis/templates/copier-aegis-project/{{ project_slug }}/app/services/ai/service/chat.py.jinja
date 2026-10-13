@@ -13,7 +13,7 @@ import uuid
 from pydantic_ai.exceptions import ModelRetry, UnexpectedModelBehavior
 {% endif %}
 from app.core.log import logger
-from app.services.ai.config import AIServiceConfig
+from app.services.ai.domains.llm.config import AIServiceConfig
 from app.services.ai.domains.chat.agent_loader import (
     DEFAULT_AGENT_SLUG,
     resolve_agent,
@@ -93,6 +93,7 @@ class ChatMixin(PromptMixin):
         conversation_id: str | None = None,
         user_id: str = "default",
         owner_user_id: int | None = None,
+        admin: bool | None = None,
         agent_slug: str | None = None,
         surface: str | None = None,
         attachments: list[ChatAttachment] | None = None,
@@ -170,6 +171,7 @@ class ChatMixin(PromptMixin):
                     agent_slug=agent_slug,
                     conversation_id=conversation.id,
                     subject=subject,
+                    admin=admin,
                 ),
                 reading_stage() as staged_readings,
             ):

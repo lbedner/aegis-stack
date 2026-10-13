@@ -31,7 +31,13 @@ make bench-engines             # measure both on your own routes
 ```
 
 Nothing is persisted by a flag. For a deployment, set `WEBSERVER_ENGINE`
-and `WEBSERVER_LOOP` in the env file alongside every other deploy setting.
+and `WEBSERVER_LOOP` in the env file alongside every other deploy setting,
+or pick them in **Overseer > Settings** (under the Server), where the loop
+list offers what the running engine can start. A saved choice applies on
+the next restart, and only when the env file does not set it. A saved loop
+the engine cannot start (saved for the other engine, say) starts on `auto`
+with a warning in the log, so a choice made in the Overseer never keeps the
+server from starting; one set in the env file still refuses, by name.
 
 ## The Engine
 

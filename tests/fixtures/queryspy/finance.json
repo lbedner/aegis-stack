@@ -143,6 +143,12 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM finance_account WHERE finance_account.deleted_at IS NULL AND finance_account.owner_user_id = :owner_user_id_1",
+      "file": "app/services/finance/domains/ledger/queries/accounts.py",
+      "function": "accounts_page"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM finance_account WHERE finance_account.deleted_at IS NULL AND finance_account.owner_user_id = :owner_user_id_1",
       "file": "app/services/finance/domains/ledger/queries/networth.py",
       "function": "account_rollup"
     },
@@ -155,6 +161,12 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM finance_account WHERE finance_account.deleted_at IS NULL AND finance_account.owner_user_id = :owner_user_id_1 AND NOT finance_account.is_hidden ORDER BY finance_account.classification, finance_account.name LIMIT :param_1 OFFSET :param_2",
+      "file": "app/services/finance/domains/ledger/queries/accounts.py",
+      "function": "accounts_page"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM finance_account WHERE finance_account.deleted_at IS NULL AND finance_account.owner_user_id = :owner_user_id_1 ORDER BY finance_account.classification, finance_account.name LIMIT :param_1 OFFSET :param_2",
       "file": "app/services/finance/domains/ledger/queries/accounts.py",
       "function": "accounts_page"
     },
@@ -529,12 +541,6 @@
       "label": "SELECT ... FROM finance_insight WHERE finance_insight.related_stream_id IN (__[POSTCOMPILE_related_stream_id_1])",
       "file": "app/services/finance/domains/detection/queries.py",
       "function": "insight_rows_where"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM finance_insight WHERE finance_insight.status = :status_1 AND finance_insight.insight_type != :insight_type_1",
-      "file": "app/services/finance/domains/planning/queries.py",
-      "function": "new_insight_count"
     },
     {
       "kind": "repeated_statement",

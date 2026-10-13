@@ -3,7 +3,8 @@ process, in tiers (the edge, the app, its data), the connections between
 them, and everything that runs inside the webserver instead (the services,
 the web frontend). Drawn from what is installed, so a stack without Redis
 has no Cache and no line to it. ``zoomed`` is the Server opened up: what
-runs inside it, and what that reaches (``service_links``). No UI framework
+runs inside it, and what that reaches (the system model's calls). Each
+part's place is its own declaration (``parts.PARTS``). No UI framework
 imports.
 """
 
@@ -11,50 +12,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 
-from app.core.constants import ComponentName
-
-# The worker's queue: not a process or a health check of its own, but where
-# every enqueue lands and the worker takes work from (in Redis, beside the
-# Cache). Drawn whenever there is a worker.
-QUEUE = "queue"
-# Each tier's processes, by their health component name, in drawing order.
-TIERS: tuple[tuple[str, ...], ...] = (
-    (ComponentName.INGRESS,),
-    (ComponentName.BACKEND, ComponentName.WORKER, ComponentName.SCHEDULER),
-    (
-        ComponentName.DATABASE,
-        QUEUE,
-        ComponentName.CACHE,
-        ComponentName.STORAGE,
-        ComponentName.OLLAMA,
-        ComponentName.BROWSER,
-    ),
-)
-# Who talks to whom: requests in through the ingress; the app's processes
-# to their stores; work handed to the queue, and taken from it.
-LINKS: tuple[tuple[str, str], ...] = (
-    (ComponentName.INGRESS, ComponentName.BACKEND),
-    (ComponentName.BACKEND, ComponentName.DATABASE),
-    (ComponentName.BACKEND, QUEUE),
-    (ComponentName.BACKEND, ComponentName.CACHE),
-    (ComponentName.BACKEND, ComponentName.STORAGE),
-    (ComponentName.BACKEND, ComponentName.OLLAMA),
-    (ComponentName.BACKEND, ComponentName.BROWSER),
-    (ComponentName.WORKER, QUEUE),
-    (ComponentName.WORKER, ComponentName.DATABASE),
-    (ComponentName.SCHEDULER, ComponentName.DATABASE),
-    (ComponentName.SCHEDULER, QUEUE),
-)
-# What lives inside another part, so fails with it, with no line drawn.
-INSIDE: dict[str, str] = {QUEUE: ComponentName.CACHE}
-HOST = ComponentName.BACKEND  # what has no process of its own runs in the webserver
-# Nothing calls the worker: a part using it hands work to its queue.
-THROUGH: dict[str, str] = {ComponentName.WORKER: QUEUE}
-# A part that takes from another rather than calls it: in the way work
-# flows (``flow``), the line runs the other way.
-PULLS = frozenset({(ComponentName.WORKER, QUEUE)})
-# Where every key lives: a line from it is a key it holds for another part.
-KEYS = ComponentName.SECRETS
+from app.core.ontology.parts import INSIDE, PLACED, QUEUE, placement
+from app.core.ownership import TAKES
 
 
 class Role(StrEnum):
@@ -67,12 +26,22 @@ class Role(StrEnum):
     OUTSIDE = "outside"
 
 
-ROLES: dict[str, Role] = {
-    ComponentName.DATABASE: Role.STORE,
-    ComponentName.CACHE: Role.STORE,
-    QUEUE: Role.QUEUE,
-    ComponentName.STORAGE: Role.BUCKET,
-}
+# Every part the map can place, as each declares itself (``parts.PARTS``:
+# its row, its shape, its lines, ``ontology.parts.PLACED``), the worker's
+# queue among them. None of it is kept here.
+_ORDERED = sorted(PLACED, key=placement)
+# Each tier's processes, by health name, in drawing order: the edge, the
+# app, its data.
+TIERS = tuple(tuple(n for n in _ORDERED if PLACED[n].tier == t) for t in range(3))
+# Who talks to whom: requests in through the ingress; the app's processes
+# to their stores; work handed to the queue, and taken from it.
+LINKS = tuple((n, d) for tier in TIERS for n in tier for d in PLACED[n].depends_on)
+# A part that takes from another rather than calls it: in the way work
+# flows (``flow``), the line runs the other way.
+PULLS = frozenset(TAKES.items())
+# Where every key lives: a line from it is a key it holds for another part.
+KEYS = next(n for n in _ORDERED if PLACED[n].holds_keys)
+ROLES: dict[str, Role] = {n: Role(p.role) for n, p in PLACED.items() if p.role}
 # Each shape, named for the map's key.
 ROLE_LABELS: dict[Role, str] = {
     Role.STORE: "Store",
@@ -174,8 +143,13 @@ def causes(
     (``INSIDE``) fails with it."""
     followed = [*links, *INSIDE.items()]
 
-    def roots(name: str) -> list[str]:
-        below = [b for a, b in followed if a == name and b in failing]
-        return list(dict.fromkeys(r for b in below for r in roots(b) or [b]))
+    def roots(name: str, seen: frozenset[str]) -> list[str]:
+        """``name``'s failing roots; a part already on the way ends it (two
+        that depend on each other are each other's cause)."""
+        seen = seen | {name}
+        below = [b for a, b in followed if a == name and b in failing and b not in seen]
+        return list(dict.fromkeys(r for b in below for r in roots(b, seen) or [b]))
 
-    return {name: found for name in sorted(failing) if (found := roots(name))}
+    return {
+        name: found for name in sorted(failing) if (found := roots(name, frozenset()))
+    }

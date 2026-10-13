@@ -6,14 +6,14 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.services.comms.models import MessageStatus, SendSMSRequest
-from app.services.comms.sms import (
+from app.services.comms.domains.telephony.sms import (
     SMSConfigurationError,
     get_sms_status,
     send_sms,
     send_sms_simple,
     validate_sms_config,
 )
+from app.services.comms.models import MessageStatus, SendSMSRequest
 from tests.services.comms._settings import secret_settings
 
 
@@ -88,7 +88,9 @@ class TestSendSMS:
         """Test successful SMS send."""
         with (
             secret_settings() as mock_settings,
-            patch("app.services.comms.twilio.Client") as mock_client_class,
+            patch(
+                "app.services.comms.domains.telephony.client.Client"
+            ) as mock_client_class,
         ):
             mock_settings.TWILIO_ACCOUNT_SID = "ACtest123"
             mock_settings.TWILIO_AUTH_TOKEN = "auth_token"
@@ -116,7 +118,9 @@ class TestSendSMS:
         """Test that SMS segments are calculated correctly."""
         with (
             secret_settings() as mock_settings,
-            patch("app.services.comms.twilio.Client") as mock_client_class,
+            patch(
+                "app.services.comms.domains.telephony.client.Client"
+            ) as mock_client_class,
         ):
             mock_settings.TWILIO_ACCOUNT_SID = "ACtest123"
             mock_settings.TWILIO_AUTH_TOKEN = "auth_token"
@@ -162,7 +166,7 @@ class TestSendSMS:
         """Test SMS send fails when phone number is missing."""
         with (
             secret_settings() as mock_settings,
-            patch("app.services.comms.twilio.Client"),
+            patch("app.services.comms.domains.telephony.client.Client"),
         ):
             mock_settings.TWILIO_ACCOUNT_SID = "ACtest123"
             mock_settings.TWILIO_AUTH_TOKEN = "auth_token"
@@ -188,7 +192,9 @@ class TestSendSMSSimple:
         """Test simple SMS send."""
         with (
             secret_settings() as mock_settings,
-            patch("app.services.comms.twilio.Client") as mock_client_class,
+            patch(
+                "app.services.comms.domains.telephony.client.Client"
+            ) as mock_client_class,
         ):
             mock_settings.TWILIO_ACCOUNT_SID = "ACtest123"
             mock_settings.TWILIO_AUTH_TOKEN = "auth_token"

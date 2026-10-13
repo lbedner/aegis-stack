@@ -1,0 +1,37 @@
+{# A route's dry path (dry_path, overseer_requests.dry_context): each hop
+   set in under the one whose code makes it, opening at its line in Code;
+   each stop at its line, with why. #}
+{% from "pages/overseer/_macros.html" import line_link %}
+<div data-dry-path class="space-y-3 border-t border-aegis-border pt-3">
+  <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+    <p class="text-sm font-semibold text-aegis-text">Dry path</p>
+    <p class="text-xs text-aegis-muted flex-1">Every hop it can take, read from the code; nothing is sent.</p>
+    <a data-map-path href="{{ map_url }}" {{ hx_replace(map_url, "#overseer-main") }} class="text-xs text-aegis-muted hover:text-aegis-teal">Show on the map</a>
+  </div>
+  <ol class="space-y-0.5 text-xs">
+    {% for row in rows %}{% set hop = row.hop %}
+    <li data-hop="{{ hop.kind }}" class="flex items-baseline gap-2 min-w-0" style="padding-left: {{ row.depth * 0.875 }}rem">
+      <span class="micro-label w-16 shrink-0 text-aegis-muted">{{ hop.kind }}</span>
+      <a href="{{ line_url(hop.path, hop.line) }}" class="min-w-0 truncate font-mono text-aegis-text hover:text-aegis-teal" title="{{ hop.path }}:{{ hop.line }}: {{ hop.text }}">{{ hop.symbol.split(".")[-2:]|join(".") }}</a>
+      {% if hop.node %}<span class="shrink-0 text-aegis-muted">{{ hop.node }}</span>{% endif %}
+      {% if hop.guard %}<span class="shrink-0 truncate font-mono text-aegis-amber">if {{ hop.guard }}</span>{% endif %}
+      {% if hop.mode == "async" %}<span class="shrink-0 text-aegis-amber">on the worker</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+  {% if stops %}
+  <div class="space-y-1">
+    <p class="micro-label font-semibold text-aegis-muted">Where the walk stops</p>
+    <ul class="space-y-1 text-xs">
+      {% for stop in stops %}
+      <li data-stop="{{ stop.reason }}" class="flex items-baseline gap-2 min-w-0">
+        <span class="shrink-0">{{ line_link(stop.path, stop.line) }}</span>
+        <code class="min-w-0 truncate text-aegis-text">{{ stop.text }}</code>
+        <span class="shrink-0 text-aegis-amber">{{ reasons[stop.reason] }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+  <p class="text-xxs text-aegis-muted">Not seen by reading the code: {{ unseen }}.</p>
+</div>

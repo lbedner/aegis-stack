@@ -1,6 +1,8 @@
 """Fragments for the Overseer Server page: one connection's timeline in
-the drawer, a route's request form and its Execute, and starting a load
-test. Mounted by ``routes/pages.py``."""
+the drawer, a route's request form, its Execute and its dry path, and
+starting a load test. Mounted by ``routes/pages.py``."""
+
+import asyncio
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
@@ -71,3 +73,14 @@ async def execute(request: Request) -> Response:
     if answer is None:
         return toast_response(f"Not sent: {why}", "error")
     return HTMLResponse(fragment(overseer_requests.ANSWER, answer=answer))
+
+
+@requests_router.get("/dry", response_class=HTMLResponse)
+async def dry(request: Request, route: str) -> Response:
+    """Every hop the route can take, read from the code: nothing is sent."""
+    context = await asyncio.to_thread(
+        overseer_requests.dry_context, request.app.routes, route
+    )
+    if context is None:
+        raise HTTPException(status_code=404, detail="No dry path for that route.")
+    return HTMLResponse(fragment(overseer_requests.DRY, **context))

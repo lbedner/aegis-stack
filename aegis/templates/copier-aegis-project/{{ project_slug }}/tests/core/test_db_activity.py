@@ -4,11 +4,11 @@ locked, are recorded with the process and the app code behind them, for the
 Database pages. Against a real SQLite file: the lock is SQLite's own."""
 
 import asyncio
+from collections.abc import AsyncIterator, Iterator
+from pathlib import Path
 import socket
 import sqlite3
 import time
-from collections.abc import AsyncIterator, Iterator
-from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from app.core import db_activity
 from app.core.cache import get_cache
 from app.core.config import settings
+from app.core.source_index import ROOT
 from app.services.system.models import ComponentStatus
 
 
@@ -102,10 +103,7 @@ def test_generated_code_is_not_the_apps() -> None:
     """SQLAlchemy runs code it generates (``<string>``): never the caller,
     though it resolves under the project's root."""
     assert db_activity._app_path("<string>") is None
-    assert (
-        db_activity._app_path(str(db_activity.ROOT / "app" / "main.py"))
-        == "app/main.py"
-    )
+    assert db_activity._app_path(str(ROOT / "app" / "main.py")) == "app/main.py"
 
 
 async def test_a_transaction_opened_while_this_task_holds_one_waits_on_itself(
@@ -181,3 +179,31 @@ async def test_the_database_health_carries_it(monkeypatch: pytest.MonkeyPatch) -
     )
     status = await health_db.check_database_health()
     assert status.metadata == {"a": 1, "activity": [{"kind": "slow"}]}
+
+
+def test_a_statement_is_a_hop_to_the_database_and_to_its_tables(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Counted where it runs (``edges``), from the code that ran it, and
+    from that part to each table, a failed one too."""
+    import sqlalchemy as sa
+
+    from app.core import edges
+
+    engine = sa.create_engine("sqlite://")
+    db_activity.watch(engine)
+    notes = sa.Table("notes", sa.MetaData(), sa.Column("id", sa.Integer))
+    notes.metadata.create_all(engine)
+    edges.reset()
+    monkeypatch.setattr(edges, "callers", lambda: ["service:finance"])
+
+    with engine.connect() as conn:
+        conn.execute(sa.select(notes)).all()
+        with pytest.raises(sa.exc.OperationalError):
+            conn.execute(sa.select(sa.table("gone", sa.column("id")))).all()
+
+    seen = edges._seen
+    assert seen[("service:finance", "component:database")].count == 2
+    assert seen[("service:finance", "object:notes")].count == 1
+    assert seen[("service:finance", "object:gone")].errors == 1
+    edges.reset()

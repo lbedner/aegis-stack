@@ -70,7 +70,7 @@ async def ensure_load_test_user(email: str) -> None:
 
     from app.core.db import get_async_session
     from app.models.user import UserCreate
-    from app.services.auth.users import UserService
+    from app.services.auth.service import UserService
 
     async with get_async_session() as session:
         user_service = UserService(session)

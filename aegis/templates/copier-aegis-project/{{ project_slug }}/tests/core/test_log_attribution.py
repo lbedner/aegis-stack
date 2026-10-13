@@ -1,10 +1,10 @@
 """Service attribution works through the real logging and collection pipeline."""
 
-import logging
-import sys
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime
 from io import StringIO
+import logging
+import sys
 from typing import Any
 
 import pytest
@@ -16,6 +16,7 @@ from app.core.config import settings
 from app.core.log_records import LogAssembler
 from app.core.runtime import parse_log_line
 from app.services.system.errors.normalize import normalize
+from tests import _code as code
 
 
 @pytest.fixture(autouse=True)
@@ -53,9 +54,7 @@ def output(
 
 
 def function_at(path: str, body: str) -> Callable[[], Any]:
-    namespace: dict[str, Any] = {"logger": log.logger}
-    exec(compile("def run():\n" + body, path, "exec"), namespace)
-    return namespace["run"]
+    return code.function_at(path, body, logger=log.logger)
 
 
 def retained(output: StringIO) -> Any:

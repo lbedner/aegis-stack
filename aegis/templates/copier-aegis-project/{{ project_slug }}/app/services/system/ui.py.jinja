@@ -47,10 +47,26 @@ def get_status_color_name(status: ComponentStatusType) -> str:
     return "white"
 
 
+SERVICE_PREFIX = "service_"  # a service's registry key, before its name
+
+
 def registry_key(group: str, name: str) -> str:
     """An entry's key in the one name registry: a component's own name, a
     service's ``service_<name>`` (``get_component_title``)."""
-    return name if group == "components" else f"service_{name}"
+    return name if group == "components" else f"{SERVICE_PREFIX}{name}"
+
+
+def is_service(key: str) -> bool:
+    """Whether a registry key is a service's (``service_ai``)."""
+    return key.startswith(SERVICE_PREFIX)
+
+
+def registry_entry(key: str) -> tuple[str, str]:
+    """``registry_key`` the other way: ``("services", "ai")`` for
+    ``service_ai``, ``("components", "cache")`` for ``cache``."""
+    if key.startswith(SERVICE_PREFIX):
+        return "services", key.removeprefix(SERVICE_PREFIX)
+    return "components", key
 
 
 def get_component_title(component_name: str) -> str:
@@ -130,7 +146,7 @@ def get_component_title(component_name: str) -> str:
         {%- endif %}
     }
     fallback = (
-        component_name.removeprefix("service_").replace("_", " ").replace("-", " ")
+        component_name.removeprefix(SERVICE_PREFIX).replace("_", " ").replace("-", " ")
     )
     return mapping.get(component_name, fallback.title())
 

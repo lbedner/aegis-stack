@@ -50,6 +50,63 @@ def test_monthly_price_rejects_an_unknown_size() -> None:
         _client().monthly_price("s-9vcpu", "nyc3")
 
 
+def _catalog_routes() -> dict[tuple[str, str], Any]:
+    return {
+        ("GET", "/sizes?per_page=200"): {
+            "sizes": [
+                {
+                    "slug": "s-1vcpu-2gb",
+                    "description": "Basic",
+                    "memory": 2048,
+                    "vcpus": 1,
+                    "disk": 50,
+                    "price_monthly": 12.0,
+                    "regions": ["fra1", "nyc3", "sgp1"],
+                    "available": True,
+                },
+                {
+                    "slug": "s-1vcpu-512mb",
+                    "description": "Basic",
+                    "memory": 512,
+                    "vcpus": 1,
+                    "disk": 10,
+                    "price_monthly": 4.0,
+                    "regions": ["fra1"],
+                    "available": False,
+                },
+            ]
+        },
+        ("GET", "/regions?per_page=200"): {
+            "regions": [
+                {"slug": "fra1", "name": "Frankfurt 1", "available": True},
+                {"slug": "nyc3", "name": "New York 3", "available": True},
+                {"slug": "sgp1", "name": "Singapore 1", "available": False},
+            ]
+        },
+    }
+
+
+def test_the_catalog_lists_what_can_be_created_where() -> None:
+    """Sizes it offers now, each priced in the regions that take new
+    droplets; a size or region DigitalOcean has closed is left out."""
+    assert _client(_catalog_routes()).catalog() == {
+        "sizes": [
+            {
+                "slug": "s-1vcpu-2gb",
+                "group": "Basic",
+                "memory_mb": 2048,
+                "vcpus": 1,
+                "disk_gb": 50,
+                "prices": {"fra1": "12.00", "nyc3": "12.00"},
+            }
+        ],
+        "regions": [
+            {"slug": "fra1", "name": "Frankfurt 1"},
+            {"slug": "nyc3", "name": "New York 3"},
+        ],
+    }
+
+
 def test_ensure_ssh_key_reuses_the_key_with_this_fingerprint() -> None:
     routes = _do_routes()
     routes[("GET", f"/account/keys/{_fingerprint()}")] = {"ssh_key": {"id": 5}}

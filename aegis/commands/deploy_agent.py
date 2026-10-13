@@ -43,6 +43,7 @@ from .. import __version__
 from ..cli import brand
 from ..cli.validation import validate_copier_project
 from ..core.component_files import PROJECT_SLUG_PLACEHOLDER, get_template_path
+from ..core.footprint import DockerError, measure
 from ..core.provision.http import ProvisionError, json_requester, mask_token
 from ..core.provision.registry import PROVIDERS
 from ..core.template_cleanup import env_value
@@ -194,20 +195,31 @@ def run(
         return process.wait()
 
 
-def quote(args: dict[str, str], env: dict[str, str]) -> dict[str, str]:
-    """The provider's monthly price for the size and region, asked here
-    with the request's token (``env``) or this process's, with the
-    request's arguments beside it."""
-    spec = PROVIDERS[args["provider"]]
+def _ask(provider: str, env: dict[str, str], call: Callable[[Any], Any]) -> Any:
+    """``call`` on the provider's client, with the request's token
+    (``env``) or this process's; a provider's refusal says why."""
+    spec = PROVIDERS[provider]
     token = env.get(spec.token_env) or os.environ.get(spec.token_env, "").strip()
     if not token:
         raise RefusedError(t("provision.token_missing", env=spec.token_env))
-    client = spec.client(json_requester(spec.api_url, token))
     try:
-        price = client.monthly_price(args["size"], args["region"])
+        return call(spec.client(json_requester(spec.api_url, token)))
     except ProvisionError as exc:  # its message never carries the token
         raise RefusedError(str(exc)) from None
-    return args | {"price": price, "currency": spec.currency}
+
+
+def quote(args: dict[str, str], env: dict[str, str]) -> str:
+    """The provider's monthly price for the size and region now."""
+    return _ask(
+        args["provider"], env, lambda c: c.monthly_price(args["size"], args["region"])
+    )
+
+
+def catalog(provider: str, env: dict[str, str]) -> dict[str, Any]:
+    """What the provider sells where (its client's ``catalog``), in its
+    currency."""
+    found = _ask(provider, env, lambda c: c.catalog())
+    return found | {"currency": PROVIDERS[provider].currency}
 
 
 def _fresh(at: Any) -> None:
@@ -241,14 +253,25 @@ def _execute(
     job: Job, root: Path, action: str, args: dict[str, str], token: str | None
 ) -> None:
     env = _token_env(root, action, args, token)
-    if action == "quote":
-        job.done(quote(args, env))
+    if action == "footprint":
+        try:
+            found = json.dumps(measure(root))
+        except DockerError as exc:
+            raise RefusedError(str(exc)) from None
+        job.client.set(PROTOCOL["footprint"], found, ex=PROTOCOL["footprint_seconds"])
+        job.done({})
+        return
+    if action == "catalog":
+        key = f"{PROTOCOL['catalog']}{args['provider']}"
+        found = json.dumps(catalog(args["provider"], env))
+        job.client.set(key, found, ex=PROTOCOL["catalog_seconds"])
+        job.done({})
         return
     if action == "provision":
         # The price confirmed in the Overseer, asked again before anything
         # is created; checked here, so it is not one of the command's flags.
         confirmed = args.pop("price")
-        if (price := quote(args, env)["price"]) != confirmed:
+        if (price := quote(args, env)) != confirmed:
             raise RefusedError(
                 t("deploy_agent.price_changed", price=price, confirmed=confirmed)
             )
@@ -348,9 +371,9 @@ def deploy_agent_command(
     Run the Overseer's deploy requests on this machine.
 
     Listens on the project's Redis for what Overseer > Deployments asks for
-    (a price, a new server, a deploy, a backup, a rollback, a destroy) and
-    runs it with the aegis deploy commands, one at a time, with your SSH
-    key: run it where that is, with the stack up. A cloud token comes with
+    (a provider's sizes and regions, a new server, a deploy, a backup, a
+    rollback, a destroy) and runs it with the aegis deploy commands, one at
+    a time, with your SSH key: run it where that is, with the stack up. A cloud token comes with
     the request (Overseer > Secrets) or from this shell's environment.
 
     Examples:

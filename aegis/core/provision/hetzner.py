@@ -27,6 +27,33 @@ class HetznerClient:
             f"{size} is not offered in {region}; available: {available}"
         )
 
+    def catalog(self) -> dict[str, Any]:
+        """Server types still sold, priced (gross) per location, grouped as
+        Hetzner sells them: shared or dedicated vCPUs, x86 or Arm."""
+        types = self._request("GET", "/server_types?per_page=50")["server_types"]
+        sizes = [
+            {
+                "slug": t["name"],
+                "group": f"{t['cpu_type'].title()} vCPU"
+                + (", Arm" if t.get("architecture") == "arm" else ""),
+                "memory_mb": round(t["memory"] * 1024),
+                "vcpus": t["cores"],
+                "disk_gb": t["disk"],
+                "prices": {
+                    p["location"]: f"{float(p['price_monthly']['gross']):.2f}"
+                    for p in t["prices"]
+                },
+            }
+            for t in types
+            if not t.get("deprecation") and t["prices"]
+        ]
+        locations = self._request("GET", "/locations?per_page=50")["locations"]
+        regions = [
+            {"slug": loc["name"], "name": f"{loc['city']}, {loc['country']}"}
+            for loc in locations
+        ]
+        return {"sizes": sizes, "regions": regions}
+
     def ensure_ssh_key(self, name: str, public_key: str) -> tuple[int, bool]:
         """Return ``(key_id, created)``, uploading the key only if it is new."""
         found = self._request(

@@ -30,6 +30,33 @@ class DigitalOceanClient:
             )
         return f"{float(found['price_monthly']):.2f}"
 
+    def catalog(self) -> dict[str, Any]:
+        """Sizes on sale, priced (one price everywhere) in each region open
+        to new droplets that offers them."""
+        regions = [
+            r
+            for r in self._request("GET", "/regions?per_page=200")["regions"]
+            if r.get("available")
+        ]
+        open_now = {r["slug"] for r in regions}
+        sizes = []
+        for size in self._request("GET", "/sizes?per_page=200")["sizes"]:
+            price = f"{float(size['price_monthly']):.2f}"
+            prices = {r: price for r in size["regions"] if r in open_now}
+            if size.get("available") and prices:
+                sizes.append(
+                    {
+                        "slug": size["slug"],
+                        "group": size.get("description") or "Other",
+                        "memory_mb": size["memory"],
+                        "vcpus": size["vcpus"],
+                        "disk_gb": size["disk"],
+                        "prices": prices,
+                    }
+                )
+        names = [{"slug": r["slug"], "name": r["name"]} for r in regions]
+        return {"sizes": sizes, "regions": names}
+
     def ensure_ssh_key(self, name: str, public_key: str) -> tuple[int, bool]:
         """Return ``(key_id, created)``, uploading the key only if it is new."""
         try:

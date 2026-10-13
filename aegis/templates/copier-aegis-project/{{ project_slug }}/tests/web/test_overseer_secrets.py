@@ -104,8 +104,14 @@ def test_it_says_how_values_change(page: str) -> None:
     assert "restart" in text(one(page, "#secrets-backend")).lower()
 
 
-def test_without_a_store_it_says_how_to_get_one(page: str) -> None:
+def test_without_a_store_it_says_how_to_get_one(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Its own line, in the body's colour, not the note's muted one."""
+    monkeypatch.setattr(secrets, "_store", None)
+    monkeypatch.setattr(secrets, "_discovered", True)
+    sign_in(app, monkeypatch, status_with(SECRETS_ENTRY))
+    page = TestClient(app).get("/overseer/secrets").text
     line = text(one(page, "#secrets-backend [data-add-store]"))
     assert line == "Add the secrets component to set them here instead."
 

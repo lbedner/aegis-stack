@@ -18,7 +18,7 @@ from tests._probe import answering
 from tests._secret_settings import FakeStore, use_store
 
 BACKUP = {"backup": "2026-10-01_020000"}
-QUOTE = {"provider": "digitalocean", "size": "s-1vcpu-2gb", "region": "nyc3"}
+CATALOG = {"provider": "digitalocean"}
 TOKEN = "dop_v1_from-the-app-wxyz"
 
 
@@ -65,7 +65,7 @@ def test_a_request_is_queued_with_its_job_waiting(redis: FakeRedis) -> None:
         ("rollback", {"backup": "$(reboot)"}),
         ("deploy", {"rolling": "yes"}),
         ("destroy", {}),
-        ("quote", {"provider": "digitalocean", "size": "--yes", "region": "nyc3"}),
+        ("catalog", {"provider": "--yes"}),
     ],
 )
 def test_what_the_agent_would_refuse_is_never_queued(
@@ -81,6 +81,21 @@ def test_the_agent_listens_while_its_heartbeat_is_there(redis: FakeRedis) -> Non
     redis.strings[agent.HEARTBEAT] = json.dumps({"providers": ["digitalocean"]})
     beat = asyncio.run(agent.agent())
     assert beat is not None and beat["providers"] == ["digitalocean"]
+
+
+def test_a_catalog_fetch_leaves_the_newest_job_alone(redis: FakeRedis) -> None:
+    """Asked for in the background, so the panel keeps showing the deploy
+    (or provision) it was showing."""
+    shown = asyncio.run(agent.enqueue("rollback", BACKUP, "ada"))
+    asyncio.run(agent.enqueue("catalog", CATALOG, "ada"))
+    assert redis.strings[agent.LAST] == shown
+
+
+def test_a_catalog_is_read_back_while_it_lasts(redis: FakeRedis) -> None:
+    assert asyncio.run(agent.catalog("digitalocean")) is None
+    sold = {"currency": "USD", "sizes": [], "regions": []}
+    redis.strings[f"{agent.CATALOG}digitalocean"] = json.dumps(sold)
+    assert asyncio.run(agent.catalog("digitalocean")) == sold
 
 
 def test_only_a_deploy_job_is_shown(redis: FakeRedis) -> None:
@@ -118,13 +133,13 @@ async def test_a_token_is_checked_with_its_provider(
             await entry.verify(TOKEN)
 
 
-def test_a_quote_carries_the_apps_token_beside_its_args(
+def test_a_catalog_carries_the_apps_token_beside_its_args(
     redis: FakeRedis, store: FakeStore
 ) -> None:
     store.values["DIGITALOCEAN_TOKEN"] = TOKEN
-    asyncio.run(agent.enqueue("quote", QUOTE, "ada"))
+    asyncio.run(agent.enqueue("catalog", CATALOG, "ada"))
     request = _sent(redis)
-    assert request["token"] == TOKEN and request["args"] == QUOTE
+    assert request["token"] == TOKEN and request["args"] == CATALOG
     assert TOKEN not in json.dumps(redis.hashes)  # the job never holds it
 
 
@@ -143,7 +158,7 @@ def test_a_destroy_carries_the_provisioned_servers_token(
     [
         ("deploy", {}, TOKEN),  # needs no token
         ("rollback", BACKUP, TOKEN),
-        ("quote", QUOTE, None),  # the app has none: the agent's own, if any
+        ("catalog", CATALOG, None),  # the app has none: the agent's own, if any
     ],
 )
 def test_no_token_is_sent_where_none_is_needed_or_held(
@@ -160,7 +175,7 @@ def test_a_malformed_token_is_refused_before_it_is_sent(
 ) -> None:
     store.values["DIGITALOCEAN_TOKEN"] = "pasted with a space"
     with pytest.raises(RefusedError) as refused:
-        asyncio.run(agent.enqueue("quote", QUOTE, "ada"))
+        asyncio.run(agent.enqueue("catalog", CATALOG, "ada"))
     assert "pasted" not in str(refused.value)
     assert not redis.lists
 

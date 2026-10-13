@@ -6,12 +6,18 @@ which clients exist. The helpers below are shared by every client.
 
 import base64
 import hashlib
-from typing import Protocol
+from typing import Any, Protocol
 
 
 class ProviderClient(Protocol):
     def monthly_price(self, size: str, region: str) -> str:
         """Monthly price of ``size`` in ``region``, e.g. ``"4.15"``."""
+        ...
+
+    def catalog(self) -> dict[str, Any]:
+        """What can be created where: ``sizes`` (slug, group, memory_mb,
+        vcpus, disk_gb, and ``prices``: the monthly price in each region
+        that offers it) and ``regions`` (slug, readable name)."""
         ...
 
     def ensure_ssh_key(self, name: str, public_key: str) -> tuple[int, bool]:

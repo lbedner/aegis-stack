@@ -1,6 +1,13 @@
 """The deploy agent's protocol: the Redis keys, the actions it runs and
 each argument's pattern, and the one check a request must pass.
 
+A ``catalog`` (what a provider sells, where) is kept under the
+``catalog`` key plus the provider for ``catalog_seconds``, and the
+stack's ``footprint`` (what its production services take, measured where
+it is built) for ``footprint_seconds``, for the Overseer's new-server form
+and whether a size has room. An action marked ``background`` is not the
+newest job the Overseer shows (``last``).
+
 An action marked ``token`` acts on a cloud provider's account (the one it
 names, or the provisioned server's), and its request may carry the app's
 token for it (``app.core.secrets``) as its own field, never in ``args``,
@@ -21,6 +28,10 @@ PROTOCOL: dict[str, Any] = {
     "last": "deploy:last",
     "beat_seconds": 10,
     "stale_seconds": 300,
+    "catalog": "deploy:catalog:",
+    "catalog_seconds": 3600,
+    "footprint": "deploy:footprint",
+    "footprint_seconds": 600,
     # A provider API token: its own characters only, so it can travel in an
     # environment variable and nothing else rides along with it.
     "token": r"[A-Za-z0-9._~+/=:-]{8,512}",
@@ -35,10 +46,13 @@ PROTOCOL: dict[str, Any] = {
         "confirm": "[a-z0-9][a-z0-9-]{0,62}",
     },
     "actions": {
-        "quote": {
+        "catalog": {
             "token": True,
-            "required": ["provider", "size", "region"],
-            "optional": ["domain", "email"],
+            "background": True,
+            "required": ["provider"],
+        },
+        "footprint": {
+            "background": True,
         },
         "provision": {
             "command": ["deploy-provision", "--yes"],

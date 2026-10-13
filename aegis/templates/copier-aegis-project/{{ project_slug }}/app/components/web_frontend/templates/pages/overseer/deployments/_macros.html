@@ -1,8 +1,10 @@
-{# Overseer > Deployments' asks of ``aegis deploy-agent``
-   (overseer_deploy_actions): one recipe for a control that asks (a write,
-   answered by its job, which swaps into the card's job panel), and the
-   destroy form that the card and a failed provision both offer. #}
+{# Overseer > Deployments' pieces (overseer_deploy_actions): one recipe
+   for a control that asks ``aegis deploy-agent`` (a write, answered by its
+   job, which swaps into the card's job panel); the destroy form that the
+   server and a failed provision both offer; a step on the way to a
+   server; why the agent cannot be asked; and the job panel. #}
 {% from "components/macros/form.html" import action, field, text_input, primary_button %}
+{% from "components/macros/layout.html" import command %}
 
 {% macro asks(url) %}data-write hx-post="{{ url }}" hx-target="#deploy-job" hx-swap="innerHTML"{% endmacro %}
 
@@ -16,4 +18,47 @@
   {% call field("Type " ~ name ~ " to delete the server, its firewall, DNS record and SSH key") %}{{ text_input("confirm", required=True) }}{% endcall %}
   {{ primary_button("Destroy", "submit") }}
 </form>
+{% endmacro %}
+
+{# A step (``s``: key, title, status, summary), numbered ``n``: done shows
+   its answer in a line, the one at hand its body (the caller), one still
+   to come only its name. #}
+{% macro step(n, s) %}
+{% set tone = {"done": "border-aegis-teal text-aegis-teal", "current": "border-aegis-teal text-aegis-text"}.get(s.status, "border-aegis-border text-aegis-muted") %}
+<li data-step="{{ s.key }}" data-status="{{ s.status }}" class="flex gap-3">
+  <span class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs {{ tone }}" aria-hidden="true">
+    {%- if s.status == "done" %}<svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>{% else %}{{ n }}{% endif -%}
+  </span>
+  <div class="min-w-0 flex-1 space-y-3">
+    <p class="text-sm"><span class="font-semibold {{ 'text-aegis-muted' if s.status == 'todo' else 'text-aegis-text' }}">{{ s.title }}</span>{% if s.summary %} <span data-summary class="text-aegis-muted">{{ s.summary }}</span>{% endif %}</p>
+    {% if s.status == "current" %}<div data-step-body class="space-y-3">{{ caller() }}</div>{% endif %}
+  </div>
+</li>
+{% endmacro %}
+
+{# Why the deploy agent cannot be asked (``agent``, its state), or nothing
+   when it can. #}
+{% macro agent_note(agent) %}
+{% set note = "text-sm text-aegis-muted space-y-2" %}
+{% if agent.state == "no-redis" %}
+<div data-deploy-state="no-redis" class="{{ note }}">
+  <p>Deploying from here needs Redis: the Overseer hands each action to <code class="font-mono text-aegis-text">aegis deploy-agent</code> on your machine through the project's Redis, so your SSH key never enters the app.</p>
+  <p class="flex items-center gap-2">{{ command("aegis add redis") }}</p>
+</div>
+{% elif agent.state == "unreachable" %}
+<p data-deploy-state="unreachable" class="{{ note }}">Redis did not answer: {{ agent.error }}</p>
+{% elif agent.state == "no-agent" %}
+<div data-deploy-state="no-agent" class="{{ note }}">
+  <p>No deploy agent is listening. <code class="font-mono text-aegis-text">make serve</code> starts one when the aegis CLI is installed (<code class="font-mono text-aegis-text">uv tool install aegis-stack</code>); with the stack started another way, run it in the project directory, then reload.</p>
+  <p class="flex items-center gap-2">{{ command(agent.command) }}</p>
+  <p>It runs what you ask here with your SSH key, which stays on your machine. The cloud token comes from Overseer &gt; Secrets (or <code class="font-mono text-aegis-text">.env</code>), or from the agent's own environment.</p>
+</div>
+{% endif %}
+{% endmacro %}
+
+{# The newest deploy job, streamed while the page is open (_job.html). #}
+{% macro job_panel(actions) %}
+<div hx-ext="sse" sse-connect="{{ actions.events }}">
+  <div id="deploy-job" sse-swap="{{ actions.event }}" hx-target="this">{% with job=actions.job %}{% include "pages/overseer/deployments/_job.html" %}{% endwith %}</div>
+</div>
 {% endmacro %}

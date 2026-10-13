@@ -3,7 +3,7 @@
 from typing import Any
 
 from .http import ProvisionError, Requester, delete
-from .provider import ssh_fingerprint, ssh_key_name
+from .provider import amount, ssh_fingerprint, ssh_key_name
 
 API_URL = "https://api.digitalocean.com/v2"
 IMAGE = "ubuntu-24-04-x64"
@@ -11,24 +11,58 @@ IMAGE = "ubuntu-24-04-x64"
 # the one that holds: SSH, HTTP and HTTPS in, everything out.
 OPEN_PORTS = ("22", "80", "443")
 _ANYWHERE = {"addresses": ["0.0.0.0/0", "::/0"]}
+MANAGED_TAG = "managed-by-aegis"
+PROJECT_TAG = "aegis-project:"
 
 
 class DigitalOceanClient:
     def __init__(self, request: Requester) -> None:
         self._request = request
 
-    def monthly_price(self, size: str, region: str) -> str:
-        """Monthly price of ``size`` in USD, e.g. ``"12.00"``."""
-        sizes = self._request("GET", "/sizes?per_page=200")["sizes"]
-        found = next((s for s in sizes if s["slug"] == size), None)
-        if found is None:
-            raise ProvisionError(f"Unknown DigitalOcean size: {size}")
-        if region not in found["regions"]:
-            available = ", ".join(found["regions"])
-            raise ProvisionError(
-                f"{size} is not offered in {region}; available: {available}"
-            )
-        return f"{float(found['price_monthly']):.2f}"
+    def account(self) -> dict[str, Any]:
+        """Droplets (``droplet:read``) and this month's spend
+        (``billing:read``, said missing when the token lacks it)."""
+        try:
+            droplets = self._request("GET", "/droplets?per_page=200")["droplets"]
+        except ProvisionError as exc:
+            if exc.status == 403:
+                raise ProvisionError(
+                    "The token cannot list droplets: give it droplet:read.", 403
+                ) from None
+            raise
+        servers = [
+            {
+                "name": d["name"],
+                "size": d["size_slug"],
+                "region": d["region"]["slug"],
+                "price": amount(d["size"]["price_monthly"]),
+                "created": d["created_at"],
+                "project": next(
+                    (
+                        t.removeprefix(PROJECT_TAG)
+                        for t in d.get("tags") or ()
+                        if t.startswith(PROJECT_TAG)
+                    ),
+                    None,
+                ),
+            }
+            for d in droplets
+        ]
+        try:
+            spent = self._request("GET", "/customers/my/balance")["month_to_date_usage"]
+        except ProvisionError as exc:
+            if exc.status != 403:
+                raise
+            return {
+                "servers": servers,
+                "month_to_date": None,
+                "missing": ["billing:read"],
+            }
+        return {
+            "servers": servers,
+            "month_to_date": amount(spent),
+            "missing": [],
+        }
 
     def catalog(self) -> dict[str, Any]:
         """Sizes on sale, priced (one price everywhere) in each region open
@@ -41,7 +75,7 @@ class DigitalOceanClient:
         open_now = {r["slug"] for r in regions}
         sizes = []
         for size in self._request("GET", "/sizes?per_page=200")["sizes"]:
-            price = f"{float(size['price_monthly']):.2f}"
+            price = amount(size["price_monthly"])
             prices = {r: price for r in size["regions"] if r in open_now}
             if size.get("available") and prices:
                 sizes.append(
@@ -82,7 +116,7 @@ class DigitalOceanClient:
             "image": IMAGE,
             "ssh_keys": [ssh_key_id],
             "user_data": user_data,
-            "tags": ["managed-by-aegis", f"aegis-project:{name}"],
+            "tags": [MANAGED_TAG, f"{PROJECT_TAG}{name}"],
         }
         return self._request("POST", "/droplets", body)["droplet"]["id"]
 

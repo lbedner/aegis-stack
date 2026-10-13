@@ -23,7 +23,11 @@ from aegis.core.provision.http import (
     json_requester,
     mask_token,
 )
-from aegis.core.provision.provider import cloud_init_user_data, ssh_fingerprint
+from aegis.core.provision.provider import (
+    cloud_init_user_data,
+    monthly_price,
+    ssh_fingerprint,
+)
 from tests.cli.test_utils import strip_ansi_codes
 
 RUNNER = CliRunner()
@@ -56,10 +60,16 @@ class FakeAPI:
 
 def _hetzner_routes() -> dict[tuple[str, str], Any]:
     return {
-        ("GET", "/server_types?name=cx23"): {
+        ("GET", "/server_types?per_page=50"): {
             "server_types": [
                 {
                     "name": "cx23",
+                    "cores": 2,
+                    "memory": 4.0,
+                    "disk": 40,
+                    "cpu_type": "shared",
+                    "architecture": "x86",
+                    "deprecation": None,
                     "prices": [
                         {
                             "location": "nbg1",
@@ -68,6 +78,9 @@ def _hetzner_routes() -> dict[tuple[str, str], Any]:
                     ],
                 }
             ]
+        },
+        ("GET", "/locations?per_page=50"): {
+            "locations": [{"name": "nbg1", "city": "Nuremberg", "country": "DE"}]
         },
         ("GET", f"/ssh_keys?fingerprint={_fingerprint()}"): {"ssh_keys": []},
         ("POST", "/ssh_keys"): {"ssh_key": {"id": 11}},
@@ -96,10 +109,21 @@ def _do_routes() -> dict[tuple[str, str], Any]:
             "sizes": [
                 {
                     "slug": "s-1vcpu-2gb",
+                    "description": "Basic",
+                    "memory": 2048,
+                    "vcpus": 1,
+                    "disk": 50,
                     "price_monthly": 12.0,
-                    "regions": ["nyc3", "fra1"],
+                    "regions": ["tor1", "fra1"],
                     "available": True,
                 }
+            ]
+        },
+        ("GET", "/regions?per_page=200"): {
+            "regions": [
+                {"slug": "tor1", "name": "Toronto 1", "available": True},
+                {"slug": "fra1", "name": "Frankfurt 1", "available": True},
+                {"slug": "sgp1", "name": "Singapore 1", "available": True},
             ]
         },
         ("GET", f"/account/keys/{_fingerprint()}"): ProvisionError(
@@ -159,7 +183,7 @@ def test_ssh_fingerprint_is_md5_colon_form() -> None:
 
 def test_monthly_price_reads_gross_for_location() -> None:
     client = HetznerClient(FakeAPI(_hetzner_routes()))
-    assert client.monthly_price("cx23", "nbg1") == "4.15"
+    assert monthly_price(client, "cx23", "nbg1") == "4.15"
 
 
 def test_the_catalog_lists_what_can_be_created_where() -> None:
@@ -215,10 +239,55 @@ def test_the_catalog_lists_what_can_be_created_where() -> None:
     }
 
 
+def test_the_account_lists_its_servers_priced_where_they_are() -> None:
+    """Hetzner has no billing API: the servers, and no spend."""
+    api = FakeAPI(
+        {
+            ("GET", "/servers?per_page=50"): {
+                "servers": [
+                    {
+                        "name": "my-app",
+                        "server_type": {
+                            "name": "cx23",
+                            "prices": [
+                                {
+                                    "location": "fsn1",
+                                    "price_monthly": {"gross": "5.0000"},
+                                },
+                                {
+                                    "location": "nbg1",
+                                    "price_monthly": {"gross": "4.1531"},
+                                },
+                            ],
+                        },
+                        "datacenter": {"location": {"name": "nbg1"}},
+                        "created": "2026-08-01T09:00:00+00:00",
+                        "labels": {"managed-by": "aegis", "aegis-project": "my-app"},
+                    }
+                ]
+            }
+        }
+    )
+    assert HetznerClient(api).account() == {
+        "servers": [
+            {
+                "name": "my-app",
+                "size": "cx23",
+                "region": "nbg1",
+                "price": "4.15",
+                "created": "2026-08-01T09:00:00+00:00",
+                "project": "my-app",
+            }
+        ],
+        "month_to_date": None,
+        "missing": [],
+    }
+
+
 def test_monthly_price_rejects_unavailable_location() -> None:
     client = HetznerClient(FakeAPI(_hetzner_routes()))
     with pytest.raises(ProvisionError, match="nbg1"):
-        client.monthly_price("cx23", "ash")
+        monthly_price(client, "cx23", "ash")
 
 
 def test_ensure_ssh_key_reuses_matching_key() -> None:
@@ -476,7 +545,9 @@ def test_provision_happy_path_sslip(project: Path, apis: dict[str, FakeAPI]) -> 
     assert record["size"] == "cx23"
     assert record["ssh_key_id"] == 11
     assert record["status"] == "ready"
-    body = apis[hetzner.API_URL].calls[3][2]
+    body = next(
+        c[2] for c in apis[hetzner.API_URL].calls if c[:2] == ("POST", "/servers")
+    )
     assert body is not None and "echo hi" in body["user_data"]
     assert body["name"] == "my-app"
     assert apis["deployed"] == [str(project)]  # type: ignore[comparison-overlap]
@@ -570,6 +641,18 @@ def test_provision_refuses_when_already_ready(
     apis[hetzner.API_URL].calls.clear()
     result = _provision(project)
     assert result.exit_code == 1
+    assert not apis[hetzner.API_URL].calls
+
+
+def test_provision_refuses_an_open_env_before_buying_anything(
+    project: Path, apis: dict[str, FakeAPI]
+) -> None:
+    """The deploy at its end would refuse it anyway: refused first, no
+    server is bought only to sit there unconfigured."""
+    (project / ".env").write_text("APP_ENV=dev\nAUTH_ENABLED=false\n")
+    result = _provision(project)
+    assert result.exit_code == 1
+    assert "AUTH_ENABLED" in strip_ansi_codes(result.output)
     assert not apis[hetzner.API_URL].calls
 
 
@@ -723,7 +806,7 @@ def test_provider_digitalocean_uses_its_client_token_and_defaults(
     assert not apis[hetzner.API_URL].calls
     record = _deploy_yml(project)["provision"]
     assert record["provider"] == "digitalocean"
-    assert (record["size"], record["region"]) == ("s-1vcpu-2gb", "nyc3")
+    assert (record["size"], record["region"]) == ("s-1vcpu-2gb", "tor1")
     assert (record["server_id"], record["ipv4"]) == (77, IP)
     assert (record["ssh_key_id"], record["firewall_id"]) == (21, "fw-1")
     assert _deploy_yml(project)["server"]["host"] == IP

@@ -840,6 +840,7 @@ MESSAGES: dict[str, str] = {
     "deploy.backup_storage_failed": "Warning: Object storage backup failed",
     "deploy.backup_offsite": "Copying backup off the server (restic)...",
     "deploy.backup_offsite_failed": "Warning: Off-box copy failed: {error}",
+    "deploy.env_unsafe": "{file} выставит приложение в сеть без защиты. Исправьте там {settings} (AUTH_ENABLED=true, APP_ENV=prod, новый SECRET_KEY из openssl rand -hex 32) и разверните снова; каждая настройка описана в .env.deploy.example.",
     "deploy.disk_low": "На {host} свободно всего {free} ГБ, требуется {need} ГБ. Освободить: docker image prune -af && docker builder prune -af",
     "deploy.pruning": "Освобождение места Docker (висячие образы и старый кэш сборки)...",
     "deploy.prune_failed": "Не удалось освободить место Docker; сам деплой прошёл успешно.",

@@ -4,15 +4,15 @@
    a size or region picked reloads it, so the regions are the ones that
    offer the size and the price is theirs. The price shown is typed back
    to create the server. #}
-{% from "components/macros/form.html" import action, field, select, text_input, primary_button %}
-{% from "pages/overseer/deployments/_macros.html" import asks %}
-<div data-provision="{{ p.provider }}" data-write hx-disinherit="*" hx-swap="outerHTML" hx-include="find form" class="space-y-3"{% if p.reload %} hx-get="{{ p.reload.url }}" hx-trigger="{{ p.reload.trigger }}"{% endif %}>
-  <p class="text-sm font-semibold text-aegis-text">New server on {{ p.name }}</p>
+{% from "components/macros/form.html" import field, select, text_input, primary_button %}
+{% from "components/macros/layout.html" import avatar %}
+{% from "pages/overseer/deployments/_macros.html" import asks, failed, reloads, waiting %}
+<div data-provision="{{ p.provider }}" data-part data-write hx-disinherit="*" hx-swap="outerHTML" hx-include="find form" class="space-y-3"{{ reloads(p.reload) }}>
+  <p data-provision-heading class="flex items-center gap-2 text-sm font-semibold text-aegis-text">{{ avatar(p.name, p.logo) }}New server on {{ p.name }}</p>
   {% if p.state == "loading" %}
-  <p data-loading class="text-sm text-aegis-muted">Asking {{ p.name }} what it offers…</p>
+  {{ waiting("Asking " ~ p.name ~ " what it sells, where…") }}
   {% elif p.state == "failed" %}
-  <p data-error class="text-sm text-error">{{ p.error }}</p>
-  {{ action("Try again", 'data-retry hx-get="' ~ p.url ~ '" hx-target="closest [data-provision]" hx-swap="outerHTML"') }}
+  {{ failed("", p) }}
   {% else %}
   <form {{ asks(p.partials ~ "/provision") }} class="space-y-3">
     <input type="hidden" name="provider" value="{{ p.provider }}">
@@ -23,9 +23,10 @@
       {% call field("Email (optional)") %}{{ text_input("email", p.email, placeholder="the project's author email") }}{% endcall %}
     </div>
     {% with f=p.fit %}{% include "pages/overseer/deployments/_fit.html" %}{% endwith %}
-    <p data-price class="text-sm text-aegis-text">{{ p.currency }} {{ p.price }} a month, billed to your {{ p.name }} account.</p>
+    {% with f=p.account %}{% include "pages/overseer/deployments/_account.html" %}{% endwith %}
+    <p data-price class="text-sm text-aegis-text">{{ p.price_cents|money(p.currency) }} a month, billed to your {{ p.name }} account.</p>
     <div class="flex flex-wrap items-end gap-2">
-      {% call field("Type " ~ p.price ~ " to create it") %}{{ text_input("typed", required=True) }}{% endcall %}
+      {% call field("Type " ~ p.price ~ " to create it") %}{{ text_input("typed", required=True, pattern=p.price|exactly) }}{% endcall %}
       {{ primary_button("Create server", "submit") }}
     </div>
   </form>

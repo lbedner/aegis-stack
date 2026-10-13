@@ -829,6 +829,7 @@ MESSAGES: dict[str, str] = {
     "deploy.backup_storage_failed": "Warning: Object storage backup failed",
     "deploy.backup_offsite": "Copying backup off the server (restic)...",
     "deploy.backup_offsite_failed": "Warning: Off-box copy failed: {error}",
+    "deploy.env_unsafe": "{file} 그대로라면 앱이 보호 없이 공개됩니다. 그 파일에서 {settings}을(를) 고친 뒤(AUTH_ENABLED=true, APP_ENV=prod, openssl rand -hex 32로 만든 새 SECRET_KEY) 다시 배포하세요. 각 설정은 .env.deploy.example에 설명되어 있습니다.",
     "deploy.disk_low": "{host}에 {free}GB만 남았습니다. {need}GB가 필요합니다. 정리 방법: docker image prune -af && docker builder prune -af",
     "deploy.pruning": "Docker 디스크 공간 회수 중(미사용 이미지 및 오래된 빌드 캐시)...",
     "deploy.prune_failed": "Docker 디스크 공간을 회수하지 못했습니다. 배포 자체는 성공했습니다.",

@@ -1,11 +1,11 @@
 """What a project's stack takes, measured where it is built, so the
 Overseer can say whether a server size has room for it.
 
-The services are production's (the compose files and profile ``aegis
-deploy`` starts, ``DEPLOY_COMPOSE``), each with its memory and CPU limits
-resolved as a deploy resolves them (from the env file it ships), its image
-and what that image takes on disk; beside them the data volumes they keep,
-and what each uses now where it runs. Asked of ``docker`` on this machine,
+The services are production's (the compose files, ``COMPOSE_FILES``, and
+profile ``aegis deploy`` starts), each with its memory and CPU limits
+resolved as a deploy resolves them (from the env file it ships) and what
+it uses now where it runs; beside them what their images and data volumes
+take on disk. Asked of ``docker`` on this machine,
 through ``docker`` (a callable, so tests answer for it).
 """
 
@@ -16,16 +16,12 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from .template_cleanup import env_value
+from .template_cleanup import deploy_env_file, env_value
 
 Docker = Callable[..., str]
-DEPLOY_COMPOSE = (
-    "compose",
-    "-f",
-    "docker-compose.yml",
-    "-f",
-    "docker-compose.prod.yml",
-)
+# The compose files a deploy runs, in order: the base, then production's
+# (generated with ingress; without it the base is production).
+COMPOSE_FILES = ("docker-compose.yml", "docker-compose.prod.yml")
 DOCKER_SECONDS = 60
 # Compose writes binary units (768M is 768 MiB); docker system df decimal
 # ones (336MB); docker stats binary with an i (385.2MiB).
@@ -86,9 +82,7 @@ def runner(root: Path) -> Docker:
 def _resolver(root: Path) -> Callable[[Any], str | None]:
     """``${VAR:-default}`` as a deploy fills it: the shipped env file
     (``.env.deploy`` over ``.env``), else the default."""
-    shipped = next(
-        (p for p in (root / ".env.deploy", root / ".env") if p.exists()), None
-    )
+    shipped = deploy_env_file(root)
 
     def resolve(value: Any) -> str | None:
         if value is None:
@@ -137,13 +131,16 @@ def _used(docker: Docker, project: str) -> dict[str, int]:
 
 def measure(root: Path, docker: Docker | None = None) -> dict[str, Any]:
     """``services`` production runs (name, memory and cpus limits, None
-    where unlimited; image_size; used now, None where not running here),
-    the ``volumes`` they keep (name, size) and the ``images`` they need
-    (bytes, each once)."""
+    where unlimited; used now, None where not running here), and the bytes
+    their ``images`` (each once) and ``data`` volumes take."""
     docker = docker or runner(root)
+    files = [
+        f for name in COMPOSE_FILES if (root / name).exists() for f in ("-f", name)
+    ]
     config = json.loads(
         docker(
-            *DEPLOY_COMPOSE,
+            "compose",
+            *(files or ("-f", COMPOSE_FILES[0])),
             "--profile",
             "prod",
             "config",
@@ -172,7 +169,6 @@ def measure(root: Path, docker: Docker | None = None) -> dict[str, Any]:
                 "name": name,
                 "memory": size_of(memory) if memory else None,
                 "cpus": float(cpus) if cpus else None,
-                "image_size": sizes.get(images[name] or ""),
                 "used": used.get(name),
             }
         )
@@ -187,9 +183,6 @@ def measure(root: Path, docker: Docker | None = None) -> dict[str, Any]:
     df = json.loads(docker("system", "df", "-v", "--format", "json"))
     on_disk = {v["Name"]: size_of(v["Size"]) for v in df.get("Volumes") or ()}
     named = config.get("volumes") or {}
-    volumes = [
-        {"name": v, "size": on_disk.get((named.get(v) or {}).get("name", v), 0)}
-        for v in kept
-    ]
-    total = sum(size for size in sizes.values() if size)
-    return {"services": services, "volumes": volumes, "images": total}
+    data = sum(on_disk.get((named.get(v) or {}).get("name", v), 0) for v in kept)
+    images_total = sum(size for size in sizes.values() if size)
+    return {"services": services, "images": images_total, "data": data}

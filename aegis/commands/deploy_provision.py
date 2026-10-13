@@ -27,7 +27,11 @@ from ..cli import brand
 from ..core.provision.cloudflare import API_URL as CLOUDFLARE_API
 from ..core.provision.cloudflare import CloudflareDNS
 from ..core.provision.http import ProvisionError, json_requester, mask_token
-from ..core.provision.provider import ProviderClient, cloud_init_user_data
+from ..core.provision.provider import (
+    ProviderClient,
+    cloud_init_user_data,
+    monthly_price,
+)
 from ..core.provision.registry import PROVIDERS, Provider
 from ..core.provision.wait import (
     sslip_name,
@@ -46,6 +50,7 @@ from .deploy import (
     _run_remote_capture,
     _save_deploy_config,
     deploy_command,
+    refuse_unsafe_env,
 )
 from .ingress import enable_tls, known_email
 
@@ -346,7 +351,7 @@ def _confirm_price(
     cloud: ProviderClient, provider: Provider, record: dict[str, Any], yes: bool
 ) -> None:
     try:
-        price = cloud.monthly_price(record["size"], record["region"])
+        price = monthly_price(cloud, record["size"], record["region"])
     except ProvisionError as exc:
         brand.error(str(exc), err=True)
         raise typer.Exit(1) from None
@@ -411,6 +416,7 @@ def deploy_provision_command(
     spec = _provider(provider)
     cloud = _client(spec)
     root = _get_project_root(project_path)
+    refuse_unsafe_env(root)  # its deploy would refuse it after the purchase
     user_data, public_key = _read_inputs(root, ssh_key)
     acme_email = _acme_email(root, email)
 

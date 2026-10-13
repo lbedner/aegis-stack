@@ -4,13 +4,12 @@
    agent's heartbeat, a token, the records): done ones in a line, the one
    at hand open. With a server, the server, what can be asked of
    ``aegis deploy-agent`` for it, its newest job, and destroying it apart. #}
-{% from "components/macros/layout.html" import avatar, card, command, facts %}
+{% from "components/macros/layout.html" import card, command, facts %}
 {% from "components/macros/form.html" import field, text_input, primary_button %}
-{% from "pages/overseer/deployments/_macros.html" import agent_note, asks, ask, destroy_form, job_panel, step %}
-{% set note = "text-sm text-aegis-muted space-y-2" %}
+{% from "pages/overseer/deployments/_macros.html" import agent_note, asks, ask, destroy_form, job_panel, note, place, step %}
 {% if actions.view == "deployed" %}
 {% call card("Deploys", id="card-deploy") %}
-<div data-deploy-state="deployed" class="{{ note }}">
+<div data-deploy-state="deployed" class="{{ note() }}">
   <p>This is a deployed server. Redeploys come from the dev Overseer, or from CI:</p>
   <p class="flex items-center gap-2">{{ command(actions.command) }}</p>
 </div>
@@ -24,9 +23,9 @@
   {{ agent_note(actions.agent) }}
   {% elif s.key == "where" %}
   {% for p in actions.missing %}
-  <p data-token-missing="{{ p.key }}" class="{{ note }}">To create a server on {{ p.name }}, set <code class="font-mono text-aegis-text">{{ p.token }}</code> {% if actions.secrets_page %}in <a href="{{ actions.secrets_page }}" {{ hx_replace(actions.secrets_page, "#app-content") }} class="text-aegis-teal hover:underline">Overseer &gt; Secrets</a>{% else %}in <code class="font-mono text-aegis-text">.env</code>{% endif %}, or export it where the deploy agent runs.</p>
+  <p data-token-missing="{{ p.key }}" class="{{ note() }}">To create a server on {{ p.name }}, set <code class="font-mono text-aegis-text">{{ p.token }}</code> {% if actions.secrets_page %}in <a href="{{ actions.secrets_page }}" {{ hx_replace(actions.secrets_page, "#app-content") }} class="text-aegis-teal hover:underline">Overseer &gt; Secrets</a>{% else %}in <code class="font-mono text-aegis-text">.env</code>{% endif %}, or export it where the deploy agent runs.</p>
   {% endfor %}
-  <div data-own-server class="{{ note }}">
+  <div data-own-server class="{{ note() }}">
     <p>Already have a server (AWS, or any machine you can SSH into)? Name it, and this page offers it deploys:</p>
     <p class="flex items-center gap-2">{{ command(actions.own_server) }}</p>
   </div>
@@ -49,10 +48,7 @@
 {% endcall %}
 {% else %}
 {% call card("Your server", id="card-deploy") %}
-<div class="flex items-center gap-3">
-  {{ avatar(actions.server.name, actions.server.logo, "lg") }}
-  <span class="text-sm font-semibold text-aegis-text">{{ actions.server.name }}</span>
-</div>
+{{ place(actions.server) }}
 {{ facts(actions.server.facts) }}
 {% if actions.agent.state == "ready" %}
 <div class="flex flex-wrap items-center gap-2">

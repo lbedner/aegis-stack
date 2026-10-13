@@ -5,12 +5,14 @@ failure written elsewhere. A scripted call stands in for the browser; the
 Meet page itself is tested against a fake page (``test_meet_page``)."""
 
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import pytest
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.config import settings
 from app.services.meetings import bot
 from app.services.meetings.meet import CallState
 from app.services.meetings.models import (
@@ -20,7 +22,7 @@ from app.services.meetings.models import (
     MeetingStatus,
 )
 from app.services.meetings.service import MeetingsService, transition
-from tests._meetings import MEET, bot_on
+from tests._meetings import MEET, SAID, SECOND, SHOWN, bot_on
 
 # The run beats on every look here (BEAT_SECONDS is 0), by design.
 pytestmark = pytest.mark.queryspy(allow_n_plus_one=True)
@@ -36,6 +38,7 @@ class FakeCall:
         people: list[int] | None = None,
         during: dict[str, Callable[[], Any]] | None = None,
         captions: list[list[Caption]] | None = None,
+        sound: bool = False,
     ):
         self.states = states
         self.counts = people or [3]
@@ -45,6 +48,9 @@ class FakeCall:
         self.said: list[str] = []
         self.asked_as: str | None = None
         self.left = False
+        # A second of the call reaches the bot on every look, while ``sound``.
+        self.sound = sound
+        self.on_audio: Callable[[str], None] | None = None
 
     async def _at(self, moment: str) -> None:
         if moment in self.during:
@@ -72,6 +78,8 @@ class FakeCall:
         return True
 
     async def captions(self) -> list[Caption]:
+        if self.sound and self.on_audio is not None:
+            self.on_audio(SECOND)
         return self.shown.pop(0) if len(self.shown) > 1 else self.shown[0]
 
 
@@ -82,12 +90,16 @@ def run(
     """Run the bot against ``call`` on a meeting (a new Meet meeting unless
     given), without waiting between looks; returns the meeting after."""
 
-    async def go(call: FakeCall, meeting: Meeting | None = None) -> Meeting:
+    async def go(
+        call: FakeCall,
+        meeting: Meeting | None = None,
+        notes: Callable[[int], Any] | None = None,
+    ) -> Meeting:
         if meeting is None:
             meeting = await MeetingsService(async_db_session, None).request(
                 MEET, "Notes"
             )
-        bot_on(monkeypatch, async_db_session, call)
+        bot_on(monkeypatch, async_db_session, call, notes=notes)
         await bot.run_meeting(meeting.id)  # type: ignore[arg-type]
         await async_db_session.refresh(meeting)
         return meeting
@@ -252,6 +264,35 @@ async def test_only_meet_is_joined_for_now(
     assert call.asked_as is None
 
 
+async def test_a_long_turn_keeps_its_start_and_lines_keep_when_they_were_said(
+    run: Callable[..., Any],
+    async_db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Meet trims the start of a long turn as it grows; the line keeps it.
+    Every line is written once, at the end, and still has the time it was
+    first captioned, in the order they came."""
+    call = FakeCall(
+        [CallState.IN_CALL] * 4 + [CallState.ENDED],
+        captions=[
+            [Caption("1", "William", SAID)],
+            [Caption("1", "William", SHOWN), Caption("2", "Lisa", "Steve.")],
+        ],
+    )
+    bot_on(monkeypatch, async_db_session, call)
+    monkeypatch.setattr(bot, "BEAT_SECONDS", 3600)
+
+    meeting = await MeetingsService(async_db_session, None).request(MEET, "Notes")
+    await bot.run_meeting(meeting.id)  # type: ignore[arg-type]
+
+    lines = await MeetingsService(async_db_session, None).transcript(meeting)
+    assert [(speaker, line.text) for speaker, line in lines] == [
+        ("William", SAID + " Let me just"),
+        ("Lisa", "Steve."),
+    ]
+    assert lines[0][1].start_seconds < lines[1][1].start_seconds
+
+
 async def test_what_is_said_is_kept_line_by_line(
     run: Callable[..., Any], async_db_session: AsyncSession
 ) -> None:
@@ -279,3 +320,54 @@ async def test_what_is_said_is_kept_line_by_line(
         )
     )
     assert sorted(people.all()) == ["Ada", "Leonard"]
+
+
+async def test_once_it_has_left_the_notes_are_written(
+    run: Callable[..., Any],
+) -> None:
+    written: list[int] = []
+
+    async def write(meeting_id: int) -> None:
+        written.append(meeting_id)
+
+    meeting: Meeting = await run(
+        FakeCall([CallState.IN_CALL, CallState.ENDED]), notes=write
+    )
+
+    assert written == [meeting.id]
+
+
+async def test_what_it_hears_goes_to_whoever_was_talking(
+    run: Callable[..., Any], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Kept, as each speaker's audio, when a folder is named for it."""
+    monkeypatch.setattr(settings, "MEETINGS_KEEP_AUDIO_DIR", str(tmp_path))
+    talking = [Caption("1", "Ada", "Hello.")]
+    more = [Caption("1", "Ada", "Hello there.")]
+    call = FakeCall(
+        [CallState.IN_CALL] * 3 + [CallState.ENDED],
+        captions=[talking, more],
+        sound=True,
+    )
+
+    meeting: Meeting = await run(call)
+
+    assert [p.name for p in (tmp_path / str(meeting.id)).iterdir()] == ["Ada.wav"]
+
+
+async def test_how_long_each_speaker_was_heard_is_kept(
+    run: Callable[..., Any],
+) -> None:
+    call = FakeCall(
+        [CallState.IN_CALL] * 3 + [CallState.ENDED],
+        captions=[
+            [Caption("1", "Ada", "Hello.")],
+            [Caption("1", "Ada", "Hello there.")],
+        ],
+        sound=True,
+    )
+
+    meeting: Meeting = await run(call)
+
+    assert list(meeting.heard or {}) == ["Ada"]
+    assert (meeting.heard or {})["Ada"] > 0

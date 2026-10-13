@@ -12,6 +12,9 @@ from app.core.constants import ComponentName
 {%- if include_documents %}
 from app.services.documents.health import DOCUMENTS_MODAL_ID
 {%- endif %}
+{%- if include_meetings %}
+from app.services.meetings.health import MEETINGS_MODAL_ID
+{%- endif %}
 
 
 def modal_registry() -> dict[str, type[ft.Container]]:
@@ -35,6 +38,9 @@ def modal_registry() -> dict[str, type[ft.Container]]:
     {%- endif %}
     {%- if include_documents %}
     from app.components.frontend.dashboard.modals.documents_modal import DocumentsDetailDialog
+    {%- endif %}
+    {%- if include_meetings %}
+    from app.components.frontend.dashboard.modals.meetings_modal import MeetingsDetailDialog
     {%- endif %}
     {%- if include_insights %}
     from app.components.frontend.dashboard.modals.insights_modal import InsightsDetailDialog
@@ -102,6 +108,9 @@ def modal_registry() -> dict[str, type[ft.Container]]:
         {%- endif %}
         {%- if include_documents %}
         DOCUMENTS_MODAL_ID: DocumentsDetailDialog,
+        {%- endif %}
+        {%- if include_meetings %}
+        MEETINGS_MODAL_ID: MeetingsDetailDialog,
         {%- endif %}
         {%- if include_insights %}
         "service_insights": InsightsDetailDialog,

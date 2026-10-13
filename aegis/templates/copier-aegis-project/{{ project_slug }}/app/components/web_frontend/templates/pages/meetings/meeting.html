@@ -1,0 +1,7 @@
+{# One meeting: its body (_body.html), which keeps itself current. #}
+{% extends layout %}
+{% block title %}Meeting {{ meeting.id }}{% endblock %}
+{% block app_content %}
+<p class="mb-4 text-xs"><a href="/meetings" {{ hx_replace("/meetings", "#app-content") }} class="text-aegis-muted hover:text-aegis-text">All meetings</a></p>
+{% include "pages/meetings/_body.html" %}
+{% endblock %}

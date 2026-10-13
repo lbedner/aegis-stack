@@ -97,6 +97,14 @@ def _optional_pages() -> dict[tuple[str, str], SectionedPage]:
     except ImportError:  # no documents service in this project
         pass
     try:
+        from . import overseer_meetings
+
+        pages[("services", "meetings")] = SectionedPage(
+            "meetings", overseer_meetings.SECTIONS, overseer_meetings.section_context
+        )
+    except ImportError:  # no meetings service in this project
+        pass
+    try:
         from . import overseer_comms
 
         pages[("services", "comms")] = SectionedPage(

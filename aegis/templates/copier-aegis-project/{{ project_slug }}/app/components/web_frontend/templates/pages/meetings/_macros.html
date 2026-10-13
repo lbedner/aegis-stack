@@ -1,0 +1,77 @@
+{# What one meeting came to, drawn the same on the Meetings page and in
+   Overseer's drawer. ``clock`` maps a transcript line's id to its time. #}
+{% from "components/macros/feedback.html" import empty_state %}
+{% from "components/macros/layout.html" import badge %}
+
+{# Where the bot is with the call, and how long it was in. #}
+{% macro status_line(status, length) %}
+<span data-status>{{ badge(status.label, status.tone) }}</span>
+{% if length %}<span class="text-xs tabular-nums text-aegis-muted">{{ length }}</span>{% endif %}
+{% endmacro %}
+
+{% macro failure(meeting) %}
+{% if meeting.failure_reason %}<p role="alert" class="text-sm text-error">{{ meeting.failure_reason }}</p>{% endif %}
+{% endmacro %}
+
+{# The notes, or why there are none: the summary, then what the caller
+   puts first (the Meetings page puts my items there), then the lists. #}
+{% macro notes_view(notes, notes_error, clock, empty) %}
+{% if notes %}
+<p id="meeting-summary" class="text-sm text-aegis-text">{{ notes.summary }}</p>
+{% if caller is defined %}{{ caller() }}{% endif %}
+{{ notes_lists(notes, clock) }}
+{% elif notes_error %}
+<p role="alert" class="text-sm text-error">The notes could not be written: {{ notes_error }}</p>
+{% else %}
+<p class="text-sm text-aegis-muted">{{ empty }}</p>
+{% endif %}
+{% endmacro %}
+
+{% macro items(list, empty, clock, owners=False) %}
+{% if list %}
+<ul class="space-y-2 text-sm">
+  {% for item in list %}
+  <li class="flex items-baseline gap-3">
+    <span class="flex-1 min-w-0">{{ item.text }}{% if owners and item.owner %} <span class="text-aegis-muted">· {{ item.owner }}</span>{% endif %}{% if item.due %} <span class="text-aegis-muted">· {{ item.due }}</span>{% endif %}</span>
+    {% if item.lines %}<a href="#line-{{ item.lines[0] }}" class="shrink-0 text-xs tabular-nums text-aegis-muted hover:text-aegis-teal">{{ clock.get(item.lines[0], "Said") }}</a>{% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p class="text-xs text-aegis-muted">{{ empty }}</p>
+{% endif %}
+{% endmacro %}
+
+{% macro heading(label) %}<h3 class="text-xs font-semibold caps text-aegis-muted">{{ label }}</h3>{% endmacro %}
+
+{# Everyone's action items, the decisions and the open questions. #}
+{% macro notes_lists(notes, clock) %}
+<section id="all-items" class="grid gap-2">
+  {{ heading("Everyone's") }}
+  {{ items(notes.action_items, "No action items.", clock, owners=True) }}
+</section>
+<section id="decisions" class="grid gap-2">
+  {{ heading("Decisions") }}
+  {{ items(notes.decisions, "No decisions.", clock) }}
+</section>
+<section id="open-questions" class="grid gap-2">
+  {{ heading("Open questions") }}
+  {{ items(notes.open_questions, "None left open.", clock) }}
+</section>
+{% endmacro %}
+
+{% macro transcript(lines, clock) %}
+{% if lines %}
+<ol class="space-y-2 text-sm">
+  {% for line in lines %}
+  <li id="line-{{ line.id }}" class="scroll-mt-20 rounded px-2 -mx-2 target:bg-aegis-teal/10">
+    <span class="text-xs tabular-nums text-aegis-muted">{{ clock[line.id] }}</span>
+    <span class="font-medium text-aegis-text">{{ line.speaker }}</span>
+    <span class="text-aegis-text">{{ line.text }}</span>
+  </li>
+  {% endfor %}
+</ol>
+{% else %}
+{{ empty_state("Nothing said yet", "Lines appear here as the call's captions write them.") }}
+{% endif %}
+{% endmacro %}

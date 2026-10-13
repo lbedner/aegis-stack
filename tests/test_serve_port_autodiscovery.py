@@ -85,6 +85,7 @@ def test_resolve_ports_writes_only_allowlisted_keys(tmp_path: Path) -> None:
         redis=True,
         ollama=True,
         browser=True,
+        storage=True,
         ports_file=ports_file,
     )
     content = ports_file.read_text()
@@ -105,8 +106,10 @@ def test_resolve_ports_writes_only_allowlisted_keys(tmp_path: Path) -> None:
     # .env.ports — config.py has no field for it and its strict Settings
     # would reject the unknown key at boot.
     assert "INGRESS_HTTP_PORT" not in content
+    assert "SEAWEEDFS_HOST_PORT" not in content
     assert ports["WEBSERVER_HOST_PORT"]
     assert ports["INGRESS_HTTP_PORT"]
+    assert ports["SEAWEEDFS_HOST_PORT"]
 
 
 def test_resolve_ports_backing_services_off_by_default(tmp_path: Path) -> None:
@@ -117,6 +120,7 @@ def test_resolve_ports_backing_services_off_by_default(tmp_path: Path) -> None:
         redis=False,
         ollama=False,
         browser=False,
+        storage=False,
         ports_file=tmp_path / ".env.ports",
     )
     assert set(ports) == {"WEBSERVER_HOST_PORT"}

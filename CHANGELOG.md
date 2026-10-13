@@ -35,8 +35,35 @@
   component. Without a sign-in the bot joins as a guest.
 - **The meeting bot keeps a transcript.** It turns on Meet's captions in
   its own view and keeps them, one line per speaker's turn, named and
-  timed (`meetings show <id>`). Nobody else's view changes; the chat
+  timed from when it was said (`meetings show <id>`). A long turn Meet
+  trims on screen as it grows is kept whole. Once admitted it answers
+  what Meet puts over the call (a notetaker's "Join now" notice, camera
+  tips), which otherwise cover the chat, captions and Leave. Nobody else's view changes; the chat
   message still says it is taking notes.
+- **Meeting notes.** Once the bot has left, the active model reads the
+  transcript and writes the meeting's summary, decisions, action items
+  (who, what, and by when if it was said) and open questions, each citing
+  the lines it came from. Metered as `meetings:notes` in AI spend, and
+  written again on request over the old ones. Needs the AI service on
+  pydantic-ai with a database (#1512).
+- **The meeting bot hears the call.** Its browser reads every audio
+  stream the call sends, as 16 kHz mono, and hands it to the bot a second
+  at a time over the connection it already drives the browser with; each
+  second goes to whoever Meet's captions say was talking then. Kept as
+  one WAV per speaker when `MEETINGS_KEEP_AUDIO_DIR` names a folder
+  (#1510).
+- **A Meetings page.** `/meetings` on the htmx frontend: send the bot to a
+  call, follow it while it joins and talks (the page keeps itself
+  current), and read what came of it: the summary, your action items
+  first, then everyone's, the decisions and open questions, each jumping
+  to its line in the transcript. Say which speaker is you and "yours"
+  follows; your next meeting remembers it (#1513).
+- **Meetings in Overseer.** Services > Meetings lists every owner's
+  meetings for the admin; one opens in the drawer with its notes,
+  transcript and how long each speaker was heard, where the bot is asked
+  to leave or the meeting is deleted with everything kept of it. The Flet
+  dashboard has the same as a Meetings card and modal, over new admin
+  routes (`/api/v1/meetings/admin`).
 - **Background work ends cleanly at shutdown.** The webserver cancels what
   `background()` still has running and gives it five seconds to finish its
   own cleanup, instead of leaving it to the event loop's teardown.
@@ -53,6 +80,15 @@
   active project) and can refuse a turn before the model with `gate` (a
   plan, a daily budget). The API's `/chat/stream` and the mounts share one
   SSE writer (`api/ai/sse.py`) (#1566).
+
+### Fixed
+
+- **A Python 3.13 project starts again.** The chat surface named its own
+  class in an annotation Python 3.13 reads eagerly, so the webserver
+  stopped at import with `NameError: name 'ChatSurface' is not defined`.
+- **Two stacks with storage run side by side.** `make serve` now moves the
+  storage (S3) host port off 8333 when another stack has it, as it already
+  does for Postgres, Redis and the browser.
 
 ## [0.15.1] - 2026-10-11
 

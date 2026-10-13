@@ -1,0 +1,29 @@
+{# The Meetings page: send the bot to a call, and every meeting it was
+   sent to, newest first, with how many of its action items are mine. #}
+{% extends layout %}
+{% from "components/macros/layout.html" import card, page_header %}
+{% from "components/macros/form.html" import field, primary_button, text_input %}
+{% from "components/macros/table.html" import data_table %}
+{% macro mine_cell(count) %}<span data-mine>{{ count }}</span>{% endmacro %}
+{% block title %}Meetings{% endblock %}
+{% block app_content %}
+{% call page_header("Meetings", "Send the bot to a call, then read what came of it.") %}{% endcall %}
+<div class="grid gap-6">
+  {% call card("Send the bot") %}
+  <form hx-post="/meetings" hx-target="#app-content" class="grid gap-3 sm:grid-cols-[1fr_14rem_auto] sm:items-end">
+    {% call field("Meeting link", error) %}{{ text_input("url", url, placeholder="https://meet.google.com/abc-defg-hij", required=True) }}{% endcall %}
+    {% call field("Bot name") %}{{ text_input("bot_name", bot_name) }}{% endcall %}
+    {{ primary_button("Send", type="submit") }}
+  </form>
+  {% endcall %}
+  {% call card("Sent to") %}
+  {{ data_table([
+       {"key": "meeting", "label": "Meeting", "kind": "link"},
+       {"key": "requested", "label": "Requested"},
+       {"key": "status", "label": "Status", "kind": "status"},
+       {"key": "length", "label": "Length", "align": "right"},
+       {"key": "mine", "label": "Mine", "align": "right", "render": mine_cell},
+     ], rows, empty="No meetings yet", row_id="meeting") }}
+  {% endcall %}
+</div>
+{% endblock %}

@@ -100,6 +100,7 @@ def resolve_ports(
     redis: bool,
     ollama: bool,
     browser: bool,
+    storage: bool,
     ports_file: Path | None = None,
 ) -> dict[str, int]:
     """Resolve host ports for the requested services and persist them.
@@ -150,6 +151,11 @@ def resolve_ports(
             int(os.environ.get("BROWSER_PORT_BASE", "3000")),
             "browser",
             "",
+        )
+    if storage:
+        ports["SEAWEEDFS_HOST_PORT"] = _resolve_one(
+            int(os.environ.get("SEAWEEDFS_PORT_BASE", "8333")),
+            "storage (S3)",
         )
 
     target = ports_file or _DEFAULT_PORTS_FILE

@@ -1,0 +1,162 @@
+{% if include_ai and ai_backend != "memory" and ai_framework == "pydantic-ai" %}
+"""Meeting notes (``meetings.notes``): one model pass over the finished
+transcript, kept with the lines each item came from, and metered. The
+model is pydantic-ai's ``TestModel``: what is under test is the plumbing,
+not the prose."""
+
+from typing import Any
+
+from pydantic_ai.models.test import TestModel
+import pytest
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.services.ai.domains.llm import active_model
+from app.services.meetings import notes
+from app.services.meetings.service import WRITING, MeetingsService
+from tests._meetings import MEET, said
+from tests._session import opens
+
+
+@pytest.fixture(autouse=True)
+def _on_the_test_session(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(notes, "get_async_session", opens(async_db_session))
+
+
+@pytest.fixture
+def metered(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+    """Each usage row the run would write."""
+    rows: list[dict[str, Any]] = []
+
+    async def record_usage(**row: Any) -> float:
+        rows.append(row)
+        return 0.0
+
+    monkeypatch.setattr(notes, "record_usage", record_usage)
+    return rows
+
+
+def _model(
+    monkeypatch: pytest.MonkeyPatch, answer: dict[str, Any] | Exception
+) -> list[str]:
+    """The active model answers ``answer`` (or raises it); returns each
+    time it was asked."""
+    asked: list[str] = []
+
+    async def model_for_active(settings: Any) -> tuple[Any, str]:
+        asked.append("asked")
+        if isinstance(answer, Exception):
+            raise answer
+        return TestModel(custom_output_args=answer), "test-model"
+
+    monkeypatch.setattr(active_model, "model_for_active", model_for_active)
+    return asked
+
+
+async def _meeting(session: AsyncSession) -> int:
+    meeting = await MeetingsService(session, None).request(MEET)
+    return meeting.id  # type: ignore[return-value]
+
+
+async def _kept(session: AsyncSession, meeting_id: int) -> Any:
+    return (await MeetingsService(session, None).notes_for([meeting_id])).get(
+        meeting_id
+    )
+
+
+async def test_each_item_cites_the_lines_it_came_from(
+    async_db_session: AsyncSession,
+    metered: list[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A line the model made up is dropped from what an item cites."""
+    meeting_id = await _meeting(async_db_session)
+    _, promise = await said(
+        async_db_session,
+        meeting_id,
+        ("Leonard", "Can someone write the docs?"),
+        ("Ada", "I will, by Friday."),
+    )
+    _model(
+        monkeypatch,
+        {
+            "summary": "Ada writes the docs.",
+            "decisions": [{"text": "The docs get written", "lines": [promise]}],
+            "action_items": [
+                {
+                    "text": "Write the docs",
+                    "owner": "Ada",
+                    "due": "Friday",
+                    "lines": [promise, 99999],
+                }
+            ],
+            "open_questions": [],
+        },
+    )
+
+    await notes.write_notes(meeting_id)
+
+    kept = (await _kept(async_db_session, meeting_id)).notes()
+    assert kept.summary == "Ada writes the docs."
+    assert kept.action_items[0].lines == [promise]
+    assert kept.action_items[0].owner == "Ada"
+    assert [row["action"] for row in metered] == ["meetings:notes"]
+    assert metered[0]["model_name"] == "test-model"
+    assert meeting_id not in WRITING
+
+
+async def test_a_model_that_fails_leaves_why(
+    async_db_session: AsyncSession,
+    metered: list[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    meeting_id = await _meeting(async_db_session)
+    await said(async_db_session, meeting_id, ("Ada", "Hello."))
+    _model(monkeypatch, RuntimeError("the model is down"))
+
+    await notes.write_notes(meeting_id)
+
+    kept = await _kept(async_db_session, meeting_id)
+    assert kept.notes() is None
+    assert "the model is down" in kept.error
+    assert meeting_id not in WRITING
+
+
+async def test_the_notes_are_being_written_until_they_are_saved(
+    async_db_session: AsyncSession,
+    metered: list[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A page that looks before they are saved keeps waiting for them."""
+    meeting_id = await _meeting(async_db_session)
+    await said(async_db_session, meeting_id, ("Ada", "Hello."))
+    _model(monkeypatch, {"summary": "Ada said hello."})
+    writing_at_save: list[bool] = []
+    save = notes.save_notes
+
+    async def saving(session: AsyncSession, kept: Any) -> None:
+        writing_at_save.append(meeting_id in WRITING)
+        await save(session, kept)
+
+    monkeypatch.setattr(notes, "save_notes", saving)
+
+    await notes.write_notes(meeting_id)
+
+    assert writing_at_save == [True]
+    assert meeting_id not in WRITING
+
+
+async def test_nothing_said_asks_no_model(
+    async_db_session: AsyncSession,
+    metered: list[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    meeting_id = await _meeting(async_db_session)
+    asked = _model(monkeypatch, {"summary": "Nothing."})
+
+    await notes.write_notes(meeting_id)
+
+    assert not asked and not metered
+    assert await _kept(async_db_session, meeting_id) is None
+{% endif %}

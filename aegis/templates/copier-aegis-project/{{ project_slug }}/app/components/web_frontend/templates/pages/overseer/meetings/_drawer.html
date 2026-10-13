@@ -1,0 +1,26 @@
+{# One meeting in the drawer: how it went, its notes and transcript, and
+   the admin's two actions: ask the bot to leave while it is in, delete
+   once it is out. #}
+{% from "components/macros/layout.html" import card, dialog_title, facts %}
+{% from "components/macros/form.html" import action %}
+{% from "pages/meetings/_macros.html" import failure, notes_view, status_line, transcript %}
+{{ dialog_title("Meeting " ~ meeting.id, meeting.url) }}
+<div class="space-y-6">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <span class="flex items-center gap-3">{{ status_line(status, length) }}</span>
+    <span class="flex items-center gap-2">
+      {% if can_leave %}{{ action("Ask it to leave", 'data-leave data-write hx-post="' ~ partials ~ '/' ~ meeting.id ~ '/leave" hx-swap="none" data-api-done="Asked to leave"', "warn") }}{% endif %}
+      {% if can_delete %}{{ action("Delete", hx_dialog(partials ~ "/" ~ meeting.id ~ "/confirm-delete", "data-write"), "danger") }}{% endif %}
+    </span>
+  </div>
+  {{ failure(meeting) }}
+  {{ facts([
+    ("Bot", meeting.bot_name),
+    ("Owner", meeting.owner_user_id),
+    ("Owner speaks as", meeting.me),
+    ("Notes by", model_name),
+    ("Heard", heard),
+  ]) }}
+  {% call card("Notes", id="meeting-notes") %}{{ notes_view(notes, notes_error, clock, "No notes.") }}{% endcall %}
+  {% call card("Transcript", id="meeting-transcript") %}{{ transcript(lines, clock) }}{% endcall %}
+</div>

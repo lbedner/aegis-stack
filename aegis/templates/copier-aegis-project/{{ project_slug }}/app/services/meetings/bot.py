@@ -7,21 +7,29 @@ It runs inside whichever process starts it: the CLI waits for it
 and cancels it at shutdown, when it records itself as left. It writes the
 row only through the service's ``transition`` and ``heartbeat``. Each step
 opens its own short session, so an hour-long call holds no database
-connection.
+connection. What it hears goes to whoever the captions say was talking
+(``audio.Hearing``).
 """
 
 import asyncio
+import math
+from pathlib import Path
 
 from app.core.concurrency import background
+from app.core.config import settings
 from app.core.db import get_async_session
 from app.core.log import logger
-from app.services.meetings.meet import CallState, MeetPage, open_meet
+from app.services.meetings.audio import Hearing
+from app.services.meetings.meet import CallState, MeetPage, merge_caption, open_meet
 from app.services.meetings.models import Caption, Meeting, MeetingStatus, Platform
 from app.services.meetings.service import (
     NOT_DONE,
     STILL_WANTED,
     MeetingsService,
     heartbeat,
+    notes_writer,
+    remember_me,
+    save_heard,
     transition,
     write_captions,
 )
@@ -71,14 +79,22 @@ class _Transcript:
         self.started = self.written_at = asyncio.get_running_loop().time()
         self.rows: dict[str, int] = {}  # caption line -> transcript row
         self.seen: dict[str, str] = {}  # caption line -> its text, last look
+        self.text: dict[str, str] = {}  # caption line -> all of it heard so far
+        # caption line -> when it was first captioned, from when the bot got in
+        self.first_seen: dict[str, float] = {}
         self.pending: dict[str, Caption] = {}
+        # When each speaker's caption last moved: who was talking when.
+        self.spoke: list[tuple[float, str]] = []
 
     async def take(self, captions: list[Caption]) -> None:
+        now = asyncio.get_running_loop().time()
         for c in captions:
             if self.seen.get(c.line) != c.text:
                 self.seen[c.line] = c.text
-                self.pending[c.line] = c
-        now = asyncio.get_running_loop().time()
+                self.text[c.line] = merge_caption(self.text.get(c.line, ""), c.text)
+                self.first_seen.setdefault(c.line, now - self.started)
+                self.pending[c.line] = Caption(c.line, c.speaker, self.text[c.line])
+                self.spoke.append((now, c.speaker))
         if now - self.written_at >= BEAT_SECONDS:
             await self.flush()
 
@@ -94,6 +110,7 @@ class _Transcript:
                 list(self.pending.values()),
                 self.rows,
                 self.written_at - self.started,
+                starts=self.first_seen,
             )
         self.pending = {}
 
@@ -135,10 +152,13 @@ async def _admitted(call: MeetPage, pulse: _Pulse) -> None:
         await asyncio.sleep(POLL_SECONDS)
 
 
-async def _stay(call: MeetPage, pulse: _Pulse, transcript: _Transcript) -> None:
+async def _stay(
+    call: MeetPage, pulse: _Pulse, transcript: _Transcript, hearing: Hearing
+) -> None:
     """Back when the bot should leave: asked to, or alone too long. Ends
     the run when the call ends on its own (any page but the call's). Each
-    look keeps what was said since the last."""
+    look keeps what was said since the last, and gives what was heard to
+    its speaker once the captions have caught up."""
     loop = asyncio.get_running_loop()
     alone_since: float | None = None
     try:
@@ -146,6 +166,7 @@ async def _stay(call: MeetPage, pulse: _Pulse, transcript: _Transcript) -> None:
             if await call.state() != CallState.IN_CALL:
                 raise _RunEnded(MeetingStatus.LEFT)
             await transcript.take(await call.captions())
+            hearing.settle(transcript.spoke, loop.time())
             if not await pulse.still_wanted():
                 return
             people = await call.people()
@@ -158,13 +179,20 @@ async def _stay(call: MeetPage, pulse: _Pulse, transcript: _Transcript) -> None:
             await asyncio.sleep(POLL_SECONDS)
     finally:
         await transcript.flush()
+        hearing.settle(transcript.spoke, math.inf)
+        hearing.close()
+        if hearing.seconds:
+            async with get_async_session() as session:
+                await save_heard(session, transcript.meeting_id, hearing.seconds)
 
 
 async def _join(meeting: Meeting) -> None:
     meeting_id: int = meeting.id  # type: ignore[assignment]
     await _step(meeting_id, MeetingStatus.JOINING, MeetingStatus.REQUESTED)
     pulse = _Pulse(meeting_id)
-    async with open_meet(meeting.url) as call:
+    keep_in = settings.MEETINGS_KEEP_AUDIO_DIR
+    hearing = Hearing(Path(keep_in) / str(meeting_id) if keep_in else None)
+    async with open_meet(meeting.url, hearing.heard) as call:
         if not await pulse.still_wanted():
             raise _RunEnded(MeetingStatus.LEFT)
         await call.ask_to_join(meeting.bot_name)
@@ -178,12 +206,22 @@ async def _join(meeting: Meeting) -> None:
         )
         if not await call.turn_on_captions():
             logger.warning("No captions in this call", meeting_id=meeting_id)
-        await _stay(call, pulse, transcript)
+        await _stay(call, pulse, transcript, hearing)
         await call.leave()
 
 
+async def _after(meeting_id: int) -> None:
+    """Once the bot is out: who the owner is among the speakers, and the
+    notes, where the stack has a model to write them."""
+    async with get_async_session() as session:
+        await remember_me(session, meeting_id)
+    if (write := notes_writer()) is not None:
+        await write(meeting_id)
+
+
 async def run_meeting(meeting_id: int) -> None:
-    """Take the bot through one meeting, start to finish."""
+    """Take the bot through one meeting, start to finish, then write what
+    it came to. Stopped from outside, it writes nothing (the page can)."""
     async with get_async_session() as session:
         meeting = await MeetingsService(session, None).get(meeting_id)
     try:
@@ -204,6 +242,7 @@ async def run_meeting(meeting_id: int) -> None:
     except Exception as exc:
         logger.exception("Meeting bot failed", meeting_id=meeting_id)
         await _move(meeting_id, MeetingStatus.FAILED, NOT_DONE, str(exc))
+    await _after(meeting_id)
 
 
 def start_meeting(meeting_id: int) -> asyncio.Task[None]:

@@ -20,6 +20,7 @@ from app.services.meetings.login import (
     find_chrome,
     save_login,
 )
+from app.services.meetings.models import MeetingRecord
 from app.services.meetings.service import (
     DEFAULT_BOT_NAME,
     MeetingNotFoundError,
@@ -91,28 +92,39 @@ async def leave(meeting_id: int = typer.Argument(..., help="The meeting's id")) 
     console.print(f"Meeting {meeting.id}: {meeting.status}")
 
 
+def describe(record: MeetingRecord) -> list[str]:
+    """One meeting as ``show`` prints it: the service's read, as the pages
+    say it."""
+    meeting = record.meeting
+    facts = [
+        ("Status", record.status),
+        ("Reason", meeting.failure_reason),
+        ("Length", record.length),
+        ("Heard", record.heard),
+        ("Bot", meeting.bot_name),
+    ]
+    return [
+        f"Meeting {meeting.id}  {meeting.platform}  {meeting.url}",
+        *[f"{label}: {value}" for label, value in facts if value],
+        f"Requested {format_relative_time(meeting.created_at)}",
+        *[
+            f"[dim]{format_clock(row.at)}[/dim] {row.speaker}: {row.text}"
+            for row in record.transcript
+        ],
+        *([] if record.transcript else ["[dim]No transcript yet.[/dim]"]),
+    ]
+
+
 @app.command()
 async def show(meeting_id: int = typer.Argument(..., help="The meeting's id")) -> None:
-    """One meeting: its status and its transcript."""
+    """One meeting: its status, who was heard, and its transcript."""
     async with get_async_session() as session:
-        svc = MeetingsService(session, owner_user_id=None)
         try:
-            meeting = await svc.get(meeting_id)
+            record = await MeetingsService(session, owner_user_id=None).read(meeting_id)
         except MeetingNotFoundError as exc:
             theme.fail(str(exc))
-        lines = await svc.transcript(meeting)
-    console.print(f"Meeting {meeting.id}  {meeting.platform}  {meeting.url}")
-    console.print(f"Status: {meeting.status}")
-    if meeting.failure_reason:
-        console.print(f"Reason: {meeting.failure_reason}")
-    console.print(f"Bot: {meeting.bot_name}")
-    console.print(f"Requested {format_relative_time(meeting.created_at)}")
-    if not lines:
-        console.print("[dim]No transcript yet.[/dim]")
-    for speaker, line in lines:
-        console.print(
-            f"[dim]{format_clock(line.start_seconds)}[/dim] {speaker}: {line.text}"
-        )
+    for line in describe(record):
+        console.print(line)
 
 
 @app.command()

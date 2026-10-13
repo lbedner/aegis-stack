@@ -256,6 +256,12 @@
     },
     {
       "kind": "repeated_statement",
+      "label": "SELECT ... FROM conversation ORDER BY conversation.updated_at DESC",
+      "file": "app/services/ai/domains/chat/queries.py",
+      "function": "conversations_with_messages"
+    },
+    {
+      "kind": "repeated_statement",
       "label": "SELECT ... FROM conversation WHERE conversation.id = :pk_1",
       "file": "app/services/ai/domains/chat/chat_kit/history.py",
       "function": "append_turn"
@@ -271,6 +277,12 @@
       "label": "SELECT ... FROM conversation_message WHERE conversation_message.conversation_id = :conversation_id_1",
       "file": "app/services/ai/domains/chat/queries.py",
       "function": "latest_message_timestamp"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM conversation_message WHERE conversation_message.conversation_id IN (__[POSTCOMPILE_primary_keys])",
+      "file": "app/services/ai/domains/chat/queries.py",
+      "function": "conversations_with_messages"
     },
     {
       "kind": "repeated_statement",
@@ -1771,6 +1783,36 @@
       "label": "SELECT ... FROM llm_usage WHERE llm_usage.user_id = :user_id_1",
       "file": "tests/services/ai/test_usage_tracking.py",
       "function": "test_a_turn_that_used_no_tools_records_zero_not_null"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting WHERE meeting.id = :id_1",
+      "file": "app/services/meetings/service.py",
+      "function": "get"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting WHERE meeting.me IS NOT NULL AND meeting.id != :id_1 ORDER BY meeting.created_at DESC, meeting.id DESC LIMIT :param_1",
+      "file": "app/services/meetings/service.py",
+      "function": "remember_me"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_notes WHERE meeting_notes.meeting_id = :pk_1",
+      "file": "app/services/meetings/service.py",
+      "function": "save_notes"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_participant WHERE meeting_participant.meeting_id = :meeting_id_1 AND meeting_participant.display_name IN (__[POSTCOMPILE_display_name_1])",
+      "file": "app/services/meetings/service.py",
+      "function": "_participants"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_participant WHERE meeting_participant.meeting_id = :meeting_id_1 ORDER BY meeting_participant.display_name",
+      "file": "app/services/meetings/service.py",
+      "function": "speakers"
     },
     {
       "kind": "repeated_statement",

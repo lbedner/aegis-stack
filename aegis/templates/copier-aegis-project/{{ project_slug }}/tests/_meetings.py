@@ -72,7 +72,11 @@ def bot_on(
 def hold_the_bot(monkeypatch: pytest.MonkeyPatch) -> list[int]:
     """The meetings the bot is sent to, without starting it."""
     ids: list[int] = []
-    monkeypatch.setattr(bot, "start_meeting", ids.append)
+
+    async def start_meeting(meeting_id: int) -> None:
+        ids.append(meeting_id)
+
+    monkeypatch.setattr(bot, "start_meeting", start_meeting)
     return ids
 
 

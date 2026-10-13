@@ -77,6 +77,12 @@ elif [ "$run_command" = "worker" ]; then
         }
         printf '%s\n' "$out" | tail -n 1
     }
+    # Reload on code changes in dev (APP_ENV=dev, or WORKER_WATCH=true
+    # anywhere), unless WORKER_WATCH=false: a worker whose jobs outlive any
+    # edit (the meeting bot, in a call) must not restart under them.
+    worker_watch() {
+        [ "$WORKER_WATCH" = "true" ] || { [ "$APP_ENV" = "dev" ] && [ "$WORKER_WATCH" != "false" ]; }
+    }
 {%- if worker_backend == "taskiq" %}
     # Worker component using TaskIQ
     queue_type="${1:-system}"  # Default to system queue if not specified
@@ -97,15 +103,14 @@ elif [ "$run_command" = "worker" ]; then
     # @broker.task functions never reach the live workers and ``.kiq()``
     # enqueues land in Redis as "task not found".
     #
-    # In dev (APP_ENV=dev or WORKER_WATCH=true) drop to one worker
+    # In dev (worker_watch) drop to one worker
     # process and skip the forkserver entirely. The single process
     # re-imports modules fresh on every restart, so new tasks register
     # immediately. TaskIQ's own ``--reload`` needs its ``reload`` extra
     # and has been broken in released versions (FileWatcher: NoneType is
     # not callable), so the restart comes from watchfiles, the same
     # wrapper the scheduler and webserver branches use.
-    if { [ "$APP_ENV" = "dev" ] || [ "$WORKER_WATCH" = "true" ]; } \
-        && "${RUN[@]}" python -c "import watchfiles" 2>/dev/null; then
+    if worker_watch && "${RUN[@]}" python -c "import watchfiles" 2>/dev/null; then
         echo "Starting ${queue_type} taskiq worker with auto-reload (1 process, forkserver disabled)..."
         exec "${RUN[@]}" watchfiles --filter python \
             "taskiq worker ${broker_module} --workers 1 --max-async-tasks ${concurrency} $*" /code/app
@@ -131,10 +136,9 @@ elif [ "$run_command" = "worker" ]; then
     worker_threads=$(worker_concurrency "${queue_type}") || exit 1
 
     # Dev hot-reload via dramatiq's built-in ``--watch DIR`` flag.
-    # Gated by APP_ENV=dev or WORKER_WATCH=true to match the arq /
-    # taskiq branches above — picking any backend in dev should feel
-    # the same.
-    if [ "$APP_ENV" = "dev" ] || [ "$WORKER_WATCH" = "true" ]; then
+    # Gated by worker_watch to match the arq / taskiq branches: picking
+    # any backend in dev should feel the same.
+    if worker_watch; then
         echo "Starting ${queue_type} dramatiq worker with auto-reload (${worker_processes} processes, ${worker_threads} threads)..."
         exec "${RUN[@]}" dramatiq "${broker_module}" "${queue_module}" --queues "${queue_type}" \
             --processes "${worker_processes}" --threads "${worker_threads}" --watch /code/app "$@"
@@ -156,8 +160,7 @@ elif [ "$run_command" = "worker" ]; then
     # without re-importing anything. Both branches run one entrypoint
     # that owns its loop; dev restarts the process under watchfiles, as
     # the scheduler branch does.
-    if { [ "$APP_ENV" = "dev" ] || [ "$WORKER_WATCH" = "true" ]; } \
-        && "${RUN[@]}" python -c "import watchfiles" 2>/dev/null; then
+    if worker_watch && "${RUN[@]}" python -c "import watchfiles" 2>/dev/null; then
         echo "Starting ${queue_type} worker with auto-reload..."
         exec "${RUN[@]}" watchfiles --filter python \
             "python -m app.entrypoints.worker ${queue_type}" /code/app

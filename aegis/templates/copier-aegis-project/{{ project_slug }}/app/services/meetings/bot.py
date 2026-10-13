@@ -3,8 +3,9 @@ stay until there is a reason to leave, and write each step on the meeting
 row.
 
 It runs inside whichever process starts it: the CLI waits for it
-(``meetings join``), the app runs it with ``background`` (``start_meeting``)
-and cancels it at shutdown, when it records itself as left. It writes the
+(``meetings join``), and the app hands it to the worker, or runs it in its
+own process where the stack has none (``domains.bot.dispatch``). Stopped
+at shutdown, it records itself as left. It writes the
 row only through the service's ``transition`` and ``heartbeat``. Each step
 opens its own short session, so an hour-long call holds no database
 connection. What it hears goes to whoever the captions say was talking
@@ -15,11 +16,11 @@ import asyncio
 import math
 from pathlib import Path
 
-from app.core.concurrency import background
 from app.core.config import settings
 from app.core.db import get_async_session
 from app.core.log import logger
 from app.services.meetings.audio import Hearing
+from app.services.meetings.domains.bot.dispatch import start_meeting
 from app.services.meetings.meet import CallState, MeetPage, merge_caption, open_meet
 from app.services.meetings.models import Caption, Meeting, MeetingStatus, Platform
 from app.services.meetings.service import (
@@ -189,7 +190,6 @@ async def _stay(
 
 async def _join(meeting: Meeting) -> None:
     meeting_id: int = meeting.id  # type: ignore[assignment]
-    await _step(meeting_id, MeetingStatus.JOINING, MeetingStatus.REQUESTED)
     pulse = _Pulse(meeting_id)
     keep_in = settings.MEETINGS_KEEP_AUDIO_DIR
     hearing = Hearing(Path(keep_in) / str(meeting_id) if keep_in else None)
@@ -222,7 +222,11 @@ async def _after(meeting_id: int) -> None:
 
 async def run_meeting(meeting_id: int) -> None:
     """Take the bot through one meeting, start to finish, then write what
-    it came to. Stopped from outside, it writes nothing (the page can)."""
+    it came to. Stopped from outside, it writes nothing (the page can). A
+    meeting already taken (by another run, or left before any) is not this
+    run's: a job delivered twice does nothing the second time."""
+    if not await _move(meeting_id, MeetingStatus.JOINING, (MeetingStatus.REQUESTED,)):
+        return
     async with get_async_session() as session:
         meeting = await MeetingsService(session, None).get(meeting_id)
     try:
@@ -246,14 +250,21 @@ async def run_meeting(meeting_id: int) -> None:
     await _after(meeting_id)
 
 
-def start_meeting(meeting_id: int) -> asyncio.Task[None]:
-    """Run the bot without waiting for it, in this process."""
-    return background(run_meeting(meeting_id))
-
-
 async def send_bot(svc: MeetingsService, url: str, bot_name: str) -> Meeting:
     """Record the meeting and start the bot on it, without waiting: the one
     way in for the Meetings page, Overseer and the API."""
     meeting = await svc.request(url, bot_name.strip() or DEFAULT_BOT_NAME)
-    start_meeting(meeting.id)  # type: ignore[arg-type]
+    meeting_id: int = meeting.id  # type: ignore[assignment]
+    try:
+        await start_meeting(meeting_id)
+    except Exception as exc:
+        # Nothing will ever run it: say so on the row, not only in this log.
+        logger.exception("Meeting bot not started", meeting_id=meeting_id)
+        await transition(
+            svc.db,
+            meeting_id,
+            MeetingStatus.FAILED,
+            from_=(MeetingStatus.REQUESTED,),
+            reason=f"The bot could not be started: {exc}",
+        )
     return meeting

@@ -190,14 +190,62 @@ async def test_asked_to_leave_in_the_call_it_leaves(
 async def test_asked_to_leave_before_it_starts_it_never_joins(
     run: Callable[..., Any], meeting: Callable[..., Any], async_db_session: AsyncSession
 ) -> None:
+    """Left at once: no run has it yet, and one that comes for it later
+    finds it taken."""
     row: Meeting = await meeting()
     await MeetingsService(async_db_session, None).ask_to_leave(row.id)  # type: ignore[arg-type]
+    assert (await _status(async_db_session, row)) == MeetingStatus.LEFT
     call = FakeCall([CallState.IN_CALL])
 
     after: Meeting = await run(call, row)
 
     assert call.asked_as is None
     assert after.status == MeetingStatus.LEFT
+
+
+async def test_a_meeting_another_run_has_is_left_to_it(
+    run: Callable[..., Any], meeting: Callable[..., Any], async_db_session: AsyncSession
+) -> None:
+    """A run handed the same meeting twice (a worker that died, its job
+    delivered again) finds it taken: no second bot, no notes, and the row
+    as the first run (or the stale sweep) leaves it."""
+    row: Meeting = await meeting()
+    await transition(
+        async_db_session,
+        row.id,  # type: ignore[arg-type]
+        MeetingStatus.IN_CALL,
+        from_=(MeetingStatus.REQUESTED,),
+    )
+    written: list[int] = []
+
+    async def write(meeting_id: int) -> None:
+        written.append(meeting_id)
+
+    call = FakeCall([CallState.IN_CALL])
+
+    after: Meeting = await run(call, row, notes=write)
+
+    assert call.asked_as is None and not written
+    assert after.status == MeetingStatus.IN_CALL
+
+
+async def test_a_bot_that_cannot_be_started_fails_the_meeting_with_why(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Nothing will ever run it, so it says so instead of waiting."""
+
+    async def no_broker(meeting_id: int) -> None:
+        raise ConnectionError("no broker")
+
+    monkeypatch.setattr(bot, "start_meeting", no_broker)
+
+    sent = await bot.send_bot(MeetingsService(async_db_session, None), MEET, "")
+    sent_id: int = sent.id  # type: ignore[assignment]
+
+    async_db_session.expire_all()
+    failed = await MeetingsService(async_db_session, None).get(sent_id)
+    assert failed.status == MeetingStatus.FAILED
+    assert "no broker" in (failed.failure_reason or "")
 
 
 async def test_a_leave_asked_while_joining_is_not_overwritten(
@@ -371,3 +419,9 @@ async def test_how_long_each_speaker_was_heard_is_kept(
 
     assert list(meeting.heard or {}) == ["Ada"]
     assert (meeting.heard or {})["Ada"] > 0
+
+
+async def _status(session: AsyncSession, row: Meeting) -> MeetingStatus:
+    return (
+        await session.exec(select(Meeting.status).where(Meeting.id == row.id))
+    ).one()

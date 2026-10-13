@@ -56,8 +56,9 @@ def test_the_bot_can_be_asked_to_leave(
 
     response = authenticated_app_client.post(f"/api/v1/meetings/{meeting_id}/leave")
 
+    # Not started yet, so there is no call to leave: it is over at once.
     assert response.status_code == 202
-    assert response.json()["status"] == "leaving"
+    assert response.json()["status"] == "left"
 
 
 def test_an_unknown_meeting_is_not_found(

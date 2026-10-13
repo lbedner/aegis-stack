@@ -1,0 +1,27 @@
+"""Where the bot runs. On the worker's meetings queue when the stack has
+one, so a webserver restart (a reload, a deploy) leaves the call alone;
+else as a task in this process, which ends with it."""
+{%- if include_worker %}
+
+from app.components.worker.pools import enqueue_task
+from app.core.constants import ServiceName
+
+# The bot's task on the meetings queue (``worker/queues/meetings.py``).
+RUN_TASK = "run_meeting_task"
+
+
+async def start_meeting(meeting_id: int) -> None:
+    """Hand the run to the meetings queue's worker."""
+    await enqueue_task(RUN_TASK, ServiceName.MEETINGS, meeting_id)
+{%- else %}
+
+from app.core.concurrency import background
+
+
+async def start_meeting(meeting_id: int) -> None:
+    """Run the bot in this process, without waiting for it."""
+    # Imported here: the bot imports this module to start itself.
+    from app.services.meetings.bot import run_meeting
+
+    background(run_meeting(meeting_id))
+{%- endif %}

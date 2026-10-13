@@ -247,7 +247,9 @@ def refuse_unsafe_env(project_root: Path) -> None:
 
 
 def _upload_env(project_root: Path, host: str, user: str, deploy_path: str) -> str:
-    """Copy the deploy env file to the server and stamp BUILD_ID into it.
+    """Copy the deploy env file to the server and stamp BUILD_ID into it,
+    and DOMAIN, the name the server answers on (``.aegis/deploy.yml``'s,
+    which provisioning writes), for the files that read it.
 
     ``.env.deploy`` wins over ``.env``; neither existing is not an error
     (the server may already hold one). Both deploy paths call this so the
@@ -264,25 +266,30 @@ def _upload_env(project_root: Path, host: str, user: str, deploy_path: str) -> s
             raise typer.Exit(1)
 
     build = _build_id(project_root)
-    typer.echo(f"Stamping BUILD_ID={build}")
-    _run_remote(host, user, _stamp_build_id_command(f"{deploy_path}/.env", build))
+    stamps = {"BUILD_ID": build}
+    if domain := (_load_deploy_config(str(project_root)) or {}).get("domain"):
+        stamps["DOMAIN"] = domain
+    typer.echo("Stamping " + " ".join(f"{k}={v}" for k, v in stamps.items()))
+    _run_remote(host, user, _stamp_env_command(f"{deploy_path}/.env", stamps))
     # A dirty tree's id carries the time: the deploy record names this one.
     return build
 
 
-def _stamp_build_id_command(env_path: str, build: str) -> str:
-    """Shell that leaves exactly one ``BUILD_ID=<build>`` line in ``env_path``.
+def _stamp_env_command(env_path: str, values: dict[str, str]) -> str:
+    """Shell that leaves exactly one ``KEY=value`` line in ``env_path`` for
+    each of ``values``.
 
     Rewritten through ``grep -v``, whose output ends every line with a
     newline: a bare ``>>`` joined an ``.env`` that ends without one, and the
     build id landed inside a comment. Portable (no ``sed -i``).
     """
     env = shlex.quote(env_path)
-    tmp = shlex.quote(f"{env_path}.build-id")
-    line = shlex.quote(f"BUILD_ID={build}")
+    tmp = shlex.quote(f"{env_path}.stamped")
+    keys = shlex.quote("^(" + "|".join(values) + ")=")
+    lines = " ".join(shlex.quote(f"{k}={v}") for k, v in values.items())
     return (
-        f"touch {env} && {{ grep -v '^BUILD_ID=' {env}; echo {line}; }} > {tmp} "
-        f"&& cat {tmp} > {env} && rm -f {tmp}"
+        f"touch {env} && {{ grep -Ev {keys} {env}; printf '%s\\n' {lines}; }} "
+        f"> {tmp} && cat {tmp} > {env} && rm -f {tmp}"
     )
 
 

@@ -1376,9 +1376,8 @@ MESSAGES: dict[str, str] = {
     "provision.help_opt_provider": "Cloud provider to create the server in ({providers})",
     "provision.help_opt_size": "Server type (defaults: {sizes})",
     "provision.help_opt_region": "Provider location (defaults: {regions})",
-    "provision.help_opt_domain": (
-        "Hostname to point at the server through Cloudflare (default: an sslip.io name)"
-    ),
+    "provision.help_opt_domain": "Hostname to point at the server through its DNS provider (default: an sslip.io name)",
+    "provision.help_opt_dns": "DNS provider for --domain: {providers} (default: the first whose keys are set)",
     "provision.help_opt_ssh_key": "Public key installed for root on the new server (default: the first of ~/.ssh/id_ed25519.pub, id_ecdsa.pub, id_rsa.pub)",
     "provision.no_ssh_key": "No SSH public key found in {dir} (looked for {names}). Pass one with --ssh-key.",
     "provision.help_opt_email": "Address Let's Encrypt registers the HTTPS certificate to (default: the project's author_email)",

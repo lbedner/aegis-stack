@@ -45,11 +45,10 @@ from ..core.component_files import template_module
 from ..core.footprint import DockerError, measure
 from ..core.provision.http import ProvisionError, json_requester, mask_token
 from ..core.provision.provider import monthly_price
-from ..core.provision.registry import PROVIDERS
+from ..core.provision.registry import DNS_PROVIDERS, PROVIDERS
 from ..core.template_cleanup import env_value
 from ..i18n import lazy_t, t
 from .deploy import _get_project_root, _load_deploy_config
-from .deploy_provision import CLOUDFLARE_TOKEN_ENV
 
 _protocol = template_module(
     "aegis_deploy_protocol", "app", "components", "deploy", "protocol.py"
@@ -124,7 +123,8 @@ def presence() -> dict[str, Any]:
 
 def _tokens() -> list[str]:
     """Every token this process holds, to mask wherever one would be sent."""
-    names = [p.token_env for p in PROVIDERS.values()] + [CLOUDFLARE_TOKEN_ENV]
+    dns = [name for p in DNS_PROVIDERS.values() for name in p.secrets]
+    names = [p.token_env for p in PROVIDERS.values()] + dns
     return [value for name in names if (value := os.environ.get(name, "").strip())]
 
 

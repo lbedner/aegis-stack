@@ -15,7 +15,14 @@ from typer.testing import CliRunner
 
 from aegis.__main__ import app
 from aegis.commands import deploy_provision as cmd
-from aegis.core.provision import digitalocean, hetzner, wait
+from aegis.core.provision import (
+    cloudflare,
+    digitalocean,
+    hetzner,
+    porkbun,
+    registry,
+    wait,
+)
 from aegis.core.provision.cloudflare import CloudflareDNS
 from aegis.core.provision.hetzner import HetznerClient
 from aegis.core.provision.http import (
@@ -23,6 +30,7 @@ from aegis.core.provision.http import (
     json_requester,
     mask_token,
 )
+from aegis.core.provision.porkbun import PorkbunDNS
 from aegis.core.provision.provider import (
     cloud_init_user_data,
     monthly_price,
@@ -34,6 +42,7 @@ RUNNER = CliRunner()
 HCLOUD = "hcloud-secret-token-1234"
 DO_TOKEN = "do-secret-token-5678"
 CF = "cf-secret-token-9876"
+PK, SK = "pk1_" + "a" * 24, "sk1_" + "b" * 24  # Porkbun's key pair
 PUBKEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl me@laptop"
 IP = "203.0.113.7"
 
@@ -159,6 +168,16 @@ def _cloudflare_routes() -> dict[tuple[str, str], Any]:
         ("GET", "/zones?name=example.com"): {"result": [{"id": "zone1"}]},
         ("POST", "/zones/zone1/dns_records"): {"result": {"id": "rec1"}},
         ("DELETE", "/zones/zone1/dns_records/rec1"): {"result": {"id": "rec1"}},
+    }
+
+
+def _porkbun_routes() -> dict[tuple[str, str], Any]:
+    absent = ProvisionError("POST /dns/retrieve: HTTP 400: Invalid domain.", 400)
+    return {
+        ("POST", "/dns/retrieve/app.example.com"): absent,
+        ("POST", "/dns/retrieve/example.com"): {"status": "SUCCESS", "records": []},
+        ("POST", "/dns/create/example.com"): {"status": "SUCCESS", "id": 123},
+        ("POST", "/dns/delete/example.com/123"): {"status": "SUCCESS"},
     }
 
 
@@ -364,6 +383,24 @@ def test_cloudflare_finds_zone_by_suffix_and_creates_unproxied_record() -> None:
     }
 
 
+def test_porkbun_finds_the_domain_by_suffix_and_names_the_host_in_it() -> None:
+    api = FakeAPI(_porkbun_routes())
+    assert PorkbunDNS(api).create_a_record("app.example.com", IP) == (
+        "example.com",
+        "123",
+    )
+    assert api.calls[-1][2] == {"name": "app", "type": "A", "content": IP, "ttl": "600"}
+
+
+def test_porkbun_without_the_domain_says_where_to_turn_api_access_on() -> None:
+    routes = _porkbun_routes()
+    routes[("POST", "/dns/retrieve/example.com")] = routes[
+        ("POST", "/dns/retrieve/app.example.com")
+    ]
+    with pytest.raises(ProvisionError, match="app.example.com.*API ACCESS"):
+        PorkbunDNS(FakeAPI(routes)).create_a_record("app.example.com", IP)
+
+
 def test_cloudflare_without_zone_raises() -> None:
     routes = _cloudflare_routes()
     routes[("GET", "/zones?name=example.com")] = {"result": []}
@@ -395,6 +432,16 @@ def test_json_requester_sends_bearer_and_parses_json() -> None:
     assert pool.seen["url"] == "https://api.test/v1/servers"
     assert pool.seen["headers"]["Authorization"] == f"Bearer {HCLOUD}"
     assert pool.seen["json"] == {"a": 1}
+
+
+def test_json_requester_carries_keys_in_the_body_for_an_api_that_wants_them() -> None:
+    """Porkbun's: no Authorization header, the pair in every body."""
+    pool = _FakePool(_FakeResponse(200, b'{"status": "SUCCESS"}'))
+    keys = {"apikey": PK, "secretapikey": SK}
+    request = json_requester("https://pb.test", body=keys, pool=pool)
+    request("POST", "/dns/create/example.com", {"name": "app"})
+    assert pool.seen["json"] == {"name": "app"} | keys
+    assert "Authorization" not in pool.seen["headers"]
 
 
 def test_json_requester_error_carries_api_message_not_token() -> None:
@@ -458,9 +505,11 @@ def apis(monkeypatch: pytest.MonkeyPatch) -> dict[str, FakeAPI]:
     fakes = {
         hetzner.API_URL: FakeAPI(_hetzner_routes()),
         digitalocean.API_URL: FakeAPI(_do_routes()),
-        cmd.CLOUDFLARE_API: FakeAPI(_cloudflare_routes()),
+        cloudflare.API_URL: FakeAPI(_cloudflare_routes()),
+        porkbun.API_URL: FakeAPI(_porkbun_routes()),
     }
-    monkeypatch.setattr(cmd, "json_requester", lambda base, _token: fakes[base])
+    monkeypatch.setattr(registry, "json_requester", lambda base, *_a, **_k: fakes[base])
+    monkeypatch.setattr(cmd, "json_requester", lambda base, *_a, **_k: fakes[base])
     monkeypatch.setattr(cmd, "wait_until", lambda check, *_a, **_k: check())
     monkeypatch.setattr(cmd, "wait_for_host_key", lambda _ip: True)
     monkeypatch.setattr(cmd, "wait_for_dns", lambda _h, _ip: True)
@@ -484,7 +533,8 @@ def apis(monkeypatch: pytest.MonkeyPatch) -> dict[str, FakeAPI]:
     fakes["steps"] = steps  # type: ignore[assignment]
     monkeypatch.setenv("HCLOUD_TOKEN", HCLOUD)
     monkeypatch.setenv("DIGITALOCEAN_TOKEN", DO_TOKEN)
-    monkeypatch.delenv("CLOUDFLARE_API_TOKEN", raising=False)
+    for name in ("CLOUDFLARE_API_TOKEN", "PORKBUN_API_KEY", "PORKBUN_SECRET_KEY"):
+        monkeypatch.delenv(name, raising=False)
     fakes["deployed"] = deployed  # type: ignore[assignment]
     return fakes
 
@@ -571,7 +621,27 @@ def test_provision_with_domain_creates_cloudflare_record(
     assert CF not in result.output
     config = _deploy_yml(project)
     assert config["domain"] == "app.example.com"
-    assert config["provision"]["dns"] == {"zone_id": "zone1", "record_id": "rec1"}
+    dns = {"provider": "cloudflare", "zone_id": "zone1", "record_id": "rec1"}
+    assert config["provision"]["dns"] == dns
+
+
+def test_provision_with_domain_and_porkbun_keys_makes_the_record_there(
+    project: Path, apis: dict[str, FakeAPI], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The DNS provider is the one whose keys are set (``--dns`` picks
+    another); the record says which, so destroy deletes it there."""
+    monkeypatch.setenv("PORKBUN_API_KEY", PK)
+    monkeypatch.setenv("PORKBUN_SECRET_KEY", SK)
+    result = _provision(project, "--domain", "app.example.com")
+    assert result.exit_code == 0, result.output
+    assert PK not in result.output and SK not in result.output
+    dns = {"provider": "porkbun", "zone_id": "example.com", "record_id": "123"}
+    assert _deploy_yml(project)["provision"]["dns"] == dns
+    result = RUNNER.invoke(
+        app, ["deploy-destroy", "--project-path", str(project), "--confirm", "my-app"]
+    )
+    assert result.exit_code == 0, result.output
+    assert apis[porkbun.API_URL].called("POST", "/dns/delete/example.com/123")
 
 
 def test_provision_domain_without_cloudflare_token_fails_before_creating(
@@ -677,7 +747,7 @@ def test_destroy_deletes_server_dns_and_key(
     assert result.exit_code == 0, result.output
     assert apis[hetzner.API_URL].called("DELETE", "/servers/42")
     assert apis[hetzner.API_URL].called("DELETE", "/ssh_keys/11")
-    assert apis[cmd.CLOUDFLARE_API].called("DELETE", "/zones/zone1/dns_records/rec1")
+    assert apis[cloudflare.API_URL].called("DELETE", "/zones/zone1/dns_records/rec1")
     assert _deploy_yml(project)["provision"]["status"] == "destroyed"
 
 
@@ -758,6 +828,18 @@ def test_provision_turns_tls_on_for_the_name_before_deploying(
         ("tls", (project, "203-0-113-7.sslip.io", EMAIL)),
         ("deploy", None),
     ]
+
+
+def test_a_project_that_reads_its_name_from_the_env_is_not_re_rendered(
+    project: Path, apis: dict[str, FakeAPI]
+) -> None:
+    """Its production compose takes the host from ``DOMAIN``, which the
+    deploy stamps into the server's .env: its files are left as they are."""
+    rule = "traefik.http.routers.webserver.rule=Host(`${DOMAIN}`)"
+    (project / "docker-compose.prod.yml").write_text(f'labels: ["{rule}"]\n')
+    result = _provision(project)
+    assert result.exit_code == 0, result.output
+    assert apis["steps"] == [("deploy", None)]  # type: ignore[comparison-overlap]
 
 
 def test_without_an_email_nothing_is_created(

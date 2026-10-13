@@ -24,15 +24,14 @@ from typing import Any
 import typer
 
 from ..cli import brand
-from ..core.provision.cloudflare import API_URL as CLOUDFLARE_API
-from ..core.provision.cloudflare import CloudflareDNS
 from ..core.provision.http import ProvisionError, json_requester, mask_token
 from ..core.provision.provider import (
+    DnsClient,
     ProviderClient,
     cloud_init_user_data,
     monthly_price,
 )
-from ..core.provision.registry import PROVIDERS, Provider
+from ..core.provision.registry import DNS_PROVIDERS, PROVIDERS, DnsProvider, Provider
 from ..core.provision.wait import (
     sslip_name,
     wait_for_dns,
@@ -54,7 +53,6 @@ from .deploy import (
 )
 from .ingress import enable_tls, known_email
 
-CLOUDFLARE_TOKEN_ENV = "CLOUDFLARE_API_TOKEN"
 SERVER_RUNNING_ATTEMPTS = 60
 SERVER_RUNNING_INTERVAL = 5
 # cloud-init exits 2 for "done, with recoverable warnings"; 1 is a failure.
@@ -106,6 +104,39 @@ def _client(provider: Provider) -> ProviderClient:
     return provider.client(json_requester(provider.api_url, _token(provider.token_env)))
 
 
+def _dns(key: str | None) -> DnsProvider:
+    """The DNS provider named (``--dns``), else the first in the table whose
+    keys this environment holds; without any, its keys are named."""
+    if key is not None:
+        if key in DNS_PROVIDERS:
+            return DNS_PROVIDERS[key]
+        supported = ", ".join(DNS_PROVIDERS)
+        brand.error(
+            t("provision.unknown_provider", provider=key, supported=supported),
+            err=True,
+        )
+        raise typer.Exit(1)
+    for spec in DNS_PROVIDERS.values():
+        if all(os.environ.get(name, "").strip() for name in spec.secrets):
+            return spec
+    wanted = " or ".join(" + ".join(p.secrets) for p in DNS_PROVIDERS.values())
+    brand.error(t("provision.token_missing", env=wanted), err=True)
+    raise typer.Exit(1)
+
+
+def _connect(spec: DnsProvider) -> tuple[str, DnsClient]:
+    """``spec``'s key and its client, its keys from the environment."""
+    return spec.key, spec.connect(*(_token(name) for name in spec.secrets))
+
+
+def _names_itself(root: Path) -> bool:
+    """Whether the project's production compose takes the server's name
+    from ``DOMAIN`` in its .env (stamped at deploy): then provisioning
+    leaves its files as they are, rather than rendering the name in."""
+    prod = root / "docker-compose.prod.yml"
+    return prod.is_file() and "${DOMAIN" in prod.read_text()
+
+
 def _created_lines(record: dict[str, Any]) -> list[str]:
     """What this record says exists in the user's accounts, one line each."""
     lines = []
@@ -131,14 +162,14 @@ def _created_lines(record: dict[str, Any]) -> list[str]:
 
 def _destroy(
     cloud: ProviderClient,
-    dns: CloudflareDNS | None,
+    dns: tuple[str, DnsClient] | None,
     root: Path,
     config: dict[str, Any],
     record: dict[str, Any],
 ) -> None:
     """Delete everything the record lists, then mark it destroyed."""
     if "dns" in record and dns is not None:
-        dns.delete_record(record["dns"]["zone_id"], record["dns"]["record_id"])
+        dns[1].delete_record(record["dns"]["zone_id"], record["dns"]["record_id"])
     if "firewall_id" in record:
         cloud.delete_firewall(record["firewall_id"])
     if "server_id" in record:
@@ -154,15 +185,19 @@ def _destroy(
 
 
 def _point_name(
-    dns: CloudflareDNS | None, record: dict[str, Any], persist: Callable[[], None]
+    dns: tuple[str, DnsClient] | None,
+    record: dict[str, Any],
+    persist: Callable[[], None],
 ) -> str:
-    """The Cloudflare name when one was asked for, else an sslip.io name."""
+    """The name asked for, its record made at the DNS provider (``dns``,
+    its key and client), else an sslip.io name."""
     ip = record["ipv4"]
     if dns is None or not record.get("domain"):
         return sslip_name(ip)
     if "dns" not in record:
-        zone_id, record_id = dns.create_a_record(record["domain"], ip)
-        record["dns"] = {"zone_id": zone_id, "record_id": record_id}
+        key, client = dns
+        zone_id, record_id = client.create_a_record(record["domain"], ip)
+        record["dns"] = {"provider": key, "zone_id": zone_id, "record_id": record_id}
         persist()
         typer.echo(t("provision.dns_created", hostname=record["domain"], ip=ip))
     return record["domain"]
@@ -225,7 +260,7 @@ def _firewall(
 
 def _provision(
     cloud: ProviderClient,
-    dns: CloudflareDNS | None,
+    dns: tuple[str, DnsClient] | None,
     root: Path,
     config: dict[str, Any],
     record: dict[str, Any],
@@ -259,7 +294,9 @@ def _provision(
 
     # A project generated without TLS has no :443 listener or resolver at
     # all; the name the server just got needs both before the first deploy.
-    enable_tls(root, hostname, email)
+    # One whose files read the name from DOMAIN is left as it is.
+    if not _names_itself(root):
+        enable_tls(root, hostname, email)
     deploy_command(
         project_path=str(root),
         build=True,
@@ -274,7 +311,7 @@ def _provision(
 def _on_failure(
     exc: BaseException,
     cloud: ProviderClient,
-    dns: CloudflareDNS | None,
+    dns: tuple[str, DnsClient] | None,
     root: Path,
     config: dict[str, Any],
     record: dict[str, Any],
@@ -388,6 +425,11 @@ def deploy_provision_command(
     domain: str | None = typer.Option(
         None, "--domain", help=lazy_t("provision.help_opt_domain")
     ),
+    dns_provider: str | None = typer.Option(
+        None,
+        "--dns",
+        help=lazy_t("provision.help_opt_dns", providers=", ".join(DNS_PROVIDERS)),
+    ),
     ssh_key: str | None = typer.Option(
         None, "--ssh-key", help=lazy_t("provision.help_opt_ssh_key")
     ),
@@ -402,7 +444,8 @@ def deploy_provision_command(
     """
     Create a server in your own cloud account and deploy to it.
 
-    Reads the provider's API token (and CLOUDFLARE_API_TOKEN with --domain)
+    Reads the provider's API token (and, with --domain, the DNS provider's
+    keys: CLOUDFLARE_API_TOKEN, or PORKBUN_API_KEY and PORKBUN_SECRET_KEY)
     from the environment; a missing one is named. Re-run to resume an
     interrupted run.
 
@@ -411,6 +454,7 @@ def deploy_provision_command(
         - aegis deploy-provision --size cx33 --region fsn1
         - aegis deploy-provision --provider digitalocean --region fra1
         - aegis deploy-provision --domain app.example.com
+        - aegis deploy-provision --domain app.example.com --dns porkbun
         - aegis deploy-provision --email ops@example.com
     """
     spec = _provider(provider)
@@ -437,9 +481,8 @@ def deploy_provision_command(
         }
     dns = None
     if record.get("domain"):
-        dns = CloudflareDNS(
-            json_requester(CLOUDFLARE_API, _token(CLOUDFLARE_TOKEN_ENV))
-        )
+        made = (record.get("dns") or {}).get("provider")
+        dns = _connect(_dns(made or dns_provider))
 
     if resuming:
         brand.accent(t("provision.resuming", name=record["server_name"]), bold=True)
@@ -481,9 +524,8 @@ def deploy_destroy_command(
     cloud = _client(_provider(record.get("provider")))
     dns = None
     if "dns" in record:
-        dns = CloudflareDNS(
-            json_requester(CLOUDFLARE_API, _token(CLOUDFLARE_TOKEN_ENV))
-        )
+        # A record from before the provider was written down is Cloudflare's.
+        dns = _connect(_dns(record["dns"].get("provider", "cloudflare")))
 
     brand.warn(t("provision.destroy_title"), bold=True)
     for line in _created_lines(record):

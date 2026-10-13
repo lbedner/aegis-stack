@@ -649,8 +649,12 @@ Tokens are read from the environment at call time and never stored or printed
   use a project dedicated to this app.
 - `DIGITALOCEAN_TOKEN` (`--provider digitalocean`), a DigitalOcean API token
   with write scope.
-- `CLOUDFLARE_API_TOKEN`, only with `--domain`: a token with DNS edit rights on
-  the zone that owns the name.
+- Only with `--domain`, the DNS provider's keys (`--dns` names one; by default
+  the first whose keys are set):
+    - `CLOUDFLARE_API_TOKEN`: a token with DNS edit rights on the zone that
+      owns the name.
+    - `PORKBUN_API_KEY` and `PORKBUN_SECRET_KEY`, with API ACCESS on for the
+      domain (its details page on porkbun.com).
 
 Without `--domain` the app gets an `sslip.io` name (`203-0-113-7.sslip.io`),
 so a first deploy needs no domain at all.
@@ -659,6 +663,11 @@ On DigitalOcean the droplet also gets a cloud firewall allowing only SSH,
 HTTP and HTTPS in: Docker-published ports bypass the server's own ufw, so the
 firewall outside the droplet is the one that holds. It is deleted with the
 droplet.
+
+A project whose `docker-compose.prod.yml` takes its host from `${DOMAIN}` is
+left as it is: each deploy stamps the server's name into the server's `.env`
+as `DOMAIN` (beside `BUILD_ID`). Any other project has HTTPS rendered into its
+files for the name, as `aegis ingress-enable` does.
 
 Every resource is recorded under `provision:` in `.aegis/deploy.yml` the moment
 it exists. If a later step fails, the command lists what was created and offers
@@ -674,7 +683,8 @@ aegis deploy-provision [OPTIONS]
 - `--provider TEXT`, Cloud provider: `hetzner` (default) or `digitalocean`
 - `--size TEXT`, Server type (default: `cx23` on Hetzner, `s-1vcpu-2gb` on DigitalOcean)
 - `--region TEXT`, Provider location (default: `nbg1` on Hetzner, `tor1` on DigitalOcean)
-- `--domain TEXT`, Hostname to point at the server through Cloudflare
+- `--domain TEXT`, Hostname to point at the server through its DNS provider
+- `--dns TEXT`, DNS provider for `--domain`: `porkbun` or `cloudflare` (default: the first whose keys are set)
 - `--email TEXT`, Address Let's Encrypt registers the certificate to (default: the project's `author_email`)
 - `--ssh-key TEXT`, Public key installed for root (default: the first of `~/.ssh/id_ed25519.pub`, `id_ecdsa.pub`, `id_rsa.pub` that exists)
 - `--project-path TEXT`, Path to the project (default: current directory)
@@ -686,6 +696,7 @@ aegis deploy-provision
 aegis deploy-provision --size cx33 --region fsn1
 aegis deploy-provision --provider digitalocean --region fra1
 aegis deploy-provision --domain app.example.com
+aegis deploy-provision --domain app.example.com --dns porkbun
 ```
 
 ---

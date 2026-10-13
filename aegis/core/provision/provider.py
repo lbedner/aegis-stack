@@ -51,6 +51,16 @@ class ProviderClient(Protocol):
     def delete_firewall(self, firewall_id: str) -> None: ...
 
 
+class DnsClient(Protocol):
+    """A DNS provider: one A record for a server, and deleting it again."""
+
+    def create_a_record(self, hostname: str, ip: str) -> tuple[str, str]:
+        """Point ``hostname`` at ``ip``; its zone (or domain) and record ids."""
+        ...
+
+    def delete_record(self, zone_id: str, record_id: str) -> None: ...
+
+
 def amount(value: Any) -> str:
     """A provider's money as every client reports it: ``"12.00"``."""
     return f"{float(value):.2f}"

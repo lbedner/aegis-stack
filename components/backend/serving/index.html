@@ -6652,7 +6652,13 @@ installed.</p>
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>make<span class="w"> </span>bench-engines<span class="w">             </span><span class="c1"># measure both on your own routes</span>
 </span></code></pre></div>
 <p>Nothing is persisted by a flag. For a deployment, set <code>WEBSERVER_ENGINE</code>
-and <code>WEBSERVER_LOOP</code> in the env file alongside every other deploy setting.</p>
+and <code>WEBSERVER_LOOP</code> in the env file alongside every other deploy setting,
+or pick them in <strong>Overseer &gt; Settings</strong> (under the Server), where the loop
+list offers what the running engine can start. A saved choice applies on
+the next restart, and only when the env file does not set it. A saved loop
+the engine cannot start (saved for the other engine, say) starts on <code>auto</code>
+with a warning in the log, so a choice made in the Overseer never keeps the
+server from starting; one set in the env file still refuses, by name.</p>
 <h2 id="the-engine">The Engine</h2>
 <table>
 <thead>

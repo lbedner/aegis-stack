@@ -6689,46 +6689,79 @@ not what it is called:</p>
 <tr>
 <th>File</th>
 <th>Holds</th>
+<th>Part</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>service.py</code></td>
-<td>the facade: the entry point callers reach for</td>
-</tr>
-<tr>
-<td><code>models.py</code></td>
-<td>the service's tables</td>
-</tr>
-<tr>
-<td><code>schemas.py</code></td>
-<td>request and response shapes</td>
+<td><code>health.py</code></td>
+<td>what the dashboard shows</td>
+<td>required</td>
 </tr>
 <tr>
 <td><code>queries.py</code></td>
 <td>every read, batched; no business logic</td>
+<td>required once it reads</td>
+</tr>
+<tr>
+<td><code>jobs.py</code></td>
+<td>all background jobs, each <code>*_job</code> in a <code>JOBS</code> list or called</td>
+<td>required once it has jobs</td>
+</tr>
+<tr>
+<td><code>service.py</code></td>
+<td>the facade: the entry point callers reach for</td>
+<td>optional (advised)</td>
+</tr>
+<tr>
+<td><code>models.py</code></td>
+<td>the service's tables</td>
+<td>optional</td>
+</tr>
+<tr>
+<td><code>schemas.py</code></td>
+<td>request and response shapes</td>
+<td>optional</td>
 </tr>
 <tr>
 <td><code>deps.py</code></td>
 <td>the request-scoped wiring</td>
+<td>optional</td>
 </tr>
 <tr>
-<td><code>health.py</code></td>
-<td>what the dashboard shows</td>
+<td><code>tools.py</code></td>
+<td>what it hands the AI: its chat tools</td>
+<td>optional</td>
 </tr>
 <tr>
-<td><code>jobs.py</code></td>
-<td>all background jobs</td>
+<td><code>change_types.py</code></td>
+<td>what it hands the change queue: its executors</td>
+<td>optional</td>
+</tr>
+<tr>
+<td><code>sources.py</code></td>
+<td>what it hands research: the sources a plugin registers</td>
+<td>optional</td>
+</tr>
+<tr>
+<td><code>adapters/</code></td>
+<td>what it talks to: providers, file formats, collectors, kept apart from what it knows (<code>domains/</code>)</td>
+<td>optional</td>
 </tr>
 <tr>
 <td><code>constants.py</code>, <code>utils.py</code></td>
 <td>shared values and helpers</td>
+<td>optional</td>
 </tr>
 </tbody>
 </table>
+<p>Its router lives apart, in <code>app/components/backend/api/&lt;name&gt;</code>, and leaves the
+database to the service. At least one test imports the service.</p>
 <p>A service grows into that layout in three steps, and stops at whichever one
 still fits: a small service keeps its logic in <code>service.py</code>; a larger one puts
-each subsystem in a package under <code>domains/</code>.</p>
+each subsystem in a package under <code>domains/</code>, and what it talks to (a
+provider's API, a file format, a source's collector) under <code>adapters/</code>, kept
+apart from what it knows.</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>app/services/
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>├── documents/               # a spine, plus one domain
 </span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>│   ├── service.py models.py queries.py health.py deps.py
@@ -6737,10 +6770,11 @@ each subsystem in a package under <code>domains/</code>.</p>
 </span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>│
 </span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>└── finance/                 # several domains, each its own package
 </span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>    ├── service/ models/ schemas/ health.py jobs.py utils.py
-</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>    └── domains/
-</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>        ├── ledger/          # each with its own queries.py
-</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>        ├── planning/
-</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>        └── detection/
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>    ├── domains/
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>    │   ├── ledger/          # each with its own queries.py
+</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>    │   ├── planning/
+</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>    │   └── detection/
+</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>    └── adapters/            # what it talks to: providers/, importers/
 </span></code></pre></div>
 <p>Domains are plural nouns with no <code>_service</code> suffix, and their functions take
 the session first (<code>async def create_budget(db, ...)</code>). Everything a caller
@@ -6752,17 +6786,25 @@ belongs - so it names each domain and what it owns.</p>
 <div class="admonition tip">
 <p class="admonition-title">The layout is tested, not just described</p>
 <p>Behavioural tests cannot see a layout: a service works the same whether it
-is one flat package or four small ones. Finance and documents each carry a
-<code>test_*_module_layout.py</code> stating which module defines what, so folding a
-domain back together, or dropping a function into whichever file was open,
-fails a test rather than passing quietly.</p>
-</div>
-<div class="admonition note">
-<p class="admonition-title">Services written before the standard</p>
-<p><code>auth</code>, <code>blog</code> and <code>insights</code> still carry <code>&lt;name&gt;_service.py</code> names from
-before this was settled. They work exactly as they always did; they are
-moved onto the layout when there is a reason to be in them, not in a
-sweep for its own sake.</p>
+is one flat package or four small ones. Every service is checked against
+this standard as a pattern: <strong>Overseer &gt; Patterns &gt; Service parts</strong> shows
+which parts each one has and which rules it breaks, with the file and line
+that shows it, and <code>patterns --format json</code> prints the same report. The
+enforced rules (reads in queries, every job wired, a health check) are held
+by <code>tests/services/test_service_layout.py</code>; reads still outside a queries
+module are recorded there as debt that may only shrink. A module at a
+service's top level that the table above does not name is flagged too
+(<strong>Logic lives in domains</strong>), each loose file listed, and so is a file
+past the size budget (<strong>Files stay readable</strong>): over 500 lines, 900 for
+models, schemas and other lists, or the largest file of its package at
+over 40% of it and 400 lines. On the map, open the Server: a service
+that breaks a rule says how many places to fix, and hovering it lists
+each one (the file linked, its size or its line) with what to do. Open
+the service and each piece says the same about its own files.
+Finance and documents also carry a <code>test_*_module_layout.py</code> stating which
+module defines what, so folding a domain back together, or dropping a
+function into whichever file was open, fails a test rather than passing
+quietly.</p>
 </div>
 <h3 id="service-integration-points">Service Integration Points</h3>
 <pre class="mermaid"><code>graph TB

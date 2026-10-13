@@ -6464,8 +6464,12 @@ untouched at <code>/dashboard</code>, and a <code>web_frontend</code> entry in <
 symmetric: <code>aegis remove htmx</code> deletes the component tree and regenerates the
 shared files that referenced it.</p>
 <p>Overseer comes with it at <code>/overseer</code>: every component and service as a list,
-cards or a map of the stack, each linking to its own page. To sign in to it,
-and keep it to admins, add auth:</p>
+cards or a map of the stack, each linking to its own page. The map's Traffic
+chip tones each node by how much ran through it instead of its health:
+every call along the lines touching it, Overseer's own reads included,
+counted as it happens with no tracer needed. Opened up, each service that
+breaks the service standard says how many places it should fix. To sign in
+to it, and keep it to admins, add auth:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>aegis<span class="w"> </span>init<span class="w"> </span>my-app<span class="w"> </span>--components<span class="w"> </span>htmx<span class="w"> </span>--services<span class="w"> </span><span class="s1">&#39;auth[basic]&#39;</span>
 </span></code></pre></div>
 <p>Then open <code>/overseer/login</code>. The form uses the shared auth and form macros and

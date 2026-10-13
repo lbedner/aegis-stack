@@ -6934,8 +6934,9 @@ call that produced it. The examples live in <code>web_frontend/macro_catalog.py<
 a new public macro fails <code>tests/web/test_overseer_patterns.py</code> until it has
 one there. The same page's Backend group shows the app's patterns detected
 from the running code: routes (<code>app/services/system/patterns.py</code>), services
-and their session handling (<code>app/services/system/service_patterns.py</code>) and,
-with the worker installed, worker tasks on any engine
+and their session handling (<code>app/services/system/service_patterns.py</code>), each
+service against the service standard (<code>app/services/system/service_parts.py</code>)
+and, with the worker installed, worker tasks on any engine
 (<code>app/components/worker/patterns.py</code>). <code>&lt;project&gt; patterns</code> prints the same
 report for an agent to read before building.</p>
 <h3 id="a-table-page">A table page</h3>

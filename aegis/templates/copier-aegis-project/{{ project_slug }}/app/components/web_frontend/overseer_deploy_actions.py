@@ -14,13 +14,13 @@ dev Overseer or CI. The htmx Overseer only; the Flet
 dashboard shows the commands.
 """
 
+import asyncio
 from collections.abc import AsyncIterator
 from typing import Any
 from urllib.parse import urlencode
 
 from app.components.deploy import agent as deploy_agent
 from app.components.deploy.protocol import PROTOCOL, RefusedError, validate
-from app.core import secrets
 from app.core.config import settings
 from app.core.formatting import format_bytes
 from app.core.log import logger
@@ -56,14 +56,6 @@ DEPLOYED = "This is a deployed server: deploy from the dev Overseer or CI."
 
 def deployed() -> bool:
     return settings.BUILD_ID != hosting.LOCAL
-
-
-async def dns_held() -> dict[str, bool]:
-    """Each DNS provider's keys, by name: whether the app holds it
-    (Overseer > Secrets, or ``.env``)."""
-    names = [name for p in hosting.DNS for name in p.secrets]
-    found = await secrets.get_many(*names)
-    return {name: bool(found.get(name)) for name in names}
 
 
 async def held(beat: dict[str, Any]) -> set[str]:
@@ -116,8 +108,8 @@ async def shared() -> dict[str, Any]:
 
 async def accounts(agent: dict[str, Any]) -> list[dict[str, Any]]:
     """Each connected cloud account's servers and what they cost, as the
-    agent last found them; where it has not looked, waiting on it (asked
-    in the background, never on opening the page)."""
+    agent last found them (kept a few minutes); where that has expired,
+    waiting on it, asked again in the background as the page opens."""
     tokens = await held(agent.get("beat") or {})
     return [
         _account(p, None, await deploy_agent.kept("account", {"provider": p.key}))
@@ -233,15 +225,20 @@ PICKED = "change[target.name=='size'||target.name=='region']"
 
 
 def _loading(
-    panel: str, provider: hosting.Provider, job: str | None, **picked: str
+    panel: str,
+    provider: hosting.Provider,
+    job: str | None,
+    first: str = "load",
+    **picked: str,
 ) -> dict[str, Any]:
-    """A part of the form waiting on the agent: loaded as the page is, then,
-    once the agent has been asked (``job``), polled each second until it
-    answers (a poll still waiting swaps nothing: the routes' ``_part``)."""
+    """A part of the form waiting on the agent: loaded on ``first`` (as the
+    page is, by default), then, once the agent has been asked (``job``),
+    polled each second until it answers (a poll still waiting swaps
+    nothing: the routes' ``_part``)."""
     url = panel_url(panel, provider.key, **picked, job=job or "")
     return {
         "state": "loading",
-        "reload": {"url": url, "trigger": "every 1s" if job else "load"},
+        "reload": {"url": url, "trigger": "every 1s" if job else first},
     }
 
 
@@ -254,18 +251,30 @@ def _failed(
     return {"state": "failed", "error": str(exc), "retry": retry}
 
 
+# Instead of a new server, one of your own: name it, then deploy to it
+# (the terminal's way, as ``by_hand`` lists it).
+OWN_SERVER = (
+    {
+        "name": "Name it (AWS, or any machine you can SSH into)",
+        "command": "aegis deploy-init --host <your server's address>",
+    },
+    {"name": "Then deploy to it", "command": hosting.BY_KEY["server"].command},
+)
+
+
 def _shown(provider: hosting.Provider) -> dict[str, Any]:
     return {
         "provider": provider.key,
         "name": provider.name,
-        "logo": provider.logo,
+        "own": OWN_SERVER,
         "url": panel_url("catalog", provider.key),
     }
 
 
 def waiting(provider: hosting.Provider) -> dict[str, Any]:
-    """The form before its catalog is asked for."""
-    return _shown(provider) | _loading("catalog", provider, None)
+    """The form before its catalog is asked for: asked once it shows (its
+    cloud picked), not for every cloud on opening the page."""
+    return _shown(provider) | _loading("catalog", provider, None, "intersect once")
 
 
 async def _listening() -> dict[str, Any]:
@@ -312,8 +321,8 @@ async def _catalog(provider: hosting.Provider) -> dict[str, Any]:
 
 def provisionable(key: str) -> hosting.Provider:
     """The provider servers are created on from here named ``key``."""
-    found = next((p for p in hosting.PROVISIONABLE if p.key == key), None)
-    if found is None:
+    found = hosting.provider(key)
+    if found is None or found not in hosting.PROVISIONABLE:
         raise RefusedError(f"Servers are not created on {key} from here.")
     return found
 
@@ -362,13 +371,12 @@ async def provision_form(
         return shown | _failed("catalog", provider, exc)
     optional = PROTOCOL["actions"]["provision"]["optional"]
     entered = {k: form.get(k, "") for k in optional}
-    keys = await dns_held()
-    dns = [p for p in hosting.DNS if all(keys[name] for name in p.secrets)]
-    entered["dns_choices"] = [{"id": p.key, "name": p.name} for p in dns]
-    entered["dns"] = entered["dns"] or (dns[0].key if dns else "")
+    footprint, account = await asyncio.gather(
+        deploy_agent.kept("footprint", {}), deploy_agent.kept("account", args)
+    )
     panels = {
-        "fit": _fit(provider, picked, await deploy_agent.kept("footprint", {})),
-        "account": _account(provider, picked, await deploy_agent.kept("account", args)),
+        "fit": _fit(provider, picked, footprint),
+        "account": _account(provider, picked, account),
     }
     reload = {"url": shown["url"], "trigger": PICKED}
     ready = {"state": "ready", "partials": PARTIALS, "reload": reload}

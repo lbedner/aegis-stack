@@ -5,11 +5,12 @@
    server; why the agent cannot be asked; the job panel; where something
    runs (``place``: a provider's mark and name); a fragment's reload while
    it waits on the agent; a part of the new-server form (``panel``: waiting
-   on the agent, why it failed, or what it found); and ``note``, the muted
-   paragraph's classes. #}
+   on the agent, why it failed, or what it found); a picker of providers
+   by their logos, and a terminal way folded under it (``picker``,
+   ``by_hand``); and ``note``, the muted paragraph's classes. #}
 {% from "components/macros/form.html" import action, field, text_input, primary_button %}
 {% from "components/macros/icons.html" import icon %}
-{% from "components/macros/layout.html" import avatar, card, command, progress %}
+{% from "components/macros/layout.html" import avatar, badge, card, command, dropdown, menu_item, progress %}
 {% macro note() %}text-sm text-aegis-muted space-y-2{% endmacro %}
 
 {# ``reload`` (overseer_deploy_actions: url, trigger) as the hx attributes
@@ -69,9 +70,9 @@
 </form>
 {% endmacro %}
 
-{# A step (``s``: key, title, status, summary), numbered ``n``: done shows
-   its answer in a line, the one at hand (or an optional one) its body
-   (the caller), one still to come only its name. #}
+{# A step (``s``: key, title, status, summary, open), numbered ``n``: its
+   answer in a line once done, its body (the caller) while ``open`` (at
+   hand, or optional), and only its name while still to come. #}
 {% macro step(n, s) %}
 {% set tone = {"done": "border-aegis-teal text-aegis-teal", "current": "border-aegis-teal text-aegis-text", "optional": "border-dashed border-aegis-border text-aegis-text"}.get(s.status, "border-aegis-border text-aegis-muted") %}
 <li data-step="{{ s.key }}" data-status="{{ s.status }}" class="flex gap-3">
@@ -80,7 +81,7 @@
   </span>
   <div class="min-w-0 flex-1 space-y-3">
     <p class="text-sm"><span class="font-semibold {{ 'text-aegis-muted' if s.status == 'todo' else 'text-aegis-text' }}">{{ s.title }}</span>{% if s.summary %} <span data-summary class="text-aegis-muted">{{ s.summary }}</span>{% endif %}</p>
-    {% if s.status in ("current", "optional") %}<div data-step-body class="space-y-3">{{ caller() }}</div>{% endif %}
+    {% if s.open %}<div data-step-body class="space-y-3">{{ caller() }}</div>{% endif %}
   </div>
 </li>
 {% endmacro %}
@@ -109,6 +110,41 @@
   </details>
 </div>
 {% endif %}
+{% endmacro %}
+
+{# A provider as the picker shows it: its logo and name. #}
+{% macro mark(d) %}<span class="inline-flex items-center gap-2">{{ avatar(d.name, d.logo) }}{{ d.name }}</span>{% endmacro %}
+
+{# A picker of providers, each by its logo and name (the Domain and Server
+   steps): ``model`` is the Alpine field it sets, ``chosen`` the one it
+   opens on (marked until another is picked), ``nothing`` the label of
+   picking none, if allowed. #}
+{% macro picker(label, model, providers, chosen, nothing=None) %}
+{% set items = ([{"key": "", "name": nothing}] if nothing else []) + providers %}
+{% set current %}{% for d in items %}<span x-show="{{ model }} === '{{ d.key }}'">{{ mark(d) if d.key else d.name }}</span>{% endfor %}{% endset %}
+<div data-picker="{{ model }}" class="space-y-1">
+  <p class="text-xs text-aegis-muted">{{ label }}</p>
+  {% call dropdown(current, align="left") %}
+  {% for d in items %}
+  {{ menu_item(mark(d) if d.key else d.name, 'data-value="' ~ d.key ~ '" x-on:click="' ~ model ~ ' = \'' ~ d.key ~ '\'" x-bind:aria-current="' ~ model ~ ' === \'' ~ d.key ~ '\' ? \'true\' : null"' ~ (' aria-current="true"' if d.key == chosen else '')) }}
+  {% endfor %}
+  {% endcall %}
+</div>
+{% endmacro %}
+
+{# A terminal way (``way``; ``entries``: name, command, what it reads from
+   the environment), folded in a note until opened. Under a picker
+   (``model``), an entry with a ``key`` shows only while it is picked,
+   and the note only while something is. #}
+{% macro by_hand(entries, way, model=None, title="Prefer the terminal?") %}
+<details data-by-hand="{{ way }}" {% if model %}x-show="{{ model }}" {% endif %}class="rounded-lg border border-aegis-teal/30 bg-aegis-teal/10 px-3 py-2 text-xs text-aegis-muted">
+  <summary class="cursor-pointer font-medium text-aegis-teal">{{ title }}</summary>
+  <ul class="mt-2 space-y-2">
+    {% for e in entries %}
+    <li {% if e.key %}x-show="{{ model }} === '{{ e.key }}'" {% endif %}class="space-y-1"><span class="text-aegis-text">{{ e.name }}</span>{% if e.reads %}, reading {% for r in e.reads %}<code class="font-mono">{{ r }}</code>{{ ", " if not loop.last }}{% endfor %} from your environment{% endif %}<p class="flex items-center gap-2">{{ command(e.command) }}</p></li>
+    {% endfor %}
+  </ul>
+</details>
 {% endmacro %}
 
 {# A deployed server's card: deploys come from the dev Overseer, or CI. #}

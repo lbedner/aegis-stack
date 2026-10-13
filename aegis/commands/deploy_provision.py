@@ -20,7 +20,7 @@ import os
 import re
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeVar
 
 import typer
 
@@ -52,6 +52,7 @@ from .deploy import (
     deploy_command,
     refuse_unsafe_env,
 )
+from .deploy_agent import _protocol
 from .ingress import enable_tls, known_email
 
 SERVER_RUNNING_ATTEMPTS = 60
@@ -91,14 +92,23 @@ def _cloud_init_ok(ip: str) -> bool:
     return result.returncode in CLOUD_INIT_OK
 
 
-def _provider(key: str | None) -> Provider:
-    if key in PROVIDERS:
-        return PROVIDERS[key]
-    supported = ", ".join(PROVIDERS)
+Known = TypeVar("Known")
+
+
+def _known(table: dict[str, Known], key: str | None) -> Known:
+    """``table``'s entry for ``key``; an unknown one is named, with those
+    there are."""
+    if key in table:
+        return table[key]
+    supported = ", ".join(table)
     brand.error(
         t("provision.unknown_provider", provider=key, supported=supported), err=True
     )
     raise typer.Exit(1)
+
+
+def _provider(key: str | None) -> Provider:
+    return _known(PROVIDERS, key)
 
 
 def _client(provider: Provider) -> ProviderClient:
@@ -109,14 +119,7 @@ def _dns(key: str | None) -> DnsProvider:
     """The DNS provider named (``--dns``), else the first in the table whose
     keys this environment holds; without any, its keys are named."""
     if key is not None:
-        if key in DNS_PROVIDERS:
-            return DNS_PROVIDERS[key]
-        supported = ", ".join(DNS_PROVIDERS)
-        brand.error(
-            t("provision.unknown_provider", provider=key, supported=supported),
-            err=True,
-        )
-        raise typer.Exit(1)
+        return _known(DNS_PROVIDERS, key)
     for spec in DNS_PROVIDERS.values():
         if all(os.environ.get(name, "").strip() for name in spec.secrets):
             return spec
@@ -144,11 +147,13 @@ def _allowlist(value: str | None) -> str | None:
 
 
 def _names_itself(root: Path) -> bool:
-    """Whether the project's production compose takes the server's name
-    from ``DOMAIN`` in its .env (stamped at deploy): then provisioning
-    leaves its files as they are, rather than rendering the name in."""
+    """Whether the project already serves HTTPS and its production compose
+    takes the server's name from ``DOMAIN`` in its .env (stamped at
+    deploy): then provisioning leaves its files as they are, rather than
+    rendering the name (and HTTPS) in."""
     prod = root / "docker-compose.prod.yml"
-    return prod.is_file() and "${DOMAIN" in prod.read_text()
+    tls = _project_answers(root).get("ingress_tls") is True
+    return tls and prod.is_file() and "${DOMAIN" in prod.read_text()
 
 
 def _created_lines(record: dict[str, Any]) -> list[str]:
@@ -504,7 +509,7 @@ def deploy_provision_command(
         }
     dns = None
     if record.get("domain"):
-        made = (record.get("dns") or {}).get("provider")
+        made = _protocol.record_dns_provider(record)
         dns = _connect(_dns(made or dns_provider))
 
     if resuming:
@@ -547,8 +552,7 @@ def deploy_destroy_command(
     cloud = _client(_provider(record.get("provider")))
     dns = None
     if "dns" in record:
-        # A record from before the provider was written down is Cloudflare's.
-        dns = _connect(_dns(record["dns"].get("provider", "cloudflare")))
+        dns = _connect(_dns(_protocol.record_dns_provider(record)))
 
     brand.warn(t("provision.destroy_title"), bold=True)
     for line in _created_lines(record):

@@ -14,6 +14,7 @@ from app.components.deploy import agent
 from app.components.deploy.protocol import PROTOCOL, kept_key
 from app.components.web_frontend import overseer_deploy_actions as actions
 from app.components.web_frontend import overseer_secrets
+from app.core import secrets
 from app.core.config import settings
 from app.services.system import hosting
 from app.services.system.job_store import RedisJobStore
@@ -245,10 +246,6 @@ def _options(form: Any, name: str) -> list[tuple[str, str]]:
     ]
 
 
-def _picked(form: Any, name: str) -> str | None:
-    return chosen(form, f"select[name={name}]")
-
-
 def test_the_overview_is_what_is_deployed_the_steps_their_own_page(
     redis: FakeRedis, app: FastAPI
 ) -> None:
@@ -272,6 +269,11 @@ def test_the_overview_shows_every_server_in_each_connected_account(
     assert "2 servers, $18.00 a month" in text(account)
     assert "With this one" not in text(account)
     assert not _queued(redis)
+    rows = select(account, "tbody tr")  # dearest first, aegis's own marked
+    assert [text(r).split()[0] for r in rows] == ["my-app", "old-box"]
+    assert [text(r["A month"]) for r in table_rows(account)] == ["$12.00", "$6.00"]
+    assert one(rows[0], "[data-aegis-project]") is not None
+    none(rows[1], "[data-aegis-project]")
 
 
 def test_the_steps_page_points_at_the_server_a_project_has(
@@ -342,18 +344,15 @@ def test_an_agent_older_than_the_app_is_named_stale(
 
 
 def test_the_steps_are_read_from_what_is_true(redis: FakeRedis, app: FastAPI) -> None:
-    """An agent listening and a token held: those two are done, each said
-    in a line, and the server is the step at hand."""
+    """An agent listening: it is done, said in a line; a domain is
+    optional; the server (its cloud, keys and form) is the step at hand."""
     card = _card(TestClient(app))
     assert _steps(card) == [
         ("agent", "done"),
-        ("where", "done"),
         ("domain", "optional"),
         ("server", "current"),
     ]
     assert "laptop" in text(one(_step(card, "agent"), "[data-summary]"))
-    assert "DigitalOcean" in text(one(_step(card, "where"), "[data-summary]"))
-    none(_step(card, "where"), "[data-step-body]")
     one(_step(card, "server"), "[data-step-body] [data-provision]")
 
 
@@ -365,14 +364,20 @@ def test_the_domain_step_asks_each_dns_providers_keys(
     comes back here."""
     step = _step(_card(TestClient(app)), "domain")
     assert step.get("data-status") == "optional"
+    assert _picker_offers(step, "dns") == ["", "porkbun", "cloudflare"]
+    assert _picker_on(step, "dns") == ""  # none until a provider's keys are set
     for provider, keys in (
         ("porkbun", ("PORKBUN_API_KEY", "PORKBUN_SECRET_KEY")),
         ("cloudflare", ("CLOUDFLARE_API_TOKEN",)),
     ):
         dns = one(step, f'[data-dns="{provider}"]')
         for key in keys:
-            setter = one(dns, f'[data-dns-key="{key}"] button')
-            assert setter.get("hx-get") == overseer_secrets.set_url(key, NEW)
+            row = one(dns, f'[data-key="{key}"]')
+            if secrets.writable():
+                url = overseer_secrets.set_url(key, NEW)
+                assert one(row, "button").get("hx-get") == url
+            else:
+                assert ".env" in text(row)
     assert "sslip.io" in text(step)
 
 
@@ -385,6 +390,7 @@ def test_with_a_dns_providers_keys_the_domain_step_is_done(
     }
     step = _step(_card(TestClient(app)), "domain")
     assert step.get("data-status") == "done"
+    assert _picker_on(step, "dns") == "porkbun"
     assert "Porkbun" in text(one(step, "[data-summary]"))
 
 
@@ -396,28 +402,96 @@ def test_without_an_agent_the_steps_after_it_wait(
     card = _card(TestClient(app))
     assert _steps(card) == [
         ("agent", "current"),
-        ("where", "done"),
         ("domain", "optional"),
         ("server", "todo"),
     ]
     none(card, "[data-provision]")
 
 
-def test_without_a_token_the_where_step_says_how_and_offers_a_server_of_your_own(
+def _by_hand(step: Any, way: str, body: bool = True) -> Any:
+    """A step's terminal way (``way``), folded away until opened."""
+    inside = "[data-step-body] " if body else ""
+    folded = one(step, f'{inside}details[data-by-hand="{way}"]')
+    assert folded.get("open") is None
+    return folded
+
+
+def _picker_offers(scope: Any, model: str) -> list[str | None]:
+    """What a provider picker (its Alpine field, ``model``) offers."""
+    return [
+        i.get("data-value")
+        for i in select(scope, f'[data-picker="{model}"] [data-value]')
+    ]
+
+
+def _picker_on(scope: Any, model: str) -> str | None:
+    """What a provider picker opens on."""
+    (item,) = select(
+        scope, f'[data-picker="{model}"] [data-value][aria-current="true"]'
+    )
+    return item.get("data-value")
+
+
+def test_each_step_has_its_terminal_way_folded_under_it(
     redis: FakeRedis, store: FakeStore, app: FastAPI
 ) -> None:
-    _agent_holds(redis)
+    """The agent's command, in its note; under each picker, only the picked
+    provider's command, with the keys it reads; and, apart, a server of
+    your own."""
+    beat = redis.strings.pop(agent.HEARTBEAT)  # no agent: its step is open
+    started = _step(_card(TestClient(app)), "agent")
+    assert text(started).count("aegis deploy-agent") == 1  # its note's, once
+    redis.strings[agent.HEARTBEAT] = beat
     card = _card(TestClient(app))
-    assert _steps(card)[1:] == [
-        ("where", "current"),
-        ("domain", "optional"),
-        ("server", "todo"),
-    ]
-    where = one(_step(card, "where"), "[data-step-body]")
-    assert "aegis deploy-init --host" in text(one(where, "[data-own-server]"))
-    terminal = one(where, "details[data-terminal]")
-    for p in hosting.PROVIDERS:
-        assert p.command in text(terminal)
+    assert _steps(card)[1:] == [("domain", "optional"), ("server", "current")]
+    for step, model, providers in (
+        ("domain", "dns", hosting.DNS),
+        ("server", "cloud", hosting.PROVISIONABLE),
+    ):
+        box = _by_hand(_step(card, step), model)
+        for p in providers:
+            said = text(one(box, f"[x-show=\"{model} === '{p.key}'\"]"))
+            assert p.command in said and all(name in said for name in p.secrets)
+    # A server of your own: under the new-server form's heading.
+    form = one(_step(card, "server"), '[data-provision="digitalocean"]')
+    heading = one(form, "[data-provision-heading]")
+    own = _by_hand(form, "own", body=False)
+    assert own.getprevious() is heading
+    assert "aegis deploy-init --host" in text(own) and "aegis deploy" in text(own)
+
+
+def test_the_server_step_picks_the_cloud_its_keys_and_its_form_follow(
+    redis: FakeRedis, store: FakeStore, app: FastAPI
+) -> None:
+    """One cloud at a time, as DNS is: it opens on the first whose token is
+    set (here both are: Hetzner's the app's, DigitalOcean's the agent's);
+    the picked one's keys, then its new-server form."""
+    store.values["HCLOUD_TOKEN"] = "hetzner-token-from-the-app"
+    card = _card(TestClient(app))
+    server = _step(card, "server")
+    one(card, '[data-picker="cloud"]')  # one place to pick it
+    assert _picker_offers(server, "cloud") == [p.key for p in hosting.PROVISIONABLE]
+    assert _picker_on(server, "cloud") == "hetzner"
+    for p in hosting.PROVISIONABLE:
+        cloud = one(server, f'[data-for="{p.key}"]')
+        assert cloud.get("x-show") == f"cloud === '{p.key}'"
+        one(cloud, f'[data-cloud="{p.key}"] [data-key="{p.token}"]')
+        shown = one(cloud, "[data-provision]")
+        assert shown.get("data-provision") == p.key
+        # Loaded only once its cloud is picked and it shows, not on opening
+        # the page for every cloud at once.
+        assert shown.get("hx-trigger") == "intersect once"
+
+
+def test_a_cloud_without_its_token_says_so_on_the_server_step(
+    redis: FakeRedis, app: FastAPI
+) -> None:
+    """The agent holds DigitalOcean's only: Hetzner's form would fail, so
+    its key is asked for in its place."""
+    server = _step(_card(TestClient(app)), "server")
+    hetzner = one(server, '[data-for="hetzner"]')
+    none(hetzner, "[data-provision]")
+    assert "not set" in text(one(hetzner, '[data-key="HCLOUD_TOKEN"]'))
 
 
 def test_a_new_server_on_each_provider_the_agent_has_a_token_for(
@@ -428,7 +502,10 @@ def test_a_new_server_on_each_provider_the_agent_has_a_token_for(
     (form,) = select(card, "[data-provision]")
     assert form.get("data-provision") == "digitalocean"
     assert form.get("data-write") is not None
-    assert (form.get("hx-get"), form.get("hx-trigger")) == (CATALOG_URL, "load")
+    assert (form.get("hx-get"), form.get("hx-trigger")) == (
+        CATALOG_URL,
+        "intersect once",
+    )
     none(card, '[data-ask="deploy"]')  # nothing to redeploy yet
 
 
@@ -468,11 +545,19 @@ def test_a_poll_while_the_agent_works_leaves_the_bar_running(
     assert polled.status_code == 204
 
 
-def test_the_form_wears_its_providers_logo(redis: FakeRedis, app: FastAPI) -> None:
-    """So it is plain which account the server is bought on."""
-    heading = one(_form(TestClient(app)), "[data-provision-heading]")
-    assert "DigitalOcean" in text(heading)
-    assert "digitalocean.com" in one(heading, "img").get("src")
+def test_each_picker_wears_its_providers_logos_and_nothing_else_does(
+    redis: FakeRedis, app: FastAPI
+) -> None:
+    """So it is plain which account the server is bought on: the logos are
+    the pickers', each offered provider and the one picked."""
+    server = _step(_card(TestClient(app)), "server")
+    for p in hosting.PROVISIONABLE:
+        item = one(server, f'[data-picker="cloud"] [data-value="{p.key}"]')
+        assert p.domain in one(item, "img").get("src")
+        # The mark follows a pick, not just the one the page opened on.
+        assert f"cloud === '{p.key}'" in item.get("x-bind:aria-current")
+    _sold(redis)
+    none(_form(TestClient(app)), "img")
 
 
 def test_a_poll_for_a_request_that_is_gone_stops_and_offers_to_ask_again(
@@ -563,12 +648,12 @@ def test_the_form_offers_what_the_provider_sells(
         ("s-1vcpu-2gb", "2.0 GB · 1 vCPU · 50 GB"),
         ("s-2vcpu-4gb", "4.0 GB · 2 vCPU · 80 GB"),
     ]
-    assert _picked(form, "size") == "s-1vcpu-2gb"
+    assert chosen(form, "select[name=size]") == "s-1vcpu-2gb"
     assert _options(form, "region") == [
         ("fra1", "Frankfurt 1 (fra1)"),
         ("tor1", "Toronto 1 (tor1)"),
     ]
-    assert _picked(form, "region") == "tor1"
+    assert chosen(form, "select[name=region]") == "tor1"
     assert "$12.00 a month" in text(one(form, "[data-price]"))
     assert form.get("data-write") is not None
 
@@ -581,7 +666,7 @@ def test_a_size_reloads_the_form_with_the_regions_that_offer_it(
     assert "change" in form.get("hx-trigger") and form.get("hx-get") == CATALOG_URL
     assert [slug for slug, _ in _options(form, "region")] == ["fra1", "nyc3"]
     # Neither tor1 (asked, and the default) offers it: the first by name.
-    assert _picked(form, "region") == "fra1"
+    assert chosen(form, "select[name=region]") == "fra1"
     assert "$6.00 a month" in text(one(form, "[data-price]"))
 
 
@@ -603,9 +688,10 @@ def test_the_form_loads_whether_its_size_fits(redis: FakeRedis, app: FastAPI) ->
 def test_the_form_shows_what_the_account_runs_and_the_total_with_this_one(
     redis: FakeRedis, app: FastAPI
 ) -> None:
-    """Dearest first, aegis's own marked; what they cost a month, with the
-    server being bought, and what the account has spent this month: every
-    amount money, whole units as the provider says them (never cents)."""
+    """What the account's servers cost a month, with the server being
+    bought, and what it has spent this month: every amount money, whole
+    units as the provider says them (never cents). The servers themselves
+    are the Overview's to list."""
     _sold(redis)
     _accounted(redis)
     account = one(_form(TestClient(app)), "[data-account]")
@@ -613,11 +699,7 @@ def test_the_form_shows_what_the_account_runs_and_the_total_with_this_one(
     assert "2 servers, $18.00 a month" in said
     assert "With this one: $30.00 a month" in said
     assert "$23.17" in text(one(account, "[data-month-to-date]"))
-    rows = select(account, "tbody tr")
-    assert [text(r).split()[0] for r in rows] == ["my-app", "old-box"]
-    assert [text(r["A month"]) for r in table_rows(account)] == ["$12.00", "$6.00"]
-    assert one(rows[0], "[data-aegis-project]") is not None
-    none(rows[1], "[data-aegis-project]")
+    none(account, "table")
 
 
 def test_without_billing_read_the_account_says_which_scope(
@@ -743,7 +825,7 @@ def test_without_the_default_size_the_cheapest_with_2_gb_is_offered(
 ) -> None:
     sizes = [s for s in SOLD["sizes"] if s["slug"] != "s-1vcpu-2gb"]
     _sold(redis, SOLD | {"sizes": sizes})
-    assert _picked(_form(TestClient(app)), "size") == "s-2vcpu-4gb"
+    assert chosen(_form(TestClient(app)), "select[name=size]") == "s-2vcpu-4gb"
 
 
 def test_a_project_with_a_server_shows_it_and_its_actions(
@@ -791,24 +873,28 @@ def test_a_provider_is_offered_when_only_the_app_has_its_token(
     card = _card(TestClient(app))
     (form,) = select(card, "[data-provision]")
     assert form.get("data-provision") == "hetzner"
-    none(card, '[data-token-missing="hetzner"]')
+    assert _picker_on(card, "cloud") == "hetzner"
+    held = one(card, '[data-cloud="hetzner"] [data-key="HCLOUD_TOKEN"]')
+    assert "not set" not in text(held)
 
 
 def test_with_no_token_anywhere_it_says_where_to_set_it(
     redis: FakeRedis, store: FakeStore, app: FastAPI
 ) -> None:
+    """Each provider's token, set from here (the Secrets dialog, which comes
+    back) where the app keeps secrets, else named for .env."""
     _agent_holds(redis)
     card = _card(TestClient(app))
     none(card, "[data-provision]")
     for p in hosting.PROVISIONABLE:
-        missing = one(card, f'[data-token-missing="{p.key}"]')
-        assert p.token in text(missing)
-        if overseer_secrets.has_component():
-            assert "Overseer > Secrets" in text(missing)
-            assert one(missing, "a").get("href") == overseer_secrets.url()
+        missing = one(card, f'[data-cloud="{p.key}"] [data-key="{p.token}"]')
+        assert "not set" in text(missing)
+        if secrets.writable():
+            url = overseer_secrets.set_url(p.token, NEW)
+            assert one(missing, "button").get("hx-get") == url
         else:
             assert ".env" in text(missing)
-            none(missing, "a")
+            none(missing, "button")
 
 
 def test_provisioning_sends_the_apps_token_outside_the_args_and_audit(
@@ -900,11 +986,14 @@ PORKBUN = {
 def test_a_new_server_on_a_domain_carries_its_dns_providers_keys(
     redis: FakeRedis, store: FakeStore, app: FastAPI
 ) -> None:
-    """The form offers the DNS providers whose keys the app holds; the keys
-    travel with the request, outside its audited arguments."""
+    """The Domain step's picker is the one choice: the form carries it (no
+    second select of its own); the keys travel with the request, outside
+    its audited arguments."""
     store.values |= PORKBUN
     _sold(redis)
-    assert chosen(_form(TestClient(app)), "select[name=dns]") == "porkbun"
+    form = _form(TestClient(app))
+    none(form, "select[name=dns]")
+    assert one(form, "input[type=hidden][name=dns]").get("x-bind:value") == "dns"
     named = {"typed": "12.00", "domain": "app.example.com", "dns": "porkbun"}
     TestClient(app).post(f"{actions.PARTIALS}/provision", data=PICKED | named)
     (request,) = _queued(redis)
@@ -931,6 +1020,44 @@ def test_who_may_reach_the_overseer_is_asked_on_the_form(
     )
     (request,) = _queued(redis)
     assert request["args"]["allowlist"] == "203.0.113.9/32"
+
+
+def test_without_a_domain_no_dns_keys_travel(
+    redis: FakeRedis, store: FakeStore, app: FastAPI
+) -> None:
+    """A provider picked but no name to give: nothing uses the keys."""
+    store.values |= PORKBUN
+    _sold(redis)
+    data = PICKED | {"typed": "12.00", "dns": "porkbun"}
+    TestClient(app).post(f"{actions.PARTIALS}/provision", data=data)
+    (request,) = _queued(redis)
+    assert "dns_keys" not in request
+
+
+def test_destroying_a_record_from_before_its_provider_was_named_sends_cloudflares(
+    redis: FakeRedis, store: FakeStore, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Records were Cloudflare's only then: the CLI reads them so too."""
+    store.values["CLOUDFLARE_API_TOKEN"] = "cf-token-from-the-app-0000"
+    made = READY | {"dns": {"zone_id": "zone1", "record_id": "rec1"}}
+    deployed(monkeypatch, {"server": BOX, "provision": made})
+    TestClient(app).post(f"{actions.PARTIALS}/destroy", data={"confirm": "my-app"})
+    (request,) = _queued(redis)
+    assert request["dns_keys"] == {"CLOUDFLARE_API_TOKEN": "cf-token-from-the-app-0000"}
+
+
+def test_a_key_set_in_env_is_changed_there_not_replaced_here(
+    redis: FakeRedis, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The Secrets page's own rule: a saved value never beats .env."""
+    if not secrets.writable():
+        pytest.skip("no secrets store to replace into")
+    monkeypatch.setitem(settings.__dict__, "HCLOUD_TOKEN", "hetzner-token-in-env")
+    row = one(
+        _card(TestClient(app)), '[data-cloud="hetzner"] [data-key="HCLOUD_TOKEN"]'
+    )
+    assert "Change it in .env" in text(row)
+    none(row, "button[hx-get]")
 
 
 def test_a_destroy_carries_the_keys_its_record_was_made_with(

@@ -45,7 +45,7 @@ from ..core.component_files import template_module
 from ..core.footprint import DockerError, measure
 from ..core.provision.http import ProvisionError, json_requester, mask_token
 from ..core.provision.provider import monthly_price
-from ..core.provision.registry import DNS_PROVIDERS, PROVIDERS
+from ..core.provision.registry import DNS_SECRETS, PROVIDERS
 from ..core.template_cleanup import env_value
 from ..i18n import lazy_t, t
 from .deploy import _get_project_root, _load_deploy_config
@@ -124,8 +124,7 @@ def presence() -> dict[str, Any]:
 
 def _tokens() -> list[str]:
     """Every token this process holds, to mask wherever one would be sent."""
-    dns = [name for p in DNS_PROVIDERS.values() for name in p.secrets]
-    names = [p.token_env for p in PROVIDERS.values()] + dns
+    names = [p.token_env for p in PROVIDERS.values()] + sorted(DNS_SECRETS)
     return [value for name in names if (value := os.environ.get(name, "").strip())]
 
 
@@ -262,8 +261,7 @@ def _dns_env(action: str, keys: Any) -> dict[str, str]:
     (``DNS_PROVIDERS``); any other name (``PATH``, ``LD_PRELOAD``) would
     change what the command runs, so it is refused."""
     keys = _protocol.checked_dns_keys(action, keys)
-    readable = {name for p in DNS_PROVIDERS.values() for name in p.secrets}
-    if not set(keys) <= readable:
+    if not set(keys) <= DNS_SECRETS:
         raise RefusedError("Refused: the DNS keys are not a DNS provider's.")
     return keys
 

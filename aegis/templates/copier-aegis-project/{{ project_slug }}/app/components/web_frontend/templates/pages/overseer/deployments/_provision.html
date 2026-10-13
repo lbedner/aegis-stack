@@ -5,10 +5,10 @@
    offer the size and the price is theirs. The price shown is typed back
    to create the server. #}
 {% from "components/macros/form.html" import field, select, text_input, primary_button %}
-{% from "components/macros/layout.html" import avatar %}
-{% from "pages/overseer/deployments/_macros.html" import asks, failed, reloads, waiting %}
+{% from "pages/overseer/deployments/_macros.html" import asks, by_hand, failed, reloads, waiting %}
 <div data-provision="{{ p.provider }}" data-part data-write hx-disinherit="*" hx-swap="outerHTML" hx-include="find form" class="space-y-3"{{ reloads(p.reload) }}>
-  <p data-provision-heading class="flex items-center gap-2 text-sm font-semibold text-aegis-text">{{ avatar(p.name, p.logo) }}New server on {{ p.name }}</p>
+  <p data-provision-heading class="text-sm font-semibold text-aegis-text">New server on {{ p.name }}</p>
+  {{ by_hand(p.own, "own", title="Already have a server?") }}
   {% if p.state == "loading" %}
   {{ waiting("Asking " ~ p.name ~ " what it sells, where…") }}
   {% elif p.state == "failed" %}
@@ -21,7 +21,8 @@
       {% call field("Region") %}{{ select("region", p.regions, p.region, blank=None, block=True) }}{% endcall %}
       {% call field("Domain (optional)") %}{{ text_input("domain", p.domain, placeholder="an sslip.io name") }}{% endcall %}
       {% call field("Overseer reachable from (optional)") %}{{ text_input("allowlist", p.allowlist, placeholder="your IP, like 203.0.113.9/32") }}{% endcall %}
-      {% if p.dns_choices %}{% call field("DNS for the domain") %}{{ select("dns", p.dns_choices, p.dns, blank=None, block=True) }}{% endcall %}{% endif %}
+      {# The Domain step's pick (its Alpine field): the one choice of DNS provider. #}
+      <input type="hidden" name="dns" x-bind:value="dns">
       {% call field("Email (optional)") %}{{ text_input("email", p.email, placeholder="the project's author email") }}{% endcall %}
     </div>
     {% with f=p.fit %}{% include "pages/overseer/deployments/_fit.html" %}{% endwith %}

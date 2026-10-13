@@ -62,7 +62,13 @@ PROVIDERS = tuple(
     Provider(**{**p, "can": tuple(p["can"]), "keys": tuple(p.get("keys", ()))})
     for p in json.loads(Path(__file__).with_name("providers.json").read_text())
 )
-_BY_KEY = {p.key: p for p in PROVIDERS}
+# Each provider by its key (the table's).
+BY_KEY = {p.key: p for p in PROVIDERS}
+
+
+def provider(key: str | None) -> Provider | None:
+    """The provider the table names ``key``, or None."""
+    return BY_KEY.get(key or "")
 # Where aegis creates servers, each with the token it needs; and where it
 # names them (a DNS record for a domain of your own).
 PROVISIONABLE = tuple(p for p in PROVIDERS if "Provision" in p.can)
@@ -74,7 +80,7 @@ _running: dict[str, Any] | None = None
 def _where(
     key: str | None, name: str, facts: list[tuple[str, Any]], console: str | None
 ) -> dict[str, Any]:
-    provider = _BY_KEY.get(key or "")
+    provider = BY_KEY.get(key or "")
     return {
         "key": key,
         "name": name,
@@ -200,7 +206,7 @@ def deploys_to(path: Path = DEPLOY_CONFIG) -> dict[str, Any] | None:
     config = deploy_config(path)
     record = config.get("provision") or {}
     key = record.get("provider")
-    provider = _BY_KEY.get(key or "")
+    provider = BY_KEY.get(key or "")
     if provider is None:
         box = config.get("server") or {}
         if not box.get("host"):

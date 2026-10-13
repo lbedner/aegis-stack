@@ -25,6 +25,7 @@ FACTS = (
     / "system"
     / "providers.json"
 )
+_TABLE = json.loads(FACTS.read_text())
 _CLIENTS: dict[str, tuple[str, Callable[[Requester], ProviderClient]]] = {
     "hetzner": (hetzner.API_URL, hetzner.HetznerClient),
     "digitalocean": (digitalocean.API_URL, digitalocean.DigitalOceanClient),
@@ -55,7 +56,7 @@ def _load() -> dict[str, Provider]:
             p["currency"],
             *_CLIENTS[p["key"]],
         )
-        for p in json.loads(FACTS.read_text())
+        for p in _TABLE
         if "Provision" in p["can"]
     }
 
@@ -92,12 +93,14 @@ def _load_dns() -> dict[str, DnsProvider]:
         p["key"]: DnsProvider(
             p["key"],
             p["name"],
-            tuple(p.get("keys") or (p["token"],)),
+            (p["token"],) if p.get("token") else tuple(p["keys"]),
             _DNS_CLIENTS[p["key"]],
         )
-        for p in json.loads(FACTS.read_text())
+        for p in _TABLE
         if "DNS" in p["can"]
     }
 
 
 DNS_PROVIDERS = _load_dns()
+# Every variable a DNS provider is reached with (the agent passes only these).
+DNS_SECRETS = frozenset(name for p in DNS_PROVIDERS.values() for name in p.secrets)

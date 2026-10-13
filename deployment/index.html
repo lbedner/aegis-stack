@@ -6974,7 +6974,11 @@ where, at its price. The agent prices the server again before creating it,
 and refuses if the price has changed since. Beside the price, "Will it fit?"
 puts the stack against the size picked: its production services' memory (in
 use now, and their limits), CPU limits and disk (images and data), measured
-by the agent on your machine, each bar toned and saying why.</p>
+by the agent on your machine, each bar toned and saying why. Beside it,
+what the account already runs: its servers with what each costs a month
+(aegis's own marked), the total with the new one, and on DigitalOcean this
+month's spend. Listing needs the token's <code>droplet:read</code> scope, and the
+spend <code>billing:read</code>; without one, the page says which to add.</p>
 <p>Why a host runner: every step needs what the app's container does not have
 and should not hold (the aegis CLI, the working tree it ships, your SSH key).
 So the Overseer only asks, through the project's Redis, and

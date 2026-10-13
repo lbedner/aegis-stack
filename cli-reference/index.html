@@ -7893,7 +7893,7 @@ to delete it; run it again to resume instead.</p>
 <ul>
 <li><code>--provider TEXT</code>, Cloud provider: <code>hetzner</code> (default) or <code>digitalocean</code></li>
 <li><code>--size TEXT</code>, Server type (default: <code>cx23</code> on Hetzner, <code>s-1vcpu-2gb</code> on DigitalOcean)</li>
-<li><code>--region TEXT</code>, Provider location (default: <code>nbg1</code> on Hetzner, <code>nyc3</code> on DigitalOcean)</li>
+<li><code>--region TEXT</code>, Provider location (default: <code>nbg1</code> on Hetzner, <code>tor1</code> on DigitalOcean)</li>
 <li><code>--domain TEXT</code>, Hostname to point at the server through Cloudflare</li>
 <li><code>--email TEXT</code>, Address Let's Encrypt registers the certificate to (default: the project's <code>author_email</code>)</li>
 <li><code>--ssh-key TEXT</code>, Public key installed for root (default: the first of <code>~/.ssh/id_ed25519.pub</code>, <code>id_ecdsa.pub</code>, <code>id_rsa.pub</code> that exists)</li>
@@ -7945,8 +7945,8 @@ host and user to GitHub Actions secrets, and scaffolds
 </span></code></pre></div></p>
 <hr />
 <h3 id="aegis-deploy-agent">aegis deploy-agent</h3>
-<p>Run what Overseer &gt; Deployments asks for on this machine: a price, a new
-server, a deploy, a backup, the backup list, a rollback, a destroy. The
+<p>Run what Overseer &gt; Deployments asks for on this machine: a provider's sizes
+and regions, what the account already runs, the stack's footprint, a new server, a deploy, a backup, the backup list, a rollback, a destroy. The
 Overseer puts each request on the project's Redis; this takes them one at a
 time and runs the matching <code>aegis deploy-*</code> command, streaming its output back
 to the page. Run it in the project directory with the stack up, where your
@@ -7958,7 +7958,10 @@ names the providers this machine holds a token for, never the token).</p>
 <p>It finds Redis as the app's host-side settings do: <code>REDIS_URL_LOCAL</code>, else
 the port <code>make serve</code> published (<code>.env.ports</code>). Requests older than five
 minutes are failed, not run. A new server is created only at the price you
-typed back in the Overseer, which it asks the provider for again first.</p>
+typed back in the Overseer, which it asks the provider for again first.
+The heartbeat also names the actions this agent runs: one started before the
+CLI learned an action the page asks for is shown as older than the app, to
+restart, and is not asked.</p>
 <p><strong>Usage:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-35-1"><a id="__codelineno-35-1" name="__codelineno-35-1" href="#__codelineno-35-1"></a>aegis<span class="w"> </span>deploy-agent<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
 </span></code></pre></div></p>

@@ -25,6 +25,7 @@ from tests.web.dom import chosen, none, one, select, table_rows, text, triggers
 from tests.web.overseer import page_html, sent_events, sign_in, status_with
 
 PAGE = "/overseer/deployments"
+NEW = f"{PAGE}/new"  # the steps to a new server
 CARD = "#card-deploy"
 BOX = {"host": "203.0.113.7", "user": "root", "path": "/opt/my-app"}
 READY = {"provider": "digitalocean", "server_name": "my-app", "status": "ready"}
@@ -167,8 +168,8 @@ def deployed(monkeypatch: pytest.MonkeyPatch, config: dict[str, Any]) -> None:
     use_runtime(monkeypatch, FakeRuntime(SERVER))
 
 
-def _card(client: TestClient) -> Any:
-    return one(page_html(client, PAGE), CARD)
+def _card(client: TestClient, page: str = NEW) -> Any:
+    return one(page_html(client, page), CARD)
 
 
 def _steps(card: Any) -> list[tuple[str, str]]:
@@ -247,15 +248,51 @@ def _picked(form: Any, name: str) -> str | None:
     return chosen(form, f"select[name={name}]")
 
 
+def test_the_overview_is_what_is_deployed_the_steps_their_own_page(
+    redis: FakeRedis, app: FastAPI
+) -> None:
+    """Without a server the overview says so and leads to the steps,
+    which are their own page (and in the sub-menu)."""
+    html = page_html(TestClient(app), PAGE)
+    none(html, "[data-steps]")
+    none_yet = one(one(html, CARD), '[data-deploy-state="no-server"]')
+    one(none_yet, f'a[href="{NEW}"]')
+    one(_card(TestClient(app)), "[data-steps]")
+
+
+def test_the_overview_shows_every_server_in_each_connected_account(
+    redis: FakeRedis, app: FastAPI
+) -> None:
+    """From what the agent last found (kept a few minutes), so opening the
+    page asks the cloud nothing; nothing is being bought, so no total
+    with a new one."""
+    _accounted(redis)
+    account = one(page_html(TestClient(app), PAGE), "[data-account]")
+    assert "2 servers, $18.00 a month" in text(account)
+    assert "With this one" not in text(account)
+    assert not _queued(redis)
+
+
+def test_the_steps_page_points_at_the_server_a_project_has(
+    redis: FakeRedis, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    deployed(monkeypatch, {"server": BOX, "provision": READY})
+    card = _card(TestClient(app))
+    assert one(card, '[data-deploy-state="has-server"] a').get("href") == PAGE
+    none(card, "[data-provision]")
+
+
 def test_a_deployed_server_points_at_the_dev_overseer_or_ci(
     app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     sign_in(app, monkeypatch, status_with())
     deployed(monkeypatch, {})
     monkeypatch.setattr(settings, "BUILD_ID", "abc1234")
-    card = _card(TestClient(app))
-    assert "aegis deploy-cd-setup" in text(one(card, '[data-deploy-state="deployed"]'))
-    none(card, "[data-write]")
+    for page in (PAGE, NEW):
+        card = _card(TestClient(app), page)
+        said = text(one(card, '[data-deploy-state="deployed"]'))
+        assert "aegis deploy-cd-setup" in said
+        none(card, "[data-write]")
 
 
 def test_without_redis_it_says_the_actions_need_it(
@@ -837,7 +874,7 @@ def test_a_failed_provision_offers_to_destroy_what_it_made(
     deployed(monkeypatch, {"provision": started})
     lines = {"lines": ["Created server 77", "SSH on 203.0.113.7 did not come up"]}
     _job(redis, "provision", lines, error="aegis deploy-provision failed (exit 1)")
-    panel = one(page_html(TestClient(app), PAGE), '[data-deploy-job="provision"]')
+    panel = one(page_html(TestClient(app), NEW), '[data-deploy-job="provision"]')
     assert "SSH on 203.0.113.7" in text(one(panel, "[data-lines]"))
     destroy = one(panel, '[data-ask="destroy"]')
     assert destroy.get("data-write") is not None

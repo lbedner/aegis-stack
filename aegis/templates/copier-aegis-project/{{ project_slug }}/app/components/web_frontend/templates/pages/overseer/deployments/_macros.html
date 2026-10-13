@@ -9,7 +9,7 @@
    paragraph's classes. #}
 {% from "components/macros/form.html" import action, field, text_input, primary_button %}
 {% from "components/macros/icons.html" import icon %}
-{% from "components/macros/layout.html" import avatar, command, progress %}
+{% from "components/macros/layout.html" import avatar, card, command, progress %}
 {% macro note() %}text-sm text-aegis-muted space-y-2{% endmacro %}
 
 {# ``reload`` (overseer_deploy_actions: url, trigger) as the hx attributes
@@ -109,6 +109,16 @@
   </details>
 </div>
 {% endif %}
+{% endmacro %}
+
+{# A deployed server's card: deploys come from the dev Overseer, or CI. #}
+{% macro deployed_card(actions) %}
+{% call card("Deploys", id="card-deploy") %}
+<div data-deploy-state="deployed" class="{{ note() }}">
+  <p>This is a deployed server. Redeploys come from the dev Overseer, or from CI:</p>
+  <p class="flex items-center gap-2">{{ command(actions.command) }}</p>
+</div>
+{% endcall %}
 {% endmacro %}
 
 {# The newest deploy job, streamed while the page is open (_job.html). #}

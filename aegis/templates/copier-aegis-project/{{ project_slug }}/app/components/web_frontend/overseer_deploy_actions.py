@@ -25,7 +25,6 @@ from app.core.formatting import format_bytes
 from app.core.log import logger
 from app.services.system import deploy_fit, deploy_spend, hosting
 
-from . import overseer_secrets
 from .overseer_live import fragment_events
 from .rendering import fragment
 
@@ -54,32 +53,20 @@ TITLES = {
 DEPLOYED = "This is a deployed server: deploy from the dev Overseer or CI."
 
 
-def _deployed() -> bool:
+def deployed() -> bool:
     return settings.BUILD_ID != hosting.LOCAL
 
 
-async def _held(beat: dict[str, Any]) -> set[str]:
+async def held(beat: dict[str, Any]) -> set[str]:
     """The providers a server can be created on: their token is the app's
     (``app.core.secrets``) or the agent's (its heartbeat)."""
     return set(beat.get("providers") or ()) | await deploy_agent.tokens_here()
 
 
-def _secrets_page() -> str | None:
-    """Where a token can be set from here: the Secrets page, with the
-    secrets component to keep it; None where only ``.env`` can."""
-    return overseer_secrets.url() if overseer_secrets.has_component() else None
-
-
-def _server_name() -> str | None:
+def server_name() -> str | None:
     """The provisioned server's name, while what it made may still exist."""
     record = hosting.deploy_config().get("provision") or {}
     return record.get("server_name") if record.get("status") in LIVE else None
-
-
-# The way from this machine to a server, in order. Provisioning deploys,
-# so the server step ends with the app live there.
-STEPS = (("agent", "Deploy agent"), ("where", "Where"), ("server", "Server"))
-OWN_SERVER = "aegis deploy-init --host <your server's address>"
 
 
 async def _agent() -> dict[str, Any]:
@@ -100,71 +87,34 @@ async def _agent() -> dict[str, Any]:
     return {"state": "ready", "beat": beat}
 
 
-def _steps(summaries: dict[str, str]) -> list[dict[str, Any]]:
-    """``STEPS``, each done (it has a summary), the one at hand (the first
-    not done), or still to come."""
-    found = []
-    for key, title in STEPS:
-        status = "done" if key in summaries else "todo"
-        if status == "todo" and all(s["status"] == "done" for s in found):
-            status = "current"
-        found.append(
-            {
-                "key": key,
-                "title": title,
-                "status": status,
-                "summary": summaries.get(key),
-            }
-        )
-    return found
+# Where nothing is asked from here: a deployed server.
+DEPLOYED_VIEW = {"view": "deployed", "command": CD_COMMAND}
 
 
-async def context() -> dict[str, Any]:
-    """The card, as one of three views: a deployed server (redeploys come
-    from elsewhere), the steps to a server (none yet), or the server and
-    what can be done to it."""
-    if _deployed():
-        return {"view": "deployed", "command": CD_COMMAND}
+async def shared() -> dict[str, Any]:
+    """What both pages show of the agent: whether it can be asked (and why
+    not), and its newest job, streamed."""
     agent = await _agent()
     listening = agent["state"] == "ready"
-    shared = {
+    return {
         "agent": agent,
         "partials": PARTIALS,
         "events": EVENTS,
         "event": EVENT,
         "job": await job_context() if listening else None,
     }
-    config = hosting.deploy_config()
-    if config.get("server"):
-        return shared | {
-            "view": "server",
-            "server": hosting.deploys_to(),
-            "destroy": _server_name(),
-        }
-    held = await _held(agent.get("beat") or {})
-    providers = [p for p in hosting.PROVISIONABLE if p.key in held]
-    summaries = {}
-    if listening:
-        beat = agent["beat"]
-        summaries["agent"] = f"Listening on {beat['host']} (aegis {beat['version']})"
-    if providers:
-        summaries["where"] = ", ".join(p.name for p in providers) + ": token set"
-    return shared | {
-        "view": "steps",
-        "steps": _steps(summaries),
-        "providers": [_waiting(p) for p in providers] if listening else [],
-        "missing": [
-            {"key": p.key, "name": p.name, "token": p.token}
-            for p in hosting.PROVISIONABLE
-            if p.key not in held
-        ],
-        "secrets_page": _secrets_page(),
-        "own_server": OWN_SERVER,
-        "terminal": [
-            {"name": p.name, "command": p.command, "token": p.token}
-            for p in hosting.PROVIDERS
-        ],
-    }
+
+
+async def accounts(agent: dict[str, Any]) -> list[dict[str, Any]]:
+    """Each connected cloud account's servers and what they cost, as the
+    agent last found them; where it has not looked, waiting on it (asked
+    in the background, never on opening the page)."""
+    tokens = await held(agent.get("beat") or {})
+    return [
+        _account(p, None, await deploy_agent.kept("account", {"provider": p.key}))
+        for p in hosting.PROVISIONABLE
+        if p.key in tokens
+    ]
 
 
 async def job_context(job_id: str | None = None) -> dict[str, Any] | None:
@@ -187,7 +137,7 @@ async def job_context(job_id: str | None = None) -> dict[str, Any] | None:
         "label": found.label,
         "error": found.error,
         "lines": result.get("lines") or [],
-        "destroy": _server_name() if failed_provision else None,
+        "destroy": server_name() if failed_provision else None,
         "partials": PARTIALS,
     }
 
@@ -304,7 +254,7 @@ def _shown(provider: hosting.Provider) -> dict[str, Any]:
     }
 
 
-def _waiting(provider: hosting.Provider) -> dict[str, Any]:
+def waiting(provider: hosting.Provider) -> dict[str, Any]:
     """The form before its catalog is asked for."""
     return _shown(provider) | _loading("catalog", provider, None)
 
@@ -370,16 +320,19 @@ def _fit(
 
 
 def _account(
-    provider: hosting.Provider, picked: dict[str, Any], found: dict[str, Any] | None
+    provider: hosting.Provider,
+    picked: dict[str, Any] | None,
+    found: dict[str, Any] | None,
 ) -> dict[str, Any]:
     """What the account already runs and costs, with the server ``picked``
-    (``deploy_spend``), from the agent's look at it; without one, waiting
-    on it."""
+    when one is being bought (``deploy_spend``), from the agent's look at
+    it; without one, waiting on it."""
     shown = {"name": provider.name}
+    where = {"size": picked["size"], "region": picked["region"]} if picked else {}
     if found is None:
-        where = {"size": picked["size"], "region": picked["region"]}
         return shown | _loading("account", provider, None, **where)
-    return shown | {"state": "ready"} | deploy_spend.spend(found, picked["price"])
+    price = picked["price"] if picked else None
+    return shown | {"state": "ready"} | deploy_spend.spend(found, price)
 
 
 async def provision_form(
@@ -443,7 +396,8 @@ async def account_panel(
         found, job = await _from_agent("account", args, form.get("job"), by)
         if found is None:
             return shown | _loading("account", provider, job, **where)
-        picked = choice(await _catalog(provider), provider, form)
+        sold = await _catalog(provider) if where["size"] else None
+        picked = choice(sold, provider, form) if sold else None
     except RefusedError as exc:
         return shown | _failed("account", provider, exc, **where)
     return _account(provider, picked, found)
@@ -476,10 +430,10 @@ async def _confirmed(form: dict[str, str]) -> dict[str, str]:
 async def request_args(action: str, form: dict[str, str]) -> dict[str, str]:
     """What to ask the agent for ``action``, from its form, checked as far
     as the app can (the agent checks again); refused with the reason."""
-    if _deployed():
+    if deployed():
         raise RefusedError(DEPLOYED)
     beat = await _listening()
-    if form.get("provider") and form["provider"] not in await _held(beat):
+    if form.get("provider") and form["provider"] not in await held(beat):
         raise RefusedError(
             f"No token to create a server on {form['provider']}: set it in "
             "Overseer > Secrets (or .env), or where the deploy agent runs."
@@ -487,6 +441,6 @@ async def request_args(action: str, form: dict[str, str]) -> dict[str, str]:
     if action == "provision":
         return await _confirmed(form)
     args = validate(action, form)
-    if action == "destroy" and args["confirm"] != _server_name():
+    if action == "destroy" and args["confirm"] != server_name():
         raise RefusedError("Type the server's name exactly to destroy it.")
     return args

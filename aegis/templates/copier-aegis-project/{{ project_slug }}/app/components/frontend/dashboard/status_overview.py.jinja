@@ -14,6 +14,9 @@ from app.services.blog.constants import BLOG_COMPONENT_NAME
 {% if include_documents %}
 from app.services.documents.health import DOCUMENTS_MODAL_ID
 {% endif %}
+{% if include_meetings %}
+from app.services.meetings.health import MEETINGS_MODAL_ID
+{% endif %}
 {% if include_payment %}
 from app.services.payment.constants import PAYMENT_COMPONENT_NAME
 {% endif %}
@@ -84,6 +87,11 @@ def get_component_display_info(
 
     elif component_name == DOCUMENTS_MODAL_ID:
         return ("Documents", get_component_subtitle(DOCUMENTS_MODAL_ID, metadata))
+{% endif %}
+{% if include_meetings %}
+
+    elif component_name == MEETINGS_MODAL_ID:
+        return ("Meetings", get_component_subtitle(MEETINGS_MODAL_ID, metadata))
 {% endif %}
 {% if include_insights %}
 
@@ -271,6 +279,9 @@ class StatusOverviewPanel(ft.Container):
 {% endif %}
 {% if include_documents %}
             DOCUMENTS_MODAL_ID,
+{% endif %}
+{% if include_meetings %}
+            MEETINGS_MODAL_ID,
 {% endif %}
 {% if include_payment %}
             f"service_{PAYMENT_COMPONENT_NAME}",

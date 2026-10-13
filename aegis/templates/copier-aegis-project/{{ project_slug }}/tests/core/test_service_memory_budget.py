@@ -36,7 +36,7 @@ BUDGET_MB = {
     "finance": 85,
     "insights": 40,
     "load_test": 25,
-    "meetings": 30,
+    "meetings": 70,
     "ops": 10,
     "payment": 55,
     "rag": 75,

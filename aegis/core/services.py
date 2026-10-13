@@ -1499,10 +1499,30 @@ SERVICES: dict[str, ServiceSpec] = {
         wiring=PluginWiring(
             routers=[
                 RouterWiring(
+                    module="app.components.backend.api.meetings.admin",
+                    symbol="router",
+                    alias="meetings_admin_router",
+                    prefix="/api/v1",
+                ),
+                RouterWiring(
                     module="app.components.backend.api.meetings.router",
                     symbol="router",
                     alias="meetings_router",
                     prefix="/api/v1",
+                ),
+            ],
+            dashboard_cards=[
+                FrontendWidgetWiring(
+                    module="app.components.frontend.dashboard.cards.meetings_card",
+                    symbol="MeetingsCard",
+                    modal_id="service_meetings",
+                ),
+            ],
+            dashboard_modals=[
+                FrontendWidgetWiring(
+                    module="app.components.frontend.dashboard.modals.meetings_modal",
+                    symbol="MeetingsDetailDialog",
+                    modal_id="service_meetings",
                 ),
             ],
             deps_providers=[
@@ -1529,9 +1549,27 @@ SERVICES: dict[str, ServiceSpec] = {
                 "tests/services/test_meetings_bot.py",
                 "tests/services/test_meet_page.py",
                 "tests/services/test_meetings_login.py",
+                "tests/services/test_meetings_notes.py",
+                "tests/services/test_meetings_audio.py",
+                "tests/components/frontend/test_meetings_ui.py",
+                "app/components/frontend/dashboard/cards/meetings_card.py",
+                "app/components/frontend/dashboard/modals/meetings_modal.py",
                 "tests/api/test_meetings_endpoints.py",
                 "tests/_meetings.py",
             ],
+            extras={
+                # The Meetings page and Overseer's, only where the htmx
+                # frontend is.
+                "include_htmx": [
+                    "app/components/web_frontend/routes/meetings.py",
+                    "app/components/web_frontend/templates/pages/meetings",
+                    "app/components/web_frontend/overseer_meetings.py",
+                    "app/components/web_frontend/routes/partials/overseer_meetings.py",
+                    "app/components/web_frontend/templates/pages/overseer/meetings",
+                    "tests/web/test_meetings_page.py",
+                    "tests/web/test_overseer_meetings.py",
+                ],
+            },
         ),
     ),
 }

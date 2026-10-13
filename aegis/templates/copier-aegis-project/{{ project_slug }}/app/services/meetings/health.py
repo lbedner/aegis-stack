@@ -7,6 +7,8 @@ from app.services.meetings.service import meetings_counts
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
 MEETINGS_COMPONENT_NAME = "meetings"
+# The Overseer card and modal for this service (both frontends) go by this.
+MEETINGS_MODAL_ID = f"service_{MEETINGS_COMPONENT_NAME}"
 
 
 async def check_meetings_service_health() -> ComponentStatus:

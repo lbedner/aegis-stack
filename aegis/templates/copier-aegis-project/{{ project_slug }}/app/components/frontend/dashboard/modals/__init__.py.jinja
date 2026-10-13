@@ -21,6 +21,9 @@ from app.components.frontend.dashboard.modals.comms_modal import CommsDetailDial
 {%- if include_documents %}
 from app.components.frontend.dashboard.modals.documents_modal import DocumentsDetailDialog
 {%- endif %}
+{%- if include_meetings %}
+from app.components.frontend.dashboard.modals.meetings_modal import MeetingsDetailDialog
+{%- endif %}
 {%- if include_insights %}
 from app.components.frontend.dashboard.modals.insights_modal import InsightsDetailDialog
 {%- endif %}
@@ -87,6 +90,9 @@ __all__ = [
 {%- endif %}
 {%- if include_documents %}
     "DocumentsDetailDialog",
+{%- endif %}
+{%- if include_meetings %}
+    "MeetingsDetailDialog",
 {%- endif %}
 {%- if include_insights %}
     "InsightsDetailDialog",

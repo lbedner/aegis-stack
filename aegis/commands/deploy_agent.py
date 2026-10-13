@@ -45,11 +45,10 @@ from ..core.component_files import template_module
 from ..core.footprint import DockerError, measure
 from ..core.provision.http import ProvisionError, json_requester, mask_token
 from ..core.provision.provider import monthly_price
-from ..core.provision.registry import PROVIDERS
+from ..core.provision.registry import DNS_PROVIDERS, PROVIDERS
 from ..core.template_cleanup import env_value
 from ..i18n import lazy_t, t
 from .deploy import _get_project_root, _load_deploy_config
-from .deploy_provision import CLOUDFLARE_TOKEN_ENV
 
 _protocol = template_module(
     "aegis_deploy_protocol", "app", "components", "deploy", "protocol.py"
@@ -114,6 +113,7 @@ def presence() -> dict[str, Any]:
         "started_at": datetime.now(UTC).isoformat(),
         "version": __version__,
         "actions": list(PROTOCOL["actions"]),
+        "revision": PROTOCOL["revision"],
         "providers": [
             key
             for key, p in PROVIDERS.items()
@@ -124,7 +124,8 @@ def presence() -> dict[str, Any]:
 
 def _tokens() -> list[str]:
     """Every token this process holds, to mask wherever one would be sent."""
-    names = [p.token_env for p in PROVIDERS.values()] + [CLOUDFLARE_TOKEN_ENV]
+    dns = [name for p in DNS_PROVIDERS.values() for name in p.secrets]
+    names = [p.token_env for p in PROVIDERS.values()] + dns
     return [value for name in names if (value := os.environ.get(name, "").strip())]
 
 
@@ -256,10 +257,26 @@ def _token_env(
     return {PROVIDERS[key].token_env: token}
 
 
+def _dns_env(action: str, keys: Any) -> dict[str, str]:
+    """A request's DNS keys, each under the variable a DNS provider reads
+    (``DNS_PROVIDERS``); any other name (``PATH``, ``LD_PRELOAD``) would
+    change what the command runs, so it is refused."""
+    keys = _protocol.checked_dns_keys(action, keys)
+    readable = {name for p in DNS_PROVIDERS.values() for name in p.secrets}
+    if not set(keys) <= readable:
+        raise RefusedError("Refused: the DNS keys are not a DNS provider's.")
+    return keys
+
+
 def _execute(
-    job: Job, root: Path, action: str, args: dict[str, str], token: str | None
+    job: Job,
+    root: Path,
+    action: str,
+    args: dict[str, str],
+    token: str | None,
+    dns: dict[str, str],
 ) -> None:
-    env = _token_env(root, action, args, token)
+    env = _token_env(root, action, args, token) | dns
     spec = PROTOCOL["actions"][action]
     if "kept" in spec:
         key = _protocol.kept_key(action, args)
@@ -306,7 +323,8 @@ def handle(client: Any, root: Path, raw: str) -> None:
         _fresh(request.get("at"))
         args = validate(action, request.get("args"))
         token = checked_token(action, request.get("token"))
-        _execute(job, root, action, args, token)
+        dns = _dns_env(action, request.get("dns_keys"))
+        _execute(job, root, action, args, token, dns)
     except RefusedError as exc:
         job.fail(str(exc))
         brand.warn(str(exc))

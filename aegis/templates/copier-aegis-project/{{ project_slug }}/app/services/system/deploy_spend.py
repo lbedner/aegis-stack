@@ -17,10 +17,11 @@ def cents(amount: str | None) -> int | None:
     return round(float(amount) * 100) if amount else None
 
 
-def spend(found: dict[str, Any], price: str) -> dict[str, Any]:
+def spend(found: dict[str, Any], price: str | None) -> dict[str, Any]:
     """``found`` (servers, month_to_date, missing, currency), its servers
     as table rows (_account.html's columns), with the monthly totals before
-    and with a server at ``price``: every amount in cents."""
+    and with a server at ``price`` (when one is being bought): every amount
+    in cents."""
     servers = sorted(
         found["servers"], key=lambda s: cents(s["price"]) or 0, reverse=True
     )
@@ -39,7 +40,7 @@ def spend(found: dict[str, Any], price: str) -> dict[str, Any]:
     return {
         "servers": rows,
         "running": running,
-        "with": running + (cents(price) or 0),
+        "with": running + (cents(price) or 0) if price else None,
         "currency": found["currency"],
         "month_to_date": cents(found.get("month_to_date")),
         "missing": found.get("missing") or [],

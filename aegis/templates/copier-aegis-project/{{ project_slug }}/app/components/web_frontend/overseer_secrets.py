@@ -13,6 +13,7 @@ from collections.abc import Callable
 from importlib.util import find_spec
 from itertools import groupby
 from typing import Any
+from urllib.parse import urlencode
 
 from app.core import secrets
 from app.core.constants import ComponentName
@@ -82,9 +83,11 @@ def page_context(
     }
 
 
-def set_url(name: str) -> str:
-    """Where a key's set dialog, and its other actions, live."""
-    return f"{PARTIALS}/{name}"
+def set_url(name: str, back: str | None = None) -> str:
+    """Where a key's set dialog, and its other actions, live; opened from
+    another page (``back``), saving returns there."""
+    url = f"{PARTIALS}/{name}"
+    return f"{url}?{urlencode({'next': back})}" if back else url
 
 
 def base_row(row: secrets.SecretStatus) -> dict[str, Any]:

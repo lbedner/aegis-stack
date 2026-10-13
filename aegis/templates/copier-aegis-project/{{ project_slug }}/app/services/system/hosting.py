@@ -45,6 +45,12 @@ class Provider:
     size: str | None = None  # deploy-provision's default, where it provisions
     region: str | None = None
     currency: str | None = None  # what its prices are in
+    keys: tuple[str, ...] = ()  # a DNS provider's, where one token will not do
+
+    @property
+    def secrets(self) -> tuple[str, ...]:
+        """The environment variables (and stored secrets) it is reached with."""
+        return (self.token,) if self.token else self.keys
 
     @property
     def logo(self) -> str | None:
@@ -53,12 +59,14 @@ class Provider:
 
 
 PROVIDERS = tuple(
-    Provider(**{**p, "can": tuple(p["can"])})
+    Provider(**{**p, "can": tuple(p["can"]), "keys": tuple(p.get("keys", ()))})
     for p in json.loads(Path(__file__).with_name("providers.json").read_text())
 )
 _BY_KEY = {p.key: p for p in PROVIDERS}
-# Where aegis creates servers, each with the token it needs.
+# Where aegis creates servers, each with the token it needs; and where it
+# names them (a DNS record for a domain of your own).
 PROVISIONABLE = tuple(p for p in PROVIDERS if "Provision" in p.can)
+DNS = tuple(p for p in PROVIDERS if "DNS" in p.can)
 
 _running: dict[str, Any] | None = None
 
@@ -214,8 +222,9 @@ def deploys_to(path: Path = DEPLOY_CONFIG) -> dict[str, Any] | None:
 
 
 def providers(current: str | None) -> list[dict[str, Any]]:
-    """Every provider as a card: what aegis can do there, the command and
-    token to start, and whether it is the one in use (``current``)."""
+    """Every place it can run as a card (a DNS provider only names it):
+    what aegis can do there, the command and token to start, and whether
+    it is the one in use (``current``)."""
     return [
         {
             "key": p.key,
@@ -227,4 +236,5 @@ def providers(current: str | None) -> list[dict[str, Any]]:
             "current": p.key == current,
         }
         for p in PROVIDERS
+        if p not in DNS
     ]

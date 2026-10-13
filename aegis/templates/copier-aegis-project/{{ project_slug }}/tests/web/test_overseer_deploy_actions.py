@@ -25,6 +25,7 @@ from tests.web.dom import chosen, none, one, select, table_rows, text, triggers
 from tests.web.overseer import page_html, sent_events, sign_in, status_with
 
 PAGE = "/overseer/deployments"
+NEW = f"{PAGE}/new"  # the steps to a new server
 CARD = "#card-deploy"
 BOX = {"host": "203.0.113.7", "user": "root", "path": "/opt/my-app"}
 READY = {"provider": "digitalocean", "server_name": "my-app", "status": "ready"}
@@ -139,6 +140,7 @@ def redis(app: FastAPI, monkeypatch: pytest.MonkeyPatch, store: FakeStore) -> Fa
         "version": "0.16.0",
         "providers": ["digitalocean"],
         "actions": list(PROTOCOL["actions"]),
+        "revision": PROTOCOL["revision"],
     }
     fake.strings[agent.HEARTBEAT] = json.dumps(beat)
     deployed(monkeypatch, {})
@@ -167,8 +169,8 @@ def deployed(monkeypatch: pytest.MonkeyPatch, config: dict[str, Any]) -> None:
     use_runtime(monkeypatch, FakeRuntime(SERVER))
 
 
-def _card(client: TestClient) -> Any:
-    return one(page_html(client, PAGE), CARD)
+def _card(client: TestClient, page: str = NEW) -> Any:
+    return one(page_html(client, page), CARD)
 
 
 def _steps(card: Any) -> list[tuple[str, str]]:
@@ -247,15 +249,51 @@ def _picked(form: Any, name: str) -> str | None:
     return chosen(form, f"select[name={name}]")
 
 
+def test_the_overview_is_what_is_deployed_the_steps_their_own_page(
+    redis: FakeRedis, app: FastAPI
+) -> None:
+    """Without a server the overview says so and leads to the steps,
+    which are their own page (and in the sub-menu)."""
+    html = page_html(TestClient(app), PAGE)
+    none(html, "[data-steps]")
+    none_yet = one(one(html, CARD), '[data-deploy-state="no-server"]')
+    one(none_yet, f'a[href="{NEW}"]')
+    one(_card(TestClient(app)), "[data-steps]")
+
+
+def test_the_overview_shows_every_server_in_each_connected_account(
+    redis: FakeRedis, app: FastAPI
+) -> None:
+    """From what the agent last found (kept a few minutes), so opening the
+    page asks the cloud nothing; nothing is being bought, so no total
+    with a new one."""
+    _accounted(redis)
+    account = one(page_html(TestClient(app), PAGE), "[data-account]")
+    assert "2 servers, $18.00 a month" in text(account)
+    assert "With this one" not in text(account)
+    assert not _queued(redis)
+
+
+def test_the_steps_page_points_at_the_server_a_project_has(
+    redis: FakeRedis, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    deployed(monkeypatch, {"server": BOX, "provision": READY})
+    card = _card(TestClient(app))
+    assert one(card, '[data-deploy-state="has-server"] a').get("href") == PAGE
+    none(card, "[data-provision]")
+
+
 def test_a_deployed_server_points_at_the_dev_overseer_or_ci(
     app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     sign_in(app, monkeypatch, status_with())
     deployed(monkeypatch, {})
     monkeypatch.setattr(settings, "BUILD_ID", "abc1234")
-    card = _card(TestClient(app))
-    assert "aegis deploy-cd-setup" in text(one(card, '[data-deploy-state="deployed"]'))
-    none(card, "[data-write]")
+    for page in (PAGE, NEW):
+        card = _card(TestClient(app), page)
+        said = text(one(card, '[data-deploy-state="deployed"]'))
+        assert "aegis deploy-cd-setup" in said
+        none(card, "[data-write]")
 
 
 def test_without_redis_it_says_the_actions_need_it(
@@ -264,7 +302,7 @@ def test_without_redis_it_says_the_actions_need_it(
     monkeypatch.setattr(agent, "has_redis", lambda: False)
     card = _card(TestClient(app))
     assert "aegis add redis" in text(one(card, '[data-deploy-state="no-redis"]'))
-    none(card, "[data-write]")
+    none(card, "[data-ask], [data-provision]")  # keys may still be set
 
 
 def test_without_an_agent_it_shows_how_to_start_one(
@@ -279,7 +317,7 @@ def test_without_an_agent_it_shows_how_to_start_one(
     why = one(note, "details[data-agent-why]")
     assert why.get("open") is None
     assert "SSH key" in text(why)
-    none(card, "[data-write]")
+    none(card, "[data-ask], [data-provision]")  # keys may still be set
 
 
 def test_an_agent_older_than_the_app_is_named_stale(
@@ -310,12 +348,44 @@ def test_the_steps_are_read_from_what_is_true(redis: FakeRedis, app: FastAPI) ->
     assert _steps(card) == [
         ("agent", "done"),
         ("where", "done"),
+        ("domain", "optional"),
         ("server", "current"),
     ]
     assert "laptop" in text(one(_step(card, "agent"), "[data-summary]"))
     assert "DigitalOcean" in text(one(_step(card, "where"), "[data-summary]"))
     none(_step(card, "where"), "[data-step-body]")
     one(_step(card, "server"), "[data-step-body] [data-provision]")
+
+
+def test_the_domain_step_asks_each_dns_providers_keys(
+    redis: FakeRedis, app: FastAPI
+) -> None:
+    """Optional: without one the server gets an sslip.io name. Each key
+    opens the Secrets dialog (saved where .env values are read), which
+    comes back here."""
+    step = _step(_card(TestClient(app)), "domain")
+    assert step.get("data-status") == "optional"
+    for provider, keys in (
+        ("porkbun", ("PORKBUN_API_KEY", "PORKBUN_SECRET_KEY")),
+        ("cloudflare", ("CLOUDFLARE_API_TOKEN",)),
+    ):
+        dns = one(step, f'[data-dns="{provider}"]')
+        for key in keys:
+            setter = one(dns, f'[data-dns-key="{key}"] button')
+            assert setter.get("hx-get") == overseer_secrets.set_url(key, NEW)
+    assert "sslip.io" in text(step)
+
+
+def test_with_a_dns_providers_keys_the_domain_step_is_done(
+    redis: FakeRedis, store: FakeStore, app: FastAPI
+) -> None:
+    store.values |= {
+        "PORKBUN_API_KEY": "pk1_" + "a" * 20,
+        "PORKBUN_SECRET_KEY": "sk1_" + "b" * 20,
+    }
+    step = _step(_card(TestClient(app)), "domain")
+    assert step.get("data-status") == "done"
+    assert "Porkbun" in text(one(step, "[data-summary]"))
 
 
 def test_without_an_agent_the_steps_after_it_wait(
@@ -327,6 +397,7 @@ def test_without_an_agent_the_steps_after_it_wait(
     assert _steps(card) == [
         ("agent", "current"),
         ("where", "done"),
+        ("domain", "optional"),
         ("server", "todo"),
     ]
     none(card, "[data-provision]")
@@ -337,7 +408,11 @@ def test_without_a_token_the_where_step_says_how_and_offers_a_server_of_your_own
 ) -> None:
     _agent_holds(redis)
     card = _card(TestClient(app))
-    assert _steps(card)[1:] == [("where", "current"), ("server", "todo")]
+    assert _steps(card)[1:] == [
+        ("where", "current"),
+        ("domain", "optional"),
+        ("server", "todo"),
+    ]
     where = one(_step(card, "where"), "[data-step-body]")
     assert "aegis deploy-init --host" in text(one(where, "[data-own-server]"))
     terminal = one(where, "details[data-terminal]")
@@ -816,6 +891,69 @@ def test_once_the_catalog_has_expired_provisioning_says_to_reload(
     assert not _queued(redis)
 
 
+PORKBUN = {
+    "PORKBUN_API_KEY": "pk1_" + "a" * 24,
+    "PORKBUN_SECRET_KEY": "sk1_" + "b" * 24,
+}
+
+
+def test_a_new_server_on_a_domain_carries_its_dns_providers_keys(
+    redis: FakeRedis, store: FakeStore, app: FastAPI
+) -> None:
+    """The form offers the DNS providers whose keys the app holds; the keys
+    travel with the request, outside its audited arguments."""
+    store.values |= PORKBUN
+    _sold(redis)
+    assert chosen(_form(TestClient(app)), "select[name=dns]") == "porkbun"
+    named = {"typed": "12.00", "domain": "app.example.com", "dns": "porkbun"}
+    TestClient(app).post(f"{actions.PARTIALS}/provision", data=PICKED | named)
+    (request,) = _queued(redis)
+    assert request["args"]["dns"] == "porkbun"
+    assert request["dns_keys"] == PORKBUN
+    assert not set(PORKBUN.values()) & set(request["args"].values())
+
+
+def test_who_may_reach_the_overseer_is_asked_on_the_form(
+    redis: FakeRedis, app: FastAPI
+) -> None:
+    """Networks, checked as the agent checks them; stamped on the server's
+    .env at each deploy, so the Overseer there answers you."""
+    _sold(redis)
+    one(_form(TestClient(app)), "input[name=allowlist]")
+    url = f"{actions.PARTIALS}/provision"
+    response = TestClient(app).post(
+        url, data=PICKED | {"typed": "12.00", "allowlist": "my house"}
+    )
+    assert triggers(response)["toast"]["tone"] == "error"
+    assert not _queued(redis)
+    TestClient(app).post(
+        url, data=PICKED | {"typed": "12.00", "allowlist": "203.0.113.9/32"}
+    )
+    (request,) = _queued(redis)
+    assert request["args"]["allowlist"] == "203.0.113.9/32"
+
+
+def test_a_destroy_carries_the_keys_its_record_was_made_with(
+    redis: FakeRedis, store: FakeStore, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store.values |= PORKBUN
+    made = READY | {"dns": {"provider": "porkbun", "zone_id": "example.com"}}
+    deployed(monkeypatch, {"server": BOX, "provision": made})
+    TestClient(app).post(f"{actions.PARTIALS}/destroy", data={"confirm": "my-app"})
+    (request,) = _queued(redis)
+    assert request["dns_keys"] == PORKBUN
+
+
+def test_an_agent_from_before_dns_keys_is_named_stale(
+    redis: FakeRedis, app: FastAPI
+) -> None:
+    """It would run a provision without the keys it was sent."""
+    beat = json.loads(redis.strings[agent.HEARTBEAT])
+    del beat["revision"]
+    redis.strings[agent.HEARTBEAT] = json.dumps(beat)
+    one(_card(TestClient(app)), '[data-deploy-state="stale"]')
+
+
 def test_destroy_needs_the_server_name_typed(
     redis: FakeRedis, app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -837,7 +975,7 @@ def test_a_failed_provision_offers_to_destroy_what_it_made(
     deployed(monkeypatch, {"provision": started})
     lines = {"lines": ["Created server 77", "SSH on 203.0.113.7 did not come up"]}
     _job(redis, "provision", lines, error="aegis deploy-provision failed (exit 1)")
-    panel = one(page_html(TestClient(app), PAGE), '[data-deploy-job="provision"]')
+    panel = one(page_html(TestClient(app), NEW), '[data-deploy-job="provision"]')
     assert "SSH on 203.0.113.7" in text(one(panel, "[data-lines]"))
     destroy = one(panel, '[data-ask="destroy"]')
     assert destroy.get("data-write") is not None

@@ -50,22 +50,32 @@ def delete(request: Requester, path: str) -> None:
             raise
 
 
-def json_requester(base_url: str, token: str, pool: _Pool | None = None) -> Requester:
+def json_requester(
+    base_url: str,
+    token: str | None = None,
+    pool: _Pool | None = None,
+    *,
+    body: dict[str, str] | None = None,
+) -> Requester:
     """A ``request(method, path, body=None) -> dict`` bound to one API and token.
 
-    The token only ever travels in the Authorization header; error messages
-    carry the method, path, status and the API's own message, never the token.
+    The token only ever travels in the Authorization header; an API that
+    wants its keys in each request's JSON instead (Porkbun) gets ``body``
+    merged into every one. Error messages carry the method, path, status and
+    the API's own message, never a key.
     """
     http = pool or urllib3.PoolManager(timeout=urllib3.Timeout(total=30), retries=False)
 
+    keys = body
+
     def request(
-        method: str, path: str, body: dict[str, Any] | None = None
+        method: str, path: str, payload: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         response = http.request(
             method,
             f"{base_url}{path}",
-            headers={"Authorization": f"Bearer {token}"},
-            json=body,
+            headers={"Authorization": f"Bearer {token}"} if token else {},
+            json=(payload or {}) | keys if keys else payload,
         )
         try:
             data = json.loads(response.data) if response.data else {}

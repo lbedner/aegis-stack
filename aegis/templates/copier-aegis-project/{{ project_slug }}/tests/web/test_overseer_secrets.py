@@ -15,7 +15,7 @@ from app.core.config import settings
 from app.core.secrets import Secret
 from app.services.system.models import ComponentStatus
 from tests._secret_settings import FakeStore, use_store
-from tests.web.dom import one, row_text, select, text
+from tests.web.dom import location, one, row_text, select, text
 from tests.web.overseer import sign_in, status_with
 
 KEY = "sk-test-0123456789wxyz"
@@ -163,6 +163,24 @@ def test_saving_stores_it_and_echoes_nothing(
     assert response.status_code == 200
     assert store.values["ANTHROPIC_API_KEY"] == "sk-ant-new-0000abcd"
     assert "sk-ant-new" not in response.text + str(response.headers)
+
+
+def test_a_dialog_opened_elsewhere_returns_there(
+    writable: tuple[TestClient, FakeStore],
+) -> None:
+    """Deployments' domain step opens a key's dialog and is where saving
+    lands; somewhere off the site, never."""
+    client, _ = writable
+    back = "/overseer/deployments/new"
+    html = client.get(overseer_secrets.set_url("ANTHROPIC_API_KEY", back)).text
+    assert one(html, 'input[name="next"]').get("value") == back
+    for asked, lands in (
+        (back, back),
+        ("https://evil.example", overseer_secrets.url()),
+    ):
+        data = {"value": "sk-ant-new-0000abcd", "next": asked}
+        response = client.post(f"{PARTIALS}/ANTHROPIC_API_KEY", data=data)
+        assert location(response) == lands
 
 
 def test_remove_clears_a_stored_value(writable: tuple[TestClient, FakeStore]) -> None:

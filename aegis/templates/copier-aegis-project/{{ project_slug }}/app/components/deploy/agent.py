@@ -42,6 +42,8 @@ from app.services.system.jobs import JobSnapshot
 REQUESTS = PROTOCOL["requests"]
 HEARTBEAT = PROTOCOL["heartbeat"]
 LAST = PROTOCOL["last"]
+CATALOG = PROTOCOL["catalog"]
+FOOTPRINT = PROTOCOL["footprint"]
 JOB_PREFIX = "deploy:"  # a job's name: ``deploy:<action>``
 WAITING = "Waiting for the deploy agent"
 
@@ -67,6 +69,20 @@ REDIS_KEYS = (
         "string",
         "Last deploy job",
         "The job of the newest deploy action, which Overseer > Deployments shows",
+        "Deploy agent",
+    ),
+    KeyFamily(
+        f"{CATALOG}*",
+        "string",
+        "Provider catalog",
+        "A provider's sizes and regions, for the new-server form, kept an hour",
+        "Deploy agent",
+    ),
+    KeyFamily(
+        FOOTPRINT,
+        "string",
+        "Stack footprint",
+        "What the production services take, measured by the agent, kept ten minutes",
         "Deploy agent",
     ),
 )
@@ -124,8 +140,9 @@ async def _token(action: str, args: dict[str, str]) -> str | None:
 
 async def enqueue(action: str, args: dict[str, str], by: str) -> str:
     """Ask the agent for ``action``: its job, waiting, then the request,
-    with the app's provider token beside its arguments where it needs one.
-    The job's id."""
+    with the app's provider token beside its arguments where it needs one;
+    the newest job the page shows unless it runs in the background. The
+    job's id."""
     args = validate(action, args)
     job_id = uuid.uuid4().hex
     request = {
@@ -141,7 +158,8 @@ async def enqueue(action: str, args: dict[str, str], by: str) -> str:
     try:
         await RedisJobStore(client).create(job_id, f"{JOB_PREFIX}{action}", WAITING)
         await client.rpush(REQUESTS, json.dumps(request))
-        await client.set(LAST, job_id, ex=KEEP_SECONDS)
+        if not PROTOCOL["actions"][action].get("background"):
+            await client.set(LAST, job_id, ex=KEEP_SECONDS)
     finally:
         await client.aclose()
     return job_id
@@ -159,6 +177,27 @@ async def agent() -> dict[str, Any] | None:
     finally:
         await client.aclose()
     return json.loads(beat) if beat else None
+
+
+async def _kept(key: str) -> dict[str, Any] | None:
+    """What the agent left under ``key``; None once it has expired, or
+    before the agent has been asked."""
+    client = _client()
+    try:
+        found = _text(await client.get(key))
+    finally:
+        await client.aclose()
+    return json.loads(found) if found else None
+
+
+async def catalog(provider: str) -> dict[str, Any] | None:
+    """What ``provider`` sells where, as the agent last fetched it."""
+    return await _kept(f"{CATALOG}{provider}")
+
+
+async def footprint() -> dict[str, Any] | None:
+    """What the stack's production services take, as last measured."""
+    return await _kept(FOOTPRINT)
 
 
 async def job(job_id: str | None = None) -> JobSnapshot | None:

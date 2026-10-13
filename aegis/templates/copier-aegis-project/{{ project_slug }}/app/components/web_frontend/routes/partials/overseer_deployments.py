@@ -8,7 +8,7 @@ from fastapi.responses import HTMLResponse, Response, StreamingResponse
 
 from app.components.backend.api.utils import audit_admin_action
 from app.components.deploy import agent as deploy_agent
-from app.components.deploy.protocol import PROTOCOL, RefusedError
+from app.components.deploy.protocol import RefusedError
 from app.components.web_frontend import overseer_deploy_actions as actions
 from app.components.web_frontend.overseer_access import overseer_actor
 from app.components.web_frontend.overseer_live import event_stream
@@ -29,6 +29,34 @@ async def job_events() -> StreamingResponse:
     return event_stream(actions.events())
 
 
+@router.get(actions.catalog_url("{provider}"), response_class=HTMLResponse)
+async def provision_form(
+    request: Request, provider: str, actor: Actor = Depends(overseer_actor)
+) -> HTMLResponse:
+    """A provider's new-server form, from its catalog; the agent asked for
+    the catalog when there is none (a read: not audited)."""
+    form = dict(request.query_params)
+    try:
+        page = await actions.render_provision_form(provider, form, actor.label)
+    except RefusedError:  # not a provider servers are created on from here
+        raise HTTPException(status_code=404) from None
+    return HTMLResponse(page)
+
+
+@router.get(f"{actions.PARTIALS}/fit/{{provider}}", response_class=HTMLResponse)
+async def fit(
+    request: Request, provider: str, actor: Actor = Depends(overseer_actor)
+) -> HTMLResponse:
+    """Whether the size picked has room for the stack; the agent asked to
+    measure it when it has not (a read: not audited)."""
+    form = dict(request.query_params)
+    try:
+        page = await actions.render_fit(provider, form, actor.label)
+    except RefusedError:  # not a provider servers are created on from here
+        raise HTTPException(status_code=404) from None
+    return HTMLResponse(page)
+
+
 @router.post(f"{actions.PARTIALS}/{{action}}", response_class=HTMLResponse)
 async def ask(
     request: Request,
@@ -37,7 +65,7 @@ async def ask(
     audit: AuditEmitter = Depends(get_audit),
 ) -> Response:
     """Ask the deploy agent for ``action``; the answer is its job."""
-    if action not in PROTOCOL["actions"]:
+    if action not in actions.TITLES:
         raise HTTPException(status_code=404)
     event = f"deploy.{action}"
     try:

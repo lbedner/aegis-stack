@@ -175,8 +175,13 @@ def _job(redis: FakeRedis, store_class: Any, job_id: str) -> Any:
 
 
 def test_a_valid_request_passes_with_its_empty_optionals_dropped() -> None:
-    args = {"provider": "digitalocean", "size": "s-1vcpu-2gb", "region": "nyc3"}
-    assert agent.validate("quote", args | {"domain": ""}) == args
+    args = {
+        "provider": "digitalocean",
+        "size": "s-1vcpu-2gb",
+        "region": "nyc3",
+        "price": "12.00",
+    }
+    assert agent.validate("provision", args | {"domain": ""}) == args
 
 
 @pytest.mark.parametrize(
@@ -187,8 +192,16 @@ def test_a_valid_request_passes_with_its_empty_optionals_dropped() -> None:
         ("destroy", {}),  # its confirmation missing
         ("rollback", {"backup": "latest; rm -rf /"}),
         ("rollback", {"backup": "--help"}),
-        ("quote", {"provider": "digitalocean", "size": "--yes", "region": "nyc3"}),
-        ("quote", {"provider": "linode", "size": "g6", "region": "us-east"}),
+        (
+            "provision",
+            {
+                "provider": "digitalocean",
+                "size": "--yes",
+                "region": "nyc3",
+                "price": "12.00",
+            },
+        ),
+        ("catalog", {"provider": "linode"}),
         ("destroy", {"confirm": ["my-app"]}),
     ],
 )
@@ -307,45 +320,101 @@ def test_a_refused_request_says_why(project: Path, app_store: Any) -> None:
     assert job.status == "failed" and "backup" in job.error
 
 
+def _nowhere(redis: FakeRedis, token: str) -> None:
+    """The token is in no job, list or key the agent left behind."""
+    assert token not in json.dumps([redis.hashes, redis.lists, redis.strings])
+
+
+SIZE = {
+    "slug": "s-1vcpu-2gb",
+    "description": "Basic",
+    "memory": 2048,
+    "vcpus": 1,
+    "disk": 50,
+    "regions": ["nyc3"],
+    "available": True,
+}
+
+
 def _price_api(monkeypatch: pytest.MonkeyPatch, price: float) -> list[str]:
+    """DigitalOcean's size and region lists, the size at ``price``."""
     tokens: list[str] = []
+    answer = {
+        "sizes": [SIZE | {"price_monthly": price}],
+        "regions": [{"slug": "nyc3", "name": "New York 3", "available": True}],
+    }
 
     def requester(base: str, token: str) -> Any:
         assert base == digitalocean.API_URL
         tokens.append(token)
-        sizes = [{"slug": "s-1vcpu-2gb", "regions": ["nyc3"], "price_monthly": price}]
-        return lambda method, path, body=None: {"sizes": sizes}
+        return lambda method, path, body=None: answer
 
     monkeypatch.setattr(agent, "json_requester", requester)
     return tokens
 
 
 QUOTED = {"provider": "digitalocean", "size": "s-1vcpu-2gb", "region": "nyc3"}
+CATALOGUED = {"provider": "digitalocean"}
+CATALOG_KEY = "deploy:catalog:digitalocean"
 
 
-def test_a_quote_answers_with_the_providers_price(
+def test_a_catalog_is_kept_in_redis_for_the_overseer(
     project: Path, app_store: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """The provider's sizes and regions, as its client lists them, with
+    its currency, for an hour; the token is in none of it."""
     tokens = _price_api(monkeypatch, 12)
     redis = FakeRedis()
-    job_id = _request(redis, app_store, "quote", QUOTED)
+    job_id = _request(redis, app_store, "catalog", CATALOGUED)
+    _serve(redis, project)
+    assert _job(redis, app_store, job_id).status == "done"
+    found = json.loads(redis.strings[CATALOG_KEY])
+    assert found["currency"] == "USD"
+    assert found["regions"] == [{"slug": "nyc3", "name": "New York 3"}]
+    assert [(s["slug"], s["prices"]) for s in found["sizes"]] == [
+        ("s-1vcpu-2gb", {"nyc3": "12.00"})
+    ]
+    assert redis.ttl[CATALOG_KEY] == agent.PROTOCOL["catalog_seconds"]
+    assert tokens == [DO_TOKEN]
+    _nowhere(redis, DO_TOKEN)
+
+
+def test_the_stacks_footprint_is_kept_in_redis_for_the_overseer(
+    project: Path, app_store: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Measured here (``aegis.core.footprint``), for a while, in the
+    background; it needs no token."""
+    measured = {"services": [], "volumes": [], "images": 0}
+    monkeypatch.setattr(agent, "measure", lambda root: measured)
+    redis = FakeRedis()
+    job_id = _request(redis, app_store, "footprint", {})
+    _serve(redis, project)
+    assert _job(redis, app_store, job_id).status == "done"
+    key = agent.PROTOCOL["footprint"]
+    assert json.loads(redis.strings[key]) == measured
+    assert redis.ttl[key] == agent.PROTOCOL["footprint_seconds"]
+
+
+def test_docker_failing_fails_the_footprint_saying_why(
+    project: Path, app_store: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def broken(root: Path) -> dict[str, Any]:
+        raise agent.DockerError("Cannot connect to the Docker daemon")
+
+    monkeypatch.setattr(agent, "measure", broken)
+    redis = FakeRedis()
+    job_id = _request(redis, app_store, "footprint", {})
     _serve(redis, project)
     job = _job(redis, app_store, job_id)
-    assert job.status == "done"
-    assert job.result | {"lines": []} == QUOTED | {
-        "price": "12.00",
-        "currency": "USD",
-        "lines": [],
-    }
-    assert tokens == [DO_TOKEN] and DO_TOKEN not in json.dumps(redis.hashes)
+    assert job.status == "failed" and "Docker daemon" in job.error
 
 
-def test_a_quote_without_the_token_says_which(
+def test_a_catalog_without_the_token_says_which(
     project: Path, app_store: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.delenv("DIGITALOCEAN_TOKEN")
     redis = FakeRedis()
-    job_id = _request(redis, app_store, "quote", QUOTED)
+    job_id = _request(redis, app_store, "catalog", CATALOGUED)
     _serve(redis, project)
     job = _job(redis, app_store, job_id)
     assert job.status == "failed" and "DIGITALOCEAN_TOKEN" in job.error
@@ -378,17 +447,12 @@ def test_provisioning_at_the_confirmed_price_runs(
     )
 
 
-def _nowhere(redis: FakeRedis, token: str) -> None:
-    """The token is in no job, list or key the agent left behind."""
-    assert token not in json.dumps([redis.hashes, redis.lists, redis.strings])
-
-
 def test_a_token_the_app_sends_is_used_over_the_environments(
     project: Path, app_store: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     tokens = _price_api(monkeypatch, 12)
     redis = FakeRedis()
-    job_id = _request(redis, app_store, "quote", QUOTED, token=SENT_TOKEN)
+    job_id = _request(redis, app_store, "catalog", CATALOGUED, token=SENT_TOKEN)
     _serve(redis, project)
     assert _job(redis, app_store, job_id).status == "done"
     assert tokens == [SENT_TOKEN]
@@ -428,11 +492,11 @@ def test_a_destroy_sends_the_token_of_the_provisioned_servers_provider(
 @pytest.mark.parametrize(
     ("action", "args", "token"),
     [
-        ("quote", QUOTED, "has a space in it"),
-        ("quote", QUOTED, "short"),
-        ("quote", QUOTED, "x" * 600),
-        ("quote", QUOTED, "line\nbreak-token"),
-        ("quote", QUOTED, ["dop_v1_in-a-list"]),
+        ("catalog", CATALOGUED, "has a space in it"),
+        ("catalog", CATALOGUED, "short"),
+        ("catalog", CATALOGUED, "x" * 600),
+        ("catalog", CATALOGUED, "line\nbreak-token"),
+        ("catalog", CATALOGUED, ["dop_v1_in-a-list"]),
         ("deploy", {}, SENT_TOKEN),  # an action that takes no token
     ],
 )

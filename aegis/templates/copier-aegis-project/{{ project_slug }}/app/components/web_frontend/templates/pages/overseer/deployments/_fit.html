@@ -1,0 +1,28 @@
+{# Whether the size picked has room for the stack
+   (overseer_deploy_actions.fit_panel, deploy_fit): memory, CPU and disk as
+   bars, each toned and saying why. A bar's solid part is in use now, its
+   dashed outline the limits, its line this server; loading, it asks again
+   until the deploy agent has measured the stack. #}
+{% from "components/macros/layout.html" import badge %}
+<div data-fit hx-target="this" hx-swap="outerHTML" class="space-y-3 rounded border border-aegis-border p-3"{% if f.reload %} hx-get="{{ f.reload.url }}" hx-trigger="{{ f.reload.trigger }}"{% endif %}>
+  {% if f.state == "loading" %}
+  <p data-measuring class="text-xs text-aegis-muted">Measuring what the stack takes…</p>
+  {% elif f.state == "failed" %}
+  <p data-error class="text-xs text-error">Could not tell whether it fits: {{ f.error }}</p>
+  {% else %}
+  <p class="flex items-center gap-2 text-sm"><span class="font-semibold text-aegis-text">Will it fit?</span> <span data-verdict data-tone="{{ f.verdict }}" class="toned">{{ badge(f.headline, f.verdict) }}</span></p>
+  {% for r in f.rows %}
+  <div data-fit-row="{{ r.key }}" class="space-y-1">
+    <p class="flex flex-wrap items-baseline justify-between gap-x-3 text-xs"><span class="font-medium text-aegis-text">{{ r.label }}</span><span class="text-aegis-muted">{{ r.figures }}</span></p>
+    <svg data-tone="{{ r.tone }}" class="toned block h-3 w-full" viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true">
+      <rect width="100" height="6" rx="1" class="fill-aegis-border/40"/>
+      {% if r.solid is not none %}<rect width="{{ r.solid }}" height="6" rx="1" fill="currentColor" opacity="0.8"/>{% endif %}
+      {% if r.dashed is not none %}<rect x="0.25" y="0.5" width="{{ [r.dashed - 0.5, 0]|max }}" height="5" rx="1" fill="none" stroke="currentColor" stroke-dasharray="3 2" vector-effect="non-scaling-stroke"/>{% endif %}
+      <line x1="{{ r.line }}" x2="{{ r.line }}" y1="0" y2="6" class="stroke-aegis-text" stroke-width="2" vector-effect="non-scaling-stroke"/>
+    </svg>
+    <p data-why data-tone="{{ r.tone }}" class="toned text-xs">{{ r.why }}</p>
+  </div>
+  {% endfor %}
+  <p class="text-xxs text-aegis-muted">Solid: in use now, on this machine. Dashed: the services' limits in production. Line: this server, less about 400 MB of memory and 5 GB of disk for its own system.</p>
+  {% endif %}
+</div>

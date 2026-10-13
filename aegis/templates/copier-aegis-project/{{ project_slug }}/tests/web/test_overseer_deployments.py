@@ -58,16 +58,15 @@ def test_the_sidebar_leads_to_deployment(client: TestClient) -> None:
 
 
 def test_the_live_build_and_the_host(client: TestClient) -> None:
-    html = page_html(client, PAGE)
-    now = _facts(html, "card-now")
-    assert (now["Build"], now["Commit"], now["Health"]) == (
+    """One card: the build, and the host it is on."""
+    build = _facts(page_html(client, PAGE), "card-this-build")
+    assert (build["Build"], build["Commit"], build["Health"]) == (
         "abc1234",
         "abc1234",
         "Healthy",
     )
-    assert now["Live since"].endswith("(5 hours ago)")
-    host = _facts(html, "card-host")
-    assert (host["CPUs"], host["Docker"]) == ("4", "27.1.1")
+    assert build["Live since"].endswith("(5 hours ago)")
+    assert (build["CPUs"], build["Docker"]) == ("4", "27.1.1")
 
 
 @pytest.mark.skipif(
@@ -123,11 +122,11 @@ def test_the_history_section_lists_each_deploy(
     assert "aaa1111" in text(row) and "Ada" in text(row) and "passed" in text(row)
 
 
-def test_it_shows_where_it_runs_and_where_it_can(
+def test_it_shows_where_it_runs(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The provider it runs on, with its facts and console, and every
-    provider aegis knows as a card, the one in use marked."""
+    """The provider it runs on, with its facts and console, in the build's
+    card."""
     from app.services.system import hosting
 
     running = {
@@ -144,21 +143,8 @@ def test_it_shows_where_it_runs_and_where_it_can(
     monkeypatch.setattr(hosting, "running_on", on_hetzner)
     monkeypatch.setattr(hosting, "deploys_to", lambda: None)
     html = page_html(client, PAGE)
-    card = one(html, "#card-running-on")
+    card = one(html, "#card-this-build")
     assert "Hetzner Cloud" in text(card) and "fsn1-dc14" in text(card)
     assert (
         one(card, 'a[href="https://console.hetzner.cloud/"]').get("target") == "_blank"
     )
-    tiles = select(html, "[data-provider]")
-    assert [t.get("data-provider") for t in tiles] == [
-        "hetzner",
-        "digitalocean",
-        "aws",
-        "server",
-    ]
-    assert [
-        t.get("data-provider") for t in select(html, "[data-provider][data-current]")
-    ] == ["hetzner"]
-    detail = one(html, '[data-provider-detail="hetzner"]')
-    assert "aegis deploy-provision --provider hetzner" in text(detail)
-    assert "HCLOUD_TOKEN" in text(detail)

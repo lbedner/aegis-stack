@@ -1,10 +1,8 @@
 {# The newest deploy job (overseer_deploy_actions.job_context), streamed
    while the page is open: what it is doing and its output's tail, then
-   how it ended. A price waits to be typed back before anything is
-   created; a provision that failed part way offers the destroy that
+   how it ended. A provision that failed part way offers the destroy that
    cleans up after it. #}
-{% from "components/macros/form.html" import field, text_input, primary_button %}
-{% from "pages/overseer/deployments/_macros.html" import asks, destroy_form %}
+{% from "pages/overseer/deployments/_macros.html" import destroy_form %}
 {% if job %}
 <div data-deploy-job="{{ job.action }}" data-status="{{ job.status }}" class="space-y-3">
   <p class="text-sm flex flex-wrap items-baseline gap-2">
@@ -13,14 +11,6 @@
     {% elif job.status == "failed" %}<span data-error class="text-error">{{ job.error }}</span>
     {% else %}<span class="text-aegis-teal">Done</span>{% endif %}
   </p>
-  {% if job.quote %}
-  <p data-price class="text-sm text-aegis-text">{{ job.quote.name }} {{ job.quote.size }} in {{ job.quote.region }}: {{ job.quote.currency }} {{ job.quote.price }} a month.</p>
-  <form data-confirm-price {{ asks(job.partials ~ "/provision") }} class="flex flex-wrap items-end gap-2">
-    <input type="hidden" name="quote" value="{{ job.id }}">
-    {% call field("Type " ~ job.quote.price ~ " to create it in your account") %}{{ text_input("typed", required=True) }}{% endcall %}
-    {{ primary_button("Create server", "submit") }}
-  </form>
-  {% endif %}
   {% if job.destroy %}
   <p class="text-sm text-aegis-muted">What it created is still in your account, and billed. Ask for the server again to resume, or destroy it:</p>
   {{ destroy_form(job.partials, job.destroy) }}

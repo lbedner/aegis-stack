@@ -162,6 +162,59 @@ def test_monthly_price_reads_gross_for_location() -> None:
     assert client.monthly_price("cx23", "nbg1") == "4.15"
 
 
+def test_the_catalog_lists_what_can_be_created_where() -> None:
+    """Server types still sold, priced (gross) per location, grouped as
+    Hetzner sells them; locations by city."""
+    api = FakeAPI(
+        {
+            ("GET", "/server_types?per_page=50"): {
+                "server_types": [
+                    {
+                        "name": "cax11",
+                        "cores": 2,
+                        "memory": 4.0,
+                        "disk": 40,
+                        "cpu_type": "shared",
+                        "architecture": "arm",
+                        "deprecation": None,
+                        "prices": [
+                            {"location": "fsn1", "price_monthly": {"gross": "4.5100"}}
+                        ],
+                    },
+                    {
+                        "name": "cx11",
+                        "cores": 1,
+                        "memory": 2.0,
+                        "disk": 20,
+                        "cpu_type": "shared",
+                        "architecture": "x86",
+                        "deprecation": {"announced": "2024-06-06T00:00:00+00:00"},
+                        "prices": [
+                            {"location": "fsn1", "price_monthly": {"gross": "4.1500"}}
+                        ],
+                    },
+                ]
+            },
+            ("GET", "/locations?per_page=50"): {
+                "locations": [{"name": "fsn1", "city": "Falkenstein", "country": "DE"}]
+            },
+        }
+    )
+    assert HetznerClient(api).catalog() == {
+        "sizes": [
+            {
+                "slug": "cax11",
+                "group": "Shared vCPU, Arm",
+                "memory_mb": 4096,
+                "vcpus": 2,
+                "disk_gb": 40,
+                "prices": {"fsn1": "4.51"},
+            }
+        ],
+        "regions": [{"slug": "fsn1", "name": "Falkenstein, DE"}],
+    }
+
+
 def test_monthly_price_rejects_unavailable_location() -> None:
     client = HetznerClient(FakeAPI(_hetzner_routes()))
     with pytest.raises(ProvisionError, match="nbg1"):

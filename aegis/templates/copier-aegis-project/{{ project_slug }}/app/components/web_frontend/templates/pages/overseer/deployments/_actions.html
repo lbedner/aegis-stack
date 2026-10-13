@@ -1,64 +1,75 @@
-{# Overseer > Deployments: what can be asked of ``aegis deploy-agent``
-   from here (overseer_deploy_actions), or why nothing can: a deployed
-   server, no Redis to carry the asking, no agent listening. Each ask's
-   job streams into the panel at the bottom (_job.html). #}
-{% from "components/macros/layout.html" import card, command %}
+{# Overseer > Deployments' card (overseer_deploy_actions.context), one of
+   three views. A deployed server says where redeploys come from. Without
+   a server yet, the steps to one, each read from what is true (the
+   agent's heartbeat, a token, the records): done ones in a line, the one
+   at hand open. With a server, the server, what can be asked of
+   ``aegis deploy-agent`` for it, its newest job, and destroying it apart. #}
+{% from "components/macros/layout.html" import avatar, card, command, facts %}
 {% from "components/macros/form.html" import field, text_input, primary_button %}
-{% from "pages/overseer/deployments/_macros.html" import asks, ask, destroy_form %}
+{% from "pages/overseer/deployments/_macros.html" import agent_note, asks, ask, destroy_form, job_panel, step %}
 {% set note = "text-sm text-aegis-muted space-y-2" %}
-{% call card("Deploy from here") %}
-{% if actions.state == "deployed" %}
+{% if actions.view == "deployed" %}
+{% call card("Deploys", id="card-deploy") %}
 <div data-deploy-state="deployed" class="{{ note }}">
   <p>This is a deployed server. Redeploys come from the dev Overseer, or from CI:</p>
   <p class="flex items-center gap-2">{{ command(actions.command) }}</p>
 </div>
-{% elif actions.state == "no-redis" %}
-<div data-deploy-state="no-redis" class="{{ note }}">
-  <p>Deploying from here needs Redis: the Overseer hands each action to <code class="font-mono text-aegis-text">aegis deploy-agent</code> on your machine through the project's Redis, so your SSH key never enters the app.</p>
-  <p class="flex items-center gap-2">{{ command("aegis add redis") }}</p>
-</div>
-{% elif actions.state == "unreachable" %}
-<p data-deploy-state="unreachable" class="{{ note }}">Redis did not answer: {{ actions.error }}</p>
-{% elif actions.state == "no-agent" %}
-<div data-deploy-state="no-agent" class="{{ note }}">
-  <p>No deploy agent is listening. <code class="font-mono text-aegis-text">make serve</code> starts one when the aegis CLI is installed (<code class="font-mono text-aegis-text">uv tool install aegis-stack</code>); with the stack started another way, run it in the project directory, then reload.</p>
-  <p class="flex items-center gap-2">{{ command(actions.command) }}</p>
-  <p>It runs what you ask here with your SSH key, which stays on your machine. The cloud token comes from Overseer &gt; Secrets (or <code class="font-mono text-aegis-text">.env</code>), or from the agent's own environment.</p>
-</div>
-{% else %}
-<div data-deploy-state="ready" class="space-y-4">
-  <p class="text-xs text-aegis-muted">The deploy agent is listening on {{ actions.agent.host }} (aegis {{ actions.agent.version }}).</p>
-  {% if actions.server %}
-  <div class="flex flex-wrap items-center gap-2">
-    {{ ask("Deploy", actions.partials, "deploy", "primary") }}
-    {{ ask("Back up now", actions.partials, "backup") }}
-    {{ ask("List backups", actions.partials, "backups") }}
-  </div>
-  <form data-ask="rollback" {{ asks(actions.partials ~ "/rollback") }} class="flex flex-wrap items-end gap-2">
-    {% call field("Roll back to (blank: the newest backup)") %}{{ text_input("backup", placeholder="2026-10-01_020000") }}{% endcall %}
-    {{ primary_button("Roll back", "submit") }}
-  </form>
-  {% endif %}
-  {% if actions.destroy %}{{ destroy_form(actions.partials, actions.destroy) }}{% endif %}
-  {% for p in actions.providers %}
-  <form data-provision="{{ p.key }}" {{ asks(actions.partials ~ "/quote") }} class="space-y-3">
-    <p class="text-sm font-semibold text-aegis-text">New server on {{ p.name }}</p>
-    <input type="hidden" name="provider" value="{{ p.key }}">
-    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      {% call field("Size") %}{{ text_input("size", p.size, required=True) }}{% endcall %}
-      {% call field("Region") %}{{ text_input("region", p.region, required=True) }}{% endcall %}
-      {% call field("Domain (optional)") %}{{ text_input("domain", placeholder="an sslip.io name") }}{% endcall %}
-      {% call field("Email (optional)") %}{{ text_input("email", placeholder="the project's author email") }}{% endcall %}
-    </div>
-    {{ primary_button("Get price", "submit") }}
-  </form>
-  {% endfor %}
+{% endcall %}
+{% elif actions.view == "steps" %}
+{% call card("Put it on a server", id="card-deploy") %}
+<ol data-steps class="space-y-5">
+  {% for s in actions.steps %}
+  {% call step(loop.index, s) %}
+  {% if s.key == "agent" %}
+  {{ agent_note(actions.agent) }}
+  {% elif s.key == "where" %}
   {% for p in actions.missing %}
   <p data-token-missing="{{ p.key }}" class="{{ note }}">To create a server on {{ p.name }}, set <code class="font-mono text-aegis-text">{{ p.token }}</code> {% if actions.secrets_page %}in <a href="{{ actions.secrets_page }}" {{ hx_replace(actions.secrets_page, "#app-content") }} class="text-aegis-teal hover:underline">Overseer &gt; Secrets</a>{% else %}in <code class="font-mono text-aegis-text">.env</code>{% endif %}, or export it where the deploy agent runs.</p>
   {% endfor %}
-  <div hx-ext="sse" sse-connect="{{ actions.events }}">
-    <div id="deploy-job" sse-swap="{{ actions.event }}" hx-target="this">{% with job=actions.job %}{% include "pages/overseer/deployments/_job.html" %}{% endwith %}</div>
+  <div data-own-server class="{{ note }}">
+    <p>Already have a server (AWS, or any machine you can SSH into)? Name it, and this page offers it deploys:</p>
+    <p class="flex items-center gap-2">{{ command(actions.own_server) }}</p>
   </div>
+  <details data-terminal class="text-xs text-aegis-muted">
+    <summary class="cursor-pointer hover:text-aegis-text">Prefer the terminal?</summary>
+    <ul class="mt-2 space-y-2">
+      {% for p in actions.terminal %}
+      <li class="space-y-1"><span class="text-aegis-text">{{ p.name }}</span>{% if p.token %} reads <code class="font-mono">{{ p.token }}</code> from your environment{% endif %}<p class="flex items-center gap-2">{{ command(p.command) }}</p></li>
+      {% endfor %}
+    </ul>
+  </details>
+  {% elif s.key == "server" %}
+  {% for p in actions.providers %}{% include "pages/overseer/deployments/_provision.html" %}{% endfor %}
+  <p class="text-xs text-aegis-muted">Creating it also deploys the app there, with HTTPS.</p>
+  {{ job_panel(actions) }}
+  {% endif %}
+  {% endcall %}
+  {% endfor %}
+</ol>
+{% endcall %}
+{% else %}
+{% call card("Your server", id="card-deploy") %}
+<div class="flex items-center gap-3">
+  {{ avatar(actions.server.name, actions.server.logo, "lg") }}
+  <span class="text-sm font-semibold text-aegis-text">{{ actions.server.name }}</span>
 </div>
+{{ facts(actions.server.facts) }}
+{% if actions.agent.state == "ready" %}
+<div class="flex flex-wrap items-center gap-2">
+  {{ ask("Deploy", actions.partials, "deploy", "primary") }}
+  {{ ask("Back up now", actions.partials, "backup") }}
+  {{ ask("List backups", actions.partials, "backups") }}
+</div>
+<form data-ask="rollback" {{ asks(actions.partials ~ "/rollback") }} class="flex flex-wrap items-end gap-2">
+  {% call field("Roll back to (blank: the newest backup)") %}{{ text_input("backup", placeholder="2026-10-01_020000") }}{% endcall %}
+  {{ primary_button("Roll back", "submit") }}
+</form>
+{{ job_panel(actions) }}
+{% else %}
+{{ agent_note(actions.agent) }}
 {% endif %}
 {% endcall %}
+{% if actions.destroy and actions.agent.state == "ready" %}
+{% call card("Destroy") %}{{ destroy_form(actions.partials, actions.destroy) }}{% endcall %}
+{% endif %}
+{% endif %}

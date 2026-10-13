@@ -39,8 +39,12 @@ This replaces steps 1 and 2 above. It creates a server in your own Hetzner accou
 ## From the Overseer
 
 With the htmx frontend and Redis, Overseer > Deployments on your dev build
-does the same from the page: a new server (live price, typed back to
-confirm), deploy, back up, list backups, roll back, destroy. Each streams its
+does the same from the page: a new server (a size and region picked from
+what the provider sells, its price typed back to confirm), deploy, back up,
+list backups, roll back, destroy. Until there is a server it walks you there
+in steps (the agent, where: a provider's token or a server of your own, then
+the server), each read from what is already true; after, it shows the
+server and what can be done to it. Each action streams its
 output on the page and is audited. `make serve` starts the agent that runs
 them, `aegis deploy-agent`, beside the stack and stops it with the stack, when
 the aegis CLI is installed (`uv tool install aegis-stack`). With the stack
@@ -51,12 +55,21 @@ The cloud token is a secret like the app's other credentials: set
 `DIGITALOCEAN_TOKEN` (or `HCLOUD_TOKEN`) on Overseer > Secrets, with the
 [secrets component](../components/secrets/index.md), or in `.env`. The Overseer
 offers a new server on each provider it has a token for, and sends the token
-with the one request that needs it (a price, a new server, a destroy), beside
+with the one request that needs it (the provider's sizes and regions, a new
+server, a destroy), beside
 its arguments rather than in them, so it is never audited or shown. The agent
 hands it to the command in its environment, masks it in the output, and keeps
 it nowhere. An exported variable where the agent runs works too (for CI, say),
 and the Overseer offers that provider as well; a token sent with a request
 wins over it.
+
+The sizes and regions come from the provider, through the agent, and are
+kept in Redis for an hour, so the form offers only what can be created and
+where, at its price. The agent prices the server again before creating it,
+and refuses if the price has changed since. Beside the price, "Will it fit?"
+puts the stack against the size picked: its production services' memory (in
+use now, and their limits), CPU limits and disk (images and data), measured
+by the agent on your machine, each bar toned and saying why.
 
 Why a host runner: every step needs what the app's container does not have
 and should not hold (the aegis CLI, the working tree it ships, your SSH key).

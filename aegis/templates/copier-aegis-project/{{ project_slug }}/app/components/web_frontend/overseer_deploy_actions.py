@@ -20,6 +20,7 @@ from urllib.parse import urlencode
 
 from app.components.deploy import agent as deploy_agent
 from app.components.deploy.protocol import PROTOCOL, RefusedError, validate
+from app.core import secrets
 from app.core.config import settings
 from app.core.formatting import format_bytes
 from app.core.log import logger
@@ -55,6 +56,14 @@ DEPLOYED = "This is a deployed server: deploy from the dev Overseer or CI."
 
 def deployed() -> bool:
     return settings.BUILD_ID != hosting.LOCAL
+
+
+async def dns_held() -> dict[str, bool]:
+    """Each DNS provider's keys, by name: whether the app holds it
+    (Overseer > Secrets, or ``.env``)."""
+    names = [name for p in hosting.DNS for name in p.secrets]
+    found = await secrets.get_many(*names)
+    return {name: bool(found.get(name)) for name in names}
 
 
 async def held(beat: dict[str, Any]) -> set[str]:
@@ -353,6 +362,10 @@ async def provision_form(
         return shown | _failed("catalog", provider, exc)
     optional = PROTOCOL["actions"]["provision"]["optional"]
     entered = {k: form.get(k, "") for k in optional}
+    keys = await dns_held()
+    dns = [p for p in hosting.DNS if all(keys[name] for name in p.secrets)]
+    entered["dns_choices"] = [{"id": p.key, "name": p.name} for p in dns]
+    entered["dns"] = entered["dns"] or (dns[0].key if dns else "")
     panels = {
         "fit": _fit(provider, picked, await deploy_agent.kept("footprint", {})),
         "account": _account(provider, picked, await deploy_agent.kept("account", args)),

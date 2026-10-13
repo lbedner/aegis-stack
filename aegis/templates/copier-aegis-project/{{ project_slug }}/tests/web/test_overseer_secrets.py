@@ -174,7 +174,10 @@ def test_a_dialog_opened_elsewhere_returns_there(
     back = "/overseer/deployments/new"
     html = client.get(overseer_secrets.set_url("ANTHROPIC_API_KEY", back)).text
     assert one(html, 'input[name="next"]').get("value") == back
-    for asked, lands in ((back, back), ("https://evil.example", overseer_secrets.url())):
+    for asked, lands in (
+        (back, back),
+        ("https://evil.example", overseer_secrets.url()),
+    ):
         data = {"value": "sk-ant-new-0000abcd", "next": asked}
         response = client.post(f"{PARTIALS}/ANTHROPIC_API_KEY", data=data)
         assert location(response) == lands

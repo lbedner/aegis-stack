@@ -8,7 +8,6 @@ destroy) are ``overseer_deploy_actions``."""
 
 from typing import Any
 
-from app.core import secrets
 from app.services.system import hosting, ui_deployments
 from app.services.system.models import ComponentStatus
 
@@ -150,8 +149,7 @@ async def _dns(back: str) -> list[dict[str, Any]]:
     """Each DNS provider and its keys: whether the app holds each (Overseer
     > Secrets, or ``.env``), and the dialog that sets it, which comes back
     to ``back``."""
-    names = [name for p in hosting.DNS for name in p.secrets]
-    found = await secrets.get_many(*names)
+    held = await actions.dns_held()
     return [
         {
             "key": p.key,
@@ -160,7 +158,7 @@ async def _dns(back: str) -> list[dict[str, Any]]:
             "secrets": [
                 {
                     "name": name,
-                    "held": bool(found.get(name)),
+                    "held": held[name],
                     "url": overseer_secrets.set_url(name, back),
                 }
                 for name in p.secrets

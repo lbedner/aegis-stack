@@ -761,15 +761,18 @@ SSH key is. A cloud token comes with the request that needs it (set on
 Overseer > Secrets, or in the app's `.env`), or from this machine's
 environment; a sent one wins. It reaches the command only through the
 environment, is masked in the output, and is kept nowhere (the heartbeat
-names the providers this machine holds a token for, never the token).
+names the providers this machine holds a token for, never the token). A new
+server on a domain, and its destroy, carry the DNS provider's keys the same
+way; only a DNS provider's own variables are accepted (anything else, such as
+`PATH`, is refused).
 
 It finds Redis as the app's host-side settings do: `REDIS_URL_LOCAL`, else
 the port `make serve` published (`.env.ports`). Requests older than five
 minutes are failed, not run. A new server is created only at the price you
 typed back in the Overseer, which it asks the provider for again first.
-The heartbeat also names the actions this agent runs: one started before the
-CLI learned an action the page asks for is shown as older than the app, to
-restart, and is not asked.
+The heartbeat also names the actions this agent runs and the protocol
+revision it speaks: one started before the CLI learned what the page asks
+for is shown as older than the app, to restart, and is not asked.
 
 **Usage:**
 ```bash

@@ -20,6 +20,7 @@
       {% call field("Size") %}{{ select("size", p.sizes, p.size, blank=None, block=True, grouped=True) }}{% endcall %}
       {% call field("Region") %}{{ select("region", p.regions, p.region, blank=None, block=True) }}{% endcall %}
       {% call field("Domain (optional)") %}{{ text_input("domain", p.domain, placeholder="an sslip.io name") }}{% endcall %}
+      {% if p.dns_choices %}{% call field("DNS for the domain") %}{{ select("dns", p.dns_choices, p.dns, blank=None, block=True) }}{% endcall %}{% endif %}
       {% call field("Email (optional)") %}{{ text_input("email", p.email, placeholder="the project's author email") }}{% endcall %}
     </div>
     {% with f=p.fit %}{% include "pages/overseer/deployments/_fit.html" %}{% endwith %}

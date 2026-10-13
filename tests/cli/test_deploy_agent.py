@@ -33,11 +33,13 @@ from tests.cli.test_utils import strip_ansi_codes
 
 DO_TOKEN = "do-secret-token-5678"
 SENT_TOKEN = "dop_v1_sent-by-the-app-wxyz"  # one the Overseer sends
+PK, SK = "pk1_" + "c" * 24 + "pkey", "sk1_" + "d" * 24 + "skey"  # Porkbun's
 SYSTEM = get_template_path() / PROJECT_SLUG_PLACEHOLDER / "app" / "services" / "system"
 FAKE_AEGIS = """\
 import os, sys
 print("ran " + " ".join(sys.argv[1:]))
 print("token " + os.environ.get("DIGITALOCEAN_TOKEN", ""))
+print("dns " + os.environ.get("PORKBUN_API_KEY", ""))
 sys.exit(int(os.environ.get("FAKE_EXIT", "0")))
 """
 
@@ -147,6 +149,7 @@ def _request(
     args: dict[str, str] | None = None,
     at: datetime | None = None,
     token: Any = None,
+    dns_keys: Any = None,
 ) -> str:
     """What the app's ``enqueue`` does: the job record, then the request."""
     job_id = uuid.uuid4().hex
@@ -158,6 +161,8 @@ def _request(
     request = {"job_id": job_id, "action": action, "args": args or {}, "by": "ada"}
     if token is not None:
         request["token"] = token
+    if dns_keys is not None:
+        request["dns_keys"] = dns_keys
     redis.rpush(agent.PROTOCOL["requests"], json.dumps(request | {"at": when}))
     return job_id
 
@@ -254,6 +259,7 @@ def test_the_heartbeat_names_the_providers_it_has_tokens_for(project: Path) -> N
     agent.serve(redis, project, stop=stop)
     beat = json.loads(seen[0] or "{}")
     assert beat["providers"] == ["digitalocean"]
+    assert beat["revision"] == agent.PROTOCOL["revision"]
     assert beat["actions"] == list(agent.PROTOCOL["actions"])
     assert beat["pid"] and beat["host"] and beat["version"]
     assert DO_TOKEN not in (seen[0] or "")
@@ -582,6 +588,49 @@ def test_a_sent_token_reaches_the_command_in_its_environment_never_its_args(
     assert ran.startswith("ran deploy-provision") and SENT_TOKEN not in ran
     assert token == "token ...wxyz"  # masked in the line the job keeps
     _nowhere(redis, SENT_TOKEN)
+
+
+def test_a_provisions_dns_keys_reach_its_command_masked_never_its_args(
+    project: Path, app_store: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _price_api(monkeypatch, 12)
+    redis = FakeRedis()
+    args = QUOTED | {"price": "12.00", "domain": "app.example.com", "dns": "porkbun"}
+    keys = {"PORKBUN_API_KEY": PK, "PORKBUN_SECRET_KEY": SK}
+    job_id = _request(
+        redis, app_store, "provision", args, token=SENT_TOKEN, dns_keys=keys
+    )
+    _serve(redis, project)
+    ran, _, dns = _job(redis, app_store, job_id).result["lines"][:3]
+    assert "--dns porkbun" in ran and PK not in ran
+    assert dns == "dns ...pkey"
+    _nowhere(redis, PK)
+    _nowhere(redis, SK)
+
+
+@pytest.mark.parametrize(
+    "keys",
+    [
+        {"PATH": "/tmp/evil:/usr/bin"},  # a name no DNS provider reads
+        {"PORKBUN_API_KEY": "not a key; rm -rf"},
+        "PORKBUN_API_KEY=pk1_x",
+    ],
+)
+def test_dns_keys_other_than_a_dns_providers_are_refused(
+    project: Path, app_store: Any, monkeypatch: pytest.MonkeyPatch, keys: Any
+) -> None:
+    """Only a DNS provider's own variables reach the command: anything else
+    (``PATH``, ``LD_PRELOAD``) would change what it runs."""
+    _price_api(monkeypatch, 12)
+    redis = FakeRedis()
+    args = QUOTED | {"price": "12.00", "domain": "app.example.com", "dns": "porkbun"}
+    job_id = _request(
+        redis, app_store, "provision", args, token=SENT_TOKEN, dns_keys=keys
+    )
+    _serve(redis, project)
+    job = _job(redis, app_store, job_id)
+    assert job.status == "failed" and "DNS" in job.error
+    assert not job.result["lines"]
 
 
 def test_a_destroy_sends_the_token_of_the_provisioned_servers_provider(

@@ -31,6 +31,9 @@ PROTOCOL: dict[str, Any] = {
     "last": "deploy:last",
     "beat_seconds": 10,
     "stale_seconds": 300,
+    # Raised when a request carries something an older agent would drop
+    # (2: a DNS provider's keys): the heartbeat says which it speaks.
+    "revision": 2,
     # A provider API token: its own characters only, so it can travel in an
     # environment variable and nothing else rides along with it.
     "token": r"[A-Za-z0-9._~+/=:-]{8,512}",
@@ -39,6 +42,7 @@ PROTOCOL: dict[str, Any] = {
         "size": "[a-z0-9][a-z0-9-]{0,39}",
         "region": "[a-z0-9][a-z0-9-]{0,31}",
         "domain": r"(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}",
+        "dns": "[a-z0-9][a-z0-9-]{0,31}",
         "email": r"[A-Za-z0-9][A-Za-z0-9._%+-]{0,63}@(?:[A-Za-z0-9-]{1,63}\.)+[A-Za-z]{2,63}",
         "price": r"\d{1,6}\.\d{2}",
         "backup": r"\d{4}-\d{2}-\d{2}_\d{6}",
@@ -64,8 +68,9 @@ PROTOCOL: dict[str, Any] = {
         "provision": {
             "command": ["deploy-provision", "--yes"],
             "token": True,
+            "dns": True,
             "required": ["provider", "size", "region", "price"],
-            "optional": ["domain", "email"],
+            "optional": ["domain", "email", "dns"],
         },
         "deploy": {
             "command": ["deploy"],
@@ -83,6 +88,7 @@ PROTOCOL: dict[str, Any] = {
         "destroy": {
             "command": ["deploy-destroy"],
             "token": True,
+            "dns": True,
             "required": ["confirm"],
         },
     },
@@ -124,6 +130,30 @@ def checked_token(action: str, token: Any) -> str | None:
     if not isinstance(token, str) or not re.fullmatch(PROTOCOL["token"], token):
         raise RefusedError("Refused: the provider token is not a valid token.")
     return token
+
+
+# A DNS key's variable name, as a provider table names them.
+_KEY_NAME = r"[A-Z][A-Z0-9_]{2,63}"
+
+
+def checked_dns_keys(action: str, keys: Any) -> dict[str, str]:
+    """A request's DNS provider keys (``{variable: value}``), empty when it
+    carries none; RefusedError for an action that takes none, or anything
+    but names and tokens. Which names a DNS provider reads is the agent's
+    to check (its provider table). The message never repeats a value."""
+    if keys is None:
+        return {}
+    if not PROTOCOL["actions"][action].get("dns"):
+        raise RefusedError(f"{action} refused: it takes no DNS keys.")
+    if not isinstance(keys, dict) or not all(
+        isinstance(name, str)
+        and re.fullmatch(_KEY_NAME, name)
+        and isinstance(value, str)
+        and re.fullmatch(PROTOCOL["token"], value)
+        for name, value in keys.items()
+    ):
+        raise RefusedError("Refused: the DNS keys are not valid keys.")
+    return keys
 
 
 def kept_key(action: str, args: dict[str, str]) -> str:

@@ -140,6 +140,7 @@ def redis(app: FastAPI, monkeypatch: pytest.MonkeyPatch, store: FakeStore) -> Fa
         "version": "0.16.0",
         "providers": ["digitalocean"],
         "actions": list(PROTOCOL["actions"]),
+        "revision": PROTOCOL["revision"],
     }
     fake.strings[agent.HEARTBEAT] = json.dumps(beat)
     deployed(monkeypatch, {})
@@ -378,7 +379,10 @@ def test_the_domain_step_asks_each_dns_providers_keys(
 def test_with_a_dns_providers_keys_the_domain_step_is_done(
     redis: FakeRedis, store: FakeStore, app: FastAPI
 ) -> None:
-    store.values |= {"PORKBUN_API_KEY": "pk1_" + "a" * 20, "PORKBUN_SECRET_KEY": "sk1_" + "b" * 20}
+    store.values |= {
+        "PORKBUN_API_KEY": "pk1_" + "a" * 20,
+        "PORKBUN_SECRET_KEY": "sk1_" + "b" * 20,
+    }
     step = _step(_card(TestClient(app)), "domain")
     assert step.get("data-status") == "done"
     assert "Porkbun" in text(one(step, "[data-summary]"))
@@ -885,6 +889,49 @@ def test_once_the_catalog_has_expired_provisioning_says_to_reload(
     response = TestClient(app).post(url, data=PICKED | {"typed": "12.00"})
     assert "reload" in triggers(response)["toast"]["text"].lower()
     assert not _queued(redis)
+
+
+PORKBUN = {
+    "PORKBUN_API_KEY": "pk1_" + "a" * 24,
+    "PORKBUN_SECRET_KEY": "sk1_" + "b" * 24,
+}
+
+
+def test_a_new_server_on_a_domain_carries_its_dns_providers_keys(
+    redis: FakeRedis, store: FakeStore, app: FastAPI
+) -> None:
+    """The form offers the DNS providers whose keys the app holds; the keys
+    travel with the request, outside its audited arguments."""
+    store.values |= PORKBUN
+    _sold(redis)
+    assert chosen(_form(TestClient(app)), "select[name=dns]") == "porkbun"
+    named = {"typed": "12.00", "domain": "app.example.com", "dns": "porkbun"}
+    TestClient(app).post(f"{actions.PARTIALS}/provision", data=PICKED | named)
+    (request,) = _queued(redis)
+    assert request["args"]["dns"] == "porkbun"
+    assert request["dns_keys"] == PORKBUN
+    assert not set(PORKBUN.values()) & set(request["args"].values())
+
+
+def test_a_destroy_carries_the_keys_its_record_was_made_with(
+    redis: FakeRedis, store: FakeStore, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store.values |= PORKBUN
+    made = READY | {"dns": {"provider": "porkbun", "zone_id": "example.com"}}
+    deployed(monkeypatch, {"server": BOX, "provision": made})
+    TestClient(app).post(f"{actions.PARTIALS}/destroy", data={"confirm": "my-app"})
+    (request,) = _queued(redis)
+    assert request["dns_keys"] == PORKBUN
+
+
+def test_an_agent_from_before_dns_keys_is_named_stale(
+    redis: FakeRedis, app: FastAPI
+) -> None:
+    """It would run a provision without the keys it was sent."""
+    beat = json.loads(redis.strings[agent.HEARTBEAT])
+    del beat["revision"]
+    redis.strings[agent.HEARTBEAT] = json.dumps(beat)
+    one(_card(TestClient(app)), '[data-deploy-state="stale"]')
 
 
 def test_destroy_needs_the_server_name_typed(

@@ -113,6 +113,7 @@ def presence() -> dict[str, Any]:
         "started_at": datetime.now(UTC).isoformat(),
         "version": __version__,
         "actions": list(PROTOCOL["actions"]),
+        "revision": PROTOCOL["revision"],
         "providers": [
             key
             for key, p in PROVIDERS.items()
@@ -256,10 +257,26 @@ def _token_env(
     return {PROVIDERS[key].token_env: token}
 
 
+def _dns_env(action: str, keys: Any) -> dict[str, str]:
+    """A request's DNS keys, each under the variable a DNS provider reads
+    (``DNS_PROVIDERS``); any other name (``PATH``, ``LD_PRELOAD``) would
+    change what the command runs, so it is refused."""
+    keys = _protocol.checked_dns_keys(action, keys)
+    readable = {name for p in DNS_PROVIDERS.values() for name in p.secrets}
+    if not set(keys) <= readable:
+        raise RefusedError("Refused: the DNS keys are not a DNS provider's.")
+    return keys
+
+
 def _execute(
-    job: Job, root: Path, action: str, args: dict[str, str], token: str | None
+    job: Job,
+    root: Path,
+    action: str,
+    args: dict[str, str],
+    token: str | None,
+    dns: dict[str, str],
 ) -> None:
-    env = _token_env(root, action, args, token)
+    env = _token_env(root, action, args, token) | dns
     spec = PROTOCOL["actions"][action]
     if "kept" in spec:
         key = _protocol.kept_key(action, args)
@@ -306,7 +323,8 @@ def handle(client: Any, root: Path, raw: str) -> None:
         _fresh(request.get("at"))
         args = validate(action, request.get("args"))
         token = checked_token(action, request.get("token"))
-        _execute(job, root, action, args, token)
+        dns = _dns_env(action, request.get("dns_keys"))
+        _execute(job, root, action, args, token, dns)
     except RefusedError as exc:
         job.fail(str(exc))
         brand.warn(str(exc))

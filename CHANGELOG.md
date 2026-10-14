@@ -9,6 +9,20 @@
 
 ### Added
 
+- **How to work with each person.** For everyone who speaks in an owner's
+  meetings, a guide read from what they say: what they care about, how they
+  like their information, how they decide and commit, and what lands with
+  them, each point citing the lines it rests on, and only how they work.
+  Written after each meeting's notes from the latest ten meetings with
+  them (metered `meetings:guide`), with the owner's own note kept and read
+  each time. Shown under Overseer > Meetings > People (htmx and Flet) and
+  served by `/api/v1/meetings/people` and its admin twin.
+- Meetings: the notes and the person guides are written by agent rows,
+  `meeting-notes` and `meeting-guide`, seeded at startup, so their prompt,
+  model and sampling are edited in Agents with a prompt history. Without a
+  row, the built-in prompt runs on the model in force. In a guide, the lines
+  each point rests on now fold under it.
+
 - **The meeting bot runs on the worker.** Where the stack has a worker, each call
   is a job on the worker's own `meetings` queue (arq, Dramatiq or TaskIQ),
   run by a `worker-meetings` container that does not reload on code changes,

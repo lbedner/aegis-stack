@@ -75,6 +75,9 @@ MESSAGES: dict[str, str] = {
     "service.research": "Outside posts and threads, collected by saved searches",
     "service.meetings": "A bot that joins calls and keeps the transcript",
     "service.blog": "支持草稿、发布和标签的 Markdown 博客",
+    "service.insights": "Adoption metrics and analytics with automated data collection",
+    "service.payment": "Payment processing with Stripe (checkout, subscriptions, webhooks)",
+    "service.finance": "Personal finance aggregation (accounts, transactions, net worth, import)",
     # ── 交互：组件选择提示 ────────────────────────────────────────────
     "interactive.add_prompt": "添加{description}？",
     "interactive.add_with_redis": "添加{description}？（将自动加入 Redis）",

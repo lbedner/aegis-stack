@@ -385,6 +385,33 @@ async def test_once_it_has_left_the_notes_are_written(
     assert written == [meeting.id]
 
 
+async def test_after_the_notes_each_persons_guide_is_written(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """How to work with each person reads the notes' meeting too, so it
+    comes after them."""
+    order: list[str] = []
+
+    async def notes(meeting_id: int) -> None:
+        order.append("notes")
+
+    async def guides(meeting_id: int) -> None:
+        order.append("guides")
+
+    bot_on(
+        monkeypatch,
+        async_db_session,
+        FakeCall([CallState.IN_CALL, CallState.ENDED]),
+        notes=notes,
+        guides=guides,
+    )
+    meeting = await MeetingsService(async_db_session, None).request(MEET, "Notes")
+
+    await bot.run_meeting(meeting.id)  # type: ignore[arg-type]
+
+    assert order == ["notes", "guides"]
+
+
 async def test_what_it_hears_goes_to_whoever_was_talking(
     run: Callable[..., Any], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

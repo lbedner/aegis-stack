@@ -84,12 +84,15 @@ MESSAGES: dict[str, str] = {
     "component.htmx": "Server-rendered htmx web frontend",
     # ── Service descriptions ────────────────────────────────────────────
     "service.auth": "User authentication and authorization with JWT tokens",
-    "service.ai": "AI chatbot service with multi-framework support",
+    "service.ai": "AI platform: multi-provider chat, agents, and an LLM catalog",
     "service.comms": "Communications service with email, SMS and voice",
     "service.documents": "Document store: keep the paper, deduped and findable",
     "service.research": "Outside posts and threads, collected by saved searches",
     "service.meetings": "A bot that joins calls and keeps the transcript",
     "service.blog": "Markdown blog with draft/publish workflow and tags",
+    "service.insights": "Adoption metrics and analytics with automated data collection",
+    "service.payment": "Payment processing with Stripe (checkout, subscriptions, webhooks)",
+    "service.finance": "Personal finance aggregation (accounts, transactions, net worth, import)",
     # ── Interactive: component prompts ─────────────────────────────────
     "interactive.add_prompt": "Add {description}?",
     "interactive.add_with_redis": "Add {description}? (will auto-add Redis)",

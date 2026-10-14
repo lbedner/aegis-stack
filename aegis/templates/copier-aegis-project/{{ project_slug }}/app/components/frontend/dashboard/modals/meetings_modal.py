@@ -9,7 +9,6 @@ the owner's send route and the admin API (``api/meetings/admin.py``).
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import Awaitable, Callable
 from datetime import datetime
 from typing import Any
@@ -28,10 +27,7 @@ from app.components.frontend.controls.buttons import PulseButton
 from app.components.frontend.controls.inputs import StyledTextField
 from app.components.frontend.controls.record_detail import build_field_blocks
 from app.components.frontend.controls.snack_bar import ErrorSnackBar, SuccessSnackBar
-from app.components.frontend.core.session_health import (
-    SessionLoops,
-    page_is_connected,
-)
+from app.components.frontend.controls.tabs import PulseTabs
 from app.components.frontend.state.session_state import get_session_state
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.formatting import format_clock, format_date
@@ -42,13 +38,13 @@ from app.services.system.ui import get_component_subtitle, get_component_title
 
 from ..cards.card_utils import get_status_detail
 from .base_detail_popup import BaseDetailPopup
+from .meetings_follow import FOLLOW_SECONDS, follow
+from .meetings_people_tab import PeopleTab
 from .modal_sections import EmptyStatePlaceholder, SectionHeader
 
 API = "/api/v1/meetings/admin"
 # Where a meeting is sent from: the owner's route, so the admin's own.
 SEND = "/api/v1/meetings"
-# How often the pane reads a meeting again while it is being followed.
-FOLLOW_SECONDS = 3
 
 
 def _api(page: ft.Page) -> Any:
@@ -231,20 +227,18 @@ class MeetingPane(ft.Container):
             self.page.run_task(self._follow, meeting_id)
 
     async def _follow(self, meeting_id: int) -> None:
-        """Read the meeting again while it is the one shown, its tab is
-        there (``SessionLoops``: Flet keeps a closed tab's session for an
-        hour) and something is still happening; then stop."""
-        loops = SessionLoops(self.page, lambda: page_is_connected(self.page))
+        """Read the meeting again while it is the one shown and something
+        is still happening; then the list, once it settled."""
         try:
-            while self._showing == meeting_id and loops.alive():
-                await asyncio.sleep(FOLLOW_SECONDS)
-                record = await _api(self.page).get(f"{API}/{meeting_id}")
-                if not isinstance(record, dict) or self._showing != meeting_id:
-                    return
-                self._draw(record)
-                if not following(record):
-                    await self._on_change()
-                    return
+            if await follow(
+                self.page,
+                lambda: _api(self.page).get(f"{API}/{meeting_id}"),
+                lambda: self._showing == meeting_id,
+                self._draw,
+                following,
+                FOLLOW_SECONDS,
+            ):
+                await self._on_change()
         finally:
             self._following = None
 
@@ -422,7 +416,16 @@ class MeetingsDetailDialog(BaseDetailPopup):
             subtitle_text=get_component_subtitle(
                 MEETINGS_MODAL_ID, component_data.metadata
             ),
-            sections=[MeetingsTab(page)],
+            sections=[
+                PulseTabs(
+                    selected_index=0,
+                    expand=True,
+                    tabs=[
+                        ft.Tab(text="Meetings", content=MeetingsTab(page)),
+                        ft.Tab(text="People", content=PeopleTab(page)),
+                    ],
+                )
+            ],
             scrollable=False,
             width=1280,
             height=840,

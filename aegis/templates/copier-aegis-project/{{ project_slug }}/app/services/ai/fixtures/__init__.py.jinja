@@ -12,6 +12,9 @@ from app.services.ai.fixtures.llm_fixtures import load_all_llm_fixtures
 {% if include_finance %}
 from app.services.finance.domains.detection.analyst import load_finance_agent_fixtures
 {% endif %}
+{% if include_meetings and ai_framework == "pydantic-ai" %}
+from app.services.meetings.domains.agents import load_meetings_agent_fixtures
+{% endif %}
 
 
 def load_agent_registry_fixtures(session: Session) -> dict[str, int]:
@@ -26,6 +29,9 @@ def load_agent_registry_fixtures(session: Session) -> dict[str, int]:
     # Service-owned agents seed alongside the default one: a project that has
     # the finance service gets its analyst without a second seeding step.
     counts.update(load_finance_agent_fixtures(session))
+{% endif %}
+{% if include_meetings and ai_framework == "pydantic-ai" %}
+    counts.update(load_meetings_agent_fixtures(session))
 {% endif %}
     return counts
 

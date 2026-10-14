@@ -1,8 +1,9 @@
 """Actions for the Overseer Meetings page: the bot sent from there, one
 meeting in the drawer (live, with which speaker is me and the notes
 written again, as the Meetings page has them), the bot asked to leave it,
-and the meeting deleted. Mounted by ``routes/pages.py`` behind Overseer's
-gate; the admin reads and writes every owner's meetings (``Every``), and
+and the meeting deleted; and one person's guide, its owner's note kept
+and the guide written again. Mounted by ``routes/pages.py`` behind
+Overseer's gate; the admin reads and writes every owner's meetings (``Every``), and
 a meeting the admin sends is the admin's own (``Mine``).
 """
 
@@ -12,7 +13,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, Response
 
 from app.components.web_frontend import overseer_meetings
-from app.components.web_frontend.rendering import dialog, with_query
+from app.components.web_frontend.rendering import dialog, fragment, with_query
 from app.components.web_frontend.routes.meetings import (
     meeting_context,
     meeting_routes,
@@ -21,17 +22,23 @@ from app.components.web_frontend.routes.meetings import (
 from app.services.meetings.deps import (
     as_http,
     get_every_owners_meetings,
+    get_every_owners_people,
     get_meetings_service,
 )
+from app.services.meetings.domains.people.service import PeopleService
+from app.services.meetings.models import GuideRecord
 from app.services.meetings.service import MeetingsService
 
 PREFIX = overseer_meetings.PARTIALS
 router = APIRouter(prefix=PREFIX)
 Every = Annotated[MeetingsService, Depends(get_every_owners_meetings)]
 Mine = Annotated[MeetingsService, Depends(get_meetings_service)]
+People = Annotated[PeopleService, Depends(get_every_owners_people)]
 
 DRAWER = "pages/overseer/meetings/_drawer.html"
 BODY = "pages/overseer/meetings/_drawer_body.html"
+GUIDE = "pages/overseer/meetings/_guide.html"
+GUIDE_BODY = "pages/overseer/meetings/_guide_body.html"
 
 
 @router.post("")
@@ -81,3 +88,37 @@ async def delete(meeting_id: int, svc: Every) -> Response:
     with as_http():
         await svc.delete(meeting_id)
     return Response(status_code=204)
+
+
+@router.get("/people/{guide_id}/drawer", response_class=HTMLResponse)
+async def guide(request: Request, guide_id: int, svc: People) -> Response:
+    with as_http():
+        record = await svc.read(guide_id)
+    return dialog(request, GUIDE, **overseer_meetings.guide_context(record))
+
+
+def _guide_body(record: GuideRecord) -> HTMLResponse:
+    return HTMLResponse(fragment(GUIDE_BODY, **overseer_meetings.guide_context(record)))
+
+
+@router.get("/people/{guide_id}/body", response_class=HTMLResponse)
+async def guide_body(guide_id: int, svc: People) -> HTMLResponse:
+    """The guide's live part, re-read while it is being written."""
+    with as_http():
+        return _guide_body(await svc.read(guide_id))
+
+
+@router.post("/people/{guide_id}/note", response_class=HTMLResponse)
+async def guide_note(
+    guide_id: int, svc: People, note: Annotated[str, Form()] = ""
+) -> HTMLResponse:
+    """The owner's note on the person; blank clears it."""
+    with as_http():
+        return _guide_body(await svc.set_note(guide_id, note))
+
+
+@router.post("/people/{guide_id}/guide", response_class=HTMLResponse)
+async def write_guide(guide_id: int, svc: People) -> HTMLResponse:
+    """Write the guide again from every meeting, in the background."""
+    with as_http():
+        return _guide_body(await svc.write_again(guide_id))

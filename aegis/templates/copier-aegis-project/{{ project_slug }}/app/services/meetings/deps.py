@@ -8,6 +8,10 @@ from fastapi import Depends, HTTPException, status
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.db import get_async_db
+from app.services.meetings.domains.people.service import (
+    GuideNotFoundError,
+    PeopleService,
+)
 from app.services.meetings.service import (
     MeetingInProgressError,
     MeetingNotFoundError,
@@ -34,16 +38,29 @@ def get_every_owners_meetings(
     return MeetingsService(db, None)
 
 
+async def get_people_service(
+    db: AsyncSession = Depends(get_async_db),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> PeopleService:
+    return PeopleService(db, owner_user_id)
+
+
+def get_every_owners_people(db: AsyncSession = Depends(get_async_db)) -> PeopleService:
+    """Every owner's guides, for Overseer: each route that takes it guards
+    itself as an admin's."""
+    return PeopleService(db, None)
+
+
 @contextmanager
 def as_http() -> Iterator[None]:
     """The service's refusals as HTTP, for every route over meetings (the
-    API's, the Meetings page's and Overseer's): a meeting the caller
-    cannot see is a 404, one the bot is still in (or notes that cannot be
-    written now) a 409, a link it cannot join or a speaker who was not
+    API's, the Meetings page's and Overseer's): a meeting or guide the
+    caller cannot see is a 404, one the bot is still in (or notes or a
+    guide that cannot be written now) a 409, a link it cannot join or a speaker who was not
     there a 422."""
     try:
         yield
-    except MeetingNotFoundError as exc:
+    except (MeetingNotFoundError, GuideNotFoundError) as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
     except (MeetingInProgressError, NothingToWriteError) as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc

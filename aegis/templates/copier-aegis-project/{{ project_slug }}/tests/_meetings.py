@@ -15,11 +15,13 @@ from app.services.meetings.audio import RATE
 from app.services.meetings.models import (
     ActionItem,
     Caption,
+    Guide,
     Meeting,
     MeetingNotes,
     MeetingRecord,
     MeetingStatus,
     Notes,
+    PersonGuide,
     Platform,
 )
 from app.services.meetings.service import (
@@ -50,6 +52,7 @@ def bot_on(
     call: Any,
     poll_seconds: float = 0,
     notes: Callable[[int], Awaitable[None]] | None = None,
+    guides: Callable[[int], Awaitable[None]] | None = None,
 ) -> None:
     """The bot runs on ``session`` and joins ``call`` instead of a browser,
     beating on every look."""
@@ -58,6 +61,7 @@ def bot_on(
     monkeypatch.setattr(bot, "BEAT_SECONDS", 0)
     # No model writes the notes unless the test brings one.
     monkeypatch.setattr(bot, "notes_writer", lambda: notes)
+    monkeypatch.setattr(bot, "guides_writer", lambda: guides)
 
     @asynccontextmanager
     async def open_meet(
@@ -94,6 +98,38 @@ def hold_the_writer(monkeypatch: pytest.MonkeyPatch) -> tuple[list[int], list[An
     monkeypatch.setattr(meetings_service, "background", runs.append)
     monkeypatch.setattr(meetings_service, "WRITING", set())
     return written, runs
+
+
+def answering(
+    monkeypatch: pytest.MonkeyPatch, answer: dict[str, Any] | Exception, row: Any = None
+) -> list[str]:
+    """The meetings' writers answer ``answer`` (or raise it) on pydantic-ai's
+    ``TestModel``, as ``row`` (an ``AgentConfig``; none = no agent row, so
+    the built-in prompt on the model in force). Returns the model asked,
+    each time it was."""
+    from pydantic_ai.models.test import TestModel
+
+    from app.services.ai.domains.chat import agent_loader
+    from app.services.ai.domains.llm import active_model, model_factory
+
+    asked: list[str] = []
+
+    async def model_for(config: Any, settings: Any) -> tuple[Any, str]:
+        asked.append(config.model)
+        if isinstance(answer, Exception):
+            raise answer
+        return TestModel(custom_output_args=answer), "test-model"
+
+    async def resolve_agent(slug: str = "", **_: Any) -> Any:
+        return row or agent_loader.default_agent_config()
+
+    async def no_stored_selection(settings: Any) -> bool:
+        return False
+
+    monkeypatch.setattr(model_factory, "model_for", model_for)
+    monkeypatch.setattr(agent_loader, "resolve_agent", resolve_agent)
+    monkeypatch.setattr(active_model, "sync_from_db", no_stored_selection)
+    return asked
 
 
 async def said(
@@ -141,6 +177,23 @@ async def docs_meeting(session: AsyncSession, owner: int | None) -> int:
         ),
     )
     return meeting_id
+
+
+async def kept_guide(
+    session: AsyncSession, owner: int | None, person: str, **content: Any
+) -> int:
+    """A guide to ``person`` for ``owner``, kept as the model would have
+    written it (``content`` as ``Guide``'s parts), from one meeting; its id."""
+    guide = PersonGuide(
+        owner_user_id=owner,
+        person=person,
+        content=Guide(**content).model_dump(),
+        meetings=1,
+        model_name="test-model",
+    )
+    session.add(guide)
+    await session.commit()
+    return guide.id  # type: ignore[return-value]
 
 
 def record(meeting: Meeting | None = None, **fields: Any) -> MeetingRecord:

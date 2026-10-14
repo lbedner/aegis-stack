@@ -5,6 +5,11 @@ Verifies that locale detection, normalization, and message catalogs
 work correctly across all supported languages.
 """
 
+import pytest
+
+from aegis.core.components import COMPONENTS
+from aegis.core.plugins.spec import PluginSpec
+from aegis.core.services import SERVICES
 from aegis.i18n.locales import AVAILABLE_LOCALES
 from aegis.i18n.locales.en import MESSAGES as EN_MESSAGES
 from aegis.i18n.registry import _normalize_locale
@@ -208,3 +213,17 @@ class TestMessageCompleteness:
         ]:
             empty = [k for k, v in messages.items() if not v.strip()]
             assert not empty, f"{name} has empty values: {empty}"
+
+
+@pytest.mark.parametrize(
+    ("key", "spec"),
+    [(f"component.{n}", s) for n, s in COMPONENTS.items()]
+    + [(f"service.{n}", s) for n, s in SERVICES.items()],
+)
+def test_spec_description_matches_locale(key: str, spec: PluginSpec) -> None:
+    """Every registered spec's one-liner is a locale key with the same text.
+
+    Prompts read the locale; the spec is only the fallback, so the two
+    drifting means some flows show different copy than others.
+    """
+    assert EN_MESSAGES.get(key) == spec.description

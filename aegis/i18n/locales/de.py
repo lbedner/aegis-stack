@@ -88,6 +88,9 @@ MESSAGES: dict[str, str] = {
     "service.research": "Outside posts and threads, collected by saved searches",
     "service.meetings": "A bot that joins calls and keeps the transcript",
     "service.blog": "Markdown-Blog mit Entwurfs-, Veröffentlichungs- und Tag-Workflow",
+    "service.insights": "Adoption metrics and analytics with automated data collection",
+    "service.payment": "Payment processing with Stripe (checkout, subscriptions, webhooks)",
+    "service.finance": "Personal finance aggregation (accounts, transactions, net worth, import)",
     # ── Interactive: component prompts ─────────────────────────────────
     "interactive.add_prompt": "{description} hinzufügen?",
     "interactive.add_with_redis": "{description} hinzufügen? (fügt Redis automatisch hinzu)",

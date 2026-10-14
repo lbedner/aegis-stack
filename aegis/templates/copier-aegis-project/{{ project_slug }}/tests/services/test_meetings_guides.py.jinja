@@ -1,0 +1,194 @@
+{% if include_ai and ai_backend != "memory" and ai_framework == "pydantic-ai" %}
+"""How to work with each person, written (``domains.people.guides``): one
+model pass over the owner's meetings the person spoke in, each point citing
+the lines it rests on, the owner's own note read with them, and metered.
+The model is pydantic-ai's ``TestModel``: what is under test is the
+plumbing, not the read of the person."""
+
+from typing import Any
+
+from pydantic_ai import capture_run_messages
+import pytest
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.services.meetings.domains.people import guides
+from app.services.meetings.domains.people.service import GUIDING, PeopleService
+from app.services.meetings.models import Notes, PersonGuide
+from app.services.meetings.service import MeetingsService
+from tests._meetings import answering, ended
+from tests._session import opens
+
+
+@pytest.fixture(autouse=True)
+def _on_the_test_session(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(guides, "get_async_session", opens(async_db_session))
+
+
+@pytest.fixture
+def metered(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+    """Each usage row the run would write."""
+    rows: list[dict[str, Any]] = []
+
+    async def record_usage(**row: Any) -> float:
+        rows.append(row)
+        return 0.0
+
+    monkeypatch.setattr(guides, "record_usage", record_usage)
+    return rows
+
+
+async def _met(
+    session: AsyncSession, owner: int | None, *lines: tuple[str, str]
+) -> list[int]:
+    _, ids = await ended(session, owner, *lines, notes=lambda _: Notes(summary="-"))
+    return ids
+
+
+# Enough for a guide (``guides.MIN_LINES``).
+ADA = (("Ada", "Ship it."), ("Ada", "Today."), ("Ada", "No later."))
+
+
+def _prompt(messages: list[Any]) -> str:
+    return "\n".join(
+        str(part.content)
+        for message in messages
+        for part in message.parts
+        if part.part_kind == "user-prompt"
+    )
+
+
+async def _kept(session: AsyncSession, owner: int | None) -> PersonGuide:
+    (guide,) = await PeopleService(session, owner).guides()
+    return guide
+
+
+async def test_each_point_cites_the_lines_it_rests_on(
+    async_db_session: AsyncSession,
+    metered: list[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Read across every meeting they were in; a line the model made up is
+    dropped from what a point cites."""
+    first = await _met(
+        async_db_session, 1, ("Ada", "When does it ship?"), ("Leo", "Friday.")
+    )
+    second = await _met(
+        async_db_session,
+        1,
+        ("Ada", "Numbers first, please."),
+        ("Ada", "Then the story."),
+    )
+    answering(
+        monkeypatch,
+        {
+            "cares_about": [{"text": "Shipping dates", "lines": [first[0]]}],
+            "information": [{"text": "The numbers first", "lines": [second[0], 99999]}],
+            "decides": [],
+            "lands": [],
+        },
+    )
+
+    await guides.write_guide(1, "Ada")
+
+    kept = await _kept(async_db_session, 1)
+    guide = kept.guide()
+    assert kept.person == "Ada" and kept.meetings == 2
+    assert guide is not None and guide.information[0].lines == [second[0]]
+    assert [row["action"] for row in metered] == ["meetings:guide"]
+    assert (1, "Ada") not in GUIDING
+
+
+async def test_only_this_owners_meetings_with_them_are_read(
+    async_db_session: AsyncSession,
+    metered: list[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _met(async_db_session, 1, *ADA)
+    await _met(async_db_session, 2, ("Ada", "Another owner's call."))
+    await _met(async_db_session, 1, ("Grace", "A call Ada was not in."))
+    answering(monkeypatch, {})
+
+    with capture_run_messages() as messages:
+        await guides.write_guide(1, "Ada")
+
+    prompt = _prompt(messages)
+    assert "Ship it." in prompt
+    assert "Another owner's call." not in prompt
+    assert "A call Ada was not in." not in prompt
+
+
+async def test_the_owners_note_is_read_with_them_and_kept(
+    async_db_session: AsyncSession,
+    metered: list[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _met(async_db_session, 1, *ADA)
+    answering(monkeypatch, {})
+    await guides.write_guide(1, "Ada")
+    svc = PeopleService(async_db_session, 1)
+    await svc.set_note((await _kept(async_db_session, 1)).id or 0, "Calls, not email.")
+
+    with capture_run_messages() as messages:
+        await guides.write_guide(1, "Ada")
+
+    assert "Calls, not email." in _prompt(messages)
+    assert (await _kept(async_db_session, 1)).note == "Calls, not email."
+
+
+async def test_someone_who_barely_spoke_gets_no_guide(
+    async_db_session: AsyncSession,
+    metered: list[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    await _met(async_db_session, 1, ("Ada", "Hi."))
+    asked = answering(monkeypatch, {})
+
+    await guides.write_guide(1, "Ada")
+
+    assert not asked and not metered
+    assert await PeopleService(async_db_session, 1).guides() == []
+
+
+async def test_a_model_that_fails_says_why_and_keeps_the_last_guide(
+    async_db_session: AsyncSession,
+    metered: list[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    ids = await _met(async_db_session, 1, *ADA)
+    answering(monkeypatch, {"cares_about": [{"text": "Shipping", "lines": ids[:1]}]})
+    await guides.write_guide(1, "Ada")
+    answering(monkeypatch, RuntimeError("the model is down"))
+
+    await guides.write_guide(1, "Ada")
+
+    kept = await _kept(async_db_session, 1)
+    guide = kept.guide()
+    assert "the model is down" in (kept.error or "")
+    assert guide is not None and guide.cares_about[0].text == "Shipping"
+
+
+async def test_after_a_meeting_everyone_but_the_owner_gets_one(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    meeting_id, _ = await ended(
+        async_db_session,
+        1,
+        ("Ada", "Ship it."),
+        ("Leo", "Fine."),
+        ("Grace", "Agreed."),
+        notes=lambda _: Notes(summary="-"),
+    )
+    await MeetingsService(async_db_session, 1).set_me(meeting_id, "Leo")
+    written: list[tuple[int | None, str]] = []
+
+    async def write_guide(owner: int | None, person: str) -> None:
+        written.append((owner, person))
+
+    monkeypatch.setattr(guides, "write_guide", write_guide)
+
+    await guides.write_guides(meeting_id)
+
+    assert sorted(written) == [(1, "Ada"), (1, "Grace")]
+{% endif %}

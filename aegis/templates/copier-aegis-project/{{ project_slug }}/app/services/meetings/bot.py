@@ -21,6 +21,7 @@ from app.core.db import get_async_session
 from app.core.log import logger
 from app.services.meetings.audio import Hearing
 from app.services.meetings.domains.bot.dispatch import start_meeting
+from app.services.meetings.domains.people.service import guides_writer
 from app.services.meetings.meet import CallState, MeetPage, merge_caption, open_meet
 from app.services.meetings.models import Caption, Meeting, MeetingStatus, Platform
 from app.services.meetings.service import (
@@ -212,12 +213,15 @@ async def _join(meeting: Meeting) -> None:
 
 
 async def _after(meeting_id: int) -> None:
-    """Once the bot is out: who the owner is among the speakers, and the
-    notes, where the stack has a model to write them."""
+    """Once the bot is out: who the owner is among the speakers, then the
+    notes and how to work with each person, where the stack has a model to
+    write them."""
     async with get_async_session() as session:
         await remember_me(session, meeting_id)
     if (write := notes_writer()) is not None:
         await write(meeting_id)
+    if (guide := guides_writer()) is not None:
+        await guide(meeting_id)
 
 
 async def run_meeting(meeting_id: int) -> None:

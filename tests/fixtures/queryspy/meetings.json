@@ -52,6 +52,18 @@
     },
     {
       "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_person_guide WHERE meeting_person_guide.id = :id_1",
+      "file": "app/services/meetings/domains/people/queries.py",
+      "function": "guide"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_person_guide WHERE meeting_person_guide.id = :id_1 AND meeting_person_guide.owner_user_id = :owner_user_id_1",
+      "file": "app/services/meetings/domains/people/queries.py",
+      "function": "guide"
+    },
+    {
+      "kind": "repeated_statement",
       "label": "SELECT ... FROM meeting_transcript_line LEFT OUTER JOIN meeting_participant ON meeting_transcript_line.participant_id = meeting_participant.id WHERE meeting_transcript_line.meeting_id = :meeting_id_1 ORDER BY meeting_transcript_line.start_seconds, meeting_transcript_line.id",
       "file": "app/services/meetings/service.py",
       "function": "transcript"

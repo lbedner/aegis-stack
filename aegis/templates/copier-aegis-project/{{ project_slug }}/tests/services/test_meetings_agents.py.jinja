@@ -1,0 +1,84 @@
+{% if include_ai and ai_backend != "memory" and ai_framework == "pydantic-ai" %}
+"""The meetings' model writers as agents (``domains.agents``): the notes
+and the person guides each run as a seeded ``agent`` row, so their prompt,
+model and sampling are edited in Agents like any other agent's; while a
+row is missing or off, the built-in prompt runs on the model in force."""
+
+from pydantic_ai import capture_run_messages
+import pytest
+from sqlmodel import Session, select
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.services.ai.domains.chat.agent_loader import AgentConfig
+from app.services.ai.models.agents import Agent
+from app.services.meetings import notes
+from app.services.meetings.domains import agents
+from app.services.meetings.service import MeetingsService
+from tests._meetings import MEET, answering, said
+from tests._session import opens
+
+
+def _slugs(session: Session) -> list[str]:
+    rows = session.exec(select(Agent).where(Agent.category == "meetings")).all()
+    return sorted(row.slug for row in rows)
+
+
+def test_each_writer_is_seeded_once_and_an_edit_is_kept(db_session: Session) -> None:
+    agents.load_meetings_agent_fixtures(db_session)
+    guide = db_session.exec(select(Agent).where(Agent.slug == agents.GUIDE_AGENT)).one()
+    guide.system_prompt = "Mine."
+    db_session.commit()
+
+    agents.load_meetings_agent_fixtures(db_session)
+
+    assert _slugs(db_session) == sorted([agents.NOTES_AGENT, agents.GUIDE_AGENT])
+    db_session.refresh(guide)
+    assert guide.system_prompt == "Mine."
+
+
+async def _notes_written(session: AsyncSession) -> list[str]:
+    """The instructions the notes ran on."""
+    meeting = await MeetingsService(session, None).request(MEET)
+    meeting_id: int = meeting.id  # type: ignore[assignment]
+    await said(session, meeting_id, ("Ada", "Ship it Friday."))
+    with capture_run_messages() as messages:
+        await notes.write_notes(meeting_id)
+    return [m.instructions for m in messages if getattr(m, "instructions", None)]
+
+
+@pytest.fixture(autouse=True)
+def _on_the_test_session(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(notes, "get_async_session", opens(async_db_session))
+
+    async def record_usage(**_: object) -> float:
+        return 0.0
+
+    monkeypatch.setattr(notes, "record_usage", record_usage)
+
+
+async def test_the_rows_prompt_and_model_write_the_notes(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    row = AgentConfig(
+        slug=agents.NOTES_AGENT,
+        name="Meeting notes",
+        system_prompt="Bullet points only.",
+        model_id="qwen3:4b",
+        temperature=0.0,
+        max_tokens=4000,
+    )
+    asked = answering(monkeypatch, {"summary": "-"}, row)
+
+    assert await _notes_written(async_db_session) == ["Bullet points only."]
+    assert asked == ["qwen3:4b"]
+
+
+async def test_without_the_row_the_built_in_prompt_writes_them(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    answering(monkeypatch, {"summary": "-"})
+
+    assert await _notes_written(async_db_session) == [agents.NOTES_PROMPT]
+{% endif %}

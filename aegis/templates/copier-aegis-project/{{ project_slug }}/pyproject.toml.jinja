@@ -409,6 +409,10 @@ cmd = "docker compose logs -f scheduler"
 help = "Open shell in webserver container"
 cmd = "docker compose exec webserver /bin/bash"
 
+[tool.poe.tasks.cli]
+help = "Run the app CLI where the database is (poe cli --help)"
+cmd = "docker compose exec webserver /opt/venv/bin/python -c 'from app.cli.main import main; main()'"
+
 [tool.poe.tasks.shell-worker]
 help = "Open shell in worker container"
 cmd = "docker compose exec worker-system /bin/bash"

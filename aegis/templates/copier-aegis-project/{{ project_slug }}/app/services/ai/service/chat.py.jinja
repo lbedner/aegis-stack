@@ -315,15 +315,16 @@ class ChatMixin(PromptMixin):
                 allowed_collections=agent_config.knowledge_base_ids,
             )
 
-{% endif %}            # Build health context (always included, refreshed per message)
-        health_context, health_warning = await self._build_health_context()
-
-        # Usage and model-catalog self-awareness belong to the
-        # default ops assistant; custom agents (a finance analyst,
-        # say) would pay their token cost every turn without ever
-        # using them.
+{% endif %}            # The system status and the usage and model-catalog
+        # self-awareness belong to the default ops assistant. A custom
+        # agent (a finance analyst, say) would pay their token cost every
+        # turn without ever using them, and one that answers an app's own
+        # users must not see the app's infrastructure.
         is_default_agent = (
             agent_config is None or agent_config.slug == DEFAULT_AGENT_SLUG
+        )
+        health_context, health_warning = (
+            await self._build_health_context() if is_default_agent else (None, None)
         )
         usage_context = (
             await self._build_usage_context() if is_default_agent else None

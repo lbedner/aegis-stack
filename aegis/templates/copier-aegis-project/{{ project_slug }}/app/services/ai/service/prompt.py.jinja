@@ -6,9 +6,11 @@ chat/stream entrypoints (above it): everything here turns resolved
 contexts + the agent row into something the framework can run.
 """
 
+from datetime import date
 from typing import Any
 
 from app.core.log import logger
+from app.core.time import today
 from app.services.ai.domains.llm.config import AIServiceConfig
 {% if ai_framework == "pydantic-ai" and ai_backend != "memory" %}
 from app.services.ai.domains.chat.agent_loader import AgentConfig, agent_capabilities
@@ -65,6 +67,17 @@ def history_char_budget(context_window_tokens: int | None) -> int:
         context_window_tokens * _CHARS_PER_TOKEN * _HISTORY_CONTEXT_FRACTION
     )
     return max(HISTORY_CHAR_BUDGET_MIN, min(HISTORY_CHAR_BUDGET_MAX, chars))
+
+
+def _dated(content: str, on: date) -> str:
+    """An answer from an earlier day, prefixed with the day it was given.
+
+    A stored answer is just text: a figure quoted weeks ago would reach the
+    model beside today's with equal standing, and the only way to prefer the
+    fresh one is to notice the contradiction. Dated, the old numbers read as
+    true when written. Today's answers go undated; the date would be noise.
+    """
+    return content if on >= today() else f"[answered {on.isoformat()}] {content}"
 
 
 class PromptMixin(ContextsMixin):
@@ -311,7 +324,7 @@ class PromptMixin(ContextsMixin):
             if msg.role == MessageRole.USER:
                 line = f"User: {msg.content}"
             elif msg.role == MessageRole.ASSISTANT:
-                line = f"Assistant: {msg.content}"
+                line = f"Assistant: {_dated(msg.content, msg.timestamp.date())}"
             else:
                 continue
             if dropped or used + len(line) > budget:

@@ -112,6 +112,15 @@
   its reason, wherever the walk cannot see further. Admins can ask the
   `ontology` tool for the same with `route="GET /api/v1/..."`.
 
+- **A chat mount can leave the model picker out.** `ChatSurface(model_picker=False)`
+  drops the composer's model chip and its routes: the picker switches the
+  model the whole install answers with, an operator's choice, so an app's
+  mount for its own users turns it off.
+- **An answer from an earlier day replays dated.** History reaches the model
+  with `[answered 2026-07-21]` before an assistant reply from before today,
+  so a figure quoted weeks ago reads as true when written instead of
+  standing beside today's with equal weight.
+
 ### Fixed
 
 - **A Python 3.13 project starts again.** The chat surface named its own
@@ -155,6 +164,14 @@
   - insights: `views/` -> `domains/views/`. finance: `write_tools` ->
     `domains/writes/lookups`. research: `refresh` ->
     `domains/watches/refresh` (`registry` stays: plugins register there).
+
+### Security
+
+- **Only the default agent sees the system status.** The live health of the
+  stack's services went into every agent's prompt; it now goes only to the
+  default ops assistant, as usage and the model catalog already did. An
+  agent that answers an app's own users no longer sees the app's
+  infrastructure.
 
 ## [0.15.1] - 2026-10-11
 

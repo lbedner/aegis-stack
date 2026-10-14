@@ -82,6 +82,10 @@ class ChatSurface:
     # A FastAPI dependency run before a turn reaches the model (a plan's
     # entitlement, a daily budget): the reason it is refused, or None.
     gate: Callable[..., Awaitable[str | None]] | None = None
+    # The model chip and its picker: they switch the model the whole
+    # install answers with, so an operator's mount keeps them and a mount
+    # for an app's own users turns them off.
+    model_picker: bool = True
 
 
 async def assistant_name(chat: ChatSurface, session: Any = None) -> str:
@@ -369,7 +373,7 @@ async def surface_context(chat: ChatSurface) -> dict[str, Any]:
         "section_subtitle": f"Ask {thread['assistant']} anything",
         "chat_path": chat.path,
         "voice": _voice() if HAS_VOICE else None,
-        "picker": PERSISTED,
+        "picker": PERSISTED and chat.model_picker,
         # Voice profiles are rows: the voice chip needs a database.
         "voices": HAS_VOICE and PERSISTED,
         # The change queue lives with a persisted AI backend.

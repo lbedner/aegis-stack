@@ -171,3 +171,23 @@ def test_another_users_or_projects_conversation_is_absent(client: TestClient) ->
     assert client.get("/chat/conversations/other-project").status_code == 404
     assert client.get("/chat/conversations/other-user").status_code == 404
     assert client.get("/chat/messages/other-user/a1").status_code == 404
+
+
+def test_a_mount_without_the_picker_cannot_switch_the_model(
+    turns: list[dict[str, Any]],
+) -> None:
+    """The picker switches the model the whole install answers with: an
+    operator's choice. A mount for an app's own users turns it off, and
+    then neither the chip nor its routes exist."""
+    closed = replace(MOUNT, model_picker=False)
+
+    async def bind_closed(request: Request) -> ChatSurface:
+        return replace(closed, user=request.headers["x-user"])
+
+    app = FastAPI()
+    app.include_router(chat_router(replace(closed, bind=bind_closed), allow))
+    client = TestClient(app, headers={"x-user": "7", "x-project": "3"})
+
+    assert 'id="chat-model"' not in client.get("/chat/drawer").text
+    assert client.get("/chat/models").status_code == 404
+    assert client.post("/chat/models", data={"model_id": "m"}).status_code == 404

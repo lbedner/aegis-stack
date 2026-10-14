@@ -197,7 +197,7 @@ def chat_router(mount: ChatSurface, guard: Callable[..., Any]) -> APIRouter:
 
     # --- The model chip and its picker: the catalog is rows ------------------
 
-    if chat.PERSISTED:
+    if chat.PERSISTED and mount.model_picker:
 
         @router.get("/models/chip", response_class=HTMLResponse)
         async def model_chip(request: Request) -> Response:

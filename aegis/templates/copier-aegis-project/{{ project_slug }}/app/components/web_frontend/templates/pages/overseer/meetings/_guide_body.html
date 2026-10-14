@@ -1,0 +1,62 @@
+{# One person's guide, live: where it was read from, each part with the
+   lines its points rest on folded under them (each opening its meeting), the owner's own
+   note, and the guide written again. While it is being written it
+   re-reads itself every few seconds. #}
+{% from "components/macros/layout.html" import facts %}
+{% from "components/macros/form.html" import action, textarea %}
+{% from "pages/meetings/_macros.html" import heading %}
+{% set guide = record.guide %}
+{% set hx_body = 'hx-target="#guide-body" hx-swap="outerHTML"' %}
+<div id="guide-body" class="space-y-6"
+     {% if record.writing %}hx-get="{{ base }}/body" hx-trigger="every 3s" hx-swap="outerHTML"{% endif %}>
+  {{ facts([
+    ("Owner", guide.owner_user_id),
+    ("Read from", guide.meetings ~ (" meeting" if guide.meetings == 1 else " meetings")),
+    ("Written by", guide.model_name),
+    ("Written", written),
+  ]) }}
+  {% if guide.error %}<p role="alert" class="text-sm text-error">The last write failed: {{ guide.error }}</p>{% endif %}
+  {% if record.writing %}<p class="text-sm text-aegis-muted">Writing the guide…</p>{% endif %}
+  {% for section in record.sections %}
+  <section data-guide-section="{{ section.key }}" class="grid gap-2">
+    {{ heading(section.title) }}
+    {% if section.points %}
+    <ul class="space-y-3 text-sm">
+      {% for point in section.points %}
+      <li>
+        {% if point.quotes %}
+        <details data-quotes class="group/q">
+          <summary class="list-none cursor-pointer flex items-start gap-2">
+            <span aria-hidden="true" class="text-aegis-muted transition-transform group-open/q:rotate-90">›</span>
+            <span class="leading-relaxed">{{ point.text }}</span>
+            <span class="ml-auto whitespace-nowrap text-xs text-aegis-muted">{{ point.quotes|length }} {{ "line" if point.quotes|length == 1 else "lines" }}</span>
+          </summary>
+          <div class="mt-1.5 ml-4 space-y-1.5">
+            {% for quote in point.quotes %}
+            <p data-quote class="border-l-2 border-aegis-border pl-3 text-xs leading-relaxed text-aegis-muted">
+              <span class="text-aegis-text">{{ quote.speaker }}:</span> {{ quote.text }}
+              <a href="{{ said[quote.id].url }}" class="whitespace-nowrap tabular-nums hover:text-aegis-teal">{{ said[quote.id].when }}</a>
+            </p>
+            {% endfor %}
+          </div>
+        </details>
+        {% else %}
+        <p class="ml-4 leading-relaxed">{{ point.text }}</p>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-sm text-aegis-muted">Nothing yet.</p>
+    {% endif %}
+  </section>
+  {% endfor %}
+  <section class="grid gap-2">
+    {{ heading("Your note") }}
+    {{ textarea("note", guide.note, rows=3, placeholder="What you know of them that the meetings do not say: read with them the next time the guide is written.") }}
+    <div class="flex gap-2">
+      {{ action("Save the note", 'data-write hx-post="' ~ base ~ '/note" hx-include="#guide-body [name=note]" ' ~ hx_body) }}
+      {% if record.can_write %}{{ action("Write it again", 'data-write-guide data-write hx-post="' ~ base ~ '/guide" ' ~ hx_body) }}{% endif %}
+    </div>
+  </section>
+</div>

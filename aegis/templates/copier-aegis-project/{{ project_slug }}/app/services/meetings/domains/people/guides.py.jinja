@@ -1,0 +1,114 @@
+{% if include_ai and ai_backend != "memory" and ai_framework == "pydantic-ai" %}
+"""How to work with one person: one pass of the ``meeting-guide`` agent
+(``domains.agents``) over the owner's meetings they spoke in (the latest
+``MAX_MEETINGS``), with the owner's own note on them, for what they care
+about, how they like their information, how they decide and what lands
+with them, each point citing the lines it rests on. Metered like every other model call
+(``meetings:guide`` in AI spend).
+
+The bot writes the guide of everyone in a meeting but the owner once the
+notes are written (``bot.run_meeting``); Overseer writes one again on
+request. A guide that fails keeps the last one it had, with why.
+"""
+
+from app.core.db import get_async_session
+from app.core.log import logger
+from app.core.time import utcnow
+from app.services.ai.domains.spend.recording import extract_usage, record_usage
+from app.services.meetings.domains.agents import GUIDE_AGENT, GUIDE_PROMPT, writer
+from app.services.meetings.domains.people import queries
+from app.services.meetings.domains.people.service import GUIDING
+from app.services.meetings.models import Guide, PersonGuide, TranscriptLine
+from app.services.meetings.service import MeetingsService, speakers
+
+ACTION = "meetings:guide"
+# Fewer lines than this across their meetings say too little to read.
+MIN_LINES = 3
+# ponytail: the latest meetings only, so the prompt stays bounded; a
+# running summary would carry older ones if a guide needs them.
+MAX_MEETINGS = 10
+
+
+async def write_guides(meeting_id: int) -> None:
+    """The guide of everyone who spoke in the meeting but the owner."""
+    async with get_async_session() as session:
+        meeting = await MeetingsService(session, None).get(meeting_id)
+        people = await speakers(session, meeting_id)
+    for person in people:
+        if person != meeting.me:
+            await write_guide(meeting.owner_user_id, person)
+
+
+async def write_guide(owner_user_id: int | None, person: str) -> None:
+    """Write the person's guide over the last, or why it could not be;
+    someone who barely spoke gets none."""
+    key = (owner_user_id, person)
+    GUIDING.add(key)
+    try:
+        kept = await _write(owner_user_id, person)
+        if kept is not None:
+            async with get_async_session() as session:
+                await session.merge(kept)
+                await session.commit()
+    finally:
+        GUIDING.discard(key)
+
+
+async def _write(owner_user_id: int | None, person: str) -> PersonGuide | None:
+    async with get_async_session() as session:
+        meeting_ids = await queries.meetings_with(
+            session, owner_user_id, person, MAX_MEETINGS
+        )
+        lines = await queries.said_in(session, meeting_ids)
+        kept = await queries.guide_of(session, owner_user_id, person)
+    if sum(speaker == person for _, speaker, _ in lines) < MIN_LINES:
+        return None
+    kept = kept or PersonGuide(owner_user_id=owner_user_id, person=person)
+    try:
+        guide, model_name = await _ask(kept, lines)
+    except Exception as exc:
+        logger.exception("Person guide failed", person=person)
+        kept.error = str(exc)[:500]
+        return kept
+    kept.content = guide.model_dump()
+    kept.model_name = model_name
+    kept.meetings = len(meeting_ids)
+    kept.error = None
+    kept.written_at = utcnow()
+    return kept
+
+
+async def _ask(
+    kept: PersonGuide, lines: list[tuple[int, str, TranscriptLine]]
+) -> tuple[Guide, str]:
+    agent, model_name = await writer(GUIDE_AGENT, GUIDE_PROMPT, Guide)
+    result = await agent.run(_prompt(kept, lines))
+    await record_usage(
+        action=ACTION,
+        model_name=model_name,
+        usage=extract_usage(result),
+        user_id=None if kept.owner_user_id is None else str(kept.owner_user_id),
+    )
+    return _cited(result.output, {line.id for _, _, line in lines}), model_name
+
+
+def _prompt(kept: PersonGuide, lines: list[tuple[int, str, TranscriptLine]]) -> str:
+    said: list[str] = [f"The person: {kept.person}"]
+    if kept.note:
+        said.append(f"The owner's own note on them: {kept.note}")
+    meeting: int | None = None
+    for meeting_id, speaker, line in lines:
+        if meeting_id != meeting:
+            meeting = meeting_id
+            said.append(f"\nMeeting {meeting_id}")
+        said.append(f"[{line.id}] {speaker}: {line.text}")
+    return "\n".join(said)
+
+
+def _cited(guide: Guide, said: set[int | None]) -> Guide:
+    """``guide`` citing only lines the meetings have: a model can make one
+    up."""
+    for item in guide.points():
+        item.lines = [line for line in item.lines if line in said]
+    return guide
+{% endif %}

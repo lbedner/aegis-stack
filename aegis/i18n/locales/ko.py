@@ -84,6 +84,9 @@ MESSAGES: dict[str, str] = {
     "service.research": "Outside posts and threads, collected by saved searches",
     "service.meetings": "A bot that joins calls and keeps the transcript",
     "service.blog": "초안, 게시, 태그 워크플로가 있는 Markdown 블로그",
+    "service.insights": "Adoption metrics and analytics with automated data collection",
+    "service.payment": "Payment processing with Stripe (checkout, subscriptions, webhooks)",
+    "service.finance": "Personal finance aggregation (accounts, transactions, net worth, import)",
     # ── Interactive: component prompts ─────────────────────────────────
     "interactive.add_prompt": "{description}을(를) 추가하시겠습니까?",
     "interactive.add_with_redis": "{description}을(를) 추가하시겠습니까? (Redis 자동 추가)",

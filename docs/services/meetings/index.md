@@ -71,11 +71,21 @@ When the call ends, how many seconds of each speaker the bot heard is kept with 
 
 ## Notes
 
-One pass of the active model (the one Overseer's AI page selects) over the finished transcript, with the transcript's line ids in front of each line. What comes back is checked against the transcript: an item citing a line that does not exist loses that citation. The call is metered like every other, as `meetings:notes` in AI spend.
+One pass of the `meeting-notes` agent (see [The writers are agents](#the-writers-are-agents)) over the finished transcript, with the transcript's line ids in front of each line. What comes back is checked against the transcript: an item citing a line that does not exist loses that citation. The call is metered like every other, as `meetings:notes` in AI spend.
 
 The notes are written again on request (the page's "Write them again"), over the old ones: after switching to a better model, say. A model that fails leaves its reason, which the page shows. A meeting where nothing was said gets no notes.
 
 Notes need the AI service on pydantic-ai with a database (`ai_backend` other than `memory`). Without it the meeting keeps its transcript and the page shows that alone.
+
+## How to work with each person
+
+For everyone who speaks in an owner's meetings, a guide to working with them, read from what they say across those meetings: what they care about, how they like their information (big picture or detail, a demo or numbers, short or thorough), how they decide and commit, and what lands with them and what gets pushback. Every point cites the lines it rests on, so the read can be checked against what was said. It is only how they work: nothing about health, family, relationships, politics or religion, even when it came up.
+
+Once the notes are written, the bot writes the guide of everyone in the meeting but the owner (the speaker "I am" names), one pass of the `meeting-guide` agent over the latest ten meetings of the owner's they spoke in, metered as `meetings:guide`. Someone with fewer than three lines across them gets none yet. Each meeting writes it again, so it firms up as meetings accrue; a write that fails keeps the last guide, with why. The owner's own note on a person (what they know that the meetings do not say) is kept across every rewrite and read with the meetings. Guides are the owner's own; Overseer's admin sees every owner's. Like the notes, they need the AI service on pydantic-ai with a database.
+
+## The writers are agents
+
+The notes and the guides are each written by an agent row the meetings service seeds at startup: `meeting-notes` and `meeting-guide`, under the "meetings" category in Overseer's Agents. Their prompt, model and sampling are edited there like any other agent's, and every prompt change is kept in its history. A row left as seeded runs on the model in force; one pinned to a model runs on that model. Seeding only adds a missing row, so an edit survives restarts and upgrades. While a row is missing or turned off, its built-in prompt runs on the model in force.
 
 ## The Meetings page
 
@@ -91,7 +101,9 @@ Each meeting is its owner's: with the auth service a user sees only the meetings
 
 Overseer > Services > Meetings runs meetings as fully as the Meetings page does, across every owner: send the bot to a call from there (the meeting is the admin's own), and every owner's meetings are listed, newest first, with how many there are and how many the bot is in now. A row opens the meeting in the drawer: its status, owner and how long each speaker was heard, then the same notes and transcript as the page, with "I am" (which speaker the owner is, their action items first) and "Write them again". The drawer re-reads itself every few seconds while the bot is in or the notes are being written. From there the admin also asks the bot to leave a meeting it is still in, or deletes a meeting it is out of, with its transcript, notes and speakers.
 
-The Flet dashboard (`/dashboard`) has the same: a Meetings card with the counts, opening a modal that sends the bot and lists every owner's meetings beside the selected one, read in full and followed while something is happening, with the same actions.
+Its People tab lists every owner's guides, latest written first; a row opens one in the drawer, each point folding open to the lines it rests on (each opening its meeting), with the owner's note and "Write it again".
+
+The Flet dashboard (`/dashboard`) has the same: a Meetings card with the counts, opening a modal that sends the bot and lists every owner's meetings beside the selected one, read in full and followed while something is happening, with the same actions. A People tab in the modal does the same for the guides.
 
 ## CLI
 
@@ -121,3 +133,12 @@ Overseer's routes, across every owner. Reading them takes an admin where the sta
 | `POST /api/v1/meetings/admin/{id}/me` | `{"name": ...}`: which speaker the owner is (`null`: nobody); returns the meeting read in full |
 | `POST /api/v1/meetings/admin/{id}/notes` | Write the notes again, in the background; `409` while the bot is in, when nothing was said, or while a writer is at it |
 | `DELETE /api/v1/meetings/admin/{id}` | Delete the meeting with its transcript, notes and speakers; `409` while the bot is in it |
+
+How to work with each person. The caller's own guides under `/api/v1/meetings/people`; every owner's, for Overseer, under `/api/v1/meetings/admin/people`, read by an admin and changed by an operator:
+
+| Route | What it does |
+|-------|--------------|
+| `GET .../people` | The guides, latest written first |
+| `GET .../people/{id}` | One guide, each part with its points and the lines they rest on |
+| `PUT .../people/{id}/note` | `{"note": ...}`: the owner's note on the person (blank clears it); returns the guide |
+| `POST .../people/{id}/guide` | Write the guide again, in the background; `409` without a model or while it is being written |

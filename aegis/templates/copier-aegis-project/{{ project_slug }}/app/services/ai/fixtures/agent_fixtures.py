@@ -41,6 +41,7 @@ __all__ = [
     "built_in_agents",
     "default_agent_definition",
     "load_agent_fixtures",
+    "seed_missing_agents",
 ]
 
 
@@ -122,6 +123,19 @@ def built_in_agents() -> list[dict[str, Any]]:
     return [default_agent_definition(), sentiment_agent_definition()]
 
 
+def seed_missing_agents(session: Session, definitions: list[dict[str, Any]]) -> int:
+    """Seed each of ``definitions`` whose slug has no row yet, and say how
+    many: an existing (possibly user-edited) row is never touched."""
+    slugs = [definition["slug"] for definition in definitions]
+    present = set(session.exec(select(Agent.slug).where(col(Agent.slug).in_(slugs))))
+    missing = [d for d in definitions if d["slug"] not in present]
+    for definition in missing:
+        seed_agent(session, definition)
+        session.commit()
+        logger.info(f"Seeded agent '{definition['slug']}'")
+    return len(missing)
+
+
 def load_agent_fixtures(session: Session) -> dict[str, int]:
     """Seed the built-in agents, skipping rows that already exist.
 
@@ -134,18 +148,7 @@ def load_agent_fixtures(session: Session) -> dict[str, int]:
     Returns:
         dict with counts: {"agents": N added, "tools": N added}
     """
-    added = 0
-    for definition in built_in_agents():
-        existing = session.exec(
-            select(Agent).where(Agent.slug == definition["slug"])
-        ).first()
-        if existing is not None:
-            logger.debug(f"Agent '{definition['slug']}' already present")
-            continue
-        seed_agent(session, definition)
-        session.commit()
-        added += 1
-        logger.info(f"Seeded agent '{definition['slug']}'")
+    added = seed_missing_agents(session, built_in_agents())
 
     # Sync registered tools into grantable rows: every callable in the
     # Python registry gets a matching ``tool`` row (by name) so the agent

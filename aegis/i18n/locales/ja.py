@@ -83,6 +83,9 @@ MESSAGES: dict[str, str] = {
     "service.research": "Outside posts and threads, collected by saved searches",
     "service.meetings": "A bot that joins calls and keeps the transcript",
     "service.blog": "下書き、公開、タグに対応した Markdown ブログ",
+    "service.insights": "Adoption metrics and analytics with automated data collection",
+    "service.payment": "Payment processing with Stripe (checkout, subscriptions, webhooks)",
+    "service.finance": "Personal finance aggregation (accounts, transactions, net worth, import)",
     # ── 対話モード：コンポーネントプロンプト ────────────────────────────
     "interactive.add_prompt": "{description} を追加しますか？",
     "interactive.add_with_redis": "{description} を追加しますか？（Redis も自動追加）",

@@ -1,21 +1,19 @@
 {% if include_ai and ai_backend != "memory" and ai_framework == "pydantic-ai" %}
-"""A meeting's notes: one pass of the active model over the finished
-transcript, for its summary, decisions, action items and open questions,
-each citing the transcript lines it came from. Metered like every other
-model call (``meetings:notes`` in AI spend).
+"""A meeting's notes: one pass of the ``meeting-notes`` agent
+(``domains.agents``) over the finished transcript, for its summary,
+decisions, action items and open questions, each citing the transcript
+lines it came from. Metered like every other model call
+(``meetings:notes`` in AI spend).
 
 The bot writes them once it is out of the call (``bot.run_meeting``);
 the Meetings page writes them again on request, over the old ones, so a
 better model or a corrected "me" never needs the call again.
 """
 
-from pydantic_ai import Agent
-
-from app.core.config import settings
 from app.core.db import get_async_session
 from app.core.log import logger
-from app.services.ai.domains.llm import active_model
 from app.services.ai.domains.spend.recording import extract_usage, record_usage
+from app.services.meetings.domains.agents import NOTES_AGENT, NOTES_PROMPT, writer
 from app.services.meetings.models import (
     Meeting,
     MeetingNotes,
@@ -25,14 +23,6 @@ from app.services.meetings.models import (
 from app.services.meetings.service import WRITING, MeetingsService, save_notes
 
 ACTION = "meetings:notes"
-INSTRUCTIONS = """You write the notes of a meeting from its transcript.
-Each transcript line reads "[id] Speaker: what they said".
-
-Write a short summary, the decisions made, the action items (who has to do
-what, and by when if it was said), and the questions left open. Leave a
-list empty rather than invent an item. Give each item the ids of the lines
-it came from. An action item's owner is the speaker who has to do it,
-named exactly as in the transcript, or none when nobody took it."""
 
 
 async def write_notes(meeting_id: int) -> None:
@@ -65,8 +55,7 @@ async def _write(meeting_id: int) -> MeetingNotes | None:
 async def _ask(
     meeting: Meeting, lines: list[tuple[str, TranscriptLine]]
 ) -> MeetingNotes:
-    model, model_name = await active_model.model_for_active(settings)
-    agent = Agent(model, instructions=INSTRUCTIONS, output_type=Notes)
+    agent, model_name = await writer(NOTES_AGENT, NOTES_PROMPT, Notes)
     result = await agent.run(
         "\n".join(f"[{line.id}] {speaker}: {line.text}" for speaker, line in lines)
     )

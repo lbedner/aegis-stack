@@ -393,7 +393,7 @@ SERVICES: dict[str, ServiceSpec] = {
         docs_path="services/ai",
         marker_path="app/services/ai",
         type=ServiceType.AI,
-        description="AI chatbot service with multi-framework support",
+        description="AI platform: multi-provider chat, agents, and an LLM catalog",
         long_description=(
             "A complete AI platform: multi-provider chat, a database-"
             "driven agent registry with tools and memory modules, an LLM "
@@ -686,7 +686,7 @@ SERVICES: dict[str, ServiceSpec] = {
         docs_path="services/comms",
         marker_path="app/services/comms",
         type=ServiceType.NOTIFICATION,
-        description="Communications service with email (Resend), SMS and voice (Twilio)",
+        description="Communications service with email, SMS and voice",
         long_description=(
             "Email, SMS, and voice calls using industry providers: Resend "
             "for email, Twilio for SMS and voice. Both have free tiers, so "
@@ -1126,9 +1126,8 @@ SERVICES: dict[str, ServiceSpec] = {
             "Quicken/OFX/CSV files, tracks net worth over time, and surfaces "
             "recurring-spend insights. Connectivity ships behind provider "
             "flags (Plaid, SnapTrade); file import and manual accounts work "
-            "with no third-party service. When the auth service is present, "
-            "finance rows are owned by the app user (FK wired via the "
-            "finance_auth_link migration); standalone finance is single-user."
+            "with no third-party service. With the auth service, each user "
+            "owns their own finances; without it, finance is single-user."
         ),
         required_components=[
             ComponentNames.BACKEND,
@@ -1333,8 +1332,8 @@ SERVICES: dict[str, ServiceSpec] = {
             "scans, statements, letters, forms. Bytes are addressed by "
             "their own content hash, so the same file uploaded twice is "
             "one document and one object, and moving to a bucket later "
-            "is a copy rather than a migration. What a document MEANS - "
-            "a case, a deadline, an obligation - belongs to whatever "
+            "is a copy rather than a migration. What a document means "
+            "(a case, a deadline, an obligation) belongs to whatever "
             "consumes it."
         ),
         required_components=[
@@ -1440,8 +1439,8 @@ SERVICES: dict[str, ServiceSpec] = {
         type=ServiceType.ANALYTICS,
         description="Outside posts and threads, collected by saved searches",
         long_description=(
-            "What other people published elsewhere - a story, a thread, a "
-            "blog post, the comments under them - collected by saved "
+            "What other people published elsewhere (a story, a thread, a "
+            "blog post, the comments under them), collected by saved "
             "searches (watches) into one store, refreshed nightly, and read "
             "by agents, MCP clients, the API and the CLI. Sources are "
             "plugins (Hacker News is the first); storing, refreshing and "
@@ -1518,6 +1517,18 @@ SERVICES: dict[str, ServiceSpec] = {
         wiring=PluginWiring(
             routers=[
                 RouterWiring(
+                    module="app.components.backend.api.meetings.people",
+                    symbol="admin_router",
+                    alias="meetings_people_admin_router",
+                    prefix="/api/v1",
+                ),
+                RouterWiring(
+                    module="app.components.backend.api.meetings.people",
+                    symbol="router",
+                    alias="meetings_people_router",
+                    prefix="/api/v1",
+                ),
+                RouterWiring(
                     module="app.components.backend.api.meetings.admin",
                     symbol="router",
                     alias="meetings_admin_router",
@@ -1570,9 +1581,15 @@ SERVICES: dict[str, ServiceSpec] = {
                 "tests/services/test_meetings_login.py",
                 "tests/services/test_meetings_notes.py",
                 "tests/services/test_meetings_audio.py",
+                "tests/services/test_meetings_people.py",
+                "tests/services/test_meetings_guides.py",
+                "tests/services/test_meetings_agents.py",
+                "tests/api/test_meetings_people_endpoints.py",
                 "tests/components/frontend/test_meetings_ui.py",
                 "app/components/frontend/dashboard/cards/meetings_card.py",
                 "app/components/frontend/dashboard/modals/meetings_modal.py",
+                "app/components/frontend/dashboard/modals/meetings_follow.py",
+                "app/components/frontend/dashboard/modals/meetings_people_tab.py",
                 "tests/api/test_meetings_endpoints.py",
                 "tests/_meetings.py",
             ],
@@ -1587,6 +1604,7 @@ SERVICES: dict[str, ServiceSpec] = {
                     "app/components/web_frontend/templates/pages/overseer/meetings",
                     "tests/web/test_meetings_page.py",
                     "tests/web/test_overseer_meetings.py",
+                    "tests/web/test_overseer_meeting_people.py",
                 ],
                 # The bot's own queue, where the stack has a worker: a call
                 # outlives any webserver restart.

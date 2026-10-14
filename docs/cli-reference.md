@@ -104,7 +104,7 @@ Authentication Services
 
 AI & Machine Learning Services
 ----------------------------------------
-  ai           - AI chatbot with PydanticAI engine
+  ai           - AI platform: multi-provider chat, agents, and an LLM catalog
                Requires components: backend
                Supports: OpenAI, Anthropic, Google, Groq, Mistral, Cohere
 ```

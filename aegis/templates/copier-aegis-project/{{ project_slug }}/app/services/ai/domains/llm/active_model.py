@@ -198,6 +198,21 @@ async def config_for_active(
     return AIServiceConfig.from_settings(settings).for_agent(agent)
 
 
+async def agent_in_force(
+    settings: Any, slug: str, prompt: str
+) -> tuple["AIServiceConfig", str]:
+    """A headless job's agent row ``slug``: its config (``config_for_active``)
+    and prompt; while no such agent is active, ``prompt`` on the model in
+    force."""
+    from app.services.ai.domains.chat import agent_loader
+
+    found = await agent_loader.resolve_agent(slug)
+    # A missing or inactive agent resolves to the default one: not ours.
+    agent = found if found.slug == slug else None
+    config = await config_for_active(settings, agent)
+    return config, agent.system_prompt if agent else prompt
+
+
 async def model_for_active(settings: Any) -> tuple[Any, str]:
     """A model instance for the selection actually in force, and its name
     (``config_for_active``)."""

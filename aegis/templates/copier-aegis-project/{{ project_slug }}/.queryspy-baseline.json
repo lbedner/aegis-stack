@@ -168,13 +168,19 @@
       "kind": "repeated_statement",
       "label": "SELECT ... FROM agent WHERE agent.slug = :slug_1",
       "file": "app/services/ai/fixtures/agent_fixtures.py",
-      "function": "load_agent_fixtures"
+      "function": "attach_tools"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM agent WHERE agent.slug = :slug_1",
       "file": "app/services/finance/domains/detection/analyst/seeds.py",
       "function": "load_finance_agent_fixtures"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM agent WHERE agent.slug IN (__[POSTCOMPILE_slug_1])",
+      "file": "app/services/ai/fixtures/agent_fixtures.py",
+      "function": "seed_missing_agents"
     },
     {
       "kind": "repeated_statement",
@@ -1966,9 +1972,39 @@
     },
     {
       "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_person_guide WHERE meeting_person_guide.id = :id_1",
+      "file": "app/services/meetings/domains/people/queries.py",
+      "function": "guide"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_person_guide WHERE meeting_person_guide.id = :id_1 AND meeting_person_guide.owner_user_id = :owner_user_id_1",
+      "file": "app/services/meetings/domains/people/queries.py",
+      "function": "guide"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_person_guide WHERE meeting_person_guide.owner_user_id = :owner_user_id_1 ORDER BY meeting_person_guide.written_at DESC, meeting_person_guide.id DESC LIMIT :param_1",
+      "file": "app/services/meetings/domains/people/queries.py",
+      "function": "guides"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_person_guide WHERE meeting_person_guide.person = :person_1 AND meeting_person_guide.owner_user_id = :owner_user_id_1",
+      "file": "app/services/meetings/domains/people/queries.py",
+      "function": "guide_of"
+    },
+    {
+      "kind": "repeated_statement",
       "label": "SELECT ... FROM meeting_transcript_line LEFT OUTER JOIN meeting_participant ON meeting_transcript_line.participant_id = meeting_participant.id WHERE meeting_transcript_line.meeting_id = :meeting_id_1 ORDER BY meeting_transcript_line.start_seconds, meeting_transcript_line.id",
       "file": "app/services/meetings/service.py",
       "function": "transcript"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_transcript_line LEFT OUTER JOIN meeting_participant ON meeting_transcript_line.participant_id = meeting_participant.id WHERE meeting_transcript_line.meeting_id IN (__[POSTCOMPILE_meeting_id_1]) ORDER BY meeting_transcript_line.meeting_id, meeting_transcript_line.start_seconds, meeting_transcript_line.id",
+      "file": "app/services/meetings/domains/people/queries.py",
+      "function": "said_in"
     },
     {
       "kind": "repeated_statement",
@@ -2335,6 +2371,12 @@
       "label": "SELECT DISTINCT ... FROM finance_transaction WHERE finance_transaction.recurring_stream_id IN (__[POSTCOMPILE_recurring_stream_id_1]) AND finance_transaction.is_transfer IS true",
       "file": "app/services/finance/domains/planning/recurring/queries.py",
       "function": "transfer_flagged_stream_ids"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT DISTINCT ... FROM meeting JOIN meeting_participant ON meeting_participant.meeting_id = meeting.id WHERE meeting_participant.display_name = :display_name_1 AND meeting.owner_user_id = :owner_user_id_1 ORDER BY meeting.id DESC LIMIT :param_1",
+      "file": "app/services/meetings/domains/people/queries.py",
+      "function": "meetings_with"
     }
   ]
 }

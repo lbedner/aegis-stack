@@ -5,6 +5,7 @@ import asyncio
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
+import flet as ft
 import pytest
 
 from app.components.frontend.dashboard.cards.meetings_card import MeetingsCard
@@ -16,10 +17,11 @@ from app.components.frontend.dashboard.modals.meetings_modal import (
     meeting_cells,
     record_view,
 )
+from app.components.frontend.dashboard.modals.meetings_people_tab import guide_view
 from app.services.meetings.health import MEETINGS_MODAL_ID
 from app.services.system.models import ComponentStatus, ComponentStatusType
 from tests._meetings import MEET, record
-from tests.components.frontend._tree import texts
+from tests.components.frontend._tree import texts, walk
 
 MEETING = {
     "id": 7,
@@ -132,3 +134,49 @@ async def test_following_stops_once_the_modal_is_closed(
     await asyncio.wait_for(pane._follow(7), timeout=1)
 
     assert reads == []
+
+
+def _guide(**fields: Any) -> dict[str, Any]:
+    """A person's guide as the admin API reads it (``GuideRecord``)."""
+    quote = {
+        "id": 3,
+        "meeting_id": 7,
+        "speaker": "Ada",
+        "at": 61.0,
+        "text": "Numbers first.",
+    }
+    sections = [
+        {"key": "cares_about", "title": "What they care about", "points": []},
+        {
+            "key": "information",
+            "title": "How they like their information",
+            "points": [{"text": "The numbers first", "quotes": [quote]}],
+        },
+    ]
+    guide = {"id": 1, "person": "Ada", "owner_user_id": 4242, "meetings": 3}
+    return {
+        "guide": guide | fields.pop("guide", {}),
+        "sections": sections,
+        "writing": False,
+        "can_write": True,
+    } | fields
+
+
+def test_a_guide_reads_with_the_lines_each_point_rests_on() -> None:
+    view = guide_view(_guide())
+    shown = " | ".join(texts(view))
+    # The lines fold under the point, closed until it is opened.
+    (point,) = [c for c in walk(view) if isinstance(c, ft.ExpansionTile)]
+    lines = " | ".join(texts(point))
+
+    assert "How they like their information" in shown
+    assert "Nothing yet." in shown
+    assert texts(point.title) == ["The numbers first"]
+    assert not point.initially_expanded
+    assert "Numbers first." in lines and "Meeting 7, 01:01" in lines
+
+
+def test_a_guide_that_failed_says_why() -> None:
+    record = _guide(guide={"error": "the model is down"})
+
+    assert "the model is down" in " | ".join(texts(guide_view(record)))

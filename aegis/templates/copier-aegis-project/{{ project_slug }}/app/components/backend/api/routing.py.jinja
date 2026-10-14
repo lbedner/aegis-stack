@@ -57,6 +57,12 @@ from app.components.backend.api.research.router import router as research_router
 {%- endif %}
 {%- if include_meetings %}
 from app.components.backend.api.meetings.admin import router as meetings_admin_router
+from app.components.backend.api.meetings.people import (
+    admin_router as meetings_people_admin_router,
+)
+from app.components.backend.api.meetings.people import (
+    router as meetings_people_router,
+)
 from app.components.backend.api.meetings.router import router as meetings_router
 {%- endif %}
 {%- if include_finance %}
@@ -142,7 +148,9 @@ def include_routers(app: FastAPI) -> None:
     app.include_router(research_router, prefix="/api/v1")
     {%- endif %}
     {%- if include_meetings %}
-    # Before the owner's routes: /meetings/admin is not a meeting id.
+    # Before the meeting routes: /meetings/admin and /people are not ids.
+    app.include_router(meetings_people_admin_router, prefix="/api/v1")
+    app.include_router(meetings_people_router, prefix="/api/v1")
     app.include_router(meetings_admin_router, prefix="/api/v1")
     app.include_router(meetings_router, prefix="/api/v1")
     {%- endif %}

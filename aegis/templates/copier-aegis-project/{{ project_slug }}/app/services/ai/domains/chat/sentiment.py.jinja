@@ -104,14 +104,11 @@ async def _scorer() -> Scorer:
     """The ``sentiment`` agent's model, sampling and prompt, or, while no
     such agent is active, the built-in prompt on the model in force.
     Resolved once a batch."""
-    from app.services.ai.domains.chat import agent_loader
     from app.services.ai.domains.llm import active_model
 
-    found = await agent_loader.resolve_agent(SENTIMENT_AGENT_SLUG)
-    # A missing or inactive agent resolves to the default one: not ours.
-    agent = found if found.slug == SENTIMENT_AGENT_SLUG else None
-    config = await active_model.config_for_active(settings, agent)
-    return config, agent.system_prompt if agent else SENTIMENT_SYSTEM_PROMPT
+    return await active_model.agent_in_force(
+        settings, SENTIMENT_AGENT_SLUG, SENTIMENT_SYSTEM_PROMPT
+    )
 
 
 async def _llm_score(transcript: str, config: AIServiceConfig, prompt: str) -> dict[str, Any]:

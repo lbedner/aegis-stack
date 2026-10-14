@@ -1,0 +1,108 @@
+{% if include_ai and ai_backend != "memory" and ai_framework == "pydantic-ai" %}
+"""The meetings' model writers as agents: the notes of a meeting and how
+to work with each person each run as an ``agent`` row, seeded with the
+prompts below, so their prompt, model and sampling are edited in Agents
+like any other agent's (each change kept in its prompt history). While a
+row is missing or off, its built-in prompt runs on the model in force.
+"""
+
+from typing import Any, TypeVar
+
+from pydantic_ai import Agent
+from sqlmodel import Session
+
+from app.core.config import settings
+from app.services.ai.domains.llm import active_model
+
+NOTES_AGENT = "meeting-notes"
+GUIDE_AGENT = "meeting-guide"
+Output = TypeVar("Output")
+# Generous: a long meeting's notes run past the chat's 1000 tokens.
+MAX_TOKENS = 8000
+
+NOTES_PROMPT = """You write the notes of a meeting from its transcript.
+Each transcript line reads "[id] Speaker: what they said".
+
+Write a short summary, the decisions made, the action items (who has to do
+what, and by when if it was said), and the questions left open. Leave a
+list empty rather than invent an item. Give each item the ids of the lines
+it came from. An action item's owner is the speaker who has to do it,
+named exactly as in the transcript, or none when nobody took it."""
+
+GUIDE_PROMPT = """You write how to work with one person, from what was said
+in meetings they were in. Each meeting starts with its heading; each line
+reads "[id] Speaker: what they said".
+
+Write only how they work: what they care about, how they like their
+information (big picture or detail, a demo or numbers, short or thorough),
+how they decide and commit, and what lands with them and what gets
+pushback. Read it from what they said and how they answered others.
+
+Nothing about their life outside work: leave out health, family,
+relationships, politics and religion, even when it was said. Leave a part
+empty rather than guess. Give each point the ids of the lines it rests on.
+The owner's own note on them, when there is one, is what the owner knows:
+weigh it, but cite only lines."""
+
+
+async def writer(
+    slug: str, prompt: str, output_type: type[Output]
+) -> tuple[Agent[None, Output], str]:
+    """The agent ``slug`` writes with (``prompt`` while it has no row),
+    and the name of the model it runs on."""
+    # Here, not at the top: the factory loads every provider's SDK, which
+    # only a writer at work needs.
+    from app.services.ai.domains.llm import model_factory
+
+    config, instructions = await active_model.agent_in_force(settings, slug, prompt)
+    model, model_name = await model_factory.model_for(config, settings)
+    agent = Agent(
+        model,
+        instructions=instructions,
+        output_type=output_type,
+        model_settings=model_factory._model_settings(config),
+        name=slug,
+    )
+    return agent, model_name
+
+
+def _definition(slug: str, name: str, description: str, prompt: str) -> dict[str, Any]:
+    return {
+        "slug": slug,
+        "name": name,
+        "description": description,
+        "category": "meetings",
+        "model_id": None,
+        "system_prompt": prompt,
+        "temperature": 0.3,
+        "max_tokens": MAX_TOKENS,
+    }
+
+
+def meetings_agent_definitions() -> list[dict[str, Any]]:
+    return [
+        _definition(
+            NOTES_AGENT,
+            "Meeting notes",
+            "Writes a meeting's notes from its transcript",
+            NOTES_PROMPT,
+        ),
+        _definition(
+            GUIDE_AGENT,
+            "How to work with them",
+            "Writes how to work with each person from what they said",
+            GUIDE_PROMPT,
+        ),
+    ]
+
+
+def load_meetings_agent_fixtures(session: Session) -> dict[str, int]:
+    """Seed the meetings' agents that are missing; a row edited in Agents
+    is never touched."""
+    # Here, not at the top: the AI fixtures package loads these seeds.
+    from app.services.ai.fixtures.agent_fixtures import seed_missing_agents
+
+    return {
+        "meetings_agents": seed_missing_agents(session, meetings_agent_definitions())
+    }
+{% endif %}

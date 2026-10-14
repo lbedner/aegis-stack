@@ -6617,7 +6617,10 @@ listed or served, and neither are generated or installed folders
 <p>It is on in dev (<code>APP_ENV</code> of <code>dev</code>, <code>development</code> or <code>local</code>). Anywhere else it stays off until
 <code>OVERSEER_CODE_ENABLED</code> is turned on, in <code>.env</code> or on the Web Frontend page's
 <strong>Settings</strong> section, because the source is a map of the app. Like every
-Overseer page, it is for admins only when the stack has auth.</p>
+Overseer page, it is for admins only when the stack has auth. Without auth
+there is no admin and Overseer is anyone's to read, so the setting counts
+only on the build that was never deployed: a deployed stack without auth
+never shows its source (or a table's rows).</p>
 <h2 id="how-it-works">How It Works</h2>
 <pre class="mermaid"><code>sequenceDiagram
     participant C as Components/Services

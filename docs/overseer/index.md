@@ -135,7 +135,10 @@ listed or served, and neither are generated or installed folders
 It is on in dev (`APP_ENV` of `dev`, `development` or `local`). Anywhere else it stays off until
 `OVERSEER_CODE_ENABLED` is turned on, in `.env` or on the Web Frontend page's
 **Settings** section, because the source is a map of the app. Like every
-Overseer page, it is for admins only when the stack has auth.
+Overseer page, it is for admins only when the stack has auth. Without auth
+there is no admin and Overseer is anyone's to read, so the setting counts
+only on the build that was never deployed: a deployed stack without auth
+never shows its source (or a table's rows).
 
 ## How It Works
 

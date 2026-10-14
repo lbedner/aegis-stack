@@ -56,8 +56,12 @@ class SectionedPage(NamedTuple):
     # A glance at its containers above its Overview (``overseer_container``).
     glance: bool = False
     # The data is the page (Logs, Deployments): it takes the whole canvas
-    # rather than the reading column (``_shell.html``'s ``data-width``).
-    workspace: bool = False
+    # rather than the reading column (``_shell.html``'s ``data-width``); or
+    # only the sections named (a table's rows on the Database page).
+    workspace: bool | frozenset[str] = False
+
+    def takes_canvas(self, section: str) -> bool:
+        return self.workspace is True or section in (self.workspace or ())
 
     @property
     def single(self) -> bool:
@@ -370,7 +374,10 @@ _PAGES: dict[tuple[str, str], SectionedPage] = {
         glance=True,
     ),
     ("components", ComponentName.DATABASE): SectionedPage(
-        "database", overseer_database.SECTIONS, overseer_database.section_context
+        "database",
+        overseer_database.SECTIONS,
+        overseer_database.section_context,
+        workspace=frozenset({overseer_database.ROWS, overseer_database.QUERY}),
     ),
     ("components", ComponentName.CACHE): SectionedPage(
         "redis", overseer_redis.SECTIONS, overseer_redis.section_context, glance=True

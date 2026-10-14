@@ -124,6 +124,8 @@ def test_the_file_says_which_build_it_is_from(
     """In dev the files are the working tree; deployed, the build's commit."""
     url = f"{PAGE}?file=app/main.py"
     assert "working tree" in text(one(page_html(client, url), "#code-file"))
+    # Deployed, the source shows only where someone signs in (``exposure``).
+    monkeypatch.setattr(settings, "AUTH_ENABLED", True)
     monkeypatch.setattr(settings, "BUILD_ID", "abc1234")
     assert "at abc1234" in text(one(page_html(client, url), "#code-file"))
 

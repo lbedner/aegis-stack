@@ -30,9 +30,8 @@ from app.services.auth.deps import (
 {%- else %}
 from fastapi import HTTPException, status
 
-from app.core.config import settings
+from app.core import exposure
 from app.core.tools import current_admin
-from app.services.system.hosting import LOCAL
 
 # Without auth, an operator's change is asked only at these (``refusal_at``).
 LOOPBACK = frozenset({"localhost", "127.0.0.1", "::1"})
@@ -124,7 +123,7 @@ def refusal_at(url: str, origin: str | None = None) -> str | None:
     from the bridge gateway, and so does one on the LAN. A LAN address, a
     domain, a rebound DNS name or another site's page is refused."""
     asked = [url] if origin is None else [url, origin]
-    if settings.BUILD_ID == LOCAL and all(
+    if not exposure.deployed() and all(
         urlsplit(u).hostname in LOOPBACK for u in asked
     ):
         return None

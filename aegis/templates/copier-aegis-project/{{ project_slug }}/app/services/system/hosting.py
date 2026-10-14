@@ -24,13 +24,12 @@ from typing import Any
 import httpx
 import yaml
 
+from app.core import exposure
 from app.core.brand_icons import favicon_url
-from app.core.config import settings
 
 METADATA = "http://169.254.169.254"
 PROBE_SECONDS = 0.5  # a link-local answer is instant; off a cloud, nothing is
 DEPLOY_CONFIG = Path(".aegis/deploy.yml")
-LOCAL = "dev"  # BUILD_ID before any deploy stamps it
 
 
 @dataclass(frozen=True)
@@ -189,7 +188,7 @@ async def _detect(transport: httpx.AsyncBaseTransport | None) -> dict[str, Any]:
     for where in found:
         if where is not None:
             return where
-    name = "Local" if settings.BUILD_ID == LOCAL else "Self-hosted"
+    name = "Self-hosted" if exposure.deployed() else "Local"
     return _where(None, name, [], None)
 
 

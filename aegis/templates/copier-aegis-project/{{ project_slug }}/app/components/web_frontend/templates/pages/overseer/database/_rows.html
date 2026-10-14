@@ -1,0 +1,33 @@
+{# A table's rows (overseer_database.rows, db_rows), read like Logs rather
+   than on a card: one row of controls (the table, a column:value filter,
+   the order), the table's keys out and in, then the rows (``rows_table``;
+   Wrap opens every line, a click opens a row to where its keys lead). Under them
+   the pager, by the table's key where it is ordered by it. #}
+{% from "components/macros/form.html" import search_input, select %}
+{% from "components/macros/table.html" import pager %}
+{% from "pages/overseer/_macros.html" import rows_scroller, wrap_actions, wraps %}
+{% from "pages/overseer/database/_macros.html" import rows_off_note, rows_table %}
+{% if rows_off %}
+{{ rows_off_note(rows_off) }}
+{% else %}
+<div id="database-rows" class="space-y-3" {{ wraps() }}>
+  <form data-rows-controls class="flex flex-wrap items-center gap-3" {{ hx_replace(request.url.path, "#database-rows") }} hx-trigger="change, submit">
+    {{ select("table", rows_tables, rows_asked.table, blank=None) }}
+    {{ search_input("where", rows_asked.where, placeholder="column:value") }}
+    {% if rows is defined %}
+    {{ select("order", rows_orders, rows_asked.order, blank="By key" if rows.key else "Unordered") }}
+    {{ select("dir", rows_dirs, rows_asked.dir or "asc", blank=None) }}
+    {% endif %}
+    <div class="ml-auto flex gap-1.5">{{ wrap_actions("database-rows-body", rows is defined and rows.rows) }}</div>
+  </form>
+  {% if rows_keys %}<p data-keys class="text-xs font-mono text-aegis-muted">Keys: {{ rows_keys|join(" · ") }}</p>{% endif %}
+  {% if rows_slow %}
+  <p data-rows-slow class="text-sm text-aegis-amber">{{ rows_slow }} Filter or order by an indexed column to read less.</p>
+  {% else %}
+  {% call rows_scroller() %}
+    {{ rows_table(rows, "database-rows-body", rows.key, "No rows" ~ (" match " ~ rows_asked.where if rows_asked.where else "") ~ ".", rows_links) }}
+  {% endcall %}
+  {{ pager(rows_pager, "#database-rows") }}
+  {% endif %}
+</div>
+{% endif %}

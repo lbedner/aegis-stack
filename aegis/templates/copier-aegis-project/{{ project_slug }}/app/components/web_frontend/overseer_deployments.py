@@ -9,7 +9,7 @@ destroy) are ``overseer_deploy_actions``."""
 from collections.abc import Iterable, Set
 from typing import Any
 
-from app.core import secrets
+from app.core import exposure, secrets
 from app.core.parts import Category
 from app.services.system import hosting, ui_deployments
 from app.services.system.models import ComponentStatus
@@ -95,7 +95,7 @@ async def _deployed() -> dict[str, Any]:
     """The Overview's card: a deployed server (redeploys come from
     elsewhere), the server this project deploys to and what can be done to
     it, or none yet; with every connected cloud account's servers."""
-    if actions.deployed():
+    if exposure.deployed():
         return actions.DEPLOYED_VIEW
     found = await actions.shared()
     found["accounts"] = await actions.accounts(found["agent"])
@@ -170,7 +170,7 @@ def _choices(
 async def _steps_context() -> dict[str, Any]:
     """The steps to a new server, each read from what is true; on a deployed
     server, or with a server already, where to go instead."""
-    if actions.deployed():
+    if exposure.deployed():
         return actions.DEPLOYED_VIEW
     found = await actions.shared()
     if hosting.deploy_config().get("server"):

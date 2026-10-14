@@ -15,7 +15,7 @@ from fastapi.dependencies.models import Dependant
 from fastapi.routing import APIRoute
 from starlette.routing import BaseRoute
 
-from app.core import secrets, source_index
+from app.core import exposure, secrets, source_index
 from app.core.ontology import calls
 from app.core.ontology.model import Mode
 from app.core.source_index import Index
@@ -88,11 +88,11 @@ def _needs(dependant: Dependant) -> tuple[Need, ...]:
 
 def walk(route: APIRoute) -> DryPath:
     """``route``'s dry path, its hops on the running app's model nodes.
-    Raises ValueError while the source is hidden (``source_index.visible``):
+    Raises ValueError while the source is hidden (``exposure.shown``):
     every hop is a line of it."""
     from app.core.ontology import current
 
-    if not source_index.visible():
+    if not exposure.shown(exposure.CODE):
         raise ValueError("The source is hidden here: turn on Overseer > Code.")
     return trace(anchor(route), ids={n.id for n in current().nodes})
 

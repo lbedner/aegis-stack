@@ -12,8 +12,9 @@
    order and a range narrow the lines already here (``data-facets`` in
    app.js), new ones included, and keep their state in the URL. #}
 {% from "components/macros/form.html" import action, checklist, filter_input, range_chips, select %}
+{% from "pages/overseer/_macros.html" import opens_rows, rows_scroller, wrap_actions, wraps %}
 {% set newest_first = logs_order == "desc" %}
-<div id="logs" class="space-y-3" x-data="{ paused: false, wrap: false }" x-bind:class="wrap && 'logs-wrap'" x-on:htmx:sse-before-message="paused && $event.preventDefault()"{% if not logs.note %} hx-ext="sse" sse-connect="{{ logs_events }}"{% endif %}>
+<div id="logs" class="space-y-3" {{ wraps("paused: false, ") }} x-on:htmx:sse-before-message="paused && $event.preventDefault()"{% if not logs.note %} hx-ext="sse" sse-connect="{{ logs_events }}"{% endif %}>
   <form class="flex flex-wrap items-center gap-3" data-facets="#logs-lines" {{ hx_replace(request.url.path, "#logs") }}
         hx-trigger="change[target.name=='window']" x-on:submit.prevent>
     {{ range_chips(logs_windows, logs_window, field="window", aria="Log window") }}
@@ -24,12 +25,8 @@
     {{ filter_input("#logs-lines", "q", logs_q, placeholder="Search lines") }}
     {% if not logs.note %}
     <div class="ml-auto flex gap-1.5">
-      {{ action("Wrap", "data-wrap x-on:click=\"wrap = !wrap\" x-bind:aria-pressed=\"wrap\"") }}
       {{ action("Pause", "data-pause x-on:click=\"paused = !paused\" x-text=\"paused ? 'Resume' : 'Pause'\" x-bind:aria-pressed=\"paused\"") }}
-      {% if logs.lines %}
-      {{ action("Top", 'data-scroll-to="#logs-lines > tr:first-child"') }}
-      {{ action("Bottom", 'data-scroll-to="#logs-lines > tr:last-child"') }}
-      {% endif %}
+      {{ wrap_actions("logs-lines", logs.lines) }}
     </div>
     {% endif %}
   </form>
@@ -53,18 +50,16 @@
     <button type="button" data-clear-range="logs-volume" class="text-xs text-aegis-muted hover:text-aegis-teal"{% if not logs_range %} hidden{% endif %}>Whole window</button>
   </div>
   {% endif %}
-  {# Runs to the bottom of the window and scrolls inside, so the filters
-     above stay put. A stream, so flat on the canvas, not on a card. #}
-  <div data-scroll class="flex {{ 'flex-col' if newest_first else 'flex-col-reverse' }} h-[calc(100vh-16rem)] min-h-[24rem] overflow-y-auto border-t border-aegis-border">
+  {% call rows_scroller("flex " ~ ("flex-col" if newest_first else "flex-col-reverse") ~ " overflow-y-auto") %}
     {# Fixed columns: lines a search shows again never re-measure the table. #}
     <table class="w-full text-xs table-fixed">
       <colgroup><col class="w-28"><col class="w-52"><col></colgroup>
       <tbody id="logs-lines" sse-swap="logs-lines" hx-swap="{{ 'afterbegin' if newest_first else 'beforeend' }}"
-             x-on:click="$event.target.closest('a, button') || getSelection().toString() || $event.target.closest('tr')?.toggleAttribute('data-open')">
+             {{ opens_rows() }}>
         {% with rows = logs.lines, tones = logs_tones, links = logs_links if logs_links is defined else none %}{% include "pages/overseer/_logs_rows.html" %}{% endwith %}
       </tbody>
     </table>
-  </div>
+  {% endcall %}
   {% if not logs.lines %}<p class="text-sm text-aegis-muted">No lines in this window yet; new ones appear as they are written.</p>{% endif %}
   {% endif %}
 </div>

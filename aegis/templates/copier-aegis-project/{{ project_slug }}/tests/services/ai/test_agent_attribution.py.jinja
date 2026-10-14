@@ -489,10 +489,44 @@ class _FakeUsageContext:
         return "USAGE-BLOCK"
 
 
+class _FakeHealthContext:
+    def format_for_prompt(self, compact: bool = False) -> str:
+        return "HEALTH-BLOCK"
+
+
+async def _fake_health(self: AIService) -> tuple["_FakeHealthContext", str]:
+    return _FakeHealthContext(), "SERVER-DOWN"
+
+
 class TestOpsContextScoping:
-    """The usage/model-catalog self-awareness blocks belong to the default
-    ops assistant; a custom agent (a finance analyst, say) pays their
-    token cost every turn without ever using them."""
+    """The system status and the usage/model-catalog self-awareness blocks
+    belong to the default ops assistant. A custom agent (a finance analyst,
+    say) pays their token cost every turn without ever using them, and one
+    that faces an app's own users must not see the app's infrastructure."""
+
+    async def test_custom_agent_prompt_skips_system_status(
+        self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
+    ) -> None:
+        service, _recorder, captured, monkeypatch = harness
+        monkeypatch.setattr(AIService, "_build_health_context", _fake_health)
+        _stub_resolve(monkeypatch, _custom_config())
+
+        await service.chat("hello")
+
+        assert "HEALTH-BLOCK" not in captured["system_prompt"]
+        assert "SERVER-DOWN" not in captured["system_prompt"]
+
+    async def test_default_agent_keeps_system_status(
+        self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
+    ) -> None:
+        service, _recorder, captured, monkeypatch = harness
+        monkeypatch.setattr(AIService, "_build_health_context", _fake_health)
+        _stub_resolve(monkeypatch, default_agent_config())
+
+        await service.chat("hello")
+
+        assert "HEALTH-BLOCK" in captured["system_prompt"]
+        assert "SERVER-DOWN" in captured["system_prompt"]
 
     async def test_custom_agent_prompt_skips_usage_and_catalog(
         self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
@@ -561,6 +595,31 @@ class TestHistoryBudget:
         assert "answer 8" in context
         assert "answer 0" not in context
         assert context.endswith("User: the current question")
+
+    def test_an_answer_from_an_earlier_day_replays_dated(
+        self, mock_ai_settings: MagicMock
+    ) -> None:
+        """A stored answer is just text, so a figure quoted weeks ago would
+        stand beside today's with equal weight; dated, it reads as history.
+        Today's answers and every question go undated."""
+        from datetime import UTC, datetime
+
+        from app.services.ai.models import AIProvider, Conversation, MessageRole
+
+        service = AIService(mock_ai_settings)
+        conversation = Conversation(id="c3", provider=AIProvider.OLLAMA, model="test")
+        conversation.add_message(MessageRole.USER, "how many cloners?")
+        conversation.add_message(MessageRole.ASSISTANT, "810 this month")
+        conversation.messages[0].timestamp = datetime(2026, 7, 21, 9, tzinfo=UTC)
+        conversation.messages[1].timestamp = datetime(2026, 7, 21, 9, tzinfo=UTC)
+        conversation.add_message(MessageRole.ASSISTANT, "1723 now")
+        conversation.add_message(MessageRole.USER, "and today?")
+
+        context = service._build_conversation_context(conversation)
+
+        assert "User: how many cloners?" in context
+        assert "Assistant: [answered 2026-07-21] 810 this month" in context
+        assert "Assistant: 1723 now" in context
 
     def test_short_history_is_untouched(self, mock_ai_settings: MagicMock) -> None:
         from app.services.ai.models import AIProvider, Conversation, MessageRole

@@ -87,6 +87,9 @@ shell: ## Open shell in webserver container
 	@echo "Opening shell in webserver container..."
 	@docker compose exec webserver /bin/bash
 
+cli: ## Run the app CLI where the database is (make cli ARGS="--help")
+	@docker compose exec webserver /opt/venv/bin/python -c "from app.cli.main import main; main()" $(ARGS)
+
 shell-worker: ## Open shell in worker container
 	@echo "Opening shell in worker container..."
 	@docker compose exec worker-system /bin/bash

@@ -29,6 +29,11 @@ class TestCard:
         assert section.get("aria-labelledby") == heading.get("id")
         one(section, "#body")
 
+    def test_its_border_goes_teal_on_hover(self) -> None:
+        """Every card shares one hover (``.hover-card`` in input.css)."""
+        html = render('{% call card("Top payees") %}x{% endcall %}')
+        assert "hover-card" in (one(html, "section").get("class") or "").split()
+
     def test_optional_subtitle(self) -> None:
         html = render('{% call card("Spending", "last 90 days") %}x{% endcall %}')
         assert "last 90 days" in text(one(html, "section p"))

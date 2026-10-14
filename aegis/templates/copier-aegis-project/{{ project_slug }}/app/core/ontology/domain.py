@@ -5,8 +5,8 @@ One object per table, ``object:<table name>`` (never the schema-qualified
 key, so SQLite and Postgres agree): its owner by ``ownership``'s rule, its
 class docstring's first sentence, and each column's type, whether it may
 be empty, its ``Field(description=)`` and the values a single-column
-``CHECK (x IN (...))`` lets in. A link per foreign key, through its
-column. Each registered change type as the change it makes: the table it
+``CHECK (x IN (...))`` lets in. A link per foreign key, from its
+column to the one it points at. Each registered change type as the change it makes: the table it
 changes. Names and types only: no defaults, no
 rows, so a secret column shows as a name and nothing else."""
 
@@ -47,6 +47,7 @@ def objects(metadata: MetaData, owned: Owned) -> tuple[list[ObjectNode], list[Ed
             target=node_id(Kind.OBJECT, key.column.table.name),
             kind=EdgeKind.LINK,
             via=key.parent.name,
+            to=key.column.name,
         )
         for table in tables
         for key in sorted(table.foreign_keys, key=lambda k: k.parent.name)

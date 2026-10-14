@@ -60,7 +60,7 @@
 {% macro card(title=None, subtitle=None, id=None) %}
 {% set card_id = id or ("card-" ~ title|lower|replace(" ", "-")) %}
 <section id="{{ card_id }}" {% if title %}aria-labelledby="{{ card_id }}-title"{% endif %}
-         class="bg-aegis-card border border-aegis-border rounded-lg p-5 flex flex-col gap-4 min-w-0">
+         class="hover-card bg-aegis-card border border-aegis-border rounded-lg p-5 flex flex-col gap-4 min-w-0">
   {# A card whose page title already names it (the forecast's chart) goes
      without a header rather than repeating the words. #}
   {% if title %}
@@ -78,7 +78,7 @@
    Red once a figure goes negative and nothing otherwise: when every
    healthy number is coloured, colour stops meaning anything. #}
 {% macro stat_tile(label, value, negative=False, caption=None, attrs="") %}
-<div {{ attrs|safe }} class="bg-aegis-card border border-aegis-border rounded-lg px-5 py-4{% if attrs %} cursor-pointer hover:border-aegis-muted transition-colors{% endif %}">
+<div {{ attrs|safe }} class="hover-card bg-aegis-card border border-aegis-border rounded-lg px-5 py-4{% if attrs %} cursor-pointer{% endif %}">
   <dt class="text-xxs text-aegis-muted caps">{{ label }}</dt>
   <dd class="mt-1 text-2xl font-semibold tabular-nums {{ 'text-error' if negative else 'text-aegis-text' }}">{{ value }}</dd>
   {% if caption %}<dd class="mt-1 text-xxs text-aegis-muted">{{ caption }}</dd>{% endif %}

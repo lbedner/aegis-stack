@@ -2,7 +2,7 @@
    in the columns the pattern's view names. #}
 {% from "components/macros/table.html" import data_table %}
 {% for group, rows in route_groups %}
-<details data-route-group {% if groups_open %}open{% endif %} class="group/g bg-aegis-card border border-aegis-border rounded-lg px-5">
+<details data-route-group {% if groups_open %}open{% endif %} class="hover-card group/g bg-aegis-card border border-aegis-border rounded-lg px-5">
   <summary class="list-none cursor-pointer select-none py-3 flex items-center gap-3">
     <span aria-hidden="true" class="text-aegis-muted transition-transform group-open/g:rotate-90">›</span>
     <h2 class="text-sm font-semibold text-aegis-text">{{ group }}</h2>

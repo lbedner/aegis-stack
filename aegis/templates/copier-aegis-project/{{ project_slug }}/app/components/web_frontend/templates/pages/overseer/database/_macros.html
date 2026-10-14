@@ -1,0 +1,32 @@
+{# What Rows and Query share: the note saying why the app's data is hidden
+   (``exposure.refusal``), and rows read like Logs (``rows_scroller``): one
+   line each, cut at the edge like a log line, a click opening one, a
+   column holding a secret shown as hidden. ``found`` is a page
+   (db_rows.Rows) or an answer (db_query.Answer); ``body`` the tbody's id,
+   for Top and Bottom; ``key`` the column the pages run on; ``links``, a
+   row's keys (overseer_database.row_links), opening under it with it,
+   each refilling ``#database-rows``. #}
+{% from "pages/overseer/_macros.html" import opens_rows %}
+
+{% macro rows_off_note(reason) %}
+<p data-rows-off class="text-sm text-aegis-muted">A table's rows are the app's data: {{ reason }}</p>
+{%- endmacro %}
+
+{% macro rows_table(found, body, key=None, empty="No rows.", links=None) %}
+<table data-rows class="w-full text-xs font-mono">
+  <thead class="sticky top-0 bg-aegis-bg">
+    <tr>{% for column in found.columns %}<th class="px-3 py-1.5 text-left font-normal text-aegis-muted whitespace-nowrap">{{ column }}{% if column == key %}<span class="ml-1 text-aegis-teal" title="The key the pages run on">⌗</span>{% endif %}</th>{% endfor %}</tr>
+  </thead>
+  <tbody id="{{ body }}" {{ opens_rows() }}>
+    {% for row in found.rows %}
+    <tr class="log-row">
+      {% for cell in row %}{% set column = found.columns[loop.index0] %}<td class="px-3 py-1 max-w-xs {{ 'text-aegis-muted' if column in found.masked else 'text-aegis-text' }}"{% if column in found.masked %} title="Hidden: it holds a secret"{% endif %}><div class="log-line">{{ cell }}</div></td>{% endfor %}
+    </tr>
+    {% if links and links[loop.index0] %}
+    <tr data-links><td colspan="{{ found.columns|length }}" class="px-3 pb-2 flex flex-wrap gap-x-4 gap-y-1">{% for link in links[loop.index0] %}<a href="{{ link.url }}" {{ hx_replace(link.url, "#database-rows") }} class="text-aegis-teal hover:underline">{{ link.label }}</a>{% endfor %}</td></tr>
+    {% endif %}
+    {% endfor %}
+  </tbody>
+</table>
+{% if not found.rows %}<p class="px-3 py-4 text-sm text-aegis-muted">{{ empty }}</p>{% endif %}
+{%- endmacro %}

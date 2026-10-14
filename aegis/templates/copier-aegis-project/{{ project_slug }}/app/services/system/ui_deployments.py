@@ -15,7 +15,7 @@ from datetime import UTC, datetime
 import re
 from typing import Any
 
-from app.core import runtime
+from app.core import exposure, runtime
 from app.core.config import settings
 from app.core.formatting import (
     format_bytes,
@@ -26,7 +26,7 @@ from app.core.formatting import (
 from app.core.log import logger
 from app.core.runtime import RuntimeUnavailableError
 from app.services.system import health
-from app.services.system.hosting import LOCAL
+
 # What ``aegis deploy`` stamps: a short commit, and for a tree with
 # uncommitted changes, ``-dirty-<unix time>`` after it.
 _BUILD = re.compile(r"^(?P<commit>[0-9a-f]{7,40})(?P<dirty>-dirty-\d+)?$")
@@ -57,7 +57,7 @@ def commit() -> str | None:
 async def now() -> list[tuple[str, str]]:
     """The live build as ``(label, value)`` facts."""
     build = settings.BUILD_ID
-    facts = [("Build", f"{build}, not deployed" if build == LOCAL else build)]
+    facts = [("Build", build if exposure.deployed() else f"{build}, not deployed")]
     if live := commit():
         facts.append(("Commit", live))
     if by := await _deployed_by(build):

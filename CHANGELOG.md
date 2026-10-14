@@ -18,6 +18,10 @@
   its meeting with the reason, a meeting left before the bot starts is over
   at once, and a call delivered twice is never joined twice. `WORKER_WATCH=false`
   keeps any worker from reloading in dev.
+- **A table's rows in the Overseer.** Database > Rows pages through a table's rows, laid out like Logs: by the table's key, so a deep page costs what the first does; sorted and filtered only where an index serves it; secret columns never read, other text redacted; each read stopped after 5 seconds and taking no SQLite write lock. Off outside dev until `OVERSEER_DATABASE_ROWS_ENABLED` is on.
+- **A table's relationships in the Overseer.** Database > Rows lists each foreign key out of and into the table, composite keys whole; a row opens to the rows its keys point at and those pointing at it, each refiltering the same scroller. The ontology's link edges now carry the column they point at (`to`).
+- **A read-only query in the Overseer.** Database > Query runs one statement and shows its rows in the same scroller: writes fail because the connection cannot write (a read-only transaction; SQLite's `query_only`, with `ATTACH` and `PRAGMA` refused), one statement at a time, 200 rows, stopped after 5 seconds, every run audited. Secret columns read as empty on SQLite however a statement reaches them; on PostgreSQL a statement reading a table that holds one is refused, as is a superuser login outside dev.
+- **Every card's border goes teal on hover**, the map's nodes included (one shared `.hover-card`).
 
 - **Run meetings from Overseer.** Send the bot from Overseer's Meetings
   page (htmx and Flet); the drawer and the Flet pane follow a meeting live
@@ -123,6 +127,8 @@
   did not lead to its definition.
 
 ### Changed
+
+- **Overseer > Code on a deployed stack without auth stays off**, even with `OVERSEER_CODE_ENABLED`: with no one to sign in, Overseer is anyone's to read, so the setting now counts only on the build that was never deployed (the same rule holds a table's rows).
 
 - **Every service keeps its logic in `domains/`.** A service's top level
   is now only the standard files (`service.py`, `models.py`, `queries.py`,

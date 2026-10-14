@@ -225,6 +225,32 @@ A transaction open past `DATABASE_SLOW_TRANSACTION_SECONDS` shows red.
 
 Records live for an hour, in Redis when the stack has it (the webserver then shows what the worker and scheduler recorded too), otherwise in the process that recorded them. `DATABASE_SLOW_TRANSACTION_SECONDS=0` turns it off; it is also on the Database page's Settings section and Overseer > Settings. The engine's own parameters (PostgreSQL settings, SQLite PRAGMAs) are the page's **Engine** section.
 
+### A table's rows
+
+The Overseer's Database page has a **Rows** section: pick a table and page through its rows, laid out like Logs across the whole window, one line each (click a row, or **Wrap**, to see it whole). A table name on the **Schema** section leads there too.
+
+- Only a table the app's models declare, and that the database has, can be read.
+- It sorts only by a column an index serves (the key, an indexed or unique column), and filters (`column:value`, or several as `column:value, column:value`) by those or a foreign key's columns. A foreign key PostgreSQL has no index for can mean reading the whole table, which the 5-second limit bounds.
+- Above the rows, the table's keys: each foreign key out of it and into it, a composite one whole (`note.post_id, tag_id → tagged.post_id, tag_id`). Click a row and, under it, each key leads to the rows it points at or that point at it (a table that points at itself, both ways), refiltering the same scroller to them.
+- The default order is the table's key, and the next page starts where the last one ended rather than at an offset, so a deep page costs what the first does. Sorting by another column pages by offset, at most 400 pages deep.
+- 25 rows a page. The count shown is the health check's: exact on SQLite, PostgreSQL's estimate otherwise.
+- A text column holding a secret (a password hash, a token, a stored secret, an encrypted value) is never read: the database returns it as hidden, and it cannot be sorted or filtered by. Other text is read to 1,024 characters, cleared of anything that looks like a credential (a URL's password, a bearer token), then cut; binary shows its size.
+- A read stops after 5 seconds (PostgreSQL's `statement_timeout`; on SQLite, an interrupt), and PostgreSQL reads in a read-only transaction.
+- It reads through the app's sync session factory, which never begins a write transaction, so on SQLite reading rows never holds the write lock; the connection has `query_only` on while it reads.
+- The rows are the app's data: outside dev they stay hidden until an admin turns on `OVERSEER_DATABASE_ROWS_ENABLED` (Overseer > Settings). With the auth service, Overseer is for admins only; without it, the setting counts only on the build that was never deployed, and the page says to add auth instead.
+
+### A query
+
+The **Query** section runs one SQL statement you type, read-only, and shows its rows in the same scroller.
+
+- A write fails because the connection cannot write, not because the SQL was inspected: PostgreSQL runs it in a read-only transaction, rolled back; SQLite with `query_only` on, and `ATTACH`, `DETACH` and every `PRAGMA` refused, so the statement cannot turn it off. `INSERT`, `UPDATE`, `DELETE`, DDL, and a write inside a CTE or a function all fail.
+- One statement at a time: a `;` inside it is refused (a trailing one is fine).
+- The first 200 rows, saying so when there were more; it stops after 5 seconds, as a table's rows do.
+- A secret never leaves the database. On SQLite, every column the models hold one in reads as empty however the statement reaches it (an alias, a `UNION`, a CTE's column list), and shows as hidden under its own name (`SELECT *`). PostgreSQL cannot blank a column, so a statement whose plan reads a table holding a secret is refused; read that table on **Rows**, where its secrets are hidden. Cells are cleared of credentials and cut, as a table's rows are.
+- On PostgreSQL, outside dev, Query refuses a superuser login: a read-only transaction does not stop a superuser's `COPY ... TO PROGRAM` or reads of the server's files. Run the app as a login that is not a superuser to use it there. Each query runs on its own connection, closed after it, so nothing it sets outlives it.
+- Every run is recorded in the audit log (`database.query`), refused ones too, with who ran it and the statement.
+- It is shown where a table's rows are, and only to someone who may make Overseer's changes: an admin with the auth service; without it, the build that was never deployed, at localhost.
+
 ## Testing
 
 The component includes test fixtures for database testing:

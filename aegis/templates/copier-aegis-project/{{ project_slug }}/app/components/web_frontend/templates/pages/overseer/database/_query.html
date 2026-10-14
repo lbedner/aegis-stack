@@ -1,0 +1,23 @@
+{# One read-only statement (overseer_database.query, db_query), read like
+   Logs: the statement on one line, Run and Clear pushed right, its answer
+   filling the scroller under it (``_query_answer.html``). The prompt is a
+   write control (``data-write``): hidden where Overseer's changes are
+   refused, and every run is audited. Clear asks for the section afresh. #}
+{% from "components/macros/form.html" import action, search_input %}
+{% from "pages/overseer/_macros.html" import wrap_actions, wraps %}
+{% from "pages/overseer/database/_macros.html" import rows_off_note %}
+{% if rows_off %}
+{{ rows_off_note(rows_off) }}
+{% else %}
+<div id="database-query" class="space-y-3" {{ wraps() }}>
+  <form data-query data-write class="flex items-center gap-3" hx-post="{{ query_run }}" hx-target="#database-query-answer" hx-swap="innerHTML">
+    <div class="flex-1 [&>input]:w-full [&>input]:font-mono">{{ search_input("sql", placeholder="SELECT ... (one statement, read only)", autofocus=True, attrs='autocomplete="off" spellcheck="false"') }}</div>
+    <div class="flex gap-1.5">
+      {{ action("Run", "", "primary", type="submit") }}
+      {{ action("Clear", hx_replace(request.url.path, "#database-query")) }}
+      {{ wrap_actions("database-query-body") }}
+    </div>
+  </form>
+  <div id="database-query-answer">{% include "pages/overseer/database/_query_answer.html" %}</div>
+</div>
+{% endif %}

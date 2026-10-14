@@ -14,7 +14,7 @@ from app.components.deploy import agent
 from app.components.deploy.protocol import PROTOCOL, kept_key
 from app.components.web_frontend import overseer_deploy_actions as actions
 from app.components.web_frontend import overseer_secrets
-from app.core import secrets
+from app.core import exposure, secrets
 from app.core.config import settings
 from app.services.system import hosting
 from app.services.system.job_store import RedisJobStore
@@ -132,7 +132,7 @@ def redis(app: FastAPI, monkeypatch: pytest.MonkeyPatch, store: FakeStore) -> Fa
     """The dev build, Redis present, an agent listening with a DigitalOcean
     token, the app holding none, and no deploy record yet."""
     sign_in(app, monkeypatch, status_with())
-    monkeypatch.setattr(settings, "BUILD_ID", hosting.LOCAL)
+    monkeypatch.setattr(settings, "BUILD_ID", exposure.LOCAL)
     monkeypatch.setattr(agent, "has_redis", lambda: True)
     fake = FakeRedis()
     monkeypatch.setattr(agent, "_client", lambda: fake)

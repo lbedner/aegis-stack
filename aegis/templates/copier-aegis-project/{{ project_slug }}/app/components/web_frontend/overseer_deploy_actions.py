@@ -21,7 +21,7 @@ from urllib.parse import urlencode
 
 from app.components.deploy import agent as deploy_agent
 from app.components.deploy.protocol import PROTOCOL, RefusedError, validate
-from app.core.config import settings
+from app.core import exposure
 from app.core.formatting import format_bytes
 from app.core.log import logger
 from app.services.system import deploy_fit, deploy_spend, hosting
@@ -54,8 +54,6 @@ TITLES = {
 DEPLOYED = "This is a deployed server: deploy from the dev Overseer or CI."
 
 
-def deployed() -> bool:
-    return settings.BUILD_ID != hosting.LOCAL
 
 
 async def held(beat: dict[str, Any]) -> set[str]:
@@ -451,7 +449,7 @@ async def _confirmed(form: dict[str, str]) -> dict[str, str]:
 async def request_args(action: str, form: dict[str, str]) -> dict[str, str]:
     """What to ask the agent for ``action``, from its form, checked as far
     as the app can (the agent checks again); refused with the reason."""
-    if deployed():
+    if exposure.deployed():
         raise RefusedError(DEPLOYED)
     beat = await _listening()
     if form.get("provider") and form["provider"] not in await held(beat):

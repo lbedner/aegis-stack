@@ -47,10 +47,13 @@ def test_every_table_is_an_object_its_part_owns(model: SystemModel) -> None:
 
 
 def test_a_foreign_key_is_a_link_through_its_column(model: SystemModel) -> None:
+    """From its column (``via``) to the one it points at (``to``)."""
     from sqlmodel import SQLModel
 
     links = {
-        (e.source, e.target, e.via) for e in model.edges if e.kind is EdgeKind.LINK
+        (e.source, e.target, e.via, e.to)
+        for e in model.edges
+        if e.kind is EdgeKind.LINK
     }
     for table in SQLModel.metadata.tables.values():
         for key in table.foreign_keys:
@@ -59,6 +62,7 @@ def test_a_foreign_key_is_a_link_through_its_column(model: SystemModel) -> None:
                 f"object:{table.name}",
                 f"object:{target}",
                 key.parent.name,
+                key.column.name,
             ) in links
 
 

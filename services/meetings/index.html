@@ -3998,6 +3998,28 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#how-to-work-with-each-person" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How to work with each person
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-writers-are-agents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The writers are agents
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#the-meetings-page" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -6410,6 +6432,28 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#how-to-work-with-each-person" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How to work with each person
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-writers-are-agents" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The writers are agents
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#the-meetings-page" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -6528,9 +6572,14 @@
 <p>Meet does not send one stream per person: it mixes the call into a few streams that follow the loudest speakers, so a stream never says who is talking. The captions do. Each second goes to the speaker whose caption changed nearest to when it was heard, allowing for captions showing up a moment after the words, once they have had time to catch up. A second no caption explains is <code>Unknown</code>.</p>
 <p>When the call ends, how many seconds of each speaker the bot heard is kept with the meeting (Overseer shows it as "Heard: Ada 4m 10s · Leonard 2m 30s"). The audio itself is not kept by default: set <code>MEETINGS_KEEP_AUDIO_DIR</code> to a folder to keep each speaker's audio there as a WAV, under the meeting's id (<code>&lt;folder&gt;/&lt;id&gt;/Ada.wav</code>), for checking what the bot heard.</p>
 <h2 id="notes">Notes</h2>
-<p>One pass of the active model (the one Overseer's AI page selects) over the finished transcript, with the transcript's line ids in front of each line. What comes back is checked against the transcript: an item citing a line that does not exist loses that citation. The call is metered like every other, as <code>meetings:notes</code> in AI spend.</p>
+<p>One pass of the <code>meeting-notes</code> agent (see <a href="#the-writers-are-agents">The writers are agents</a>) over the finished transcript, with the transcript's line ids in front of each line. What comes back is checked against the transcript: an item citing a line that does not exist loses that citation. The call is metered like every other, as <code>meetings:notes</code> in AI spend.</p>
 <p>The notes are written again on request (the page's "Write them again"), over the old ones: after switching to a better model, say. A model that fails leaves its reason, which the page shows. A meeting where nothing was said gets no notes.</p>
 <p>Notes need the AI service on pydantic-ai with a database (<code>ai_backend</code> other than <code>memory</code>). Without it the meeting keeps its transcript and the page shows that alone.</p>
+<h2 id="how-to-work-with-each-person">How to work with each person</h2>
+<p>For everyone who speaks in an owner's meetings, a guide to working with them, read from what they say across those meetings: what they care about, how they like their information (big picture or detail, a demo or numbers, short or thorough), how they decide and commit, and what lands with them and what gets pushback. Every point cites the lines it rests on, so the read can be checked against what was said. It is only how they work: nothing about health, family, relationships, politics or religion, even when it came up.</p>
+<p>Once the notes are written, the bot writes the guide of everyone in the meeting but the owner (the speaker "I am" names), one pass of the <code>meeting-guide</code> agent over the latest ten meetings of the owner's they spoke in, metered as <code>meetings:guide</code>. Someone with fewer than three lines across them gets none yet. Each meeting writes it again, so it firms up as meetings accrue; a write that fails keeps the last guide, with why. The owner's own note on a person (what they know that the meetings do not say) is kept across every rewrite and read with the meetings. Guides are the owner's own; Overseer's admin sees every owner's. Like the notes, they need the AI service on pydantic-ai with a database.</p>
+<h2 id="the-writers-are-agents">The writers are agents</h2>
+<p>The notes and the guides are each written by an agent row the meetings service seeds at startup: <code>meeting-notes</code> and <code>meeting-guide</code>, under the "meetings" category in Overseer's Agents. Their prompt, model and sampling are edited there like any other agent's, and every prompt change is kept in its history. A row left as seeded runs on the model in force; one pinned to a model runs on that model. Seeding only adds a missing row, so an edit survives restarts and upgrades. While a row is missing or turned off, its built-in prompt runs on the model in force.</p>
 <h2 id="the-meetings-page">The Meetings page</h2>
 <p>With the htmx frontend, <code>/meetings</code> (linked from the navbar) sends the bot and reads what came of it, no CLI needed (signing the bot in is still <code>meetings login</code>):</p>
 <ul>
@@ -6541,7 +6590,8 @@
 <p>Each meeting is its owner's: with the auth service a user sees only the meetings they sent the bot to.</p>
 <h2 id="in-overseer">In Overseer</h2>
 <p>Overseer &gt; Services &gt; Meetings runs meetings as fully as the Meetings page does, across every owner: send the bot to a call from there (the meeting is the admin's own), and every owner's meetings are listed, newest first, with how many there are and how many the bot is in now. A row opens the meeting in the drawer: its status, owner and how long each speaker was heard, then the same notes and transcript as the page, with "I am" (which speaker the owner is, their action items first) and "Write them again". The drawer re-reads itself every few seconds while the bot is in or the notes are being written. From there the admin also asks the bot to leave a meeting it is still in, or deletes a meeting it is out of, with its transcript, notes and speakers.</p>
-<p>The Flet dashboard (<code>/dashboard</code>) has the same: a Meetings card with the counts, opening a modal that sends the bot and lists every owner's meetings beside the selected one, read in full and followed while something is happening, with the same actions.</p>
+<p>Its People tab lists every owner's guides, latest written first; a row opens one in the drawer, each point folding open to the lines it rests on (each opening its meeting), with the owner's note and "Write it again".</p>
+<p>The Flet dashboard (<code>/dashboard</code>) has the same: a Meetings card with the counts, opening a modal that sends the bot and lists every owner's meetings beside the selected one, read in full and followed while something is happening, with the same actions. A People tab in the modal does the same for the guides.</p>
 <h2 id="cli">CLI</h2>
 <table>
 <thead>
@@ -6628,6 +6678,33 @@
 <tr>
 <td><code>DELETE /api/v1/meetings/admin/{id}</code></td>
 <td>Delete the meeting with its transcript, notes and speakers; <code>409</code> while the bot is in it</td>
+</tr>
+</tbody>
+</table>
+<p>How to work with each person. The caller's own guides under <code>/api/v1/meetings/people</code>; every owner's, for Overseer, under <code>/api/v1/meetings/admin/people</code>, read by an admin and changed by an operator:</p>
+<table>
+<thead>
+<tr>
+<th>Route</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET .../people</code></td>
+<td>The guides, latest written first</td>
+</tr>
+<tr>
+<td><code>GET .../people/{id}</code></td>
+<td>One guide, each part with its points and the lines they rest on</td>
+</tr>
+<tr>
+<td><code>PUT .../people/{id}/note</code></td>
+<td><code>{"note": ...}</code>: the owner's note on the person (blank clears it); returns the guide</td>
+</tr>
+<tr>
+<td><code>POST .../people/{id}/guide</code></td>
+<td>Write the guide again, in the background; <code>409</code> without a model or while it is being written</td>
 </tr>
 </tbody>
 </table>

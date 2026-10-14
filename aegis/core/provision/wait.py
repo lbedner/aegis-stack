@@ -48,13 +48,18 @@ def wait_for_host_key(ip: str, attempts: int = 60, interval: float = 5) -> bool:
 
 
 def wait_for_dns(
-    hostname: str, ip: str, attempts: int = 60, interval: float = 10
+    hostname: str, ip: str, attempts: int = 240, interval: float = 10
 ) -> bool:
     """Wait until ``hostname`` resolves to ``ip`` from here.
 
     Let's Encrypt rate-limits failed validations, so the first deploy waits
     for the name rather than letting Traefik ask for a certificate too early.
+    Up to 40 minutes: a name looked up before its record existed stays
+    "not found" in resolvers' caches for the zone's negative TTL (often
+    30 minutes).
     """
+    # ponytail: the local resolver, so a cached "not found" waits out its
+    # TTL; asking the zone's own nameservers would end that wait early.
 
     def resolves() -> bool:
         try:

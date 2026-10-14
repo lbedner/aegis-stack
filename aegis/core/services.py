@@ -302,6 +302,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 "app/services/system/ui_auth.py",
                 "app/core/security.py",
                 "app/cli/auth.py",
+                "tests/cli/test_auth_cli.py",
                 ".claude/skills/protect-an-endpoint",
                 "tests/api/test_auth_endpoints.py",
                 "tests/services/test_auth_integration.py",

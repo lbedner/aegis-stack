@@ -250,3 +250,28 @@ def test_the_generated_env_ends_with_a_newline(components: dict[str, Any]) -> No
     rendered = env.get_template("{{ project_slug }}/.env.example.jinja").render(context)
 
     assert rendered.endswith("\n")
+
+
+def test_a_failed_start_shows_the_containers_before_any_rollback() -> None:
+    """Their states and the webserver's own words: a rollback removes them."""
+    ps, logs = deploy._why_it_failed("/opt/my-app")
+    assert ps.startswith("cd /opt/my-app && docker compose") and ps.endswith("ps -a")
+    assert logs.endswith("logs --no-color --tail 60 webserver")
+
+
+def test_the_health_check_waits_for_the_webserver_to_settle(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A first boot on one CPU outlasts the check's few tries: its own
+    HEALTHCHECK says when it is worth asking."""
+    said = iter(["starting", "starting", "healthy", "never asked"])
+    asked: list[str] = []
+    monkeypatch.setattr(deploy, "_rolling_webserver_ids", lambda *a: ["c1"])
+    monkeypatch.setattr(
+        deploy,
+        "_rolling_container_health",
+        lambda *a: asked.append(next(said)) or asked[-1],
+    )
+    monkeypatch.setattr(deploy.time, "sleep", lambda s: None)
+    deploy._wait_for_webserver("h", "u", "/opt/my-app")
+    assert asked == ["starting", "starting", "healthy"]

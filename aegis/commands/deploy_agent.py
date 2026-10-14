@@ -30,9 +30,10 @@ import sys
 import threading
 import time
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlsplit
 
 import redis
@@ -54,12 +55,13 @@ _protocol = template_module(
     "aegis_deploy_protocol", "app", "components", "deploy", "protocol.py"
 )
 PROTOCOL: dict[str, Any] = _protocol.PROTOCOL
+LOOKS = 4  # looks answered at once (a catalog, an account, the footprint)
 RefusedError = _protocol.RefusedError
 checked_token = _protocol.checked_token
 # The app's job record (``RedisJobStore``): its key prefix and lifetime.
 JOB_PREFIX = "jobs:"
 JOB_KEEP_SECONDS = 6 * 3600
-TAIL = 40  # lines of a command's output a job keeps for the page
+TAIL = 400  # lines of a command's output a job keeps (the page, Copy)
 JOB_ID = re.compile(r"[0-9a-f]{32}")  # a uuid4's hex, as the app mints them
 AEGIS = [sys.executable, "-m", "aegis"]
 DEFAULT_REDIS_PORT = "6379"
@@ -142,23 +144,30 @@ class Job:
         self.client = client
         self.key = f"{JOB_PREFIX}{job_id}"
         self.lines: list[str] = []
+        self.progress: Any = None
 
     def _write(self, **fields: str) -> None:
         self.client.hset(self.key, mapping=fields)
         self.client.expire(self.key, JOB_KEEP_SECONDS)
 
+    def _result(self, **more: Any) -> str:
+        return json.dumps({"lines": self.lines, "progress": self.progress} | more)
+
     def line(self, text: str) -> None:
-        """A line of output: the job's label, and the tail the page shows."""
+        """A line of output: the job's label, and the tail the page shows;
+        or, a ``progress_line``, where its steps stand."""
+        if (progress := _protocol.read_progress(text)) is not None:
+            self.progress = progress
+            self._write(result=self._result())
+            return
         self.lines = [*self.lines, text][-TAIL:]
-        self._write(label=text, result=json.dumps({"lines": self.lines}))
+        self._write(label=text, result=self._result())
 
     def done(self, result: dict[str, Any]) -> None:
-        self._write(status="done", result=json.dumps({"lines": self.lines} | result))
+        self._write(status="done", result=self._result(**result))
 
     def fail(self, error: str) -> None:
-        self._write(
-            status="failed", error=error, result=json.dumps({"lines": self.lines})
-        )
+        self._write(status="failed", error=error, result=self._result())
 
 
 def run(
@@ -184,7 +193,7 @@ def run(
         stderr=subprocess.STDOUT,
         text=True,
         errors="replace",
-        env=os.environ | env | {"PYTHONUNBUFFERED": "1"},
+        env=os.environ | env | {"PYTHONUNBUFFERED": "1", PROTOCOL["progress_env"]: "1"},
     ) as process:
         for raw in process.stdout or ():
             line = _masked(raw.rstrip(), tokens)
@@ -276,7 +285,7 @@ def _execute(
 ) -> None:
     env = _token_env(root, action, args, token) | dns
     spec = PROTOCOL["actions"][action]
-    if "kept" in spec:
+    if _protocol.is_kept(action):
         key = _protocol.kept_key(action, args)
         if not job.client.exists(key):  # asked twice, found once
             found = _found(root, action, args, env)
@@ -303,19 +312,24 @@ def _execute(
     job.done({"exit_code": 0})
 
 
-def handle(client: Any, root: Path, raw: str) -> None:
-    """Run one request and finish its job, done or failed with the reason."""
+def _request(raw: str) -> dict[str, Any] | None:
+    """A request off the queue, None (said) for one without a job to
+    answer in."""
     try:
         request = json.loads(raw)
         job_id = request["job_id"]
     except (ValueError, TypeError, KeyError):
-        brand.warn(t("deploy_agent.unreadable"))
-        return
+        job_id = None
     if not isinstance(job_id, str) or not JOB_ID.fullmatch(job_id):
         brand.warn(t("deploy_agent.unreadable"))
-        return
-    job = Job(client, job_id)
-    action = request.get("action")
+        return None
+    return request
+
+
+def handle(client: Any, root: Path, request: dict[str, Any]) -> None:
+    """Run one request and finish its job, done or failed with the reason."""
+    job = Job(client, request["job_id"])
+    action = cast(str, request.get("action"))  # checked by validate, below
     typer.echo(t("deploy_agent.request", action=action, by=request.get("by") or "?"))
     try:
         _fresh(request.get("at"))
@@ -354,18 +368,32 @@ def serve(client: Any, root: Path, stop: threading.Event | None = None) -> None:
     client.set(key, beat, ex=every * 3)
     thread = threading.Thread(target=beating, daemon=True)
     thread.start()
+    commands, looks = ThreadPoolExecutor(1), ThreadPoolExecutor(LOOKS)
     try:
         while not stop.is_set():
             try:
                 item = client.blpop([PROTOCOL["requests"]], timeout=POLL_SECONDS)
-                if item:
-                    handle(client, root, item[1])
+                if item and (request := _request(item[1])):
+                    # Commands one at a time, in order; a look (read only,
+                    # quick) beside them, never queued behind a server being
+                    # made until too old to run.
+                    look = _protocol.is_kept(request.get("action"))
+                    (looks if look else commands).submit(handle, client, root, request)
             except redis.RedisError:
                 # The stack restarting, between requests or during one (its
                 # job could not even record failing); listen again once
                 # Redis is back.
                 stop.wait(REDIS_RETRY_SECONDS)
+    except BaseException:
+        # Interrupted: a command not started yet does not start.
+        # ponytail: its job says it waits until it expires (hours); put it
+        # back on the queue if that ever matters.
+        commands.shutdown(cancel_futures=True)
+        raise
     finally:
+        # What was taken off the queue is finished before leaving.
+        commands.shutdown()
+        looks.shutdown()
         stopped.set()
         thread.join()
         with contextlib.suppress(redis.RedisError):

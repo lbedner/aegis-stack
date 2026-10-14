@@ -14,7 +14,7 @@ import subprocess
 import tempfile
 import time
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
@@ -383,12 +383,17 @@ def _exec_command(deploy_path: str, service: str, argv: list[str]) -> str:
 
 
 def _run_remote_capture(
-    host: str, user: str, command: str
+    host: str, user: str, command: str, upload: Path | None = None
 ) -> subprocess.CompletedProcess:
-    """Run a command on the remote server via SSH and capture output."""
-    return subprocess.run(
-        ["ssh", f"{user}@{host}", command], capture_output=True, text=True
-    )
+    """Run a command on the remote server via SSH and capture output;
+    ``upload`` (a file), if given, is its stdin."""
+    with upload.open("rb") if upload else nullcontext() as stdin:
+        return subprocess.run(
+            ["ssh", f"{user}@{host}", command],
+            stdin=stdin,
+            capture_output=True,
+            text=True,
+        )
 
 
 def _install_pubkey_on_server(
@@ -690,6 +695,14 @@ def _public_address(config: dict, project_root: Path) -> tuple[str | None, bool]
     return name, answers.get("ingress_tls") is True
 
 
+def _why_it_failed(deploy_path: str) -> list[str]:
+    """What to show of a stack that would not start or answer, before
+    anything rolls it back and its containers (their logs too) go: their
+    states, and the webserver's last lines."""
+    prefix = _compose_prefix(deploy_path)
+    return [f"{prefix} ps -a", f"{prefix} logs --no-color --tail 60 webserver"]
+
+
 def _run_health_check(
     host: str, user: str, command: str, retries: int = 3, interval: int = 5
 ) -> bool:
@@ -876,6 +889,24 @@ def _rolling_container_health(host: str, user: str, container_id: str) -> str:
         host, user, _rolling_inspect_health_command(container_id)
     )
     return _rolling_health_verdict(result.stdout)
+
+
+def _wait_for_webserver(
+    host: str,
+    user: str,
+    deploy_path: str,
+    ceiling_seconds: int = ROLLING_ROLLOUT_TIMEOUT_DEFAULT,
+) -> None:
+    """Until the webserver's own HEALTHCHECK settles (``healthy`` or
+    ``unhealthy``): a first boot on one CPU takes minutes, longer than the
+    health check's few tries. ``ceiling_seconds`` only guards a container
+    that never settles."""
+    ids = _rolling_webserver_ids(host, user, deploy_path)
+    deadline = time.monotonic() + ceiling_seconds
+    while ids and time.monotonic() < deadline:
+        if _rolling_container_health(host, user, ids[0]) != "starting":
+            return
+        time.sleep(ROLLING_HEALTH_POLL_SECONDS)
 
 
 def _rolling_remove_container(host: str, user: str, container_id: str) -> None:
@@ -1427,6 +1458,8 @@ def deploy_command(
     compose_result = subprocess.run(["ssh", f"{user}@{host}", compose_cmd])
     if compose_result.returncode != 0:
         brand.error(t("deploy.start_failed"), err=True)
+        for command in _why_it_failed(deploy_path):
+            _run_remote(host, user, command)
         if backup_timestamp and health_cfg["auto_rollback"]:
             brand.warn(t("deploy.auto_rollback"))
             rolled_back = _rollback_to_backup(
@@ -1446,10 +1479,13 @@ def deploy_command(
 
     # Step 7: Health check + auto-rollback
     if health_check:
+        _wait_for_webserver(host, user, deploy_path)
         healthy = _run_health_check(
             host, user, health_command, retries=health_cfg["retries"]
         )
         if not healthy:
+            for command in _why_it_failed(deploy_path):
+                _run_remote(host, user, command)
             if backup_timestamp and health_cfg["auto_rollback"]:
                 brand.warn(t("deploy.auto_rollback"), bold=True)
                 success = _rollback_to_backup(

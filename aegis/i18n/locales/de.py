@@ -1034,6 +1034,17 @@ MESSAGES: dict[str, str] = {
     "deploy.help_opt_logs_service": "Logs nur für einen bestimmten Service anzeigen",
     "deploy.help_opt_shell_service": "Service, mit dem die Verbindung hergestellt wird",
     "deploy.help_arg_exec_command": "Befehl, der im Container ausgeführt wird (nach --).",
+    "deploy.upload_not_sqlite": "Nur eine SQLite-Datenbank kann hochgeladen werden; die dieses Projekts ist keine.",
+    "deploy.upload_snapshot": "Snapshot der Datenbank dieses Rechners...",
+    "deploy.upload_no_snapshot": "Die Datenbank dieses Rechners war nicht lesbar: Stack starten (make serve) und erneut versuchen. Der Server wurde nicht angefasst.",
+    "deploy.upload_backup_failed": "Der Server konnte nicht gesichert werden, daher wurde seine Datenbank nicht ersetzt.",
+    "deploy.upload_restoring": "Datenbank des Servers wird ersetzt...",
+    "deploy.upload_refused": "Der Upload wurde abgelehnt, der Server behält seine Datenbank: {error}",
+    "deploy.upload_start_failed": "Die Datenbank ist eingespielt, aber der Stack startete nicht: aegis deploy-logs zeigt warum.",
+    "deploy.upload_done": "Die Datenbank dieses Rechners ist auf {host}.",
+    "deploy.upload_confirm": "Die Datenbank auf {host} durch die dieses Rechners ersetzen? Die des Servers wird vorher gesichert.",
+    "provision.help_opt_data": "local: nach dem ersten Deploy die Datenbank dieses Rechners auf den Server kopieren (SQLite)",
+    "provision.help_opt_resume": "nur eine unterbrochene Bereitstellung fortsetzen; nie einen neuen Server anlegen",
     "deploy.exec_no_command": "Kein Befehl angegeben. Nach -- schreiben, z. B.: aegis deploy-exec -- alembic current",
     "deploy.help_opt_gh_repo": "GitHub-Repo als owner/name (Standardwert: automatisch aus git remote origin)",
     "deploy.help_opt_gh_tags": "Deploy-Workflow auch bei Push auf v*-Tags auslösen",
@@ -1341,6 +1352,8 @@ MESSAGES: dict[str, str] = {
     "provision.nothing_to_destroy": (
         "In .aegis/deploy.yml ist kein bereitgestellter Server verzeichnet."
     ),
+    "provision.nothing_to_resume": "In .aegis/deploy.yml ist keine Bereitstellung unterbrochen: nichts fortzusetzen, und kein neuer Server wird angelegt.",
+    "provision.first_deploy_failed": "Das erste Deployment ist fehlgeschlagen; die Ausgabe nennt den Grund.",
     "provision.destroy_title": "Dies löscht dauerhaft:",
     "provision.destroy_confirm": "Gib zur Bestätigung den Servernamen ({name}) ein",
     "provision.destroy_cancelled": (

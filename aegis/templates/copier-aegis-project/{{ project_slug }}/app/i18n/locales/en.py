@@ -469,6 +469,12 @@ MESSAGES: dict[str, str] = {
     "auth.promote_user_failed": "Error: Failed to promote user: {error}",
     # Help text
     "auth.help": "Authentication management commands",
+    "auth.help_create_user": "Create an account; its password is asked, hidden, twice.",
+    "auth.opt_account_email": "The account's email address",
+    "auth.password_prompt": "Password",
+    "auth.account_created": "Created {email}.",
+    "auth.not_admin": "Not an admin: add it to ADMIN_USER_EMAILS in .env for the Overseer.",
+    "auth.account_failed": "Could not create the account: {error}",
     "auth.help_create_test_user": "Create a test user for development and testing.",
     "auth.help_create_test_users": "Create multiple test users for development and testing.",
     "auth.help_list_users": "List all users in the system.",

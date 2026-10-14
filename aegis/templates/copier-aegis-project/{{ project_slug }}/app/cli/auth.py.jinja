@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     pass
 
+from pydantic import ValidationError
 from rich.console import Console
 from rich.table import Table
 import typer
@@ -22,7 +23,8 @@ from app.core.db import get_async_session
 from app.core.security import VALID_ROLES
 {%- endif %}
 from app.i18n import lazy_t, t
-from app.models.user import UserCreate
+from app.models.user import User, UserCreate
+from app.services.auth.deps import is_admin
 from app.services.auth.service import UserService
 
 app = typer.Typer(help=lazy_t("auth.help"))
@@ -74,6 +76,39 @@ async def find_next_available_email(
         return f"{prefix}{counter}@{domain}"
 
 
+async def _add_user(
+    user_service: UserService, email: str, password: str, full_name: str | None
+) -> User:
+    """Create the account, refusing an email already taken."""
+    if await user_service.get_user_by_email(email):
+        theme.bad(t("auth.user_already_exists", email=email))
+        raise typer.Exit(1)
+    return await user_service.create_user(
+        UserCreate(email=email, password=password, full_name=full_name)
+    )
+
+
+@app.command(help=lazy_t("auth.help_create_user"))
+async def create_user(
+    email: str = typer.Option(..., help=lazy_t("auth.opt_account_email")),
+    full_name: str | None = typer.Option(None, help=lazy_t("auth.opt_full_name")),
+) -> None:
+    # Asked, never an option: a password typed into a command stays in the
+    # shell's history and the process list.
+    password = typer.prompt(
+        t("auth.password_prompt"), hide_input=True, confirmation_prompt=True
+    )
+    try:
+        async with get_async_session() as session:
+            user = await _add_user(UserService(session), email, password, full_name)
+    except ValidationError as exc:
+        theme.bad(t("auth.account_failed", error=exc.errors()[0]["msg"]))
+        raise typer.Exit(1) from None
+    theme.good(t("auth.account_created", email=user.email))
+    if not is_admin(user):
+        theme.warn(t("auth.not_admin"))
+
+
 @app.command(help=lazy_t("auth.help_create_test_user"))
 def create_test_user(
     email: str | None = typer.Option(
@@ -116,21 +151,7 @@ async def _create_test_user(
                 email = await find_next_available_email(user_service, prefix, domain)
                 theme.label(t("auth.auto_generated_email", email=email))
 
-            # Check if user already exists
-            existing_user = await user_service.get_user_by_email(email)
-            if existing_user:
-                theme.bad(t("auth.user_already_exists", email=email))
-                raise typer.Exit(1)
-
-            # Create user data
-            user_data = UserCreate(
-                email=email,
-                password=password,
-                full_name=full_name,
-            )
-
-            # Create the user
-            user = await user_service.create_user(user_data)
+            user = await _add_user(user_service, email, password, full_name)
 
             # Display success message
             theme.good(t("auth.user_created"), bold=True)

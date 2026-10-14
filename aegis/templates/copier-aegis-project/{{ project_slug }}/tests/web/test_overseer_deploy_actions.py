@@ -11,8 +11,9 @@ from fastapi.testclient import TestClient
 import pytest
 
 from app.components.deploy import agent
-from app.components.deploy.protocol import PROTOCOL, kept_key
+from app.components.deploy.protocol import PROTOCOL, PROVISION_STEPS, is_kept, kept_key
 from app.components.web_frontend import overseer_deploy_actions as actions
+from app.components.web_frontend import overseer_deploy_form as deploy_form
 from app.components.web_frontend import overseer_secrets
 from app.core import exposure, secrets
 from app.core.config import settings
@@ -23,7 +24,13 @@ from tests._fake_redis import FakeRedis
 from tests._fake_runtime import SERVER, FakeRuntime, use_runtime
 from tests._secret_settings import FakeStore, use_store
 from tests.web.dom import chosen, none, one, select, table_rows, text, triggers
-from tests.web.overseer import page_html, sent_events, sign_in, status_with
+from tests.web.overseer import (
+    frame_html,
+    page_html,
+    sent_events,
+    sign_in,
+    status_with,
+)
 
 PAGE = "/overseer/deployments"
 NEW = f"{PAGE}/new"  # the steps to a new server
@@ -31,7 +38,7 @@ CARD = "#card-deploy"
 BOX = {"host": "203.0.113.7", "user": "root", "path": "/opt/my-app"}
 READY = {"provider": "digitalocean", "server_name": "my-app", "status": "ready"}
 TOKEN = "dop_v1_from-the-app-wxyz"
-CATALOG_URL = actions.panel_path("catalog", "digitalocean")
+CATALOG_URL = deploy_form.panel_path("catalog", "digitalocean")
 # What DigitalOcean sells where, as the agent caches it. The provider's
 # default (s-1vcpu-2gb in nyc3) is not offered: nyc3 does not have it.
 SOLD = {
@@ -80,9 +87,9 @@ PICKED = {"provider": "digitalocean", "size": "s-1vcpu-2gb", "region": "fra1"}
 MIB = 1024**2
 # What the stack takes (``aegis.core.footprint``), steward-shaped: about
 # 0.7 GB in use, 2.3 GB of limits, traefik not running here.
-FOOTPRINT = {
+FOOTPRINT: dict[str, Any] = {
     "services": [
-        {"name": "webserver", "memory": 768 * MIB, "cpus": 2.0, "used": 400 * MIB},
+        {"name": "webserver", "memory": 768 * MIB, "cpus": 1.0, "used": 400 * MIB},
         {"name": "worker-system", "memory": 1024 * MIB, "cpus": 1.0, "used": 130 * MIB},
         {"name": "scheduler", "memory": 256 * MIB, "cpus": 0.5, "used": 130 * MIB},
         {"name": "redis", "memory": 128 * MIB, "cpus": 0.25, "used": 20 * MIB},
@@ -92,7 +99,7 @@ FOOTPRINT = {
     "data": 1200 * MIB,
     "images": 480 * MIB,
 }
-FIT_URL = actions.panel_path("fit", "digitalocean")
+FIT_URL = deploy_form.panel_path("fit", "digitalocean")
 # What the DigitalOcean account runs now, as the agent keeps it.
 ACCOUNT = {
     "servers": [
@@ -184,12 +191,21 @@ def _step(card: Any, key: str) -> Any:
     return one(card, f'[data-step="{key}"]')
 
 
-def _job(redis: FakeRedis, action: str, result: dict[str, Any], error: str = "") -> str:
-    """A finished deploy job, the newest."""
+def _job(
+    redis: FakeRedis,
+    action: str,
+    result: dict[str, Any],
+    error: str = "",
+    running: bool = False,
+) -> str:
+    """A deploy job, the newest: finished, failed with ``error``, or still
+    ``running``."""
     store = RedisJobStore(redis)
     job_id = f"{action}0000000000000000000000000000"[:32]
     asyncio.run(store.create(job_id, f"deploy:{action}", "Waiting"))
-    if error:
+    if running:
+        redis.hashes[f"jobs:{job_id}"]["result"] = json.dumps(result)
+    elif error:
         asyncio.run(store.fail(job_id, error))
         redis.hashes[f"jobs:{job_id}"]["result"] = json.dumps(result)
     else:
@@ -258,15 +274,32 @@ def test_the_overview_is_what_is_deployed_the_steps_their_own_page(
     one(_card(TestClient(app)), "[data-steps]")
 
 
+def test_while_a_server_is_being_made_the_overview_points_to_it(
+    redis: FakeRedis, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Its first deploy is one of its steps: shown on New server, not as a
+    server to deploy to, back up or destroy."""
+    server = {"host": "203.0.113.7", "user": "root", "path": "/opt/my-app"}
+    stopped = READY | {"status": "provisioning"}
+    deployed(monkeypatch, {"server": server, "provision": stopped})
+    _job(redis, "provision", {"lines": ["Failed to start services"]}, error="exit 1")
+    card = one(page_html(TestClient(app), PAGE), CARD)
+    one(one(card, '[data-deploy-state="creating"]'), f'a[href="{NEW}"]')
+    none(card, "[data-deploy-job]")
+    none(card, "[data-ask]")
+
+
 def test_the_overview_shows_every_server_in_each_connected_account(
     redis: FakeRedis, app: FastAPI
 ) -> None:
     """From what the agent last found (kept a few minutes), so opening the
     page asks the cloud nothing; nothing is being bought, so no total
-    with a new one."""
+    with a new one. Which account is its logo, not a sentence naming it."""
     _accounted(redis)
     account = one(page_html(TestClient(app), PAGE), "[data-account]")
-    assert "2 servers, $18.00 a month" in text(account)
+    assert hosting.BY_KEY["digitalocean"].domain in one(account, "p img").get("src")
+    assert "DigitalOcean: 2 servers, $18.00 a month" in text(account)
+    assert "Already in" not in text(account)
     assert "With this one" not in text(account)
     assert not _queued(redis)
     rows = select(account, "tbody tr")  # dearest first, aegis's own marked
@@ -335,7 +368,7 @@ def test_an_agent_older_than_the_app_is_named_stale(
     assert "make serve" in text(one(card, '[data-deploy-state="stale"]'))
     assert _steps(card)[0] == ("agent", "current")
     _sold(redis)
-    url = actions.panel_url(
+    url = deploy_form.panel_url(
         "account", "digitalocean", size="s-1vcpu-2gb", region="tor1"
     )
     said = text(one(TestClient(app).get(url).text, "[data-account] [data-error]"))
@@ -392,6 +425,17 @@ def test_with_a_dns_providers_keys_the_domain_step_is_done(
     assert step.get("data-status") == "done"
     assert _picker_on(step, "dns") == "porkbun"
     assert "Porkbun" in text(one(step, "[data-summary]"))
+
+
+def test_with_one_of_a_pair_of_keys_the_picker_stays_on_its_provider(
+    redis: FakeRedis, store: FakeStore, app: FastAPI
+) -> None:
+    """Saving a key comes back to the page: half way through Porkbun's
+    pair it opens on Porkbun still, the other key's row at hand."""
+    store.values |= {"PORKBUN_API_KEY": "pk1_" + "a" * 20}
+    step = _step(_card(TestClient(app)), "domain")
+    assert step.get("data-status") == "optional"
+    assert _picker_on(step, "dns") == "porkbun"
 
 
 def test_without_an_agent_the_steps_after_it_wait(
@@ -679,7 +723,7 @@ def test_a_provider_selling_nothing_says_so(redis: FakeRedis, app: FastAPI) -> N
 def test_the_form_loads_whether_its_size_fits(redis: FakeRedis, app: FastAPI) -> None:
     _sold(redis)
     fit = one(_form(TestClient(app)), "[data-fit]")
-    assert fit.get("hx-get") == actions.panel_url(
+    assert fit.get("hx-get") == deploy_form.panel_url(
         "fit", "digitalocean", size="s-1vcpu-2gb"
     )
     assert fit.get("hx-trigger") == "load"
@@ -696,10 +740,10 @@ def test_the_form_shows_what_the_account_runs_and_the_total_with_this_one(
     _accounted(redis)
     account = one(_form(TestClient(app)), "[data-account]")
     said = text(account)
-    assert "2 servers, $18.00 a month" in said
+    assert "Already in your account: 2 servers, $18.00 a month" in said
     assert "With this one: $30.00 a month" in said
     assert "$23.17" in text(one(account, "[data-month-to-date]"))
-    none(account, "table")
+    none(account, "table, img")  # the cloud picker wears the logo here
 
 
 def test_without_billing_read_the_account_says_which_scope(
@@ -724,7 +768,7 @@ def test_without_the_account_the_agent_is_asked(redis: FakeRedis, app: FastAPI) 
     includes this one)."""
     _sold(redis)
     placeholder = one(_form(TestClient(app)), "[data-account]")
-    url = actions.panel_url(
+    url = deploy_form.panel_url(
         "account", "digitalocean", size="s-1vcpu-2gb", region="tor1"
     )
     assert placeholder.get("hx-get") == url
@@ -778,6 +822,22 @@ def test_a_2_gb_server_fits_today_but_not_at_the_limits(
     assert _tone(_row(fit, "cpu")) == "muted"
     assert _tone(_row(fit, "disk")) == "ok"
     assert one(fit, "[data-verdict] [data-tone]").get("data-tone") == "warn"
+
+
+def test_one_service_limited_past_the_servers_cpus_does_not_fit(
+    redis: FakeRedis, app: FastAPI
+) -> None:
+    """Docker refuses to start a container limited to more CPUs than the
+    machine has: not slower, not started at all."""
+    _sold(redis)
+    services = [dict(s) for s in FOOTPRINT["services"]]
+    services[0]["cpus"] = 2.0  # the webserver
+    _measured(redis, FOOTPRINT | {"services": services})
+    fit = _fit(TestClient(app), "s-1vcpu-2gb")
+    cpu = _row(fit, "cpu")
+    assert _tone(cpu) == "error"
+    assert "webserver (2 CPUs)" in text(one(cpu, "[data-why]"))
+    assert one(fit, "[data-verdict] [data-tone]").get("data-tone") == "error"
 
 
 def test_the_limits_are_drawn_service_by_service(
@@ -1022,6 +1082,66 @@ def test_who_may_reach_the_overseer_is_asked_on_the_form(
     assert request["args"]["allowlist"] == "203.0.113.9/32"
 
 
+# A stack without a database has no DATABASE_URL, and nothing to bring.
+WITH_A_DATABASE = pytest.mark.skipif(
+    not hasattr(settings, "DATABASE_URL"), reason="no database in this stack"
+)
+
+
+@WITH_A_DATABASE
+def test_bringing_this_machines_data_is_a_box_on_the_form(
+    redis: FakeRedis, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Off by default: ticked, the agent copies the SQLite database over
+    after the first deploy (``aegis deploy-upload-db``); the box stays
+    ticked when a size or region reloads the form."""
+    monkeypatch.setattr(settings, "DATABASE_URL", "sqlite:///./data/app.db")
+    _sold(redis)
+    box = one(_form(TestClient(app)), "input[type=checkbox][name=data]")
+    assert box.get("value") == "local" and box.get("checked") is None
+    assert (
+        one(_form(TestClient(app), data="local"), "input[name=data]").get("checked")
+        is not None
+    )
+    url = f"{actions.PARTIALS}/provision"
+    TestClient(app).post(url, data=PICKED | {"typed": "12.00", "data": "local"})
+    (request,) = _queued(redis)
+    assert request["args"]["data"] == "local"
+
+
+def test_the_form_keeps_to_what_most_fill_in(redis: FakeRedis, app: FastAPI) -> None:
+    """Size, region, a name; the email and who reaches the Overseer folded
+    under More options, which most leave as they are."""
+    _sold(redis)
+    form = _form(TestClient(app))
+    more = one(form, "details[data-more]")
+    for name in ("email", "allowlist"):
+        one(more, f"input[name={name}]")
+    for name in ("size", "region", "domain"):
+        none(more, f"[name={name}]")
+        one(form, f"[name={name}]")
+
+
+def test_whether_it_fits_is_its_verdict_with_the_bars_folded(
+    redis: FakeRedis, app: FastAPI
+) -> None:
+    _sold(redis)
+    _measured(redis)
+    fit = _fit(TestClient(app), "s-1vcpu-2gb")
+    folded = one(fit, "details[data-fit-details]")
+    one(one(folded, "summary"), "[data-verdict]")
+    one(folded, '[data-fit-row="memory"]')
+
+
+@WITH_A_DATABASE
+def test_without_sqlite_there_is_no_data_to_bring(
+    redis: FakeRedis, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "DATABASE_URL", "postgresql://db/app")
+    _sold(redis)
+    none(_form(TestClient(app)), "input[name=data]")
+
+
 def test_without_a_domain_no_dns_keys_travel(
     redis: FakeRedis, store: FakeStore, app: FastAPI
 ) -> None:
@@ -1095,18 +1215,113 @@ def test_destroy_needs_the_server_name_typed(
     assert request["args"] == {"confirm": "my-app"}
 
 
-def test_a_failed_provision_offers_to_destroy_what_it_made(
+def test_a_provision_that_stopped_offers_resume_and_folds_away_the_rest(
     redis: FakeRedis, app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    started = READY | {"status": "provisioning"}
-    deployed(monkeypatch, {"provision": started})
+    """Only the job on the page: no pickers, no form; delete and the output
+    each folded under their own disclosure."""
+    deployed(monkeypatch, {"provision": READY | {"status": "provisioning"}})
     lines = {"lines": ["Created server 77", "SSH on 203.0.113.7 did not come up"]}
     _job(redis, "provision", lines, error="aegis deploy-provision failed (exit 1)")
-    panel = one(page_html(TestClient(app), NEW), '[data-deploy-job="provision"]')
-    assert "SSH on 203.0.113.7" in text(one(panel, "[data-lines]"))
-    destroy = one(panel, '[data-ask="destroy"]')
-    assert destroy.get("data-write") is not None
+    page = page_html(TestClient(app), NEW)
+    none(page, "[data-steps]")
+    panel = one(page, '[data-deploy-job="provision"]')
+    assert one(panel, '[data-ask="resume"]').get("data-write") is not None
+    destroy = one(panel, 'details[data-delete] [data-ask="destroy"]')
     assert one(destroy, "input[name=confirm]").get("pattern") == "my-app"
+    output = one(panel, "details[data-output] [data-lines]")
+    assert "SSH on 203.0.113.7" in text(output)
+    copied = one(panel, "details[data-output] [data-copy]").get("data-copy")
+    assert copied == "\n".join(lines["lines"])
+
+
+def test_one_stopped_so_long_ago_its_job_is_gone_still_offers_resume(
+    redis: FakeRedis, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    stopped = {"status": "provisioning", "error": "SSH on 203.0.113.7 timed out."}
+    deployed(monkeypatch, {"provision": READY | stopped})
+    page = page_html(TestClient(app), NEW)
+    none(page, "[data-steps]")
+    panel = one(page, '[data-deploy-job="provision"]')
+    assert text(one(panel, "[data-error]")) == stopped["error"]  # why, kept
+    one(panel, '[data-ask="resume"]')
+    one(panel, 'details[data-delete] [data-ask="destroy"]')
+
+
+def test_a_failed_delete_of_one_stopped_still_offers_resume(
+    redis: FakeRedis, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Its server still half made and billed: the way on stays on the page."""
+    deployed(monkeypatch, {"provision": READY | {"status": "provisioning"}})
+    _job(redis, "destroy", {"lines": []}, error="aegis deploy-destroy failed (exit 1)")
+    panel = one(page_html(TestClient(app), NEW), '[data-deploy-job="destroy"]')
+    one(panel, '[data-ask="resume"]')
+
+
+def test_resume_asks_the_agent_for_the_provision_on_record(
+    redis: FakeRedis, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client = TestClient(app)
+    url = f"{actions.PARTIALS}/resume"
+    deployed(monkeypatch, {"provision": READY})
+    assert triggers(client.post(url))["toast"]["tone"] == "error"
+    assert not _queued(redis)
+    deployed(monkeypatch, {"provision": READY | {"status": "provisioning"}})
+    response = client.post(url)
+    (request,) = _queued(redis)
+    assert (request["action"], request["args"]) == ("resume", {})
+    one(response.text, '[data-deploy-job="resume"]')
+
+
+PLAN = list(PROVISION_STEPS)
+
+
+def _stages(panel: Any) -> dict[str, str]:
+    """The step bar: each step's title and where it stands."""
+    return {
+        text(li): li.get("data-status")
+        for li in select(one(panel, "[data-stages]"), "[data-stage]")
+    }
+
+
+def test_a_server_being_created_shows_its_steps_as_they_go(
+    redis: FakeRedis, app: FastAPI
+) -> None:
+    progress = {"steps": PLAN, "at": "boot"}
+    _job(redis, "provision", {"lines": ["Waiting"], "progress": progress}, running=True)
+    (frame,) = asyncio.run(sent_events(actions.events(max_frames=1)))
+    page = page_html(TestClient(app), NEW)
+    none(page, "[data-steps]")  # only the job while it runs
+    job = '[data-deploy-job="provision"]'
+    for panel in (one(frame_html(frame), job), one(page, job)):
+        assert _stages(panel) == {
+            "Create the server": "done",
+            "First boot": "current",
+            "Point the name": "todo",
+            "Deploy": "todo",
+            "Bring my data": "todo",
+        }
+        none(panel, '[data-ask="resume"]')
+    assert one(page, '[data-stage="boot"]').get("aria-current") == "step"
+
+
+def test_a_failed_provision_marks_the_step_it_stopped_at(
+    redis: FakeRedis, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    deployed(monkeypatch, {"provision": READY | {"status": "provisioning"}})
+    progress = {"steps": PLAN[:4], "at": "dns"}
+    _job(redis, "provision", {"lines": [], "progress": progress}, error="exit 1")
+    panel = one(page_html(TestClient(app), NEW), '[data-deploy-job="provision"]')
+    assert list(_stages(panel).values()) == ["done", "done", "failed", "todo"]
+
+
+def test_a_job_that_marks_no_steps_has_no_step_bar(
+    redis: FakeRedis, app: FastAPI
+) -> None:
+    """Other actions, and an agent older than the step bar."""
+    _job(redis, "provision", {"lines": ["Done"]})
+    panel = one(page_html(TestClient(app), NEW), '[data-deploy-job="provision"]')
+    none(panel, "[data-stages]")
 
 
 def test_the_newest_job_streams(redis: FakeRedis) -> None:
@@ -1118,5 +1333,5 @@ def test_the_newest_job_streams(redis: FakeRedis) -> None:
 
 def test_every_action_the_card_asks_is_titled() -> None:
     """``TITLES`` is the card's actions: the protocol's that are not kept."""
-    asked = {a for a, spec in PROTOCOL["actions"].items() if "kept" not in spec}
+    asked = {a for a in PROTOCOL["actions"] if not is_kept(a)}
     assert set(actions.TITLES) == asked

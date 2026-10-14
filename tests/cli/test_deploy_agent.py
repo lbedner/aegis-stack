@@ -40,8 +40,22 @@ import os, sys
 print("ran " + " ".join(sys.argv[1:]))
 print("token " + os.environ.get("DIGITALOCEAN_TOKEN", ""))
 print("dns " + os.environ.get("PORKBUN_API_KEY", ""))
+if os.environ.get("FAKE_WAIT_FOR"):  # until a look is answered, or 5s
+    import time
+    for _ in range(50):
+        if os.path.exists(os.environ["FAKE_WAIT_FOR"]):
+            print("answered alongside")
+            break
+        time.sleep(0.1)
+if os.environ.get(PROGRESS_ENV):
+    print(PROGRESS_LINE)
 sys.exit(int(os.environ.get("FAKE_EXIT", "0")))
 """
+PROGRESS = {"steps": ["server", "boot"], "at": "boot"}
+FAKE_AEGIS = (
+    f"PROGRESS_ENV = {agent.PROTOCOL['progress_env']!r}\n"
+    f"PROGRESS_LINE = {agent._protocol.progress_line(**PROGRESS)!r}\n"
+) + FAKE_AEGIS
 
 
 class FakeRedis:
@@ -282,6 +296,35 @@ def test_a_request_runs_and_its_output_streams_into_the_job(
     # The token reached the command, and only its last four the job.
     assert job.result["lines"][1] == "token ...5678"
     assert DO_TOKEN not in json.dumps(redis.hashes)
+
+
+def test_the_commands_step_is_kept_beside_its_output_not_in_it(
+    project: Path, app_store: Any
+) -> None:
+    """A step bar's place, which the command prints only for the agent."""
+    redis = FakeRedis()
+    job_id = _request(redis, app_store, "rollback", {"backup": "2026-10-01_020000"})
+    _serve(redis, project)
+    job = _job(redis, app_store, job_id)
+    assert job.result["progress"] == PROGRESS
+    marker = agent.PROTOCOL["progress"]
+    assert not any(marker in line for line in [*job.result["lines"], job.label])
+
+
+def test_a_look_is_answered_while_a_command_runs(
+    project: Path, app_store: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A catalog or account asked while a server is being made is answered
+    beside it, not queued behind it until it is too old to run."""
+    flag = project / "answered"
+    monkeypatch.setenv("FAKE_WAIT_FOR", str(flag))
+    monkeypatch.setattr(agent, "_found", lambda *args: flag.touch() or {"sizes": []})
+    redis = FakeRedis()
+    running = _request(redis, app_store, "rollback", {"backup": "2026-10-01_020000"})
+    look = _request(redis, app_store, "catalog", {"provider": "digitalocean"})
+    _serve(redis, project)
+    assert "answered alongside" in _job(redis, app_store, running).result["lines"]
+    assert _job(redis, app_store, look).status == "done"
 
 
 def test_the_job_record_is_the_apps(app_store: Any) -> None:

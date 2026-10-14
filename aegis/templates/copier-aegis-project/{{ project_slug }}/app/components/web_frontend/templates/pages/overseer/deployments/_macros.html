@@ -1,7 +1,8 @@
 {# Overseer > Deployments' pieces (overseer_deploy_actions): one recipe
    for a control that asks ``aegis deploy-agent`` (a write, answered by its
    job, which swaps into the card's job panel); the destroy form that the
-   server and a failed provision both offer; a step on the way to a
+   server and a failed provision both offer, and that provision's resume
+   (``stopped``); a step on the way to a
    server; why the agent cannot be asked; the job panel; where something
    runs (``place``: a provider's mark and name); a fragment's reload while
    it waits on the agent; a part of the new-server form (``panel``: waiting
@@ -12,6 +13,14 @@
 {% from "components/macros/icons.html" import icon %}
 {% from "components/macros/layout.html" import avatar, badge, card, command, dropdown, menu_item, progress %}
 {% macro note() %}text-sm text-aegis-muted space-y-2{% endmacro %}
+{# What most can leave folded: ``label`` the line that opens it, the
+   caller's body under it, ``attrs`` on its ``<details>``. #}
+{% macro fold(label, attrs="") %}
+<details {{ attrs }} class="text-sm">
+  <summary class="cursor-pointer text-aegis-muted hover:text-aegis-text">{{ label }}</summary>
+  <div class="mt-3">{{ caller() }}</div>
+</details>
+{% endmacro %}
 
 {# ``reload`` (overseer_deploy_actions: url, trigger) as the hx attributes
    a fragment asks again with, or nothing once it is ready. #}
@@ -33,7 +42,7 @@
 {{ action("Try again", 'data-retry hx-get="' ~ f.retry ~ '" hx-target="closest [data-part]" hx-swap="outerHTML"') }}
 {% endmacro %}
 
-{# A panel of the new-server form (``f``, from overseer_deploy_actions'
+{# A panel of the new-server form (``f``, from overseer_deploy_form's
    PANELS): waiting on the agent, why it could not be had, or what it
    found (the caller's body). ``name`` is its data attribute. #}
 {% macro panel(name, f, said_waiting, said_failed) %}
@@ -68,6 +77,16 @@
   {% call field("Type " ~ name ~ " to delete the server, its firewall, DNS record and SSH key") %}{{ text_input("confirm", required=True, pattern=name|exactly) }}{% endcall %}
   {{ primary_button("Destroy", "submit") }}
 </form>
+{% endmacro %}
+
+{# A provision that stopped part way (``name``, the server it made, still
+   billed): resume it, or, folded away, delete what it made. #}
+{% macro stopped(partials, name) %}
+<div data-stopped class="space-y-3">
+  <p class="{{ note() }}">What it created is still in your account, and billed. Resuming carries on from where it stopped.</p>
+  {{ ask("Resume", partials, "resume", tone="primary") }}
+  {% call fold("Delete what it made instead", "data-delete") %}{{ destroy_form(partials, name) }}{% endcall %}
+</div>
 {% endmacro %}
 
 {# A step (``s``: key, title, status, summary, open), numbered ``n``: its
@@ -159,7 +178,7 @@
 
 {# The newest deploy job, streamed while the page is open (_job.html). #}
 {% macro job_panel(actions) %}
-<div hx-ext="sse" sse-connect="{{ actions.events }}">
+<div hx-ext="sse" sse-connect="{{ actions.events }}" x-data="{ output: false }">
   <div id="deploy-job" sse-swap="{{ actions.event }}" hx-target="this">{% with job=actions.job %}{% include "pages/overseer/deployments/_job.html" %}{% endwith %}</div>
 </div>
 {% endmacro %}

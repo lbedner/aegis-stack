@@ -465,6 +465,12 @@ MESSAGES: dict[str, str] = {
     "auth.list_users_failed": "Fehler: Benutzer konnten nicht aufgelistet werden: {error}",
     # Help text
     "auth.help": "Befehle zur Authentifizierungsverwaltung",
+    "auth.help_create_user": "Ein Konto anlegen; das Passwort wird verdeckt zweimal abgefragt.",
+    "auth.opt_account_email": "E-Mail-Adresse des Kontos",
+    "auth.password_prompt": "Passwort",
+    "auth.account_created": "{email} angelegt.",
+    "auth.not_admin": "Kein Admin: in .env zu ADMIN_USER_EMAILS hinzufügen, um den Overseer zu öffnen.",
+    "auth.account_failed": "Konto konnte nicht angelegt werden: {error}",
     "auth.help_create_test_user": "Testbenutzer für Entwicklung und Tests erstellen.",
     "auth.help_create_test_users": "Mehrere Testbenutzer für Entwicklung und Tests erstellen.",
     "auth.help_list_users": "Alle Benutzer im System auflisten.",

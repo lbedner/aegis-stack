@@ -465,6 +465,12 @@ MESSAGES: dict[str, str] = {
     "auth.list_users_failed": "Ошибка: не удалось получить список пользователей: {error}",
     # Справка
     "auth.help": "Команды управления аутентификацией",
+    "auth.help_create_user": "Создать учётную запись; пароль запрашивается дважды, скрыто.",
+    "auth.opt_account_email": "Адрес электронной почты учётной записи",
+    "auth.password_prompt": "Пароль",
+    "auth.account_created": "{email} создан.",
+    "auth.not_admin": "Не администратор: добавьте в ADMIN_USER_EMAILS в .env для Overseer.",
+    "auth.account_failed": "Не удалось создать учётную запись: {error}",
     "auth.help_create_test_user": "Создать тестового пользователя для разработки.",
     "auth.help_create_test_users": "Создать несколько тестовых пользователей для разработки.",
     "auth.help_list_users": "Показать всех пользователей в системе.",

@@ -198,6 +198,11 @@ def deploy_config(path: Path = DEPLOY_CONFIG) -> dict[str, Any]:
     return (yaml.safe_load(path.read_text()) or {}) if path.is_file() else {}
 
 
+def provision_record(path: Path = DEPLOY_CONFIG) -> dict[str, Any]:
+    """The provisioned server's record in ``.aegis/deploy.yml``, or nothing."""
+    return deploy_config(path).get("provision") or {}
+
+
 def deploys_to(path: Path = DEPLOY_CONFIG) -> dict[str, Any] | None:
     """Where this project deploys to: the provisioned server (its record),
     else the server ``aegis deploy-init`` named, by its address; None where

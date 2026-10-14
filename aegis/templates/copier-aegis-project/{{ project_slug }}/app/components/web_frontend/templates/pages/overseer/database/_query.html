@@ -1,23 +1,34 @@
-{# One read-only statement (overseer_database.query, db_query), read like
-   Logs: the statement on one line, Run and Clear pushed right, its answer
-   filling the scroller under it (``_query_answer.html``). The prompt is a
-   write control (``data-write``): hidden where Overseer's changes are
-   refused, and every run is audited. Clear asks for the section afresh. #}
-{% from "components/macros/form.html" import action, search_input %}
+{# Overseer > Database > Query (overseer_database_browser.query_page, db_query),
+   filling the page below its header: the statements open as tabs (sql.js
+   keeps them in this browser, each with its last answer; ``query_seed``,
+   from a table, opens one more), the editor across the top, highlighted
+   in the database's dialect and completing its tables and columns, drawn
+   taller or shorter by its corner, its answer in the flat scroller under
+   it (``_query_answer.html``). Without the script, one plain box. Cmd-Enter
+   (or Run) runs the tab's statement. The editor is a write control
+   (``data-write``): hidden where Overseer's changes are refused, and every
+   run is audited. #}
+{% from "components/macros/form.html" import action, textarea %}
 {% from "pages/overseer/_macros.html" import wrap_actions, wraps %}
-{% from "pages/overseer/database/_macros.html" import rows_off_note %}
+{% from "pages/overseer/database/_macros.html" import export_menu, rows_off_note %}
 {% if rows_off %}
 {{ rows_off_note(rows_off) }}
 {% else %}
-<div id="database-query" class="space-y-3" {{ wraps() }}>
-  <form data-query data-write class="flex items-center gap-3" hx-post="{{ query_run }}" hx-target="#database-query-answer" hx-swap="innerHTML">
-    <div class="flex-1 [&>input]:w-full [&>input]:font-mono">{{ search_input("sql", placeholder="SELECT ... (one statement, read only)", autofocus=True, attrs='autocomplete="off" spellcheck="false"') }}</div>
-    <div class="flex gap-1.5">
-      {{ action("Run", "", "primary", type="submit") }}
-      {{ action("Clear", hx_replace(request.url.path, "#database-query")) }}
-      {{ wrap_actions("database-query-body") }}
+<div id="database-query" data-sql-workbench data-seed="{{ query_seed or '' }}" data-seed-name="{{ query_seed_name or '' }}" class="overseer-fill flex flex-col gap-3" {{ wraps() }}>
+  <form data-query data-write class="shrink-0 flex flex-col gap-2" hx-post="{{ query_run }}" hx-target="#database-query-answer" hx-swap="innerHTML">
+    <div class="flex items-end gap-3 border-b border-aegis-border">
+      <nav data-sql-tabs role="tablist" aria-label="Statements" class="min-w-0 flex-1 flex items-end gap-1 overflow-x-auto"></nav>
+      <div class="flex gap-1.5 pb-1.5">
+        {{ action("Run", 'title="Cmd-Enter"', "primary", type="submit") }}
+        {{ export_menu("database-query-body", "query") }}
+        {{ wrap_actions("database-query-body") }}
+      </div>
+    </div>
+    <div data-sql-editor data-dialect="{{ query_dialect }}" data-schema='{{ query_schema|tojson }}'
+         class="sql-editor h-[40dvh] min-h-[6rem] max-h-[80dvh] resize-y overflow-hidden [&>textarea]:h-full [&>textarea]:mt-0 [&>textarea]:text-sm">
+      {{ textarea("sql", placeholder="SELECT ... (one statement, read only; Cmd-Enter runs it)") }}
     </div>
   </form>
-  <div id="database-query-answer">{% include "pages/overseer/database/_query_answer.html" %}</div>
+  <div id="database-query-answer" class="flex-1 min-h-0 flex flex-col gap-3">{% include "pages/overseer/database/_query_answer.html" %}</div>
 </div>
 {% endif %}

@@ -225,28 +225,37 @@ A transaction open past `DATABASE_SLOW_TRANSACTION_SECONDS` shows red.
 
 Records live for an hour, in Redis when the stack has it (the webserver then shows what the worker and scheduler recorded too), otherwise in the process that recorded them. `DATABASE_SLOW_TRANSACTION_SECONDS=0` turns it off; it is also on the Database page's Settings section and Overseer > Settings. The engine's own parameters (PostgreSQL settings, SQLite PRAGMAs) are the page's **Engine** section.
 
-### A table's rows
+### A table
 
-The Overseer's Database page has a **Rows** section: pick a table and page through its rows, laid out like Logs across the whole window, one line each (click a row, or **Wrap**, to see it whole). A table name on the **Schema** section leads there too.
+The Overseer's Database page has a **Tables** section, everything about a table in one place, across the whole width: the table picked, which opens to the schema's tables to pick another (PostgreSQL's `public`, SQLite's `main`, each table with its row count), beside three tabs, and a link that queries it (below):
+
+- **Rows**: its rows a page at a time, laid out like Logs, one line each (click a row, or **Wrap**, to see it whole).
+- **Schema**: its `CREATE TABLE` statement, indexes and foreign keys after.
+- **Relationships**: drawn as Overseer's map draws: the tables pointing at it on the left, it in the middle, the tables it points at on the right, a line for each pair. Hover a table for the keys between them, a composite one whole (`note.post_id, tag_id → tagged.post_id, tag_id`); click it for its own relationships.
+
+A table opens on Rows, or on Schema where its rows are not shown. Its rows:
 
 - Only a table the app's models declare, and that the database has, can be read.
-- It sorts only by a column an index serves (the key, an indexed or unique column), and filters (`column:value`, or several as `column:value, column:value`) by those or a foreign key's columns. A foreign key PostgreSQL has no index for can mean reading the whole table, which the 5-second limit bounds.
-- Above the rows, the table's keys: each foreign key out of it and into it, a composite one whole (`note.post_id, tag_id → tagged.post_id, tag_id`). Click a row and, under it, each key leads to the rows it points at or that point at it (a table that points at itself, both ways), refiltering the same scroller to them.
+- A header orders the whole table by its column where an index serves it (the key, an indexed or unique column); any other header sorts the rows on the page. To filter, pick a column (any but one holding a secret, binary or JSON), how it compares (=, ≠, <, ≤, >, ≥; the list offers only what the column allows: text and true/false only = or ≠, so what the page hides cannot be spelled out by ordering) and a value, read as the column's kind (a date as the page shows it); each filter becomes a chip, removed by clicking it. A column no index serves is read through the table, which the 5-second limit bounds.
+- Click a row and, under it, each key leads to the rows it points at or that point at it (a table that points at itself, both ways), opening that table's rows filtered to them.
 - The default order is the table's key, and the next page starts where the last one ended rather than at an offset, so a deep page costs what the first does. Sorting by another column pages by offset, at most 400 pages deep.
 - 25 rows a page. The count shown is the health check's: exact on SQLite, PostgreSQL's estimate otherwise.
 - A text column holding a secret (a password hash, a token, a stored secret, an encrypted value) is never read: the database returns it as hidden, and it cannot be sorted or filtered by. Other text is read to 1,024 characters, cleared of anything that looks like a credential (a URL's password, a bearer token), then cut; binary shows its size.
 - A read stops after 5 seconds (PostgreSQL's `statement_timeout`; on SQLite, an interrupt), and PostgreSQL reads in a read-only transaction.
 - It reads through the app's sync session factory, which never begins a write transaction, so on SQLite reading rows never holds the write lock; the connection has `query_only` on while it reads.
 - The rows are the app's data: outside dev they stay hidden until an admin turns on `OVERSEER_DATABASE_ROWS_ENABLED` (Overseer > Settings). With the auth service, Overseer is for admins only; without it, the setting counts only on the build that was never deployed, and the page says to add auth instead.
+- Every read is recorded in the audit log (`database.rows`): who read which table, its filters and order, and whether it ran, was refused or was stopped. A tab that reads no rows (Schema, Relationships) is not.
+
+Rows and a query's answer both have **Export**: the rows shown, as shown (a long cell cut, a secret hidden), downloaded as CSV or JSON, or copied as CSV, JSON, a Markdown table, or tab-separated text that pastes into a sheet's cells. A cell a spreadsheet would run as a formula is exported as text. On Rows that is the page; export the whole table from a query.
 
 ### A query
 
-The **Query** section runs one SQL statement you type, read-only, and shows its rows in the same scroller.
+The **Query** section runs one SQL statement at a time, read-only, and shows its rows in the same scroller, under an editor across the top of the window (drag its corner for more room). The editor highlights the database's dialect and completes keywords, tables and their columns (a bare name offers the columns of the tables the statement reads, first); Cmd-Enter runs the statement, Tab takes a completion. As you type, with no request, it underlines what is wrong: a syntax error the grammar finds (an unclosed parenthesis or quote) and a table the database does not have. Columns are left to the database, which says which one it lacks when the statement runs, and what the database itself accepts the editor accepts (SQLite reads `WHERE name` as "where name is true"). Statements open as tabs (**+** for another, double-click to rename, **x** to close), kept in your browser so a reload keeps them, on that machine only; each tab keeps its last answer while the page is open. **Query this table** on Tables opens a tab reading that table. The editor loads CodeMirror from esm.sh on first use; without it, the editor is a plain box.
 
 - A write fails because the connection cannot write, not because the SQL was inspected: PostgreSQL runs it in a read-only transaction, rolled back; SQLite with `query_only` on, and `ATTACH`, `DETACH` and every `PRAGMA` refused, so the statement cannot turn it off. `INSERT`, `UPDATE`, `DELETE`, DDL, and a write inside a CTE or a function all fail.
 - One statement at a time: a `;` inside it is refused (a trailing one is fine).
 - The first 200 rows, saying so when there were more; it stops after 5 seconds, as a table's rows do.
-- A secret never leaves the database. On SQLite, every column the models hold one in reads as empty however the statement reaches it (an alias, a `UNION`, a CTE's column list), and shows as hidden under its own name (`SELECT *`). PostgreSQL cannot blank a column, so a statement whose plan reads a table holding a secret is refused; read that table on **Rows**, where its secrets are hidden. Cells are cleared of credentials and cut, as a table's rows are.
+- A secret never leaves the database. On SQLite, every column the models hold one in reads as empty however the statement reaches it (an alias, a `UNION`, a CTE's column list), and shows as hidden under its own name (`SELECT *`). PostgreSQL cannot blank a column, so a statement whose plan reads a table holding a secret is refused; read that table's **Rows** on Tables, where its secrets are hidden. Cells are cleared of credentials and cut, as a table's rows are.
 - On PostgreSQL, outside dev, Query refuses a superuser login: a read-only transaction does not stop a superuser's `COPY ... TO PROGRAM` or reads of the server's files. Run the app as a login that is not a superuser to use it there. Each query runs on its own connection, closed after it, so nothing it sets outlives it.
 - Every run is recorded in the audit log (`database.query`), refused ones too, with who ran it and the statement.
 - It is shown where a table's rows are, and only to someone who may make Overseer's changes: an admin with the auth service; without it, the build that was never deployed, at localhost.

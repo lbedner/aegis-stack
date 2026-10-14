@@ -17,7 +17,7 @@ Org endpoints: `/api/v1/orgs/*`
 
 ### POST /auth/register
 
-Register a new user account. Automatically accepts any pending org invites for the registered email. On success the response sets the same `aegis_session` + `aegis_refresh` cookie pair as `POST /auth/token` — the user lands signed-in without a second round-trip.
+Register a new user account. Automatically accepts any pending org invites for the registered email. On success the response sets the same `<project>_session` + `<project>_refresh` cookie pair as `POST /auth/token` — the user lands signed-in without a second round-trip.
 
 **Auth:** None
 **Rate limited:** Yes
@@ -68,8 +68,10 @@ Login and receive a JWT access token. Follows the OAuth2 password flow; email is
 
 On success the response also sets two cookies:
 
-- `aegis_session` — HttpOnly access token, `Path=/`, `SameSite=Lax`. Browser flows ride on this.
-- `aegis_refresh` — HttpOnly opaque refresh token, `Path=/api/v1/auth`, `SameSite=Strict`. Sent only on auth endpoints; used to rotate `aegis_session` once the access token expires.
+Both are named for the project (`PROJECT_NAME`, e.g. `my-app_session`): browsers share a host's cookies across its ports, so two apps on `localhost` never overwrite each other's sign-in.
+
+- `<project>_session` — HttpOnly access token, `Path=/`, `SameSite=Lax`. Browser flows ride on this.
+- `<project>_refresh` — HttpOnly opaque refresh token, `Path=/api/v1/auth`, `SameSite=Strict`. Sent only on auth endpoints; used to rotate `<project>_session` once the access token expires.
 
 API clients (CLIs, server-to-server) keep using the body's `access_token` as a bearer header; cookies are a parallel surface, not exclusive.
 
@@ -301,9 +303,9 @@ curl -X POST http://localhost:8000/api/v1/auth/verify-email \
 
 ### POST /auth/refresh
 
-Rotate the refresh token and mint a fresh access token. Reads the `aegis_refresh` cookie, revokes the inbound row, inserts a successor in the same family, and sets both cookies fresh. Returns the new access token in the body so bearer clients can update their header.
+Rotate the refresh token and mint a fresh access token. Reads the `<project>_refresh` cookie, revokes the inbound row, inserts a successor in the same family, and sets both cookies fresh. Returns the new access token in the body so bearer clients can update their header.
 
-**Auth:** `aegis_refresh` cookie required (no bearer fallback — refresh tokens never travel in `Authorization` headers).
+**Auth:** `<project>_refresh` cookie required (no bearer fallback — refresh tokens never travel in `Authorization` headers).
 
 **Response: `200 OK`**
 
@@ -327,7 +329,7 @@ The browser-side `APIClient` in the generated frontend calls this endpoint trans
 ```bash
 # Cookie-bearing clients (browsers, curl with -b)
 curl -X POST http://localhost:8000/api/v1/auth/refresh \
-  -b "aegis_refresh=$REFRESH_TOKEN"
+  -b "<project>_refresh=$REFRESH_TOKEN"
 ```
 
 ---
@@ -336,7 +338,7 @@ curl -X POST http://localhost:8000/api/v1/auth/refresh \
 
 Sign the user out. Revokes the refresh token in the database and drops both cookies. The short-lived access JWT is left to expire naturally (~15 minutes) — there is no stateful blacklist.
 
-**Auth:** Bearer token or `aegis_session` cookie required.
+**Auth:** Bearer token or `<project>_session` cookie required.
 
 **Response: `200 OK`**
 

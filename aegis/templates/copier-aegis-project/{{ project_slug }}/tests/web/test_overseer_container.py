@@ -647,6 +647,15 @@ def test_a_tier_wider_than_a_row_wraps() -> None:
     assert _widths(found)["s0"] == pytest.approx(overseer_map.FILL * 100 / 5)
 
 
+def test_across_the_foot_of_a_column_opens_its_hint_above() -> None:
+    """The map clips what runs past its bottom: a column's last node's hint
+    (a table's keys, Database > Tables) opens above it."""
+    shape = topology.Shape(tiers=[["a", "b"], ["c"]], links=[], hosted=[])
+    found = overseer_map.layout([_entry(k) for k in "abc"], shape, across=True)
+    above = {node["key"]: node["hint_above"] for node in found["map_nodes"]}
+    assert above == {"a": False, "b": True, "c": True}
+
+
 def test_the_servers_node_zooms_in(
     app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> None:

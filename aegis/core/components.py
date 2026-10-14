@@ -360,6 +360,8 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 "tests/services/test_db_rows.py",
                 "app/services/system/db_query.py",
                 "tests/services/test_db_query.py",
+                "app/services/system/db_filters.py",
+                "tests/services/test_db_filters.py",
                 "tests/services/_db_fixtures.py",
                 "app/components/backend/api/database.py",
                 "tests/api/test_database_endpoints.py",

@@ -5,7 +5,8 @@
    Secrets holds); data in its shape (a store, the queue, object storage:
    a glyph here, the outline opened up); what runs in the webserver as chips in
    the Server's node, two to a row, each with its cost to load
-   (load_cost). Rendered in the page and again for each frame. #}
+   (load_cost). Its links swap ``map_target`` (the main area; a table's,
+   in Database > Tables). Rendered in the page and again for each frame. #}
 {% from "components/macros/layout.html" import chip, health_badge, hint_panel, status_dot %}
 {% from "components/macros/icons.html" import icon %}
 {% from "pages/overseer/_glance_macros.html" import cause, figures %}
@@ -13,27 +14,27 @@
 {# A node's name, linking to its page; plain for what has none: a piece of
    a service opened up in full, an outside provider muted. #}
 {% macro node_title(node, size="") -%}
-{% if node.url %}<a data-title href="{{ node.url }}" {{ hx_replace(node.url, "#overseer-main") }} class="{{ size }} min-w-0 font-semibold text-aegis-text hover:text-aegis-teal truncate">{{ node.title }}</a>
+{% if node.url %}<a data-title href="{{ node.url }}" {{ hx_replace(node.url, map_target) }} class="{{ size }} min-w-0 font-semibold text-aegis-text hover:text-aegis-teal truncate">{{ node.title }}</a>
 {%- else %}<span data-title class="{{ size }} min-w-0 {{ 'font-semibold text-aegis-text' if node.place and node.place != 'outside' and not node.missing else 'text-aegis-muted' }} truncate">{{ node.title }}</span>{% endif %}
 {%- endmacro %}
 {# Open a node up: the Server into what runs in it, a service into its pieces. #}
 {% macro zoom_link(node) -%}
-{% if node.zoom %}<a data-zoom href="{{ node.zoom }}" {{ hx_replace(node.zoom, "#overseer-main") }} title="Open up: what is inside it" class="shrink-0 text-aegis-muted hover:text-aegis-teal">{{ icon("zoom-in", "w-4 h-4") }}<span class="sr-only">Open up {{ node.title }}</span></a>{% endif %}
+{% if node.zoom %}<a data-zoom href="{{ node.zoom }}" {{ hx_replace(node.zoom, map_target) }} title="Open up: what is inside it" class="shrink-0 text-aegis-muted hover:text-aegis-teal">{{ icon("zoom-in", "w-4 h-4") }}<span class="sr-only">Open up {{ node.title }}</span></a>{% endif %}
 {%- endmacro %}
 {% if map_trail %}
 {# Opened up (overseer_zoom: the Server, a service in it): the way back
    up a level at a time. #}
 <nav data-breadcrumb aria-label="Map level" class="mb-3 flex items-center gap-2 text-sm">
-  <a data-back href="{{ map_back }}" {{ hx_replace(map_back, "#overseer-main") }} class="text-aegis-muted hover:text-aegis-teal">{{ project_name }}</a>
+  <a data-back href="{{ map_back }}" {{ hx_replace(map_back, map_target) }} class="text-aegis-muted hover:text-aegis-teal">{{ project_name }}</a>
   {% for level in map_trail %}<span class="text-aegis-muted" aria-hidden="true">›</span>
-  {% if level.url %}<a href="{{ level.url }}" {{ hx_replace(level.url, "#overseer-main") }} class="text-aegis-muted hover:text-aegis-teal">{{ level.title }}</a>
+  {% if level.url %}<a href="{{ level.url }}" {{ hx_replace(level.url, map_target) }} class="text-aegis-muted hover:text-aegis-teal">{{ level.title }}</a>
   {% else %}<span aria-current="page" class="text-aegis-text">{{ level.title }}</span>{% endif %}{% endfor %}
 </nav>
 {% endif %}
 {% if map_overlays %}
 {# What tones the nodes instead of their health (overseer_heat), and what it shows. #}
 <nav data-overlays aria-label="Overlays" class="mb-3 flex flex-wrap items-center gap-1.5">
-  {% for overlay in map_overlays %}{{ chip(overlay.label, overlay.on, overlay.url, hx_replace(overlay.url, "#overseer-main"), 'data-overlay="' ~ overlay.key ~ '"') }}{% endfor %}
+  {% for overlay in map_overlays %}{{ chip(overlay.label, overlay.on, overlay.url, hx_replace(overlay.url, map_target), 'data-overlay="' ~ overlay.key ~ '"') }}{% endfor %}
   {% for overlay in map_overlays if overlay.on %}<p data-overlay-key class="text-xs text-aegis-muted">{{ overlay.says }}</p>{% endfor %}
 </nav>
 {% endif %}
@@ -43,7 +44,7 @@
 <style>{% for dep in map_rail %}:root:has([data-rail-item="{{ dep.key }}"]:hover) [data-uses~="{{ dep.key }}"] { box-shadow: 0 0 0 2px oklch(var(--p)); }{% endfor %}</style>
 <div data-rail class="mb-3 flex flex-wrap items-center gap-2 border-b-2 border-aegis-teal/50 pb-2 text-xs">
   <span class="micro-label font-semibold text-aegis-muted">Used throughout</span>
-  {% for dep in map_rail %}<a data-rail-item="{{ dep.key }}"{% if dep.url %} href="{{ dep.url }}" {{ hx_replace(dep.url, "#overseer-main") }}{% endif %} class="chip flex items-center gap-1.5 text-aegis-text hover:border-aegis-teal">{% if dep.status %}{{ status_dot(dep.status) }}{% endif %}{{ dep.title }}</a>{% endfor %}
+  {% for dep in map_rail %}<a data-rail-item="{{ dep.key }}"{% if dep.url %} href="{{ dep.url }}" {{ hx_replace(dep.url, map_target) }}{% endif %} class="chip flex items-center gap-1.5 text-aegis-text hover:border-aegis-teal">{% if dep.status %}{{ status_dot(dep.status) }}{% endif %}{{ dep.title }}</a>{% endfor %}
 </div>
 {% endif %}
 {% set flagged = map_links|selectattr("why", "defined")|map(attribute="tone")|unique|sort|list %}
@@ -92,7 +93,7 @@
       {% if node.badges %}<span class="flex max-w-full flex-wrap gap-1">{% for badge_title in node.badges %}<span data-badge class="rounded border border-aegis-teal/40 px-1 text-xxs text-aegis-teal">{{ badge_title }}</span>{% endfor %}</span>{% endif %}
       {% if node.todo %}<span data-to-fix data-tone="{{ node.todo_tone }}" class="toned text-xxs font-semibold">{{ node.todo_count }} to fix</span>{% endif %}
       {% call hint_panel("data-hint", ("right-0" if node.hint_end else "left-0") ~ " " ~ ("bottom-full pb-1.5" if node.hint_above else "top-full pt-1.5") ~ " group-hover:block") %}{{ node.message|message }}{% if node.holds %}
-          <ul data-holds class="mt-1 font-mono text-aegis-text">{% for held in node.holds %}<li class="truncate">{% if held.url %}<a data-held="{{ held.name }}" href="{{ held.url }}" {{ hx_replace(held.url, "#overseer-main") }} class="hover:text-aegis-teal">{{ held.name }}</a>{% else %}{{ held.name }}{% endif %}</li>{% endfor %}{% if node.holds_more %}<li class="text-aegis-muted">{{ node.holds_more }} more</li>{% endif %}</ul>{% endif %}{% if node.reaches %}<span class="block">Uses {{ node.reaches|join(", ") }}</span>{% endif %}{% if node.note %}<span class="block">{{ node.note }}</span>{% endif %}{{ cause(node) }}
+          <ul data-holds class="mt-1 font-mono text-aegis-text">{% for held in node.holds %}<li class="truncate">{% if held.url %}<a data-held="{{ held.name }}" href="{{ held.url }}" {{ hx_replace(held.url, map_target) }} class="hover:text-aegis-teal">{{ held.name }}</a>{% else %}{{ held.name }}{% endif %}</li>{% endfor %}{% if node.holds_more %}<li class="text-aegis-muted">{{ node.holds_more }} more</li>{% endif %}</ul>{% endif %}{% if node.reaches %}<span class="block">Uses {{ node.reaches|join(", ") }}</span>{% endif %}{% if node.note %}<span class="block">{{ node.note }}</span>{% endif %}{{ cause(node) }}
           {% for todo in node.todo or [] %}<div data-todo class="mt-1"><p data-tone="{{ todo.tone }}" class="toned">{{ todo.action }}</p>
             <ul class="mt-0.5 space-y-0.5">{% for place in todo.places %}<li class="break-words">{{ line_link(place.path, place.line) }} <span class="text-aegis-muted">{{ place.note }}</span></li>{% endfor %}</ul></div>{% endfor %}
           {% for fix in node.fix or [] %}<button type="button" data-fix data-write {{ hx_dialog(fix.url) }} class="mt-1 block text-aegis-teal hover:underline">Set {{ fix.name }}</button>{% endfor %}{% endcall %}
@@ -123,7 +124,7 @@
       {% if node.hosted %}
       <div class="grid grid-cols-2 gap-1.5 pt-1">
         {% for chip in node.hosted %}
-        <a data-chip="{{ chip.key }}" href="{{ chip.url }}" {{ hx_replace(chip.url, "#overseer-main") }} title="{{ chip.message }}"
+        <a data-chip="{{ chip.key }}" href="{{ chip.url }}" {{ hx_replace(chip.url, map_target) }} title="{{ chip.message }}"
            class="flex items-center gap-1.5 rounded border border-aegis-border px-1.5 py-1 text-xxs text-aegis-muted hover:text-aegis-text hover:border-aegis-muted truncate">
           {% set health_status = chip.status %}{% include "pages/overseer/_status_dot.html" %}<span class="truncate">{{ chip.title }}</span>{% if chip.load %}<span data-load class="ml-auto shrink-0 tabular-nums">{{ chip.load }}</span>{% endif %}
         </a>

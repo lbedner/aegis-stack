@@ -1,10 +1,9 @@
 """A table's rows, a page at a time, as Overseer reads them (Database >
-Rows), shown only where ``exposure.shown`` allows. Only a table the app's
-models declare (``table_of``: a name is looked up, never put into SQL);
-sorted only by an indexed column and filtered by such columns or a foreign
-key's (which Postgres may not index: ``SECONDS`` bounds that read); never
-by a column holding a secret. Each
-foreign key (``keys``), out of a table and into it, leads from a row to
+Tables > Rows), shown only where ``exposure.shown`` allows. Only a table
+the app's models declare (``table_of``: a name is looked up, never put
+into SQL); sorted only by an indexed column, filtered by the columns
+``filterable`` names; never by a column holding a secret. Each foreign
+key (``keys``), out of a table and into it, leads from a row to
 the rows it points at or that point at it (``follow``): a table and the
 filter that finds them.
 
@@ -27,7 +26,6 @@ import time
 from typing import Any
 
 from sqlalchemy import (
-    Boolean,
     Column,
     Connection,
     Engine,
@@ -35,7 +33,6 @@ from sqlalchemy import (
     String,
     Table,
     Text,
-    TypeDecorator,
     UniqueConstraint,
     cast,
     func,
@@ -46,6 +43,7 @@ from sqlalchemy.exc import DBAPIError
 from sqlmodel import SQLModel
 
 from app.core import exposure
+from app.services.system import db_filters
 from app.services.system.errors import redact
 
 PAGE = 25  # rows a page shows
@@ -59,7 +57,6 @@ HIDDEN = "••••••"
 # catches passwords, tokens and keys), and the suffix encrypted ones carry.
 MASKED = frozenset({"ciphertext"})
 MASKED_SUFFIX = "_encrypted"
-TRUE = frozenset({"1", "true", "t", "yes", "on"})
 # What a statement may not do on SQLite, whose query_only it could undo.
 REFUSED = frozenset(
     {sqlite3.SQLITE_ATTACH, sqlite3.SQLITE_DETACH, sqlite3.SQLITE_PRAGMA}
@@ -128,29 +125,13 @@ def tables(present: Iterable[str] | None = None) -> list[str]:
     return sorted(names & set(present) if present is not None else names)
 
 
-def _holds(column: Column[Any]) -> type | None:
-    """The Python type a column holds, through a wrapping type (SQLModel's
-    ``AutoString`` wraps ``String`` and says nothing of its own)."""
-    kind = column.type
-    if isinstance(kind, TypeDecorator):
-        kind = kind.impl_instance
-    try:
-        return kind.python_type
-    except NotImplementedError:
-        return None
-
-
-def _textual(column: Column[Any]) -> bool:
-    return _holds(column) in (str, dict, list)
-
-
 @cache
 def masked(table: Table) -> frozenset[str]:
     """The columns shown as hidden: text or bytes named as a secret."""
     return frozenset(
         c.name
         for c in table.columns
-        if (_textual(c) or _holds(c) is bytes)
+        if (db_filters.textual(c) or db_filters.holds(c) is bytes)
         and (
             redact.SECRET.search(c.name)
             or c.name in MASKED
@@ -180,10 +161,10 @@ def sortable(table: Table) -> list[str]:
     return [c.name for c in table.columns if c.name in indexed - hidden]
 
 
-def _filterable(table: Table) -> set[str]:
-    """What a filter may compare: a sortable column, or a foreign key."""
-    keys = {c.name for c in table.columns if c.foreign_keys} - masked(table)
-    return set(sortable(table)) | keys
+def filterable(table: Table) -> list[str]:
+    """What a filter may compare (``db_filters.filterable``), its secrets
+    never."""
+    return db_filters.filterable(table, masked(table))
 
 
 def keys(table: Table) -> tuple[list[Key], list[Key]]:
@@ -225,16 +206,11 @@ def follow(
     if any(not v or v == HIDDEN or v.endswith("…") or "," in v for v in values):
         return None
     other = table_of(table, metadata)
-    if other is None or not set(theirs) <= _filterable(other):
+    if other is None or not set(theirs) <= set(filterable(other)):
         return None
-    return table, ", ".join(f"{c}:{v}" for c, v in zip(theirs, values, strict=True))
-
-
-def parse_where(text: str | None) -> list[tuple[str, str]]:
-    """``column:value, column:value`` as pairs (a value holding a comma
-    cannot be asked for: keys are numbers and ids)."""
-    pairs = (part.partition(":") for part in (text or "").split(","))
-    return [(c.strip(), v.strip()) for c, _, v in pairs if c.strip() and v.strip()]
+    return table, db_filters.where_text(
+        [(c, ":", v) for c, v in zip(theirs, values, strict=True)]
+    )
 
 
 def _key(table: Table) -> Column[Any] | None:
@@ -242,16 +218,6 @@ def _key(table: Table) -> Column[Any] | None:
     keys = list(table.primary_key.columns)
     one = keys[0] if len(keys) == 1 else None
     return one if one is not None and one.name not in masked(table) else None
-
-
-def _value(column: Column[Any], text: str) -> Any:
-    """``text`` as the column's own type, for the database to compare."""
-    if isinstance(column.type, Boolean):
-        return text.lower() in TRUE
-    try:
-        return column.type.python_type(text)
-    except (NotImplementedError, TypeError, ValueError):
-        return text
 
 
 def _selected(table: Table, key: Column[Any] | None) -> list[Any]:
@@ -264,9 +230,9 @@ def _selected(table: Table, key: Column[Any] | None) -> list[Any]:
             picked.append(literal(HIDDEN, String).label(c.name))
         elif c is key:
             picked.append(c)
-        elif _holds(c) is bytes:
+        elif db_filters.holds(c) is bytes:
             picked.append(func.length(c).label(c.name))
-        elif _textual(c):
+        elif db_filters.textual(c):
             picked.append(func.substr(cast(c, Text), 1, READ).label(c.name))
         else:
             picked.append(c)
@@ -278,7 +244,7 @@ def page(
     *,
     order: str | None = None,
     desc: bool = False,
-    where: Sequence[tuple[str, str]] = (),
+    where: Sequence[db_filters.Filter] = (),
     after: str | None = None,
     before: str | None = None,
     number: int = 1,
@@ -286,30 +252,26 @@ def page(
 ) -> Rows:
     """A page of ``table``'s rows: by its key from ``after`` (or back from
     ``before``) when ordered by it, else page ``number`` of ``order``;
-    ``where`` keeps rows whose columns equal the values. Raises
-    RowsHiddenError where rows are not shown, ValueError for a column it may not use or a page
-    too deep, ReadTooSlowError past ``SECONDS``."""
+    ``where`` keeps rows each filter's comparison holds for. Raises
+    RowsHiddenError where rows are not shown, AskError for what cannot be
+    asked, ReadTooSlowError past ``SECONDS``."""
     require_shown()
     key = _key(table)
     sorts = sortable(table)
     if order is not None and order not in sorts:
-        raise ValueError(f"{table.name} cannot be ordered by {order!r}")
+        raise db_filters.AskError(f"{table.name} cannot be ordered by {order!r}")
     by = table.columns[order] if order else key
     query = select(*_selected(table, key))
-    filterable = _filterable(table) if where else set()
-    for name, text in where:
-        if name not in filterable:
-            raise ValueError(f"{table.name} cannot be filtered by {name!r}")
-        column = table.columns[name]
-        query = query.where(column == _value(column, text))
-    binary = {c.name for c in table.columns if _holds(c) is bytes}
+    if where:
+        query = query.where(*db_filters.conditions(table, where, filterable(table)))
+    binary = {c.name for c in table.columns if db_filters.holds(c) is bytes}
     names = table.columns.keys()
     if key is not None and by is key:
         back = after is None and before is not None
         cursor = before if back else after
         descending = desc != back  # back from a page reads the other way
         if cursor is not None:
-            value = _value(key, cursor)
+            value = db_filters.value(key, cursor)
             query = query.where(key < value if descending else key > value)
         query = query.order_by(key.desc() if descending else key.asc())
         found = _read(engine, table, query.limit(PAGE + 1))
@@ -323,8 +285,11 @@ def page(
         prev = {"before": first} if older and found else None
     else:
         if not 1 <= number <= MAX_DEPTH:
-            raise ValueError(f"Pages by offset go {MAX_DEPTH} deep at most")
-        ordering = [by] if by is not None else list(table.primary_key.columns)
+            raise db_filters.AskError(f"Pages by offset go {MAX_DEPTH} deep at most")
+        # Ties broken by the key, or the database may order them differently
+        # each page (PostgreSQL does), repeating rows and losing others.
+        keyed = list(table.primary_key.columns)
+        ordering = [by, *(c for c in keyed if c is not by)] if by is not None else keyed
         query = query.order_by(*(c.desc() if desc else c.asc() for c in ordering))
         found = _read(engine, table, query.offset((number - 1) * PAGE).limit(PAGE + 1))
         more, found = len(found) > PAGE, found[:PAGE]

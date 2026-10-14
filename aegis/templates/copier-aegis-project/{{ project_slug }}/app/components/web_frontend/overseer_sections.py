@@ -12,6 +12,7 @@ from typing import Any, NamedTuple
 
 from starlette.requests import Request
 
+from app.core.client_session import cookie_name
 from app.core.constants import ComponentName
 from app.core.ontology import Kind
 from app.core.ontology.parts import concern_of
@@ -202,7 +203,7 @@ class MenuChoice(NamedTuple):
     chosen: str
 
 
-GROUPING_COOKIE = "overseer_grouping"
+GROUPING_COOKIE = cookie_name("overseer_grouping")
 GROUPINGS = ((Grouping.KIND, "By kind"), (Grouping.CONCERN, "By concern"))
 # Each concern's heading, in the sidebar's order (Overview heads the first).
 HEADINGS = {c: "AI" if c is Category.AI else c.value.title() for c in Category}
@@ -377,7 +378,7 @@ _PAGES: dict[tuple[str, str], SectionedPage] = {
         "database",
         overseer_database.SECTIONS,
         overseer_database.section_context,
-        workspace=frozenset({overseer_database.ROWS, overseer_database.QUERY}),
+        workspace=frozenset({overseer_database.TABLES, overseer_database.QUERY}),
     ),
     ("components", ComponentName.CACHE): SectionedPage(
         "redis", overseer_redis.SECTIONS, overseer_redis.section_context, glance=True

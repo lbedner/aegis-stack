@@ -42,7 +42,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import get_async_db
 {%- endif %}
 {%- if include_auth %}
-from app.core.security import SESSION_COOKIE_NAME, verify_token
+from app.core.security import SESSION_COOKIE, verify_token
 from app.models.user import User
 from app.services.auth.deps import get_optional_user, get_user_service, is_admin
 from app.services.auth.service import UserService, session_id_of
@@ -123,20 +123,20 @@ async def admin_only_page(request: Request, exc: Exception) -> Response:
 
 def session_id(request: Request) -> str | None:
     """The viewer's own sign-in session (the access token's ``sid``)."""
-    return session_id_of(request.cookies.get(SESSION_COOKIE_NAME))
+    return session_id_of(request.cookies.get(SESSION_COOKIE))
 
 
 def session_expires(request: Request) -> datetime | None:
     """When the viewer's session cookie (its access token) runs out and has
     to renew from the refresh token."""
-    token = request.cookies.get(SESSION_COOKIE_NAME)
+    token = request.cookies.get(SESSION_COOKIE)
     payload = verify_token(token) if token else None
     expires = payload.get("exp") if payload else None
     return datetime.fromtimestamp(expires, UTC) if isinstance(expires, int) else None
 
 
 async def overseer_socket_gate(
-    session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
+    session: str | None = Cookie(default=None, alias=SESSION_COOKIE),
     user_service: UserService = Depends(get_user_service),
 ) -> None:
     """The gate's rule for a socket (a live call): admins only. A socket

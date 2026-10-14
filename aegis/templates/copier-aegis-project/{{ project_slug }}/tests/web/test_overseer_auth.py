@@ -10,6 +10,7 @@ import pytest
 
 from app.components.web_frontend import overseer_auth
 from app.components.web_frontend.routes.partials import overseer_auth as partials
+from app.core.client_session import SESSION_COOKIE
 from app.core.db import get_async_db
 from app.core.security import create_access_token
 from app.models.refresh_token import SessionEnd, SessionHistory
@@ -110,7 +111,7 @@ SESSIONS = [
 def _browse_as(client: TestClient, session_id: str) -> None:
     """This browser's session cookie, an access token for ``session_id``."""
     client.cookies.set(
-        "aegis_session",
+        SESSION_COOKIE,
         create_access_token({"sub": "ops@example.com", "sid": session_id}),
     )
 

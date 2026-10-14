@@ -10,7 +10,7 @@ from app.components.backend.security.rate_limit import (
 )
 from app.core.audit import AuditEmitter
 from app.core.security import (
-    REFRESH_COOKIE_NAME,
+    REFRESH_COOKIE,
     clear_refresh_cookie,
     clear_session_cookie,
     set_refresh_cookie,
@@ -48,7 +48,7 @@ async def sign_in_metadata(
     """``get_session_metadata`` plus the session the browser's refresh cookie
     belongs to (``replaces``), so a sign-in ends the session it replaces.
     The cookie rides only on the auth API, so a page form's sign-in has none."""
-    cookie = request.cookies.get(REFRESH_COOKIE_NAME)
+    cookie = request.cookies.get(REFRESH_COOKIE)
     replaces = await refresh_service.family_of(cookie) if cookie else None
     return get_session_metadata(request) | {"replaces": replaces}
 
@@ -63,7 +63,7 @@ async def refresh(
 ):
     """Rotate the refresh token and mint a fresh access token.
 
-    Reads the ``aegis_refresh`` cookie, validates the row, revokes it,
+    Reads the ``<project>_refresh`` cookie, validates the row, revokes it,
     inserts a new one in the same family, and sets both cookies.
     Returns the access token in the body for API clients (bearer flow).
 
@@ -71,7 +71,7 @@ async def refresh(
     service nukes the whole family — this call returns 401 and the
     user is forced to re-auth on the next request.
     """
-    refresh_cookie = request.cookies.get(REFRESH_COOKIE_NAME)
+    refresh_cookie = request.cookies.get(REFRESH_COOKIE)
     if not refresh_cookie:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -172,7 +172,7 @@ async def _current_session_family(
     /sessions``, and is what ``/logout`` revokes."""
     if sid := session_id_of(token):
         return sid
-    cookie = request.cookies.get(REFRESH_COOKIE_NAME)
+    cookie = request.cookies.get(REFRESH_COOKIE)
     if not cookie:
         return None
     return await refresh_service.family_of(cookie)

@@ -57,10 +57,10 @@
 {%- endmacro %}
 
 {# ... and the rows themselves: flat on the canvas, not on a card, running
-   to the bottom of the window and scrolling inside it, so what is above
-   stays put; a click on a row (not a link, not a selection) opens it. #}
-{% macro rows_scroller(classes="overflow-auto") %}
-<div data-scroll class="{{ classes }} h-[calc(100vh-16rem)] min-h-[24rem] border-t border-aegis-border">{{ caller() }}</div>
+   to the bottom of the window (or of what holds them: ``height``) and
+   scrolling inside it, so what is above stays put; a click on a row (not a link, not a selection) opens it. #}
+{% macro rows_scroller(classes="overflow-auto", height="h-[calc(100vh-16rem)] min-h-[24rem]") %}
+<div data-scroll class="{{ classes }} {{ height }} border-t border-aegis-border">{{ caller() }}</div>
 {%- endmacro %}
 {% macro opens_rows() %}x-on:click="$event.target.closest('a, button') || getSelection().toString() || $event.target.closest('tr.log-row')?.toggleAttribute('data-open')"{% endmacro %}
 

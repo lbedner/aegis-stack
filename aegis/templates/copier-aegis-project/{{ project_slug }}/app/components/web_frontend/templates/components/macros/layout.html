@@ -367,6 +367,13 @@
 {%- endmacro %}
 
 
+{# A dropdown() menu's group heading (Download, Copy; a schema), its
+   ``glyph`` before it; a ``tag`` other than ``li`` where it heads rows
+   inside one item (a filtered list). #}
+{% macro menu_heading(label, glyph=None, tag="li", attrs="") %}
+<{{ tag }} {{ attrs|safe }} class="flex items-center gap-1.5 px-3 pt-2 pb-1 text-xxs caps text-aegis-muted">{% if glyph %}{{ icon(glyph, "w-3 h-3") }}{% endif %}{{ label }}</{{ tag }}>
+{%- endmacro %}
+
 {# One entry in a dropdown() menu. ``attrs`` carries the htmx verb
    (``hx-get``/``hx-post``/``hx-delete`` plus target and swap); the menu
    closes itself on the click, so a dialog never opens over it. #}
@@ -513,7 +520,7 @@
 
 {% macro tab_item(label, active=False, href="", hx="") %}
 <a href="{{ href }}" {{ hx|safe }} {% if active %}aria-current="page"{% endif %}
-   class="text-sm pb-2 -mb-px border-b-2 whitespace-nowrap transition-colors {{ 'text-aegis-text border-aegis-teal' if active else 'text-aegis-muted border-transparent hover:text-aegis-text' }}">{{ label }}</a>
+   class="tab">{{ label }}</a>
 {% endmacro %}
 
 {# A chip: one of a row of exclusive choices (a time window, a month, a

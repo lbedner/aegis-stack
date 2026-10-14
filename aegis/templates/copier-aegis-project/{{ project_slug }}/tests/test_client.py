@@ -16,12 +16,15 @@ cleanup since they never make a request.
 """
 
 from collections.abc import AsyncIterator, Callable
+from http.cookies import SimpleCookie
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from app.core.client import APIClient
+from app.core.client_session import REFRESH_COOKIE, SESSION_COOKIE, cookie_name
+from app.core.config import settings
 from app.core.sse import stream_sse_post
 
 
@@ -575,14 +578,30 @@ class TestAPIClient:
 
     # ---- cookie jar lifecycle ----
 
+    def test_the_cookies_carry_the_projects_name(self) -> None:
+        """Browsers share cookies across a host's ports: two apps on
+        localhost (:8000, :8002) named theirs alike and signed each other
+        out, each refusing the other's refresh token."""
+        assert SESSION_COOKIE.startswith(settings.PROJECT_NAME)
+        assert REFRESH_COOKIE.startswith(settings.PROJECT_NAME)
+        assert SESSION_COOKIE != REFRESH_COOKIE
+
+    def test_a_cookie_name_is_one_a_browser_takes(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``PROJECT_NAME`` can be overridden with anything; a cookie's name
+        is ASCII letters, digits, ``_`` and ``-`` (Python's ``\\w`` is not)."""
+        monkeypatch.setattr(settings, "PROJECT_NAME", "Café app.v2")
+        SimpleCookie()[cookie_name("session")] = "x"  # CookieError otherwise
+
     @pytest.mark.asyncio
     async def test_clear_cookies_drops_every_cookie_in_jar(
         self, make_client: Callable[..., APIClient]
     ) -> None:
         """``logout`` calls this so a stale cookie cannot be replayed."""
         client = make_client()
-        client._client.cookies.set("aegis_session", "tok-abc", domain="test")
-        assert "aegis_session" in dict(client._client.cookies)
+        client._client.cookies.set(SESSION_COOKIE, "tok-abc", domain="test")
+        assert SESSION_COOKIE in dict(client._client.cookies)
 
         client.clear_cookies()
 

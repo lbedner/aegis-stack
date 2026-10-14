@@ -1,19 +1,24 @@
 """The Overseer Database page: the Flet database modal's tabs, Activity included."""
 
 from collections.abc import Generator
+import json
 from typing import Any
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
 
-from app.components.web_frontend import overseer_container, overseer_database
+from app.components.web_frontend import (
+    overseer_container,
+    overseer_database,
+    overseer_database_browser,
+)
 from app.core import exposure
 from app.core.config import settings
-from app.services.system import db_query, db_rows, db_transactions
+from app.services.system import db_filters, db_query, db_rows, db_transactions
 from app.services.system.models import ComponentStatus
 from tests._audit import recording
-from tests.web.dom import chosen, none, one, select, table_rows, text
+from tests.web.dom import none, one, select, table_rows, text
 from tests.web.overseer import sign_in, status_with
 
 POSTGRES: dict[str, Any] = {
@@ -128,8 +133,7 @@ class TestSections:
         html = _get(postgres)
         assert [text(a) for a in select(html, "#overseer-subnav nav a")] == [
             "Overview",
-            "Schema",
-            "Rows",
+            "Tables",
             "Query",
             "Migrations",
             "Engine",
@@ -166,38 +170,109 @@ class TestOverview:
         assert figures["Connections"] == "1"
 
 
-class TestSchema:
-    def test_table_expands_to_create_statement(self, postgres: TestClient) -> None:
-        html = _get(postgres, "schema")
-        assert (
-            text(one(html, "tbody tr:not([data-detail])").cssselect("td")[1]) == "user"
+TABLES = overseer_database_browser.TABLES_URL
+QUERY = overseer_database_browser.QUERY_URL
+
+
+def _tab(client: TestClient, table: str, tab: str = "") -> str:
+    query = f"?table={table}" + (f"&tab={tab}" if tab else "")
+    response = client.get(TABLES + query)
+    assert response.status_code == 200
+    return response.text
+
+
+class TestTables:
+    """Everything about a table in one place, the whole width its own: the
+    table's Rows, Schema and Relationships as tabs, and beside them the
+    table picked, opening to the schema's tables to pick another."""
+
+    def test_the_picker_opens_to_the_tables_under_their_schema(
+        self, postgres: TestClient
+    ) -> None:
+        html = _get(postgres, "tables")
+        assert one(html, "[data-width]").get("data-width") == "workspace"
+        picker = one(html, "#database-table [data-tables-picker] details")
+        assert text(one(picker, "summary")) == "user"
+        assert "public" in text(one(picker, "[data-schema]"))
+        listed = one(picker, "[data-tables-list]")
+        search = one(picker, "input[data-filter]")  # app.js, no request
+        assert listed.get("id") and search.get("data-filter") == f"#{listed.get('id')}"
+        link = one(listed, f'a[href="{TABLES}?table=user"]')
+        assert link.get("hx-target") == "#database-table"
+        assert "1,200" in text(link)
+
+    def test_a_table_opens_on_its_tabs(self, postgres: TestClient) -> None:
+        pytest.importorskip("app.models.user")
+        html = _tab(postgres, "user")
+        tabs = select(
+            html, "#database-table [role=tablist] > a:not([data-query-table])"
         )
-        sql = text(one(html, "tr[data-detail] pre"))
+        assert [text(a) for a in tabs] == ["Rows", "Schema", "Relationships"]
+        assert tabs[0].get("aria-current") == "page"
+        query = one(html, "#database-table a[data-query-table]")
+        assert query.get("href") == f"{QUERY}?table=user"
+        assert tabs[1].get("href") == f"{TABLES}?table=user&tab=schema"
+        assert tabs[1].get("hx-target") == "#database-table"
+
+    def test_its_schema_is_its_create_statement(self, postgres: TestClient) -> None:
+        sql = text(one(_tab(postgres, "user", "schema"), "#database-table pre"))
         assert "email VARCHAR NOT NULL," in sql
         assert "PRIMARY KEY (id)" in sql
         assert "CREATE UNIQUE INDEX ix_user_email ON user (email);" in sql
-        one(html, "tr[data-detail] .highlight")
 
+    def test_its_relationships_are_drawn_as_the_map_draws(
+        self, sqlite: TestClient
+    ) -> None:
+        """The map's own nodes and lines (overseer_map, across): the tables
+        pointing at it on the left, it in the middle, each a node with its
+        keys on hover, leading to that table's relationships."""
+        pytest.importorskip("app.models.user")
+        user = db_rows.table_of("user")
+        assert user is not None
+        _, into = db_rows.keys(user)
+        if not into:
+            pytest.skip("nothing points at the user table in this stack")
+        html = _tab(sqlite, "user", "relationships")
+        one(html, "#database-table [data-map][data-across]")
+        one(html, '[data-node="user"]')
+        other = one(html, f'[data-node="{into[0].table}"]')
+        assert f"{into[0].table}.{into[0].columns[0]}" in text(
+            one(other, "[data-hint]")
+        )
+        title = one(other, "a[data-title]")
+        assert title.get("href") == f"{TABLES}?table={into[0].table}&tab=relationships"
+        assert title.get("hx-target") == "#database-table"  # as its tabs do
+        one(html, f'path[data-link][data-from="{into[0].table}"][data-to="user"]')
 
-ROWS = overseer_database.ROWS_URL
+    def test_a_table_the_models_do_not_declare_opens_on_its_schema(
+        self, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Its rows are not read (``db_rows`` reads the models' tables)."""
+        legacy = {"name": "legacy", "rows": 3, "columns": [{"name": "id"}]}
+        metadata = POSTGRES | {"table_schemas": [legacy]}
+        with _client(app, monkeypatch, metadata) as client:
+            html = _tab(client, "legacy")
+            assert "CREATE TABLE IF NOT EXISTS legacy" in text(one(html, "pre"))
+            one(_tab(client, "legacy", "rows"), "[data-unread]")
+
+    def test_an_unknown_table_is_not_found(self, sqlite: TestClient) -> None:
+        assert sqlite.get(f"{TABLES}?table=nope").status_code == 404
 
 
 class TestRows:
-    """A table's rows, read like Logs: one row of controls, then a flat
-    scroller that takes the window, paged by the table's key. Read from the
-    suite's own database (``SessionLocal``, every table created)."""
+    """A table's Rows tab, read like Logs: one row of controls, then a flat
+    scroller that takes the rest of the pane, paged by the table's key.
+    Read from the suite's own database (``SessionLocal``, every table
+    created)."""
 
     def test_a_table_reads_like_the_logs(self, sqlite: TestClient) -> None:
-        html = _get(sqlite, "rows")
-        assert one(html, "[data-width]").get("data-width") == "workspace"
-        picked = 'form[data-rows-controls] select[name="table"]'
-        assert chosen(html, picked) == db_rows.tables()[0]
-        assert one(html, "[data-scroll]") is not None
+        html = _get(sqlite, "tables")
+        assert one(html, "#database-rows [data-scroll]") is not None
         assert select(html, "[data-rows] thead th")
 
     def test_a_secret_never_reaches_the_page(self, sqlite: TestClient) -> None:
         pytest.importorskip("app.models.user")  # the auth service's table
-        first = table_rows(_get(sqlite, "rows?table=user"), "[data-rows]")[0]
+        first = table_rows(_tab(sqlite, "user"), "[data-rows]")[0]
         assert text(first["hashed_password"]) == db_rows.HIDDEN
 
     def test_the_next_page_follows_the_key(
@@ -205,69 +280,228 @@ class TestRows:
     ) -> None:
         pytest.importorskip("app.models.user")  # two seeded users to page
         monkeypatch.setattr(db_rows, "PAGE", 1)
-        html = _get(sqlite, "rows?table=user")
+        html = _tab(sqlite, "user")
         assert "after=" in (one(html, 'a[rel="next"]').get("href") or "")
 
-    def test_a_row_opens_to_its_keys_and_each_refilters(
+    def test_a_row_opens_to_its_keys_and_each_opens_that_table(
         self, sqlite: TestClient
     ) -> None:
-        """No tab of its own: under each row, the rows it points at and
-        that point at it, each a link that refilters the same scroller."""
+        """Under each row, the rows it points at and that point at it, each
+        a link opening the other table's rows, filtered to them."""
         pytest.importorskip("app.models.user")
         user = db_rows.table_of("user")
         assert user is not None
-        out, into = db_rows.keys(user)
+        _, into = db_rows.keys(user)
         if not into:
             pytest.skip("nothing points at the user table in this stack")
-        html = _get(sqlite, "rows?table=user")
-        keys = text(one(html, "[data-keys]"))
-        assert all(f"{k.table}.{k.columns[0]}" in keys for k in into)
-        link = select(html, "#database-rows-body tr[data-links] a")[0]
-        assert link.get("hx-target") == "#database-rows"
+        html = _tab(sqlite, "user")
+        # across the whole row (a flex cell would sit in the first column)
+        link = select(html, "#database-rows-body tr[data-links] > td[colspan] > div a")[
+            0
+        ]
+        assert link.get("hx-target") == "#database-table"
         href = link.get("href") or ""
         assert f"table={into[0].table}" in href and "where=" in href
         followed = sqlite.get(href)
         assert followed.status_code == 200
         one(followed.text, "[data-rows]")
 
-    def test_an_unknown_table_is_not_found(self, sqlite: TestClient) -> None:
-        assert sqlite.get(f"{ROWS}?table=nope").status_code == 404
+    def test_a_header_orders_the_table_or_sorts_the_page(
+        self, sqlite: TestClient
+    ) -> None:
+        """A column an index serves orders the whole table (the server, by
+        key, again for the other way); any other sorts the rows shown."""
+        pytest.importorskip("app.models.user")
+        user = db_rows.table_of("user")
+        assert user is not None
+        html = _tab(sqlite, "user")
+        key = one(html, 'th[data-column="id"]')
+        assert key.get("aria-sort") == "ascending"
+        link = one(key, "a")
+        assert link.get("hx-target") == "#database-rows"
+        assert "order=id" in (link.get("href") or "")
+        assert "dir=desc" in (link.get("href") or "")
+        other = next(c for c in user.columns.keys() if c not in db_rows.sortable(user))
+        one(html, f'th[data-column="{other}"] button[data-sort-rows]')
+
+    def test_a_filter_is_a_column_picked_and_a_value(self, sqlite: TestClient) -> None:
+        """A column the table has (never a secret), how it compares, a value,
+        each filter a chip that takes it away; one the URL names that it
+        does not have says so in place of the rows."""
+        pytest.importorskip("app.models.user")
+        user = db_rows.table_of("user")
+        assert user is not None
+        html = _tab(sqlite, "user")
+        picks = [
+            o.get("value")
+            for o in select(
+                html, 'form[data-rows-controls] select[name="column"] option'
+            )
+        ]
+        assert picks == db_rows.filterable(user)
+        controls = one(html, "form[data-rows-controls] [data-filter-allowed]")
+        allowed = json.loads(controls.get("data-filter-allowed") or "")
+        assert allowed["id"] == list(db_filters.OPERATORS)  # in the page, no request
+        assert allowed["email"] == [":", "!="]
+        ops = [o.get("value") for o in select(html, 'select[name="op"] option')]
+        assert ops == [":", "!=", "<", "<=", ">", ">="]
+        found = sqlite.get(f"{TABLES}?table=user&column=id&op=%3A&value=1").text
+        at = list(user.columns.keys()).index("id")
+        ids = {
+            text(r.cssselect("td")[at])
+            for r in select(found, "#database-rows-body tr.log-row")
+        }
+        assert ids == {"1"}
+        chip = one(found, "[data-filter-chip]")
+        assert "id" in text(chip) and "where" not in (chip.get("href") or "")
+        later = sqlite.get(f"{TABLES}?table=user&column=id&op=%3E%3D&value=2").text
+        assert "id ≥ 2" in text(one(later, "[data-filter-chip]"))
+        comma = sqlite.get(f"{TABLES}?table=user&column=email&op=%3A&value=a,b").text
+        one(comma, "[data-rows-bad]")
+        none(comma, "[data-filter-chip]")  # the filter it could not carry, gone
+        bad = sqlite.get(f"{TABLES}?table=user&where=nope:1")
+        assert bad.status_code == 200
+        assert "nope" in text(one(bad.text, "[data-rows-bad]"))
+        one(bad.text, 'form[data-rows-controls] select[name="column"]')
+
+    def test_every_link_keeps_the_rest_of_what_was_asked(
+        self, sqlite: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Clicking around a filtered, ordered table resets nothing: a chip
+        keeps the order and the other filter, a header the filters, the next
+        page all of it; a column no index serves says it reads the table."""
+        pytest.importorskip("app.models.user")
+        monkeypatch.setattr(db_rows, "PAGE", 1)
+        html = _tab(sqlite, "user&order=email&dir=desc&where=id>=1,id<=99")
+        chip = select(html, "[data-filter-chip]")[0].get("href") or ""
+        assert "order=email" in chip and "dir=desc" in chip and "id%3C%3D99" in chip
+        email = one(html, 'th[data-column="email"] a').get("href") or ""
+        assert "where=" in email and "dir=" not in email  # the other way now
+        assert "where=" in (one(html, 'th[data-column="id"] a').get("href") or "")
+        later = one(html, 'a[rel="next"]').get("href") or ""
+        assert all(part in later for part in ("where=", "order=email", "page=2"))
+        labels = {
+            o.get("value"): text(o)
+            for o in select(html, 'select[name="column"] option')
+        }
+        assert labels["id"] == "id" and "(no index)" in labels["full_name"]
+
+    def test_a_swap_of_the_rows_alone_leaves_out_the_picker(
+        self, sqlite: TestClient
+    ) -> None:
+        """Paging, sorting and filtering swap the rows; the picker's every
+        table would be rendered and thrown away."""
+        name = db_rows.tables()[0]
+        url = f"{TABLES}?table={name}"
+        swap = sqlite.get(
+            url, headers={"HX-Request": "true", "HX-Target": "database-rows"}
+        )
+        one(swap.text, "#database-rows [data-rows]")
+        none(swap.text, "[data-tables-list] a")
+        assert select(_tab(sqlite, name), "[data-tables-list] a")
+
+    def test_a_read_past_its_time_says_so(
+        self, sqlite: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def slow(*_: object, **__: object) -> None:
+            raise db_rows.ReadTooSlowError("Stopped after 5 seconds.")
+
+        monkeypatch.setattr(db_rows, "page", slow)
+        html = _tab(sqlite, db_rows.tables()[0])
+        assert "Stopped" in text(one(html, "[data-rows-slow]"))
+
+    def test_every_read_is_audited(
+        self, sqlite: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The rows are the app's data: who read which table, how it was
+        asked, and how it went (ran, refused, stopped); a tab that reads
+        none is not recorded."""
+
+        def slow(*_: object, **__: object) -> None:
+            raise db_rows.ReadTooSlowError("Stopped after 5 seconds.")
+
+        name = db_rows.tables()[0]
+        audit = recording(sqlite)
+        _tab(sqlite, name)
+        _tab(sqlite, name, "schema")
+        assert sqlite.get(f"{TABLES}?table={name}&where=nope:1").status_code == 200
+        monkeypatch.setattr(db_rows, "page", slow)
+        _tab(sqlite, name)
+        assert [(e["event_type"], e["outcome"], e["table"]) for e in audit.events] == [
+            ("database.rows", "ran", name),
+            ("database.rows", "refused", name),
+            ("database.rows", "stopped", name),
+        ]
+        assert audit.events[1]["where"] == "nope:1"
+
+    def test_the_rows_shown_download_or_copy(self, sqlite: TestClient) -> None:
+        html = _tab(sqlite, db_rows.tables()[0])
+        formats = select(html, '[data-export-rows="#database-rows-body"]')
+        assert [(f.get("data-export-to"), f.get("data-export")) for f in formats] == [
+            ("file", "csv"),
+            ("file", "json"),
+            ("copy", "tsv"),
+            ("copy", "csv"),
+            ("copy", "json"),
+            ("copy", "markdown"),
+        ]
 
     def test_off_outside_dev_until_it_is_turned_on(
         self, sqlite: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """The rows are the app's data: outside dev, an admin turns them on."""
+        """The rows are the app's data: outside dev, an admin turns them on;
+        the table opens on its schema meanwhile."""
         monkeypatch.setattr(settings, "APP_ENV", "production")
-        off = _get(sqlite, "rows")
+        name = db_rows.tables()[0]
+        none(_tab(sqlite, name), "[data-rows]")
+        off = _tab(sqlite, name, "rows")
         none(off, "[data-rows]")
         assert exposure.ROWS in text(one(off, "[data-rows-off]"))
         monkeypatch.setattr(settings, exposure.ROWS, True)
-        one(_get(sqlite, "rows"), "[data-rows]")
-
-    def test_schema_leads_to_each_readable_tables_rows(
-        self, postgres: TestClient
-    ) -> None:
-        pytest.importorskip("app.models.user")
-        html = _get(postgres, "schema")
-        one(html, f'a[href="{ROWS}?table=user"]')
+        one(_tab(sqlite, name), "[data-rows]")
 
 
 class TestQuery:
-    """One read-only statement: a one-line prompt over the same flat
-    scroller as Rows, its answer in it, every run audited."""
+    """One read-only statement at a time, written in an editor that takes
+    the top of the window (sql.js keeps its tabs), its answer in the same
+    flat scroller as Rows under it, every run audited."""
 
     def _run(self, client: TestClient, sql: str) -> str:
-        response = client.post(overseer_database.QUERY_RUN, data={"sql": sql})
+        response = client.post(overseer_database_browser.QUERY_RUN, data={"sql": sql})
         assert response.status_code == 200
         return response.text
 
-    def test_a_prompt_over_the_scroller(self, sqlite: TestClient) -> None:
+    def test_an_editor_over_the_scroller(self, sqlite: TestClient) -> None:
         html = _get(sqlite, "query")
         assert one(html, "[data-width]").get("data-width") == "workspace"
+        one(html, "#database-query[data-sql-workbench] [data-sql-tabs]")
         form = one(html, "form[data-query][data-write]")
-        assert form.get("hx-post") == overseer_database.QUERY_RUN
-        one(form, 'input[name="sql"]')
+        assert form.get("hx-post") == overseer_database_browser.QUERY_RUN
+        one(form, 'textarea[name="sql"]')  # without the script, still a prompt
+        one(
+            html,
+            '[data-export-to="file"][data-export="csv"][data-export-rows="#database-query-body"]',
+        )
         one(html, "#database-query-answer [data-scroll]")
+
+    def test_a_table_opens_a_tab_reading_it(self, postgres: TestClient) -> None:
+        """From Tables: a new tab with the table's rows, named as the
+        dialect needs (``user`` is a word of PostgreSQL's)."""
+        html = _get(postgres, "query?table=user")
+        seed = one(html, "[data-sql-workbench]").get("data-seed")
+        assert seed == 'SELECT * FROM "user"'
+        assert one(_get(postgres, "query?table=nope"), "[data-sql-workbench]").get(
+            "data-seed"
+        ) in (None, "")
+
+    def test_the_prompt_knows_the_dialect_and_each_tables_columns(
+        self, postgres: TestClient
+    ) -> None:
+        """For the editor (sql.js): highlighting in the database's dialect,
+        completing its tables and their columns."""
+        editor = one(_get(postgres, "query"), "[data-sql-editor]")
+        assert editor.get("data-dialect") == "postgresql"
+        assert json.loads(editor.get("data-schema") or "") == {"user": ["id", "email"]}
 
     def test_its_rows_and_what_it_cost(self, sqlite: TestClient) -> None:
         audit = recording(sqlite)
@@ -277,6 +511,7 @@ class TestQuery:
             {"one": "1", "two": "two"}
         ]
         assert "read-only" in text(one(html, "[data-query-footer]"))
+        assert len(select(html, "th button[data-sort-rows]")) == 2
         assert [(e["event_type"], e["outcome"]) for e in audit.events] == [
             ("database.query", "ran")
         ]
@@ -288,6 +523,18 @@ class TestQuery:
         monkeypatch.setattr(db_query, "LIMIT", 1)
         html = self._run(sqlite, "SELECT 1 UNION ALL SELECT 2")
         assert "first 1" in text(one(html, "[data-query-footer]"))
+
+    def test_a_statement_past_its_time_is_audited_as_stopped(
+        self, sqlite: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def slow(*_: object, **__: object) -> None:
+            raise db_rows.ReadTooSlowError("Stopped after 5 seconds.")
+
+        monkeypatch.setattr(db_query, "run", slow)
+        audit = recording(sqlite)
+        html = self._run(sqlite, "SELECT 1")
+        assert "Stopped" in text(one(html, "[data-query-error]"))
+        assert audit.events[0]["outcome"] == "stopped"
 
     def test_a_write_is_refused_and_audited(self, sqlite: TestClient) -> None:
         audit = recording(sqlite)
@@ -303,7 +550,9 @@ class TestQuery:
         off = _get(sqlite, "query")
         none(off, "form[data-query]")
         assert exposure.ROWS in text(one(off, "[data-rows-off]"))
-        response = sqlite.post(overseer_database.QUERY_RUN, data={"sql": "SELECT 1"})
+        response = sqlite.post(
+            overseer_database_browser.QUERY_RUN, data={"sql": "SELECT 1"}
+        )
         assert response.status_code == 404
 
 

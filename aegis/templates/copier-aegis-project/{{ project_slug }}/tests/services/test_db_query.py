@@ -3,12 +3,16 @@ by construction (a read-only connection), never by reading the SQL; one
 statement at a time; rows capped; a secret never shown; stopped past its
 time; and the connection handed back as writable as it came."""
 
+from contextlib import nullcontext
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any, Self, cast
 
 import pytest
-from sqlalchemy import Engine, insert, select
+from sqlalchemy import Connection, Engine, insert, select
 
 from app.core import exposure
+from app.core.config import settings
 from app.services.system import db_query, db_rows
 from tests.services._db_fixtures import META, ORG, seeded
 
@@ -107,6 +111,57 @@ def test_postgres_refuses_a_plan_reading_a_table_with_a_secret() -> None:
         == "member"
     )
     assert db_query.secret_read(plan, {"org": frozenset({"x"})}) is None
+
+
+class _Postgres:
+    """A Postgres connection's answers, in order (``is_superuser``, the
+    plan, then the statement's: no rows), what it was sent, and whether it
+    was thrown away."""
+
+    dialect = SimpleNamespace(name="postgresql")
+
+    def __init__(self, *answers: Any) -> None:
+        self.answers = iter(answers)
+        self.sent: list[str] = []
+        self.invalidated = False
+
+    def exec_driver_sql(self, sql: str) -> SimpleNamespace:
+        self.sent.append(sql)
+        answer = next(self.answers, None)
+        return SimpleNamespace(scalar=lambda: answer, returns_rows=False)
+
+    def execution_options(self, **_: Any) -> Self:
+        return self
+
+    def invalidate(self) -> None:
+        self.invalidated = True
+
+
+def test_postgres_refuses_a_superuser_outside_dev(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A read-only transaction does not stop a superuser's ``COPY ... TO
+    PROGRAM``: outside dev, nothing is planned; in dev, it runs."""
+    plan = [{"Plan": {"Node Type": "Result"}}]
+    monkeypatch.setattr(settings, "APP_ENV", "production")
+    conn = _Postgres("on")
+    with pytest.raises(db_query.QueryError, match="superuser"):
+        db_query._vet(cast(Connection, conn), "SELECT 1", {})
+    assert len(conn.sent) == 1
+    monkeypatch.setattr(settings, "APP_ENV", "dev")
+    db_query._vet(cast(Connection, _Postgres("on", plan)), "SELECT 1", {})
+
+
+def test_postgres_throws_the_connection_away_after_each_statement(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Whatever a statement set (``SET``, a temp table) leaves with it,
+    failed or not."""
+    conn = _Postgres("off", [{"Plan": {"Node Type": "Result"}}])
+    monkeypatch.setattr(db_rows, "reading", lambda *_: nullcontext(conn))
+    with pytest.raises(db_query.QueryError, match="no rows"):
+        db_query.run("SET work_mem = '1GB'", metadata=META)
+    assert conn.invalidated and conn.sent[-1] == "SET work_mem = '1GB'"
 
 
 def test_cells_are_redacted_and_cut(engine: Engine) -> None:

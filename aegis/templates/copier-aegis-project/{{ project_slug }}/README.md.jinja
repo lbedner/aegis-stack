@@ -281,7 +281,7 @@ OAUTH_SESSION_SECRET=replace-me-with-a-strong-random-string
 
 The `?next=` parameter is honored only for same-origin paths. After a
 successful callback the user is redirected to `next` (or `/app` by
-default) with the JWT set in an HttpOnly `aegis_session` cookie. API
+default) with the JWT set in an HttpOnly `<project>_session` cookie. API
 clients can keep using `Authorization: Bearer ...` — the cookie path
 is parallel, not exclusive.
 

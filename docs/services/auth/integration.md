@@ -487,7 +487,7 @@ async def refresh(
     response: Response,
     refresh_service: RefreshService = Depends(get_refresh_service),
 ):
-    inbound = request.cookies.get("aegis_refresh")
+    inbound = request.cookies.get(REFRESH_COOKIE)
     result = await refresh_service.rotate(inbound)
     if result is None:
         # Stale, expired, or replay — drop both cookies and 401.

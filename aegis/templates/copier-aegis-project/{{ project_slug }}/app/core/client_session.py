@@ -10,17 +10,31 @@ rotates the refresh token. Everything here assumes the host class owns
 from __future__ import annotations
 
 import inspect
+import re
 from typing import Any
 
 from httpx import CookieConflict
 
+from app.core.config import settings
 from app.core.log import logger
 
-# The cookies the backend mints. Named here rather than imported from
-# ``app.core.security`` so the client stays usable from contexts that do
+
+def cookie_name(what: str) -> str:
+    """A cookie of this app's (``session``), named for the project:
+    browsers share a host's cookies across its ports, so two apps on
+    localhost named alike overwrite each other's (a sign-in, each refusing
+    the other's refresh token; OAuth state mid sign-in). ``PROJECT_NAME``
+    as a cookie name may hold it: a slug by default, but an environment can
+    override it with anything; a browser takes ASCII letters, digits,
+    ``_`` and ``-``."""
+    return f"{re.sub(r'[^A-Za-z0-9_-]', '_', settings.PROJECT_NAME)}_{what}"
+
+
+# The cookies the backend mints for a sign-in (``app.core.security`` sets
+# them). Here, not there, so the client stays usable from contexts that do
 # not pull in the auth service.
-SESSION_COOKIE = "aegis_session"
-REFRESH_COOKIE = "aegis_refresh"
+SESSION_COOKIE = cookie_name("session")
+REFRESH_COOKIE = cookie_name("refresh")
 
 
 class SessionCookieMixin:
@@ -88,9 +102,7 @@ class SessionCookieMixin:
         """
         for cookie in list(self._client.cookies.jar):
             if cookie.name == name and cookie.value != value:
-                self._client.cookies.jar.clear(
-                    cookie.domain, cookie.path, cookie.name
-                )
+                self._client.cookies.jar.clear(cookie.domain, cookie.path, cookie.name)
 
     async def _note_session_rotation(self) -> None:
         """Tell the caller when the refresh cookie changes value.

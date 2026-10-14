@@ -1,0 +1,43 @@
+{# Overseer > Database > Tables (overseer_database_browser.tables), the whole width
+   the table's own, filling the page below its header: the table picked,
+   opening to the schema's tables to pick another (``dropdown``; its box
+   narrows them as you type, ``filter_input``), beside its
+   tabs: Rows (``_rows.html``), Schema (its CREATE statement) and
+   Relationships (as Overseer's map draws, ``_overview_map.html``: who
+   points at it, it, what it points at), then the way to query it (a new
+   tab on Query). A table or a tab swaps it all. #}
+{% from "components/macros/layout.html" import code_block, dropdown, menu_heading, tab_bar, tab_item %}
+{% from "components/macros/feedback.html" import empty_state %}
+{% from "components/macros/form.html" import filter_input %}
+<section id="database-table" aria-label="{{ table_name }}" class="overseer-fill flex flex-col">
+  {% call tab_bar(table_name) %}
+  <div data-tables-picker class="pb-2">
+    {% call dropdown(table_name, align="left") %}
+    <li class="p-2">{{ filter_input("#database-tables-list", placeholder="Find a table") }}</li>
+    <li id="database-tables-list" data-tables-list class="max-h-[70vh] overflow-auto">
+      {{ menu_heading(tables_schema ~ " · " ~ tables_list|length, tag="p", attrs="data-schema") }}
+      {% for table in tables_list %}{% set current = table.name == table_name %}
+      <a href="{{ table.url }}" {{ hx_replace(table.url, "#database-table") }} {% if current %}aria-current="page"{% endif %}
+         class="flex justify-between gap-6 px-3 py-1 text-xs font-mono rounded hover:bg-aegis-border/30 {{ 'text-aegis-teal' if current else 'text-aegis-text' }}"><span class="truncate">{{ table.name }}</span>{% if table.rows is not none %}<span class="text-aegis-muted tabular-nums">{{ table.rows }}</span>{% endif %}</a>
+      {% endfor %}
+    </li>
+    {% endcall %}
+  </div>
+  {% for tab in table_tabs %}{{ tab_item(tab.label, tab.key == table_tab, tab.url, hx_replace(tab.url, "#database-table")) }}{% endfor %}
+  <a href="{{ table_query }}" data-query-table class="ml-auto pb-2 text-xs text-aegis-teal hover:underline">Query this table</a>
+  {% endcall %}
+  {% if table_tab == "schema" %}
+  <div class="min-h-0 overflow-auto">
+    {% if table_sql %}{{ code_block(table_sql, lang="sql") }}{% else %}{{ empty_state("No schema read", "The health check has not listed this table's columns.") }}{% endif %}
+  </div>
+  {% elif table_unread %}
+  <p data-unread class="text-sm text-aegis-muted">Not one of the app's models, which its rows and keys are read through.</p>
+  {% elif table_tab == "relationships" %}
+  <div class="min-h-0 overflow-auto">
+    {% if table_alone %}<p data-no-keys class="mb-3 text-sm text-aegis-muted">No key points out of it or into it.</p>{% endif %}
+    {% include "pages/overseer/_overview_map.html" %}
+  </div>
+  {% else %}
+  {% include "pages/overseer/database/_rows.html" %}
+  {% endif %}
+</section>

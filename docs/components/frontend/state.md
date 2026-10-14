@@ -103,7 +103,7 @@ Knowing which is which makes the auth model a lot less mysterious.
 | --- | --- | --- | --- | --- | --- |
 | `SessionState` | Python process, `page.data["session_state"]` | No | Yes (same session id) | Yes | API client, theme manager, current user, anything that should outlive a view but not the session |
 | `page.client_storage` | Browser `localStorage` | Yes | Yes | Yes | UI preferences (last-selected filter, sidebar open state). Survives refresh; **safe to read but never authoritative**. |
-| HttpOnly cookie (`aegis_session`) | Browser cookie jar (HttpOnly) + httpx jar on server | Yes | Yes | No (cleared) | Auth and only auth. |
+| HttpOnly cookie (`<project>_session`) | Browser cookie jar (HttpOnly) + httpx jar on server | Yes | Yes | No (cleared) | Auth and only auth. |
 
 ### Rule: do not put auth tokens in `client_storage`
 
@@ -112,7 +112,7 @@ running on the page. Putting a session token there gives every script
 on the page access to it. The HttpOnly cookie cannot be read by JS at
 all, which is the whole reason it exists. The Aegis auth flow never
 touches `client_storage`; the backend issues `Set-Cookie:
-aegis_session=...` and the httpx client on the Python side carries it.
+<project>_session=...` and the httpx client on the Python side carries it.
 This pattern is also the same one you would use with any other Python
 front end; the cookie does not care that Flet is rendering the UI.
 

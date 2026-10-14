@@ -1,0 +1,870 @@
+{
+ "sqlite": {
+  "SELECT * FROM nope": [
+   {
+    "name": "Keyword",
+    "text": "SELECT",
+    "from": 0,
+    "to": 6
+   },
+   {
+    "name": "Operator",
+    "text": "*",
+    "from": 7,
+    "to": 8
+   },
+   {
+    "name": "Keyword",
+    "text": "FROM",
+    "from": 9,
+    "to": 13
+   },
+   {
+    "name": "Identifier",
+    "text": "nope",
+    "from": 14,
+    "to": 18
+   }
+  ],
+  "SELECT * FROM org o JOIN nope n ON n.id = o.id": [
+   {
+    "name": "Keyword",
+    "text": "SELECT",
+    "from": 0,
+    "to": 6
+   },
+   {
+    "name": "Operator",
+    "text": "*",
+    "from": 7,
+    "to": 8
+   },
+   {
+    "name": "Keyword",
+    "text": "FROM",
+    "from": 9,
+    "to": 13
+   },
+   {
+    "name": "Identifier",
+    "text": "org",
+    "from": 14,
+    "to": 17
+   },
+   {
+    "name": "Identifier",
+    "text": "o",
+    "from": 18,
+    "to": 19
+   },
+   {
+    "name": "Keyword",
+    "text": "JOIN",
+    "from": 20,
+    "to": 24
+   },
+   {
+    "name": "Identifier",
+    "text": "nope",
+    "from": 25,
+    "to": 29
+   },
+   {
+    "name": "Identifier",
+    "text": "n",
+    "from": 30,
+    "to": 31
+   },
+   {
+    "name": "Keyword",
+    "text": "ON",
+    "from": 32,
+    "to": 34
+   },
+   {
+    "name": "CompositeIdentifier",
+    "text": "n.id",
+    "from": 35,
+    "to": 39
+   },
+   {
+    "name": "Operator",
+    "text": "=",
+    "from": 40,
+    "to": 41
+   },
+   {
+    "name": "CompositeIdentifier",
+    "text": "o.id",
+    "from": 42,
+    "to": 46
+   }
+  ],
+  "SELECT u.nope, email FROM user AS u": [
+   {
+    "name": "Keyword",
+    "text": "SELECT",
+    "from": 0,
+    "to": 6
+   },
+   {
+    "name": "CompositeIdentifier",
+    "text": "u.nope",
+    "from": 7,
+    "to": 13
+   },
+   {
+    "name": "Punctuation",
+    "text": ",",
+    "from": 13,
+    "to": 14
+   },
+   {
+    "name": "Identifier",
+    "text": "email",
+    "from": 15,
+    "to": 20
+   },
+   {
+    "name": "Keyword",
+    "text": "FROM",
+    "from": 21,
+    "to": 25
+   },
+   {
+    "name": "Keyword",
+    "text": "user",
+    "from": 26,
+    "to": 30
+   },
+   {
+    "name": "Keyword",
+    "text": "AS",
+    "from": 31,
+    "to": 33
+   },
+   {
+    "name": "Identifier",
+    "text": "u",
+    "from": 34,
+    "to": 35
+   }
+  ],
+  "WITH t AS (SELECT 1) SELECT * FROM t": [
+   {
+    "name": "Keyword",
+    "text": "WITH",
+    "from": 0,
+    "to": 4
+   },
+   {
+    "name": "Identifier",
+    "text": "t",
+    "from": 5,
+    "to": 6
+   },
+   {
+    "name": "Keyword",
+    "text": "AS",
+    "from": 7,
+    "to": 9
+   },
+   {
+    "name": "Parens",
+    "text": "(SELECT 1)",
+    "from": 10,
+    "to": 20,
+    "children": [
+     {
+      "name": "(",
+      "text": "(",
+      "from": 10,
+      "to": 11
+     },
+     {
+      "name": "Keyword",
+      "text": "SELECT",
+      "from": 11,
+      "to": 17
+     },
+     {
+      "name": "Number",
+      "text": "1",
+      "from": 18,
+      "to": 19
+     },
+     {
+      "name": ")",
+      "text": ")",
+      "from": 19,
+      "to": 20
+     }
+    ]
+   },
+   {
+    "name": "Keyword",
+    "text": "SELECT",
+    "from": 21,
+    "to": 27
+   },
+   {
+    "name": "Operator",
+    "text": "*",
+    "from": 28,
+    "to": 29
+   },
+   {
+    "name": "Keyword",
+    "text": "FROM",
+    "from": 30,
+    "to": 34
+   },
+   {
+    "name": "Identifier",
+    "text": "t",
+    "from": 35,
+    "to": 36
+   }
+  ],
+  "WITH t (a) AS MATERIALIZED (SELECT 1) SELECT * FROM t": [
+   {
+    "name": "Keyword",
+    "text": "WITH",
+    "from": 0,
+    "to": 4
+   },
+   {
+    "name": "Identifier",
+    "text": "t",
+    "from": 5,
+    "to": 6
+   },
+   {
+    "name": "Parens",
+    "text": "(a)",
+    "from": 7,
+    "to": 10,
+    "children": [
+     {
+      "name": "(",
+      "text": "(",
+      "from": 7,
+      "to": 8
+     },
+     {
+      "name": "Identifier",
+      "text": "a",
+      "from": 8,
+      "to": 9
+     },
+     {
+      "name": ")",
+      "text": ")",
+      "from": 9,
+      "to": 10
+     }
+    ]
+   },
+   {
+    "name": "Keyword",
+    "text": "AS",
+    "from": 11,
+    "to": 13
+   },
+   {
+    "name": "Identifier",
+    "text": "MATERIALIZED",
+    "from": 14,
+    "to": 26
+   },
+   {
+    "name": "Parens",
+    "text": "(SELECT 1)",
+    "from": 27,
+    "to": 37,
+    "children": [
+     {
+      "name": "(",
+      "text": "(",
+      "from": 27,
+      "to": 28
+     },
+     {
+      "name": "Keyword",
+      "text": "SELECT",
+      "from": 28,
+      "to": 34
+     },
+     {
+      "name": "Number",
+      "text": "1",
+      "from": 35,
+      "to": 36
+     },
+     {
+      "name": ")",
+      "text": ")",
+      "from": 36,
+      "to": 37
+     }
+    ]
+   },
+   {
+    "name": "Keyword",
+    "text": "SELECT",
+    "from": 38,
+    "to": 44
+   },
+   {
+    "name": "Operator",
+    "text": "*",
+    "from": 45,
+    "to": 46
+   },
+   {
+    "name": "Keyword",
+    "text": "FROM",
+    "from": 47,
+    "to": 51
+   },
+   {
+    "name": "Identifier",
+    "text": "t",
+    "from": 52,
+    "to": 53
+   }
+  ],
+  "SELECT * FROM generate_series(1, 3)": [
+   {
+    "name": "Keyword",
+    "text": "SELECT",
+    "from": 0,
+    "to": 6
+   },
+   {
+    "name": "Operator",
+    "text": "*",
+    "from": 7,
+    "to": 8
+   },
+   {
+    "name": "Keyword",
+    "text": "FROM",
+    "from": 9,
+    "to": 13
+   },
+   {
+    "name": "Identifier",
+    "text": "generate_series",
+    "from": 14,
+    "to": 29
+   },
+   {
+    "name": "Parens",
+    "text": "(1, 3)",
+    "from": 29,
+    "to": 35,
+    "children": [
+     {
+      "name": "(",
+      "text": "(",
+      "from": 29,
+      "to": 30
+     },
+     {
+      "name": "Number",
+      "text": "1",
+      "from": 30,
+      "to": 31
+     },
+     {
+      "name": "Punctuation",
+      "text": ",",
+      "from": 31,
+      "to": 32
+     },
+     {
+      "name": "Number",
+      "text": "3",
+      "from": 33,
+      "to": 34
+     },
+     {
+      "name": ")",
+      "text": ")",
+      "from": 34,
+      "to": 35
+     }
+    ]
+   }
+  ],
+  "SELECT * FROM (SELECT id FROM org) AS s": [
+   {
+    "name": "Keyword",
+    "text": "SELECT",
+    "from": 0,
+    "to": 6
+   },
+   {
+    "name": "Operator",
+    "text": "*",
+    "from": 7,
+    "to": 8
+   },
+   {
+    "name": "Keyword",
+    "text": "FROM",
+    "from": 9,
+    "to": 13
+   },
+   {
+    "name": "Parens",
+    "text": "(SELECT id FROM org)",
+    "from": 14,
+    "to": 34,
+    "children": [
+     {
+      "name": "(",
+      "text": "(",
+      "from": 14,
+      "to": 15
+     },
+     {
+      "name": "Keyword",
+      "text": "SELECT",
+      "from": 15,
+      "to": 21
+     },
+     {
+      "name": "Identifier",
+      "text": "id",
+      "from": 22,
+      "to": 24
+     },
+     {
+      "name": "Keyword",
+      "text": "FROM",
+      "from": 25,
+      "to": 29
+     },
+     {
+      "name": "Identifier",
+      "text": "org",
+      "from": 30,
+      "to": 33
+     },
+     {
+      "name": ")",
+      "text": ")",
+      "from": 33,
+      "to": 34
+     }
+    ]
+   },
+   {
+    "name": "Keyword",
+    "text": "AS",
+    "from": 35,
+    "to": 37
+   },
+   {
+    "name": "Identifier",
+    "text": "s",
+    "from": 38,
+    "to": 39
+   }
+  ],
+  "SELECT * FROM main.anything": [
+   {
+    "name": "Keyword",
+    "text": "SELECT",
+    "from": 0,
+    "to": 6
+   },
+   {
+    "name": "Operator",
+    "text": "*",
+    "from": 7,
+    "to": 8
+   },
+   {
+    "name": "Keyword",
+    "text": "FROM",
+    "from": 9,
+    "to": 13
+   },
+   {
+    "name": "CompositeIdentifier",
+    "text": "main.anything",
+    "from": 14,
+    "to": 27
+   }
+  ],
+  "SELECT * FROM sqlite_master": [
+   {
+    "name": "Keyword",
+    "text": "SELECT",
+    "from": 0,
+    "to": 6
+   },
+   {
+    "name": "Operator",
+    "text": "*",
+    "from": 7,
+    "to": 8
+   },
+   {
+    "name": "Keyword",
+    "text": "FROM",
+    "from": 9,
+    "to": 13
+   },
+   {
+    "name": "Identifier",
+    "text": "sqlite_master",
+    "from": 14,
+    "to": 27
+   }
+  ],
+  "SELECT * FROM org WHERE id IS DISTINCT FROM name": [
+   {
+    "name": "Keyword",
+    "text": "SELECT",
+    "from": 0,
+    "to": 6
+   },
+   {
+    "name": "Operator",
+    "text": "*",
+    "from": 7,
+    "to": 8
+   },
+   {
+    "name": "Keyword",
+    "text": "FROM",
+    "from": 9,
+    "to": 13
+   },
+   {
+    "name": "Identifier",
+    "text": "org",
+    "from": 14,
+    "to": 17
+   },
+   {
+    "name": "Keyword",
+    "text": "WHERE",
+    "from": 18,
+    "to": 23
+   },
+   {
+    "name": "Identifier",
+    "text": "id",
+    "from": 24,
+    "to": 26
+   },
+   {
+    "name": "Keyword",
+    "text": "IS",
+    "from": 27,
+    "to": 29
+   },
+   {
+    "name": "Keyword",
+    "text": "DISTINCT",
+    "from": 30,
+    "to": 38
+   },
+   {
+    "name": "Keyword",
+    "text": "FROM",
+    "from": 39,
+    "to": 43
+   },
+   {
+    "name": "Identifier",
+    "text": "name",
+    "from": 44,
+    "to": 48
+   }
+  ],
+  "SELECT (1": [
+   {
+    "name": "Keyword",
+    "text": "SELECT",
+    "from": 0,
+    "to": 6
+   },
+   {
+    "name": "Parens",
+    "text": "(1",
+    "from": 7,
+    "to": 9,
+    "children": [
+     {
+      "name": "(",
+      "text": "(",
+      "from": 7,
+      "to": 8
+     },
+     {
+      "name": "Number",
+      "text": "1",
+      "from": 8,
+      "to": 9
+     },
+     {
+      "name": "⚠",
+      "text": "",
+      "from": 9,
+      "to": 9
+     }
+    ]
+   }
+  ],
+  "SELECT 'abc": [
+   {
+    "name": "Keyword",
+    "text": "SELECT",
+    "from": 0,
+    "to": 6
+   },
+   {
+    "name": "String",
+    "text": "'abc",
+    "from": 7,
+    "to": 11
+   }
+  ],
+  "SELECT u.* FROM user u": [
+   {
+    "name": "Keyword",
+    "text": "SELECT",
+    "from": 0,
+    "to": 6
+   },
+   {
+    "name": "CompositeIdentifier",
+    "text": "u.",
+    "from": 7,
+    "to": 9
+   },
+   {
+    "name": "Operator",
+    "text": "*",
+    "from": 9,
+    "to": 10
+   },
+   {
+    "name": "Keyword",
+    "text": "FROM",
+    "from": 11,
+    "to": 15
+   },
+   {
+    "name": "Keyword",
+    "text": "user",
+    "from": 16,
+    "to": 20
+   },
+   {
+    "name": "Identifier",
+    "text": "u",
+    "from": 21,
+    "to": 22
+   }
+  ],
+  "SELECT * FROM stt_usage WHERE detec": [
+   {
+    "name": "Keyword",
+    "text": "SELECT",
+    "from": 0,
+    "to": 6
+   },
+   {
+    "name": "Operator",
+    "text": "*",
+    "from": 7,
+    "to": 8
+   },
+   {
+    "name": "Keyword",
+    "text": "FROM",
+    "from": 9,
+    "to": 13
+   },
+   {
+    "name": "Identifier",
+    "text": "stt_usage",
+    "from": 14,
+    "to": 23
+   },
+   {
+    "name": "Keyword",
+    "text": "WHERE",
+    "from": 24,
+    "to": 29
+   },
+   {
+    "name": "Identifier",
+    "text": "detec",
+    "from": 30,
+    "to": 35
+   }
+  ],
+  "SELECT * FROM user u JOIN org o ON o.id = u.id": [
+   {
+    "name": "Keyword",
+    "text": "SELECT",
+    "from": 0,
+    "to": 6
+   },
+   {
+    "name": "Operator",
+    "text": "*",
+    "from": 7,
+    "to": 8
+   },
+   {
+    "name": "Keyword",
+    "text": "FROM",
+    "from": 9,
+    "to": 13
+   },
+   {
+    "name": "Keyword",
+    "text": "user",
+    "from": 14,
+    "to": 18
+   },
+   {
+    "name": "Identifier",
+    "text": "u",
+    "from": 19,
+    "to": 20
+   },
+   {
+    "name": "Keyword",
+    "text": "JOIN",
+    "from": 21,
+    "to": 25
+   },
+   {
+    "name": "Identifier",
+    "text": "org",
+    "from": 26,
+    "to": 29
+   },
+   {
+    "name": "Identifier",
+    "text": "o",
+    "from": 30,
+    "to": 31
+   },
+   {
+    "name": "Keyword",
+    "text": "ON",
+    "from": 32,
+    "to": 34
+   },
+   {
+    "name": "CompositeIdentifier",
+    "text": "o.id",
+    "from": 35,
+    "to": 39
+   },
+   {
+    "name": "Operator",
+    "text": "=",
+    "from": 40,
+    "to": 41
+   },
+   {
+    "name": "CompositeIdentifier",
+    "text": "u.id",
+    "from": 42,
+    "to": 46
+   }
+  ]
+ },
+ "postgresql": {
+  "SELECT extract(EPOCH FROM at) FROM org": [
+   {
+    "name": "Keyword",
+    "text": "SELECT",
+    "from": 0,
+    "to": 6
+   },
+   {
+    "name": "Keyword",
+    "text": "extract",
+    "from": 7,
+    "to": 14
+   },
+   {
+    "name": "Parens",
+    "text": "(EPOCH FROM at)",
+    "from": 14,
+    "to": 29,
+    "children": [
+     {
+      "name": "(",
+      "text": "(",
+      "from": 14,
+      "to": 15
+     },
+     {
+      "name": "Identifier",
+      "text": "EPOCH",
+      "from": 15,
+      "to": 20
+     },
+     {
+      "name": "Keyword",
+      "text": "FROM",
+      "from": 21,
+      "to": 25
+     },
+     {
+      "name": "Keyword",
+      "text": "at",
+      "from": 26,
+      "to": 28
+     },
+     {
+      "name": ")",
+      "text": ")",
+      "from": 28,
+      "to": 29
+     }
+    ]
+   },
+   {
+    "name": "Keyword",
+    "text": "FROM",
+    "from": 30,
+    "to": 34
+   },
+   {
+    "name": "Identifier",
+    "text": "org",
+    "from": 35,
+    "to": 38
+   }
+  ],
+  "SELECT E'a\\nb'": [
+   {
+    "name": "Keyword",
+    "text": "SELECT",
+    "from": 0,
+    "to": 6
+   },
+   {
+    "name": "String",
+    "text": "E'a\\nb'",
+    "from": 7,
+    "to": 14
+   }
+  ]
+ }
+}

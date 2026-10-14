@@ -62,7 +62,7 @@
   }
 
   /* An Overseer workspace that fills the page below its header down to the
-     viewport's edge, so only its own panes scroll (Chat, Code). From md up
+     viewport's edge, so only its own panes scroll. From md up
      the heights subtract the shell's top padding (py-7, lg:py-10) and the
      page header (6rem with its padding and margin), and the negative margin
      gives back the shell's bottom padding. Below md the menus stack above
@@ -178,13 +178,51 @@
   }
   pre.code-block--wrap,
   .code-block--wrap pre { @apply whitespace-pre-wrap; overflow-wrap: anywhere; }
-  .code-block .highlight :is(.k, .kc, .kd, .kn, .kp, .kr, .ow) { @apply text-aegis-teal; }
-  .code-block .highlight :is(.s, .s1, .s2, .sa, .sb, .sd, .se, .si, .dl) { @apply text-aegis-amber; }
-  .code-block .highlight :is(.c, .c1, .cm, .cs, .ch) { @apply text-aegis-muted italic; }
+  /* Database > Query's editor (sql.js, CodeMirror): the box's height and
+     colours, its tokens coloured as a code block's are, its completions on
+     the card. Three classes deep, past CodeMirror's own. */
+  .sql-editor .cm-editor { @apply h-full bg-aegis-bg border border-aegis-border rounded text-sm text-aegis-text; }
+  .sql-editor .cm-editor.cm-focused { @apply outline-none border-aegis-teal; }
+  .sql-editor .cm-editor .cm-content { @apply font-mono px-1 py-1.5; }
+  /* Its own cursor (the native caret is hidden), black by default. */
+  .sql-editor .cm-editor .cm-cursor,
+  .sql-editor .cm-editor .cm-dropCursor { @apply border-l-2 border-aegis-teal; }
+  .sql-editor .cm-editor .cm-placeholder { @apply text-aegis-muted/50; }
+  .sql-editor .cm-editor .cm-selectionBackground,
+  .sql-editor .cm-editor.cm-focused .cm-selectionBackground { @apply bg-aegis-teal/25; }
+  .sql-editor .cm-editor .cm-tooltip { @apply bg-aegis-card border border-aegis-border rounded text-xs font-mono text-aegis-text; }
+  .sql-editor .cm-editor .cm-tooltip-autocomplete > ul > li[aria-selected] { @apply bg-aegis-teal/20 text-aegis-text; }
+  .sql-editor .cm-editor .cm-completionDetail { @apply text-aegis-muted; }
+  /* ... and its statements' tabs (sql.js draws them, each a .tab). */
+  .sql-tab { @apply flex items-center gap-1.5 px-3 pt-1 cursor-pointer select-none; }
+  .sql-tab-close { @apply invisible text-aegis-muted hover:text-aegis-text; }
+  .sql-tab:hover .sql-tab-close, .sql-tab[aria-selected="true"] .sql-tab-close { @apply visible; }
+  .sql-tab-new { @apply px-2 pt-1 pb-2 text-sm text-aegis-muted hover:text-aegis-teal; }
+  .sql-tab-name { @apply w-32 bg-transparent border-b border-aegis-teal text-sm text-aegis-text outline-none; }
+  /* A tab (tab_item; Query's statements): teal underlined when it is the
+     one shown. */
+  .tab { @apply text-sm pb-2 -mb-px border-b-2 border-transparent whitespace-nowrap transition-colors text-aegis-muted hover:text-aegis-text; }
+  .tab:is([aria-current="page"], [aria-selected="true"]) { @apply text-aegis-text border-aegis-teal; }
+  /* A table's rows' headers (rows_table): each sorts them, the one sorted
+     marked by its arrow (rows.js; on Rows, the server's order). */
+  .rows-sort { @apply inline-flex items-center gap-1 hover:text-aegis-text; }
+  .rows-sort-up, .rows-sort-down { @apply hidden text-aegis-teal; }
+  th[aria-sort] .rows-sort { @apply text-aegis-text; }
+  th[aria-sort="ascending"] .rows-sort-up,
+  th[aria-sort="descending"] .rows-sort-down { @apply inline; }
+
+  /* Pygments' classes, and CodeMirror's (the Query editor, tok-*). */
+  .code-block .highlight :is(.k, .kc, .kd, .kn, .kp, .kr, .ow),
+  .sql-editor :is(.tok-keyword, .tok-bool) { @apply text-aegis-teal; }
+  .code-block .highlight :is(.s, .s1, .s2, .sa, .sb, .sd, .se, .si, .dl),
+  .sql-editor .tok-string { @apply text-aegis-amber; }
+  .code-block .highlight :is(.c, .c1, .cm, .cs, .ch),
+  .sql-editor .tok-comment { @apply text-aegis-muted italic; }
   .code-block .highlight :is(.nf, .nc, .fm, .nd) { @apply font-semibold; }
   /* JSON (a response body): keys as names, numbers with the keywords. */
   .code-block .highlight .nt { @apply text-aegis-text font-semibold; }
-  .code-block .highlight :is(.m, .mi, .mf, .mh, .mo, .mb) { @apply text-aegis-teal; }
+  .code-block .highlight :is(.m, .mi, .mf, .mh, .mo, .mb),
+  .sql-editor .tok-number { @apply text-aegis-teal; }
   /* A Python traceback: its heading and carets quiet, the exception in red. */
   .code-block .highlight :is(.gt, .pm) { @apply text-aegis-muted; }
   .code-block .highlight .gr { @apply text-error font-semibold; }

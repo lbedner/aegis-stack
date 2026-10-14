@@ -26,7 +26,7 @@ from fastapi import HTTPException, status
 from fastapi import Cookie, Depends
 from fastapi.security import OAuth2PasswordBearer
 
-from app.core.security import SESSION_COOKIE_NAME, VALID_ROLES
+from app.core.security import SESSION_COOKIE, VALID_ROLES
 {% endif %}
 
 # What callers outside the service use of its domains.
@@ -152,14 +152,14 @@ def require_role(*required_roles: str):
 
     async def dependency(
         bearer_token: str | None = Depends(_oauth2_scheme),
-        aegis_session: str | None = Cookie(default=None, alias=SESSION_COOKIE_NAME),
+        session_cookie: str | None = Cookie(default=None, alias=SESSION_COOKIE),
         user_service: UserService = Depends(get_user_service),
     ) -> User:
         if not settings.AUTH_ENABLED:
             return _build_dev_user()
         # Cookie wins (browser flows are the primary path); bearer is the
         # fallback for CLIs and tests. Mirrors ``get_session_token``.
-        token = aegis_session or bearer_token
+        token = session_cookie or bearer_token
         user = await get_current_user_from_token(token, user_service)
         if user.role not in required_roles:
             raise HTTPException(

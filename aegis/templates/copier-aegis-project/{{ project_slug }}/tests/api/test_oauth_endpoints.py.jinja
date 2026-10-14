@@ -10,9 +10,11 @@ is what would actually break.
 """
 
 import pytest
+from app.core.client_session import REFRESH_COOKIE, cookie_name
 from app.core.config import settings
-from fastapi import status
+from fastapi import FastAPI, status
 from fastapi.testclient import TestClient
+from starlette.middleware.sessions import SessionMiddleware
 
 
 @pytest.fixture(autouse=True)
@@ -49,6 +51,13 @@ def _clear_oauth_credentials():
             settings.GOOGLE_OAUTH_CLIENT_ID,
             settings.GOOGLE_OAUTH_CLIENT_SECRET,
         ) = prior
+
+
+def test_the_oauth_state_cookie_carries_the_projects_name(app: FastAPI) -> None:
+    """Starlette names its session cookie ``session``: two apps on one host
+    (:8000, :8002) overwrote each other's OAuth state mid sign-in."""
+    found = [m for m in app.user_middleware if m.cls is SessionMiddleware]
+    assert found and found[0].kwargs["session_cookie"] == cookie_name("oauth")
 
 
 class TestOAuthGuards:
@@ -137,7 +146,7 @@ class TestOAuthRetiresTheSessionItReplaces:
     def _request(cookie: str | None = None, session: dict | None = None):
         from starlette.requests import Request
 
-        headers = [(b"cookie", f"aegis_refresh={cookie}".encode())] if cookie else []
+        headers = [(b"cookie", f"{REFRESH_COOKIE}={cookie}".encode())] if cookie else []
         scope = {
             "type": "http",
             "session": session if session is not None else {},

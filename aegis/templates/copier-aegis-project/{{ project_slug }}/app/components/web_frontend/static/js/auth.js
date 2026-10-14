@@ -1,6 +1,6 @@
 // Auth plumbing for the web frontend.
 //
-// Session auth lives in the `aegis_session` HttpOnly cookie the server sets
+// Session auth lives in the `<project>_session` HttpOnly cookie the server sets
 // during /login and /register. The browser attaches it automatically on
 // same-origin requests, so this file is mostly about handling the
 // session-expired case uniformly:

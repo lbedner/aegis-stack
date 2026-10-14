@@ -184,6 +184,7 @@ class Settings(
     # generating the project.
     PROJECT_DESCRIPTION: str = "{{ project_description }}"
     OVERSEER_CODE_ENABLED: Annotated[bool, Configurable(ComponentName.WEB_FRONTEND, "Show the project's source on Overseer > Code outside dev (admins only)")] = False
+    OVERSEER_DATABASE_ROWS_ENABLED: Annotated[bool, Configurable(ComponentName.WEB_FRONTEND, "Show the tables' rows on Overseer > Database outside dev (admins only)")] = False
 {%- endif %}
 {%- if include_mcp %}
 

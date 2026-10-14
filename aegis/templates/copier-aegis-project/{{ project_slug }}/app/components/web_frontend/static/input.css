@@ -298,6 +298,11 @@
   .tone-border { @apply border-aegis-border stroke-aegis-border; }
   .tone-border[data-tone="warn"] { @apply border-aegis-amber/70 stroke-aegis-amber/70; }
   .tone-border[data-tone="error"] { @apply border-aegis-error/70 stroke-aegis-error/70; }
+  /* Any card (a card section, a list of rows on the card surface, a map
+     node), hovered: its border goes teal, whatever its tone. One hover every
+     card shares; after the tones, so it wins over them. */
+  .hover-card { @apply transition-colors; }
+  .hover-card:hover { @apply border-aegis-teal stroke-aegis-teal; }
   /* A map node under a heat (overseer_heat): filled in its tone, so the
      hot ones read across the room, a data shape's outline filled too. */
   [data-heat][data-tone="ok"] { @apply bg-aegis-teal/10; }
@@ -311,6 +316,8 @@
   [data-order="trouble"] [data-card][data-tone="error"] { order: -2; }
   [data-order="trouble"] [data-card][data-tone="warn"] { order: -1; }
   [data-only="true"] [data-card]:not([data-tone="warn"], [data-tone="error"]) { display: none; }
+  /* A row read like a log line (Logs, a table's rows): a click opens it. */
+  .log-row { @apply border-t border-aegis-border/40 hover:bg-aegis-card align-top cursor-pointer; }
   .log-row[data-tone="warn"] > td:first-child { @apply border-l-aegis-amber; }
   .log-row[data-tone="error"] > td:first-child { @apply border-l-aegis-error; }
   /* A line drawn small or between nodes: one stroke, in its colour. */
@@ -336,7 +343,8 @@
      (Wrap), whole, with its traceback. A volume bar stacks its tones. */
   .log-line { @apply truncate; }
   :is(.logs-wrap, .log-row[data-open]) .log-line { @apply whitespace-normal break-all; }
-  .log-row:not([data-open]) .log-trace, :is(.logs-wrap, .log-row[data-open]) .log-trace-hint { @apply hidden; }
+  /* What a row holds beyond its line (a trace; a table row's keys, the row under it) shows while it is open. */
+  .log-row:not([data-open]) .log-trace, .log-row:not([data-open]) + tr[data-links], :is(.logs-wrap, .log-row[data-open]) .log-trace-hint { @apply hidden; }
   .logs-wrap .log-row .log-trace { @apply block; }
   .volume-bar span { @apply block w-full bg-current; }
   .volume-bar span[data-tone="muted"] { @apply opacity-40; }

@@ -1,6 +1,6 @@
 {# Pieces shared by Overseer pages. #}
 {% from "components/macros/layout.html" import card, chart_panel, facts, health_badge %}
-{% from "components/macros/form.html" import range_form %}
+{% from "components/macros/form.html" import action, range_form %}
 
 {# A page's live charts (``overseer_live.chart_panel``): the range chips,
    which re-request ``target`` at ``url`` over the new window (its stream
@@ -42,6 +42,27 @@
 {# A module of the app's own, linked to its file in Overseer > Code
    (``overseer_code.module_url``); a library's stays text. #}
 {% macro module_link(module) %}{% set url = module_url(module) %}{% if url %}{{ code_link(url, module) }}{% else %}{{ module }}{% endif %}{% endmacro %}
+
+{# Reading many rows the way Logs does (Logs, a table's Rows, a query):
+   ``wraps``, the page's Alpine scope (``extra`` state riding along), whose
+   ``wrap`` opens every row; Wrap, which flips it, and with rows, the jumps
+   to either end of ``body``. #}
+{% macro wraps(extra="") %}x-data="{ {{ extra }}wrap: false }" x-bind:class="wrap && 'logs-wrap'"{% endmacro %}
+{% macro wrap_actions(body, rows=True) %}
+{{ action("Wrap", "data-wrap x-on:click=\"wrap = !wrap\" x-bind:aria-pressed=\"wrap\"") }}
+{% if rows %}
+{{ action("Top", 'data-scroll-to="#' ~ body ~ ' > tr:first-child"') }}
+{{ action("Bottom", 'data-scroll-to="#' ~ body ~ ' > tr:nth-last-child(1 of .log-row)"') }}
+{% endif %}
+{%- endmacro %}
+
+{# ... and the rows themselves: flat on the canvas, not on a card, running
+   to the bottom of the window and scrolling inside it, so what is above
+   stays put; a click on a row (not a link, not a selection) opens it. #}
+{% macro rows_scroller(classes="overflow-auto") %}
+<div data-scroll class="{{ classes }} h-[calc(100vh-16rem)] min-h-[24rem] border-t border-aegis-border">{{ caller() }}</div>
+{%- endmacro %}
+{% macro opens_rows() %}x-on:click="$event.target.closest('a, button') || getSelection().toString() || $event.target.closest('tr.log-row')?.toggleAttribute('data-open')"{% endmacro %}
 
 {# A traceback's frame in the app's own code (``overseer_code.own_frames``). #}
 {% macro own_frame(frame) %}{{ line_link(frame.path, frame.line) }}{% endmacro %}

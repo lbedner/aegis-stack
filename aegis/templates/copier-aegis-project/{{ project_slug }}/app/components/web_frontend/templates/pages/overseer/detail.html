@@ -1,6 +1,6 @@
 {% extends "pages/overseer/_shell.html" %}
 {% block title %}{{ item.title }} · Overseer - {{ project_name }}{% endblock %}
-{% block overseer_width %}{{ "workspace" if page is defined and page.workspace else "document" }}{% endblock %}
+{% block overseer_width %}{{ "workspace" if page is defined and page.takes_canvas(current) else "document" }}{% endblock %}
 {% block overseer_subnav %}{% if page is defined and not page.single %}{% include "pages/overseer/_subnav.html" %}{% endif %}{% endblock %}
 {% block overseer_content %}
 {% if page is defined %}

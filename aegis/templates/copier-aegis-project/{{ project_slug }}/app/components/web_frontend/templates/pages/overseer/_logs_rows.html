@@ -17,7 +17,7 @@
 {% set _copy = "ml-1.5 align-middle text-aegis-muted hover:text-aegis-text opacity-0 group-hover/cell:opacity-100 focus:opacity-100" %}
 {% for row in rows %}
 {% set tone = tones.get(row.level) %}
-<tr{% if row.ms %} data-at="{{ row.ms }}"{% endif %} data-facet-level="{{ row.level or 'none' }}" data-facet-service="{{ row.page }}" data-facet-container="{{ row.instance }}"{% if row.app_service %} data-facet-app_service="{{ row.app_service }}"{% endif %}{% if row.app_component %} data-facet-app_component="{{ row.app_component }}"{% endif %} class="log-row border-t border-aegis-border/40 hover:bg-aegis-card align-top cursor-pointer{% if tone == 'muted' %} opacity-60{% endif %}"{% if tone %} data-tone="{{ tone }}"{% endif %}>
+<tr{% if row.ms %} data-at="{{ row.ms }}"{% endif %} data-facet-level="{{ row.level or 'none' }}" data-facet-service="{{ row.page }}" data-facet-container="{{ row.instance }}"{% if row.app_service %} data-facet-app_service="{{ row.app_service }}"{% endif %}{% if row.app_component %} data-facet-app_component="{{ row.app_component }}"{% endif %} class="log-row{% if tone == 'muted' %} opacity-60{% endif %}"{% if tone %} data-tone="{{ tone }}"{% endif %}>
   <td class="group/cell px-3 py-1 whitespace-nowrap text-aegis-muted font-mono border-l-2 border-l-transparent">{{ row.at }}{{ copy_icon(row.at, _copy) }}</td>
   <td class="group/cell px-3 py-1 whitespace-nowrap truncate" data-service title="{{ row.instance }}">
     {{ chart_dot(row.color + 1) }}

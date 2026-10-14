@@ -47,6 +47,7 @@ def test_the_top_level_shape_is_pinned(model: SystemModel) -> None:
         "kind",
         "mode",
         "via",
+        "to",
         "observed",
         "state",
     }

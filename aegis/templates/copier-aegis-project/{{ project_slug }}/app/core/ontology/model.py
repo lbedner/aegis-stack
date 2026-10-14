@@ -32,7 +32,7 @@ class EdgeKind(StrEnum):
     DEPENDS_ON = "depends_on"  # a process and what it needs (backend, database)
     CALLS = "calls"  # a service and what its code reaches
     RUNS_ON = "runs_on"  # a part, or a job, and the container it runs in
-    LINK = "link"  # a table and one its foreign key points at (``via``)
+    LINK = "link"  # a table and one its foreign key points at (``via``, ``to``)
     CHANGES = "changes"  # a change type and the table it changes
 
 
@@ -186,6 +186,7 @@ class Edge(BaseModel):
     kind: EdgeKind
     mode: Mode = Mode.SYNC
     via: str | None = None  # a link's foreign key column
+    to: str | None = None  # ... and the column it points at
     observed: Observed | None = None
     state: State | None = None
 

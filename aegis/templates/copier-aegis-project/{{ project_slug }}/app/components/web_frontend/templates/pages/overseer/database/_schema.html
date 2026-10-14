@@ -3,7 +3,7 @@
 {% macro table_detail(row) %}{{ code_block(row.sql, lang="sql") }}{% endmacro %}
 {% call card("Tables", tables|length ~ " in this database") %}
   {{ data_table([
-    {"key": "name", "label": "Table"},
+    {"key": "link", "label": "Table", "kind": "link", "target": "#overseer-main"} if tables_link else {"key": "name", "label": "Table"},
     {"key": "rows", "label": "Rows", "kind": "int", "align": "right"},
     {"key": "columns", "label": "Columns", "kind": "int", "align": "right"},
     {"key": "indexes", "label": "Indexes", "kind": "int", "align": "right"},

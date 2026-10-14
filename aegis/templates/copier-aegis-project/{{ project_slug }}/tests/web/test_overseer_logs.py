@@ -5,9 +5,9 @@ text, and follows new ones over SSE while it is open."""
 
 import json
 
-import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+import pytest
 
 from app.components.web_frontend import overseer_code, overseer_logs
 from app.core.config import settings
@@ -141,7 +141,10 @@ def test_buttons_scroll_to_either_end(client: TestClient) -> None:
         b.get("data-scroll-to")
         for b in select(page_html(client, PAGE), "#logs [data-scroll-to]")
     ]
-    assert targets == ["#logs-lines > tr:first-child", "#logs-lines > tr:last-child"]
+    assert targets == [
+        "#logs-lines > tr:first-child",
+        "#logs-lines > tr:nth-last-child(1 of .log-row)",
+    ]
 
 
 def test_every_line_comes_and_the_filters_keep_their_state(client: TestClient) -> None:

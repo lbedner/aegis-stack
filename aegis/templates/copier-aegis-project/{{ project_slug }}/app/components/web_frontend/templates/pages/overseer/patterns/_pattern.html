@@ -9,7 +9,7 @@
   <ol id="pattern-steps" aria-label="{{ pattern.title }} steps" class="flex flex-wrap items-stretch gap-2">
     {% for step in steps %}
     <li data-step class="flex items-center gap-2">
-      <div class="h-full min-w-[9rem] max-w-[13rem] bg-aegis-card border border-aegis-border rounded-lg px-4 py-3 space-y-1">
+      <div class="hover-card h-full min-w-[9rem] max-w-[13rem] bg-aegis-card border border-aegis-border rounded-lg px-4 py-3 space-y-1">
         <p data-step-label class="text-sm font-semibold text-aegis-text">{{ step.label }}</p>
         <p class="text-xxs text-aegis-muted">{{ step.detail }}</p>
         {% if step.followed is not none %}

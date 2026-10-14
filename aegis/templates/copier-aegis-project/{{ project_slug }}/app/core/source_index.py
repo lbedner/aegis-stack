@@ -23,7 +23,6 @@ import os
 from pathlib import Path
 from typing import TypeVar
 
-from app.core.config import settings
 from app.core.constants import ComponentName, ServiceName
 from app.core.parts import Category
 from app.core.source_functions import Function, functions
@@ -104,11 +103,6 @@ class Module:
 
     def place(self, line: int) -> Place:
         return Place(self.path, line, self.lines[line - 1].strip())
-
-
-def visible() -> bool:
-    """Whether the source may be shown: in dev, or ``OVERSEER_CODE_ENABLED``."""
-    return settings.is_dev or bool(getattr(settings, "OVERSEER_CODE_ENABLED", False))
 
 
 def module_name(path: str) -> str:

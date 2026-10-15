@@ -50,7 +50,12 @@ from ..core.provision.provider import monthly_price
 from ..core.provision.registry import DNS_SECRETS, PROVIDERS
 from ..core.template_cleanup import env_value
 from ..i18n import lazy_t, t
-from .deploy import _get_project_root, _load_deploy_config, _run_remote_capture
+from .deploy import (
+    _get_project_root,
+    _load_deploy_config,
+    _run_remote_capture,
+    app_deploy,
+)
 from .deploy_backup import list_backups
 
 PROTOCOL: dict[str, Any] = _protocol.PROTOCOL
@@ -175,10 +180,12 @@ def run(
     command: list[str],
     args: dict[str, str],
     env: dict[str, str] | None = None,
+    action: str = "",
 ) -> int:
     """``aegis <command>`` on the project, each argument its own ``--flag``
     (never through a shell), ``env`` (a request's token) added to its
-    environment, its output streamed into ``job``. Its exit code."""
+    environment, its output streamed into ``job``; told it runs ``action``,
+    whose step bar it marks. Its exit code."""
     env = env or {}
     argv = [*AEGIS, command[0], "--project-path", str(root), *command[1:]]
     for key, value in args.items():
@@ -192,7 +199,9 @@ def run(
         stderr=subprocess.STDOUT,
         text=True,
         errors="replace",
-        env=os.environ | env | {"PYTHONUNBUFFERED": "1", PROTOCOL["progress_env"]: "1"},
+        env=os.environ
+        | env
+        | {"PYTHONUNBUFFERED": "1", PROTOCOL["progress_env"]: action},
     ) as process:
         for raw in process.stdout or ():
             line = _masked(raw.rstrip(), tokens)
@@ -231,16 +240,30 @@ def _found(
         provider = args["provider"]
         found = _ask(provider, env, lambda c: getattr(c, action)())
         return found | {"currency": PROVIDERS[provider].currency}
-    if action == "backups":
+    if action in ("backups", "history"):  # read on the server
         server = (_load_deploy_config(str(root)) or {}).get("server")
         if not server:
             raise RefusedError(t("deploy.no_config"))
         remote = partial(_run_remote_capture, server["host"], server["user"])
-        return {"backups": list_backups(remote, server["path"])}
+        if action == "backups":
+            return {"backups": list_backups(remote, server["path"])}
+        return {"deploys": _history(root, remote, server["path"])}
     try:
         return measure(root)
     except DockerError as exc:
         raise RefusedError(str(exc)) from None
+
+
+def _history(root: Path, remote: Any, deploy_path: str) -> list[dict[str, Any]]:
+    """The server's deploy history, newest first: the last line its
+    ``deploy history`` prints (the JSON, whatever the app logged before)."""
+    result = app_deploy(root, remote, deploy_path, "history")
+    if result is None:
+        raise RefusedError(t("deploy_agent.no_history"))
+    lines = result.stdout.strip().splitlines()
+    if result.returncode != 0 or not lines:
+        raise RefusedError(result.stderr.strip() or f"exit {result.returncode}")
+    return json.loads(lines[-1])
 
 
 def _fresh(at: Any) -> None:
@@ -306,9 +329,16 @@ def _execute(
                 t("deploy_agent.price_changed", price=price, confirmed=confirmed)
             )
     command = spec["command"]
-    code = run(job, root, command, args, env)
-    # A backup, a deploy (it backs up first), a rollback: the list changed.
-    job.client.delete(_protocol.kept_key("backups", {}))
+    code = run(job, root, command, args, env, action)
+    # What a command may have changed (the backups, the history) is looked
+    # at again.
+    job.client.delete(
+        *(
+            _protocol.kept_key(name, {})
+            for name, kept in PROTOCOL["actions"].items()
+            if kept.get("until_a_command")
+        )
+    )
     if spec.get("token"):  # it may have changed what the account runs
         for key in PROVIDERS:
             job.client.delete(_protocol.kept_key("account", {"provider": key}))
@@ -359,6 +389,20 @@ def handle(client: Any, root: Path, request: dict[str, Any]) -> None:
     brand.success(t("deploy_agent.done", action=action))
 
 
+def _reap(client: Any) -> None:
+    """Deploy jobs left running by an agent that stopped part way fail
+    saying so: one agent serves a project, so no one is running them, and
+    the page would wait on them (its buttons, a list) until they expired.
+    Not one whose request still waits on the queue: that is about to run."""
+    queued = " ".join(client.lrange(PROTOCOL["requests"], 0, -1))
+    for key in client.scan_iter(match=f"{JOB_PREFIX}*"):
+        found = client.hgetall(key)
+        job_id = key.removeprefix(JOB_PREFIX)
+        mine = found.get("name", "").startswith("deploy:")
+        if mine and found.get("status") == "running" and job_id not in queued:
+            Job(client, job_id).fail(t("deploy_agent.stopped"))
+
+
 def serve(client: Any, root: Path, stop: threading.Event | None = None) -> None:
     """Take requests until ``stop`` is set, beating the whole time so the
     Overseer knows someone is listening; the heartbeat goes when this does."""
@@ -372,6 +416,7 @@ def serve(client: Any, root: Path, stop: threading.Event | None = None) -> None:
             with contextlib.suppress(redis.RedisError):
                 client.set(key, beat, ex=every * 3)
 
+    _reap(client)
     client.set(key, beat, ex=every * 3)
     thread = threading.Thread(target=beating, daemon=True)
     thread.start()

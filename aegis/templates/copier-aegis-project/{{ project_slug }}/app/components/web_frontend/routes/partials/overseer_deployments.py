@@ -13,6 +13,7 @@ from app.components.deploy import agent as deploy_agent
 from app.components.deploy.protocol import RefusedError
 from app.components.web_frontend import overseer_deploy_actions as actions
 from app.components.web_frontend import overseer_deploy_form as deploy_form
+from app.components.web_frontend import overseer_deployments
 from app.components.web_frontend.overseer_access import overseer_actor
 from app.components.web_frontend.overseer_live import event_stream
 from app.components.web_frontend.rendering import (
@@ -59,7 +60,8 @@ async def panel(
         raise HTTPException(status_code=404)
     form = dict(request.query_params)
     build, template, name = deploy_form.PANELS[panel]
-    return _part(form, await build(chosen, form, actor.label), template, name)
+    built = await build(chosen, form, actor.label)
+    return _part(form, built, template, **{name: built})
 
 
 @router.get(deploy_form.ROLLBACK, response_class=HTMLResponse)
@@ -70,18 +72,28 @@ async def rollback(
     it has not (a read: not audited)."""
     form = dict(request.query_params)
     built = await deploy_form.rollback_panel(form, actor.label)
-    return _part(form, built, deploy_form.ROLLBACK_TEMPLATE, "r")
+    return _part(form, built, deploy_form.ROLLBACK_TEMPLATE, r=built)
+
+
+@router.get(deploy_form.HISTORY, response_class=HTMLResponse)
+async def history(request: Request, actor: Actor = Depends(overseer_actor)) -> Response:
+    """The server's deploy history; the agent asked to read it when it has
+    not (a read: not audited)."""
+    form = dict(request.query_params)
+    built = await deploy_form.history_panel(form, actor.label)
+    context = overseer_deployments.history_view(built)
+    return _part(form, built, deploy_form.HISTORY_TEMPLATE, **context)
 
 
 def _part(
-    form: dict[str, str], built: dict[str, Any], template: str, name: str
+    form: dict[str, str], built: dict[str, Any], template: str, **context: Any
 ) -> Response:
-    """A part the agent answers for, as the page asked for it. A poll still
-    waiting gets no content: htmx swaps nothing, so the bar on the page
-    keeps moving."""
+    """A part the agent answers for (``built``), as the page asked for it.
+    A poll still waiting gets no content: htmx swaps nothing, so the bar on
+    the page keeps moving."""
     if "job" in form and built["state"] == "loading":
         return Response(status_code=204)
-    return HTMLResponse(fragment(template, **{name: built}))
+    return HTMLResponse(fragment(template, **context))
 
 
 @router.post(f"{actions.PARTIALS}/{{action}}", response_class=HTMLResponse)

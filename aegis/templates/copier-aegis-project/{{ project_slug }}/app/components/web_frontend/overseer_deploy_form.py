@@ -17,12 +17,13 @@ from app.components.deploy.protocol import (
     PROTOCOL,
     PROVISION_STEPS,
     RefusedError,
+    is_kept,
     validate,
 )
 from app.core import exposure
 from app.core.config import settings
 from app.core.formatting import format_bytes
-from app.services.system import deploy_fit, deploy_spend, hosting
+from app.services.system import deploy_fit, deploy_spend, hosting, ui_deployments
 
 from .overseer_deploy_actions import (
     AGENT_COMMAND,
@@ -36,6 +37,8 @@ FIT = "pages/overseer/deployments/_fit.html"
 ACCOUNT = "pages/overseer/deployments/_account.html"
 ROLLBACK = f"{PARTIALS}/rollback"  # the backups a rollback picks from
 ROLLBACK_TEMPLATE = "pages/overseer/deployments/_rollback.html"
+HISTORY = f"{PARTIALS}/history"  # the server's deploy history, from here
+HISTORY_TEMPLATE = "pages/overseer/deployments/_history.html"
 MIN_MEMORY_MB = 2048  # the smallest size offered by default: the stack needs it
 DEPLOYED = "This is a deployed server: deploy from the dev Overseer or CI."
 
@@ -361,6 +364,23 @@ async def rollback_panel(form: dict[str, str], by: str) -> dict[str, Any]:
 ROLLBACK_WAITING = _loading(ROLLBACK, None)
 
 
+async def history_panel(form: dict[str, str], by: str) -> dict[str, Any]:
+    """The server's deploy history (the protocol's ``history``) as the
+    agent last read it; while it has not, it asked (once) and the panel
+    waiting, or why it failed."""
+    try:
+        found, job = await _from_agent("history", {}, form.get("job"), by)
+    except RefusedError as exc:
+        return _failed(HISTORY, exc)
+    if found is None:
+        return _loading(HISTORY, job)
+    return {"state": "ready"} | ui_deployments.history_rows(found["deploys"])
+
+
+# The History section on this machine: asked for as it loads.
+HISTORY_WAITING = _loading(HISTORY, None)
+
+
 # The new-server form's parts, each loaded on its own while the agent
 # answers: its builder, template, and the name the template reads it by.
 PANELS = {
@@ -396,6 +416,10 @@ async def request_args(action: str, form: dict[str, str]) -> dict[str, str]:
             f"No token to create a server on {form['provider']}: set it in "
             "Overseer > Secrets (or .env), or where the deploy agent runs."
         )
+    if not is_kept(action):  # the agent would only run it after
+        newest = await deploy_agent.job()
+        if newest is not None and newest.status == "running":
+            raise RefusedError("A job is still running: wait for it to finish.")
     if action == "provision":
         return await _confirmed(form)
     if action == "resume" and stopped() is None:

@@ -47,27 +47,33 @@ HISTORY_COLUMNS = columns(ui_deployments.HISTORY_COLUMNS, status=("health",))
 HEALTH_TONES = {"passed": "ok", "failed": "error"}
 
 
+def history_view(found: dict[str, Any]) -> dict[str, Any]:
+    """The History table's context: ``found`` (its rows, or a panel still
+    waiting), each deploy's health as a status cell."""
+    rows = [
+        r
+        | {
+            "health": status_cell(r["health"], HEALTH_TONES.get(r["health"], "muted"))
+            if r["health"]
+            else ""
+        }
+        for r in found.get("rows") or []
+    ]
+    return {"history": found | {"rows": rows}, "history_columns": HISTORY_COLUMNS}
+
+
 async def section_context(
     section: str, component: ComponentStatus, req: SectionRequest
 ) -> dict[str, Any]:
     if section == "history":
-        found = await ui_deployments.history()
-        rows = [
-            r
-            | {
-                "health": status_cell(
-                    r["health"], HEALTH_TONES.get(r["health"], "muted")
-                )
-                if r["health"]
-                else ""
-            }
-            for r in found["rows"]
-        ]
+        # The protocol's ``history``: a deployed server reads its own.
+        deployed = exposure.deployed()
+        found = (
+            await ui_deployments.history() if deployed else deploy_form.HISTORY_WAITING
+        )
         return {
             "section_subtitle": "Each build that went live, newest first.",
-            "history": found | {"rows": rows},
-            "history_columns": HISTORY_COLUMNS,
-        }
+        } | history_view(found)
     if section == "backups":
         return {
             "section_subtitle": "The scheduled database backups, newest first.",

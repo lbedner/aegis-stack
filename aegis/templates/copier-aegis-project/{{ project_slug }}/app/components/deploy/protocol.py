@@ -36,6 +36,15 @@ PROVISION_STEPS = {
     "data": "Bring my data",
 }
 
+# A deploy's steps (``backup`` only when there is a deploy to back up,
+# ``health`` only when it is checked).
+DEPLOY_STEPS = {
+    "backup": "Back up",
+    "upload": "Send the code",
+    "build": "Build and start",
+    "health": "Check it answers",
+}
+
 # A backup's steps, as its step bar names them: those it takes, in the
 # order it takes them (``database`` before ``files`` for SQLite, after for
 # Postgres; ``offsite`` only for a server that pushes one).
@@ -55,8 +64,9 @@ PROTOCOL: dict[str, Any] = {
     # Raised when a request carries something an older agent would drop
     # (2: a DNS provider's keys; 3: bringing this machine's data; 4: a
     # resume that refuses to start a new server; 5: the backups a rollback
-    # is picked from): the heartbeat says which it speaks.
-    "revision": 5,
+    # is picked from; 6: the server's deploy history): the heartbeat says
+    # which it speaks.
+    "revision": 6,
     # Run by the agent (``progress_env`` set), a command with ``steps``
     # prints, as each starts, its plan and step (``progress_line``); the
     # agent keeps them in the job (``read_progress``) instead of its
@@ -117,17 +127,27 @@ PROTOCOL: dict[str, Any] = {
         },
         "deploy": {
             "command": ["deploy"],
+            "steps": DEPLOY_STEPS,
         },
         "backup": {
             "command": ["deploy-backup"],
             "steps": BACKUP_STEPS,
         },
-        # The server's backups (name, size, whether each holds the
-        # database), so a rollback is picked from them, never typed;
-        # forgotten by any command, which may have changed them.
+        # Read on the server for the dev Overseer: its backups (name, size,
+        # whether each holds the database), so a rollback is picked from
+        # them, never typed; and its deploy history, recorded in the
+        # server's database (``deploy history`` there), never this one's.
+        # Each forgotten by any command, which may have changed it
+        # (``until_a_command``).
         "backups": {
             "kept": "deploy:backups",
             "seconds": 600,
+            "until_a_command": True,
+        },
+        "history": {
+            "kept": "deploy:history",
+            "seconds": 600,
+            "until_a_command": True,
         },
         "rollback": {
             "command": ["deploy-rollback"],

@@ -13,7 +13,7 @@ import socket
 import subprocess
 import tempfile
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager, nullcontext
 from datetime import UTC, datetime
 from functools import partial
@@ -358,8 +358,6 @@ def _record_deploy(
     """Hand the app what only the deployer knows, through ``deploy record``
     (see the template's ``app.components.deploy.history``). Projects without
     deploy history have no such command; a failed write only warns."""
-    if not (project_root / "app" / "cli" / "deploy_cli.py").exists():
-        return
     fields = {
         "--build": build_id,
         "--by": _deployer(project_root),
@@ -367,15 +365,27 @@ def _record_deploy(
         "--health": health,
         "--backup": backup,
     }
-    argv = ["python", "-m", "app.cli.main", "deploy", "record"]
-    argv += [part for flag, value in fields.items() if value for part in (flag, value)]
+    argv = [part for flag, value in fields.items() if value for part in (flag, value)]
     if rolled_back:
         argv.append("--rolled-back")
-    result = _run_remote_capture(
-        host, user, _exec_command(deploy_path, "webserver", argv)
-    )
-    if result.returncode != 0:
+    remote = partial(_run_remote_capture, host, user)
+    result = app_deploy(project_root, remote, deploy_path, "record", *argv)
+    if result is not None and result.returncode != 0:
         brand.warn(t("deploy.record_failed", error=result.stderr.strip()))
+
+
+def app_deploy(
+    project_root: Path,
+    remote: Callable[[str], subprocess.CompletedProcess],
+    deploy_path: str,
+    *argv: str,
+) -> subprocess.CompletedProcess | None:
+    """The app's own ``deploy`` command (its deploy history) in the
+    server's webserver, through ``remote``; None for a project without it."""
+    if not (project_root / "app" / "cli" / "deploy_cli.py").exists():
+        return None
+    command = ["python", "-m", "app.cli.main", "deploy", *argv]
+    return remote(_exec_command(deploy_path, "webserver", command))
 
 
 def _exec_command(deploy_path: str, service: str, argv: list[str]) -> str:
@@ -1324,6 +1334,16 @@ def deploy_setup_command(
     typer.echo(t("deploy.setup_next"))
 
 
+def _deploy_plan(existing: bool, checked: bool) -> list[str]:
+    """The DEPLOY_STEPS a deploy takes (the protocol says which)."""
+    return [
+        *(["backup"] if existing else []),
+        "upload",
+        "build",
+        *(["health"] if checked else []),
+    ]
+
+
 def deploy_command(
     project_path: str | None = typer.Option(
         None, "--project-path", help=lazy_t("common.help_project_path")
@@ -1416,27 +1436,32 @@ def deploy_command(
 
     brand.accent(t("deploy.deploying", host=host), bold=True)
 
-    # Step 1: Create backup before deploying
-    backup_timestamp: str | None = None
-    if backup:
-        # Check if there's an existing deployment to back up
-        check = _run_remote_capture(
+    # Step 1: Create backup before deploying, of a deployment there is
+    existing = (
+        backup
+        and _run_remote_capture(
             host, user, f"test -f {shlex.quote(deploy_path)}/docker-compose.yml"
+        ).returncode
+        == 0
+    )
+    plan = _deploy_plan(existing, health_check)
+    backup_timestamp: str | None = None
+    if existing:
+        step(plan, "backup")
+        backup_timestamp = _create_backup(
+            host,
+            user,
+            deploy_path,
+            include_db=backup_cfg["include_database"],
+            neon=neon,
+            sqlite=sqlite,
+            keep_count=backup_cfg["keep_count"],
         )
-        if check.returncode == 0:
-            backup_timestamp = _create_backup(
-                host,
-                user,
-                deploy_path,
-                include_db=backup_cfg["include_database"],
-                neon=neon,
-                sqlite=sqlite,
-                keep_count=backup_cfg["keep_count"],
-            )
-        else:
-            typer.echo(t("deploy.no_existing"))
+    elif backup:
+        typer.echo(t("deploy.no_existing"))
 
     # Step 2: Sync files to server
+    step(plan, "upload")
     typer.echo(t("deploy.syncing"))
     mkdir_result = subprocess.run(
         ["ssh", f"{user}@{host}", f"mkdir -p {shlex.quote(deploy_path)}"]
@@ -1469,6 +1494,7 @@ def deploy_command(
         )
 
     # Step 4: Stop existing services
+    step(plan, "build")
     typer.echo(t("deploy.stopping"))
     compose_prefix = _compose_prefix(deploy_path)
     _run_remote(host, user, f"{compose_prefix} down --remove-orphans")
@@ -1501,6 +1527,7 @@ def deploy_command(
 
     # Step 7: Health check + auto-rollback
     if health_check:
+        step(plan, "health")
         _wait_for_webserver(host, user, deploy_path)
         healthy = _run_health_check(
             host, user, health_command, retries=health_cfg["retries"]

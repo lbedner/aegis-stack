@@ -1,5 +1,6 @@
 """``deploy``: the deployer's side of deploy history (``app.components.deploy.history``)."""
 
+import json
 from typing import Annotated
 
 import typer
@@ -41,3 +42,12 @@ async def record(
         rolled_back=rolled_back,
     )
     console.print(f"[{theme.ACCENT}]✓[/] Recorded deploy of {build}")
+
+
+@app.command("history")
+async def show_history(
+    limit: Annotated[int, typer.Option("--limit", help="How many.")] = 50,
+) -> None:
+    """The recent deploys as JSON, newest first (the protocol's ``history``)."""
+    rows = await history.recent(limit)
+    typer.echo(json.dumps([row.model_dump(mode="json") for row in rows]))

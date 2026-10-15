@@ -1375,6 +1375,7 @@ MESSAGES: dict[str, str] = {
     "deploy_agent.done": "{action} done",
     "deploy_agent.unreadable": "Skipped a request that could not be read.",
     "deploy_agent.no_provider": "Refused: no provider to use the request's token with.",
+    "deploy_agent.no_history": "This project keeps no deploy history.",
     "deploy_agent.stale": (
         "This request waited {minutes} minutes for the deploy agent; ask again from the Overseer."
     ),

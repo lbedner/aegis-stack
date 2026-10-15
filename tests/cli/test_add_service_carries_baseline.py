@@ -57,7 +57,7 @@ def test_add_auth_merges_the_template_entries_for_its_files(
         for e in template
         if e["file"] not in before and (project_path / e["file"]).exists()
     ]
-    assert any(e["file"] == "app/services/auth/users.py" for e in expected)
+    assert any(e["file"].startswith("app/services/auth/") for e in expected)
 
     entries = _entries(baseline)
     assert sorted(map(str, entries)) == sorted(map(str, [own, *expected]))

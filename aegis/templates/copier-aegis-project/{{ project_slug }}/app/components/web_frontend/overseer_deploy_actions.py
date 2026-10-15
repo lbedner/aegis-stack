@@ -165,7 +165,7 @@ def _steps(
     """The step bar (``progress``, where the command's steps stand, each
     named in ``titles``): each done, the one it is on current (failed, if
     the job did), the rest to come. Empty for a job that marks no steps,
-    or marks steps it does not declare (a deploy's backup marks its own)."""
+    or steps it does not declare (an older CLI's)."""
     plan, at = progress.get("steps") or [], progress.get("at")
     if at not in plan or not titles.keys() >= set(plan):
         return []

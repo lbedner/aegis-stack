@@ -765,7 +765,7 @@ def test_a_resume_needs_nothing_but_the_record(
     monkeypatch.setattr(cmd, "wait_for_host_key", lambda _ip: True)
     uploaded: list[Any] = []
     monkeypatch.setattr(cmd, "upload_db", lambda *args: uploaded.append(args))
-    monkeypatch.setenv(agent_protocol.PROTOCOL["progress_env"], "1")
+    monkeypatch.setenv(agent_protocol.PROTOCOL["progress_env"], "provision")
     do = apis[digitalocean.API_URL]
     do.calls.clear()
     result = _resume(project)
@@ -816,7 +816,7 @@ def test_a_resume_brings_the_data_when_asked_then(
     monkeypatch.setattr(cmd, "wait_for_host_key", lambda _ip: True)
     uploaded: list[Any] = []
     monkeypatch.setattr(cmd, "upload_db", lambda *args: uploaded.append(args))
-    monkeypatch.setenv(agent_protocol.PROTOCOL["progress_env"], "1")
+    monkeypatch.setenv(agent_protocol.PROTOCOL["progress_env"], "provision")
     result = _resume(project, "--data", "local")
     assert result.exit_code == 0, result.output
     assert uploaded
@@ -880,7 +880,7 @@ def test_for_the_agent_each_step_is_marked_as_it_starts(
 ) -> None:
     _sqlite(project)
     monkeypatch.setattr(cmd, "upload_db", lambda *args: None)
-    monkeypatch.setenv(agent_protocol.PROTOCOL["progress_env"], "1")
+    monkeypatch.setenv(agent_protocol.PROTOCOL["progress_env"], "provision")
     result = _provision(project, "--data", "local")
     assert result.exit_code == 0, result.output
     plan = list(agent_protocol.PROVISION_STEPS)
@@ -890,7 +890,7 @@ def test_for_the_agent_each_step_is_marked_as_it_starts(
 def test_without_data_there_is_no_data_step_and_in_a_terminal_no_marks(
     project: Path, apis: dict[str, FakeAPI], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv(agent_protocol.PROTOCOL["progress_env"], "1")
+    monkeypatch.setenv(agent_protocol.PROTOCOL["progress_env"], "provision")
     marked = _provision(project).output
     assert {tuple(p["steps"]) for p in _progress(marked)} == {
         ("server", "boot", "dns", "deploy")

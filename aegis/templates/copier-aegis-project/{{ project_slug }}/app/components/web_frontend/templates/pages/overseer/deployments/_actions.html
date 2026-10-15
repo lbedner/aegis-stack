@@ -18,6 +18,8 @@
 <p data-deploy-state="creating" class="{{ note() }}">A server is being created: <a href="{{ new_url }}" {{ hx_replace(new_url, "#overseer-main") }} class="text-aegis-teal hover:underline">New server</a> shows where it is.</p>
 {% endcall %}
 {% else %}
+{# Its controls lock while its job runs (``data-locks``, input.css). #}
+<div data-locks class="contents">
 {% call card("Your server", id="card-deploy") %}
 {{ place(actions.server) }}
 {{ facts(actions.server.facts) }}
@@ -35,6 +37,7 @@
 {% if actions.destroy and actions.agent.state == "ready" %}
 {% call card("Destroy") %}{{ destroy_form(actions.partials, actions.destroy) }}{% endcall %}
 {% endif %}
+</div>
 {% endif %}
 {% if actions.accounts %}
 {% call card("In your cloud accounts") %}

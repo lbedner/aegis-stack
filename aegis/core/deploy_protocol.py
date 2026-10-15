@@ -17,6 +17,11 @@ protocol = template_module(
 
 def step(steps: list[str], at: str) -> None:
     """Where the step bar stands (``progress_line``: the plan, and the step
-    ``at`` starting), for the deploy agent; nothing in a terminal."""
-    if os.environ.get(protocol.PROTOCOL["progress_env"]):
+    ``at`` starting), for the deploy agent, which names the action it ran
+    (``progress_env``). Only that action's steps: a command run inside
+    another (a provision's deploy, a deploy's backup) leaves the bar to it.
+    Nothing in a terminal."""
+    action = os.environ.get(protocol.PROTOCOL["progress_env"], "")
+    declared = protocol.PROTOCOL["actions"].get(action, {}).get("steps", {})
+    if set(steps) <= declared.keys() and steps:
         typer.echo(protocol.progress_line(steps, at))

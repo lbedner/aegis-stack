@@ -162,8 +162,8 @@ def backups() -> dict[str, Any]:
 
 
 async def history() -> dict[str, Any]:
-    """``{"rows": [...], "note": str | None}``: the deploy records, newest
-    first, or why there are none."""
+    """``{"rows": [...], "note": str | None}``: this app's deploy records,
+    newest first, or why there are none."""
     try:  # the history ships only with a database (and so SQLAlchemy)
         from sqlalchemy.exc import SQLAlchemyError
 
@@ -174,18 +174,27 @@ async def history() -> dict[str, Any]:
         records = await recent()
     except SQLAlchemyError as exc:  # a build that adds the table, not migrated
         return {"rows": [], "note": f"Deploy history could not be read: {exc}"}
-    rows = [
-        {
-            "build": row.build_id,
-            "started": format_relative_time(row.started_at.replace(tzinfo=UTC)),
-            "by": row.deployed_by or "",
-            "from": row.deployed_from or "",
-            "health": row.health or "",
-            "backup": row.backup or "",
-            "rollback": f"Back to {row.rolled_back_to}" if row.rolled_back_to else "",
-        }
-        for row in records
-    ]
+    return history_rows([row.model_dump() for row in records])
+
+
+def history_rows(records: list[dict[str, Any]]) -> dict[str, Any]:
+    """Deploy records (this app's, or the server's ``deploy history``) as
+    the History table shows them."""
+    rows = []
+    for row in records:
+        rows.append(
+            {
+                "build": row["build_id"],
+                "started": format_relative_time(row["started_at"]),
+                "by": row["deployed_by"] or "",
+                "from": row["deployed_from"] or "",
+                "health": row["health"] or "",
+                "backup": row["backup"] or "",
+                "rollback": f"Back to {row['rolled_back_to']}"
+                if row["rolled_back_to"]
+                else "",
+            }
+        )
     if not rows:
         return {"rows": [], "note": "No deploys recorded yet."}
     return {"rows": rows, "note": None}

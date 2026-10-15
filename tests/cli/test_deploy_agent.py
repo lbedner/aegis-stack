@@ -11,6 +11,7 @@ import asyncio
 import importlib.util
 import json
 import logging
+import subprocess
 import sys
 import threading
 import types
@@ -49,6 +50,7 @@ if os.environ.get("FAKE_WAIT_FOR"):  # until a look is answered, or 5s
         time.sleep(0.1)
 if os.environ.get(PROGRESS_ENV):
     print(PROGRESS_LINE)
+    print("bar of " + os.environ[PROGRESS_ENV])
 sys.exit(int(os.environ.get("FAKE_EXIT", "0")))
 """
 PROGRESS = {"steps": ["server", "boot"], "at": "boot"}
@@ -87,6 +89,13 @@ class FakeRedis:
 
     def get(self, key: str) -> str | None:
         return self.strings.get(key)
+
+    def lrange(self, key: str, start: int, end: int) -> list[str]:
+        return list(self.lists.get(key, []))
+
+    def scan_iter(self, match: str) -> list[str]:
+        prefix = match.removesuffix("*")
+        return [k for k in self.hashes if k.startswith(prefix)]
 
     def exists(self, key: str) -> int:
         return int(key in self.strings)
@@ -178,6 +187,8 @@ def _request(
     if dns_keys is not None:
         request["dns_keys"] = dns_keys
     redis.rpush(agent.PROTOCOL["requests"], json.dumps(request | {"at": when}))
+    if not agent._protocol.is_kept(action):  # the newest job the page shows
+        redis.strings[agent.PROTOCOL["last"]] = job_id
     return job_id
 
 
@@ -309,6 +320,8 @@ def test_the_commands_step_is_kept_beside_its_output_not_in_it(
     assert job.result["progress"] == PROGRESS
     marker = agent.PROTOCOL["progress"]
     assert not any(marker in line for line in [*job.result["lines"], job.label])
+    # The command is told which action's bar it marks: nested ones stay out.
+    assert "bar of rollback" in job.result["lines"]
 
 
 def test_a_look_is_answered_while_a_command_runs(
@@ -577,10 +590,7 @@ def test_the_servers_backups_are_kept_for_the_overseer(
 ) -> None:
     """Listed on the server in the background (``list_backups``): a
     rollback is asked for one of them, never a typed name."""
-    (project / ".aegis").mkdir()
-    (project / ".aegis" / "deploy.yml").write_text(
-        "server:\n  host: h\n  user: u\n  path: /opt/app\n"
-    )
+    _server(project)
     seen: list[str] = []
     monkeypatch.setattr(
         agent, "list_backups", lambda run, path: seen.append(path) or LISTED
@@ -593,14 +603,71 @@ def test_the_servers_backups_are_kept_for_the_overseer(
     assert seen == ["/opt/app"]
 
 
-def test_a_command_forgets_the_kept_backups(project: Path, app_store: Any) -> None:
-    """A backup, a deploy (it backs up first) or a rollback changes the
-    list: the next look asks again."""
+def _server(project: Path) -> None:
+    (project / ".aegis").mkdir(exist_ok=True)
+    (project / ".aegis" / "deploy.yml").write_text(
+        "server:\n  host: h\n  user: u\n  path: /opt/app\n"
+    )
+
+
+def test_the_servers_deploy_history_is_kept_for_the_overseer(
+    project: Path, app_store: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The protocol's ``history``: its last line is the JSON, whatever the
+    app logged before it."""
+    _server(project)
+    (project / "app" / "cli").mkdir(parents=True)
+    (project / "app" / "cli" / "deploy_cli.py").write_text("")
+    rows = [{"build_id": "1c956eef", "health": "passed"}]
+    ran: list[str] = []
+
+    def remote(host: str, user: str, command: str) -> subprocess.CompletedProcess:
+        ran.append(command)
+        out = "a log line\n" + json.dumps(rows) + "\n"
+        return subprocess.CompletedProcess([], 0, out, "")
+
+    monkeypatch.setattr(agent, "_run_remote_capture", remote)
     redis = FakeRedis()
-    redis.strings["deploy:backups"] = json.dumps({"backups": []})
-    _request(redis, app_store, "backup")
+    job_id = _request(redis, app_store, "history", {})
     _serve(redis, project)
-    assert "deploy:backups" not in redis.strings
+    assert _job(redis, app_store, job_id).status == "done"
+    assert json.loads(redis.strings["deploy:history"]) == {"deploys": rows}
+    (command,) = ran
+    assert "exec -T webserver python -m app.cli.main deploy history" in command
+
+
+def test_a_command_forgets_what_it_may_have_changed(
+    project: Path, app_store: Any
+) -> None:
+    """The backups and the history (``until_a_command``); not a catalog."""
+    redis = FakeRedis()
+    for key in ("deploy:backups", "deploy:history", CATALOG_KEY):
+        redis.strings[key] = json.dumps({})
+    _request(redis, app_store, "deploy")
+    _serve(redis, project)
+    assert set(redis.strings) & {"deploy:backups", "deploy:history"} == set()
+    assert CATALOG_KEY in redis.strings
+
+
+def test_a_job_left_running_by_a_stopped_agent_fails_saying_so(
+    project: Path, app_store: Any
+) -> None:
+    """Only one agent serves a project: a newest job still running when it
+    starts was the last one's, cut off, and would hold the page's buttons
+    forever. One still on the queue is not: it is about to run."""
+    redis = FakeRedis()
+    orphans = [_request(redis, app_store, a) for a in ("deploy", "backups")]
+    redis.lists.clear()  # taken by the agent that stopped
+    _serve(redis, project)
+    # A look too: the rollback's list would wait on it until it expired.
+    for orphan in orphans:
+        job = _job(redis, app_store, orphan)
+        assert job.status == "failed" and "stopped" in job.error
+
+    redis = FakeRedis()
+    queued = _request(redis, app_store, "deploy")
+    _serve(redis, project)
+    assert _job(redis, app_store, queued).status == "done"
 
 
 def test_a_catalog_without_the_token_says_which(

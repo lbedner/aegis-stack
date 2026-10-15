@@ -1414,13 +1414,76 @@ def test_a_backup_shows_its_steps_as_they_go(redis: FakeRedis) -> None:
     assert not actions.creating({"action": "backup", "status": "running"})
 
 
-def test_a_deploy_does_not_borrow_its_backups_steps(redis: FakeRedis) -> None:
-    """A deploy backs up first, and the backup marks its steps: they are
-    not the deploy's, which marks none."""
+def test_steps_a_job_does_not_declare_draw_no_bar(redis: FakeRedis) -> None:
+    """An older CLI, whose deploy let its backup mark the bar: a deploy's
+    bar never shows a backup's steps."""
     progress = {"steps": ["database", "files", "documents"], "at": "files"}
     _job(redis, "deploy", {"lines": [], "progress": progress}, running=True)
     (frame,) = asyncio.run(sent_events(actions.events(max_frames=1)))
     none(one(frame_html(frame), '[data-deploy-job="deploy"]'), "[data-stages]")
+
+
+def test_a_deploy_shows_its_steps_as_they_go(redis: FakeRedis) -> None:
+    progress = {"steps": ["backup", "upload", "build", "health"], "at": "build"}
+    _job(redis, "deploy", {"lines": [], "progress": progress}, running=True)
+    (frame,) = asyncio.run(sent_events(actions.events(max_frames=1)))
+    panel = one(frame_html(frame), '[data-deploy-job="deploy"]')
+    assert _stages(panel) == {
+        "Back up": "done",
+        "Send the code": "done",
+        "Build and start": "current",
+        "Check it answers": "todo",
+    }
+
+
+def test_while_a_job_runs_the_card_asks_for_nothing_else(
+    redis: FakeRedis, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Its every control sits under the lock (``data-locks``: greyed while
+    the streamed job says it runs, lifted when it ends), and a request
+    sent anyway is refused: the agent would only run it after."""
+    deployed(monkeypatch, {"server": BOX, "provision": READY})
+    _keep(redis, "backups", {"backups": BACKUPS})
+    _job(redis, "deploy", {"lines": []}, running=True)
+    page = page_html(TestClient(app), PAGE)
+    lock = one(page, "[data-locks]")
+    one(lock, '[data-deploy-job="deploy"][data-status="running"]')
+    assert len(select(lock, "[data-write]")) == len(select(page, "[data-write]")) > 2
+    client = TestClient(app)
+    client.post(f"{actions.PARTIALS}/backup")
+    client.post(f"{actions.PARTIALS}/rollback", data={"backup": BACKUPS[0]["name"]})
+    assert _queued(redis) == []
+
+
+DEPLOYS = [
+    {
+        "build_id": "1c956eef",
+        "started_at": "2026-10-15T03:16:40",
+        "deployed_by": "Ada <ada@example.org>",
+        "deployed_from": "ada-laptop",
+        "health": "passed",
+        "backup": "2026-10-15_031418",
+        "rolled_back_to": None,
+    }
+]
+
+
+def test_on_this_machine_the_history_is_the_servers(
+    redis: FakeRedis, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The protocol's ``history``: asked of the agent, waiting meanwhile."""
+    deployed(monkeypatch, {"server": BOX, "provision": READY})
+    section = one(page_html(TestClient(app), f"{PAGE}/history"), "[data-history]")
+    assert section.get("hx-get") == deploy_form.HISTORY
+    one(TestClient(app).get(deploy_form.HISTORY).text, "[data-history] [data-waiting]")
+    (request,) = _queued(redis)
+    assert request["action"] == "history"
+
+    _keep(redis, "history", {"deploys": DEPLOYS})
+    (row,) = select(
+        TestClient(app).get(deploy_form.HISTORY).text, "#deployments-history tbody tr"
+    )
+    assert "1c956eef" in text(row) and "Ada" in text(row) and "passed" in text(row)
 
 
 def test_the_newest_job_streams(redis: FakeRedis) -> None:

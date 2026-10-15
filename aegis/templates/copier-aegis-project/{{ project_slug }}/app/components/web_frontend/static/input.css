@@ -55,6 +55,13 @@
      says why), no write control is offered, in a dialog or drawer too. */
   body:has([data-read-only]) [data-write] { display: none; }
 
+  /* While the deploy job it holds runs, a deploy card's write controls are
+     greyed and still (``data-locks``), lifting as the job ends; the app
+     refuses a request sent anyway. */
+  [data-locks]:has([data-deploy-job][data-status="running"]) [data-write] {
+    @apply pointer-events-none opacity-40;
+  }
+
   /* The main sidebar only flags trouble: a healthy entry shows no dot (the
      screen-reader status stays). The sub-menu and pages keep every dot. */
   #overseer-sidebar .status-dot:not([data-tone="warn"]):not([data-tone="error"]) {

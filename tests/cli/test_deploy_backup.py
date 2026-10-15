@@ -133,7 +133,7 @@ class TestSteps:
         capsys: pytest.CaptureFixture[str],
         **kwargs: Any,
     ) -> list[dict[str, Any]]:
-        monkeypatch.setenv(protocol.PROTOCOL["progress_env"], "1")
+        monkeypatch.setenv(protocol.PROTOCOL["progress_env"], "backup")
         _backup(monkeypatch, **kwargs)
         lines = capsys.readouterr().out.splitlines()
         return [p for line in lines if (p := protocol.read_progress(line))]
@@ -154,6 +154,22 @@ class TestSteps:
         )
         assert [m["at"] for m in marked] == ["files", "database", "documents"]
         assert all(m["steps"] == ["files", "database", "documents"] for m in marked)
+
+    @pytest.mark.parametrize("outer", ["deploy", "provision"])
+    def test_inside_another_command_the_backup_marks_nothing(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+        outer: str,
+    ) -> None:
+        """The bar is the action the agent ran (its ``progress_env``): a
+        deploy's backup, a provision's deploy, would replace its steps with
+        ones it does not have."""
+        monkeypatch.setenv(protocol.PROTOCOL["progress_env"], outer)
+        calls: list[str] = []
+        monkeypatch.setattr(deploy_mod, "_run_remote_capture", _recorder(calls))
+        assert _create_backup("h", "u", "/srv/app", sqlite=True)
+        assert "::aegis-progress" not in capsys.readouterr().out
 
     def test_in_a_terminal_nothing_is_marked(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]

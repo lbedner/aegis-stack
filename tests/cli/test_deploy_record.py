@@ -13,6 +13,7 @@ from typing import Any
 import pytest
 
 from aegis.commands import deploy
+from aegis.core.deploy_protocol import protocol
 
 BUILD = "a1b2c3d"
 
@@ -275,3 +276,18 @@ def test_the_health_check_waits_for_the_webserver_to_settle(
     monkeypatch.setattr(deploy.time, "sleep", lambda s: None)
     deploy._wait_for_webserver("h", "u", "/opt/my-app")
     assert asked == ["starting", "starting", "healthy"]
+
+
+@pytest.mark.parametrize(
+    "existing,checked,plan",
+    [
+        (True, True, ["backup", "upload", "build", "health"]),
+        (False, True, ["upload", "build", "health"]),
+        (True, False, ["backup", "upload", "build"]),
+    ],
+)
+def test_a_deploy_plans_the_steps_it_takes(
+    existing: bool, checked: bool, plan: list[str]
+) -> None:
+    assert deploy._deploy_plan(existing, checked) == plan
+    assert set(plan) <= set(protocol.DEPLOY_STEPS)

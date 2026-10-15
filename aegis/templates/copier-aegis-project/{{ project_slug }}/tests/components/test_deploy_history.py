@@ -8,6 +8,7 @@ suite redirects ``get_async_session`` to.
 """
 
 from collections.abc import AsyncIterator
+import json
 from typing import Any
 
 import pytest
@@ -210,3 +211,20 @@ async def test_a_history_it_cannot_read_says_why(
     view = await ui_deployments.history()
     assert view["rows"] == [] and "no such table" in view["note"]
     assert "Deployed by" not in dict(await ui_deployments.now())
+
+
+def test_deploy_history_prints_the_recent_deploys_as_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def recent(limit: int = 50) -> list[Deployment]:
+        return [Deployment(build_id=BUILD, deployed_by="Ada", health="passed")]
+
+    monkeypatch.setattr(history, "recent", recent)
+    result = invoke(["deploy", "history"])
+    assert result.exit_code == 0, result.output
+    (row,) = json.loads(result.output.strip().splitlines()[-1])
+    assert (row["build_id"], row["deployed_by"], row["health"]) == (
+        BUILD,
+        "Ada",
+        "passed",
+    )

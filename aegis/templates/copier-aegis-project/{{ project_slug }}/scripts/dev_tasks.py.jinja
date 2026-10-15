@@ -146,7 +146,7 @@ def docs() -> None:
     """Serve the documentation on a port that is actually free."""
     port = docs_port()
     subprocess.run(
-        ["uv", "run", "mkdocs", "serve", "--dev-addr", f"0.0.0.0:{port}"],
+        ["uv", "run", "mkdocs", "serve", "--dev-addr", f"127.0.0.1:{port}"],
         check=True,
     )
 

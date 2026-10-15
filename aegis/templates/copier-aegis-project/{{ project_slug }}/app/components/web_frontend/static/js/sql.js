@@ -18,25 +18,17 @@
    holding it. + opens a tab, a double click renames one, x closes it.
 
    CodeMirror is fetched on first use (or as a link to Query is pointed
-   at), from esm.sh: it resolves every package's dependencies to one copy,
-   where jsdelivr's builds each pin their own and two copies of
-   @codemirror/state break the editor. Its packages only: the codemirror
-   bundle would add search, unused, for its basic setup. */
+   at) from the app itself: one pinned bundle (static/vendor/codemirror.js,
+   how to rebuild it at its top), whose URL the script tag carries
+   (data-codemirror, fingerprinted in a build). Nothing from another origin
+   runs unverified, and a dynamic import() could not carry a hash. */
 
-const ESM = 'https://esm.sh/';
 const KEY = 'aegis-sql-tabs';
+const CODEMIRROR = typeof document !== 'undefined' ? document.currentScript?.dataset.codemirror : undefined;
 
 let loading = null;
 function codeMirror() {
-  if (!loading) {
-    const names = [
-      '@codemirror/view@6', '@codemirror/state@6', '@codemirror/lang-sql@6',
-      '@codemirror/language@6', '@codemirror/autocomplete@6', '@codemirror/commands@6', '@lezer/highlight@1',
-      '@codemirror/lint@6',
-    ];
-    loading = Promise.all(names.map((name) => import(ESM + name)))
-      .then((modules) => Object.assign({}, ...modules));
-  }
+  if (!loading) loading = import(CODEMIRROR);
   return loading;
 }
 

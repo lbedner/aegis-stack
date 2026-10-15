@@ -102,6 +102,8 @@ class TestAssetFingerprinting:
         (tmp_path / "css" / "app.css").write_text("body{color:red}")
         (tmp_path / "js" / "app.js").write_text("console.log(1)")
         (tmp_path / "js" / "pages" / "extra.js").write_text("console.log(2)")
+        (tmp_path / "vendor").mkdir()
+        (tmp_path / "vendor" / "lib.js").write_text("export const x = 1")
         (tmp_path / "dist" / "app.css").write_text(".x{}")
 
         monkeypatch.setattr(build_mod, "STATIC_DIR", tmp_path)
@@ -122,6 +124,14 @@ class TestAssetFingerprinting:
         assert re.fullmatch(r"dist/app-[0-9a-f]{8}\.css", manifest["dist/app.css"])
         for built in manifest.values():
             assert (static_tree / built).is_file(), built
+
+    def test_fingerprints_vendored_scripts_too(self, static_tree: Path) -> None:
+        """A pinned library (the Query editor's CodeMirror) caches for a year
+        under its hash, as the app's own scripts do."""
+        from app.components.web_frontend.build import build_assets
+
+        manifest = build_assets()
+        assert re.fullmatch(r"dist/vendor/lib-[0-9a-f]{8}\.js", manifest["vendor/lib.js"])
 
     def test_globs_nested_sources_without_a_list_to_maintain(
         self, static_tree: Path

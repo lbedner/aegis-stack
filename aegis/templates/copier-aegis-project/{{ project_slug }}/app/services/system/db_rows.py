@@ -53,10 +53,6 @@ READ = 1024  # characters text is read to: room to find a password to hide
 SECONDS = 5.0  # the longest a read may run
 STEPS = 1000  # SQLite instructions between looks at the clock
 HIDDEN = "••••••"
-# Columns holding a secret the redaction words miss (``redact.SECRET``
-# catches passwords, tokens and keys), and the suffix encrypted ones carry.
-MASKED = frozenset({"ciphertext"})
-MASKED_SUFFIX = "_encrypted"
 # What a statement may not do on SQLite, whose query_only it could undo.
 REFUSED = frozenset(
     {sqlite3.SQLITE_ATTACH, sqlite3.SQLITE_DETACH, sqlite3.SQLITE_PRAGMA}
@@ -69,6 +65,10 @@ class RowsHiddenError(Exception):
 
 class ReadTooSlowError(Exception):
     """A read ran past ``SECONDS`` and was stopped."""
+
+
+class RowsUnreadError(Exception):
+    """The database could not read the table (not migrated yet, say)."""
 
 
 @dataclass(frozen=True)
@@ -127,15 +127,16 @@ def tables(present: Iterable[str] | None = None) -> list[str]:
 
 @cache
 def masked(table: Table) -> frozenset[str]:
-    """The columns shown as hidden: text or bytes named as a secret."""
+    """The columns shown as hidden: one its model marks secret
+    (``info={"secret": True}`` on its column, any type), and text or bytes
+    named as one (``redact.secret_name``, as errors and logs are redacted)."""
     return frozenset(
         c.name
         for c in table.columns
-        if (db_filters.textual(c) or db_filters.holds(c) is bytes)
-        and (
-            redact.SECRET.search(c.name)
-            or c.name in MASKED
-            or c.name.endswith(MASKED_SUFFIX)
+        if c.info.get("secret")
+        or (
+            (db_filters.textual(c) or db_filters.holds(c) is bytes)
+            and redact.secret_name(c.name)
         )
     )
 
@@ -214,10 +215,14 @@ def follow(
 
 
 def _key(table: Table) -> Column[Any] | None:
-    """The single-column key pages run on; none when it holds a secret."""
+    """The single-column key pages run on; none when it holds a secret or
+    text (paging from it would order text, and carry its values whole in
+    the page links, past what the cells redact)."""
     keys = list(table.primary_key.columns)
     one = keys[0] if len(keys) == 1 else None
-    return one if one is not None and one.name not in masked(table) else None
+    if one is None or one.name in masked(table) or db_filters.textual(one):
+        return None
+    return one
 
 
 def _selected(table: Table, key: Column[Any] | None) -> list[Any]:
@@ -254,7 +259,8 @@ def page(
     ``before``) when ordered by it, else page ``number`` of ``order``;
     ``where`` keeps rows each filter's comparison holds for. Raises
     RowsHiddenError where rows are not shown, AskError for what cannot be
-    asked, ReadTooSlowError past ``SECONDS``."""
+    asked, ReadTooSlowError past ``SECONDS``, RowsUnreadError where the
+    database cannot read it."""
     require_shown()
     key = _key(table)
     sorts = sortable(table)
@@ -315,7 +321,7 @@ def require_shown() -> None:
         raise RowsHiddenError(f"A table's rows are the app's data: {refused}")
 
 
-def _app_engine() -> Engine:
+def app_engine() -> Engine:
     """The engine the app's sync sessions use (``SessionLocal``)."""
     from app.core import db
 
@@ -333,7 +339,7 @@ def reading(
     every column ``metadata``'s models hold a secret in as empty, however a
     statement reaches it; all of it undone before the connection goes back."""
     deadline = time.monotonic() + SECONDS
-    with (engine or _app_engine()).connect() as conn:
+    with (engine or app_engine()).connect() as conn:
         sqlite = conn.dialect.name == "sqlite"
         raw = conn.connection.driver_connection if sqlite else None
         if raw is not None:
@@ -370,9 +376,13 @@ def _authorizer(hidden: dict[str, frozenset[str]]) -> Callable[..., int]:
 
 
 def _read(engine: Engine | None, table: Table, query: Any) -> list[Sequence[Any]]:
-    """``query``'s rows of ``table`` (``reading``)."""
-    with reading(engine, table.metadata) as conn:
-        return [tuple(row) for row in conn.execute(query)]
+    """``query``'s rows of ``table`` (``reading``); RowsUnreadError where the
+    database cannot read it."""
+    try:
+        with reading(engine, table.metadata) as conn:
+            return [tuple(row) for row in conn.execute(query)]
+    except DBAPIError as exc:
+        raise RowsUnreadError(f"{table.name} could not be read: {exc.orig}") from None
 
 
 def cell(value: Any, binary: bool) -> str:

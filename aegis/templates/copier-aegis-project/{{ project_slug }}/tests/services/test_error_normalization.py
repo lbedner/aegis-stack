@@ -228,3 +228,19 @@ def test_free_text_hides_credentials(raw: str, kept: str, gone: str) -> None:
     from app.services.system.errors.redact import text
 
     assert kept in text(raw) and gone not in text(raw)
+
+
+def test_redaction_knows_the_secret_names_a_column_does() -> None:
+    """One list with what Overseer hides in a table (``db_rows.masked``):
+    a private key, a one-time code, a salt, each a whole part of a name."""
+    from app.services.system.errors import redact
+
+    found = redact.clean(
+        {"private_key": "pk", "otp": "1", "salt": "s", "footprint": "ok"}
+    )
+    assert found == {
+        "private_key": "[redacted]",
+        "otp": "[redacted]",
+        "salt": "[redacted]",
+        "footprint": "ok",
+    }

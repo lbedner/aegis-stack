@@ -180,17 +180,9 @@ def test_sigterm_stops_it_promptly(tmp_path: Path) -> None:
 
 
 def test_the_dev_stack_runs_tailwind_under_the_supervisor() -> None:
-    import yaml
-    from jinja2 import Environment, FileSystemLoader
+    from tests.core._compose import load, render
 
-    from aegis.core.component_files import get_copier_defaults
-
-    env = Environment(loader=FileSystemLoader(str(get_template_path())))
-    compose = yaml.safe_load(
-        env.get_template("{{ project_slug }}/docker-compose.dev.yml.jinja").render(
-            {**get_copier_defaults(), "project_slug": "demo", "include_htmx": True}
-        )
-    )
+    compose = load(render("docker-compose.dev.yml.jinja", include_htmx=True))
     command = " ".join(compose["services"]["tailwind"]["command"])
     assert "tailwind_watch.sh" in command
     assert "npx tailwindcss" not in command

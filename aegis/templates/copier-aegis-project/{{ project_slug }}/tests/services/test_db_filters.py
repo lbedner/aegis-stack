@@ -31,3 +31,10 @@ def test_a_filter_asked_is_one_the_text_carries_back() -> None:
     for op, value in ((":", "a,b"), (">", "=5"), ("~", "x")):
         with pytest.raises(db_filters.AskError):
             db_filters.ask("id", op, value)
+
+
+def test_a_number_past_what_a_database_holds_is_not_one() -> None:
+    """SQLite would refuse it mid-read: an overflow, not a filter's error."""
+    with pytest.raises(db_filters.AskError):
+        db_filters.value(MEMBER.c.id, "9" * 20)
+    assert db_filters.value(MEMBER.c.id, str(2**63 - 1)) == 2**63 - 1

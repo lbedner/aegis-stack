@@ -208,7 +208,7 @@ async def rows(
 ) -> dict[str, Any]:
     """A table's Rows tab (``_rows``), every read recorded: the rows are the
     app's data, so who read the table, as they asked, and how it went (ran,
-    refused, stopped)."""
+    refused, stopped, failed)."""
     outcome, found = await _rows(req, table, count, offered)
     await req.audit("database.rows", outcome, table.name, **found["rows_asked"])
     return found
@@ -287,6 +287,8 @@ async def _rows(
         return "refused", picked | {"rows_bad": str(exc)}
     except db_rows.ReadTooSlowError as exc:
         return "stopped", picked | {"rows_slow": str(exc)}
+    except db_rows.RowsUnreadError as exc:
+        return "failed", picked | {"rows_bad": str(exc)}
     summary = counted(len(found.rows), "row")
     if count is not None:
         summary += (

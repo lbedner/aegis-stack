@@ -17,7 +17,7 @@ Org endpoints: `/api/v1/orgs/*`
 
 ### POST /auth/register
 
-Register a new user account. Automatically accepts any pending org invites for the registered email. On success the response sets the same `<project>_session` + `<project>_refresh` cookie pair as `POST /auth/token` — the user lands signed-in without a second round-trip.
+Register a new user account. Automatically accepts any pending org invites for the registered email. On success the response sets the same `<project>_session` + `<project>_refresh` cookie pair as `POST /auth/token`, so the user lands signed-in without a second round-trip.
 
 **Auth:** None
 **Rate limited:** Yes
@@ -70,8 +70,8 @@ On success the response also sets two cookies:
 
 Both are named for the project (`PROJECT_NAME`, e.g. `my-app_session`): browsers share a host's cookies across its ports, so two apps on `localhost` never overwrite each other's sign-in.
 
-- `<project>_session` — HttpOnly access token, `Path=/`, `SameSite=Lax`. Browser flows ride on this.
-- `<project>_refresh` — HttpOnly opaque refresh token, `Path=/api/v1/auth`, `SameSite=Strict`. Sent only on auth endpoints; used to rotate `<project>_session` once the access token expires.
+- `<project>_session`: HttpOnly access token, `Path=/`, `SameSite=Lax`. Browser flows ride on this.
+- `<project>_refresh`: HttpOnly opaque refresh token, `Path=/api/v1/auth`, `SameSite=Strict`. Sent only on auth endpoints; used to rotate `<project>_session` once the access token expires.
 
 API clients (CLIs, server-to-server) keep using the body's `access_token` as a bearer header; cookies are a parallel surface, not exclusive.
 
@@ -305,7 +305,7 @@ curl -X POST http://localhost:8000/api/v1/auth/verify-email \
 
 Rotate the refresh token and mint a fresh access token. Reads the `<project>_refresh` cookie, revokes the inbound row, inserts a successor in the same family, and sets both cookies fresh. Returns the new access token in the body so bearer clients can update their header.
 
-**Auth:** `<project>_refresh` cookie required (no bearer fallback — refresh tokens never travel in `Authorization` headers).
+**Auth:** `<project>_refresh` cookie required (no bearer fallback: refresh tokens never travel in `Authorization` headers).
 
 **Response: `200 OK`**
 

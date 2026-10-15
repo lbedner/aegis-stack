@@ -3,7 +3,7 @@
 database: a member table with secrets, binary and an AutoString token; an
 org it points at; an event with no key; a composite-key join, and a note
 pointing at a join row by both its columns; a tree pointing at itself; a
-ledger of dates, money and JSON."""
+ledger of dates, money and JSON; a table keyed by text."""
 
 from datetime import datetime
 from decimal import Decimal
@@ -77,6 +77,7 @@ LEDGER = Table(
     Column("amount", Numeric(10, 2)),
     Column("meta", JSON),
 )
+SLUG = Table("slug", META, Column("name", String, primary_key=True))
 
 
 def seeded(tmp_path: Path) -> Engine:
@@ -123,4 +124,5 @@ def seeded(tmp_path: Path) -> Engine:
                 for n in (1, 2, 3)
             ],
         )
+        conn.execute(insert(SLUG), [{"name": f"s{n:02}"} for n in range(30)])
     return found

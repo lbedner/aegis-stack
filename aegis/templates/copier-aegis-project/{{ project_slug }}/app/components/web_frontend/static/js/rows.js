@@ -105,7 +105,7 @@ if (typeof document !== 'undefined') {
     if (!button) return;
     const body = document.querySelector(button.dataset.exportRows);
     const found = body && rowsOf(body);
-    if (!found || !found.rows.length) {
+    if (!found?.rows.length) {
       toast('No rows to export', 'error');
       return;
     }

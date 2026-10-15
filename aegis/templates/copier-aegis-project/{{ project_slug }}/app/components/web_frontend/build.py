@@ -38,7 +38,11 @@ TAILWIND_OUTPUT = "dist/app.css"
 # Directories scanned for hand-authored assets, and the extension each
 # holds. Add a file to either and it is fingerprinted automatically; no
 # list to keep in sync.
-SOURCE_TREES: tuple[tuple[str, str], ...] = (("css", ".css"), ("js", ".js"))
+SOURCE_TREES: tuple[tuple[str, str], ...] = (
+    ("css", ".css"),
+    ("js", ".js"),
+    ("vendor", ".js"),
+)
 
 
 def iter_sources() -> list[tuple[str, str]]:

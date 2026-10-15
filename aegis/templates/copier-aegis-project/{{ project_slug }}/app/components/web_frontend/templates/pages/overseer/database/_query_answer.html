@@ -10,7 +10,7 @@
   {% if rows is defined %}
   {{ rows_table(rows, "database-query-body") }}
   {% elif not query_error %}
-  <p class="px-3 py-4 text-sm text-aegis-muted">Run a statement (Cmd-Enter) to see its rows here. A write, or two statements at once, is refused; a column holding a secret reads as empty.</p>
+  <p class="px-3 py-4 text-sm text-aegis-muted">Run a statement (Cmd-Enter) to see its rows here. A write, or two statements at once, is refused; a column holding a secret reads as empty (on PostgreSQL, a statement reading one is refused).</p>
   {% endif %}
 {% endcall %}
 {% if rows is defined %}<p data-query-footer class="text-xs text-aegis-muted font-mono">{{ query_footer }}</p>{% endif %}

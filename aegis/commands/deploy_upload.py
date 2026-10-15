@@ -33,55 +33,7 @@ from .deploy import (
     _project_answers,
     _run_remote_capture,
 )
-from .deploy_backup import is_sqlite
-
-# Runs in the local webserver container and writes the snapshot's bytes
-# to stdout. stdout is moved to stderr before the app is imported, so
-# nothing it logs lands in the copy.
-_SNAPSHOT = """\
-import os, shutil, sqlite3, tempfile
-out = os.fdopen(os.dup(1), "wb")
-os.dup2(2, 1)
-from app.core.db import DATABASE_PATH
-with tempfile.TemporaryDirectory() as tmp:
-    snap = os.path.join(tmp, "snapshot.db")
-    live = sqlite3.connect(f"file:{os.path.abspath(DATABASE_PATH)}?mode=ro", uri=True)
-    copy = sqlite3.connect(snap)
-    live.backup(copy)
-    copy.close()
-    live.close()
-    with open(snap, "rb") as f:
-        shutil.copyfileobj(f, out)
-out.close()
-"""
-
-# Runs in a one-off server webserver container, the stack down: stdin
-# beside the database, checked, then in its place. An empty file is a
-# valid empty database to SQLite, hence the header.
-_RESTORE = """\
-import os, shutil, sqlite3, sys
-from app.core.db import DATABASE_PATH
-part = DATABASE_PATH + ".upload"
-os.makedirs(os.path.dirname(os.path.abspath(DATABASE_PATH)), exist_ok=True)
-try:
-    with open(part, "wb") as f:
-        shutil.copyfileobj(sys.stdin.buffer, f)
-    with open(part, "rb") as f:
-        if f.read(16) != b"SQLite format 3\\x00":
-            sys.exit("the upload is not a SQLite database")
-    db = sqlite3.connect(part)
-    checked = db.execute("PRAGMA integrity_check").fetchone()[0]
-    db.close()
-    if checked != "ok":
-        sys.exit(f"the upload failed its integrity check: {checked}")
-    for extra in ("-wal", "-shm"):
-        if os.path.exists(DATABASE_PATH + extra):
-            os.remove(DATABASE_PATH + extra)
-    os.replace(part, DATABASE_PATH)
-finally:
-    if os.path.exists(part):
-        os.remove(part)
-"""
+from .deploy_backup import RESTORE, SNAPSHOT, is_sqlite
 
 
 def _snapshot(root: Path, out: Path) -> bool:
@@ -89,7 +41,7 @@ def _snapshot(root: Path, out: Path) -> bool:
     with out.open("wb") as f:
         done = subprocess.run(
             ["docker", "compose", "exec", "-T", "webserver"]
-            + ["python", "-c", _SNAPSHOT],
+            + ["python", "-c", SNAPSHOT],
             cwd=root,
             stdout=f,
             stderr=subprocess.PIPE,
@@ -125,7 +77,7 @@ def upload_db(root: Path, server: dict[str, Any]) -> None:
             host,
             user,
             f"{prefix} run --rm --no-deps -T --entrypoint python webserver"
-            f" -c {shlex.quote(_RESTORE)}",
+            f" -c {shlex.quote(RESTORE)}",
             snapshot,
         )
         started = _run_remote_capture(host, user, f"{prefix} up -d")

@@ -1324,6 +1324,29 @@ def test_a_job_that_marks_no_steps_has_no_step_bar(
     none(panel, "[data-stages]")
 
 
+def test_a_backup_shows_its_steps_as_they_go(redis: FakeRedis) -> None:
+    progress = {"steps": ["database", "files", "documents"], "at": "files"}
+    _job(redis, "backup", {"lines": [], "progress": progress}, running=True)
+    (frame,) = asyncio.run(sent_events(actions.events(max_frames=1)))
+    panel = one(frame_html(frame), '[data-deploy-job="backup"]')
+    assert _stages(panel) == {
+        "Database": "done",
+        "Code and settings": "current",
+        "Documents": "todo",
+    }
+    # A backup is no server being made: it stays on the Overview.
+    assert not actions.creating({"action": "backup", "status": "running"})
+
+
+def test_a_deploy_does_not_borrow_its_backups_steps(redis: FakeRedis) -> None:
+    """A deploy backs up first, and the backup marks its steps: they are
+    not the deploy's, which marks none."""
+    progress = {"steps": ["database", "files", "documents"], "at": "files"}
+    _job(redis, "deploy", {"lines": [], "progress": progress}, running=True)
+    (frame,) = asyncio.run(sent_events(actions.events(max_frames=1)))
+    none(one(frame_html(frame), '[data-deploy-job="deploy"]'), "[data-stages]")
+
+
 def test_the_newest_job_streams(redis: FakeRedis) -> None:
     _job(redis, "backup", {"lines": ["Backup complete"]})
     (frame,) = asyncio.run(sent_events(actions.events(max_frames=1)))

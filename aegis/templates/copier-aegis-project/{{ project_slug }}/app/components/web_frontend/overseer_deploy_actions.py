@@ -16,6 +16,7 @@ from typing import Any
 from app.components.deploy import agent as deploy_agent
 from app.components.deploy.protocol import (
     PROTOCOL,
+    PROVISION_STEPS,
     RefusedError,
 )
 from app.core.log import logger
@@ -33,7 +34,9 @@ AGENT_COMMAND = "aegis deploy-agent"
 CD_COMMAND = "aegis deploy-cd-setup"
 LIVE = ("provisioning", "ready")  # a provision record whose resources may exist
 # The jobs that create a server: the ones with a provision's steps.
-CREATING = {a for a, spec in PROTOCOL["actions"].items() if "steps" in spec}
+CREATING = {
+    a for a, spec in PROTOCOL["actions"].items() if spec.get("steps") is PROVISION_STEPS
+}
 # The actions asked from the card, each its job; the protocol's ``kept``
 # ones are fetched in the background, never asked.
 TITLES = {
@@ -162,16 +165,17 @@ def _steps(
 ) -> list[dict[str, str]]:
     """The step bar (``progress``, where the command's steps stand, each
     named in ``titles``): each done, the one it is on current (failed, if
-    the job did), the rest to come. Empty for a job that marks no steps."""
+    the job did), the rest to come. Empty for a job that marks no steps,
+    or marks steps it does not declare (a deploy's backup marks its own)."""
     plan, at = progress.get("steps") or [], progress.get("at")
-    if at not in plan:
+    if at not in plan or not titles.keys() >= set(plan):
         return []
     here = plan.index(at)
     now = {"running": "current", "failed": "failed"}.get(status, "done")
     return [
         {
             "key": key,
-            "title": titles.get(key, key),
+            "title": titles[key],
             "status": "done" if n < here else now if n == here else "todo",
         }
         for n, key in enumerate(plan)

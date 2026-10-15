@@ -36,6 +36,16 @@ PROVISION_STEPS = {
     "data": "Bring my data",
 }
 
+# A backup's steps, as its step bar names them: those it takes, in the
+# order it takes them (``database`` before ``files`` for SQLite, after for
+# Postgres; ``offsite`` only for a server that pushes one).
+BACKUP_STEPS = {
+    "database": "Database",
+    "files": "Code and settings",
+    "documents": "Documents",
+    "offsite": "Off the server",
+}
+
 PROTOCOL: dict[str, Any] = {
     "requests": "deploy:requests",
     "heartbeat": "deploy:agent",
@@ -110,6 +120,7 @@ PROTOCOL: dict[str, Any] = {
         },
         "backup": {
             "command": ["deploy-backup"],
+            "steps": BACKUP_STEPS,
         },
         "backups": {
             "command": ["deploy-backups"],

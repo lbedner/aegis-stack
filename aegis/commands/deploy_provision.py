@@ -26,6 +26,7 @@ from typing import Any, TypeVar
 import typer
 
 from ..cli import brand
+from ..core.deploy_protocol import step
 from ..core.provision.http import ProvisionError, json_requester, mask_token
 from ..core.provision.provider import (
     DnsClient,
@@ -87,11 +88,9 @@ def _step(record: dict[str, Any], key: str) -> None:
     """Where the step bar stands, for the deploy agent (``progress_line``):
     the provision's steps, ``data`` only when ``record`` brings it; nothing
     in a terminal."""
-    if os.environ.get(_protocol.PROTOCOL["progress_env"]):
-        steps = [
-            s for s in _protocol.PROVISION_STEPS if s != "data" or record.get("data")
-        ]
-        typer.echo(_protocol.progress_line(steps, key))
+    step(
+        [s for s in _protocol.PROVISION_STEPS if s != "data" or record.get("data")], key
+    )
 
 
 def _require(ok: bool, key: str, **kwargs: Any) -> None:

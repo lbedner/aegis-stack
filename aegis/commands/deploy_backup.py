@@ -146,16 +146,19 @@ def archive_storage(run: Run, compose_prefix: str, backup_dir: str) -> None:
         brand.warn(t("deploy.backup_storage_failed"))
 
 
+def offsite_configured(run: Run, deploy_path: str) -> bool:
+    """The server pushes its backups off the box (``offsite_env``)."""
+    return run(f"test -f {shlex.quote(offsite_env(deploy_path))}").returncode == 0
+
+
 def push_offsite(run: Run, deploy_path: str, backup_dir: str, timestamp: str) -> None:
-    """Copy the backup, minus ``files/``, off the box when the server is
-    configured for it; the repository is initialised on first use.
+    """Copy the backup, minus ``files/``, off the box (a server
+    ``offsite_configured``); the repository is initialised on first use.
 
     ponytail: runs only when a backup does (each deploy, each
     ``deploy-backup``); schedule ``aegis deploy-backup`` for a cadence.
     """
     env = shlex.quote(offsite_env(deploy_path))
-    if run(f"test -f {env}").returncode != 0:
-        return
     typer.echo(t("deploy.backup_offsite"))
     backup = shlex.quote(backup_dir)
     files = shlex.quote(f"{backup_dir}/files")

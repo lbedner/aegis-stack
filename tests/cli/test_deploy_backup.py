@@ -13,6 +13,7 @@ import re
 import shlex
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -26,6 +27,7 @@ from aegis.commands.deploy_backup import (
     offsite_env,
     snapshot_sqlite,
 )
+from aegis.core.deploy_protocol import protocol
 
 TS = "2026-01-01_000000"
 
@@ -117,6 +119,46 @@ def test_backup_archives_the_object_store(monkeypatch: pytest.MonkeyPatch) -> No
     archive = next(c for c in calls if "storage.tar.gz" in c)
     assert "exec -T webserver tar -czf - -C /data/storage ." in archive
     _bash_parses(archive)
+
+
+class TestSteps:
+    """Marked for the deploy agent's step bar (``progress_line``), in the
+    order they run; ``offsite`` only when the server pushes one."""
+
+    def _marked(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+        **kwargs: Any,
+    ) -> list[dict[str, Any]]:
+        monkeypatch.setenv(protocol.PROTOCOL["progress_env"], "1")
+        _backup(monkeypatch, **kwargs)
+        lines = capsys.readouterr().out.splitlines()
+        return [p for line in lines if (p := protocol.read_progress(line))]
+
+    def test_sqlite_marks_the_database_first(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        plan = ["database", "files", "documents", "offsite"]
+        assert self._marked(monkeypatch, capsys, sqlite=True) == [
+            {"steps": plan, "at": key} for key in plan
+        ]
+
+    def test_without_offsite_there_is_no_offsite_step(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        marked = self._marked(
+            monkeypatch, capsys, sqlite=False, fail=("test -f /etc/aegis/",)
+        )
+        assert [m["at"] for m in marked] == ["files", "database", "documents"]
+        assert all(m["steps"] == ["files", "database", "documents"] for m in marked)
+
+    def test_in_a_terminal_nothing_is_marked(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.delenv(protocol.PROTOCOL["progress_env"], raising=False)
+        _backup(monkeypatch, sqlite=True)
+        assert "::aegis-progress" not in capsys.readouterr().out
 
 
 class TestOffsite:

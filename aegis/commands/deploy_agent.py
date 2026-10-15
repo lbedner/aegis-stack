@@ -42,7 +42,7 @@ import typer
 from .. import __version__
 from ..cli import brand
 from ..cli.validation import validate_copier_project
-from ..core.component_files import template_module
+from ..core.deploy_protocol import protocol as _protocol
 from ..core.footprint import DockerError, measure
 from ..core.provision.http import ProvisionError, json_requester, mask_token
 from ..core.provision.provider import monthly_price
@@ -51,9 +51,6 @@ from ..core.template_cleanup import env_value
 from ..i18n import lazy_t, t
 from .deploy import _get_project_root, _load_deploy_config
 
-_protocol = template_module(
-    "aegis_deploy_protocol", "app", "components", "deploy", "protocol.py"
-)
 PROTOCOL: dict[str, Any] = _protocol.PROTOCOL
 LOOKS = 4  # looks answered at once (a catalog, an account, the footprint)
 RefusedError = _protocol.RefusedError

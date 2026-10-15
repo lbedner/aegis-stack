@@ -26,6 +26,7 @@ from ..cli import brand
 from ..constants import AnswerKeys, PostgresProviders
 from ..core.component_files import template_module
 from ..core.copier_manager import AEGIS_GIT_EMAIL, load_copier_answers
+from ..core.deploy_protocol import step
 from ..core.footprint import COMPOSE_FILES
 from ..core.template_cleanup import deploy_env_file, env_value
 from ..i18n import lazy_t, t
@@ -34,6 +35,7 @@ from .deploy_backup import (
     archive_storage,
     backup_config,
     is_sqlite,
+    offsite_configured,
     prune_backups,
     push_offsite,
     restore_data,
@@ -471,9 +473,23 @@ def _create_backup(
 
     typer.echo(t("deploy.creating_backup", timestamp=timestamp))
 
+    # The step bar's plan (BACKUP_STEPS), in the order they run: SQLite is
+    # snapshotted before the files, a Postgres dump taken after them.
+    offsite = offsite_configured(run, deploy_path)
+    database = ["database"] if include_db and not neon else []
+    plan = [
+        *(database if sqlite else []),
+        "files",
+        *([] if sqlite else database),
+        "documents",
+        *(["offsite"] if offsite else []),
+    ]
+    if include_db and sqlite:
+        step(plan, "database")
     snapshot = (
         include_db and sqlite and snapshot_sqlite(run, compose_prefix, backup_dir)
     )
+    step(plan, "files")
     skip_live = " --exclude /data" if snapshot else ""
     commands = [
         f"mkdir -p {safe_backup}/files",
@@ -490,6 +506,8 @@ def _create_backup(
     if include_db and neon:
         typer.echo(t("deploy.backup_db_neon"))
     elif include_db:
+        if not sqlite:
+            step(plan, "database")
         # Check if postgres service exists and is running
         pg_check = _run_remote_capture(
             host, user, f"{compose_prefix} ps postgres --quiet 2>/dev/null"
@@ -504,6 +522,7 @@ def _create_backup(
             db_result = _run_remote_capture(host, user, db_cmd)
             if db_result.returncode != 0:
                 brand.warn(t("deploy.backup_db_failed"))
+    step(plan, "documents")
     archive_storage(run, compose_prefix, backup_dir)
 
     # Write manifest
@@ -515,7 +534,9 @@ def _create_backup(
     _run_remote_capture(
         host, user, f"echo -e {shlex.quote(manifest)} > {safe_backup}/manifest.yml"
     )
-    push_offsite(run, deploy_path, backup_dir, timestamp)
+    if offsite:
+        step(plan, "offsite")
+        push_offsite(run, deploy_path, backup_dir, timestamp)
     prune_backups(run, deploy_path, keep_count)
 
     brand.success(t("deploy.backup_created", timestamp=timestamp))

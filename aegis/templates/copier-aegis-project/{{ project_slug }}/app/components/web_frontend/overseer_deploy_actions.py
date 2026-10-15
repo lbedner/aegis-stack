@@ -44,7 +44,6 @@ TITLES = {
     "resume": "Resume the server",
     "deploy": "Deploy",
     "backup": "Back up",
-    "backups": "Backups",
     "rollback": "Roll back",
     "destroy": "Destroy",
 }

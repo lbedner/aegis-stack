@@ -569,6 +569,40 @@ def test_a_provision_forgets_the_kept_account(
     assert "deploy:account:digitalocean" not in redis.strings
 
 
+LISTED = [{"name": "2026-10-15_014324", "size": "172M", "database": True}]
+
+
+def test_the_servers_backups_are_kept_for_the_overseer(
+    project: Path, app_store: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Listed on the server in the background (``list_backups``): a
+    rollback is asked for one of them, never a typed name."""
+    (project / ".aegis").mkdir()
+    (project / ".aegis" / "deploy.yml").write_text(
+        "server:\n  host: h\n  user: u\n  path: /opt/app\n"
+    )
+    seen: list[str] = []
+    monkeypatch.setattr(
+        agent, "list_backups", lambda run, path: seen.append(path) or LISTED
+    )
+    redis = FakeRedis()
+    job_id = _request(redis, app_store, "backups", {})
+    _serve(redis, project)
+    assert _job(redis, app_store, job_id).status == "done"
+    assert json.loads(redis.strings["deploy:backups"]) == {"backups": LISTED}
+    assert seen == ["/opt/app"]
+
+
+def test_a_command_forgets_the_kept_backups(project: Path, app_store: Any) -> None:
+    """A backup, a deploy (it backs up first) or a rollback changes the
+    list: the next look asks again."""
+    redis = FakeRedis()
+    redis.strings["deploy:backups"] = json.dumps({"backups": []})
+    _request(redis, app_store, "backup")
+    _serve(redis, project)
+    assert "deploy:backups" not in redis.strings
+
+
 def test_a_catalog_without_the_token_says_which(
     project: Path, app_store: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:

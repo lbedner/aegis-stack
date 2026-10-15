@@ -199,6 +199,26 @@ def restore_data(
     return result.returncode == 0
 
 
+def list_backups(run: Run, deploy_path: str) -> list[dict[str, Any]]:
+    """The server's backups, newest first: each one's name (its timestamp),
+    size, and whether it holds the database (a SQLite snapshot, a Postgres
+    dump, or an older backup's ``data/``). One remote call; none yet, an
+    empty list."""
+    root = shlex.quote(f"{deploy_path}/backups")
+    held = f'-f "$b/{DATABASE_FILE}" -o -f "$b/db_backup.sql" -o -d "$b/data"'
+    result = run(
+        f"cd {root} 2>/dev/null || exit 0; for b in $(ls -1t); do"
+        f' printf "%s\\t%s\\t%s\\n" "$b" "$(du -sh "$b" | cut -f1)"'
+        f' "$(test {held} && echo y)"; done'
+    )
+    backups = []
+    for line in result.stdout.splitlines():
+        name, size, database = (line.split("\t") + ["", ""])[:3]
+        if BACKUP_TIMESTAMP_RE.match(name):
+            backups.append({"name": name, "size": size, "database": database == "y"})
+    return backups
+
+
 def prune_backups(run: Run, deploy_path: str, keep_count: int) -> None:
     """Remove old backups, keeping only the most recent N."""
     safe_path = shlex.quote(f"{deploy_path}/backups")

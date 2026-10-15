@@ -9,6 +9,7 @@ instead of run, so these pin the shell each step sends.
 
 from __future__ import annotations
 
+import os
 import re
 import shlex
 import subprocess
@@ -24,6 +25,7 @@ from aegis.commands.deploy_backup import (
     RESTORE,
     SNAPSHOT,
     is_sqlite,
+    list_backups,
     offsite_env,
     snapshot_sqlite,
 )
@@ -159,6 +161,41 @@ class TestSteps:
         monkeypatch.delenv(protocol.PROTOCOL["progress_env"], raising=False)
         _backup(monkeypatch, sqlite=True)
         assert "::aegis-progress" not in capsys.readouterr().out
+
+
+def test_the_servers_backups_are_listed_in_one_call(tmp_path: Path) -> None:
+    """Newest first, each with its size and whether it holds the database
+    (a SQLite snapshot, a Postgres dump, or a pre-#1627 ``data/``); a
+    stray directory is no backup. Run for real, in one remote call (the
+    listing used to make two per backup)."""
+    root = tmp_path / "backups"
+    for name, held in (
+        ("2026-10-13_020000", "data"),
+        ("2026-10-14_020000", None),
+        ("2026-10-15_020000", DATABASE_FILE),
+    ):
+        (root / name / "files").mkdir(parents=True)
+        if held == "data":
+            (root / name / "data").mkdir()
+        elif held:
+            (root / name / held).write_text("x" * 2048)
+        os.utime(root / name, (int(name[8:10]), int(name[8:10])))
+    (root / "lost+found").mkdir()
+    calls: list[str] = []
+
+    def bash(command: str) -> subprocess.CompletedProcess[str]:
+        calls.append(command)
+        return subprocess.run(["bash", "-c", command], capture_output=True, text=True)
+
+    listed = list_backups(bash, str(tmp_path))
+    assert [(b["name"], b["database"]) for b in listed] == [
+        ("2026-10-15_020000", True),
+        ("2026-10-14_020000", False),
+        ("2026-10-13_020000", True),
+    ]
+    assert all(b["size"] for b in listed)
+    assert len(calls) == 1
+    assert list_backups(bash, str(tmp_path / "nothing-yet")) == []
 
 
 class TestOffsite:

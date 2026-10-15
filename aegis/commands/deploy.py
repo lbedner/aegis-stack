@@ -31,10 +31,10 @@ from ..core.footprint import COMPOSE_FILES
 from ..core.template_cleanup import deploy_env_file, env_value
 from ..i18n import lazy_t, t
 from .deploy_backup import (
-    DATABASE_FILE,
     archive_storage,
     backup_config,
     is_sqlite,
+    list_backups,
     offsite_configured,
     prune_backups,
     push_offsite,
@@ -1593,14 +1593,10 @@ def deploy_backups_command(
     user = config["server"]["user"]
     deploy_path = config["server"]["path"]
 
-    safe_path = shlex.quote(f"{deploy_path}/backups")
-    result = _run_remote_capture(host, user, f"ls -1t {safe_path} 2>/dev/null")
-
-    if result.returncode != 0 or not result.stdout.strip():
+    backups = list_backups(partial(_run_remote_capture, host, user), deploy_path)
+    if not backups:
         typer.echo(t("deploy.no_backups"))
         return
-
-    backups = [b.strip() for b in result.stdout.strip().splitlines() if b.strip()]
 
     brand.accent(
         f"{t('deploy.backups_header', host=host, count=len(backups))}\n", bold=True
@@ -1610,27 +1606,9 @@ def deploy_backups_command(
     db = t("deploy.col_database")
     typer.echo(f"  {ts:<24} {sz:<12} {db}")
     typer.echo(f"  {'─' * 24} {'─' * 12} {'─' * 10}")
-
-    for backup_name in backups:
-        backup_dir = f"{deploy_path}/backups/{backup_name}"
-        safe_dir = shlex.quote(backup_dir)
-
-        # Get size
-        size_result = _run_remote_capture(
-            host, user, f"du -sh {safe_dir} 2>/dev/null | cut -f1"
-        )
-        size = size_result.stdout.strip() if size_result.returncode == 0 else "?"
-
-        # Check for DB dump
-        db_check = _run_remote_capture(
-            host,
-            user,
-            f"test -f {safe_dir}/db_backup.sql -o -f {safe_dir}/{DATABASE_FILE}"
-            f" -o -d {safe_dir}/data",
-        )
-        has_db = "yes" if db_check.returncode == 0 else "no"
-
-        typer.echo(f"  {backup_name:<24} {size:<12} {has_db}")
+    for backup in backups:
+        has_db = "yes" if backup["database"] else "no"
+        typer.echo(f"  {backup['name']:<24} {backup['size']:<12} {has_db}")
 
     typer.echo(f"\n{t('deploy.rollback_hint')}")
 

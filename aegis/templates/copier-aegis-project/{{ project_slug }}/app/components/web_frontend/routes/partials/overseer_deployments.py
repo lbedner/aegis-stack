@@ -3,6 +3,8 @@
 with the job it started, which the card's stream then follows. Mounted by
 ``routes/pages.py`` behind Overseer's gate (``overseer_access``)."""
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
 
@@ -52,14 +54,31 @@ async def panel(
 ) -> Response:
     """A part of the new-server form (``PANELS``: the form from the
     provider's catalog, whether it fits, what the account runs); the agent
-    asked for what it needs when it has not (a read: not audited). A poll
-    still waiting gets no content: htmx swaps nothing, so the bar on the
-    page keeps moving."""
+    asked for what it needs when it has not (a read: not audited)."""
     if panel not in deploy_form.PANELS:
         raise HTTPException(status_code=404)
     form = dict(request.query_params)
     build, template, name = deploy_form.PANELS[panel]
-    built = await build(chosen, form, actor.label)
+    return _part(form, await build(chosen, form, actor.label), template, name)
+
+
+@router.get(deploy_form.ROLLBACK, response_class=HTMLResponse)
+async def rollback(
+    request: Request, actor: Actor = Depends(overseer_actor)
+) -> Response:
+    """The backups a rollback picks from; the agent asked to list them when
+    it has not (a read: not audited)."""
+    form = dict(request.query_params)
+    built = await deploy_form.rollback_panel(form, actor.label)
+    return _part(form, built, deploy_form.ROLLBACK_TEMPLATE, "r")
+
+
+def _part(
+    form: dict[str, str], built: dict[str, Any], template: str, name: str
+) -> Response:
+    """A part the agent answers for, as the page asked for it. A poll still
+    waiting gets no content: htmx swaps nothing, so the bar on the page
+    keeps moving."""
     if "job" in form and built["state"] == "loading":
         return Response(status_code=204)
     return HTMLResponse(fragment(template, **{name: built}))

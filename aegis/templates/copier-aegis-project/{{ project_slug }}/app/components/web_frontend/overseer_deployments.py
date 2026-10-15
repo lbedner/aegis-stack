@@ -108,6 +108,7 @@ async def _deployed() -> dict[str, Any]:
         "view": "server",
         "server": hosting.deploys_to(),
         "destroy": actions.server_name(),
+        "rollback": deploy_form.ROLLBACK_WAITING,
     }
 
 

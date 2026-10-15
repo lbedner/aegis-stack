@@ -910,8 +910,11 @@ def test_a_project_with_a_server_shows_it_and_its_actions(
     assert "Your server" in text(one(card, "h2"))
     assert "203.0.113.7" in text(card)
     none(card, "[data-step]")
-    for verb in ("deploy", "backup", "backups", "rollback"):
+    for verb in ("deploy", "backup"):
         assert one(card, f'[data-ask="{verb}"]').get("data-write") is not None
+    # The backups a rollback picks from load on their own (no list to ask).
+    assert one(card, "[data-rollback]").get("hx-get") == deploy_form.ROLLBACK
+    none(card, '[data-ask="backups"]')
     none(card, "[data-provision]")  # it has its server
     destroy = one(one(html, "#card-destroy"), '[data-ask="destroy"]')
     assert destroy.get("data-write") is not None
@@ -1199,6 +1202,63 @@ def test_an_agent_from_before_dns_keys_is_named_stale(
     del beat["revision"]
     redis.strings[agent.HEARTBEAT] = json.dumps(beat)
     one(_card(TestClient(app)), '[data-deploy-state="stale"]')
+
+
+BACKUPS = [
+    {"name": "2026-10-15_014324", "size": "172M", "database": True},
+    {"name": "2026-10-14_233051", "size": "27M", "database": False},
+]
+
+
+def test_a_rollback_is_picked_from_the_servers_backups(
+    redis: FakeRedis, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Only backups the server has, newest first, each saying whether it
+    holds the database: nothing to type."""
+    deployed(monkeypatch, {"server": BOX, "provision": READY})
+    _keep(redis, "backups", {"backups": BACKUPS})
+    form = one(TestClient(app).get(deploy_form.ROLLBACK).text, '[data-ask="rollback"]')
+    picked = one(form, "select[name=backup]")
+    options = select(picked, "option")
+    assert [o.get("value") for o in options] == [b["name"] for b in BACKUPS]
+    assert "no database" in text(options[1]) and "no database" not in text(options[0])
+    none(form, "input[name=backup]")
+
+
+def test_while_the_backups_are_looked_up_the_panel_waits(
+    redis: FakeRedis, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    deployed(monkeypatch, {"server": BOX, "provision": READY})
+    panel = one(TestClient(app).get(deploy_form.ROLLBACK).text, "[data-rollback]")
+    one(panel, "[data-waiting]")
+    (request,) = _queued(redis)
+    assert (request["action"], request["args"]) == ("backups", {})
+
+
+def test_a_server_without_backups_says_so(
+    redis: FakeRedis, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    deployed(monkeypatch, {"server": BOX, "provision": READY})
+    _keep(redis, "backups", {"backups": []})
+    panel = one(TestClient(app).get(deploy_form.ROLLBACK).text, "[data-rollback]")
+    none(panel, '[data-ask="rollback"]')
+    assert "Back up now" in text(panel)
+
+
+@pytest.mark.parametrize("backup", ["2020-01-01_000000", ""])
+def test_a_rollback_to_a_backup_the_server_has_not_is_refused(
+    redis: FakeRedis, app: FastAPI, monkeypatch: pytest.MonkeyPatch, backup: str
+) -> None:
+    """Asked by hand or from a stale page, a name not in the list never
+    reaches the agent; one in it does."""
+    deployed(monkeypatch, {"server": BOX, "provision": READY})
+    _keep(redis, "backups", {"backups": BACKUPS})
+    client = TestClient(app)
+    client.post(f"{actions.PARTIALS}/rollback", data={"backup": backup})
+    assert _queued(redis) == []
+    client.post(f"{actions.PARTIALS}/rollback", data={"backup": BACKUPS[1]["name"]})
+    (request,) = _queued(redis)
+    assert request["args"] == {"backup": BACKUPS[1]["name"]}
 
 
 def test_destroy_needs_the_server_name_typed(

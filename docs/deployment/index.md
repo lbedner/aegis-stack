@@ -44,15 +44,16 @@ what the provider sells, its price typed back to confirm), deploy, back up,
 list backups, roll back, destroy. Until there is a server it walks you there
 in steps (the agent, where: a provider's token or a server of your own, then
 the server), each read from what is already true; after, it shows the
-server and what can be done to it. Each action streams its
-output on the page and is audited. `make serve` starts the agent that runs
+server and what can be done to it. Each action is audited, and its
+output streams under Deployments > Jobs. `make serve` starts the agent that runs
 them, `aegis deploy-agent`, beside the stack and stops it with the stack, when
 the aegis CLI is installed (`uv tool install aegis-stack`). With the stack
 started another way, run `aegis deploy-agent` in the project directory
 yourself.
 
 The cloud token is a secret like the app's other credentials: set
-`DIGITALOCEAN_TOKEN` (or `HCLOUD_TOKEN`) on Overseer > Secrets, with the
+`DIGITALOCEAN_TOKEN` (or `HCLOUD_TOKEN`) on Overseer > Deployments >
+Settings (beside where the provider makes one, and the scopes it needs), with the
 [secrets component](../components/secrets/index.md), or in `.env`. The Overseer
 offers a new server on each provider it has a token for, and sends the token
 with the one request that needs it (the provider's sizes and regions, a new

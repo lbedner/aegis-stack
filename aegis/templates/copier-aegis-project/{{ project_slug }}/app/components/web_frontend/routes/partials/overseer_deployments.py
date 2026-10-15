@@ -5,7 +5,7 @@ with the job it started, which the card's stream then follows. Mounted by
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
 
 from app.components.backend.api.utils import audit_admin_action
@@ -19,20 +19,25 @@ from app.components.web_frontend.overseer_live import event_stream
 from app.components.web_frontend.rendering import (
     form_fields,
     fragment,
+    go_to,
     toast_response,
     with_toast,
 )
 from app.core.audit import AuditEmitter, get_audit
 from app.services.shared.deps import Actor
-from app.services.system import hosting
+from app.services.system import hosting, ui_deployments
 
 router = APIRouter()
 
 
 @router.get(actions.EVENTS, include_in_schema=False)
-async def job_events() -> StreamingResponse:
-    """The newest deploy job, while the Deployments page is open."""
-    return event_stream(actions.events())
+async def job_events(
+    job: str | None = Query(None, pattern="^[0-9a-f]{32}$"),
+    whole: bool = False,
+) -> StreamingResponse:
+    """A deploy job while a Deployments page shows it: the newest, as the
+    card does or ``whole`` (New server), or the one Jobs picked (``job``)."""
+    return event_stream(actions.events(job, whole=whole))
 
 
 def _provisionable(provider: str) -> hosting.Provider:
@@ -85,6 +90,16 @@ async def history(request: Request, actor: Actor = Depends(overseer_actor)) -> R
     return _part(form, built, deploy_form.HISTORY_TEMPLATE, **context)
 
 
+@router.get(deploy_form.LIVE, response_class=HTMLResponse)
+async def live(request: Request, actor: Actor = Depends(overseer_actor)) -> Response:
+    """What is live on the server (its newest deploy), from the history the
+    agent reads (a read: not audited)."""
+    form = dict(request.query_params)
+    built = await deploy_form.history_panel(form, actor.label, deploy_form.LIVE)
+    live = ui_deployments.live_facts(built.get("rows") or [])
+    return _part(form, built, deploy_form.LIVE_TEMPLATE, live=built | {"live": live})
+
+
 def _part(
     form: dict[str, str], built: dict[str, Any], template: str, **context: Any
 ) -> Response:
@@ -117,5 +132,7 @@ async def ask(
     await audit_admin_action(
         audit, actor, request, event, "requested", title, job=job_id, **args
     )
-    page = HTMLResponse(await actions.render_job(job_id))
-    return with_toast(page, f"{title}: asked the deploy agent")
+    said = f"{title}: asked the deploy agent"
+    if action in actions.CREATING:  # New server follows it, whole
+        return go_to(overseer_deployments.NEW_URL, said, "#overseer-main")
+    return with_toast(HTMLResponse(await actions.render_job(job_id)), said)

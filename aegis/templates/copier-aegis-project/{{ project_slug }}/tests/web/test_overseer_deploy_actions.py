@@ -23,7 +23,16 @@ from tests._audit import recording
 from tests._fake_redis import FakeRedis
 from tests._fake_runtime import SERVER, FakeRuntime, use_runtime
 from tests._secret_settings import FakeStore, use_store
-from tests.web.dom import chosen, none, one, select, table_rows, text, triggers
+from tests.web.dom import (
+    chosen,
+    location,
+    none,
+    one,
+    select,
+    table_rows,
+    text,
+    triggers,
+)
 from tests.web.overseer import (
     frame_html,
     page_html,
@@ -34,6 +43,9 @@ from tests.web.overseer import (
 
 PAGE = "/overseer/deployments"
 NEW = f"{PAGE}/new"  # the steps to a new server
+JOBS = f"{PAGE}/jobs"  # every deploy job, one picked whole
+ACCOUNTS = f"{PAGE}/accounts"  # what the cloud accounts run
+SETTINGS = f"{PAGE}/settings"  # the keys and settings deploying uses
 CARD = "#card-deploy"
 BOX = {"host": "203.0.113.7", "user": "root", "path": "/opt/my-app"}
 READY = {"provider": "digitalocean", "server_name": "my-app", "status": "ready"}
@@ -199,9 +211,10 @@ def _job(
     result: dict[str, Any],
     error: str = "",
     running: bool = False,
+    started: str | None = None,
 ) -> str:
     """A deploy job, the newest: finished, failed with ``error``, or still
-    ``running``."""
+    ``running``; ``started`` then, if given."""
     store = RedisJobStore(redis)
     job_id = f"{action}0000000000000000000000000000"[:32]
     asyncio.run(store.create(job_id, f"deploy:{action}", "Waiting"))
@@ -212,6 +225,8 @@ def _job(
         redis.hashes[f"jobs:{job_id}"]["result"] = json.dumps(result)
     else:
         asyncio.run(store.finish(job_id, result))
+    if started:
+        redis.hashes[f"jobs:{job_id}"]["started_at"] = started
     redis.strings[agent.LAST] = job_id
     return job_id
 
@@ -291,14 +306,16 @@ def test_while_a_server_is_being_made_the_overview_points_to_it(
     none(card, "[data-ask]")
 
 
-def test_the_overview_shows_every_server_in_each_connected_account(
+def test_cloud_accounts_show_every_server_in_each_connected_account(
     redis: FakeRedis, app: FastAPI
 ) -> None:
-    """From what the agent last found (kept a few minutes), so opening the
-    page asks the cloud nothing; nothing is being bought, so no total
-    with a new one. Which account is its logo, not a sentence naming it."""
+    """Their own page, the Overview left to this project's server. From
+    what the agent last found (kept a few minutes), so opening the page
+    asks the cloud nothing; nothing is being bought, so no total with a
+    new one. Which account is its logo, not a sentence naming it."""
     _accounted(redis)
-    account = one(page_html(TestClient(app), PAGE), "[data-account]")
+    none(page_html(TestClient(app), PAGE), "[data-account]")
+    account = one(page_html(TestClient(app), ACCOUNTS), "[data-account]")
     assert hosting.BY_KEY["digitalocean"].domain in one(account, "p img").get("src")
     assert "DigitalOcean: 2 servers, $18.00 a month" in text(account)
     assert "Already in" not in text(account)
@@ -923,7 +940,7 @@ def test_a_project_with_a_server_shows_it_and_its_actions(
     redis: FakeRedis, app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """No steps once there is a server: the server, what can be done to
-    it, and destroying it apart."""
+    it, rolling back and destroying folded into More."""
     deployed(monkeypatch, {"server": BOX, "provision": READY})
     monkeypatch.setattr(
         hosting,
@@ -943,12 +960,16 @@ def test_a_project_with_a_server_shows_it_and_its_actions(
     none(card, "[data-step]")
     for verb in ("deploy", "backup"):
         assert one(card, f'[data-ask="{verb}"]').get("data-write") is not None
-    # The backups a rollback picks from load on their own (no list to ask).
-    assert one(card, "[data-rollback]").get("hx-get") == deploy_form.ROLLBACK
+    # The backups a rollback picks from load on their own (no list to
+    # ask), once More opens.
+    rollback = one(card, "details [data-rollback]")
+    assert rollback.get("hx-get") == deploy_form.ROLLBACK
+    assert rollback.get("hx-trigger").startswith("toggle once")
     none(card, '[data-ask="backups"]')
     none(card, "[data-provision]")  # it has its server
-    destroy = one(one(html, "#card-destroy"), '[data-ask="destroy"]')
+    destroy = one(card, 'details [data-destroy] [data-ask="destroy"]')
     assert destroy.get("data-write") is not None
+    none(html, "#card-destroy")
 
 
 def test_a_job_for_an_action_gone_from_the_page_is_not_shown(
@@ -970,6 +991,56 @@ def test_a_provider_is_offered_when_only_the_app_has_its_token(
     assert _picker_on(card, "cloud") == "hetzner"
     held = one(card, '[data-cloud="hetzner"] [data-key="HCLOUD_TOKEN"]')
     assert "not set" not in text(held)
+
+
+def test_settings_has_every_key_deploying_uses_this_projects_first(
+    redis: FakeRedis, store: FakeStore, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Each set (or replaced) from here, back to Settings, beside where the
+    provider makes them and what one needs; the providers this project
+    deploys with first; and what its deploy record says."""
+    store.values["DIGITALOCEAN_TOKEN"] = "dop_v1_held-by-the-app"
+    record = READY | {"dns_provider": "porkbun"}
+    deployed(
+        monkeypatch, {"server": BOX, "provision": record, "domain": "app.example.com"}
+    )
+    page = page_html(TestClient(app), SETTINGS)
+    order = [p.get("data-provider") for p in select(page, "[data-provider]")]
+    assert order[:2] == ["digitalocean", "porkbun"]
+    assert set(order) == {p.key for p in (*hosting.PROVISIONABLE, *hosting.DNS)}
+    ocean = one(page, '[data-provider="digitalocean"]')
+    one(ocean, "[data-used]")
+    none(one(page, '[data-provider="hetzner"]'), "[data-used]")
+    token = one(ocean, '[data-key="DIGITALOCEAN_TOKEN"]')
+    _sets_here(token, "DIGITALOCEAN_TOKEN", SETTINGS)
+    made = hosting.BY_KEY["digitalocean"].tokens
+    assert one(ocean, "a[data-tokens]").get("href") == made
+    assert "billing:read" in [text(s) for s in select(ocean, "[data-scope]")]
+    said = text(one(page, "[data-deploy-settings]"))
+    assert "app.example.com" in said and "root@203.0.113.7:/opt/my-app" in said
+
+
+def test_settings_read_the_dns_provider_a_name_was_made_at(
+    redis: FakeRedis, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A record whose name was made (``dns``) is that provider's, an older
+    one's Cloudflare, as the CLI reads it."""
+    record = READY | {"dns": {"name": "app.example.com"}}
+    deployed(monkeypatch, {"server": BOX, "provision": record})
+    page = page_html(TestClient(app), SETTINGS)
+    one(page, '[data-provider="cloudflare"] [data-used]')
+    assert "Cloudflare" in text(one(page, "[data-deploy-settings]"))
+
+
+def test_a_token_the_agent_holds_can_still_be_set_here(
+    redis: FakeRedis, store: FakeStore, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Where the agent runs, and the app's own (which wins) set beside it."""
+    deployed(monkeypatch, {"server": BOX, "provision": READY})
+    page = page_html(TestClient(app), SETTINGS)
+    token = one(page, '[data-provider="digitalocean"] [data-key="DIGITALOCEAN_TOKEN"]')
+    assert "where the deploy agent runs" in text(token)
+    _sets_here(token, "DIGITALOCEAN_TOKEN", SETTINGS)
 
 
 def test_with_no_token_anywhere_it_says_where_to_set_it(
@@ -1041,7 +1112,7 @@ def test_the_price_shown_must_be_typed_to_provision(
     (request,) = _queued(redis)
     assert request["action"] == "provision"
     assert request["args"] == PICKED | {"price": "12.00"}
-    assert agent.WAITING in text(one(response.text, '[data-deploy-job="provision"]'))
+    assert location(response) == NEW  # where it shows, whole
     assert [e["outcome"] for e in audit.events] == ["refused", "requested"]
 
 
@@ -1256,6 +1327,24 @@ def test_a_rollback_is_picked_from_the_servers_backups(
     none(form, "input[name=backup]")
 
 
+def test_the_server_card_says_what_is_live_there(
+    redis: FakeRedis, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The server's newest deploy (its own history, read by the agent):
+    the build, when it went live, who deployed it, and its health; asked
+    for as the card loads, waiting until the agent has looked."""
+    deployed(monkeypatch, {"server": BOX, "provision": READY})
+    card = one(page_html(TestClient(app), PAGE), CARD)
+    assert one(card, "[data-live]").get("hx-get") == deploy_form.LIVE
+    client = TestClient(app)
+    one(client.get(deploy_form.LIVE).text, "[data-live] [data-waiting]")
+    _keep(redis, "history", {"deploys": DEPLOYS})
+    live = one(client.get(deploy_form.LIVE).text, "[data-live]")
+    said = text(live)
+    assert "1c956eef" in said and "Ada <ada@example.org>" in said
+    assert "passed" in said and "Went live" in said
+
+
 def test_while_the_backups_are_looked_up_the_panel_waits(
     redis: FakeRedis, app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1361,7 +1450,7 @@ def test_resume_asks_the_agent_for_the_provision_on_record(
     response = client.post(url)
     (request,) = _queued(redis)
     assert (request["action"], request["args"]) == ("resume", {})
-    one(response.text, '[data-deploy-job="resume"]')
+    assert location(response) == NEW
 
 
 PLAN = list(PROVISION_STEPS)
@@ -1379,12 +1468,17 @@ def test_a_server_being_created_shows_its_steps_as_they_go(
     redis: FakeRedis, app: FastAPI
 ) -> None:
     progress = {"steps": PLAN, "at": "boot"}
-    _job(redis, "provision", {"lines": ["Waiting"], "progress": progress}, running=True)
-    (frame,) = asyncio.run(sent_events(actions.events(max_frames=1)))
-    page = page_html(TestClient(app), NEW)
-    none(page, "[data-steps]")  # only the job while it runs
+    job_id = _job(
+        redis, "provision", {"lines": ["Waiting"], "progress": progress}, running=True
+    )
+    new = page_html(TestClient(app), NEW)
+    none(new, "[data-steps]")  # only the job, whole, the newest followed
+    stream = one(new, f'[sse-connect^="{actions.EVENTS}"]').get("sse-connect")
+    assert stream == actions.job_events()
+    (frame,) = asyncio.run(sent_events(actions.events(whole=True, max_frames=1)))
+    page = page_html(TestClient(app), actions.job_url(job_id))
     job = '[data-deploy-job="provision"]'
-    for panel in (one(frame_html(frame), job), one(page, job)):
+    for panel in (one(new, job), one(frame_html(frame), job), one(page, job)):
         assert _stages(panel) == {
             "Create the server": "done",
             "First boot": "current",
@@ -1401,8 +1495,11 @@ def test_a_failed_provision_marks_the_step_it_stopped_at(
 ) -> None:
     deployed(monkeypatch, {"provision": READY | {"status": "provisioning"}})
     progress = {"steps": PLAN[:4], "at": "dns"}
-    _job(redis, "provision", {"lines": [], "progress": progress}, error="exit 1")
-    panel = one(page_html(TestClient(app), NEW), '[data-deploy-job="provision"]')
+    job_id = _job(
+        redis, "provision", {"lines": [], "progress": progress}, error="exit 1"
+    )
+    page = page_html(TestClient(app), actions.job_url(job_id))
+    panel = one(page, '[data-deploy-job="provision"]')
     assert list(_stages(panel).values()) == ["done", "done", "failed", "todo"]
 
 
@@ -1417,8 +1514,8 @@ def test_a_job_that_marks_no_steps_has_no_step_bar(
 
 def test_a_backup_shows_its_steps_as_they_go(redis: FakeRedis) -> None:
     progress = {"steps": ["database", "files", "documents"], "at": "files"}
-    _job(redis, "backup", {"lines": [], "progress": progress}, running=True)
-    (frame,) = asyncio.run(sent_events(actions.events(max_frames=1)))
+    job_id = _job(redis, "backup", {"lines": [], "progress": progress}, running=True)
+    (frame,) = asyncio.run(sent_events(actions.events(job_id, max_frames=1)))
     panel = one(frame_html(frame), '[data-deploy-job="backup"]')
     assert _stages(panel) == {
         "Database": "done",
@@ -1440,8 +1537,8 @@ def test_steps_a_job_does_not_declare_draw_no_bar(redis: FakeRedis) -> None:
 
 def test_a_deploy_shows_its_steps_as_they_go(redis: FakeRedis) -> None:
     progress = {"steps": ["backup", "upload", "build", "health"], "at": "build"}
-    _job(redis, "deploy", {"lines": [], "progress": progress}, running=True)
-    (frame,) = asyncio.run(sent_events(actions.events(max_frames=1)))
+    job_id = _job(redis, "deploy", {"lines": [], "progress": progress}, running=True)
+    (frame,) = asyncio.run(sent_events(actions.events(job_id, max_frames=1)))
     panel = one(frame_html(frame), '[data-deploy-job="deploy"]')
     assert _stages(panel) == {
         "Back up": "done",
@@ -1451,19 +1548,87 @@ def test_a_deploy_shows_its_steps_as_they_go(redis: FakeRedis) -> None:
     }
 
 
+def _opened(panel: Any) -> str:
+    """Where a card's job opens: its page under Jobs."""
+    return one(panel, "a[data-job-link]").get("href")
+
+
+def _sets_here(row: Any, name: str, back: str) -> None:
+    """Where a key can be set here: ``name`` from its ``row``, through the
+    Secrets dialog, back to ``back``."""
+    if secrets.writable():
+        url = overseer_secrets.set_url(name, back)
+        assert url in [b.get("hx-get") for b in select(row, "button")]
+
+
+def test_the_card_shows_where_its_job_stands_and_opens_it_whole(
+    redis: FakeRedis, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The bar and the line it is on; its output on its own page."""
+    deployed(monkeypatch, {"server": BOX, "provision": READY})
+    job_id = _job(redis, "deploy", {"lines": ["Building webserver"]}, running=True)
+    panel = one(page_html(TestClient(app), PAGE), '[data-deploy-job="deploy"]')
+    none(panel, "[data-output]")
+    assert _opened(panel) == f"{JOBS}?job={job_id}"
+
+
+def test_the_jobs_page_shows_the_picked_job_whole_beside_every_job(
+    redis: FakeRedis, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Newest first, each opening here; the picked one (the newest unless
+    another is asked for) with its output, streamed while it runs."""
+    deployed(monkeypatch, {"server": BOX, "provision": READY})
+    lines = {"lines": ["Snapshotting SQLite database..."]}
+    backup = _job(redis, "backup", lines, started="2026-10-15T10:00:00+00:00")
+    deploy = _job(
+        redis,
+        "deploy",
+        {"lines": ["Building webserver"]},
+        running=True,
+        started="2026-10-15T11:00:00+00:00",
+    )
+    client = TestClient(app)
+    page = page_html(client, JOBS)
+    links = [a.get("href") for a in select(page, "[data-jobs] tbody a")]
+    assert links == [f"{JOBS}?job={deploy}", f"{JOBS}?job={backup}"]
+    shown = one(page, "[data-deploy-job]")
+    assert shown.get("data-deploy-job") == "deploy"
+    none(shown, "a[data-job-link]")  # already here
+    stream = one(page, f'[sse-connect^="{actions.EVENTS}"]').get("sse-connect")
+    assert stream == actions.job_events(deploy)
+    (frame,) = asyncio.run(sent_events(actions.events(deploy, max_frames=1)))
+    assert "Building webserver" in frame  # streamed whole
+    page = page_html(client, f"{JOBS}?job={backup}")
+    shown = one(page, '[data-deploy-job="backup"]')
+    assert "Snapshotting" in text(one(shown, "details[data-output] [data-lines]"))
+    none(page, f'[sse-connect^="{actions.EVENTS}"]')  # done: nothing to follow
+
+
+def test_without_jobs_the_jobs_page_says_so(
+    redis: FakeRedis, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    deployed(monkeypatch, {"server": BOX, "provision": READY})
+    page = page_html(TestClient(app), JOBS)
+    none(page, "[data-deploy-job]")
+    assert "No deploy jobs" in text(one(page, "[data-jobs]"))
+
+
 def test_while_a_job_runs_the_card_asks_for_nothing_else(
     redis: FakeRedis, app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Its every control sits under the lock (``data-locks``: greyed while
-    the streamed job says it runs, lifted when it ends), and a request
-    sent anyway is refused: the agent would only run it after."""
+    """Its every control sits under the lock (``data-locks``: what is idle
+    hidden while the streamed job says it runs, back when it ends), and a
+    request sent anyway is refused: the agent would only run it after."""
     deployed(monkeypatch, {"server": BOX, "provision": READY})
     _keep(redis, "backups", {"backups": BACKUPS})
     _job(redis, "deploy", {"lines": []}, running=True)
     page = page_html(TestClient(app), PAGE)
     lock = one(page, "[data-locks]")
     one(lock, '[data-deploy-job="deploy"][data-status="running"]')
-    assert len(select(lock, "[data-write]")) == len(select(page, "[data-write]")) > 2
+    idle = select(lock, "[data-idle]")
+    writes = sum(len(select(i, "[data-write]")) for i in idle)
+    assert writes == len(select(page, "[data-write]")) > 2
+    none(lock, "[data-idle] [data-deploy-job]")  # the job stays in sight
     client = TestClient(app)
     client.post(f"{actions.PARTIALS}/backup")
     client.post(f"{actions.PARTIALS}/rollback", data={"backup": BACKUPS[0]["name"]})
@@ -1501,11 +1666,20 @@ def test_on_this_machine_the_history_is_the_servers(
     assert "1c956eef" in text(row) and "Ada" in text(row) and "passed" in text(row)
 
 
-def test_the_newest_job_streams(redis: FakeRedis) -> None:
-    _job(redis, "backup", {"lines": ["Backup complete"]})
+def test_the_newest_job_streams_as_the_cards_show_it(redis: FakeRedis) -> None:
+    """While it runs, that it does and a link to it; its steps and output
+    on its own page; once it ends, nothing (Jobs keeps it)."""
+    progress = {"steps": ["database", "files"], "at": "files"}
+    result = {"lines": ["Snapshotting SQLite database..."], "progress": progress}
+    job_id = _job(redis, "backup", result, running=True)
     (frame,) = asyncio.run(sent_events(actions.events(max_frames=1)))
     assert frame.startswith(f"event: {actions.EVENT}")
-    assert "Backup complete" in frame
+    panel = one(frame_html(frame), '[data-deploy-job="backup"]')
+    assert _opened(panel) == actions.job_url(job_id)
+    none(panel, "[data-stages], [data-output]")
+    _job(redis, "backup", {"lines": ["Backup complete"]})
+    (frame,) = asyncio.run(sent_events(actions.events(max_frames=1)))
+    none(frame_html(frame), "[data-deploy-job] p, [data-deploy-job] a")
 
 
 def test_every_action_the_card_asks_is_titled() -> None:

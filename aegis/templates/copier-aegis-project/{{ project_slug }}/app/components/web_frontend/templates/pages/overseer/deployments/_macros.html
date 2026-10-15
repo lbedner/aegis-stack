@@ -24,6 +24,9 @@
 
 {# ``reload`` (overseer_deploy_actions: url, trigger) as the hx attributes
    a fragment asks again with, or nothing once it is ready. #}
+{# A link to another part of Overseer, swapped into its main area. #}
+{% macro goto(url, label, attrs="") %}<a {{ attrs|safe }} href="{{ url }}" {{ hx_replace(url, "#overseer-main") }} class="text-aegis-teal hover:underline">{{ label }}</a>{% endmacro %}
+
 {% macro reloads(reload) %}{% if reload %} hx-get="{{ reload.url }}" hx-trigger="{{ reload.trigger }}"{% endif %}{% endmacro %}
 
 {# What a part of the new-server form waits on the agent for, over a
@@ -42,11 +45,12 @@
 {{ action("Try again", 'data-retry hx-get="' ~ f.retry ~ '" hx-target="closest [data-part]" hx-swap="outerHTML"') }}
 {% endmacro %}
 
-{# A panel of the new-server form (``f``, from overseer_deploy_form's
-   PANELS): waiting on the agent, why it could not be had, or what it
-   found (the caller's body). ``name`` is its data attribute. #}
-{% macro panel(name, f, said_waiting, said_failed) %}
-<div data-{{ name }} data-part hx-target="this" hx-swap="outerHTML" class="space-y-3 rounded border border-aegis-border p-3"{{ reloads(f.reload) }}>
+{# A part the agent is asked for (``f``, from overseer_deploy_form: the
+   new-server form's PANELS, the card's rollback and live build): waiting
+   on the agent, why it could not be had, or what it found (the caller's
+   body). ``name`` is its data attribute; ``boxed`` frames it. #}
+{% macro panel(name, f, said_waiting, said_failed, boxed=True) %}
+<div data-{{ name }} data-part hx-target="this" hx-swap="outerHTML" class="space-y-3{{ ' rounded border border-aegis-border p-3' if boxed }}"{{ reloads(f.reload) }}>
   {% if f.state == "loading" %}
   {{ waiting(said_waiting) }}
   {% elif f.state == "failed" %}
@@ -126,7 +130,7 @@
     <summary class="cursor-pointer hover:text-aegis-text">What is the deploy agent?</summary>
     <div class="mt-2 space-y-1">
       <p>A small process on your machine that does what you ask on this page: create a server, deploy, back up, roll back, destroy. <code class="font-mono text-aegis-text">make serve</code> starts it beside the stack when the aegis CLI is installed (<code class="font-mono text-aegis-text">uv tool install aegis-stack</code>).</p>
-      <p>It runs there, not in the app, so your SSH key never leaves your machine. The cloud token comes from Overseer &gt; Secrets (or <code class="font-mono text-aegis-text">.env</code>), or from the agent's own environment.</p>
+      <p>It runs there, not in the app, so your SSH key never leaves your machine. The cloud token comes from Deployments &gt; Settings (or <code class="font-mono text-aegis-text">.env</code>), or from the agent's own environment.</p>
     </div>
   </details>
 </div>
@@ -178,9 +182,10 @@
 {% endcall %}
 {% endmacro %}
 
-{# The newest deploy job, streamed while the page is open (_job.html). #}
+{# A deploy job (_job.html), streamed from ``actions.events`` while the
+   page is open; one that has ended, without it, streams nothing. #}
 {% macro job_panel(actions) %}
-<div hx-ext="sse" sse-connect="{{ actions.events }}" x-data="{ output: false }">
+<div{% if actions.events %} hx-ext="sse" sse-connect="{{ actions.events }}"{% endif %} x-data="{ output: false }">
   <div id="deploy-job" sse-swap="{{ actions.event }}" hx-target="this">{% with job=actions.job %}{% include "pages/overseer/deployments/_job.html" %}{% endwith %}</div>
 </div>
 {% endmacro %}

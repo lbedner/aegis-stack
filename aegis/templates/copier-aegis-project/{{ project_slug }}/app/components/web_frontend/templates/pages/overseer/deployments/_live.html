@@ -1,0 +1,9 @@
+{# What is live on the server (the ``live`` route: history_panel at LIVE,
+   then ui_deployments.live_facts): its newest deploy, by History's
+   labels; waiting on the agent's read of the server's history, or why it
+   could not be had. #}
+{% from "components/macros/layout.html" import facts %}
+{% from "pages/overseer/deployments/_macros.html" import note, panel %}
+{% call panel("live", live, "Asking the server what is live...", "Could not read what is live: ", boxed=False) %}
+{% if live.live %}{{ facts(live.live) }}{% else %}<p class="{{ note() }}">Nothing deployed there yet.</p>{% endif %}
+{% endcall %}

@@ -48,7 +48,7 @@ async def test_a_local_build_has_no_commit(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setattr(settings, "BUILD_ID", "dev")
     use_runtime(monkeypatch, FakeRuntime(SERVER))
     now = dict(await ui_deployments.now())
-    assert now["Build"] == "dev, not deployed" and "Commit" not in now
+    assert now["Build"] == "dev, this machine" and "Commit" not in now
 
 
 async def test_the_host_it_runs_on(monkeypatch: pytest.MonkeyPatch) -> None:

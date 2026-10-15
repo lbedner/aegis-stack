@@ -5,20 +5,9 @@
    being created, or one stopped part way, only its job. A deployed
    server, or a project with a server already, says where to go
    instead. #}
-{% from "components/macros/layout.html" import badge, card %}
-{% from "pages/overseer/deployments/_macros.html" import agent_note, by_hand, deployed_card, job_panel, note, picker, step %}
-{% from "pages/overseer/secrets/_macros.html" import row_actions with context %}
-{# One provider's keys, each as Overseer > Secrets shows it (held or not,
-   set here through its dialog, which comes back, or changed in .env); a
-   cloud the deploy agent holds a token for says so. #}
-{% macro keys(attr, d) %}
-<div data-{{ attr }}="{{ d.key }}" class="space-y-2">
-  {% for k in d.secrets %}
-  {% set held = k.held or d.elsewhere %}
-  <p data-key="{{ k.name }}" class="flex flex-wrap items-center gap-2 text-sm">{{ badge("set" if held else "not set", "ok" if held else "muted") }}<code class="font-mono text-aegis-text">{{ k.name }}</code>{% if d.elsewhere and not k.held %}<span class="text-xs text-aegis-muted">where the deploy agent runs</span>{% elif not writable and not held %}<span class="text-xs text-aegis-muted">in <code class="font-mono">.env</code>, or where the deploy agent runs</span>{% elif k.url %}{{ row_actions(k) }}{% endif %}</p>
-  {% endfor %}
-</div>
-{% endmacro %}
+{% from "components/macros/layout.html" import card %}
+{% from "pages/overseer/deployments/_macros.html" import agent_note, by_hand, deployed_card, goto, job_panel, note, picker, step %}
+{% from "pages/overseer/deployments/_keys.html" import keys with context %}
 {% if actions.view == "deployed" %}
 {{ deployed_card(actions) }}
 {% elif actions.view == "creating" %}
@@ -28,7 +17,7 @@
 {% endcall %}
 {% elif actions.view == "has-server" %}
 {% call card("Put it on a server", id="card-deploy") %}
-<p data-deploy-state="has-server" class="{{ note() }}">This project deploys to {{ actions.server.name }} already: deploy, back up and roll back it from the <a href="{{ overview_url }}" {{ hx_replace(overview_url, "#overseer-main") }} class="text-aegis-teal hover:underline">Overview</a>.</p>
+<p data-deploy-state="has-server" class="{{ note() }}">This project deploys to {{ actions.server.name }} already: deploy, back up and roll back it from the {{ goto(overview_url, "Overview") }}.</p>
 {% endcall %}
 {% else %}
 {% call card("Put it on a server", id="card-deploy") %}

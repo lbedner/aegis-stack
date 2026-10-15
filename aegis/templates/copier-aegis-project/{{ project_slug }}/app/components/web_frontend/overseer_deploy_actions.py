@@ -11,6 +11,7 @@ commands.
 """
 
 from collections.abc import AsyncIterator
+from functools import partial
 from typing import Any
 
 from app.components.deploy import agent as deploy_agent
@@ -19,16 +20,21 @@ from app.components.deploy.protocol import (
     PROVISION_STEPS,
     RefusedError,
 )
+from app.core.formatting import format_relative_time
 from app.core.log import logger
 from app.services.system import hosting
+from app.services.system.job_store import KEEP_SECONDS
+from app.services.system.jobs import JobSnapshot
 
 from .overseer_live import fragment_events
-from .rendering import fragment
+from .rendering import fragment, status_cell, with_query
 
 EVENTS = "/overseer/events/deployments/job"
 EVENT = "deploy-job"
 PARTIALS = "/partials/overseer/deployments"
 JOB = "pages/overseer/deployments/_job.html"
+PAGE = "/overseer/deployments"  # the Deployments page (its nav item's url)
+JOBS_URL = f"{PAGE}/jobs"  # a job's own page: ?job=<id>
 INTERVAL_SECONDS = 1.0
 AGENT_COMMAND = "aegis deploy-agent"
 CD_COMMAND = "aegis deploy-cd-setup"
@@ -71,7 +77,7 @@ def creating(job: dict[str, Any] | None) -> bool:
     return running or stopped() is not None
 
 
-async def _agent() -> dict[str, Any]:
+async def agent_state() -> dict[str, Any]:
     """Whether the deploy agent is listening (``beat``, its heartbeat), or
     why it cannot be: no Redis to carry the asking, Redis not answering,
     nobody listening, or one older than this app."""
@@ -105,7 +111,7 @@ DEPLOYED_VIEW = {"view": "deployed", "command": CD_COMMAND}
 async def shared() -> dict[str, Any]:
     """What both pages show of the agent: whether it can be asked (and why
     not), and its newest job, streamed."""
-    agent = await _agent()
+    agent = await agent_state()
     listening = agent["state"] == "ready"
     return {
         "agent": agent,
@@ -116,9 +122,11 @@ async def shared() -> dict[str, Any]:
     }
 
 
-async def job_context(job_id: str | None = None) -> dict[str, Any] | None:
-    """A deploy job as the card shows it (the newest by default): its
-    progress and the output's tail, or, once one failed with a provision
+async def job_context(
+    job_id: str | None = None, *, whole: bool = False
+) -> dict[str, Any] | None:
+    """A deploy job as a card shows it (the newest by default), or
+    ``whole``, as its own page does; once one failed with a provision
     stopped part way (its own, or a destroy of it), resuming it or the
     destroy that cleans up after it; with no job left (kept a few hours),
     that provision as one that stopped. None for one the card does not ask
@@ -129,8 +137,13 @@ async def job_context(job_id: str | None = None) -> dict[str, Any] | None:
         if name is None:
             return None
         why = hosting.provision_record().get("error") or "It stopped part way."
-        return _card("provision", "failed", error=why, stopped=name)
-    action = found.name.removeprefix(deploy_agent.JOB_PREFIX)
+        return _card("provision", "failed", error=why, stopped=name, whole=whole)
+    return _snapshot_card(found, whole=whole)
+
+
+def _snapshot_card(found: JobSnapshot, *, whole: bool) -> dict[str, Any] | None:
+    """A job the store holds (``found``) as ``job_context`` shows it."""
+    action = deploy_agent.action_of(found)
     if not asked_from_card(action):
         return None
     return _card(
@@ -140,7 +153,20 @@ async def job_context(job_id: str | None = None) -> dict[str, Any] | None:
         label=found.label,
         error=found.error,
         stopped=stopped() if found.status == "failed" else None,
+        job_id=found.job_id,
+        whole=whole,
     )
+
+
+def job_url(job_id: str) -> str:
+    """A job's own page, its output whole (``JOBS_URL``)."""
+    return with_query(JOBS_URL, job=job_id)
+
+
+def job_events(job_id: str | None = None) -> str:
+    """Where a job streams whole (``events``): ``job_id``, or the newest
+    (New server's, which a resume asked there takes over)."""
+    return with_query(EVENTS, job=job_id, whole="1")
 
 
 def _card(
@@ -151,8 +177,11 @@ def _card(
     label: str = "",
     error: str | None = None,
     stopped: str | None = None,
+    job_id: str | None = None,
+    whole: bool,
 ) -> dict[str, Any]:
-    """A job as the card shows it, from what it left (``result``)."""
+    """A job as a card shows it, from what it left (``result``): where it
+    stands and a link to it; or ``whole``, its steps and output too."""
     result = result or {}
     titles = PROTOCOL["actions"][action].get("steps") or {}
     return {
@@ -165,6 +194,8 @@ def _card(
         "steps": _steps(result.get("progress") or {}, status, titles),
         "stopped": stopped,
         "partials": PARTIALS,
+        "url": job_url(job_id) if job_id else None,
+        "whole": whole,
     }
 
 
@@ -190,13 +221,64 @@ def _steps(
     ]
 
 
-async def render_job(job_id: str | None = None) -> str:
-    return fragment(JOB, job=await job_context(job_id))
+async def render_job(job_id: str | None = None, *, whole: bool = False) -> str:
+    return fragment(JOB, job=await job_context(job_id, whole=whole))
 
 
-def events(max_frames: int | None = None) -> AsyncIterator[str]:
-    """The newest deploy job over SSE, sent again only when it changes."""
-    return fragment_events(EVENT, render_job, INTERVAL_SECONDS, max_frames)
+def events(
+    job_id: str | None = None, max_frames: int | None = None, *, whole: bool = False
+) -> AsyncIterator[str]:
+    """A deploy job over SSE, sent again only when it changes: the newest,
+    as the cards show it, or ``whole`` (``job_id`` always is: Jobs)."""
+    render = partial(render_job, job_id, whole=whole or job_id is not None)
+    return fragment_events(EVENT, render, INTERVAL_SECONDS, max_frames)
+
+
+JOB_COLUMNS = [
+    {"key": "job", "label": "Job", "kind": "link", "target": "#overseer-main"},
+    {"key": "status", "label": "Status", "kind": "status"},
+    {"key": "started", "label": "Started"},
+    {"key": "said", "label": "Last line", "wrap": True},
+]
+STATUS_CELLS = {"running": ("Running", "accent"), "failed": ("Failed", "error")}
+
+
+async def jobs_page(picked: str | None) -> dict[str, Any]:
+    """The Jobs page: every deploy job still kept, newest first, each
+    opening here, and the one picked (the newest unless another is)
+    whole, streamed while it runs; or why the agent cannot be asked."""
+    agent = await agent_state()
+    if agent["state"] in ("no-redis", "unreachable"):
+        return {"agent": agent, "rows": None}
+    found = [
+        j
+        for j in await deploy_agent.jobs()
+        if asked_from_card(deploy_agent.action_of(j))
+    ]
+    shown = next((j for j in found if j.job_id == picked), found[0] if found else None)
+    running = shown is not None and shown.status == "running"
+    return {
+        "agent": agent,
+        "job": _snapshot_card(shown, whole=True) if shown else None,
+        "events": job_events(shown.job_id) if shown and running else None,
+        "event": EVENT,
+        "columns": JOB_COLUMNS,
+        "rows": [_job_row(j) for j in found],
+        "kept_hours": KEEP_SECONDS // 3600,
+    }
+
+
+def _job_row(job: JobSnapshot) -> dict[str, Any]:
+    """A job as the Jobs table lists it."""
+    return {
+        "job": {
+            "label": TITLES[deploy_agent.action_of(job)],
+            "url": job_url(job.job_id),
+        },
+        "status": status_cell(*STATUS_CELLS.get(job.status, ("Done", "ok"))),
+        "started": format_relative_time(job.started_at),
+        "said": job.error or job.label,
+    }
 
 
 def asked_from_card(action: str) -> bool:

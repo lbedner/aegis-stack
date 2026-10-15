@@ -2,44 +2,41 @@
    one of four views. A deployed server says where redeploys come from.
    Without a server yet, the way to one (New server); one being made,
    the way to it there. With a server, the
-   server, what can be asked of ``aegis deploy-agent`` for it, its newest
-   job, and destroying it apart. Then each connected cloud account's
-   servers and what they cost, as the agent last found them. #}
-{% from "components/macros/layout.html" import card, command, facts %}
-{% from "pages/overseer/deployments/_macros.html" import agent_note, ask, deployed_card, destroy_form, job_panel, note, place, step %}
+   server, what can be asked of ``aegis deploy-agent`` for it (rolling
+   back and destroying folded into More), and, while one runs, its newest
+   job (whole under Jobs). #}
+{% from "components/macros/layout.html" import card, dropdown, facts %}
+{% from "pages/overseer/deployments/_macros.html" import agent_note, ask, deployed_card, destroy_form, goto, job_panel, note, place %}
 {% if actions.view == "deployed" %}
 {{ deployed_card(actions) }}
 {% elif actions.view == "no-server" %}
 {% call card("Your server", id="card-deploy") %}
-<p data-deploy-state="no-server" class="{{ note() }}">No server yet: <a href="{{ new_url }}" {{ hx_replace(new_url, "#overseer-main") }} class="text-aegis-teal hover:underline">New server</a> walks you to one.</p>
+<p data-deploy-state="no-server" class="{{ note() }}">No server yet: {{ goto(new_url, "New server") }} walks you to one.</p>
 {% endcall %}
 {% elif actions.view == "creating" %}
 {% call card("Your server", id="card-deploy") %}
-<p data-deploy-state="creating" class="{{ note() }}">A server is being created: <a href="{{ new_url }}" {{ hx_replace(new_url, "#overseer-main") }} class="text-aegis-teal hover:underline">New server</a> shows where it is.</p>
+<p data-deploy-state="creating" class="{{ note() }}">A server is being created: {{ goto(new_url, "New server") }} shows where it is.</p>
 {% endcall %}
 {% else %}
-{# Its controls lock while its job runs (``data-locks``, input.css). #}
+{# What it can do hides while its job runs (``data-locks``, input.css). #}
 <div data-locks class="contents">
 {% call card("Your server", id="card-deploy") %}
 {{ place(actions.server) }}
 {{ facts(actions.server.facts) }}
 {% if actions.agent.state == "ready" %}
-<div class="flex flex-wrap items-center gap-2">
+{% with live = actions.live %}{% include "pages/overseer/deployments/_live.html" %}{% endwith %}
+<div data-idle class="flex flex-wrap items-center gap-2">
   {{ ask("Deploy", actions.partials, "deploy", "primary") }}
   {{ ask("Back up now", actions.partials, "backup") }}
+  {# Rolling back and destroying are rare: folded into a menu, asked there. #}
+  {% call dropdown("More", align="left") %}
+  <li data-rollback-item class="w-80 p-2">{% with r = actions.rollback %}{% include "pages/overseer/deployments/_rollback.html" %}{% endwith %}</li>
+  {% if actions.destroy %}<li data-destroy class="w-80 p-2 border-t border-aegis-border">{{ destroy_form(actions.partials, actions.destroy) }}</li>{% endif %}
+  {% endcall %}
 </div>
-{% with r = actions.rollback %}{% include "pages/overseer/deployments/_rollback.html" %}{% endwith %}
 {{ job_panel(actions) }}
 {% endif %}
 {{ agent_note(actions.agent) }}
 {% endcall %}
-{% if actions.destroy and actions.agent.state == "ready" %}
-{% call card("Destroy") %}{{ destroy_form(actions.partials, actions.destroy) }}{% endcall %}
-{% endif %}
 </div>
-{% endif %}
-{% if actions.accounts %}
-{% call card("In your cloud accounts") %}
-<div class="space-y-3">{% for f in actions.accounts %}{% include "pages/overseer/deployments/_account.html" %}{% endfor %}</div>
-{% endcall %}
 {% endif %}

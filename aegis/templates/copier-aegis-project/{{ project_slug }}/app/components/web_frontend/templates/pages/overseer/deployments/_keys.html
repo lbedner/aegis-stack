@@ -1,0 +1,18 @@
+{# One provider's keys (``d``, overseer_deployments._choices), each as
+   Overseer > Secrets shows it: held or not, set here through its dialog
+   (which comes back), or changed in .env; one the deploy agent holds a
+   token for says so, and can still be set here (the app's wins); then
+   where the provider makes them, and what one needs. Used by
+   New server and Settings; import it ``with context`` (``writable``). #}
+{% from "components/macros/layout.html" import badge %}
+{% from "pages/overseer/secrets/_macros.html" import row_actions with context %}
+{% macro keys(attr, d) %}
+<div data-{{ attr }}="{{ d.key }}" class="space-y-2">
+  {% for k in d.secrets %}
+  {% set held = k.held or d.elsewhere %}
+  <p data-key="{{ k.name }}" class="flex flex-wrap items-center gap-2 text-sm">{{ badge("set" if held else "not set", "ok" if held else "muted") }}<code class="font-mono text-aegis-text">{{ k.name }}</code>{% if d.elsewhere and not k.held %}<span class="text-xs text-aegis-muted">where the deploy agent runs</span>{% endif %}{% if not writable and not held %}<span class="text-xs text-aegis-muted">in <code class="font-mono">.env</code>, or where the deploy agent runs</span>{% elif k.url %}{{ row_actions(k) }}{% endif %}</p>
+  {% endfor %}
+  {% if d.tokens %}<p class="text-xs text-aegis-muted">Made at <a data-tokens href="{{ d.tokens }}" target="_blank" rel="noopener" class="text-aegis-teal hover:underline">{{ d.tokens }}</a>{% if d.scopes %}, needing:{% endif %}</p>{% endif %}
+  {% if d.scopes %}<ul class="flex flex-wrap gap-1">{% for s in d.scopes %}<li data-scope class="font-mono text-xxs rounded border border-aegis-border px-1.5 py-0.5 text-aegis-muted">{{ s }}</li>{% endfor %}</ul>{% endif %}
+</div>
+{% endmacro %}

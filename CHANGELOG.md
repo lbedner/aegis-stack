@@ -9,6 +9,17 @@
 
 ### Added
 
+- **Saved queries.** Query's **Saved** menu keeps a tab, by its name, in the
+  app's database for every admin and opens it again as a tab on any machine;
+  saves and deletes are audited. A table the database component owns
+  (`saved_query`), migrated last so existing revisions keep their numbers.
+- **Tables say who owns them and how they changed.** Each table shows the part
+  owning it (from the ontology), linking to that service on Overseer's map,
+  whose pieces link their tables back; the picker and the rows' summary show
+  the change since the day's first count (`+12 today`).
+- **Relationship lines say what each key does.** Hover a line: one to one or
+  many to one, optional or required, and what ON DELETE does, as the models
+  declare it.
 - **How to work with each person.** For everyone who speaks in an owner's
   meetings, a guide read from what they say: what they care about, how they
   like their information, how they decide and commit, and what lands with

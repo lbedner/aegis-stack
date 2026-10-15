@@ -28,6 +28,7 @@ from tests.services._db_fixtures import (
     META,
     NOTE,
     ORG,
+    PROFILE,
     SLUG,
     TAGGED,
     TREE,
@@ -205,8 +206,10 @@ def test_reading_takes_no_write_lock(engine: Engine, tmp_path: Path) -> None:
 def test_a_tables_keys_out_and_in() -> None:
     """Each foreign key whole, a composite one too: from its columns to
     the ones it points at."""
-    org_id = db_rows.Key("member", ("org_id",), "org", ("id",))
-    both = db_rows.Key("note", ("post_id", "tag_id"), "tagged", ("post_id", "tag_id"))
+    org_id = db_rows.Key("member", ("org_id",), "org", ("id",), optional=True)
+    both = db_rows.Key(
+        "note", ("post_id", "tag_id"), "tagged", ("post_id", "tag_id"), optional=True
+    )
     assert db_rows.keys(MEMBER) == ([org_id], [])
     assert db_rows.keys(ORG) == ([], [org_id])
     assert db_rows.keys(TAGGED) == ([], [both])
@@ -233,7 +236,7 @@ def test_a_row_follows_its_keys(engine: Engine) -> None:
 
 def test_a_key_into_its_own_table_leads_both_ways() -> None:
     """A tree: up to the parent, down to the children."""
-    parent = db_rows.Key("tree", ("parent_id",), "tree", ("id",))
+    parent = db_rows.Key("tree", ("parent_id",), "tree", ("id",), optional=True)
     assert db_rows.keys(TREE) == ([parent], [parent])
     row = {"id": "4", "parent_id": "2"}
     assert db_rows.follow(parent, row, out=True, metadata=META) == ("tree", "id:2")
@@ -361,3 +364,13 @@ def test_a_column_marked_or_named_as_a_secret_is_hidden() -> None:
         "recovery_codes",
         "salt",
     }
+
+
+def test_a_key_says_what_it_requires_and_does() -> None:
+    """As the models declare it: optional where a key column may be empty,
+    one-to-one where its columns are unique (here the primary key), and
+    what deleting the row it points at does."""
+    (profile,), _ = db_rows.keys(PROFILE)
+    assert (profile.optional, profile.one, profile.ondelete) == (False, True, "CASCADE")
+    (org_id,), _ = db_rows.keys(MEMBER)
+    assert (org_id.optional, org_id.one, org_id.ondelete) == (True, False, "NO ACTION")

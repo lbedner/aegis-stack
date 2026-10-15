@@ -47,12 +47,13 @@
   {% for dep in map_rail %}<a data-rail-item="{{ dep.key }}"{% if dep.url %} href="{{ dep.url }}" {{ hx_replace(dep.url, map_target) }}{% endif %} class="chip flex items-center gap-1.5 text-aegis-text hover:border-aegis-teal">{% if dep.status %}{{ status_dot(dep.status) }}{% endif %}{{ dep.title }}</a>{% endfor %}
 </div>
 {% endif %}
-{% set flagged = map_links|selectattr("why", "defined")|map(attribute="tone")|unique|sort|list %}
+{% set line_key = map_line_key|default({}) %}
+{% set flagged = map_links|selectattr("why", "defined")|map(attribute="tone")|select("in", line_key)|unique|sort|list %}
 {% if flagged %}
 {# What a red or amber line means (overseer_zoom.LINE_KEY), only those drawn;
-   each line says its own why on hover. #}
+   each line says its own why on hover (a plain one too: a key's details). #}
 <p data-line-key class="mb-3 flex flex-wrap items-center gap-3 text-xs text-aegis-muted">
-  {% for tone in flagged %}<span class="flex items-center gap-1.5"><span data-tone="{{ tone }}" class="toned inline-block h-0.5 w-4 bg-current" aria-hidden="true"></span>{{ map_line_key[tone] }}</span>{% endfor %}
+  {% for tone in flagged %}<span class="flex items-center gap-1.5"><span data-tone="{{ tone }}" class="toned inline-block h-0.5 w-4 bg-current" aria-hidden="true"></span>{{ line_key[tone] }}</span>{% endfor %}
   <span>Hover a line for why</span>
 </p>
 {% endif %}
@@ -64,10 +65,13 @@
       {% if map_lanes %}<defs><marker id="map-arrow" viewBox="0 0 6 6" refX="5" refY="3" markerUnits="userSpaceOnUse" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L6,3 L0,6 z" class="fill-aegis-teal" /></marker></defs>{% endif %}
       {% for link in map_links %}<path data-link data-from="{{ link.start }}" data-to="{{ link.end }}"{% if link.queued %} data-queued{% endif %}{% if link.key %} data-key{% endif %} class="map-link" data-tone="{{ link.tone }}" d="{{ link.d }}"{% if link.arrow %} marker-end="url(#map-arrow)"{% endif %} />{% if link.why %}<path data-hit="{{ loop.index }}" class="map-hit" d="{{ link.d }}" />{% endif %}{% endfor %}
     </svg>
+    {# A line's label at its middle, always shown (a key's details, at a
+       glance; the whole of it on hover). #}
+    {% for link in map_links %}{% if link.label %}<span data-line-label class="absolute -translate-x-1/2 -translate-y-1/2 px-1 rounded bg-aegis-bg text-xxs text-aegis-muted whitespace-nowrap pointer-events-none" style="left: {{ link.mid.left }}%; top: {{ link.mid.top / map_height * 100 }}%">{{ link.label }}</span>{% endif %}{% endfor %}
     {# A flagged line's why, in a panel at its middle while it is hovered. #}
     {% for link in map_links %}{% if link.why %}
     <style>[data-map]:has([data-hit="{{ loop.index }}"]:hover) [data-line-hint="{{ loop.index }}"] { display: block; }</style>
-    {% call hint_panel('data-line-hint="' ~ loop.index ~ '"', "-translate-x-1/2 pt-1.5 pointer-events-none", "left: " ~ link.mid.left ~ "%; top: " ~ (link.mid.top / map_height * 100) ~ "%") %}{{ link.why }}{% endcall %}
+    {% call hint_panel('data-line-hint="' ~ loop.index ~ '"', "-translate-x-1/2 pt-1.5 pointer-events-none", "left: " ~ link.mid.left ~ "%; top: " ~ (link.mid.top / map_height * 100) ~ "%") %}{{ link.why|message }}{% endcall %}
     {% endif %}{% endfor %}
     {% for lane in map_lanes %}<p data-lane class="micro-label absolute top-0 -translate-x-1/2 font-semibold text-aegis-muted" style="left: {{ lane.left }}%">{{ lane.label }}</p>{% endfor %}
     {% for node in map_nodes %}

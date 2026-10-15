@@ -47,13 +47,15 @@ def layout(
     across: bool = False,
     opened: bool = False,
     target: str = MAIN,
+    tones: dict[tuple[str, str], dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     """``overview()``'s entries as placed nodes, the lines between them,
     and the map's height; in ``shape`` (the stack's own by default: the
     Server opened up is ``topology.zoomed``), ``compact`` for small
     nodes, ``across`` for tiers left to right (compact), ``opened`` for
     the Server opened up (``COMPACT_ROW`` to a row, cards too); its links
-    swap ``target`` (a page's main area; a table's, drawn in Tables)."""
+    swap ``target`` (a page's main area; a table's, drawn in Tables), each
+    line toned or saying why on hover where ``tones`` says (as ``lanes``)."""
     items = {item["key"]: item for item in stack}
     found = shape or topology.shape(list(items))
     nodes, place, height = (
@@ -65,7 +67,8 @@ def layout(
     return {
         "map_nodes": nodes,
         "map_links": [
-            _line(place[a], place[b], a, items[b], half) for a, b in found.links
+            _line(place[a], place[b], a, items[b], half) | (tones or {}).get((a, b), {})
+            for a, b in found.links
         ],
         "map_height": height,
         "map_width": WIDTH,
@@ -332,6 +335,7 @@ def _line(
         bends = f"{middle:.0f} {y1:.0f}, {middle:.0f} {y2:.0f}"
     return {
         "d": f"M {x1:.0f} {y1:.0f} C {bends}, {x2:.0f} {y2:.0f}",
+        "mid": _mid((x1 + x2) / 2, (y1 + y2) / 2),
         "tone": target.get("line_tone", target["tone"]),
         "start": source,
         "end": target["key"],

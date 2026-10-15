@@ -1,6 +1,7 @@
 """The Overseer Database page: the Flet database modal's tabs, Activity included."""
 
 from collections.abc import Generator
+from datetime import UTC, datetime
 import json
 from typing import Any
 
@@ -12,12 +13,25 @@ from app.components.web_frontend import (
     overseer_container,
     overseer_database,
     overseer_database_browser,
+    overseer_database_saved,
+    overseer_zoom,
 )
 from app.core import exposure
 from app.core.config import settings
-from app.services.system import db_filters, db_query, db_rows, db_transactions
+from app.core.ontology import Kind, current
+from app.core.ontology.model import ObjectNode
+from app.services.system import (
+    db_filters,
+    db_query,
+    db_rows,
+    db_transactions,
+    db_trend,
+)
 from app.services.system.models import ComponentStatus
+from app.services.system.service_pieces import Piece
+from app.services.system.ui import registry_key
 from tests._audit import recording
+from tests._ontology import model_of
 from tests.web.dom import none, one, select, table_rows, text
 from tests.web.overseer import sign_in, status_with
 
@@ -243,6 +257,77 @@ class TestTables:
         assert title.get("href") == f"{TABLES}?table={into[0].table}&tab=relationships"
         assert title.get("hx-target") == "#database-table"  # as its tabs do
         one(html, f'path[data-link][data-from="{into[0].table}"][data-to="user"]')
+        # Each line says what its keys do, as the models declare them.
+        said = [text(hint) for hint in select(html, "[data-line-hint]")]
+        assert any(f"{into[0].table}.{into[0].columns[0]}" in s for s in said)
+        assert all(" to one" in s and "on delete" in s for s in said)
+        # ... and, at a glance, on the line itself.
+        labels = [text(label) for label in select(html, "[data-line-label]")]
+        assert labels and all(":1" in label or "keys" in label for label in labels)
+
+    def test_a_table_names_its_owner_leading_to_it_on_the_map(
+        self, sqlite: TestClient
+    ) -> None:
+        """The part owning it, as the ontology reads it, on its header and
+        its node; a service leads to itself opened up on Overseer's map."""
+        listed = set(db_rows.tables())
+        owned = next(
+            (
+                (n.name, n.owner.partition(":")[2])
+                for n in current().nodes
+                if n.kind is Kind.OBJECT
+                and n.name in listed
+                and (n.owner or "").startswith("service:")
+            ),
+            None,
+        )
+        if owned is None:
+            pytest.skip("no table a service owns in this stack")
+        table, part = owned
+        owner = one(
+            _tab(sqlite, table, "schema"), "#database-table a[data-table-owner]"
+        )
+        assert text(owner) == part
+        service = registry_key("services", part.partition(".")[0])
+        assert owner.get("href") == overseer_container.zoom_url(service)
+        html = _tab(sqlite, table, "relationships")
+        assert text(one(html, f'[data-node="{table}"] [data-badge]')) == part
+
+    def test_a_table_says_how_its_rows_changed_today(
+        self, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Beside its count in the picker, and in its rows' summary: the
+        change since the day's first count (``db_trend``)."""
+        table = db_rows.tables()[0]
+        listed = {"name": table, "rows": 112, "columns": [{"name": "id"}]}
+        morning = datetime(2026, 10, 15, 0, 5, tzinfo=UTC)
+
+        async def kept(**_: object) -> dict[str, Any]:
+            return {table: (100, morning)}
+
+        monkeypatch.setattr(db_trend, "baselines", kept)
+        with _client(
+            app, monkeypatch, POSTGRES | {"table_schemas": [listed]}
+        ) as client:
+            picked = one(
+                _tab(client, table, "schema"), f'[data-tables-list] a[href$="={table}"]'
+            )
+            assert text(one(picked, "[data-trend]")) == "+12 today"
+            summary = text(
+                one(_tab(client, table, "rows"), 'nav[aria-label="Pagination"]')
+            )
+            assert "+12 today" in summary
+
+    def test_a_table_on_the_map_opens_its_tables_page(self) -> None:
+        """Where a service opened up names a table one of its pieces holds,
+        the table opens on Tables, there among its relationships."""
+        table = db_rows.tables()[0]
+        held = ObjectNode(name=table, module="app.pieces", class_name="Held")
+        piece = Piece("piece:data", "Data", "data", ("app.pieces",), ("app/pieces.py",))
+        hanging = overseer_zoom._hanging(model_of([held]))
+        node = overseer_zoom._piece(piece, hanging, overseer_zoom._tables(hanging))
+        url = f"{TABLES}?table={table}&tab=relationships"
+        assert {"name": table, "url": url} in node["holds"]
 
     def test_a_table_the_models_do_not_declare_opens_on_its_schema(
         self, app: FastAPI, monkeypatch: pytest.MonkeyPatch
@@ -489,7 +574,8 @@ class TestQuery:
         one(html, "#database-query[data-sql-workbench] [data-sql-tabs]")
         form = one(html, "form[data-query][data-write]")
         assert form.get("hx-post") == overseer_database_browser.QUERY_RUN
-        one(form, 'textarea[name="sql"]')  # without the script, still a prompt
+        # Without the script, still a prompt: the box joins the form by ``form=``.
+        one(html, f'textarea[name="sql"][form="{form.get("id")}"]')
         one(
             html,
             '[data-export-to="file"][data-export="csv"][data-export-rows="#database-query-body"]',
@@ -566,6 +652,54 @@ class TestQuery:
             overseer_database_browser.QUERY_RUN, data={"sql": "SELECT 1"}
         )
         assert response.status_code == 404
+        saving = {"name": "orgs", "sql": "SELECT 1"}
+        response = sqlite.post(overseer_database_saved.QUERY_SAVE, data=saving)
+        assert response.status_code == 404
+        assert sqlite.get(overseer_database_saved.QUERY_SAVE).status_code == 404
+
+    @pytest.mark.queryspy(allow_n_plus_one=True)  # save, list, delete: each lists
+    def test_a_tab_is_saved_for_every_admin_and_deleted(
+        self, sqlite: TestClient
+    ) -> None:
+        """Kept in the app's database (DB-12) under its tab's name, audited;
+        listed as the menu opens (a render reads no rows), each opening
+        again as a tab (sql.js); deleting is audited too. A save or delete
+        answers with a toast and tells the list to read again."""
+        audit = recording(sqlite)
+        page = _get(sqlite, "query")
+        run = one(page, "form#database-run[data-query]")  # holds nothing
+        assert run.get("hx-post") == overseer_database_browser.QUERY_RUN
+        one(page, '[data-sql-editor] textarea[form="database-run"]')
+        one(page, 'button[type="submit"][form="database-run"]')
+        none(page, "form[data-query] [hx-get], form[data-query] [hx-post]")
+        save = one(page, "#database-query [data-sql-save]")
+        assert save.get("hx-post") == overseer_database_saved.QUERY_SAVE
+        listed = one(page, "#database-saved")
+        assert listed.get("hx-get") == overseer_database_saved.QUERY_SAVE
+        assert "saved-queries from:body" in (listed.get("hx-trigger") or "")
+        saving = {"name": "orgs", "sql": "SELECT * FROM org"}
+        said = sqlite.post(overseer_database_saved.QUERY_SAVE, data=saving).headers
+        assert (
+            "Saved orgs" in said["HX-Trigger"] and "saved-queries" in said["HX-Trigger"]
+        )
+        listing = sqlite.get(overseer_database_saved.QUERY_SAVE).text
+        kept = one(listing, '#database-saved [data-saved-open][data-name="orgs"]')
+        assert kept.get("data-sql") == "SELECT * FROM org"
+        forget = one(listing, "[data-saved-forget]").get("hx-post") or ""
+        assert "Deleted orgs" in sqlite.post(forget).headers["HX-Trigger"]
+        none(sqlite.get(overseer_database_saved.QUERY_SAVE).text, "[data-saved-open]")
+        events = [(e["event_type"], e["outcome"], e["detail"]) for e in audit.events]
+        assert events == [
+            ("database.query_saved", "saved", "orgs"),
+            ("database.query_forgotten", "forgotten", "orgs"),
+        ]
+
+    def test_a_tab_that_cannot_be_saved_says_why(self, sqlite: TestClient) -> None:
+        audit = recording(sqlite)
+        saving = {"name": " ", "sql": "SELECT 1"}
+        response = sqlite.post(overseer_database_saved.QUERY_SAVE, data=saving)
+        assert "name" in response.headers["HX-Trigger"]  # a warning toast
+        assert audit.events[0]["outcome"] == "refused"
 
 
 class TestMigrations:

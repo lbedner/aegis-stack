@@ -1,12 +1,13 @@
 {# Overseer > Database > Tables (overseer_database_browser.tables), the whole width
    the table's own, filling the page below its header: the table picked,
    opening to the schema's tables to pick another (``dropdown``; its box
-   narrows them as you type, ``filter_input``), beside its
+   narrows them as you type, ``filter_input``), the part owning it
+   (``owner_link``: a service opens on the map, a component its page), its
    tabs: Rows (``_rows.html``), Schema (its CREATE statement) and
    Relationships (as Overseer's map draws, ``_overview_map.html``: who
    points at it, it, what it points at), then the way to query it (a new
    tab on Query). A table or a tab swaps it all. #}
-{% from "components/macros/layout.html" import code_block, dropdown, menu_heading, tab_bar, tab_item %}
+{% from "components/macros/layout.html" import badge, code_block, dropdown, menu_heading, tab_bar, tab_item %}
 {% from "components/macros/feedback.html" import empty_state %}
 {% from "components/macros/form.html" import filter_input %}
 <section id="database-table" aria-label="{{ table_name }}" class="overseer-fill flex flex-col">
@@ -18,11 +19,14 @@
       {{ menu_heading(tables_schema ~ " · " ~ tables_list|length, tag="p", attrs="data-schema") }}
       {% for table in tables_list %}{% set current = table.name == table_name %}
       <a href="{{ table.url }}" {{ hx_replace(table.url, "#database-table") }} {% if current %}aria-current="page"{% endif %}
-         class="flex justify-between gap-6 px-3 py-1 text-xs font-mono rounded hover:bg-aegis-border/30 {{ 'text-aegis-teal' if current else 'text-aegis-text' }}"><span class="truncate">{{ table.name }}</span>{% if table.rows is not none %}<span class="text-aegis-muted tabular-nums">{{ table.rows }}</span>{% endif %}</a>
+         class="flex justify-between gap-6 px-3 py-1 text-xs font-mono rounded hover:bg-aegis-border/30 {{ 'text-aegis-teal' if current else 'text-aegis-text' }}"><span class="truncate">{{ table.name }}</span><span class="flex gap-2 tabular-nums">{% if table.trend %}<span data-trend class="text-aegis-teal">{{ table.trend }}</span>{% endif %}{% if table.rows is not none %}<span class="text-aegis-muted">{{ table.rows }}</span>{% endif %}</span></a>
       {% endfor %}
     </li>
     {% endcall %}
   </div>
+  {% if table_owner %}{% set owned_by = badge(table_owner.name, "accent") %}
+  <span class="pb-2 text-xs text-aegis-muted">{% if table_owner.url %}<a data-table-owner href="{{ table_owner.url }}" title="Where {{ table_owner.name }} lives" class="hover:underline">{{ owned_by }}</a>{% else %}<span data-table-owner>{{ owned_by }}</span>{% endif %}</span>
+  {% endif %}
   {% for tab in table_tabs %}{{ tab_item(tab.label, tab.key == table_tab, tab.url, hx_replace(tab.url, "#database-table")) }}{% endfor %}
   <a href="{{ table_query }}" data-query-table class="ml-auto pb-2 text-xs text-aegis-teal hover:underline">Query this table</a>
   {% endcall %}

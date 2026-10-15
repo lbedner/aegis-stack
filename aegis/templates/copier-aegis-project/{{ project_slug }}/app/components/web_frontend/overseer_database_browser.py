@@ -1,10 +1,11 @@
 """Overseer > Database > Tables and Query, the database browser.
 
-Tables, everything about a table in one place: its schema, its
-relationships drawn as Overseer's map draws (``table_graph``), its rows a
-page at a time (``db_rows``) read like Logs, each row opening to the rows
-its keys lead to (``row_links``); and Query, read-only statements written
-in an editor (sql.js keeps its tabs), each answer in the same scroller
+Tables, everything about a table in one place: the part owning it
+(``owner_link``), its schema, its relationships drawn as Overseer's map
+draws (``table_graph``), its rows a page at a time (``db_rows``) read like
+Logs, each row opening to the rows its keys lead to (``row_links``); and Query, read-only statements written
+in an editor (sql.js keeps its tabs; ``overseer_database_saved`` keeps one in
+the app's database for every admin), each answer in the same scroller
 (``db_query``). Rows and answers where ``exposure.shown`` allows.
 """
 
@@ -16,10 +17,14 @@ from fastapi import HTTPException
 from app.core import exposure
 from app.core.constants import ComponentName
 from app.core.formatting import counted, format_duration_ms, format_number, page_number
+from app.core.ontology import Kind, current
+from app.core.ontology.model import parse_node_id
 from app.services.system import topology, ui_database
+from app.services.system.ui import registry_key
 
+from . import overseer_database_saved as saved_view
 from . import overseer_map
-from .overseer_nav import SectionRequest, page_url
+from .overseer_nav import SectionRequest, find_installed, page_url
 from .rendering import with_query
 
 PAGE = page_url("components", ComponentName.DATABASE)
@@ -48,13 +53,57 @@ def _listed(metadata: dict[str, Any]) -> tuple[dict[str, dict[str, Any]], list[s
     return found, sorted(found) or db_rows.tables()
 
 
+def relationships_url(name: str) -> str:
+    """A table opened on Tables, among its relationships."""
+    return with_query(TABLES_URL, table=name, tab=RELATIONSHIPS)
+
+
+def listed() -> set[str]:
+    """The tables Tables offers (``_listed``), as the database's last health
+    check has them: what the map may link to."""
+    item = find_installed("components", ComponentName.DATABASE)
+    return set(_listed((item.component.metadata or {}) if item else {})[1])
+
+
+def owners() -> dict[str, str]:
+    """Each table's owner as the ontology reads it: the id of the part its
+    model's module belongs to (``service:auth``). None for a table no model
+    declares, or one whose model no part owns."""
+    return {
+        n.name: n.owner for n in current().nodes if n.kind is Kind.OBJECT and n.owner
+    }
+
+
+def owner_link(owner: str | None) -> dict[str, str | None] | None:
+    """A table's owner as its badge names it (``auth``, ``ai.rag``,
+    ``change_queue``), leading where it lives: a service (a sub-service's,
+    its own) opened up on Overseer's map, a component on its page; nowhere
+    for one the stack has no level for."""
+    if not owner:
+        return None
+    from . import overseer_container  # the map's: it links back to Tables
+
+    kind, name = parse_node_id(owner)
+    url = None
+    if kind is Kind.SERVICE:
+        key = registry_key("services", name.partition(".")[0])
+        url = (
+            overseer_container.zoom_url(key) if overseer_container.opens(key) else None
+        )
+    elif kind is Kind.COMPONENT:
+        item = find_installed("components", name)
+        url = item.url if item else None
+    return {"name": name, "url": url}
+
+
 async def tables(req: SectionRequest, metadata: dict[str, Any]) -> dict[str, Any]:
-    """The Tables section: the database's tables under their schema, and
-    the one picked (``?table=``, the first otherwise) on its tab (``?tab=``):
+    """The Tables section: the database's tables under their schema, each
+    with its rows and how they changed today (``db_trend``), and the one
+    picked (``?table=``, the first otherwise) on its tab (``?tab=``):
     Rows where they are shown and the models declare it, Schema otherwise;
     and the way to query it. A table the database does not have is not
     found; one the models do not declare has no rows or keys read."""
-    from app.services.system import db_rows  # with the database component
+    from app.services.system import db_rows, db_trend  # with the database component
 
     found, names = _listed(metadata)
     name = req.query.get("table") or (names[0] if names else "")
@@ -62,11 +111,14 @@ async def tables(req: SectionRequest, metadata: dict[str, Any]) -> dict[str, Any
         raise HTTPException(status_code=404, detail=f"No table {name!r} to read.")
     readable = db_rows.tables(list(found) or None)
     table = db_rows.table_of(name) if name in readable else None
+    owned = owners()
     off = exposure.refusal(exposure.ROWS)
     tab = req.query.get("tab") or ""
     if tab not in TABS:
         tab = ROWS if table is not None and not off else SCHEMA
     counts = {n: t.get("rows") for n, t in found.items()}
+    kept = await db_trend.baselines()
+    trends = {n: db_trend.change(counts.get(n), kept.get(n)) for n in names}
     context: dict[str, Any] = {
         "tables_schema": ui_database.schema_name(metadata),
         # Left out where only the rows are swapped: thrown away there.
@@ -76,6 +128,7 @@ async def tables(req: SectionRequest, metadata: dict[str, Any]) -> dict[str, Any
             {
                 "name": n,
                 "rows": format_number(counts[n]) if counts.get(n) is not None else None,
+                "trend": trends.get(n),
                 "url": with_query(TABLES_URL, table=n),
             }
             for n in names
@@ -92,26 +145,30 @@ async def tables(req: SectionRequest, metadata: dict[str, Any]) -> dict[str, Any
             for key, label in TABS.items()
         ],
         "table_unread": table is None,
+        "table_owner": owner_link(owned.get(name)),
         "rows_pane": ROWS_PANE,
     }
     if tab == SCHEMA:
-        listed = found.get(name)
-        context["table_sql"] = ui_database.create_table_sql(listed) if listed else None
+        schema = found.get(name)
+        context["table_sql"] = ui_database.create_table_sql(schema) if schema else None
     elif table is not None and tab == RELATIONSHIPS:
-        context |= table_graph(table, set(names), counts)
+        context |= table_graph(table, set(names), counts, owned)
     elif table is not None and off:
         context["rows_off"] = off
     elif table is not None:
-        context |= await rows(req, table, counts.get(name), set(readable))
+        context |= await rows(
+            req, table, counts.get(name), set(readable), trends.get(name)
+        )
     return context
 
 
 def query_page(req: SectionRequest, metadata: dict[str, Any]) -> dict[str, Any]:
     """The Query section: where the editor posts a statement, the dialect
-    it highlights and the tables and columns it completes, and, from a
-    table (``?table=``), the statement a new tab starts with, the table
-    named as the dialect needs, and the tab's name. Where rows are hidden,
-    why."""
+    it highlights and the tables and columns it completes, where a tab is
+    saved and the saved ones listed (on opening the menu: a render reads no
+    rows), and, from a table
+    (``?table=``), the statement a new tab starts with, the table named as
+    the dialect needs, and the tab's name. Where rows are hidden, why."""
     if off := exposure.refusal(exposure.ROWS):
         return {"rows_off": off}
     from sqlalchemy.dialects import postgresql, sqlite  # with the database component
@@ -122,6 +179,8 @@ def query_page(req: SectionRequest, metadata: dict[str, Any]) -> dict[str, Any]:
     seeded = asked in names
     return {
         "query_run": QUERY_RUN,
+        "query_save": saved_view.QUERY_SAVE,
+        "saved_refresh": saved_view.REFRESH,
         "query_dialect": dialect.name,
         "query_schema": editor_schema(names, found),
         "query_seed": f"SELECT * FROM {dialect.identifier_preparer.quote(asked)}"
@@ -150,22 +209,27 @@ def editor_schema(
 
 
 def table_graph(
-    table: Any, offered: set[str], counts: dict[str, int | None]
+    table: Any,
+    offered: set[str],
+    counts: dict[str, int | None],
+    owned: dict[str, str],
 ) -> dict[str, Any]:
     """A table's Relationships as Overseer's map draws them
     (``overseer_map.layout``, across): the tables pointing at it on the
     left, it in the middle, those it points at on the right (one pointing
-    both ways too), a line for each pair; each a node with its rows and, on
-    hover, the keys between them, leading to its own relationships where
-    the database has it. A table pointing at itself says so on its node."""
+    both ways too), a line for each pair saying what its keys do on hover
+    (``_key_said``); each a node with its owner, its rows and, on hover, the
+    keys between them, leading to its own relationships where the database
+    has it. A table pointing at itself says so on its node."""
     from app.services.system import db_rows  # with the database component
 
     name = table.name
     out, into = db_rows.keys(table)
-    said: dict[str, list[str]] = {}
+    between: dict[str, list[Any]] = {}  # the other table -> the keys to it
     for key in (*out, *into):
         other = key.target if key.table == name else key.table
-        said.setdefault(other, []).append(_key_label(key))
+        between.setdefault(other, []).append(key)
+    said = {other: [_key_said(k) for k in keys] for other, keys in between.items()}
     right = list(dict.fromkeys(k.target for k in out if k.target != name))
     left = [
         t
@@ -180,10 +244,13 @@ def table_graph(
         return {
             "key": table_name,
             "title": table_name,
-            "url": with_query(TABLES_URL, table=table_name, tab=RELATIONSHIPS)
+            "url": relationships_url(table_name)
             if table_name in offered and not here
             else None,
             "tone": "ok",
+            "badges": [parse_node_id(owner)[1]]
+            if (owner := owned.get(table_name))
+            else [],
             "figure": counted(rows, "row") if rows is not None else None,
             "message": "\n".join(keys) if not here else "This table.",
             "note": f"Points at itself: {', '.join(keys)}" if here and keys else None,
@@ -195,27 +262,41 @@ def table_graph(
         links=[(t, name) for t in left] + [(name, t) for t in right],
         hosted=[],
     )
+    lines = {
+        (a, b): {"why": "\n".join(said[other]), "label": _keys_short(between[other])}
+        for a, b in shape.links
+        for other in [b if a == name else a]
+    }
     return overseer_map.layout(
         [node(t) for tier in tiers for t in tier],
         shape,
         across=True,
         target="#database-table",
+        tones=lines,
     ) | {"table_alone": not (left or right)}
 
 
 async def rows(
-    req: SectionRequest, table: Any, count: int | None, offered: set[str]
+    req: SectionRequest,
+    table: Any,
+    count: int | None,
+    offered: set[str],
+    trend: str | None,
 ) -> dict[str, Any]:
     """A table's Rows tab (``_rows``), every read recorded: the rows are the
     app's data, so who read the table, as they asked, and how it went (ran,
     refused, stopped, failed)."""
-    outcome, found = await _rows(req, table, count, offered)
+    outcome, found = await _rows(req, table, count, offered, trend)
     await req.audit("database.rows", outcome, table.name, **found["rows_asked"])
     return found
 
 
 async def _rows(
-    req: SectionRequest, table: Any, count: int | None, offered: set[str]
+    req: SectionRequest,
+    table: Any,
+    count: int | None,
+    offered: set[str],
+    trend: str | None,
 ) -> tuple[str, dict[str, Any]]:
     """How the read went, and a table's Rows tab: a page of it as the query
     orders and filters it (the filters so far, ``where``, and one more: a
@@ -294,6 +375,8 @@ async def _rows(
         summary += (
             f" of {'~' if asked['where'] else ''}{format_number(count)} in {name}"
         )
+    if trend:
+        summary += f" · {trend}"
     out, into = db_rows.keys(table)
     return "ran", picked | {
         "rows": found,
@@ -334,6 +417,27 @@ def sorts(path: str, asked: dict[str, Any], found: Any) -> dict[str, dict[str, A
 def _key_label(key: Any) -> str:
     """``member.org_id → org.id``, a composite key's columns together."""
     return f"{key.table}.{', '.join(key.columns)} → {key.target}.{', '.join(key.to)}"
+
+
+def _keys_short(keys: list[Any]) -> str:
+    """What the keys on a line do, at a glance: ``N:1 · optional`` (``1:1``
+    one to one; ``· cascade`` where deleting does more than refuse), or
+    ``2 keys`` for several."""
+    if len(keys) > 1:
+        return f"{len(keys)} keys"
+    key = keys[0]
+    parts = ["1:1" if key.one else "N:1", "optional" if key.optional else "required"]
+    if key.ondelete != "NO ACTION":
+        parts.append(key.ondelete.lower())
+    return " · ".join(parts)
+
+
+def _key_said(key: Any) -> str:
+    """A key and what it does, as the models declare it: ``member.org_id →
+    org.id: many to one, optional, on delete no action``."""
+    cardinality = "one to one" if key.one else "many to one"
+    need = "optional" if key.optional else "required"
+    return f"{_key_label(key)}: {cardinality}, {need}, on delete {key.ondelete.lower()}"
 
 
 def row_links(

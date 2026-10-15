@@ -16,6 +16,7 @@ from app.components.deploy import docker
 from app.components.deploy.docker import (
     BUILD_LABEL,
     DockerRuntime,
+    exit_code,
     parse_status,
 )
 from app.components.deploy.docker_logs import split_frames
@@ -80,6 +81,7 @@ STATS = {
             {"op": "write", "value": 8192},
         ]
     },
+    "pids_stats": {"current": 7},
 }
 
 
@@ -206,6 +208,23 @@ async def test_stats_compute_cpu_and_memory_like_docker_stats() -> None:
     assert (stats.network_rx, stats.network_tx) == (101, 52)
     assert (stats.disk_read, stats.disk_write) == (4096, 8192)
     assert stats.cpus == 2  # what cpu_percent is out of: 100% a core
+    assert stats.pids == 7
+
+
+@pytest.mark.parametrize(
+    ("status", "code"),
+    [
+        ("Exited (137) 3 minutes ago", 137),
+        ("Exited (0) 2 hours ago", 0),
+        ("Up 5 hours (healthy)", None),
+        ("Restarting (1) 5 seconds ago", None),
+    ],
+)
+def test_a_stopped_container_says_how_it_exited(status: str, code: int | None) -> None:
+    """The list's ``Status`` carries the exit code."""
+    assert exit_code(status) == code
+    listed = _container("a", "webserver") | {"State": "exited", "Status": status}
+    assert docker._instance(listed).exit_code == (code if "Exited" in status else None)
 
 
 def _one_shot(total: int, system: int) -> dict[str, Any]:

@@ -217,6 +217,7 @@ def _no_background_sampling(monkeypatch: pytest.MonkeyPatch) -> None:
     sampled history starts empty."""
     from app.core import series
     from app.core.cache import CacheService
+    from app.core.series_store import SeriesStore
 
     async def idle(samplers: Any) -> None:
         return None
@@ -224,9 +225,10 @@ def _no_background_sampling(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.core.config import settings
 
     monkeypatch.setattr(settings, "ERROR_TRACKING_ENABLED", False)
-    history = CacheService()
+    cache, history = CacheService(), SeriesStore()
     monkeypatch.setattr(series, "run", idle)
-    monkeypatch.setattr(series, "get_cache", lambda: history)
+    monkeypatch.setattr(series, "get_cache", lambda: cache)
+    monkeypatch.setattr(series, "get_store", lambda: history)
 
 
 @pytest.fixture(autouse=True)

@@ -71,7 +71,7 @@ async def test_it_charts_what_was_sampled(monkeypatch: pytest.MonkeyPatch) -> No
     section = ContainerSection("redis")
     await section.load()
     charts = [c for c in walk(section) if isinstance(c, LineChartCard)]
-    assert len(charts) == 2  # CPU and memory
+    assert len(charts) == 3  # CPU, memory and processes (0, from the sample)
     assert "app-redis-1" in texts(charts[0])  # its legend
 
 
@@ -260,7 +260,7 @@ async def test_a_figure_past_its_threshold_takes_its_tone(
     row |= {"cpu": "95%", "memory": "1 GB", "disk": "9 B/s"}
     row |= {"cpu_status": "warning", "memory_status": "unhealthy"}
 
-    async def section(page: str, window: int) -> tuple:
+    async def section(page: str, window: int, draw: bool = True) -> tuple:
         return {"rows": [row], "note": None}, []
 
     monkeypatch.setattr(ui_runtime, "section", section)

@@ -23,6 +23,7 @@ REDIS_KEYS = (
         "Each queue's job ids by time, the order the history lists them in",
         "Worker task history",
         columns=("Job id", "Timestamp"),
+        holds="job",
     ),
 )
 

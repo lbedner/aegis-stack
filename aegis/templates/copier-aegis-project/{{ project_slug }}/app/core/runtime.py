@@ -74,6 +74,7 @@ class Instance:
     started_at: datetime | None = None
     image: str | None = None
     build: str | None = None
+    exit_code: int | None = None  # a stopped one's, where the backend says
 
     @property
     def uptime_seconds(self) -> float | None:
@@ -102,6 +103,7 @@ class Stats:
     disk_read: int = 0
     disk_write: int = 0
     cpus: int = 1  # what cpu_percent is out of: 100% a core
+    pids: int = 0  # processes and threads running in it
 
 
 @dataclass(frozen=True)

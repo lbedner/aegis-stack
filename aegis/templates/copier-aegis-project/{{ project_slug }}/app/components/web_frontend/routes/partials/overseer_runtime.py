@@ -14,7 +14,7 @@ from app.components.web_frontend import (
 from app.components.web_frontend.overseer_live import event_stream
 from app.components.web_frontend.rendering import dialog
 from app.core import runtime, series
-from app.services.system import ui_runtime
+from app.services.system import ui_resources, ui_runtime
 
 router = APIRouter()
 
@@ -29,7 +29,8 @@ async def container_events(page: str, window: str | None = None) -> StreamingRes
     """The page's containers over SSE, charted over the window its range
     chips chose."""
     _known(page)
-    return event_stream(overseer_container.events(page, series.window_of(window)))
+    seconds, _ = await ui_runtime.window_of(page, window)
+    return event_stream(overseer_container.events(page, seconds))
 
 
 @router.get(overseer_container.GLANCE_EVENTS, include_in_schema=False)
@@ -63,7 +64,8 @@ async def overview_events(request: Request) -> StreamingResponse:
 async def resources_events(window: str | None = None) -> StreamingResponse:
     """Overseer > Resources over SSE, charted over the window its range
     chips chose."""
-    return event_stream(overseer_resources.events(series.window_of(window)))
+    seconds = series.window_of(window, ui_resources.WINDOWS)
+    return event_stream(overseer_resources.events(seconds))
 
 
 @router.get(overseer_container.RESTART, response_class=HTMLResponse)

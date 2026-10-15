@@ -4,10 +4,11 @@ an hour.
 A ``Sampler`` names what it reads and how often; ``read`` returns a
 ``Sample``: numbers by series name (``"redis:app-redis-1:cpu"``), and the
 reading as a whole (``latest``) for the views that show it. Each tick's
-numbers are kept in the shared cache under ``series:<sampler>:<name>``
-(Redis when the stack has it, so every process reads the same history;
-this process's memory otherwise), listed in an index per sampler so reads
-never scan the keyspace. One process samples each tick (``claim``).
+numbers are kept under ``series:<sampler>:<name>`` in the series store
+(``series_store``: Redis when the stack has it, so every process reads the
+same history; this process's memory otherwise), listed in an index per
+sampler so reads never scan the keyspace. One process samples each tick
+(``claim``).
 
 Polling costs only while someone looks: a view that reads a sampler's
 latest (``watch``) keeps it at ``interval``; unwatched, it reads every
@@ -16,8 +17,11 @@ happens rather than something polled (an LLM call finishing) is a point
 of its own: ``record``.
 
 ``read`` gets a window back and ``chart`` turns it into what
-``chart_panel`` draws. Transient on purpose: an hour, then gone. Longer
-history (downsampled, or in the database) can sit behind the same ``read``.
+``chart_panel`` draws. Transient on purpose: an hour, then gone; a sampler
+that keeps history (``Sampler.history``) also keeps each minute's highest
+for a day and each five minutes' for a week (``TIERS``, folded from the
+raw hour by ``roll``), which ``read`` serves a window longer than the hour
+from. The highest, not the average, so a spike outlives the hour.
 """
 
 import asyncio
@@ -25,11 +29,13 @@ from bisect import bisect_left
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
 import math
+import statistics
 import time
 from typing import Any
 
 from app.core.cache import get_cache
 from app.core.log import logger
+from app.core.series_store import get_store
 
 PREFIX = "series:"
 INDEX = "series-index:"
@@ -57,6 +63,18 @@ WATCH_SECONDS = 15
 # row labels them (``web_frontend/ranges.py``); none longer than is kept.
 WINDOWS: tuple[tuple[int, str], ...] = ((900, "15m"), (1800, "30m"), (3600, "1h"))
 DEFAULT_WINDOW = 900
+# A history sampler's tiers: (seconds a point, seconds kept), and the
+# windows its charts offer over them.
+DAY = 86400
+TIERS: tuple[tuple[int, int], ...] = ((60, DAY), (300, 7 * DAY))
+HISTORY_WINDOWS = WINDOWS + (
+    (7200, "2h"),
+    (21600, "6h"),
+    (43200, "12h"),
+    (DAY, "1d"),
+    (7 * DAY, "7d"),
+)
+
 # The most points a chart line carries: a longer window is averaged down.
 MAX_POINTS = 900
 # A chart's threshold shows once its data is within 1/GUIDE_REACH of it.
@@ -76,7 +94,11 @@ def window_of(
 
 
 def phrase(seconds: int) -> str:
-    """A window in words: "the last 15 minutes", "the last hour"."""
+    """A window in words: "the last 15 minutes", "the last hour", "the
+    last 7 days"."""
+    if seconds % DAY == 0:
+        days = seconds // DAY
+        return "the last day" if days == 1 else f"the last {days} days"
     if seconds % 3600 == 0:
         hours = seconds // 3600
         return "the last hour" if hours == 1 else f"the last {hours} hours"
@@ -94,12 +116,56 @@ class Sample:
 @dataclass(frozen=True)
 class Sampler:
     """What to read, every ``interval`` while watched, every
-    ``idle_interval`` otherwise."""
+    ``idle_interval`` otherwise; ``history``: kept past the hour (``TIERS``)."""
 
     name: str
     read: Callable[[], Awaitable[Sample]]
     interval: float = TICK_SECONDS
     idle_interval: float = 15.0
+    history: bool = False
+
+    def __post_init__(self) -> None:
+        if self.history:
+            _HISTORY.add(self.name)
+
+
+# The samplers kept past the hour (``Sampler.history``), by name: what
+# ``read`` serves a long window from, and ``windows`` offers.
+_HISTORY: set[str] = set()
+
+
+def windows(*samplers: str) -> tuple[tuple[int, str], ...]:
+    """The windows a chart of ``samplers``' series offers: a day and a week
+    too where every one of them keeps history."""
+    kept = samplers and all(name in _HISTORY for name in samplers)
+    return HISTORY_WINDOWS if kept else WINDOWS
+
+
+def _step(window: float) -> int:
+    """The seconds a point of the tier serving ``window`` covers (0 within
+    the raw hour)."""
+    if window <= KEEP_SECONDS:
+        return 0
+    return next((step for step, keep in TIERS if window <= keep), TIERS[-1][0])
+
+
+@dataclass
+class Redraw:
+    """When a live view's charts over ``window`` have new points to read:
+    every tick within the hour; past it, once its tier's step turns, so a
+    view does not re-read a week to redraw nothing."""
+
+    window: int
+    drawn_at: float = float("-inf")
+
+    def due(self, now: float | None = None) -> bool:
+        """Whether to read them now, which counts as drawn if so."""
+        now = time.time() if now is None else now
+        step = _step(self.window)
+        if step and now // step == self.drawn_at // step:
+            return False
+        self.drawn_at = now
+        return True
 
 
 async def watch(name: str) -> None:
@@ -151,7 +217,7 @@ async def record(values: dict[str, float]) -> None:
 
 async def _keep(sampler: str, values: dict[str, float]) -> None:
     """One sampler's points for this moment, in one write."""
-    await get_cache().append_many(
+    await get_store().append(
         {f"{PREFIX}{sampler}:{name}": value for name, value in values.items()},
         at=time.time(),
         keep_seconds=KEEP_SECONDS,
@@ -169,9 +235,66 @@ async def sample(sampler: Sampler, cadence: float | None = None) -> None:
         return
     reading = await sampler.read()
     if reading.latest is not None:
-        ttl = int(sampler.idle_interval * 2)
+        # A history sampler's last reading is also what its next one is
+        # compared with (a container's restart): kept past a restart.
+        ttl = DAY if sampler.history else int(sampler.idle_interval * 2)
         await get_cache().set(LATEST + sampler.name, reading.latest, ttl=ttl)
     await _keep(sampler.name, reading.values)
+    if sampler.history:
+        await roll(sampler.name, time.time())
+
+
+def tier(step: int) -> tuple[str, str]:
+    """A tier's key prefix and index prefix (``series-60:``)."""
+    return f"{PREFIX[:-1]}-{step}:", f"{INDEX[:-1]}-{step}:"
+
+
+# The newest bucket each sampler's tier has folded, in this process: claims
+# are asked for once a bucket, not once a tick.
+_folded: dict[tuple[str, int], int] = {}
+
+
+async def roll(sampler: str, now: float) -> None:
+    """Fold every finished bucket of each tier not yet folded that the raw
+    hour still holds (one a tick skipped, around a restart, included):
+    each series' highest point in it, kept at the bucket's start. Once a
+    bucket, by one process (``claim``), from one read of the raw hour.
+
+    ponytail: a running total's highest is its last, so a long window's
+    network and disk rates are each bucket's average, not its peak."""
+    due: list[tuple[int, int, int]] = []
+    for step, keep in TIERS:
+        last = int(now // step) - 1
+        done = _folded.get((sampler, step))
+        first = int((now - KEEP_SECONDS) // step) + 1 if done is None else done + 1
+        _folded[(sampler, step)] = last
+        for bucket in range(first, last + 1):
+            claim = f"{CLAIM}roll:{sampler}:{step}:{bucket}"
+            if await get_cache().claim(claim, ttl=KEEP_SECONDS):
+                due.append((step, keep, bucket))
+    if not due:
+        return
+    found = await get_store().points(
+        f"{PREFIX}{sampler}:",
+        since=min(step * bucket for step, _, bucket in due),
+        index=INDEX + sampler,
+    )
+    for step, keep, bucket in due:
+        start, end = bucket * step, (bucket + 1) * step
+        highest = {
+            name.removeprefix(PREFIX): max(inside)
+            for name, points in found.items()
+            if (inside := [v for at, v in points if start <= at < end])
+        }
+        if highest:
+            key, index = tier(step)
+            await get_store().push(
+                {key + name: value for name, value in highest.items()},
+                at=start,
+                length=keep // step,
+                keep_seconds=keep,
+                index=index + sampler,
+            )
 
 
 async def tick(sampler: Sampler, last: float, now: float) -> float:
@@ -212,15 +335,21 @@ async def read(
     (``"containers:redis:"``), by the rest of its name; given ``ending``,
     only the names ending with one of those (``(":cpu",)``). ``viewed``: a
     view is drawing it, so its sampler keeps full pace (``watch``)."""
+    sampler = prefix.split(":", 1)[0]
     if viewed:
-        await watch(prefix.split(":", 1)[0])
-    start = PREFIX + prefix
-    found = await get_cache().points_with_prefix(
-        start,
-        since=time.time() - window,
-        index=INDEX + prefix.split(":", 1)[0],
-        ending=ending,
-    )
+        await watch(sampler)
+    since, step = time.time() - window, _step(window)
+    if step and sampler in _HISTORY:  # from the tier that spans it
+        base, index = tier(step)
+        found = await get_store().recent(
+            base + prefix, since=since, index=index + sampler, ending=ending
+        )
+    else:
+        base = PREFIX
+        found = await get_store().points(
+            base + prefix, since=since, index=INDEX + sampler, ending=ending
+        )
+    start = base + prefix
     return {key.removeprefix(start): points for key, points in sorted(found.items())}
 
 
@@ -302,12 +431,15 @@ def _bucketed(
     if span <= max_points:
         return found
     step = math.ceil(span / max_points)
+    # Past the hour the points are a tier's highs (``roll``): keep the
+    # highest of each, as averaging them again would flatten the spike.
+    fold = max if span > KEEP_SECONDS else statistics.fmean
     bucketed = {}
     for name, points in found.items():
         buckets: dict[float, list[float]] = {}
         for at, value in points:
             buckets.setdefault(at // step * step, []).append(value)
-        bucketed[name] = [(at, sum(vs) / len(vs)) for at, vs in sorted(buckets.items())]
+        bucketed[name] = [(at, fold(vs)) for at, vs in sorted(buckets.items())]
     return bucketed
 
 

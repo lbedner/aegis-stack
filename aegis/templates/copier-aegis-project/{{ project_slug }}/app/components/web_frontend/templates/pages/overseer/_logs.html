@@ -56,7 +56,7 @@
       <colgroup><col class="w-28"><col class="w-52"><col></colgroup>
       <tbody id="logs-lines" sse-swap="logs-lines" hx-swap="{{ 'afterbegin' if newest_first else 'beforeend' }}"
              {{ opens_rows() }}>
-        {% with rows = logs.lines, tones = logs_tones, links = logs_links if logs_links is defined else none %}{% include "pages/overseer/_logs_rows.html" %}{% endwith %}
+        {% with rows = logs.lines, tones = logs_tones, links = logs_links if logs_links is defined else none, mixed = logs_mixed %}{% include "pages/overseer/_logs_rows.html" %}{% endwith %}
       </tbody>
     </table>
   {% endcall %}

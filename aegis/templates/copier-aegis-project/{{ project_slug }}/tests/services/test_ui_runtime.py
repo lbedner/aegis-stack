@@ -4,6 +4,8 @@ and Flet; and, where there is nothing to read, why. The containers sampler
 (``ui_runtime.sample``) reads every container once a tick and every viewer
 is served from that one reading."""
 
+from typing import Any
+
 import pytest
 
 from app.core import series
@@ -76,6 +78,7 @@ async def test_one_reading_serves_every_viewer(monkeypatch: pytest.MonkeyPatch) 
         ui_runtime.NET_OUT: STATS.network_tx,
         ui_runtime.DISK_READ: STATS.disk_read,
         ui_runtime.DISK_WRITE: STATS.disk_write,
+        ui_runtime.PIDS: STATS.pids,
     }
     assert reading.values == {
         f"{page}:{name}:{metric}": value
@@ -88,6 +91,55 @@ async def test_one_reading_serves_every_viewer(monkeypatch: pytest.MonkeyPatch) 
         view = await ui_runtime.containers("redis")
     assert view["rows"][0]["name"] == "app-redis-1"
     assert (fake.listed, fake.asked) == asked  # no further runtime reads
+
+
+async def test_a_restart_between_readings_is_an_event(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Each reading is compared with the last (``container_events``): a
+    container whose uptime started over restarted, a point on Events."""
+    use_runtime(monkeypatch, FakeRuntime(REDIS))
+    row = (await ui_runtime.sample()).latest["redis"]["rows"][0]
+    uptime = (row["uptime_seconds"] or 0) + 3600
+    earlier = {"redis": {"rows": [row | {"uptime_seconds": uptime}], "note": None}}
+
+    async def latest(name: str) -> dict[str, Any]:
+        return earlier
+
+    monkeypatch.setattr(series, "latest", latest)
+    reading = await ui_runtime.sample()
+    assert reading.values["redis:app-redis-1:restart"] == 1.0
+
+
+async def test_a_page_offers_a_day_where_its_charts_keep_history(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The windows follow the charts a page draws: its containers' keep a
+    week; a server outside Docker reports only its hour. A page that can be
+    either offers what it draws now (Ollama in a container keeps history)."""
+    use_runtime(monkeypatch, FakeRuntime(REDIS))
+    await series.sample(ui_runtime.CONTAINERS)
+    week = series.HISTORY_WINDOWS
+    assert await ui_runtime.window_of("redis", "86400") == (86400, week)
+    chart = ui_runtime.Chart("x", "X", "elsewhere:", "m")  # kept an hour
+    host = ui_runtime.Host("On the host", (chart,))
+    monkeypatch.setattr(ui_runtime, "host_of", lambda page: host)
+    assert await ui_runtime.window_of("redis", "86400") == (86400, week)
+    hour = series.WINDOWS
+    assert await ui_runtime.window_of("worker", "86400") == (
+        series.DEFAULT_WINDOW,
+        hour,
+    )
+
+
+async def test_a_section_can_leave_its_charts_undrawn(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A long window's charts change once a tier step: a live view between
+    steps reads the cards alone."""
+    use_runtime(monkeypatch, FakeRuntime(REDIS))
+    view, charts = await ui_runtime.section("redis", 86400, draw=False)
+    assert view["rows"] and charts is None
 
 
 async def test_reading_a_page_marks_the_sampler_watched(
@@ -112,7 +164,7 @@ async def test_the_charts_cover_the_window_asked_for(
     use_runtime(monkeypatch, FakeRuntime(REDIS))
     drawn = await ui_runtime.charts("redis", window=1800)
     assert drawn is not None
-    cpu, _memory, _network, _disk = drawn
+    cpu, *_ = drawn
     start, end = cpu["data"]["window"]
     assert end - start == 1800 * 1000
     assert cpu["subtitle"] == "Last 30 minutes"
@@ -158,6 +210,8 @@ async def test_network_and_disk_chart_as_bytes_per_second(
         "Memory",
         "Network",
         "Disk I/O",
+        "Processes",
+        "Events",
     ]
 
 

@@ -164,6 +164,8 @@ async def _context(
         "logs_q": query.get("q", ""),
         "logs_orders": ORDERS,
         "logs_order": order,
+        # Lines from several services: a dot each tells them apart.
+        "logs_mixed": len(pages) > 1,
     }
 
 
@@ -175,9 +177,13 @@ def _range(query: Mapping[str, str]) -> tuple[int, int] | None:
 
 
 def render(
-    rows: list[dict[str, Any]], links: dict[str, dict[str, str]] | None = None
+    rows: list[dict[str, Any]],
+    links: dict[str, dict[str, str]] | None = None,
+    mixed: bool = False,
 ) -> str:
-    return fragment(ROWS, rows=rows, tones=ui_logs.TONES, links=links)
+    """Log rows; ``mixed``: from several services, each line's dot telling
+    them apart."""
+    return fragment(ROWS, rows=rows, tones=ui_logs.TONES, links=links, mixed=mixed)
 
 
 def events(page: str) -> AsyncIterator[str]:
@@ -202,6 +208,6 @@ def _stream(
 ) -> AsyncIterator[str]:
     async def lines() -> AsyncIterator[str]:
         async for batch in ui_logs.follow(pages, {}, found=found):
-            yield frame(EVENT, render(batch, links))
+            yield frame(EVENT, render(batch, links, len(pages) > 1))
 
     return heartbeat(lines())

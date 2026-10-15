@@ -78,11 +78,26 @@ SAMPLERS = [Sampler("containers", ui_runtime.sample), Sampler("queues", queue_de
 ```
 
 Samplers are listed in `app/services/system/samplers.py` and run in the
-webserver from startup. Each tick's numbers are kept for an hour in the shared
-cache under `series:<sampler>:<name>` (Redis when the stack has it, so every
-process reads the same history; process memory otherwise), listed in an index
-set per sampler so reads never scan the keyspace. One process samples each
-tick.
+webserver from startup. Each tick's numbers are kept for an hour under
+`series:<sampler>:<name>` in the series store (`app.core.series_store`: Redis
+when the stack has it, on the shared cache's database, so every process reads
+the same history; process memory otherwise), listed in an index set per
+sampler so reads never scan the keyspace. One process samples each tick.
+
+A sampler made with `history=True` (the containers and the host) is kept
+longer too: each minute's highest value for a day and each five minutes'
+for a week (`series.TIERS`), folded from the raw hour as each minute ends.
+The raw hour is a sorted set a series, read by time; a tier is a list a
+series, appended in order and cut to its length, about 20 bytes a point
+against a sorted set's 120, so a week of a dozen containers' history takes a
+few megabytes of Redis's 64.
+The highest rather than the average, so a spike from last night is still
+there. `series.read` serves a window longer than the hour from the tier
+that spans it; asked for a long window, a sampler without history gives
+its hour. A chart offers `series.windows(*samplers)`: `series.HISTORY_WINDOWS`
+(adding 2h, 6h, 12h, 1d and 7d) where every sampler behind it keeps
+history, and a live view re-reads a long window's charts only when its
+tier moves (`series.Redraw`).
 
 Polling costs only while someone looks. A view reads the sampler's last
 reading (`series.latest`) and marks it watched (`series.watch`); a watched
@@ -107,7 +122,8 @@ turns it into `chart_panel` data, one line per series on the times they
 share, the axis spanning the window up to now. A window longer than
 `MAX_POINTS` seconds is averaged into buckets on fixed boundaries, so each
 bucket keeps its place as the window moves. The windows a chart offers are
-`series.WINDOWS` (15m, 30m, 1h, labelled like every other range row), picked
+`series.WINDOWS` (15m, 30m, 1h, labelled like every other range row; 2h, 6h,
+12h, 1d and 7d too where history is kept), picked
 with `range_chips` on the web and `DateRangeChips` in Flet; the choice lives
 in the query string (`?window=1800`) and the section's stream follows it.
 

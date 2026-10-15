@@ -180,30 +180,33 @@ class TestValuesWithPrefix:
         assert await cache.values_with_prefix("connections:record:") == {}
 
 
-class TestSeriesPoints:
-    """Time series kept in the cache (``app.core.series`` writes them): a
-    sorted set per series under Redis, a list here."""
-
-    async def test_points_come_back_in_time_order_from_since(self) -> None:
-        cache = CacheService()
-        await cache.append_many({"series:a:x": 1.0}, at=100.0, keep_seconds=60)
-        await cache.append_many({"series:a:x": 2.0}, at=130.0, keep_seconds=60)
-        await cache.append_many({"series:a:y": 5.0}, at=130.0, keep_seconds=60)
-        await cache.append_many({"series:b:x": 9.0}, at=130.0, keep_seconds=60)
-        assert await cache.points_with_prefix("series:a:", since=110.0) == {
-            "series:a:x": [(130.0, 2.0)],
-            "series:a:y": [(130.0, 5.0)],
-        }
-
-    async def test_a_point_older_than_its_window_is_dropped(self) -> None:
-        cache = CacheService()
-        await cache.append_many({"series:a:x": 1.0}, at=100.0, keep_seconds=60)
-        await cache.append_many({"series:a:x": 2.0}, at=200.0, keep_seconds=60)
-        assert await cache.points_with_prefix("series:a:", since=0) == {
-            "series:a:x": [(200.0, 2.0)]
-        }
+class TestClaims:
+    """One process of many takes a periodic job each round."""
 
     async def test_a_claim_holds_until_it_expires(self) -> None:
         cache = CacheService()
         assert await cache.claim("series-claim:a", ttl=60) is True
         assert await cache.claim("series-claim:a", ttl=60) is False
+
+
+class TestUnreadableEntries:
+    """A value pickled by another build (a class since renamed or moved,
+    or one this build does not have yet) is no reading: dropped, so the
+    one who asked takes a fresh one instead of failing."""
+
+    @pytest.mark.asyncio
+    async def test_a_value_this_build_cannot_unpickle_is_dropped(self) -> None:
+        dropped: list[str] = []
+
+        class Redis:
+            async def get(self, key: str) -> bytes:
+                # A class from a module this build does not have.
+                return b"cgone.module\nThing\n(tR."
+
+            async def delete(self, key: str) -> None:
+                dropped.append(key)
+
+        cache = CacheService()
+        cache._redis = Redis()  # type: ignore[assignment]
+        assert await cache.get("series-latest:redis-keyspace") is None
+        assert dropped == ["series-latest:redis-keyspace"]

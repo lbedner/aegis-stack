@@ -187,7 +187,7 @@ def test_a_malformed_token_is_refused_before_it_is_sent(
 def test_a_queued_request_is_never_peeked(monkeypatch: pytest.MonkeyPatch) -> None:
     """A provision's request carries the provider token until the agent
     takes it, so Overseer > Redis names the list but never reads it."""
-    from app.services.system import redis_keys
+    from app.services.system import redis_facts, redis_keys
 
     def no_client(db: int = 0) -> Any:
         raise AssertionError("the requests list was read")
@@ -196,5 +196,5 @@ def test_a_queued_request_is_never_peeked(monkeypatch: pytest.MonkeyPatch) -> No
     index = next(
         i for i, f in enumerate(redis_keys.families()) if f.pattern == agent.REQUESTS
     )
-    peeked = asyncio.run(redis_keys.peek(index))
-    assert peeked is not None and peeked["rows"] == []
+    peeked = asyncio.run(redis_facts.detail(index))
+    assert peeked is not None and peeked.rows == []

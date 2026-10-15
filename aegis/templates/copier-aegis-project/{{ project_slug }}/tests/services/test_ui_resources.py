@@ -151,7 +151,8 @@ async def test_a_part_reads_as_one_line_on_every_chart() -> None:
             }
         )
     charts = await _charts()
-    assert list(charts) == ["cpu", "memory", "network", "disk"]
+    # A container's events are its own, never added up across the stack.
+    assert list(charts) == ["cpu", "memory", "network", "disk", "pids"]
     assert list(_lines(charts["network"])) == ["Cache"]
 
 

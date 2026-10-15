@@ -319,6 +319,15 @@ def test_each_service_has_its_own_color(everything: TestClient) -> None:
     assert f"--aegis-chart-{ui_logs.color_of('worker') + 1}" in dot.get("style")
 
 
+def test_one_services_lines_carry_no_dot(client: TestClient) -> None:
+    """A page's own Logs are one service's, in one color: a dot tells
+    nothing apart, so only lines mixed from several services carry one."""
+    rows = select(page_html(client, PAGE), "#logs-lines tr")
+    assert rows
+    for row in rows:
+        none(row, "[data-service] [data-dot]")
+
+
 def test_every_icon_points_at_a_symbol_the_page_has(client: TestClient) -> None:
     """The copy icons draw from the one icon sprite, which every page
     carries (``base.html``), not only the chat."""
@@ -627,7 +636,9 @@ def test_attributed_logs_put_dot_first_and_keep_metadata_in_expanded_row(
         if structured
         else "2026-10-03 20:45:01 [info ] Usage recorded [app.core.log] app_service=ai cost=0 emitting_service=ai pathname=/code/app/services/ai/usage.py"
     )
-    use_runtime(monkeypatch, FakeRuntime(WORKER, lines={WORKER.name: [_at(1, raw)]}))
+    # Two services' lines mixed: each line leads with its service's dot.
+    runtime = FakeRuntime(WORKER, REDIS, lines={WORKER.name: [_at(1, raw)]})
+    use_runtime(monkeypatch, runtime)
     row = one(page_html(TestClient(app), ALL), "#logs-lines tr")
     source = one(row, "[data-service]")
     assert source[0].get("data-dot") is not None

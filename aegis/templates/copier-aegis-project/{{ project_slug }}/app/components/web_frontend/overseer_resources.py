@@ -37,13 +37,15 @@ TOTALS = "pages/overseer/resources/_totals.html"
 async def section_context(
     section: str, component: ComponentStatus, req: SectionRequest
 ) -> dict[str, Any]:
-    window = series.window_of(req.query.get("window"))
+    window = series.window_of(req.query.get("window"), ui_resources.WINDOWS)
     charts, view = await asyncio.gather(ui_resources.charts(window), _view(wait=False))
     return {
         "section_subtitle": "What this stack uses of the host, and what the rest of it does.",
         "resources_event": EVENT,
         "resources_totals_event": TOTALS_EVENT,
-        "resources_charts": chart_panel(EVENT, charts, window, EVENTS),
+        "resources_charts": chart_panel(
+            EVENT, charts, window, EVENTS, ui_resources.WINDOWS
+        ),
     } | view
 
 
@@ -67,16 +69,16 @@ def events(  # noqa: ANN201 - async iterator
     window: int = series.DEFAULT_WINDOW, max_frames: int | None = None
 ):
     """The snapshot and each chart over SSE, each sent again only when it
-    changes (``overseer_live.chart_frames``)."""
+    changes (``overseer_live.chart_frames``); a long window's charts are
+    read again only when its tier moves (``series.Redraw``)."""
     held: dict[str, tuple[list[str], int]] = {}
+    redraw = series.Redraw(window)
 
     async def frame() -> dict[str, str]:
-        charts, view = await asyncio.gather(
-            ui_resources.charts(window), _view(wait=True)
-        )
-        return {
-            EVENT: fragment(BODY, **view),
-            TOTALS_EVENT: fragment(TOTALS, **view),
-        } | chart_frames(EVENT, charts, held)
+        view = await _view(wait=True)
+        sent = {EVENT: fragment(BODY, **view), TOTALS_EVENT: fragment(TOTALS, **view)}
+        if not redraw.due():
+            return sent
+        return sent | chart_frames(EVENT, await ui_resources.charts(window), held)
 
     return fragments_events(frame, series.TICK_SECONDS, max_frames)

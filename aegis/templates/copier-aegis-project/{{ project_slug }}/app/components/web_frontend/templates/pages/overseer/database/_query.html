@@ -5,30 +5,41 @@
    in the database's dialect and completing its tables and columns, drawn
    taller or shorter by its corner, its answer in the flat scroller under
    it (``_query_answer.html``). Without the script, one plain box. Cmd-Enter
-   (or Run) runs the tab's statement. The editor is a write control
+   (or Run) runs the tab's statement. The Run form holds nothing (its box
+   and button join it by ``form=``), so no menu's request is its own, nor
+   inherits where its answer goes. Saved keeps the tab in the app's
+   database for every admin (sql.js sends the tab's name and statement)
+   and opens one kept there as a tab (``_query_saved.html``, read as the
+   menu first opens). Its box and buttons are write controls
    (``data-write``): hidden where Overseer's changes are refused, and every
-   run is audited. #}
+   run and save is audited. #}
 {% from "components/macros/form.html" import action, textarea %}
+{% from "components/macros/layout.html" import dropdown, menu_item %}
 {% from "pages/overseer/_macros.html" import wrap_actions, wraps %}
 {% from "pages/overseer/database/_macros.html" import export_menu, rows_off_note %}
 {% if rows_off %}
 {{ rows_off_note(rows_off) }}
 {% else %}
 <div id="database-query" data-sql-workbench data-seed="{{ query_seed or '' }}" data-seed-name="{{ query_seed_name or '' }}" class="overseer-fill flex flex-col gap-3" {{ wraps() }}>
-  <form data-query data-write class="shrink-0 flex flex-col gap-2" hx-post="{{ query_run }}" hx-target="#database-query-answer" hx-swap="innerHTML">
+  <form id="database-run" data-query data-write hidden hx-post="{{ query_run }}" hx-target="#database-query-answer" hx-swap="innerHTML"></form>
+  <div data-write class="shrink-0 flex flex-col gap-2">
     <div class="flex items-end gap-3 border-b border-aegis-border">
       <nav data-sql-tabs role="tablist" aria-label="Statements" class="min-w-0 flex-1 flex items-end gap-1 overflow-x-auto"></nav>
       <div class="flex gap-1.5 pb-1.5">
-        {{ action("Run", 'title="Cmd-Enter"', "primary", type="submit") }}
+        {{ action("Run", 'title="Cmd-Enter" form="database-run"', "primary", type="submit") }}
+        {% call dropdown("Saved") %}
+        {{ menu_item("Save this tab", 'data-sql-save data-write hx-post="' ~ query_save ~ '" hx-swap="none" title="Keep this tab, by its name, for every admin"') }}
+        {% include "pages/overseer/database/_query_saved.html" %}
+        {% endcall %}
         {{ export_menu("database-query-body", "query") }}
         {{ wrap_actions("database-query-body") }}
       </div>
     </div>
     <div data-sql-editor data-dialect="{{ query_dialect }}" data-schema='{{ query_schema|tojson }}'
          class="sql-editor h-[40dvh] min-h-[6rem] max-h-[80dvh] resize-y overflow-hidden [&>textarea]:h-full [&>textarea]:mt-0 [&>textarea]:text-sm">
-      {{ textarea("sql", placeholder="SELECT ... (one statement, read only; Cmd-Enter runs it)") }}
+      {{ textarea("sql", placeholder="SELECT ... (one statement, read only; Cmd-Enter runs it)", attrs='form="database-run"') }}
     </div>
-  </form>
+  </div>
   <div id="database-query-answer" class="flex-1 min-h-0 flex flex-col gap-3">{% include "pages/overseer/database/_query_answer.html" %}</div>
 </div>
 {% endif %}

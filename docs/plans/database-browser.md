@@ -60,6 +60,16 @@ Paths are under the template's `app/` and `tests/`.
 | The page scripts share one global scope: no name declared twice | `static/js/*.js` | `test_app_js::test_the_page_scripts_declare_no_name_twice` |
 | No third-party script runs unverified: a CDN script pins its version and hash (`integrity`), CodeMirror ships with the app | `templates/base.html`, `static/js/charts.js`, `static/vendor/codemirror.js` | `test_app_js::test_no_third_party_script_runs_unverified` |
 
+## What a table says
+
+| Rule | Home | Test |
+|---|---|---|
+| A table's owner is the ontology's (its model's part); none for a table no model declares or no part owns; a service leads to itself on the map, a component to its page | `overseer_database_browser.owners`, `owner_link` | `TestTables::test_a_table_names_its_owner_leading_to_it_on_the_map` |
+| A relationship line says each key's cardinality, need and ON DELETE, as the models declare it | `db_rows.keys` (`Key.one`, `optional`, `ondelete`), `overseer_database_browser._key_said` | `test_a_key_says_what_it_requires_and_does`, `TestTables::test_its_relationships_are_drawn_as_the_map_draws` |
+| A table a service's piece holds opens on Tables from the map, only where the database has it | `overseer_zoom._piece`, `overseer_database_browser.listed` | `TestTables::test_a_table_on_the_map_opens_its_tables_page` |
+| The change today is against the day's first count the health check read (UTC); a failing cache never fails the health check | `db_trend`, called by the database health check's dispatcher (`health_db`) | `test_db_trend.py`, `TestTables::test_a_table_says_how_its_rows_changed_today` |
+| A saved query is kept by name for every admin, within its sizes; saving and deleting are audited and hidden with Query | `app/components/database/saved.py`, the partial routes | `test_database_saved.py`, `TestQuery::test_a_tab_is_saved_for_every_admin_and_deleted` |
+
 ## Decided against
 
 - Checking `alias.column` in the editor: guessing which table an alias means

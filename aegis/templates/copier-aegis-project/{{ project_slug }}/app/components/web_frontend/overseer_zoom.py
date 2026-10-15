@@ -155,7 +155,8 @@ def service_opened(
     a piece every lane may use does (Constants, Schemas)."""
     others = {item["registry"]: item for item in stack}
     held = _hanging(model)
-    pieces = [_piece(piece, held) for piece in found]
+    tables = _tables(held)
+    pieces = [_piece(piece, held, tables) for piece in found]
     lane = {piece.key: piece.lane for piece in found}
     joined = {
         (source, target)
@@ -244,11 +245,22 @@ def _hanging(model: SystemModel) -> Held:
     return _held[1]
 
 
-def _piece(piece: Piece, held: Held) -> dict[str, Any]:
+def _tables(held: Held) -> dict[str, str]:
+    """Each table the database has, by where it opens on Tables, for a
+    service opened up whose pieces hold one; none where none does (a stack
+    without the database component)."""
+    if not any(Kind.OBJECT in kinds for kinds in held.values()):
+        return {}
+    from . import overseer_database_browser as browser  # with the database component
+
+    return {name: browser.relationships_url(name) for name in browser.listed()}
+
+
+def _piece(piece: Piece, held: Held, tables: dict[str, str]) -> dict[str, Any]:
     """A piece's node: what hangs off it counted, and named in its hint with
-    its modules (the first ``HOLDS``, each opening its code); a piece nothing
-    hangs off names its public functions and classes instead (Deps, its
-    dependencies)."""
+    its modules (the first ``HOLDS``, each opening its code, a table its
+    Tables page where the database has it); a piece nothing hangs off names
+    its public functions and classes instead (Deps, its dependencies)."""
     hung = {
         kind: [
             (m, *named)
@@ -259,8 +271,8 @@ def _piece(piece: Piece, held: Held) -> dict[str, Any]:
     }
     index = source_index.project()
     found = {m: index.get(m) for m in piece.modules}
-    holds = [named for names in hung.values() for named in names] or [
-        (m, name, name)
+    holds = [(kind, *named) for kind, names in hung.items() for named in names] or [
+        (None, m, name, name)
         for m, module in found.items()
         if module is not None
         for name in module.public
@@ -281,8 +293,13 @@ def _piece(piece: Piece, held: Held) -> dict[str, Any]:
         )
         or None,
         holds=[
-            {"name": name, "url": _opens(urls[m], found[m], defined)}
-            for m, name, defined in holds[:HOLDS]
+            {
+                "name": name,
+                "url": tables.get(name)
+                if kind is Kind.OBJECT and name in tables
+                else _opens(urls[m], found[m], defined),
+            }
+            for kind, m, name, defined in holds[:HOLDS]
         ],
         holds_more=len(holds[HOLDS:]),
     )

@@ -165,8 +165,8 @@ bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-
 </div>
 {% endmacro %}
 
-{% macro textarea(name, value=None, rows=6, placeholder="") %}
-<textarea name="{{ name }}" rows="{{ rows }}" placeholder="{{ placeholder }}"
+{% macro textarea(name, value=None, rows=6, placeholder="", attrs="") %}
+<textarea name="{{ name }}" rows="{{ rows }}" placeholder="{{ placeholder }}" {{ attrs|safe }}
           class="{{ _control_classes }} w-full mt-1 font-mono text-xs">{{ value or "" }}</textarea>
 {% endmacro %}
 

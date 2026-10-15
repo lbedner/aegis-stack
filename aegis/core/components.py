@@ -23,6 +23,7 @@ from ..constants import (
 )
 from .file_manifest import FileManifest
 from .migration_generator import (
+    DATABASE_MIGRATION,
     DEPLOY_MIGRATION,
     MCP_MIGRATION,
     SCHEDULER_MIGRATION,
@@ -349,9 +350,13 @@ COMPONENTS: dict[str, ComponentSpec] = {
         template_files=["app/core/db.py"],
         marker_path="app/core/db.py",
         docker_services=["postgres"],
+        # Query's saved queries, in its own table (app/components/database).
+        migrations=[DATABASE_MIGRATION],
         files=FileManifest(
             primary=[
                 "app/core/db.py",
+                "app/components/database",
+                "tests/components/test_database_saved.py",
                 "app/core/db_activity.py",
                 "tests/core/test_db_activity.py",
                 "app/services/system/db_transactions.py",
@@ -362,6 +367,8 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 "tests/services/test_db_query.py",
                 "app/services/system/db_filters.py",
                 "tests/services/test_db_filters.py",
+                "app/services/system/db_trend.py",
+                "tests/services/test_db_trend.py",
                 "tests/services/_db_fixtures.py",
                 "app/components/backend/api/database.py",
                 "tests/api/test_database_endpoints.py",

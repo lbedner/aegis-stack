@@ -156,7 +156,7 @@ def map_state(query: Mapping[str, str]) -> MapState:
     view = query.get("view")
     view = view if view in TEMPLATES else VIEWS[0][0]
     zoom = query.get("zoom") if view == MAP_VIEW else None
-    if zoom != HOST and not (zoom and _opens(zoom)):
+    if zoom != HOST and not (zoom and opens(zoom)):
         zoom = None
     overlay = query.get("overlay")
     return {
@@ -167,7 +167,7 @@ def map_state(query: Mapping[str, str]) -> MapState:
     }
 
 
-def _opens(key: str) -> bool:
+def opens(key: str) -> bool:
     """Whether ``key`` is a service the stack has: a level of its own (a
     sub-service, or one since removed, has none)."""
     return is_service(key) and ownership.installed(

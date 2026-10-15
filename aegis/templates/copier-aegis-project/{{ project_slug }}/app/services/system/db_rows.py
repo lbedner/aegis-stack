@@ -74,12 +74,15 @@ class RowsUnreadError(Exception):
 @dataclass(frozen=True)
 class Key:
     """A foreign key, whole: ``columns`` of ``table`` pointing at ``to``
-    of ``target``."""
+    of ``target``, as the models declare it."""
 
     table: str
     columns: tuple[str, ...]
     target: str
     to: tuple[str, ...]
+    optional: bool = False  # a key column may be empty: a row need point nowhere
+    one: bool = False  # its columns are unique: one row at most points at each
+    ondelete: str = "NO ACTION"  # what deleting the row pointed at does
 
 
 @dataclass(frozen=True)
@@ -168,6 +171,19 @@ def filterable(table: Table) -> list[str]:
     return db_filters.filterable(table, masked(table))
 
 
+def _unique(table: Table) -> set[frozenset[str]]:
+    """Each set of columns no two rows share: the key, a unique column, a
+    unique constraint or index."""
+    found = {frozenset(c.name for c in table.primary_key.columns)}
+    found |= {frozenset([c.name]) for c in table.columns if c.unique}
+    found |= {
+        frozenset(c.name for c in u.columns)
+        for u in [*table.constraints, *table.indexes]
+        if isinstance(u, UniqueConstraint) or getattr(u, "unique", False)
+    }
+    return found
+
+
 def keys(table: Table) -> tuple[list[Key], list[Key]]:
     """``table``'s foreign keys out, and the keys of every table pointing
     into it, each by its table and columns."""
@@ -177,6 +193,9 @@ def keys(table: Table) -> tuple[list[Key], list[Key]]:
             tuple(e.parent.name for e in c.elements),
             c.referred_table.name,
             tuple(e.column.name for e in c.elements),
+            optional=any(e.parent.nullable for e in c.elements),
+            one=frozenset(e.parent.name for e in c.elements) in _unique(t),
+            ondelete=(c.ondelete or "NO ACTION").upper(),
         )
         for t in by_name(table.metadata).values()
         for c in t.foreign_key_constraints

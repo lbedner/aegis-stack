@@ -1,0 +1,22 @@
+{# The queries kept for every admin (overseer_database_saved.saved_queries,
+   app.components.database.saved), in Query's Saved menu: each opens again
+   as a tab (sql.js, ``data-saved-open``), or is deleted (audited; its toast
+   is the answer). Read as the menu first opens (``saved_queries`` not given:
+   loading), and again whenever a save or a delete says ``saved_refresh``. #}
+{% set loading = saved_queries is not defined %}
+<li id="database-saved" data-saved hx-get="{{ query_save }}" hx-trigger="{{ 'intersect once, ' if loading }}{{ saved_refresh }} from:body" hx-target="this" hx-swap="outerHTML" class="max-h-[60vh] min-w-[16rem] overflow-auto">
+  {% if loading %}
+  <p class="px-3 py-1.5 text-xs text-aegis-muted">Loading saved queries</p>
+  {% else %}
+  {% for query in saved_queries %}
+  <div class="flex items-center gap-1">
+    <button type="button" data-saved-open data-name="{{ query.name }}" data-sql="{{ query.sql }}" title="{{ query.hint }}" @click="$el.closest('details').removeAttribute('open')"
+            class="flex-1 min-w-0 truncate text-left px-3 py-1.5 text-sm font-mono text-aegis-text hover:bg-aegis-border/30 rounded transition-colors">{{ query.name }}</button>
+    <button type="button" data-saved-forget data-write hx-post="{{ query.forget }}" hx-swap="none" aria-label="Delete {{ query.name }}" title="Delete {{ query.name }}"
+            class="px-2 py-1 text-xs text-aegis-muted hover:text-error rounded">×</button>
+  </div>
+  {% else %}
+  <p class="px-3 py-1.5 text-xs text-aegis-muted">Nothing saved yet. Save a tab to keep it for every admin.</p>
+  {% endfor %}
+  {% endif %}
+</li>

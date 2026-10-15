@@ -15,7 +15,9 @@
    (localStorage, once typing pauses: what was typed survives a reload, on
    this machine only), each with its last answer while the page is open; a
    seed (from a table, named for it) opens one more, or the tab already
-   holding it. + opens a tab, a double click renames one, x closes it.
+   holding it, as a saved query does (kept in the app's database for every
+   admin: Saved sends the tab's name and statement). + opens a tab, a
+   double click renames one, x closes it.
 
    CodeMirror is fetched on first use (or as a link to Query is pointed
    at) from the app itself: one pinned bundle (static/vendor/codemirror.js,
@@ -178,9 +180,13 @@ function workbench(root, cm) {
     draw();
     view.focus();
   }
-  function open(id) {
+  // The tab being left keeps its editor and its answer.
+  function leave() {
     states.set(book.active, view.state);
     answers.set(book.active, [...answer.childNodes]);
+  }
+  function open(id) {
+    leave();
     show(id);
   }
   function close(id) {
@@ -243,6 +249,19 @@ function workbench(root, cm) {
     });
     nav.replaceChildren(...book.tabs.map(tabOf), add);
   }
+
+  // Saved sends the tab's name and statement; a saved query opens as a tab.
+  root.querySelector('[data-sql-save]')?.addEventListener('htmx:configRequest', (event) => {
+    const tab = current();
+    Object.assign(event.detail.parameters, { name: tab.name, sql: tab.sql });
+  });
+  root.addEventListener('click', (event) => {
+    const kept = event.target.closest?.('[data-saved-open]');
+    if (!kept) return;
+    leave();
+    seeded(book, kept.dataset.sql, kept.dataset.name);
+    show(book.active);
+  });
 
   // An answer that lands after its tab was left is kept for that tab.
   let asked = null;

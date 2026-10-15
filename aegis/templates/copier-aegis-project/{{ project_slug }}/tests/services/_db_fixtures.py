@@ -3,7 +3,8 @@
 database: a member table with secrets, binary and an AutoString token; an
 org it points at; an event with no key; a composite-key join, and a note
 pointing at a join row by both its columns; a tree pointing at itself; a
-ledger of dates, money and JSON; a table keyed by text."""
+ledger of dates, money and JSON; a table keyed by text; an account and the
+one profile each has, deleted with it."""
 
 from datetime import datetime
 from decimal import Decimal
@@ -78,6 +79,17 @@ LEDGER = Table(
     Column("meta", JSON),
 )
 SLUG = Table("slug", META, Column("name", String, primary_key=True))
+ACCOUNT = Table("account", META, Column("id", Integer, primary_key=True))
+PROFILE = Table(
+    "profile",
+    META,
+    Column(
+        "account_id",
+        Integer,
+        ForeignKey("account.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+)
 
 
 def seeded(tmp_path: Path) -> Engine:

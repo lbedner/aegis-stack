@@ -294,6 +294,19 @@ DEPLOY_MIGRATION = ServiceMigrationSpec(
 )
 
 
+# The database component's own table: the statements Overseer's Query keeps
+# (``app/components/database``). A revision only where the stack already
+# migrates, and last, so an existing project's revisions keep their numbers;
+# a database-only stack (no alembic) has it from the startup hook's
+# ``create_all`` (``database_init``, SQLite or PostgreSQL),
+# and the revision a later service brings adopts it (``if_not_exists``).
+DATABASE_MIGRATION = ServiceMigrationSpec(
+    service_name="database",
+    description="Saved queries: the statements Overseer's Query keeps",
+    stamp_signature=("table", "saved_query"),
+)
+
+
 MCP_MIGRATION = ServiceMigrationSpec(
     service_name="mcp",
     description="MCP activity: one row per call an outside assistant made",
@@ -1017,6 +1030,11 @@ def get_services_needing_migrations(context: dict[str, Any]) -> list[str]:
                 and (enabled == "yes" or enabled is True)
             ):
                 services.append(name)
+
+    # The database component's own table (saved queries): last, and only
+    # where something else migrates; otherwise ``create_all`` makes it.
+    if services and (include_database == "yes" or include_database is True):
+        services.append("database")
 
     # Per-user vs shared insights is one folded migration — generation
     # picks the shape from the context flag (see ``generate_migration``).

@@ -190,7 +190,8 @@ typecheck: ## Run type checking with ty
 	@uv run pytest --queryspy-strict --queryspy-baseline .queryspy-baseline.json
 
 check-queries-baseline: ## Rewrite .queryspy-baseline.json from the current suite
-	@uv run pytest --queryspy-strict --queryspy-baseline .queryspy-baseline.json --queryspy-baseline-update
+	@# -n 0: under xdist the baseline is written by the controller, which runs no tests, so it comes out empty.
+	@uv run pytest -n 0 --queryspy-strict --queryspy-baseline .queryspy-baseline.json --queryspy-baseline-update
 
 {% endif %}check: lint typecheck test ## Run all code quality checks
 	@echo "All checks completed successfully!"

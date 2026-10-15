@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from importlib.util import find_spec
 import json
+import threading
 from types import SimpleNamespace
 from typing import Any
 
@@ -101,6 +102,27 @@ def gemini(monkeypatch: pytest.MonkeyPatch) -> FakeRealtime:
     return fake
 
 
+@pytest.fixture
+def ended(monkeypatch: pytest.MonkeyPatch) -> threading.Event:
+    """Set once the server has finished the call, its last writes made.
+
+    The test client cancels the app as it leaves the socket, so a call still
+    saving would be cut off mid-write and leak its database connection; a
+    later test's teardown then hangs collecting it. A test hangs up and
+    waits for this before it leaves."""
+    done = threading.Event()
+    drive = realtime_calls.drive
+
+    async def driven(*args: Any, **kwargs: Any) -> None:
+        try:
+            await drive(*args, **kwargs)
+        finally:
+            done.set()
+
+    monkeypatch.setattr(realtime_calls, "drive", driven)
+    return done
+
+
 class TestTheControls:
     def test_the_phone_sits_beside_the_mic_and_knows_its_socket(
         self, client: TestClient
@@ -136,7 +158,7 @@ class TestTheControls:
 
 class TestTheCall:
     def test_it_carries_the_audio_both_ways(
-        self, client: TestClient, gemini: FakeRealtime
+        self, client: TestClient, gemini: FakeRealtime, ended: threading.Event
     ) -> None:
         heard: list[bytes] = []
         told: list[dict[str, Any]] = []
@@ -151,6 +173,8 @@ class TestTheCall:
                     told.append(json.loads(message["text"]))
                 if heard and any(t["type"] == "saved" for t in told):
                     break
+            ws.close()
+            assert ended.wait(5)
 
         assert ready["type"] == "ready"
         assert (ready["input_rate"], ready["output_rate"]) == (16_000, 24_000)
@@ -168,7 +192,11 @@ class TestTheCall:
         assert told[-1]["type"] == "saved"  # the thread reloads
 
     def test_a_dropped_call_picks_up_where_it_stopped(
-        self, client: TestClient, gemini: FakeRealtime, monkeypatch: pytest.MonkeyPatch
+        self,
+        client: TestClient,
+        gemini: FakeRealtime,
+        ended: threading.Event,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.setattr(
             realtime_calls, "resumed", lambda conversation: "How much is left?"
@@ -176,6 +204,8 @@ class TestTheCall:
         with client.websocket_connect(SOCKET) as ws:
             ws.receive_json()
             ws.send_bytes(b"\x10\x20")  # the fake plays once it hears you
+            ws.close()
+            assert ended.wait(5)
         (opening,) = gemini.live.sent
         assert "How much is left?" in opening
 

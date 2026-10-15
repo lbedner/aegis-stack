@@ -74,6 +74,9 @@ from app.integrations.main import create_integrated_app
 from app.core.model_registry import import_all_models  # noqa: E402
 
 import_all_models()
+
+# ``--shard K/N`` for CI's parallel test jobs; importing the hooks registers them.
+from tests._shard import pytest_addoption, pytest_collection_modifyitems  # noqa: E402, F401
 {%- if include_database %}
 
 # queryspy's baseline knows a repeated statement by its shape, so a new

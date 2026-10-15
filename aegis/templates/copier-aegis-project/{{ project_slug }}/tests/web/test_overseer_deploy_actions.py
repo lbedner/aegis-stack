@@ -627,6 +627,22 @@ def test_a_poll_after_the_agent_stopped_says_so(redis: FakeRedis, app: FastAPI) 
     assert "No deploy agent is listening" in text(one(form, "[data-error]"))
 
 
+def test_a_stack_without_redis_is_said_not_a_server_error(
+    redis: FakeRedis, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """No Redis to reach the agent through: a refusal saying so, like Redis
+    not answering, wherever the agent is asked (never a 500)."""
+    monkeypatch.setattr(agent, "has_redis", lambda: False)
+
+    def no_client() -> None:
+        raise AssertionError("no Redis to make a client for")
+
+    monkeypatch.setattr(agent, "_client", no_client)
+    response = TestClient(app).get(deploy_form.ROLLBACK)
+    assert response.status_code == 200
+    assert "no Redis" in text(one(response.text, "[data-rollback] [data-error]"))
+
+
 def test_redis_not_answering_is_said_not_a_server_error(
     redis: FakeRedis, app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> None:

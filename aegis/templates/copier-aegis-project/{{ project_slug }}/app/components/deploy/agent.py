@@ -148,8 +148,11 @@ def _redis_errors() -> tuple[type[Exception], ...]:
 
 @asynccontextmanager
 async def _redis() -> AsyncIterator[Any]:
-    """A client for one exchange, closed after it. Redis not answering is a
-    refusal saying so, which every caller already shows (never a 500)."""
+    """A client for one exchange, closed after it. Redis not answering, or
+    a stack without it, is a refusal saying so, which every caller already
+    shows (never a 500)."""
+    if not has_redis():
+        raise RefusedError("This stack has no Redis to reach the deploy agent through.")
     client = _client()
     try:
         yield client

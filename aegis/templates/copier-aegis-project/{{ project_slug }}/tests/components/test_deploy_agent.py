@@ -24,7 +24,9 @@ TOKEN = "dop_v1_from-the-app-wxyz"
 
 @pytest.fixture
 def redis(monkeypatch: pytest.MonkeyPatch) -> FakeRedis:
+    """The stack's Redis, faked: there in any stack, with or without one."""
     fake = FakeRedis()
+    monkeypatch.setattr(agent, "has_redis", lambda: True)
     monkeypatch.setattr(agent, "_client", lambda: fake)
     return fake
 

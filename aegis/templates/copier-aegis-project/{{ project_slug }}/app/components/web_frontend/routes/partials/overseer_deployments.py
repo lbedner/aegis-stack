@@ -10,6 +10,7 @@ from app.components.backend.api.utils import audit_admin_action
 from app.components.deploy import agent as deploy_agent
 from app.components.deploy.protocol import RefusedError
 from app.components.web_frontend import overseer_deploy_actions as actions
+from app.components.web_frontend import overseer_deploy_form as deploy_form
 from app.components.web_frontend.overseer_access import overseer_actor
 from app.components.web_frontend.overseer_live import event_stream
 from app.components.web_frontend.rendering import (
@@ -34,12 +35,14 @@ async def job_events() -> StreamingResponse:
 def _provisionable(provider: str) -> hosting.Provider:
     """The provider in the path, if servers are created on it from here."""
     try:
-        return actions.provisionable(provider)
+        return deploy_form.provisionable(provider)
     except RefusedError:
         raise HTTPException(status_code=404) from None
 
 
-@router.get(actions.panel_path("{panel}", "{provider}"), response_class=HTMLResponse)
+@router.get(
+    deploy_form.panel_path("{panel}", "{provider}"), response_class=HTMLResponse
+)
 async def panel(
     request: Request,
     panel: str,
@@ -52,10 +55,10 @@ async def panel(
     asked for what it needs when it has not (a read: not audited). A poll
     still waiting gets no content: htmx swaps nothing, so the bar on the
     page keeps moving."""
-    if panel not in actions.PANELS:
+    if panel not in deploy_form.PANELS:
         raise HTTPException(status_code=404)
     form = dict(request.query_params)
-    build, template, name = actions.PANELS[panel]
+    build, template, name = deploy_form.PANELS[panel]
     built = await build(chosen, form, actor.label)
     if "job" in form and built["state"] == "loading":
         return Response(status_code=204)
@@ -74,7 +77,7 @@ async def ask(
         raise HTTPException(status_code=404)
     event = f"deploy.{action}"
     try:
-        args = await actions.request_args(action, await form_fields(request))
+        args = await deploy_form.request_args(action, await form_fields(request))
         job_id = await deploy_agent.enqueue(action, args, actor.label)
     except RefusedError as exc:
         await audit_admin_action(audit, actor, request, event, "refused", str(exc))

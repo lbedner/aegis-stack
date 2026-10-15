@@ -1,11 +1,11 @@
-{# One provider's new-server form (overseer_deploy_actions.provision_form),
+{# One provider's new-server form (overseer_deploy_form.provision_form),
    from what the provider sells where (its catalog, which the deploy agent
    fetches). Loading, it asks again until the agent has answered; ready,
    a size or region picked reloads it, so the regions are the ones that
    offer the size and the price is theirs. The price shown is typed back
    to create the server. #}
-{% from "components/macros/form.html" import field, select, text_input, primary_button %}
-{% from "pages/overseer/deployments/_macros.html" import asks, by_hand, failed, reloads, waiting %}
+{% from "components/macros/form.html" import checkbox, field, select, text_input, primary_button %}
+{% from "pages/overseer/deployments/_macros.html" import asks, by_hand, failed, fold, reloads, waiting %}
 <div data-provision="{{ p.provider }}" data-part data-write hx-disinherit="*" hx-swap="outerHTML" hx-include="find form" class="space-y-3"{{ reloads(p.reload) }}>
   <p data-provision-heading class="text-sm font-semibold text-aegis-text">New server on {{ p.name }}</p>
   {{ by_hand(p.own, "own", title="Already have a server?") }}
@@ -16,15 +16,22 @@
   {% else %}
   <form {{ asks(p.partials ~ "/provision") }} class="space-y-3">
     <input type="hidden" name="provider" value="{{ p.provider }}">
-    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div class="grid gap-3 sm:grid-cols-3">
       {% call field("Size") %}{{ select("size", p.sizes, p.size, blank=None, block=True, grouped=True) }}{% endcall %}
       {% call field("Region") %}{{ select("region", p.regions, p.region, blank=None, block=True) }}{% endcall %}
       {% call field("Domain (optional)") %}{{ text_input("domain", p.domain, placeholder="an sslip.io name") }}{% endcall %}
-      {% call field("Overseer reachable from (optional)") %}{{ text_input("allowlist", p.allowlist, placeholder="your IP, like 203.0.113.9/32") }}{% endcall %}
       {# The Domain step's pick (its Alpine field): the one choice of DNS provider. #}
       <input type="hidden" name="dns" x-bind:value="dns">
-      {% call field("Email (optional)") %}{{ text_input("email", p.email, placeholder="the project's author email") }}{% endcall %}
     </div>
+    {% if p.bring %}{{ checkbox("data", checked=p.data == "local", label=p.bring ~ ": once it deploys, copy this machine's database to the server, which otherwise starts empty", value="local") }}{% endif %}
+    {# What most leave as it is, folded (open once filled in, as a size
+       or region picked reloads the form). #}
+    {% call fold("More options", "data-more" ~ (" open" if p.email or p.allowlist else "")) %}
+      <div class="grid gap-3 sm:grid-cols-2">
+        {% call field("Email for the HTTPS certificate (optional)") %}{{ text_input("email", p.email, placeholder="the project's author email") }}{% endcall %}
+        {% call field("Overseer reachable from (optional)") %}{{ text_input("allowlist", p.allowlist, placeholder="your IP, like 203.0.113.9/32") }}{% endcall %}
+      </div>
+    {% endcall %}
     {% with f=p.fit %}{% include "pages/overseer/deployments/_fit.html" %}{% endwith %}
     {% with f=p.account %}{% include "pages/overseer/deployments/_account.html" %}{% endwith %}
     <p data-price class="text-sm text-aegis-text">{{ p.price_cents|money(p.currency) }} a month, billed to your {{ p.name }} account.</p>

@@ -1084,6 +1084,17 @@ MESSAGES: dict[str, str] = {
     "deploy.help_opt_logs_service": "Show logs for specific service",
     "deploy.help_opt_shell_service": "Service to connect to",
     "deploy.help_arg_exec_command": "Command to run inside the container (after --).",
+    "deploy.upload_not_sqlite": "Only a SQLite database can be uploaded; this project's is not.",
+    "deploy.upload_snapshot": "Snapshotting this machine's database...",
+    "deploy.upload_no_snapshot": "Could not read this machine's database: start its stack (make serve) and try again. The server was not touched.",
+    "deploy.upload_backup_failed": "Could not back the server up, so its database was not replaced.",
+    "deploy.upload_restoring": "Replacing the server's database...",
+    "deploy.upload_refused": "The upload was refused, and the server keeps its own database: {error}",
+    "deploy.upload_start_failed": "The database is in place, but the stack did not start: aegis deploy-logs says why.",
+    "deploy.upload_done": "This machine's database is on {host}.",
+    "deploy.upload_confirm": "Replace the database on {host} with this machine's? The server's is backed up first.",
+    "provision.help_opt_data": "local: after the first deploy, copy this machine's database to the server (SQLite)",
+    "provision.help_opt_resume": "only carry on a provision that stopped part way; never start a new server",
     "deploy.exec_no_command": "No command given. Put it after --, e.g. aegis deploy-exec -- alembic current",
     "deploy.help_opt_gh_repo": (
         "GitHub repo as owner/name (default: auto-detect from git remote origin)"
@@ -1439,6 +1450,8 @@ MESSAGES: dict[str, str] = {
     "provision.nothing_to_destroy": (
         "No provisioned server is recorded in .aegis/deploy.yml."
     ),
+    "provision.nothing_to_resume": "No provision stopped part way in .aegis/deploy.yml: nothing to resume, and no new server is started.",
+    "provision.first_deploy_failed": "The first deploy failed; its output says why.",
     "provision.destroy_title": "This permanently deletes:",
     "provision.destroy_confirm": "Type the server name ({name}) to confirm",
     "provision.destroy_cancelled": "Name did not match. Nothing was deleted.",

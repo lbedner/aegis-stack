@@ -1,25 +1,30 @@
 {# Whether the size picked has room for the stack
-   (overseer_deploy_actions.fit_panel, deploy_fit): memory, CPU and disk as
-   bars, each toned and saying why. A bar's solid part is in use now, its
-   dashed outline the limits (memory's one piece per service, named on
+   (overseer_deploy_form.fit_panel, deploy_fit): memory, CPU and disk as
+   bars under its verdict, each toned and saying why. A bar's solid part
+   is in use now, its dashed outline the limits (memory's one piece per service, named on
    hover), its line this server; loading, it asks again
    until the deploy agent has measured the stack. #}
 {% from "components/macros/layout.html" import badge %}
 {% from "pages/overseer/deployments/_macros.html" import panel %}
 {% call panel("fit", f, "Measuring what the stack takes…", "Could not tell whether it fits: ") %}
-  <p class="flex items-center gap-2 text-sm"><span class="font-semibold text-aegis-text">Will it fit?</span> <span data-verdict>{{ badge(f.headline, f.verdict) }}</span></p>
-  {% for r in f.rows %}
-  <div data-fit-row="{{ r.key }}" class="space-y-1">
-    <p class="flex flex-wrap items-baseline justify-between gap-x-3 text-xs"><span class="font-medium text-aegis-text">{{ r.label }}</span><span class="text-aegis-muted">{{ r.figures }}</span></p>
-    <svg data-tone="{{ r.tone }}" class="toned block h-3 w-full" viewBox="0 0 100 6" preserveAspectRatio="none">
-      <rect width="100" height="6" rx="1" class="fill-aegis-border/40"/>
-      {% if r.solid is not none %}<rect width="{{ r.solid }}" height="6" rx="1" fill="currentColor" opacity="0.8"/>{% endif %}
-      {% for g in r.segments or () %}<rect data-segment="{{ g.name }}" x="{{ g.x + 0.25 }}" y="0.5" width="{{ [g.width - 0.5, 0]|max }}" height="5" rx="1" fill="none" stroke="currentColor" stroke-dasharray="3 2" vector-effect="non-scaling-stroke"><title>{{ g.title }}</title></rect>{% endfor %}
-      {% if r.dashed is not none %}<rect x="0.25" y="0.5" width="{{ [r.dashed - 0.5, 0]|max }}" height="5" rx="1" fill="none" stroke="currentColor" stroke-dasharray="3 2" vector-effect="non-scaling-stroke"/>{% endif %}
-      <line x1="{{ r.line }}" x2="{{ r.line }}" y1="0" y2="6" class="stroke-aegis-text" stroke-width="2" vector-effect="non-scaling-stroke"/>
-    </svg>
-    <p data-why data-tone="{{ r.tone }}" class="toned text-xs">{{ r.why }}</p>
-  </div>
-  {% endfor %}
-  <p class="text-xxs text-aegis-muted">{{ f.note }}</p>
+  {# Its verdict, the bars folded under it (open when it does not fit). #}
+  <details data-fit-details{% if f.verdict == "error" %} open{% endif %}>
+    <summary class="cursor-pointer text-sm"><span class="font-semibold text-aegis-text">Will it fit?</span> <span data-verdict>{{ badge(f.headline, f.verdict) }}</span></summary>
+    <div class="mt-3 space-y-3">
+      {% for r in f.rows %}
+      <div data-fit-row="{{ r.key }}" class="space-y-1">
+        <p class="flex flex-wrap items-baseline justify-between gap-x-3 text-xs"><span class="font-medium text-aegis-text">{{ r.label }}</span><span class="text-aegis-muted">{{ r.figures }}</span></p>
+        <svg data-tone="{{ r.tone }}" class="toned block h-3 w-full" viewBox="0 0 100 6" preserveAspectRatio="none">
+          <rect width="100" height="6" rx="1" class="fill-aegis-border/40"/>
+          {% if r.solid is not none %}<rect width="{{ r.solid }}" height="6" rx="1" fill="currentColor" opacity="0.8"/>{% endif %}
+          {% for g in r.segments or () %}<rect data-segment="{{ g.name }}" x="{{ g.x + 0.25 }}" y="0.5" width="{{ [g.width - 0.5, 0]|max }}" height="5" rx="1" fill="none" stroke="currentColor" stroke-dasharray="3 2" vector-effect="non-scaling-stroke"><title>{{ g.title }}</title></rect>{% endfor %}
+          {% if r.dashed is not none %}<rect x="0.25" y="0.5" width="{{ [r.dashed - 0.5, 0]|max }}" height="5" rx="1" fill="none" stroke="currentColor" stroke-dasharray="3 2" vector-effect="non-scaling-stroke"/>{% endif %}
+          <line x1="{{ r.line }}" x2="{{ r.line }}" y1="0" y2="6" class="stroke-aegis-text" stroke-width="2" vector-effect="non-scaling-stroke"/>
+        </svg>
+        <p data-why data-tone="{{ r.tone }}" class="toned text-xs">{{ r.why }}</p>
+      </div>
+      {% endfor %}
+      <p class="text-xxs text-aegis-muted">{{ f.note }}</p>
+    </div>
+  </details>
 {% endcall %}

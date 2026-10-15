@@ -465,6 +465,12 @@ MESSAGES: dict[str, str] = {
     "auth.list_users_failed": "오류: 사용자 목록 조회 실패: {error}",
     # Help text
     "auth.help": "인증 관리 명령어",
+    "auth.help_create_user": "계정을 만듭니다. 비밀번호는 숨김으로 두 번 묻습니다.",
+    "auth.opt_account_email": "계정 이메일 주소",
+    "auth.password_prompt": "비밀번호",
+    "auth.account_created": "{email} 생성됨.",
+    "auth.not_admin": "관리자가 아닙니다: Overseer를 쓰려면 .env의 ADMIN_USER_EMAILS에 추가하세요.",
+    "auth.account_failed": "계정을 만들 수 없습니다: {error}",
     "auth.help_create_test_user": "개발 및 테스트용 테스트 사용자를 생성합니다.",
     "auth.help_create_test_users": "개발 및 테스트용 테스트 사용자를 여러 명 생성합니다.",
     "auth.help_list_users": "시스템의 모든 사용자를 표시합니다.",

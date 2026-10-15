@@ -465,6 +465,12 @@ MESSAGES: dict[str, str] = {
     "auth.list_users_failed": "錯誤：獲取用戶列表失敗：{error}",
     # 幫助文本
     "auth.help": "認證管理命令",
+    "auth.help_create_user": "建立帳戶；密碼會隱藏輸入並詢問兩次。",
+    "auth.opt_account_email": "帳戶的電子郵件地址",
+    "auth.password_prompt": "密碼",
+    "auth.account_created": "已建立 {email}。",
+    "auth.not_admin": "不是管理員：在 .env 的 ADMIN_USER_EMAILS 中加入它以使用 Overseer。",
+    "auth.account_failed": "無法建立帳戶：{error}",
     "auth.help_create_test_user": "創建測試用戶，用於開發和測試",
     "auth.help_create_test_users": "批量創建測試用戶，用於開發和測試",
     "auth.help_list_users": "列出所有用戶",

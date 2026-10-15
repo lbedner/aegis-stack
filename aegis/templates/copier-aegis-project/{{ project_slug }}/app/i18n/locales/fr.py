@@ -465,6 +465,12 @@ MESSAGES: dict[str, str] = {
     "auth.list_users_failed": "Erreur : échec du listage des utilisateurs : {error}",
     # Texte d'aide
     "auth.help": "Commandes de gestion de l'authentification",
+    "auth.help_create_user": "Créer un compte ; le mot de passe est demandé deux fois, masqué.",
+    "auth.opt_account_email": "Adresse e-mail du compte",
+    "auth.password_prompt": "Mot de passe",
+    "auth.account_created": "{email} créé.",
+    "auth.not_admin": "Pas administrateur : ajoutez-le à ADMIN_USER_EMAILS dans .env pour l'Overseer.",
+    "auth.account_failed": "Impossible de créer le compte : {error}",
     "auth.help_create_test_user": "Créer un utilisateur de test pour le développement.",
     "auth.help_create_test_users": "Créer plusieurs utilisateurs de test pour le développement.",
     "auth.help_list_users": "Lister tous les utilisateurs du système.",

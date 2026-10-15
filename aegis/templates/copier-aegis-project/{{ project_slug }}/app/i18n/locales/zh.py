@@ -469,6 +469,12 @@ MESSAGES: dict[str, str] = {
     "auth.promote_user_failed": "错误：更新用户角色失败：{error}",
     # 帮助文本
     "auth.help": "认证管理命令",
+    "auth.help_create_user": "创建账户；密码会隐藏输入并询问两次。",
+    "auth.opt_account_email": "账户的电子邮件地址",
+    "auth.password_prompt": "密码",
+    "auth.account_created": "已创建 {email}。",
+    "auth.not_admin": "不是管理员：在 .env 的 ADMIN_USER_EMAILS 中添加它以使用 Overseer。",
+    "auth.account_failed": "无法创建账户：{error}",
     "auth.help_create_test_user": "创建测试用户，用于开发和测试",
     "auth.help_create_test_users": "批量创建测试用户，用于开发和测试",
     "auth.help_list_users": "列出所有用户",

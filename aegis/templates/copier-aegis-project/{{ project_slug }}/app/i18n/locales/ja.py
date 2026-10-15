@@ -465,6 +465,12 @@ MESSAGES: dict[str, str] = {
     "auth.list_users_failed": "エラー：ユーザー一覧取得失敗：{error}",
     # ヘルプ
     "auth.help": "認証管理コマンド",
+    "auth.help_create_user": "アカウントを作成します。パスワードは非表示で2回尋ねます。",
+    "auth.opt_account_email": "アカウントのメールアドレス",
+    "auth.password_prompt": "パスワード",
+    "auth.account_created": "{email} を作成しました。",
+    "auth.not_admin": "管理者ではありません: Overseer を使うには .env の ADMIN_USER_EMAILS に追加してください。",
+    "auth.account_failed": "アカウントを作成できませんでした: {error}",
     "auth.help_create_test_user": "開発・テスト用のテストユーザーを作成します。",
     "auth.help_create_test_users": "開発・テスト用のテストユーザーを複数作成します。",
     "auth.help_list_users": "システム内の全ユーザーを一覧表示します。",

@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import typer
 import yaml
 from typer.testing import CliRunner
 
@@ -529,6 +530,8 @@ def apis(monkeypatch: pytest.MonkeyPatch) -> dict[str, FakeAPI]:
         lambda **kw: (
             deployed.append(kw["project_path"]),
             steps.append(("deploy", None)),
+            # The first deploy: no backup, so no rollback taking it away.
+            kw["backup"] is False or pytest.fail("the first deploy backs up"),
         ),
     )
     fakes["steps"] = steps  # type: ignore[assignment]
@@ -547,6 +550,12 @@ def _provision(project: Path, *extra: str, input: str = "y\n") -> Any:
     args = ["deploy-provision", "--project-path", str(project)]
     args += ["--ssh-key", str(project / "id.pub"), "--email", EMAIL, *extra]
     return RUNNER.invoke(app, args, input=input)
+
+
+def _sqlite(project: Path) -> None:
+    (project / ".copier-answers.yml").write_text(
+        "include_database: true\ndatabase_engine: sqlite\n"
+    )
 
 
 def _deploy_yml(project: Path) -> dict[str, Any]:
@@ -707,6 +716,115 @@ def test_rerun_resumes_without_creating_a_second_server(
     assert _deploy_yml(project)["provision"]["status"] == "ready"
 
 
+def test_why_it_stopped_is_kept_in_the_record_until_resumed(
+    project: Path, apis: dict[str, FakeAPI], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The job saying why is gone in hours; the record is not."""
+    monkeypatch.setattr(cmd, "wait_for_host_key", lambda _ip: False)
+    _provision(project, input="y\nn\n")
+    assert "SSH" in _deploy_yml(project)["provision"]["error"]
+    monkeypatch.setattr(cmd, "wait_for_host_key", lambda _ip: True)
+    assert _resume(project).exit_code == 0
+    assert "error" not in _deploy_yml(project)["provision"]
+
+
+def test_ready_only_once_the_first_deploy_has_gone_up(
+    project: Path, apis: dict[str, FakeAPI], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A first deploy that fails leaves it part way, to resume, not a ready
+    server with nothing serving on it."""
+
+    def fails(**kw: Any) -> None:
+        raise typer.Exit(1)
+
+    monkeypatch.setattr(cmd, "deploy_command", fails)
+    _provision(project, input="y\nn\n")
+    record = _deploy_yml(project)["provision"]
+    assert record["status"] == "provisioning"
+    assert "deploy" in record["error"]
+    monkeypatch.setattr(cmd, "deploy_command", lambda **kw: None)
+    hz = apis[hetzner.API_URL]
+    hz.calls.clear()
+    assert _resume(project).exit_code == 0
+    assert not hz.called("POST", "/servers")
+    assert _deploy_yml(project)["provision"]["status"] == "ready"
+
+
+def test_a_resume_needs_nothing_but_the_record(
+    project: Path, apis: dict[str, FakeAPI], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The Overseer's Resume asks for nothing else: the cloud, the DNS
+    provider (its name not made yet) and the data come from the record."""
+    _sqlite(project)
+    monkeypatch.setenv("PORKBUN_API_KEY", PK)
+    monkeypatch.setenv("PORKBUN_SECRET_KEY", SK)
+    monkeypatch.setenv("CLOUDFLARE_API_TOKEN", CF)  # never picked over the record's
+    monkeypatch.setattr(cmd, "wait_for_host_key", lambda _ip: False)
+    first = ["--provider", "digitalocean", "--domain", "app.example.com"]
+    _provision(project, *first, "--dns", "porkbun", "--data", "local", input="y\nn\n")
+    monkeypatch.setattr(cmd, "wait_for_host_key", lambda _ip: True)
+    uploaded: list[Any] = []
+    monkeypatch.setattr(cmd, "upload_db", lambda *args: uploaded.append(args))
+    monkeypatch.setenv(agent_protocol.PROTOCOL["progress_env"], "1")
+    do = apis[digitalocean.API_URL]
+    do.calls.clear()
+    result = _resume(project)
+    assert result.exit_code == 0, result.output
+    assert do.calls and not do.called("POST", "/droplets")
+    assert apis[porkbun.API_URL].called("POST", "/dns/create/example.com")
+    assert not apis[cloudflare.API_URL].calls
+    assert uploaded
+    assert _progress(result.output)[-1]["at"] == "data"
+
+
+def _resume(project: Path, *extra: str) -> Any:
+    """As the Overseer's Resume runs it (the protocol's command)."""
+    command = agent_protocol.PROTOCOL["actions"]["resume"]["command"]
+    args = [*command, "--project-path", str(project), "--ssh-key"]
+    return RUNNER.invoke(app, [*args, str(project / "id.pub"), *extra])
+
+
+@pytest.mark.parametrize("before", ["nothing", "destroyed"])
+def test_a_resume_with_nothing_stopped_never_buys_a_server(
+    project: Path,
+    apis: dict[str, FakeAPI],
+    monkeypatch: pytest.MonkeyPatch,
+    before: str,
+) -> None:
+    """A Resume queued behind a Delete (or with no provision at all) would
+    otherwise be a new provision at the default size: refused instead."""
+    if before == "destroyed":
+        monkeypatch.setattr(cmd, "wait_for_host_key", lambda _ip: False)
+        _provision(project, input="y\nn\n")
+        name = _deploy_yml(project)["provision"]["server_name"]
+        destroy = ["deploy-destroy", "--project-path", str(project), "--confirm", name]
+        RUNNER.invoke(app, destroy)
+        assert _deploy_yml(project)["provision"]["status"] == "destroyed"
+    apis[hetzner.API_URL].calls.clear()
+    result = _resume(project, "--email", EMAIL)  # all a new one would need
+    assert result.exit_code == 1
+    assert not apis[hetzner.API_URL].called("POST", "/servers")
+
+
+def test_a_resume_brings_the_data_when_asked_then(
+    project: Path, apis: dict[str, FakeAPI], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One first asked without it: ``--data`` on the resume adds the step."""
+    _sqlite(project)
+    monkeypatch.setattr(cmd, "wait_for_host_key", lambda _ip: False)
+    _provision(project, input="y\nn\n")
+    monkeypatch.setattr(cmd, "wait_for_host_key", lambda _ip: True)
+    uploaded: list[Any] = []
+    monkeypatch.setattr(cmd, "upload_db", lambda *args: uploaded.append(args))
+    monkeypatch.setenv(agent_protocol.PROTOCOL["progress_env"], "1")
+    result = _resume(project, "--data", "local")
+    assert result.exit_code == 0, result.output
+    assert uploaded
+    assert {tuple(p["steps"]) for p in _progress(result.output)} == {
+        tuple(agent_protocol.PROVISION_STEPS)
+    }
+
+
 def test_provision_refuses_when_already_ready(
     project: Path, apis: dict[str, FakeAPI]
 ) -> None:
@@ -727,6 +845,59 @@ def test_provision_refuses_an_open_env_before_buying_anything(
     assert result.exit_code == 1
     assert "AUTH_ENABLED" in strip_ansi_codes(result.output)
     assert not apis[hetzner.API_URL].calls
+
+
+def test_bringing_data_refuses_a_project_without_sqlite_before_buying(
+    project: Path, apis: dict[str, FakeAPI]
+) -> None:
+    result = _provision(project, "--data", "local")
+    assert result.exit_code == 1
+    assert "SQLite" in strip_ansi_codes(result.output)
+    assert not apis[hetzner.API_URL].calls
+
+
+def test_bringing_data_uploads_it_after_the_first_deploy(
+    project: Path, apis: dict[str, FakeAPI], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _sqlite(project)
+    steps: list[tuple[str, Any]] = apis["steps"]  # type: ignore[assignment]
+    monkeypatch.setattr(cmd, "upload_db", lambda *args: steps.append(("upload", args)))
+    result = _provision(project, "--data", "local")
+    assert result.exit_code == 0, result.output
+    assert steps[-2:] == [
+        ("deploy", None),
+        ("upload", (project, {"host": IP, "user": "root", "path": "/opt/my_app"})),
+    ]
+
+
+def _progress(output: str) -> list[dict[str, Any]]:
+    found = map(agent_protocol.read_progress, output.splitlines())
+    return [p for p in found if p is not None]
+
+
+def test_for_the_agent_each_step_is_marked_as_it_starts(
+    project: Path, apis: dict[str, FakeAPI], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _sqlite(project)
+    monkeypatch.setattr(cmd, "upload_db", lambda *args: None)
+    monkeypatch.setenv(agent_protocol.PROTOCOL["progress_env"], "1")
+    result = _provision(project, "--data", "local")
+    assert result.exit_code == 0, result.output
+    plan = list(agent_protocol.PROVISION_STEPS)
+    assert _progress(result.output) == [{"steps": plan, "at": key} for key in plan]
+
+
+def test_without_data_there_is_no_data_step_and_in_a_terminal_no_marks(
+    project: Path, apis: dict[str, FakeAPI], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(agent_protocol.PROTOCOL["progress_env"], "1")
+    marked = _provision(project).output
+    assert {tuple(p["steps"]) for p in _progress(marked)} == {
+        ("server", "boot", "dns", "deploy")
+    }
+    monkeypatch.delenv(agent_protocol.PROTOCOL["progress_env"])
+    (project / ".aegis" / "deploy.yml").unlink()
+    assert _progress(_provision(project).output) == []
 
 
 def test_destroy_requires_typed_name(project: Path, apis: dict[str, FakeAPI]) -> None:

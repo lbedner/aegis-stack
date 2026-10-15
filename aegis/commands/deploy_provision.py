@@ -19,6 +19,7 @@ import ipaddress
 import os
 import re
 from collections.abc import Callable
+from enum import Enum
 from pathlib import Path
 from typing import Any, TypeVar
 
@@ -53,6 +54,7 @@ from .deploy import (
     refuse_unsafe_env,
 )
 from .deploy_agent import _protocol
+from .deploy_upload import refuse_unless_sqlite, upload_db
 from .ingress import enable_tls, known_email
 
 SERVER_RUNNING_ATTEMPTS = 60
@@ -79,6 +81,17 @@ def _server_name(project_name: str) -> str:
 def _persist(root: Path, config: dict[str, Any], record: dict[str, Any]) -> None:
     config["provision"] = record
     _save_deploy_config(config, str(root))
+
+
+def _step(record: dict[str, Any], key: str) -> None:
+    """Where the step bar stands, for the deploy agent (``progress_line``):
+    the provision's steps, ``data`` only when ``record`` brings it; nothing
+    in a terminal."""
+    if os.environ.get(_protocol.PROTOCOL["progress_env"]):
+        steps = [
+            s for s in _protocol.PROVISION_STEPS if s != "data" or record.get("data")
+        ]
+        typer.echo(_protocol.progress_line(steps, key))
 
 
 def _require(ok: bool, key: str, **kwargs: Any) -> None:
@@ -290,15 +303,18 @@ def _provision(
     def persist() -> None:
         _persist(root, config, record)
 
+    _step(record, "server")
     if "server_id" not in record:
         _create(cloud, record, user_data, public_key, persist)
     ip = _wait_running(cloud, record, persist)
     _firewall(cloud, record, persist)
+    _step(record, "boot")
     typer.echo(t("provision.waiting_ssh", ip=ip))
     _require(wait_for_host_key(ip), "provision.ssh_timeout", ip=ip)
     typer.echo(t("provision.waiting_cloud_init"))
     _require(_cloud_init_ok(ip), "provision.cloud_init_failed", ip=ip)
 
+    _step(record, "dns")
     hostname = _point_name(dns, record, persist)
     typer.echo(t("provision.waiting_dns", hostname=hostname))
     _require(wait_for_dns(hostname, ip), "provision.dns_timeout", hostname=hostname)
@@ -307,24 +323,29 @@ def _provision(
     config["server"] = {"host": ip, "user": "root", "path": f"/opt/{project_name}"}
     config.setdefault("docker", {"context": f"{project_name}-remote"})
     config["domain"] = hostname
-    record["status"] = "ready"
     persist()
     brand.success(t("provision.ready", hostname=hostname))
+    _step(record, "deploy")
 
     # A project generated without TLS has no :443 listener or resolver at
     # all; the name the server just got needs both before the first deploy.
     # One whose files read the name from DOMAIN is left as it is.
     if not _names_itself(root):
         enable_tls(root, hostname, email)
+    # No backup: nothing has served here to roll back to, and a rollback
+    # would take the failed containers, and why they failed, with it.
     deploy_command(
         project_path=str(root),
         build=True,
-        backup=True,
+        backup=False,
         health_check=True,
         rolling=False,
         drain_timeout=ROLLING_DRAIN_TIMEOUT_DEFAULT,
         rollout_timeout=ROLLING_ROLLOUT_TIMEOUT_DEFAULT,
     )
+    # Ready once it serves: a failed first deploy is resumed like any step.
+    record["status"] = "ready"
+    persist()
 
 
 def _on_failure(
@@ -336,12 +357,23 @@ def _on_failure(
     record: dict[str, Any],
     yes: bool,
 ) -> None:
-    """Say what exists after a failed run and offer to delete it."""
+    """Say what exists after a failed run and offer to delete it; why it
+    stopped stays in the record (the agent's job saying so goes in hours)."""
     if isinstance(exc, ProvisionError):
         brand.error(str(exc), err=True)
     created = _created_lines(record)
     if not created:
         return
+    # A ProvisionError's message is written for the user, a deploy's exit
+    # (it said why above) as the deploy failing; anything else (a bug,
+    # Ctrl-C) by its name only, never what it may carry.
+    if isinstance(exc, ProvisionError):
+        record["error"] = str(exc)
+    elif isinstance(exc, typer.Exit):
+        record["error"] = t("provision.first_deploy_failed")
+    else:
+        record["error"] = type(exc).__name__
+    _persist(root, config, record)
     brand.warn(t("provision.partial_title"))
     for line in created:
         typer.echo(f"  {line}")
@@ -425,9 +457,15 @@ def _per_provider(field: str) -> str:
     return ", ".join(f"{key} {getattr(p, field)}" for key, p in PROVIDERS.items())
 
 
+class Data(str, Enum):
+    """What ``--data`` brings to the new server."""
+
+    LOCAL = "local"  # this machine's database (``aegis deploy-upload-db``)
+
+
 def deploy_provision_command(
-    provider: str = typer.Option(
-        "hetzner",
+    provider: str | None = typer.Option(
+        None,
         "--provider",
         help=lazy_t("provision.help_opt_provider", providers=", ".join(PROVIDERS)),
     ),
@@ -458,6 +496,12 @@ def deploy_provision_command(
     allowlist: str | None = typer.Option(
         None, "--allowlist", help=lazy_t("provision.help_opt_allowlist")
     ),
+    data: Data | None = typer.Option(
+        None, "--data", help=lazy_t("provision.help_opt_data")
+    ),
+    resume: bool = typer.Option(
+        False, "--resume", help=lazy_t("provision.help_opt_resume")
+    ),
     project_path: str | None = typer.Option(
         None, "--project-path", help=lazy_t("common.help_project_path")
     ),
@@ -469,7 +513,7 @@ def deploy_provision_command(
     Reads the provider's API token (and, with --domain, the DNS provider's
     keys: CLOUDFLARE_API_TOKEN, or PORKBUN_API_KEY and PORKBUN_SECRET_KEY)
     from the environment; a missing one is named. Re-run to resume an
-    interrupted run.
+    interrupted run; --resume only resumes, never starting a new server.
 
     Examples:
         - aegis deploy-provision
@@ -479,25 +523,39 @@ def deploy_provision_command(
         - aegis deploy-provision --domain app.example.com --dns porkbun
         - aegis deploy-provision --email ops@example.com
         - aegis deploy-provision --allowlist 203.0.113.9/32
+        - aegis deploy-provision --data local
+        - aegis deploy-provision --resume
     """
-    spec = _provider(provider)
-    cloud = _client(spec)
     root = _get_project_root(project_path)
-    refuse_unsafe_env(root)  # its deploy would refuse it after the purchase
-    user_data, public_key = _read_inputs(root, ssh_key)
-    acme_email = _acme_email(root, email)
-    admins = _allowlist(allowlist)
-
     config = _load_deploy_config(str(root)) or {}
-    # Stamped into the server's .env at each deploy (``deploy.STAMPED``).
-    config["acme_email"] = acme_email
-    if admins:
-        config["admin_ip_allowlist"] = admins
     record: dict[str, Any] = config.get("provision") or {}
     if record.get("status") == "ready":
         brand.error(t("provision.already_ready", ip=record.get("ipv4")), err=True)
         raise typer.Exit(1)
     resuming = record.get("status") == "provisioning"
+    if resume and not resuming:  # never a new server in its place
+        brand.error(t("provision.nothing_to_resume"), err=True)
+        raise typer.Exit(1)
+    if resuming:
+        record.pop("error", None)  # this run's, if it stops again
+        # Carried on as first asked: the Overseer's Resume names nothing.
+        provider = record["provider"]
+        data = data or (Data(record["data"]) if record.get("data") else None)
+        email = email or config.get("acme_email")
+    provider = provider or "hetzner"
+    spec = _provider(provider)
+    cloud = _client(spec)
+    refuse_unsafe_env(root)  # its deploy would refuse it after the purchase
+    if data:
+        refuse_unless_sqlite(root)
+    user_data, public_key = _read_inputs(root, ssh_key)
+    acme_email = _acme_email(root, email)
+    admins = _allowlist(allowlist)
+
+    # Stamped into the server's .env at each deploy (``deploy.STAMPED``).
+    config["acme_email"] = acme_email
+    if admins:
+        config["admin_ip_allowlist"] = admins
     if not resuming:
         record = {
             "provider": provider,
@@ -507,10 +565,13 @@ def deploy_provision_command(
             "domain": domain,
             "status": "provisioning",
         }
+    if data:
+        record["data"] = data.value
     dns = None
     if record.get("domain"):
         made = _protocol.record_dns_provider(record)
         dns = _connect(_dns(made or dns_provider))
+        record["dns_provider"] = dns[0]  # a resume's, before the name is made
 
     if resuming:
         brand.accent(t("provision.resuming", name=record["server_name"]), bold=True)
@@ -524,6 +585,11 @@ def deploy_provision_command(
         if isinstance(exc, ProvisionError | typer.Exit):
             raise typer.Exit(1) from None
         raise
+    # The server stands and serves; a failed upload is retried with
+    # ``aegis deploy-upload-db``, never a reason to undo the purchase.
+    if data:
+        _step(record, "data")
+        upload_db(root, config["server"])
 
 
 def deploy_destroy_command(

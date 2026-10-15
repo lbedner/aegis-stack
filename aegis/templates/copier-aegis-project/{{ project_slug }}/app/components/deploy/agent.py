@@ -30,6 +30,7 @@ from app.components.deploy.protocol import (
     PROTOCOL,
     RefusedError,
     checked_token,
+    is_kept,
     kept_key,
     record_dns_provider,
     token_provider,
@@ -167,7 +168,7 @@ async def tokens_here() -> set[str]:
 async def _token(action: str, args: dict[str, str]) -> str | None:
     """The app's token for the provider ``action`` acts on, checked as the
     agent will check it; None where it needs none or the app has none."""
-    record = hosting.deploy_config().get("provision") or {}
+    record = hosting.provision_record()
     key = token_provider(action, args, record)
     found = hosting.provider(key)
     if found is None or found not in hosting.PROVISIONABLE or found.token is None:
@@ -184,7 +185,7 @@ async def _dns_keys(action: str, args: dict[str, str]) -> dict[str, str]:
         return {}
     if action == "provision" and not args.get("domain"):
         return {}
-    record = hosting.deploy_config().get("provision") or {}
+    record = hosting.provision_record()
     found = hosting.provider(args.get("dns") or record_dns_provider(record))
     if found is None or found not in hosting.DNS:
         return {}
@@ -213,7 +214,7 @@ async def enqueue(action: str, args: dict[str, str], by: str) -> str:
     async with _redis() as client:
         await RedisJobStore(client).create(job_id, f"{JOB_PREFIX}{action}", WAITING)
         await client.rpush(REQUESTS, json.dumps(request))
-        if "kept" not in PROTOCOL["actions"][action]:
+        if not is_kept(action):
             await client.set(LAST, job_id, ex=KEEP_SECONDS)
     return job_id
 

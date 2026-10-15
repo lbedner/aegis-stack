@@ -1038,6 +1038,17 @@ MESSAGES: dict[str, str] = {
     "deploy.help_opt_logs_service": "Mostrar los logs de un servicio en concreto",
     "deploy.help_opt_shell_service": "Servicio al que conectarse",
     "deploy.help_arg_exec_command": "Comando a ejecutar dentro del contenedor (después de --).",
+    "deploy.upload_not_sqlite": "Solo se puede subir una base de datos SQLite; la de este proyecto no lo es.",
+    "deploy.upload_snapshot": "Tomando una instantánea de la base de datos de esta máquina...",
+    "deploy.upload_no_snapshot": "No se pudo leer la base de datos de esta máquina: inicia su stack (make serve) y vuelve a intentarlo. El servidor no se tocó.",
+    "deploy.upload_backup_failed": "No se pudo respaldar el servidor, así que su base de datos no se reemplazó.",
+    "deploy.upload_restoring": "Reemplazando la base de datos del servidor...",
+    "deploy.upload_refused": "La subida fue rechazada y el servidor conserva su base de datos: {error}",
+    "deploy.upload_start_failed": "La base de datos está en su lugar, pero el stack no arrancó: aegis deploy-logs dice por qué.",
+    "deploy.upload_done": "La base de datos de esta máquina está en {host}.",
+    "deploy.upload_confirm": "¿Reemplazar la base de datos de {host} por la de esta máquina? La del servidor se respalda antes.",
+    "provision.help_opt_data": "local: tras el primer despliegue, copiar la base de datos de esta máquina al servidor (SQLite)",
+    "provision.help_opt_resume": "solo continuar un aprovisionamiento interrumpido; nunca crear un servidor nuevo",
     "deploy.exec_no_command": "No se indicó ningún comando. Escríbelo después de --, p. ej.: aegis deploy-exec -- alembic current",
     "deploy.help_opt_gh_repo": "Repositorio de GitHub como owner/name (por defecto: detectar automáticamente desde git remote origin)",
     "deploy.help_opt_gh_tags": "Disparar también el workflow de despliegue al hacer push de tags v*",
@@ -1339,6 +1350,8 @@ MESSAGES: dict[str, str] = {
     "provision.nothing_to_destroy": (
         "No hay ningún servidor aprovisionado registrado en .aegis/deploy.yml."
     ),
+    "provision.nothing_to_resume": "No hay ningún aprovisionamiento interrumpido en .aegis/deploy.yml: nada que reanudar, y no se crea ningún servidor nuevo.",
+    "provision.first_deploy_failed": "El primer despliegue falló; su salida indica el motivo.",
     "provision.destroy_title": "Esto elimina de forma permanente:",
     "provision.destroy_confirm": (
         "Escribe el nombre del servidor ({name}) para confirmar"

@@ -1,8 +1,9 @@
 {# Overseer > Deployments > New server (overseer_deployments._steps_context): the
    steps to a server, each read from what is true (the agent's heartbeat,
    a token, the records): done ones in a line, the one at hand (and the
-   optional Domain, whose provider can change) open. A
-   deployed server, or a project with a server already, says where to go
+   optional Domain, whose provider can change) open. While a server is
+   being created, or one stopped part way, only its job. A deployed
+   server, or a project with a server already, says where to go
    instead. #}
 {% from "components/macros/layout.html" import badge, card %}
 {% from "pages/overseer/deployments/_macros.html" import agent_note, by_hand, deployed_card, job_panel, note, picker, step %}
@@ -20,6 +21,11 @@
 {% endmacro %}
 {% if actions.view == "deployed" %}
 {{ deployed_card(actions) }}
+{% elif actions.view == "creating" %}
+{% call card("Creating the server", id="card-deploy") %}
+{{ agent_note(actions.agent) }}
+{{ job_panel(actions) }}
+{% endcall %}
 {% elif actions.view == "has-server" %}
 {% call card("Put it on a server", id="card-deploy") %}
 <p data-deploy-state="has-server" class="{{ note() }}">This project deploys to {{ actions.server.name }} already: deploy, back up and roll back it from the <a href="{{ overview_url }}" {{ hx_replace(overview_url, "#overseer-main") }} class="text-aegis-teal hover:underline">Overview</a>.</p>

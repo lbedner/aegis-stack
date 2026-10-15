@@ -13,6 +13,7 @@ from app.components.worker.events import (
     events_redis,
     publish_event,
 )
+from app.components.worker.queue_discovery import queue_module
 from app.components.worker.registry import queue_tasks
 from app.core import edges
 from app.core.config import (
@@ -21,7 +22,6 @@ from app.core.config import (
     is_valid_queue,
     settings,
 )
-from app.core.constants import QueueName
 from app.core.log import logger
 
 # Broker cache to avoid re-importing
@@ -53,17 +53,11 @@ def get_broker(queue_type: str | None = None) -> Any:
     if queue_type in _broker_cache:
         return _broker_cache[queue_type]
 
-    # Dynamic import based on queue type
-    if queue_type == QueueName.SYSTEM:
-        from app.components.worker.queues.system import broker
-
-        _broker_cache[queue_type] = broker
-    elif queue_type == QueueName.LOAD_TEST:
-        from app.components.worker.queues.load_test import broker
-
-        _broker_cache[queue_type] = broker
-    else:
+    # Any queue module in queues/ (a service adds its own, e.g. meetings).
+    module = queue_module(queue_type)
+    if module is None or not hasattr(module, "broker"):
         raise ValueError(f"Unknown queue type: {queue_type}")
+    _broker_cache[queue_type] = module.broker
 
     logger.debug(f"Loaded broker for queue: {queue_type}")
     return _broker_cache[queue_type]

@@ -9,10 +9,12 @@ instead of run, so these pin the shell each step sends.
 
 from __future__ import annotations
 
+import os
 import re
 import shlex
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -23,9 +25,11 @@ from aegis.commands.deploy_backup import (
     RESTORE,
     SNAPSHOT,
     is_sqlite,
+    list_backups,
     offsite_env,
     snapshot_sqlite,
 )
+from aegis.core.deploy_protocol import protocol
 
 TS = "2026-01-01_000000"
 
@@ -117,6 +121,81 @@ def test_backup_archives_the_object_store(monkeypatch: pytest.MonkeyPatch) -> No
     archive = next(c for c in calls if "storage.tar.gz" in c)
     assert "exec -T webserver tar -czf - -C /data/storage ." in archive
     _bash_parses(archive)
+
+
+class TestSteps:
+    """Marked for the deploy agent's step bar (``progress_line``), in the
+    order they run; ``offsite`` only when the server pushes one."""
+
+    def _marked(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+        **kwargs: Any,
+    ) -> list[dict[str, Any]]:
+        monkeypatch.setenv(protocol.PROTOCOL["progress_env"], "1")
+        _backup(monkeypatch, **kwargs)
+        lines = capsys.readouterr().out.splitlines()
+        return [p for line in lines if (p := protocol.read_progress(line))]
+
+    def test_sqlite_marks_the_database_first(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        plan = ["database", "files", "documents", "offsite"]
+        assert self._marked(monkeypatch, capsys, sqlite=True) == [
+            {"steps": plan, "at": key} for key in plan
+        ]
+
+    def test_without_offsite_there_is_no_offsite_step(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        marked = self._marked(
+            monkeypatch, capsys, sqlite=False, fail=("test -f /etc/aegis/",)
+        )
+        assert [m["at"] for m in marked] == ["files", "database", "documents"]
+        assert all(m["steps"] == ["files", "database", "documents"] for m in marked)
+
+    def test_in_a_terminal_nothing_is_marked(
+        self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        monkeypatch.delenv(protocol.PROTOCOL["progress_env"], raising=False)
+        _backup(monkeypatch, sqlite=True)
+        assert "::aegis-progress" not in capsys.readouterr().out
+
+
+def test_the_servers_backups_are_listed_in_one_call(tmp_path: Path) -> None:
+    """Newest first, each with its size and whether it holds the database
+    (a SQLite snapshot, a Postgres dump, or a pre-#1627 ``data/``); a
+    stray directory is no backup. Run for real, in one remote call (the
+    listing used to make two per backup)."""
+    root = tmp_path / "backups"
+    for name, held in (
+        ("2026-10-13_020000", "data"),
+        ("2026-10-14_020000", None),
+        ("2026-10-15_020000", DATABASE_FILE),
+    ):
+        (root / name / "files").mkdir(parents=True)
+        if held == "data":
+            (root / name / "data").mkdir()
+        elif held:
+            (root / name / held).write_text("x" * 2048)
+        os.utime(root / name, (int(name[8:10]), int(name[8:10])))
+    (root / "lost+found").mkdir()
+    calls: list[str] = []
+
+    def bash(command: str) -> subprocess.CompletedProcess[str]:
+        calls.append(command)
+        return subprocess.run(["bash", "-c", command], capture_output=True, text=True)
+
+    listed = list_backups(bash, str(tmp_path))
+    assert [(b["name"], b["database"]) for b in listed] == [
+        ("2026-10-15_020000", True),
+        ("2026-10-14_020000", False),
+        ("2026-10-13_020000", True),
+    ]
+    assert all(b["size"] for b in listed)
+    assert len(calls) == 1
+    assert list_backups(bash, str(tmp_path / "nothing-yet")) == []
 
 
 class TestOffsite:

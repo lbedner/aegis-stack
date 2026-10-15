@@ -34,6 +34,8 @@ from .overseer_deploy_actions import (
 PROVISION = "pages/overseer/deployments/_provision.html"
 FIT = "pages/overseer/deployments/_fit.html"
 ACCOUNT = "pages/overseer/deployments/_account.html"
+ROLLBACK = f"{PARTIALS}/rollback"  # the backups a rollback picks from
+ROLLBACK_TEMPLATE = "pages/overseer/deployments/_rollback.html"
 MIN_MEMORY_MB = 2048  # the smallest size offered by default: the stack needs it
 DEPLOYED = "This is a deployed server: deploy from the dev Overseer or CI."
 
@@ -61,14 +63,15 @@ def panel_path(panel: str, provider: str) -> str:
     return f"{PARTIALS}/{panel}/{provider}"
 
 
-def panel_url(panel: str, provider: str, **params: str) -> str:
-    """``panel_path`` with what it is asked for (empty values left out)."""
+def _with(path: str, **params: str) -> str:
+    """``path`` with what it is asked for (empty values left out)."""
     query = urlencode({k: v for k, v in params.items() if v})
-    return (
-        f"{panel_path(panel, provider)}?{query}"
-        if query
-        else panel_path(panel, provider)
-    )
+    return f"{path}?{query}" if query else path
+
+
+def panel_url(panel: str, provider: str, **params: str) -> str:
+    """``panel_path`` with what it is asked for."""
+    return _with(panel_path(panel, provider), **params)
 
 
 def _cheapest(size: dict[str, Any]) -> float:
@@ -123,30 +126,26 @@ PICKED = "change[target.name=='size'||target.name=='region']"
 
 
 def _loading(
-    panel: str,
-    provider: hosting.Provider,
+    path: str,
     job: str | None,
     first: str = "load",
     **picked: str,
 ) -> dict[str, Any]:
-    """A part of the form waiting on the agent: loaded on ``first`` (as the
-    page is, by default), then, once the agent has been asked (``job``),
-    polled each second until it answers (a poll still waiting swaps
-    nothing: the routes' ``_part``)."""
-    url = panel_url(panel, provider.key, **picked, job=job or "")
+    """A part waiting on the agent (loaded from ``path``): loaded on
+    ``first`` (as the page is, by default), then, once the agent has been
+    asked (``job``), polled each second until it answers (a poll still
+    waiting swaps nothing: the routes' ``part``)."""
+    url = _with(path, **picked, job=job or "")
     return {
         "state": "loading",
         "reload": {"url": url, "trigger": "every 1s" if job else first},
     }
 
 
-def _failed(
-    panel: str, provider: hosting.Provider, exc: RefusedError, **picked: str
-) -> dict[str, Any]:
-    """A part of the form that could not be had: why, and where asking
-    again loads it from."""
-    retry = panel_url(panel, provider.key, **picked)
-    return {"state": "failed", "error": str(exc), "retry": retry}
+def _failed(path: str, exc: RefusedError, **picked: str) -> dict[str, Any]:
+    """A part that could not be had: why, and where asking again loads it
+    from (``path``)."""
+    return {"state": "failed", "error": str(exc), "retry": _with(path, **picked)}
 
 
 # Instead of a new server, one of your own: name it, then deploy to it
@@ -172,7 +171,9 @@ def _shown(provider: hosting.Provider) -> dict[str, Any]:
 def waiting(provider: hosting.Provider) -> dict[str, Any]:
     """The form before its catalog is asked for: asked once it shows (its
     cloud picked), not for every cloud on opening the page."""
-    return _shown(provider) | _loading("catalog", provider, None, "intersect once")
+    return _shown(provider) | _loading(
+        panel_path("catalog", provider.key), None, "intersect once"
+    )
 
 
 async def _listening() -> dict[str, Any]:
@@ -231,7 +232,7 @@ def _fit(
     """Whether the size ``picked`` has room for the stack (``deploy_fit``),
     from the agent's measurement (``found``); without one, waiting on it."""
     if found is None:
-        return _loading("fit", provider, None, size=picked["size"])
+        return _loading(panel_path("fit", provider.key), None, size=picked["size"])
     return {"state": "ready"} | deploy_fit.fit(found, picked["size_spec"])
 
 
@@ -252,7 +253,7 @@ def _account(
     shown = _named(provider)
     where = {"size": picked["size"], "region": picked["region"]} if picked else {}
     if found is None:
-        return shown | _loading("account", provider, None, **where)
+        return shown | _loading(panel_path("account", provider.key), None, **where)
     price = picked["price"] if picked else None
     return shown | {"state": "ready"} | deploy_spend.spend(found, price)
 
@@ -269,10 +270,10 @@ async def provision_form(
     try:
         sold, job = await _from_agent("catalog", args, form.get("job"), by)
         if sold is None:
-            return shown | _loading("catalog", provider, job)
+            return shown | _loading(panel_path("catalog", provider.key), job)
         picked = choice(sold, provider, form)
     except RefusedError as exc:
-        return shown | _failed("catalog", provider, exc)
+        return shown | _failed(panel_path("catalog", provider.key), exc)
     optional = PROTOCOL["actions"]["provision"]["optional"]
     entered = {k: form.get(k, "") for k in optional}
     footprint, account = await asyncio.gather(
@@ -301,12 +302,12 @@ async def fit_panel(
     try:
         found, job = await _from_agent("footprint", {}, form.get("job"), by)
         if found is None:
-            return _loading("fit", provider, job, size=size)
+            return _loading(panel_path("fit", provider.key), job, size=size)
         picked = choice(await _catalog(provider), provider, form)
         if picked["size"] != size:
             raise RefusedError("Pick a size the provider sells.")
     except RefusedError as exc:
-        return _failed("fit", provider, exc, size=size)
+        return _failed(panel_path("fit", provider.key), exc, size=size)
     return _fit(provider, picked, found)
 
 
@@ -323,12 +324,41 @@ async def account_panel(
         args = {"provider": provider.key}
         found, job = await _from_agent("account", args, form.get("job"), by)
         if found is None:
-            return shown | _loading("account", provider, job, **where)
+            return shown | _loading(panel_path("account", provider.key), job, **where)
         sold = await _catalog(provider) if where["size"] else None
         picked = choice(sold, provider, form) if sold else None
     except RefusedError as exc:
-        return shown | _failed("account", provider, exc, **where)
+        return shown | _failed(panel_path("account", provider.key), exc, **where)
     return _account(provider, picked, found)
+
+
+def _backup_option(backup: dict[str, Any]) -> dict[str, str]:
+    """A backup as the rollback's select offers it: its name, size, and
+    whether it holds the database."""
+    held = "with the database" if backup["database"] else "no database"
+    return {
+        "id": backup["name"],
+        "name": f"{backup['name']} · {backup['size']} · {held}",
+    }
+
+
+async def rollback_panel(form: dict[str, str], by: str) -> dict[str, Any]:
+    """The backups a rollback can go to, newest first (the agent's look at
+    the server); while it has not looked, it asked (once) and the panel
+    waiting, or why it failed."""
+    try:
+        found, job = await _from_agent("backups", {}, form.get("job"), by)
+    except RefusedError as exc:
+        return _failed(ROLLBACK, exc)
+    if found is None:
+        return _loading(ROLLBACK, job)
+    options = [_backup_option(b) for b in found["backups"]]
+    return {"state": "ready", "backups": options, "partials": PARTIALS}
+
+
+# The rollback's backups, as the Overview first draws them: asked for as
+# the card loads.
+ROLLBACK_WAITING = _loading(ROLLBACK, None)
 
 
 # The new-server form's parts, each loaded on its own while the agent
@@ -373,4 +403,8 @@ async def request_args(action: str, form: dict[str, str]) -> dict[str, str]:
     args = validate(action, form)
     if action == "destroy" and args["confirm"] != server_name():
         raise RefusedError("Type the server's name exactly to destroy it.")
+    if action == "rollback":
+        kept = await deploy_agent.kept("backups", {}) or {}
+        if args["backup"] not in {b["name"] for b in kept.get("backups", ())}:
+            raise RefusedError("That backup is not on the server: reload the page.")
     return args

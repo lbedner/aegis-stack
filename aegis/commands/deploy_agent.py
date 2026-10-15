@@ -32,6 +32,7 @@ import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 from typing import Any, cast
 from urllib.parse import urlsplit
@@ -42,18 +43,16 @@ import typer
 from .. import __version__
 from ..cli import brand
 from ..cli.validation import validate_copier_project
-from ..core.component_files import template_module
+from ..core.deploy_protocol import protocol as _protocol
 from ..core.footprint import DockerError, measure
 from ..core.provision.http import ProvisionError, json_requester, mask_token
 from ..core.provision.provider import monthly_price
 from ..core.provision.registry import DNS_SECRETS, PROVIDERS
 from ..core.template_cleanup import env_value
 from ..i18n import lazy_t, t
-from .deploy import _get_project_root, _load_deploy_config
+from .deploy import _get_project_root, _load_deploy_config, _run_remote_capture
+from .deploy_backup import list_backups
 
-_protocol = template_module(
-    "aegis_deploy_protocol", "app", "components", "deploy", "protocol.py"
-)
 PROTOCOL: dict[str, Any] = _protocol.PROTOCOL
 LOOKS = 4  # looks answered at once (a catalog, an account, the footprint)
 RefusedError = _protocol.RefusedError
@@ -232,6 +231,12 @@ def _found(
         provider = args["provider"]
         found = _ask(provider, env, lambda c: getattr(c, action)())
         return found | {"currency": PROVIDERS[provider].currency}
+    if action == "backups":
+        server = (_load_deploy_config(str(root)) or {}).get("server")
+        if not server:
+            raise RefusedError(t("deploy.no_config"))
+        remote = partial(_run_remote_capture, server["host"], server["user"])
+        return {"backups": list_backups(remote, server["path"])}
     try:
         return measure(root)
     except DockerError as exc:
@@ -302,6 +307,8 @@ def _execute(
             )
     command = spec["command"]
     code = run(job, root, command, args, env)
+    # A backup, a deploy (it backs up first), a rollback: the list changed.
+    job.client.delete(_protocol.kept_key("backups", {}))
     if spec.get("token"):  # it may have changed what the account runs
         for key in PROVIDERS:
             job.client.delete(_protocol.kept_key("account", {"provider": key}))

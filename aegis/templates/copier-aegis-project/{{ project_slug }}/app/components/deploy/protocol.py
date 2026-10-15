@@ -36,6 +36,16 @@ PROVISION_STEPS = {
     "data": "Bring my data",
 }
 
+# A backup's steps, as its step bar names them: those it takes, in the
+# order it takes them (``database`` before ``files`` for SQLite, after for
+# Postgres; ``offsite`` only for a server that pushes one).
+BACKUP_STEPS = {
+    "database": "Database",
+    "files": "Code and settings",
+    "documents": "Documents",
+    "offsite": "Off the server",
+}
+
 PROTOCOL: dict[str, Any] = {
     "requests": "deploy:requests",
     "heartbeat": "deploy:agent",
@@ -44,9 +54,9 @@ PROTOCOL: dict[str, Any] = {
     "stale_seconds": 300,
     # Raised when a request carries something an older agent would drop
     # (2: a DNS provider's keys; 3: bringing this machine's data; 4: a
-    # resume that refuses to start a new server): the heartbeat says which
-    # it speaks.
-    "revision": 4,
+    # resume that refuses to start a new server; 5: the backups a rollback
+    # is picked from): the heartbeat says which it speaks.
+    "revision": 5,
     # Run by the agent (``progress_env`` set), a command with ``steps``
     # prints, as each starts, its plan and step (``progress_line``); the
     # agent keeps them in the job (``read_progress``) instead of its
@@ -110,13 +120,18 @@ PROTOCOL: dict[str, Any] = {
         },
         "backup": {
             "command": ["deploy-backup"],
+            "steps": BACKUP_STEPS,
         },
+        # The server's backups (name, size, whether each holds the
+        # database), so a rollback is picked from them, never typed;
+        # forgotten by any command, which may have changed them.
         "backups": {
-            "command": ["deploy-backups"],
+            "kept": "deploy:backups",
+            "seconds": 600,
         },
         "rollback": {
             "command": ["deploy-rollback"],
-            "optional": ["backup"],
+            "required": ["backup"],
         },
         "destroy": {
             "command": ["deploy-destroy"],

@@ -6628,7 +6628,7 @@ Knowing which is which makes the auth model a lot less mysterious.</p>
 <td>UI preferences (last-selected filter, sidebar open state). Survives refresh; <strong>safe to read but never authoritative</strong>.</td>
 </tr>
 <tr>
-<td>HttpOnly cookie (<code>aegis_session</code>)</td>
+<td>HttpOnly cookie (<code>&lt;project&gt;_session</code>)</td>
 <td>Browser cookie jar (HttpOnly) + httpx jar on server</td>
 <td>Yes</td>
 <td>Yes</td>
@@ -6643,7 +6643,7 @@ running on the page. Putting a session token there gives every script
 on the page access to it. The HttpOnly cookie cannot be read by JS at
 all, which is the whole reason it exists. The Aegis auth flow never
 touches <code>client_storage</code>; the backend issues <code>Set-Cookie:
-aegis_session=...</code> and the httpx client on the Python side carries it.
+&lt;project&gt;_session=...</code> and the httpx client on the Python side carries it.
 This pattern is also the same one you would use with any other Python
 front end; the cookie does not care that Flet is rendering the UI.</p>
 <h3 id="rule-sessionstate-is-in-memory-only">Rule: <code>SessionState</code> is in-memory only</h3>

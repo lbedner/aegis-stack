@@ -6752,11 +6752,11 @@
 <h2 id="what-you-get">What You Get</h2>
 <ul>
 <li><strong>JWT-based authentication</strong> - Industry-standard token authentication</li>
-<li><strong>HttpOnly session cookies</strong> - Browser flows ride on the <code>aegis_session</code>
+<li><strong>HttpOnly session cookies</strong> - Browser flows ride on the <code>&lt;project&gt;_session</code>
   cookie set by the backend; the token never has to be touched by
   frontend code</li>
 <li><strong>Persistent sessions via refresh-token rotation</strong> - Short-lived access
-  tokens (15 min default) paired with long-lived <code>aegis_refresh</code> cookies
+  tokens (15 min default) paired with long-lived <code>&lt;project&gt;_refresh</code> cookies
   (14 day default), rotated on every use with family-based reuse
   detection. The frontend <code>APIClient</code> refreshes transparently on 401</li>
 <li><strong>Sign-in and registration views out of the box</strong> - The Overseer ships
@@ -6886,16 +6886,16 @@
     participant D as Database
 
     U-&gt;&gt;C: Make API call
-    C-&gt;&gt;A: GET /api/v1/things&lt;br/&gt;(aegis_session expired)
+    C-&gt;&gt;A: GET /api/v1/things&lt;br/&gt;(&lt;project&gt;_session expired)
     A--&gt;&gt;C: 401 Unauthorized
-    C-&gt;&gt;A: POST /auth/refresh&lt;br/&gt;(aegis_refresh cookie)
+    C-&gt;&gt;A: POST /auth/refresh&lt;br/&gt;(&lt;project&gt;_refresh cookie)
     A-&gt;&gt;R: rotate(refresh_token)
     R-&gt;&gt;D: Lookup row by PK
     D--&gt;&gt;R: Row found, not revoked
     R-&gt;&gt;D: Mark inbound revoked,&lt;br/&gt;insert successor in same family
     D--&gt;&gt;R: Successor row
     R--&gt;&gt;A: Successor row (same family_id)
-    A--&gt;&gt;C: 200 + Set-Cookie&lt;br/&gt;(aegis_session, aegis_refresh)
+    A--&gt;&gt;C: 200 + Set-Cookie&lt;br/&gt;(&lt;project&gt;_session, &lt;project&gt;_refresh)
     C-&gt;&gt;A: Retry GET /api/v1/things
     A--&gt;&gt;C: 200 OK + payload
     C--&gt;&gt;U: Render result
@@ -6989,7 +6989,7 @@ consent → callback → cookie set → 303 to <code>/</code>. No view code to w
   Authlib-driven <code>state</code> + PKCE redirects.</li>
 <li><code>GET /api/v1/auth/oauth/{provider}/callback</code>, exchanges the code,
   upserts a local user (linking by email when an account already
-  exists), sets the <code>aegis_session</code> HttpOnly cookie, and 303s to
+  exists), sets the <code>&lt;project&gt;_session</code> HttpOnly cookie, and 303s to
   <code>/app</code> (or to the same-origin <code>?next=</code> the user came in with).</li>
 <li><code>GET /api/v1/auth/oauth/connections</code> and
   <code>DELETE /api/v1/auth/oauth/connections/{provider}</code>, list and

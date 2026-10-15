@@ -7114,7 +7114,7 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 <hr />
 <h2 id="auth-endpoints-all-levels">Auth Endpoints (All Levels)</h2>
 <h3 id="post-authregister">POST /auth/register</h3>
-<p>Register a new user account. Automatically accepts any pending org invites for the registered email. On success the response sets the same <code>aegis_session</code> + <code>aegis_refresh</code> cookie pair as <code>POST /auth/token</code> — the user lands signed-in without a second round-trip.</p>
+<p>Register a new user account. Automatically accepts any pending org invites for the registered email. On success the response sets the same <code>&lt;project&gt;_session</code> + <code>&lt;project&gt;_refresh</code> cookie pair as <code>POST /auth/token</code> — the user lands signed-in without a second round-trip.</p>
 <p><strong>Auth:</strong> None
 <strong>Rate limited:</strong> Yes</p>
 <p><strong>Request body:</strong></p>
@@ -7236,9 +7236,10 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 <h3 id="post-authtoken">POST /auth/token</h3>
 <p>Login and receive a JWT access token. Follows the OAuth2 password flow; email is passed as <code>username</code> in form data.</p>
 <p>On success the response also sets two cookies:</p>
+<p>Both are named for the project (<code>PROJECT_NAME</code>, e.g. <code>my-app_session</code>): browsers share a host's cookies across its ports, so two apps on <code>localhost</code> never overwrite each other's sign-in.</p>
 <ul>
-<li><code>aegis_session</code> — HttpOnly access token, <code>Path=/</code>, <code>SameSite=Lax</code>. Browser flows ride on this.</li>
-<li><code>aegis_refresh</code> — HttpOnly opaque refresh token, <code>Path=/api/v1/auth</code>, <code>SameSite=Strict</code>. Sent only on auth endpoints; used to rotate <code>aegis_session</code> once the access token expires.</li>
+<li><code>&lt;project&gt;_session</code> — HttpOnly access token, <code>Path=/</code>, <code>SameSite=Lax</code>. Browser flows ride on this.</li>
+<li><code>&lt;project&gt;_refresh</code> — HttpOnly opaque refresh token, <code>Path=/api/v1/auth</code>, <code>SameSite=Strict</code>. Sent only on auth endpoints; used to rotate <code>&lt;project&gt;_session</code> once the access token expires.</li>
 </ul>
 <p>API clients (CLIs, server-to-server) keep using the body's <code>access_token</code> as a bearer header; cookies are a parallel surface, not exclusive.</p>
 <p><strong>Auth:</strong> None
@@ -7621,8 +7622,8 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 </span></code></pre></div>
 <hr />
 <h3 id="post-authrefresh">POST /auth/refresh</h3>
-<p>Rotate the refresh token and mint a fresh access token. Reads the <code>aegis_refresh</code> cookie, revokes the inbound row, inserts a successor in the same family, and sets both cookies fresh. Returns the new access token in the body so bearer clients can update their header.</p>
-<p><strong>Auth:</strong> <code>aegis_refresh</code> cookie required (no bearer fallback — refresh tokens never travel in <code>Authorization</code> headers).</p>
+<p>Rotate the refresh token and mint a fresh access token. Reads the <code>&lt;project&gt;_refresh</code> cookie, revokes the inbound row, inserts a successor in the same family, and sets both cookies fresh. Returns the new access token in the body so bearer clients can update their header.</p>
+<p><strong>Auth:</strong> <code>&lt;project&gt;_refresh</code> cookie required (no bearer fallback — refresh tokens never travel in <code>Authorization</code> headers).</p>
 <p><strong>Response: <code>200 OK</code></strong></p>
 <table>
 <thead>
@@ -7668,12 +7669,12 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 <p>The browser-side <code>APIClient</code> in the generated frontend calls this endpoint transparently on any other-endpoint <code>401</code> and retries the original request once. Most users will never see a refresh response directly.</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="c1"># Cookie-bearing clients (browsers, curl with -b)</span>
 </span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/auth/refresh<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="w">  </span>-b<span class="w"> </span><span class="s2">&quot;aegis_refresh=</span><span class="nv">$REFRESH_TOKEN</span><span class="s2">&quot;</span>
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="w">  </span>-b<span class="w"> </span><span class="s2">&quot;&lt;project&gt;_refresh=</span><span class="nv">$REFRESH_TOKEN</span><span class="s2">&quot;</span>
 </span></code></pre></div>
 <hr />
 <h3 id="post-authlogout">POST /auth/logout</h3>
 <p>Sign the user out. Revokes the refresh token in the database and drops both cookies. The short-lived access JWT is left to expire naturally (~15 minutes) — there is no stateful blacklist.</p>
-<p><strong>Auth:</strong> Bearer token or <code>aegis_session</code> cookie required.</p>
+<p><strong>Auth:</strong> Bearer token or <code>&lt;project&gt;_session</code> cookie required.</p>
 <p><strong>Response: <code>200 OK</code></strong></p>
 <div class="language-json highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="p">{</span><span class="nt">&quot;detail&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Logged out&quot;</span><span class="p">}</span>
 </span></code></pre></div>

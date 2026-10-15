@@ -6468,7 +6468,7 @@ through it. Raw <code>httpx.AsyncClient</code> use outside this module is a code
 <ol>
 <li>Wraps a long-lived <code>httpx.AsyncClient</code> whose cookie jar persists across
    requests within a session.</li>
-<li>Carries the HttpOnly <code>aegis_session</code> cookie automatically once the
+<li>Carries the HttpOnly <code>&lt;project&gt;_session</code> cookie automatically once the
    backend issues it.</li>
 <li>Calls an <code>on_unauthorized</code> handler on 401, which is what drives the
    "session expired, send the user to /login" path.</li>
@@ -6504,7 +6504,7 @@ attached to <a href="../state/"><code>SessionState</code></a>:</p>
 <p>Why per-session rather than per-call:</p>
 <ul>
 <li><strong>The cookie jar has to persist.</strong> A fresh <code>httpx.AsyncClient</code> on every
-  call would mean a fresh empty jar on every call. The <code>aegis_session</code>
+  call would mean a fresh empty jar on every call. The <code>&lt;project&gt;_session</code>
   cookie would never make it back to the server.</li>
 <li><strong>Connection pooling.</strong> httpx reuses keep-alive connections inside an
   <code>AsyncClient</code>. Constructing a new client per call defeats it.</li>
@@ -6518,7 +6518,7 @@ exactly once per session, from <code>clear_session_state(page)</code>. See
 <a href="../state/#teardown">Session State</a> for why it does not fire on
 <code>on_disconnect</code>.</p>
 <h2 id="the-cookie-jar-and-the-auth-flow">The cookie jar and the auth flow</h2>
-<p>The backend issues <code>Set-Cookie: aegis_session=&lt;token&gt;; HttpOnly</code> on:</p>
+<p>The backend issues <code>Set-Cookie: &lt;project&gt;_session=&lt;token&gt;; HttpOnly</code> on:</p>
 <ul>
 <li><code>POST /api/v1/auth/token</code> (username + password sign-in)</li>
 <li><code>POST /api/v1/auth/register</code></li>
@@ -6534,10 +6534,10 @@ in the <code>Cookie:</code> header. The view code does not need to know about it
 
     V-&gt;&gt;C: post_form to /auth/token with credentials
     C-&gt;&gt;B: POST /auth/token
-    B--&gt;&gt;C: 200 plus Set-Cookie aegis_session
+    B--&gt;&gt;C: 200 plus Set-Cookie &lt;project&gt;_session
     Note over C: cookie lands in httpx jar
     V-&gt;&gt;C: get /api/v1/insights/projects
-    C-&gt;&gt;B: GET with Cookie aegis_session
+    C-&gt;&gt;B: GET with Cookie &lt;project&gt;_session
     B--&gt;&gt;C: 200 plus JSON payload</code></pre>
 <p>Logout (<code>sign_out(page)</code> in <code>app/components/frontend/auth/session.py</code>):</p>
 <ol>

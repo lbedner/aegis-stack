@@ -9,7 +9,7 @@
    on the agent, why it failed, or what it found); a picker of providers
    by their logos, and a terminal way folded under it (``picker``,
    ``by_hand``); and ``note``, the muted paragraph's classes. #}
-{% from "components/macros/form.html" import action, field, text_input, primary_button %}
+{% from "components/macros/form.html" import action, field, text_input %}
 {% from "components/macros/icons.html" import icon %}
 {% from "components/macros/layout.html" import avatar, badge, card, command, dropdown, menu_item, progress %}
 {% macro note() %}text-sm text-aegis-muted space-y-2{% endmacro %}
@@ -75,7 +75,7 @@
 {% macro destroy_form(partials, name) %}
 <form data-ask="destroy" {{ asks(partials ~ "/destroy") }} class="flex flex-wrap items-end gap-2">
   {% call field("Type " ~ name ~ " to delete the server, its firewall, DNS record and SSH key") %}{{ text_input("confirm", required=True, pattern=name|exactly) }}{% endcall %}
-  {{ primary_button("Destroy", "submit") }}
+  {{ action("Destroy", "", "danger", type="submit") }}
 </form>
 {% endmacro %}
 

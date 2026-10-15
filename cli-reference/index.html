@@ -7973,8 +7973,11 @@ names the providers this machine holds a token for, never the token). A new
 server on a domain, and its destroy, carry the DNS provider's keys the same
 way; only a DNS provider's own variables are accepted (anything else, such as
 <code>PATH</code>, is refused).</p>
-<p>It finds Redis as the app's host-side settings do: <code>REDIS_URL_LOCAL</code>, else
-the port <code>make serve</code> published (<code>.env.ports</code>). Requests older than five
+<p>It finds Redis with <code>REDIS_URL_LOCAL</code>, else by asking Docker, on every
+(re)connect, for the port of the <code>redis</code> container compose started from this
+checkout; never <code>.env.ports</code>, whose port may since be another project's. It
+refuses to listen while another live agent does for the project, and stops
+once whoever started it (<code>make serve</code>, a shell) is gone. Requests older than five
 minutes are failed, not run. A new server is created only at the price you
 typed back in the Overseer, which it asks the provider for again first.
 The heartbeat also names the actions this agent runs and the protocol

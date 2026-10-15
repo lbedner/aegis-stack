@@ -6,8 +6,7 @@
    job, and destroying it apart. Then each connected cloud account's
    servers and what they cost, as the agent last found them. #}
 {% from "components/macros/layout.html" import card, command, facts %}
-{% from "components/macros/form.html" import field, text_input, primary_button %}
-{% from "pages/overseer/deployments/_macros.html" import agent_note, asks, ask, deployed_card, destroy_form, job_panel, note, place, step %}
+{% from "pages/overseer/deployments/_macros.html" import agent_note, ask, deployed_card, destroy_form, job_panel, note, place, step %}
 {% if actions.view == "deployed" %}
 {{ deployed_card(actions) }}
 {% elif actions.view == "no-server" %}
@@ -26,12 +25,8 @@
 <div class="flex flex-wrap items-center gap-2">
   {{ ask("Deploy", actions.partials, "deploy", "primary") }}
   {{ ask("Back up now", actions.partials, "backup") }}
-  {{ ask("List backups", actions.partials, "backups") }}
 </div>
-<form data-ask="rollback" {{ asks(actions.partials ~ "/rollback") }} class="flex flex-wrap items-end gap-2">
-  {% call field("Roll back to (blank: the newest backup)") %}{{ text_input("backup", placeholder="2026-10-01_020000") }}{% endcall %}
-  {{ primary_button("Roll back", "submit") }}
-</form>
+{% with r = actions.rollback %}{% include "pages/overseer/deployments/_rollback.html" %}{% endwith %}
 {{ job_panel(actions) }}
 {% else %}
 {{ agent_note(actions.agent) }}

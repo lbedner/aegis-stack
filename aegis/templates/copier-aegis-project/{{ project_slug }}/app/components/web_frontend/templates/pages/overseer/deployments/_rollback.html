@@ -1,0 +1,16 @@
+{# The backups a rollback picks from (``r``, overseer_deploy_form's
+   rollback_panel): waiting on the agent's look at the server, why it
+   could not be had, or the server's backups, newest first, each saying
+   whether it holds the database. Picked, never typed. #}
+{% from "components/macros/form.html" import action, field, select %}
+{% from "pages/overseer/deployments/_macros.html" import asks, note, panel %}
+{% call panel("rollback", r, "Looking for the server's backups...", "Could not list the backups: ") %}
+{% if r.backups %}
+<form data-ask="rollback" {{ asks(r.partials ~ "/rollback") }} class="flex flex-wrap items-end gap-2">
+  {% call field("Roll back to") %}{{ select("backup", r.backups, blank=None, block=True) }}{% endcall %}
+  {{ action("Roll back", "", "warn", type="submit") }}
+</form>
+{% else %}
+<p class="{{ note() }}">No backups on the server yet: Back up now makes one.</p>
+{% endif %}
+{% endcall %}

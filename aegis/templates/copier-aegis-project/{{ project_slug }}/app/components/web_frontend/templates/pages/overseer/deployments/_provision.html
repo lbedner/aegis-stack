@@ -4,7 +4,7 @@
    a size or region picked reloads it, so the regions are the ones that
    offer the size and the price is theirs. The price shown is typed back
    to create the server. #}
-{% from "components/macros/form.html" import checkbox, field, select, text_input, primary_button %}
+{% from "components/macros/form.html" import action, checkbox, field, select, text_input %}
 {% from "pages/overseer/deployments/_macros.html" import asks, by_hand, failed, fold, reloads, waiting %}
 <div data-provision="{{ p.provider }}" data-part data-write hx-disinherit="*" hx-swap="outerHTML" hx-include="find form" class="space-y-3"{{ reloads(p.reload) }}>
   <p data-provision-heading class="text-sm font-semibold text-aegis-text">New server on {{ p.name }}</p>
@@ -37,7 +37,7 @@
     <p data-price class="text-sm text-aegis-text">{{ p.price_cents|money(p.currency) }} a month, billed to your {{ p.name }} account.</p>
     <div class="flex flex-wrap items-end gap-2">
       {% call field("Type " ~ p.price ~ " to create it") %}{{ text_input("typed", required=True, pattern=p.price|exactly) }}{% endcall %}
-      {{ primary_button("Create server", "submit") }}
+      {{ action("Create server", "", "primary", type="submit") }}
     </div>
   </form>
   {% endif %}

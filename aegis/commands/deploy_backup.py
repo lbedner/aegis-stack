@@ -5,11 +5,12 @@ deploy directory into ``backups/<timestamp>/files``: the code and the
 server's ``.env``. The data needs more than a file copy, so it lands
 beside it:
 
-- ``data/``: the SQLite database, through SQLite's online backup API in the
-  webserver container. A byte copy of a live WAL database misses every
-  commit not yet checkpointed. With a snapshot, ``files/`` skips ``data/``,
-  so a rollback's ``rsync --delete`` clears the live database and its
-  ``-wal`` before the snapshot goes in.
+- ``database.db``: the SQLite database, through SQLite's online backup API
+  in the webserver container, wherever ``DATABASE_PATH`` puts it. A byte
+  copy of a live WAL database misses every commit not yet checkpointed.
+  With a snapshot, ``files/`` skips ``data/``, so a rollback's
+  ``rsync --delete`` never lays a live copy's ``-wal`` back down; the
+  snapshot goes back in through the container, checked first.
 - ``storage.tar.gz``: the object store, a named volume outside the
   directory.
 
@@ -41,25 +42,56 @@ BACKUP_TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{6}$")
 STORAGE_ROOT = "/data/storage"
 STORAGE_ARCHIVE = "storage.tar.gz"
 
-# Runs in the webserver container and writes a tar of the snapshot to
-# stdout, named relative to the ``./data`` bind mount. stdout is moved to
-# stderr before the app is imported, so nothing it logs lands in the tar.
-_SQLITE_SNAPSHOT = """\
-import os, sqlite3, tarfile, tempfile
-from pathlib import Path
+DATABASE_FILE = "database.db"  # the SQLite snapshot, in a backup
+
+# Runs in a webserver container (this machine's for an upload, the
+# server's for a backup) and writes the snapshot's bytes to stdout, found
+# through DATABASE_PATH wherever the project keeps it (a bind mount or a
+# named volume). stdout is moved to stderr before the app is imported, so
+# nothing it logs lands in the copy.
+SNAPSHOT = """\
+import os, shutil, sqlite3, tempfile
 out = os.fdopen(os.dup(1), "wb")
 os.dup2(2, 1)
 from app.core.db import DATABASE_PATH
-src = Path(DATABASE_PATH).resolve()
 with tempfile.TemporaryDirectory() as tmp:
-    snap = Path(tmp, src.name)
-    live, copy = sqlite3.connect(f"file:{src}?mode=ro", uri=True), sqlite3.connect(snap)
+    snap = os.path.join(tmp, "snapshot.db")
+    live = sqlite3.connect(f"file:{os.path.abspath(DATABASE_PATH)}?mode=ro", uri=True)
+    copy = sqlite3.connect(snap)
     live.backup(copy)
     copy.close()
     live.close()
-    with tarfile.open(fileobj=out, mode="w|") as tar:
-        tar.add(snap, arcname=str(src.relative_to(Path("data").resolve())))
+    with open(snap, "rb") as f:
+        shutil.copyfileobj(f, out)
 out.close()
+"""
+
+# Runs in a one-off server webserver container, the stack down (an
+# upload, a rollback): stdin beside the database, checked, then in its place. An empty file is a
+# valid empty database to SQLite, hence the header.
+RESTORE = """\
+import os, shutil, sqlite3, sys
+from app.core.db import DATABASE_PATH
+part = DATABASE_PATH + ".upload"
+os.makedirs(os.path.dirname(os.path.abspath(DATABASE_PATH)), exist_ok=True)
+try:
+    with open(part, "wb") as f:
+        shutil.copyfileobj(sys.stdin.buffer, f)
+    with open(part, "rb") as f:
+        if f.read(16) != b"SQLite format 3\\x00":
+            sys.exit("the upload is not a SQLite database")
+    db = sqlite3.connect(part)
+    checked = db.execute("PRAGMA integrity_check").fetchone()[0]
+    db.close()
+    if checked != "ok":
+        sys.exit(f"the upload failed its integrity check: {checked}")
+    for extra in ("-wal", "-shm"):
+        if os.path.exists(DATABASE_PATH + extra):
+            os.remove(DATABASE_PATH + extra)
+    os.replace(part, DATABASE_PATH)
+finally:
+    if os.path.exists(part):
+        os.remove(part)
 """
 
 
@@ -88,14 +120,14 @@ def offsite_env(deploy_path: str) -> str:
 
 
 def snapshot_sqlite(run: Run, compose_prefix: str, backup_dir: str) -> bool:
-    """Snapshot the live database into ``<backup>/data``. False on failure,
-    with nothing partial left behind."""
+    """Snapshot the live database into ``<backup>/DATABASE_FILE``. False on
+    failure, with nothing partial left behind."""
     typer.echo(t("deploy.backup_sqlite"))
-    target = shlex.quote(f"{backup_dir}/data")
+    target = shlex.quote(f"{backup_dir}/{DATABASE_FILE}")
+    # First into the backup: nothing has made its directory yet.
     result = run(
-        f"set -o pipefail; mkdir -p {target} && {compose_prefix} exec -T webserver"
-        f" python -c {shlex.quote(_SQLITE_SNAPSHOT)} | tar -xf - -C {target}"
-        f" || {{ rm -rf {target}; false; }}"
+        f"mkdir -p {shlex.quote(backup_dir)} && {compose_prefix} exec -T webserver"
+        f" python -c {shlex.quote(SNAPSHOT)} > {target} || {{ rm -f {target}; false; }}"
     )
     if result.returncode != 0:
         brand.warn(t("deploy.backup_sqlite_failed"))
@@ -142,7 +174,10 @@ def restore_data(
     """Put back what ``snapshot_sqlite`` and ``archive_storage`` captured.
 
     The stack must be down; a backup without them restores nothing here.
+    A backup from before aegis-stack#1627 holds ``data/`` (a copy of the
+    ``./data`` bind mount) instead of ``DATABASE_FILE``.
     """
+    db = shlex.quote(f"{backup_dir}/{DATABASE_FILE}")
     data = shlex.quote(f"{backup_dir}/data")
     live = shlex.quote(f"{deploy_path}/data")
     archive = shlex.quote(f"{backup_dir}/{STORAGE_ARCHIVE}")
@@ -150,7 +185,9 @@ def restore_data(
         f"find {STORAGE_ROOT} -mindepth 1 -delete && tar -xzf - -C {STORAGE_ROOT}"
     )
     result = run(
-        f"{{ [ ! -d {data} ] || {{ mkdir -p {live} && cp -a {data}/. {live}/; }}; }}"
+        f"{{ [ ! -f {db} ] || {compose_prefix} run --rm --no-deps -T --entrypoint"
+        f" python webserver -c {shlex.quote(RESTORE)} < {db}; }}"
+        f" && {{ [ ! -d {data} ] || {{ mkdir -p {live} && cp -a {data}/. {live}/; }}; }}"
         f" && {{ [ ! -f {archive} ] || {{ {compose_prefix} run --rm --no-deps -T"
         f" --entrypoint sh webserver -c {unpack} < {archive}; }}; }}"
     )

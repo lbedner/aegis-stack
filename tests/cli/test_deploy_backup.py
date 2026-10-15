@@ -9,19 +9,23 @@ instead of run, so these pin the shell each step sends.
 
 from __future__ import annotations
 
-import io
-import os
-import sqlite3
+import re
+import shlex
 import subprocess
-import sys
-import tarfile
 from pathlib import Path
 
 import pytest
 
 from aegis.commands import deploy as deploy_mod
 from aegis.commands.deploy import _create_backup, _rollback_to_backup
-from aegis.commands.deploy_backup import _SQLITE_SNAPSHOT, is_sqlite, offsite_env
+from aegis.commands.deploy_backup import (
+    DATABASE_FILE,
+    RESTORE,
+    SNAPSHOT,
+    is_sqlite,
+    offsite_env,
+    snapshot_sqlite,
+)
 
 TS = "2026-01-01_000000"
 
@@ -54,51 +58,30 @@ def _bash_parses(command: str) -> None:
 
 
 class TestSqliteSnapshot:
-    def test_script_reads_through_the_wal(self, tmp_path: Path) -> None:
-        """Run the in-container script for real against a WAL database
-        whose newest commit has not been checkpointed: a byte copy of the
-        main file would miss it. Its import also prints, as an app may
-        log on import; only the archive may reach stdout."""
-        (tmp_path / "app" / "core").mkdir(parents=True)
-        (tmp_path / "app" / "__init__.py").write_text("")
-        (tmp_path / "app" / "core" / "__init__.py").write_text("")
-        (tmp_path / "app" / "core" / "db.py").write_text(
-            "print('noise on import')\nDATABASE_PATH = './data/app.db'\n"
-        )
-        (tmp_path / "data").mkdir()
-        live = sqlite3.connect(tmp_path / "data" / "app.db")
-        live.execute("PRAGMA journal_mode=wal")
-        live.execute("PRAGMA wal_autocheckpoint=0")
-        live.execute("CREATE TABLE t (v TEXT)")
-        live.execute("INSERT INTO t VALUES ('newest')")
-        live.commit()
-        try:
-            out = subprocess.run(
-                [sys.executable, "-c", _SQLITE_SNAPSHOT],
-                cwd=tmp_path,
-                env={**os.environ, "PYTHONPATH": str(tmp_path)},
-                capture_output=True,
-                check=True,
-            ).stdout
-        finally:
-            live.close()
-
-        with tarfile.open(fileobj=io.BytesIO(out)) as tar:
-            assert tar.getnames() == ["app.db"]
-            tar.extractall(tmp_path / "restored", filter="data")
-        copy = sqlite3.connect(tmp_path / "restored" / "app.db")
-        assert copy.execute("SELECT v FROM t").fetchall() == [("newest",)]
-        copy.close()
-
     def test_backup_snapshots_into_its_own_directory(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         calls = _backup(monkeypatch, sqlite=True)
 
         snapshot = next(c for c in calls if "python -c" in c)
-        assert "exec -T webserver" in snapshot
-        assert "/backups/" in snapshot and "/data" in snapshot
+        assert f"exec -T webserver python -c {shlex.quote(SNAPSHOT)}" in snapshot
+        assert re.search(r"> /srv/app/backups/[0-9_-]+/database\.db ", snapshot)
         _bash_parses(snapshot)
+
+    def test_the_snapshot_makes_the_backup_directory_it_writes_into(
+        self, tmp_path: Path
+    ) -> None:
+        """It runs before anything else of the backup exists. Run for real,
+        with ``echo`` standing in for docker compose."""
+
+        def bash(command: str) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                ["bash", "-c", command], capture_output=True, text=True
+            )
+
+        backup = tmp_path / "backups" / TS
+        assert snapshot_sqlite(bash, "echo", str(backup))
+        assert (backup / DATABASE_FILE).read_text().startswith("exec -T webserver")
 
     def test_file_copy_skips_the_live_database_once_snapshotted(
         self, monkeypatch: pytest.MonkeyPatch
@@ -174,6 +157,11 @@ class TestRollback:
         calls = self._rollback(monkeypatch)
 
         restore = next(c for c in calls if "storage.tar.gz" in c)
+        assert (
+            "run --rm --no-deps -T --entrypoint python webserver"
+            f" -c {shlex.quote(RESTORE)} < /srv/app/backups/{TS}/database.db"
+        ) in restore
+        # A backup from before #1627 holds a data/ directory instead.
         assert f"cp -a /srv/app/backups/{TS}/data/. /srv/app/data/" in restore
         assert "run --rm --no-deps -T --entrypoint sh webserver" in restore
         _bash_parses(restore)

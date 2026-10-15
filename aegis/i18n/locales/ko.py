@@ -827,7 +827,7 @@ MESSAGES: dict[str, str] = {
     "deploy.backup_pruned": "오래된 백업 정리됨: {name}",
     "deploy.backup_sqlite": "Snapshotting SQLite database...",
     "deploy.backup_sqlite_failed": (
-        "Warning: SQLite snapshot failed; copying the live database file instead"
+        "Warning: SQLite snapshot failed; this backup may not hold the database"
     ),
     "deploy.backup_storage_failed": "Warning: Object storage backup failed",
     "deploy.backup_offsite": "Copying backup off the server (restic)...",

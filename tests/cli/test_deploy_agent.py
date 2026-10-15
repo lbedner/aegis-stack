@@ -11,6 +11,7 @@ import asyncio
 import importlib.util
 import json
 import logging
+import os
 import subprocess
 import sys
 import threading
@@ -82,10 +83,18 @@ class FakeRedis:
             self.on_empty()
         return None
 
-    def set(self, key: str, value: str, ex: int | None = None) -> None:
+    def ping(self) -> bool:
+        return True
+
+    def set(
+        self, key: str, value: str, ex: int | None = None, nx: bool = False
+    ) -> bool | None:
+        if nx and key in self.strings:
+            return None
         self.strings[key] = value
         if ex:
             self.ttl[key] = ex
+        return True
 
     def get(self, key: str) -> str | None:
         return self.strings.get(key)
@@ -253,17 +262,37 @@ def test_a_rollback_takes_the_backups_own_timestamps() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_redis_is_found_on_the_published_port(
+def test_redis_is_found_where_docker_published_this_checkouts(
     project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    for key in ("REDIS_URL_LOCAL", "REDIS_HOST_PORT", "REDIS_URL"):
+    """Asked of Docker each time, by the checkout compose ran in, never a
+    port written down (``.env.ports``, which may since be another
+    project's) nor the project's name (another checkout's, too)."""
+    for key in ("REDIS_URL_LOCAL", "REDIS_URL"):
         monkeypatch.delenv(key, raising=False)
-    assert agent.redis_url(project) == "redis://127.0.0.1:6379"
-    (project / ".env").write_text("REDIS_URL=redis://redis:6379/2\nREDIS_HOST_PORT=1\n")
-    (project / ".env.ports").write_text("REDIS_HOST_PORT=6380\n")
-    assert agent.redis_url(project) == "redis://127.0.0.1:6380/2"
+    asked: list[tuple[str, ...]] = []
+
+    def docker(*args: str) -> str:
+        asked.append(args)
+        return "c0ffee\n" if args[0] == "ps" else "127.0.0.1:6380\n[::1]:6380\n"
+
+    (project / ".env").write_text("REDIS_URL=redis://redis:6379/2\n")
+    (project / ".env.ports").write_text("REDIS_HOST_PORT=6381\n")
+    assert agent.redis_url(project, docker) == "redis://127.0.0.1:6380/2"
+    ps, port = asked
+    assert f"label=com.docker.compose.project.working_dir={project}" in ps
+    assert "label=com.docker.compose.service=redis" in ps
+    assert port == ("port", "c0ffee", "6379")
     monkeypatch.setenv("REDIS_URL_LOCAL", "redis://10.0.0.5:7000")
-    assert agent.redis_url(project) == "redis://10.0.0.5:7000"
+    assert agent.redis_url(project, docker) == "redis://10.0.0.5:7000"
+
+
+def test_a_checkout_whose_redis_is_not_running_has_none(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("REDIS_URL_LOCAL", raising=False)
+    with pytest.raises(agent.DockerError):
+        agent.redis_url(project, lambda *args: "")
 
 
 # ---------------------------------------------------------------------------
@@ -287,6 +316,7 @@ def test_the_heartbeat_names_the_providers_it_has_tokens_for(project: Path) -> N
     assert beat["revision"] == agent.PROTOCOL["revision"]
     assert beat["actions"] == list(agent.PROTOCOL["actions"])
     assert beat["pid"] and beat["host"] and beat["version"]
+    assert beat["root"] == str(project)  # which checkout deploys
     assert DO_TOKEN not in (seen[0] or "")
     assert redis.ttl[agent.PROTOCOL["heartbeat"]] > 0
     # Stopping takes it down: the Overseer stops offering the actions.
@@ -412,10 +442,9 @@ def test_an_unexpected_error_fails_its_job_and_the_agent_listens_on(
 def test_redis_dropping_mid_job_leaves_the_agent_listening(
     project: Path, app_store: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The stack restarting while a job writes its record: the write, and
-    the failure it would record, both raise. The agent waits for Redis and
-    takes the next request, as it does when Redis drops between them."""
-    monkeypatch.setattr(agent, "REDIS_RETRY_SECONDS", 0)
+    """The stack restarting while a job writes its record: the lost writes
+    are that record's alone (the next puts it right), the command runs on
+    to the end, and the next request runs."""
     redis = FakeRedis()
     first = _request(redis, app_store, "deploy")
     then = _request(redis, app_store, "deploy")
@@ -430,6 +459,7 @@ def test_redis_dropping_mid_job_leaves_the_agent_listening(
 
     monkeypatch.setattr(redis, "hset", flaky)
     _serve(redis, project)
+    assert _job(redis, app_store, first).status == "done"
     assert _job(redis, app_store, then).status == "done"
 
 
@@ -853,46 +883,115 @@ def test_help() -> None:
     assert "--project-path" in strip_ansi_codes(result.output)
 
 
-class _Flaky:
-    """A Redis that is not up for its first ``down`` calls."""
+def _beat_of(redis: FakeRedis, pid: int) -> None:
+    """Another agent's heartbeat on this project's Redis."""
+    beat = {"host": agent.socket.gethostname(), "pid": pid, "root": "/elsewhere"}
+    redis.strings[agent.PROTOCOL["heartbeat"]] = json.dumps(beat)
 
-    def __init__(self, down: int) -> None:
-        self.down = down
+
+def _found(redis: FakeRedis, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The project's Redis is ``redis``, up."""
+    monkeypatch.setattr(agent, "redis_url", lambda root: "redis://127.0.0.1:1")
+    monkeypatch.setattr(agent.redis.Redis, "from_url", lambda *a, **k: redis)
+
+
+def test_a_second_agent_for_the_project_is_refused(
+    project: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Two would take turns at the requests (two deploys at once), and each
+    would fail the jobs the other is running."""
+    redis = FakeRedis()
+    _beat_of(redis, os.getppid())  # alive
+    _found(redis, monkeypatch)
+    with pytest.raises(agent.RefusedError, match="/elsewhere"):
+        agent.connect(project, threading.Event())
+    assert "Listening" not in capsys.readouterr().out
+    assert "/elsewhere" in redis.strings[agent.PROTOCOL["heartbeat"]]  # not taken down
+
+
+def test_a_dead_agents_heartbeat_does_not_hold_the_project(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Killed without taking it down (make serve stopping it): its heartbeat
+    lingers a few seconds, and the next agent listens anyway."""
+    redis = FakeRedis()
+    gone = subprocess.Popen([sys.executable, "-c", ""])
+    gone.wait()
+    _beat_of(redis, gone.pid)
+    _found(redis, monkeypatch)
+    assert agent.connect(project, threading.Event()) is redis
+    beat = json.loads(redis.strings[agent.PROTOCOL["heartbeat"]])
+    assert beat["pid"] == os.getpid()  # taken over
+
+
+def test_the_agent_stops_once_whoever_started_it_is_gone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """make serve killed outright: left behind, the agent would listen for
+    a stack nobody runs, and stand beside the next make serve's."""
+    monkeypatch.setattr(agent, "POLL_SECONDS", 0.01)
+    parent = {"pid": os.getppid()}
+    monkeypatch.setattr(agent.os, "getppid", lambda: parent["pid"])
+    stop = threading.Event()
+    agent.watch_parent(stop)
+    assert not stop.wait(0.05)
+    parent["pid"] = 1  # reparented
+    assert stop.wait(2)
+
+
+class _Flaky(FakeRedis):
+    """A Redis not up the first time it is asked."""
+
+    def __init__(self) -> None:
+        super().__init__()
         self.calls = 0
 
     def ping(self) -> bool:
         self.calls += 1
-        if self.calls <= self.down:
+        if self.calls == 1:
             raise agent.redis.ConnectionError("Connection refused")
         return True
 
 
-def test_it_waits_for_redis_saying_where_once(
-    capsys: pytest.CaptureFixture[str],
+def test_it_waits_for_its_projects_redis_saying_why_once(
+    project: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """Started beside the stack (make serve), the agent is usually up
-    before Redis is."""
-    client, naps = _Flaky(down=2), []
-    agent.wait_for_redis(client, "redis://127.0.0.1:1", sleep=naps.append)
-    assert client.calls == 3
-    assert len(naps) == 2
-    assert strip_ansi_codes(capsys.readouterr().out).count("redis://127.0.0.1:1") == 1
+    before Redis is: asked where it is again each try, as the stack may
+    come up on another port."""
+    monkeypatch.setattr(agent, "REDIS_RETRY_SECONDS", 0)
+    places = iter([agent.DockerError("not running"), "redis://127.0.0.1:1"])
+
+    def where(root: Path) -> str:
+        place = next(places, "redis://127.0.0.1:2")
+        if isinstance(place, Exception):
+            raise place
+        return place
+
+    client = _Flaky()
+    monkeypatch.setattr(agent, "redis_url", where)
+    monkeypatch.setattr(agent.redis.Redis, "from_url", lambda *a, **k: client)
+    assert agent.connect(project, threading.Event()) is client
+    assert client.calls == 2
+    said = strip_ansi_codes(capsys.readouterr().out)
+    assert said.count("not running") == 1
+    assert "redis://127.0.0.1:2" in said  # listening, where
 
 
-def test_it_rides_out_redis_going_away(project: Path) -> None:
-    """The stack restarting takes Redis down for a moment; the agent keeps
-    listening rather than dying with it."""
-    redis = FakeRedis()
+def test_it_listens_again_wherever_its_redis_comes_back(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The stack restarting takes Redis down; the agent finds it again (on
+    whatever port it came back on) rather than dying with it."""
     stop = threading.Event()
-    blips = iter([agent.redis.ConnectionError("gone")])
-    real = redis.blpop
+    first, starting, then = FakeRedis(), FakeRedis(), FakeRedis(on_empty=stop.set)
 
-    def blpop(keys: list[str], timeout: int) -> Any:
-        for blip in blips:
-            raise blip
-        stop.set()
-        return real(keys, timeout=timeout)
+    def gone(*args: Any, **kwargs: Any) -> Any:
+        raise agent.redis.ConnectionError("gone")
 
-    redis.blpop = blpop  # type: ignore[method-assign]
-    agent.serve(redis, project, stop=stop)
-    assert stop.is_set()
+    first.blpop = gone  # type: ignore[method-assign]  # between requests
+    starting.scan_iter = gone  # type: ignore[method-assign]  # while starting
+    clients = iter([first, starting, then])
+    monkeypatch.setattr(agent, "connect", lambda root, stop: next(clients, None))
+    agent.listen(project, stop)
+    assert stop.is_set() and next(clients, None) is None

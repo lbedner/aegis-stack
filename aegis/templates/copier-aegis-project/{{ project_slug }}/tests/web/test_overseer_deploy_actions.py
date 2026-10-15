@@ -145,6 +145,8 @@ def redis(app: FastAPI, monkeypatch: pytest.MonkeyPatch, store: FakeStore) -> Fa
     monkeypatch.setattr(agent, "_client", lambda: fake)
     beat = {
         "host": "laptop",
+        "root": "/home/ada/my-app",
+        "pid": 4242,
         "version": "0.16.0",
         "providers": ["digitalocean"],
         "actions": list(PROTOCOL["actions"]),
@@ -355,6 +357,17 @@ def test_without_an_agent_it_shows_how_to_start_one(
     none(card, "[data-ask], [data-provision]")  # keys may still be set
 
 
+def test_the_listening_agent_names_the_checkout_it_deploys_from(
+    redis: FakeRedis, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every checkout of a project (a worktree, a copy) runs its own agent:
+    the server card says whose deploys are about to run."""
+    deployed(monkeypatch, {"server": BOX, "provision": READY})
+    card = _card(TestClient(app), PAGE)
+    assert "/home/ada/my-app" in text(one(card, '[data-deploy-state="ready"]'))
+    one(card, '[data-ask="deploy"]')
+
+
 def test_an_agent_older_than_the_app_is_named_stale(
     redis: FakeRedis, app: FastAPI
 ) -> None:
@@ -365,7 +378,9 @@ def test_an_agent_older_than_the_app_is_named_stale(
     beat["actions"].remove("account")
     redis.strings[agent.HEARTBEAT] = json.dumps(beat)
     card = _card(TestClient(app))
-    assert "make serve" in text(one(card, '[data-deploy-state="stale"]'))
+    stale = one(card, '[data-deploy-state="stale"]')
+    assert "make serve" in text(stale)
+    assert "pid 4242" in text(one(stale, "[data-agent-said]"))  # the one to stop
     assert _steps(card)[0] == ("agent", "current")
     _sold(redis)
     url = deploy_form.panel_url(
@@ -385,7 +400,7 @@ def test_the_steps_are_read_from_what_is_true(redis: FakeRedis, app: FastAPI) ->
         ("domain", "optional"),
         ("server", "current"),
     ]
-    assert "laptop" in text(one(_step(card, "agent"), "[data-summary]"))
+    assert "/home/ada/my-app" in text(one(_step(card, "agent"), "[data-summary]"))
     one(_step(card, "server"), "[data-step-body] [data-provision]")
 
 

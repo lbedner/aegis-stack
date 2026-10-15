@@ -30,9 +30,8 @@
 </div>
 {% with r = actions.rollback %}{% include "pages/overseer/deployments/_rollback.html" %}{% endwith %}
 {{ job_panel(actions) }}
-{% else %}
-{{ agent_note(actions.agent) }}
 {% endif %}
+{{ agent_note(actions.agent) }}
 {% endcall %}
 {% if actions.destroy and actions.agent.state == "ready" %}
 {% call card("Destroy") %}{{ destroy_form(actions.partials, actions.destroy) }}{% endcall %}

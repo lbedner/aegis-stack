@@ -47,8 +47,15 @@ jobs:
     - name: Run type checking
       run: uv run ty check
 
-  test:
+  # The suite in two parallel jobs (``--shard``, tests/_shard.py), each
+  # running a worker per CPU.
+  test-shard:
+    name: test {% raw %}${{ matrix.shard }}{% endraw %}/2
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     steps:
     - uses: actions/checkout@v6
 
@@ -65,5 +72,15 @@ jobs:
       run: uv sync
 
     - name: Run tests{% if include_database %} (fails on new N+1 query sites too)
-      run: uv run pytest --queryspy-strict --queryspy-baseline .queryspy-baseline.json{% else %}
-      run: uv run pytest{% endif %}
+      run: uv run pytest --queryspy-strict --queryspy-baseline .queryspy-baseline.json --shard {% raw %}${{ matrix.shard }}{% endraw %}/2{% else %}
+      run: uv run pytest --shard {% raw %}${{ matrix.shard }}{% endraw %}/2{% endif %}
+
+  # The required check stays ``test``: it passes only when every shard did,
+  # so splitting the suite changes nothing branch protection blocks on.
+  test:
+    if: always()
+    needs: [test-shard]
+    runs-on: ubuntu-latest
+    steps:
+    - name: Every shard passed
+      run: test "{% raw %}${{ needs.test-shard.result }}{% endraw %}" = success

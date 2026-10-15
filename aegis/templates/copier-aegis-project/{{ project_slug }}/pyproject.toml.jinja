@@ -321,6 +321,10 @@ exclude = [".venv", "venv", ".tox", "build", "dist"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# One worker per CPU. ``logical``, not ``auto``: with psutil installed (it is,
+# for the runtime probes) ``auto`` counts physical cores, which is half a
+# GitHub runner. loadgroup keeps an ``xdist_group`` on one worker.
+addopts = "-n logical --dist=loadgroup"
 
 # Windows-compatible mirror of the Makefile: `uv run poe <target>` means the
 # same thing as `make <target>` on any OS, since `make` isn't a native
@@ -511,7 +515,7 @@ cmd = "uv run pytest --queryspy-strict --queryspy-baseline .queryspy-baseline.js
 
 [tool.poe.tasks.check-queries-baseline]
 help = "Rewrite .queryspy-baseline.json from the current suite"
-cmd = "uv run pytest --queryspy-strict --queryspy-baseline .queryspy-baseline.json --queryspy-baseline-update"
+cmd = "uv run pytest -n 0 --queryspy-strict --queryspy-baseline .queryspy-baseline.json --queryspy-baseline-update"
 
 {% endif %}[tool.poe.tasks.check]
 help = "Run all code quality checks"
@@ -592,6 +596,7 @@ dev = [
     "httpx>=0.28.1,<0.29",
     "pytest>=9.0.3,<10",
     "pytest-asyncio>=1.1.0,<2",
+    "pytest-xdist>=3.5.0,<4",
     "ruff==0.12.7",
     "ty==0.0.79",
     "types-psutil==7.0.0.20250801",

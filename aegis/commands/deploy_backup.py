@@ -124,9 +124,10 @@ def snapshot_sqlite(run: Run, compose_prefix: str, backup_dir: str) -> bool:
     failure, with nothing partial left behind."""
     typer.echo(t("deploy.backup_sqlite"))
     target = shlex.quote(f"{backup_dir}/{DATABASE_FILE}")
+    # First into the backup: nothing has made its directory yet.
     result = run(
-        f"{compose_prefix} exec -T webserver python -c {shlex.quote(SNAPSHOT)}"
-        f" > {target} || {{ rm -f {target}; false; }}"
+        f"mkdir -p {shlex.quote(backup_dir)} && {compose_prefix} exec -T webserver"
+        f" python -c {shlex.quote(SNAPSHOT)} > {target} || {{ rm -f {target}; false; }}"
     )
     if result.returncode != 0:
         brand.warn(t("deploy.backup_sqlite_failed"))

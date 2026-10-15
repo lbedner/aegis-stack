@@ -12,12 +12,20 @@ from __future__ import annotations
 import re
 import shlex
 import subprocess
+from pathlib import Path
 
 import pytest
 
 from aegis.commands import deploy as deploy_mod
 from aegis.commands.deploy import _create_backup, _rollback_to_backup
-from aegis.commands.deploy_backup import RESTORE, SNAPSHOT, is_sqlite, offsite_env
+from aegis.commands.deploy_backup import (
+    DATABASE_FILE,
+    RESTORE,
+    SNAPSHOT,
+    is_sqlite,
+    offsite_env,
+    snapshot_sqlite,
+)
 
 TS = "2026-01-01_000000"
 
@@ -59,6 +67,21 @@ class TestSqliteSnapshot:
         assert f"exec -T webserver python -c {shlex.quote(SNAPSHOT)}" in snapshot
         assert re.search(r"> /srv/app/backups/[0-9_-]+/database\.db ", snapshot)
         _bash_parses(snapshot)
+
+    def test_the_snapshot_makes_the_backup_directory_it_writes_into(
+        self, tmp_path: Path
+    ) -> None:
+        """It runs before anything else of the backup exists. Run for real,
+        with ``echo`` standing in for docker compose."""
+
+        def bash(command: str) -> subprocess.CompletedProcess[str]:
+            return subprocess.run(
+                ["bash", "-c", command], capture_output=True, text=True
+            )
+
+        backup = tmp_path / "backups" / TS
+        assert snapshot_sqlite(bash, "echo", str(backup))
+        assert (backup / DATABASE_FILE).read_text().startswith("exec -T webserver")
 
     def test_file_copy_skips_the_live_database_once_snapshotted(
         self, monkeypatch: pytest.MonkeyPatch

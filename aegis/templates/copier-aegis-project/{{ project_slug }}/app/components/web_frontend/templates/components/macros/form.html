@@ -50,10 +50,10 @@ bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-
    optgroup each); ``blank`` is the "no filter" label (``None`` for no
    blank choice), chosen while nothing is; ``selected`` the current id.
    ``label`` wraps it inline for a filter bar; ``block`` lays it out
-   full-width inside a ``field()``. #}
-{% macro select(name, options, selected=None, blank="All", label=None, block=False, grouped=False) %}
+   full-width inside a ``field()``; ``attrs`` rides on the select. #}
+{% macro select(name, options, selected=None, blank="All", label=None, block=False, grouped=False, attrs="") %}
 {% if label %}<label class="inline-flex items-center gap-2 text-xs text-aegis-muted"><span>{{ label }}</span>{% endif %}
-<select name="{{ name }}" class="{{ _control_classes }} select-caret pr-8{% if block %} block w-full mt-1{% endif %}">
+<select name="{{ name }}" {{ attrs|safe }} class="{{ _control_classes }} select-caret pr-8{% if block %} block w-full mt-1{% endif %}">
   {% if blank is not none %}<option value="" {% if not selected %}selected{% endif %}>{{ blank }}</option>{% endif %}
   {% for group in (options if grouped else [{"label": none, "options": options}]) %}
   {% if group.label is not none %}<optgroup label="{{ group.label }}">{% endif %}

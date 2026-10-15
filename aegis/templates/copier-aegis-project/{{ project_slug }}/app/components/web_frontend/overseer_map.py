@@ -12,6 +12,7 @@ from app.core.ownership import HOST
 from app.services.system import topology
 
 WIDTH = 1000  # the lines' coordinate width (the map is as wide as the page)
+MAIN = "#overseer-main"  # what the map's links swap, unless told otherwise
 NODE_HEIGHT = 136
 CHIP_ROW = 34  # each row of chips the Server's node grows by
 CHIPS_PER_ROW = 2  # room for a name in full, and its cost to load
@@ -45,12 +46,14 @@ def layout(
     compact: bool = False,
     across: bool = False,
     opened: bool = False,
+    target: str = MAIN,
 ) -> dict[str, Any]:
     """``overview()``'s entries as placed nodes, the lines between them,
     and the map's height; in ``shape`` (the stack's own by default: the
     Server opened up is ``topology.zoomed``), ``compact`` for small
     nodes, ``across`` for tiers left to right (compact), ``opened`` for
-    the Server opened up (``COMPACT_ROW`` to a row, cards too)."""
+    the Server opened up (``COMPACT_ROW`` to a row, cards too); its links
+    swap ``target`` (a page's main area; a table's, drawn in Tables)."""
     items = {item["key"]: item for item in stack}
     found = shape or topology.shape(list(items))
     nodes, place, height = (
@@ -68,6 +71,7 @@ def layout(
         "map_width": WIDTH,
         "map_compact": compact or across,
         "map_across": across,
+        "map_target": target,
     }
 
 
@@ -125,7 +129,13 @@ def _across(items: dict[str, dict[str, Any]], found: topology.Shape) -> Placed:
         x, top = (index + 0.5) / count * WIDTH, (tallest - spans[index]) / 2
         for key in tier:
             place[key] = (x, top, heights[key])
-            nodes.append(_placed(items[key], x, top, heights[key], width, True))
+            # The map clips what runs past its bottom, as _down's rows do:
+            # a column's last node's hint opens above it.
+            last = key == tier[-1]
+            nodes.append(
+                _placed(items[key], x, top, heights[key], width, True)
+                | {"hint_above": last}
+            )
             top += heights[key] + ACROSS_GAP
     return nodes, place, tallest + HINT_ROOM
 
@@ -197,6 +207,7 @@ def lanes(
             {"label": label, "left": columns[key] / WIDTH * 100} for key, label in LANES
         ],
         "map_rail": [item for item in stack if item.get("place") == "rail"],
+        "map_target": MAIN,
     }
 
 

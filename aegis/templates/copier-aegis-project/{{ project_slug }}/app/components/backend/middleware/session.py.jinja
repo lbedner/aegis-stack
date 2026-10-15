@@ -8,6 +8,7 @@ verifier in the starlette session between ``/start`` and
 verified. Only registered when OAuth social login is enabled.
 """
 
+from app.core.client_session import cookie_name
 from app.core.config import settings
 from fastapi import FastAPI
 from starlette.middleware.sessions import SessionMiddleware
@@ -33,6 +34,7 @@ def register_middleware(app: FastAPI) -> None:
     app.add_middleware(
         SessionMiddleware,
         secret_key=settings.OAUTH_SESSION_SECRET,
+        session_cookie=cookie_name("oauth"),
         same_site="lax",
         https_only=https_only,
     )

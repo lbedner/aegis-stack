@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
 
 from app.components.backend.api.utils import audit_admin_action
-from app.components.web_frontend import overseer_database
+from app.components.web_frontend import overseer_database, overseer_database_browser
 from app.components.web_frontend.overseer_access import overseer_actor
 from app.components.web_frontend.overseer_live import event_stream
 from app.components.web_frontend.rendering import dialog, form_fields, fragment
@@ -40,7 +40,7 @@ async def confirm_end(request: Request, pid: int) -> Response:
     )
 
 
-@router.post(overseer_database.QUERY_RUN, response_class=HTMLResponse)
+@router.post(overseer_database_browser.QUERY_RUN, response_class=HTMLResponse)
 async def run_query(
     request: Request,
     actor: Actor = Depends(overseer_actor),
@@ -49,6 +49,6 @@ async def run_query(
     """Run the prompt's statement read-only; the answer fills the scroller
     (not found where rows are hidden, unaudited: nothing ran)."""
     sql = (await form_fields(request)).get("sql", "")
-    outcome, answer = await overseer_database.query(sql)
+    outcome, answer = await overseer_database_browser.query(sql)
     await audit_admin_action(audit, actor, request, "database.query", outcome, sql)
-    return HTMLResponse(fragment(overseer_database.QUERY_ANSWER, **answer))
+    return HTMLResponse(fragment(overseer_database_browser.QUERY_ANSWER, **answer))

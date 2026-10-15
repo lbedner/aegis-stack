@@ -1,4 +1,4 @@
-{# A statement's answer (overseer_database.query): its rows in the flat
+{# A statement's answer (overseer_database_browser.query): its rows in the flat
    scroller, then one line saying how many, how long, and that it only
    read; or why there are none. Before any run, the empty scroller. #}
 {% from "pages/overseer/_macros.html" import rows_scroller %}
@@ -6,11 +6,11 @@
 {% if query_error %}
 <p data-query-error class="text-sm text-aegis-amber font-mono whitespace-pre-wrap">{{ query_error }}</p>
 {% endif %}
-{% call rows_scroller() %}
+{% call rows_scroller(height="flex-1 min-h-0") %}
   {% if rows is defined %}
   {{ rows_table(rows, "database-query-body") }}
   {% elif not query_error %}
-  <p class="px-3 py-4 text-sm text-aegis-muted">Run a statement to see its rows here. A write, or two statements at once, is refused; a column holding a secret reads as empty.</p>
+  <p class="px-3 py-4 text-sm text-aegis-muted">Run a statement (Cmd-Enter) to see its rows here. A write, or two statements at once, is refused; a column holding a secret reads as empty.</p>
   {% endif %}
 {% endcall %}
 {% if rows is defined %}<p data-query-footer class="text-xs text-aegis-muted font-mono">{{ query_footer }}</p>{% endif %}

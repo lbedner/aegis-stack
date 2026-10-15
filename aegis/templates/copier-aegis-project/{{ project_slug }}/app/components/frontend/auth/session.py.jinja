@@ -4,7 +4,7 @@ Cookie-backed session helpers for the Flet frontend.
 
 Auth model
 ----------
-The backend issues an HttpOnly ``aegis_session`` cookie on
+The backend issues an HttpOnly ``<project>_session`` cookie on
 ``/auth/token``, ``/auth/register``, and the OAuth callback. That
 cookie lives in the per-session ``APIClient``'s underlying httpx
 cookie jar. The Flet Python server holds the jar; the browser never

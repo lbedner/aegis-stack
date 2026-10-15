@@ -1,33 +1,42 @@
-{# A table's rows (overseer_database.rows, db_rows), read like Logs rather
-   than on a card: one row of controls (the table, a column:value filter,
-   the order), the table's keys out and in, then the rows (``rows_table``;
-   Wrap opens every line, a click opens a row to where its keys lead). Under them
-   the pager, by the table's key where it is ordered by it. #}
-{% from "components/macros/form.html" import search_input, select %}
+{# A table's Rows tab (overseer_database_browser.rows, db_rows), read like Logs
+   rather than on a card: one row of controls (a filter read as a sentence:
+   a column picked from those it may use, how it compares, a value; each
+   filter then a chip that takes it away; the export), then the rows (``rows_table``; a header orders or sorts them,
+   Wrap opens every line, a click opens a row to where its keys lead),
+   running to the bottom of the pane.
+   Under them the pager, by the table's key where it is ordered by it. #}
+{% from "components/macros/form.html" import action, search_input, select %}
+{% from "components/macros/layout.html" import chip %}
 {% from "components/macros/table.html" import pager %}
 {% from "pages/overseer/_macros.html" import rows_scroller, wrap_actions, wraps %}
-{% from "pages/overseer/database/_macros.html" import rows_off_note, rows_table %}
+{% from "pages/overseer/database/_macros.html" import export_menu, rows_off_note, rows_table %}
 {% if rows_off %}
 {{ rows_off_note(rows_off) }}
 {% else %}
-<div id="database-rows" class="space-y-3" {{ wraps() }}>
-  <form data-rows-controls class="flex flex-wrap items-center gap-3" {{ hx_replace(request.url.path, "#database-rows") }} hx-trigger="change, submit">
-    {{ select("table", rows_tables, rows_asked.table, blank=None) }}
-    {{ search_input("where", rows_asked.where, placeholder="column:value") }}
-    {% if rows is defined %}
-    {{ select("order", rows_orders, rows_asked.order, blank="By key" if rows.key else "Unordered") }}
-    {{ select("dir", rows_dirs, rows_asked.dir or "asc", blank=None) }}
-    {% endif %}
-    <div class="ml-auto flex gap-1.5">{{ wrap_actions("database-rows-body", rows is defined and rows.rows) }}</div>
+<div id="{{ rows_pane }}" class="flex-1 min-h-0 flex flex-col gap-3" {{ wraps() }}>
+  <form data-rows-controls class="flex flex-wrap items-center gap-3" {{ hx_replace(request.url.path, "#" ~ rows_pane) }} hx-trigger="submit">
+    {% for field, given in rows_asked.items() %}<input type="hidden" name="{{ field }}" value="{{ given or '' }}">{% endfor %}
+    {# The comparisons the column picked allows (``rows_allowed``, the
+       server's one rule): the others hidden as it changes, no request. #}
+    <div class="flex items-center gap-1.5" data-filter-allowed='{{ rows_allowed|tojson }}'
+         x-data="{ column: '', allowed: JSON.parse($el.dataset.filterAllowed) }">
+      {{ select("column", rows_filters, blank=None, attrs='x-init="column = $el.value" x-on:change="column = $el.value"') }}
+      {{ select("op", rows_ops, blank=None, attrs='x-effect="const ok = allowed[column] || []; [...$el.options].forEach((o) => { o.hidden = o.disabled = !ok.includes(o.value); }); if (!ok.includes($el.value)) $el.value = ok[0]"') }}
+      {{ search_input("value", placeholder="value", attrs='autocomplete="off"') }}
+      {{ action("Filter", "", type="submit") }}
+    </div>
+    {% for filter in rows_chips %}{{ chip(filter.label ~ " ×", False, filter.url, hx_replace(filter.url, "#" ~ rows_pane), 'data-filter-chip title="Remove this filter"') }}{% endfor %}
+    <div class="ml-auto flex gap-1.5">{% if rows is defined %}{{ export_menu("database-rows-body", rows_asked.table) }}{% endif %}{{ wrap_actions("database-rows-body", rows is defined and rows.rows) }}</div>
   </form>
-  {% if rows_keys %}<p data-keys class="text-xs font-mono text-aegis-muted">Keys: {{ rows_keys|join(" · ") }}</p>{% endif %}
-  {% if rows_slow %}
+  {% if rows_bad %}
+  <p data-rows-bad class="text-sm text-aegis-amber">{{ rows_bad }}</p>
+  {% elif rows_slow %}
   <p data-rows-slow class="text-sm text-aegis-amber">{{ rows_slow }} Filter or order by an indexed column to read less.</p>
   {% else %}
-  {% call rows_scroller() %}
-    {{ rows_table(rows, "database-rows-body", rows.key, "No rows" ~ (" match " ~ rows_asked.where if rows_asked.where else "") ~ ".", rows_links) }}
+  {% call rows_scroller(height="flex-1 min-h-0") %}
+    {{ rows_table(rows, "database-rows-body", rows.key, "No rows" ~ (" match " ~ rows_chips|map(attribute="label")|join(", ") if rows_chips else "") ~ ".", rows_links, rows_sorts) }}
   {% endcall %}
-  {{ pager(rows_pager, "#database-rows") }}
+  {{ pager(rows_pager, "#" ~ rows_pane) }}
   {% endif %}
 </div>
 {% endif %}

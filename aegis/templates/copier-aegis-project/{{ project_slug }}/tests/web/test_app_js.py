@@ -9,6 +9,7 @@ query string, and dropping it sends the viewer back to the top.
 
 import json
 from pathlib import Path
+import re
 
 import pytest
 
@@ -472,3 +473,24 @@ def test_a_clicked_name_is_found_by_its_column_in_the_source() -> None:
     """Overseer > Code asks where a name is by line and column: the column
     counts the line's source only, never its number."""
     assert run(COLUMN, APP_JS=APP_JS) == [10, 4, None]
+
+
+# A declaration at a script's top level (``function mount``, ``const KEY``).
+TOP_LEVEL = re.compile(
+    r"^(?:async\s+)?(?:function\*?|const|let|var|class)\s+(\w+)", re.M
+)
+
+
+def test_the_page_scripts_declare_no_name_twice() -> None:
+    """Classic scripts share one global scope: a second ``function mount``
+    replaces the first, and its script's listeners call the other's."""
+    seen: dict[str, str] = {}
+    clashes = []
+    for path in sorted(APP_JS.parent.glob("*.js")):
+        if path.name == "mic-worklet.js":  # an audio worklet's own scope
+            continue
+        for name in TOP_LEVEL.findall(path.read_text()):
+            if name in seen and seen[name] != path.name:
+                clashes.append((name, seen[name], path.name))
+            seen.setdefault(name, path.name)
+    assert clashes == []

@@ -5,7 +5,7 @@ left rail limited to components and services actually in the project,
 including plugin-provided entries.
 """
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from hashlib import sha1
@@ -26,6 +26,11 @@ from app.services.system.ui import get_component_title, registry_key
 
 from .overseer_access import Db, Viewer
 
+# Records what a section did with the app's data, as the viewer, from where
+# they asked (``audit_admin_action``): an event, how it went, its detail,
+# and what it was done to.
+Audit = Callable[..., Awaitable[None]]
+
 
 def _shown(value: str | int | float | bool) -> str:
     if isinstance(value, bool):
@@ -41,6 +46,7 @@ class SectionRequest:
     db: Db  # None without the database component
     query: Mapping[str, str]
     path: str
+    audit: Audit
     # The app's routes, for pages that describe the app itself.
     routes: Sequence[BaseRoute] = ()
     # The viewer's own sign-in session (the access token's ``sid``), and when

@@ -337,7 +337,7 @@ ACCOUNT_LOCKOUT_MINUTES=15
 
 ## 6. Logout + Refresh-Token Rotation
 
-`POST /auth/logout` revokes the session in the database and drops both the `aegis_session` and `aegis_refresh` cookies. The session's access tokens stop working on their next request, so a bearer client holding a copy is signed out too, not only the browser.
+`POST /auth/logout` revokes the session in the database and drops both the `<project>_session` and `<project>_refresh` cookies. The session's access tokens stop working on their next request, so a bearer client holding a copy is signed out too, not only the browser.
 
 **Login and capture the access + refresh tokens (use `-c` to persist cookies):**
 
@@ -354,7 +354,7 @@ curl -s -c cookies.txt -X POST http://localhost:8000/api/v1/auth/token \
 }
 ```
 
-`cookies.txt` now holds both `aegis_session` and `aegis_refresh`.
+`cookies.txt` now holds both `<project>_session` and `<project>_refresh`.
 
 **Rotate the access token mid-session (this is what the frontend does on 401):**
 

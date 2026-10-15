@@ -14,7 +14,7 @@ Auth model
 ----------
 The client holds a long-lived ``httpx.AsyncClient`` whose cookie jar
 persists across requests. When the backend issues ``Set-Cookie:
-aegis_session=...`` (e.g. from ``/auth/token``, ``/auth/register``,
+<project>_session=...`` (e.g. from ``/auth/token``, ``/auth/register``,
 or the OAuth callback), it lands in this jar and is automatically
 sent back on every subsequent call. Logout drops the cookie via
 ``/auth/logout`` *and* clears the jar locally.
@@ -49,7 +49,7 @@ class APIClient(SessionCookieMixin):
 
     Cookie jar-backed session: the underlying ``httpx.AsyncClient`` is
     created once and kept alive for the life of the Flet session.
-    Anything the backend stores in cookies (notably ``aegis_session``)
+    Anything the backend stores in cookies (notably ``<project>_session``)
     rides along on every subsequent call.
     """
 

@@ -9,7 +9,7 @@ focused on the sign-in fields and submit logic.
 
 Auth flow:
 - Submit POSTs ``/api/v1/auth/token`` via ``APIClient.post_form``.
-- On 200, the backend issues an HttpOnly ``aegis_session`` cookie that
+- On 200, the backend issues an HttpOnly ``<project>_session`` cookie that
   lands in the per-session ``APIClient``'s cookie jar automatically.
   We just navigate to ``/``; the router's auth guard then permits the
   dashboard via a ``/auth/me`` round-trip.

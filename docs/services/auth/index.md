@@ -22,11 +22,11 @@ The **Authentication Service** provides complete user management and JWT-based a
 ## What You Get
 
 - **JWT-based authentication** - Industry-standard token authentication
-- **HttpOnly session cookies** - Browser flows ride on the `aegis_session`
+- **HttpOnly session cookies** - Browser flows ride on the `<project>_session`
   cookie set by the backend; the token never has to be touched by
   frontend code
 - **Persistent sessions via refresh-token rotation** - Short-lived access
-  tokens (15 min default) paired with long-lived `aegis_refresh` cookies
+  tokens (15 min default) paired with long-lived `<project>_refresh` cookies
   (14 day default), rotated on every use with family-based reuse
   detection. The frontend `APIClient` refreshes transparently on 401
 - **Sign-in and registration views out of the box** - The Overseer ships
@@ -167,16 +167,16 @@ sequenceDiagram
     participant D as Database
 
     U->>C: Make API call
-    C->>A: GET /api/v1/things<br/>(aegis_session expired)
+    C->>A: GET /api/v1/things<br/>(<project>_session expired)
     A-->>C: 401 Unauthorized
-    C->>A: POST /auth/refresh<br/>(aegis_refresh cookie)
+    C->>A: POST /auth/refresh<br/>(<project>_refresh cookie)
     A->>R: rotate(refresh_token)
     R->>D: Lookup row by PK
     D-->>R: Row found, not revoked
     R->>D: Mark inbound revoked,<br/>insert successor in same family
     D-->>R: Successor row
     R-->>A: Successor row (same family_id)
-    A-->>C: 200 + Set-Cookie<br/>(aegis_session, aegis_refresh)
+    A-->>C: 200 + Set-Cookie<br/>(<project>_session, <project>_refresh)
     C->>A: Retry GET /api/v1/things
     A-->>C: 200 OK + payload
     C-->>U: Render result
@@ -298,7 +298,7 @@ consent → callback → cookie set → 303 to `/`. No view code to write.
   Authlib-driven `state` + PKCE redirects.
 - `GET /api/v1/auth/oauth/{provider}/callback`, exchanges the code,
   upserts a local user (linking by email when an account already
-  exists), sets the `aegis_session` HttpOnly cookie, and 303s to
+  exists), sets the `<project>_session` HttpOnly cookie, and 303s to
   `/app` (or to the same-origin `?next=` the user came in with).
 - `GET /api/v1/auth/oauth/connections` and
   `DELETE /api/v1/auth/oauth/connections/{provider}`, list and

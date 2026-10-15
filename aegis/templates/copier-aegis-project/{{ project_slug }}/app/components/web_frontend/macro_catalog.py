@@ -141,6 +141,14 @@ EXAMPLES: dict[str, dict[str, str]] = {
               {{ menu_item("Retry", on_click) }}
               {{ menu_item("Delete", "", danger=True) }}
             {% endcall %}""",
+        "menu_heading": """
+            {% set on_click %}@click="$dispatch('toast', { text: 'Clicked', tone: 'ok' })"{% endset %}
+            {% call dropdown("Export", align="left") %}
+              {{ menu_heading("Download", "arrow-down-tray") }}
+              {{ menu_item("CSV", on_click) }}
+              {{ menu_heading("Copy", "copy") }}
+              {{ menu_item("Markdown", on_click) }}
+            {% endcall %}""",
         "dropdown": """
             {% set on_click %}@click="$dispatch('toast', { text: 'Clicked', tone: 'ok' })"{% endset %}
             {% call dropdown("Actions", align="left") %}

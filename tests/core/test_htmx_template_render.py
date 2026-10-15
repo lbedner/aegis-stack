@@ -399,6 +399,7 @@ class TestWebFrontendScaffolding:
                 "hint_panel",
                 "hover_hint",
                 "info_tooltip",
+                "menu_heading",
                 "menu_item",
                 "modal_scrim",
                 "page_header",

@@ -12,7 +12,7 @@ Same flow for every provider (GitHub, Google, ...):
 3. We exchange the code for a token, fetch the user's profile +
    verified email, upsert the local user (linking by email if an
    account already exists), issue our own JWT, stamp it into the
-   HttpOnly ``aegis_session`` cookie, and 303 to ``/app`` (or to the
+   HttpOnly ``<project>_session`` cookie, and 303 to ``/app`` (or to the
    ``?next=`` path stashed in session).
 
 GitHub uses two REST calls: profile + emails endpoint (emails are
@@ -36,7 +36,7 @@ from app.core.log import logger
 from app.core import secrets
 from app.core.secrets import Secret
 from app.core.security import (
-    REFRESH_COOKIE_NAME,
+    REFRESH_COOKIE,
     set_refresh_cookie,
     set_session_cookie,
 )
@@ -157,7 +157,7 @@ OAUTH_REPLACES = "oauth_replaces"
 
 async def _remember_session(request: Request, refresh_service: RefreshService) -> None:
     """Note the session this browser holds, for the OAuth sign-in to end."""
-    cookie = request.cookies.get(REFRESH_COOKIE_NAME)
+    cookie = request.cookies.get(REFRESH_COOKIE)
     family = await refresh_service.family_of(cookie) if cookie else None
     if family:
         request.session[OAUTH_REPLACES] = family

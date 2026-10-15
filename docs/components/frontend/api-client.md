@@ -8,7 +8,7 @@ It does three things that the rest of the frontend relies on:
 
 1. Wraps a long-lived `httpx.AsyncClient` whose cookie jar persists across
    requests within a session.
-2. Carries the HttpOnly `aegis_session` cookie automatically once the
+2. Carries the HttpOnly `<project>_session` cookie automatically once the
    backend issues it.
 3. Calls an `on_unauthorized` handler on 401, which is what drives the
    "session expired, send the user to /login" path.
@@ -53,7 +53,7 @@ init_session_state(page, api_client=api_client)
 Why per-session rather than per-call:
 
 - **The cookie jar has to persist.** A fresh `httpx.AsyncClient` on every
-  call would mean a fresh empty jar on every call. The `aegis_session`
+  call would mean a fresh empty jar on every call. The `<project>_session`
   cookie would never make it back to the server.
 - **Connection pooling.** httpx reuses keep-alive connections inside an
   `AsyncClient`. Constructing a new client per call defeats it.
@@ -69,7 +69,7 @@ exactly once per session, from `clear_session_state(page)`. See
 
 ## The cookie jar and the auth flow
 
-The backend issues `Set-Cookie: aegis_session=<token>; HttpOnly` on:
+The backend issues `Set-Cookie: <project>_session=<token>; HttpOnly` on:
 
 - `POST /api/v1/auth/token` (username + password sign-in)
 - `POST /api/v1/auth/register`
@@ -87,10 +87,10 @@ sequenceDiagram
 
     V->>C: post_form to /auth/token with credentials
     C->>B: POST /auth/token
-    B-->>C: 200 plus Set-Cookie aegis_session
+    B-->>C: 200 plus Set-Cookie <project>_session
     Note over C: cookie lands in httpx jar
     V->>C: get /api/v1/insights/projects
-    C->>B: GET with Cookie aegis_session
+    C->>B: GET with Cookie <project>_session
     B-->>C: 200 plus JSON payload
 ```
 

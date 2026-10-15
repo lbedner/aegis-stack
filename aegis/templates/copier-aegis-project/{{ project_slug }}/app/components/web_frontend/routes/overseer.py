@@ -2,6 +2,8 @@
 its gate (``overseer_access``), after
 the partial routers, so a partial's path wins over the catch-all pages."""
 
+from functools import partial
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import (
     HTMLResponse,
@@ -10,6 +12,7 @@ from fastapi.responses import (
     StreamingResponse,
 )
 
+from app.components.backend.api.utils import audit_admin_action
 from app.components.web_frontend import (
     overseer_connections,
     overseer_container,
@@ -30,6 +33,7 @@ from app.components.web_frontend.overseer_access import (
 from app.components.web_frontend.overseer_events import health_events
 from app.components.web_frontend.overseer_live import event_stream
 from app.components.web_frontend.overseer_nav import (
+    Audit,
     SectionRequest,
     build_navigation,
     find_item,
@@ -41,9 +45,21 @@ from app.components.web_frontend.overseer_sections import (
     rail,
 )
 from app.components.web_frontend.rendering import render
+from app.core.audit import AuditEmitter, get_audit
+from app.services.shared.deps import actor_of
 from app.services.system.health import last_system_status
 
 router = APIRouter()
+
+
+def audited(
+    request: Request,
+    user: Viewer = Depends(viewer),
+    audit: AuditEmitter = Depends(get_audit),
+) -> Audit:
+    """What a section records a read of the app's data with: the viewer,
+    from where they asked."""
+    return partial(audit_admin_action, audit, actor_of(user), request)
 
 
 @router.get("/overseer", response_class=HTMLResponse, include_in_schema=False)
@@ -104,16 +120,17 @@ async def overseer_standalone_page(
     group: str,
     user: Viewer = Depends(viewer),
     db: Db = Depends(overseer_db),
+    audit: Audit = Depends(audited),
 ) -> Response:
     """A page outside the health tree (``STANDALONE``). Secrets lives on the
     component's own page when the stack has it."""
     if group == "secrets" and overseer_secrets.has_component():
         return RedirectResponse(url=overseer_secrets.COMPONENT_URL, status_code=303)
-    return await _standalone(request, group, "", user, db)
+    return await _standalone(request, group, "", user, db, audit)
 
 
 async def _standalone(
-    request: Request, group: str, section: str, user: Viewer, db: Db
+    request: Request, group: str, section: str, user: Viewer, db: Db, audit: Audit
 ) -> Response:
     """A ``STANDALONE`` page on one of its sections, its first by default."""
     page = SECTIONED_PAGES.get((group, group))
@@ -123,7 +140,9 @@ async def _standalone(
     labels = list(page.labels)
     if section and section not in labels[1:]:
         raise HTTPException(status_code=404)
-    return await _overseer_detail(request, group, group, user, db, section or labels[0])
+    return await _overseer_detail(
+        request, group, group, user, db, audit, section or labels[0]
+    )
 
 
 @router.get(
@@ -135,11 +154,12 @@ async def overseer_detail(
     name: str,
     user: Viewer = Depends(viewer),
     db: Db = Depends(overseer_db),
+    audit: Audit = Depends(audited),
 ) -> Response:
     """A navigable status page for an installed component or service."""
     if group in STANDALONE:
-        return await _standalone(request, group, name, user, db)
-    return await _overseer_detail(request, group, name, user, db)
+        return await _standalone(request, group, name, user, db, audit)
+    return await _overseer_detail(request, group, name, user, db, audit)
 
 
 @router.get(
@@ -154,12 +174,13 @@ async def overseer_section(
     section: str,
     user: Viewer = Depends(viewer),
     db: Db = Depends(overseer_db),
+    audit: Audit = Depends(audited),
 ) -> Response:
     """One section of a page with a sub-menu; the first lives at the page's URL."""
     page = page_for(group, name)
     if page is None or section not in list(page.labels)[1:]:
         raise HTTPException(status_code=404)
-    return await _overseer_detail(request, group, name, user, db, section)
+    return await _overseer_detail(request, group, name, user, db, audit, section)
 
 
 async def _overseer_detail(
@@ -168,6 +189,7 @@ async def _overseer_detail(
     name: str,
     user: Viewer,
     db: Db,
+    audit: Audit,
     section: str = "overview",
 ) -> Response:
     """Render a page on the request's own session (``db``): a second one would
@@ -184,6 +206,7 @@ async def _overseer_detail(
             db,
             request.query_params,
             request.url.path,
+            audit,
             request.app.routes,
             session_id(request),
             session_expires(request),

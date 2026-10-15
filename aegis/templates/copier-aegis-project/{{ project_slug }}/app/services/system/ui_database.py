@@ -24,6 +24,12 @@ def is_postgres(metadata: dict[str, Any]) -> bool:
     return metadata.get("implementation", "sqlite") == "postgresql"
 
 
+def schema_name(metadata: dict[str, Any]) -> str:
+    """The schema the health check lists the tables of: PostgreSQL's
+    ``public``, SQLite's ``main``."""
+    return "public" if is_postgres(metadata) else "main"
+
+
 def display_url(url: str) -> str:
     """The URL as a developer on the host would use it: Docker service
     hosts become localhost, and the password stays hidden."""

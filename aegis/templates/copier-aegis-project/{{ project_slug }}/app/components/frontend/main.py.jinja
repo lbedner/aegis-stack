@@ -176,7 +176,7 @@ def create_frontend_app() -> Callable[[ft.Page], Awaitable[None]]:
         page.title = "Aegis Stack - System Dashboard"
 
         # APIClient: the single canonical HTTP client for the frontend.
-        # The HttpOnly ``aegis_session`` cookie rides on the underlying
+        # The HttpOnly ``<project>_session`` cookie rides on the underlying
         # httpx cookie jar — there is no manual token plumbing in Python.
         # A 401 from any call routes the user back to /login.
         {% if include_auth -%}

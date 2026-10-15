@@ -44,10 +44,10 @@ diff is sent back. The visible UI is a projection of a Python widget tree.
 | --- | --- |
 | Rendered DOM | `ft.Page` instance |
 | `page.client_storage` (browser localStorage) | `SessionState` (`page.data["session_state"]`) |
-| Cookies (HttpOnly `aegis_session`) | `APIClient` + its `httpx` cookie jar |
+| Cookies (HttpOnly `<project>_session`) | `APIClient` + its `httpx` cookie jar |
 | Visual scroll position | Every control instance, every callback |
 
-The cookie is the interesting case. The backend sets `aegis_session` as
+The cookie is the interesting case. The backend sets `<project>_session` as
 HttpOnly, so JavaScript never sees it. In a Flet deployment the **server's**
 httpx client carries it on outbound calls; the browser never touches it
 directly. The result is that auth feels seamless to view code (`api.get(...)`

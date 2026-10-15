@@ -10,9 +10,10 @@ import pytest
 from sqlalchemy import Engine, create_engine, text
 
 from app.core import exposure, model_registry
-from app.services.system import db_rows
+from app.services.system import db_filters, db_rows
 from tests.services._db_fixtures import (
     EVENT,
+    LEDGER,
     MEMBER,
     META,
     NOTE,
@@ -101,7 +102,7 @@ def test_a_secret_cannot_be_sorted_or_filtered_by(engine: Engine) -> None:
     with pytest.raises(ValueError):
         db_rows.page(MEMBER, order="hashed_password", engine=engine)
     with pytest.raises(ValueError):
-        db_rows.page(MEMBER, where=[("hashed_password", "x")], engine=engine)
+        db_rows.page(MEMBER, where=[("hashed_password", ":", "x")], engine=engine)
 
 
 def test_a_long_cell_is_redacted_then_cut(engine: Engine) -> None:
@@ -115,20 +116,25 @@ def test_binary_shows_its_size(engine: Engine) -> None:
     assert avatar == "binary, 16 bytes"
 
 
-def test_a_filter_is_one_indexed_or_foreign_key_column(engine: Engine) -> None:
-    org = db_rows.page(MEMBER, where=[("org_id", "3")], engine=engine)
+def test_any_column_filters_but_a_secret_or_binary(engine: Engine) -> None:
+    """Unindexed too (a scan, which ``SECONDS`` stops); never a secret (its
+    values told apart unshown) or bytes (nothing to type)."""
+    org = db_rows.page(MEMBER, where=[("org_id", ":", "3")], engine=engine)
     assert org.rows and set(_column(org, "org_id")) == {"3"}
-    with pytest.raises(ValueError):  # unindexed: a scan of the table
-        db_rows.page(MEMBER, where=[("bio", "short")], engine=engine)
+    tokens = db_rows.page(MEMBER, where=[("input_tokens", ":", "10")], engine=engine)
+    assert _column(tokens, "input_tokens") == ["10"]
+    with pytest.raises(ValueError):
+        db_rows.page(MEMBER, where=[("avatar", ":", "x")], engine=engine)
+    with pytest.raises(ValueError):
+        db_rows.page(MEMBER, where=[("nope", ":", "x")], engine=engine)
+    assert "avatar" not in db_rows.filterable(MEMBER)
+    more = db_rows.page(MEMBER, where=[("input_tokens", ">=", "20")], engine=engine)
+    assert more.rows and all(int(n) >= 20 for n in _column(more, "input_tokens"))
 
 
 def test_a_flag_filters_as_a_flag(engine: Engine) -> None:
     """``false`` is false (``bool("false")`` is not)."""
-    MEMBER.c.active.index = True
-    try:
-        off = db_rows.page(MEMBER, where=[("active", "false")], engine=engine)
-    finally:
-        MEMBER.c.active.index = None
+    off = db_rows.page(MEMBER, where=[("active", ":", "false")], engine=engine)
     assert off.rows and set(_column(off, "active")) == {"False"}
 
 
@@ -206,7 +212,7 @@ def test_a_row_follows_its_keys(engine: Engine) -> None:
         "post_id:2, tag_id:1",
     )
     found = db_rows.page(
-        TAGGED, where=db_rows.parse_where("post_id:2, tag_id:1"), engine=engine
+        TAGGED, where=db_filters.parse_where("post_id:2, tag_id:1"), engine=engine
     )
     assert found.rows == [["2", "1"]]
     org = dict(zip(*_first(db_rows.page(ORG, engine=engine))))
@@ -242,3 +248,52 @@ def test_a_unique_constraint_serves_a_sort() -> None:
 
 def _first(found: db_rows.Rows) -> tuple[list[str], list[str]]:
     return found.columns, found.rows[0]
+
+
+def test_a_value_is_read_as_its_columns_kind(engine: Engine) -> None:
+    """A date as the page shows it, money; one not of the kind says so (a
+    raw string compared as text would match nothing, or fail in the driver)."""
+    on = db_rows.page(LEDGER, where=[("at", ":", "2024-01-02 10:00:00")], engine=engine)
+    assert _column(on, "id") == ["2"]
+    since = db_rows.page(LEDGER, where=[("at", ">=", "2024-01-02")], engine=engine)
+    assert _column(since, "id") == ["2", "3"]
+    rich = db_rows.page(LEDGER, where=[("amount", ">", "20")], engine=engine)
+    assert _column(rich, "id") == ["2", "3"]
+    for name, wrong in (("amount", "abc"), ("at", "soon"), ("id", "x")):
+        with pytest.raises(db_filters.AskError):
+            db_rows.page(LEDGER, where=[(name, ":", wrong)], engine=engine)
+
+
+def test_json_is_not_filtered_and_text_is_only_matched(engine: Engine) -> None:
+    """JSON has no equality on PostgreSQL; ordering text would spell out what
+    the page hides, a character at a time (``redact``, the cut)."""
+    assert "meta" not in db_rows.filterable(LEDGER)
+    db_rows.page(MEMBER, where=[("bio", "!=", "x")], engine=engine)
+    with pytest.raises(db_filters.AskError):
+        db_rows.page(MEMBER, where=[("bio", ">=", "post")], engine=engine)
+
+
+def test_a_flag_is_matched_true_or_false(engine: Engine) -> None:
+    """Ordered, a flag means nothing (and SQLAlchemy refuses it); a value
+    neither true nor false is not one."""
+    for op, value in ((">", "true"), (":", "nope")):
+        with pytest.raises(db_filters.AskError):
+            db_rows.page(MEMBER, where=[("active", op, value)], engine=engine)
+
+
+def test_pages_by_a_column_with_ties_break_them_by_key(
+    engine: Engine, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Many rows share an org: without the key after it, PostgreSQL may
+    order the ties differently each page, repeating rows and losing others."""
+    read = db_rows._read
+    asked: list[str] = []
+
+    def spy(*args: object) -> object:
+        asked.append(str(args[2]))
+        return read(*args)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(db_rows, "_read", spy)
+    monkeypatch.setattr(MEMBER.c.org_id, "index", True)  # sortable, with ties
+    db_rows.page(MEMBER, order="org_id", desc=True, engine=engine)
+    assert "ORDER BY member.org_id DESC, member.id DESC" in asked[0]

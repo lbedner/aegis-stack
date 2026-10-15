@@ -26,7 +26,7 @@ from app.components.backend.security.rate_limit import get_client_ip
 from app.core.audit import AuditEmitter
 from app.core.config import settings
 from app.core.security import (
-    REFRESH_COOKIE_NAME,
+    REFRESH_COOKIE,
     clear_refresh_cookie,
     clear_session_cookie,
     set_refresh_cookie,
@@ -175,7 +175,7 @@ async def login(
 ) -> TokenResponse:
     """Login and get access token.
 
-    Sets the HttpOnly ``aegis_session`` cookie *and* returns the token in
+    Sets the HttpOnly ``<project>_session`` cookie *and* returns the token in
     the JSON body. Browser-based callers rely on the cookie; pure API
     clients (CLIs, tests) keep using the bearer token from the body.
     """

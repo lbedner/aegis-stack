@@ -2,19 +2,25 @@
 ``db_query``), declared on their own metadata and seeded into a file
 database: a member table with secrets, binary and an AutoString token; an
 org it points at; an event with no key; a composite-key join, and a note
-pointing at a join row by both its columns; a tree pointing at itself."""
+pointing at a join row by both its columns; a tree pointing at itself; a
+ledger of dates, money and JSON."""
 
+from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     Column,
+    DateTime,
     Engine,
     ForeignKey,
     ForeignKeyConstraint,
     Integer,
     LargeBinary,
     MetaData,
+    Numeric,
     String,
     Table,
     UniqueConstraint,
@@ -63,6 +69,14 @@ TREE = Table(
     Column("code", String),
     UniqueConstraint("code"),
 )
+LEDGER = Table(
+    "ledger",
+    META,
+    Column("id", Integer, primary_key=True),
+    Column("at", DateTime),
+    Column("amount", Numeric(10, 2)),
+    Column("meta", JSON),
+)
 
 
 def seeded(tmp_path: Path) -> Engine:
@@ -97,4 +111,16 @@ def seeded(tmp_path: Path) -> Engine:
             [{"post_id": p, "tag_id": t} for p in (2, 1) for t in (2, 1)],
         )
         conn.execute(insert(NOTE), [{"id": 1, "post_id": 2, "tag_id": 1}])
+        conn.execute(
+            insert(LEDGER),
+            [
+                {
+                    "id": n,
+                    "at": datetime(2024, 1, n, 10),
+                    "amount": Decimal(f"{n}0.50"),
+                    "meta": {"n": n},
+                }
+                for n in (1, 2, 3)
+            ],
+        )
     return found

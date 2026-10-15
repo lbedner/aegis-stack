@@ -30,6 +30,7 @@ from ..core.footprint import COMPOSE_FILES
 from ..core.template_cleanup import deploy_env_file, env_value
 from ..i18n import lazy_t, t
 from .deploy_backup import (
+    DATABASE_FILE,
     archive_storage,
     backup_config,
     is_sqlite,
@@ -1601,7 +1602,10 @@ def deploy_backups_command(
 
         # Check for DB dump
         db_check = _run_remote_capture(
-            host, user, f"test -f {safe_dir}/db_backup.sql -o -d {safe_dir}/data"
+            host,
+            user,
+            f"test -f {safe_dir}/db_backup.sql -o -f {safe_dir}/{DATABASE_FILE}"
+            f" -o -d {safe_dir}/data",
         )
         has_db = "yes" if db_check.returncode == 0 else "no"
 

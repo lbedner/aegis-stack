@@ -7114,7 +7114,7 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 <hr />
 <h2 id="auth-endpoints-all-levels">Auth Endpoints (All Levels)</h2>
 <h3 id="post-authregister">POST /auth/register</h3>
-<p>Register a new user account. Automatically accepts any pending org invites for the registered email. On success the response sets the same <code>&lt;project&gt;_session</code> + <code>&lt;project&gt;_refresh</code> cookie pair as <code>POST /auth/token</code> — the user lands signed-in without a second round-trip.</p>
+<p>Register a new user account. Automatically accepts any pending org invites for the registered email. On success the response sets the same <code>&lt;project&gt;_session</code> + <code>&lt;project&gt;_refresh</code> cookie pair as <code>POST /auth/token</code>, so the user lands signed-in without a second round-trip.</p>
 <p><strong>Auth:</strong> None
 <strong>Rate limited:</strong> Yes</p>
 <p><strong>Request body:</strong></p>
@@ -7238,8 +7238,8 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 <p>On success the response also sets two cookies:</p>
 <p>Both are named for the project (<code>PROJECT_NAME</code>, e.g. <code>my-app_session</code>): browsers share a host's cookies across its ports, so two apps on <code>localhost</code> never overwrite each other's sign-in.</p>
 <ul>
-<li><code>&lt;project&gt;_session</code> — HttpOnly access token, <code>Path=/</code>, <code>SameSite=Lax</code>. Browser flows ride on this.</li>
-<li><code>&lt;project&gt;_refresh</code> — HttpOnly opaque refresh token, <code>Path=/api/v1/auth</code>, <code>SameSite=Strict</code>. Sent only on auth endpoints; used to rotate <code>&lt;project&gt;_session</code> once the access token expires.</li>
+<li><code>&lt;project&gt;_session</code>: HttpOnly access token, <code>Path=/</code>, <code>SameSite=Lax</code>. Browser flows ride on this.</li>
+<li><code>&lt;project&gt;_refresh</code>: HttpOnly opaque refresh token, <code>Path=/api/v1/auth</code>, <code>SameSite=Strict</code>. Sent only on auth endpoints; used to rotate <code>&lt;project&gt;_session</code> once the access token expires.</li>
 </ul>
 <p>API clients (CLIs, server-to-server) keep using the body's <code>access_token</code> as a bearer header; cookies are a parallel surface, not exclusive.</p>
 <p><strong>Auth:</strong> None
@@ -7623,7 +7623,7 @@ Org endpoints: <code>/api/v1/orgs/*</code></p>
 <hr />
 <h3 id="post-authrefresh">POST /auth/refresh</h3>
 <p>Rotate the refresh token and mint a fresh access token. Reads the <code>&lt;project&gt;_refresh</code> cookie, revokes the inbound row, inserts a successor in the same family, and sets both cookies fresh. Returns the new access token in the body so bearer clients can update their header.</p>
-<p><strong>Auth:</strong> <code>&lt;project&gt;_refresh</code> cookie required (no bearer fallback — refresh tokens never travel in <code>Authorization</code> headers).</p>
+<p><strong>Auth:</strong> <code>&lt;project&gt;_refresh</code> cookie required (no bearer fallback: refresh tokens never travel in <code>Authorization</code> headers).</p>
 <p><strong>Response: <code>200 OK</code></strong></p>
 <table>
 <thead>

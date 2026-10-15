@@ -109,7 +109,17 @@ def _memory(services: list[dict[str, Any]], size: dict[str, Any]) -> dict[str, A
 def _cpu(services: list[dict[str, Any]], size: dict[str, Any]) -> dict[str, Any]:
     have = size["vcpus"]
     limits = round(sum(s["cpus"] or 0 for s in services), 2)
-    if limits > have:
+    over = [
+        f"{s['name']} ({s['cpus']:g} CPUs)" for s in services if (s["cpus"] or 0) > have
+    ]
+    if over:
+        # Docker refuses such a limit outright: the service never starts.
+        tone = "error"
+        why = (
+            f"Docker will not start {', '.join(over)} on {have}: no one "
+            "service may be limited to more CPUs than the server has."
+        )
+    elif limits > have:
         tone = "muted"
         why = (
             f"The limits add up to {limits:g} CPUs on {have}: when busy, the "

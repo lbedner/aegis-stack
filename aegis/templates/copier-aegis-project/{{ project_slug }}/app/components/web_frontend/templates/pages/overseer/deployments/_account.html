@@ -1,17 +1,20 @@
 {# What the cloud account already runs and costs
-   (overseer_deploy_actions.account_panel, deploy_spend): what its servers
+   (overseer_deploy_form.account_panel, deploy_spend): what its servers
    cost a month and this month's spend where the provider says (or the
    token scope it needs to); on the Overview the servers themselves
    (dearest first, aegis's own marked: nothing is being bought), on the steps the total
    with the server being bought. Loading, it asks again until the deploy
    agent has looked. #}
 {% from "components/macros/table.html" import data_table %}
+{% from "components/macros/layout.html" import avatar %}
 {% from "pages/overseer/deployments/_macros.html" import panel %}
 {% macro server_cell(server) -%}
 {{ server.name }}{% if server.project %} <span data-aegis-project class="text-aegis-muted">aegis: {{ server.project }}</span>{% endif %}
 {%- endmacro %}
 {% call panel("account", f, "Asking " ~ f.name ~ " what is already running…", "Could not see what is running: ") %}
-  <p class="text-sm"><span class="font-semibold text-aegis-text">Already in your {{ f.name }} account:</span>
+  {# The Overview marks each account by its logo; on the steps the cloud
+     picker above already wears it. #}
+  <p class="text-sm">{% if f.with is none %}{{ avatar(f.name, f.logo) }}<span class="sr-only">{{ f.name }}:</span>{% else %}<span class="font-semibold text-aegis-text">Already in your account:</span>{% endif %}
     {% if f.servers %}{{ f.servers|length }} server{{ "s" if f.servers|length != 1 }}, {{ f.running|money(f.currency) }} a month{% else %}nothing running{% endif %}.
     {% if f.with is not none %}<span class="text-aegis-muted">With this one: {{ f.with|money(f.currency) }} a month.</span>{% endif %}</p>
   {% if f.month_to_date is not none %}<p data-month-to-date class="text-xs text-aegis-muted">Spent so far this month: {{ f.month_to_date|money(f.currency) }}, everything in the account, not only servers.</p>{% endif %}

@@ -1,20 +1,42 @@
 {# The newest deploy job (overseer_deploy_actions.job_context), streamed
-   while the page is open: what it is doing and its output's tail, then
-   how it ended. A provision that failed part way offers the destroy that
-   cleans up after it. #}
-{% from "pages/overseer/deployments/_macros.html" import destroy_form %}
+   while the page is open: where its steps stand (a provision's step bar),
+   what it is doing and its output's tail (folded), then how it ended. A
+   provision that stopped part way offers to resume it, or to destroy what
+   it made. #}
+{% from "components/macros/layout.html" import copy_button, progress %}
+{% from "pages/overseer/deployments/_macros.html" import fold, stopped %}
 {% if job %}
 <div data-deploy-job="{{ job.action }}" data-status="{{ job.status }}" class="space-y-3">
+  {% if job.steps %}
+  <ol data-stages class="flex gap-2">
+    {% for s in job.steps %}
+    {% set at = s.status in ("current", "failed") %}
+    <li data-stage="{{ s.key }}" data-status="{{ s.status }}"{% if at %} aria-current="step"{% endif %} class="min-w-0 flex-1 space-y-1">
+      {# Done full, under way sweeping, failed full and red, to come empty. #}
+      {{ progress({"current": none, "todo": 0}.get(s.status, 1), {"failed": "error", "todo": "muted"}.get(s.status, "ok"), s.title, "h-1.5") }}
+      <span class="block text-xs leading-tight {{ 'text-aegis-muted' if s.status == 'todo' else 'text-error' if s.status == 'failed' else 'text-aegis-text' }}{{ ' font-semibold' if at }}">{{ s.title }}</span>
+    </li>
+    {% endfor %}
+  </ol>
+  {% endif %}
   <p class="text-sm flex flex-wrap items-baseline gap-2">
     <span class="font-semibold text-aegis-text">{{ job.title }}</span>
     {% if job.status == "running" %}<span class="text-aegis-muted">{{ job.label }}</span>
     {% elif job.status == "failed" %}<span data-error class="text-error">{{ job.error }}</span>
     {% else %}<span class="text-aegis-teal">Done</span>{% endif %}
   </p>
-  {% if job.destroy %}
-  <p class="text-sm text-aegis-muted">What it created is still in your account, and billed. Ask for the server again to resume, or destroy it:</p>
-  {{ destroy_form(job.partials, job.destroy) }}
+  {% if job.stopped %}{{ stopped(job.partials, job.stopped) }}{% endif %}
+  {# Folded; open stays open across the stream's swaps (job_panel's
+     ``output``), and each swap shows its newest line (reversed, the box
+     starts at its bottom). Its scrollbar always shows (daisyUI's
+     ``scrollbar-color`` on every element would hide a styled one), and
+     its scrolling stays in it. #}
+  {% if job.lines %}
+  {% set attrs %}data-output x-bind:open="output" x-on:toggle="output = $el.open"{% endset %}
+  {% call fold("Show output", attrs) %}
+    <div class="mb-2 flex justify-end">{{ copy_button(job.lines|join("\n")) }}</div>
+    <pre data-lines class="text-xs font-mono text-aegis-muted bg-aegis-bg border border-aegis-border rounded p-3 max-h-[70vh] overflow-auto overscroll-contain [scrollbar-color:auto] [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-aegis-border whitespace-pre-wrap flex flex-col-reverse"><span>{{ job.lines|join("\n") }}</span></pre>
+  {% endcall %}
   {% endif %}
-  {% if job.lines %}<pre data-lines class="text-xs font-mono text-aegis-muted bg-aegis-bg border border-aegis-border rounded p-3 max-h-80 overflow-auto whitespace-pre-wrap">{{ job.lines|join("\n") }}</pre>{% endif %}
 </div>
 {% endif %}

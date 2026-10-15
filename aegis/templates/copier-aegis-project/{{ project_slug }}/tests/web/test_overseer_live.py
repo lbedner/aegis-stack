@@ -5,13 +5,14 @@ import asyncio
 from collections.abc import AsyncIterator
 
 from app.components.web_frontend import overseer_live
-from tests.web.overseer import sent_events
+from tests.web.overseer import frame_html, sent_events
 
 
-def test_a_frame_is_one_line_of_html_under_its_event() -> None:
-    assert overseer_live.frame("logs-lines", "<tr>\n<td>a</td>\n</tr>\n") == (
-        "event: logs-lines\ndata: <tr> <td>a</td> </tr>\n\n"
-    )
+def test_a_frame_is_its_html_a_data_line_per_line_under_its_event() -> None:
+    """The browser joins the lines with newlines: a ``<pre>`` keeps its own."""
+    sent = overseer_live.frame("job", "<pre>a\r\nb</pre>\n")
+    assert sent == "event: job\ndata: <pre>a\ndata: b</pre>\n\n"
+    assert frame_html(sent) == "<pre>a\nb</pre>"
 
 
 async def _quiet() -> AsyncIterator[str]:
@@ -47,5 +48,10 @@ async def test_a_failed_read_sends_nothing_and_the_stream_goes_on() -> None:
             raise ConnectionError("redis down")
         return html
 
-    sent = await sent_events(overseer_live.fragment_events("x", render, 0, max_frames=4))
-    assert sent == [overseer_live.frame("x", "<p>a</p>"), overseer_live.frame("x", "<p>b</p>")]
+    sent = await sent_events(
+        overseer_live.fragment_events("x", render, 0, max_frames=4)
+    )
+    assert sent == [
+        overseer_live.frame("x", "<p>a</p>"),
+        overseer_live.frame("x", "<p>b</p>"),
+    ]

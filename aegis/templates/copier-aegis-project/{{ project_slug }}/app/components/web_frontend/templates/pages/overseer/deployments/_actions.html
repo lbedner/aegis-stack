@@ -1,6 +1,7 @@
 {# Overseer > Deployments > Overview's card (overseer_deployments._deployed),
-   one of three views. A deployed server says where redeploys come from.
-   Without a server yet, the way to one (New server). With a server, the
+   one of four views. A deployed server says where redeploys come from.
+   Without a server yet, the way to one (New server); one being made,
+   the way to it there. With a server, the
    server, what can be asked of ``aegis deploy-agent`` for it, its newest
    job, and destroying it apart. Then each connected cloud account's
    servers and what they cost, as the agent last found them. #}
@@ -12,6 +13,10 @@
 {% elif actions.view == "no-server" %}
 {% call card("Your server", id="card-deploy") %}
 <p data-deploy-state="no-server" class="{{ note() }}">No server yet: <a href="{{ new_url }}" {{ hx_replace(new_url, "#overseer-main") }} class="text-aegis-teal hover:underline">New server</a> walks you to one.</p>
+{% endcall %}
+{% elif actions.view == "creating" %}
+{% call card("Your server", id="card-deploy") %}
+<p data-deploy-state="creating" class="{{ note() }}">A server is being created: <a href="{{ new_url }}" {{ hx_replace(new_url, "#overseer-main") }} class="text-aegis-teal hover:underline">New server</a> shows where it is.</p>
 {% endcall %}
 {% else %}
 {% call card("Your server", id="card-deploy") %}

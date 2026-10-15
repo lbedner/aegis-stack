@@ -22,8 +22,19 @@ which the CLI loads out of the template it ships. So it imports nothing
 but the standard library.
 """
 
+import json
 import re
 from typing import Any
+
+# A provision's steps, in order, as its step bar names them (``data``
+# only when it was asked for).
+PROVISION_STEPS = {
+    "server": "Create the server",
+    "boot": "First boot",
+    "dns": "Point the name",
+    "deploy": "Deploy",
+    "data": "Bring my data",
+}
 
 PROTOCOL: dict[str, Any] = {
     "requests": "deploy:requests",
@@ -32,8 +43,16 @@ PROTOCOL: dict[str, Any] = {
     "beat_seconds": 10,
     "stale_seconds": 300,
     # Raised when a request carries something an older agent would drop
-    # (2: a DNS provider's keys): the heartbeat says which it speaks.
-    "revision": 2,
+    # (2: a DNS provider's keys; 3: bringing this machine's data; 4: a
+    # resume that refuses to start a new server): the heartbeat says which
+    # it speaks.
+    "revision": 4,
+    # Run by the agent (``progress_env`` set), a command with ``steps``
+    # prints, as each starts, its plan and step (``progress_line``); the
+    # agent keeps them in the job (``read_progress``) instead of its
+    # output, and the Overseer draws the step bar from them.
+    "progress": "::aegis-progress ",
+    "progress_env": "AEGIS_PROGRESS",
     # A provider API token: its own characters only, so it can travel in an
     # environment variable and nothing else rides along with it.
     "token": r"[A-Za-z0-9._~+/=:-]{8,512}",
@@ -49,6 +68,8 @@ PROTOCOL: dict[str, Any] = {
         "price": r"\d{1,6}\.\d{2}",
         "backup": r"\d{4}-\d{2}-\d{2}_\d{6}",
         "confirm": "[a-z0-9][a-z0-9-]{0,62}",
+        # Bring this machine's database to the new server (SQLite).
+        "data": "local",
     },
     "actions": {
         "catalog": {
@@ -72,7 +93,17 @@ PROTOCOL: dict[str, Any] = {
             "token": True,
             "dns": True,
             "required": ["provider", "size", "region", "price"],
-            "optional": ["domain", "email", "dns", "allowlist"],
+            "optional": ["domain", "email", "dns", "allowlist", "data"],
+            "steps": PROVISION_STEPS,
+        },
+        # A provision that stopped part way, carried on from its record in
+        # ``.aegis/deploy.yml`` (its cloud, size, region, name and data);
+        # refused by the command once there is none.
+        "resume": {
+            "command": ["deploy-provision", "--yes", "--resume"],
+            "token": True,
+            "dns": True,
+            "steps": PROVISION_STEPS,
         },
         "deploy": {
             "command": ["deploy"],
@@ -158,17 +189,43 @@ def checked_dns_keys(action: str, keys: Any) -> dict[str, str]:
     return keys
 
 
+def is_kept(action: Any) -> bool:
+    """Whether ``action`` is one the agent ``kept`` answers (a look), not a
+    command that changes anything."""
+    return isinstance(action, str) and "kept" in PROTOCOL["actions"].get(action, {})
+
+
+def progress_line(steps: list[str], at: str) -> str:
+    """The line a command prints as its step ``at`` (of ``steps``) starts."""
+    return PROTOCOL["progress"] + json.dumps({"steps": steps, "at": at})
+
+
+def read_progress(line: str) -> dict[str, Any] | None:
+    """Where a ``progress_line`` says the steps stand; None for any other
+    line (or one cut short)."""
+    if not line.startswith(PROTOCOL["progress"]):
+        return None
+    try:
+        found = json.loads(line.removeprefix(PROTOCOL["progress"]))
+    except ValueError:
+        return None
+    return found if isinstance(found, dict) else None
+
+
 def kept_key(action: str, args: dict[str, str]) -> str:
     """Where the agent keeps what a ``kept`` action found."""
     return PROTOCOL["actions"][action]["kept"].format(**args)
 
 
 def record_dns_provider(record: dict[str, Any]) -> str | None:
-    """The DNS provider a provision record's name was made at; a record from
-    before the provider was written down is Cloudflare's (the only one
-    then). None without a record made."""
+    """The DNS provider a provision record's name is at: where it was made
+    (a record from before the provider was written down is Cloudflare's,
+    the only one then), else where it is to be (``dns_provider``, so a
+    resume brings its keys). None without a name of its own."""
     made = record.get("dns")
-    return (made.get("provider") or "cloudflare") if made else None
+    if made:
+        return made.get("provider") or "cloudflare"
+    return record.get("dns_provider")
 
 
 def token_provider(

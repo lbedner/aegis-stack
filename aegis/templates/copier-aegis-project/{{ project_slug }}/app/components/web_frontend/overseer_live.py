@@ -89,9 +89,11 @@ def changed_frames(last: dict[str, str], payloads: dict[str, str]) -> list[str]:
 
 
 def frame(event: str, html: str) -> str:
-    """One htmx SSE frame: ``html``, on one line, as ``event``."""
-    data = html.strip().replace("\r", "").replace("\n", " ")
-    return f"event: {event}\ndata: {data}\n\n"
+    """One htmx SSE frame: ``html`` as ``event``, a ``data:`` line per line
+    (the browser joins them with newlines, so a ``<pre>`` keeps its own)."""
+    lines = html.strip().replace("\r", "").split("\n")
+    data = "".join(f"data: {line}\n" for line in lines)
+    return f"event: {event}\n{data}\n"
 
 
 async def heartbeat(

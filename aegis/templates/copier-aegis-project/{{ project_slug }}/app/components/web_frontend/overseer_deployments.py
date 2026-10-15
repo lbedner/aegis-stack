@@ -15,6 +15,7 @@ from app.services.system import hosting, ui_deployments
 from app.services.system.models import ComponentStatus
 
 from . import overseer_deploy_actions as actions
+from . import overseer_deploy_form as deploy_form
 from . import overseer_secrets
 from .overseer_nav import NavItem, SectionRequest
 from .rendering import columns, status_cell
@@ -98,7 +99,9 @@ async def _deployed() -> dict[str, Any]:
     if exposure.deployed():
         return actions.DEPLOYED_VIEW
     found = await actions.shared()
-    found["accounts"] = await actions.accounts(found["agent"])
+    found["accounts"] = await deploy_form.accounts(found["agent"])
+    if actions.creating(found["job"]):  # New server shows it, step by step
+        return found | {"view": "creating"}
     if not hosting.deploy_config().get("server"):
         return found | {"view": "no-server"}
     return found | {
@@ -167,12 +170,23 @@ def _choices(
     ]
 
 
+def _opens_on(choices: list[dict[str, Any]], otherwise: str) -> str:
+    """The provider a picker opens on: one whose keys are all set, else one
+    with some set (saving a key reloads the page, half way through a
+    pair), else ``otherwise``."""
+    started = [c for c in choices if c["held"] or any(r["held"] for r in c["secrets"])]
+    started.sort(key=lambda c: not c["held"])
+    return started[0]["key"] if started else otherwise
+
+
 async def _steps_context() -> dict[str, Any]:
     """The steps to a new server, each read from what is true; on a deployed
     server, or with a server already, where to go instead."""
     if exposure.deployed():
         return actions.DEPLOYED_VIEW
     found = await actions.shared()
+    if actions.creating(found["job"]):
+        return found | {"view": "creating"}
     if hosting.deploy_config().get("server"):
         return found | {"view": "has-server", "server": hosting.deploys_to()}
     agent = found["agent"]
@@ -188,7 +202,7 @@ async def _steps_context() -> dict[str, Any]:
     clouds = _choices(hosting.PROVISIONABLE, rows, agents)
     for cloud, p in zip(clouds, hosting.PROVISIONABLE, strict=True):
         # Its new-server form, where the agent can be asked with its token.
-        cloud["form"] = actions.waiting(p) if listening and cloud["held"] else None
+        cloud["form"] = deploy_form.waiting(p) if listening and cloud["held"] else None
     dns = _choices(hosting.DNS, rows)
     ready = [d for d in dns if d["held"]]
     if ready:
@@ -199,7 +213,7 @@ async def _steps_context() -> dict[str, Any]:
         # Each picker opens on a provider whose keys are set: the first
         # cloud otherwise, no DNS provider (an sslip.io name).
         "clouds": clouds,
-        "cloud_choice": next((c["key"] for c in clouds if c["held"]), clouds[0]["key"]),
+        "cloud_choice": _opens_on(clouds, clouds[0]["key"]),
         "dns": dns,
-        "dns_choice": ready[0]["key"] if ready else "",
+        "dns_choice": _opens_on(dns, ""),
     }

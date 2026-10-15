@@ -28,7 +28,6 @@ import socket
 import subprocess
 import sys
 import threading
-import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
@@ -44,7 +43,7 @@ from .. import __version__
 from ..cli import brand
 from ..cli.validation import validate_copier_project
 from ..core.deploy_protocol import protocol as _protocol
-from ..core.footprint import DockerError, measure
+from ..core.footprint import Docker, DockerError, measure, runner
 from ..core.provision.http import ProvisionError, json_requester, mask_token
 from ..core.provision.provider import monthly_price
 from ..core.provision.registry import DNS_SECRETS, PROVIDERS
@@ -68,8 +67,10 @@ JOB_KEEP_SECONDS = 6 * 3600
 TAIL = 400  # lines of a command's output a job keeps (the page, Copy)
 JOB_ID = re.compile(r"[0-9a-f]{32}")  # a uuid4's hex, as the app mints them
 AEGIS = [sys.executable, "-m", "aegis"]
-DEFAULT_REDIS_PORT = "6379"
-POLL_SECONDS = 1  # how long one BLPOP blocks, so a stop is noticed promptly
+REDIS_PORT = "6379"  # the redis service's, inside the stack
+POLL_SECONDS = (
+    1  # how often a wait looks up (BLPOP, the parent), so a stop is noticed promptly
+)
 REDIS_RETRY_SECONDS = 2  # between tries while Redis is down
 
 
@@ -89,33 +90,44 @@ def validate(action: Any, args: Any) -> dict[str, str]:
     return given
 
 
-def redis_url(root: Path) -> str:
-    """Where the project's Redis answers on this machine, found the way the
-    app's own host-side settings find it: ``REDIS_URL_LOCAL``, else
-    ``REDIS_URL``'s database on the published port (``.env.ports``, which
-    ``make serve`` writes). The environment wins, then ``.env.ports``, then
-    ``.env``."""
+def redis_url(root: Path, docker: Docker | None = None) -> str:
+    """Where the project's own Redis answers on this machine:
+    ``REDIS_URL_LOCAL``, else ``REDIS_URL``'s database on the port Docker
+    published for the ``redis`` container compose started from ``root``
+    (its working-directory label, so neither the project's name nor
+    another checkout of it can stand in). Asked each time, never read from
+    ``.env.ports``: ports are handed out per run, so one written down may
+    since be another project's Redis, whose requests would run here. The
+    environment wins, then ``.env``. DockerError while none is running."""
 
     def setting(key: str) -> str | None:
-        return (
-            os.environ.get(key)
-            or env_value(root / ".env.ports", key)
-            or env_value(root / ".env", key)
-        )
+        return os.environ.get(key) or env_value(root / ".env", key)
 
     if local := setting("REDIS_URL_LOCAL"):
         return local
-    port = setting("REDIS_HOST_PORT") or DEFAULT_REDIS_PORT
-    return f"redis://127.0.0.1:{port}{urlsplit(setting('REDIS_URL') or '').path}"
+    docker = docker or runner(root)
+    found = docker(
+        "ps",
+        "-q",
+        "--filter",
+        f"label=com.docker.compose.project.working_dir={root}",
+        "--filter",
+        "label=com.docker.compose.service=redis",
+    ).split()
+    if not found:
+        raise DockerError("no redis container is running from it")
+    address = docker("port", found[0], REDIS_PORT).split()[0]  # IPv4 first
+    return f"redis://{address}{urlsplit(setting('REDIS_URL') or '').path}"
 
 
-def presence() -> dict[str, Any]:
-    """The heartbeat: who is listening, the actions it runs (an app newer
-    than it asks for one it lacks), and the providers it holds tokens for
-    (their names only)."""
+def presence(root: Path) -> dict[str, Any]:
+    """The heartbeat: who is listening and in which checkout (``root``),
+    the actions it runs (an app newer than it asks for one it lacks), and
+    the providers it holds tokens for (their names only)."""
     return {
         "host": socket.gethostname(),
         "pid": os.getpid(),
+        "root": str(root),
         "started_at": datetime.now(UTC).isoformat(),
         "version": __version__,
         "actions": list(PROTOCOL["actions"]),
@@ -151,8 +163,12 @@ class Job:
         self.progress: Any = None
 
     def _write(self, **fields: str) -> None:
-        self.client.hset(self.key, mapping=fields)
-        self.client.expire(self.key, JOB_KEEP_SECONDS)
+        # Redis restarting must not stop the command whose output this is
+        # (its pipe closed, it would die part way); each write carries the
+        # whole record, so the next one puts it right.
+        with contextlib.suppress(redis.RedisError):
+            self.client.hset(self.key, mapping=fields)
+            self.client.expire(self.key, JOB_KEEP_SECONDS)
 
     def _result(self, **more: Any) -> str:
         return json.dumps({"lines": self.lines, "progress": self.progress} | more)
@@ -403,12 +419,43 @@ def _reap(client: Any) -> None:
             Job(client, job_id).fail(t("deploy_agent.stopped"))
 
 
-def serve(client: Any, root: Path, stop: threading.Event | None = None) -> None:
-    """Take requests until ``stop`` is set, beating the whole time so the
-    Overseer knows someone is listening; the heartbeat goes when this does."""
-    stop = stop or threading.Event()
+def _alive(held: dict[str, Any]) -> bool:
+    """Whether the agent that left heartbeat ``held`` still runs; one on
+    another machine is taken to."""
+    if held.get("host") != socket.gethostname():
+        return True
+    try:
+        os.kill(held["pid"], 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:  # alive, someone else's
+        pass
+    return True
+
+
+def _claim(client: Any, beat: str) -> None:
+    """The project's heartbeat taken (``beat``), in one step when it is
+    free, so two agents finding Redis at once cannot both pass. Refused
+    while another agent listens: two would take turns at its requests (two
+    deploys at once), and each would fail the jobs the other runs
+    (``_reap``). One killed without taking its heartbeat down does not
+    count."""
+    key, ttl = PROTOCOL["heartbeat"], PROTOCOL["beat_seconds"] * 3
+    if client.set(key, beat, nx=True, ex=ttl):
+        return
+    held = json.loads(client.get(key) or "{}")
+    if held.get("pid") not in (None, os.getpid()) and _alive(held):
+        root = held.get("root", "?")
+        raise RefusedError(t("deploy_agent.another", pid=held["pid"], root=root))
+    client.set(key, beat, ex=ttl)
+
+
+def serve(client: Any, root: Path, stop: threading.Event) -> None:
+    """Take requests until ``stop`` is set or Redis goes away, beating the
+    whole time so the Overseer knows someone is listening; the heartbeat
+    goes when this does."""
     key, every = PROTOCOL["heartbeat"], PROTOCOL["beat_seconds"]
-    beat = json.dumps(presence())
+    beat = json.dumps(presence(root))
     stopped = threading.Event()
 
     def beating() -> None:
@@ -432,10 +479,9 @@ def serve(client: Any, root: Path, stop: threading.Event | None = None) -> None:
                     look = _protocol.is_kept(request.get("action"))
                     (looks if look else commands).submit(handle, client, root, request)
             except redis.RedisError:
-                # The stack restarting, between requests or during one (its
-                # job could not even record failing); listen again once
-                # Redis is back.
-                stop.wait(REDIS_RETRY_SECONDS)
+                # The stack stopping or restarting: found again (``listen``),
+                # on whatever port it comes back on.
+                return
     except BaseException:
         # Interrupted: a command not started yet does not start.
         # ponytail: its job says it waits until it expires (hours); put it
@@ -452,21 +498,53 @@ def serve(client: Any, root: Path, stop: threading.Event | None = None) -> None:
             client.delete(key)
 
 
-def wait_for_redis(
-    client: Any, url: str, sleep: Callable[[float], None] = time.sleep
-) -> None:
-    """Until the project's Redis answers. Started beside the stack (``make
-    serve``), the agent is usually up first; it says where it waits once."""
+def connect(root: Path, stop: threading.Event) -> Any:
+    """A client on the project's own Redis once it answers, where it is
+    asked again each try (the stack may come up on another port); None if
+    ``stop`` is set first. Started beside the stack (``make serve``), the
+    agent is usually up first; it says why it waits once. Refused beside
+    another agent (``_claim``), each time it finds Redis again."""
     said = False
-    while True:
+    while not stop.is_set():
+        url = str(root)
         try:
+            url = redis_url(root)
+            client = redis.Redis.from_url(url, decode_responses=True, socket_timeout=10)
             client.ping()
-            return
-        except redis.RedisError as exc:
+            _claim(client, json.dumps(presence(root)))
+        except (DockerError, redis.RedisError) as exc:
             if not said:
                 typer.echo(t("deploy_agent.no_redis", url=url, error=exc))
                 said = True
-            sleep(REDIS_RETRY_SECONDS)
+            stop.wait(REDIS_RETRY_SECONDS)
+            continue
+        providers = ", ".join(presence(root)["providers"]) or "-"
+        brand.success(t("deploy_agent.listening", url=url, providers=providers))
+        return client
+    return None
+
+
+def listen(root: Path, stop: threading.Event) -> None:
+    """Serve the project's Redis whenever it is up, until ``stop``."""
+    while (client := connect(root, stop)) is not None:
+        # Gone again while starting (its jobs reaped, its heartbeat set):
+        # found again, as when it goes between requests.
+        with contextlib.suppress(redis.RedisError):
+            serve(client, root, stop)
+
+
+def watch_parent(stop: threading.Event) -> None:
+    """Set ``stop`` once whoever started this agent (make serve, a shell)
+    is gone: left behind, it would listen for a stack nobody runs, and
+    stand beside the next make serve's agent."""
+    parent = os.getppid()
+
+    def watch() -> None:
+        while not stop.wait(POLL_SECONDS):
+            if os.getppid() != parent:
+                stop.set()
+
+    threading.Thread(target=watch, daemon=True).start()
 
 
 def deploy_agent_command(
@@ -488,16 +566,13 @@ def deploy_agent_command(
     """
     root = _get_project_root(project_path).resolve()
     validate_copier_project(root, "deploy-agent")
-    url = redis_url(root)
-    client = redis.Redis.from_url(url, decode_responses=True, socket_timeout=10)
+    stop = threading.Event()
+    watch_parent(stop)
     try:
-        wait_for_redis(client, url)
+        listen(root, stop)
+    except RefusedError as exc:
+        brand.error(str(exc), err=True)
+        raise typer.Exit(1) from None
     except KeyboardInterrupt:
-        typer.echo(t("deploy_agent.stopping"))
-        return
-    providers = ", ".join(presence()["providers"]) or "-"
-    brand.success(t("deploy_agent.listening", url=url, providers=providers))
-    try:
-        serve(client, root)
-    except KeyboardInterrupt:
-        typer.echo(t("deploy_agent.stopping"))
+        pass
+    typer.echo(t("deploy_agent.stopping"))

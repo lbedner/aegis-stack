@@ -1482,4 +1482,7 @@ MESSAGES: dict[str, str] = {
     ),
     "deploy_agent.command_failed": "{command} failed (exit {code})",
     "deploy_agent.stopped": "The deploy agent stopped before this finished.",
+    "deploy_agent.another": (
+        "Another deploy agent (pid {pid}, in {root}) already listens for this project: stop it first."
+    ),
 }

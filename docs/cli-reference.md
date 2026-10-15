@@ -769,8 +769,11 @@ server on a domain, and its destroy, carry the DNS provider's keys the same
 way; only a DNS provider's own variables are accepted (anything else, such as
 `PATH`, is refused).
 
-It finds Redis as the app's host-side settings do: `REDIS_URL_LOCAL`, else
-the port `make serve` published (`.env.ports`). Requests older than five
+It finds Redis with `REDIS_URL_LOCAL`, else by asking Docker, on every
+(re)connect, for the port of the `redis` container compose started from this
+checkout; never `.env.ports`, whose port may since be another project's. It
+refuses to listen while another live agent does for the project, and stops
+once whoever started it (`make serve`, a shell) is gone. Requests older than five
 minutes are failed, not run. A new server is created only at the price you
 typed back in the Overseer, which it asks the provider for again first.
 The heartbeat also names the actions this agent runs and the protocol

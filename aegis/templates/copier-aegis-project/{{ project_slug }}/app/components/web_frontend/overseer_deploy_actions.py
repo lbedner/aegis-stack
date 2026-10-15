@@ -84,9 +84,18 @@ async def _agent() -> dict[str, Any]:
         return {"state": "unreachable", "error": str(exc)}
     if beat is None:
         return {"state": "no-agent", "command": AGENT_COMMAND}
+    said = _said(beat)
     if deploy_agent.stale(beat):
-        return {"state": "stale", "error": deploy_agent.STALE}
-    return {"state": "ready", "beat": beat}
+        return {"state": "stale", "error": deploy_agent.STALE, "said": said}
+    return {"state": "ready", "beat": beat, "said": said}
+
+
+def _said(beat: dict[str, Any]) -> str:
+    """Which agent listens: the checkout it runs in (each worktree or copy
+    runs its own; an older agent names only its machine), its aegis and
+    its pid, to stop it by."""
+    where = beat.get("root") or beat.get("host")
+    return f"Listening in {where} (aegis {beat.get('version')}, pid {beat.get('pid')})"
 
 
 # Where nothing is asked from here: a deployed server.

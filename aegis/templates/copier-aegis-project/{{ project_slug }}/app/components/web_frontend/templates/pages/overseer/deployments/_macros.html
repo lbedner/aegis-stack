@@ -105,10 +105,12 @@
 </li>
 {% endmacro %}
 
-{# Why the deploy agent cannot be asked (``agent``, its state), or nothing
-   when it can. #}
+{# Why the deploy agent cannot be asked (``agent``, its state), or, when
+   it can, the checkout it runs in (each worktree or copy runs its own). #}
 {% macro agent_note(agent) %}
-{% if agent.state == "no-redis" %}
+{% if agent.state == "ready" %}
+<p data-deploy-state="ready" class="text-xs text-aegis-muted">Deploy agent: {{ agent.said }}</p>
+{% elif agent.state == "no-redis" %}
 <div data-deploy-state="no-redis" class="{{ note() }}">
   <p>Deploying from here needs Redis: the Overseer hands each action to <code class="font-mono text-aegis-text">aegis deploy-agent</code> on your machine through the project's Redis, so your SSH key never enters the app.</p>
   <p class="flex items-center gap-2">{{ command("aegis add redis") }}</p>
@@ -116,7 +118,7 @@
 {% elif agent.state == "unreachable" %}
 <p data-deploy-state="unreachable" class="{{ note() }}">Redis did not answer: {{ agent.error }}</p>
 {% elif agent.state == "stale" %}
-<p data-deploy-state="stale" class="{{ note() }}">{{ agent.error }}</p>
+<p data-deploy-state="stale" class="{{ note() }}">{{ agent.error }} <span data-agent-said>{{ agent.said }}</span></p>
 {% elif agent.state == "no-agent" %}
 <div data-deploy-state="no-agent" class="{{ note() }}">
   <p class="flex flex-wrap items-center gap-2">No deploy agent is running: restart <code class="font-mono text-aegis-text">make serve</code>, or run {{ command(agent.command) }} in the project directory.</p>

@@ -200,8 +200,7 @@ async def _steps_context() -> dict[str, Any]:
     listening = agent["state"] == "ready"
     summaries = {}
     if listening:
-        beat = agent["beat"]
-        summaries["agent"] = f"Listening on {beat['host']} (aegis {beat['version']})"
+        summaries["agent"] = agent["said"]
     # Every key on the page in one read: the clouds' and the DNS providers'.
     names = [n for p in (*hosting.PROVISIONABLE, *hosting.DNS) for n in p.secrets]
     rows = await overseer_secrets.rows_for(names, NEW_URL)

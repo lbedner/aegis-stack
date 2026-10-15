@@ -494,3 +494,27 @@ def test_the_page_scripts_declare_no_name_twice() -> None:
                 clashes.append((name, seen[name], path.name))
             seen.setdefault(name, path.name)
     assert clashes == []
+
+
+# A script fetched from another origin: a tag's ``src``, or a URL a page
+# script loads itself (``createElement('script')``, ``import()``).
+REMOTE_TAG = re.compile(r"<script\b[^>]*\bsrc=\"https?://[^>]*>")
+REMOTE_URL = re.compile(r"['\"`]https?://[^'\"`]+['\"`]")
+
+
+def test_no_third_party_script_runs_unverified() -> None:
+    """A changed CDN file would run on Overseer's origin, where requests
+    carry the admin's cookie: each pins its version and the hash the
+    browser checks (``integrity``), or ships with the app."""
+    templates = APP_JS.parents[2] / "templates"
+    unverified = [
+        f"{path.name}: {tag}"
+        for path in templates.rglob("*.html")
+        for tag in REMOTE_TAG.findall(path.read_text())
+        if "integrity=" not in tag or "crossorigin=" not in tag
+    ]
+    for path in APP_JS.parent.glob("*.js"):
+        source = path.read_text()
+        if REMOTE_URL.search(source) and ".integrity = " not in source:
+            unverified.append(f"{path.name}: loads a remote script unhashed")
+    assert unverified == []

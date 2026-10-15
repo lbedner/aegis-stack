@@ -10,20 +10,11 @@ from __future__ import annotations
 
 from typing import Any
 
-import yaml
-from jinja2 import Environment, FileSystemLoader
-
-from aegis.core.component_files import get_copier_defaults, get_template_path
-
-PROJECT_SLUG_PLACEHOLDER = "{{ project_slug }}"
+from tests.core._compose import load, render
 
 
 def _render(name: str, **overrides: Any) -> dict[str, Any]:
-    env = Environment(loader=FileSystemLoader(str(get_template_path())))
-    context = {**get_copier_defaults(), "project_slug": "demo", **overrides}
-    return yaml.safe_load(
-        env.get_template(f"{PROJECT_SLUG_PLACEHOLDER}/{name}").render(context)
-    )
+    return load(render(name, **overrides))
 
 
 def test_the_scheduler_healthcheck_runs_the_heartbeat_module() -> None:

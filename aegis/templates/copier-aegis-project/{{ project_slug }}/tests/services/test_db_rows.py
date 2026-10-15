@@ -7,7 +7,17 @@ lock or running past its time."""
 from pathlib import Path
 
 import pytest
-from sqlalchemy import Engine, create_engine, text
+from sqlalchemy import (
+    Column,
+    Engine,
+    Integer,
+    MetaData,
+    String,
+    Table,
+    create_engine,
+    insert,
+    text,
+)
 
 from app.core import exposure, model_registry
 from app.services.system import db_filters, db_rows
@@ -18,6 +28,7 @@ from tests.services._db_fixtures import (
     META,
     NOTE,
     ORG,
+    SLUG,
     TAGGED,
     TREE,
     seeded,
@@ -297,3 +308,56 @@ def test_pages_by_a_column_with_ties_break_them_by_key(
     monkeypatch.setattr(MEMBER.c.org_id, "index", True)  # sortable, with ties
     db_rows.page(MEMBER, order="org_id", desc=True, engine=engine)
     assert "ORDER BY member.org_id DESC, member.id DESC" in asked[0]
+
+
+def test_not_equal_keeps_a_row_holding_nothing_there(engine: Engine) -> None:
+    """NULL is not 3 either; SQL's ``!=`` would drop it unsaid."""
+    with engine.begin() as conn:
+        conn.execute(insert(MEMBER).values(id=99, email="none@x.io", org_id=None))
+    found = db_rows.page(
+        MEMBER, where=[("org_id", "!=", "3")], desc=True, engine=engine
+    )
+    assert _column(found, "id")[0] == "99"
+
+
+def test_a_text_key_pages_by_offset(engine: Engine) -> None:
+    """Paging from a text key would order text, and carry its values whole
+    in the page links, past what the cells redact."""
+    found = db_rows.page(SLUG, engine=engine)
+    assert found.key is None and found.next == {"page": "2"}
+
+
+def test_a_table_the_database_lacks_says_so(tmp_path: Path) -> None:
+    """Not migrated yet: the health check lists none, so the models' tables
+    are offered."""
+    empty = create_engine(f"sqlite:///{tmp_path / 'empty.db'}")
+    with pytest.raises(db_rows.RowsUnreadError, match="member"):
+        db_rows.page(MEMBER, engine=empty)
+
+
+def test_a_column_marked_or_named_as_a_secret_is_hidden() -> None:
+    """A model marks one (``info={"secret": True}``, any type); the names
+    the redaction words miss are caught as whole parts of a name."""
+    vault = Table(
+        "vault",
+        MetaData(),
+        Column("id", Integer, primary_key=True),
+        Column("pin", Integer, info={"secret": True}),
+        Column("private_key", String),
+        Column("signing_key", String),
+        Column("otp", String),
+        Column("totp_seed", String),
+        Column("recovery_codes", String),
+        Column("salt", String),
+        Column("footprint", String),
+        Column("cache_key", String),
+    )
+    assert db_rows.masked(vault) == {
+        "pin",
+        "private_key",
+        "signing_key",
+        "otp",
+        "totp_seed",
+        "recovery_codes",
+        "salt",
+    }

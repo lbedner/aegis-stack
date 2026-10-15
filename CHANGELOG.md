@@ -35,7 +35,7 @@
 - **A table in the Overseer.** Database > Tables shows one table across the whole width, picked from the schema's tables, on three tabs: Rows, Schema (its `CREATE TABLE` statement) and Relationships, with a link that queries it. Rows pages through a table's rows, laid out like Logs: by the table's key, so a deep page costs what the first does; sorted only where an index serves it; secret columns never read, other text redacted; each read stopped after 5 seconds and taking no SQLite write lock. Off outside dev until `OVERSEER_DATABASE_ROWS_ENABLED` is on.
 - **A table's relationships in the Overseer.** Database > Tables > Relationships draws the table as Overseer's map does: the tables pointing at it, it, and the tables it points at, joined by lines, each node's keys on hover (composite keys whole) and leading to its own relationships; a row on Rows opens to the rows its keys point at and those pointing at it. The ontology's link edges now carry the column they point at (`to`).
 - **A read-only query in the Overseer.** Database > Query runs a statement written in an editor across the top of the window that highlights SQL, completes tables and columns, underlines syntax errors and unknown tables as you type (in the browser, no request; columns are left to the database), and keeps statements as tabs in the browser, and shows its rows in the same scroller under it: writes fail because the connection cannot write (a read-only transaction; SQLite's `query_only`, with `ATTACH` and `PRAGMA` refused), one statement at a time, 200 rows, stopped after 5 seconds, every run audited. Secret columns read as empty on SQLite however a statement reaches them; on PostgreSQL a statement reading a table that holds one is refused, as is a superuser login outside dev.
-- **Rows filter by picking a column.** Pick a column (never one holding a secret, binary or JSON), how it compares (=, ≠, <, ≤, >, ≥) and a value; each filter is a chip that removes it. Any column can be filtered (text and true/false only matched, never ordered, so hidden text cannot be spelled out unaudited), read within the 5-second limit; a value is read as its column's kind (a date as shown); a column the table lacks says so instead of failing. Every read of a table's rows is audited (`database.rows`), as every query is.
+- **Rows filter by picking a column.** Pick a column (never one holding a secret, binary or JSON), how it compares (=, ≠, <, ≤, >, ≥) and a value; each filter is a chip that removes it. Any other column can be filtered, indexed or not (text and true/false only matched, never ordered, so hidden text cannot be spelled out), read within the 5-second limit; a value is read as its column's kind (a date as shown); a column the table lacks says so instead of failing. Every read of a table's rows is audited (`database.rows`), as every query is.
 - **Sorting and export on a table's rows.** On Rows and a query's answer, a header sorts by its column (on Rows, an indexed column orders the whole table), and Export downloads the rows shown as CSV or JSON or copies them as CSV, JSON, Markdown or tab-separated for a sheet, formulas defused.
 - **Sign-in cookies are named for the project** (`<project>_session`, `<project>_refresh`, from `PROJECT_NAME`). Two Aegis apps on one host (`localhost:8000` and `:8002`) shared `aegis_session` and `aegis_refresh`, overwrote each other's sign-in, and each refused the other's refresh token, so every reload sent you back to sign in. The OAuth state cookie and Overseer's sidebar preference are named the same way. Signed-in users sign in once more after upgrading. Two copies of the same project on one host still share them; give one a different `PROJECT_NAME`.
 - **Every card's border goes teal on hover**, the map's nodes included (one shared `.hover-card`).
@@ -140,6 +140,13 @@
 
 ### Fixed
 
+- **Overseer charts draw again.** A second page script's `mount()` replaced
+  the charts' own; a test now refuses a name declared twice across the page
+  scripts.
+- **Database rows that could not be read say why.** A huge number in a
+  filter or page link, or a table not migrated yet, showed an error page;
+  each now says so in place of the rows. A ≠ filter keeps the rows holding
+  nothing in that column, as SQL's `!=` did not.
 - **A Python 3.13 project starts again.** The chat surface named its own
   class in an annotation Python 3.13 reads eagerly, so the webserver
   stopped at import with `NameError: name 'ChatSurface' is not defined`.
@@ -184,6 +191,30 @@
 
 ### Security
 
+- **The dev stack is reachable from localhost only.** Every port the dev
+  compose publishes binds `127.0.0.1` (and `make docs-serve` too), so without
+  the auth service no one on the same network can read Overseer, a table's
+  rows included.
+- **No third-party script runs unverified.** htmx, its SSE extension, Alpine
+  and Chart.js carry the hash the browser checks (`integrity`), their
+  versions pinned; the Query editor's CodeMirror ships with the app
+  (`static/vendor/codemirror.js`) instead of loading from esm.sh.
+- **A model can mark a column secret.** `info={"secret": True}` on a column
+  hides it in Rows and Query, of any type, and the names caught now include
+  private and signing keys, one-time codes, recovery codes and salts, in
+  errors and logs as well.
+- **Query on PostgreSQL runs as a reader that cannot see secrets.** Each
+  statement runs as a role per login granted each table's known columns but
+  its secrets (one that a migration adds stays unread until a restart),
+  which also drops a superuser's powers; a secret table's
+  other columns can now be queried, and a superuser login works outside dev.
+  Where the login cannot create roles, the older refusals stay.
+- **Query on PostgreSQL refuses what its plan cannot show into.** SQL run
+  inside a function (`query_to_xml`, `table_to_xml`), the planner's samples
+  of every column (`pg_stats`) and ending another connection passed the
+  check for tables holding a secret; each is refused now. A table keyed by
+  text pages by offset, so its key's values no longer ride in the page
+  links unredacted.
 - **Only the default agent sees the system status.** The live health of the
   stack's services went into every agent's prompt; it now goes only to the
   default ops assistant, as usage and the model catalog already did. An

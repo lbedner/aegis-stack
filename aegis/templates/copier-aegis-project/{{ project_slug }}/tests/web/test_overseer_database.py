@@ -434,6 +434,18 @@ class TestRows:
         ]
         assert audit.events[1]["where"] == "nope:1"
 
+    def test_a_table_it_cannot_read_says_why(
+        self, sqlite: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        def unread(*_: object, **__: object) -> None:
+            raise db_rows.RowsUnreadError("no such table: member")
+
+        monkeypatch.setattr(db_rows, "page", unread)
+        audit = recording(sqlite)
+        html = _tab(sqlite, db_rows.tables()[0])
+        assert "no such table" in text(one(html, "[data-rows-bad]"))
+        assert audit.events[0]["outcome"] == "failed"
+
     def test_the_rows_shown_download_or_copy(self, sqlite: TestClient) -> None:
         html = _tab(sqlite, db_rows.tables()[0])
         formats = select(html, '[data-export-rows="#database-rows-body"]')

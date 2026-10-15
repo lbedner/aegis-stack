@@ -9,10 +9,10 @@ services:
   webserver:
     volumes:
       - .:/code
-    ports:
+    ports: !override
       # Host port auto-selected by `make serve` (WEBSERVER_HOST_PORT);
       # falls back to PORT for a raw `docker compose up`.
-      - "${WEBSERVER_HOST_PORT:-${PORT:-8000}}:${PORT:-8000}"
+      - "127.0.0.1:${WEBSERVER_HOST_PORT:-${PORT:-8000}}:${PORT:-8000}"
     environment:
       - WATCHFILES_FORCE_POLLING=true
 {%- if include_finance and finance_plaid %}
@@ -59,19 +59,19 @@ services:
     ports:
       # Host port auto-selected by `make serve` (REDIS_HOST_PORT). The
       # container still listens on 6379 for in-network clients.
-      - "${REDIS_HOST_PORT:-6379}:6379"
+      - "127.0.0.1:${REDIS_HOST_PORT:-6379}:6379"
 {%- endif %}
 {%- if include_storage %}
 
   seaweedfs:
     ports:
-      - "${SEAWEEDFS_HOST_PORT:-8333}:8333"
+      - "127.0.0.1:${SEAWEEDFS_HOST_PORT:-8333}:8333"
 {%- endif %}
 {%- if include_browser %}
 
   browser:
     ports:
-      - "${BROWSER_HOST_PORT:-3000}:3000"
+      - "127.0.0.1:${BROWSER_HOST_PORT:-3000}:3000"
 {%- endif %}
 {%- if database_engine == "postgres" %}
 
@@ -79,7 +79,7 @@ services:
     ports:
       # Host port auto-selected by `make serve` (POSTGRES_HOST_PORT). The
       # container still listens on 5432 for in-network clients.
-      - "${POSTGRES_HOST_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5432}:5432"
 {%- endif %}
 {%- if ollama_mode == "docker" %}
 
@@ -87,7 +87,7 @@ services:
     ports:
       # Host port auto-selected by `make serve` (OLLAMA_HOST_PORT). The
       # container still listens on 11434 for in-network clients.
-      - "${OLLAMA_HOST_PORT:-11434}:11434"
+      - "127.0.0.1:${OLLAMA_HOST_PORT:-11434}:11434"
 {%- endif %}
 {%- if include_ingress %}
 
@@ -100,8 +100,8 @@ services:
       # Host ports auto-selected by `make serve` (INGRESS_HTTP_PORT /
       # INGRESS_DASHBOARD_PORT); fall back to the standard ports for a
       # raw `docker compose up`.
-      - "${INGRESS_HTTP_PORT:-80}:80"
-      - "${INGRESS_DASHBOARD_PORT:-8080}:8080"  # Dashboard
+      - "127.0.0.1:${INGRESS_HTTP_PORT:-80}:80"
+      - "127.0.0.1:${INGRESS_DASHBOARD_PORT:-8080}:8080"  # Dashboard
 {%- endif %}
 
   test_runner:

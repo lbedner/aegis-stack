@@ -8,4 +8,4 @@
 {# The scheduler clock's scrubbing (Alpine component). Plain script at the end
    of the body: it registers before the deferred Alpine starts, and one full
    load covers every page htmx then swaps in. #}
-{% block scripts %}<script src="{{ static('js/clock.js') }}"></script><script src="{{ static('js/sql-read.js') }}"></script><script src="{{ static('js/sql.js') }}"></script><script src="{{ static('js/rows.js') }}"></script>{% endblock %}
+{% block scripts %}<script src="{{ static('js/clock.js') }}"></script><script src="{{ static('js/sql-read.js') }}"></script><script src="{{ static('js/sql.js') }}" data-codemirror="{{ static('vendor/codemirror.js') }}"></script><script src="{{ static('js/rows.js') }}"></script>{% endblock %}

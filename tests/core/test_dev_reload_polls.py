@@ -8,25 +8,15 @@ edit. Polling sees every change; the static asset watcher polls for the
 same reason.
 """
 
-from pathlib import Path
-
 import pytest
-import yaml
-from jinja2 import Environment
 
-PROJECT = (
-    Path(__file__).parents[2]
-    / "aegis/templates/copier-aegis-project/{{ project_slug }}"
-)
+from tests.core._compose import load, render
 
 
 @pytest.mark.parametrize("plaid", [False, True])
 def test_the_dev_webserver_polls_for_changes(plaid: bool) -> None:
-    source = (PROJECT / "docker-compose.dev.yml.jinja").read_text()
-    rendered = (
-        Environment()
-        .from_string(source)
-        .render(include_finance=plaid, finance_plaid=plaid, project_slug="app")
+    rendered = render(
+        "docker-compose.dev.yml.jinja", include_finance=plaid, finance_plaid=plaid
     )
-    webserver = yaml.safe_load(rendered)["services"]["webserver"]
+    webserver = load(rendered)["services"]["webserver"]
     assert "WATCHFILES_FORCE_POLLING=true" in webserver["environment"]

@@ -16,12 +16,14 @@ from sqlalchemy import Boolean, Column, Table, TypeDecorator
 
 TRUE = frozenset({"1", "true", "t", "yes", "on"})
 FALSE = frozenset({"0", "false", "f", "no", "off"})
+BIGGEST = 2**63  # past a 64-bit integer, the database refuses the value mid-read
 # What a filter may ask of a column: its sign as written (``where``, the
 # URL; ``:`` for equals, as the row links write it), as shown, and the
 # comparison.
 OPERATORS: dict[str, tuple[str, Callable[[Any, Any], Any]]] = {
     ":": ("=", operator.eq),
-    "!=": ("≠", operator.ne),
+    # NULL is not the value either: SQL's ``!=`` would drop it unsaid.
+    "!=": ("≠", lambda column, value: column.is_distinct_from(value)),
     "<": ("<", operator.lt),
     "<=": ("≤", operator.le),
     ">": (">", operator.gt),
@@ -107,11 +109,14 @@ def value(column: Column[Any], text: str) -> Any:
     if kind is None or kind is str:
         return text
     try:
-        return getattr(kind, "fromisoformat", kind)(text)  # a date: as shown
+        found = getattr(kind, "fromisoformat", kind)(text)  # a date: as shown
+        if kind is int and not -BIGGEST <= found < BIGGEST:
+            raise ValueError(text)
     except (ArithmeticError, TypeError, ValueError):
         raise AskError(
             f"{column.name} holds {kind.__name__} values: {text!r} is not one."
         ) from None
+    return found
 
 
 def ask(column: str, op: str, text: str) -> Filter:

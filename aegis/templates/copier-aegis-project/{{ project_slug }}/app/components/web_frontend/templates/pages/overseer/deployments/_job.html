@@ -1,13 +1,15 @@
-{# The newest deploy job (overseer_deploy_actions.job_context), streamed
-   while the page is open: where its steps stand (a provision's step bar),
-   what it is doing and its output's tail (folded), then how it ended. A
-   provision that stopped part way offers to resume it, or to destroy what
-   it made. #}
+{# A deploy job (overseer_deploy_actions.job_context), streamed while the
+   page is open. Whole (Jobs, New server): where its steps stand (its
+   step bar), what it is doing, how it ended, and its output's tail,
+   folded. On a card: only that one runs, with a link to it (the card's
+   controls hide meanwhile, input.css). A provision that stopped part way
+   offers, on both, to resume it or destroy what it made. #}
 {% from "components/macros/layout.html" import copy_button, progress %}
-{% from "pages/overseer/deployments/_macros.html" import fold, stopped %}
+{% from "pages/overseer/deployments/_macros.html" import fold, goto, stopped %}
 {% if job %}
+{% set whole = job.whole %}
 <div data-deploy-job="{{ job.action }}" data-status="{{ job.status }}" class="space-y-3">
-  {% if job.steps %}
+  {% if whole and job.steps %}
   <ol data-stages class="flex gap-2">
     {% for s in job.steps %}
     {% set at = s.status in ("current", "failed") %}
@@ -19,19 +21,23 @@
     {% endfor %}
   </ol>
   {% endif %}
+  {% if whole or job.status == "running" or job.stopped %}
   <p class="text-sm flex flex-wrap items-baseline gap-2">
+    {% if job.status == "running" and not whole %}<span class="loading loading-dots loading-xs text-aegis-teal" aria-hidden="true"></span>{% endif %}
     <span class="font-semibold text-aegis-text">{{ job.title }}</span>
-    {% if job.status == "running" %}<span class="text-aegis-muted">{{ job.label }}</span>
+    {% if job.status == "running" %}<span class="text-aegis-muted">{{ job.label if whole else "running" }}</span>
     {% elif job.status == "failed" %}<span data-error class="text-error">{{ job.error }}</span>
     {% else %}<span class="text-aegis-teal">Done</span>{% endif %}
+    {% if job.url and not whole %}{{ goto(job.url, "Open", "data-job-link") }}{% endif %}
   </p>
+  {% endif %}
   {% if job.stopped %}{{ stopped(job.partials, job.stopped) }}{% endif %}
   {# Folded; open stays open across the stream's swaps (job_panel's
      ``output``), and each swap shows its newest line (reversed, the box
      starts at its bottom). Its scrollbar always shows (daisyUI's
      ``scrollbar-color`` on every element would hide a styled one), and
      its scrolling stays in it. #}
-  {% if job.lines %}
+  {% if whole and job.lines %}
   {% set attrs %}data-output x-bind:open="output" x-on:toggle="output = $el.open"{% endset %}
   {% call fold("Show output", attrs) %}
     <div class="mb-2 flex justify-end">{{ copy_button(job.lines|join("\n")) }}</div>

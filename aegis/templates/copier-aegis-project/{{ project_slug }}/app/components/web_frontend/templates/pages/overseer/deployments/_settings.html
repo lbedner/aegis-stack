@@ -1,0 +1,27 @@
+{# Overseer > Deployments > Settings (overseer_deployments._settings):
+   every cloud and DNS provider's keys, the ones this project deploys
+   with first, each set or replaced here, beside where the provider makes
+   them and what one needs (_keys.html); then what .aegis/deploy.yml
+   says. #}
+{% from "components/macros/layout.html" import badge, card, facts %}
+{% from "pages/overseer/deployments/_keys.html" import keys with context %}
+{% from "pages/overseer/deployments/_macros.html" import deployed_card, mark, note %}
+<div class="space-y-4">
+{% if actions.view == "deployed" %}
+{{ deployed_card(actions) }}
+{% else %}
+{% call card("Keys", "The app's own wins over the deploy agent's.") %}
+<div class="divide-y divide-aegis-border/60">
+  {% for d in actions.providers %}
+  <section data-provider="{{ d.key }}" class="space-y-2 py-4 first:pt-0 last:pb-0">
+    <p class="flex flex-wrap items-center gap-2 text-sm font-semibold text-aegis-text">{{ mark(d) }}{% if d.used %} <span data-used>{{ badge("this project's", "accent") }}</span>{% endif %}</p>
+    {{ keys("keys", d) }}
+  </section>
+  {% endfor %}
+</div>
+{% endcall %}
+{% call card("This project's deploy record", ".aegis/deploy.yml, on the machine you deploy from") %}
+<div data-deploy-settings>{% if actions.facts %}{{ facts(actions.facts) }}{% else %}<p class="{{ note() }}">No deploy record yet: New server makes one.</p>{% endif %}</div>
+{% endcall %}
+{% endif %}
+</div>

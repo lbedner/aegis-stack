@@ -7,6 +7,8 @@
     "command": "aegis deploy-provision --provider hetzner",
     "token": "HCLOUD_TOKEN",
     "check": "https://api.hetzner.cloud/v1/server_types?per_page=1",
+    "tokens": "https://console.hetzner.cloud/projects",
+    "scopes": ["Read & Write"],
     "size": "cx23",
     "region": "nbg1",
     "currency": "EUR"
@@ -19,6 +21,15 @@
     "command": "aegis deploy-provision --provider digitalocean",
     "token": "DIGITALOCEAN_TOKEN",
     "check": "https://api.digitalocean.com/v2/account",
+    "tokens": "https://cloud.digitalocean.com/account/api/tokens",
+    "scopes": [
+      "actions:read", "regions:read", "sizes:read",
+      "droplet:create", "droplet:read", "droplet:delete",
+      "firewall:create", "firewall:read", "firewall:delete",
+      "ssh_key:create", "ssh_key:read", "ssh_key:delete",
+      "tag:create", "tag:read",
+      "image:read", "snapshot:read", "vpc:read", "billing:read"
+    ],
     "size": "s-1vcpu-2gb",
     "region": "tor1",
     "currency": "USD"
@@ -29,7 +40,9 @@
     "domain": "porkbun.com",
     "can": ["DNS"],
     "command": "aegis deploy-provision --domain <name> --dns porkbun",
-    "keys": ["PORKBUN_API_KEY", "PORKBUN_SECRET_KEY"]
+    "keys": ["PORKBUN_API_KEY", "PORKBUN_SECRET_KEY"],
+    "tokens": "https://porkbun.com/account/api",
+    "scopes": ["API access turned on for the domain"]
   },
   {
     "key": "cloudflare",
@@ -38,7 +51,9 @@
     "can": ["DNS"],
     "command": "aegis deploy-provision --domain <name> --dns cloudflare",
     "token": "CLOUDFLARE_API_TOKEN",
-    "check": "https://api.cloudflare.com/client/v4/user/tokens/verify"
+    "check": "https://api.cloudflare.com/client/v4/user/tokens/verify",
+    "tokens": "https://dash.cloudflare.com/profile/api-tokens",
+    "scopes": ["Zone:Zone:Read", "Zone:DNS:Edit"]
   },
   {
     "key": "aws",

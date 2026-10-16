@@ -45,6 +45,8 @@ class Provider:
     region: str | None = None
     currency: str | None = None  # what its prices are in
     keys: tuple[str, ...] = ()  # a DNS provider's, where one token will not do
+    tokens: str | None = None  # where its tokens (or keys) are made
+    scopes: tuple[str, ...] = ()  # what a token needs to do all aegis does there
 
     @property
     def secrets(self) -> tuple[str, ...]:
@@ -58,7 +60,14 @@ class Provider:
 
 
 PROVIDERS = tuple(
-    Provider(**{**p, "can": tuple(p["can"]), "keys": tuple(p.get("keys", ()))})
+    Provider(
+        **p
+        | {
+            "can": tuple(p["can"]),
+            "keys": tuple(p.get("keys", ())),
+            "scopes": tuple(p.get("scopes", ())),
+        }
+    )
     for p in json.loads(Path(__file__).with_name("providers.json").read_text())
 )
 # Each provider by its key (the table's).
@@ -68,6 +77,8 @@ BY_KEY = {p.key: p for p in PROVIDERS}
 def provider(key: str | None) -> Provider | None:
     """The provider the table names ``key``, or None."""
     return BY_KEY.get(key or "")
+
+
 # Where aegis creates servers, each with the token it needs; and where it
 # names them (a DNS record for a domain of your own).
 PROVISIONABLE = tuple(p for p in PROVIDERS if "Provision" in p.can)

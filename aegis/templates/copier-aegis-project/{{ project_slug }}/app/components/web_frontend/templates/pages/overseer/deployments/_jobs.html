@@ -1,0 +1,19 @@
+{# Overseer > Deployments > Jobs: the job picked (the newest unless
+   another is), whole and streamed while it runs, over every deploy job
+   still kept, newest first, each opening here
+   (overseer_deploy_actions.jobs_page). #}
+{% from "components/macros/layout.html" import card %}
+{% from "components/macros/table.html" import data_table %}
+{% from "pages/overseer/deployments/_macros.html" import agent_note, deployed_card, job_panel %}
+<div class="space-y-4">
+{% if actions.view == "deployed" %}
+{{ deployed_card(actions) }}
+{% elif actions.rows is none %}
+{% call card("Jobs") %}{{ agent_note(actions.agent) }}{% endcall %}
+{% else %}
+{% if actions.job %}{% call card(actions.job.title) %}{{ job_panel(actions) }}{% endcall %}{% endif %}
+{% call card("Every job", "kept " ~ actions.kept_hours ~ " hours") %}
+<div data-jobs>{{ data_table(actions.columns, actions.rows, empty="No deploy jobs in the last " ~ actions.kept_hours ~ " hours.") }}</div>
+{% endcall %}
+{% endif %}
+</div>

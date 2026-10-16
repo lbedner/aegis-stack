@@ -255,6 +255,19 @@ async def kept(action: str, args: dict[str, str]) -> dict[str, Any] | None:
     return await _kept(kept_key(action, args))
 
 
+def action_of(job: JobSnapshot) -> str:
+    """The protocol action a deploy job runs (its name, ``JOB_PREFIX``)."""
+    return job.name.removeprefix(JOB_PREFIX)
+
+
+async def jobs() -> list[JobSnapshot]:
+    """Every deploy job still kept (a few hours), newest first."""
+    async with _redis() as client:
+        found = await RedisJobStore(client).list_jobs()
+    mine = [j for j in found if j.name.startswith(JOB_PREFIX)]
+    return sorted(mine, key=lambda j: j.started_at, reverse=True)
+
+
 async def job(job_id: str | None = None) -> JobSnapshot | None:
     """A deploy job (the newest when no id is given), or None."""
     async with _redis() as client:

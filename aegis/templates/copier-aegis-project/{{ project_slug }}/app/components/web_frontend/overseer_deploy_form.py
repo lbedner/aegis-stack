@@ -10,7 +10,6 @@ the agent answers; the job they start is ``overseer_deploy_actions``'.
 
 import asyncio
 from typing import Any
-from urllib.parse import urlencode
 
 from app.components.deploy import agent as deploy_agent
 from app.components.deploy.protocol import (
@@ -31,6 +30,7 @@ from .overseer_deploy_actions import (
     server_name,
     stopped,
 )
+from .rendering import with_query
 
 PROVISION = "pages/overseer/deployments/_provision.html"
 FIT = "pages/overseer/deployments/_fit.html"
@@ -39,6 +39,8 @@ ROLLBACK = f"{PARTIALS}/rollback"  # the backups a rollback picks from
 ROLLBACK_TEMPLATE = "pages/overseer/deployments/_rollback.html"
 HISTORY = f"{PARTIALS}/history"  # the server's deploy history, from here
 HISTORY_TEMPLATE = "pages/overseer/deployments/_history.html"
+LIVE = f"{PARTIALS}/live"  # the server's newest deploy, on its card
+LIVE_TEMPLATE = "pages/overseer/deployments/_live.html"
 MIN_MEMORY_MB = 2048  # the smallest size offered by default: the stack needs it
 DEPLOYED = "This is a deployed server: deploy from the dev Overseer or CI."
 
@@ -66,15 +68,9 @@ def panel_path(panel: str, provider: str) -> str:
     return f"{PARTIALS}/{panel}/{provider}"
 
 
-def _with(path: str, **params: str) -> str:
-    """``path`` with what it is asked for (empty values left out)."""
-    query = urlencode({k: v for k, v in params.items() if v})
-    return f"{path}?{query}" if query else path
-
-
 def panel_url(panel: str, provider: str, **params: str) -> str:
     """``panel_path`` with what it is asked for."""
-    return _with(panel_path(panel, provider), **params)
+    return with_query(panel_path(panel, provider), **params)
 
 
 def _cheapest(size: dict[str, Any]) -> float:
@@ -138,7 +134,7 @@ def _loading(
     ``first`` (as the page is, by default), then, once the agent has been
     asked (``job``), polled each second until it answers (a poll still
     waiting swaps nothing: the routes' ``part``)."""
-    url = _with(path, **picked, job=job or "")
+    url = with_query(path, **picked, job=job or "")
     return {
         "state": "loading",
         "reload": {"url": url, "trigger": "every 1s" if job else first},
@@ -148,7 +144,7 @@ def _loading(
 def _failed(path: str, exc: RefusedError, **picked: str) -> dict[str, Any]:
     """A part that could not be had: why, and where asking again loads it
     from (``path``)."""
-    return {"state": "failed", "error": str(exc), "retry": _with(path, **picked)}
+    return {"state": "failed", "error": str(exc), "retry": with_query(path, **picked)}
 
 
 # Instead of a new server, one of your own: name it, then deploy to it
@@ -359,26 +355,31 @@ async def rollback_panel(form: dict[str, str], by: str) -> dict[str, Any]:
     return {"state": "ready", "backups": options, "partials": PARTIALS}
 
 
-# The rollback's backups, as the Overview first draws them: asked for as
-# the card loads.
-ROLLBACK_WAITING = _loading(ROLLBACK, None)
+# The rollback's backups, as the Overview first draws them: folded under
+# the card's More, asked for once it opens.
+ROLLBACK_WAITING = _loading(ROLLBACK, None, "toggle once from:closest details")
 
 
-async def history_panel(form: dict[str, str], by: str) -> dict[str, Any]:
+async def history_panel(
+    form: dict[str, str], by: str, path: str = HISTORY
+) -> dict[str, Any]:
     """The server's deploy history (the protocol's ``history``) as the
-    agent last read it; while it has not, it asked (once) and the panel
+    agent last read it, for the part at ``path`` (History's table, or the
+    card's live build); while it has not, it asked (once) and the part
     waiting, or why it failed."""
     try:
         found, job = await _from_agent("history", {}, form.get("job"), by)
     except RefusedError as exc:
-        return _failed(HISTORY, exc)
+        return _failed(path, exc)
     if found is None:
-        return _loading(HISTORY, job)
+        return _loading(path, job)
     return {"state": "ready"} | ui_deployments.history_rows(found["deploys"])
 
 
-# The History section on this machine: asked for as it loads.
+# The History section on this machine, and the server card's live build:
+# asked for as they load.
 HISTORY_WAITING = _loading(HISTORY, None)
+LIVE_WAITING = _loading(LIVE, None)
 
 
 # The new-server form's parts, each loaded on its own while the agent

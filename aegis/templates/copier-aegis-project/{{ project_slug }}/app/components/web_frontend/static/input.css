@@ -55,11 +55,11 @@
      says why), no write control is offered, in a dialog or drawer too. */
   body:has([data-read-only]) [data-write] { display: none; }
 
-  /* While the deploy job it holds runs, a deploy card's write controls are
-     greyed and still (``data-locks``), lifting as the job ends; the app
-     refuses a request sent anyway. */
-  [data-locks]:has([data-deploy-job][data-status="running"]) [data-write] {
-    @apply pointer-events-none opacity-40;
+  /* While the deploy job it holds runs, what a deploy card could do is
+     hidden (``data-locks``, ``data-idle``), back as the job ends, so the
+     job is all there is to see; the app refuses a request sent anyway. */
+  [data-locks]:has([data-deploy-job][data-status="running"]) [data-idle] {
+    @apply hidden;
   }
 
   /* The main sidebar only flags trouble: a healthy entry shows no dot (the

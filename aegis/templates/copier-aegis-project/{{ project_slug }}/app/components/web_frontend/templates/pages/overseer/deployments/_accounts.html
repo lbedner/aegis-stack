@@ -1,0 +1,19 @@
+{# Overseer > Deployments > Cloud accounts: what each connected account
+   runs and costs (overseer_deploy_form.accounts), as the deploy agent last
+   looked. #}
+{% from "components/macros/layout.html" import card %}
+{% from "pages/overseer/deployments/_macros.html" import agent_note, deployed_card, goto, note %}
+<div class="space-y-4">
+{% if actions.view == "deployed" %}
+{{ deployed_card(actions) }}
+{% else %}
+{% call card("In your cloud accounts") %}
+{{ agent_note(actions.agent) }}
+{% if actions.accounts %}
+<div class="space-y-3">{% for f in actions.accounts %}{% include "pages/overseer/deployments/_account.html" %}{% endfor %}</div>
+{% else %}
+<p data-no-accounts class="{{ note() }}">No cloud account is connected: give a provider's API token in {{ goto(settings_url, "Settings") }}.</p>
+{% endif %}
+{% endcall %}
+{% endif %}
+</div>

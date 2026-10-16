@@ -1345,6 +1345,40 @@ def test_the_server_card_says_what_is_live_there(
     assert "passed" in said and "Went live" in said
 
 
+GONE = ["sha256/aa/aa/" + "a" * 64, "sha256/bb/bb/" + "b" * 64]
+
+
+def test_the_server_card_says_which_stored_files_the_server_lacks(
+    redis: FakeRedis, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Rows on the server naming files it does not have (its database
+    copied without its store, aegis-stack#1679): counted as the card loads,
+    and brought from this machine's store with one press."""
+    deployed(monkeypatch, {"server": BOX, "provision": READY})
+    card = one(page_html(TestClient(app), PAGE), CARD)
+    assert one(card, "[data-storage]").get("hx-get") == deploy_form.STORAGE
+    client = TestClient(app)
+    one(client.get(deploy_form.STORAGE).text, "[data-storage] [data-waiting]")
+    _keep(redis, "storage", {"missing": GONE})
+    part = one(client.get(deploy_form.STORAGE).text, "[data-storage]")
+    assert "2 stored files" in text(part)
+    bring = one(part, '[data-ask="upload-storage"]')
+    assert bring.get("hx-post") == f"{actions.PARTIALS}/upload-storage"
+    client.post(f"{actions.PARTIALS}/upload-storage")
+    asked = [r["action"] for r in _queued(redis)]
+    assert asked == ["storage", "upload-storage"]  # the check, then the press
+
+
+def test_with_every_stored_file_there_nothing_is_offered(
+    redis: FakeRedis, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    deployed(monkeypatch, {"server": BOX, "provision": READY})
+    _keep(redis, "storage", {"missing": []})
+    part = one(TestClient(app).get(deploy_form.STORAGE).text, "[data-storage]")
+    assert "Every stored file" in text(part)
+    none(part, '[data-ask="upload-storage"]')
+
+
 def test_while_the_backups_are_looked_up_the_panel_waits(
     redis: FakeRedis, app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> None:

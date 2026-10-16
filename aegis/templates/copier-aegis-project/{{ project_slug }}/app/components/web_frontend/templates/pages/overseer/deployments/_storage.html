@@ -1,0 +1,13 @@
+{# The stored files the server's rows name and its store lacks (the
+   ``storage`` route: storage_panel), and bringing them from this
+   machine's store (``aegis deploy-upload-storage``); waiting on the
+   agent's check, or why it could not be had. #}
+{% from "pages/overseer/deployments/_macros.html" import ask, note, panel %}
+{% call panel("storage", storage, "Asking the server about its stored files...", "Could not check the server's stored files: ", boxed=False) %}
+{% if storage.missing %}
+<div class="flex flex-wrap items-center gap-2">
+  <p class="{{ note() }}">{{ storage.missing }} stored file{{ "s" if storage.missing != 1 }} the server's database names {{ "are" if storage.missing != 1 else "is" }} not on it.</p>
+  <span data-idle>{{ ask("Bring missing files", storage.partials, "upload-storage") }}</span>
+</div>
+{% else %}<p class="{{ note() }}">Every stored file the server's database names is on it.</p>{% endif %}
+{% endcall %}

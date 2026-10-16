@@ -23,6 +23,8 @@ a database copy does not carry (aegis-stack#1679).
 import shlex
 import subprocess
 import tempfile
+from collections.abc import Callable
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +35,7 @@ from ..i18n import lazy_t, t
 from .deploy import (
     _compose_prefix,
     _create_backup,
+    _exec_command,
     _get_project_root,
     _project_answers,
     _require_deploy_config,
@@ -59,6 +62,8 @@ def _snapshot(root: Path, out: Path) -> bool:
     return _local(root, ["python", "-c", SNAPSHOT], out) and out.stat().st_size > 0
 
 
+# The project's own check: the keys its rows name and its store lacks.
+STORAGE_CHECK = ["python", "-m", "app.cli.main", "storage", "check"]
 # Keys on stdin, this machine's store's copies out as a tarball; a key
 # this store lacks too is left out, and the check after says so.
 _PACK = (
@@ -67,12 +72,11 @@ _PACK = (
 )
 
 
-def _missing(host: str, user: str, prefix: str) -> list[str] | None:
-    """The keys the server's rows name and its store lacks; None when the
-    server cannot say (a project from before ``storage check``)."""
-    done = _run_remote_capture(
-        host, user, f"{prefix} exec -T webserver python -m app.cli.main storage check"
-    )
+def server_missing(remote: Callable[..., Any], deploy_path: str) -> list[str] | None:
+    """The keys the server's rows name and its store lacks (its ``storage
+    check``, through ``remote``); None when the server cannot say (a
+    project from before it)."""
+    done = remote(_exec_command(deploy_path, "webserver", STORAGE_CHECK))
     if done.returncode not in (0, 1):
         return None
     # stdout is the keys alone; what a person reads goes to stderr.
@@ -91,9 +95,9 @@ def upload_storage(root: Path, server: dict[str, Any]) -> None:
     replaced. ponytail: into the server's filesystem store; a server on a
     bucket fills it with its own copy.
     """
-    host, user = server["host"], server["user"]
-    prefix = _compose_prefix(server["path"])
-    missing = _missing(host, user, prefix)
+    host, deploy_path = server["host"], server["path"]
+    remote = partial(_run_remote_capture, host, server["user"])
+    missing = server_missing(remote, deploy_path)
     if missing:
         typer.echo(t("deploy.storage_copying", count=len(missing)))
         with tempfile.TemporaryDirectory() as tmp:
@@ -101,18 +105,14 @@ def upload_storage(root: Path, server: dict[str, Any]) -> None:
             if not _pack(root, missing, archive):
                 brand.error(t("deploy.storage_no_pack"), err=True)
                 raise typer.Exit(1)
-            unpacked = _run_remote_capture(
-                host,
-                user,
-                f"{prefix} exec -T webserver tar -xzf - -C {STORAGE_ROOT}",
-                archive,
-            )
+            unpack = ["tar", "-xzf", "-", "-C", STORAGE_ROOT]
+            unpacked = remote(_exec_command(deploy_path, "webserver", unpack), archive)
         if unpacked.returncode != 0:
             brand.error(
                 t("deploy.storage_refused", error=unpacked.stderr.strip()), err=True
             )
             raise typer.Exit(1)
-        missing = _missing(host, user, prefix)
+        missing = server_missing(remote, deploy_path)
     if missing is None:
         brand.warn(t("deploy.storage_cannot_check"))
         return

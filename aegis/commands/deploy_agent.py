@@ -56,6 +56,7 @@ from .deploy import (
     app_deploy,
 )
 from .deploy_backup import list_backups
+from .deploy_upload import server_missing
 
 PROTOCOL: dict[str, Any] = _protocol.PROTOCOL
 LOOKS = 4  # looks answered at once (a catalog, an account, the footprint)
@@ -256,18 +257,28 @@ def _found(
         provider = args["provider"]
         found = _ask(provider, env, lambda c: getattr(c, action)())
         return found | {"currency": PROVIDERS[provider].currency}
-    if action in ("backups", "history"):  # read on the server
+    if action in ("backups", "history", "storage"):  # read on the server
         server = (_load_deploy_config(str(root)) or {}).get("server")
         if not server:
             raise RefusedError(t("deploy.no_config"))
         remote = partial(_run_remote_capture, server["host"], server["user"])
         if action == "backups":
             return {"backups": list_backups(remote, server["path"])}
+        if action == "storage":
+            return {"missing": _missing(remote, server["path"])}
         return {"deploys": _history(root, remote, server["path"])}
     try:
         return measure(root)
     except DockerError as exc:
         raise RefusedError(str(exc)) from None
+
+
+def _missing(remote: Any, deploy_path: str) -> list[str]:
+    """The stored files the server's rows name and its store lacks."""
+    missing = server_missing(remote, deploy_path)
+    if missing is None:
+        raise RefusedError(t("deploy.storage_cannot_check"))
+    return missing
 
 
 def _history(root: Path, remote: Any, deploy_path: str) -> list[dict[str, Any]]:

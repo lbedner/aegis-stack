@@ -163,6 +163,62 @@ async def test_is_poison_fails_open_on_redis_error(
     conn.xack.assert_not_awaited()
 
 
+# ---------------------------------------------------------------------------
+# One consumer per worker host, and the ones that left are forgotten
+# ---------------------------------------------------------------------------
+
+
+def test_a_worker_keeps_one_consumer_name_across_restarts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """taskiq names a consumer with a fresh uuid each start, so every
+    restart and every dev reload joined the group anew and none ever left.
+    The host's name (a container's id) stays the same across restarts."""
+    monkeypatch.setattr(broker_module.socket, "gethostname", lambda: "0c132f87156d")
+    url = "redis://localhost:6379"
+    assert PausableRedisStreamBroker(url=url).consumer_name == "0c132f87156d"
+    named = PausableRedisStreamBroker(url=url, consumer_name="mine")
+    assert named.consumer_name == "mine"
+
+
+@pytest.mark.asyncio
+async def test_startup_forgets_consumers_that_left(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A consumer that has read nothing for an hour and holds no job is
+    gone; one still holding jobs stays until ``xautoclaim`` takes them,
+    since deleting it would drop them."""
+    conn = AsyncMock()
+    hour = broker_module.STALE_CONSUMER_MS
+    conn.xinfo_consumers.return_value = [
+        {"name": b"c", "pending": 0, "idle": hour * 9},  # this worker
+        {"name": b"old", "pending": 0, "idle": hour + 1},
+        {"name": b"holding", "pending": 2, "idle": hour * 9},
+        {"name": b"live", "pending": 0, "idle": 500},
+    ]
+    pipe = MagicMock(execute=AsyncMock())
+    conn.pipeline = MagicMock(return_value=pipe)
+    monkeypatch.setattr(
+        broker_module.aioredis, "Redis", lambda **_: _RedisCtx(conn), raising=True
+    )
+    await _make_broker().forget_stale_consumers()
+    pipe.xgroup_delconsumer.assert_called_once_with("q", "g", b"old")  # one trip
+    pipe.execute.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_no_group_yet_is_nothing_to_forget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    conn = AsyncMock()
+    conn.xinfo_consumers.side_effect = broker_module.aioredis.ResponseError("no key")
+    monkeypatch.setattr(
+        broker_module.aioredis, "Redis", lambda **_: _RedisCtx(conn), raising=True
+    )
+    await _make_broker().forget_stale_consumers()
+    conn.pipeline.assert_not_called()
+
+
 def test_a_new_consumer_group_starts_at_the_beginning_of_the_stream() -> None:
     """Work enqueued before the worker ever ran must still be delivered.
 

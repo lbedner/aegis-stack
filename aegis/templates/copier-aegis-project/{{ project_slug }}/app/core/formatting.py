@@ -330,6 +330,12 @@ def format_span(seconds: float | None) -> str | None:
     return " ".join(parts)
 
 
+def format_ago(seconds: float | None) -> str | None:
+    """How long ago, in ``format_span``'s two units: ``"1m 30s ago"``."""
+    span = format_span(seconds)
+    return None if span is None else f"{span} ago"
+
+
 # Anything that could end a header line or a quoted filename.
 _UNSAFE_FILENAME = re.compile(r'[\r\n"\\]+')
 

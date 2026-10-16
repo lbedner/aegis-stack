@@ -125,14 +125,19 @@ async def heartbeat(
 
 
 def chart_panel(
-    prefix: str, charts: list[dict[str, Any]], seconds: int, events: str
+    prefix: str,
+    charts: list[dict[str, Any]],
+    seconds: int,
+    events: str,
+    windows: tuple[tuple[int, str], ...],
 ) -> dict[str, Any]:
     """A page's live charts as its ``live_charts`` macro draws them: each
     chart with its id (``prefix``-key, its stream event too), the range
-    chips over ``seconds``, and the stream (``events``) over that window."""
+    chips (``windows``) over ``seconds``, and the stream (``events``) over
+    that window."""
     return {
         "charts": [chart | {"id": f"{prefix}-{chart['key']}"} for chart in charts],
-        "windows": series.WINDOWS,
+        "windows": windows,
         "window": seconds,
         "events": with_query(events, window=str(seconds)),
     }

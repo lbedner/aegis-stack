@@ -17,7 +17,9 @@ class KeyFamily:
     ``db`` names the settings field holding the logical database;
     ``columns`` label a peek at the newest key (a sorted set's member and
     score, a hash's field and value); ``peek=False`` keeps a family whose
-    values carry a credential out of it, named but never read.
+    values carry a credential out of it, named but never read. ``holds``
+    says what an entry is, singular (``"event"``), for its figures; without
+    it, the type's word (a stream's entry, a sorted set's member).
     """
 
     pattern: str
@@ -28,3 +30,4 @@ class KeyFamily:
     db: str = "REDIS_DB"
     columns: tuple[str, str] = ("Member", "Value")
     peek: bool = True
+    holds: str | None = None

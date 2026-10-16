@@ -1,12 +1,15 @@
 """The Redis keyspace map: which part of the app owns each key, and how the
 map draws them."""
 
+from types import SimpleNamespace
 from typing import Any, Self
 
 import pytest
 
 from app.services.system import redis_keys
+from app.services.system.models import KeyProbe
 from app.services.system.redis_keys import KeyFamily
+from tests._fake_redis import FakeRedis as SharedRedis
 
 FAMILIES = (
     KeyFamily(
@@ -52,19 +55,19 @@ class TestWaffle:
 class TestSummary:
     def test_sizes_the_family_from_its_samples(self) -> None:
         probes = {
-            "a": {"type": "zset", "ttl": 60, "idle": 2, "bytes": 100},
-            "b": {"type": "zset", "ttl": 30, "idle": 50, "bytes": 300},
+            "a": KeyProbe(ttl=60, idle=2, bytes=100),
+            "b": KeyProbe(ttl=30, idle=50, bytes=300),
         }
         summary = redis_keys.summarize(["a", "b", "c"], probes)
-        assert summary["count"] == 3
-        assert summary["memory"] == 600  # average sample size times the count
-        assert summary["idle"] == 2
-        assert summary["active"] is True
-        assert summary["latest"] == "a"  # the most recently touched
+        assert summary.count == 3
+        assert summary.memory == 600  # average sample size times the count
+        assert summary.idle == 2
+        assert summary.active is True
+        assert summary.latest == "a"  # the most recently touched
 
     def test_a_quiet_family_is_not_active(self) -> None:
-        probes = {"a": {"type": "zset", "ttl": -1, "idle": 3600, "bytes": 10}}
-        assert redis_keys.summarize(["a"], probes)["active"] is False
+        probes = {"a": KeyProbe(idle=3600, bytes=10)}
+        assert redis_keys.summarize(["a"], probes).active is False
 
 
 class TestShown:
@@ -96,10 +99,12 @@ class TestProbe:
     async def test_the_hot_key_is_found_however_deep_it_sits(self) -> None:
         keys = [f"traffic:sources:{i}" for i in range(500)]
         idle = {k: 3600 for k in keys} | {keys[-1]: 0}
-        probes = await redis_keys._probe(FakeRedis(idle), [keys])
-        summary = redis_keys.summarize(keys, probes)
-        assert summary["active"] is True
-        assert summary["latest"] == keys[-1]
+        redis = FakeRedis(idle)
+        probes, idle_of = await redis_keys.probe(redis, [keys])
+        summary = redis_keys.summarize(keys, probes, idle_of)
+        assert not [op for op, _ in redis.calls if op == "type"]  # nothing reads it
+        assert summary.active is True
+        assert summary.latest == keys[-1]
 
 
 class FakeRedis:
@@ -147,5 +152,61 @@ def test_the_shared_cache_claims_its_database_after_traffic() -> None:
     assert claimed["Shared cache"] == ["insights:project:7"]
     assert unclaimed == []
     assert "Shared cache" not in [
-        cache_db[i].name for i, keys in groups.items() if "traffic:total:2026-09-28" in keys
+        cache_db[i].name
+        for i, keys in groups.items()
+        if "traffic:total:2026-09-28" in keys
     ]
+
+
+class TestFamilyOf:
+    """A key named for what it is: the family that claims it, as the map
+    sorts it."""
+
+    def test_a_key_is_named_by_the_family_that_claims_it(self) -> None:
+        found = redis_keys.family_of("traffic:sources:2026-10-15T18")
+        assert found is not None and found.name == "Traffic sources"
+        assert redis_keys.family_of(None) is None
+
+    def test_the_live_charts_history_is_its_own(self) -> None:
+        """Not the shared cache's catch-all: the charts' points, their
+        tiers and the samplers' own keys say what they are."""
+        keys = [
+            "series:containers:worker:app-worker-1:cpu",
+            "series-60:containers:worker:app-worker-1:cpu",
+            "series-index:containers",
+            "series-latest:containers",
+        ]
+        names = [getattr(redis_keys.family_of(k), "name", None) for k in keys]
+        assert None not in names and "Shared cache" not in names
+
+
+class TestKeysOf:
+    @pytest.mark.asyncio
+    async def test_redis_says_which_arguments_are_keys(self) -> None:
+        """``COMMAND GETKEYS``: streams, scripts and a slow log's cut
+        arguments alike; a command without keys has none."""
+        commands = [["ZADD", "k", "1", "m"], ["PING"], []]
+        assert await redis_keys.keys_of(SharedRedis(), commands) == [["k"], [], []]
+
+
+class TestHomes:
+    @pytest.mark.asyncio
+    async def test_a_key_is_found_in_the_database_that_holds_it(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The app's database or the cache's; a key gone since has none."""
+        # A Redis stack's two databases, whatever stack runs this.
+        monkeypatch.setattr(
+            redis_keys, "settings", SimpleNamespace(REDIS_DB=0, CACHE_REDIS_DB=1)
+        )
+        app, cache = SharedRedis(), SharedRedis()
+        app.strings["legacy:thing"] = "x"
+        cache.strings["insights:project:7"] = "y"
+        monkeypatch.setattr(
+            redis_keys, "redis_client", lambda db=0: {0: app, 1: cache}[db]
+        )
+        keys = ["legacy:thing", "insights:project:7", "gone"]
+        assert await redis_keys.homes(keys) == {
+            "legacy:thing": 0,
+            "insights:project:7": 1,
+        }

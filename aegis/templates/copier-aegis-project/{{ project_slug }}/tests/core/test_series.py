@@ -4,6 +4,8 @@ at the sampler's pace while someone watches and slowly otherwise; its
 latest reading is kept whole for views, events add points without any
 polling, and a chart lines the series up on the times they share."""
 
+import time
+
 import pytest
 
 from app.core import series
@@ -191,3 +193,149 @@ async def test_a_read_can_keep_only_the_series_it_draws() -> None:
     await series.record({"probe:a-1:cpu": 1.0, "probe:a-1:net_in": 9.0})
     found = await series.read("probe:", 60, ending=(":cpu",))
     assert list(found) == ["a-1:cpu"]
+
+
+async def _raw(name: str, points: list[tuple[float, float]]) -> None:
+    """Raw points for ``name`` (``sampler:rest``), at the times given."""
+    sampler = name.split(":", 1)[0]
+    for at, value in points:
+        await series.get_store().append(
+            {series.PREFIX + name: value},
+            at=at,
+            keep_seconds=series.KEEP_SECONDS,
+            index=series.INDEX + sampler,
+        )
+
+
+async def test_history_keeps_each_minutes_highest_for_a_day() -> None:
+    """Past the raw hour, a history sampler's series are kept a minute at
+    a time, each minute's highest, so a spike outlives the hour."""
+    Sampler("hist", _sampler([]).read, history=True)
+    now = time.time()
+    start = (int(now // 60) - 1) * 60  # the minute just finished
+    await _raw("hist:a:cpu", [(start + 5, 5.0), (start + 20, 9.0), (start + 50, 1.0)])
+    await series.roll("hist", now)
+    found = await series.read("hist:", window=86400)
+    assert found == {"a:cpu": [(start, 9.0)]}
+
+
+async def test_history_keeps_each_five_minutes_highest_for_a_week() -> None:
+    Sampler("week", _sampler([]).read, history=True)
+    now = time.time()
+    start = (int(now // 300) - 1) * 300
+    await _raw("week:a:cpu", [(start + 10, 3.0), (start + 200, 7.0)])
+    await series.roll("week", now)
+    found = await series.read("week:", window=7 * 86400)
+    assert found == {"a:cpu": [(start, 7.0)]}
+
+
+async def test_each_bucket_is_folded_once() -> None:
+    Sampler("once-a", _sampler([]).read, history=True)
+    now = time.time()
+    start = (int(now // 60) - 1) * 60
+    await _raw("once-a:a:cpu", [(start + 5, 5.0)])
+    await series.roll("once-a", now)
+    await _raw("once-a:a:cpu", [(start + 6, 50.0)])  # late, after the fold
+    await series.roll("once-a", now + 1)  # the same minute again
+    found = await series.read("once-a:", window=86400)
+    assert found == {"a:cpu": [(start, 5.0)]}
+
+
+async def test_a_history_sampler_folds_as_it_samples_and_others_do_not(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    kept = Sampler("kept", _sampler([]).read, history=True)
+    plain = Sampler("plain", _sampler([]).read)
+    rolled: list[str] = []
+
+    async def roll(name: str, now: float) -> None:
+        rolled.append(name)
+
+    monkeypatch.setattr(series, "roll", roll)
+    await series.sample(kept)
+    await series.sample(plain)
+    assert rolled == ["kept"]
+
+
+async def test_a_minute_nobody_rolled_when_it_ended_is_still_folded() -> None:
+    """A restart or deploy can skip the tick after a minute ends: the next
+    roll folds every minute still in the raw hour that has not been."""
+    Sampler("late", _sampler([]).read, history=True)
+    now = time.time()
+    start = (int(now // 60) - 3) * 60  # three minutes back, never rolled
+    await _raw("late:a:cpu", [(start + 5, 4.0)])
+    await series.roll("late", now)
+    found = await series.read("late:", window=86400)
+    assert (start, 4.0) in found["a:cpu"]
+
+
+def test_a_long_window_keeps_each_buckets_highest() -> None:
+    """Past the hour a chart draws a tier of highs; averaging them again
+    would flatten the spike the tier was kept for."""
+    found = {"a:cpu": [(float(t * 60), 90.0 if t == 5 else 1.0) for t in range(40)]}
+    data = series.chart(found, label=str, window=86400, max_points=10)
+    assert max(v for v in data["series"][0]["values"] if v is not None) == 90.0
+
+
+async def test_a_sampler_without_history_reads_its_hour_for_a_long_window() -> None:
+    """Asked for a day, a sampler that keeps only the hour gives its hour,
+    not nothing."""
+    Sampler("hourly", _sampler([]).read)
+    await series.record({"hourly:a:cpu": 3.0})
+    found = await series.read("hourly:", window=86400)
+    assert [v for _, v in found["a:cpu"]] == [3.0]
+
+
+def test_the_windows_on_offer_follow_what_the_samplers_keep() -> None:
+    Sampler("keeps", _sampler([]).read, history=True)
+    Sampler("forgets", _sampler([]).read)
+    assert series.windows("keeps") == series.HISTORY_WINDOWS
+    assert series.windows("keeps", "forgets") == series.WINDOWS
+
+
+def test_a_long_window_is_redrawn_when_its_tier_moves() -> None:
+    """Within the hour every tick has new points; past it, a tier's bucket
+    does not change until its step turns."""
+    hour = series.Redraw(900)
+    assert hour.due(now=120.0) and hour.due(now=121.0)
+    day = series.Redraw(86400)
+    assert day.due(now=120.0)
+    assert not day.due(now=150.0)
+    assert day.due(now=180.0)
+
+
+async def test_a_history_samplers_reading_outlives_a_restart(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Its last reading is what the next is compared with (a container's
+    restart): kept a day, not two idle ticks."""
+    kept: dict[str, int | None] = {}
+    cache = series.get_cache()
+    original = cache.set
+
+    async def set_(key: str, value: object, ttl: int | None = None) -> None:
+        kept[key] = ttl
+        await original(key, value, ttl=ttl)
+
+    monkeypatch.setattr(cache, "set", set_)
+    await series.sample(Sampler("lasting", _sampler([]).read, history=True))
+    assert kept[series.LATEST + "lasting"] == series.DAY
+
+
+def test_history_charts_offer_a_day_and_a_week() -> None:
+    """Their chips read like every other range row (``ranges.py``)."""
+    assert [label for _, label in series.HISTORY_WINDOWS] == [
+        "15m",
+        "30m",
+        "1h",
+        "2h",
+        "6h",
+        "12h",
+        "1d",
+        "7d",
+    ]
+    assert series.window_of("86400", series.HISTORY_WINDOWS) == 86400
+    assert series.window_of("21600", series.HISTORY_WINDOWS) == 21600
+    assert series.phrase(7200) == "the last 2 hours"
+    assert series.phrase(86400) == "the last day"
+    assert series.phrase(7 * 86400) == "the last 7 days"

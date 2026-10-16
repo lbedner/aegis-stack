@@ -1,6 +1,5 @@
-"""Slow queries: the commands that took long enough to notice."""
-
-from datetime import datetime
+"""Slow queries: the commands that took long enough to notice, each with
+what it touched (``ui_redis.slow_queries``, which the web page reads too)."""
 
 import flet as ft
 
@@ -12,59 +11,45 @@ from app.components.frontend.dashboard.modals.redis_modal.constants import (
     COL_WIDTH_DURATION,
     COL_WIDTH_SLOWLOG_CMD,
     COL_WIDTH_TIMESTAMP,
+    COL_WIDTH_TOUCHED,
 )
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.system import ui_redis
-from app.services.system.models import ComponentStatus
+from app.services.system.models import ComponentStatus, SlowQuery
 
 
 class SlowQueryRow(ft.Container):
     """Single slow query display row."""
 
-    def __init__(self, entry: dict) -> None:
-        """
-        Initialize slow query row.
-
-        Args:
-            entry: Slow query entry from SLOWLOG
-        """
+    def __init__(self, row: SlowQuery) -> None:
+        """One ``ui_redis.slow_queries`` row."""
         super().__init__()
-
-        timestamp = entry.get("timestamp", 0)
-        duration_ms = entry.get("duration_ms", 0)
-        command = entry.get("command", "")
-
-        # Format timestamp
-        try:
-            dt = datetime.fromtimestamp(timestamp)
-            timestamp_str = dt.strftime("%Y-%m-%d %H:%M:%S")
-        except (ValueError, OSError, OverflowError, TypeError):
-            timestamp_str = str(timestamp)
-
-        duration_color = Theme.Colors.semantic(ui_redis.slowlog_color(duration_ms))
-        display_cmd, tooltip_cmd = ui_redis.slow_command(command), command
 
         self.content = ft.Row(
             [
                 ft.Container(
-                    content=BodyText(timestamp_str),
+                    content=BodyText(row.when),
                     width=COL_WIDTH_TIMESTAMP,
                 ),
                 ft.Container(
                     content=SecondaryText(
-                        f"{duration_ms:.2f}ms",
-                        color=duration_color,
+                        f"{row.duration_ms:.2f}ms",
+                        color=Theme.Colors.semantic(row.color),
                         weight=Theme.Typography.WEIGHT_SEMIBOLD,
                     ),
                     width=COL_WIDTH_DURATION,
                 ),
                 ft.Container(
+                    content=BodyText(row.touched or "-", tooltip=row.key),
+                    width=COL_WIDTH_TOUCHED,
+                ),
+                ft.Container(
                     content=ft.Text(
-                        display_cmd,
+                        row.command,
                         size=Theme.Typography.BODY,
                         color=ft.Colors.ON_SURFACE,
                         font_family="monospace",
-                        tooltip=tooltip_cmd,
+                        tooltip=row.full,
                     ),
                     width=COL_WIDTH_SLOWLOG_CMD,
                 ),
@@ -87,13 +72,7 @@ class SlowQueriesSection(ft.Container):
         super().__init__()
         self.padding = Theme.Spacing.MD
 
-        metadata = redis_component.metadata or {}
-        slowlog_entries = metadata.get("slowlog_entries", [])
-
-        # Sort by duration descending
-        sorted_entries = sorted(
-            slowlog_entries, key=lambda x: x.get("duration_ms", 0), reverse=True
-        )
+        rows = ui_redis.slow_queries(redis_component.metadata or {})
 
         # Column headers
         header_row = ft.Row(
@@ -114,6 +93,12 @@ class SlowQueriesSection(ft.Container):
                 ),
                 ft.Container(
                     content=SecondaryText(
+                        "Touched", weight=Theme.Typography.WEIGHT_SEMIBOLD
+                    ),
+                    width=COL_WIDTH_TOUCHED,
+                ),
+                ft.Container(
+                    content=SecondaryText(
                         "Command", weight=Theme.Typography.WEIGHT_SEMIBOLD
                     ),
                     width=COL_WIDTH_SLOWLOG_CMD,
@@ -123,7 +108,7 @@ class SlowQueriesSection(ft.Container):
         )
 
         # Query rows
-        query_rows = [SlowQueryRow(entry) for entry in sorted_entries]
+        query_rows = [SlowQueryRow(row) for row in rows]
 
         if query_rows:
             self.content = ft.Column(

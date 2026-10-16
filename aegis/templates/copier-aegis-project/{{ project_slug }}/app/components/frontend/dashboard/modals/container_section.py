@@ -51,16 +51,24 @@ class ContainerSection(ft.Column):
         self._key = page
         self._open = False
         self._window = series.DEFAULT_WINDOW
-        self._chips = DateRangeChips(
-            options=[(label, seconds) for seconds, label in series.WINDOWS],
+        self._offered = series.WINDOWS
+        self._chips = self._chips_for(self._offered)
+        self._charts: list[dict[str, Any]] | None = None
+        self._redraw = series.Redraw(self._window)
+        self._show(ui_runtime.PENDING)
+
+    def _chips_for(self, offered: tuple[tuple[int, str], ...]) -> DateRangeChips:
+        """The range chips over ``offered`` (``ui_runtime.window_of``)."""
+        return DateRangeChips(
+            options=[(label, seconds) for seconds, label in offered],
             selected_days=self._window,
             on_change=lambda seconds: self.page.run_task(self.show_window, seconds),
         )
-        self._show(ui_runtime.PENDING)
 
     async def show_window(self, seconds: int) -> None:
         """Chart the last ``seconds`` (a range chip)."""
         self._window = seconds
+        self._redraw = series.Redraw(seconds)
         await self.load()
 
     def did_mount(self) -> None:
@@ -79,8 +87,17 @@ class ContainerSection(ft.Column):
             await asyncio.sleep(REFRESH_SECONDS)
 
     async def load(self) -> None:
-        view, charts = await ui_runtime.section(self._key, self._window)
-        self._show(view, charts)
+        """The cards, and the charts when they have new points (a long
+        window's once its tier moves: ``series.Redraw``); the chips follow
+        the windows the drawn charts offer."""
+        self._window, offered = await ui_runtime.window_of(self._key, self._window)
+        if offered != self._offered:
+            self._offered, self._chips = offered, self._chips_for(offered)
+        self._redraw.window = self._window
+        draw = self._redraw.due()
+        view, charts = await ui_runtime.section(self._key, self._window, draw=draw)
+        self._charts = charts if charts is not None else self._charts
+        self._show(view, self._charts)
         if self.page is not None:
             self.update()
 

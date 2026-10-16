@@ -63,6 +63,15 @@ _UP = re.compile(
     r"|(\d+) (second|minute|hour|day|week|month|year)s?)"
 )
 _HEALTH = re.compile(r"\((?:health: )?(healthy|unhealthy|starting)\)")
+_EXITED = re.compile(r"^Exited \((\d+)\)")
+
+
+def exit_code(status: str) -> int | None:
+    """A stopped container's exit code, from the list's ``Status``
+    (``Exited (137) 3 minutes ago``); None otherwise. Whether memory ran
+    out is inspect's to say, which the proxy refuses."""
+    match = _EXITED.match(status)
+    return int(match.group(1)) if match else None
 
 
 def parse_status(status: str) -> tuple[int | None, str | None]:
@@ -107,6 +116,7 @@ def _instance(summary: dict[str, Any]) -> Instance:
         build=labels.get(BUILD_LABEL)
         or str(summary.get("ImageID", "")).removeprefix("sha256:")[:12]
         or None,
+        exit_code=exit_code(summary.get("Status") or ""),
     )
 
 
@@ -160,6 +170,7 @@ def _stats(data: dict[str, Any], before: tuple[int, int] | None) -> Stats:
         disk_write=sum(
             int(e["value"]) for e in io if e.get("op", "").lower() == "write"
         ),
+        pids=int((data.get("pids_stats") or {}).get("current") or 0),
     )
 
 

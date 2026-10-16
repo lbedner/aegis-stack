@@ -10,9 +10,8 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 from app.core import series
-from app.core.formatting import format_span
 from app.services.system import redis_keys, ui_redis
-from app.services.system.models import ComponentStatus
+from app.services.system.models import ComponentStatus, Keyspace
 from app.services.system.ui_database import display_url
 
 from .filters import color_tone
@@ -32,38 +31,19 @@ KEYSPACE_TEMPLATE = "pages/overseer/redis/_keyspace.html"
 KEYSPACE_INTERVAL_SECONDS = 3.0
 
 
-async def load_keyspace() -> dict[str, Any]:
+async def load_keyspace() -> Keyspace:
     """The keyspace map, or what went wrong reading it (the keyspace
     sampler's reading)."""
     return await series.reading(redis_keys.KEYSPACE)
 
 
-async def load_peek(family: int) -> dict[str, Any] | None:
-    """A family and its newest key's first entries; None if unknown."""
-    return await redis_keys.peek(family)
+def keyspace_view(keyspace: Keyspace) -> dict[str, Any]:
+    """``_keyspace.html``'s context: the map, and where a family's detail
+    comes from."""
+    return {"keyspace": keyspace, "partials": PARTIALS}
 
 
-def peek_view(peek: dict[str, Any] | None) -> dict[str, Any] | None:
-    """A peek's two-column rows as ``data_table`` rows."""
-    if peek is None:
-        return None
-    return peek | {"rows": [{"a": a, "b": b} for a, b in peek.get("rows", [])]}
-
-
-def keyspace_view(keyspace: dict[str, Any]) -> dict[str, Any]:
-    """The map with its times in words, for ``_keyspace.html``."""
-    families = [
-        f
-        | {
-            "ttl_label": format_span(f.get("ttl")),
-            "idle_label": format_span(f.get("idle")),
-        }
-        for f in keyspace.get("families", [])
-    ]
-    return {"keyspace": keyspace | {"families": families}, "partials": PARTIALS}
-
-
-def render_keyspace(keyspace: dict[str, Any]) -> str:
+def render_keyspace(keyspace: Keyspace) -> str:
     return fragment(KEYSPACE_TEMPLATE, **keyspace_view(keyspace))
 
 
@@ -108,12 +88,11 @@ def _figures(meta: dict[str, Any]) -> list[dict[str, Any]]:
 def _slow_rows(meta: dict[str, Any]) -> list[dict[str, Any]]:
     return [
         {
-            "command": q["command"],
-            "full": q["full"],
-            "when": q["when"],
-            "duration": status_cell(
-                f"{q['duration_ms']:,.2f}ms", color_tone(q["color"])
-            ),
+            "command": q.command,
+            "full": q.full,
+            "touched": q,
+            "when": q.when,
+            "duration": status_cell(f"{q.duration_ms:,.2f}ms", color_tone(q.color)),
         }
         for q in ui_redis.slow_queries(meta)
     ]

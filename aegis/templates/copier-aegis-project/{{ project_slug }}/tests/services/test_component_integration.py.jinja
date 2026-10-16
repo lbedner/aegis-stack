@@ -5,6 +5,9 @@ These tests focus on integration between components and their health checks,
 testing various failure scenarios and component interactions.
 """
 
+{% if include_redis -%}
+from typing import Any
+{% endif -%}
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -29,6 +32,28 @@ from app.services.system.health_db import check_database_health
 {%- if include_worker %}
 from app.services.system.health_worker import check_worker_health
 {% endif %}
+{%- if include_redis %}
+
+
+def _answering_redis(**info: Any) -> AsyncMock:
+    """A Redis that passes the cache check's probe (what is set reads
+    back) and answers INFO with ``info``."""
+    redis = AsyncMock()
+    stored: dict[str, str] = {}
+
+    async def set_(key: str, value: str, ex: int | None = None) -> bool:
+        stored[key] = value
+        return True
+
+    async def get(key: str) -> bytes:
+        return stored.get(key, "").encode()
+
+    redis.set.side_effect = set_
+    redis.get.side_effect = get
+    redis.delete.return_value = 1
+    redis.info.return_value = info
+    return redis
+{%- endif %}
 
 
 class TestComponentIntegration:
@@ -60,33 +85,13 @@ class TestComponentIntegration:
     @pytest.mark.asyncio
     async def test_cache_health_successful_connection(self) -> None:
         """Test cache health check with successful Redis connection."""
-
         with patch("redis.asyncio.from_url") as mock_from_url:
-            # Mock successful Redis connection
-            mock_redis = AsyncMock()
-            mock_redis.ping.return_value = True
-            mock_redis.set.return_value = True
-
-            # Track the test value that gets set so we can return it on get
-            stored_values = {}
-
-            async def mock_set(key: str, value: str, ex: int | None = None) -> bool:
-                stored_values[key] = value
-                return True
-
-            async def mock_get(key: str) -> bytes:
-                return stored_values.get(key, "").encode()
-
-            mock_redis.set.side_effect = mock_set
-            mock_redis.get.side_effect = mock_get
-            mock_redis.delete.return_value = 1
-            mock_redis.info.return_value = {
-                "redis_version": "7.0.0",
-                "connected_clients": 2,
-                "used_memory_human": "1.5M",
-                "uptime_in_seconds": 3600,
-            }
-            mock_from_url.return_value = mock_redis
+            mock_from_url.return_value = _answering_redis(
+                redis_version="7.0.0",
+                connected_clients=2,
+                used_memory_human="1.5M",
+                uptime_in_seconds=3600,
+            )
 
             cache_status = await check_cache_health()
 
@@ -99,6 +104,55 @@ class TestComponentIntegration:
             assert cache_status.metadata["implementation"] == "redis"
             assert cache_status.metadata["version"] == "7.0.0"
             assert cache_status.metadata["connected_clients"] == 2
+
+    @pytest.mark.asyncio
+    async def test_a_slow_command_keeps_its_arguments_whole(self) -> None:
+        """The slow log's raw reply keeps each argument apart, so a Lua
+        script with spaces in it still names its keys, and each key says
+        which database holds it."""
+        script = "return redis.call('get', KEYS[1])"
+        named = AsyncMock(return_value=[["lock:job"]])
+        with (
+            patch("redis.asyncio.from_url") as mock_from_url,
+            patch("app.services.system.redis_keys.keys_of", named),
+            patch(
+                "app.services.system.redis_keys.homes",
+                AsyncMock(return_value={"lock:job": 0}),
+            ),
+        ):
+            redis = _answering_redis(redis_version="7.0.0")
+            redis.execute_command.return_value = [
+                [1, 1, 5000, [b"EVAL", script.encode(), b"1", b"lock:job"]]
+            ]
+            mock_from_url.return_value = redis
+
+            cache_status = await check_cache_health()
+
+        assert named.await_args.args[1] == [["EVAL", script, "1", "lock:job"]]
+        (entry,) = cache_status.metadata["slowlog_entries"]
+        assert entry["command"] == f"EVAL {script} 1 lock:job"
+        assert entry["keys"] == ["lock:job"] and entry["db"] == 0
+
+    @pytest.mark.asyncio
+    async def test_naming_the_slow_logs_keys_never_fails_the_check(self) -> None:
+        """Which keys each slow command touched is a nicety for Overseer's
+        Redis page: when Redis will not say, the log shows without them."""
+        with (
+            patch("redis.asyncio.from_url") as mock_from_url,
+            patch(
+                "app.services.system.redis_keys.keys_of",
+                AsyncMock(side_effect=TypeError("'int' object is not iterable")),
+            ),
+        ):
+            redis = _answering_redis(redis_version="7.0.0")
+            redis.execute_command.return_value = [[1, 1, 5000, [b"ZADD", b"k", b"1", b"m"]]]
+            mock_from_url.return_value = redis
+
+            cache_status = await check_cache_health()
+
+        assert cache_status.healthy is True
+        (entry,) = cache_status.metadata["slowlog_entries"]
+        assert entry["command"] == "ZADD k 1 m" and entry["keys"] == []
 {% endif %}
 
 {#- These worker-health tests mock arq queue inspection (zcard on

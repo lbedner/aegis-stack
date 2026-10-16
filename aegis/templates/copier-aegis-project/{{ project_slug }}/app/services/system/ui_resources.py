@@ -166,9 +166,9 @@ def _cores(value: float) -> str:
 
 
 async def charts(window: int = series.DEFAULT_WINDOW) -> list[dict[str, Any]]:
-    """``ui_runtime.charts``' four, for the whole stack over ``window``
-    seconds: a line a part, stacked; the host's in use dashed on CPU and
-    memory. The containers' read leaves watching to ``overview`` (which
+    """``ui_runtime.charts``' that add up (``Chart.added``), for the whole
+    stack over ``window`` seconds: a line a part, stacked; the host's in
+    use dashed on CPU and memory. The containers' read leaves watching to ``overview`` (which
     keeps their sampler at full pace)."""
     found, host = await asyncio.gather(
         series.read(f"{ui_runtime.SAMPLER}:", window),
@@ -180,6 +180,7 @@ async def charts(window: int = series.DEFAULT_WINDOW) -> list[dict[str, Any]]:
             spec, _chart(spec, found, host.get(spec.metric), window), words
         )
         for spec in ui_runtime.CONTAINER_CHARTS
+        if spec.added
     ]
 
 
@@ -247,4 +248,6 @@ async def _sample_host() -> Sample:
 # About as often as the host checks read anew (``host_metrics`` is cached
 # ``SYSTEM_METRICS_CACHE_SECONDS``, 5 by default; a setting saved while the
 # app runs is never read at import, so this does not follow it).
-HOST = Sampler(HOST_SAMPLER, _sample_host, interval=5.0)
+HOST = Sampler(HOST_SAMPLER, _sample_host, interval=5.0, history=True)
+# The windows Resources' charts offer: what the containers and host keep.
+WINDOWS = series.windows(ui_runtime.SAMPLER, HOST_SAMPLER)

@@ -8,12 +8,18 @@ flag, waits for in-flight jobs to drain via the per-worker heartbeat
 key, then restarts worker containers. Workers that finish their current
 job during the pause sit idle on the gate instead of consuming a new
 message that would be killed by SIGTERM.
+
+A worker joins each stream's consumer group under its host's name (a
+container's id), the same across restarts and dev reloads, and on startup
+forgets consumers that left (``forget_stale_consumers``): taskiq's own
+default, a fresh uuid each start, left one behind per restart.
 """
 
 from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncGenerator
+import socket
 from typing import Any
 
 import redis.asyncio as aioredis
@@ -24,7 +30,7 @@ from taskiq_redis.redis_broker import logger as _broker_logger
 from app.components.worker.heartbeat import PAUSE_KEY, PAUSE_POLL_SECONDS
 from app.core.config import settings
 from app.core.key_family import KeyFamily
-
+from app.services.system.redis_keys import decoded
 
 REDIS_KEYS = (
     KeyFamily(
@@ -34,6 +40,7 @@ REDIS_KEYS = (
         "One stream per queue: jobs waiting, and ones taken but not yet acked",
         "TaskIQ broker",
         columns=("Message", "Payload"),
+        holds="job",
     ),
     KeyFamily(
         "[0-9a-f]" * 32,
@@ -54,6 +61,10 @@ REDIS_KEYS = (
 )
 
 
+# A consumer that has read nothing this long and holds no job has left.
+STALE_CONSUMER_MS = 3_600_000
+
+
 class PausableRedisStreamBroker(RedisStreamBroker):
     """``RedisStreamBroker`` that gates ``listen()`` on a pause flag.
 
@@ -63,14 +74,48 @@ class PausableRedisStreamBroker(RedisStreamBroker):
     (the deploy script's drain wait handles those via the heartbeat).
     """
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
+    def __init__(
+        self, *args: Any, consumer_name: str | None = None, **kwargs: Any
+    ) -> None:
+        super().__init__(
+            *args, consumer_name=consumer_name or socket.gethostname(), **kwargs
+        )
         # Each delivered job's stream entry, by task id, and the refresh
         # holding the claim of each one running (``keep_claim``).
         # ponytail: an entry the receiver drops unrun (an unknown task) is
         # never released; rare, and bounded by the redelivery cap.
         self._claims: dict[str, tuple[Any, Any]] = {}
         self._keeping: dict[str, asyncio.Task[None]] = {}
+
+    async def startup(self) -> None:
+        await super().startup()
+        await self.forget_stale_consumers()
+
+    async def forget_stale_consumers(self) -> None:
+        """Remove each stream's consumers that have read nothing for
+        ``STALE_CONSUMER_MS`` and hold no job. One still holding jobs stays
+        until ``xautoclaim`` hands them on: deleting it would drop them."""
+        async with aioredis.Redis(connection_pool=self.connection_pool) as conn:
+            for stream in [self.queue_name, *self.additional_streams]:
+                try:
+                    consumers = await conn.xinfo_consumers(
+                        stream, self.consumer_group_name
+                    )
+                except aioredis.ResponseError as exc:  # no stream or group yet
+                    _broker_logger.debug("No consumers to read on %s: %s", stream, exc)
+                    continue
+                gone = [
+                    c["name"]
+                    for c in consumers
+                    if decoded(c["name"]) != self.consumer_name
+                    and not c["pending"]
+                    and c["idle"] > STALE_CONSUMER_MS
+                ]
+                if gone:
+                    pipe = conn.pipeline(transaction=False)
+                    for name in gone:
+                        pipe.xgroup_delconsumer(stream, self.consumer_group_name, name)
+                    await pipe.execute()
 
     def keep_claim(self, task_id: str) -> None:
         """Hold a running job's claim. ``xautoclaim`` (``listen``) hands a

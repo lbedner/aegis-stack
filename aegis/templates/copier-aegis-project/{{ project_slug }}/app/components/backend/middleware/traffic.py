@@ -59,6 +59,7 @@ REDIS_KEYS = (
         "Backend traffic monitor",
         db="CACHE_REDIS_DB",
         columns=("Source IP", "Requests"),
+        holds="source",
     ),
     KeyFamily(
         "traffic:total:*",
@@ -68,6 +69,7 @@ REDIS_KEYS = (
         "Backend traffic monitor",
         db="CACHE_REDIS_DB",
         columns=("Hour", "Requests"),
+        holds="request",
     ),
 )
 

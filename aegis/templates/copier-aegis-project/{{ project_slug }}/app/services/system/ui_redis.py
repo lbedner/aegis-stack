@@ -7,6 +7,9 @@ Built from the cache health check's metadata. Colours are semantic names
 from datetime import datetime
 from typing import Any
 
+from app.services.system import redis_keys
+from app.services.system.models import SlowlogEntry, SlowQuery
+
 SLOWLOG_CRITICAL_MS = 1000
 SLOWLOG_WARNING_MS = 100
 
@@ -31,16 +34,20 @@ def slowlog_color(duration_ms: float) -> str:
     return "yellow" if duration_ms >= SLOWLOG_WARNING_MS else "green"
 
 
-def slow_command(command: str) -> str:
-    """A SLOWLOG command, readable: Lua calls name their keys, and UUIDs in
-    keys are cut to their first block."""
+# Script calls, shown by the keys they touched rather than the script.
+SCRIPTS = {"EVAL", "EVALSHA", "EVAL_RO", "EVALSHA_RO", "FCALL", "FCALL_RO"}
+
+
+def slow_command(command: str, keys: list[str]) -> str:
+    """A SLOWLOG command, readable: a script call names the keys it touched
+    (``keys``, as Redis named them), and UUIDs in keys are cut to their first
+    block."""
     parts = command.split()
     if not parts:
         return command
     cmd = parts[0].upper()
-    if cmd == "EVALSHA" and len(parts) >= 4:
-        keys = parts[3 : 3 + int(parts[2])] if parts[2].isdigit() else []
-        return f"EVALSHA (Lua) on {' '.join(keys) or 'unknown'}"
+    if cmd in SCRIPTS:
+        return f"{cmd} (Lua) on {' '.join(keys) or 'unknown'}"
     return " ".join([cmd, *(_short_uuids(p) for p in parts[1:])])
 
 
@@ -53,27 +60,35 @@ def _short_uuids(part: str) -> str:
     )
 
 
-def _when(timestamp: Any) -> str:
+def _when(timestamp: float) -> str:
     try:
         return datetime.fromtimestamp(timestamp).strftime("%Y-%m-%d %H:%M:%S")
-    except (ValueError, OSError, OverflowError, TypeError):
+    except (ValueError, OSError, OverflowError):
         return str(timestamp)
 
 
-def slow_queries(metadata: dict[str, Any]) -> list[dict[str, Any]]:
-    """The slow log, slowest first."""
+def slow_queries(metadata: dict[str, Any]) -> list[SlowQuery]:
+    """The slow log (the cache health check's ``slowlog_entries``), slowest
+    first, each command with what it touched: its first key (as Redis
+    named them) and that key's family."""
     entries = sorted(
-        metadata.get("slowlog_entries") or [],
-        key=lambda e: e.get("duration_ms", 0),
+        (SlowlogEntry.model_validate(e) for e in metadata.get("slowlog_entries") or []),
+        key=lambda e: e.duration_ms,
         reverse=True,
     )
-    return [
-        {
-            "when": _when(e.get("timestamp", 0)),
-            "duration_ms": e.get("duration_ms", 0),
-            "color": slowlog_color(e.get("duration_ms", 0)),
-            "command": slow_command(e.get("command", "")),
-            "full": e.get("command", ""),
-        }
-        for e in entries
-    ]
+    rows = []
+    for e in entries:
+        key = next(iter(e.keys), None)
+        family = redis_keys.family_of(key, e.db)
+        rows.append(
+            SlowQuery(
+                when=_when(e.timestamp),
+                duration_ms=e.duration_ms,
+                color=slowlog_color(e.duration_ms),
+                command=slow_command(e.command, e.keys),
+                full=e.command,
+                key=key,
+                family=family.name if family else None,
+            )
+        )
+    return rows

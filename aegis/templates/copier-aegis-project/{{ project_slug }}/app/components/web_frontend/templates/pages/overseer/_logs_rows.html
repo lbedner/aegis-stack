@@ -1,7 +1,8 @@
 {# Log lines as rows (ui_logs): the page renders them, and the Logs
    stream sends each new batch to add. Three cells: the time, the source
    (with ``links``, Overseer > Logs, the service in its own color linking
-   to its page; which of its containers only when it has several; the
+   to its page; with ``mixed``, lines from several services, a dot each
+   in its service's color; which of its containers only when it has several; the
    container's full name on hover) and the line: its level as a tag when it
    has a tone (info, the normal case, has none), the message (the lead the time cell repeats is left out, a
    copy keeps it), and a JSON line's fields as muted keys and their values;
@@ -20,7 +21,7 @@
 <tr{% if row.ms %} data-at="{{ row.ms }}"{% endif %} data-facet-level="{{ row.level or 'none' }}" data-facet-service="{{ row.page }}" data-facet-container="{{ row.instance }}"{% if row.app_service %} data-facet-app_service="{{ row.app_service }}"{% endif %}{% if row.app_component %} data-facet-app_component="{{ row.app_component }}"{% endif %} class="log-row{% if tone == 'muted' %} opacity-60{% endif %}"{% if tone %} data-tone="{{ tone }}"{% endif %}>
   <td class="group/cell px-3 py-1 whitespace-nowrap text-aegis-muted font-mono border-l-2 border-l-transparent">{{ row.at }}{{ copy_icon(row.at, _copy) }}</td>
   <td class="group/cell px-3 py-1 whitespace-nowrap truncate" data-service title="{{ row.instance }}">
-    {{ chart_dot(row.color + 1) }}
+    {% if mixed %}{{ chart_dot(row.color + 1) }}{% endif %}
     {%- if row.app_service %}<span data-app-service class="text-aegis-text">{{ links.get(row.app_service, {}).get("title", row.app_service) if links else row.app_service }}</span>{% if links %}<span class="text-aegis-muted"> · </span>{% endif %}{% endif %}
     {%- if links %}{% set service = links[row.page] %}<a href="{{ service.url }}" {{ hx_replace(service.url, "#overseer-main") }} class="{{ 'text-aegis-muted' if row.app_service else 'text-aegis-text' }} hover:text-aegis-teal">{{ service.title }}</a>{% endif %}
     {%- if row.source %}<span class="text-aegis-muted">{{ " · " if links }}{{ row.source }}</span>{% endif %}

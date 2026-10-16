@@ -14,7 +14,8 @@ from app.core.config import settings
 from app.core.constants import ComponentName
 from app.core.log import logger
 
-from .models import ComponentStatus, ComponentStatusType
+from . import redis_keys
+from .models import ComponentStatus, ComponentStatusType, SlowlogEntry
 from .redis_keys import KeyFamily
 from .redis_keys import redis_url as redis_url_effective
 
@@ -33,27 +34,8 @@ REDIS_KEYS = (
 
 
 def _decode_slowlog_arg(arg: Any) -> str:
-    """Decode a single SLOWLOG command argument to a readable string."""
-    if isinstance(arg, bytes):
-        return arg.decode("utf-8", errors="replace")
-    if isinstance(arg, str):
-        return arg
-    if isinstance(arg, list | tuple):
-        # redis-py can return args as list of ints (ASCII byte values)
-        try:
-            return bytes(arg).decode("utf-8", errors="replace")
-        except (ValueError, TypeError):
-            return str(arg)
-    return str(arg)
-
-
-def _decode_slowlog_command(command: Any) -> str:
-    """Decode a SLOWLOG command entry to a human-readable string."""
-    if isinstance(command, list | tuple):
-        return " ".join(_decode_slowlog_arg(arg) for arg in command)
-    if isinstance(command, bytes):
-        return command.decode("utf-8", errors="replace")
-    return str(command)
+    """One raw SLOWLOG argument as text, whatever bytes it holds."""
+    return arg.decode("utf-8", errors="replace") if isinstance(arg, bytes) else str(arg)
 
 
 async def check_cache_health() -> ComponentStatus:
@@ -120,18 +102,34 @@ async def check_cache_health() -> ComponentStatus:
         # Get recent slow query log entries from Redis SLOWLOG
         slowlog_entries: list[dict[str, Any]] = []
         try:
-            slowlog = await redis_info_client.slowlog_get(10)
-            slowlog_entries = [
-                {
-                    "id": entry["id"],
-                    "timestamp": entry["start_time"],
-                    # Convert microseconds to ms
-                    "duration_ms": round(entry["duration"] / 1000, 2),
-                    "command": _decode_slowlog_command(entry["command"]),
-                }
-                for entry in slowlog
+            # The raw reply, each argument apart (redis-py's own parser joins
+            # them with spaces, which a Lua script's text is full of).
+            slowlog = await redis_info_client.execute_command("SLOWLOG", "GET", 10)
+            arguments = [
+                [_decode_slowlog_arg(a) for a in (e[3] if isinstance(e[3], list) else e[4])]
+                for e in slowlog
             ]
-        except (redis.exceptions.RedisError, AttributeError, KeyError) as e:
+            # Which arguments are keys, and the database each lives in, as
+            # Redis says: a nicety, so failing to never fails the check.
+            try:
+                keys = await redis_keys.keys_of(redis_info_client, arguments)
+                homes = await redis_keys.homes([k[0] for k in keys if k])
+            except Exception as e:  # noqa: BLE001 - logged, the log still shows
+                logger.warning(f"Could not name the slow log's keys: {e}")
+                keys, homes = [[] for _ in arguments], {}
+            slowlog_entries = [
+                SlowlogEntry(
+                    id=entry[0],
+                    timestamp=entry[1],
+                    # Convert microseconds to ms
+                    duration_ms=round(entry[2] / 1000, 2),
+                    command=" ".join(args),
+                    keys=touched,
+                    db=homes.get(touched[0]) if touched else None,
+                ).model_dump()
+                for entry, args, touched in zip(slowlog, arguments, keys, strict=True)
+            ]
+        except (redis.exceptions.RedisError, AttributeError, IndexError, TypeError) as e:
             logger.warning(f"Failed to get SLOWLOG: {e}")
 
         # Get active client connections

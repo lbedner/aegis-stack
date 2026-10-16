@@ -1,28 +1,53 @@
-{% from "components/macros/layout.html" import stat_row %}
+{# A picked key family: what it is for, how much it holds and has passed
+   through (``redis_facts``), who reads it, and its newest key. #}
+{% from "components/macros/layout.html" import sparkline, stat_row %}
 {% from "components/macros/table.html" import data_table %}
+{% set facts = detail.facts if detail else {} %}
 <section id="redis-family" class="hover-card lg:col-span-2 bg-aegis-card border border-aegis-border rounded-lg p-5 min-w-0 space-y-4">
   <div>
-    <h3 class="text-base font-semibold text-aegis-text">{{ family.name }}</h3>
-    <p class="font-mono text-xxs text-aegis-muted">{{ family.pattern }} · {{ family.kind }} · db {{ family.db }}</p>
+    <h3 class="text-base font-semibold text-aegis-text">{{ row.family.name }}</h3>
+    <p data-purpose class="mt-1 text-sm text-aegis-text">{{ row.family.purpose }}</p>
+    <p class="mt-1 text-xs text-aegis-muted">Written by <span class="text-aegis-text">{{ row.family.owner }}</span> · <span class="font-mono">{{ row.where }}</span></p>
   </div>
-  <p data-purpose class="text-sm text-aegis-text">{{ family.purpose }}</p>
-  <p class="text-xs text-aegis-muted">Written by <span class="text-aegis-text">{{ family.owner }}</span></p>
-  {{ stat_row([
-    ("Keys", family.count),
-    ("Memory", family.memory|filesizeformat),
-    ("TTL", family.ttl_label or "none"),
-    ("Last touched", (family.idle_label ~ " ago") if family.idle_label else "-"),
-  ]) }}
-  {% if peek and peek.key %}
-  <div class="space-y-2">
-    <p class="text-xxs caps text-aegis-muted">Newest key <span class="font-mono normal-case tracking-normal text-aegis-text">{{ peek.key }}</span></p>
+  <div data-figures>
+    {{ stat_row((facts.figures or []) + [
+      ("Keys", "{:,}".format(row.count)),
+      ("Memory", row.memory|filesizeformat),
+      ("TTL", row.ttl_label or "none"),
+      ("Last touched", row.idle_ago or "-"),
+    ]) }}
+    {% if facts.partial %}<p class="mt-2 text-xxs text-aegis-muted">Figures read its first {{ facts.partial }} keys.</p>{% endif %}
+  </div>
+  {% if facts.spark %}
+  <div data-spark>
+    <p class="text-xxs caps text-aegis-muted">The last hour, a minute at a time</p>
+    <div class="mt-1 h-10">{{ sparkline(facts.spark, "w-full h-full") }}</div>
+  </div>
+  {% endif %}
+  {% if facts.groups %}
+  <div data-groups class="space-y-2">
+    <p class="text-xxs caps text-aegis-muted">Read by</p>
     {{ data_table([
-      {"key": "a", "label": peek.columns[0]},
-      {"key": "b", "label": peek.columns[1], "align": "right"},
-    ], peek.rows, empty="Empty") }}
+      {"key": "name", "label": "Group"},
+      {"key": "consumers", "label": "Readers", "align": "right"},
+      {"key": "pending", "label": "Unacked", "align": "right"},
+      {"key": "lag", "label": "Behind", "align": "right"},
+    ], facts.groups) }}
   </div>
-  {% elif peek and peek.error %}
-  <p class="text-xs text-error">Could not read it: {{ peek.error }}</p>
+  {% endif %}
+  {% if detail and detail.key %}
+  {% set dated = detail.rows|selectattr("when")|list %}
+  <div data-newest class="space-y-2">
+    <p class="text-xxs caps text-aegis-muted">Newest key <span class="font-mono normal-case tracking-normal text-aegis-text">{{ detail.key }}</span></p>
+    {{ data_table([
+      {"key": "a", "label": detail.columns[0]},
+      {"key": "b", "label": detail.columns[1], "align": "right"},
+    ] + ([{"key": "when", "label": "When", "align": "right"}] if dated else []), detail.rows, empty="Empty") }}
+  </div>
+  {% elif detail and detail.error %}
+  <p class="text-xs text-error">Could not read it: {{ detail.error }}</p>
+  {% elif row.family.peek is false %}
+  <p class="text-xs text-aegis-muted">Holds a credential: named here, never read.</p>
   {% else %}
   <p class="text-xs text-aegis-muted">No keys to show yet.</p>
   {% endif %}

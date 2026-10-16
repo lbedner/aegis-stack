@@ -9,6 +9,28 @@
 
 ### Added
 
+- **Slow queries say what they touched.** Overseer's Redis slow log names
+  each command's key (as `COMMAND GETKEYS` reports it) and that key's family,
+  in both UIs; the live charts' history keys are a family of their own
+  instead of falling under the shared cache.
+- **Worker consumers no longer pile up.** A taskiq worker joins each queue's
+  consumer group under its host's name (a container's id) instead of a fresh
+  uuid each start, and on startup removes consumers idle an hour that hold no
+  job: every restart and dev reload used to leave one behind.
+- **Redis families in their own terms.** Pick a family on Overseer's Redis
+  page: what it is for, how much it holds and has passed through (a stream's
+  every entry since it began), how many came in the last minute and hour,
+  drawn a minute at a time, each reader group and how far behind it is, and
+  its newest entries as their fields and when each came. Read from the data,
+  nothing stored; figures count in the family's own word
+  (`KeyFamily(holds="event")`).
+- **Container history past the hour.** The containers' and host's charts keep
+  each minute's highest value for a day and each five minutes' for a week, so
+  a spike outlives the hour; their range chips add 2h, 6h, 12h, 1d and 7d.
+  The history is kept as compact lists (a few megabytes for a week), in a
+  series store of its own (`app.core.series_store`) rather than the cache. New charts:
+  processes, and Events, a dot wherever a container restarted, exited or its
+  health check failed or recovered. A stopped container shows its exit code.
 - **Saved queries.** Query's **Saved** menu keeps a tab, by its name, in the
   app's database for every admin and opens it again as a tab on any machine;
   saves and deletes are audited. A table the database component owns

@@ -9,8 +9,15 @@ from fastapi.testclient import TestClient
 import pytest
 
 from app.components.web_frontend import overseer_redis
-from app.services.system import redis_keys
-from app.services.system.models import ComponentStatus
+from app.core.key_family import KeyFamily
+from app.services.system import redis_facts, redis_keys
+from app.services.system.models import (
+    ComponentStatus,
+    FamilyDetail,
+    KeyFamilyRow,
+    Keyspace,
+    Unclaimed,
+)
 from app.services.system.ui import get_component_title
 from tests.web.dom import none, one, select, text
 from tests.web.overseer import sent_events, sign_in, status_with
@@ -31,7 +38,13 @@ METADATA: dict[str, Any] = {
     "hit_rate_percent": 95.5,
     "total_keys": 3,
     "slowlog_entries": [
-        {"id": 1, "timestamp": 1_700_000_000, "duration_ms": 12.5, "command": "GET a"},
+        {
+            "id": 1,
+            "timestamp": 1_700_000_000,
+            "duration_ms": 12.5,
+            "command": "ZSCORE traffic:sources:1 10.0.0.1",
+            "keys": ["traffic:sources:1"],
+        },
         {
             "id": 2,
             "timestamp": 1_700_000_100,
@@ -51,50 +64,79 @@ METADATA: dict[str, Any] = {
     ],
 }
 
-KEYSPACE: dict[str, Any] = {
-    "families": [
-        {
-            "id": 0,
-            "name": "Traffic sources",
-            "pattern": "traffic:sources:*",
-            "kind": "zset",
-            "purpose": "Requests per client IP, one sorted set per hour",
-            "owner": "Backend traffic monitor",
-            "db": 1,
-            "count": 2,
-            "memory": 2048,
-            "ttl": 86400,
-            "idle": 1,
-            "active": True,
-            "latest": "traffic:sources:497354",
-        },
-        {
-            "id": 1,
-            "name": "Health probes",
-            "pattern": "health_check:*",
-            "kind": "string",
-            "purpose": "Set/get probe keys the health check writes and deletes",
-            "owner": "System health",
-            "db": 0,
-            "count": 0,
-            "memory": 0,
-            "ttl": None,
-            "idle": None,
-            "active": False,
-            "latest": None,
-        },
+TRAFFIC = KeyFamily(
+    "traffic:sources:*",
+    "zset",
+    "Traffic sources",
+    "Requests per client IP, one sorted set per hour",
+    "Backend traffic monitor",
+    db="CACHE_REDIS_DB",
+    columns=("Source IP", "Requests"),
+)
+PROBES = KeyFamily(
+    "health_check:*",
+    "string",
+    "Health probes",
+    "Set/get probe keys the health check writes and deletes",
+    "System health",
+)
+KEYSPACE = Keyspace(
+    families=[
+        KeyFamilyRow(
+            family=TRAFFIC,
+            id=0,
+            db=1,
+            count=2,
+            memory=2048,
+            ttl=86400,
+            idle=1,
+            active=True,
+            latest="traffic:sources:497354",
+        ),
+        KeyFamilyRow(family=PROBES, id=1, db=0),
     ],
-    "unclaimed": {"count": 1, "samples": ["legacy:thing"]},
-    "cells": [0, 0, "unclaimed"] + [None] * 39,
-    "total": 3,
-    "estimated": False,
-}
+    unclaimed=Unclaimed(count=1, samples=["legacy:thing"]),
+    cells=[0, 0, "unclaimed"] + [None] * 39,
+    total=3,
+)
 
-PEEK: dict[str, Any] = {
-    "key": "traffic:sources:497354",
-    "columns": ["Source IP", "Requests"],
-    "rows": [["172.18.0.1", "41"], ["10.0.0.9", "3"]],
-}
+DETAIL = FamilyDetail.model_validate(
+    {
+        "key": "traffic:sources:497354",
+        "columns": ["Source IP", "Requests"],
+        "rows": [
+            {"a": "172.18.0.1", "b": "41", "when": None},
+            {"a": "10.0.0.9", "b": "3", "when": None},
+        ],
+        "facts": {
+            "figures": [("Held now", "2 sources")],
+            "spark": None,
+            "groups": [],
+            "partial": 0,
+        },
+    }
+)
+STREAM_DETAIL = FamilyDetail.model_validate(
+    {
+        "key": "aegis:events:worker",
+        "columns": ["Entry", "Event"],
+        "rows": [
+            {
+                "a": "1800000000000-0",
+                "b": "event_type=job.completed · queue=system",
+                "when": "20s ago",
+            }
+        ],
+        "facts": {
+            "figures": [("Through it", "41,203 events"), ("Last minute", "12")],
+            "spark": "0.0,24.0 100.0,0.0",
+            "groups": [
+                {"name": "overseer", "consumers": 1, "pending": 2, "lag": "caught up"}
+            ],
+            "partial": 50,
+        },
+    }
+)
 
 
 @pytest.fixture
@@ -102,14 +144,14 @@ def signed_in(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> Generator[TestCl
     cache = ComponentStatus(name="cache", message="Redis is healthy", metadata=METADATA)
     sign_in(app, monkeypatch, status_with(cache))
 
-    async def keyspace() -> dict[str, Any]:
+    async def keyspace() -> Keyspace:
         return KEYSPACE
 
-    async def peek(family: int) -> dict[str, Any] | None:
-        return PEEK if family == 0 else None
+    async def detail(family: int, latest: str | None = None) -> FamilyDetail | None:
+        return {0: DETAIL, 1: STREAM_DETAIL}.get(family)
 
     monkeypatch.setattr(overseer_redis, "load_keyspace", keyspace)
-    monkeypatch.setattr(overseer_redis, "load_peek", peek)
+    monkeypatch.setattr(redis_facts, "detail", detail)
     with TestClient(app) as client:
         yield client
 
@@ -150,7 +192,7 @@ class TestOverview:
     def test_a_cell_per_key_coloured_by_family(self, signed_in: TestClient) -> None:
         html = _get(signed_in)
         cells = select(html, "#redis-keyspace .keyspace__cell")
-        assert len(cells) == len(KEYSPACE["cells"])
+        assert len(cells) == len(KEYSPACE.cells)
         assert [c.get("data-family") for c in cells[:3]] == ["0", "0", "unclaimed"]
         assert cells[0].get("data-active") == "true"
 
@@ -159,16 +201,16 @@ class TestOverview:
     ) -> None:
         rows = select(_get(signed_in), "#redis-keyspace [data-legend]")
         first = text(rows[0])
-        assert "Traffic sources" in first and "traffic:sources:*" in first
-        assert "zset" in first
+        assert "Traffic sources" in first
+        assert "Requests per client IP, one sorted set per hour" in first
         assert "no keys yet" in text(rows[1])
         assert "Unclaimed" in text(rows[2])
 
     def test_a_crowded_grid_says_what_a_cell_stands_for(
         self, signed_in: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        async def crowded() -> dict[str, Any]:
-            return KEYSPACE | {"total": 2328}
+        async def crowded() -> Keyspace:
+            return KEYSPACE.model_copy(update={"total": 2328})
 
         monkeypatch.setattr(overseer_redis, "load_keyspace", crowded)
         assert "1 cell ≈ 55 keys" in text(one(_get(signed_in), "#redis-keyspace"))
@@ -184,14 +226,8 @@ class TestOverview:
     def test_an_empty_keyspace_says_so(
         self, signed_in: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        async def empty() -> dict[str, Any]:
-            return {
-                "families": [],
-                "unclaimed": {"count": 0, "samples": []},
-                "cells": [None] * 42,
-                "total": 0,
-                "estimated": False,
-            }
+        async def empty() -> Keyspace:
+            return Keyspace(cells=[None] * 42)
 
         monkeypatch.setattr(overseer_redis, "load_keyspace", empty)
         html = _get(signed_in)
@@ -214,6 +250,29 @@ class TestFamilyDetail:
         ]
         assert "172.18.0.1" in text(one(html_root, "tbody"))
 
+    def test_says_how_much_it_holds_in_its_word(self, signed_in: TestClient) -> None:
+        html = signed_in.get(f"{overseer_redis.PARTIALS}/family/0").text
+        figures = text(one(html, "#redis-family [data-figures]"))
+        assert "Held now" in figures and "2 sources" in figures
+        assert "traffic:sources:*" in text(one(html, "#redis-family"))
+        none(html, "#redis-family [data-spark]")  # nothing dates a count
+        none(html, "#redis-family [data-groups]")
+
+    def test_a_stream_says_what_went_through_and_who_reads_it(
+        self, signed_in: TestClient
+    ) -> None:
+        html = signed_in.get(f"{overseer_redis.PARTIALS}/family/1").text
+        root = one(html, "#redis-family")
+        figures = text(one(root, "[data-figures]"))
+        assert "Through it" in figures and "41,203 events" in figures
+        one(root, "[data-spark] svg")
+        assert "overseer" in text(one(root, "[data-groups]"))
+        assert "caught up" in text(one(root, "[data-groups]"))
+        assert "first 50 keys" in text(root)  # more keys than were read
+        headers = [text(th) for th in select(root, "[data-newest] thead th")]
+        assert headers == ["Entry", "Event", "When"]
+        assert "20s ago" in text(one(root, "[data-newest] tbody"))
+
     def test_unknown_family_is_404(self, signed_in: TestClient) -> None:
         assert signed_in.get(f"{overseer_redis.PARTIALS}/family/9").status_code == 404
 
@@ -223,7 +282,7 @@ class TestKeyspaceStream:
     async def test_sends_the_card_only_when_it_changes(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        async def keyspace() -> dict[str, Any]:
+        async def keyspace() -> Keyspace:
             return KEYSPACE
 
         monkeypatch.setattr(overseer_redis, "load_keyspace", keyspace)
@@ -234,6 +293,13 @@ class TestKeyspaceStream:
 
 
 class TestSlowQueries:
+    def test_each_command_names_what_it_touched(self, signed_in: TestClient) -> None:
+        """The key's family, as the keyspace map names it, and the key."""
+        rows = select(_get(signed_in, "slow-queries"), "tbody tr")
+        touched = text(one(rows[1], "[data-family]"))
+        assert "Traffic sources" in touched and "traffic:sources:1" in touched
+        none(rows[0], "[data-family]")  # KEYS * touches no one key
+
     def test_slowest_first_and_flagged(self, signed_in: TestClient) -> None:
         rows = select(_get(signed_in, "slow-queries"), "tbody tr")
         assert "KEYS *" in text(rows[0])
@@ -262,7 +328,7 @@ class TestKeyspaceSampler:
     ) -> None:
         scans = []
 
-        async def read(cells: int = 42) -> dict[str, Any]:
+        async def read(cells: int = 42) -> Keyspace:
             scans.append(cells)
             return KEYSPACE
 
@@ -275,9 +341,9 @@ class TestKeyspaceSampler:
     async def test_a_failed_read_is_shown_not_raised(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        async def down(cells: int = 42) -> dict[str, Any]:
+        async def down(cells: int = 42) -> Keyspace:
             raise ConnectionError("Redis is not answering")
 
         monkeypatch.setattr(redis_keys, "read_keyspace", down)
         found = await overseer_redis.load_keyspace()
-        assert found["error"] == "Redis is not answering" and found["families"] == []
+        assert found.error == "Redis is not answering" and found.families == []

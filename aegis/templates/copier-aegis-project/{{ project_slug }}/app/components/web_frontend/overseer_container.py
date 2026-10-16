@@ -85,12 +85,12 @@ async def context(page: str, query: Mapping[str, str]) -> dict[str, Any]:
     sampled, so it opens full and never waits on the runtime (``PENDING``
     before the first sample), the range chips, and where it all refreshes
     from."""
-    seconds = series.window_of(query.get("window"))
+    seconds, offered = await ui_runtime.window_of(page, query.get("window"))
     table, charts = await ui_runtime.section(page, seconds, wait=False)
     return {
         "container": toned(table),
         "container_charts": chart_panel(
-            EVENT, charts, seconds, EVENTS.format(page=page)
+            EVENT, charts, seconds, EVENTS.format(page=page), offered
         ),
     }
 
@@ -482,11 +482,14 @@ def events(  # noqa: ANN201 - async iterator
     page: str, window: int = series.DEFAULT_WINDOW, max_frames: int | None = None
 ):
     """The cards and each chart over SSE, each sent again only when it
-    changes (``overseer_live.chart_frames``)."""
+    changes (``overseer_live.chart_frames``); a long window's charts are
+    read again only when its tier moves (``series.Redraw``)."""
     held: dict[str, tuple[list[str], int]] = {}
+    redraw = series.Redraw(window)
 
     async def frame() -> dict[str, str]:
-        table, charts = await ui_runtime.section(page, window)
-        return {EVENT: render(table)} | chart_frames(EVENT, charts, held)
+        table, charts = await ui_runtime.section(page, window, draw=redraw.due())
+        sent = {EVENT: render(table)}
+        return sent if charts is None else sent | chart_frames(EVENT, charts, held)
 
     return fragments_events(frame, series.TICK_SECONDS, max_frames)

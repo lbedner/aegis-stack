@@ -12,6 +12,8 @@ from typing import Any
 from pydantic import BaseModel, Field, computed_field, field_validator
 
 from app.core.credential import hide_passwords
+from app.core.formatting import format_ago, format_span
+from app.core.key_family import KeyFamily
 
 
 class ComponentStatusType(str, Enum):
@@ -279,3 +281,151 @@ class LoadCosts(BaseModel):
 
     core: int = Field(0, description="Python and the app's core")
     parts: dict[str, int] = Field(default_factory=dict)
+
+
+# What Overseer's Redis page reads (``redis_keys``, ``redis_facts``,
+# ``ui_redis``).
+
+
+class KeyProbe(BaseModel):
+    """One sampled key: its TTL (-1: none) and size, and how long since it
+    was touched."""
+
+    ttl: int = -1
+    idle: int | None = None
+    bytes: int = 0
+
+
+class KeyActivity(BaseModel):
+    """A key family's size and activity, from its sampled keys."""
+
+    count: int = 0
+    memory: int = 0  # bytes
+    ttl: int | None = None  # seconds, of a sampled key that expires
+    idle: int | None = None  # seconds since the newest touch
+    active: bool = False
+    latest: str | None = None  # the most recently touched key
+
+    @property
+    def ttl_label(self) -> str | None:
+        return format_span(self.ttl)
+
+    @property
+    def idle_ago(self) -> str | None:
+        return format_ago(self.idle)
+
+
+class KeyFamilyRow(KeyActivity):
+    """A key family on the keyspace map: what it is, by its place in
+    ``redis_keys.families``, the logical database it lives in, and how it is
+    doing."""
+
+    family: KeyFamily
+    id: int
+    db: int
+
+    @property
+    def where(self) -> str:
+        """Its pattern, type and database, as the map and its detail say."""
+        return f"{self.family.pattern} · {self.family.kind} · db {self.db}"
+
+
+class Unclaimed(BaseModel):
+    """Keys no family claims: how many, and a few by name."""
+
+    count: int = 0
+    samples: list[str] = Field(default_factory=list)
+
+
+class Keyspace(BaseModel):
+    """The keyspace map: each family, the unclaimed keys, the grid's cells
+    (a family's id, ``"unclaimed"``, or empty), and whether the counts are
+    scaled from a capped scan; or why it could not be read."""
+
+    families: list[KeyFamilyRow] = Field(default_factory=list)
+    unclaimed: Unclaimed = Field(default_factory=Unclaimed)
+    cells: list[int | str | None] = Field(default_factory=list)
+    total: int = 0
+    estimated: bool = False
+    error: str | None = None
+
+
+class ReaderGroup(BaseModel):
+    """A stream's consumer group: who reads it, and how far behind."""
+
+    name: str
+    consumers: int = 0
+    pending: int = 0
+    lag: str
+
+
+class Tally(BaseModel):
+    """What a family's figures are read from, before they are words."""
+
+    held: int | None = None
+    through: int | None = None  # every entry a stream was ever given
+    minutes: list[int] | None = None  # the last hour, oldest first
+    capped: bool = False
+    oldest: float | None = None  # Unix seconds
+    newest: float | None = None
+    groups: list[ReaderGroup] = Field(default_factory=list)
+    total: float | None = None  # counters stored as strings, added up
+
+
+class FamilyFacts(BaseModel):
+    """A family's figures as (label, text), the last hour drawn (``spark``),
+    its reader groups, and how many keys were read when it has more."""
+
+    figures: list[tuple[str, str]] = Field(default_factory=list)
+    spark: str | None = None
+    groups: list[ReaderGroup] = Field(default_factory=list)
+    partial: int = 0
+
+
+class EntryRow(BaseModel):
+    """One entry of a key, in its family's two columns, and when it came."""
+
+    a: str
+    b: str
+    when: str | None = None
+
+
+class FamilyDetail(BaseModel):
+    """A picked family: its figures and its newest key's first entries."""
+
+    key: str | None = None
+    columns: tuple[str, str]
+    rows: list[EntryRow] = Field(default_factory=list)
+    facts: FamilyFacts = Field(default_factory=FamilyFacts)
+    error: str | None = None
+
+
+class SlowlogEntry(BaseModel):
+    """A slow command as the cache health check keeps it (in its metadata):
+    which of its arguments were keys, as Redis named them."""
+
+    id: int = 0
+    timestamp: float = 0
+    duration_ms: float = 0
+    command: str = ""
+    keys: list[str] = Field(default_factory=list)
+    db: int | None = None  # the logical database its first key lives in
+
+
+class SlowQuery(BaseModel):
+    """A slow command as both UIs show it: readable, coloured by duration,
+    with what it touched (its first key and that key's family)."""
+
+    when: str
+    duration_ms: float
+    color: str
+    command: str
+    full: str
+    key: str | None = None
+    family: str | None = None
+
+    @property
+    def touched(self) -> str | None:
+        """What it touched, as both UIs say it: its key's family, a key no
+        family claims, or nothing (a command without a key)."""
+        return (self.family or "Unclaimed") if self.key else None

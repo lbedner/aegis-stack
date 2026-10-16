@@ -17,10 +17,10 @@ from typing import Any, Literal
 
 from app.core import runtime, series, thresholds
 from app.core.config import settings
-from app.core.formatting import format_bytes, format_percentage, format_span
 from app.core.ownership import page_of_part
 from app.core.runtime import Instance, RuntimeUnavailableError, Stats
 from app.core.series import Sample, Sampler
+from app.services.system import container_events, container_rows
 
 NO_DEPLOY = (
     "No deploy target: this process is all the app can see. Add the deploy "
@@ -35,6 +35,7 @@ RESTART_TITLE = "Restart container"
 CPU, MEMORY = "cpu", series.MEMORY  # each container's gauges, and charts
 # Running totals since the container started; their charts read the rate.
 NET_IN, NET_OUT, DISK_READ, DISK_WRITE = "net_in", "net_out", "disk_read", "disk_write"
+PIDS = "pids"
 # Each live figure's name, in both UIs and on its chart.
 FIGURES = {CPU: "CPU", MEMORY: "Memory", "network": "Network", "disk": "Disk I/O"}
 # Shown only before the containers sampler's first reading.
@@ -63,6 +64,8 @@ class Chart:
     # Where warning and alert begin, as lines across the chart: the row key
     # of what a container has of it, and the setting naming the alert share.
     limit: tuple[str, str] | None = None
+    # Whether its lines add up across containers (Resources stacks them).
+    added: bool = True
 
 
 CONTAINER_CHARTS = (
@@ -99,6 +102,17 @@ CONTAINER_CHARTS = (
         "bytes_per_second",
         lines=((DISK_READ, "read"), (DISK_WRITE, "write")),
         rate=True,
+    ),
+    Chart(PIDS, "Processes", SAMPLER + ":{page}:", PIDS),
+    Chart(
+        "events",
+        "Events",
+        SAMPLER + ":{page}:",
+        container_events.RESTART,
+        empty="No restarts, exits or health changes in {window}.",
+        style="events",
+        lines=container_events.EVENTS,
+        added=False,
     ),
 )
 
@@ -139,6 +153,20 @@ def host_of(page: str) -> Host | None:
     return HOSTS.get(page)
 
 
+async def window_of(
+    page: str, asked: str | int | None
+) -> tuple[int, tuple[tuple[int, str], ...]]:
+    """The window a page's charts draw (``asked``, if on offer) and the
+    windows they offer: what the samplers behind the charts it draws now
+    keep (``series.windows``), so a server outside Docker, which reports
+    only its hour, offers an hour, and the same server in a container a
+    week."""
+    tables = await series.latest(SAMPLER) if runtime.deployed() else None
+    specs = _charts_for(page, tables)
+    offered = series.windows(*{spec.prefix.split(":", 1)[0] for spec in specs})
+    return series.window_of(asked, offered), offered
+
+
 def page_of(component: str) -> str | None:
     """The page a health component's containers show on, if any has one."""
     page = page_of_part(component)
@@ -147,8 +175,9 @@ def page_of(component: str) -> str | None:
 
 async def sample() -> Sample:
     """Every container that belongs on a page, read once: CPU (once there is
-    a reading to compare with) and memory by ``page:name``, and each page's
-    table as ``latest``. Nothing without a deploy target."""
+    a reading to compare with), memory, network, disk and processes by
+    ``page:name``, what happened since the last reading (``container_events``),
+    and each page's table as ``latest``. Nothing without a deploy target."""
     if not runtime.deployed():
         return Sample()
     pages: dict[str, list[Instance]] = {}
@@ -175,14 +204,16 @@ async def sample() -> Sample:
             values[f"{page}:{instance.name}:{NET_OUT}"] = stats.network_tx
             values[f"{page}:{instance.name}:{DISK_READ}"] = stats.disk_read
             values[f"{page}:{instance.name}:{DISK_WRITE}"] = stats.disk_write
+            values[f"{page}:{instance.name}:{PIDS}"] = stats.pids
     tables = {
-        page: {"rows": [_row(i, read[i.id]) for i in group], "note": None}
+        page: {"rows": [container_rows.row(i, read[i.id]) for i in group], "note": None}
         for page, group in pages.items()
     }
+    values |= container_events.changes(await series.latest(SAMPLER), tables)
     return Sample(values, tables)
 
 
-CONTAINERS = Sampler(SAMPLER, sample)
+CONTAINERS = Sampler(SAMPLER, sample, history=True)
 
 
 async def containers(page: str, *, wait: bool = True) -> dict[str, Any]:
@@ -202,12 +233,18 @@ async def containers_of(
 
 
 async def section(
-    page: str, window: int = series.DEFAULT_WINDOW, *, wait: bool = True
-) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    """A page's Container section, its ``containers`` and its ``charts``,
-    from one reading of the sampler."""
+    page: str,
+    window: int = series.DEFAULT_WINDOW,
+    *,
+    wait: bool = True,
+    draw: bool = True,
+) -> tuple[dict[str, Any], list[dict[str, Any]] | None]:
+    """A page's Container section, its ``containers`` and its ``charts``
+    (None without ``draw``: a live view between a long window's tier
+    steps), from one reading of the sampler."""
     tables, note = await _reading([page], wait)
-    return _view(page, tables, note), await charts(page, window, tables)
+    drawn = await charts(page, window, tables) if draw else None
+    return _view(page, tables, note), drawn
 
 
 async def _reading(
@@ -395,97 +432,3 @@ def _label(name: str) -> str:
 async def _stats(instance: Instance) -> Stats | None:
     """A stopped container has nothing to read."""
     return await runtime.stats(instance.id) if instance.state == "running" else None
-
-
-def _row(instance: Instance, stats: Stats | None) -> dict[str, Any]:
-    """One instance's row; a stopped one (no stats) has the same keys."""
-    return {
-        "name": instance.name,
-        "id": instance.id,
-        **_state(instance),
-        # Its parts too, for a view that shows them apart (htmx's cards).
-        "phase": instance.state,
-        "health": instance.health or "",
-        "restarts": "-" if instance.restarts is None else str(instance.restarts),
-        "uptime": format_span(instance.uptime_seconds) or "-",
-        "image": " ".join(p for p in (instance.image, instance.build) if p) or "-",
-    } | _figures(stats)
-
-
-def _state(instance: Instance) -> dict[str, str]:
-    """Its word and status (read like ``cpu_status``): stopped is down; a
-    failing healthcheck while it serves, or starting, is a warning."""
-    if instance.state in ("exited", "dead"):
-        return {"state": instance.state, "state_status": "unhealthy"}
-    sick = instance.health == "unhealthy"
-    fine = instance.state == "running" and not sick
-    word = "unhealthy" if sick else instance.state
-    return {"state": word, "state_status": "healthy" if fine else "warning"}
-
-
-# A stopped container's live figures: none.
-_LIVE = (
-    "cpu_value",
-    "memory_value",
-    "memory_percent",
-    "cpu_status",
-    "memory_status",
-    "cpu_capacity",
-    "memory_capacity",
-)
-_FIGURES = (
-    "cpu",
-    "memory",
-    "network",
-    "disk",
-    "memory_used",
-    "network_in",
-    "network_out",
-    "disk_read",
-    "disk_write",
-)
-
-
-def _figures(stats: Stats | None) -> dict[str, Any]:
-    """A row's live figures, whole (``memory``) and in parts (``memory_used``)."""
-    if stats is None:
-        return (
-            dict.fromkeys(_FIGURES, "-") | dict.fromkeys(_LIVE) | {"memory_limit": ""}
-        )
-    used, limit = format_bytes(stats.memory_used), stats.memory_limit
-    rx, tx = format_bytes(stats.network_rx), format_bytes(stats.network_tx)
-    read, write = format_bytes(stats.disk_read), format_bytes(stats.disk_write)
-    return {
-        "cpu": "-"
-        if stats.cpu_percent is None
-        else format_percentage(stats.cpu_percent),
-        "memory": f"{used} / {format_bytes(limit)}" if limit else used,
-        "network": f"in {rx}, out {tx}",
-        "disk": f"read {read}, write {write}",
-        "memory_used": used,
-        # The raw figures, for what sums them (``ui_resources``).
-        "cpu_value": stats.cpu_percent,
-        "memory_value": stats.memory_used,
-        # Creeping toward the limit is what kills a container.
-        "memory_percent": round(stats.memory_used / limit * 100, 1) if limit else None,
-        "memory_limit": format_bytes(limit) if limit else "",
-        "network_in": rx,
-        "network_out": tx,
-        "disk_read": read,
-        "disk_write": write,
-        # Each figure against what the container has of it, by the host
-        # checks' rule, and that capacity (for the charts' threshold lines).
-        "cpu_status": _status(
-            stats.cpu_percent, stats.cpus * 100, "CPU_THRESHOLD_PERCENT"
-        ),
-        "memory_status": _status(stats.memory_used, limit, "MEMORY_THRESHOLD_PERCENT"),
-        "cpu_capacity": stats.cpus * 100,
-        "memory_capacity": limit,
-    }
-
-
-def _status(value: float | None, capacity: float | None, setting: str) -> str | None:
-    """``value``'s share of ``capacity`` against the ``setting`` alert share."""
-    if value is None or not capacity:
-        return None
-    return thresholds.status(value / capacity * 100, getattr(settings, setting)).value

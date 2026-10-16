@@ -515,6 +515,12 @@ takes only what it can start:
 | **Dramatiq** | Prefetches as many messages as it has threads, not twice that (set when the worker boots, however it is launched) | The consumer's heartbeat keeps its messages; a dead worker's are requeued |
 | **arq** | Takes a slot first, then claims the job | Its in-progress key lasts the job's timeout, which arq enforces |
 
+A TaskIQ worker joins each queue's consumer group under its host's name (a
+container's id), the same across restarts and dev reloads, and on startup
+removes consumers that have read nothing for an hour and hold no job. One
+still holding jobs stays until another worker's `XAUTOCLAIM` takes them,
+since deleting it would drop them.
+
 A busy worker still counts as alive: one working through its jobs reads
 nothing for a while, and Overseer counts it as serving its queue as long as
 it keeps reporting itself (Worker > Runtime).

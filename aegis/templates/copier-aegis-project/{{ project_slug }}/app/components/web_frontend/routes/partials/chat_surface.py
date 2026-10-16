@@ -50,9 +50,18 @@ def chat_router(mount: ChatSurface, guard: Callable[..., Any]) -> APIRouter:
     router = APIRouter(prefix=mount.path, dependencies=[Depends(guard)])
     models_path = f"{mount.path}/models"
     # Live calls are picked with the models where calls are on offer.
-    calls = chat.HAS_VOICE and chat.PERSISTED
+    calls = chat.offers_calls(mount)
     # The mount this request is served (``ChatSurface.bind``).
     Mount = Annotated[ChatSurface, Depends(chat.resolver(mount))]  # noqa: N806
+
+    async def operator_only(bound: Mount) -> None:
+        """The operator's controls answer only a request its mount gives
+        them (``bind`` decides per request); anyone else finds no route."""
+        if not bound.operator_controls:
+            raise HTTPException(status_code=404)
+
+    # The model and voice chips' routes, behind ``operator_only``.
+    operator = APIRouter(dependencies=[Depends(operator_only)])
 
     async def owned(bound: ChatSurface, conversation_id: str) -> Any:
         found = await chat.find_conversation(bound, conversation_id)
@@ -197,9 +206,9 @@ def chat_router(mount: ChatSurface, guard: Callable[..., Any]) -> APIRouter:
 
     # --- The model chip and its picker: the catalog is rows ------------------
 
-    if chat.PERSISTED and mount.model_picker:
+    if chat.PERSISTED and mount.operator_controls:
 
-        @router.get("/models/chip", response_class=HTMLResponse)
+        @operator.get("/models/chip", response_class=HTMLResponse)
         async def model_chip(request: Request) -> Response:
             """The composer's chip; it loads itself, and a pick sends it back out
             of band."""
@@ -210,7 +219,7 @@ def chat_router(mount: ChatSurface, guard: Callable[..., Any]) -> APIRouter:
                 request, MODELS_TEMPLATE, chip=chip, chip_only=True, path=models_path
             )
 
-        @router.get("/models", response_class=HTMLResponse)
+        @operator.get("/models", response_class=HTMLResponse)
         async def models_dialog(request: Request, q: str = "") -> Response:
             """The picker, in the modal; the same route re-renders its list as
             the search changes."""
@@ -220,7 +229,7 @@ def chat_router(mount: ChatSurface, guard: Callable[..., Any]) -> APIRouter:
             picker = await models.picker(q, current, models_path, calls)
             return dialog(request, MODELS_TEMPLATE, picker=picker)
 
-        @router.post("/models", response_class=HTMLResponse)
+        @operator.post("/models", response_class=HTMLResponse)
         async def pick_model(
             request: Request,
             model_id: Annotated[str, Form()],
@@ -296,8 +305,9 @@ def chat_router(mount: ChatSurface, guard: Callable[..., Any]) -> APIRouter:
 
         add_card_routes(router, mount)
     # Voice profiles are rows: the chip and its dialog need a database too.
-    if chat.HAS_VOICE and chat.PERSISTED:
+    if chat.HAS_VOICE and chat.PERSISTED and mount.operator_controls:
         from .chat_voices import add_voice_routes
 
-        add_voice_routes(router, mount)
+        add_voice_routes(operator, mount)
+    router.include_router(operator)
     return router

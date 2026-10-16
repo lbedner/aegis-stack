@@ -78,6 +78,9 @@ async def _priced(session: AsyncSession, monkeypatch: pytest.MonkeyPatch) -> Non
     await seed_voice_catalog(session)
 
 
+# Saves a turn, then reads the conversation back to check it: two reads
+# by construction, not a loop.
+@pytest.mark.queryspy(allow_n_plus_one=True)
 class TestATurn:
     def test_a_turn_is_what_you_said_what_she_said_and_her_steps(self) -> None:
         log = TurnLog()
@@ -231,6 +234,9 @@ class TestACallRemembers:
         assert history.count("And now?") == 1
 
 
+# Saves a turn, then reads the conversation back to check it: two reads
+# by construction, not a loop.
+@pytest.mark.queryspy(allow_n_plus_one=True)
 class TestACutCall:
     """A call can drop mid-answer (a restart, the network, a hang-up). What
     was said and run so far is kept, marked, and a call soon after picks
@@ -398,6 +404,9 @@ class TestTheSettings:
         assert vad == {"start_sensitivity": "low", "end_sensitivity": "high"}
 
 
+# Saves a turn, then reads the conversation back to check it: two reads
+# by construction, not a loop.
+@pytest.mark.queryspy(allow_n_plus_one=True)
 class TestDrivingACall:
     """``drive`` runs a call to its end, whichever way its audio travels."""
 

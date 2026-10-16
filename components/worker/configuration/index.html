@@ -7688,6 +7688,11 @@ takes only what it can start:</p>
 </tr>
 </tbody>
 </table>
+<p>A TaskIQ worker joins each queue's consumer group under its host's name (a
+container's id), the same across restarts and dev reloads, and on startup
+removes consumers that have read nothing for an hour and hold no job. One
+still holding jobs stays until another worker's <code>XAUTOCLAIM</code> takes them,
+since deleting it would drop them.</p>
 <p>A busy worker still counts as alive: one working through its jobs reads
 nothing for a while, and Overseer counts it as serving its queue as long as
 it keeps reporting itself (Worker &gt; Runtime).</p>

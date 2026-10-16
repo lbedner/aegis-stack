@@ -6398,7 +6398,7 @@
 <ul>
 <li><strong>A Redis 7 service</strong> in the compose stack (<code>redis:7-alpine</code>).</li>
 <li><strong>Settings:</strong> <code>REDIS_URL</code> (default <code>redis://redis:6379</code>, the compose service), <code>REDIS_URL_LOCAL</code> for CLI commands run on the host, <code>REDIS_DB</code> and <code>CACHE_REDIS_DB</code>.</li>
-<li><strong>An Overseer page</strong> (Components &gt; Cache) with a keyspace map: every key grouped into the family that owns it, what each family is for, and how much room it takes.</li>
+<li><strong>An Overseer page</strong> (Components &gt; Cache) with a keyspace map: every key grouped into the family that owns it, what each family is for, and how much room it takes. Pick a family to see how much it holds and has passed through, in its owner's words.</li>
 </ul>
 <h2 id="logical-databases">Logical databases</h2>
 <table>
@@ -6427,9 +6427,26 @@
 <p>The dev service caps memory at 64 MB with <code>--maxmemory-policy volatile-lru</code>: under pressure, Redis evicts only keys that already expire (cache entries, job results, task records), least recently used first. Keys with no expiry, such as queued jobs, are never evicted; once nothing evictable is left, Redis refuses the write instead of silently dropping work. <code>allkeys-lru</code> would evict queued jobs, and a guard test keeps it out of the template.</p>
 <h2 id="seeing-what-is-in-it">Seeing what is in it</h2>
 <ul>
-<li><strong>Components &gt; Cache</strong> in the Overseer: the whole keyspace by family, the connection, and slow queries. The shared cache's entries show as one family, <strong>Shared cache</strong>, since services name their own keys.</li>
-<li><strong>Server &gt; Cache</strong>: the shared cache's families, sizes and hit rates. See <a href="../backend/cache/">Cache</a>.</li>
+<li><strong>Components &gt; Cache</strong> in the Overseer: the whole keyspace by family, the connection, and slow queries. The shared cache's entries show as one family, <strong>Shared cache</strong>, since services name their own keys; the live charts' history (<code>app.core.series_keys</code>) shows as its own.</li>
+<li><strong>Slow queries</strong> say what each command touched: its key, as Redis names a command's keys (<code>COMMAND GETKEYS</code>), and the family that key belongs to, so <code>ZRANGEBYSCORE series:containers:worker:...:cpu</code> reads as <strong>Chart history</strong>. A command without a key (<code>KEYS</code>, <code>INFO</code>) touched none.</li>
+<li><strong>A family, picked</strong>, says what it is for and how it is doing, read from the data itself, nothing stored: a stream's every entry since it began (Redis counts them), how many came in the last minute and hour, drawn a minute at a time, and each reader group with how far behind it is; a sorted set scored by time the same, its oldest and newest as times; a list's depth; counters stored as strings added up. Each figure counts in the family's own word (<code>KeyFamily(..., holds="event")</code>), else its type's (entries, members, items). Then its newest key's entries, a stream's as their fields and when each came. A family holding a credential (<code>peek=False</code>) is named, never read.</li>
 </ul>
+<p>To have your own keys mapped, declare them beside the code that writes them and list the module in <code>redis_keys.OWNERS</code>:</p>
+<p><div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.core.key_family</span><span class="w"> </span><span class="kn">import</span> <span class="n">KeyFamily</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">REDIS_KEYS</span> <span class="o">=</span> <span class="p">(</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="n">KeyFamily</span><span class="p">(</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>        <span class="s2">&quot;orders:events&quot;</span><span class="p">,</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>        <span class="s2">&quot;stream&quot;</span><span class="p">,</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>        <span class="s2">&quot;Order events&quot;</span><span class="p">,</span>
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>        <span class="s2">&quot;Every order placed, paid or refunded, for the receipts worker&quot;</span><span class="p">,</span>
+</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>        <span class="s2">&quot;Orders service&quot;</span><span class="p">,</span>
+</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>        <span class="n">columns</span><span class="o">=</span><span class="p">(</span><span class="s2">&quot;Entry&quot;</span><span class="p">,</span> <span class="s2">&quot;Event&quot;</span><span class="p">),</span>
+</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>        <span class="n">holds</span><span class="o">=</span><span class="s2">&quot;event&quot;</span><span class="p">,</span>
+</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>    <span class="p">),</span>
+</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a><span class="p">)</span>
+</span></code></pre></div>
+- <strong>Server &gt; Cache</strong>: the shared cache's families, sizes and hit rates. See <a href="../backend/cache/">Cache</a>.</p>
 
 
 

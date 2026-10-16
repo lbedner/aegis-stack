@@ -6329,11 +6329,25 @@ series name, and the reading as a whole for the views that show it:</p>
 </span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="n">SAMPLERS</span> <span class="o">=</span> <span class="p">[</span><span class="n">Sampler</span><span class="p">(</span><span class="s2">&quot;containers&quot;</span><span class="p">,</span> <span class="n">ui_runtime</span><span class="o">.</span><span class="n">sample</span><span class="p">),</span> <span class="n">Sampler</span><span class="p">(</span><span class="s2">&quot;queues&quot;</span><span class="p">,</span> <span class="n">queue_depths</span><span class="p">)]</span>
 </span></code></pre></div>
 <p>Samplers are listed in <code>app/services/system/samplers.py</code> and run in the
-webserver from startup. Each tick's numbers are kept for an hour in the shared
-cache under <code>series:&lt;sampler&gt;:&lt;name&gt;</code> (Redis when the stack has it, so every
-process reads the same history; process memory otherwise), listed in an index
-set per sampler so reads never scan the keyspace. One process samples each
-tick.</p>
+webserver from startup. Each tick's numbers are kept for an hour under
+<code>series:&lt;sampler&gt;:&lt;name&gt;</code> in the series store (<code>app.core.series_store</code>: Redis
+when the stack has it, on the shared cache's database, so every process reads
+the same history; process memory otherwise), listed in an index set per
+sampler so reads never scan the keyspace. One process samples each tick.</p>
+<p>A sampler made with <code>history=True</code> (the containers and the host) is kept
+longer too: each minute's highest value for a day and each five minutes'
+for a week (<code>series.TIERS</code>), folded from the raw hour as each minute ends.
+The raw hour is a sorted set a series, read by time; a tier is a list a
+series, appended in order and cut to its length, about 20 bytes a point
+against a sorted set's 120, so a week of a dozen containers' history takes a
+few megabytes of Redis's 64.
+The highest rather than the average, so a spike from last night is still
+there. <code>series.read</code> serves a window longer than the hour from the tier
+that spans it; asked for a long window, a sampler without history gives
+its hour. A chart offers <code>series.windows(*samplers)</code>: <code>series.HISTORY_WINDOWS</code>
+(adding 2h, 6h, 12h, 1d and 7d) where every sampler behind it keeps
+history, and a live view re-reads a long window's charts only when its
+tier moves (<code>series.Redraw</code>).</p>
 <p>Polling costs only while someone looks. A view reads the sampler's last
 reading (<code>series.latest</code>) and marks it watched (<code>series.watch</code>); a watched
 sampler reads every <code>interval</code> (a second), an unwatched one every
@@ -6355,7 +6369,8 @@ turns it into <code>chart_panel</code> data, one line per series on the times th
 share, the axis spanning the window up to now. A window longer than
 <code>MAX_POINTS</code> seconds is averaged into buckets on fixed boundaries, so each
 bucket keeps its place as the window moves. The windows a chart offers are
-<code>series.WINDOWS</code> (15m, 30m, 1h, labelled like every other range row), picked
+<code>series.WINDOWS</code> (15m, 30m, 1h, labelled like every other range row; 2h, 6h,
+12h, 1d and 7d too where history is kept), picked
 with <code>range_chips</code> on the web and <code>DateRangeChips</code> in Flet; the choice lives
 in the query string (<code>?window=1800</code>) and the section's stream follows it.</p>
 <p>A chart goes live with <code>chart_panel(..., live="&lt;event&gt;")</code> inside an element

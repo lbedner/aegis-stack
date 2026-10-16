@@ -1,9 +1,9 @@
 {%- if ai_framework == "langchain" -%}
 """The LangChain turn, end to end, on both entrypoints.
 
-LangChain streams text deltas and nothing else: no tool events, no
-staged readings, no per-run usage. Both ``chat()`` and ``stream_chat()``
-must finish a turn on exactly that. This is the path the pydantic-ai
+LangChain streams text deltas, and token counts only where its provider
+reports them: no tool events, no staged readings. ``chat()`` runs
+``stream_chat()`` to its end, so both finish a turn on exactly that. This is the path the pydantic-ai
 harness cannot reach, and the one that broke when the post-stream
 bookkeeping assumed the pydantic-ai event stream had run.
 """
@@ -15,6 +15,9 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 import app.services.ai.service.chat as chat_module
+{%- if ai_backend != "memory" %}
+import app.services.ai.service.turn as turn_module
+{%- endif %}
 from app.services.ai.domains.chat.agent_loader import DEFAULT_AGENT_SLUG, AgentConfig
 from app.services.ai.service import AIService
 
@@ -34,13 +37,11 @@ class _Chunk:
     def __init__(self, content: str, **metadata: str) -> None:
         self.content = content
         self.response_metadata = metadata
+        self.usage_metadata: dict[str, int] | None = None
 
 
 class _FakeLLM:
     """What ``_prepare_llm_and_messages`` hands back under LangChain."""
-
-    async def ainvoke(self, messages: Any) -> _Chunk:
-        return _Chunk("".join(PIECES))
 
     async def astream(self, messages: Any) -> AsyncIterator[_Chunk]:
         for piece in PIECES:
@@ -84,13 +85,13 @@ def harness(
 
     monkeypatch.setattr(chat_module, "resolve_agent", resolve)
 
-    recorder = AsyncMock()
+    recorder = AsyncMock(return_value=0.0)  # the cost it priced
 {%- if ai_backend != "memory" %}
 
     async def no_memory(user_id: str, **kwargs: object) -> None:
         return None
 
-    monkeypatch.setattr(chat_module, "build_user_memory_context", no_memory)
+    monkeypatch.setattr(turn_module, "build_user_memory_context", no_memory)
     monkeypatch.setattr(service, "_record_usage", recorder)
 {%- endif %}
 
@@ -137,19 +138,40 @@ class TestLangChainStreaming:
         # No tools ran, so no trail is attached.
         assert "tool_trace" not in final.metadata
 {%- if ai_backend != "memory" %}
-        # LangChain reports no token counts while streaming: the turn is
-        # ledgered at zero rather than not at all. It IS timed, though -
-        # no tokens does not mean no wall clock, and latency is the one
-        # number this path can still honestly report.
+        # This model reports no token counts: the turn is ledgered at zero
+        # rather than not at all. It IS timed, though - no tokens does not
+        # mean no wall clock.
         recorder.assert_called_once()
         assert recorder.call_args.args == (
-            f"stream_chat:{DEFAULT_AGENT_SLUG}",
+            f"chat:{DEFAULT_AGENT_SLUG}",
             {"input_tokens": 0, "output_tokens": 0},
             "default",
         )
         assert recorder.call_args.kwargs["duration_ms"] > 0
         assert final.metadata["input_tokens"] == 0
         assert final.metadata["output_tokens"] == 0
+
+    async def test_token_counts_ride_the_chunks_that_carry_them(
+        self, harness: tuple[AIService, MagicMock], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Where a provider counts while streaming, the counts add up across
+        the chunks carrying them (Anthropic splits input and output)."""
+        service, recorder = harness
+
+        class _Counted(_FakeLLM):
+            async def astream(self, messages: Any) -> AsyncIterator[_Chunk]:
+                first, last = _Chunk("Hi"), _Chunk("")
+                first.usage_metadata = {"input_tokens": 12, "output_tokens": 0}
+                last.usage_metadata = {"input_tokens": 0, "output_tokens": 3}
+                yield first
+                yield last
+
+        monkeypatch.setattr(
+            AIService, "_prepare_llm_and_messages", _prepared(_Counted())
+        )
+        await service.chat("hello")
+
+        assert recorder.call_args.args[1] == {"input_tokens": 12, "output_tokens": 3}
 {%- endif %}
 
     @pytest.mark.parametrize(

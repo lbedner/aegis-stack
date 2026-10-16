@@ -16,6 +16,8 @@ A module row has two independent content columns; assembly is column-driven:
 
 There is deliberately no "type" field. Whether a module is static, dynamic, or hybrid is simply which columns are filled, so promoting a static module to hybrid is filling one more column, not a migration.
 
+Modules render as the caller: a fetcher that asks whether the caller is an admin gets the answer for whoever is chatting. A typed turn and a live voice call build the agent through one function, so a call holds the same modules, contexts and tools as a typed turn.
+
 ### Module fields
 
 | Field | Meaning |
@@ -31,9 +33,13 @@ There is deliberately no "type" field. Whether a module is static, dynamic, or h
 
 A module must have `prompt_content`, `fetch_function`, or both; creating or editing one into an empty state is rejected.
 
+## The App Map
+
+The default `assistant` always has one module, `app_map`, seeded with the agent: what the app is, read from its code. It lists each top-level part with what it is for, the tables by owner with the tables each links to, and the changes an agent may propose. An admin's map includes the parts; anyone else's is the tables and changes alone, as the `ontology` tool answers each. It carries nothing live (no traffic, health or row counts), so its text stays the same turn to turn and a provider's prompt cache serves it. The `ontology` tool stays for depth: one node, its neighbours, the paths between two. Another agent opts in by adding `app_map` to its `memory_modules`.
+
 ## Writing a Fetcher
 
-Fetchers are plain async functions registered by name, exactly like tools. The framework ships the registry plus two reference fetchers (`recent_conversations` and a `user_profile` stub meant to be replaced); your application registers its own domain fetchers:
+Fetchers are plain async functions registered by name, exactly like tools. The framework ships the registry plus three fetchers: `recent_conversations`, a `user_profile` stub meant to be replaced, and `app_map`. Your application registers its own domain fetchers:
 
 ```python
 from app.services.ai.fetchers import FetchContext, register_fetcher

@@ -69,6 +69,7 @@
       <span data-state="live">Talking live - just speak.</span>
       <span data-state="working">{{ assistant }} is pulling that up...</span>
       <span data-state="muted">Muted - {{ assistant }} can't hear you.</span>
+      <span data-state="hanging-up">Hanging up in <span data-countdown></span>s - say anything to stay on.</span>
       {% endif %}
     </span>
   </template>
@@ -133,7 +134,7 @@
     <span class="relative w-9 h-9 rounded-full bg-aegis-teal/10 text-aegis-teal flex items-center justify-center">
       {{ phone_states() }}
     </span>
-    <span class="min-w-0 flex-1 text-sm text-aegis-text tabular-nums">
+    <span class="min-w-0 flex-1 truncate text-sm text-aegis-text tabular-nums">
       Live · <span data-call-engine></span> · <span data-call-timer>0:00</span>
       <span class="text-aegis-muted"> · <span data-call-cost></span><span data-call-cost-later>priced as it goes</span></span>
     </span>

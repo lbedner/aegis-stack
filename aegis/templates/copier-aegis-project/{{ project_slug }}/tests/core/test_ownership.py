@@ -43,7 +43,7 @@ FILES = {
     "app/services/rag/__init__.py": "from app.core.constants import ServiceName\n"
     "PART_OF = ServiceName.AI\n",
     "app/services/rag/indexer.py": "",
-    "app/services/system/__init__.py": 'PART_OF = "stack"\n',
+    "app/services/system/__init__.py": 'PART_OF = "shared"\n',
     "app/services/system/health.py": "",
     "app/services/ops/__init__.py": 'PART_OF = "deploy"\n',
     "app/services/ops/audit.py": "",
@@ -85,7 +85,7 @@ def index(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> source_index.Index
         ("app/services/random_helper/helper.py", None),
         ("app/cli/ai/chat.py", Owner("service", "ai")),
         ("app/services/rag/indexer.py", Owner("service", "ai", "rag")),
-        ("app/services/system/health.py", Owner("stack", "system")),
+        ("app/services/system/health.py", Owner("shared", "system")),
         ("app/services/ops/audit.py", Owner("component", "deploy", "ops")),
         # A part with no health check, known from its spec (``parts``).
         ("app/components/deploy/docker.py", Owner("component", "deploy")),

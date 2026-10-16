@@ -95,6 +95,19 @@ def test_a_package_says_what_it_is_part_of_and_its_concern(project: Path) -> Non
     assert found.summary == "A plugin's service."
 
 
+def test_a_summary_is_the_whole_first_paragraph(tmp_path: Path) -> None:
+    """Not its first line: Illiana's app map gave the database "its own
+    tables: what Overseer's Query keeps", cut off mid-sentence."""
+    write_tree(
+        tmp_path,
+        {
+            "app/__init__.py": "",
+            "app/db.py": '"""One\nsentence, wrapped.\n\nMore."""\n',
+        },
+    )
+    assert source_index.at(tmp_path).get("app.db").summary == "One sentence, wrapped."
+
+
 def test_each_file_is_parsed_once_whoever_reads_it(
     project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

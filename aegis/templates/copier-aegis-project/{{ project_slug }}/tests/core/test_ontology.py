@@ -10,16 +10,19 @@ from app.core import secrets, source_index
 from app.core.ontology import (
     SCHEMA_VERSION,
     EdgeKind,
+    JobNode,
+    KeysNode,
     Kind,
     Mode,
+    ObjectNode,
     PartNode,
     SystemModel,
     calls,
     system_model,
 )
-from app.core.ontology.parts import service_folders
+from app.core.ontology.parts import _Packages, service_folders
 from app.core.parts import Category
-from app.services.system import health, topology
+from app.services.system import health, redis_keys, topology
 from app.services.system.patterns import PROJECT_ROOT
 
 
@@ -39,7 +42,7 @@ def test_the_top_level_shape_is_pinned(model: SystemModel) -> None:
     breaking change bumps ``schema_version``."""
     dumped = model.model_dump()
     assert set(dumped) == {"schema_version", "partial", "stack", "nodes", "edges"}
-    assert dumped["schema_version"] == SCHEMA_VERSION == 1
+    assert dumped["schema_version"] == SCHEMA_VERSION == 2
     assert set(dumped["stack"]) == {"name", "env", "build", "aegis_version"}
     assert set(dumped["edges"][0]) == {
         "source",
@@ -65,6 +68,30 @@ def test_every_installed_part_is_a_node_with_its_concern(model: SystemModel) -> 
     assert all(isinstance(p.category, Category) for p in parts.values())
 
 
+def test_every_part_with_code_says_what_it_is_for(model: SystemModel) -> None:
+    """Its package's docstring: the line Illiana's app map gives it. The
+    backend had none, so asked how the app reaches its database she made
+    up an answer (2026-10-16)."""
+    packages = _Packages(source_index.project())
+    silent = [
+        p.id
+        for p in model.nodes
+        if isinstance(p, PartNode)
+        and p.kind in (Kind.COMPONENT, Kind.SERVICE)
+        and not p.description
+        and packages.of(p.kind, p.name) is not None
+    ]
+    assert not silent
+
+
+def test_the_queue_says_what_it_is(model: SystemModel) -> None:
+    """It has no package to say it, so asked what breaks when Redis goes
+    down she read the cache it sits in and left the worker out
+    (2026-10-16)."""
+    queue = f"component:{topology.QUEUE}"  # none without a worker
+    assert all(n.description for n in model.nodes if n.id == queue)
+
+
 def test_every_route_job_tool_and_change_type_has_an_owner(model: SystemModel) -> None:
     ids = {n.id for n in model.nodes}
     owned = (Kind.ROUTE, Kind.JOB, Kind.TOOL, Kind.CHANGE)
@@ -79,9 +106,7 @@ def test_every_route_job_tool_and_change_type_has_an_owner(model: SystemModel) -
     assert any(n.kind is Kind.ROUTE for n in model.nodes)
     # And the module that defines it: where in its part it lives.
     unplaced = [
-        n.id
-        for n in model.nodes
-        if n.kind in owned and not getattr(n, "module", None)
+        n.id for n in model.nodes if n.kind in owned and not getattr(n, "module", None)
     ]
     assert not unplaced, unplaced
 
@@ -109,7 +134,7 @@ def test_each_services_calls_are_what_it_imports(model: SystemModel) -> None:
     ids = {n.id for n in model.nodes}
     index = source_index.project()
     for folder, source in service_folders(index, ids):
-        if source.startswith(f"{Kind.STACK}:"):
+        if source.startswith(f"{Kind.SHARED}:"):
             continue
         package = index.root / "app" / "services" / folder
         for target in calls.talks_to(package, secrets.declared(), index):
@@ -119,6 +144,52 @@ def test_each_services_calls_are_what_it_imports(model: SystemModel) -> None:
     queue = f"component:{topology.QUEUE}"
     edges = [e for e in model.edges if e.kind is EdgeKind.CALLS]
     assert all((e.mode is Mode.ASYNC) == (e.target == queue) for e in edges)
+
+
+def test_the_apps_own_code_is_shared_code(model: SystemModel) -> None:
+    """No one part's: the code every service imports to be one."""
+    system = _parts(model)["shared:system"]
+    assert system.kind is Kind.SHARED
+
+
+def test_the_migration_record_is_the_databases_table(model: SystemModel) -> None:
+    """A table no model declares is a node all the same, its owner's, so
+    the model's tables are the database's."""
+    tables = {n.name: n for n in model.nodes if isinstance(n, ObjectNode)}
+    if not tables:
+        pytest.skip("no database in this stack")
+    record = tables["alembic_version"]
+    assert record.owner == "component:database" and record.description
+
+
+def test_the_schedulers_heartbeat_is_its_job(model: SystemModel) -> None:
+    """Every job the scheduler runs is a node: its own, beside the
+    services'; the heartbeat runs in the scheduler itself."""
+    jobs = {n.name: n for n in model.nodes if isinstance(n, JobNode)}
+    if "component:scheduler" not in _parts(model):
+        pytest.skip("no scheduler in this stack")
+    beat = jobs["scheduler_heartbeat"]
+    assert beat.owner == "component:scheduler" and beat.module
+    runs_on = {e.target for e in model.edges if e.source == beat.id}
+    assert runs_on == {"container:scheduler"}
+
+
+def test_each_redis_key_family_is_a_node(model: SystemModel) -> None:
+    """What the app keeps in Redis, in its owners' words, and held by the
+    part declaring it (else by Redis, the cache component)."""
+    if "component:cache" not in _parts(model):
+        pytest.skip("no Redis in this stack")
+    ids = {n.id for n in model.nodes}
+    found = {n.name: n for n in model.nodes if isinstance(n, KeysNode)}
+    for family in redis_keys.families():
+        node = found[family.pattern]
+        assert (node.title, node.purpose, node.type) == (
+            family.name,
+            family.purpose,
+            family.kind,
+        )
+        assert node.owner in ids
+    assert found["series-hour:*"].owner == "component:cache"  # core's
 
 
 def test_a_folder_part_of_a_service_is_its_sub_service(model: SystemModel) -> None:

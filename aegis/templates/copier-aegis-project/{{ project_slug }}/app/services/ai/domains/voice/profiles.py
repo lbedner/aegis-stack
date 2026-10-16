@@ -95,7 +95,7 @@ def parse_form(form: Any) -> tuple[dict[str, Any], list[str]]:
         values["live_idle_seconds"] = idle
     except ValueError:
         errors.append(
-            f"Hang up after is whole seconds from {IDLE_RANGE[0]} to {IDLE_RANGE[1]}."
+            f"Check in after is whole seconds from {IDLE_RANGE[0]} to {IDLE_RANGE[1]}."
         )
     values["tts_instructions"] = str(form.get("tts_instructions") or "").strip() or None
     return values, errors

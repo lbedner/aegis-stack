@@ -9,8 +9,8 @@ from .models import (
     ErrorResponse,
 )
 
-# The stack's own code, not a service (``ownership``).
-PART_OF = "stack"
+# Shared code, not a service (``ownership``).
+PART_OF = "shared"
 
 
 __all__ = [

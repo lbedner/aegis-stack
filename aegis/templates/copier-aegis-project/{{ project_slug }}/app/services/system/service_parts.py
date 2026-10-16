@@ -3,7 +3,7 @@
 which rules it breaks, with the ``path:line`` that shows it.
 
 One instance per services folder that is a part of the system model (a
-service, a sub-service with a folder of its own like RAG, the stack's own
+service, a sub-service with a folder of its own like RAG, the app's shared
 code), named by its node. Read from the source index, never imported.
 Optional parts (a router, jobs) are inventory, counted on the strip; only
 the rules are findings."""

@@ -18,7 +18,7 @@ OWNERS = {
     "app/services/rag/search.py": "service:ai.rag",
     WORKER: "component:worker",
     "app/components/backend/main.py": "component:backend",
-    "app/services/system/health.py": "stack:system",
+    "app/services/system/health.py": "shared:system",
 }
 
 

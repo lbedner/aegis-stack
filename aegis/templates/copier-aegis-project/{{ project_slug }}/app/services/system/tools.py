@@ -6,13 +6,15 @@ Read-only."""
 
 import asyncio
 from collections import Counter
+from collections.abc import Iterator
 from typing import Any
 
 from starlette.datastructures import QueryParams
 
 from app.core import runtime
-from app.core.ontology import Kind, PartNode, graph
+from app.core.ontology import Kind, graph
 from app.core.ontology.observed import running
+from app.core.ontology.summary import summary
 from app.core.tools import register_tool
 from app.services.shared.deps import caller_is_admin
 from app.services.system import dry_path, live_status, ui_errors, ui_logs
@@ -38,6 +40,19 @@ def _tree(component: ComponentStatus) -> dict[str, Any]:
     return node
 
 
+def _checks(
+    components: dict[str, ComponentStatus], prefix: str = ""
+) -> Iterator[tuple[str, ComponentStatus]]:
+    """Each check in the tree by its dotted name, but one only passing on
+    its parts' issues (``aegis``, ``components``): it is not one more."""
+    for key, component in components.items():
+        name = f"{prefix}{key}"
+        yield from _checks(component.sub_components, f"{name}.")
+        parts = component.sub_components.values()
+        if component.healthy or all(p.healthy for p in parts):
+            yield name, component
+
+
 def _find(components: dict[str, ComponentStatus], name: str) -> ComponentStatus | None:
     for key, component in components.items():
         if key == name:
@@ -61,13 +76,21 @@ async def health(component: str | None = None) -> dict[str, Any]:
     (healthy, info, warning, unhealthy) and message, nested as Overseer
     shows them. ``component`` narrows it to one, with everything it
     reports (a worker's queues, the scheduler's jobs, the database's
-    tables). Start here, then read what broke with ``errors`` and what
-    led up to it with ``logs``."""
+    tables). ``counts`` counts each check once, and ``attention`` names
+    every one not healthy, with its message. Start here, then read what
+    broke with ``errors`` and what led up to it with ``logs``."""
     status, note = await live_status.live_status()
     if component is None:
+        checks = list(_checks(status.components))
         return {
             "healthy": status.overall_healthy,
             "checked_at": status.timestamp.isoformat(),
+            "counts": Counter(c.status.value for _, c in checks),
+            "attention": [
+                {"name": name, "status": c.status.value, "message": c.message}
+                for name, c in checks
+                if not c.healthy
+            ],
             "components": {
                 name: _tree(part) for name, part in status.components.items()
             },
@@ -188,12 +211,16 @@ async def ontology(
     route: str | None = None,
 ) -> dict[str, Any]:
     """What this app is, read from its code: its tables and the changes to
-    them (an admin also sees parts, routes, jobs and tools). No arguments:
-    a summary. ``kind``, ``category`` or ``text``: matching nodes. ``node``
-    (an id like ``object:user``): it, its edges and neighbours ``depth``
-    steps out; with ``to``, the paths between the two. ``route`` (``GET
-    /api/v1/...``, an admin's): every hop it can take, read from the code
-    without sending it, each at its file and line, and where the walk stops."""
+    them (an admin also sees parts, routes, jobs, tools and Redis keys). No
+    arguments: a summary (the app, counts by kind, its tables by owner with
+    their links, the changes to them, and an admin's parts). ``kind``,
+    ``category`` or ``text``: matching nodes. ``node`` (an id like
+    ``object:user``): it, its edges and neighbours ``depth`` steps out;
+    with ``to``, the paths between the two. ``route`` (``GET /api/v1/...``,
+    an admin's): every hop it can take, read from the code without sending
+    it, each at its file and line, and where the walk stops. An edge's
+    ``mode`` is whether the caller waits on it (``sync``) or hands it to
+    the queue (``async``), not how either is written."""
     if route:
         return await _dry_path(route)
     model = await running()
@@ -232,20 +259,14 @@ async def ontology(
             "total": len(matches),
             "note": note,
         }
-    parts = [n for n in model.nodes if isinstance(n, PartNode)]
-    summary = {
-        "stack": model.stack.model_dump(mode="json"),
-        "counts": Counter(n.kind.value for n in model.nodes),
-        "note": note,
-    }
-    if not parts:  # the tables' view (``domain``): list them, there are no parts
-        brief = [n.model_dump(mode="json", include=BRIEF) for n in model.nodes]
-        return summary | {"nodes": brief[:MAX_NODES], "total": len(brief)}
-    return summary | {
-        "categories": Counter(p.category.value for p in parts),
+    found = summary(model)
+    brief = found.model_dump(mode="json", exclude={"parts"}) | {"note": note}
+    if not found.parts:  # the app's data alone (``domain``)
+        return brief
+    return brief | {
         "parts": [
-            p.model_dump(mode="json", include={*BRIEF, "category"}) for p in parts
-        ],
+            p.model_dump(mode="json", include={*BRIEF, "category"}) for p in found.parts
+        ]
     }
 
 

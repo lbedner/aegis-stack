@@ -6,8 +6,9 @@ key, so SQLite and Postgres agree): its owner by ``ownership``'s rule, its
 class docstring's first sentence, and each column's type, whether it may
 be empty, its ``Field(description=)`` and the values a single-column
 ``CHECK (x IN (...))`` lets in. A link per foreign key, from its
-column to the one it points at. Each registered change type as the change it makes: the table it
-changes. Names and types only: no defaults, no
+column to the one it points at. The tables kept without a model
+(``unmodeled``). Each registered change type as the change it makes: the
+table it changes. Names and types only: no defaults, no
 rows, so a secret column shows as a name and nothing else."""
 
 from __future__ import annotations
@@ -117,6 +118,20 @@ def _allowed(table: Table) -> dict[str, tuple[str, ...]]:
         if match:
             found[match[1]] = tuple(re.findall(r"'([^']*)'", match[2]))
     return found
+
+
+def unmodeled(owned: Owned) -> list[ObjectNode]:
+    """The tables the database component keeps without a model (its
+    ``TABLES``: the migration record), so the model's are the database's."""
+    try:
+        from app.components import database
+    except ImportError:  # no database in this stack
+        return []
+    module = database.__name__
+    return [
+        ObjectNode(name=name, description=held, owner=owned(module), module=module)
+        for name, held in database.TABLES.items()
+    ]
 
 
 def change(

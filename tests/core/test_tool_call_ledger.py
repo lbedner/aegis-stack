@@ -48,9 +48,10 @@ class TestTheSeamIsUsed:
         assert "resolved.append(entry.func)" not in source
 
     def test_the_turn_is_bound_where_the_model_is_called(self) -> None:
-        """The kit is generic over a deps type it never inspects, so turn
-        identity rides a context variable, set beside ``memory_user``."""
-        source = _source("app/services/ai/domains/chat/chat_kit/agent.py")
+        """Turn identity rides a context variable, bound inside
+        ``memory_user``: the one scope every runtime (typed turns, the kit,
+        live calls) wraps its model call in."""
+        source = _source("app/services/ai/domains/chat/user_memory.py")
 
         assert "tool_turn(" in source
         assert "from app.services.ai.domains.chat.tool_telemetry import tool_turn" in (

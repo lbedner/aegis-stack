@@ -1,5 +1,8 @@
 """
-Application cache service.
+Application cache: one TTL store every process shares, in Redis when it is
+configured, else in memory. Which is fixed at startup: while Redis is down
+its calls fail, they do not fall back to memory. The same Redis holds the
+worker's queue.
 
 Process-shared TTL cache. Backed by Redis in production (so the
 webserver, the scheduler, the CLI, and any future worker all read

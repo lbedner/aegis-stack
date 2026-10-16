@@ -12,6 +12,7 @@ import pytest
 
 from app.core.config import settings
 from app.core.ontology.model import (
+    ChangeNode,
     Edge,
     EdgeKind,
     Kind,
@@ -91,6 +92,24 @@ async def test_health_is_a_tree_of_statuses_without_details(
     assert worker == {"status": "unhealthy", "message": "1 queue stuck"}
     assert result["healthy"] is False
     assert "queues" not in json.dumps(result)
+
+
+async def test_health_counts_each_check_once_and_names_each_issue(
+    status: SystemStatus,
+) -> None:
+    """A part passing on its parts' issues (``aegis``, ``components``) is
+    not one more: the counts are the checks', and every check that is not
+    healthy is named, with its message."""
+    result = await tools.health()
+
+    assert result["counts"] == {"healthy": 1, "unhealthy": 1}
+    assert result["attention"] == [
+        {
+            "name": "aegis.components.worker",
+            "status": "unhealthy",
+            "message": "1 queue stuck",
+        }
+    ]
 
 
 async def test_health_of_one_component_carries_its_details(
@@ -381,7 +400,22 @@ def model(monkeypatch: pytest.MonkeyPatch) -> SystemModel:
         owner="service:payment",
         module="app.services.payment.models",
     )
-    found = model_of([*parts, *routes, charge, table], edges)
+    customer = ObjectNode(
+        name="payment_customer", class_name="Customer", owner="service:payment"
+    )
+    refund = ChangeNode(
+        name="payment.refund",
+        title="Refund a charge",
+        object=table.id,
+        owner="service:payment",
+    )
+    edges += [
+        Edge(
+            source=table.id, target=customer.id, kind=EdgeKind.LINK, via="customer_id"
+        ),
+        Edge(source=refund.id, target=table.id, kind=EdgeKind.CHANGES),
+    ]
+    found = model_of([*parts, *routes, charge, table, customer, refund], edges)
     monkeypatch.setattr("app.core.ontology.system.current", lambda: found)
     # Read as an admin unless a test binds otherwise: sign-in off.
     monkeypatch.setattr(settings, "AUTH_ENABLED", False)
@@ -390,16 +424,27 @@ def model(monkeypatch: pytest.MonkeyPatch) -> SystemModel:
 
 @pytest.mark.usefixtures("model")
 async def test_the_ontology_summary_fits_one_call_record() -> None:
-    """The stack, counts by kind and concern, and every part: whole under
+    """The app, counts by kind, every part, and the app's data (its tables
+    by owner with what each links to, and the changes to them): whole under
     the MCP call record's cap, so nothing a reader saw is clipped."""
     cap = pytest.importorskip("app.components.mcp.server").TEXT_CAP
     result = await tools.ontology()
 
+    assert result["app"]["name"] == "app" and "stack" not in result
     assert result["counts"]["route"] == 151
     assert {p["id"] for p in result["parts"]} == {
         "component:backend",
         "component:database",
         "service:payment",
+    }
+    assert result["tables"] == {
+        "service:payment": {
+            "payment_charge": ["payment_customer"],
+            "payment_customer": [],
+        }
+    }
+    assert result["changes"] == {
+        "payment.refund": {"title": "Refund a charge", "table": "payment_charge"}
     }
     assert len(json.dumps(result)) < cap
 
@@ -457,8 +502,12 @@ async def test_anyone_but_an_admin_reads_only_the_apps_data() -> None:
         summary = await tools.ontology()
         routes = await tools.ontology(kind="route")
         table = await tools.ontology(node="object:payment_charge")
-    assert summary["counts"] == {"object": 1}
-    assert [n["id"] for n in summary["nodes"]] == ["object:payment_charge"]
+    assert summary["counts"] == {"object": 2, "change": 1}
+    assert "parts" not in summary
+    assert summary["tables"]["service:payment"]["payment_charge"] == [
+        "payment_customer"
+    ]
+    assert list(summary["changes"]) == ["payment.refund"]
     assert routes["total"] == 0
     assert table["node"]["class_name"] == "Charge"
     assert table["node"]["module"] is None  # where the code lives: an admin's

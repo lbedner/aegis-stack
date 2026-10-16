@@ -28,6 +28,8 @@ class UsageContext(BaseModel):
     recent_requests: int = Field(
         default=0, description="Number of recent requests returned"
     )
+    week_requests: int = Field(default=0, description="Requests, last 7 days")
+    week_cost: float = Field(default=0.0, description="Cost in USD, last 7 days")
 
     def format_for_prompt(self, compact: bool = False) -> str:
         """
@@ -43,15 +45,17 @@ class UsageContext(BaseModel):
             return "Usage: No requests recorded yet"
 
         # Ultra-compact mode for Ollama and smaller models
+        week = f"last 7 days: {self.week_requests:,} requests, ${self.week_cost:.2f}"
         if compact:
             return (
-                f"Usage: {self.total_requests} requests, "
-                f"{self.total_tokens:,} tokens, ${self.total_cost:.2f}"
+                f"Usage, all time: {self.total_requests} requests, "
+                f"{self.total_tokens:,} tokens, ${self.total_cost:.2f}; {week}"
             )
 
         lines = [
-            f"Usage: {self.total_requests:,} requests | "
+            f"Usage, all time: {self.total_requests:,} requests | "
             f"{self.total_tokens:,} tokens | ${self.total_cost:.2f} total cost",
+            f"Usage, {week}",
             f"Success Rate: {self.success_rate:.1f}%",
         ]
 
@@ -62,7 +66,9 @@ class UsageContext(BaseModel):
             )
 
         lines.append(
-            "  Report these stats when asked about your usage, activity, or costs."
+            "  Report these stats when asked about your usage, activity, or "
+            "costs, naming the window. For any other window, say these two are "
+            "what you have."
         )
 
         return "\n".join(lines)

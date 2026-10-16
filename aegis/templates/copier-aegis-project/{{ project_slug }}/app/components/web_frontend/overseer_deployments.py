@@ -146,6 +146,7 @@ async def _deployed() -> dict[str, Any]:
         "destroy": actions.server_name(),
         "rollback": deploy_form.ROLLBACK_WAITING,
         "live": deploy_form.LIVE_WAITING,
+        "storage": deploy_form.STORAGE_WAITING,
     }
 
 

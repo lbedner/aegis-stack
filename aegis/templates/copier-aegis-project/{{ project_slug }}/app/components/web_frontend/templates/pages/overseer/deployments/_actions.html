@@ -25,6 +25,7 @@
 {{ facts(actions.server.facts) }}
 {% if actions.agent.state == "ready" %}
 {% with live = actions.live %}{% include "pages/overseer/deployments/_live.html" %}{% endwith %}
+{% with storage = actions.storage %}{% include "pages/overseer/deployments/_storage.html" %}{% endwith %}
 <div data-idle class="flex flex-wrap items-center gap-2">
   {{ ask("Deploy", actions.partials, "deploy", "primary") }}
   {{ ask("Back up now", actions.partials, "backup") }}

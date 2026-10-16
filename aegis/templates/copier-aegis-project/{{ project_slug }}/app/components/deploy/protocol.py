@@ -149,6 +149,17 @@ PROTOCOL: dict[str, Any] = {
             "seconds": 600,
             "until_a_command": True,
         },
+        # The stored files the server's rows name and its store lacks (its
+        # ``storage check``), and bringing them from this machine's store;
+        # looked at again after any command.
+        "storage": {
+            "kept": "deploy:storage",
+            "seconds": 600,
+            "until_a_command": True,
+        },
+        "upload-storage": {
+            "command": ["deploy-upload-storage"],
+        },
         "rollback": {
             "command": ["deploy-rollback"],
             "required": ["backup"],

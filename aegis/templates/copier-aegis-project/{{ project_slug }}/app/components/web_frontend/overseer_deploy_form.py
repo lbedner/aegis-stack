@@ -41,6 +41,8 @@ HISTORY = f"{PARTIALS}/history"  # the server's deploy history, from here
 HISTORY_TEMPLATE = "pages/overseer/deployments/_history.html"
 LIVE = f"{PARTIALS}/live"  # the server's newest deploy, on its card
 LIVE_TEMPLATE = "pages/overseer/deployments/_live.html"
+STORAGE = f"{PARTIALS}/storage"  # the stored files the server lacks
+STORAGE_TEMPLATE = "pages/overseer/deployments/_storage.html"
 MIN_MEMORY_MB = 2048  # the smallest size offered by default: the stack needs it
 DEPLOYED = "This is a deployed server: deploy from the dev Overseer or CI."
 
@@ -376,10 +378,24 @@ async def history_panel(
     return {"state": "ready"} | ui_deployments.history_rows(found["deploys"])
 
 
-# The History section on this machine, and the server card's live build:
-# asked for as they load.
+async def storage_panel(form: dict[str, str], by: str) -> dict[str, Any]:
+    """How many stored files the server's rows name and its store lacks
+    (the protocol's ``storage``) as the agent last checked; while it has
+    not, it asked (once) and the part waiting, or why it failed."""
+    try:
+        found, job = await _from_agent("storage", {}, form.get("job"), by)
+    except RefusedError as exc:
+        return _failed(STORAGE, exc)
+    if found is None:
+        return _loading(STORAGE, job)
+    return {"state": "ready", "missing": len(found["missing"]), "partials": PARTIALS}
+
+
+# The History section on this machine, and the server card's live build
+# and stored files: asked for as they load.
 HISTORY_WAITING = _loading(HISTORY, None)
 LIVE_WAITING = _loading(LIVE, None)
+STORAGE_WAITING = _loading(STORAGE, None)
 
 
 # The new-server form's parts, each loaded on its own while the agent

@@ -666,16 +666,41 @@ def test_the_servers_deploy_history_is_kept_for_the_overseer(
     assert "exec -T webserver python -m app.cli.main deploy history" in command
 
 
+def test_the_servers_missing_files_are_kept_for_the_overseer(
+    project: Path, app_store: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The protocol's ``storage``: the server's ``storage check``, whose
+    stdout is the keys alone (aegis-stack#1681)."""
+    _server(project)
+    gone = "sha256/aa/aa/" + "a" * 64
+    ran: list[str] = []
+
+    def remote(host: str, user: str, command: str) -> subprocess.CompletedProcess:
+        ran.append(command)
+        return subprocess.CompletedProcess([], 1, gone + "\n", "1 missing")
+
+    monkeypatch.setattr(agent, "_run_remote_capture", remote)
+    redis = FakeRedis()
+    job_id = _request(redis, app_store, "storage", {})
+    _serve(redis, project)
+    assert _job(redis, app_store, job_id).status == "done"
+    assert json.loads(redis.strings["deploy:storage"]) == {"missing": [gone]}
+    (command,) = ran
+    assert "exec -T webserver python -m app.cli.main storage check" in command
+
+
 def test_a_command_forgets_what_it_may_have_changed(
     project: Path, app_store: Any
 ) -> None:
-    """The backups and the history (``until_a_command``); not a catalog."""
+    """The backups, the history and the missing files
+    (``until_a_command``); not a catalog."""
     redis = FakeRedis()
-    for key in ("deploy:backups", "deploy:history", CATALOG_KEY):
+    changed = {"deploy:backups", "deploy:history", "deploy:storage"}
+    for key in (*changed, CATALOG_KEY):
         redis.strings[key] = json.dumps({})
     _request(redis, app_store, "deploy")
     _serve(redis, project)
-    assert set(redis.strings) & {"deploy:backups", "deploy:history"} == set()
+    assert set(redis.strings) & changed == set()
     assert CATALOG_KEY in redis.strings
 
 

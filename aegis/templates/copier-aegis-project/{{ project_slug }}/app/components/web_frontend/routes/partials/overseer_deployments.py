@@ -100,6 +100,15 @@ async def live(request: Request, actor: Actor = Depends(overseer_actor)) -> Resp
     return _part(form, built, deploy_form.LIVE_TEMPLATE, live=built | {"live": live})
 
 
+@router.get(deploy_form.STORAGE, response_class=HTMLResponse)
+async def storage(request: Request, actor: Actor = Depends(overseer_actor)) -> Response:
+    """How many stored files the server lacks, as the agent checks (a
+    read: not audited)."""
+    form = dict(request.query_params)
+    built = await deploy_form.storage_panel(form, actor.label)
+    return _part(form, built, deploy_form.STORAGE_TEMPLATE, storage=built)
+
+
 def _part(
     form: dict[str, str], built: dict[str, Any], template: str, **context: Any
 ) -> Response:

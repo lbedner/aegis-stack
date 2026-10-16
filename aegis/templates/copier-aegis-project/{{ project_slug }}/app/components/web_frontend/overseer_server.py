@@ -5,7 +5,7 @@ read the backend's health metadata; Performance, Traffic and Load Tests read
 the sources behind their API routes, as of this request.
 """
 
-from collections.abc import Collection
+from collections.abc import Collection, Mapping
 from typing import Any
 
 from app.components.backend.api.traffic import get_traffic_sources
@@ -16,9 +16,14 @@ from app.services.load_test.api import request_form
 from app.services.system import ui_backend, ui_cache
 from app.services.system.models import ComponentStatus
 
-from . import overseer_connections, overseer_requests, overseer_server_load_tests
+from . import (
+    overseer_connections,
+    overseer_container,
+    overseer_requests,
+    overseer_server_load_tests,
+)
 from .overseer_nav import SectionRequest
-from .rendering import one_decimal, status_cell
+from .rendering import one_decimal, status_cell, with_query
 
 SECTIONS = (
     (None, {"overview": "Overview"}),
@@ -96,13 +101,33 @@ def overview_context(backend: ComponentStatus) -> dict[str, Any]:
     }
 
 
+# The container charts the Overview leads with: the figures it runs on.
+# Processes and events stay on the Container section.
+OVERVIEW_CHARTS = ("cpu", "memory", "network", "disk")
+
+
+async def overview_charts(query: Mapping[str, str]) -> dict[str, Any] | None:
+    """The ``OVERVIEW_CHARTS`` as the Container section draws them (its
+    range chips), on its stream asked for just those; None with no
+    container charts to draw."""
+    panel = (await overseer_container.context("server", query))["container_charts"]
+    charts = [chart for chart in panel["charts"] if chart["key"] in OVERVIEW_CHARTS]
+    stream = with_query(
+        overseer_container.EVENTS.format(page="server"),
+        window=str(panel["window"]),
+        charts=[chart["key"] for chart in charts],
+    )
+    return panel | {"charts": charts, "events": stream} if charts else None
+
+
 async def section_context(
     section: str, backend: ComponentStatus, req: SectionRequest
 ) -> dict[str, Any]:
     """What the named section's template needs beyond the backend status."""
     metadata = backend.metadata or {}
     if section == "overview":
-        return overview_context(backend)
+        charts = await overview_charts(req.query)
+        return overview_context(backend) | {"overview_charts": charts}
     if section == "cache":
         return {"cache": await ui_cache.load()}
     if section == "connections":

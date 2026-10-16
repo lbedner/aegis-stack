@@ -17,7 +17,8 @@
    long text cell wrap instead of running on. A row marked ``group`` reads as a
    heading and the ``child`` rows after it are indented (a total and its
    parts under one set of columns); ``render`` is a macro
-   taking the value, for a cell no kind covers; ``header`` is a macro
+   taking the value (the whole row, with ``row`` set: a cell drawn from
+   more than one field), for a cell no kind covers; ``header`` is a macro
    rendering the column's heading in place of ``label`` (a select-all
    checkbox, say); ``align`` is ``left``
    (default) or ``right``. Rows are objects or dicts; a blank value
@@ -37,7 +38,7 @@
 {%- if value is not defined or value is none or value == "" -%}
 -
 {%- elif col.render -%}
-{{ col.render(value) }}
+{{ col.render(row if col.row else value) }}
 {%- elif col.kind == "money" -%}
 {%- set currency = (row["currency"] if row is mapping and "currency" in row else row|attr("currency")) -%}
 {{ "+" if col.signed and value > 0 }}{{ value|money(currency if currency is string else "USD") }}

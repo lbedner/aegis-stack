@@ -28,6 +28,7 @@ from app.core import frames, ownership
 from app.core.cache import get_cache
 from app.core.concurrency import background
 from app.core.config import settings
+from app.core.key_family import KeyFamily
 from app.core.parts import PARTS
 
 PREFIX = "edges:"
@@ -36,6 +37,17 @@ HOST_CAP = 50
 OTHER = "other"
 FLUSH_SECONDS = 10.0
 KEEP_SECONDS = 86_400
+# What the counts keep in the shared cache, for the keyspace map.
+REDIS_KEYS = (
+    KeyFamily(
+        PREFIX + "*",
+        "string",
+        "Observed traffic",
+        "Each process's counted hops between parts, for the ontology's map",
+        "Ontology",
+        db="CACHE_REDIS_DB",
+    ),
+)
 QUEUE = "component:queue"  # where work handed off waits (``ontology.parts``)
 SERVER = f"component:{ownership.HOST}"
 SCHEDULER = "component:scheduler"

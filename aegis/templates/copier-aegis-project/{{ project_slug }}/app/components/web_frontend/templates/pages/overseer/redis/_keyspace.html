@@ -1,5 +1,6 @@
 {# The keyspace map, re-sent over SSE when it changes. ``selected`` belongs
    to the Alpine scope outside, so a picked family stays picked. #}
+{% from "pages/overseer/_macros.html" import named %}
 {% set k = keyspace %}
 <div class="flex items-baseline justify-between gap-3">
   <h2 class="text-xxs caps tracking-[0.3em] text-aegis-muted">Keyspace</h2>
@@ -25,8 +26,7 @@
           class="keyspace__row{% if not f.count %} opacity-60{% endif %}">
     <span class="keyspace__swatch" data-shade="{{ f.id % 4 }}" {% if f.active %}data-active="true"{% endif %}></span>
     <span class="min-w-0 flex-1 text-left">
-      <span class="block text-sm font-semibold text-aegis-text truncate">{{ f.family.name }}</span>
-      <span class="block text-xxs text-aegis-muted truncate" title="{{ f.where }}">{{ f.family.purpose }}</span>
+      {{ named(f.family.name, f.family.purpose, f.where) }}
     </span>
     <span class="shrink-0 text-right">
       {% if f.count %}

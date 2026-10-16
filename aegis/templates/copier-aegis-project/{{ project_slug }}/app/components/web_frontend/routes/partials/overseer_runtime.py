@@ -3,7 +3,9 @@ and Logs, ``overseer_logs``) on every page with a container behind it, of
 Overseer > Logs and of Overseer > Resources; and a container row's Restart confirm.
 Mounted by ``routes/pages.py`` behind Overseer's gate (``overseer_access``)."""
 
-from fastapi import APIRouter, HTTPException, Request
+from typing import Annotated
+
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
 
 from app.components.web_frontend import (
@@ -25,12 +27,18 @@ def _known(page: str) -> None:
 
 
 @router.get(overseer_container.EVENTS, include_in_schema=False)
-async def container_events(page: str, window: str | None = None) -> StreamingResponse:
+async def container_events(
+    page: str,
+    window: str | None = None,
+    charts: Annotated[list[str] | None, Query()] = None,
+) -> StreamingResponse:
     """The page's containers over SSE, charted over the window its range
-    chips chose."""
+    chips chose; just the ``charts`` asked for, given any (its Overview)."""
     _known(page)
     seconds, _ = await ui_runtime.window_of(page, window)
-    return event_stream(overseer_container.events(page, seconds))
+    return event_stream(
+        overseer_container.events(page, seconds, charts=tuple(charts or ()))
+    )
 
 
 @router.get(overseer_container.GLANCE_EVENTS, include_in_schema=False)

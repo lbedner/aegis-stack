@@ -18,10 +18,10 @@ def _ours(pattern: str, kind: str, name: str, purpose: str, **more: Any) -> KeyF
 REDIS_KEYS = (
     _ours(
         series.PREFIX + "*",
-        "zset",
+        "list",
         "Chart history",
-        "Each chart series' points for the last hour, one sorted set a series",
-        columns=("Point", "Time"),
+        "Each chart series' points for the last hour, a list a series",
+        columns=("Position", "Time:value"),
         holds="point",
     ),
     *(
@@ -37,7 +37,7 @@ REDIS_KEYS = (
         for step, keep in series.TIERS
     ),
     _ours(
-        series.INDEX.rstrip(":") + "*",  # the tiers' indexes too
+        series.tier("*")[1] + "*",
         "set",
         "Chart series lists",
         "Each sampler's series, so a chart's read never scans the keyspace",

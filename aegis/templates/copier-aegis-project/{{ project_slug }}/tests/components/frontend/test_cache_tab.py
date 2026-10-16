@@ -3,10 +3,11 @@ Cache section, built by the same helper (``app.services.system.ui_cache``)."""
 
 from app.core.cache import CacheEntry, CacheStats
 from app.services.system import ui_cache
+from app.services.system.models import CacheView
 from tests.components.frontend._tree import texts as _texts
 
 
-def _tab(view: dict) -> object:
+def _tab(view: CacheView) -> object:
     from app.components.frontend.dashboard.modals.backend_modal.cache_tab import (
         CacheTab,
     )
@@ -17,7 +18,7 @@ def _tab(view: dict) -> object:
 
 
 def test_families_and_largest_keys_are_shown() -> None:
-    view = {"error": None} | ui_cache.summarize(
+    view = ui_cache.summarize(
         "redis",
         [
             CacheEntry("insights:project:1", 4000, 200),
@@ -33,10 +34,10 @@ def test_families_and_largest_keys_are_shown() -> None:
 
 
 def test_an_empty_cache_says_so() -> None:
-    view = {"error": None} | ui_cache.summarize("memory", [], False, {})
+    view = ui_cache.summarize("memory", [], False, {})
     assert any("empty" in t.lower() for t in _texts(_tab(view)))
 
 
 def test_an_unreadable_cache_says_why() -> None:
-    shown = _texts(_tab({"error": "redis down", "backend": "redis"}))
+    shown = _texts(_tab(CacheView(backend="redis", error="redis down")))
     assert any("redis down" in t for t in shown)

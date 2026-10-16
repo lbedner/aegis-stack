@@ -67,6 +67,12 @@ class CacheStats:
     misses: int = 0
     sets: int = 0
 
+    @property
+    def hit_rate(self) -> float | None:
+        """Hits as a percentage of reads; None before any read."""
+        reads = self.hits + self.misses
+        return round(100 * self.hits / reads, 1) if reads else None
+
 
 def family(key: str) -> str:
     """A key's family: its first two ``:``-separated parts

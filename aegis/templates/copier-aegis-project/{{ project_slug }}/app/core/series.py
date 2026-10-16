@@ -4,7 +4,7 @@ an hour.
 A ``Sampler`` names what it reads and how often; ``read`` returns a
 ``Sample``: numbers by series name (``"redis:app-redis-1:cpu"``), and the
 reading as a whole (``latest``) for the views that show it. Each tick's
-numbers are kept under ``series:<sampler>:<name>`` in the series store
+numbers are kept under ``series-hour:<sampler>:<name>`` in the series store
 (``series_store``: Redis when the stack has it, so every process reads the
 same history; this process's memory otherwise), listed in an index per
 sampler so reads never scan the keyspace. One process samples each tick
@@ -37,8 +37,15 @@ from app.core.cache import get_cache
 from app.core.log import logger
 from app.core.series_store import get_store
 
-PREFIX = "series:"
-INDEX = "series-index:"
+
+def tier(step: int | str) -> tuple[str, str]:
+    """A series' key prefix and its index's: a tier's (``series-60:``) or
+    the raw hour's (``"hour"``)."""
+    return f"series-{step}:", f"series-index-{step}:"
+
+
+# Not ``series:``, the sorted sets the raw hour once was: those lapse.
+PREFIX, INDEX = tier("hour")
 LATEST = "series-latest:"
 WATCH = "series-watch:"
 CLAIM = "series-claim:"
@@ -55,6 +62,11 @@ LATENCY = "latency"
 TOKENS_PER_SECOND = "tokens_per_second"
 # A sampler's pace while watched, and so a live view's.
 TICK_SECONDS = 1.0
+# The raw hour's length: an hour at full pace. ponytail: a series recorded
+# faster than a point a second (``record``, a busy model's calls) keeps, and
+# a window reads (``_tail``), less than asked; a time-trimmed store if that
+# chart needs it.
+RAW_LENGTH = int(KEEP_SECONDS / TICK_SECONDS)
 # How long a view's look keeps its sampler at full pace: longer than the
 # slowest reader's pace (the Flet modal reads every 5 s), so it never lapses
 # between two looks.
@@ -217,9 +229,10 @@ async def record(values: dict[str, float]) -> None:
 
 async def _keep(sampler: str, values: dict[str, float]) -> None:
     """One sampler's points for this moment, in one write."""
-    await get_store().append(
+    await get_store().push(
         {f"{PREFIX}{sampler}:{name}": value for name, value in values.items()},
         at=time.time(),
+        length=RAW_LENGTH,
         keep_seconds=KEEP_SECONDS,
         index=INDEX + sampler,
     )
@@ -242,11 +255,6 @@ async def sample(sampler: Sampler, cadence: float | None = None) -> None:
     await _keep(sampler.name, reading.values)
     if sampler.history:
         await roll(sampler.name, time.time())
-
-
-def tier(step: int) -> tuple[str, str]:
-    """A tier's key prefix and index prefix (``series-60:``)."""
-    return f"{PREFIX[:-1]}-{step}:", f"{INDEX[:-1]}-{step}:"
 
 
 # The newest bucket each sampler's tier has folded, in this process: claims
@@ -274,10 +282,12 @@ async def roll(sampler: str, now: float) -> None:
                 due.append((step, keep, bucket))
     if not due:
         return
-    found = await get_store().points(
+    since = min(step * bucket for step, _, bucket in due)
+    found = await get_store().recent(
         f"{PREFIX}{sampler}:",
-        since=min(step * bucket for step, _, bucket in due),
+        since=since,
         index=INDEX + sampler,
+        count=_tail(now - since, TICK_SECONDS),
     )
     for step, keep, bucket in due:
         start, end = bucket * step, (bucket + 1) * step
@@ -324,6 +334,12 @@ async def _keep_sampling(sampler: Sampler) -> None:
         await asyncio.sleep(sampler.interval)
 
 
+def _tail(span: float, step: float) -> int:
+    """How many of a series' newest points cover ``span``, a point at most
+    every ``step``: a slower pace only reads a little more."""
+    return math.ceil(span / step) + 1
+
+
 async def read(
     prefix: str,
     window: float,
@@ -339,16 +355,15 @@ async def read(
     if viewed:
         await watch(sampler)
     since, step = time.time() - window, _step(window)
-    if step and sampler in _HISTORY:  # from the tier that spans it
-        base, index = tier(step)
-        found = await get_store().recent(
-            base + prefix, since=since, index=index + sampler, ending=ending
-        )
-    else:
-        base = PREFIX
-        found = await get_store().points(
-            base + prefix, since=since, index=INDEX + sampler, ending=ending
-        )
+    # From the tier that spans it, else the raw hour.
+    base, index = tier(step) if step and sampler in _HISTORY else (PREFIX, INDEX)
+    found = await get_store().recent(
+        base + prefix,
+        since=since,
+        index=index + sampler,
+        ending=ending,
+        count=_tail(window, step or TICK_SECONDS),
+    )
     start = base + prefix
     return {key.removeprefix(start): points for key, points in sorted(found.items())}
 

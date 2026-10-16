@@ -199,9 +199,10 @@ async def _raw(name: str, points: list[tuple[float, float]]) -> None:
     """Raw points for ``name`` (``sampler:rest``), at the times given."""
     sampler = name.split(":", 1)[0]
     for at, value in points:
-        await series.get_store().append(
+        await series.get_store().push(
             {series.PREFIX + name: value},
             at=at,
+            length=series.RAW_LENGTH,
             keep_seconds=series.KEEP_SECONDS,
             index=series.INDEX + sampler,
         )

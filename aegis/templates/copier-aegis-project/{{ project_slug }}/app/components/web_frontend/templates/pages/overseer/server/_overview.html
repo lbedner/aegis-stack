@@ -1,5 +1,5 @@
 {% from "components/macros/layout.html" import card, resource_bar, stats_strip %}
-{% from "pages/overseer/_macros.html" import status_card %}
+{% from "pages/overseer/_macros.html" import live_charts, status_card %}
 {% set meta = component.metadata or {} %}
 {% set deprecated = meta.get("deprecated_count") or 0 %}
 {# Endpoints only apart from routes (ui_backend.endpoints_apart). #}
@@ -10,6 +10,13 @@
     {"label": "Middleware", "value": meta.get("total_middleware", "-")},
     {"label": "Security layers", "value": meta.get("security_count", "-")},
   ], id="server-api") }}
+  {# What its container runs on, live: the Container section's own charts
+     and stream (overseer_container.overview_charts). #}
+  {% if overview_charts %}
+  <div id="server-charts" hx-ext="sse" sse-connect="{{ overview_charts.events }}">
+    {{ live_charts(overview_charts, "#server-charts", request.url.path) }}
+  </div>
+  {% endif %}
   <div class="grid gap-4 {{ 'lg:grid-cols-3' if host_figures else 'lg:grid-cols-2' }}">
     {# The machine it runs on, only without containers to read
        (overseer_server.overview_context). #}

@@ -128,18 +128,6 @@ class FakeRedis:
     async def xlen(self, key: str) -> int:
         return len(self._of("stream", key))
 
-    async def zremrangebyscore(self, key: str, low: float | str, high: float) -> int:
-        members = self._of("zset", key)
-        gone = [m for m, score in members.items() if score <= high]
-        for member in gone:
-            del members[member]
-        return len(gone)
-
-    async def zrangebyscore(self, key: str, low: float, high: float | str) -> list[str]:
-        top = float("inf") if high == "+inf" else float(high)
-        members = sorted(self._of("zset", key).items(), key=lambda m: m[1])
-        return [m for m, score in members if low <= score <= top]
-
     async def ltrim(self, key: str, start: int, end: int) -> None:
         items = self.lists.get(key, [])
         self.lists[key] = items[start:] if end == -1 else items[start : end + 1]

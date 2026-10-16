@@ -32,7 +32,10 @@ from .commands.deploy import (
 )
 from .commands.deploy_agent import deploy_agent_command
 from .commands.deploy_provision import deploy_destroy_command, deploy_provision_command
-from .commands.deploy_upload import deploy_upload_db_command
+from .commands.deploy_upload import (
+    deploy_upload_db_command,
+    deploy_upload_storage_command,
+)
 from .commands.ingress import ingress_enable_command
 from .commands.init import init_command
 from .commands.plugins import plugins_app
@@ -155,6 +158,7 @@ app.command(name="deploy-backup")(deploy_backup_command)
 app.command(name="deploy-backups")(deploy_backups_command)
 app.command(name="deploy-rollback")(deploy_rollback_command)
 app.command(name="deploy-upload-db")(deploy_upload_db_command)
+app.command(name="deploy-upload-storage")(deploy_upload_storage_command)
 app.command(name="deploy-logs")(deploy_logs_command)
 app.command(name="deploy-status")(deploy_status_command)
 app.command(name="deploy-stop")(deploy_stop_command)

@@ -9,7 +9,7 @@ from typing import Any
 from urllib.parse import urlsplit
 import zlib
 
-from sqlalchemy import delete, func, or_, update
+from sqlalchemy import func, or_, update
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -17,10 +17,19 @@ from app.core.concurrency import background
 from app.core.constants import CHART_RAMP
 from app.core.formatting import format_clock, format_span
 from app.core.time import utcnow
+from app.services.meetings.domains.notes import queries as notes_queries
+from app.services.meetings.domains.notes.service import notes_of
+from app.services.meetings.domains.people import participants
+from app.services.meetings.domains.people import queries as people_queries
 from app.services.meetings.models import (
+    UNKNOWN,
     Caption,
+    KeptNotes,
     Meeting,
-    MeetingNotes,
+    MeetingGuidePoint,
+    MeetingGuidePointLine,
+    MeetingNoteItem,
+    MeetingNoteLine,
     MeetingParticipant,
     MeetingRecord,
     MeetingStatus,
@@ -95,15 +104,19 @@ class MeetingsService:
         self.db = db
         self.owner_user_id = owner_user_id
 
-    async def request(self, url: str, bot_name: str = DEFAULT_BOT_NAME) -> Meeting:
-        """Record a meeting for the bot to join; a link it cannot join raises
-        ``UnsupportedMeetingLinkError`` before anything is stored."""
+    async def request(
+        self, url: str, bot_name: str = DEFAULT_BOT_NAME, account_id: int | None = None
+    ) -> Meeting:
+        """Record a meeting for the bot to join as ``account_id`` (an agent);
+        a link it cannot join raises ``UnsupportedMeetingLinkError`` before
+        anything is stored."""
         url = url.strip()
         meeting = Meeting(
             owner_user_id=self.owner_user_id,
             url=url,
             platform=detect_platform(url),
             bot_name=bot_name,
+            account_id=account_id,
         )
         self.db.add(meeting)
         await self.db.commit()
@@ -156,7 +169,14 @@ class MeetingsService:
             )
             for speaker, line in await self.transcript(meeting)
         ]
-        notes = kept.notes() if kept else None
+        notes = kept.notes if kept else None
+        here = await people_queries.meeting_people(self.db, meeting_id)
+        heard = participants.heard_in(here, meeting)
+        mine = (
+            notes.mine(await people_queries.my_names(self.db, meeting.owner_user_id))
+            if notes
+            else []
+        )
         under_way = meeting.status in NOT_DONE
         writing = meeting_id in WRITING
         can_write = notes_writer() is not None
@@ -168,10 +188,12 @@ class MeetingsService:
             transcript=transcript,
             status=status_label(meeting.status),
             length=call_length(meeting.joined_at, meeting.left_at),
-            heard=heard_line(meeting.heard),
+            heard=heard_line(heard),
+            heard_seconds=heard,
             # Only a speaker has a participant row: the transcript names them.
             people=sorted({row.speaker for row in transcript}),
-            mine=notes.mine(meeting.me) if notes else [],
+            me=participants.me_in(here),
+            mine=mine,
             under_way=under_way,
             writing=writing,
             can_leave=meeting.status in LEAVABLE,
@@ -197,51 +219,69 @@ class MeetingsService:
         """Each line of ``meeting`` (one ``get`` returned) with its speaker's
         name, in the order it was said."""
         query = (
-            select(MeetingParticipant.display_name, TranscriptLine)
-            .join(
-                MeetingParticipant,
-                col(TranscriptLine.participant_id) == MeetingParticipant.id,
-                isouter=True,
+            notes_queries.with_speaker(
+                select(MeetingParticipant.display_name, TranscriptLine)
             )
             .where(TranscriptLine.meeting_id == meeting.id)
             # Lines captioned in the same look keep the order Meet showed them.
             .order_by(col(TranscriptLine.start_seconds), col(TranscriptLine.id))
         )
-        return [(name or "Unknown", line) for name, line in await self.db.exec(query)]
+        return [(name or UNKNOWN, line) for name, line in await self.db.exec(query)]
 
     async def set_me(self, meeting_id: int, name: str | None) -> Meeting:
-        """Say which speaker the owner is (None: none of them)."""
+        """Say which speaker the owner is (None: none of them): that
+        person is the owner in every meeting they are in."""
         meeting = await self.get(meeting_id)
-        if name is not None and name not in await speakers(self.db, meeting_id):
+        if not await participants.set_me(self.db, meeting_id, name):
             raise NotASpeakerError(f"Nobody called {name} spoke in this meeting")
-        meeting.me = name
-        self.db.add(meeting)
         await self.db.commit()
         return meeting
 
     async def delete(self, meeting_id: int) -> None:
-        """The meeting and everything kept of it: notes, transcript and
-        participants. One the bot is still in is refused: ask it to leave
-        first."""
+        """The meeting and everything kept of it (its notes, transcript and
+        participants go with it), anyone who spoke only in it (and their
+        guide), and whatever elsewhere cited only its lines: another
+        meeting's note item, a guide's point, a contradiction left with
+        one side. One the bot is still in is
+        refused: ask it to leave first."""
         meeting = await self.get(meeting_id)
         if meeting.status in IN_PROGRESS:
             raise MeetingInProgressError(
                 "The bot is still in this meeting: ask it to leave first"
             )
-        for kept in (MeetingNotes, TranscriptLine, MeetingParticipant):
-            await self.db.exec(delete(kept).where(col(kept.meeting_id) == meeting_id))  # type: ignore[call-overload]
+        items = await notes_queries.citing(self.db, MeetingNoteLine.item_id, meeting_id)
+        points = await notes_queries.citing(
+            self.db, MeetingGuidePointLine.point_id, meeting_id
+        )
+        here = await people_queries.meeting_people(self.db, meeting_id)
         await self.db.delete(meeting)
+        await self.db.flush()
+        await notes_queries.delete_in(
+            self.db,
+            MeetingNoteItem.id,
+            await notes_queries.left_uncited(self.db, items),
+        )
+        await notes_queries.delete_in(
+            self.db,
+            MeetingGuidePoint.id,
+            await people_queries.points_left_uncited(self.db, points),
+        )
+        await people_queries.drop_people_in_no_meeting(
+            self.db,
+            [person.id for _, person in here],  # type: ignore[misc]
+        )
         await self.db.commit()
 
-    async def notes_for(self, meeting_ids: list[int]) -> dict[int, MeetingNotes]:
+    async def mine_counts(self, meeting_ids: list[int]) -> dict[int, int]:
+        """How many action items the owner has to do in each of those
+        meetings' notes, by meeting id: only meetings with notes."""
+        names = await people_queries.my_names(self.db, self.owner_user_id)
+        return await notes_queries.mine_counts(self.db, meeting_ids, names)
+
+    async def notes_for(self, meeting_ids: list[int]) -> dict[int, KeptNotes]:
         """The notes of meetings this owner was given (``get``,
         ``list_meetings``), by meeting id."""
-        if not meeting_ids:
-            return {}
-        query = select(MeetingNotes).where(
-            col(MeetingNotes.meeting_id).in_(meeting_ids)
-        )
-        return {n.meeting_id: n for n in (await self.db.exec(query)).all()}
+        return await notes_of(self.db, meeting_ids)
 
 
 def notes_writer() -> Callable[[int], Awaitable[None]] | None:
@@ -249,55 +289,6 @@ def notes_writer() -> Callable[[int], Awaitable[None]] | None:
     if find_spec(NOTES) is None:
         return None
     return importlib.import_module(NOTES).write_notes
-
-
-async def speakers(db: AsyncSession, meeting_id: int) -> list[str]:
-    """Everyone who spoke in the meeting, by name."""
-    query = (
-        select(MeetingParticipant.display_name)
-        .where(MeetingParticipant.meeting_id == meeting_id)
-        .order_by(col(MeetingParticipant.display_name))
-    )
-    return list((await db.exec(query)).all())
-
-
-async def remember_me(db: AsyncSession, meeting_id: int) -> None:
-    """Until the owner says, they are the speaker they were in their last
-    meeting that says, when someone by that name spoke in this one."""
-    meeting = await db.get(Meeting, meeting_id)
-    if meeting is None or meeting.me is not None:
-        return
-    query = (
-        select(Meeting.me)
-        .where(
-            *owner_filters(Meeting.owner_user_id, meeting.owner_user_id),
-            col(Meeting.me).is_not(None),
-            Meeting.id != meeting_id,
-        )
-        .order_by(col(Meeting.created_at).desc(), col(Meeting.id).desc())
-        .limit(1)
-    )
-    last = (await db.exec(query)).first()
-    if last is not None and last in await speakers(db, meeting_id):
-        meeting.me = last
-        db.add(meeting)
-        await db.commit()
-
-
-async def save_notes(db: AsyncSession, notes: MeetingNotes) -> None:
-    """Keep a meeting's notes, over any it had."""
-    await db.merge(notes)
-    await db.commit()
-
-
-async def save_heard(
-    db: AsyncSession, meeting_id: int, heard: dict[str, float]
-) -> None:
-    """Keep how many seconds of each speaker the bot heard."""
-    await db.exec(  # type: ignore[call-overload]
-        update(Meeting).where(col(Meeting.id) == meeting_id).values(heard=heard)
-    )
-    await db.commit()
 
 
 def voice(name: str) -> int:
@@ -333,10 +324,9 @@ def call_length(joined: datetime | None, left: datetime | None) -> str | None:
     return format_clock((left - joined).total_seconds())
 
 
-def heard_rows(heard: dict[str, float] | None) -> list[tuple[str, str, float]]:
+def heard_rows(heard: dict[str, float]) -> list[tuple[str, str, float]]:
     """How long each speaker was heard, most heard first: their name, the
     time ("4m 10s") and how it compares with the most heard (1.0)."""
-    heard = heard or {}
     most = max(heard.values(), default=0) or 1
     ranked = sorted(heard.items(), key=lambda item: -item[1])
     return [
@@ -344,7 +334,7 @@ def heard_rows(heard: dict[str, float] | None) -> list[tuple[str, str, float]]:
     ]
 
 
-def heard_line(heard: dict[str, float] | None) -> str | None:
+def heard_line(heard: dict[str, float]) -> str | None:
     """``heard_rows`` on one line: "Ada 4m 10s · Leonard 2m 30s"; None when
     nobody was heard."""
     rows = heard_rows(heard)
@@ -442,7 +432,13 @@ async def write_captions(
     they speak. A new line starts when it was first captioned (``starts``,
     by caption line); ``at_seconds`` is when it last changed."""
     new = [c for c in captions if c.line not in rows]
-    speakers = await _participants(db, meeting_id, {c.speaker for c in new})
+    speakers = (
+        await participants.participants(
+            db, await db.get_one(Meeting, meeting_id), {c.speaker for c in new}
+        )
+        if new
+        else {}
+    )
     added = {
         c.line: TranscriptLine(
             meeting_id=meeting_id,
@@ -464,26 +460,3 @@ async def write_captions(
     await db.flush()
     rows |= {line: row.id for line, row in added.items()}
     await db.commit()
-
-
-async def _participants(
-    db: AsyncSession, meeting_id: int, names: set[str]
-) -> dict[str, int]:
-    """The meeting's participant id for each display name, adding those it
-    does not have yet."""
-    if not names:
-        return {}
-    found = await db.exec(
-        select(MeetingParticipant).where(
-            MeetingParticipant.meeting_id == meeting_id,
-            col(MeetingParticipant.display_name).in_(names),
-        )
-    )
-    known = {p.display_name: p for p in found.all()}
-    fresh = [
-        MeetingParticipant(meeting_id=meeting_id, display_name=name)
-        for name in names - known.keys()
-    ]
-    db.add_all(fresh)
-    await db.flush()
-    return {p.display_name: p.id for p in [*known.values(), *fresh]}

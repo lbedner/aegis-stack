@@ -1,6 +1,7 @@
 """Meetings > People in the Flet Overseer: how to work with each person who
 speaks in the meetings, every owner's, beside a pane that reads the
-selected guide (each point with the lines it rests on), keeps the owner's
+selected guide (each point with the lines it rests on, then the
+person's threads: ``meetings_threads``), keeps the owner's
 note on them and writes the guide again, following it while it is being
 written. The same as the htmx Overseer's People drawer, over the admin API
 (``api/meetings/people.py``).
@@ -25,9 +26,9 @@ from app.components.frontend.controls.snack_bar import ErrorSnackBar, SuccessSna
 from app.components.frontend.state.session_state import get_session_state
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.formatting import format_date
-from app.services.meetings.domains.people.service import said_when
 
 from .meetings_follow import follow
+from .meetings_threads import quote_lines, thread_controls
 from .modal_sections import EmptyStatePlaceholder, SectionHeader
 
 API = "/api/v1/meetings/admin/people"
@@ -41,11 +42,13 @@ def _hint(text: str) -> ft.Control:
     return SecondaryText(text, size=Theme.Typography.BODY_SMALL)
 
 
-def guide_cells(guide: dict[str, Any]) -> list[str]:
-    """One guide's row: who, whose meetings, how many, when written."""
+def guide_cells(row: dict[str, Any]) -> list[str]:
+    """One guide's row (``GuideRow``): who, whose meetings, how many, when
+    written."""
+    guide = row["guide"]
     return [
-        str(guide.get("person") or ""),
-        str(guide.get("owner_user_id") or "-"),
+        str(row.get("person") or ""),
+        str(row.get("owner_user_id") or "-"),
         str(guide.get("meetings") or 0),
         format_date(guide.get("written_at")) or "-",
     ]
@@ -60,13 +63,7 @@ def _point(point: dict[str, Any]) -> ft.Control:
         return text
     return ft.ExpansionTile(
         title=text,
-        controls=[
-            _hint(
-                f"{q.get('speaker')}: {q.get('text')}  "
-                f"{said_when(int(q['meeting_id']), float(q.get('at') or 0))}"
-            )
-            for q in quotes
-        ],
+        controls=quote_lines(quotes),
         dense=True,
     )
 
@@ -77,12 +74,12 @@ def guide_view(record: dict[str, Any]) -> ft.Column:
     guide = record["guide"]
     meetings = int(guide.get("meetings") or 0)
     facts = [
-        ("Owner", guide.get("owner_user_id")),
+        ("Owner", record.get("owner_user_id")),
         ("Read from", f"{meetings} meeting{'' if meetings == 1 else 's'}"),
         ("Written by", guide.get("model_name")),
     ]
     controls: list[ft.Control] = [
-        PrimaryText(str(guide.get("person") or ""), size=Theme.Typography.H3),
+        PrimaryText(str(record.get("person") or ""), size=Theme.Typography.H3),
         *build_field_blocks([("", facts)]),
     ]
     if guide.get("error"):
@@ -99,6 +96,7 @@ def guide_view(record: dict[str, Any]) -> ft.Column:
         points = section.get("points") or []
         controls.append(SectionHeader(str(section.get("title") or "")))
         controls.extend([_point(p) for p in points] or [_hint("Nothing yet.")])
+    controls.extend(thread_controls(record.get("threads") or []))
     return ft.Column(
         controls, spacing=Theme.Spacing.SM, scroll=ft.ScrollMode.AUTO, expand=True
     )
@@ -228,7 +226,7 @@ class PeopleTab(ft.Container):
                 "No guides yet: each person's is written after a meeting they speak in."
             ),
             on_row_click=lambda i: self.page.run_task(
-                self._pane.show, int(guides[i]["id"])
+                self._pane.show, int(guides[i]["guide"]["id"])
             ),
         )
         # ``_load`` starts before the tab is mounted: update only once it is.

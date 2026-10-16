@@ -9,8 +9,10 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 import pytest
+from sqlalchemy import event
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.components.web_frontend.routes.meetings import send_and_open
 from app.services.meetings import service as meetings_service
 from app.services.meetings.models import ActionItem, NoteItem, Notes
 from app.services.meetings.service import MeetingsService
@@ -98,6 +100,38 @@ def test_a_link_it_cannot_join_is_said_and_nothing_starts(
     assert response.status_code == 422
     assert "Not a meeting link the bot can join" in response.text
     assert not started
+
+
+@pytest.mark.parametrize(
+    ("url", "agent"), [("https://example.com/x", ""), (MEET, "nobody")]
+)
+async def test_the_form_again_reads_the_agents_once(
+    async_db_session: AsyncSession, started: list[int], url: str, agent: str
+) -> None:
+    """A link it cannot join, or an agent there is not: the form comes
+    back with the agents the send already read, not read again."""
+    reads: list[str] = []
+
+    def count(*args: Any) -> None:
+        if "FROM meeting_bot_account" in args[2]:
+            reads.append(args[2])
+
+    engine = async_db_session.bind.engine.sync_engine  # type: ignore[union-attr]
+    event.listen(engine, "before_cursor_execute", count)
+    try:
+        response = await send_and_open(
+            MeetingsService(async_db_session, None),
+            url,
+            "",
+            "/meetings",
+            lambda meeting_id: f"/meetings/{meeting_id}",
+            agent or None,
+        )
+    finally:
+        event.remove(engine, "before_cursor_execute", count)
+
+    assert response.status_code == 422
+    assert len(reads) == 1
 
 
 async def test_my_items_come_first_and_each_jumps_to_its_line(

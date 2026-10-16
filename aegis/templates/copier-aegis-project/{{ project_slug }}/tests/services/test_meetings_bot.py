@@ -431,7 +431,7 @@ async def test_what_it_hears_goes_to_whoever_was_talking(
 
 
 async def test_how_long_each_speaker_was_heard_is_kept(
-    run: Callable[..., Any],
+    run: Callable[..., Any], async_db_session: AsyncSession
 ) -> None:
     call = FakeCall(
         [CallState.IN_CALL] * 3 + [CallState.ENDED],
@@ -444,8 +444,11 @@ async def test_how_long_each_speaker_was_heard_is_kept(
 
     meeting: Meeting = await run(call)
 
-    assert list(meeting.heard or {}) == ["Ada"]
-    assert (meeting.heard or {})["Ada"] > 0
+    heard = (
+        await MeetingsService(async_db_session, None).read(meeting.id)
+    ).heard_seconds  # type: ignore[arg-type]
+    assert list(heard) == ["Ada"]
+    assert heard["Ada"] > 0
 
 
 async def _status(session: AsyncSession, row: Meeting) -> MeetingStatus:

@@ -26,15 +26,25 @@ A bot that joins a call as a visible, announced participant, and keeps who was t
 
     This opens Chrome on this machine at Google's sign-in. Sign in as the bot, then quit Chrome (Cmd+Q / Ctrl+Q), and the sign-in is kept, encrypted, in the secrets store, where the bot finds it from the CLI and the webserver alike. It needs the `secrets` component (`aegis add secrets`) and an `ENCRYPTION_KEY` in `.env`. Until it is signed in, the bot joins as a guest, which only meetings that admit guests let in.
 
+    That account is the bot's first **agent**. Each agent is a Google account of its own, with its own name in the call and its own sign-in: a work notetaker and a personal one, each invitee seeing a different name, each agent's meetings apart. Make another by signing it in under a name of its own:
+
+    ```bash
+    my-app meetings login --agent work --name "Work Notetaker" --email notes@work.example
+    ```
+
+    Each sign-in is kept under its own secret (the first's is `MEETINGS_BOT_LOGIN_SECRET`, `work`'s `MEETINGS_BOT_LOGIN_SECRET__WORK`). A meeting is sent as one agent: the first (`notetaker`) unless another is named. A stack from before agents keeps its sign-in and its meetings as the first agent's, with nothing to do.
+
 ## What You Get
 
 - **Meetings** - one row per call the bot is asked to join: the link, its platform, the name the bot joins as, and its status, with when it joined and left.
 - **Platforms** - the platform comes from the link: Google Meet (`meet.google.com`), Microsoft Teams (`teams.microsoft.com`, `teams.live.com`) and Zoom's web links (`zoom.us/j/...`). Any other link is refused before anything is stored.
-- **Participants** - whoever the call names, by display name and the platform's own id when it gives one. A participant can be linked to a user, to say "this speaker is me".
+- **People** - everyone the owner's calls name, one person each across their meetings: a participant is that person as one call named them, so the same name in the owner's next meeting (as written, or ignoring case and spacing) is the same person, and their guide, their threads and whether they are you follow them from call to call.
 - **Transcript** - one line per thing a participant said, timed in seconds from when the bot joined.
 - **Audio** - what the bot hears, a second at a time, each second given to whoever was talking. See [What the bot hears](#what-the-bot-hears).
-- **Notes** - once the bot has left, the meeting's summary, decisions, action items (who, what, and by when if it was said) and open questions, each citing the transcript lines it came from. See [Notes](#notes).
-- **Me** - which speaker you are in a meeting, by name. It decides which action items are yours, and your next meeting starts from the same name when that person spoke in it too.
+- **Notes** - once the bot has left, the meeting's summary, decisions, action items (who, what, and by when if it was said) and open questions, each a row citing the transcript lines it came from. See [Notes](#notes).
+- **Commitments, contradictions and positions** - from each meeting, who said they would do what (for whom, by when), what was said one way and the opposite way, and where each person stands on a topic, each citing its lines; kept with the notes and gathered per person. See [Commitments, contradictions and positions](#commitments-contradictions-and-positions).
+- **Me** - which speaker you are, picked in any meeting (nobody else in that meeting is). That person is you in every meeting they are in, and decides which action items are yours; your own guide is not written or listed.
+- **Agents** - the Google accounts the bot joins as, each with its own name and sign-in; every meeting says which one went. See the warning above.
 - **Owners** - a meeting belongs to whoever asked for the bot. Without an owner (no auth, the CLI) every meeting is in reach.
 
 ## How the bot runs a meeting
@@ -67,21 +77,46 @@ The bot's browser reads every audio stream the call sends it, as 16 kHz mono, an
 
 Meet does not send one stream per person: it mixes the call into a few streams that follow the loudest speakers, so a stream never says who is talking. The captions do. Each second goes to the speaker whose caption changed nearest to when it was heard, allowing for captions showing up a moment after the words, once they have had time to catch up. A second no caption explains is `Unknown`.
 
-When the call ends, how many seconds of each speaker the bot heard is kept with the meeting (Overseer shows it as "Heard: Ada 4m 10s · Leonard 2m 30s"). The audio itself is not kept by default: set `MEETINGS_KEEP_AUDIO_DIR` to a folder to keep each speaker's audio there as a WAV, under the meeting's id (`<folder>/<id>/Ada.wav`), for checking what the bot heard.
+When the call ends, how many seconds of each speaker the bot heard is kept with each of them (what no caption explained, with the meeting) (Overseer shows it as "Heard: Ada 4m 10s · Leonard 2m 30s"). The audio itself is not kept by default: set `MEETINGS_KEEP_AUDIO_DIR` to a folder to keep each speaker's audio there as a WAV, under the meeting's id (`<folder>/<id>/Ada.wav`), for checking what the bot heard.
 
 ## Notes
 
 One pass of the `meeting-notes` agent (see [The writers are agents](#the-writers-are-agents)) over the finished transcript, with the transcript's line ids in front of each line. What comes back is checked against the transcript: an item citing a line that does not exist loses that citation. The call is metered like every other, as `meetings:notes` in AI spend.
 
-The notes are written again on request (the page's "Write them again"), over the old ones: after switching to a better model, say. A model that fails leaves its reason, which the page shows. A meeting where nothing was said gets no notes.
+The notes are written again on request (the page's "Write them again"), over the old ones: after switching to a better model, say. A model that fails leaves its reason, which the page shows above the notes the meeting already had: a failed rewrite never loses them. A meeting where nothing was said gets no notes.
+
+Each item is kept as a row, citing its lines by foreign key, and each name the model gives (an action item's owner, who a commitment was made to) points at the person it is: someone in the call, by name as written or ignoring case and spacing, else someone the owner already knows. A name that is no one in the calls ("the board", a customer) is kept as written.
 
 Notes need the AI service on pydantic-ai with a database (`ai_backend` other than `memory`). Without it the meeting keeps its transcript and the page shows that alone.
+
+## Commitments, contradictions and positions
+
+The same pass that writes the notes (same agent, same metering) also writes the meeting's threads, each citing the lines it came from:
+
+- **Commitments** - who said they would do what, for whom and by when, in their own words ("I'll send it to you").
+- **Earlier commitments raised** - a commitment from an earlier meeting that came up again: done, dropped, or only mentioned and still open.
+- **Said both ways** - something said one way and the opposite way, by one person or two, in this meeting or against an earlier one, with the lines of both sides.
+- **Where people stand** - each person's stance on the topics they spoke to, and where they stood before when it shifted.
+
+So that a meeting can be read against the earlier ones, the model is also shown, from the owner's latest fifty meetings, the commitments the people in this one made or were made that are still open, and where each of them last stood on each topic, with the lines those rest on. What comes back is checked like the notes: a thread keeps only lines it was shown (a contradiction's other side may be an earlier meeting's line), a follow-up only names a commitment it was shown, and a thread left citing nothing is dropped.
+
+The `meeting-notes` agent's seeded prompt says how to write them; each thread's field in the notes' schema says so too, so a project whose agent was seeded before them still gets them. Seeding never overwrites an agent row, so to give that agent the fuller prompt, set its prompt in Agents to `NOTES_PROMPT` from `app/services/meetings/domains/agents.py`.
+
+They are kept with the meeting's notes, and writing the notes again writes them again. The next meeting's notes are shown the open commitments numbered `[C1]`, `[C2]`, and a follow-up names one by its number; a commitment is kept by its own id, so notes written again keep each commitment that cites a line it cited before, and whatever later meetings said of it still points at it. Gathered per person, they make a ledger across the owner's meetings: what the person said they would do and what was promised them, each with where it came up again and whether it was done; where they stood on each topic over time; and what they said both ways.
 
 ## How to work with each person
 
 For everyone who speaks in an owner's meetings, a guide to working with them, read from what they say across those meetings: what they care about, how they like their information (big picture or detail, a demo or numbers, short or thorough), how they decide and commit, and what lands with them and what gets pushback. Every point cites the lines it rests on, so the read can be checked against what was said. It is only how they work: nothing about health, family, relationships, politics or religion, even when it came up.
 
 Once the notes are written, the bot writes the guide of everyone in the meeting but the owner (the speaker "I am" names), one pass of the `meeting-guide` agent over the latest ten meetings of the owner's they spoke in, metered as `meetings:guide`. Someone with fewer than three lines across them gets none yet. Each meeting writes it again, so it firms up as meetings accrue; a write that fails keeps the last guide, with why. The owner's own note on a person (what they know that the meetings do not say) is kept across every rewrite and read with the meetings. Guides are the owner's own; Overseer's admin sees every owner's. Like the notes, they need the AI service on pydantic-ai with a database.
+
+## Search
+
+Every word said in a meeting, and every part of its notes, is searchable: the summary, the decisions, the action items, the open questions, and the commitments, follow-ups, contradictions and positions. A hit is the line itself, with its meeting, who said it and when in the call; a hit in the notes names its part and opens at the line it came from. Newest meeting first, each meeting's notes before its lines. Words match their other forms ("pricing" finds "priced"), and every word has to be there. It is search by words, not meaning: "pricing" does not find "$49 a month".
+
+On PostgreSQL it is full-text search (English), with a GIN index over the transcript's lines and one over the note items, which the meetings revision adds. On SQLite it is FTS5: a search table over each of the two, holding only the index (the text stays in its own table), kept by triggers and made by every startup's `create_all` (filled from what is already there) since no model can describe them. Neither needs a dependency.
+
+Each owner searches their own meetings; Overseer's admin searches every owner's. Overseer's chat has it too: the `meetings_search` tool, granted to the default agent when the meetings service seeds its agents, answers "what did Lawrence say about pricing?" from the transcripts, each line linked to the meeting at that line.
 
 ## The writers are agents
 
@@ -99,18 +134,24 @@ Each meeting is its owner's: with the auth service a user sees only the meetings
 
 ## In Overseer
 
-Overseer > Services > Meetings runs meetings as fully as the Meetings page does, across every owner: send the bot to a call from there (the meeting is the admin's own), and every owner's meetings are listed, newest first, with how many there are and how many the bot is in now. A row opens the meeting in the drawer: its status, owner and how long each speaker was heard, then the same notes and transcript as the page, with "I am" (which speaker the owner is, their action items first) and "Write them again". The drawer re-reads itself every few seconds while the bot is in or the notes are being written. From there the admin also asks the bot to leave a meeting it is still in, or deletes a meeting it is out of, with its transcript, notes and speakers.
+Overseer > Services > Meetings runs meetings as fully as the Meetings page does, across every owner: send the bot to a call from there (the meeting is the admin's own), and every owner's meetings are listed, newest first, with how many there are and how many the bot is in now. A row opens the meeting in the drawer: its status, owner and how long each speaker was heard, then the same notes and transcript as the page, with "I am" (which speaker the owner is, their action items first) and "Write them again". The drawer re-reads itself every few seconds while the bot is in or the notes are being written. From there the admin also asks the bot to leave a meeting it is still in, or deletes a meeting it is out of, with its transcript, notes and speakers, and anyone who spoke only in it with their guide. Whatever else cited only its lines goes with it: another meeting's note item, a guide's point, a contradiction left with one side.
 
-Its People tab lists every owner's guides, latest written first; a row opens one in the drawer, each point folding open to the lines it rests on (each opening its meeting), with the owner's note and "Write it again".
+Above the list, a search box searches every owner's transcripts and notes as you type ([Search](#search)); a hit opens its meeting in the drawer at the line, marked, with the hits kept above it.
 
-The Flet dashboard (`/dashboard`) has the same: a Meetings card with the counts, opening a modal that sends the bot and lists every owner's meetings beside the selected one, read in full and followed while something is happening, with the same actions. A People tab in the modal does the same for the guides.
+A meeting's commitments, earlier commitments raised, contradictions and positions load into its drawer once its notes are there, each folding open to its lines (and the other side, or where it came up again).
+
+The send form picks which agent goes, where there is more than one, and each meeting's row names its agent. The Agents tab lists every agent: its name, the name it joins as, its Google account, whether its sign-in still works (Signed in; Signed out once Google's session has run out, so sign it in again; Not signed in), and the meetings it is in now, each opening in the drawer.
+
+Its People tab lists every owner's guides, latest written first; a row opens one in the drawer, each point folding open to the lines it rests on (each opening its meeting), then the person's open threads (what they said they would do and what was promised them, with whether it was done; where they stand; what they said both ways), with the owner's note and "Write it again".
+
+The Flet dashboard (`/dashboard`) has the same: a Meetings card with the counts, opening a modal that sends the bot and lists every owner's meetings beside the selected one, read in full and followed while something is happening, with the same actions. A Search tab searches every owner's meetings and opens a hit's meeting at its line, a People tab does the same for the guides, an Agents tab lists the agents, whose picker sits beside the send box, and both meeting and guide panes show the threads.
 
 ## CLI
 
 | Command | What it does |
 |---------|--------------|
-| `meetings login [--chrome PATH]` | Sign the bot's Google account in, once, in Chrome on this machine |
-| `meetings join <link> [--bot-name NAME]` | Send the bot into a meeting and wait until it leaves (Ctrl-C takes it out) |
+| `meetings login [--agent NAME] [--name NAME] [--email EMAIL] [--chrome PATH]` | Sign one of the bot's Google accounts in, once, in Chrome on this machine: the first agent unless `--agent` names another, made if new |
+| `meetings join <link> [--agent NAME] [--bot-name NAME]` | Send the bot into a meeting as an agent (the first unless named) and wait until it leaves (Ctrl-C takes it out) |
 | `meetings leave <id>` | Ask the bot to leave |
 | `meetings list [-n LIMIT]` | The meetings, newest first |
 | `meetings show <id>` | One meeting: its status and its transcript |
@@ -119,16 +160,21 @@ The Flet dashboard (`/dashboard`) has the same: a Meetings card with the counts,
 
 | Route | What it does |
 |-------|--------------|
-| `POST /api/v1/meetings` | `{"url": ..., "bot_name": ...}`: record the meeting and start the bot; answers `202` before it joins |
+| `POST /api/v1/meetings` | `{"url": ..., "agent": ..., "bot_name": ...}`: record the meeting and start the bot as `agent` (the first unless named; `422` for one there is not), joining as `bot_name` or the agent's own name; answers `202` before it joins |
 | `GET /api/v1/meetings/{id}` | The meeting and its status |
+| `GET /api/v1/meetings/{id}/threads` | Its commitments, earlier commitments raised, contradictions and positions, each with the lines it cites |
 | `POST /api/v1/meetings/{id}/leave` | Ask the bot to leave |
+| `GET /api/v1/meetings/search?q=` | The caller's meetings' lines and note items with the words, newest meeting first |
 
 Overseer's routes, across every owner. Reading them takes an admin where the stack has auth; a change is an operator's (an admin, or without auth only the local dev build):
 
 | Route | What it does |
 |-------|--------------|
 | `GET /api/v1/meetings/admin` | Every owner's meetings, newest first |
-| `GET /api/v1/meetings/admin/{id}` | One meeting with its notes (or why there are none), transcript, and how long each speaker was heard |
+| `GET /api/v1/meetings/admin/agents` | Every agent, the first first: who it is, its sign-in (`Signed in`, `Signed out`, `Not signed in`), and the ids of the meetings it is in now |
+| `GET /api/v1/meetings/admin/search?q=` | Search every owner's meetings |
+| `GET /api/v1/meetings/admin/{id}` | One meeting with its notes (or why there are none), transcript, how long each speaker was heard (`heard_seconds`), and which speaker the owner is (`me`) |
+| `GET /api/v1/meetings/admin/{id}/threads` | Its threads, as the owner's route reads them |
 | `POST /api/v1/meetings/admin/{id}/leave` | Ask the bot to leave |
 | `POST /api/v1/meetings/admin/{id}/me` | `{"name": ...}`: which speaker the owner is (`null`: nobody); returns the meeting read in full |
 | `POST /api/v1/meetings/admin/{id}/notes` | Write the notes again, in the background; `409` while the bot is in, when nothing was said, or while a writer is at it |
@@ -138,7 +184,7 @@ How to work with each person. The caller's own guides under `/api/v1/meetings/pe
 
 | Route | What it does |
 |-------|--------------|
-| `GET .../people` | The guides, latest written first |
-| `GET .../people/{id}` | One guide, each part with its points and the lines they rest on |
+| `GET .../people` | The guides, latest written first, each with the person it is to (`{"guide", "person", "owner_user_id"}`) |
+| `GET .../people/{id}` | One guide, each part with its points and the lines they rest on, and the person's threads across the owner's meetings (`threads`) |
 | `PUT .../people/{id}/note` | `{"note": ...}`: the owner's note on the person (blank clears it); returns the guide |
 | `POST .../people/{id}/guide` | Write the guide again, in the background; `409` without a model or while it is being written |

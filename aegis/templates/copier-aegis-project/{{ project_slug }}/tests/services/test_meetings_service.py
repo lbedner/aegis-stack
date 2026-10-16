@@ -6,16 +6,19 @@ import asyncio
 from datetime import timedelta
 
 import pytest
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.cli.meetings import describe
 from app.components.backend.startup import meetings_recovery
 from app.core.time import utcnow
+from app.services.meetings.domains.notes.service import keep_failure, keep_notes
+from app.services.meetings.domains.people.participants import keep_heard
 from app.services.meetings.models import (
     ActionItem,
     Meeting,
-    MeetingNotes,
     MeetingParticipant,
+    MeetingPerson,
     MeetingStatus,
     Notes,
     Platform,
@@ -34,10 +37,6 @@ from app.services.meetings.service import (
     fail_interrupted,
     heard_line,
     meetings_counts,
-    remember_me,
-    save_heard,
-    save_notes,
-    speakers,
     transition,
     voice,
     voices,
@@ -141,7 +140,14 @@ async def test_the_transcript_reads_in_order_with_its_speakers(
 ) -> None:
     svc = MeetingsService(async_db_session, owner_user_id=None)
     meeting = await svc.request(MEET)
-    ana = MeetingParticipant(meeting_id=meeting.id, display_name="Ana")  # type: ignore[arg-type]
+    ana_is = MeetingPerson(name="Ana")
+    async_db_session.add(ana_is)
+    await async_db_session.flush()
+    ana = MeetingParticipant(
+        meeting_id=meeting.id,  # type: ignore[arg-type]
+        person_id=ana_is.id,  # type: ignore[arg-type]
+        display_name="Ana",
+    )
     async_db_session.add(ana)
     await async_db_session.flush()
     async_db_session.add_all(
@@ -299,11 +305,9 @@ async def test_the_speaker_i_am_carries_to_my_next_meeting(
     await said(async_db_session, third.id, ("Ada", "Only me."))  # type: ignore[arg-type]
 
     await svc.set_me(first.id, "Leonard")  # type: ignore[arg-type]
-    await remember_me(async_db_session, second.id)  # type: ignore[arg-type]
-    await remember_me(async_db_session, third.id)  # type: ignore[arg-type]
 
-    assert (await svc.get(second.id)).me == "Leonard"  # type: ignore[arg-type]
-    assert (await svc.get(third.id)).me is None  # type: ignore[arg-type]
+    assert (await svc.read(second.id)).me == "Leonard"  # type: ignore[arg-type]
+    assert (await svc.read(third.id)).me is None  # type: ignore[arg-type]
 
 
 async def test_only_a_speaker_in_the_meeting_can_be_me(
@@ -315,30 +319,31 @@ async def test_only_a_speaker_in_the_meeting_can_be_me(
 
     with pytest.raises(NotASpeakerError):
         await svc.set_me(meeting.id, "Mallory")  # type: ignore[arg-type]
-    assert (await svc.set_me(meeting.id, "Ada")).me == "Ada"  # type: ignore[arg-type]
-    assert (await svc.set_me(meeting.id, None)).me is None  # type: ignore[arg-type]
+    await svc.set_me(meeting.id, "Ada")  # type: ignore[arg-type]
+    assert (await svc.read(meeting.id)).me == "Ada"  # type: ignore[arg-type]
+    await svc.set_me(meeting.id, None)  # type: ignore[arg-type]
+    assert (await svc.read(meeting.id)).me is None  # type: ignore[arg-type]
 
 
 async def test_notes_are_kept_and_written_over(async_db_session: AsyncSession) -> None:
     svc = MeetingsService(async_db_session, owner_user_id=None)
     meeting = await svc.request(MEET)
     meeting_id: int = meeting.id  # type: ignore[assignment]
+    ids = await said(async_db_session, meeting_id, ("Ada", "I'll write the docs."))
 
-    await save_notes(async_db_session, MeetingNotes(meeting_id=meeting_id, error="x"))
+    await keep_failure(async_db_session, meeting_id, "x")
     better = Notes(
         summary="Ship it.",
-        action_items=[ActionItem(text="Write the docs", owner="Ada", lines=[1])],
+        action_items=[ActionItem(text="Write the docs", owner="Ada", lines=ids)],
     )
-    await save_notes(
-        async_db_session,
-        MeetingNotes(meeting_id=meeting_id, content=better.model_dump()),
-    )
+    await keep_notes(async_db_session, meeting_id, better, None)
 
     kept = (await svc.notes_for([meeting_id]))[meeting_id]
     assert kept.error is None
-    assert kept.notes() == better
-    assert [a.text for a in better.mine("Ada")] == ["Write the docs"]
-    assert better.mine(None) == []
+    assert kept.notes is not None
+    assert kept.notes.model_dump() == better.model_dump()
+    assert [a.text for a in better.mine({"Ada"})] == ["Write the docs"]
+    assert better.mine(set()) == []
 
 
 async def test_deleting_a_meeting_takes_everything_kept_of_it(
@@ -348,16 +353,16 @@ async def test_deleting_a_meeting_takes_everything_kept_of_it(
     meeting = await svc.request(MEET)
     meeting_id: int = meeting.id  # type: ignore[assignment]
     await said(async_db_session, meeting_id, ("Ada", "Hello."))
-    await save_notes(
-        async_db_session,
-        MeetingNotes(meeting_id=meeting_id, content=Notes(summary="Hi.").model_dump()),
-    )
+    await keep_notes(async_db_session, meeting_id, Notes(summary="Hi."), None)
 
     await svc.delete(meeting_id)
 
     with pytest.raises(MeetingNotFoundError):
         await svc.get(meeting_id)
-    assert await speakers(async_db_session, meeting_id) == []
+    left = await async_db_session.exec(
+        select(MeetingParticipant).where(MeetingParticipant.meeting_id == meeting_id)
+    )
+    assert left.all() == []
     assert await svc.notes_for([meeting_id]) == {}
 
 
@@ -382,7 +387,6 @@ async def test_a_meeting_the_bot_is_in_is_not_deleted(
 def test_what_was_heard_reads_most_heard_first() -> None:
     assert heard_line({"Leonard": 150.0, "Ada": 250.4}) == "Ada 4m 10s · Leonard 2m 30s"
     assert heard_line({}) is None
-    assert heard_line(None) is None
 
 
 async def test_what_was_heard_is_kept_with_the_meeting(
@@ -390,10 +394,11 @@ async def test_what_was_heard_is_kept_with_the_meeting(
 ) -> None:
     svc = MeetingsService(async_db_session, None)
     meeting_id: int = (await svc.request(MEET)).id  # type: ignore[assignment]
+    await said(async_db_session, meeting_id, ("Ada", "Hello."))
 
-    await save_heard(async_db_session, meeting_id, {"Ada": 42.0})
+    await keep_heard(async_db_session, meeting_id, {"Ada": 42.0})
 
-    assert (await svc.get(meeting_id)).heard == {"Ada": 42.0}
+    assert (await svc.read(meeting_id)).heard_seconds == {"Ada": 42.0}
 
 
 def test_the_cli_shows_a_meeting_as_the_pages_read_it() -> None:
@@ -408,7 +413,6 @@ def test_the_cli_shows_a_meeting_as_the_pages_read_it() -> None:
         bot_name="Notes",
         joined_at=joined,
         left_at=joined + timedelta(seconds=90),
-        heard={"Ada": 42.0},
     )
     record = shared_record(
         meeting,

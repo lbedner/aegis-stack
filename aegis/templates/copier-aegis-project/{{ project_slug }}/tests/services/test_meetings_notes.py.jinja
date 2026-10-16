@@ -78,7 +78,7 @@ async def test_each_item_cites_the_lines_it_came_from(
 
     await notes.write_notes(meeting_id)
 
-    kept = (await _kept(async_db_session, meeting_id)).notes()
+    kept = (await _kept(async_db_session, meeting_id)).notes
     assert kept.summary == "Ada writes the docs."
     assert kept.action_items[0].lines == [promise]
     assert kept.action_items[0].owner == "Ada"
@@ -99,7 +99,7 @@ async def test_a_model_that_fails_leaves_why(
     await notes.write_notes(meeting_id)
 
     kept = await _kept(async_db_session, meeting_id)
-    assert kept.notes() is None
+    assert kept.notes is None
     assert "the model is down" in kept.error
     assert meeting_id not in WRITING
 
@@ -114,13 +114,13 @@ async def test_the_notes_are_being_written_until_they_are_saved(
     await said(async_db_session, meeting_id, ("Ada", "Hello."))
     answering(monkeypatch, {"summary": "Ada said hello."})
     writing_at_save: list[bool] = []
-    save = notes.save_notes
+    keep = notes.keep_notes
 
-    async def saving(session: AsyncSession, kept: Any) -> None:
+    async def saving(session: AsyncSession, *kept: Any) -> None:
         writing_at_save.append(meeting_id in WRITING)
-        await save(session, kept)
+        await keep(session, *kept)
 
-    monkeypatch.setattr(notes, "save_notes", saving)
+    monkeypatch.setattr(notes, "keep_notes", saving)
 
     await notes.write_notes(meeting_id)
 

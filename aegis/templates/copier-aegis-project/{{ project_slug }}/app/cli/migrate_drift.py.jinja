@@ -13,6 +13,7 @@ from pathlib import Path
 import re
 from typing import Any
 
+from sqlalchemy import Column
 from sqlmodel import SQLModel
 
 from alembic import command
@@ -115,6 +116,14 @@ def real_drift(entries: list[str]) -> list[str]:
     return sorted(out)
 
 
+def _expression_index(diff: Any) -> bool:
+    """Whether ``diff`` reports an index on expressions alone, no column of
+    its own, in the database but not the models."""
+    if not isinstance(diff, tuple) or diff[0] != "remove_index":
+        return False
+    return not any(isinstance(e, Column) for e in diff[1].expressions)
+
+
 def drift(url: str | None = None, scratch_dir: Path | None = None) -> list[str]:
     """Replay every revision onto an empty database and diff it against the models."""
     with _connection(url, scratch_dir) as conn:
@@ -123,6 +132,10 @@ def drift(url: str | None = None, scratch_dir: Path | None = None) -> list[str]:
             conn, opts={"include_schemas": True, "compare_type": True}
         )
         diffs = compare_metadata(ctx, SQLModel.metadata)
+        # An index on an expression alone (meetings search's full-text one
+        # on Postgres) is its revision's own: no model can declare one that
+        # holds on both engines.
+        diffs = [d for d in diffs if not _expression_index(d)]
         if conn.dialect.name == "sqlite":
             # An attached SQLite database cannot see the main one, so a
             # cross-schema FK is unenforceable there and reflection never

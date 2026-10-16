@@ -217,7 +217,11 @@ function syncDrawer(root) {
     return;
   }
   htmx.ajax('GET', url, { target: '#drawer-body', swap: 'innerHTML' })
-    .then(() => { if (!drawer.open) drawer.show(); });
+    .then(() => {
+      if (!drawer.open) drawer.show();
+      // Opened at one line (a search hit's ``data-hit``): bring it into view.
+      drawer.querySelector('[data-hit]')?.scrollIntoView({ block: 'center' });
+    });
 }
 document.body.addEventListener('htmx:load', (event) => syncDrawer(event.detail.elt));
 

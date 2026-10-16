@@ -20,7 +20,7 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from app.components.browser.client import connect
 from app.services.meetings.audio import listen
-from app.services.meetings.login import stored_login
+from app.services.meetings.login import LOGIN, stored_login
 from app.services.meetings.models import Caption
 
 # A fake camera and microphone granted without a prompt: the bot joins with
@@ -208,13 +208,14 @@ class MeetPage:
 
 @asynccontextmanager
 async def open_meet(
-    url: str, on_audio: Callable[[str], None] | None = None
+    url: str, on_audio: Callable[[str], None] | None = None, login: str = LOGIN
 ) -> AsyncIterator[MeetPage]:
-    """A Meet page at ``url`` in the browser container, its audio handed to
+    """A Meet page at ``url`` in the browser container, signed in with the
+    sign-in kept as ``login`` (an agent's), its audio handed to
     ``on_audio``; the browser closes on exit, whatever happened, so no
     Chrome outlives its meeting."""
     async with connect(BROWSER_ARGS) as browser:
-        context = await browser.new_context(storage_state=await stored_login())
+        context = await browser.new_context(storage_state=await stored_login(login))
         page = await context.new_page()
         if on_audio is not None:
             await listen(page, on_audio)

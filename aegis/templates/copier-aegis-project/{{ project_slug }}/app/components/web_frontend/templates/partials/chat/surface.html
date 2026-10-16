@@ -5,8 +5,9 @@
    Needs: assistant, chat_path, messages,
    conversation_id, picker (the catalog is there to pick from), voice (how
    a spoken turn is heard, or none), approvals (the change queue's
-   review list's URL, or none), voices (profiles and live calls: voice
-   with a database). #}
+   review list's URL, or none), voices (the voice chip: voice with a
+   database, for an operator), calls (live calls: the same, on a mount
+   not bound per request). #}
 {% from "components/macros/icons.html" import icon %}
 {% from "components/macros/chat.html" import assistant_row, button_classes, conversation_field, voice_states %}
 {# A call's states, as the phone and the call bar both draw them. #}
@@ -47,7 +48,7 @@
     </span>
   </template>
   <template id="chat-image"><img src="" alt="" width="800" height="600" class="max-h-[75vh] h-auto w-auto max-w-full mx-auto rounded"></template>
-  {% if voices %}
+  {% if calls %}
   {# A card drawn mid-call, which the call announces: held at the foot of
      the thread until the saved turn redraws the thread. #}
   <template id="chat-live-card"><li {{ assistant_row() }} data-live-card></li></template>
@@ -64,7 +65,7 @@
       <span data-state="denied">The microphone is blocked. Allow it for this site, or type instead.</span>
       <span data-state="unsupported">This browser can't record here. You can type instead.</span>
       <span data-state="offline">Couldn't reach the app. You can type instead.</span>
-      {% if voices %}
+      {% if calls %}
       <span data-state="live">Talking live - just speak.</span>
       <span data-state="working">{{ assistant }} is pulling that up...</span>
       <span data-state="muted">Muted - {{ assistant }} can't hear you.</span>
@@ -109,7 +110,7 @@
       {% call voice_states(record=True) %}{{ icon("mic", "w-4 h-4") }}{% endcall %}
     </button>
     {% endif %}
-    {% if voices %}
+    {% if calls %}
     {# A live call (routes/partials/chat_live.py): the server holds the
        engine's session and carries the audio over this mount's socket. #}
     <button type="button" id="chat-live" data-state="idle"
@@ -123,7 +124,7 @@
     <button type="button" id="chat-stop" hidden class="{{ button_classes('default') }}" aria-label="Stop">Stop</button>
     <button type="submit" id="chat-send" class="{{ button_classes('primary') }}" aria-label="Send" :disabled="!text.trim() && !staged">Send</button>
   </form>
-  {% if voices %}
+  {% if calls %}
   {# In a call the composer row gives way to this: what the call is doing
      (voice_states), the engine, a timer and the running cost, mute and
      hang up. voice.js swaps the two and fills the figures. #}

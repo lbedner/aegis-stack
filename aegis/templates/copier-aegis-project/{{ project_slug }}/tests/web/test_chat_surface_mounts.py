@@ -173,13 +173,14 @@ def test_another_users_or_projects_conversation_is_absent(client: TestClient) ->
     assert client.get("/chat/messages/other-user/a1").status_code == 404
 
 
-def test_a_mount_without_the_picker_cannot_switch_the_model(
+def test_a_mount_for_an_apps_users_has_no_operator_controls(
     turns: list[dict[str, Any]],
 ) -> None:
-    """The picker switches the model the whole install answers with: an
-    operator's choice. A mount for an app's own users turns it off, and
-    then neither the chip nor its routes exist."""
-    closed = replace(MOUNT, model_picker=False)
+    """The model and voice chips set what the whole install answers with,
+    and a live call runs as the declared mount: an operator's. A mount for
+    an app's own users turns them off, and then neither the chips, the
+    call nor their routes exist. Speaking a turn and hearing one stay."""
+    closed = replace(MOUNT, operator_controls=False)
 
     async def bind_closed(request: Request) -> ChatSurface:
         return replace(closed, user=request.headers["x-user"])
@@ -188,6 +189,44 @@ def test_a_mount_without_the_picker_cannot_switch_the_model(
     app.include_router(chat_router(replace(closed, bind=bind_closed), allow))
     client = TestClient(app, headers={"x-user": "7", "x-project": "3"})
 
-    assert 'id="chat-model"' not in client.get("/chat/drawer").text
+    drawer = client.get("/chat/drawer").text
+    for absent in ('id="chat-model"', 'id="chat-voice"', 'id="chat-live"'):
+        assert absent not in drawer
     assert client.get("/chat/models").status_code == 404
     assert client.post("/chat/models", data={"model_id": "m"}).status_code == 404
+    assert client.get("/chat/voices").status_code == 404
+    assert client.post("/chat/voices").status_code in (404, 405)
+    if chat_surface.HAS_VOICE:
+        assert 'id="chat-mic"' in drawer
+
+
+def test_a_bound_mount_gives_its_operators_the_controls_and_no_one_else(
+    turns: list[dict[str, Any]],
+) -> None:
+    """``bind`` decides per request: an operator's request gets the model
+    and voice chips and their routes, anyone else's neither. A bound mount
+    offers no live call to anyone (the call runs as the declared mount)."""
+
+    async def bind_by_role(request: Request) -> ChatSurface:
+        return replace(
+            bound,
+            user=request.headers["x-user"],
+            operator_controls=request.headers.get("x-operator") == "yes",
+        )
+
+    bound = replace(MOUNT, bind=bind_by_role)
+    app = FastAPI()
+    app.include_router(chat_router(bound, allow))
+    operator = TestClient(app, headers={"x-user": "1", "x-operator": "yes"})
+    customer = TestClient(app, headers={"x-user": "7"})
+
+    assert 'id="chat-model"' in operator.get("/chat/drawer").text
+    assert operator.get("/chat/models").status_code == 200
+    drawer = customer.get("/chat/drawer").text
+    assert 'id="chat-model"' not in drawer and 'id="chat-voice"' not in drawer
+    assert customer.get("/chat/models").status_code == 404
+    assert customer.post("/chat/models", data={"model_id": "m"}).status_code == 404
+    if chat_surface.HAS_VOICE:
+        assert 'id="chat-voice"' in operator.get("/chat/drawer").text
+        assert customer.get("/chat/voices").status_code == 404
+        assert 'id="chat-live"' not in operator.get("/chat/drawer").text

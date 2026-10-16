@@ -140,10 +140,13 @@
   its reason, wherever the walk cannot see further. Admins can ask the
   `ontology` tool for the same with `route="GET /api/v1/..."`.
 
-- **A chat mount can leave the model picker out.** `ChatSurface(model_picker=False)`
-  drops the composer's model chip and its routes: the picker switches the
-  model the whole install answers with, an operator's choice, so an app's
-  mount for its own users turns it off.
+- **A chat mount for an app's own users leaves the operator's controls
+  out.** `ChatSurface(operator_controls=False)` drops the model and voice
+  chips with their routes (each sets what the whole install answers with);
+  the microphone and a reply read aloud stay. A mount's `bind` may set it
+  per request, so the people who run the install (an admin) keep the chips
+  in the same chat. A live call needs the controls and a mount not bound
+  per request: its socket serves the declared mount.
 - **An answer from an earlier day replays dated.** History reaches the model
   with `[answered 2026-07-21]` before an assistant reply from before today,
   so a figure quoted weeks ago reads as true when written instead of
@@ -151,6 +154,8 @@
 
 ### Fixed
 
+- **Seeding the model catalog reads each table once**, not once per row:
+  a voice stack's tests that seed it failed the N+1 gate.
 - **Overseer charts draw again.** A second page script's `mount()` replaced
   the charts' own; a test now refuses a name declared twice across the page
   scripts.

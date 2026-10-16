@@ -271,3 +271,20 @@ def test_the_pack_holds_the_keys_asked_for_that_this_store_has(
     (tmp_path / "out.tar.gz").write_bytes(done.stdout)
     with tarfile.open(tmp_path / "out.tar.gz") as archive:
         assert archive.getnames() == [held]
+
+
+def test_an_upload_says_how_much_has_gone(
+    tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    """Minutes on a home connection (317 files, 93 MB, 2026-10-16), and the
+    card showed one line throughout: each tenth sent is said."""
+    from aegis.commands.deploy import _send
+
+    upload = tmp_path / "up.bin"
+    upload.write_bytes(b"x" * (3 << 20))
+    done = _send(["sh", "-c", "wc -c"], upload)
+    assert done.returncode == 0
+    assert done.stdout.strip() == str(3 << 20)
+    said = capsys.readouterr().out.splitlines()
+    assert len(said) == 3
+    assert "3.1 of 3.1 MB" in said[-1]

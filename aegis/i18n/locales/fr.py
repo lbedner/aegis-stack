@@ -1048,6 +1048,7 @@ MESSAGES: dict[str, str] = {
     "deploy.upload_start_failed": "La base est en place, mais la pile n'a pas démarré : aegis deploy-logs dit pourquoi.",
     "deploy.upload_done": "La base de cette machine est sur {host}.",
     "deploy.upload_confirm": "Remplacer la base de {host} par celle de cette machine ? Celle du serveur est sauvegardée d'abord.",
+    "deploy.upload_sent": "{sent:.1f} Mo envoyés sur {total:.1f}...",
     "deploy.storage_cannot_check": "Le serveur ne peut pas lister les fichiers stockés qui lui manquent (son projet précède `storage check`) ; rien n'a été copié. Mettez le projet à jour et déployez, puis lancez aegis deploy-upload-storage.",
     "deploy.storage_copying": "Copie des {count} fichiers stockés que la base du serveur nomme et qui lui manquent...",
     "deploy.storage_no_pack": "Impossible de lire les fichiers stockés de cette machine : démarrez sa stack (make serve) et réessayez. Le serveur n'a pas été touché.",

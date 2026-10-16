@@ -1047,6 +1047,7 @@ MESSAGES: dict[str, str] = {
     "deploy.upload_start_failed": "La base de datos está en su lugar, pero el stack no arrancó: aegis deploy-logs dice por qué.",
     "deploy.upload_done": "La base de datos de esta máquina está en {host}.",
     "deploy.upload_confirm": "¿Reemplazar la base de datos de {host} por la de esta máquina? La del servidor se respalda antes.",
+    "deploy.upload_sent": "Enviados {sent:.1f} de {total:.1f} MB...",
     "deploy.storage_cannot_check": "El servidor no puede listar los archivos guardados que le faltan (su proyecto es anterior a `storage check`); no se copió nada. Actualiza el proyecto y despliega, luego ejecuta aegis deploy-upload-storage.",
     "deploy.storage_copying": "Copiando los {count} archivos guardados que nombra la base de datos del servidor y que le faltan...",
     "deploy.storage_no_pack": "No se pudieron leer los archivos guardados de esta máquina: inicia su stack (make serve) y vuelve a intentarlo. No se tocó el servidor.",

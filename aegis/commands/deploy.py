@@ -14,7 +14,7 @@ import subprocess
 import tempfile
 import time
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager, nullcontext
+from contextlib import contextmanager, suppress
 from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
@@ -408,13 +408,48 @@ def _run_remote_capture(
     host: str, user: str, command: str, upload: Path | None = None
 ) -> subprocess.CompletedProcess:
     """Run a command on the remote server via SSH and capture output;
-    ``upload`` (a file), if given, is its stdin."""
-    with upload.open("rb") if upload else nullcontext() as stdin:
-        return subprocess.run(
-            ["ssh", f"{user}@{host}", command],
-            stdin=stdin,
-            capture_output=True,
-            text=True,
+    ``upload`` (a file), if given, is its stdin, sent saying how much has
+    gone (``_send``)."""
+    argv = ["ssh", f"{user}@{host}", command]
+    if upload is not None:
+        return _send(argv, upload)
+    return subprocess.run(argv, capture_output=True, text=True)
+
+
+def _send(argv: list[str], upload: Path) -> subprocess.CompletedProcess:
+    """``argv`` with ``upload`` on its stdin, saying each tenth sent: a
+    database or a store's files take minutes on a home connection, and
+    nothing else is said meanwhile. Output goes to files, not pipes, so a
+    command that writes while it reads cannot stall the sending."""
+    total = max(upload.stat().st_size, 1)
+    with (
+        upload.open("rb") as source,
+        tempfile.TemporaryFile() as out,
+        tempfile.TemporaryFile() as err,
+    ):
+        sending = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=out, stderr=err)
+        assert sending.stdin is not None
+        sent = tenths = 0
+        # It stopped reading: its exit says why.
+        with suppress(BrokenPipeError):
+            while chunk := source.read(1 << 20):
+                sending.stdin.write(chunk)
+                sent += len(chunk)
+                if sent * 10 // total > tenths:
+                    tenths = sent * 10 // total
+                    typer.echo(
+                        t("deploy.upload_sent", sent=sent / 1e6, total=total / 1e6)
+                    )
+        with suppress(BrokenPipeError):
+            sending.stdin.close()
+        code = sending.wait()
+        out.seek(0)
+        err.seek(0)
+        return subprocess.CompletedProcess(
+            argv,
+            code,
+            out.read().decode(errors="replace"),
+            err.read().decode(errors="replace"),
         )
 
 

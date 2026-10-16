@@ -880,6 +880,7 @@ MESSAGES: dict[str, str] = {
     "deploy.upload_start_failed": "資料庫已就位，但服務堆疊未啟動：aegis deploy-logs 會說明原因。",
     "deploy.upload_done": "本機資料庫已在 {host} 上。",
     "deploy.upload_confirm": "用本機資料庫替換 {host} 上的資料庫？伺服器的資料庫會先備份。",
+    "deploy.upload_sent": "已傳送 {sent:.1f} / {total:.1f} MB...",
     "deploy.storage_cannot_check": "伺服器無法列出它缺少的已儲存檔案（其專案早於 `storage check`）；未複製任何內容。請更新專案並部署，然後執行 aegis deploy-upload-storage。",
     "deploy.storage_copying": "正在複製伺服器資料庫引用但伺服器缺少的 {count} 個已儲存檔案...",
     "deploy.storage_no_pack": "無法讀取本機的已儲存檔案：請啟動其堆疊（make serve）後重試。伺服器未被改動。",

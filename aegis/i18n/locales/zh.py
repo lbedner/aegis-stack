@@ -880,6 +880,7 @@ MESSAGES: dict[str, str] = {
     "deploy.upload_start_failed": "数据库已就位，但服务栈未启动：aegis deploy-logs 会说明原因。",
     "deploy.upload_done": "本机数据库已在 {host} 上。",
     "deploy.upload_confirm": "用本机数据库替换 {host} 上的数据库？服务器的数据库会先备份。",
+    "deploy.upload_sent": "已发送 {sent:.1f} / {total:.1f} MB...",
     "deploy.storage_cannot_check": "服务器无法列出它缺少的已存储文件（其项目早于 `storage check`）；未复制任何内容。请更新项目并部署，然后运行 aegis deploy-upload-storage。",
     "deploy.storage_copying": "正在复制服务器数据库引用但服务器缺少的 {count} 个已存储文件...",
     "deploy.storage_no_pack": "无法读取本机的已存储文件：请启动其堆栈（make serve）后重试。服务器未被改动。",

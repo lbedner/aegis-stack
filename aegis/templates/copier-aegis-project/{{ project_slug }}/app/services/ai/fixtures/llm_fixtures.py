@@ -28,11 +28,9 @@ from .llm_catalog import DEPLOYMENTS, MODELS, PRICES, VENDORS
 def _load_vendors(session: Session) -> int:
     """Load vendor fixtures, skipping existing."""
     count = 0
+    present = set(session.exec(select(LLMOrg.name)).all())
     for vendor_data in VENDORS:
-        existing = session.exec(
-            select(LLMOrg).where(LLMOrg.name == vendor_data["name"])
-        ).first()
-        if not existing:
+        if vendor_data["name"] not in present:
             # The vendor key IS the slug for a catalog-sourced org.
             vendor = LLMOrg(slug=vendor_data["name"], **vendor_data)
             session.add(vendor)
@@ -42,13 +40,19 @@ def _load_vendors(session: Session) -> int:
     return count
 
 
-def _load_models(session: Session) -> int:
+def _vendor_ids(session: Session) -> dict[str, int | None]:
+    return {name: id_ for id_, name in session.exec(select(LLMOrg.id, LLMOrg.name))}
+
+
+def _model_ids(session: Session) -> dict[str, int | None]:
+    rows = session.exec(select(LargeLanguageModel.id, LargeLanguageModel.model_id))
+    return {model_id: id_ for id_, model_id in rows}
+
+
+def _load_models(session: Session, vendor_map: dict[str, int | None]) -> int:
     """Load model fixtures, skipping existing."""
     count = 0
-
-    # Get vendor ID mapping
-    vendors = session.exec(select(LLMOrg)).all()
-    vendor_map = {v.name: v.id for v in vendors}
+    present = set(session.exec(select(LargeLanguageModel.model_id)).all())
 
     for vendor_name, models in MODELS.items():
         vendor_id = vendor_map.get(vendor_name)
@@ -57,13 +61,7 @@ def _load_models(session: Session) -> int:
             continue
 
         for model_data in models:
-            existing = session.exec(
-                select(LargeLanguageModel).where(
-                    LargeLanguageModel.model_id == model_data["model_id"]
-                )
-            ).first()
-
-            if not existing:
+            if model_data["model_id"] not in present:
                 model = LargeLanguageModel(
                     served_by_org_id=vendor_id,
                     **model_data,
@@ -76,16 +74,16 @@ def _load_models(session: Session) -> int:
     return count
 
 
-def _load_deployments(session: Session) -> int:
+def _load_deployments(
+    session: Session,
+    vendor_map: dict[str, int | None],
+    model_map: dict[str, int | None],
+) -> int:
     """Load deployment fixtures, skipping existing."""
     count = 0
-
-    # Get vendor and model mappings
-    vendors = session.exec(select(LLMOrg)).all()
-    vendor_map = {v.name: v.id for v in vendors}
-
-    models = session.exec(select(LargeLanguageModel)).all()
-    model_map = {m.model_id: m.id for m in models}
+    present = set(
+        session.exec(select(LLMDeployment.org_id, LLMDeployment.llm_id)).all()
+    )
 
     for vendor_name, deployments in DEPLOYMENTS.items():
         vendor_id = vendor_map.get(vendor_name)
@@ -101,15 +99,7 @@ def _load_deployments(session: Session) -> int:
                 )
                 continue
 
-            # Check if deployment already exists
-            existing = session.exec(
-                select(LLMDeployment).where(
-                    LLMDeployment.org_id == vendor_id,
-                    LLMDeployment.llm_id == model_id,
-                )
-            ).first()
-
-            if not existing:
+            if (vendor_id, model_id) not in present:
                 deployment = LLMDeployment(
                     org_id=vendor_id,
                     llm_id=model_id,
@@ -149,17 +139,15 @@ def price_row(
     )
 
 
-def _load_prices(session: Session) -> int:
+def _load_prices(
+    session: Session,
+    vendor_map: dict[str, int | None],
+    model_map: dict[str, int | None],
+) -> int:
     """Load price fixtures, skipping existing."""
     count = 0
     effective_date = datetime.now(UTC)
-
-    # Get vendor and model mappings
-    vendors = session.exec(select(LLMOrg)).all()
-    vendor_map = {v.name: v.id for v in vendors}
-
-    models = session.exec(select(LargeLanguageModel)).all()
-    model_map = {m.model_id: m.id for m in models}
+    present = set(session.exec(select(LLMPrice.org_id, LLMPrice.llm_id)).all())
 
     for (vendor_name, model_id), price_data in PRICES.items():
         vendor_id = vendor_map.get(vendor_name)
@@ -172,15 +160,7 @@ def _load_prices(session: Session) -> int:
             logger.warning(f"Model not found for price: {model_id}")
             continue
 
-        # Check if price already exists for this vendor-model pair
-        existing = session.exec(
-            select(LLMPrice).where(
-                LLMPrice.org_id == vendor_id,
-                LLMPrice.llm_id == llm_id,
-            )
-        ).first()
-
-        if not existing:
+        if (vendor_id, llm_id) not in present:
             price = price_row(
                 price_data,
                 org_id=vendor_id,
@@ -214,10 +194,14 @@ def load_all_llm_fixtures(session: Session) -> dict[str, int]:
     """
     logger.info("Loading LLM fixtures...")
 
+    # Each id map is read once, after the rows it maps are in: a map per
+    # loader read the same tables three times over.
     vendors_added = _load_vendors(session)
-    models_added = _load_models(session)
-    deployments_added = _load_deployments(session)
-    prices_added = _load_prices(session)
+    vendor_map = _vendor_ids(session)
+    models_added = _load_models(session, vendor_map)
+    model_map = _model_ids(session)
+    deployments_added = _load_deployments(session, vendor_map, model_map)
+    prices_added = _load_prices(session, vendor_map, model_map)
 
     result = {
         "vendors": vendors_added,

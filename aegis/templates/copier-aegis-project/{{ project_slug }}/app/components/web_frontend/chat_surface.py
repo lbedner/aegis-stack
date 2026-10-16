@@ -82,10 +82,20 @@ class ChatSurface:
     # A FastAPI dependency run before a turn reaches the model (a plan's
     # entitlement, a daily budget): the reason it is refused, or None.
     gate: Callable[..., Awaitable[str | None]] | None = None
-    # The model chip and its picker: they switch the model the whole
-    # install answers with, so an operator's mount keeps them and a mount
-    # for an app's own users turns them off.
-    model_picker: bool = True
+    # What only an operator should hold: the model and voice chips, which
+    # set what the whole install answers with. A mount for an app's own
+    # users turns them off, keeping the microphone and a reply read aloud;
+    # its ``bind`` may turn them back on for the request of someone who
+    # runs the install (an admin). The live call needs them too, and a
+    # mount not bound per request: it runs as the declared mount.
+    operator_controls: bool = True
+
+
+def offers_calls(chat: ChatSurface) -> bool:
+    """Whether the mount takes live calls: voice, a database, the operator's
+    controls, and no ``bind`` (the call's socket serves the declared mount,
+    so a mount bound per user and subject would call as no one)."""
+    return HAS_VOICE and PERSISTED and chat.operator_controls and chat.bind is None
 
 
 async def assistant_name(chat: ChatSurface, session: Any = None) -> str:
@@ -373,9 +383,10 @@ async def surface_context(chat: ChatSurface) -> dict[str, Any]:
         "section_subtitle": f"Ask {thread['assistant']} anything",
         "chat_path": chat.path,
         "voice": _voice() if HAS_VOICE else None,
-        "picker": PERSISTED and chat.model_picker,
+        "picker": PERSISTED and chat.operator_controls,
         # Voice profiles are rows: the voice chip needs a database.
-        "voices": HAS_VOICE and PERSISTED,
+        "voices": HAS_VOICE and PERSISTED and chat.operator_controls,
+        "calls": offers_calls(chat),
         # The change queue lives with a persisted AI backend.
         "approvals": CARDS.PATH if CARDS else None,
     }

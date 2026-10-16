@@ -43,6 +43,11 @@ OWNERS = (
     "app.services.system.errors.store",
     "app.components.deploy.agent",
     "app.core.series_keys",
+    "app.core.edges",
+    "app.components.backend.middleware.connections",
+    "app.components.secrets.store",
+    "app.services.system.db_trend",
+    "app.services.system.load_cost",
     # Last: the shared cache claims whatever is left in its database.
     "app.services.system.ui_cache",
 )

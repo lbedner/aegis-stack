@@ -10,13 +10,11 @@ from collections.abc import AsyncIterator
 import time
 import weakref
 
-from app.core.constants import ComponentName
 from app.core.log import logger
 from app.services.system.health import get_system_status, last_system_status
 
 from .overseer_live import changed_frames
 from .overseer_nav import build_navigation
-from .overseer_server import overview_context
 from .rendering import fragment
 
 SAMPLE_INTERVAL_SECONDS = 30
@@ -29,28 +27,13 @@ def _state() -> dict[str, str]:
     if status is None:
         return {}
     navigation = build_navigation(status)
-    payloads = {
+    return {
         entry.event: fragment(
             "pages/overseer/_status_dot.html", health_status=entry.status
         )
         for entries in navigation.values()
         for entry in entries
     }
-    backend = next(
-        (
-            entry.component
-            for entry in navigation["components"]
-            if entry.name == ComponentName.BACKEND
-        ),
-        None,
-    )
-    if backend is not None:
-        payloads["server-overview"] = fragment(
-            "pages/overseer/server/_overview.html",
-            component=backend,
-            **overview_context(backend),
-        )
-    return payloads
 
 
 class _HealthFeed:

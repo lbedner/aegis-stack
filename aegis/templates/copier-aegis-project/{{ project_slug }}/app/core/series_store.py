@@ -2,21 +2,17 @@
 them): Redis when the stack has it, so every process reads the same
 history; this process's memory otherwise.
 
-Two shapes, each for what it holds:
-
-- The raw hour: a sorted set a series, scored by time, so a read takes a
-  window by time and each write trims what has aged out (``append``,
-  ``points``).
-- A history tier: a list a series, appended in time order and cut to its
-  length (``push``, ``recent``). A tier's points come a step apart, so a
-  length is a span; and a list of short entries costs a few bytes a point,
-  where a sorted set costs over a hundred, which is what a week costs.
+A list a series, the raw hour and each history tier alike: appended in
+time order and cut to its length (``push``), read whole and taken from a
+time on (``recent``). A list of short entries costs a few bytes a point,
+where a sorted set costs seventy and more, which is what an hour a second
+apart and a week of history cost.
 
 Each series is listed in its sampler's index set, so a read never scans
 the keyspace.
 """
 
-from bisect import bisect_left, bisect_right
+from bisect import bisect_left
 from operator import itemgetter
 import time
 from typing import Any
@@ -28,8 +24,14 @@ def _text(value: Any) -> str:
     return value.decode() if isinstance(value, bytes) else str(value)
 
 
+def _member(at: float, value: float) -> str:
+    """A point as stored: milliseconds, and twelve digits, which a running
+    total needs to keep its rate (a byte counter's every byte)."""
+    return f"{at:.13g}:{value:.12g}"
+
+
 def _point(member: Any) -> tuple[float, float]:
-    """A point as stored: ``"<at>:<value>"``."""
+    """A point as ``_member`` stored it."""
     at, value = _text(member).split(":")
     return float(at), float(value)
 
@@ -51,41 +53,6 @@ class SeriesStore:
         else:
             self._store = {}
 
-    async def append(
-        self, points: dict[str, float], *, at: float, keep_seconds: int, index: str
-    ) -> None:
-        """A point at ``at`` on each raw series in ``points``, dropping the
-        ones older than ``keep_seconds`` before it, in one round trip."""
-        if self._redis is not None:
-            pipe = self._redis.pipeline(transaction=False)
-            for key, value in points.items():
-                pipe.zadd(key, {f"{at}:{value}": at})
-                pipe.zremrangebyscore(key, "-inf", at - keep_seconds)
-                pipe.expire(key, keep_seconds)
-            self._list(pipe, index, points, keep_seconds)
-            await pipe.execute()
-            return
-        for key, value in points.items():
-            kept = self._kept(key)
-            # Points arrive in time order: drop the stale ones from the front.
-            del kept[: bisect_right(kept, at - keep_seconds, key=itemgetter(0))]
-            kept.append((at, value))
-            self._lapse(key, kept, keep_seconds)
-
-    async def points(
-        self, prefix: str, *, since: float, index: str, ending: tuple[str, ...] = ()
-    ) -> Points:
-        """Every raw series under ``prefix`` (ending with one of ``ending``,
-        given any), its points from ``since`` on, oldest first."""
-        if self._redis is None:
-            return self._read(prefix, since, ending)
-        keys = await self._listed(prefix, index, ending)
-        pipe = self._redis.pipeline(transaction=False)
-        for key in keys:
-            pipe.zrangebyscore(key, since, "+inf")
-        found = dict(zip(keys, await pipe.execute(), strict=True))
-        return await self._kept_listed(index, found, since)
-
     async def push(
         self,
         points: dict[str, float],
@@ -95,12 +62,12 @@ class SeriesStore:
         keep_seconds: int,
         index: str,
     ) -> None:
-        """A point at ``at`` on each tier series in ``points``, keeping its
+        """A point at ``at`` on each series in ``points``, keeping its
         newest ``length``, in one round trip. Points come in time order."""
         if self._redis is not None:
             pipe = self._redis.pipeline(transaction=False)
             for key, value in points.items():
-                pipe.rpush(key, f"{int(at)}:{value:.6g}")
+                pipe.rpush(key, _member(at, value))
                 pipe.ltrim(key, -length, -1)
                 pipe.expire(key, keep_seconds)
             self._list(pipe, index, points, keep_seconds)
@@ -113,16 +80,23 @@ class SeriesStore:
             self._lapse(key, kept, keep_seconds)
 
     async def recent(
-        self, prefix: str, *, since: float, index: str, ending: tuple[str, ...] = ()
+        self,
+        prefix: str,
+        *,
+        since: float,
+        index: str,
+        ending: tuple[str, ...] = (),
+        count: int | None = None,
     ) -> Points:
-        """Every tier series under ``prefix`` (ending with one of ``ending``,
-        given any), its points from ``since`` on, oldest first."""
+        """Every series under ``prefix`` (ending with one of ``ending``,
+        given any), its points from ``since`` on, oldest first; of its
+        newest ``count`` only, given one (a window's tail, not the hour)."""
         if self._redis is None:
-            return self._read(prefix, since, ending)
+            return self._read(prefix, since, ending, count)
         keys = await self._listed(prefix, index, ending)
         pipe = self._redis.pipeline(transaction=False)
         for key in keys:
-            pipe.lrange(key, 0, -1)
+            pipe.lrange(key, -count if count else 0, -1)
         found = dict(zip(keys, await pipe.execute(), strict=True))
         return await self._kept_listed(index, found, since)
 
@@ -166,15 +140,21 @@ class SeriesStore:
         assert self._store is not None
         self._store[key] = (kept, time.time() + keep)
 
-    def _read(self, prefix: str, since: float, ending: tuple[str, ...]) -> Points:
+    def _read(
+        self, prefix: str, since: float, ending: tuple[str, ...], count: int | None
+    ) -> Points:
         assert self._store is not None
         now = time.time()
-        found = {
-            key: kept[bisect_left(kept, since, key=itemgetter(0)) :]
+        tails = {
+            key: kept[-count:] if count else kept
             for key, (kept, lapses) in list(self._store.items())
             if key.startswith(prefix)
             and lapses > now
             and (not ending or key.endswith(ending))
+        }
+        found = {
+            key: tail[bisect_left(tail, since, key=itemgetter(0)) :]
+            for key, tail in tails.items()
         }
         return {key: points for key, points in found.items() if points}
 

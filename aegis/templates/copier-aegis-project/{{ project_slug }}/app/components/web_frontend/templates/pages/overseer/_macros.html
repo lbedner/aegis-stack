@@ -17,6 +17,10 @@
 {% endmacro %}
 
 {# An HTTP verb, set in the mono label voice. #}
+{# A name over a muted line of what it is (a key family's purpose), the
+   line's title its whole or ``title``. #}
+{% macro named(name, about, title=none, mono=false) %}<span class="block text-sm font-semibold text-aegis-text truncate{{ ' font-mono' if mono }}">{{ name }}</span>{% if about %}<span class="block text-xxs text-aegis-muted truncate" title="{{ title or about }}">{{ about }}</span>{% endif %}{% endmacro %}
+
 {% macro method_tag(method) %}
 <span data-method class="inline-block font-mono text-xxs font-semibold px-1.5 py-0.5 rounded border border-aegis-border {{ 'text-aegis-teal' if method == 'GET' else 'text-error' if method == 'DELETE' else 'text-aegis-amber' }}">{{ method }}</span>
 {% endmacro %}

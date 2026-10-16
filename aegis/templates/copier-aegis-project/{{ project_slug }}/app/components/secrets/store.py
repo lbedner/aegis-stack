@@ -23,12 +23,26 @@ from app.core.cache import get_cache
 from app.core.config import settings
 from app.core.db import get_async_session
 from app.core.encryption import decrypt_secret, encrypt_secret
+from app.core.key_family import KeyFamily
 from app.core.secrets import SecretUnreadableError, StoredSecret, set_store
 from app.core.time import utcnow
 
 from .models import SecretRecord
 
 CACHE_PREFIX = "secret:"
+# What the store keeps in the shared cache, for the keyspace map: decrypted
+# values, so named but never read there (``peek=False``).
+REDIS_KEYS = (
+    KeyFamily(
+        CACHE_PREFIX + "*",
+        "string",
+        "Secrets",
+        "Stored secrets, decrypted, cached a few seconds between reads",
+        "Secrets",
+        db="CACHE_REDIS_DB",
+        peek=False,
+    ),
+)
 CACHE_TTL = 30
 # Cached for a name with no row, so a status poll over keys nobody stored
 # does not query the table each time. A write clears it like any entry.

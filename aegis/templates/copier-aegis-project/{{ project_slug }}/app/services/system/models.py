@@ -11,8 +11,9 @@ from typing import Any
 
 from pydantic import BaseModel, Field, computed_field, field_validator
 
+from app.core.cache import CacheStats
 from app.core.credential import hide_passwords
-from app.core.formatting import format_ago, format_span
+from app.core.formatting import format_ago, format_bytes, format_span
 from app.core.key_family import KeyFamily
 
 
@@ -429,3 +430,58 @@ class SlowQuery(BaseModel):
         """What it touched, as both UIs say it: its key's family, a key no
         family claims, or nothing (a command without a key)."""
         return (self.family or "Unclaimed") if self.key else None
+
+
+# What Overseer's Cache view reads (``ui_cache``).
+
+
+class CacheHeld(BaseModel):
+    """Room cache entries take, and how long they have left (``ttl``)."""
+
+    bytes: int
+    ttl: float
+
+    @property
+    def size(self) -> str:
+        return format_bytes(self.bytes)
+
+    @property
+    def ttl_label(self) -> str | None:
+        return format_span(self.ttl)
+
+
+class CacheGroup(CacheHeld):
+    """Cache entries that are for one thing (``ui_cache``), their ``ttl``
+    the average; ``reads`` through the cache, this process."""
+
+    name: str
+    family: KeyFamily | None = None
+    keys: int
+    share: float
+    reads: CacheStats = Field(default_factory=CacheStats)
+
+    @property
+    def about(self) -> str | None:
+        """Who keeps it and why, where its family is declared."""
+        return f"{self.family.owner} · {self.family.purpose}" if self.family else None
+
+    @property
+    def hit_rate(self) -> float | None:
+        return self.reads.hit_rate
+
+
+class CacheKey(CacheHeld):
+    """One of the largest entries, and the group it belongs to."""
+
+    key: str
+    group: str
+
+
+class CacheView(BaseModel):
+    """The cache as Overseer shows it, or why it could not be read."""
+
+    backend: str
+    error: str | None = None
+    figures: list[dict[str, Any]] = Field(default_factory=list)  # stats_strip's
+    groups: list[CacheGroup] = Field(default_factory=list)
+    largest: list[CacheKey] = Field(default_factory=list)

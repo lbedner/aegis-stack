@@ -9,10 +9,22 @@ from collections.abc import Mapping
 from datetime import datetime
 
 from app.core.cache import get_cache
+from app.core.key_family import KeyFamily
 from app.core.log import logger
 from app.core.time import utcnow
 
 KEY = "db_trend:{day}"
+# What the trend keeps in the shared cache, for the keyspace map.
+REDIS_KEYS = (
+    KeyFamily(
+        KEY.format(day="*"),
+        "string",
+        "Table counts today",
+        "Each table's first row count of the day, for Tables' change since",
+        "Database browser",
+        db="CACHE_REDIS_DB",
+    ),
+)
 KEPT = 2 * 24 * 3600  # a day's first counts outlive it, then go
 Baseline = tuple[int, datetime]  # the day's first count, and when it was read
 

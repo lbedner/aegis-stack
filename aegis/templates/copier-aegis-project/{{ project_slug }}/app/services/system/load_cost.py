@@ -26,6 +26,7 @@ import app.components
 from app.core import source_index
 from app.core.cache import get_cache
 from app.core.config import settings
+from app.core.key_family import KeyFamily
 from app.core.log import logger
 import app.services
 from app.services.system.ui import registry_key
@@ -155,6 +156,19 @@ _METHOD = hashlib.sha1(
 
 def _key() -> str:
     return f"load-cost:{settings.BUILD_ID}:{_METHOD}"
+
+
+# What the measurement keeps in the shared cache, for the keyspace map.
+REDIS_KEYS = (
+    KeyFamily(
+        "load-cost:*",
+        "string",
+        "Load costs",
+        "What each part costs the webserver to load, measured once a build",
+        "Resources",
+        db="CACHE_REDIS_DB",
+    ),
+)
 
 
 async def _load(module: str, under: list[str]) -> LoadReading:

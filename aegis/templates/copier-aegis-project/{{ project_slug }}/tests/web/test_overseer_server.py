@@ -9,8 +9,9 @@ from fastapi.testclient import TestClient
 import pytest
 
 from app.components.web_frontend import overseer_connections, overseer_server
+from app.core import series
 from app.services.system import ui_runtime
-from app.services.system.models import ComponentStatus
+from app.services.system.models import CacheView, ComponentStatus
 from tests._fake_runtime import SERVER, FakeRuntime, use_runtime
 from tests.web.dom import none, one, select, text
 from tests.web.overseer import sign_in, status_with
@@ -177,11 +178,30 @@ class TestOverview:
         one(html, f'#runtime-glance [data-glance="{SERVER.name}"]')
         none(html, "#card-resources")
 
+    def test_it_leads_with_its_containers_live_charts(
+        self, signed_in: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """CPU, memory, network and disk, the Container section's own charts
+        on the same stream, with its range chips; processes and events stay
+        on Container."""
+        use_runtime(monkeypatch, FakeRuntime(SERVER))
+        asyncio.run(ui_runtime.containers("server"))
+        charts = one(_get(signed_in), "#server-charts")
+        stream = charts.get("sse-connect") or ""
+        assert stream.startswith("/overseer/events/container/server?")
+        assert "charts=cpu" in stream and "charts=processes" not in stream
+        titles = [text(one(c, "h2")) for c in select(charts, "section[id^=chart-]")]
+        assert titles == ["CPU", "Memory", "Network", "Disk I/O"]
+        chips = select(charts, "form [name=window]")
+        assert len(chips) == len(series.HISTORY_WINDOWS)  # a week's history
+
     def test_without_a_container_it_shows_the_machine_it_runs_on(
         self, signed_in: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         use_runtime(monkeypatch, FakeRuntime(SERVER, backend_name="none"))
-        one(_get(signed_in), "#card-resources")
+        html = _get(signed_in)
+        one(html, "#card-resources")
+        none(html, "#server-charts")
 
 
 class TestRoutes:
@@ -315,14 +335,14 @@ class TestLifecycle:
 
 
 class TestCache:
-    """What is in the cache, by family: how much room each takes and
-    whether it earns it."""
+    """What is in the cache, by what it is for: how much room each kind
+    takes and whether it earns it."""
 
-    def _view(self) -> dict[str, Any]:
+    def _view(self) -> CacheView:
         from app.core.cache import CacheEntry, CacheStats
         from app.services.system import ui_cache
 
-        return {"error": None} | ui_cache.summarize(
+        return ui_cache.summarize(
             "redis",
             [
                 CacheEntry("insights:project:1", 4000, 200),
@@ -332,15 +352,15 @@ class TestCache:
             {"insights:project": CacheStats(hits=3, misses=1, sets=1)},
         )
 
-    def _serve(self, monkeypatch: pytest.MonkeyPatch, view: dict[str, Any]) -> None:
+    def _serve(self, monkeypatch: pytest.MonkeyPatch, view: CacheView) -> None:
         from app.services.system import ui_cache
 
-        async def load() -> dict[str, Any]:
+        async def load() -> CacheView:
             return view
 
         monkeypatch.setattr(ui_cache, "load", load)
 
-    def test_families_rank_by_room_with_hit_rates(
+    def test_kinds_rank_by_room_with_hit_rates(
         self, signed_in: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         self._serve(monkeypatch, self._view())
@@ -358,7 +378,7 @@ class TestCache:
     def test_an_unreadable_cache_says_why(
         self, signed_in: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        self._serve(monkeypatch, {"error": "redis down", "backend": "redis"})
+        self._serve(monkeypatch, CacheView(backend="redis", error="redis down"))
         assert "redis down" in text(one(_get(signed_in, "cache"), "[role=alert]"))
 
 

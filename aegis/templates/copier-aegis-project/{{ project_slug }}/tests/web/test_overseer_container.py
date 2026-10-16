@@ -85,6 +85,19 @@ async def test_the_stream_sends_the_table_and_the_charts(
     assert "chart-container-memory-data" in sent["event: container-memory"]
 
 
+async def test_a_stream_can_send_just_some_charts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A page's Overview draws a few charts and no cards: its stream sends
+    those alone."""
+    use_runtime(monkeypatch, FakeRuntime(REDIS))
+    frames = [
+        f
+        async for f in overseer_container.events("redis", max_frames=1, charts=("cpu",))
+    ]
+    assert [frame.split("\n", 1)[0] for frame in frames] == ["event: container-cpu"]
+
+
 def test_the_charts_draw_what_was_sampled_without_asking_the_runtime(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

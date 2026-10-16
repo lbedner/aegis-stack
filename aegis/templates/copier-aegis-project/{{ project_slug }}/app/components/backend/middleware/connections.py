@@ -40,6 +40,7 @@ from fastapi import FastAPI
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from app.core.cache import get_cache
+from app.core.key_family import KeyFamily
 from app.core.log import logger
 
 try:  # Redis is optional; its errors are not OSErrors
@@ -57,6 +58,33 @@ RECENT = "connections:recent:"
 ALIVE = "connections:alive:"
 HEARTBEAT_SECONDS = 10
 ALIVE_TTL = 30
+# What the tracker keeps in the shared cache, for the keyspace map.
+REDIS_KEYS = (
+    KeyFamily(
+        RECORD + "*",
+        "string",
+        "Connection records",
+        "Each SSE and WebSocket connection's timeline, kept a day",
+        "Connections",
+        db="CACHE_REDIS_DB",
+    ),
+    KeyFamily(
+        RECENT + "*",
+        "string",
+        "Just closed",
+        "A connection that just closed, so one reconnecting continues its record",
+        "Connections",
+        db="CACHE_REDIS_DB",
+    ),
+    KeyFamily(
+        ALIVE + "*",
+        "string",
+        "Live processes",
+        "Each serving process, refreshed while it lives",
+        "Connections",
+        db="CACHE_REDIS_DB",
+    ),
+)
 # This process: the owner stamped on every record it writes.
 BOOT = uuid4().hex[:8]
 

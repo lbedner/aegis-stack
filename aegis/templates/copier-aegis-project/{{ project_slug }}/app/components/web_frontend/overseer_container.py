@@ -479,17 +479,22 @@ def overview_events(  # noqa: ANN201 - async iterator
 
 
 def events(  # noqa: ANN201 - async iterator
-    page: str, window: int = series.DEFAULT_WINDOW, max_frames: int | None = None
+    page: str,
+    window: int = series.DEFAULT_WINDOW,
+    max_frames: int | None = None,
+    charts: tuple[str, ...] = (),
 ):
     """The cards and each chart over SSE, each sent again only when it
     changes (``overseer_live.chart_frames``); a long window's charts are
-    read again only when its tier moves (``series.Redraw``)."""
+    read again only when its tier moves (``series.Redraw``). Given
+    ``charts``, those alone and no cards (a page's Overview)."""
     held: dict[str, tuple[list[str], int]] = {}
     redraw = series.Redraw(window)
 
     async def frame() -> dict[str, str]:
-        table, charts = await ui_runtime.section(page, window, draw=redraw.due())
-        sent = {EVENT: render(table)}
-        return sent if charts is None else sent | chart_frames(EVENT, charts, held)
+        table, drawn = await ui_runtime.section(page, window, draw=redraw.due())
+        shown = [c for c in drawn or () if not charts or c["key"] in charts]
+        sent = {} if charts else {EVENT: render(table)}
+        return sent | chart_frames(EVENT, shown, held)
 
     return fragments_events(frame, series.TICK_SECONDS, max_frames)

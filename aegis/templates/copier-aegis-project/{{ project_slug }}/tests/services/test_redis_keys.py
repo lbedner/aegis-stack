@@ -1,11 +1,13 @@
 """The Redis keyspace map: which part of the app owns each key, and how the
 map draws them."""
 
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Self
 
 import pytest
 
+import app
 from app.services.system import redis_keys
 from app.services.system.models import KeyProbe
 from app.services.system.redis_keys import KeyFamily
@@ -171,13 +173,26 @@ class TestFamilyOf:
         """Not the shared cache's catch-all: the charts' points, their
         tiers and the samplers' own keys say what they are."""
         keys = [
-            "series:containers:worker:app-worker-1:cpu",
+            "series-hour:containers:worker:app-worker-1:cpu",
             "series-60:containers:worker:app-worker-1:cpu",
-            "series-index:containers",
+            "series-index-hour:containers",
+            "series-index-60:containers",
             "series-latest:containers",
         ]
         names = [getattr(redis_keys.family_of(k), "name", None) for k in keys]
         assert None not in names and "Shared cache" not in names
+
+
+def test_every_module_declaring_keys_is_an_owner() -> None:
+    """A module's ``REDIS_KEYS`` count only once ``OWNERS`` lists it; one
+    left off has its keys fall to the shared cache's catch-all."""
+    root = Path(app.__file__).parent.parent
+    declaring = {
+        ".".join(path.relative_to(root).with_suffix("").parts)
+        for path in (root / "app").rglob("*.py")
+        if "\nREDIS_KEYS = " in path.read_text()
+    }
+    assert declaring and declaring <= set(redis_keys.OWNERS)
 
 
 class TestKeysOf:

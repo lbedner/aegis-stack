@@ -13,6 +13,11 @@ wherever the project keeps the file (a bind mount or a named volume):
 
 The server's ``.env`` carries this machine's ``ENCRYPTION_KEY`` (from
 ``.env.deploy``), so encrypted columns still decrypt there.
+
+``aegis deploy-upload-storage``: the stored files the server's rows name
+and its store lacks (the project's ``storage check``), from this
+machine's store. The database upload ends with it, since rows name files
+a database copy does not carry (aegis-stack#1679).
 """
 
 import shlex
@@ -29,24 +34,99 @@ from .deploy import (
     _compose_prefix,
     _create_backup,
     _get_project_root,
-    _load_deploy_config,
     _project_answers,
+    _require_deploy_config,
     _run_remote_capture,
 )
-from .deploy_backup import RESTORE, SNAPSHOT, is_sqlite
+from .deploy_backup import RESTORE, SNAPSHOT, STORAGE_ROOT, is_sqlite
+
+
+def _local(root: Path, command: list[str], out: Path, stdin: bytes = b"") -> bool:
+    """``command`` in this machine's running webserver, stdout into ``out``."""
+    with out.open("wb") as f:
+        done = subprocess.run(
+            ["docker", "compose", "exec", "-T", "webserver", *command],
+            cwd=root,
+            input=stdin,
+            stdout=f,
+            stderr=subprocess.PIPE,
+        )
+    return done.returncode == 0
 
 
 def _snapshot(root: Path, out: Path) -> bool:
     """This machine's database into ``out``, from the running stack."""
-    with out.open("wb") as f:
-        done = subprocess.run(
-            ["docker", "compose", "exec", "-T", "webserver"]
-            + ["python", "-c", SNAPSHOT],
-            cwd=root,
-            stdout=f,
-            stderr=subprocess.PIPE,
+    return _local(root, ["python", "-c", SNAPSHOT], out) and out.stat().st_size > 0
+
+
+# Keys on stdin, this machine's store's copies out as a tarball; a key
+# this store lacks too is left out, and the check after says so.
+_PACK = (
+    f'cd {STORAGE_ROOT} && while read -r k; do [ -f "$k" ] && echo "$k"; done'
+    " | tar -czf - -T -"
+)
+
+
+def _missing(host: str, user: str, prefix: str) -> list[str] | None:
+    """The keys the server's rows name and its store lacks; None when the
+    server cannot say (a project from before ``storage check``)."""
+    done = _run_remote_capture(
+        host, user, f"{prefix} exec -T webserver python -m app.cli.main storage check"
+    )
+    if done.returncode not in (0, 1):
+        return None
+    # stdout is the keys alone; what a person reads goes to stderr.
+    return done.stdout.split()
+
+
+def _pack(root: Path, keys: list[str], out: Path) -> bool:
+    """These objects from this machine's store into ``out``."""
+    return _local(root, ["sh", "-c", _PACK], out, "\n".join(keys).encode() + b"\n")
+
+
+def upload_storage(root: Path, server: dict[str, Any]) -> None:
+    """Bring the stored files the server's rows name and its store lacks.
+
+    Add only: a key is its file's hash, so nothing the server holds is
+    replaced. ponytail: into the server's filesystem store; a server on a
+    bucket fills it with its own copy.
+    """
+    host, user = server["host"], server["user"]
+    prefix = _compose_prefix(server["path"])
+    missing = _missing(host, user, prefix)
+    if missing:
+        typer.echo(t("deploy.storage_copying", count=len(missing)))
+        with tempfile.TemporaryDirectory() as tmp:
+            archive = Path(tmp, "storage.tar.gz")
+            if not _pack(root, missing, archive):
+                brand.error(t("deploy.storage_no_pack"), err=True)
+                raise typer.Exit(1)
+            unpacked = _run_remote_capture(
+                host,
+                user,
+                f"{prefix} exec -T webserver tar -xzf - -C {STORAGE_ROOT}",
+                archive,
+            )
+        if unpacked.returncode != 0:
+            brand.error(
+                t("deploy.storage_refused", error=unpacked.stderr.strip()), err=True
+            )
+            raise typer.Exit(1)
+        missing = _missing(host, user, prefix)
+    if missing is None:
+        brand.warn(t("deploy.storage_cannot_check"))
+        return
+    if missing:
+        brand.error(
+            t(
+                "deploy.storage_still_missing",
+                count=len(missing),
+                keys="\n".join(missing),
+            ),
+            err=True,
         )
-    return done.returncode == 0 and out.stat().st_size > 0
+        raise typer.Exit(1)
+    brand.success(t("deploy.storage_done", host=host))
 
 
 def refuse_unless_sqlite(root: Path) -> None:
@@ -88,6 +168,7 @@ def upload_db(root: Path, server: dict[str, Any]) -> None:
         brand.error(t("deploy.upload_start_failed"), err=True)
         raise typer.Exit(1)
     brand.success(t("deploy.upload_done", host=host))
+    upload_storage(root, server)
 
 
 def deploy_upload_db_command(
@@ -104,11 +185,23 @@ def deploy_upload_db_command(
     """
     root = _get_project_root(project_path)
     refuse_unless_sqlite(root)
-    config = _load_deploy_config(project_path)
-    if not config:
-        brand.error(t("deploy.no_config"), err=True)
-        raise typer.Exit(1)
+    config = _require_deploy_config(project_path)
     server = config["server"]
     if not yes:
         typer.confirm(t("deploy.upload_confirm", host=server["host"]), abort=True)
     upload_db(root, server)
+
+
+def deploy_upload_storage_command(
+    project_path: str | None = typer.Option(
+        None, "--project-path", help=lazy_t("common.help_project_path")
+    ),
+) -> None:
+    """
+    Copy the stored files the server's database names and its store lacks.
+
+    From this machine's running stack; adds only, so nothing on the server
+    is replaced. Fails naming any file neither machine has.
+    """
+    config = _require_deploy_config(project_path)
+    upload_storage(_get_project_root(project_path), config["server"])

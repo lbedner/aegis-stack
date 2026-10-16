@@ -9,14 +9,15 @@ import os
 import sqlite3
 import subprocess
 import sys
+import tarfile
 from pathlib import Path
 
 import pytest
 import typer
 
 from aegis.commands import deploy_upload
-from aegis.commands.deploy_backup import RESTORE, SNAPSHOT
-from aegis.commands.deploy_upload import upload_db
+from aegis.commands.deploy_backup import RESTORE, SNAPSHOT, STORAGE_ROOT
+from aegis.commands.deploy_upload import upload_db, upload_storage
 
 SERVER = {"host": "h", "user": "u", "path": "/opt/app"}
 
@@ -165,11 +166,12 @@ def test_the_upload_backs_up_stops_restores_and_starts(
 ) -> None:
     server = _upload(monkeypatch, tmp_path, b"SQLite format 3\x00 mine")
     upload_db(tmp_path, SERVER)
-    backup, down, restore, up = server.calls
+    backup, down, restore, up, check = server.calls
     assert backup == "backup"
     assert down.endswith("down")
     assert "run --rm --no-deps -T --entrypoint python webserver -c" in restore
     assert up.endswith("up -d")
+    assert check.endswith("storage check")
     assert server.uploaded == b"SQLite format 3\x00 mine"
 
 
@@ -180,3 +182,92 @@ def test_without_a_local_snapshot_the_server_is_never_touched(
     with pytest.raises(typer.Exit):
         upload_db(tmp_path, SERVER)
     assert server.calls == []
+
+
+GONE = [f"sha256/{d[:2]}/{d[2:4]}/{d}" for d in ("a" * 64, "b" * 64)]
+
+
+class _Store(_Server):
+    """A server whose ``storage check`` answers in turn from ``checks``
+    (exit code, stdout)."""
+
+    def __init__(self, *checks: tuple[int, str]) -> None:
+        super().__init__()
+        self.checks = list(checks)
+
+    def remote(
+        self, host: str, user: str, command: str, upload: Path | None = None
+    ) -> subprocess.CompletedProcess:
+        super().remote(host, user, command, upload)
+        if command.endswith("storage check"):
+            code, out = self.checks.pop(0)
+            return subprocess.CompletedProcess([], code, out, "")
+        return subprocess.CompletedProcess([], 0, "", "")
+
+
+def _store(monkeypatch: pytest.MonkeyPatch, server: _Store) -> list[list[str]]:
+    packed: list[list[str]] = []
+
+    def pack(root: Path, keys: list[str], out: Path) -> bool:
+        packed.append(keys)
+        out.write_bytes(b"tarball")
+        return True
+
+    monkeypatch.setattr(deploy_upload, "_pack", pack)
+    monkeypatch.setattr(deploy_upload, "_run_remote_capture", server.remote)
+    return packed
+
+
+def test_only_the_files_the_server_lacks_are_sent_then_checked(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Steward's first deploy brought the database and not one of the 92
+    files its rows named (aegis-stack#1679)."""
+    server = _Store((1, "\n".join(GONE)), (0, ""))
+    packed = _store(monkeypatch, server)
+    upload_storage(tmp_path, SERVER)
+    assert packed == [GONE]
+    check, unpack, recheck = server.calls
+    assert f"tar -xzf - -C {STORAGE_ROOT}" in unpack
+    assert server.uploaded == b"tarball"
+    assert recheck == check
+
+
+def test_a_file_neither_machine_has_fails_by_name(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture
+) -> None:
+    server = _Store((1, "\n".join(GONE)), (1, GONE[0]))
+    _store(monkeypatch, server)
+    with pytest.raises(typer.Exit):
+        upload_storage(tmp_path, SERVER)
+    assert GONE[0] in capsys.readouterr().err
+
+
+def test_a_server_that_cannot_check_is_sent_nothing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A project from before ``storage check``: Click's usage error, 2."""
+    server = _Store((2, "No such command 'storage'."))
+    packed = _store(monkeypatch, server)
+    upload_storage(tmp_path, SERVER)
+    assert packed == []
+    assert len(server.calls) == 1
+
+
+def test_the_pack_holds_the_keys_asked_for_that_this_store_has(
+    tmp_path: Path,
+) -> None:
+    held, absent = GONE
+    (tmp_path / held).parent.mkdir(parents=True)
+    (tmp_path / held).write_bytes(b"kept")
+    done = subprocess.run(
+        ["sh", "-c", deploy_upload._PACK.replace(STORAGE_ROOT, str(tmp_path))],
+        input=f"{held}\n{absent}\n".encode(),
+        capture_output=True,
+        # The real one runs in the container; macOS tar adds ._ files.
+        env={**os.environ, "COPYFILE_DISABLE": "1"},
+    )
+    assert done.returncode == 0, done.stderr
+    (tmp_path / "out.tar.gz").write_bytes(done.stdout)
+    with tarfile.open(tmp_path / "out.tar.gz") as archive:
+        assert archive.getnames() == [held]

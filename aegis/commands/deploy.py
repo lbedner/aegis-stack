@@ -116,6 +116,15 @@ def _load_deploy_config(project_path: str | None = None) -> dict | None:
         return yaml.safe_load(f)
 
 
+def _require_deploy_config(project_path: str | None = None) -> dict:
+    """The deploy configuration, or exit saying there is none."""
+    config = _load_deploy_config(project_path)
+    if not config:
+        brand.error(t("deploy.no_config"), err=True)
+        raise typer.Exit(1)
+    return config
+
+
 def _save_deploy_config(config: dict, project_path: str | None = None) -> None:
     """Save deploy configuration to .aegis/deploy.yml."""
     project_root = _get_project_root(project_path)
@@ -1227,10 +1236,7 @@ def deploy_setup_command(
         - aegis deploy-setup
         - aegis deploy-setup --public-key ~/.ssh/id_ed25519.pub
     """
-    config = _load_deploy_config(project_path)
-    if not config:
-        brand.error(t("deploy.no_config"), err=True)
-        raise typer.Exit(1)
+    config = _require_deploy_config(project_path)
 
     host = config["server"]["host"]
     user = config["server"]["user"]
@@ -1394,10 +1400,7 @@ def deploy_command(
         - aegis deploy --no-backup --no-health-check
         - aegis deploy --rolling
     """
-    config = _load_deploy_config(project_path)
-    if not config:
-        brand.error(t("deploy.no_config"), err=True)
-        raise typer.Exit(1)
+    config = _require_deploy_config(project_path)
 
     host = config["server"]["host"]
     user = config["server"]["user"]
@@ -1572,10 +1575,7 @@ def deploy_backup_command(
     Examples:
         - aegis deploy-backup
     """
-    config = _load_deploy_config(project_path)
-    if not config:
-        brand.error(t("deploy.no_config"), err=True)
-        raise typer.Exit(1)
+    config = _require_deploy_config(project_path)
 
     host = config["server"]["host"]
     user = config["server"]["user"]
@@ -1611,10 +1611,7 @@ def deploy_backups_command(
     Examples:
         - aegis deploy-backups
     """
-    config = _load_deploy_config(project_path)
-    if not config:
-        brand.error(t("deploy.no_config"), err=True)
-        raise typer.Exit(1)
+    config = _require_deploy_config(project_path)
 
     host = config["server"]["host"]
     user = config["server"]["user"]
@@ -1658,10 +1655,7 @@ def deploy_rollback_command(
         - aegis deploy-rollback
         - aegis deploy-rollback --backup 2026-03-10_183045
     """
-    config = _load_deploy_config(project_path)
-    if not config:
-        brand.error(t("deploy.no_config"), err=True)
-        raise typer.Exit(1)
+    config = _require_deploy_config(project_path)
 
     host = config["server"]["host"]
     user = config["server"]["user"]
@@ -1732,10 +1726,7 @@ def deploy_logs_command(
         - aegis deploy-logs --no-follow
         - aegis deploy-logs --service webserver
     """
-    config = _load_deploy_config(project_path)
-    if not config:
-        brand.error(t("deploy.no_config"), err=True)
-        raise typer.Exit(1)
+    config = _require_deploy_config(project_path)
 
     host = config["server"]["host"]
     user = config["server"]["user"]
@@ -1758,10 +1749,7 @@ def deploy_status_command(
     Examples:
         - aegis deploy-status
     """
-    config = _load_deploy_config(project_path)
-    if not config:
-        brand.error(t("deploy.no_config"), err=True)
-        raise typer.Exit(1)
+    config = _require_deploy_config(project_path)
 
     host = config["server"]["host"]
     user = config["server"]["user"]
@@ -1782,10 +1770,7 @@ def deploy_stop_command(
     Examples:
         - aegis deploy-stop
     """
-    config = _load_deploy_config(project_path)
-    if not config:
-        brand.error(t("deploy.no_config"), err=True)
-        raise typer.Exit(1)
+    config = _require_deploy_config(project_path)
 
     host = config["server"]["host"]
     user = config["server"]["user"]
@@ -1811,10 +1796,7 @@ def deploy_restart_command(
     Examples:
         - aegis deploy-restart
     """
-    config = _load_deploy_config(project_path)
-    if not config:
-        brand.error(t("deploy.no_config"), err=True)
-        raise typer.Exit(1)
+    config = _require_deploy_config(project_path)
 
     host = config["server"]["host"]
     user = config["server"]["user"]
@@ -1844,10 +1826,7 @@ def deploy_shell_command(
         - aegis deploy-shell
         - aegis deploy-shell --service redis
     """
-    config = _load_deploy_config(project_path)
-    if not config:
-        brand.error(t("deploy.no_config"), err=True)
-        raise typer.Exit(1)
+    config = _require_deploy_config(project_path)
 
     host = config["server"]["host"]
     user = config["server"]["user"]
@@ -1887,10 +1866,7 @@ def deploy_exec_command(
         - aegis deploy-exec -- alembic current
         - aegis deploy-exec --service worker-system -- myapp jobs list
     """
-    config = _load_deploy_config(project_path)
-    if not config:
-        brand.error(t("deploy.no_config"), err=True)
-        raise typer.Exit(1)
+    config = _require_deploy_config(project_path)
 
     if not command:
         brand.error(t("deploy.exec_no_command"), err=True)
@@ -2220,10 +2196,7 @@ def deploy_cd_setup_command(
         _check_gh_cli()
 
     # Preflight: deploy config
-    config = _load_deploy_config(project_path)
-    if not config:
-        brand.error(t("deploy.no_config"), err=True)
-        raise typer.Exit(1)
+    config = _require_deploy_config(project_path)
     host = config["server"]["host"]
     user = config["server"]["user"]
 

@@ -356,6 +356,9 @@ COMPONENTS: dict[str, ComponentSpec] = {
             primary=[
                 "app/core/db.py",
                 "app/components/database",
+                "app/cli/storage_cli.py",
+                "tests/cli/test_storage_cli.py",
+                "tests/core/test_missing_objects.py",
                 "tests/components/test_database_saved.py",
                 "app/core/db_activity.py",
                 "tests/core/test_db_activity.py",

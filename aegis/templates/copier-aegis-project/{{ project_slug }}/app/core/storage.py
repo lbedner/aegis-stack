@@ -22,9 +22,12 @@ import os
 from pathlib import Path
 import re
 import tempfile
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from app.core.constants import ComponentName
+
+if TYPE_CHECKING:
+    from sqlmodel.ext.asyncio.session import AsyncSession
 
 # The component this client fronts (``ownership``, ``ontology.calls``).
 FRONTS = ComponentName.STORAGE
@@ -34,6 +37,8 @@ DIGEST_ALGORITHM = "sha256"
 # database columns and API payloads, so they are validated rather than
 # trusted: a traversal in one must not reach a file it was never given.
 _KEY_PATTERN = re.compile(r"^sha256/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{64}$")
+# The same key, found inside a JSON document that names it.
+_KEY_IN_TEXT = re.compile(_KEY_PATTERN.pattern.strip("^$"))
 
 
 def content_key(data: bytes) -> str:
@@ -194,3 +199,49 @@ def set_storage(storage: ObjectStorage | None) -> None:
     """Point the process at a different store (tests, a backend swap)."""
     global _storage
     _storage = storage
+
+
+def _kind(column: Any) -> Any:
+    """The column's SQL type; SQLModel's ``AutoString`` wraps ``String``."""
+    return getattr(column.type, "impl_instance", column.type)
+
+
+async def missing_objects(session: AsyncSession) -> list[str]:
+    """Every object a row names that the configured store lacks.
+
+    A copy that brought the database and not the store (a first deploy, a
+    restore) leaves rows pointing at nothing, found only when a page shows
+    a broken file. Rows name objects in ``*_key`` columns (a document's
+    file) or inside JSON (a chat attachment, a paste); either way a value
+    is one only if it is a content key, so ``payee_key`` and the like are
+    skipped.
+
+    ponytail: one ``exists`` per key, and every JSON column read through;
+    list the store, and mark the columns, if either grows large.
+    """
+    from sqlalchemy import JSON, String, cast, select, union, union_all
+    from sqlmodel import SQLModel
+
+    from app.core.model_registry import import_all_models
+
+    import_all_models()
+    columns = [c for t in SQLModel.metadata.tables.values() for c in t.columns]
+    named = [
+        select(c.label("v")).where(c.like(f"{DIGEST_ALGORITHM}/%"))
+        for c in columns
+        if c.name.endswith("_key") and isinstance(_kind(c), String)
+    ]
+    docs = [cast(c, String) for c in columns if isinstance(_kind(c), JSON)]
+    inside = [
+        select(d.label("v")).where(d.like(f"%{DIGEST_ALGORITHM}/%")) for d in docs
+    ]
+    keys: set[str] = set()
+    if named:
+        keys.update((await session.execute(union(*named))).scalars())
+    if inside:
+        for doc in (await session.execute(union_all(*inside))).scalars():
+            keys.update(_KEY_IN_TEXT.findall(doc))
+    found = sorted(keys)
+    storage = get_storage()
+    held = await asyncio.gather(*(storage.exists(key) for key in found))
+    return [key for key, ok in zip(found, held, strict=True) if not ok]

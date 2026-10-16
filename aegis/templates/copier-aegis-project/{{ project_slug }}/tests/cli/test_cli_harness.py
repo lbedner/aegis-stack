@@ -43,3 +43,18 @@ def test_a_failing_command_still_closes_it(monkeypatch: pytest.MonkeyPatch) -> N
     with pytest.raises(RuntimeError, match="boom"):
         asyncio.run(cli_main.run_command(command()))
     assert len(closed_on) == 1
+
+
+def test_logs_go_to_stderr_so_stdout_is_the_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Unconfigured, structlog prints to stdout: a slow-query warning on
+    the server landed among the keys ``storage check`` prints for ``aegis
+    deploy-upload-storage`` to read (2026-10-16)."""
+    import sys
+
+    streams: list[object] = []
+    monkeypatch.setattr(cli_main, "setup_logging", streams.append)
+    monkeypatch.setattr(sys, "argv", ["app", "--help"])
+    cli_main.main()
+    assert streams == [sys.stderr]

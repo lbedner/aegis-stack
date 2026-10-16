@@ -15,6 +15,7 @@ import app.cli._i18n_click  # noqa: F401 — translate Click's built-in --help t
 import click
 import typer
 from app.cli import dns, docs, health, patterns, settings_cli, theme
+from app.core.log import setup_logging
 from app.i18n import detect_locale, lazy_t, set_locale, t
 from app.i18n.locales import AVAILABLE_LOCALES
 
@@ -254,6 +255,9 @@ async def run_command(command: Coroutine[Any, Any, T]) -> T:
 
 def main() -> None:
     """Entry point for the CLI application."""
+    # Logs to stderr: stdout is a command's output, which a script reads
+    # (unconfigured, structlog prints to stdout).
+    setup_logging(sys.stderr)
     try:
         result = app(standalone_mode=False)
         # Handle async commands - standalone_mode=False returns coroutines unawaited

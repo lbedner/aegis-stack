@@ -15,7 +15,6 @@ from app.cli import theme
 from app.cli.health_display import _display_health_status
 from app.core.config import settings
 from app.core.constants import APIEndpoints, Defaults
-from app.core.log import setup_logging
 from app.i18n import lazy_t, t
 from app.services.system.models import (
     DetailedHealthResponse,
@@ -115,8 +114,6 @@ def health_status(
         False, "--json", "-j", help=lazy_t("health.opt_json")
     ),
 ) -> None:
-    setup_logging()
-
     try:
         endpoint = (
             APIEndpoints.HEALTH_DETAILED if detailed else APIEndpoints.HEALTH_BASIC
@@ -142,8 +139,6 @@ def health_status(
 
 @app.command("probe", help=lazy_t("health.help_probe"))
 def health_probe() -> None:
-    setup_logging()
-
     try:
         healthy = asyncio.run(is_system_healthy())
 
@@ -158,6 +153,3 @@ def health_probe() -> None:
         console.print(f"[{theme.ERROR}]{t('health.probe_failed', error=e)}[/]")
         sys.exit(1)
 
-
-if __name__ == "__main__":
-    app()

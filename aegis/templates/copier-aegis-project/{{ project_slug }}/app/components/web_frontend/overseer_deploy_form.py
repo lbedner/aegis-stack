@@ -21,7 +21,7 @@ from app.components.deploy.protocol import (
 )
 from app.core import exposure
 from app.core.config import settings
-from app.core.formatting import format_bytes
+from app.core.formatting import format_bytes, format_relative_time
 from app.services.system import deploy_fit, deploy_spend, hosting, ui_deployments
 
 from .overseer_deploy_actions import (
@@ -143,6 +143,18 @@ def _loading(
     }
 
 
+def _ready(path: str, found: dict[str, Any]) -> dict[str, Any]:
+    """A part the agent answered: when it looked (``checked_at``, which an
+    agent before it does not say), and where asking it again loads it from
+    (``path``, a refresh)."""
+    at = found.get("checked_at")
+    return {
+        "state": "ready",
+        "checked": format_relative_time(at) if at else None,
+        "refresh": with_query(path, refresh="1"),
+    }
+
+
 def _failed(path: str, exc: RefusedError, **picked: str) -> dict[str, Any]:
     """A part that could not be had: why, and where asking again loads it
     from (``path``)."""
@@ -189,13 +201,16 @@ async def _listening() -> dict[str, Any]:
 
 
 async def _from_agent(
-    action: str, args: dict[str, str], job: str | None, by: str
+    action: str, args: dict[str, str], job: str | None, by: str, fresh: bool = False
 ) -> tuple[dict[str, Any] | None, str | None]:
     """What the agent keeps for ``action``, asking for it once when there
-    is none: ``(found, None)``, or ``(None, job)`` while that ask (``job``)
-    runs; RefusedError when it cannot be asked, failed, or will not be
-    answered (its job gone, the agent stopped), so no poll runs forever.
-    What is kept is read first: a poll that finds it costs one read."""
+    is none (or ``fresh``, a refresh, forgets it first): ``(found, None)``,
+    or ``(None, job)`` while that ask (``job``) runs; RefusedError when it
+    cannot be asked, failed, or will not be answered (its job gone, the
+    agent stopped), so no poll runs forever. What is kept is read first: a
+    poll that finds it costs one read."""
+    if fresh and not job:
+        await deploy_agent.forget(action, args)
     if (found := await deploy_agent.kept(action, args)) is not None:
         return found, None
     if job:
@@ -370,12 +385,14 @@ async def history_panel(
     card's live build); while it has not, it asked (once) and the part
     waiting, or why it failed."""
     try:
-        found, job = await _from_agent("history", {}, form.get("job"), by)
+        found, job = await _from_agent(
+            "history", {}, form.get("job"), by, fresh=bool(form.get("refresh"))
+        )
     except RefusedError as exc:
         return _failed(path, exc)
     if found is None:
         return _loading(path, job)
-    return {"state": "ready"} | ui_deployments.history_rows(
+    return _ready(path, found) | ui_deployments.history_rows(
         found["deploys"], found.get("events")
     )
 
@@ -385,12 +402,17 @@ async def storage_panel(form: dict[str, str], by: str) -> dict[str, Any]:
     (the protocol's ``storage``) as the agent last checked; while it has
     not, it asked (once) and the part waiting, or why it failed."""
     try:
-        found, job = await _from_agent("storage", {}, form.get("job"), by)
+        found, job = await _from_agent(
+            "storage", {}, form.get("job"), by, fresh=bool(form.get("refresh"))
+        )
     except RefusedError as exc:
         return _failed(STORAGE, exc)
     if found is None:
         return _loading(STORAGE, job)
-    return {"state": "ready", "missing": len(found["missing"]), "partials": PARTIALS}
+    return _ready(STORAGE, found) | {
+        "missing": len(found["missing"]),
+        "partials": PARTIALS,
+    }
 
 
 # The History section on this machine, and the server card's live build

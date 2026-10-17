@@ -255,6 +255,13 @@ async def kept(action: str, args: dict[str, str]) -> dict[str, Any] | None:
     return await _kept(kept_key(action, args))
 
 
+async def forget(action: str, args: dict[str, str]) -> None:
+    """Drop what the agent keeps for ``action``: the next read asks it
+    again (a part's refresh)."""
+    async with _redis() as client:
+        await client.delete(kept_key(action, args))
+
+
 def action_of(job: JobSnapshot) -> str:
     """The protocol action a deploy job runs (its name, ``JOB_PREFIX``)."""
     return job.name.removeprefix(JOB_PREFIX)

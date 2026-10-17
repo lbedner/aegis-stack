@@ -619,6 +619,22 @@ STACK_COMBINATIONS = [
         expected_pyproject_deps=["fastapi", "flet", "jinja2", "redis"],
     ),
     StackCombination(
+        name="deploy_backups",
+        # Deploy with a database and the scheduler: the nightly backup sent
+        # off the server, recorded as a deploy event, and the restore
+        # drill's checks on a copy of it.
+        components=["deploy", "database", "scheduler"],
+        services=[],
+        description="Deploy with scheduled backups sent off the server",
+        expected_files=[
+            "app/services/system/offsite.py",
+            "app/components/deploy/drill.py",
+            "tests/services/test_offsite_backup.py",
+        ],
+        expected_docker_services=["webserver", "scheduler"],
+        expected_pyproject_deps=["fastapi", "flet", "sqlmodel"],
+    ),
+    StackCombination(
         name="everything",
         components=["database", "scheduler", "worker", "redis", "browser"],
         # Every service, which is the point of the row: `documents` sits in

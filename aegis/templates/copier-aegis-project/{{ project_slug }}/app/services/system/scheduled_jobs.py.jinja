@@ -6,6 +6,9 @@ from app.core.schedule import ServiceJob
 from app.core.schedule import LONG_RUNNING
 from app.services.system.backup import backup_database_job
 {%- endif %}
+{%- if include_deploy and include_scheduler and include_database %}
+from app.services.system.offsite import offsite_backup_job
+{%- endif %}
 
 JOBS: tuple[ServiceJob, ...] = (
 {%- if include_scheduler and include_database %}
@@ -14,6 +17,16 @@ JOBS: tuple[ServiceJob, ...] = (
         "database_backup",
         "Daily Database Backup",
         {"trigger": "cron", "hour": 2, "minute": 0},
+        timeout=LONG_RUNNING,
+    ),
+{%- endif %}
+{%- if include_deploy and include_scheduler and include_database %}
+    # After the backup it sends; does nothing until a repository is set.
+    ServiceJob(
+        offsite_backup_job,
+        "offsite_backup",
+        "Off-site Backup",
+        {"trigger": "cron", "hour": 2, "minute": 30},
         timeout=LONG_RUNNING,
     ),
 {%- endif %}

@@ -342,48 +342,43 @@ aegis deploy-backup [OPTIONS]
 3. Copies all deployed files into `files/` via server-side `rsync` (the code and the server's `.env`)
 4. Dumps the PostgreSQL database to `db_backup.sql` if a postgres container is running
 5. Archives the object store (the `storage-data` volume) to `storage.tar.gz`
-6. Pushes the backup off the box when the server is configured for it (see below)
-7. Prunes old backups beyond the retention count (default: 5)
+6. Prunes old backups beyond the retention count (default: 5)
 
-**Off-box copy (optional):** backups on the server die with the server. To keep
-a copy elsewhere, point [restic](https://restic.net) at S3-compatible storage
-(DigitalOcean Spaces, Backblaze B2, AWS S3). restic encrypts on the server
-before anything is uploaded, and everything but `files/` is pushed, so the
-`.env`, keys and the restic password never reach the bucket. Keep a copy of
-`.env` and the restic password somewhere else (a password manager): without
-them the backup cannot be read, nor the app's encrypted fields.
+These backups stay on the server, for rollbacks.
 
-On the server, once (`app` is the last part of the deploy path, `/opt/app`):
+**Off the server:** backups on the server die with it. A project with
+the deploy component, a database and the scheduler sends its nightly
+backup elsewhere instead: at 02:00 the app backs up its database (and its
+stored files, on the filesystem store), and at 02:30 its off-site job
+sends that backup with [restic](https://restic.net) to S3-compatible
+storage (DigitalOcean Spaces, Backblaze B2, AWS S3). restic encrypts it
+before it leaves, and keeps 7 daily, 4 weekly and 6 monthly copies.
 
-```bash
-apt-get install -y restic
-mkdir -p /etc/aegis && install -m 600 /dev/null /etc/aegis/app.restic.env
-cat > /etc/aegis/app.restic.env <<'EOF'
-RESTIC_REPOSITORY=s3:https://nyc3.digitaloceanspaces.com/<bucket>/app
-RESTIC_PASSWORD=<long random password>
-AWS_ACCESS_KEY_ID=<Spaces access key>
-AWS_SECRET_ACCESS_KEY=<Spaces secret key>
-EOF
-```
-
-From then on every backup (each `aegis deploy` and `aegis deploy-backup`) is
-pushed after it is taken, tagged with its timestamp; the first push creates the
-repository. Copies are only as frequent as backups: run `aegis deploy-backup`
-on a schedule (cron, CI) for a cadence. restic keeps every snapshot until told
-otherwise; thin them with `restic forget --keep-daily 7 --keep-weekly 4 --prune`.
-
-To restore, on the server (a fresh one: `aegis deploy-setup`, `aegis deploy`,
-then the env file above):
+It does nothing until these four are set, in `.env.deploy` or in
+Overseer > Secrets:
 
 ```bash
-set -a && . /etc/aegis/app.restic.env && set +a
-restic snapshots                      # the tag is the backup timestamp
-restic restore latest --target /      # back to /opt/app/backups/<timestamp>/
+OFFSITE_BACKUP_REPOSITORY=s3:https://nyc3.digitaloceanspaces.com/<bucket>/<project>
+OFFSITE_BACKUP_PASSWORD=<long random password>
+OFFSITE_BACKUP_ACCESS_KEY=<Spaces key id>
+OFFSITE_BACKUP_SECRET_KEY=<Spaces key secret>
 ```
 
-then, locally, `aegis deploy-rollback --backup <timestamp>`. An off-box copy
-has no `files/`, so the rollback leaves the deployed code alone and restores
-the data.
+Keep the password and the app's `ENCRYPTION_KEY` somewhere else too (a
+password manager): without them the copies cannot be read, nor the app's
+encrypted fields. Overseer > Deployments > Backups shows the last copy,
+and History lists each one.
+
+To check that a copy restores, run `aegis deploy-restore-drill` (or
+**Rehearse a restore** in the Overseer). It restores the newest copy on
+this machine and runs the app's own checks on it: the database is whole,
+the app starts on it, every stored secret decrypts, every stored file is
+there. Nothing on the server changes; the result is recorded there.
+
+To restore by hand, anywhere with restic and the same four values (as
+`RESTIC_REPOSITORY`, `RESTIC_PASSWORD`, `AWS_ACCESS_KEY_ID`,
+`AWS_SECRET_ACCESS_KEY`): `restic snapshots`, then
+`restic restore latest --target <dir>`.
 
 **Examples:**
 ```bash

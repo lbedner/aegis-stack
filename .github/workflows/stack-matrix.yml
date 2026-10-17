@@ -67,6 +67,7 @@ jobs:
           - ai_ollama
           - inference_docker
           - deploy
+          - deploy_backups
           - ai_voice
           - insights
           - insights_per_user

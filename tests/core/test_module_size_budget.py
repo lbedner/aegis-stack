@@ -71,8 +71,9 @@ BUDGET: dict[str, int] = {
     # WEBSERVER_LOOP (6, its Literal wraps) had nowhere else to live,
     # settings are this file. Now 309 over the 500 limit. The serving
     # settings are the third group to land here by default; grouping them
-    # into nested models is the split this file keeps asking for.
-    "core/config.py.jinja": 809,
+    # into nested models is the split this file keeps asking for. 816:
+    # the off-site backup's four settings (#1482), with the deploy ones.
+    "core/config.py.jinja": 816,
     # declare.py is unchanged at 408 and under the 500 cap. It trips the
     # SHARE rule only because detect.py - the other big file in
     # recurring/ - became a package, leaving declare the largest thing

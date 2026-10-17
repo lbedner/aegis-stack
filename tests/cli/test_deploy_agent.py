@@ -42,6 +42,7 @@ import os, sys
 print("ran " + " ".join(sys.argv[1:]))
 print("token " + os.environ.get("DIGITALOCEAN_TOKEN", ""))
 print("dns " + os.environ.get("PORKBUN_API_KEY", ""))
+print("asked by " + os.environ.get("AEGIS_ACTOR", ""))
 if os.environ.get("FAKE_WAIT_FOR"):  # until a look is answered, or 5s
     import time
     for _ in range(50):
@@ -391,6 +392,15 @@ def test_a_command_that_fails_fails_the_job(
     assert job.result["lines"][0] == f"ran deploy --project-path {project}"
 
 
+def test_the_command_is_told_who_asked(project: Path, app_store: Any) -> None:
+    """The Overseer user the request names, for the event the command
+    records (aegis-stack#1482)."""
+    redis = FakeRedis()
+    job_id = _request(redis, app_store, "backup")
+    _serve(redis, project)
+    assert "asked by ada" in _job(redis, app_store, job_id).result["lines"]
+
+
 def test_a_destroy_carries_the_typed_name(project: Path, app_store: Any) -> None:
     redis = FakeRedis()
     job_id = _request(redis, app_store, "destroy", {"confirm": "my-app"})
@@ -649,11 +659,13 @@ def test_the_servers_deploy_history_is_kept_for_the_overseer(
     (project / "app" / "cli").mkdir(parents=True)
     (project / "app" / "cli" / "deploy_cli.py").write_text("")
     rows = [{"build_id": "1c956eef", "health": "passed"}]
+    events = [{"kind": "restore-drill", "outcome": "ok"}]
     ran: list[str] = []
 
     def remote(host: str, user: str, command: str) -> subprocess.CompletedProcess:
         ran.append(command)
-        out = "a log line\n" + json.dumps(rows) + "\n"
+        found = events if command.endswith("deploy events") else rows
+        out = "a log line\n" + json.dumps(found) + "\n"
         return subprocess.CompletedProcess([], 0, out, "")
 
     monkeypatch.setattr(agent, "_run_remote_capture", remote)
@@ -661,9 +673,11 @@ def test_the_servers_deploy_history_is_kept_for_the_overseer(
     job_id = _request(redis, app_store, "history", {})
     _serve(redis, project)
     assert _job(redis, app_store, job_id).status == "done"
-    assert json.loads(redis.strings["deploy:history"]) == {"deploys": rows}
-    (command,) = ran
-    assert "exec -T webserver python -m app.cli.main deploy history" in command
+    kept = json.loads(redis.strings["deploy:history"])
+    assert kept == {"deploys": rows, "events": events}
+    history, done = ran
+    assert "exec -T webserver python -m app.cli.main deploy history" in history
+    assert done.endswith("deploy events")
 
 
 def test_the_servers_missing_files_are_kept_for_the_overseer(

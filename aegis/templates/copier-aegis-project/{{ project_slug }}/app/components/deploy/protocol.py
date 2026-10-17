@@ -47,12 +47,39 @@ DEPLOY_STEPS = {
 
 # A backup's steps, as its step bar names them: those it takes, in the
 # order it takes them (``database`` before ``files`` for SQLite, after for
-# Postgres; ``offsite`` only for a server that pushes one).
+# Postgres).
 BACKUP_STEPS = {
     "database": "Database",
     "files": "Code and settings",
     "documents": "Documents",
-    "offsite": "Off the server",
+}
+
+# A deploy event (``deploy event``): how it went, and History's name for
+# each kind, an action's name but the off-site copy (the server's nightly
+# job); aegis records them, through the app.
+EVENT_OK, EVENT_FAILED = "ok", "failed"
+OFFSITE, DRILL = "offsite", "restore-drill"
+EVENT_TITLES = {
+    "backup": "Backup",
+    "upload-db": "Database brought",
+    "upload-storage": "Stored files brought",
+    DRILL: "Restore drill",
+    OFFSITE: "Off-site copy",
+}
+# The off-site copy's settings (``app.services.system.offsite``), each as
+# restic and its S3 client read it: the job sends with them, and aegis's
+# restore drill reads the copies back with them.
+RESTIC_ENV = {
+    "OFFSITE_BACKUP_REPOSITORY": "RESTIC_REPOSITORY",
+    "OFFSITE_BACKUP_PASSWORD": "RESTIC_PASSWORD",
+    "OFFSITE_BACKUP_ACCESS_KEY": "AWS_ACCESS_KEY_ID",
+    "OFFSITE_BACKUP_SECRET_KEY": "AWS_SECRET_ACCESS_KEY",
+}
+# A restore drill's steps (``aegis deploy-restore-drill``).
+DRILL_STEPS = {
+    "restore": "Restore the newest copy",
+    "check": "Check it",
+    "record": "Record it",
 }
 
 PROTOCOL: dict[str, Any] = {
@@ -159,6 +186,12 @@ PROTOCOL: dict[str, Any] = {
         },
         "upload-storage": {
             "command": ["deploy-upload-storage"],
+        },
+        # The newest off-site copy, restored in a throwaway container on
+        # the agent's machine and checked; recorded on the server.
+        DRILL: {
+            "command": ["deploy-restore-drill"],
+            "steps": DRILL_STEPS,
         },
         "rollback": {
             "command": ["deploy-rollback"],

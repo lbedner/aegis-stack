@@ -1028,6 +1028,7 @@ MESSAGES: dict[str, str] = {
     "deploy.upload_start_failed": "データベースは配置されましたが、スタックが起動しませんでした。理由は aegis deploy-logs で確認できます。",
     "deploy.upload_done": "このマシンのデータベースは {host} にあります。",
     "deploy.upload_confirm": "{host} のデータベースをこのマシンのものに置き換えますか？サーバーのデータベースは先にバックアップされます。",
+    "deploy.upload_sent": "{total:.1f} MB 中 {sent:.1f} MB を送信しました...",
     "deploy.storage_cannot_check": "サーバーは不足している保存ファイルを一覧できません（プロジェクトが `storage check` より前のものです）。何もコピーしていません。プロジェクトを更新してデプロイし、aegis deploy-upload-storage を実行してください。",
     "deploy.storage_copying": "サーバーのデータベースが参照していてサーバーにない保存ファイル {count} 件をコピー中...",
     "deploy.storage_no_pack": "このマシンの保存ファイルを読めませんでした: スタックを起動して（make serve）再試行してください。サーバーには触れていません。",

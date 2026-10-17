@@ -993,6 +993,7 @@ MESSAGES: dict[str, str] = {
     "deploy.upload_start_failed": "데이터베이스는 교체되었지만 스택이 시작되지 않았습니다. 이유는 aegis deploy-logs에서 확인하세요.",
     "deploy.upload_done": "이 머신의 데이터베이스가 {host}에 있습니다.",
     "deploy.upload_confirm": "{host}의 데이터베이스를 이 머신의 것으로 교체할까요? 서버의 데이터베이스는 먼저 백업됩니다.",
+    "deploy.upload_sent": "{total:.1f} MB 중 {sent:.1f} MB 전송됨...",
     "deploy.storage_cannot_check": "서버가 누락된 저장 파일을 나열할 수 없습니다 (프로젝트가 `storage check` 이전 버전입니다). 아무것도 복사하지 않았습니다. 프로젝트를 업데이트하고 배포한 뒤 aegis deploy-upload-storage를 실행하세요.",
     "deploy.storage_copying": "서버 데이터베이스가 가리키지만 서버에 없는 저장 파일 {count}개를 복사하는 중...",
     "deploy.storage_no_pack": "이 머신의 저장 파일을 읽을 수 없습니다: 스택을 시작하고(make serve) 다시 시도하세요. 서버는 변경되지 않았습니다.",

@@ -1093,6 +1093,7 @@ MESSAGES: dict[str, str] = {
     "deploy.upload_start_failed": "The database is in place, but the stack did not start: aegis deploy-logs says why.",
     "deploy.upload_done": "This machine's database is on {host}.",
     "deploy.upload_confirm": "Replace the database on {host} with this machine's? The server's is backed up first.",
+    "deploy.upload_sent": "Sent {sent:.1f} of {total:.1f} MB...",
     "deploy.storage_cannot_check": "The server cannot list the stored files it lacks (its project predates `storage check`); nothing was copied. Update the project and deploy, then run aegis deploy-upload-storage.",
     "deploy.storage_copying": "Copying the {count} stored files the server's database names and it lacks...",
     "deploy.storage_no_pack": "Could not read this machine's stored files: start its stack (make serve) and try again. The server was not touched.",

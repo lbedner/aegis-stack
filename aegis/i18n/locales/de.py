@@ -1043,6 +1043,7 @@ MESSAGES: dict[str, str] = {
     "deploy.upload_start_failed": "Die Datenbank ist eingespielt, aber der Stack startete nicht: aegis deploy-logs zeigt warum.",
     "deploy.upload_done": "Die Datenbank dieses Rechners ist auf {host}.",
     "deploy.upload_confirm": "Die Datenbank auf {host} durch die dieses Rechners ersetzen? Die des Servers wird vorher gesichert.",
+    "deploy.upload_sent": "{sent:.1f} von {total:.1f} MB gesendet...",
     "deploy.storage_cannot_check": "Der Server kann die ihm fehlenden gespeicherten Dateien nicht auflisten (sein Projekt ist älter als `storage check`); nichts wurde kopiert. Projekt aktualisieren und deployen, dann aegis deploy-upload-storage ausführen.",
     "deploy.storage_copying": "Kopiere die {count} gespeicherten Dateien, die die Datenbank des Servers nennt und die ihm fehlen...",
     "deploy.storage_no_pack": "Die gespeicherten Dateien dieses Rechners konnten nicht gelesen werden: Stack starten (make serve) und erneut versuchen. Der Server wurde nicht verändert.",

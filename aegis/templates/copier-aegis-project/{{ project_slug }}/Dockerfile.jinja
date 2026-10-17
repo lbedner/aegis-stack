@@ -38,6 +38,9 @@ RUN apt-get update -y && \
 {%- if database_engine == "postgres" %}
       postgresql-client \
 {%- endif %}
+{%- if include_deploy and include_scheduler and include_database %}
+      restic \
+{%- endif %}
 {%- if include_documents %}
       tesseract-ocr \
       tesseract-ocr-eng \

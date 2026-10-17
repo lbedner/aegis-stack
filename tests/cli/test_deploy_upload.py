@@ -246,10 +246,12 @@ def test_a_file_neither_machine_has_fails_by_name(
 def test_a_server_that_cannot_check_is_sent_nothing(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """A project from before ``storage check``: Click's usage error, 2."""
+    """A project from before ``storage check``: Click's usage error, 2.
+    Nothing was brought, so it fails (and is recorded failed)."""
     server = _Store((2, "No such command 'storage'."))
     packed = _store(monkeypatch, server)
-    upload_storage(tmp_path, SERVER)
+    with pytest.raises(typer.Exit):
+        upload_storage(tmp_path, SERVER)
     assert packed == []
     assert len(server.calls) == 1
 

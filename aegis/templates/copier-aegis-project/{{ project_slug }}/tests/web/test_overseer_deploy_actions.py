@@ -958,7 +958,7 @@ def test_a_project_with_a_server_shows_it_and_its_actions(
     assert "Your server" in text(one(card, "h2"))
     assert "203.0.113.7" in text(card)
     none(card, "[data-step]")
-    for verb in ("deploy", "backup"):
+    for verb in ("deploy", "backup", *(["restore-drill"] if actions.DRILLS else [])):
         assert one(card, f'[data-ask="{verb}"]').get("data-write") is not None
     # The backups a rollback picks from load on their own (no list to
     # ask), once More opens.
@@ -1693,11 +1693,22 @@ def test_on_this_machine_the_history_is_the_servers(
     (request,) = _queued(redis)
     assert request["action"] == "history"
 
-    _keep(redis, "history", {"deploys": DEPLOYS})
-    (row,) = select(
-        TestClient(app).get(deploy_form.HISTORY).text, "#deployments-history tbody tr"
-    )
+    drill = {
+        "kind": "restore-drill",
+        "outcome": "ok",
+        "summary": "Restored 20261017_020000: 3 checks passed",
+        "finished_at": "2026-10-17T02:40:00",
+        "actor": "Ada",
+        "origin": "ada-laptop",
+    }
+    _keep(redis, "history", {"deploys": DEPLOYS, "events": [drill]})
+    html = TestClient(app).get(deploy_form.HISTORY).text
+    (row,) = select(html, "#deployments-history tbody tr")
     assert "1c956eef" in text(row) and "Ada" in text(row) and "passed" in text(row)
+    (done,) = select(html, "#deployments-events tbody tr")
+    cells = [text(td) for td in select(done, "td")]
+    assert cells[0] == "Restore drill"
+    assert cells[4:] == ["Done", "Restored 20261017_020000: 3 checks passed"]
 
 
 def test_the_newest_job_streams_as_the_cards_show_it(redis: FakeRedis) -> None:

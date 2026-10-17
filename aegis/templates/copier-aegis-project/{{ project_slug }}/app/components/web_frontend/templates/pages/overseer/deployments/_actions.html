@@ -29,6 +29,7 @@
 <div data-idle class="flex flex-wrap items-center gap-2">
   {{ ask("Deploy", actions.partials, "deploy", "primary") }}
   {{ ask("Back up now", actions.partials, "backup") }}
+  {% if actions.drill %}{{ ask(actions.drill.label, actions.partials, actions.drill.verb) }}{% endif %}
   {# Rolling back and destroying are rare: folded into a menu, asked there. #}
   {% call dropdown("More", align="left") %}
   <li data-rollback-item class="w-80 p-2">{% with r = actions.rollback %}{% include "pages/overseer/deployments/_rollback.html" %}{% endwith %}</li>

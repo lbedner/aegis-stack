@@ -50,10 +50,12 @@ from ..core.provision.registry import DNS_SECRETS, PROVIDERS
 from ..core.template_cleanup import env_value
 from ..i18n import lazy_t, t
 from .deploy import (
+    ACTOR_ENV,
     _get_project_root,
     _load_deploy_config,
     _run_remote_capture,
     app_deploy,
+    last_json,
 )
 from .deploy_backup import list_backups
 from .deploy_upload import server_missing
@@ -207,7 +209,8 @@ def run(
     argv = [*AEGIS, command[0], "--project-path", str(root), *command[1:]]
     for key, value in args.items():
         argv += [f"--{key}", value]
-    tokens = [*env.values(), *_tokens()]
+    # Every value handed in is a secret but who asked (``ACTOR_ENV``).
+    tokens = [v for k, v in env.items() if k != ACTOR_ENV] + _tokens()
     with subprocess.Popen(
         argv,
         cwd=root,
@@ -266,7 +269,10 @@ def _found(
             return {"backups": list_backups(remote, server["path"])}
         if action == "storage":
             return {"missing": _missing(remote, server["path"])}
-        return {"deploys": _history(root, remote, server["path"])}
+        return {
+            "deploys": _history(root, remote, server["path"]),
+            "events": _events(root, remote, server["path"]),
+        }
     try:
         return measure(root)
     except DockerError as exc:
@@ -281,16 +287,25 @@ def _missing(remote: Any, deploy_path: str) -> list[str]:
     return missing
 
 
+def _events(root: Path, remote: Any, deploy_path: str) -> list[dict[str, Any]]:
+    """Everything else done to the server, newest first: the last line of
+    its ``deploy events``; none from a project without them."""
+    result = app_deploy(root, remote, deploy_path, "events")
+    if result is None or result.returncode != 0:
+        return []
+    return last_json(result.stdout or "") or []
+
+
 def _history(root: Path, remote: Any, deploy_path: str) -> list[dict[str, Any]]:
     """The server's deploy history, newest first: the last line its
     ``deploy history`` prints (the JSON, whatever the app logged before)."""
     result = app_deploy(root, remote, deploy_path, "history")
     if result is None:
         raise RefusedError(t("deploy_agent.no_history"))
-    lines = result.stdout.strip().splitlines()
-    if result.returncode != 0 or not lines:
+    found = last_json(result.stdout) if result.returncode == 0 else None
+    if found is None:
         raise RefusedError(result.stderr.strip() or f"exit {result.returncode}")
-    return json.loads(lines[-1])
+    return found
 
 
 def _fresh(at: Any) -> None:
@@ -399,8 +414,11 @@ def handle(client: Any, root: Path, request: dict[str, Any]) -> None:
         _fresh(request.get("at"))
         args = validate(action, request.get("args"))
         token = checked_token(action, request.get("token"))
-        dns = _dns_env(action, request.get("dns_keys"))
-        _execute(job, root, action, args, token, dns)
+        # Who asked, for the event the command records (``recorded``).
+        extra = _dns_env(action, request.get("dns_keys")) | (
+            {ACTOR_ENV: str(request["by"])} if request.get("by") else {}
+        )
+        _execute(job, root, action, args, token, extra)
     except RefusedError as exc:
         job.fail(str(exc))
         brand.warn(str(exc))

@@ -375,7 +375,9 @@ async def history_panel(
         return _failed(path, exc)
     if found is None:
         return _loading(path, job)
-    return {"state": "ready"} | ui_deployments.history_rows(found["deploys"])
+    return {"state": "ready"} | ui_deployments.history_rows(
+        found["deploys"], found.get("events")
+    )
 
 
 async def storage_panel(form: dict[str, str], by: str) -> dict[str, Any]:

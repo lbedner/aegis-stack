@@ -17,7 +17,12 @@ from jinja2 import Environment, FileSystemLoader
 
 from aegis.constants import AnswerKeys, ComponentNames
 from aegis.core.component_files import get_copier_defaults, get_template_path
-from aegis.core.components import COMPONENTS, ComponentType, component_option_answers
+from aegis.core.components import (
+    COMPONENTS,
+    OFFSITE_FILES,
+    ComponentType,
+    component_option_answers,
+)
 from aegis.core.template_generator import TemplateGenerator
 
 PROJECT_SLUG_PLACEHOLDER = "{{ project_slug }}"
@@ -196,10 +201,17 @@ def test_the_component_declares_its_history_migration_and_files() -> None:
 
 
 def _history_tree(root: Any) -> list[Any]:
+    """Deploy's history files: the database group, but the off-site ones,
+    which need the scheduler too."""
     paths = [
         root / p
         for p in COMPONENTS[ComponentNames.DEPLOY].files.extras[AnswerKeys.DATABASE]
+        if p not in OFFSITE_FILES
     ]
+    return _stubbed(paths)
+
+
+def _stubbed(paths: list[Any]) -> list[Any]:
     for path in paths:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("# stub\n")
@@ -216,6 +228,29 @@ def test_init_keeps_the_history_files_only_with_a_database(
     context = TemplateGenerator(
         "demo", ["database", "deploy"] if database == "yes" else ["deploy"]
     ).get_template_context()
+
+    cleanup_components(tmp_path, context)
+
+    assert all(path.exists() is kept for path in paths)
+
+
+@pytest.mark.parametrize(
+    ("components", "kept"),
+    [
+        (["database", "scheduler", "deploy"], True),
+        (["database", "deploy"], False),
+        (["scheduler", "deploy"], False),
+    ],
+)
+def test_init_keeps_the_offsite_files_only_with_a_database_and_scheduler(
+    tmp_path: Any, components: list[str], kept: bool
+) -> None:
+    """The nightly off-site copy sends the scheduler's backup and records it
+    in the database: it, and the drill on it, need both."""
+    from aegis.core.post_gen_tasks import cleanup_components
+
+    paths = _stubbed([tmp_path / p for p in OFFSITE_FILES])
+    context = TemplateGenerator("demo", components).get_template_context()
 
     cleanup_components(tmp_path, context)
 

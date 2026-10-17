@@ -42,6 +42,15 @@ HISTORY_COLUMNS = (
     ("rollback", "Rollback"),
 )
 NO_HISTORY = "Deploy history needs the deploy component and a database."
+# Everything else done to the server (``deploy_event``), as History lists it.
+EVENT_COLUMNS = (
+    ("what", "What"),
+    ("when", "When"),
+    ("by", "By"),
+    ("from", "From"),
+    ("outcome", "Outcome"),
+    ("said", "What happened"),
+)
 
 
 def commit() -> str | None:
@@ -161,6 +170,48 @@ def backups() -> dict[str, Any]:
     return {"rows": rows, "note": None}
 
 
+async def offsite() -> dict[str, Any] | None:
+    """Backups' off-the-server card: not set up (``state`` "off"), no copy
+    yet ("waiting"), or the last copy and the last restore drill (their
+    deploy events) as ``facts``, with why the copy failed (``error``).
+    None in a stack without the job."""
+    try:
+        from app.components.deploy.history import latest_event
+        from app.components.deploy.protocol import DRILL, EVENT_OK, OFFSITE
+        import app.services.system.offsite  # noqa: F401 - the job is in this stack
+    except ImportError:
+        return None
+    from app.core import secrets
+
+    if not await secrets.get("OFFSITE_BACKUP_REPOSITORY"):
+        return {"state": "off"}
+    copy = await latest_event(OFFSITE)
+    if copy is None:
+        return {"state": "waiting"}
+    drill = await latest_event(DRILL)
+    rehearsed = (
+        f"{format_relative_time(drill.finished_at)}, "
+        + ("passed" if drill.outcome == EVENT_OK else f"failed: {drill.summary}")
+        if drill
+        else "Never"
+    )
+    ok = copy.outcome == EVENT_OK
+    return {
+        "state": "ok" if ok else "failed",
+        "error": None if ok else copy.summary,
+        "facts": [
+            ("Last copy", format_relative_time(copy.finished_at)),
+            ("Of", copy.detail.get("stamp", "")),
+            ("Copies kept", str(copy.detail["copies"]) if ok else ""),
+            (
+                "In the bucket",
+                format_bytes(held) if ok and (held := copy.detail["bytes"]) else "",
+            ),
+            ("Restore rehearsed", rehearsed),
+        ],
+    }
+
+
 async def history() -> dict[str, Any]:
     """``{"rows": [...], "note": str | None}``: this app's deploy records,
     newest first, or why there are none."""
@@ -169,12 +220,22 @@ async def history() -> dict[str, Any]:
 
         from app.components.deploy.history import recent
     except ImportError:
-        return {"rows": [], "note": NO_HISTORY}
+        return _unread(NO_HISTORY)
+    from app.components.deploy.history import recent_events
+
     try:
         records = await recent()
+        events = await recent_events()
     except SQLAlchemyError as exc:  # a build that adds the table, not migrated
-        return {"rows": [], "note": f"Deploy history could not be read: {exc}"}
-    return history_rows([row.model_dump() for row in records])
+        return _unread(f"Deploy history could not be read: {exc}")
+    return history_rows(
+        [row.model_dump() for row in records], [e.model_dump() for e in events]
+    )
+
+
+def _unread(why: str) -> dict[str, Any]:
+    """History's two tables, empty for the one reason both are."""
+    return {"rows": [], "note": why, "events": [], "events_note": why}
 
 
 def live_facts(rows: list[dict[str, Any]]) -> list[tuple[str, str]]:
@@ -183,9 +244,24 @@ def live_facts(rows: list[dict[str, Any]]) -> list[tuple[str, str]]:
     return [(label, row[k]) for row in rows[:1] for k, label in HISTORY_COLUMNS[:5]]
 
 
-def history_rows(records: list[dict[str, Any]]) -> dict[str, Any]:
-    """Deploy records (this app's, or the server's ``deploy history``) as
-    the History table shows them."""
+def history_rows(
+    records: list[dict[str, Any]], events: list[dict[str, Any]] | None = None
+) -> dict[str, Any]:
+    """Deploy records and events (this app's, or the server's ``deploy
+    history`` and ``deploy events``) as History's two tables show them."""
+    if events:  # only a stack with the deploy component has any
+        from app.components.deploy.protocol import EVENT_TITLES
+    done = [
+        {
+            "what": EVENT_TITLES.get(e["kind"], e["kind"]),
+            "when": format_relative_time(e["finished_at"]),
+            "by": e["actor"] or "",
+            "from": e["origin"] or "",
+            "outcome": e["outcome"],
+            "said": e["summary"],
+        }
+        for e in events or []
+    ]
     rows = []
     for row in records:
         rows.append(
@@ -201,6 +277,9 @@ def history_rows(records: list[dict[str, Any]]) -> dict[str, Any]:
                 else "",
             }
         )
-    if not rows:
-        return {"rows": [], "note": "No deploys recorded yet."}
-    return {"rows": rows, "note": None}
+    return {
+        "rows": rows,
+        "note": None if rows else "No deploys recorded yet.",
+        "events": done,
+        "events_note": None if done else "Nothing else done to the server yet.",
+    }

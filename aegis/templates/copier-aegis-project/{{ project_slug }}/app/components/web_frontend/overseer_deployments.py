@@ -49,6 +49,7 @@ NEW_URL = f"{ITEM.url}/new"
 SETTINGS_URL = f"{ITEM.url}/settings"
 BACKUP_COLUMNS = columns(ui_deployments.BACKUP_COLUMNS)
 HISTORY_COLUMNS = columns(ui_deployments.HISTORY_COLUMNS, status=("health",))
+EVENT_COLUMNS = columns(ui_deployments.EVENT_COLUMNS, status=("outcome",))
 # Every key a cloud or DNS provider takes, read in one go.
 KEYED = (*hosting.PROVISIONABLE, *hosting.DNS)
 # The sections a deployed server shows as they are (it reads its own);
@@ -70,7 +71,20 @@ def history_view(found: dict[str, Any]) -> dict[str, Any]:
         }
         for r in found.get("rows") or []
     ]
-    return {"history": found | {"rows": rows}, "history_columns": HISTORY_COLUMNS}
+    events = [
+        e
+        | {
+            "outcome": status_cell(
+                *actions.STATUS_CELLS.get(e["outcome"], actions.DONE)
+            )
+        }
+        for e in found.get("events") or []
+    ]
+    return {
+        "history": found | {"rows": rows, "events": events},
+        "history_columns": HISTORY_COLUMNS,
+        "event_columns": EVENT_COLUMNS,
+    }
 
 
 async def section_context(
@@ -89,6 +103,8 @@ async def section_context(
         return {
             "section_subtitle": "The scheduled database backups, newest first.",
             "backups": ui_deployments.backups(),
+            "offsite": await ui_deployments.offsite(),
+            "secrets_url": overseer_secrets.ITEM.url,
             "backup_columns": BACKUP_COLUMNS,
         }
     if section not in AS_DEPLOYED and exposure.deployed():

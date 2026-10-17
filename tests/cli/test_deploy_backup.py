@@ -26,7 +26,6 @@ from aegis.commands.deploy_backup import (
     SNAPSHOT,
     is_sqlite,
     list_backups,
-    offsite_env,
     snapshot_sqlite,
 )
 from aegis.core.deploy_protocol import protocol
@@ -125,7 +124,7 @@ def test_backup_archives_the_object_store(monkeypatch: pytest.MonkeyPatch) -> No
 
 class TestSteps:
     """Marked for the deploy agent's step bar (``progress_line``), in the
-    order they run; ``offsite`` only when the server pushes one."""
+    order they run."""
 
     def _marked(
         self,
@@ -141,17 +140,15 @@ class TestSteps:
     def test_sqlite_marks_the_database_first(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        plan = ["database", "files", "documents", "offsite"]
+        plan = ["database", "files", "documents"]
         assert self._marked(monkeypatch, capsys, sqlite=True) == [
             {"steps": plan, "at": key} for key in plan
         ]
 
-    def test_without_offsite_there_is_no_offsite_step(
+    def test_postgres_dumps_the_database_after_the_files(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        marked = self._marked(
-            monkeypatch, capsys, sqlite=False, fail=("test -f /etc/aegis/",)
-        )
+        marked = self._marked(monkeypatch, capsys, sqlite=False)
         assert [m["at"] for m in marked] == ["files", "database", "documents"]
         assert all(m["steps"] == ["files", "database", "documents"] for m in marked)
 
@@ -214,28 +211,15 @@ def test_the_servers_backups_are_listed_in_one_call(tmp_path: Path) -> None:
     assert list_backups(bash, str(tmp_path / "nothing-yet")) == []
 
 
-class TestOffsite:
-    def test_unconfigured_server_pushes_nothing(
+class TestStaysOnTheServer:
+    def test_a_backup_is_never_pushed_off_the_server(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        calls = _backup(monkeypatch, sqlite=True, fail=("test -f /etc/aegis/",))
-
-        assert not any("restic backup" in c for c in calls)
-
-    def test_configured_server_pushes_everything_but_the_files(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """``files/`` holds the server's ``.env``: it never leaves the box."""
+        """The copy that leaves is the app's nightly one (its off-site job),
+        never this: ``files/`` holds the server's ``.env``."""
         calls = _backup(monkeypatch, sqlite=True)
 
-        push = next(c for c in calls if "restic backup" in c)
-        assert offsite_env("/srv/app") in push
-        assert "--exclude /srv/app/backups/" in push and "/files" in push
-        _bash_parses(push)
-
-    def test_env_file_lives_outside_the_deploy_directory(self) -> None:
-        """A deploy rsyncs with --delete: inside the directory it is wiped."""
-        assert not offsite_env("/srv/app").startswith("/srv/app/")
+        assert not any("restic" in c for c in calls)
 
 
 class TestRollback:

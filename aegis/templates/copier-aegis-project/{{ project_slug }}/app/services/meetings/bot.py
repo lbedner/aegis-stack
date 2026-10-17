@@ -20,19 +20,24 @@ from app.core.config import settings
 from app.core.db import get_async_session
 from app.core.log import logger
 from app.services.meetings.audio import Hearing
+from app.services.meetings.domains.accounts.service import login_secret_of, pick
 from app.services.meetings.domains.bot.dispatch import start_meeting
+from app.services.meetings.domains.people.participants import keep_heard
 from app.services.meetings.domains.people.service import guides_writer
 from app.services.meetings.meet import CallState, MeetPage, merge_caption, open_meet
-from app.services.meetings.models import Caption, Meeting, MeetingStatus, Platform
+from app.services.meetings.models import (
+    BotAccount,
+    Caption,
+    Meeting,
+    MeetingStatus,
+    Platform,
+)
 from app.services.meetings.service import (
-    DEFAULT_BOT_NAME,
     NOT_DONE,
     STILL_WANTED,
     MeetingsService,
     heartbeat,
     notes_writer,
-    remember_me,
-    save_heard,
     transition,
     write_captions,
 )
@@ -186,15 +191,16 @@ async def _stay(
         hearing.close()
         if hearing.seconds:
             async with get_async_session() as session:
-                await save_heard(session, transcript.meeting_id, hearing.seconds)
+                await keep_heard(session, transcript.meeting_id, hearing.seconds)
 
 
-async def _join(meeting: Meeting) -> None:
+async def _join(meeting: Meeting, login: str) -> None:
+    """Into the call signed in as the agent it was sent as (``login``)."""
     meeting_id: int = meeting.id  # type: ignore[assignment]
     pulse = _Pulse(meeting_id)
     keep_in = settings.MEETINGS_KEEP_AUDIO_DIR
     hearing = Hearing(Path(keep_in) / str(meeting_id) if keep_in else None)
-    async with open_meet(meeting.url, hearing.heard) as call:
+    async with open_meet(meeting.url, hearing.heard, login=login) as call:
         if not await pulse.still_wanted():
             raise _RunEnded(MeetingStatus.LEFT)
         await call.ask_to_join(meeting.bot_name)
@@ -213,11 +219,8 @@ async def _join(meeting: Meeting) -> None:
 
 
 async def _after(meeting_id: int) -> None:
-    """Once the bot is out: who the owner is among the speakers, then the
-    notes and how to work with each person, where the stack has a model to
-    write them."""
-    async with get_async_session() as session:
-        await remember_me(session, meeting_id)
+    """Once the bot is out: the notes and how to work with each person,
+    where the stack has a model to write them."""
     if (write := notes_writer()) is not None:
         await write(meeting_id)
     if (guide := guides_writer()) is not None:
@@ -233,13 +236,14 @@ async def run_meeting(meeting_id: int) -> None:
         return
     async with get_async_session() as session:
         meeting = await MeetingsService(session, None).get(meeting_id)
+        login = await login_secret_of(session, meeting.account_id)
     try:
         if meeting.platform != Platform.MEET:
             raise _RunEnded(
                 MeetingStatus.FAILED,
                 f"The bot joins Google Meet so far, not {meeting.platform.title()}",
             )
-        await _join(meeting)
+        await _join(meeting, login)
         await _move(meeting_id, MeetingStatus.LEFT, NOT_DONE)
     except _RunEnded as ended:
         await _move(meeting_id, ended.status, NOT_DONE, ended.reason)
@@ -254,10 +258,21 @@ async def run_meeting(meeting_id: int) -> None:
     await _after(meeting_id)
 
 
-async def send_bot(svc: MeetingsService, url: str, bot_name: str) -> Meeting:
-    """Record the meeting and start the bot on it, without waiting: the one
-    way in for the Meetings page, Overseer and the API."""
-    meeting = await svc.request(url, bot_name.strip() or DEFAULT_BOT_NAME)
+async def send_bot(
+    svc: MeetingsService,
+    url: str,
+    bot_name: str,
+    agent: str | None = None,
+    every: list[BotAccount] | None = None,
+) -> Meeting:
+    """Record the meeting and start the bot on it as ``agent`` (the default
+    when none is named; of ``every``, the agents, when read already),
+    without waiting: the one way in for the Meetings page, Overseer and the
+    API. It joins as the agent's name unless given ``bot_name``."""
+    account = await pick(svc.db, agent, every)
+    meeting = await svc.request(
+        url, bot_name.strip() or account.display_name, account.id
+    )
     meeting_id: int = meeting.id  # type: ignore[assignment]
     try:
         await start_meeting(meeting_id)

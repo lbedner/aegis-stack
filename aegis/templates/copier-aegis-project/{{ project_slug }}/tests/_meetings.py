@@ -4,20 +4,26 @@ pace, and the call it opens; and the meetings those tests read."""
 import base64
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from importlib.util import find_spec
 from typing import Any
+from uuid import uuid4
 
 import pytest
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.meetings import bot
 from app.services.meetings import service as meetings_service
 from app.services.meetings.audio import RATE
+from app.services.meetings.domains.notes.service import keep_notes
+from app.services.meetings.domains.people.kept import guides_of, keep_guide
+from app.services.meetings.login import LOGIN
 from app.services.meetings.models import (
     ActionItem,
     Caption,
     Guide,
     Meeting,
-    MeetingNotes,
+    MeetingPerson,
     MeetingRecord,
     MeetingStatus,
     Notes,
@@ -27,7 +33,6 @@ from app.services.meetings.models import (
 from app.services.meetings.service import (
     NOT_DONE,
     MeetingsService,
-    save_notes,
     transition,
     write_captions,
 )
@@ -65,9 +70,9 @@ def bot_on(
 
     @asynccontextmanager
     async def open_meet(
-        url: str, on_audio: Callable[[str], None] | None = None
+        url: str, on_audio: Callable[[str], None] | None = None, login: str = LOGIN
     ) -> AsyncIterator[Any]:
-        call.on_audio = on_audio
+        call.on_audio, call.login = on_audio, login
         yield call
 
     monkeypatch.setattr(bot, "open_meet", open_meet)
@@ -159,8 +164,7 @@ async def ended(
     meeting_id: int = meeting.id  # type: ignore[assignment]
     await transition(session, meeting_id, MeetingStatus.LEFT, from_=NOT_DONE)
     ids = await said(session, meeting_id, *lines)
-    content = notes(ids).model_dump()
-    await save_notes(session, MeetingNotes(meeting_id=meeting_id, content=content))
+    await keep_notes(session, meeting_id, notes(ids), None)
     return meeting_id, ids
 
 
@@ -179,21 +183,71 @@ async def docs_meeting(session: AsyncSession, owner: int | None) -> int:
     return meeting_id
 
 
+async def person_named(
+    session: AsyncSession, owner: int | None, name: str
+) -> MeetingPerson | None:
+    """The owner's person called ``name``, if there is one."""
+    query = select(MeetingPerson).where(
+        MeetingPerson.name == name, MeetingPerson.owner_user_id == owner
+    )
+    return (await session.exec(query)).first()
+
+
+async def person_id(session: AsyncSession, owner: int | None, name: str) -> int:
+    """The id of the owner's person called ``name``."""
+    found = await person_named(session, owner, name)
+    assert found is not None
+    return found.id  # type: ignore[return-value]
+
+
+async def guide_of(session: AsyncSession, person: int) -> Guide | None:
+    """The person's guide, read back; None while they have none."""
+    query = select(PersonGuide).where(PersonGuide.person_id == person)
+    row = (await session.exec(query)).first()
+    if row is None:
+        return None
+    return (await guides_of(session, [row.id]))[row.id]  # type: ignore[index, list-item]
+
+
+def signed_in_state(expires: float = -1) -> dict[str, Any]:
+    """A Google sign-in as Playwright keeps it; -1 never expires."""
+    cookie = {"name": "SID", "value": "x", "domain": ".google.com", "expires": expires}
+    return {"cookies": [cookie], "origins": []}
+
+
 async def kept_guide(
     session: AsyncSession, owner: int | None, person: str, **content: Any
 ) -> int:
-    """A guide to ``person`` for ``owner``, kept as the model would have
-    written it (``content`` as ``Guide``'s parts), from one meeting; its id."""
-    guide = PersonGuide(
-        owner_user_id=owner,
-        person=person,
-        content=Guide(**content).model_dump(),
-        meetings=1,
-        model_name="test-model",
-    )
-    session.add(guide)
-    await session.commit()
+    """A guide to ``person`` for ``owner`` (the person they are, made if no
+    meeting made them yet), kept as the model would have written it
+    (``content`` as ``Guide``'s parts), from one meeting; its id."""
+    found = await person_named(session, owner, person)
+    if found is None:
+        found = MeetingPerson(owner_user_id=owner, name=person)
+        session.add(found)
+        await session.flush()
+    person_id: int = found.id  # type: ignore[assignment]
+    await keep_guide(session, person_id, Guide(**content), "test-model", meetings=1)
+    guide = (
+        await session.exec(
+            select(PersonGuide).where(PersonGuide.person_id == person_id)
+        )
+    ).one()
     return guide.id  # type: ignore[return-value]
+
+
+async def someone_else(session: AsyncSession) -> int:
+    """An owner other than the one signed in: a user of their own where the
+    stack has auth (a meeting's owner is one), any other number where it
+    has not."""
+    if find_spec("app.models.user") is None:
+        return 4242
+    from app.models.user import User
+
+    user = User(email=f"someone.{uuid4().hex[:8]}@example.com", hashed_password="-")
+    session.add(user)
+    await session.flush()
+    return user.id  # type: ignore[return-value]
 
 
 def record(meeting: Meeting | None = None, **fields: Any) -> MeetingRecord:
@@ -205,7 +259,6 @@ def record(meeting: Meeting | None = None, **fields: Any) -> MeetingRecord:
         platform=Platform.MEET,
         status=MeetingStatus.LEFT,
         bot_name="Notes",
-        heard={"Ada": 42.0},
     )
     read: dict[str, Any] = {
         "notes": None,
@@ -215,6 +268,7 @@ def record(meeting: Meeting | None = None, **fields: Any) -> MeetingRecord:
         "status": "Left",
         "length": "30:30",
         "heard": "Ada 42s",
+        "heard_seconds": {"Ada": 42.0},
         "people": ["Ada"],
         "mine": [],
         "under_way": False,

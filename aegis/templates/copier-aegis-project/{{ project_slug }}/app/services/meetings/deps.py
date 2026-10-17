@@ -8,6 +8,7 @@ from fastapi import Depends, HTTPException, status
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.db import get_async_db
+from app.services.meetings.domains.accounts.service import AgentNotFoundError
 from app.services.meetings.domains.people.service import (
     GuideNotFoundError,
     PeopleService,
@@ -56,13 +57,13 @@ def as_http() -> Iterator[None]:
     """The service's refusals as HTTP, for every route over meetings (the
     API's, the Meetings page's and Overseer's): a meeting or guide the
     caller cannot see is a 404, one the bot is still in (or notes or a
-    guide that cannot be written now) a 409, a link it cannot join or a speaker who was not
-    there a 422."""
+    guide that cannot be written now) a 409, a link it cannot join, a speaker who was not
+    there or an agent there is not a 422."""
     try:
         yield
     except (MeetingNotFoundError, GuideNotFoundError) as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
     except (MeetingInProgressError, NothingToWriteError) as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
-    except (UnsupportedMeetingLinkError, NotASpeakerError) as exc:
+    except (UnsupportedMeetingLinkError, NotASpeakerError, AgentNotFoundError) as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc

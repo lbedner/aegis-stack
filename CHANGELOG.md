@@ -9,6 +9,50 @@
 
 ### Added
 
+- **Meetings: people, and notes and guides as rows.** Everyone the owner's
+  calls name is one person across their meetings (a participant is that
+  person as one call named them, matched as written or ignoring case and
+  spacing), so their guide, threads and "me" follow them from call to call;
+  picking who you are in a meeting unpicks anyone else in it, and your own
+  guide is not among the guides. Notes and guides are kept as rows citing their
+  transcript lines by foreign key instead of JSON: a name the model gives
+  points at its person (or stays as written for someone no call named), a
+  commitment keeps its id when the notes are written again, so later
+  follow-ups still point at it, and deleting a meeting takes along whoever
+  spoke only in it (with their guide) and whatever elsewhere cited only its
+  lines. A meeting with no owner reads the threads of the meetings with no
+  owner only, not every owner's. A notes or guide rewrite that fails keeps
+  what it had; a note on a guide edited while the guide is being written is
+  no longer written back over. Search covers commitments, follow-ups,
+  contradictions and positions too, from one indexed query.
+- **Meetings: commitments, contradictions and positions.** The notes' own
+  model pass also writes who said they would do what (for whom, by when),
+  which earlier commitments came up again (done, dropped or still open),
+  what was said one way and the opposite way (in one meeting or against an
+  earlier one, both sides' lines linked), and where each person stands on a
+  topic and when it shifted, each citing the lines it came from and checked
+  like the notes. Kept with the notes, shown in
+  Overseer's meeting drawer, and gathered per person on their guide under
+  Meetings > People, in htmx and Flet; `GET /api/v1/meetings/{id}/threads`
+  and its admin twin.
+- **Meeting agents: several bot accounts, each signed in as itself.** The
+  meeting bot joins as one of several Google accounts, each with its own name
+  in the call and its own sign-in, kept under its own secret
+  (`meetings login --agent work`). Every meeting is sent as one (the first
+  unless another is picked: `meetings join --agent`, the API's `agent`, the
+  send forms), and Overseer > Meetings > Agents lists each, in htmx and
+  Flet, with whether its sign-in still works and the meetings it is in now.
+  A stack from before agents keeps its sign-in and its meetings as the first
+  agent's, with nothing to do.
+- **Search every meeting.** Every word said in a meeting and every part of
+  its notes, searched by words: the line, its meeting, who said it and when.
+  PostgreSQL full-text search (a GIN index the meetings revision adds) and
+  SQLite FTS5 (tables kept by triggers, made with `create_all`), no new
+  dependency. `GET /api/v1/meetings/search?q=` and its admin twin; a search
+  box on Overseer's Meetings page and a Search tab in Flet, a hit opening the
+  meeting at its line; and a `meetings_search` tool granted to Overseer's
+  chat, so "what did Lawrence say about pricing?" is answered with the lines
+  linked.
 - **Slow queries say what they touched.** Overseer's Redis slow log names
   each command's key (as `COMMAND GETKEYS` reports it) and that key's family,
   in both UIs; the live charts' history keys are a family of their own

@@ -1,0 +1,145 @@
+{% if include_ai and ai_backend != "memory" and ai_framework == "pydantic-ai" %}
+"""Commitments, contradictions and positions, written in the same model
+pass as the notes (``meetings.notes``), with what the owner's earlier
+meetings left open: each item cites lines the model was shown, and a
+follow-up names a commitment it was shown, or it is dropped."""
+
+from typing import Any
+
+import pytest
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.services.meetings import notes
+from app.services.meetings.domains.notes.service import notes_of
+from app.services.meetings.models import Commitment, Notes, Position
+from app.services.meetings.service import MeetingsService
+from tests._meetings import MEET, answering, ended, said
+from tests._session import opens
+
+
+@pytest.fixture(autouse=True)
+def _on_the_test_session(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(notes, "get_async_session", opens(async_db_session))
+
+    async def record_usage(**row: Any) -> float:
+        return 0.0
+
+    monkeypatch.setattr(notes, "record_usage", record_usage)
+
+
+async def _promised(session: AsyncSession) -> tuple[int, list[int]]:
+    """An earlier meeting of owner 1's: Ada promised the deck and stood
+    against a free tier. The deck's commitment id, and the line ids."""
+    meeting_id, ids = await ended(
+        session,
+        1,
+        ("Ada", "I'll send the deck."),
+        ("Ada", "No free tier."),
+        notes=lambda ids: Notes(
+            summary="-",
+            commitments=[Commitment(text="Send the deck", owner="Ada", lines=[ids[0]])],
+            positions=[
+                Position(
+                    text="Against", speaker="Ada", topic="Free tier", lines=[ids[1]]
+                )
+            ],
+        ),
+    )
+    kept = (await notes_of(session, [meeting_id]))[meeting_id].notes
+    assert kept is not None
+    return kept.commitments[0].id, ids  # type: ignore[return-value]
+
+
+async def test_threads_cite_only_lines_they_were_shown(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    deck, before = await _promised(async_db_session)
+    meeting = await MeetingsService(async_db_session, 1).request(MEET)
+    meeting_id: int = meeting.id  # type: ignore[assignment]
+    now = await said(
+        async_db_session,
+        meeting_id,
+        ("Ada", "Deck's sent. And let's do a free tier."),
+        ("Leonard", "I'll book the room."),
+    )
+    answering(
+        monkeypatch,
+        {
+            "summary": "Sent.",
+            "commitments": [
+                {"text": "Book the room", "owner": "Leonard", "lines": [now[1]]},
+                {"text": "Made up", "owner": "Ada", "lines": [99999]},
+            ],
+            "follow_ups": [
+                # The deck, as the model was shown it: [C1].
+                {"text": "Sent", "commitment": 1, "status": "done", "lines": [now[0]]},
+                {"text": "Nothing", "commitment": 99, "lines": [now[0]]},
+            ],
+            "contradictions": [
+                {
+                    "text": "Free tier",
+                    "speakers": ["Ada"],
+                    "lines": [now[0]],
+                    "against": [before[1]],
+                },
+                {
+                    "text": "Unseen",
+                    "speakers": ["Ada"],
+                    "lines": [now[0]],
+                    "against": [99999],
+                },
+            ],
+            "positions": [
+                {
+                    "text": "For",
+                    "speaker": "Ada",
+                    "topic": "Free tier",
+                    "lines": [now[0], before[1]],
+                }
+            ],
+        },
+    )
+
+    await notes.write_notes(meeting_id)
+
+    rows = await MeetingsService(async_db_session, 1).notes_for([meeting_id])
+    kept = rows[meeting_id].notes
+    assert [c.text for c in kept.commitments] == ["Book the room"]
+    assert [(f.commitment, f.status) for f in kept.follow_ups] == [(deck, "done")]
+    assert [c.against for c in kept.contradictions] == [[before[1]]]
+    # A stance is where they stand now: this meeting's lines.
+    assert [p.lines for p in kept.positions] == [[now[0]]]
+
+
+def test_the_threads_say_what_they_hold_without_the_seeded_prompt() -> None:
+    """An install seeded before the threads keeps its old prompt, so the
+    schema the model answers to carries what each thread is."""
+    schema = Notes.model_json_schema()
+    fields = schema["properties"]
+    for name in ("commitments", "follow_ups", "contradictions", "positions"):
+        assert fields[name].get("description"), name
+    # The row an item is kept as is never asked of the model.
+    assert "id" not in schema["$defs"]["Commitment"]["properties"]
+
+
+async def test_notes_are_written_when_the_earlier_meetings_cannot_be_read(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    meeting = await MeetingsService(async_db_session, 1).request(MEET)
+    meeting_id: int = meeting.id  # type: ignore[assignment]
+    await said(async_db_session, meeting_id, ("Ada", "Ship it."))
+
+    async def broken(*_: Any) -> Any:
+        raise RuntimeError("an old notes row no longer reads")
+
+    monkeypatch.setattr(notes, "earlier", broken)
+    answering(monkeypatch, {"summary": "Shipped."})
+
+    await notes.write_notes(meeting_id)
+
+    rows = await MeetingsService(async_db_session, 1).notes_for([meeting_id])
+    assert rows[meeting_id].error is None
+    assert rows[meeting_id].notes.summary == "Shipped."
+{% endif %}

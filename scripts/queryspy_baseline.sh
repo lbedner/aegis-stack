@@ -40,7 +40,9 @@ while IFS='|' read -r name comps svcs; do
   yes | uv run aegis "${args[@]}" > "$OUT/$name.gen.log" 2>&1 || { echo "$name: GENERATE FAILED ($OUT/$name.gen.log)"; continue; }
   grep -q queryspy "$proj/pyproject.toml" 2>/dev/null || { echo "$name: no database, skipped"; continue; }
   ( cd "$proj" && uv sync > "$OUT/$name.sync.log" 2>&1 ) || { echo "$name: SYNC FAILED"; continue; }
-  ( cd "$proj" && uv run pytest -q --queryspy-baseline="$OUT/baselines/$name.json" --queryspy-baseline-update > "$OUT/$name.qs.log" 2>&1 )
+  # Serially (-n 0), as the stacks' own `queryspy-baseline` task runs it:
+  # under xdist the recorder writes no entries at all.
+  ( cd "$proj" && uv run pytest -q -n 0 --queryspy-baseline="$OUT/baselines/$name.json" --queryspy-baseline-update > "$OUT/$name.qs.log" 2>&1 )
   echo "$name: $(grep -oE '[0-9]+ (passed|failed)' "$OUT/$name.qs.log" | tr '\n' ' ')"
 done < "$OUT/stacks.txt"
 

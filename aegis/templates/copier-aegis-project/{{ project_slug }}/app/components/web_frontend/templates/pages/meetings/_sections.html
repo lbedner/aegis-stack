@@ -23,10 +23,10 @@
       {{ heading("Yours") }}
       {# Only my items are redrawn: the page or drawer stays where it is. #}
       <form data-write hx-post="{{ base }}/me" hx-trigger="change" hx-target="#my-items" hx-select="#my-items" hx-swap="outerHTML">
-        {{ select("name", people, selected=meeting.me, blank="Nobody here", label="I am") }}
+        {{ select("name", people, selected=me, blank="Nobody here", label="I am") }}
       </form>
     </div>
-    {{ items(mine, "Nothing for you." if meeting.me else "Say which speaker you are to see yours.", clock) }}
+    {{ items(mine, "Nothing for you." if me else "Say which speaker you are to see yours.", clock) }}
   </section>
   {% endcall %}
   {% endif %}
@@ -34,6 +34,10 @@
   <div>{{ action("Write them again" if notes or notes_error else "Write the notes", 'data-write hx-post="' ~ base ~ '/notes" ' ~ hx_body) }}</div>
   {% endif %}
 {% endcall %}
+{% endif %}
+{# Overseer's drawer loads the meeting's threads here (with_threads). #}
+{% if with_threads is defined and notes and not (under_way or writing) %}
+<div data-threads hx-get="{{ base }}/threads" hx-trigger="load" hx-swap="outerHTML"></div>
 {% endif %}
 
 {% call card("Transcript", id="meeting-transcript") %}
@@ -46,5 +50,5 @@
   {{ action("Latest line", 'data-scroll-to="#meeting-transcript [data-turn]:last-child"', glyph="arrow-down") }}
 </div>
 {% endif %}
-{{ transcript(turns, clock, voices) }}
+{{ transcript(turns, clock, voices, hit_line) }}
 {% endcall %}

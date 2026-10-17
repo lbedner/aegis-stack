@@ -1,0 +1,58 @@
+{# Commitments, contradictions and positions, a meeting's or a person's
+   (``ThreadSection``): each section, its items with whose, where they
+   stand and the lines they cite folded under them, then their other lines
+   (a contradiction's other side, where a commitment came up again).
+   ``said`` maps a quoted line's id to when it was said and where it
+   opens. #}
+{% from "components/macros/layout.html" import badge %}
+{% from "pages/meetings/_macros.html" import heading %}
+
+{% macro quote_lines(quotes, said) %}
+{% for quote in quotes %}
+<p data-quote class="border-l-2 border-aegis-border pl-3 text-xs leading-relaxed text-aegis-muted">
+  <span class="text-aegis-text">{{ quote.speaker }}:</span> {{ quote.text }}
+  <a href="{{ said[quote.id].url }}" class="whitespace-nowrap tabular-nums hover:text-aegis-teal">{{ said[quote.id].when }}</a>
+</p>
+{% endfor %}
+{% endmacro %}
+
+{% macro thread_sections(sections, said) %}
+{% set tones = {"open": "accent", "mentioned": "warn", "done": "ok", "dropped": "muted"} %}
+{% for section in sections %}
+<section data-thread-section="{{ section.key }}" class="grid gap-2">
+  {{ heading(section.title) }}
+  {% if section.items %}
+  <ul class="space-y-3 text-sm">
+    {% for item in section.items %}
+    {% set count = item.quotes|length + item.other|length %}
+    <li data-thread>
+      <details data-quotes class="group/q">
+        <summary class="list-none cursor-pointer flex items-start gap-2">
+          <span aria-hidden="true" class="text-aegis-muted transition-transform group-open/q:rotate-90">›</span>
+          <span class="flex-1 min-w-0 leading-relaxed">
+            {%- if item.speaker %}<span class="font-semibold text-aegis-text">{{ item.speaker }}</span> <span class="text-aegis-muted">·</span> {% endif -%}
+            {{ item.text }}
+            {%- if item.detail %} <span class="whitespace-nowrap rounded bg-aegis-bg px-1.5 py-0.5 text-xs text-aegis-muted">{{ item.detail }}</span>{% endif %}
+          </span>
+          {% if item.status %}<span data-status class="text-xs">{{ badge(item.status|capitalize, tones.get(item.status)) }}</span>{% endif %}
+          <span class="whitespace-nowrap text-xs text-aegis-muted">{{ count }} {{ "line" if count == 1 else "lines" }}</span>
+        </summary>
+        <div class="mt-1.5 ml-4 space-y-1.5">
+          {{ quote_lines(item.quotes, said) }}
+          {% if item.other %}
+          <div data-other class="space-y-1.5">
+            <p class="text-xs font-semibold text-aegis-muted">{{ section.other }}</p>
+            {{ quote_lines(item.other, said) }}
+          </div>
+          {% endif %}
+        </div>
+      </details>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-xs text-aegis-muted">{{ section.empty }}</p>
+  {% endif %}
+</section>
+{% endfor %}
+{% endmacro %}

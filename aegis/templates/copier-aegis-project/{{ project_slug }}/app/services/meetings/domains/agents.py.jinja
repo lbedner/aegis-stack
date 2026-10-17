@@ -27,7 +27,20 @@ Write a short summary, the decisions made, the action items (who has to do
 what, and by when if it was said), and the questions left open. Leave a
 list empty rather than invent an item. Give each item the ids of the lines
 it came from. An action item's owner is the speaker who has to do it,
-named exactly as in the transcript, or none when nobody took it."""
+named exactly as in the transcript, or none when nobody took it.
+
+Then the threads, each citing the lines it came from, speakers named
+exactly as in the transcript:
+- Commitments: who said they would do what, for whom and by when, in
+  their own words ("I'll send it to you").
+- Follow-ups: when what was said before this meeting lists commitments
+  still open, each one raised again here, by its [C...] number: done,
+  dropped, or only mentioned and still open.
+- Contradictions: something said one way and the opposite way, by one
+  person or two, in this meeting or against an earlier line; the lines of
+  one side, and of the other as against.
+- Positions: where each person stands on the topics they spoke to, and
+  where they stood before when it is a change."""
 
 GUIDE_PROMPT = """You write how to work with one person, from what was said
 in meetings they were in. Each meeting starts with its heading; each line
@@ -98,11 +111,18 @@ def meetings_agent_definitions() -> list[dict[str, Any]]:
 
 def load_meetings_agent_fixtures(session: Session) -> dict[str, int]:
     """Seed the meetings' agents that are missing; a row edited in Agents
-    is never touched."""
+    is never touched. The default agent, Overseer's chat, is granted the
+    meetings search (``tools.meetings_search``)."""
     # Here, not at the top: the AI fixtures package loads these seeds.
-    from app.services.ai.fixtures.agent_fixtures import seed_missing_agents
+    from app.services.ai.domains.chat.agent_loader import DEFAULT_AGENT_SLUG
+    from app.services.ai.fixtures.agent_fixtures import (
+        attach_tools,
+        seed_missing_agents,
+    )
 
-    return {
-        "meetings_agents": seed_missing_agents(session, meetings_agent_definitions())
-    }
+    seeded = seed_missing_agents(session, meetings_agent_definitions())
+    granted = attach_tools(session, DEFAULT_AGENT_SLUG, ["meetings_search"])
+    if granted:
+        session.commit()
+    return {"meetings_agents": seeded, "meetings_tool_links": granted}
 {% endif %}

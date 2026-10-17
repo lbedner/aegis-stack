@@ -1,9 +1,12 @@
 {# Overseer > Deployments > History: each build that went live, newest
-   first, or why there are none; on this machine a panel waiting on the
-   server's (overseer_deploy_form.history_panel). #}
+   first, then everything else done to the server (deploy events), or why
+   there are none; on this machine a panel waiting on the server's
+   (overseer_deploy_form.history_panel). #}
 {% from "components/macros/table.html" import data_table %}
 {% from "pages/overseer/deployments/_macros.html" import panel %}
-{% macro table() %}<div id="deployments-history">{{ data_table(history_columns, history.rows, empty=history.note) }}</div>{% endmacro %}
+{% macro table() %}<div id="deployments-history">{{ data_table(history_columns, history.rows, empty=history.note) }}</div>
+<h3 class="text-sm font-semibold text-aegis-text mt-6 mb-2">Done to the server</h3>
+<div id="deployments-events">{{ data_table(event_columns, history.events or [], empty=history.events_note or "Nothing else done to the server yet.") }}</div>{% endmacro %}
 {% if history.state is defined %}
 {% call panel("history", history, "Reading the server's deploy history...", "Could not read the server's deploy history: ") %}{{ table() }}{% endcall %}
 {% else %}

@@ -5,6 +5,7 @@ Provides commands for deploying Aegis projects to remote servers,
 with backup/rollback strategy and post-deploy health checks.
 """
 
+import json
 import os
 import re
 import shlex
@@ -18,6 +19,7 @@ from contextlib import contextmanager, suppress
 from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
+from typing import Any
 
 import typer
 import yaml
@@ -381,6 +383,51 @@ def _record_deploy(
     result = app_deploy(project_root, remote, deploy_path, "record", *argv)
     if result is not None and result.returncode != 0:
         brand.warn(t("deploy.record_failed", error=result.stderr.strip()))
+
+
+# Who asked, when the Overseer's deploy agent runs a command (its user);
+# at a terminal, the git user (``_deployer``).
+ACTOR_ENV = "AEGIS_ACTOR"
+FAILED = "Failed: the command's output says why."
+
+
+@contextmanager
+def recorded(
+    project_root: Path, server: dict[str, Any], kind: str
+) -> Iterator[dict[str, Any]]:
+    """Record what the command does to the server as a deploy event (the
+    app's ``deploy event``, over SSH like ``deploy record``), however it
+    ends: the caller fills the ``summary`` and ``detail`` it is handed; an
+    exit with a code, or an error, records it failed. Projects without
+    deploy history have no such command; a failed write only warns."""
+    said: dict[str, Any] = {"summary": "", "detail": {}}
+    started = datetime.now(UTC)
+    outcome = "failed"
+    try:
+        yield said
+        outcome = "ok"
+    except typer.Exit as exc:
+        outcome = "failed" if exc.exit_code else "ok"
+        raise
+    except Exception as exc:
+        said["summary"] = said["summary"] or f"{type(exc).__name__}: {exc}"
+        raise
+    finally:
+        event = {
+            "kind": kind,
+            "outcome": outcome,
+            "summary": said["summary"] or (FAILED if outcome == "failed" else ""),
+            "actor": os.environ.get(ACTOR_ENV) or _deployer(project_root),
+            "origin": socket.gethostname(),
+            "started_at": started.isoformat(),
+            "detail": said["detail"],
+        }
+        remote = partial(_run_remote_capture, server["host"], server["user"])
+        done = app_deploy(
+            project_root, remote, server["path"], "event", json.dumps(event)
+        )
+        if done is not None and done.returncode != 0:
+            brand.warn(t("deploy.record_failed", error=done.stderr.strip()))
 
 
 def app_deploy(
@@ -1619,17 +1666,21 @@ def deploy_backup_command(
 
     brand.accent(t("deploy.creating_backup_on", host=host), bold=True)
 
-    timestamp = _create_backup(
-        host,
-        user,
-        deploy_path,
-        include_db=backup_cfg["include_database"],
-        neon=_is_neon_database(project_path),
-        sqlite=is_sqlite(_project_answers(_get_project_root(project_path))),
-        keep_count=backup_cfg["keep_count"],
-    )
-    if not timestamp:
-        raise typer.Exit(1)
+    root = _get_project_root(project_path)
+    with recorded(root, config["server"], "backup") as said:
+        timestamp = _create_backup(
+            host,
+            user,
+            deploy_path,
+            include_db=backup_cfg["include_database"],
+            neon=_is_neon_database(project_path),
+            sqlite=is_sqlite(_project_answers(root)),
+            keep_count=backup_cfg["keep_count"],
+        )
+        if not timestamp:
+            raise typer.Exit(1)
+        said["summary"] = f"Backed up {timestamp}"
+        said["detail"] = {"backup": timestamp}
     brand.success(f"\n{t('deploy.backup_complete')}", bold=True)
 
 

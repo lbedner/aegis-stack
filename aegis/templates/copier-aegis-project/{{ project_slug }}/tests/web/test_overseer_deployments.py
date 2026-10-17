@@ -1,7 +1,7 @@
 """Overseer > Deployments: what is live (build, commit, when, health), the
 host it runs on, and the database backups beside it (``ui_deployments``)."""
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 import os
 from pathlib import Path
 from typing import Any
@@ -96,6 +96,32 @@ def test_no_backups_says_why(
         monkeypatch.setattr(settings, "DATABASE_BACKUP_DIR", str(tmp_path / "none"))
     note = text(one(page_html(client, f"{PAGE}/backups"), "#deployments-backups"))
     assert "backups" in note.lower()
+
+
+def test_history_lists_what_else_was_done_to_the_server(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Below the deploys: each backup, upload, off-site copy and drill, who
+    and from where, and how it went (aegis-stack#1482)."""
+    from app.services.system import ui_deployments
+
+    drill = {
+        "kind": "restore-drill",
+        "outcome": "failed",
+        "summary": "files: 2 stored files missing",
+        "finished_at": datetime.now(UTC) - timedelta(hours=3),
+        "actor": "Ada <ada@example.org>",
+        "origin": "ada-laptop",
+    }
+
+    async def recorded() -> dict[str, Any]:
+        return ui_deployments.history_rows([], [drill])
+
+    monkeypatch.setattr(ui_deployments, "history", recorded)
+    (row,) = select(page_html(client, f"{PAGE}/history"), "#deployments-events tbody tr")
+    said = text(row)
+    assert "Restore drill" in said and "Ada <ada@example.org>" in said
+    assert "Failed" in said and "2 stored files missing" in said
 
 
 def test_the_history_section_lists_each_deploy(

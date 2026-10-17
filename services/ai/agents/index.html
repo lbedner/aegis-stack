@@ -6557,7 +6557,7 @@
 <li><strong>Persistence backend</strong> (<code>ai[sqlite]</code> or <code>ai[postgres]</code>): definitions live in the <code>agent</code> table, cached warm per process. A missing or inactive row falls back to the code default, so a half-seeded database never breaks chat.</li>
 <li><strong>Memory backend</strong> (the default <code>ai</code>): the code default is the only config source. Same shape, same behavior, no tables involved.</li>
 </ul>
-<p>Because the seeded <code>assistant</code> row is built from the same in-code default, the two sources cannot drift: a database-backed project and a memory-backed project produce identical default chat.</p>
+<p>Because the seeded <code>assistant</code> row is built from the same in-code default, the two sources cannot drift. The one difference is the app map: with a persistence backend the <code>assistant</code> always has the <code>app_map</code> memory module (see <a href="../memory-modules/">Memory Modules</a>), which needs the module tables a memory-backed project does not have.</p>
 <h3 id="what-each-backend-provides">What each backend provides</h3>
 <table>
 <thead>
@@ -6616,7 +6616,7 @@
 </tr>
 <tr>
 <td><code>system_prompt</code></td>
-<td>The agent's persona. The seeded default is a marker meaning "use the service's built-in dynamic persona"; any edited text is used verbatim</td>
+<td>The agent's persona, used verbatim. The <code>assistant</code> row is seeded with Illiana's whole persona, so what the row shows is what she runs on; the model in force and the live context are appended after it</td>
 </tr>
 <tr>
 <td><code>model_id</code></td>
@@ -6703,7 +6703,7 @@
 <p><strong>CLI</strong>:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>my-app<span class="w"> </span>agents<span class="w"> </span>list<span class="w">              </span><span class="c1"># every agent with grants at a glance</span>
 </span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>my-app<span class="w"> </span>agents<span class="w"> </span>show<span class="w"> </span>assistant<span class="w">    </span><span class="c1"># full definition including the prompt</span>
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>my-app<span class="w"> </span>agents<span class="w"> </span><span class="nb">test</span><span class="w"> </span>assistant<span class="w">    </span><span class="c1"># one live turn through the resolved config</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>my-app<span class="w"> </span>agents<span class="w"> </span><span class="nb">test</span><span class="w"> </span>assistant<span class="w">    </span><span class="c1"># one chat turn as the agent</span>
 </span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>my-app<span class="w"> </span>memory-modules<span class="w"> </span>list<span class="w">      </span><span class="c1"># the module catalog</span>
 </span></code></pre></div>
 <p><strong>Dashboard</strong>: the AI service modal has an Agents tab listing every agent with an active toggle and a detail view.</p>

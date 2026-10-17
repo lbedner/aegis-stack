@@ -7133,7 +7133,7 @@
 </span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="c1"># Agent Registry</span>
 </span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>my-app<span class="w"> </span>agents<span class="w"> </span>list<span class="w">             </span><span class="c1"># All agents with their grants</span>
 </span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>my-app<span class="w"> </span>agents<span class="w"> </span>show<span class="w"> </span>&lt;slug&gt;<span class="w">      </span><span class="c1"># One agent&#39;s full definition</span>
-</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>my-app<span class="w"> </span>agents<span class="w"> </span><span class="nb">test</span><span class="w"> </span>&lt;slug&gt;<span class="w">      </span><span class="c1"># One live turn through the agent</span>
+</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>my-app<span class="w"> </span>agents<span class="w"> </span><span class="nb">test</span><span class="w"> </span>&lt;slug&gt;<span class="w">      </span><span class="c1"># One chat turn as the agent</span>
 </span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>my-app<span class="w"> </span>memory-modules<span class="w"> </span>list<span class="w">     </span><span class="c1"># Memory module catalog</span>
 </span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>my-app<span class="w"> </span>memory-modules<span class="w"> </span>show<span class="w"> </span>&lt;slug&gt;<span class="w">  </span><span class="c1"># One module&#39;s definition</span>
 </span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>
@@ -7359,7 +7359,7 @@
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>my-app<span class="w"> </span>agents<span class="w"> </span><span class="nb">test</span><span class="w"> </span>assistant
 </span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>my-app<span class="w"> </span>agents<span class="w"> </span><span class="nb">test</span><span class="w"> </span>support<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;What are your hours?&quot;</span>
 </span></code></pre></div>
-<p>Runs one live turn through the agent's resolved configuration against the configured model and prints the reply.</p>
+<p>Runs one turn the way chat does (the agent's tools, memory modules and code mode, usage recorded) in a conversation of its own, deleted after, and prints the reply.</p>
 <h3 id="memory-modules-list-show">memory-modules list / show</h3>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>my-app<span class="w"> </span>memory-modules<span class="w"> </span>list
 </span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>my-app<span class="w"> </span>memory-modules<span class="w"> </span>show<span class="w"> </span>&lt;slug&gt;

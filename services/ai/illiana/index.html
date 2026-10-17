@@ -6929,8 +6929,8 @@
 <p><strong>Source:</strong> <code>app/services/ai/llm_catalog_context.py</code></p>
 <p>Top models per featured vendor (OpenAI, Anthropic, Google, xAI, Mistral, Groq, DeepSeek) with pricing and capabilities. This lets Illiana recommend models when asked.</p>
 <h3 id="prompt-assembly">Prompt Assembly</h3>
-<p><strong>Source:</strong> <code>app/services/ai/prompts.py</code></p>
-<p>All contexts are combined via <code>build_system_prompt()</code>. Health context is injected last so the LLM weights it more heavily for status questions.</p>
+<p><strong>Source:</strong> <code>app/services/ai/domains/chat/prompts.py</code></p>
+<p>Her persona is the <code>assistant</code> agent's <code>system_prompt</code>, seeded with the whole text and edited like any agent's (see <a href="../agents/">Agents</a>). <code>build_system_prompt()</code> appends the model in force and each context after it. Health context is injected last so the LLM weights it more heavily for status questions.</p>
 <h2 id="chat-modes">Chat Modes</h2>
 <h3 id="single-message">Single Message</h3>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>my-app<span class="w"> </span>ai<span class="w"> </span>chat<span class="w"> </span><span class="s2">&quot;Explain the architecture of this project&quot;</span>

@@ -1,8 +1,10 @@
 {% if include_ai and ai_backend != "memory" and ai_framework == "pydantic-ai" %}
 """A meeting's notes: one pass of the ``meeting-notes`` agent
 (``domains.agents``) over the finished transcript, for its summary,
-decisions, action items and open questions, each citing the transcript
-lines it came from. Metered like every other model call
+decisions, action items and open questions, and its threads (what people
+committed to, contradicted and stood on, with the commitments earlier
+meetings left open raised again; ``domains.threads``), each citing the
+transcript lines it came from. Metered like every other model call
 (``meetings:notes`` in AI spend).
 
 The bot writes them once it is out of the call (``bot.run_meeting``);
@@ -10,54 +12,66 @@ the Meetings page writes them again on request, over the old ones, so a
 better model or a corrected "me" never needs the call again.
 """
 
+from sqlmodel.ext.asyncio.session import AsyncSession
+
 from app.core.db import get_async_session
 from app.core.log import logger
 from app.services.ai.domains.spend.recording import extract_usage, record_usage
 from app.services.meetings.domains.agents import NOTES_AGENT, NOTES_PROMPT, writer
-from app.services.meetings.models import (
-    Meeting,
-    MeetingNotes,
-    Notes,
-    TranscriptLine,
-)
-from app.services.meetings.service import WRITING, MeetingsService, save_notes
+from app.services.meetings.domains.notes.service import keep_failure, keep_notes
+from app.services.meetings.domains.people import queries as people
+from app.services.meetings.domains.threads import ledger
+from app.services.meetings.domains.threads.ledger import Earlier
+from app.services.meetings.domains.threads.service import earlier
+from app.services.meetings.models import Meeting, Notes, TranscriptLine
+from app.services.meetings.service import WRITING, MeetingsService
 
 ACTION = "meetings:notes"
 
 
 async def write_notes(meeting_id: int) -> None:
-    """Write the meeting's notes, or why they could not be written; a
-    meeting where nothing was said gets none."""
+    """Write the meeting's notes, or why they could not be written (the
+    ones it had stay); a meeting where nothing was said gets none."""
     WRITING.add(meeting_id)
     try:
-        kept = await _write(meeting_id)
-        if kept is not None:
+        async with get_async_session() as session:
+            svc = MeetingsService(session, None)
+            meeting = await svc.get(meeting_id)
+            lines = await svc.transcript(meeting)
+            if not lines:
+                return
+            before = await _earlier(session, meeting)
+        try:
+            notes, model_name = await _ask(meeting, lines, before)
+        except Exception as exc:
+            logger.exception("Meeting notes failed", meeting_id=meeting_id)
             async with get_async_session() as session:
-                await save_notes(session, kept)
+                await keep_failure(session, meeting_id, str(exc))
+            return
+        async with get_async_session() as session:
+            await keep_notes(session, meeting_id, notes, model_name)
     finally:
         WRITING.discard(meeting_id)
 
 
-async def _write(meeting_id: int) -> MeetingNotes | None:
-    async with get_async_session() as session:
-        svc = MeetingsService(session, None)
-        meeting = await svc.get(meeting_id)
-        lines = await svc.transcript(meeting)
-    if not lines:
-        return None
+async def _earlier(session: AsyncSession, meeting: Meeting) -> Earlier:
+    """What earlier meetings left open for this one's people, or none when
+    it cannot be read: it enriches the notes, never blocks them."""
     try:
-        return await _ask(meeting, lines)
-    except Exception as exc:
-        logger.exception("Meeting notes failed", meeting_id=meeting_id)
-        return MeetingNotes(meeting_id=meeting_id, error=str(exc)[:500])
+        here = await people.meeting_people(session, meeting.id)  # type: ignore[arg-type]
+        return await earlier(session, meeting, sorted({p.name for _, p in here}))
+    except Exception:
+        logger.exception("Earlier meetings unread for notes", meeting_id=meeting.id)
+        return Earlier()
 
 
 async def _ask(
-    meeting: Meeting, lines: list[tuple[str, TranscriptLine]]
-) -> MeetingNotes:
+    meeting: Meeting, lines: list[tuple[str, TranscriptLine]], before: Earlier
+) -> tuple[Notes, str]:
     agent, model_name = await writer(NOTES_AGENT, NOTES_PROMPT, Notes)
+    said = "\n".join(f"[{line.id}] {speaker}: {line.text}" for speaker, line in lines)
     result = await agent.run(
-        "\n".join(f"[{line.id}] {speaker}: {line.text}" for speaker, line in lines)
+        f"{before.text}\n\nThis meeting:\n{said}" if before.text else said
     )
     await record_usage(
         action=ACTION,
@@ -65,16 +79,13 @@ async def _ask(
         usage=extract_usage(result),
         user_id=None if meeting.owner_user_id is None else str(meeting.owner_user_id),
     )
-    notes = _cited(result.output, {line.id for _, line in lines})
-    return MeetingNotes(
-        meeting_id=meeting.id, content=notes.model_dump(), model_name=model_name
-    )
+    return _cited(result.output, {line.id for _, line in lines}, before), model_name
 
 
-def _cited(notes: Notes, said: set[int | None]) -> Notes:
-    """``notes`` citing only lines the transcript has: a model can make
-    one up."""
+def _cited(notes: Notes, said: set[int | None], before: Earlier) -> Notes:
+    """``notes`` citing only lines the transcript has (or, for the
+    threads, the earlier lines it was shown): a model can make one up."""
     for item in [*notes.decisions, *notes.action_items, *notes.open_questions]:
         item.lines = [line for line in item.lines if line in said]
-    return notes
+    return ledger.cited(notes, said, before)
 {% endif %}

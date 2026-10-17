@@ -14,9 +14,11 @@
 {% endmacro %}
 
 {# The notes, or why there are none: the summary, then what the caller
-   puts first (the Meetings page puts my items there), then the lists. #}
+   puts first (the Meetings page puts my items there), then the lists. A
+   rewrite that failed keeps the notes it had, and says so above them. #}
 {% macro notes_view(notes, notes_error, clock, empty, voices) %}
 {% if notes %}
+{% if notes_error %}<p role="alert" class="text-sm text-error">Writing them again failed, so these are the last ones: {{ notes_error }}</p>{% endif %}
 <p id="meeting-summary" class="text-sm text-aegis-text">{{ notes.summary }}</p>
 {% if caller is defined %}{{ caller() }}{% endif %}
 {{ notes_lists(notes, clock, voices) }}
@@ -71,15 +73,16 @@
 {% endmacro %}
 
 {# Who said what: one speaker's lines in a row under their name, each line
-   with its time and its own anchor (an item jumps to it). #}
-{% macro transcript(turns, clock, voices) %}
+   with its time and its own anchor (an item jumps to it); ``hit``, the
+   line a search opened it at, marked. #}
+{% macro transcript(turns, clock, voices, hit=None) %}
 {% if turns %}
 <ol class="space-y-4 text-sm">
   {% for name, rows in turns %}
   <li data-turn class="grid scroll-mt-12 gap-1">
     {{ speaker(name, voices) }}
     {% for line in rows %}
-    <p id="line-{{ line.id }}" class="flex gap-3 scroll-mt-20 rounded px-2 -mx-2 target:bg-aegis-teal/10">
+    <p id="line-{{ line.id }}" {% if hit and line.id == hit %}data-hit{% endif %} class="flex gap-3 scroll-mt-20 rounded px-2 -mx-2 target:bg-aegis-teal/10 data-[hit]:bg-aegis-teal/10">
       <span class="w-10 shrink-0 pt-0.5 text-xs tabular-nums text-aegis-muted">{{ clock[line.id] }}</span>
       <span class="leading-relaxed text-aegis-text">{{ line.text }}</span>
     </p>

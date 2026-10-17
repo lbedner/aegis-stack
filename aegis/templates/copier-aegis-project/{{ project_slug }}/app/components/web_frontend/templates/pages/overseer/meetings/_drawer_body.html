@@ -1,12 +1,14 @@
 {# The drawer's meeting, live: how it is going, the admin's two actions
    (ask the bot to leave while it is in, delete once it is out), its facts,
-   then the same notes and transcript as the Meetings page (_sections.html).
+   then the same notes and transcript as the Meetings page (_sections.html),
+   with the meeting's threads loaded between them (_threads_body.html).
    While something is still happening it re-reads itself every few
    seconds, as the page does. #}
 {% from "components/macros/layout.html" import facts %}
 {% from "components/macros/form.html" import action %}
 {% from "pages/meetings/_macros.html" import failure, status_line %}
 {% set base = prefix ~ "/" ~ meeting.id %}
+{% set with_threads = true %}
 <div id="meeting-body" class="space-y-6"
      {% if under_way or writing %}hx-get="{{ base }}/body" hx-trigger="every 3s" hx-swap="outerHTML"{% endif %}>
   <div class="flex flex-wrap items-center justify-between gap-3">
@@ -20,7 +22,7 @@
   {{ facts([
     ("Bot", meeting.bot_name),
     ("Owner", meeting.owner_user_id),
-    ("Owner speaks as", meeting.me),
+    ("Owner speaks as", me),
     ("Notes by", model_name),
   ]) }}
   {% include "pages/meetings/_sections.html" %}

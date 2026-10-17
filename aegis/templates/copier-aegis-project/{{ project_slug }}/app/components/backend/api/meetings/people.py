@@ -16,7 +16,7 @@ from app.services.meetings.deps import (
     get_people_service,
 )
 from app.services.meetings.domains.people.service import PeopleService
-from app.services.meetings.models import GuideRecord, PersonGuide
+from app.services.meetings.models import GuideRecord, GuideRow
 from app.services.shared.deps import get_admin_actor, get_admin_reader
 
 
@@ -34,8 +34,8 @@ def _routes(
     ``read`` and changes behind ``change``."""
     scoped = Depends(service)  # type: ignore[call-overload]
 
-    @router.get("", response_model=list[PersonGuide], dependencies=read)
-    async def guides(svc: PeopleService = scoped) -> list[PersonGuide]:
+    @router.get("", response_model=list[GuideRow], dependencies=read)
+    async def guides(svc: PeopleService = scoped) -> list[GuideRow]:
         """The guides, latest written first."""
         return await svc.guides()
 

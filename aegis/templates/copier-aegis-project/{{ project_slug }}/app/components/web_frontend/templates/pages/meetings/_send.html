@@ -1,10 +1,13 @@
 {# Sending the bot to a call, on the Meetings page and on Overseer's: posts
    to ``send_url``; a link it cannot join comes back as this form with the
-   error (422), a sent bot opens its meeting. #}
-{% from "components/macros/form.html" import field, primary_button, text_input %}
+   error (422), a sent bot opens its meeting. Where there is more than one
+   agent (``agents``), which one it goes as; it joins as the agent's name
+   unless given another. #}
+{% from "components/macros/form.html" import field, primary_button, select, text_input %}
 <form data-send data-write hx-post="{{ send_url }}" hx-target="this" hx-swap="outerHTML"
-      class="grid gap-3 sm:grid-cols-[1fr_14rem_auto] sm:items-end">
+      class="grid gap-3 {{ 'sm:grid-cols-[1fr_14rem_14rem_auto]' if agents else 'sm:grid-cols-[1fr_14rem_auto]' }} sm:items-end">
   {% call field("Meeting link", error) %}{{ text_input("url", url, placeholder="https://meet.google.com/abc-defg-hij", required=True) }}{% endcall %}
-  {% call field("Bot name") %}{{ text_input("bot_name", bot_name) }}{% endcall %}
+  {% if agents %}{% call field("Agent") %}{{ select("agent", agents, agent or agents[0].id, blank=None, block=True) }}{% endcall %}{% endif %}
+  {% call field("Bot name") %}{{ text_input("bot_name", bot_name, placeholder="The agent's own") }}{% endcall %}
   {{ primary_button("Send", type="submit") }}
 </form>

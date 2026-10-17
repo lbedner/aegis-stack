@@ -10,8 +10,9 @@ import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.components.web_frontend import overseer_meetings
+from app.services.meetings.domains.people.participants import keep_heard
 from app.services.meetings.models import MeetingStatus, Notes
-from app.services.meetings.service import MeetingsService, save_heard, transition
+from app.services.meetings.service import MeetingsService, transition
 from app.services.system.models import ComponentStatus
 from tests._meetings import MEET, docs_meeting, ended, hold_the_bot, hold_the_writer
 from tests.web.dom import location, none, one, select, text
@@ -59,7 +60,7 @@ async def test_a_row_opens_its_notes_and_transcript_in_the_drawer(
     overseer: TestClient, async_db_session: AsyncSession
 ) -> None:
     meeting_id = await _ended(async_db_session, None)
-    await save_heard(async_db_session, meeting_id, {"Ada": 42.0})
+    await keep_heard(async_db_session, meeting_id, {"Ada": 42.0})
 
     page = page_html(overseer, f"{PAGE}?meeting={meeting_id}")
     sync = one(page, "[data-drawer-sync]")
@@ -177,7 +178,7 @@ async def test_who_talked_and_for_how_long_reads_as_a_list(
         ("Lisa Atalese", "Okay."),
         notes=lambda _: Notes(summary="Shown."),
     )
-    await save_heard(
+    await keep_heard(
         async_db_session,
         meeting_id,
         {"Lisa Atalese": 465.0, "William Ferro": 3025.0, "Unknown": 627.0},

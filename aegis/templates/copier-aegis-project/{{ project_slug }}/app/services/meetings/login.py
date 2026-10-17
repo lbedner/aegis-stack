@@ -4,8 +4,10 @@ Google refuses a sign-in in a browser that automation launched or that has
 a debugging port open ("This browser or app may not be secure"). So a
 person signs in in a plain Chrome on a fresh profile and quits it; the
 profile is then reopened headless to read the login over its debugging
-port. It is kept as a secret (``LOGIN``), where the bot finds it from any
-process: ``meetings join`` on the host, or the webserver in Docker.
+port. It is kept as a secret, where the bot finds it from any process:
+``meetings join`` on the host, or the webserver in Docker. Each agent (a
+Google account the bot joins as) has its own: the first's is ``LOGIN``,
+another's ``LOGIN__<NAME>`` (``domains.accounts``).
 """
 
 from collections.abc import Iterator
@@ -24,7 +26,9 @@ from app.core import secrets
 from app.core.secrets import Secret
 
 LOGIN = "MEETINGS_BOT_LOGIN_SECRET"
-SECRETS = (Secret(LOGIN, owner="Meetings", label="The bot's Google sign-in"),)
+SECRETS = (
+    Secret(LOGIN, owner="Meetings", label="The bot's Google sign-in", family=True),
+)
 
 SIGN_IN_URL = "https://accounts.google.com/"
 # Google's session cookie: there once the sign-in is finished.
@@ -44,9 +48,10 @@ class LoginError(RuntimeError):
     """Chrome could not be started, or nobody signed in."""
 
 
-async def stored_login() -> dict[str, Any] | None:
-    """The kept sign-in (Playwright's ``storage_state``), None until one is."""
-    value = await secrets.get(LOGIN)
+async def stored_login(secret: str = LOGIN) -> dict[str, Any] | None:
+    """The sign-in kept as ``secret`` (Playwright's ``storage_state``), None
+    until one is."""
+    value = await secrets.get(secret)
     return json.loads(value) if value else None
 
 
@@ -78,13 +83,17 @@ async def capture_login(chrome: str) -> dict[str, Any]:
     return state
 
 
-async def save_login(state: dict[str, Any], actor: str) -> None:
-    await secrets.put(LOGIN, json.dumps(state), actor)
+async def save_login(state: dict[str, Any], actor: str, secret: str = LOGIN) -> None:
+    await secrets.put(secret, json.dumps(state), actor)
 
 
-def signed_in(state: dict[str, Any]) -> bool:
+def signed_in(state: dict[str, Any], now: float | None = None) -> bool:
+    """Whether ``state`` holds Google's session; with ``now`` (epoch
+    seconds), one that has not expired by then (-1: when Chrome closes)."""
     return any(
-        cookie["name"] == SESSION_COOKIE and cookie["domain"].endswith("google.com")
+        cookie["name"] == SESSION_COOKIE
+        and cookie["domain"].endswith("google.com")
+        and (now is None or not 0 <= cookie.get("expires", -1) <= now)
         for cookie in state["cookies"]
     )
 

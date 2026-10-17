@@ -31,6 +31,8 @@ STACKS = {
         ["auth[org]", "ai[sqlite]", "insights", "payment", "blog", "comms"],
     ),
     "finance_auth": (["database[postgres]", "scheduler"], ["auth", "finance"]),
+    # Search's full-text index is the revision's own (no model declares it).
+    "meetings": (["database[postgres]", "browser"], ["meetings"]),
 }
 
 CREATE_DB = """

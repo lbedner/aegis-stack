@@ -14,6 +14,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, Response
 
+from app.components.web_frontend.meeting_agents import agent_options
 from app.components.web_frontend.rendering import (
     fragment,
     navigate,
@@ -24,9 +25,9 @@ from app.components.web_frontend.rendering import (
 from app.core.formatting import format_clock, format_relative_time
 from app.services.meetings.bot import send_bot
 from app.services.meetings.deps import as_http, get_meetings_service
+from app.services.meetings.domains.accounts.service import AgentNotFoundError, agents
 from app.services.meetings.models import Meeting, MeetingRecord, MeetingStatus
 from app.services.meetings.service import (
-    DEFAULT_BOT_NAME,
     MeetingsService,
     UnsupportedMeetingLinkError,
     call_length,
@@ -72,11 +73,21 @@ def row_of(meeting: Meeting, url: str) -> dict[str, Any]:
 def send_form(
     send_url: str,
     url: str = "",
-    bot_name: str = DEFAULT_BOT_NAME,
+    bot_name: str = "",
     error: str | None = None,
+    agents: list[dict[str, str]] | None = None,
+    agent: str | None = None,
 ) -> dict[str, Any]:
-    """The send form's context (_send.html), posting to ``send_url``."""
-    return {"send_url": send_url, "url": url, "bot_name": bot_name, "error": error}
+    """The send form's context (_send.html), posting to ``send_url``, with
+    the agents to pick from (``agent_options``)."""
+    return {
+        "send_url": send_url,
+        "url": url,
+        "bot_name": bot_name,
+        "error": error,
+        "agents": agents or [],
+        "agent": agent,
+    }
 
 
 async def send_and_open(
@@ -85,26 +96,30 @@ async def send_and_open(
     bot_name: str,
     send_url: str,
     opened: Callable[[int], str],
+    agent: str | None = None,
 ) -> Response:
-    """Send the bot, then open its meeting at ``opened(id)``; a link it
-    cannot join is the form again, saying why (422)."""
+    """Send the bot as ``agent``, then open its meeting at ``opened(id)``;
+    a link it cannot join (or an agent there is not) is the form again,
+    saying why (422)."""
+    every = await agents(svc.db)
     try:
-        meeting = await send_bot(svc, url, bot_name)
-    except UnsupportedMeetingLinkError as exc:
-        form = send_form(send_url, url, bot_name, str(exc))
+        meeting = await send_bot(svc, url, bot_name, agent, every)
+    except (UnsupportedMeetingLinkError, AgentNotFoundError) as exc:
+        options = agent_options(every)
+        form = send_form(send_url, url, bot_name, str(exc), options, agent)
         return HTMLResponse(fragment(SEND, **form), status_code=422)
     return navigate(Response(), opened(meeting.id))  # type: ignore[arg-type]
 
 
 async def _list(request: Request, svc: MeetingsService) -> Response:
     meetings = await svc.list_meetings()
-    notes = await svc.notes_for([m.id for m in meetings])  # type: ignore[misc]
-    rows = []
-    for m in meetings:
-        kept = notes[m.id].notes() if m.id in notes else None  # type: ignore[index]
-        mine = len(kept.mine(m.me)) if kept else None
-        rows.append(row_of(m, f"/meetings/{m.id}") | {"mine": mine})
-    return render(request, LIST, {"rows": rows} | send_form("/meetings"))
+    mine = await svc.mine_counts([m.id for m in meetings])  # type: ignore[misc]
+    rows = [
+        row_of(m, f"/meetings/{m.id}") | {"mine": mine.get(m.id)}  # type: ignore[arg-type]
+        for m in meetings
+    ]
+    form = send_form("/meetings", agents=agent_options(await agents(svc.db)))
+    return render(request, LIST, {"rows": rows} | form)
 
 
 def body_context(record: MeetingRecord) -> dict[str, Any]:
@@ -128,7 +143,7 @@ def body_context(record: MeetingRecord) -> dict[str, Any]:
                 "dot": colors.get(name),
                 "tone": None if name in colors else "muted",
             }
-            for name, span, ratio in heard_rows(record.meeting.heard)
+            for name, span, ratio in heard_rows(record.heard_seconds)
         ],
         # One speaker's lines in a row, under their name once.
         "turns": [
@@ -156,10 +171,16 @@ async def join(
     svc: Service,
     url: Annotated[str, Form()],
     bot_name: Annotated[str, Form()] = "",
+    agent: Annotated[str, Form()] = "",
 ) -> Response:
     """Send the bot in, then open its meeting."""
     return await send_and_open(
-        svc, url, bot_name, "/meetings", lambda meeting_id: f"/meetings/{meeting_id}"
+        svc,
+        url,
+        bot_name,
+        "/meetings",
+        lambda meeting_id: f"/meetings/{meeting_id}",
+        agent or None,
     )
 
 

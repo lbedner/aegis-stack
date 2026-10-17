@@ -89,11 +89,11 @@ async def test_a_guide_is_written_again_only_with_a_model_to_write_it(
     with pytest.raises(NothingToWriteError):
         await svc.write_again(guide_id)
 
-    written: list[tuple[int | None, str]] = []
+    written: list[int] = []
     runs: list[Any] = []
 
-    async def write(owner: int | None, person: str) -> None:
-        written.append((owner, person))
+    async def write(person_id: int) -> None:
+        written.append(person_id)
 
     monkeypatch.setattr(people_service, "guide_writer", lambda: write)
     monkeypatch.setattr(people_service, "background", runs.append)
@@ -104,4 +104,4 @@ async def test_a_guide_is_written_again_only_with_a_model_to_write_it(
         await run
 
     assert record.writing and not record.can_write
-    assert written == [(1, "Ada")]
+    assert written == [record.guide.person_id]

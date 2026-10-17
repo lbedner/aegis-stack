@@ -7,10 +7,18 @@ from fastapi.testclient import TestClient
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.services.meetings.domains.people.participants import keep_heard
 from app.services.meetings.models import MeetingStatus, Notes
-from app.services.meetings.service import MeetingsService, save_heard, transition
+from app.services.meetings.service import MeetingsService, transition
 from tests._audit import as_admin
-from tests._meetings import MEET, docs_meeting, ended, hold_the_bot, hold_the_writer
+from tests._meetings import (
+    MEET,
+    docs_meeting,
+    ended,
+    hold_the_bot,
+    hold_the_writer,
+    someone_else,
+)
 
 ADMIN = "/api/v1/meetings/admin"
 
@@ -76,9 +84,12 @@ def admin(authenticated_client: TestClient) -> TestClient:
 async def _theirs(session: AsyncSession) -> tuple[int, list[int]]:
     """Another owner's meeting the bot has left: Ada said hi, for 42s."""
     meeting_id, lines = await ended(
-        session, 4242, ("Ada", "Hi."), notes=lambda _: Notes(summary="Ada said hi.")
+        session,
+        await someone_else(session),
+        ("Ada", "Hi."),
+        notes=lambda _: Notes(summary="Ada said hi."),
     )
-    await save_heard(session, meeting_id, {"Ada": 42.0})
+    await keep_heard(session, meeting_id, {"Ada": 42.0})
     return meeting_id, lines
 
 
@@ -101,7 +112,7 @@ async def test_one_meeting_comes_with_its_notes_transcript_and_what_was_heard(
 
     body = authenticated_client.get(f"{ADMIN}/{meeting_id}").json()
 
-    assert body["meeting"]["heard"] == {"Ada": 42.0}
+    assert body["heard_seconds"] == {"Ada": 42.0}
     assert body["notes"]["summary"] == "Ada said hi."
     assert body["transcript"] == [
         {"id": lines[0], "speaker": "Ada", "at": 0.0, "text": "Hi."}
@@ -112,7 +123,8 @@ async def test_the_admin_deletes_a_meeting_but_not_one_the_bot_is_in(
     admin: TestClient, async_db_session: AsyncSession
 ) -> None:
     done, _ = await _theirs(async_db_session)
-    live = await MeetingsService(async_db_session, 4242).request(MEET)
+    owner = await someone_else(async_db_session)
+    live = await MeetingsService(async_db_session, owner).request(MEET)
     live_id: int = live.id  # type: ignore[assignment]
     await transition(
         async_db_session,
@@ -133,7 +145,9 @@ async def test_the_admin_says_who_the_owner_is_and_rewrites_the_notes(
 ) -> None:
     """What the Flet Overseer does from its pane, as the htmx drawer does."""
     _, runs = hold_the_writer(monkeypatch)
-    meeting_id = await docs_meeting(async_db_session, 4242)
+    meeting_id = await docs_meeting(
+        async_db_session, await someone_else(async_db_session)
+    )
 
     picked = admin.post(f"{ADMIN}/{meeting_id}/me", json={"name": "Ada"})
     assert [item["text"] for item in picked.json()["mine"]] == ["Write the docs"]

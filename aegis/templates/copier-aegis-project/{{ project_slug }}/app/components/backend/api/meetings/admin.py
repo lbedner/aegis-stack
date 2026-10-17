@@ -1,7 +1,7 @@
-"""Meetings for Overseer, across every owner: the list, one meeting read in
-full (its notes, transcript and how long each speaker was heard), which
-speaker its owner is, its notes written again, the bot asked to leave,
-and a meeting deleted. Reading is the admin's (``get_admin_reader``), a
+"""Meetings for Overseer, across every owner: the list, the agents the bot
+joins as, one meeting read in full (its notes, transcript and how long
+each speaker was heard) and its threads, which speaker its owner is, its
+notes written again, the bot asked to leave, and a meeting deleted. Reading is the admin's (``get_admin_reader``), a
 change an operator's (``get_admin_actor``); an owner's own meetings are
 ``router``'s."""
 
@@ -11,7 +11,9 @@ from fastapi import APIRouter, Depends, Response, status
 from pydantic import BaseModel
 
 from app.services.meetings.deps import as_http, get_every_owners_meetings
-from app.services.meetings.models import Meeting, MeetingRecord
+from app.services.meetings.domains.accounts.service import AgentRow, overview
+from app.services.meetings.domains.threads.service import meeting_threads
+from app.services.meetings.models import Meeting, MeetingRecord, ThreadSection
 from app.services.meetings.service import MeetingsService
 from app.services.shared.deps import get_admin_actor, get_admin_reader
 
@@ -27,6 +29,13 @@ CHANGE = [Depends(get_admin_actor)]
 async def every_meeting(svc: Every) -> list[Meeting]:
     """Every owner's meetings, newest first."""
     return await svc.list_meetings(LIMIT)
+
+
+@router.get("/agents", response_model=list[AgentRow], dependencies=READ)
+async def agents(svc: Every) -> list[AgentRow]:
+    """Every agent the bot joins as: whether its sign-in works, and the
+    meetings it is in now. Before the meeting routes: not a meeting id."""
+    return await overview(svc.db)
 
 
 @router.get("/{meeting_id}", response_model=MeetingRecord, dependencies=READ)
@@ -46,6 +55,15 @@ async def leave(meeting_id: int, svc: Every) -> Meeting:
     """Ask the bot to leave; it goes on its next look."""
     with as_http():
         return await svc.ask_to_leave(meeting_id)
+
+
+@router.get(
+    "/{meeting_id}/threads", response_model=list[ThreadSection], dependencies=READ
+)
+async def threads(meeting_id: int, svc: Every) -> list[ThreadSection]:
+    """Its commitments, contradictions and positions, with their lines."""
+    with as_http():
+        return await meeting_threads(svc, meeting_id)
 
 
 class Speaker(BaseModel):

@@ -96,6 +96,7 @@ class Secret:
     default: str | None = None
     parse: Callable[[str], str] | None = None
     module: str = ""  # the ``OWNERS`` module that declared it (``collect``)
+    family: bool = False  # also ``<name>__<SUFFIX>``, one value per thing of a kind
 
     def is_needed(self) -> bool:
         return self.needed() if callable(self.needed) else self.needed
@@ -320,10 +321,10 @@ async def get_many(*names: str, source: Any = None) -> dict[str, str | None]:
 
 
 def _declared(name: str) -> Secret:
-    entry = next((s for s in declared() if s.name == name), None)
-    if entry is None:
-        raise UnknownSecretError(f"{name} is not a declared secret.")
-    return entry
+    for entry in declared():
+        if entry.name == name or (entry.family and name.startswith(f"{entry.name}__")):
+            return entry
+    raise UnknownSecretError(f"{name} is not a declared secret.")
 
 
 def writable_store(name: str) -> tuple[Secret, SecretStore]:
@@ -368,8 +369,7 @@ async def put(name: str, value: str, actor: str) -> Verdict | None:
 async def test(name: str) -> Verdict:
     """Check the value in effect for ``name``, wherever it is set."""
     entry = _declared(name)
-    value = await get(name)
-    if value is None:
+    if (value := await get(name)) is None:
         return Verdict(UNVERIFIED, f"{name} is not set.")
     return await _verify(entry, value) or Verdict(
         UNVERIFIED, f"There is no check for {name}."

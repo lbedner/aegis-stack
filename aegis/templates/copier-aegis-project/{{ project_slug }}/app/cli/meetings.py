@@ -13,8 +13,16 @@ from app.core.audit import cli_actor
 from app.core.db import get_async_session
 from app.core.formatting import format_clock, format_relative_time
 from app.services.meetings.bot import run_meeting
+from app.services.meetings.domains.accounts.service import (
+    DEFAULT_AGENT,
+    AgentNameError,
+    AgentNotFoundError,
+    check_name,
+    keep_agent,
+    login_secret_for,
+    pick,
+)
 from app.services.meetings.login import (
-    LOGIN,
     LoginError,
     capture_login,
     find_chrome,
@@ -22,7 +30,6 @@ from app.services.meetings.login import (
 )
 from app.services.meetings.models import MeetingRecord
 from app.services.meetings.service import (
-    DEFAULT_BOT_NAME,
     MeetingNotFoundError,
     MeetingsService,
     UnsupportedMeetingLinkError,
@@ -57,20 +64,24 @@ async def list_meetings(
 @app.command()
 async def join(
     url: str = typer.Argument(..., help="The meeting link"),
+    agent: str | None = typer.Option(
+        None, "--agent", help="The agent to send (the default if not given)"
+    ),
     bot_name: str = typer.Option(
-        DEFAULT_BOT_NAME, "--bot-name", help="The name the bot joins as"
+        "", "--bot-name", help="The name it joins as (the agent's own if not given)"
     ),
 ) -> None:
     """Send the bot into a meeting and stay with it until it leaves (Ctrl-C
     takes it out)."""
     async with get_async_session() as session:
         try:
+            account = await pick(session, agent)
             meeting = await MeetingsService(session, owner_user_id=None).request(
-                url, bot_name
+                url, bot_name or account.display_name, account.id
             )
-        except UnsupportedMeetingLinkError as exc:
+        except (UnsupportedMeetingLinkError, AgentNotFoundError) as exc:
             theme.fail(str(exc))
-    console.print(f"Meeting {meeting.id}: joining as {bot_name}...")
+    console.print(f"Meeting {meeting.id}: joining as {meeting.bot_name}...")
     await run_meeting(meeting.id)  # type: ignore[arg-type]
     async with get_async_session() as session:
         done = await MeetingsService(session, owner_user_id=None).get(meeting.id)  # type: ignore[arg-type]
@@ -129,15 +140,25 @@ async def show(meeting_id: int = typer.Argument(..., help="The meeting's id")) -
 
 @app.command()
 async def login(
+    agent: str = typer.Option(
+        DEFAULT_AGENT, "--agent", help="The agent to sign in (made if new)"
+    ),
+    name: str | None = typer.Option(
+        None, "--name", help="The name it joins as: its Google account's"
+    ),
+    email: str | None = typer.Option(
+        None, "--email", help="Its Google account's email"
+    ),
     chrome: str | None = typer.Option(
         None, "--chrome", help="The Chrome to sign in with (found if not given)"
     ),
 ) -> None:
-    """Sign the bot's own Google account in, once: Meet turns away a bot
-    that is not signed in."""
+    """Sign one of the bot's own Google accounts in, once: Meet turns away a
+    bot that is not signed in. Each agent is a Google account of its own."""
     try:
-        secrets.writable_store(LOGIN)
-    except secrets.SecretsReadOnlyError as exc:
+        check_name(agent)
+        secrets.writable_store(login_secret_for(agent))
+    except (AgentNameError, secrets.SecretsReadOnlyError) as exc:
         theme.fail(str(exc))
     chrome = chrome or find_chrome()
     if chrome is None:
@@ -150,5 +171,7 @@ async def login(
         state = await capture_login(chrome)
     except LoginError as exc:
         theme.fail(str(exc))
-    await save_login(state, actor=cli_actor())
-    console.print("Kept. The bot joins signed in from now on.")
+    async with get_async_session() as session:
+        account = await keep_agent(session, agent, name, email)
+    await save_login(state, actor=cli_actor(), secret=account.login_secret)
+    console.print(f"Kept. {account.name} joins signed in from now on.")

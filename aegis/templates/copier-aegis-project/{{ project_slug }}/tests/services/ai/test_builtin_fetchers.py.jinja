@@ -10,6 +10,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.models.conversation import Conversation
 import app.services.ai.domains.chat.builtin_fetchers as builtin_fetchers_module
+from app.core.tools import acting_as
 from app.services.ai.domains.chat.fetchers import FetchContext, registered_fetcher_names, run_fetcher
 
 
@@ -35,6 +36,27 @@ class TestRegistration:
         names = registered_fetcher_names()
         assert "recent_conversations" in names
         assert "user_profile" in names
+        assert "app_map" in names
+
+
+class TestAppMap:
+    """What the app is, read from its code (``ontology.summary.text``):
+    an admin's with its parts, anyone else's the app's data alone, as the
+    ``ontology`` tool answers each."""
+
+    async def test_an_admin_reads_the_parts_and_the_tables(self) -> None:
+        with acting_as(None, "assistant", admin=True):
+            block = await run_fetcher("app_map", FetchContext(user_id="u1"))
+        assert block is not None
+        assert "component:backend" in block
+        assert "user" in block  # a table
+
+    async def test_anyone_else_reads_the_tables_alone(self) -> None:
+        with acting_as(None, "assistant", admin=False):
+            block = await run_fetcher("app_map", FetchContext(user_id="u1"))
+        assert block is not None
+        assert "component:backend" not in block
+        assert "user" in block
 
 
 class TestRecentConversations:

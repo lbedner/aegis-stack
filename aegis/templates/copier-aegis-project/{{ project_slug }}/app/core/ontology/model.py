@@ -11,11 +11,11 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from app.core.parts import Category
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 class Kind(StrEnum):
-    STACK = "stack"  # the stack's own code, no one part's (system, shared)
+    SHARED = "shared"  # the app's shared code, no one part's (system, shared)
     COMPONENT = "component"
     SERVICE = "service"
     ROUTE = "route"
@@ -25,6 +25,7 @@ class Kind(StrEnum):
     CONTAINER = "container"
     EXTERNAL = "external"  # an outside provider a service calls
     OBJECT = "object"  # a table: what the app's data is (``domain``)
+    KEYS = "keys"  # what a part keeps in Redis, by key pattern (``KeyFamily``)
 
 
 class EdgeKind(StrEnum):
@@ -67,9 +68,9 @@ class _Node(BaseModel):
 
 class PartNode(_Node):
     """A component, a service (``ai``) or sub-service (``ai.rag``), or the
-    stack's own code (``system``)."""
+    app's shared code (``system``)."""
 
-    kind: Literal[Kind.STACK, Kind.COMPONENT, Kind.SERVICE]
+    kind: Literal[Kind.SHARED, Kind.COMPONENT, Kind.SERVICE]
     category: Category
     description: str = ""  # its package's docstring, first line
     cli: str | None = None  # its name to the aegis CLI, where it has one
@@ -119,7 +120,7 @@ class ObjectNode(_Code):
     """A table, by its name (never ``schema.name``: SQLite has none)."""
 
     kind: Literal[Kind.OBJECT] = Kind.OBJECT
-    class_name: str
+    class_name: str = ""  # none for a table no model declares
     description: str = ""  # its class docstring's first sentence
     fields: tuple[ObjectField, ...] = ()
 
@@ -132,6 +133,16 @@ class ChangeNode(_Code):
     title: str = ""
     description: str = ""
     object: str | None = None  # the table it changes, by node id
+
+
+class KeysNode(_Code):
+    """Keys a part keeps in Redis, by their pattern, in its own words."""
+
+    kind: Literal[Kind.KEYS] = Kind.KEYS
+    title: str  # its name: ``Chart history``
+    purpose: str
+    type: str  # the Redis type: ``stream``, ``list``
+    db: str  # the settings field naming its logical database
 
 
 class ContainerNode(_Node):
@@ -152,7 +163,8 @@ Node = Annotated[
     | ChangeNode
     | ContainerNode
     | ExternalNode
-    | ObjectNode,
+    | ObjectNode
+    | KeysNode,
     Field(discriminator="kind"),
 ]
 
@@ -206,7 +218,7 @@ class SystemModel(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    schema_version: Literal[1] = SCHEMA_VERSION
+    schema_version: Literal[2] = SCHEMA_VERSION
     partial: bool
     stack: Stack
     nodes: tuple[Node, ...]

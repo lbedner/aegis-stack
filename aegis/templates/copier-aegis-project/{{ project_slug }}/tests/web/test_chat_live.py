@@ -19,6 +19,7 @@ from fastapi.testclient import TestClient
 from pydantic_ai.messages import (
     FunctionToolCallEvent,
     PartEndEvent,
+    PartStartEvent,
     RealtimeTurnCompleteEvent,
     SpeechPart,
     ToolCallPart,
@@ -70,6 +71,7 @@ def gemini(monkeypatch: pytest.MonkeyPatch) -> FakeRealtime:
     step runs, it answers, and it ends the call."""
     fake = FakeRealtime(
         [
+            PartStartEvent(index=0, part=SpeechPart(speaker="user", transcript="")),
             PartEndEvent(index=0, part=SpeechPart(speaker="user", transcript="Hi")),
             FunctionToolCallEvent(
                 part=ToolCallPart(
@@ -149,6 +151,8 @@ class TestTheControls:
             one(page, f"#chat-call [data-call-{figure}]")
         for state in ("live", "working", "muted"):
             one(page, f"template#chat-mic-states [data-state={state}]")
+        # The quiet, counted down to the hang-up on the status line.
+        one(page, "template#chat-mic-states [data-state=hanging-up] [data-countdown]")
 
     def test_a_card_drawn_mid_call_has_a_place_in_the_thread(
         self, client: TestClient
@@ -183,6 +187,9 @@ class TestTheCall:
         assert heard == [VOICE]  # its voice, as the model spoke it
         assert gemini.live.audio == [b"\x10\x20"]  # yours, as the page sent it
         assert gemini.live.sent == [chat_live.GREETING]  # it speaks first
+        # You were heard from your first word to your last: Gemini reports
+        # no onset of speech, so no quiet is counted in between.
+        assert told[0] == {"type": "hearing"}
         assert [t["text"] for t in told if t["type"] == "said"] == ["Hello!"]
         # Each step as it runs, labelled as the thread's trail labels it.
         steps = [t.get("label") for t in told if t["type"] == "working"]
@@ -190,6 +197,22 @@ class TestTheCall:
         # It ended the call: the page hangs up once the goodbye has played.
         assert {"type": "hang_up"} in told
         assert told[-1]["type"] == "saved"  # the thread reloads
+
+    def test_the_page_cues_its_check_in_and_goodbye(
+        self, client: TestClient, gemini: FakeRealtime, ended: threading.Event
+    ) -> None:
+        """No provider ends a call on quiet: the page counts it
+        (call-state.js) and names a line; the assistant says the server's,
+        and nothing the page made up."""
+        with client.websocket_connect(SOCKET) as ws:
+            ws.receive_json()
+            ws.send_bytes(b"\x10\x20")  # the fake plays once it hears you
+            ws.send_json({"type": "cue", "line": "check_in"})
+            ws.send_json({"type": "cue", "line": "goodbye"})
+            ws.send_json({"type": "cue", "line": "anything else"})
+            ws.close()
+            assert ended.wait(5)
+        assert gemini.live.sent[1:] == [chat_live.CHECK_IN, chat_live.GOODBYE]
 
     def test_a_dropped_call_picks_up_where_it_stopped(
         self,
@@ -245,3 +268,12 @@ def test_a_caller_who_is_not_signed_in_is_refused(app: FastAPI) -> None:
     ):
         ws.receive_json()
     assert refused.value.code == 1008
+
+
+def test_a_cue_that_is_not_one_says_nothing() -> None:
+    """Whatever the page sends that is not a cue by name is no line: a
+    malformed message does not end the call either."""
+    assert chat_live._cue('{"line": "check_in"}') == chat_live.CHECK_IN
+    assert chat_live._cue("not json") is None
+    assert chat_live._cue('["check_in"]') is None
+    assert chat_live._cue('{"line": "say something rude"}') is None

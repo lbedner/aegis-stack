@@ -49,13 +49,6 @@ class UsageMixin(AIServiceBase):
         return {"input_tokens": 0, "output_tokens": 0}
 {% endif %}
 
-    async def calculate_cost(self, input_tokens: int, output_tokens: int) -> float:
-        """Cost in USD for the current model's pricing; 0.0 when the model
-        or its price is not in the catalog."""
-        return await usage_recording.calculate_cost(
-            self.config.model, input_tokens, output_tokens
-        )
-
     async def _record_usage(
         self,
         action: str,
@@ -65,16 +58,19 @@ class UsageMixin(AIServiceBase):
         error_message: str | None = None,
         duration_ms: float | None = None,
         conversation_id: str | None = None,
-    ) -> None:
-        """Write one ledger row for this request; never raises.
+        model: str | None = None,
+    ) -> float:
+        """Write one ledger row for this request, priced at ``model`` (the
+        one that answered; the global when not given); never raises.
+        Returns the cost, so a caller showing it needs no second lookup.
 
         ``duration_ms`` stays optional and defaults to None: a caller
         that does not time itself must be distinguishable from one that
         answered instantly, or the column's averages are fiction.
         """
-        await usage_recording.record_usage(
+        return await usage_recording.record_usage(
             action,
-            self.config.model,
+            model or self.config.model,
             usage,
             user_id,
             success=success,

@@ -1,5 +1,5 @@
 """Who owns a file or a module: the one service or component it belongs to,
-or the stack's own code, read from where it is and, for a route or a test,
+or the app's shared code, read from where it is and, for a route or a test,
 from what it imports (``source_index``), never from a table. Only a known
 owner counts: a part the aegis CLI declares (``parts.PARTS``) or a
 registered health check names (a plugin's). A folder is not an owner by
@@ -9,8 +9,8 @@ The rules, in order, for a path under ``app``:
 
 1. ``services/<x>/``, its ``sub`` from a ``domains/<y>/`` or ``models/<y>/``;
    a folder that is not a service says what it is part of beside its code
-   (``PART_OF = ServiceName.AI`` for rag), or that it is the stack's own
-   (``PART_OF = "stack"``: system, shared, the change queue).
+   (``PART_OF = ServiceName.AI`` for rag), or that it is shared code
+   (``PART_OF = "shared"``: system, shared, the change queue).
 2. ``components/backend/api/<x>``: the service, service domain or component
    of that name, else the one service its folder (or flat file) imports, else
    the backend.
@@ -36,10 +36,10 @@ from typing import Literal
 from app.core import source_index
 from app.core.parts import PARTS
 
-Kind = Literal["service", "component", "stack"]
+Kind = Literal["service", "component", "shared"]
 SERVICE: Kind = "service"
 COMPONENT: Kind = "component"
-STACK: Kind = "stack"  # the stack's own code, no one part's
+SHARED: Kind = "shared"  # the app's shared code, no one part's
 NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_-]*")
 # The Overseer page a component shows on, where it is not named for it.
 COMPONENT_PAGES = {name: part.page for name, part in PARTS.items() if part.page}
@@ -175,8 +175,8 @@ def _part_of(folder: str, index: source_index.Index) -> Owner | None:
     """What a services folder that is not a service says it is part of."""
     package = index.get(f"{_SERVICES}{folder}")
     declared = package.declared.part_of if package else None
-    if declared == STACK:
-        return Owner(STACK, folder)
+    if declared == SHARED:
+        return Owner(SHARED, folder)
     found = _named(declared) if declared else None
     return Owner(found.kind, found.name, folder) if found else None
 

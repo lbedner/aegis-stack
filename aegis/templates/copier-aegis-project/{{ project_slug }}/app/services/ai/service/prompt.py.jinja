@@ -20,6 +20,7 @@ from app.services.ai.domains.chat.agent_loader import AgentConfig
 {% endif %}
 from app.services.ai.domains.chat.prompts import (
     DEFAULT_SYSTEM_PROMPT,
+    LEGACY_SYSTEM_PROMPT,
     build_system_prompt,
 )
 {% if ai_framework == "pydantic-ai" %}
@@ -84,16 +85,12 @@ class PromptMixin(ContextsMixin):
     """Agent-config overlay and per-request prompt/runtime construction."""
 
     def _agent_persona(self, agent_config: AgentConfig | None) -> str | None:
-        """The persona override for this request, or None for the built-in.
-
-        ``DEFAULT_SYSTEM_PROMPT`` is the seeded marker meaning "use the
-        service's dynamic persona"; any other prompt text (an edited agent
-        row) is used verbatim as the persona base.
-        """
+        """The agent row's prompt, or None (no agent) for the default. A row
+        still holding ``LEGACY_SYSTEM_PROMPT`` gets the default it meant."""
         if agent_config is None:
             return None
-        if agent_config.system_prompt == DEFAULT_SYSTEM_PROMPT:
-            return None
+        if agent_config.system_prompt == LEGACY_SYSTEM_PROMPT:
+            return DEFAULT_SYSTEM_PROMPT
         return agent_config.system_prompt
 
     def _system_prompt_for(
@@ -139,7 +136,6 @@ class PromptMixin(ContextsMixin):
             formatted_usage = usage_context.format_for_prompt(compact=is_compact)
 
         system_prompt = build_system_prompt(
-            self.settings,
             rag_context=formatted_rag,
 {% if ai_rag %}
             rag_stats_context=formatted_rag_stats,
@@ -147,7 +143,6 @@ class PromptMixin(ContextsMixin):
             health_context=formatted_health,
             usage_context=formatted_usage,
             catalog_context=catalog_context,
-            use_rag=formatted_rag is not None,
             current_model=config.model,
             current_provider=config.provider.value,
             persona=self._agent_persona(agent_config),

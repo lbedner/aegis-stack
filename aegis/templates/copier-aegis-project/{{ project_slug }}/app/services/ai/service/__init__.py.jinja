@@ -7,9 +7,10 @@ layer may call the ones beneath it:
       └─ UsageMixin      token extraction, pricing, usage rollups
          └─ ContextsMixin   health/usage/catalog{% if ai_rag %}/RAG{% endif %} context builders
             └─ PromptMixin    persona overlay + per-request runtime construction
-               └─ ChatMixin      the non-streaming turn
-                  └─ StreamingMixin  the streaming turn
-                     └─ VoiceMixin     {% if ai_voice %}STT -> chat -> TTS{% else %}empty (voice off){% endif %}
+               └─ TurnMixin      the agent for a turn, typed or spoken
+                  └─ ChatMixin      a turn's conversation setup and teardown
+                     └─ StreamingMixin  the turn: stream_chat, and chat run to its end
+                        └─ VoiceMixin     {% if ai_voice %}STT -> chat -> TTS{% else %}empty (voice off){% endif %}
     StatusMixin          conversations, status, validation (base only)
 
 The composition below is the whole class - it declares no methods of its

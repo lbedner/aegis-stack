@@ -26,6 +26,7 @@ from app.core.log import logger
 from app.core.time import utcnow
 from app.core.tools import acting_as, current_subject, register_tool
 from app.services.ai.domains.chat import queries
+from app.services.ai.domains.chat.tool_telemetry import tool_turn
 from app.services.ai.models.agents import AgentUserMemory
 
 MEMORY_CATEGORIES = (
@@ -64,13 +65,21 @@ def memory_user(
 
     Every chat runtime wraps its model call in this. Without it a
     memory write has no owner (the tool declines and the model reads
-    the refusal as success), and a queue proposal has no author for
-    the audit trail.
+    the refusal as success), a queue proposal has no author for the
+    audit trail, and a tool call lands in the ledger as nobody's
+    (``tool_turn``).
     """
     token = current_user_id.set(user_id)
     about = current_subject.set(subject)
     try:
-        with acting_as(owner_user_id, agent_slug, conversation_id, admin):
+        with (
+            acting_as(owner_user_id, agent_slug, conversation_id, admin),
+            tool_turn(
+                user_id=user_id,
+                agent_slug=agent_slug,
+                conversation_id=conversation_id,
+            ),
+        ):
             yield
     finally:
         current_subject.reset(about)

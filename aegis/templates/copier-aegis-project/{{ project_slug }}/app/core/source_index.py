@@ -4,7 +4,7 @@ top-level names, what it imports, and the lines each name is used on.
 Overseer > Code goes from a name to its definition and lists every line
 that names it; the Server map, the load costs, the Service pattern and
 ``ownership`` read what each module imports, declares (``Declared``) and
-defines, and its docstring's first line. Each file is parsed once per
+defines, and its docstring's first paragraph. Each file is parsed once per
 change, whoever asks.
 
 Static and shallow on purpose: a name defined at a module's top level, or
@@ -91,7 +91,7 @@ class Module:
     imports: frozenset[str]
     declared: Declared
     functions: tuple[Function, ...]
-    summary: str  # its docstring's first line
+    summary: str  # its docstring's first paragraph, on one line
     classes: frozenset[str]  # its top-level classes
 
     @property
@@ -187,7 +187,7 @@ def _parse(path: str, source: str) -> Module:
         frozenset(imports - {""}),
         _declared(tree),
         tuple(functions(tree, lines)),
-        (ast.get_docstring(tree) or "").partition("\n")[0].strip(),
+        " ".join((ast.get_docstring(tree) or "").partition("\n\n")[0].split()),
         frozenset(n.name for n in tree.body if isinstance(n, ast.ClassDef)),
     )
 

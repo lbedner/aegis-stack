@@ -48,11 +48,10 @@ asyncio.run(main())
 
 | Method | Description |
 |--------|-------------|
-| `chat(message, user_id, conversation_id)` | Send message, get response |
+| `chat(message, user_id, conversation_id)` | Send message, get response: `stream_chat` run to its end, so the reply keeps its steps, model and cost |
 | `stream_chat(message, user_id, conversation_id)` | Stream response chunks |
 | `get_conversation(conversation_id)` | Retrieve conversation with history |
 | `list_conversations(user_id)` | List user's conversations |
-| `calculate_cost(input_tokens, output_tokens)` | Calculate cost from catalog prices |
 | `get_usage_stats(user_id, start_time, end_time)` | Get usage analytics |
 | `refresh_config()` | Reload configuration from .env |
 
@@ -253,10 +252,9 @@ Every AI request automatically:
 
 ```python
 # Manual cost calculation
-cost = await ai_service.calculate_cost(
-    input_tokens=1500,
-    output_tokens=800
-)
+from app.services.ai.domains.spend import recording
+
+cost = await recording.calculate_cost("gpt-4o", 1500, 800)
 ```
 
 See [Cost Tracking](cost-tracking.md) for the full analytics system.

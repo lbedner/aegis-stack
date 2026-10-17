@@ -217,7 +217,8 @@ def _voice() -> dict[str, str]:
     return {
         "reply": settings.VOICE_REPLY,
         "sound": settings.VOICE_WORKING_SOUND,
-        # A live call hangs up after this many seconds of dead air (0: never).
+        # Seconds of quiet on a live call before the assistant checks in
+        # (0: never); call-state.js counts it.
         "idle": settings.VOICE_LIVE_IDLE_SECONDS,
     }
 

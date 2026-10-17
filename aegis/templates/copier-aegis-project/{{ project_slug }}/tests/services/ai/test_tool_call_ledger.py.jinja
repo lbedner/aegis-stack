@@ -140,6 +140,32 @@ class TestTurnsAreDistinguishable:
         assert by_user == {"a": [0, 1], "b": [0, 1]}
 
 
+class TestEveryRuntimeBindsItsTurn:
+    @pytest.mark.asyncio
+    async def test_a_call_inside_a_turns_identity_is_attributed(
+        self, written: list[dict[str, Any]]
+    ) -> None:
+        """``memory_user`` is what every runtime wraps its model call in:
+        typed turns and calls bound it but not the ledger's turn, so every
+        tool call landed with no agent or conversation (2026-10-16)."""
+        from app.services.ai.domains.chat.user_memory import memory_user
+
+        async def a(_ctx: Any) -> str:
+            return "a"
+
+        with memory_user("u1", agent_slug="assistant", conversation_id="c1"):
+            await instrument("a", a)(None)
+            await instrument("a", a)(None)
+
+        first, second = (row["turn"] for row in written)
+        assert (first.user_id, first.agent_slug, first.conversation_id) == (
+            "u1",
+            "assistant",
+            "c1",
+        )
+        assert first is second
+
+
 class TestTheWrapperIsTransparent:
     def test_name_signature_and_docstring_survive(self) -> None:
         """The agent framework builds the tool schema the model sees from

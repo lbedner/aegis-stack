@@ -7,7 +7,7 @@ distinct parts its files belong to (``ownership``), outermost first. A query
 finance's code made on a route of AI's is ``ai -> finance -> database``:
 service-to-service hops appear without an import hook. What only carries
 the call (the server running a route, the worker running a task, the
-stack's own code) is no part of the chain unless nothing else is.
+app's shared code) is no part of the chain unless nothing else is.
 
 Each process counts in its own memory and writes the whole of it to the
 shared cache every ``FLUSH_SECONDS`` under its own key a build (Redis when
@@ -123,10 +123,10 @@ def callers() -> list[str]:
 
 
 def _chain(callers: list[str], to: str) -> list[str]:
-    """``callers`` then ``to``: the stack's own code dropped, and the
+    """``callers`` then ``to``: the app's shared code dropped, and the
     runners while a part is calling (all but the outermost where none is),
     each part once in a row."""
-    parts = [c for c in callers if not c.startswith(f"{ownership.STACK}:")]
+    parts = [c for c in callers if not c.startswith(f"{ownership.SHARED}:")]
     if any(part_of(p) not in RUNNERS for p in parts):
         parts = [p for p in parts if part_of(p) not in RUNNERS]
     else:
@@ -176,7 +176,7 @@ def into(func: Any, *, source: str, ms: float = 0.0, error: bool = False) -> Non
     node = _node(ownership.owner(module)) if module else None
     if (
         node
-        and not node.startswith(f"{ownership.STACK}:")
+        and not node.startswith(f"{ownership.SHARED}:")
         and part_of(node) not in RUNNERS
     ):
         hop(node, via=[source], ms=ms, error=error)

@@ -21,7 +21,7 @@ import yaml
 
 from app.core import ownership, runtime, secrets, source_index
 from app.core.config import settings
-from app.core.constants import QueueName
+from app.core.constants import ComponentName, QueueName
 from app.core.ontology import calls, domain
 from app.core.ontology.model import (
     ChangeNode,
@@ -30,6 +30,7 @@ from app.core.ontology.model import (
     EdgeKind,
     ExternalNode,
     JobNode,
+    KeysNode,
     Kind,
     Mode,
     Node,
@@ -98,7 +99,7 @@ def system_model(app: Starlette | None = None) -> SystemModel:
         return {"owner": by_module(module), "module": module}
 
     containers = _containers()
-    jobs = _jobs(placed)
+    jobs, own_jobs = _jobs(placed), _scheduler_jobs(placed)
     changes = _changes(placed)
     tables, links = _tables(by_module)
     nodes: list[Node] = [
@@ -109,13 +110,15 @@ def system_model(app: Starlette | None = None) -> SystemModel:
         *_tools(placed),
         *changes,
         *jobs,
+        *own_jobs,
         *tables,
+        *_keys(by_module, ids),
     ]
     edges = [
         *_component_edges(found),
         *_contains(nodes),
         *_calls({n.id for n in nodes}, index),
-        *_runs_on(found, jobs, [c.name for c in containers]),
+        *_runs_on(found, jobs, own_jobs, [c.name for c in containers]),
         *links,
         *domain.changing(changes),
     ]
@@ -167,16 +170,54 @@ def _routes(app: Starlette, placed: Placed) -> list[RouteNode]:
     return list(found.values())
 
 
+def _schedule(trigger: dict[str, Any]) -> str:
+    """A trigger as written: ``trigger=cron hour=3``."""
+    return " ".join(f"{k}={v}" for k, v in trigger.items())
+
+
 def _jobs(placed: Placed) -> list[JobNode]:
     from app.core.schedule import service_jobs
 
     return [
-        JobNode(
-            name=job.id,
-            schedule=" ".join(f"{k}={v}" for k, v in job.trigger.items()),
-            **placed(job.func),
-        )
+        JobNode(name=job.id, schedule=_schedule(job.trigger), **placed(job.func))
         for job in service_jobs()
+    ]
+
+
+def _scheduler_jobs(placed: Placed) -> list[JobNode]:
+    """The scheduler's own (its heartbeat), beside the services'."""
+    try:
+        from app.components.scheduler import heartbeat
+    except ImportError:  # no scheduler in this stack
+        return []
+    return [
+        JobNode(
+            name=heartbeat.HEARTBEAT_JOB_ID,
+            schedule=_schedule(heartbeat.HEARTBEAT_TRIGGER),
+            **placed(heartbeat.touch_scheduler_heartbeat),
+        )
+    ]
+
+
+def _keys(owned: Callable[[str], str | None], ids: set[str]) -> list[KeysNode]:
+    """What each part keeps in Redis (``redis_keys``): held by the part
+    declaring it, else by Redis (core's); none without Redis."""
+    redis = node_id(Kind.COMPONENT, ComponentName.CACHE)
+    if redis not in ids:
+        return []
+    from app.services.system import redis_keys
+
+    return [
+        KeysNode(
+            name=family.pattern,
+            title=family.name,
+            purpose=family.purpose,
+            type=family.kind,
+            db=family.db,
+            owner=owned(module) or redis,
+            module=module,
+        )
+        for module, family in redis_keys.declared()
     ]
 
 
@@ -220,7 +261,7 @@ def _tables(owned: Callable[[str], str | None]) -> tuple[list[Node], list[Edge]]
         return [], []
     import_all_models()  # every table, whoever imported what so far
     objects, links = domain.objects(SQLModel.metadata, owned)
-    return list(objects), links
+    return [*objects, *domain.unmodeled(owned)], links
 
 
 def _containers() -> list[ContainerNode]:
@@ -272,12 +313,12 @@ def _contains(nodes: Iterable[Node]) -> list[Edge]:
 
 def _calls(ids: set[str], index: source_index.Index) -> list[Edge]:
     """What each services folder's code reaches (``calls``), from the part
-    the folder is (rag's from ``service:ai.rag``); the stack's own code
+    the folder is (rag's from ``service:ai.rag``); the app's shared code
     (what every service imports to be one) reaches nothing."""
     declared = secrets.declared()
     edges = []
     for folder, source in service_folders(index, ids):
-        if parse_node_id(source)[0] is Kind.STACK:
+        if parse_node_id(source)[0] is Kind.SHARED:
             continue
         package = index.root / "app" / "services" / folder
         edges += [
@@ -303,12 +344,16 @@ def _containers_of(part: PartNode, containers: list[str]) -> list[str]:
 
 
 def _runs_on(
-    found: Iterable[PartNode], jobs: Iterable[JobNode], containers: list[str]
+    found: Iterable[PartNode],
+    jobs: Iterable[JobNode],
+    own_jobs: Iterable[JobNode],
+    containers: list[str],
 ) -> list[Edge]:
     """Where each part runs: a component in its containers; a service, the
-    stack's code or a component with none of its own in the host's
-    (``ownership.HOST``); a sub-part with its part. A scheduled job runs on
-    the worker's system queue where there is one, else in the scheduler."""
+    app's shared code or a component with none of its own in the host's
+    (``ownership.HOST``); a sub-part with its part. A service's job runs on
+    the worker's system queue where there is one, else in the scheduler;
+    the scheduler's own, in the scheduler."""
 
     top = [p for p in found if p.owner is None]
     host_id = node_id(Kind.COMPONENT, ownership.HOST)
@@ -320,9 +365,8 @@ def _runs_on(
         for p in top
     }
     worker = places.get(node_id(Kind.COMPONENT, "worker"), [])
-    runner = [c for c in worker if c.endswith(QueueName.SYSTEM)] or places.get(
-        node_id(Kind.COMPONENT, "scheduler"), []
-    )
+    scheduler = places.get(node_id(Kind.COMPONENT, ComponentName.SCHEDULER), [])
+    runner = [c for c in worker if c.endswith(QueueName.SYSTEM)] or scheduler
     return [
         Edge(source=source, target=node_id(Kind.CONTAINER, c), kind=EdgeKind.RUNS_ON)
         for source, targets in places.items()
@@ -334,6 +378,9 @@ def _runs_on(
             kind=EdgeKind.RUNS_ON,
             mode=Mode.ASYNC,
         )
-        for job in jobs
-        for c in runner
+        for job, targets in [
+            *((job, runner) for job in jobs),
+            *((job, scheduler) for job in own_jobs),
+        ]
+        for c in targets
     ]

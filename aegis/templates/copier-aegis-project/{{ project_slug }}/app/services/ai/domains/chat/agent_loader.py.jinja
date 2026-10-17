@@ -27,6 +27,7 @@ from app.core.config import settings
 from app.core.db import get_async_session
 from app.core.log import logger
 from app.services.ai.domains.chat import queries
+from app.services.ai.domains.chat.builtin_fetchers import APP_MAP
 from app.services.ai.domains.chat.chat_kit import ContextProvider, ToolChatAgent
 from app.services.ai.domains.chat.module_context import MemoryModuleContextProvider
 from app.services.ai.domains.chat.prompts import get_default_system_prompt
@@ -42,6 +43,7 @@ from app.core.config import settings
 from app.core.db import get_async_session
 from app.core.log import logger
 from app.services.ai.domains.chat import queries
+from app.services.ai.domains.chat.builtin_fetchers import APP_MAP
 from app.services.ai.domains.chat.prompts import get_default_system_prompt
 from app.services.ai.models.agents import Agent
 {% else %}
@@ -91,6 +93,10 @@ def default_agent_config() -> AgentConfig:
         # What the app is, read from its code: its tables for anyone, the
         # rest for an admin. The seed grants these to the row.
         tool_names=("ontology",),
+{%- if ai_backend != "memory" %}
+        # ... and its map always in the prompt, the tool for depth.
+        memory_modules=(APP_MAP,),
+{%- endif %}
     )
 {% if ai_backend != "memory" %}
 

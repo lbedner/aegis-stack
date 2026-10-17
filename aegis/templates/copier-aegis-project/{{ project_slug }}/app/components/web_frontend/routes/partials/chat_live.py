@@ -16,12 +16,14 @@ reads an HTTP request a socket does not have.
 
 import asyncio
 from collections.abc import Callable
+import json
 from typing import Any
 
 from fastapi import APIRouter, Depends, WebSocket
 from pydantic_ai.messages import (
     FunctionToolCallEvent,
     PartEndEvent,
+    PartStartEvent,
     RealtimeResponseInterruptedEvent,
     RealtimeTurnCompleteEvent,
     SpeechPart,
@@ -57,6 +59,19 @@ RESUMING = (
     'they had asked: "{asked}". Say in a few words that you got cut off, '
     "then pick that answer up."
 )
+
+# Into the quiet: no provider ends a call on silence, so the page counts it
+# (call-state.js) and names one of these; the assistant says it. Cues, not
+# scripts, so the words vary. The check-in is a question they can tell
+# apart: "I'm ready when you are" went unnoticed as one.
+CHECK_IN = (
+    'It has gone quiet on the call. Ask them "Are you still there?" and nothing else.'
+)
+GOODBYE = (
+    "It is still quiet; they seem to have stepped away. Say a short goodbye "
+    "and end the call."
+)
+CUES = {"check_in": CHECK_IN, "goodbye": GOODBYE}
 
 
 def opening(conversation: Any) -> str:
@@ -99,11 +114,30 @@ async def _tell(ws: WebSocket, event: Any) -> None:
             said = {"type": "working", "label": trace_label(step[0])}
     elif isinstance(event, RealtimeTurnCompleteEvent):
         said = {"type": "done"}
+    elif (
+        isinstance(event, PartStartEvent)
+        and isinstance(event.part, SpeechPart)
+        and event.part.speaker == "user"
+    ):
+        # Gemini reports no onset of speech: your first transcribed words
+        # are it, and "heard" is the end. No quiet counts in between.
+        said = {"type": "hearing"}
     elif isinstance(event, PartEndEvent) and isinstance(event.part, SpeechPart):
         side = "heard" if event.part.speaker == "user" else "said"
         said = {"type": side, "text": event.part.transcript or ""}
     if said:
         await _send(ws, said)
+
+
+def _cue(text: str) -> str | None:
+    """The line a page's cue names (``{"line": "check_in"}``): only the
+    server's own, so the page never puts words in the assistant's mouth."""
+    try:
+        asked = json.loads(text)
+    except json.JSONDecodeError:
+        logger.warning("A live call sent a message that is not JSON")
+        return None
+    return CUES.get(asked.get("line")) if isinstance(asked, dict) else None
 
 
 async def _carry(
@@ -133,6 +167,8 @@ async def _carry(
                 break
             if message.get("bytes"):
                 await session.send_audio(message["bytes"])
+            elif message.get("text") and (line := _cue(message["text"])):
+                await session.send(line)
     finally:
         voice.cancel()
         await session.close()
@@ -169,6 +205,8 @@ def live_router(
             model=model,
             agent_slug=agent_slug,
             voice=settings.TTS_VOICE,
+            user_id=mount.user,
+            admin=admin,
             instructions=engine.instructions,
             max_output_tokens=engine.max_output_tokens,
         )

@@ -3,6 +3,8 @@
 
 from unittest.mock import patch
 
+import pytest
+
 from app.cli.main import app
 from app.services.ai.domains.chat.agent_loader import AgentConfig
 from app.services.ai.models.agents import (
@@ -108,6 +110,52 @@ class TestAgentsTest:
         result = runner.invoke(app, ["agents", "test", "assistant"])
 
         assert result.exit_code == 1
+
+
+class TestATestTurnIsAChatTurn:
+    """A bare model call on the prompt alone tested another agent: none of
+    its tools, memory or code mode. The test turn is a chat turn, in a
+    conversation of its own, deleted after."""
+
+    async def test_it_runs_the_agent_the_way_chat_does(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from types import SimpleNamespace
+        from typing import Any
+
+        from app.cli import agents as agents_cli
+        from app.services.ai.domains.chat import agent_loader
+        import app.services.ai.service as ai_service_module
+
+        config = agent_loader.default_agent_config()
+        asked: dict[str, Any] = {}
+        deleted: list[str] = []
+
+        async def delete(conversation_id: str) -> bool:
+            deleted.append(conversation_id)
+            return True
+
+        class _Service:
+            def __init__(self, settings: Any) -> None:
+                self.conversation_manager = SimpleNamespace(delete_conversation=delete)
+
+            async def chat(self, message: str, **kwargs: Any) -> Any:
+                asked.update(kwargs, message=message)
+                return SimpleNamespace(
+                    content="PONG", metadata={"conversation_id": "c1"}
+                )
+
+        async def resolve(*_: Any) -> Any:
+            return config
+
+        monkeypatch.setattr(agent_loader, "resolve_agent", resolve)
+        monkeypatch.setattr(ai_service_module, "AIService", _Service)
+
+        found, reply = await agents_cli._run_test_turn("assistant", "ping")
+
+        assert (found, reply) == (config, "PONG")
+        assert (asked["message"], asked["agent_slug"]) == ("ping", "assistant")
+        assert deleted == ["c1"]
 
 
 class TestAgentsPrompt:

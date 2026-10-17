@@ -175,9 +175,9 @@ Top models per featured vendor (OpenAI, Anthropic, Google, xAI, Mistral, Groq, D
 
 ### Prompt Assembly
 
-**Source:** `app/services/ai/prompts.py`
+**Source:** `app/services/ai/domains/chat/prompts.py`
 
-All contexts are combined via `build_system_prompt()`. Health context is injected last so the LLM weights it more heavily for status questions.
+Her persona is the `assistant` agent's `system_prompt`, seeded with the whole text and edited like any agent's (see [Agents](agents.md)). `build_system_prompt()` appends the model in force and each context after it. Health context is injected last so the LLM weights it more heavily for status questions.
 
 ## Chat Modes
 

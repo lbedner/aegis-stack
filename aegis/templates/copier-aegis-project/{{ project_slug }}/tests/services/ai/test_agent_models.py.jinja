@@ -9,18 +9,22 @@ import pytest
 from sqlmodel import Session, select
 
 from app.core.tools import register_tool, unregister_tool
+from app.services.ai.domains.chat.agent_registry import seed_agent
+from app.services.ai.domains.chat.builtin_fetchers import APP_MAP
 from app.services.ai.domains.chat.prompts import get_default_system_prompt
-from app.services.ai.domains.chat.tools import resolve_tools
 from app.services.ai.domains.chat.sentiment import (
     SENTIMENT_AGENT_SLUG,
     SENTIMENT_SYSTEM_PROMPT,
 )
+from app.services.ai.domains.chat.tools import resolve_tools
 from app.services.ai.fixtures.agent_fixtures import (
     DEFAULT_AGENT_SLUG,
     built_in_agents,
+    default_agent_definition,
     load_agent_fixtures,
 )
 from app.services.ai.models import Agent, AgentTool, Tool
+from app.services.ai.models.agents import MemoryModule
 
 
 @pytest.fixture
@@ -94,6 +98,33 @@ class TestAgentSeed:
         session.refresh(agent)
         assert "ontology" in {t.name for t in agent.tools}
 
+    def test_the_default_agent_knows_the_app_without_asking(
+        self, session: Session
+    ) -> None:
+        """The app's map is a memory module of its own, the default agent's."""
+        load_agent_fixtures(session)
+
+        modules = {m.slug: m for m in session.exec(select(MemoryModule)).all()}
+        assert modules[APP_MAP].fetch_function == APP_MAP
+        agent = session.exec(
+            select(Agent).where(Agent.slug == DEFAULT_AGENT_SLUG)
+        ).one()
+        assert APP_MAP in agent.memory_modules
+
+    def test_a_database_seeded_before_the_map_gets_it(self, session: Session) -> None:
+        """Its agent has neither the grant nor the module's row: the next
+        seed adds both, additive by name."""
+        seed_agent(session, default_agent_definition() | {"memory_modules": []})
+        session.commit()
+
+        assert load_agent_fixtures(session)["module_links"] == 1
+
+        assert APP_MAP in {m.slug for m in session.exec(select(MemoryModule)).all()}
+        agent = session.exec(
+            select(Agent).where(Agent.slug == DEFAULT_AGENT_SLUG)
+        ).one()
+        assert APP_MAP in agent.memory_modules
+
     def test_seed_is_idempotent(self, session: Session) -> None:
         load_agent_fixtures(session)
         counts = load_agent_fixtures(session)
@@ -161,9 +192,10 @@ class TestStartupSeedsTheRegistry:
         counts = seed_agent_registry()
 
         assert counts["agents"] >= 1
-        assert session.exec(
-            select(Tool).where(Tool.name == "save_memory")
-        ).first() is not None
+        assert (
+            session.exec(select(Tool).where(Tool.name == "save_memory")).first()
+            is not None
+        )
 
     def test_reseeding_changes_nothing(
         self, session: Session, monkeypatch: pytest.MonkeyPatch

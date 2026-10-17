@@ -44,7 +44,6 @@ from pydantic_ai.usage import UsageLimits
 
 from app.core.chat_transcript import as_markers, card_component, tool_label
 from app.core.log import logger
-from app.services.ai.domains.chat.tool_telemetry import tool_turn
 from app.services.ai.domains.chat.user_memory import memory_user
 from app.services.ai.domains.spend.recording import extract_usage, record_usage
 
@@ -168,25 +167,15 @@ class ToolChatAgent(Generic[DepsT]):
             # Wall clock for the whole turn, tool pauses included: what a
             # person waited, not what the model spent thinking.
             started = time.perf_counter()
-            # Bind the turn's user so a save_memory call mid-stream knows
-            # whose fact it is; the scope is the only identity a turn has.
-            # ``tool_turn`` groups this turn's tool calls in the ledger;
+            # Bind the turn's identity so a save_memory call mid-stream
+            # knows whose fact it is and the ledger groups its tool calls;
             # the kit is generic over a deps type it never inspects, so
-            # there is nowhere on deps to hang the turn's identity.
-            agent_slug = getattr(self._agent, "name", None)
-            conversation_id = scope.conversation_id
-            with (
-                memory_user(
-                    scope.user_id,
-                    owner_user_id=scope.owner_user_id,
-                    agent_slug=agent_slug,
-                    conversation_id=conversation_id,
-                ),
-                tool_turn(
-                    user_id=scope.user_id,
-                    agent_slug=agent_slug,
-                    conversation_id=conversation_id,
-                ),
+            # there is nowhere on deps to hang it.
+            with memory_user(
+                scope.user_id,
+                owner_user_id=scope.owner_user_id,
+                agent_slug=getattr(self._agent, "name", None),
+                conversation_id=scope.conversation_id,
             ):
                 async with self._agent.run_stream_events(
                     message,

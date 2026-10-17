@@ -16,6 +16,7 @@ from pydantic_ai.messages import (
 )
 
 from app.core.chat_transcript import card_component
+from app.services.ai.models import StreamingMessage
 
 
 def call_args_preview(args: Any) -> str:
@@ -45,6 +46,25 @@ def call_args_preview(args: Any) -> str:
 # the final SSE event, so a pathological payload must not bloat either.
 _TRACE_CODE_CAP = 6_000
 _TRACE_RESULT_CAP = 2_000
+
+
+def tool_notice(
+    tool_name: str,
+    *,
+    message_id: str,
+    conversation_id: str | None,
+    stream_delta: bool,
+    args: str = "",
+) -> StreamingMessage:
+    """A content-free chunk naming a tool call, for the UI trail."""
+    return StreamingMessage(
+        content="",
+        is_final=False,
+        is_delta=stream_delta,
+        message_id=message_id,
+        conversation_id=conversation_id,
+        metadata={"event": "tool", "tool": tool_name, "args": args},
+    )
 
 
 def record_tool_call(trace: list[dict[str, Any]], event: FunctionToolCallEvent) -> None:

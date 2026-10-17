@@ -335,7 +335,7 @@ def test_the_hooks_the_scripts_read_are_the_ones_the_markup_emits(
         optional |= {"chat-mic", "chat-mic-states", "data-speak", "data-state"}
     # A live call needs voice and a database (profiles and engines are rows).
     if not (chat_surface.HAS_VOICE and chat_surface.PERSISTED):
-        optional |= {"chat-live", "chat-call", "chat-mute"}
+        optional |= {"chat-live", "chat-call", "chat-mute", "data-countdown"}
     for element_id in ids - optional:
         assert any(select(h, f"#{element_id}") for h in pages), element_id
     for hook in hooks - optional:

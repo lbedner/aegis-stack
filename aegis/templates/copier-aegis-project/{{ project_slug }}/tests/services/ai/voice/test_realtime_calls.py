@@ -188,6 +188,50 @@ class TestACallKnowsWhoSheIs:
 
         assert await call_instructions(Agent("test", system_prompt="P"), "") == "P"
 
+    @pytest.mark.asyncio
+    async def test_a_call_is_built_the_way_a_typed_turn_is(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A call built her from the agent row alone: no memory modules, no
+        health, no saved memory. Asked how the database is set up, she
+        reached for the ontology tool her app map answers (2026-10-16).
+        A call and a typed turn build her through one function
+        (``_build_turn``), for the caller, so each can do what the other
+        can."""
+        from app.services.ai.domains.chat import agent_loader
+        from app.services.ai.domains.voice import realtime_calls
+
+        config = agent_loader.default_agent_config()
+        built: dict[str, Any] = {}
+
+        async def build_turn(
+            conversation: Any, agent_config: Any, **kwargs: Any
+        ) -> Any:
+            built.update(kwargs, slug=agent_config.slug)
+            agent = SimpleNamespace(
+                system_prompt_parts=_no_parts, realtime=lambda model, **kw: kw
+            )
+            return SimpleNamespace(agent=agent, conversation_context="")
+
+        async def _no_parts() -> list[Any]:
+            return []
+
+        async def resolve(*_: Any) -> Any:
+            return config
+
+        monkeypatch.setattr(agent_loader, "resolve_agent", resolve)
+        await realtime_calls.realtime_for(
+            SimpleNamespace(_build_turn=build_turn),
+            conversation=None,
+            model="google:gemini-3.8-live",
+            agent_slug=None,
+            voice=None,
+            user_id=USER,
+            admin=True,
+        )
+
+        assert built == {"user_id": USER, "admin": True, "slug": config.slug}
+
 
 class TestACallRemembers:
     """A call opens on a thread that ends with HER last reply - the one
@@ -369,8 +413,20 @@ class TestTheSettings:
         assert _model_settings("openai:gpt-realtime-2.1", "cedar", 1200) == {
             "openai_voice": "cedar",
             "input_transcription_model": INPUT_TRANSCRIPTION,
+            "openai_input_noise_reduction": "far_field",
+            "openai_turn_detection": {"type": "semantic_vad", "eagerness": "low"},
             "max_tokens": 1200,
         }
+
+    def test_openai_takes_no_turn_for_a_noise(self) -> None:
+        """A laptop's keys and room set off OpenAI's default detector: it
+        answered noise with "what's next?" and cut in on a pause mid-thought.
+        Noise filtered for a laptop mic; a turn ends when the thought does."""
+        from app.services.ai.domains.voice.realtime_calls import _model_settings
+
+        found = _model_settings("openai:gpt-realtime-2.1", None, None)
+        assert found["openai_input_noise_reduction"] == "far_field"
+        assert found["openai_turn_detection"]["type"] == "semantic_vad"
 
     def test_gemini_keeps_its_own_voice_and_transcription(self) -> None:
         """Gemini transcribes by default and has no OpenAI voices; sending
@@ -379,8 +435,20 @@ class TestTheSettings:
 
         assert _model_settings("google:gemini-3.8-live", "cedar", 1200) == {
             "max_tokens": 1200,
-            "google_vad": {"start_sensitivity": "low", "end_sensitivity": "high"},
+            "google_vad": {
+                "start_sensitivity": "low",
+                "end_sensitivity": "high",
+                "silence_duration_ms": 800,
+            },
         }
+
+    def test_gemini_waits_out_a_breath_mid_thought(self) -> None:
+        """Quick to end a turn, but not on a pause mid-sentence: Google's
+        advice against cutting in is 500-800ms of silence."""
+        from app.services.ai.domains.voice.realtime_calls import _model_settings
+
+        vad = _model_settings("google:gemini-3.8-live", None, None)["google_vad"]
+        assert vad["silence_duration_ms"] == 800
 
     def test_gpt_live_through_pydantic_ai_is_told_how_to_speak(self) -> None:
         """#274's trial: GPT-Live run by Pydantic AI. Its voice model takes
@@ -401,7 +469,7 @@ class TestTheSettings:
         from app.services.ai.domains.voice.realtime_calls import _model_settings
 
         vad = _model_settings("google:gemini-3.8-live", None, None)["google_vad"]
-        assert vad == {"start_sensitivity": "low", "end_sensitivity": "high"}
+        assert (vad["start_sensitivity"], vad["end_sensitivity"]) == ("low", "high")
 
 
 # Saves a turn, then reads the conversation back to check it: two reads

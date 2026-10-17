@@ -10,8 +10,10 @@ from collections.abc import Sequence
 {% endif %}
 
 {% if ai_backend != "memory" %}
+from datetime import timedelta
 
 from app.core.db import get_async_session
+from app.core.time import utcnow
 from app.services.ai.domains.chat.llm_catalog_context import get_llm_catalog_context
 {% endif %}
 from app.core.log import logger
@@ -241,6 +243,10 @@ class ContextsMixin(UsageMixin):
 {% if ai_backend != "memory" %}
         try:
             stats = await self.get_usage_stats(recent_limit=5)
+            async with get_async_session() as session:
+                week = await self._get_usage_totals(
+                    session, None, utcnow() - timedelta(days=7), None
+                )
 
             # Find top model by request count
             top_model = None
@@ -259,6 +265,8 @@ class ContextsMixin(UsageMixin):
                 top_model=top_model,
                 top_model_percentage=top_pct,
                 recent_requests=len(stats.get("recent_activity", [])),
+                week_requests=week["total_requests"],
+                week_cost=week["total_cost"],
             )
         except Exception as e:
             logger.debug(f"Failed to build usage context: {e}")

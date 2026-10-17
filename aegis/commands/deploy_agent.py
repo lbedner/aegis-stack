@@ -356,6 +356,11 @@ def _keep(client: Any, action: str, args: dict[str, str], found: Any) -> None:
     )
 
 
+# Looks again still running: an agent stopping waits for them, or what a
+# command changed would show as it was before it, for an hour.
+LOOKING: list[threading.Thread] = []
+
+
 def _look_again(client: Any, root: Path) -> None:
     """Each answer a command may have changed (``until_a_command``) read
     again; one that cannot be read now is dropped, to be asked for."""
@@ -364,7 +369,7 @@ def _look_again(client: Any, root: Path) -> None:
             continue
         try:
             _keep(client, name, {}, _found(root, name, {}, {}))
-        except (RefusedError, OSError, ValueError, redis.RedisError):
+        except Exception:  # any failure, as ``handle`` takes one
             with contextlib.suppress(redis.RedisError):
                 client.delete(_protocol.kept_key(name, {}))
 
@@ -396,7 +401,9 @@ def _execute(
     code = run(job, root, command, args, env, action)
     # What a command may have changed (the backups, the history) is looked
     # at again, beside the next command: what was kept shows until then.
-    threading.Thread(target=_look_again, args=(job.client, root), daemon=True).start()
+    looking = threading.Thread(target=_look_again, args=(job.client, root))
+    LOOKING[:] = [*(t for t in LOOKING if t.is_alive()), looking]
+    looking.start()
     if spec.get("token"):  # it may have changed what the account runs
         for key in PROVIDERS:
             job.client.delete(_protocol.kept_key("account", {"provider": key}))
@@ -537,6 +544,8 @@ def serve(client: Any, root: Path, stop: threading.Event) -> None:
         # What was taken off the queue is finished before leaving.
         commands.shutdown()
         looks.shutdown()
+        for looking in LOOKING:
+            looking.join()
         stopped.set()
         thread.join()
         with contextlib.suppress(redis.RedisError):

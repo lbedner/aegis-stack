@@ -400,9 +400,9 @@ class PluginSpec:
     # ``app/cli/<cli_name>.py``, with any hyphens replaced by underscores
     # (``web-scrape`` -> ``app/cli/web_scrape.py``), since hyphens are not
     # importable in a module path. The generated project's
-    # ``app/cli/main.py`` plugin loop applies the same normalization when
-    # it registers the module via ``app.add_typer(...)``, so the verb keeps
-    # its hyphen on the command line. ``None`` means the plugin ships no
+    # ``app/cli/main.py`` applies the same normalization when it lists the
+    # module in its ``GROUPS`` (loaded when run), so the verb keeps its
+    # hyphen on the command line. ``None`` means the plugin ships no
     # CLI surface. Decoupled from ``name`` so the install identifier
     # (``crawl4ai``) and the user-facing verb (``crawl``) can differ.
     cli_name: str | None = None

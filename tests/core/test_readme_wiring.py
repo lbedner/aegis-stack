@@ -95,13 +95,8 @@ def _group_source(group: str) -> str:
     """The template source of the typer app ``app/cli/main.py`` mounts
     as ``group``: its module, or every file of its package."""
     main = (CLI_DIR / "main.py.jinja").read_text()
-    var = re.search(rf"add_typer\((\w+)_module\.app, name=\"{group}\"\)", main)
-    assert var, f"no CLI group {group!r} in app/cli/main.py"
-    module = re.search(
-        rf"{var.group(1)}_module = importlib\.import_module\(\"app\.cli\.(\w+)\"\)",
-        main,
-    )
-    assert module, f"CLI group {group!r} has no module import in main.py"
+    module = re.search(rf"\"{group}\": \(\"app\.cli\.(\w+)\", \"app\"\)", main)
+    assert module, f"no CLI group {group!r} in app/cli/main.py's GROUPS"
     name = module.group(1)
     files = [*CLI_DIR.glob(f"{name}.py*"), *(CLI_DIR / name).glob("*.py*")]
     return "\n".join(f.read_text() for f in files)

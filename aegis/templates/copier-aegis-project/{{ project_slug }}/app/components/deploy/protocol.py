@@ -77,7 +77,7 @@ RESTIC_ENV = {
 }
 # How long the server's own state (its backups, history, stored files) is
 # kept between commands and refreshes.
-KEPT_FOR_A_DAY = 86400
+KEPT_FOR_AN_HOUR = 3600
 # A restore drill's steps (``aegis deploy-restore-drill``).
 DRILL_STEPS = {
     "restore": "Restore the newest copy",
@@ -168,17 +168,18 @@ PROTOCOL: dict[str, Any] = {
         # them, never typed; and its deploy history, recorded in the
         # server's database (``deploy history`` there), never this one's.
         # Each read again after any command, which may have changed it
-        # (``until_a_command``), and kept a day: the Overseer shows when it
-        # was read, with a refresh, so a page never waits on the server for
-        # what it was told minutes ago.
+        # (``until_a_command``), and kept an hour: the Overseer shows when
+        # it was read, with a refresh, so a page never waits on the server
+        # for what it was told minutes ago. An hour, not longer: a command
+        # run at a terminal changes the server without the agent knowing.
         "backups": {
             "kept": "deploy:backups",
-            "seconds": KEPT_FOR_A_DAY,
+            "seconds": KEPT_FOR_AN_HOUR,
             "until_a_command": True,
         },
         "history": {
             "kept": "deploy:history",
-            "seconds": KEPT_FOR_A_DAY,
+            "seconds": KEPT_FOR_AN_HOUR,
             "until_a_command": True,
         },
         # The stored files the server's rows name and its store lacks (its
@@ -186,7 +187,7 @@ PROTOCOL: dict[str, Any] = {
         # looked at again after any command.
         "storage": {
             "kept": "deploy:storage",
-            "seconds": KEPT_FOR_A_DAY,
+            "seconds": KEPT_FOR_AN_HOUR,
             "until_a_command": True,
         },
         "upload-storage": {

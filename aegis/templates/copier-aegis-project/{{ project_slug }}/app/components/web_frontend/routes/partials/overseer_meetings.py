@@ -2,7 +2,8 @@
 meeting in the drawer (live, with which speaker is me and the notes
 written again, as the Meetings page has them), the bot asked to leave it,
 and the meeting deleted; and one person's guide, its owner's note kept
-and the guide written again. Mounted by ``routes/pages.py`` behind
+and the guide written again; and a meeting's threads, loaded into its
+drawer. Mounted by ``routes/pages.py`` behind
 Overseer's gate; the admin reads and writes every owner's meetings (``Every``), and
 a meeting the admin sends is the admin's own (``Mine``).
 """
@@ -13,7 +14,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, Response
 
 from app.components.web_frontend import overseer_meetings
-from app.components.web_frontend.rendering import dialog, fragment, with_query
+from app.components.web_frontend.rendering import dialog, fragment
 from app.components.web_frontend.routes.meetings import (
     meeting_context,
     meeting_routes,
@@ -26,6 +27,7 @@ from app.services.meetings.deps import (
     get_meetings_service,
 )
 from app.services.meetings.domains.people.service import PeopleService
+from app.services.meetings.domains.threads.service import meeting_threads
 from app.services.meetings.models import GuideRecord
 from app.services.meetings.service import MeetingsService
 
@@ -39,34 +41,50 @@ DRAWER = "pages/overseer/meetings/_drawer.html"
 BODY = "pages/overseer/meetings/_drawer_body.html"
 GUIDE = "pages/overseer/meetings/_guide.html"
 GUIDE_BODY = "pages/overseer/meetings/_guide_body.html"
+THREADS = "pages/overseer/meetings/_threads_body.html"
 
 
 @router.post("")
 async def send(
-    svc: Mine, url: Annotated[str, Form()], bot_name: Annotated[str, Form()] = ""
+    svc: Mine,
+    url: Annotated[str, Form()],
+    bot_name: Annotated[str, Form()] = "",
+    agent: Annotated[str, Form()] = "",
 ) -> Response:
-    """Send the bot as the admin, then open its meeting in the drawer."""
+    """Send the bot as the admin, as the agent picked, then open its meeting
+    in the drawer."""
     return await send_and_open(
         svc,
         url,
         bot_name,
         PREFIX,
-        lambda meeting_id: with_query(
-            overseer_meetings.PAGE, **{overseer_meetings.DRAWER_PARAM: str(meeting_id)}
-        ),
+        overseer_meetings.meeting_url,
+        agent or None,
     )
 
 
 @router.get("/{meeting_id}/drawer", response_class=HTMLResponse)
-async def drawer(request: Request, meeting_id: int, svc: Every) -> Response:
+async def drawer(
+    request: Request, meeting_id: int, svc: Every, line: int | None = None
+) -> Response:
+    """The meeting, at ``line`` (a search hit's) when given."""
     context = await meeting_context(svc, meeting_id) | {"prefix": PREFIX}
-    return dialog(request, DRAWER, **context)
+    return dialog(request, DRAWER, **context, hit_line=line)
 
 
 # The drawer's live part: re-read while the bot is in or the notes are being
 # written; the bot asked to leave, which speaker the owner is, the notes
 # written again, the same routes as the Meetings page's.
 meeting_routes(router, get_every_owners_meetings, BODY, PREFIX)
+
+
+@router.get("/{meeting_id}/threads", response_class=HTMLResponse)
+async def threads(meeting_id: int, svc: Every) -> HTMLResponse:
+    """The meeting's threads, for the drawer's slot."""
+    with as_http():
+        sections = await meeting_threads(svc, meeting_id)
+    context = overseer_meetings.threads_context(sections, meeting_id)
+    return HTMLResponse(fragment(THREADS, **context))
 
 
 @router.get("/{meeting_id}/confirm-delete", response_class=HTMLResponse)

@@ -96,6 +96,26 @@ async def test_only_declared_names_are_written() -> None:
         await secrets.put("PATH", "x", actor="ops")
 
 
+async def test_a_family_keeps_one_value_per_member_under_its_rules(
+    env: pytest.MonkeyPatch,
+) -> None:
+    """One per thing of a kind (each meeting agent's sign-in): written and
+    read like the declared name, never listed on its own."""
+    _declare(env, Secret("OPENAI_API_KEY", owner="AI", family=True))
+    store = FakeStore()
+    secrets.set_store(store)
+
+    await secrets.put("OPENAI_API_KEY__WORK", KEY, actor="ops")
+
+    assert await secrets.get("OPENAI_API_KEY__WORK") == KEY
+    assert [row.name for row in await secrets.status()] == ["OPENAI_API_KEY"]
+    with pytest.raises(secrets.UnknownSecretError):
+        await secrets.put("OPENAI_API_KEYWORK", KEY, actor="ops")
+    _declare(env, Secret("OPENAI_API_KEY", owner="AI"))
+    with pytest.raises(secrets.UnknownSecretError):
+        await secrets.put("OPENAI_API_KEY__WORK", KEY, actor="ops")
+
+
 async def test_status_says_where_each_comes_from_never_the_value(
     env: pytest.MonkeyPatch,
 ) -> None:

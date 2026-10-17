@@ -1,5 +1,5 @@
 {# One person's guide in the drawer: who, then the live part
    (_guide_body.html, which re-reads itself while it is being written). #}
 {% from "components/macros/layout.html" import dialog_title %}
-{{ dialog_title(record.guide.person, "How to work with them, from what they say") }}
+{{ dialog_title(record.person, "How to work with them, from what they say") }}
 {% include "pages/overseer/meetings/_guide_body.html" %}

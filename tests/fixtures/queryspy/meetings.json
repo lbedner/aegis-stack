@@ -16,57 +16,237 @@
     },
     {
       "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting",
+      "file": "app/services/meetings/service.py",
+      "function": "meetings_counts"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting ORDER BY meeting.created_at DESC, meeting.id DESC LIMIT :param_1",
+      "file": "app/services/meetings/service.py",
+      "function": "list_meetings"
+    },
+    {
+      "kind": "repeated_statement",
       "label": "SELECT ... FROM meeting WHERE meeting.id = :id_1",
       "file": "app/services/meetings/service.py",
       "function": "get"
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM meeting WHERE meeting.me IS NOT NULL AND meeting.id != :id_1 ORDER BY meeting.created_at DESC, meeting.id DESC LIMIT :param_1",
+      "label": "SELECT ... FROM meeting WHERE meeting.id = :id_1 AND meeting.owner_user_id = :owner_user_id_1",
       "file": "app/services/meetings/service.py",
-      "function": "remember_me"
+      "function": "get"
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM meeting_notes WHERE meeting_notes.meeting_id = :pk_1",
+      "label": "SELECT ... FROM meeting WHERE meeting.id = :pk_1",
+      "file": "app/services/meetings/domains/notes/service.py",
+      "function": "keep_notes"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting WHERE meeting.id = :pk_1",
       "file": "app/services/meetings/service.py",
-      "function": "save_notes"
+      "function": "write_captions"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting WHERE meeting.owner_user_id = :owner_user_id_1 ORDER BY meeting.created_at DESC, meeting.id DESC LIMIT :param_1",
+      "file": "app/services/meetings/domains/notes/queries.py",
+      "function": "owner_meetings"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting WHERE meeting.owner_user_id IS NULL ORDER BY meeting.created_at DESC, meeting.id DESC LIMIT :param_1",
+      "file": "app/services/meetings/domains/notes/queries.py",
+      "function": "owner_meetings"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_bot_account ORDER BY meeting_bot_account.id",
+      "file": "app/services/meetings/domains/accounts/queries.py",
+      "function": "every_account"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_guide_point LEFT OUTER JOIN meeting_guide_point_line ON meeting_guide_point_line.point_id = meeting_guide_point.id WHERE meeting_guide_point.guide_id IN (__[POSTCOMPILE_guide_id_1]) ORDER BY meeting_guide_point.guide_id, meeting_guide_point.ord, meeting_guide_point_line.ord",
+      "file": "app/services/meetings/domains/people/queries.py",
+      "function": "guide_points"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_note_item JOIN (SELECT rowid AS id FROM meeting_note_search WHERE meeting_note_search MATCH :query) AS found ON found.id = meeting_note_item.id JOIN meeting ON meeting.id = meeting_note_item.meeting_id LEFT OUTER JOIN (SELECT meeting_note_line.item_id AS item_id, meeting_note_line.line_id AS line_id FROM meeting_note_line WHERE meeting_note_line.against IS false AND meeting_note_line.ord = :ord_1) AS first ON first.item_id = meeting_note_item.id LEFT OUTER JOIN meeting_transcript_line ON meeting_transcript_line.id = first.line_id WHERE meeting.owner_user_id = :owner_user_id_1 ORDER BY meeting.created_at DESC, meeting.id DESC, CASE meeting_note_item.kind WHEN :param_1 THEN :param_2 WHEN :param_3 THEN :param_4 WHEN :param_5 THEN :param_6 WHEN :param_7 THEN :param_8 WHEN :param_9 THEN :param_10 WHEN :param_11 THEN :param_12 WHEN :param_13 THEN :param_14 WHEN :param_15 THEN :param_16 ELSE :param_17 END, meeting_note_item.ord LIMIT :param_18",
+      "file": "app/services/meetings/domains/search/queries.py",
+      "function": "notes"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_note_item LEFT OUTER JOIN meeting_note_line ON meeting_note_line.item_id = meeting_note_item.id WHERE meeting_note_item.meeting_id = :meeting_id_1 AND meeting_note_item.kind = :kind_1",
+      "file": "app/services/meetings/domains/notes/queries.py",
+      "function": "commitment_lines"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_note_item WHERE meeting_note_item.meeting_id IN (__[POSTCOMPILE_meeting_id_1]) ORDER BY meeting_note_item.meeting_id, meeting_note_item.kind, meeting_note_item.ord",
+      "file": "app/services/meetings/domains/notes/queries.py",
+      "function": "items_of"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_note_line JOIN meeting_transcript_line ON meeting_transcript_line.id = meeting_note_line.line_id LEFT OUTER JOIN meeting_participant ON meeting_transcript_line.participant_id = meeting_participant.id LEFT OUTER JOIN meeting_person ON meeting_person.id = meeting_participant.person_id WHERE meeting_note_line.item_id IN (__[POSTCOMPILE_item_id_1]) ORDER BY meeting_note_line.item_id, meeting_note_line.ord",
+      "file": "app/services/meetings/domains/notes/queries.py",
+      "function": "cited"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_notes WHERE meeting_notes.meeting_id = :meeting_id_1 FOR UPDATE",
+      "file": "app/services/meetings/domains/notes/queries.py",
+      "function": "locked_notes"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM meeting_notes WHERE meeting_notes.meeting_id IN (__[POSTCOMPILE_meeting_id_1])",
-      "file": "app/services/meetings/service.py",
-      "function": "notes_for"
+      "file": "app/services/meetings/domains/notes/queries.py",
+      "function": "notes_rows"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_participant JOIN meeting ON meeting.id = meeting_participant.meeting_id WHERE meeting.owner_user_id = :owner_user_id_1 AND meeting_participant.display_name IN (__[POSTCOMPILE_display_name_1]) ORDER BY meeting_participant.id",
+      "file": "app/services/meetings/domains/people/queries.py",
+      "function": "people_known_as"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_participant JOIN meeting ON meeting.id = meeting_participant.meeting_id WHERE meeting.owner_user_id IS NULL AND meeting_participant.display_name IN (__[POSTCOMPILE_display_name_1]) ORDER BY meeting_participant.id",
+      "file": "app/services/meetings/domains/people/queries.py",
+      "function": "people_known_as"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_participant JOIN meeting_person ON meeting_person.id = meeting_participant.person_id WHERE meeting_participant.meeting_id = :meeting_id_1 ORDER BY meeting_participant.display_name",
+      "file": "app/services/meetings/domains/people/queries.py",
+      "function": "meeting_people"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM meeting_participant WHERE meeting_participant.meeting_id = :meeting_id_1 AND meeting_participant.display_name IN (__[POSTCOMPILE_display_name_1])",
-      "file": "app/services/meetings/service.py",
-      "function": "_participants"
+      "file": "app/services/meetings/domains/people/queries.py",
+      "function": "participants_named"
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM meeting_participant WHERE meeting_participant.meeting_id = :meeting_id_1 ORDER BY meeting_participant.display_name",
-      "file": "app/services/meetings/service.py",
-      "function": "speakers"
+      "label": "SELECT ... FROM meeting_person WHERE meeting_person.id IN (__[POSTCOMPILE_id_1])",
+      "file": "app/services/meetings/domains/notes/queries.py",
+      "function": "person_names"
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM meeting_person_guide WHERE meeting_person_guide.id = :id_1",
+      "label": "SELECT ... FROM meeting_person WHERE meeting_person.name = :name_1 AND meeting_person.owner_user_id = :owner_user_id_1",
+      "file": "tests/_meetings.py",
+      "function": "person_named"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_person WHERE meeting_person.owner_user_id = :owner_user_id_1",
+      "file": "app/services/meetings/domains/people/queries.py",
+      "function": "owner_people"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_person WHERE meeting_person.owner_user_id = :owner_user_id_1 AND meeting_person.is_me IS true",
+      "file": "app/services/meetings/domains/people/queries.py",
+      "function": "my_names"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_person WHERE meeting_person.owner_user_id = :owner_user_id_1 AND meeting_person.name IN (__[POSTCOMPILE_name_1])",
+      "file": "app/services/meetings/domains/people/queries.py",
+      "function": "people_known_as"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_person WHERE meeting_person.owner_user_id IS NULL",
+      "file": "app/services/meetings/domains/people/queries.py",
+      "function": "owner_people"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_person WHERE meeting_person.owner_user_id IS NULL AND meeting_person.is_me IS true",
+      "file": "app/services/meetings/domains/people/queries.py",
+      "function": "my_names"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_person WHERE meeting_person.owner_user_id IS NULL AND meeting_person.name IN (__[POSTCOMPILE_name_1])",
+      "file": "app/services/meetings/domains/people/queries.py",
+      "function": "people_known_as"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_person_guide",
+      "file": "tests/services/test_meetings_kept.py",
+      "function": "test_a_guide_written_again_keeps_the_owners_note"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_person_guide JOIN meeting_person ON meeting_person.id = meeting_person_guide.person_id WHERE meeting_person_guide.id = :id_2",
       "file": "app/services/meetings/domains/people/queries.py",
       "function": "guide"
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM meeting_person_guide WHERE meeting_person_guide.id = :id_1 AND meeting_person_guide.owner_user_id = :owner_user_id_1",
+      "label": "SELECT ... FROM meeting_person_guide JOIN meeting_person ON meeting_person.id = meeting_person_guide.person_id WHERE meeting_person_guide.id = :id_2 AND meeting_person.owner_user_id = :owner_user_id_1",
       "file": "app/services/meetings/domains/people/queries.py",
       "function": "guide"
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM meeting_transcript_line LEFT OUTER JOIN meeting_participant ON meeting_transcript_line.participant_id = meeting_participant.id WHERE meeting_transcript_line.meeting_id = :meeting_id_1 ORDER BY meeting_transcript_line.start_seconds, meeting_transcript_line.id",
+      "label": "SELECT ... FROM meeting_person_guide WHERE meeting_person_guide.person_id = :person_id_1",
+      "file": "tests/_meetings.py",
+      "function": "kept_guide"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_person_guide WHERE meeting_person_guide.person_id = :person_id_1 FOR UPDATE",
+      "file": "app/services/meetings/domains/people/queries.py",
+      "function": "guide_row"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_transcript_line JOIN (SELECT rowid AS id FROM meeting_line_search WHERE meeting_line_search MATCH :query) AS found ON found.id = meeting_transcript_line.id JOIN meeting ON meeting.id = meeting_transcript_line.meeting_id LEFT OUTER JOIN meeting_participant ON meeting_transcript_line.participant_id = meeting_participant.id LEFT OUTER JOIN meeting_person ON meeting_person.id = meeting_participant.person_id WHERE meeting.owner_user_id = :owner_user_id_1 ORDER BY meeting.created_at DESC, meeting.id DESC, meeting_transcript_line.start_seconds, meeting_transcript_line.id LIMIT :param_1",
+      "file": "app/services/meetings/domains/search/queries.py",
+      "function": "lines"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_transcript_line LEFT OUTER JOIN meeting_participant ON meeting_transcript_line.participant_id = meeting_participant.id LEFT OUTER JOIN meeting_person ON meeting_person.id = meeting_participant.person_id WHERE meeting_transcript_line.meeting_id = :meeting_id_1 ORDER BY meeting_transcript_line.start_seconds, meeting_transcript_line.id",
       "file": "app/services/meetings/service.py",
       "function": "transcript"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_transcript_line WHERE meeting_transcript_line.id IN (__[POSTCOMPILE_id_1])",
+      "file": "app/services/meetings/domains/notes/queries.py",
+      "function": "existing"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM saved_query ORDER BY saved_query.name",
+      "file": "app/components/database/saved.py",
+      "function": "kept"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM saved_query WHERE saved_query.id = :pk_1",
+      "file": "app/components/database/saved.py",
+      "function": "forget"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM saved_query WHERE saved_query.name = :name_1",
+      "file": "app/components/database/saved.py",
+      "function": "keep"
     }
   ]
 }

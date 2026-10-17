@@ -217,9 +217,29 @@ RESEARCH_MIGRATION = ServiceMigrationSpec(
     description="Research: saved searches, the outside items they found",
 )
 
+# Meetings search's indexes on Postgres: the English full-text vector of
+# each transcript line and each note item, the expressions the search
+# matches on. No model can declare them on both engines (SQLite has no
+# to_tsvector, and every revision replays onto a scratch SQLite), so the
+# revision adds them where it lands on Postgres; SQLite's FTS5 tables come
+# with ``create_all`` (``domains/search/fts.py``).
+_MEETINGS_SEARCH_INDEX = """\
+    if op.get_bind().dialect.name == "postgresql":
+        op.execute(
+            "CREATE INDEX IF NOT EXISTS ix_meeting_transcript_line_search "
+            "ON meeting_transcript_line "
+            "USING gin (to_tsvector('english'::regconfig, text))"
+        )
+        op.execute(
+            "CREATE INDEX IF NOT EXISTS ix_meeting_note_item_search "
+            "ON meeting_note_item "
+            "USING gin (to_tsvector('english'::regconfig, text))"
+        )"""
+
 MEETINGS_MIGRATION = ServiceMigrationSpec(
     service_name="meetings",
     description="Meetings: calls the bot joins, who spoke, what they said",
+    data_after=_MEETINGS_SEARCH_INDEX,
 )
 
 FINANCE_MIGRATION = ServiceMigrationSpec(

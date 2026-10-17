@@ -38,7 +38,7 @@ def held(monkeypatch: pytest.MonkeyPatch) -> list[Any]:
     """A model to write guides with, its runs held rather than started."""
     runs: list[Any] = []
 
-    async def write(owner: int | None, person: str) -> None:
+    async def write(person_id: int) -> None:
         return None
 
     monkeypatch.setattr(people_service, "guide_writer", lambda: write)
@@ -81,6 +81,8 @@ async def test_a_guide_opens_with_the_lines_each_point_rests_on(
     assert sync.get("data-drawer-url") == f"{PARTIALS}/{guide_id}/drawer"
     html = page_html(overseer, f"{PARTIALS}/{guide_id}/drawer")
 
+    facts = {text(dt): text(dt.getnext()) for dt in select(html, "dl dt")}
+    assert facts["Owner"] == "4242"
     part = one(html, '[data-guide-section="information"]')
     assert "Wants the numbers first" in text(part)
     # The lines fold under the point, closed until it is opened.

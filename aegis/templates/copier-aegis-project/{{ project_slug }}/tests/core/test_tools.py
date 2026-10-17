@@ -114,6 +114,7 @@ EXPECTED_EFFECTS = {
     "research_search": "read",
     "research_thread": "read",
     "research_history": "read",
+    "meetings_search": "read",
     "record_reading": "writes",
     "save_memory": "writes",
     "replace_memory": "writes",

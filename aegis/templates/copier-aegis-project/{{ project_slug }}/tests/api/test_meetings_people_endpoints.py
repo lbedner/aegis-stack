@@ -11,7 +11,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.services.meetings.domains.people import service as people_service
 from app.services.meetings.models import NoteItem, Notes
 from tests._audit import as_admin
-from tests._meetings import ended, kept_guide
+from tests._meetings import ended, kept_guide, someone_else
 
 PEOPLE = "/api/v1/meetings/people"
 ADMIN = "/api/v1/meetings/admin/people"
@@ -51,7 +51,9 @@ async def test_another_owners_guide_is_not_found(
 ) -> None:
     if acting_owner_user_id is None:
         pytest.skip("Without auth every guide is the one owner's")
-    theirs = await kept_guide(async_db_session, 4242, "Ada")
+    theirs = await kept_guide(
+        async_db_session, await someone_else(async_db_session), "Ada"
+    )
 
     assert authenticated_client.get(f"{PEOPLE}/{theirs}").status_code == 404
 
@@ -74,7 +76,7 @@ async def test_the_owners_note_is_kept_and_the_guide_written_again(
     assert refused.status_code == 409
     runs: list[Any] = []
 
-    async def write(owner: int | None, person: str) -> None:
+    async def write(person_id: int) -> None:
         return None
 
     monkeypatch.setattr(people_service, "guide_writer", lambda: write)
@@ -89,14 +91,16 @@ async def test_the_owners_note_is_kept_and_the_guide_written_again(
 async def test_the_admin_reads_every_owners_guides(
     authenticated_client: TestClient, async_db_session: AsyncSession
 ) -> None:
-    theirs = await kept_guide(async_db_session, 4242, "Ada")
+    theirs = await kept_guide(
+        async_db_session, await someone_else(async_db_session), "Ada"
+    )
 
     listed = authenticated_client.get(ADMIN)
     read = authenticated_client.get(f"{ADMIN}/{theirs}")
 
     assert listed.status_code == 200, listed.text
-    assert theirs in [g["id"] for g in listed.json()]
-    assert read.json()["guide"]["person"] == "Ada"
+    assert theirs in [g["guide"]["id"] for g in listed.json()]
+    assert read.json()["person"] == "Ada"
 
 
 async def test_the_admin_writes_one_again(
@@ -105,7 +109,9 @@ async def test_the_admin_writes_one_again(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     admin = as_admin(authenticated_client)
-    theirs = await kept_guide(async_db_session, 4242, "Ada")
+    theirs = await kept_guide(
+        async_db_session, await someone_else(async_db_session), "Ada"
+    )
     monkeypatch.setattr(people_service, "guide_writer", lambda: None)
 
     assert admin.post(f"{ADMIN}/{theirs}/guide").status_code == 409

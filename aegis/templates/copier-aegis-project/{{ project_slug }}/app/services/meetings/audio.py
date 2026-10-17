@@ -27,6 +27,8 @@ import wave
 
 from playwright.async_api import Page
 
+from app.services.meetings.models import UNKNOWN
+
 RATE = 16_000
 # One second of 16-bit mono: what the page sends at a time.
 CHUNK_BYTES = RATE * 2
@@ -34,7 +36,6 @@ CHUNK_BYTES = RATE * 2
 # than NEAR seconds from a second says nothing about who spoke in it.
 CAPTION_LAG = 1.5
 NEAR = 3.0
-UNKNOWN = "Unknown"
 
 BINDING = "__meetingAudio"
 # Hooks RTCPeerConnection before the page's own scripts run: each remote

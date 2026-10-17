@@ -36,6 +36,22 @@ def test_each_writer_is_seeded_once_and_an_edit_is_kept(db_session: Session) -> 
     assert guide.system_prompt == "Mine."
 
 
+def test_overseers_chat_is_granted_the_meetings_search(db_session: Session) -> None:
+    """The default agent, whose answers Overseer's chat gives, can search
+    the meetings once the meetings' agents are seeded."""
+    from app.services.ai.domains.chat.agent_loader import DEFAULT_AGENT_SLUG
+    from app.services.ai.fixtures.agent_fixtures import load_agent_fixtures
+
+    load_agent_fixtures(db_session)  # the tool rows, from the registry
+
+    agents.load_meetings_agent_fixtures(db_session)
+
+    assistant = db_session.exec(
+        select(Agent).where(Agent.slug == DEFAULT_AGENT_SLUG)
+    ).one()
+    assert "meetings_search" in {tool.name for tool in assistant.tools}
+
+
 async def _notes_written(session: AsyncSession) -> list[str]:
     """The instructions the notes ran on."""
     meeting = await MeetingsService(session, None).request(MEET)

@@ -1,16 +1,18 @@
 {# One person's guide, live: where it was read from, each part with the
-   lines its points rest on folded under them (each opening its meeting), the owner's own
+   lines its points rest on folded under them (each opening its meeting),
+   their open threads with the owner (_threads.html), the owner's own
    note, and the guide written again. While it is being written it
    re-reads itself every few seconds. #}
 {% from "components/macros/layout.html" import facts %}
 {% from "components/macros/form.html" import action, textarea %}
 {% from "pages/meetings/_macros.html" import heading %}
+{% from "pages/overseer/meetings/_threads.html" import quote_lines, thread_sections %}
 {% set guide = record.guide %}
 {% set hx_body = 'hx-target="#guide-body" hx-swap="outerHTML"' %}
 <div id="guide-body" class="space-y-6"
      {% if record.writing %}hx-get="{{ base }}/body" hx-trigger="every 3s" hx-swap="outerHTML"{% endif %}>
   {{ facts([
-    ("Owner", guide.owner_user_id),
+    ("Owner", record.owner_user_id),
     ("Read from", guide.meetings ~ (" meeting" if guide.meetings == 1 else " meetings")),
     ("Written by", guide.model_name),
     ("Written", written),
@@ -31,14 +33,7 @@
             <span class="leading-relaxed">{{ point.text }}</span>
             <span class="ml-auto whitespace-nowrap text-xs text-aegis-muted">{{ point.quotes|length }} {{ "line" if point.quotes|length == 1 else "lines" }}</span>
           </summary>
-          <div class="mt-1.5 ml-4 space-y-1.5">
-            {% for quote in point.quotes %}
-            <p data-quote class="border-l-2 border-aegis-border pl-3 text-xs leading-relaxed text-aegis-muted">
-              <span class="text-aegis-text">{{ quote.speaker }}:</span> {{ quote.text }}
-              <a href="{{ said[quote.id].url }}" class="whitespace-nowrap tabular-nums hover:text-aegis-teal">{{ said[quote.id].when }}</a>
-            </p>
-            {% endfor %}
-          </div>
+          <div class="mt-1.5 ml-4 space-y-1.5">{{ quote_lines(point.quotes, said) }}</div>
         </details>
         {% else %}
         <p class="ml-4 leading-relaxed">{{ point.text }}</p>
@@ -51,6 +46,7 @@
     {% endif %}
   </section>
   {% endfor %}
+  {{ thread_sections(record.threads, said) }}
   <section class="grid gap-2">
     {{ heading("Your note") }}
     {{ textarea("note", guide.note, rows=3, placeholder="What you know of them that the meetings do not say: read with them the next time the guide is written.") }}

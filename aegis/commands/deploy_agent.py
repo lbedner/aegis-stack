@@ -345,6 +345,30 @@ def _dns_env(action: str, keys: Any) -> dict[str, str]:
     return keys
 
 
+def _keep(client: Any, action: str, args: dict[str, str], found: Any) -> None:
+    """What a ``kept`` action found, with when (``checked_at``, which the
+    Overseer shows beside its refresh), for as long as the protocol says."""
+    at = datetime.now(UTC).isoformat()
+    client.set(
+        _protocol.kept_key(action, args),
+        json.dumps(found | {"checked_at": at}),
+        ex=PROTOCOL["actions"][action]["seconds"],
+    )
+
+
+def _look_again(client: Any, root: Path) -> None:
+    """Each answer a command may have changed (``until_a_command``) read
+    again; one that cannot be read now is dropped, to be asked for."""
+    for name, spec in PROTOCOL["actions"].items():
+        if not spec.get("until_a_command"):
+            continue
+        try:
+            _keep(client, name, {}, _found(root, name, {}, {}))
+        except (RefusedError, OSError, ValueError, redis.RedisError):
+            with contextlib.suppress(redis.RedisError):
+                client.delete(_protocol.kept_key(name, {}))
+
+
 def _execute(
     job: Job,
     root: Path,
@@ -356,10 +380,8 @@ def _execute(
     env = _token_env(root, action, args, token) | dns
     spec = PROTOCOL["actions"][action]
     if _protocol.is_kept(action):
-        key = _protocol.kept_key(action, args)
-        if not job.client.exists(key):  # asked twice, found once
-            found = _found(root, action, args, env)
-            job.client.set(key, json.dumps(found), ex=spec["seconds"])
+        if not job.client.exists(_protocol.kept_key(action, args)):  # asked twice
+            _keep(job.client, action, args, _found(root, action, args, env))
         job.done({})
         return
     if action == "provision":
@@ -373,14 +395,8 @@ def _execute(
     command = spec["command"]
     code = run(job, root, command, args, env, action)
     # What a command may have changed (the backups, the history) is looked
-    # at again.
-    job.client.delete(
-        *(
-            _protocol.kept_key(name, {})
-            for name, kept in PROTOCOL["actions"].items()
-            if kept.get("until_a_command")
-        )
-    )
+    # at again, beside the next command: what was kept shows until then.
+    threading.Thread(target=_look_again, args=(job.client, root), daemon=True).start()
     if spec.get("token"):  # it may have changed what the account runs
         for key in PROVIDERS:
             job.client.delete(_protocol.kept_key("account", {"provider": key}))

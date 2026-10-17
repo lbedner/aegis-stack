@@ -3,6 +3,7 @@ the developer's machine through the project's Redis, audited, and streamed
 back as its job (``overseer_deploy_actions``)."""
 
 import asyncio
+from datetime import UTC, datetime, timedelta
 import json
 from typing import Any
 
@@ -1377,6 +1378,25 @@ def test_with_every_stored_file_there_nothing_is_offered(
     part = one(TestClient(app).get(deploy_form.STORAGE).text, "[data-storage]")
     assert "Every stored file" in text(part)
     none(part, '[data-ask="upload-storage"]')
+
+
+def test_what_the_agent_read_says_when_and_a_refresh_asks_again(
+    redis: FakeRedis, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Kept a day: the part shows it at once, when it was read, and a
+    refresh that forgets it and asks the server again."""
+    deployed(monkeypatch, {"server": BOX, "provision": READY})
+    an_hour_ago = (datetime.now(UTC) - timedelta(hours=1)).isoformat()
+    _keep(redis, "storage", {"missing": [], "checked_at": an_hour_ago})
+    client = TestClient(app)
+    part = one(client.get(deploy_form.STORAGE).text, "[data-storage]")
+    assert text(one(part, "[data-checked]")) == "Checked 1 hour ago"
+    refresh = one(part, "[data-checked] [data-refresh]")
+    assert refresh.get("hx-get") == f"{deploy_form.STORAGE}?refresh=1"
+    assert _queued(redis) == []  # nothing asked while it is kept
+    asked = one(client.get(refresh.get("hx-get")).text, "[data-storage]")
+    one(asked, "[data-waiting]")
+    assert [r["action"] for r in _queued(redis)] == ["storage"]
 
 
 def test_while_the_backups_are_looked_up_the_panel_waits(

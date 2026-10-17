@@ -55,6 +55,13 @@ BACKUP_STEPS = {
     "offsite": "Off the server",
 }
 
+# A restore drill's steps (``aegis deploy-restore-drill``).
+DRILL_STEPS = {
+    "restore": "Restore the newest copy",
+    "check": "Check it",
+    "record": "Record it",
+}
+
 PROTOCOL: dict[str, Any] = {
     "requests": "deploy:requests",
     "heartbeat": "deploy:agent",
@@ -159,6 +166,12 @@ PROTOCOL: dict[str, Any] = {
         },
         "upload-storage": {
             "command": ["deploy-upload-storage"],
+        },
+        # The newest off-site copy, restored in a throwaway container on
+        # the agent's machine and checked; recorded on the server.
+        "restore-drill": {
+            "command": ["deploy-restore-drill"],
+            "steps": DRILL_STEPS,
         },
         "rollback": {
             "command": ["deploy-rollback"],

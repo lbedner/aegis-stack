@@ -40,6 +40,7 @@ from .deploy import (
     _project_answers,
     _require_deploy_config,
     _run_remote_capture,
+    recorded,
 )
 from .deploy_backup import RESTORE, SNAPSHOT, STORAGE_ROOT, is_sqlite
 
@@ -95,38 +96,51 @@ def upload_storage(root: Path, server: dict[str, Any]) -> None:
     replaced. ponytail: into the server's filesystem store; a server on a
     bucket fills it with its own copy.
     """
-    host, deploy_path = server["host"], server["path"]
-    remote = partial(_run_remote_capture, host, server["user"])
-    missing = server_missing(remote, deploy_path)
-    if missing:
-        typer.echo(t("deploy.storage_copying", count=len(missing)))
-        with tempfile.TemporaryDirectory() as tmp:
-            archive = Path(tmp, "storage.tar.gz")
-            if not _pack(root, missing, archive):
-                brand.error(t("deploy.storage_no_pack"), err=True)
+    with recorded(root, server, "upload-storage") as said:
+        host, deploy_path = server["host"], server["path"]
+        remote = partial(_run_remote_capture, host, server["user"])
+        missing = server_missing(remote, deploy_path)
+        brought = len(missing or [])
+        if missing:
+            typer.echo(t("deploy.storage_copying", count=len(missing)))
+            with tempfile.TemporaryDirectory() as tmp:
+                archive = Path(tmp, "storage.tar.gz")
+                if not _pack(root, missing, archive):
+                    brand.error(t("deploy.storage_no_pack"), err=True)
+                    raise typer.Exit(1)
+                unpack = ["tar", "-xzf", "-", "-C", STORAGE_ROOT]
+                unpacked = remote(
+                    _exec_command(deploy_path, "webserver", unpack), archive
+                )
+            if unpacked.returncode != 0:
+                brand.error(
+                    t("deploy.storage_refused", error=unpacked.stderr.strip()), err=True
+                )
                 raise typer.Exit(1)
-            unpack = ["tar", "-xzf", "-", "-C", STORAGE_ROOT]
-            unpacked = remote(_exec_command(deploy_path, "webserver", unpack), archive)
-        if unpacked.returncode != 0:
+            missing = server_missing(remote, deploy_path)
+        if missing is None:
+            brand.warn(t("deploy.storage_cannot_check"))
+            said["summary"] = "The server could not say which stored files it lacks"
+            return
+        if missing:
+            said["summary"] = f"{len(missing)} stored files still missing"
+            said["detail"] = {"brought": brought, "missing": missing[:20]}
             brand.error(
-                t("deploy.storage_refused", error=unpacked.stderr.strip()), err=True
+                t(
+                    "deploy.storage_still_missing",
+                    count=len(missing),
+                    keys="\n".join(missing),
+                ),
+                err=True,
             )
             raise typer.Exit(1)
-        missing = server_missing(remote, deploy_path)
-    if missing is None:
-        brand.warn(t("deploy.storage_cannot_check"))
-        return
-    if missing:
-        brand.error(
-            t(
-                "deploy.storage_still_missing",
-                count=len(missing),
-                keys="\n".join(missing),
-            ),
-            err=True,
+        said["summary"] = (
+            f"Brought {brought} stored files"
+            if brought
+            else "Every stored file was there"
         )
-        raise typer.Exit(1)
-    brand.success(t("deploy.storage_done", host=host))
+        said["detail"] = {"brought": brought}
+        brand.success(t("deploy.storage_done", host=host))
 
 
 def refuse_unless_sqlite(root: Path) -> None:
@@ -140,34 +154,38 @@ def upload_db(root: Path, server: dict[str, Any]) -> None:
     machine's: nothing on the server is touched until the local copy exists
     and the server is backed up; a refused copy leaves the server's in
     place."""
-    host, user, deploy_path = server["host"], server["user"], server["path"]
-    with tempfile.TemporaryDirectory() as tmp:
-        snapshot = Path(tmp, "app.db")
-        typer.echo(t("deploy.upload_snapshot"))
-        if not _snapshot(root, snapshot):
-            brand.error(t("deploy.upload_no_snapshot"), err=True)
+    with recorded(root, server, "upload-db") as said:
+        host, user, deploy_path = server["host"], server["user"], server["path"]
+        with tempfile.TemporaryDirectory() as tmp:
+            snapshot = Path(tmp, "app.db")
+            typer.echo(t("deploy.upload_snapshot"))
+            if not _snapshot(root, snapshot):
+                brand.error(t("deploy.upload_no_snapshot"), err=True)
+                raise typer.Exit(1)
+            if _create_backup(host, user, deploy_path, sqlite=True) is None:
+                brand.error(t("deploy.upload_backup_failed"), err=True)
+                raise typer.Exit(1)
+            prefix = _compose_prefix(deploy_path)
+            typer.echo(t("deploy.upload_restoring"))
+            _run_remote_capture(host, user, f"{prefix} down")
+            restored = _run_remote_capture(
+                host,
+                user,
+                f"{prefix} run --rm --no-deps -T --entrypoint python webserver"
+                f" -c {shlex.quote(RESTORE)}",
+                snapshot,
+            )
+            started = _run_remote_capture(host, user, f"{prefix} up -d")
+        if restored.returncode != 0:
+            brand.error(
+                t("deploy.upload_refused", error=restored.stderr.strip()), err=True
+            )
             raise typer.Exit(1)
-        if _create_backup(host, user, deploy_path, sqlite=True) is None:
-            brand.error(t("deploy.upload_backup_failed"), err=True)
+        if started.returncode != 0:
+            brand.error(t("deploy.upload_start_failed"), err=True)
             raise typer.Exit(1)
-        prefix = _compose_prefix(deploy_path)
-        typer.echo(t("deploy.upload_restoring"))
-        _run_remote_capture(host, user, f"{prefix} down")
-        restored = _run_remote_capture(
-            host,
-            user,
-            f"{prefix} run --rm --no-deps -T --entrypoint python webserver"
-            f" -c {shlex.quote(RESTORE)}",
-            snapshot,
-        )
-        started = _run_remote_capture(host, user, f"{prefix} up -d")
-    if restored.returncode != 0:
-        brand.error(t("deploy.upload_refused", error=restored.stderr.strip()), err=True)
-        raise typer.Exit(1)
-    if started.returncode != 0:
-        brand.error(t("deploy.upload_start_failed"), err=True)
-        raise typer.Exit(1)
-    brand.success(t("deploy.upload_done", host=host))
+        said["summary"] = "Replaced the server's database with this machine's"
+        brand.success(t("deploy.upload_done", host=host))
     upload_storage(root, server)
 
 

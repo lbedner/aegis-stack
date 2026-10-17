@@ -49,6 +49,9 @@ NEW_URL = f"{ITEM.url}/new"
 SETTINGS_URL = f"{ITEM.url}/settings"
 BACKUP_COLUMNS = columns(ui_deployments.BACKUP_COLUMNS)
 HISTORY_COLUMNS = columns(ui_deployments.HISTORY_COLUMNS, status=("health",))
+EVENT_COLUMNS = columns(ui_deployments.EVENT_COLUMNS, status=("outcome",))
+# An event's outcome, as a status cell.
+OUTCOMES = {"ok": ("Done", "ok"), "failed": ("Failed", "error")}
 # Every key a cloud or DNS provider takes, read in one go.
 KEYED = (*hosting.PROVISIONABLE, *hosting.DNS)
 # The sections a deployed server shows as they are (it reads its own);
@@ -70,7 +73,16 @@ def history_view(found: dict[str, Any]) -> dict[str, Any]:
         }
         for r in found.get("rows") or []
     ]
-    return {"history": found | {"rows": rows}, "history_columns": HISTORY_COLUMNS}
+    events = [
+        e
+        | {"outcome": status_cell(*OUTCOMES.get(e["outcome"], (e["outcome"], "muted")))}
+        for e in found.get("events") or []
+    ]
+    return {
+        "history": found | {"rows": rows, "events": events},
+        "history_columns": HISTORY_COLUMNS,
+        "event_columns": EVENT_COLUMNS,
+    }
 
 
 async def section_context(

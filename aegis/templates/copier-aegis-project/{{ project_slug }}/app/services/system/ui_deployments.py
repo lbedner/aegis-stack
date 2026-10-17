@@ -42,6 +42,23 @@ HISTORY_COLUMNS = (
     ("rollback", "Rollback"),
 )
 NO_HISTORY = "Deploy history needs the deploy component and a database."
+# Everything else done to the server (``deploy_event``), as History lists it.
+EVENT_COLUMNS = (
+    ("what", "What"),
+    ("when", "When"),
+    ("by", "By"),
+    ("from", "From"),
+    ("outcome", "Outcome"),
+    ("said", "What happened"),
+)
+OK, DRILL = "ok", "restore-drill"
+EVENT_TITLES = {
+    "backup": "Backup",
+    "upload-db": "Database brought",
+    "upload-storage": "Stored files brought",
+    DRILL: "Restore drill",
+    "offsite": "Off-site copy",
+}
 
 
 def commit() -> str | None:
@@ -170,11 +187,16 @@ async def history() -> dict[str, Any]:
         from app.components.deploy.history import recent
     except ImportError:
         return {"rows": [], "note": NO_HISTORY}
+    from app.components.deploy.history import recent_events
+
     try:
         records = await recent()
+        events = await recent_events()
     except SQLAlchemyError as exc:  # a build that adds the table, not migrated
         return {"rows": [], "note": f"Deploy history could not be read: {exc}"}
-    return history_rows([row.model_dump() for row in records])
+    return history_rows(
+        [row.model_dump() for row in records], [e.model_dump() for e in events]
+    )
 
 
 def live_facts(rows: list[dict[str, Any]]) -> list[tuple[str, str]]:
@@ -183,9 +205,22 @@ def live_facts(rows: list[dict[str, Any]]) -> list[tuple[str, str]]:
     return [(label, row[k]) for row in rows[:1] for k, label in HISTORY_COLUMNS[:5]]
 
 
-def history_rows(records: list[dict[str, Any]]) -> dict[str, Any]:
-    """Deploy records (this app's, or the server's ``deploy history``) as
-    the History table shows them."""
+def history_rows(
+    records: list[dict[str, Any]], events: list[dict[str, Any]] | None = None
+) -> dict[str, Any]:
+    """Deploy records and events (this app's, or the server's ``deploy
+    history`` and ``deploy events``) as History's two tables show them."""
+    done = [
+        {
+            "what": EVENT_TITLES.get(e["kind"], e["kind"]),
+            "when": format_relative_time(e["finished_at"]),
+            "by": e["actor"] or "",
+            "from": e["origin"] or "",
+            "outcome": e["outcome"],
+            "said": e["summary"],
+        }
+        for e in events or []
+    ]
     rows = []
     for row in records:
         rows.append(
@@ -201,6 +236,12 @@ def history_rows(records: list[dict[str, Any]]) -> dict[str, Any]:
                 else "",
             }
         )
+    events_note = None if done else "Nothing else done to the server yet."
     if not rows:
-        return {"rows": [], "note": "No deploys recorded yet."}
-    return {"rows": rows, "note": None}
+        return {
+            "rows": [],
+            "note": "No deploys recorded yet.",
+            "events": done,
+            "events_note": events_note,
+        }
+    return {"rows": rows, "note": None, "events": done, "events_note": events_note}

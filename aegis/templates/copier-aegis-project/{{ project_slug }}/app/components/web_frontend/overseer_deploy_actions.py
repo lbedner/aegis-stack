@@ -51,6 +51,7 @@ TITLES = {
     "deploy": "Deploy",
     "backup": "Back up",
     "upload-storage": "Bring missing files",
+    "restore-drill": "Rehearse a restore",
     "rollback": "Roll back",
     "destroy": "Destroy",
 }

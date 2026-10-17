@@ -24,7 +24,15 @@ from app.core.ontology.model import (
 from app.core.parts import Category
 from app.core.tools import acting_as, get_tool
 from app.services.system import health as health_module
-from app.services.system import live_status, node_now, tools, ui_errors, ui_logs
+from app.services.system import (
+    live_status,
+    node_now,
+    pattern_findings,
+    service_parts,
+    tools,
+    ui_errors,
+    ui_logs,
+)
 from app.services.system.errors.models import ErrorIssue
 from app.services.system.models import (
     ComponentStatus,
@@ -32,6 +40,7 @@ from app.services.system.models import (
     SystemStatus,
 )
 from app.services.system.node_now import NodeNow
+from app.services.system.pattern_findings import Finding
 from tests._ontology import model_of
 
 UNHEALTHY = ComponentStatusType.UNHEALTHY
@@ -119,6 +128,14 @@ async def test_health_of_one_component_carries_its_details(
     result = await tools.health("worker")
 
     assert result["component"]["metadata"]["queues"]["system"]["queued"] == 40
+
+
+@pytest.mark.usefixtures("status")
+async def test_health_of_a_part_takes_its_ontology_id() -> None:
+    """She holds the ontology's ids (``component:worker``): the check is
+    the same part's."""
+    result = await tools.health(component="component:worker")
+    assert result["component"]["name"] == "worker"
 
 
 async def test_health_of_an_unknown_component_names_the_known_ones(
@@ -430,6 +447,9 @@ def model(monkeypatch: pytest.MonkeyPatch) -> SystemModel:
         return {}
 
     monkeypatch.setattr("app.core.edges.observed", nothing_seen)
+    # The parts report is built once a process: never from this model.
+    monkeypatch.setattr(service_parts, "report", lambda: None)
+    monkeypatch.setattr(pattern_findings, "findings", lambda report: [])
     # Read as an admin unless a test binds otherwise: sign-in off.
     monkeypatch.setattr(settings, "AUTH_ENABLED", False)
     return found
@@ -544,6 +564,47 @@ async def test_a_table_has_no_now() -> None:
     result = await tools.ontology(node="object:payment_charge")
 
     assert result["now"] is None
+
+
+def _finding(subject: str) -> Finding:
+    return Finding(
+        check="parts.through-facade",
+        subject=subject,
+        severity="warn",
+        title="Other services through their facade",
+        why="It depends on how the other is organised.",
+        evidence=("app/services/payment/service.py:3",),
+        action="Call it through its service.py.",
+        fingerprint=subject,
+    )
+
+
+@pytest.fixture
+def found(monkeypatch: pytest.MonkeyPatch) -> None:
+    """What the parts pattern finds: one about payment, one about blog."""
+    monkeypatch.setattr(
+        pattern_findings,
+        "findings",
+        lambda report: [_finding("service:payment"), _finding("service:blog")],
+    )
+
+
+@pytest.mark.usefixtures("model", "status", "found", "errors_asked")
+async def test_a_part_says_what_its_code_breaks() -> None:
+    """The findings the map shows on a part, on its node: what she reads to
+    say how it is built, not only how it is doing."""
+    result = await tools.ontology(node="service:payment")
+
+    findings = [Finding.model_validate(f) for f in result["findings"]]
+    assert [f.subject for f in findings] == ["service:payment"]
+    assert findings[0].evidence == ("app/services/payment/service.py:3",)
+
+
+@pytest.mark.usefixtures("model", "status", "found")
+async def test_a_table_has_no_findings() -> None:
+    result = await tools.ontology(node="object:payment_charge")
+
+    assert result["findings"] == []
 
 
 @pytest.mark.usefixtures("model")

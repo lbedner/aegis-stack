@@ -209,6 +209,14 @@ belongs - so it names each domain and what it owns.
     that breaks a rule says how many places to fix, and hovering it lists
     each one (the file linked, its size or its line) with what to do. Open
     the service and each piece says the same about its own files.
+    A service that imports another's `domains/`, `adapters/`, `queries` or
+    `models` is flagged too (**Other services through their facade**), each
+    import's line listed: it depends on how the other is organised, not on
+    what it offers. `patterns touches` takes a change's files (as arguments,
+    or one per line from `git diff --name-only`) and says, from the app's
+    ontology, which parts own them, which parts depend on those, and the
+    tables, routes and jobs they define; Markdown for a pull request's job
+    summary, JSON with `--format json`.
     Finance and documents also carry a `test_*_module_layout.py` stating which
     module defines what, so folding a domain back together, or dropping a
     function into whichever file was open, fails a test rather than passing

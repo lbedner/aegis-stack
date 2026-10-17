@@ -887,6 +887,7 @@ MESSAGES: dict[str, str] = {
     "patterns.help": "Show how this app is built: its patterns and macros",
     "patterns.help_show": "Print the patterns detected in this app's code, and the macro catalog, as a brief to read before building.",
     "patterns.opt_format": "Output format: markdown or json",
+    "patterns.help_touches": "What a change's files touch, read from the ontology: its parts, what depends on them, its tables, routes and jobs. Files are given, or read one per line from stdin, as git diff --name-only prints them.",
     # ── Load Test ────────────────────────────────────────────────────
     # Help text
     "loadtest.help": "Load testing commands for worker performance analysis",

@@ -21,7 +21,8 @@ def resolve_tools(names: Iterable[str]) -> list[ToolFunc]:
 
     Every callable is wrapped for the per-call ledger on the way out. This
     is the one seam an agent's tools all pass through, so a new tool is
-    measured by existing rather than by remembering a decorator.
+    measured by existing rather than by remembering a decorator. Outside
+    that, a refused argument is answered (``_told``) rather than raised.
     """
     resolved: list[ToolFunc] = []
     for name in names:
@@ -30,8 +31,38 @@ def resolve_tools(names: Iterable[str]) -> list[ToolFunc]:
             logger.warning("Tool has no registered callable; skipping", tool_name=name)
             continue
         func = _admins_only(entry.func) if entry.admin else entry.func
-        resolved.append(instrument(entry.name, func))
+        resolved.append(_told(instrument(entry.name, func)))
     return resolved
+
+
+def _told(func: ToolFunc) -> ToolFunc:
+    """``func`` answering its ``ValueError`` (a tool refusing an argument,
+    naming what it knows) as the model's to correct, as a LangChain turn
+    does: raised, Pydantic AI ends the turn, a live call with it. The
+    ledger beneath has recorded it as failed."""
+
+    def told(exc: ValueError) -> str:
+        return f"{type(exc).__name__}: {exc}"
+
+    if inspect.iscoroutinefunction(func):
+
+        @functools.wraps(func)
+        async def answer(*args: Any, **kwargs: Any) -> Any:
+            try:
+                return await func(*args, **kwargs)
+            except ValueError as exc:
+                return told(exc)
+
+        return answer
+
+    @functools.wraps(func)
+    def answer_sync(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return func(*args, **kwargs)
+        except ValueError as exc:
+            return told(exc)
+
+    return answer_sync
 
 
 def _admins_only(func: ToolFunc) -> ToolFunc:

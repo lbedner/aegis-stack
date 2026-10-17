@@ -155,7 +155,7 @@ Illiana's system prompt is her persona, the model in force, her saved memory and
 
 **Sources:** `app/services/system/node_now.py`, `app/services/ai/domains/llm/catalog.py`
 
-Asking the `ontology` tool about a part returns its `now` beside its structure: its health check, the error issues it owns (latest first, with a total) and, for the AI service, what it spent today, over the last 7 days and in all, with when each was read. The `health` tool gives every component at once, and the `catalog` tool the models on offer with their prices. Each answer is a frozen Pydantic model (`NodeNow`, `CatalogAnswer`) that rejects fields it does not declare.
+Asking the `ontology` tool about a part returns its `now` beside its structure: its health check, the error issues it owns (latest first, with a total) and, for the AI service, what it spent today, over the last 7 days and in all, with when each was read. Beside it, `findings`: what the part's code breaks of the service standard, the same findings Overseer's map shows (each rule, how bad, why, the file and line, what to do), so she can say how a part is built, not only how it is doing. The `health` tool gives every component at once, and the `catalog` tool the models on offer with their prices. Each answer is a frozen Pydantic model (`NodeNow`, `CatalogAnswer`) that rejects fields it does not declare.
 
 ### What is wrong right now
 

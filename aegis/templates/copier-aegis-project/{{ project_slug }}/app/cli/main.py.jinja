@@ -9,27 +9,104 @@ from collections.abc import Coroutine
 import importlib
 import inspect
 import sys
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import Any, TypeVar
 
 import app.cli._i18n_click  # noqa: F401 — translate Click's built-in --help text
 import click
 import typer
-from app.cli import dns, docs, health, patterns, settings_cli, theme
+from typer.core import TyperGroup
+from app.cli import theme
 from app.core.log import setup_logging
 from app.i18n import detect_locale, lazy_t, set_locale, t
 from app.i18n.locales import AVAILABLE_LOCALES
 
 T = TypeVar("T")
 
-if TYPE_CHECKING:
-    pass
-
 # Theme the rich ``--help`` output to the brand palette (teal = typeable tokens,
 # neutral = prose, dim = annotations/chrome). Must run before the Typer app is
 # built so every help panel — this CLI and all subcommands — inherits it.
 theme.apply_help_theme()
 
+# Each command group: its name, the module it lives in and the Typer app
+# (or, for ``mcp``, the one command) there. A module this stack does not
+# have is skipped.
+GROUPS: dict[str, tuple[str, str]] = {
+    "health": ("app.cli.health", "app"),
+    "docs": ("app.cli.docs", "app"),
+    "dns": ("app.cli.dns", "app"),
+    "patterns": ("app.cli.patterns", "app"),
+    "settings": ("app.cli.settings_cli", "app"),
+    "api-load-test": ("app.cli.api_load_test", "app"),
+    "bench": ("app.cli.bench", "app"),
+    "load-test": ("app.cli.load_test", "app"),
+    "tasks": ("app.cli.tasks", "app"),
+    "auth": ("app.cli.auth", "app"),
+    "ai": ("app.cli.ai", "app"),
+    "storage": ("app.cli.storage_cli", "app"),
+    "secrets": ("app.cli.secrets_cli", "app"),
+    "mcp": ("app.cli.mcp_cli", "serve"),
+    "mcp-tokens": ("app.cli.mcp_tokens_cli", "app"),
+    "deploy": ("app.cli.deploy_cli", "app"),
+    "comms": ("app.cli.comms", "app"),
+    "insights": ("app.cli.insights", "app"),
+    "payment": ("app.cli.payment", "app"),
+    "finance": ("app.cli.finance", "app"),
+    "blog": ("app.cli.blog", "app"),
+    "research": ("app.cli.research", "app"),
+    "meetings": ("app.cli.meetings", "app"),
+    "rag": ("app.cli.rag", "app"),
+    "llm": ("app.cli.llm", "app"),
+    "agents": ("app.cli.agents", "app"),
+    "memory-modules": ("app.cli.agents", "modules_app"),
+{%- for p in _plugins | default([]) %}
+{%- if p.cli_name %}
+    "{{ p.cli_name }}": ("app.cli.{{ p.cli_name | replace("-", "_") }}", "app"),
+{%- endif %}
+{%- endfor %}
+}
+
+
+def _group(name: str) -> click.Command | None:
+    """The command group ``name``, imported now; None when this stack does
+    not have it."""
+    module, attribute = GROUPS[name]
+    try:
+        found = getattr(importlib.import_module(module), attribute)
+    except (ImportError, AttributeError):
+        return None
+    if not isinstance(found, typer.Typer):  # one command, not a group
+        single = typer.Typer(add_completion=False)
+        single.command(name, help=lazy_t(f"{name}.help"))(found)
+        return typer.main.get_command(single)
+    command = typer.main.get_group(found)
+    command.name = name
+    return command
+
+
+class LazyGroups(TyperGroup):
+    """The command groups, each imported only when it is the one run: a
+    command pays for its own imports, not every group's (the AI chat's
+    alone took 1.9s of every server read). Listing them (``--help``)
+    imports them all."""
+
+    loaded: dict[str, click.Command | None] = {}
+
+    def _loaded(self, name: str) -> click.Command | None:
+        if name not in self.loaded:
+            self.loaded[name] = _group(name)
+        return self.loaded[name]
+
+    def list_commands(self, ctx: click.Context) -> list[str]:
+        return [n for n in GROUPS if self._loaded(n) is not None]
+
+    def get_command(self, ctx: click.Context, cmd_name: str) -> click.Command | None:
+        if cmd_name not in GROUPS:
+            return super().get_command(ctx, cmd_name)
+        return self._loaded(cmd_name)
+
+
 app = typer.Typer(
+    cls=LazyGroups,
     name="{{ project_slug }}",
     help=lazy_t("main.help"),
     no_args_is_help=True,
@@ -55,190 +132,6 @@ def main_callback(
         )
         raise typer.Exit(1)
     set_locale(lang if lang else detect_locale())
-
-
-# Register sub-commands
-app.add_typer(health.app, name="health")
-app.add_typer(docs.app, name="docs")
-app.add_typer(dns.app, name="dns")
-app.add_typer(patterns.app, name="patterns")
-app.add_typer(settings_cli.app, name="settings")
-
-# API load testing — no component dependencies, ships in every project
-from app.cli import api_load_test as _api_load_test  # noqa: E402
-
-app.add_typer(_api_load_test.app, name="api-load-test")
-
-# Benchmarks — same story: no component dependencies, ships everywhere
-from app.cli import bench as _bench  # noqa: E402
-
-app.add_typer(_bench.app, name="bench")
-
-# Conditionally register load-test command if worker components are available
-try:
-    load_test_module = importlib.import_module("app.cli.load_test")
-    app.add_typer(load_test_module.app, name="load-test")
-except ImportError:
-    # Worker components not available, skip load-test commands
-    pass
-
-# Conditionally register tasks command if scheduler components are available
-try:
-    tasks_module = importlib.import_module("app.cli.tasks")
-    app.add_typer(tasks_module.app, name="tasks")
-except (ImportError, AttributeError):
-    # Scheduler components not available or tasks module incomplete, skip tasks commands
-    pass
-
-# Conditionally register auth command if auth service is available
-try:
-    auth_module = importlib.import_module("app.cli.auth")
-    app.add_typer(auth_module.app, name="auth")
-except ImportError:
-    # Auth service not available, skip auth commands
-    pass
-
-# Conditionally register ai command if ai service is available
-try:
-    ai_module = importlib.import_module("app.cli.ai")
-    app.add_typer(ai_module.app, name="ai")
-except ImportError:
-    # AI service not available, skip ai commands
-    pass
-
-# Register storage command if the database component is available (its rows
-# are what name stored objects)
-try:
-    storage_module = importlib.import_module("app.cli.storage_cli")
-    app.add_typer(storage_module.app, name="storage")
-except ImportError:
-    pass
-
-# Conditionally register secrets command if the secrets component is available
-try:
-    secrets_module = importlib.import_module("app.cli.secrets_cli")
-    app.add_typer(secrets_module.app, name="secrets")
-except ImportError:
-    # Secrets component not available, skip secrets commands
-    pass
-
-# Conditionally register mcp command if the mcp component is available
-try:
-    mcp_module = importlib.import_module("app.cli.mcp_cli")
-    app.command("mcp", help=lazy_t("mcp.help"))(mcp_module.serve)
-except ImportError:
-    # MCP component not available, skip mcp command
-    pass
-
-# Conditionally register mcp-tokens if the mcp component has auth to own them
-try:
-    mcp_tokens_module = importlib.import_module("app.cli.mcp_tokens_cli")
-    app.add_typer(mcp_tokens_module.app, name="mcp-tokens")
-except ImportError:
-    # No auth, so no tokens: skip mcp-tokens
-    pass
-
-# Conditionally register deploy command if deploy history is available
-try:
-    deploy_module = importlib.import_module("app.cli.deploy_cli")
-    app.add_typer(deploy_module.app, name="deploy")
-except ImportError:
-    # Deploy history not available (no deploy component or no database)
-    pass
-
-# Conditionally register comms command if comms service is available
-try:
-    comms_module = importlib.import_module("app.cli.comms")
-    app.add_typer(comms_module.app, name="comms")
-except ImportError:
-    # Comms service not available, skip comms commands
-    pass
-
-# Conditionally register insights command if insights service is available
-try:
-    insights_module = importlib.import_module("app.cli.insights")
-    app.add_typer(insights_module.app, name="insights")
-except ImportError:
-    # Insights service not available, skip insights commands
-    pass
-
-# Conditionally register payment command if payment service is available
-try:
-    payment_module = importlib.import_module("app.cli.payment")
-    app.add_typer(payment_module.app, name="payment")
-except ImportError:
-    # Payment service not available, skip payment commands
-    pass
-
-# Conditionally register finance command if finance service is available
-try:
-    finance_module = importlib.import_module("app.cli.finance")
-    app.add_typer(finance_module.app, name="finance")
-except ImportError:
-    # Finance service not available, skip finance commands
-    pass
-
-# Conditionally register blog command if blog service is available
-try:
-    blog_module = importlib.import_module("app.cli.blog")
-    app.add_typer(blog_module.app, name="blog")
-except ImportError:
-    # Blog service not available, skip blog commands
-    pass
-
-# Conditionally register research command if research service is available
-try:
-    research_module = importlib.import_module("app.cli.research")
-    app.add_typer(research_module.app, name="research")
-except ImportError:
-    # Research service not available, skip research commands
-    pass
-
-# Conditionally register meetings command if meetings service is available
-try:
-    meetings_module = importlib.import_module("app.cli.meetings")
-    app.add_typer(meetings_module.app, name="meetings")
-except ImportError:
-    # Meetings service not available, skip meetings commands
-    pass
-
-# Conditionally register rag command if ai_rag is enabled
-try:
-    rag_module = importlib.import_module("app.cli.rag")
-    app.add_typer(rag_module.app, name="rag")
-except ImportError:
-    # RAG not available, skip rag commands
-    pass
-
-# Conditionally register llm command if ai service is available
-try:
-    llm_module = importlib.import_module("app.cli.llm")
-    app.add_typer(llm_module.app, name="llm")
-except ImportError:
-    # LLM ETL service not available, skip llm commands
-    pass
-
-# Conditionally register agent registry commands (ai with persistence)
-try:
-    agents_module = importlib.import_module("app.cli.agents")
-    app.add_typer(agents_module.app, name="agents")
-    app.add_typer(agents_module.modules_app, name="memory-modules")
-except ImportError:
-    # Agent registry not available, skip agents commands
-    pass
-{%- for p in _plugins | default([]) %}
-{%- if p.cli_name %}
-{%- set cli_module = p.cli_name | replace("-", "_") %}
-
-# Conditionally register the {{ p.name }} plugin CLI as "{{ p.cli_name }}"
-try:
-    {{ cli_module }}_module = importlib.import_module("app.cli.{{ cli_module }}")
-    app.add_typer({{ cli_module }}_module.app, name="{{ p.cli_name }}")
-except ImportError:
-    # {{ p.name }} plugin CLI module not present, skip {{ p.cli_name }} commands
-    pass
-{%- endif %}
-{%- endfor %}
 
 
 async def run_command(command: Coroutine[Any, Any, T]) -> T:

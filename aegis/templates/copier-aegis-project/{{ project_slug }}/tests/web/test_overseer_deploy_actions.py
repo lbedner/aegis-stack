@@ -1399,6 +1399,21 @@ def test_what_the_agent_read_says_when_and_a_refresh_asks_again(
     assert [r["action"] for r in _queued(redis)] == ["storage"]
 
 
+def test_a_refresh_with_no_agent_keeps_what_it_was_told(
+    redis: FakeRedis, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The kept answer is the page's only one while nothing can ask again:
+    a refresh then says why, and forgets nothing."""
+    deployed(monkeypatch, {"server": BOX, "provision": READY})
+    _keep(redis, "storage", {"missing": []})
+    del redis.strings[agent.HEARTBEAT]
+    client = TestClient(app)
+    refused = one(client.get(f"{deploy_form.STORAGE}?refresh=1").text, "[data-storage]")
+    assert "No deploy agent is listening" in text(one(refused, "[data-error]"))
+    part = one(client.get(deploy_form.STORAGE).text, "[data-storage]")
+    one(part, "[data-checked]")
+
+
 def test_while_the_backups_are_looked_up_the_panel_waits(
     redis: FakeRedis, app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> None:

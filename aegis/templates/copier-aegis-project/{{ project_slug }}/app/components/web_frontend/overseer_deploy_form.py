@@ -210,6 +210,8 @@ async def _from_agent(
     agent stopped), so no poll runs forever. What is kept is read first: a
     poll that finds it costs one read."""
     if fresh and not job:
+        # Only with an agent to ask: what it kept stays shown until then.
+        await _listening()
         await deploy_agent.forget(action, args)
     if (found := await deploy_agent.kept(action, args)) is not None:
         return found, None
@@ -363,13 +365,15 @@ async def rollback_panel(form: dict[str, str], by: str) -> dict[str, Any]:
     the server); while it has not looked, it asked (once) and the panel
     waiting, or why it failed."""
     try:
-        found, job = await _from_agent("backups", {}, form.get("job"), by)
+        found, job = await _from_agent(
+            "backups", {}, form.get("job"), by, fresh=bool(form.get("refresh"))
+        )
     except RefusedError as exc:
         return _failed(ROLLBACK, exc)
     if found is None:
         return _loading(ROLLBACK, job)
     options = [_backup_option(b) for b in found["backups"]]
-    return {"state": "ready", "backups": options, "partials": PARTIALS}
+    return _ready(ROLLBACK, found) | {"backups": options, "partials": PARTIALS}
 
 
 # The rollback's backups, as the Overview first draws them: folded under

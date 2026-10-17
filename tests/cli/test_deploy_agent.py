@@ -726,7 +726,9 @@ def _looked_again(
     def thread(target: Any, args: tuple[Any, ...] = (), **kw: Any) -> Any:
         if target is not agent._look_again:  # the heartbeat runs as it does
             return real(target=target, args=args, **kw)
-        return SimpleNamespace(start=lambda: target(*args))
+        return SimpleNamespace(
+            start=lambda: target(*args), join=lambda: None, is_alive=lambda: False
+        )
 
     monkeypatch.setattr(agent.threading, "Thread", thread)
     monkeypatch.setattr(agent, "_found", found)

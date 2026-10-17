@@ -350,17 +350,12 @@ my-app ai chat --rag --collection code --top-k 20 --sources \
 
 ### Context Injection
 
-When RAG is enabled, search results are injected into Illiana's system prompt via two context objects:
+When RAG is enabled, search results are injected into Illiana's system prompt:
 
 **RAGContext** (`app/services/ai/rag_context.py`):
 - `format_for_prompt()` - Markdown with file names, line numbers, syntax highlighting
 - `format_sources_footer()` - Citation-style source references (`[1] app/services/auth.py:42`)
 - `to_metadata()` - Storage-friendly format for conversation metadata
-
-**RAGStatsContext** (`app/services/ai/rag_stats_context.py`):
-- Collection-level awareness (count, names, document counts)
-- Embedding model and chunking configuration
-- Formatted for compact prompt injection
 
 ---
 
@@ -375,7 +370,6 @@ When RAG is enabled, search results are injected into Illiana's system prompt vi
 | `app/services/rag/vectorstore.py` | ChromaDB wrapper |
 | `app/services/rag/shaping.py` | Metadata, filters, dedup |
 | `app/services/ai/rag_context.py` | Prompt context formatting |
-| `app/services/ai/rag_stats_context.py` | Stats context |
 | `app/cli/rag/` | CLI commands |
 | `app/components/backend/api/rag/router.py` | API endpoints |
 

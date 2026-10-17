@@ -18,18 +18,15 @@ class TestPersonaOverride:
         assert prompt.startswith("You are Custom.")
         assert "I'm Illiana" not in prompt
 
-    def test_persona_keeps_dynamic_context_sections(self) -> None:
-        """A custom persona still gets the live-data sections appended."""
+    def test_persona_keeps_the_sections_after_it(self) -> None:
+        """A custom persona still gets the sections appended after it."""
         prompt = build_system_prompt(
             persona="You are Custom.",
-            health_context="ALL COMPONENTS HEALTHY",
-            usage_context="42 requests today",
+            memory_context="<user_memory>\n- [food] vegan\n</user_memory>",
         )
 
         assert prompt.startswith("You are Custom.")
-        assert "## System Status" in prompt
-        assert "ALL COMPONENTS HEALTHY" in prompt
-        assert "## My Activity" in prompt
+        assert "- [food] vegan" in prompt
 
 
 class TestThePersonaIsTheRow:
@@ -62,12 +59,3 @@ class TestMemoryContext:
         prompt = build_system_prompt()
 
         assert "## Saved User Memory" not in prompt
-
-    def test_catalog_context_renders_as_body_under_heading(self) -> None:
-        """The catalog payload is body text, never part of the heading line."""
-        catalog = "- gpt-x: fast\n- gpt-y: smart"
-        prompt = build_system_prompt(catalog_context=catalog)
-
-        assert catalog in prompt
-        first_line = next(line for line in prompt.splitlines() if "gpt-x" in line)
-        assert not first_line.startswith("#")

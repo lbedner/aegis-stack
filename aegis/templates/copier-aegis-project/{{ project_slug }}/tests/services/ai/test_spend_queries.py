@@ -4,11 +4,14 @@ ledger, and what voice calls cost beside the model calls."""
 
 from datetime import date, datetime
 
+import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.ai.domains.spend import queries
+from app.core.time import utcnow
+from app.services.ai.domains.spend import queries, windows
 from app.services.ai.domains.spend.schemas import ActionSpend
 from app.services.ai.models.llm import LLMUsage
+from tests._session import opens
 
 START = datetime(2026, 9, 1)
 END = datetime(2026, 10, 1)
@@ -132,3 +135,35 @@ async def test_a_window_ends_before_its_end(async_db_session: AsyncSession) -> N
         async_db_session, user_id=None, start_time=START, end_time=END
     )
     assert models == []
+
+
+async def test_usage_over_several_windows_in_one_read(
+    async_db_session: AsyncSession,
+) -> None:
+    """Each window's requests, tokens and cost; None is the whole ledger."""
+    await _ledger(async_db_session)
+
+    found = await queries.usage_windows(
+        async_db_session, [datetime(2026, 9, 4), START, None]
+    )
+
+    assert found == [(1, 15, 2.0), (3, 45, 3.5), (4, 60, 12.5)]
+
+
+async def test_the_ai_services_spend_by_window(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """What its node's ``now`` carries: today, the last 7 days and all
+    time, each saying what it covers."""
+    async_db_session.add(_call(utcnow(), "chat:assistant", 0.25))
+    await async_db_session.commit()
+    monkeypatch.setattr(windows, "get_async_session", opens(async_db_session))
+
+    found = await windows.spend_windows()
+
+    assert [(w.label, w.total_requests, w.total_cost) for w in found] == [
+        ("today", 1, 0.25),
+        ("last 7 days", 1, 0.25),
+        ("all time", 1, 0.25),
+    ]
+    assert found[-1].since is None

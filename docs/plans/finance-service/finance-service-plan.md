@@ -23,7 +23,7 @@
 - **Connectivity (unchanged from the design):** Plaid-first (Chase/AMEX/Vanguard), **SnapTrade for Fidelity** (Plaid-via-Fidelity is unreliable), manual/file import as a permanent fallback — behind one provider-polymorphic connection layer, so adding a provider later needs zero new tables.
 - **Prereqs:** finance declares `required_components=[BACKEND, DATABASE, SCHEDULER]`, `recommended_components=[WORKER]`; auth is **integrated-when-present** via the `finance_auth_link` migration (which adds the `owner_user_id -> user` FK only when auth is included), so `required_services=[]` and finance runs standalone too. The resolver/validator enforce the component prereqs at `init` and `add-service`.
 - **UI = Flet dashboard card + modal** (the template's convention — `payment_card.py`/`insights_card.py`). The Alpine "Overseer tabs" from the earlier Pulse draft are a *downstream* concern; the template ships Flet.
-- **Illiana hook is real here** (unlike Pulse): the template's AI service exists, so a conditional `finance_context.py` (gated `{% if include_ai and include_finance %}`) plugs finance data into the agent prompt, following `health_context.py`/`usage_context.py`. v1 "wasting money" signals ship rule-based (no AI required).
+- **Illiana hook is real here** (unlike Pulse): the template's AI service exists, so a conditional `finance_context.py` (gated `{% if include_ai and include_finance %}`) plugs finance data in as a memory module or a tool (live data stays out of the system prompt, ON-18). v1 "wasting money" signals ship rule-based (no AI required).
 - **Encryption exists in the template** (`app/core/encryption.py`, AES-256-GCM). The **key-rotation CLI does not** (it's Pulse-only — pending auth/encryption backport). So the "register encrypted columns in the rotation CLI" step is deferred/blocked on that backport (noted in §11).
 
 ---
@@ -154,7 +154,7 @@ Unchanged: materialized daily `finance_balance_snapshot` (per account) + `financ
 
 - **Categorization:** capture Plaid PFC raw + map to an owned category tree; data-driven `finance_rule` engine for overrides; `finance_category_alias` for free-text QIF/CSV categories.
 - **Insights (rule-based, ship without AI):** recurring/subscription detection (`finance_recurring_stream`), price-hike, fee/interest, category overspend vs baseline. When `include_insights`, emit through the existing `insight_event` machinery (the country-spike rule pattern) so it renders in the insights UI; otherwise store finance-local `finance_insight` rows.
-- **Illiana (works in the template):** unlike Pulse, the template's AI service is real when `include_ai`. Ship `app/services/finance/finance_context.py.jinja` gated `{% if include_ai and include_finance %}`, following `health_context.py`/`usage_context.py`/`rag_context.py` — it assembles accounts/spend/streams into the agent prompt so Illiana can narrate "you're wasting money on X." No cross-repo port needed; it's a conditional file.
+- **Illiana (works in the template):** unlike Pulse, the template's AI service is real when `include_ai`. Ship `app/services/finance/finance_context.py.jinja` gated `{% if include_ai and include_finance %}`, as a memory module or a tool (live data stays out of the system prompt, ON-18), it assembles accounts/spend/streams so Illiana can narrate "you're wasting money on X." No cross-repo port needed; it's a conditional file.
 
 ---
 

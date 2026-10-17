@@ -20,7 +20,7 @@ from app.core.ontology import (
     calls,
     system_model,
 )
-from app.core.ontology.parts import _Packages, service_folders
+from app.core.ontology.parts import service_folders
 from app.core.parts import Category
 from app.services.system import health, redis_keys, topology
 from app.services.system.patterns import PROJECT_ROOT
@@ -68,20 +68,26 @@ def test_every_installed_part_is_a_node_with_its_concern(model: SystemModel) -> 
     assert all(isinstance(p.category, Category) for p in parts.values())
 
 
-def test_every_part_with_code_says_what_it_is_for(model: SystemModel) -> None:
-    """Its package's docstring: the line Illiana's app map gives it. The
-    backend had none, so asked how the app reaches its database she made
-    up an answer (2026-10-16)."""
-    packages = _Packages(source_index.project())
+def test_every_part_on_the_map_says_what_it_is_for(model: SystemModel) -> None:
+    """Its package's docstring, else its spec's description: the line
+    Illiana's app map gives it. The backend had none, so asked how the app
+    reaches its database she made up an answer; ingress, with no package,
+    said nothing at all (2026-10-16)."""
     silent = [
         p.id
         for p in model.nodes
-        if isinstance(p, PartNode)
-        and p.kind in (Kind.COMPONENT, Kind.SERVICE)
-        and not p.description
-        and packages.of(p.kind, p.name) is not None
+        if isinstance(p, PartNode) and p.owner is None and not p.description
     ]
     assert not silent
+
+
+def test_every_table_has_an_owner(model: SystemModel) -> None:
+    """The users, their tokens and the conversations live in ``app/models``,
+    which no rule gave an owner: the map listed them as nobody's
+    (2026-10-16). Each such module says the part it belongs to."""
+    assert not [
+        n.name for n in model.nodes if isinstance(n, ObjectNode) and n.owner is None
+    ]
 
 
 def test_the_queue_says_what_it_is(model: SystemModel) -> None:

@@ -20,6 +20,7 @@ from app.services.ai.domains.llm.provider_management import (
     ProviderReadiness,
     provider_readiness,
 )
+from app.services.ai.schemas import RecentActivity, UsageStatsResponse
 from app.services.system.models import ComponentStatus
 
 from . import ranges
@@ -161,30 +162,30 @@ def _provider_row(row: ProviderReadiness, icon_url: str | None) -> dict[str, Any
     }
 
 
-async def usage_stats(**window: Any) -> dict[str, Any]:
+async def usage_stats(**window: Any) -> UsageStatsResponse:
     """The usage ledger's totals (a persistence backend's service method)."""
     return await ai_service.get_usage_stats(**window)
 
 
-def _call(r: dict[str, Any], icon_url: str | None) -> dict[str, Any]:
-    ms = r.get("duration_ms")
+def _call(r: RecentActivity, icon_url: str | None) -> dict[str, Any]:
+    ms = r.duration_ms
     return {
-        "when": format_relative_time(r.get("timestamp")),
-        "model": r.get("model"),
+        "when": format_relative_time(r.timestamp),
+        "model": r.model,
         "icon_url": icon_url,
-        "action": r.get("action"),
-        "tokens": f"{r.get('input_tokens', 0):,} / {r.get('output_tokens', 0):,}",
+        "action": r.action,
+        "tokens": f"{r.input_tokens:,} / {r.output_tokens:,}",
         "outcome": status_cell("Ok", "ok")
-        if r.get("success", True)
+        if r.success
         else status_cell("Failed", "error"),
         "detail": [
-            ("Error", r.get("error_message")),
+            ("Error", r.error_message),
             ("Duration", f"{ms / 1000:.1f}s" if ms is not None else None),
-            ("Tool calls", r.get("tool_calls")),
-            ("Cache read", r.get("cache_read_tokens")),
-            ("Cache write", r.get("cache_write_tokens")),
-            ("User", r.get("user_id")),
-            ("At", r.get("timestamp")),
+            ("Tool calls", r.tool_calls),
+            ("Cache read", r.cache_read_tokens),
+            ("Cache write", r.cache_write_tokens),
+            ("User", r.user_id),
+            ("At", r.timestamp),
         ],
     }
 
@@ -198,7 +199,7 @@ async def _usage(db: Any, query: dict[str, str]) -> dict[str, Any]:
     )
     # Each model's vendor, from the breakdown; the recent calls fall in the
     # same window, so it places them too. One lookup for both tables.
-    vendor_of = {m["model_id"]: m.get("vendor") for m in stats.get("models", [])}
+    vendor_of = {m.model_id: m.vendor for m in stats.models}
     marks = await mark_urls(db, {v: (v,) for v in set(vendor_of.values()) if v})
     icon_of = {model: marks.get(vendor or "") for model, vendor in vendor_of.items()}
     return {
@@ -206,30 +207,26 @@ async def _usage(db: Any, query: dict[str, str]) -> dict[str, Any]:
         "days": days,
         "usage_url": section_url("usage"),
         "figures": [
-            {"label": "Requests", "value": f"{stats.get('total_requests', 0):,}"},
+            {"label": "Requests", "value": f"{stats.total_requests:,}"},
             {
                 "label": "Tokens",
-                "value": f"{stats.get('total_tokens', 0):,}",
-                "caption": f"{stats.get('input_tokens', 0):,} in, "
-                f"{stats.get('output_tokens', 0):,} out",
+                "value": f"{stats.total_tokens:,}",
+                "caption": f"{stats.input_tokens:,} in, {stats.output_tokens:,} out",
             },
-            {"label": "Success rate", "value": f"{stats.get('success_rate', 100.0)}%"},
+            {"label": "Success rate", "value": f"{stats.success_rate}%"},
         ],
         "models": [
             {
-                "model": m.get("model_title") or m.get("model_id"),
-                "icon_url": icon_of.get(m.get("model_id")),
-                "vendor": label(m.get("vendor") or ""),
-                "requests": m.get("requests", 0),
-                "tokens": m.get("tokens", 0),
-                "share": f"{m.get('percentage', 0)}%",
+                "model": m.model_title or m.model_id,
+                "icon_url": icon_of.get(m.model_id),
+                "vendor": label(m.vendor),
+                "requests": m.requests,
+                "tokens": m.tokens,
+                "share": f"{m.percentage}%",
             }
-            for m in stats.get("models", [])
+            for m in stats.models
         ],
-        "recent": [
-            _call(r, icon_of.get(r.get("model")))
-            for r in stats.get("recent_activity", [])
-        ],
+        "recent": [_call(r, icon_of.get(r.model)) for r in stats.recent_activity],
     }
 
 

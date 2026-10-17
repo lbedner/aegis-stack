@@ -17,12 +17,14 @@ from app.core.source_index import ROOT
 # after the database.
 QUEUE, QUEUE_IN = "queue", "cache"
 QUEUE_PART = Part(
-    kind="component", category=Category.DATA, cli="", tier=2, role="queue", order=45
-)
-# What the queue is: it has no package whose docstring would say.
-QUEUE_ABOUT = (
-    "The worker's queue, kept in the cache's Redis: while Redis is down no "
-    "work is handed off or picked up."
+    kind="component",
+    category=Category.DATA,
+    cli="",
+    tier=2,
+    role="queue",
+    order=45,
+    description="The worker's queue, kept in the cache's Redis: while Redis is "
+    "down no work is handed off or picked up.",
 )
 # Every part with a place on the map: each declared one, and the queue.
 PLACED = {**PARTS, QUEUE: QUEUE_PART}
@@ -74,10 +76,11 @@ class _Packages:
 
 
 def concern(name: str, package: source_index.Module | None) -> Category:
-    """A part's concern: what its spec declares (``PARTS``), else what its
-    package says (a plugin's ``CATEGORY``), else the app's own."""
-    if name in PARTS:
-        return PARTS[name].category
+    """A part's concern: what its spec declares (``PLACED``: each part's,
+    and the queue's), else what its package says (a plugin's
+    ``CATEGORY``), else the app's own."""
+    if name in PLACED:
+        return PLACED[name].category
     declared = package.declared.category if package else None
     return Category(declared) if declared in Category else Category.APP
 
@@ -110,7 +113,8 @@ def _part(
         name=name,
         owner=parent.id if parent else None,
         category=category,
-        description=package.summary if package else "",
+        description=(package.summary if package else "")
+        or (PLACED[name].description if name in PLACED else ""),
         cli=PARTS[name].cli if name in PARTS else None,
         page=ownership.COMPONENT_PAGES.get(name),
     )
@@ -127,12 +131,7 @@ def parts(
     ]
     if "worker" in components:
         holder = next((n for n in nodes if n.name == QUEUE_IN), None)
-        queue = (
-            _part(Kind.COMPONENT, QUEUE, None, holder)
-            if holder
-            else PartNode(kind=Kind.COMPONENT, name=QUEUE, category=QUEUE_PART.category)
-        )
-        nodes.append(queue.model_copy(update={"description": QUEUE_ABOUT}))
+        nodes.append(_part(Kind.COMPONENT, QUEUE, None, holder))
     for name in services:
         service = _part(Kind.SERVICE, name, packages.of(Kind.SERVICE, name))
         nodes += [service, *_subs(service, index)]

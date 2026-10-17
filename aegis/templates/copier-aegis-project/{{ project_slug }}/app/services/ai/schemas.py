@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
+
+# What an agent, the API and Overseer read: a field that is not one, or a
+# figure changed after it was read, is refused.
+FIGURES = ConfigDict(frozen=True, extra="forbid")
 
 
 class ModelUsageStats(BaseModel):
     """Usage statistics for a single model."""
+
+    model_config = FIGURES
 
     model_id: str
     model_title: str
@@ -20,6 +26,8 @@ class ModelUsageStats(BaseModel):
 
 class RecentActivity(BaseModel):
     """A single recent usage activity entry."""
+
+    model_config = FIGURES
 
     timestamp: str
     model: str
@@ -41,8 +49,10 @@ class RecentActivity(BaseModel):
     error_message: str | None = None
 
 
-class UsageStatsResponse(BaseModel):
-    """Aggregated LLM usage statistics response."""
+class UsageTotals(BaseModel):
+    """Usage added up over a window."""
+
+    model_config = FIGURES
 
     total_tokens: int
     input_tokens: int
@@ -50,5 +60,10 @@ class UsageStatsResponse(BaseModel):
     total_cost: float
     total_requests: int
     success_rate: float
+
+
+class UsageStatsResponse(UsageTotals):
+    """Aggregated LLM usage statistics response."""
+
     models: list[ModelUsageStats]
     recent_activity: list[RecentActivity]

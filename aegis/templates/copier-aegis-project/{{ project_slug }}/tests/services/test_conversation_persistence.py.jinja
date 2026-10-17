@@ -118,6 +118,7 @@ def _fake_runtime(reply: str) -> Iterator[None]:
 
         llm = MagicMock()
         llm.astream = astream
+        llm.bind_tools.return_value = llm  # bound, it streams the same
         runtime.return_value = llm
 {%- endif %}
         yield

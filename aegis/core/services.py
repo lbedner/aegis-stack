@@ -606,8 +606,6 @@ SERVICES: dict[str, ServiceSpec] = {
                     "app/components/frontend/dashboard/modals/rag_tab",
                     # RAG modules inside the always-copied ai tree.
                     "app/services/ai/domains/chat/rag_context.py",
-                    "app/services/ai/domains/chat/rag_stats_context.py",
-                    "tests/services/ai/test_rag_stats_context.py",
                 ],
                 # The Overseer's AI page, only where the htmx frontend is.
                 "include_htmx": [

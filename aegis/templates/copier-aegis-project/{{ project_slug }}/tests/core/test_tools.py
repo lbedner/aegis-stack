@@ -104,6 +104,7 @@ class TestEffect:
 # registered from app code but missing here fails the test below, so each
 # new tool's effect is a decision, not the (write) default.
 EXPECTED_EFFECTS = {
+    "catalog": "read",
     "context": "read",
     # Overseer's reads, on every stack.
     "health": "read",

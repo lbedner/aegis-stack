@@ -2,7 +2,7 @@
 selection, and the usage ledger.
 
 Sync and async both live here because the callers do: the CLI, the
-usage rollups and the catalog context run on a plain ``Session``;
+usage rollups run on a plain ``Session``;
 request paths on an ``AsyncSession``. The annotation on each function
 says which. Statement builders only - no business logic, no writes.
 """
@@ -281,31 +281,6 @@ async def modality_model_counts(session: AsyncSession) -> Sequence[tuple[str, in
         .order_by(LLMModality.modality)
     )
     return result.all()
-
-
-async def orgs_named(session: AsyncSession, names: Iterable[str]) -> Sequence[LLMOrg]:
-    return (
-        await session.exec(select(LLMOrg).where(LLMOrg.name.in_(list(names))))
-    ).all()
-
-
-async def models_served_by(
-    session: AsyncSession, org_ids: Iterable[int]
-) -> Sequence[LargeLanguageModel]:
-    """Every chat model the given orgs serve, with prices, deployments and
-    modalities loaded - the catalog context's one fetch."""
-    return (
-        await session.exec(
-            select(LargeLanguageModel)
-            .where(LargeLanguageModel.served_by_org_id.in_(list(org_ids)))
-            .where(LargeLanguageModel.mode == "chat")
-            .options(
-                selectinload(LargeLanguageModel.llm_prices),
-                selectinload(LargeLanguageModel.deployments),
-                selectinload(LargeLanguageModel.modalities),
-            )
-        )
-    ).all()
 
 
 # --- Active selection --------------------------------------------------

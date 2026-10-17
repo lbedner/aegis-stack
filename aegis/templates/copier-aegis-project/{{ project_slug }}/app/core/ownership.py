@@ -18,8 +18,10 @@ The rules, in order, for a path under ``app``:
    is ``ollama``), but an Overseer page (``overseer_<x>.py``,
    ``pages/overseer/<x>/``) goes with what it shows.
 4. ``core/<m>.py`` that says which component it fronts (``FRONTS``).
-5. ``cli/<x>/`` or ``cli/<x>.py`` for a service of that name.
-6. ``integrations/``, where the app is put together: the backend's.
+5. ``models/<m>.py`` that says which part it belongs to (``PART_OF``: the
+   users are auth's, the conversations the AI service's).
+6. ``cli/<x>/`` or ``cli/<x>.py`` for a service of that name.
+7. ``integrations/``, where the app is put together: the backend's.
 
 A test (``tests/``) is the owner's whose code it imports: the one service,
 else the one component; importing several, it is shared (None).
@@ -252,12 +254,23 @@ def _page(parts: list[str]) -> Owner | None:
     return None
 
 
-def _core(parts: list[str], index: source_index.Index) -> Owner | None:
+def _said(parts: list[str], index: source_index.Index) -> source_index.Declared | None:
+    """What a module straight under an ``app`` folder declares (``core``,
+    ``models``), or None."""
     if len(parts) != 3:
         return None
-    module = index.get(f"app.core.{PurePosixPath(parts[2]).stem}")
-    fronts = module.declared.fronts if module else None
+    module = index.get(f"app.{parts[1]}.{PurePosixPath(parts[2]).stem}")
+    return module.declared if module else None
+
+
+def _core(parts: list[str], index: source_index.Index) -> Owner | None:
+    fronts = said.fronts if (said := _said(parts, index)) else None
     return Owner(COMPONENT, fronts) if fronts and installed(COMPONENT, fronts) else None
+
+
+def _models(parts: list[str], index: source_index.Index) -> Owner | None:
+    part_of = said.part_of if (said := _said(parts, index)) else None
+    return _named(part_of) if part_of else None
 
 
 def _cli(parts: list[str], index: source_index.Index) -> Owner | None:
@@ -269,6 +282,7 @@ _RULES = {
     "services": _service,
     "components": _component,
     "core": _core,
+    "models": _models,
     "cli": _cli,
     "integrations": lambda parts, index: Owner(COMPONENT, HOST),
 }

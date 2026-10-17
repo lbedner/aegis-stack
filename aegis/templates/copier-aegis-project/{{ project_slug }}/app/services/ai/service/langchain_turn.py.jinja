@@ -1,0 +1,152 @@
+{%- if ai_framework == "langchain" -%}
+"""A turn on LangChain's runtime with the agent's tools: each granted tool
+bound to the model (``bound``), and a turn that runs what the model calls
+between its rounds, as the caller, until a round calls none (``run``).
+What Pydantic AI does for its own runtime, so an agent can do the same on
+either. Each chunk reaches the stream as a ``Piece``: its text, its token
+counts and its stop reason, under one spelling for every provider."""
+
+from collections.abc import AsyncIterator, Sequence
+from dataclasses import dataclass, field
+import inspect
+import json
+from typing import Any
+
+from langchain_core.messages import AIMessageChunk, ToolMessage
+from langchain_core.tools import StructuredTool
+
+from app.core.log import logger
+{%- if ai_backend != "memory" %}
+from app.services.ai.domains.chat.user_memory import memory_user
+{%- else %}
+from app.core.tools import acting_as
+{%- endif %}
+
+# The most rounds of tool calls one turn runs; the last round's text is
+# its answer either way.
+MAX_ROUNDS = 8
+
+
+@dataclass(frozen=True)
+class Piece:
+    """One chunk of the turn: its text, the tokens it reports, why the
+    model stopped (on the last), or the tool a round called (``tool``)."""
+
+    text: str = ""
+    stop: str | None = None
+    usage: dict[str, int] = field(default_factory=dict)
+    tool: str | None = None
+    args: dict[str, Any] | None = None
+
+
+def bound(
+    llm: Any, tools: Sequence[Any]
+) -> tuple[Any, dict[str, StructuredTool]]:
+    """``llm`` with ``tools`` bound, and each by its name to run; ``llm``
+    alone where there are none. A tool's name, arguments and description
+    come from its signature and docstring, as Pydantic AI reads them."""
+    named = {
+        tool.__name__: StructuredTool.from_function(
+            coroutine=tool if inspect.iscoroutinefunction(tool) else None,
+            func=None if inspect.iscoroutinefunction(tool) else tool,
+            name=tool.__name__,
+            description=inspect.getdoc(tool) or tool.__name__,
+        )
+        for tool in tools
+    }
+    return (llm.bind_tools(list(named.values())) if named else llm), named
+
+
+async def run(
+    llm: Any,
+    messages: Sequence[Any],
+    tools: dict[str, StructuredTool],
+    *,
+    user_id: str,
+    owner_user_id: int | None,
+    agent_slug: str | None,
+    conversation_id: str,
+    subject: str | None,
+    admin: bool | None,
+) -> AsyncIterator[Piece]:
+    """Every round's pieces, as the caller: where a round calls tools,
+    each runs and its answer goes back before the next round."""
+    history: list[Any] = list(messages)
+{%- if ai_backend != "memory" %}
+    caller = memory_user(
+        user_id,
+        owner_user_id=owner_user_id,
+        agent_slug=agent_slug,
+        conversation_id=conversation_id,
+        subject=subject,
+        admin=admin,
+    )
+{%- else %}
+    caller = acting_as(owner_user_id, agent_slug, conversation_id, admin)
+{%- endif %}
+    with caller:
+        for _ in range(MAX_ROUNDS):
+            whole: AIMessageChunk | None = None
+            async for chunk in llm.astream(history):
+                if isinstance(chunk, AIMessageChunk):  # a tool call's parts
+                    whole = chunk if whole is None else whole + chunk
+                yield _piece(chunk)
+            calls = getattr(whole, "tool_calls", None) or []
+            if not calls:
+                return
+            history.append(whole)
+            for call in calls:
+                yield Piece(tool=call["name"], args=call.get("args") or {})
+                answer = await _answer(tools, call)
+                history.append(ToolMessage(content=answer, tool_call_id=call["id"]))
+        logger.warning("Tool rounds ran out", rounds=MAX_ROUNDS)
+
+
+def _piece(chunk: Any) -> Piece:
+    counts = getattr(chunk, "usage_metadata", None) or {}
+    return Piece(
+        text=text_of(chunk),
+        stop=_stop_reason(getattr(chunk, "response_metadata", None)),
+        usage={k: counts.get(k, 0) or 0 for k in ("input_tokens", "output_tokens")},
+    )
+
+
+def text_of(chunk: Any) -> str:
+    """A chunk's text: its content where that is a string, else its text
+    blocks (a provider streaming tool calls sends a list)."""
+    content = getattr(chunk, "content", chunk)
+    if isinstance(content, str):
+        return content
+    return "".join(
+        block.get("text", "")
+        for block in content
+        if isinstance(block, dict) and block.get("type") == "text"
+    )
+
+
+def _stop_reason(metadata: dict[str, Any] | None) -> str | None:
+    """A chunk's stop reason under its provider's key, with a max_tokens
+    cut-off as "length" (pydantic-ai's spelling) for every one."""
+    if not metadata:
+        return None
+    reason = (
+        metadata.get("finish_reason")  # OpenAI
+        or metadata.get("stop_reason")  # Anthropic
+        or metadata.get("done_reason")  # Ollama
+    )
+    return "length" if reason in ("length", "max_tokens") else reason
+
+
+async def _answer(tools: dict[str, StructuredTool], call: dict[str, Any]) -> str:
+    """What a call returns, as the text the model reads back: a tool that
+    fails says why, as Pydantic AI hands a model its tool's error."""
+    tool = tools.get(call["name"])
+    if tool is None:
+        return f"No tool named {call['name']!r}."
+    try:
+        result = await tool.ainvoke(call.get("args") or {})
+    except Exception as exc:
+        logger.warning("Tool call failed", tool=call["name"], error=str(exc))
+        return f"{type(exc).__name__}: {exc}"
+    return result if isinstance(result, str) else json.dumps(result, default=str)
+{%- endif %}

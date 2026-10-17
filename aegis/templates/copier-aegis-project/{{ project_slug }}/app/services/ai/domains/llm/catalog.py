@@ -6,13 +6,17 @@ this module is what the picker and a chat turn ask of the catalog.
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
+from typing import Any
 
 from pydantic import BaseModel
 
 from app.core.db import get_async_session
+from app.core.time import utcnow
+from app.core.tools import register_tool
 from app.services.ai.domains.llm import queries
 from app.services.ai.models.llm import LargeLanguageModel, LLMPrice
+from app.services.ai.schemas import FIGURES
 
 
 async def context_window_for(model_id: str) -> int | None:
@@ -23,24 +27,33 @@ async def context_window_for(model_id: str) -> int | None:
     return row.context_window if row else None
 
 
-class LLMListResult(BaseModel):
-    """Result for a single model in list output."""
+class CatalogModel(BaseModel):
+    """A model as the ``catalog`` tool gives it: what an agent weighs one by.
+    The picker's ``LLMListResult`` is this and what it draws besides."""
+
+    model_config = FIGURES
 
     model_id: str
     title: str
     vendor: str
-    family: str | None
-    color: str
     context_window: int
-    input_price: float | None
+    input_price: float | None  # USD per million tokens
     output_price: float | None
     released_on: str | None
     # WHO MADE IT: the publishing org, resolved at sync time. None for a
     # model the registry does not know - unmarked beats mislabelled.
     lab: str | None = None
-    lab_icon_b64: str | None = None
     # What kind of model: "chat", or a voice kind (LargeLanguageModel.mode).
     mode: str = "chat"
+
+
+class LLMListResult(CatalogModel):
+    """Result for a single model in list output: the catalog's row, and the
+    family, colour and logo a picker draws."""
+
+    family: str | None
+    color: str
+    lab_icon_b64: str | None = None
 
     @property
     def display_id(self) -> str:
@@ -143,3 +156,44 @@ def _list_result(model: LargeLanguageModel, price: LLMPrice | None) -> LLMListRe
         else None,
         mode=model.mode,
     )
+
+
+class CatalogAnswer(BaseModel):
+    """The ``catalog`` tool's answer, and when it was read."""
+
+    model_config = FIGURES
+
+    models: tuple[CatalogModel, ...]
+    read_at: datetime
+
+
+async def catalog(
+    text: str | None = None,
+    vendor: str | None = None,
+    modality: str | None = None,
+    limit: int = 20,
+) -> dict[str, Any]:
+    """The model catalog: models this install could run, newest first, each
+    with its vendor, the lab that made it, its context window and its price
+    in USD per million input and output tokens. ``text`` matches the id or
+    title, ``vendor`` the provider (openai, anthropic, ...), ``modality``
+    what it takes in (vision, audio, ...). ``limit`` caps the rows (at most
+    50). The active model is in your session section; this is what else
+    there is."""
+    rows = await list_models(
+        pattern=text, vendor=vendor, modality=modality, limit=min(limit, 50)
+    )
+    fields = set(CatalogModel.model_fields)
+    return CatalogAnswer(
+        models=tuple(CatalogModel(**row.model_dump(include=fields)) for row in rows),
+        read_at=utcnow(),
+    ).model_dump(mode="json")
+
+
+register_tool(
+    "catalog",
+    catalog,
+    description="Look up the models this install could use, with prices",
+    replace=True,
+    effect="read",
+)

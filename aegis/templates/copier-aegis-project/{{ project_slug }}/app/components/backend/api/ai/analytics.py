@@ -2,8 +2,7 @@
 
 from datetime import datetime
 from typing import Any
-from app.services.ai.schemas import UsageStatsResponse
-from app.core.log import logger
+
 from fastapi import (
     APIRouter,
     HTTPException,
@@ -11,6 +10,8 @@ from fastapi import (
 from pydantic import BaseModel
 
 from app.components.backend.api.ai.service import ai_service
+from app.core.log import logger
+from app.services.ai.schemas import UsageStatsResponse
 
 router = APIRouter()
 
@@ -38,19 +39,16 @@ async def get_usage_stats(
         Usage statistics including totals, model breakdown, and recent activity
     """
     try:
-        stats = await ai_service.get_usage_stats(
+        return await ai_service.get_usage_stats(
             user_id=user_id,
             start_time=start_time,
             end_time=end_time,
             recent_limit=recent_limit,
         )
-        return UsageStatsResponse(**stats)
 
     except Exception as e:
         logger.exception("Failed to get usage stats")
-        raise HTTPException(
-            status_code=500, detail="Failed to get usage stats"
-        ) from e
+        raise HTTPException(status_code=500, detail="Failed to get usage stats") from e
 
 
 @router.get("/sentiment/stats")

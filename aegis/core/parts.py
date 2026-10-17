@@ -63,6 +63,7 @@ def _entry(spec: PluginSpec) -> str:
         "hosts": spec.hosts,
         "holds_keys": spec.holds_keys,
         "order": spec.order,
+        "description": spec.description,
     }
     lines = [
         f"        {name}=Category.{value.name},"
@@ -92,6 +93,9 @@ class Part:
     hosts: bool = False  # what has no process of its own runs in it
     holds_keys: bool = False  # every outside provider's key lives in it
     order: int | None = None  # in the sidebar and its row; none: last, by name
+    # What it is, in a line: what the app map says of a part with no
+    # package docstring of its own (ingress is Traefik, not Python).
+    description: str = ""
 """
 
 

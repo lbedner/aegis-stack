@@ -1,9 +1,7 @@
-"""Per-turn context providers — the CLI-chat context pattern, generalized.
+"""Per-turn context providers.
 
-GENERIC. The template's chat rebuilds fresh context objects every message
-(``HealthContext`` etc., each with a ``format_for_prompt``) and composes them
-into the prompt. This turns that into a small protocol so any caller can push
-"what's true right now" to the model without a tool call.
+GENERIC. A small protocol so any caller can push "what's true right now"
+to the model without a tool call (a memory module's briefing, say).
 
 Providers run BEFORE the model call, so they receive the agent *deps*
 directly (not a ``RunContext``). Each returns a formatted block or ``None``

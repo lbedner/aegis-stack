@@ -7,10 +7,6 @@ Centralized prompt management for Illiana, the Aegis Stack AI assistant.
 
 def build_system_prompt(
     rag_context: str | None = None,
-    rag_stats_context: str | None = None,
-    health_context: str | None = None,
-    usage_context: str | None = None,
-    catalog_context: str | None = None,
     current_model: str | None = None,
     current_provider: str | None = None,
     persona: str | None = None,
@@ -21,15 +17,12 @@ def build_system_prompt(
 
     Args:
         rag_context: Optional formatted RAG context to include
-        rag_stats_context: Optional RAG stats context for collection awareness
-        health_context: Optional formatted health context to include
-        usage_context: Optional formatted usage statistics to include
-        catalog_context: Optional formatted LLM catalog context to include
         current_model: Current model being used for this request
         current_provider: Current provider (openai, anthropic, etc.)
         persona: The agent row's prompt (``DEFAULT_SYSTEM_PROMPT`` is the
             one it is seeded with); None for that same default. The
-            session and live-data sections are appended after it.
+            session, retrieved code and memory sections are appended after
+            it (nothing live: ``PromptMixin._system_prompt_for``).
         memory_context: Optional guarded per-user memory block (from
             ``user_memory.build_user_memory_context``) to append.
 
@@ -78,38 +71,10 @@ The following code was retrieved from THIS project's codebase.
 {rag_context}
 """
 
-    if usage_context:
-        prompt += f"""
-## My Activity (LIVE DATA)
-{usage_context}
-"""
-
-    if rag_stats_context:
-        prompt += f"""
-## RAG Knowledge Base (LIVE DATA)
-{rag_stats_context}
-"""
-
-    if catalog_context:
-        prompt += f"""
-## LLM Catalog (LIVE DATA)
-{catalog_context}
-"""
-
     if memory_context:
         prompt += f"""
 ## Saved User Memory
 {memory_context}
-"""
-
-    # Health context comes LAST so LLM weights it more heavily
-    if health_context:
-        prompt += f"""
-## System Status (LIVE DATA - USE THIS FOR HEALTH QUESTIONS)
-{health_context}
-
-CRITICAL: For health/status/component questions, ONLY report what's listed above.
-Code documentation shows what CAN exist - System Status shows what IS running.
 """
 
     return prompt
@@ -128,7 +93,10 @@ tables and how they link, and the changes I can propose. My app map is the \
 outline; my ontology tool has the depth: a part's neighbours (what it uses \
 and what uses it), the paths between two, a route walked hop by hop to its \
 file and line.
-- What is happening now: health, usage and the model catalog, live below.
+- What is happening now, when you ask: a part's health, its errors and what \
+it spent from the ontology tool, the whole app's health from the health \
+tool, the models on offer from the catalog tool where there is one. When \
+something is wrong, a line on your message tells me.
 - I read what the map and the tool say about the code, not the code itself. \
 Past what they say, I say I don't know rather than guess.
 

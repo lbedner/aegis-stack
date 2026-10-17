@@ -126,45 +126,42 @@ ConversationMessage
 └── meta_data: dict
 ```
 
-## Context Injection
+## Context and Live Data
 
-Illiana receives live system data through context formatters that enrich her system prompt. This is what makes her system-aware rather than a generic chatbot.
+Illiana's system prompt holds nothing live, so a provider's prompt cache serves it turn to turn. Live data reaches her two ways: tools she calls when asked, and one line on her current message while something is wrong.
 
-### Health Context
+### A part's live state
 
-**Location:** `app/services/ai/health_context.py`
+**Location:** `app/services/system/node_now.py`
 
-Injects component health status so Illiana can answer "Is my database healthy?" or "What's the scheduler doing?"
-
-```python
-from app.services.ai.health_context import get_health_context
-
-context = await get_health_context()
-# Returns formatted markdown with component status, uptime, resource usage
-```
-
-### Usage Context
-
-**Location:** `app/services/ai/usage_context.py`
-
-Gives Illiana awareness of her own activity - token consumption, costs, success rates.
+The `ontology` tool's answer for one part carries `now`, a frozen Pydantic model:
 
 ```python
-from app.services.ai.usage_context import UsageContext
+from app.services.system.node_now import NodeNow, now_of
 
-ctx = UsageContext(
-    total_tokens=45230,
-    total_requests=23,
-    total_cost=0.47,
-    success_rate=95.6,
-    top_model="gpt-4o",
-    top_model_percentage=65.2,
-    recent_requests=10,
-)
-prompt_text = ctx.format_for_prompt()  # Compact markdown for injection
+now: NodeNow | None = await now_of(node)  # None for a table, route or sub-part
+now.health        # the part's ComponentStatus, or None where it has no check
+now.errors        # the ErrorIssues it owns, latest first (up to 5)
+now.errors_total  # how many it owns
+now.spend         # the AI service's UsageWindows: today, last 7 days, all time
+now.read_at       # when all of it was read
 ```
 
-Supports `compact=True` for small models (Ollama) where context window is limited.
+### What is wrong right now
+
+```python
+from app.services.system.node_now import right_now
+
+line = (await right_now()).line()  # None while every check is healthy
+```
+
+The default assistant's turn puts the line ahead of the current message, for typed turns and calls alike; a custom agent never gets it.
+
+### The model catalog
+
+**Location:** `app/services/ai/domains/llm/catalog.py`
+
+The `catalog` tool lists the models this install could use, filtered by text, vendor or modality, each a `CatalogModel` (id, title, vendor, lab, context window, prices per million tokens, release date). The default agent is granted it with `ontology` and, for admins, `health`.
 
 ### RAG Context
 
@@ -181,62 +178,21 @@ sources = ctx.format_sources_footer()      # Citation-style source references
 metadata = ctx.to_metadata()               # Storage-friendly format
 ```
 
-### RAG Stats Context
-
-**Location:** `app/services/ai/rag_stats_context.py`
-
-Provides collection-level awareness (how many collections, document counts, configuration):
-
-```python
-from app.services.ai.rag_stats_context import RAGStatsContext
-
-ctx = RAGStatsContext(
-    enabled=True,
-    collection_count=2,
-    collections=[("code", 1500), ("docs", 300)],
-    embedding_model="all-MiniLM-L6-v2",
-    chunk_size=1000,
-    chunk_overlap=200,
-    default_top_k=5,
-)
-```
-
-### LLM Catalog Context
-
-**Location:** `app/services/ai/llm_catalog_context.py`
-
-Injects top models per vendor so Illiana can recommend alternatives:
-
-- Featured vendors: OpenAI, Anthropic, Google, xAI, Mistral, Groq, DeepSeek
-- Top 3 newest models per vendor (by release date)
-- Includes pricing, context window, capabilities
-- Filters out alias models (`-latest`, `:latest` suffixes)
-- Optimized: ~3 SQL queries total with eager loading
-
 ### System Prompt Assembly
 
-**Location:** `app/services/ai/prompts.py`
-
-All contexts are assembled into Illiana's system prompt via `build_system_prompt()`:
+**Location:** `app/services/ai/domains/chat/prompts.py`
 
 ```python
-from app.services.ai.prompts import build_system_prompt
+from app.services.ai.domains.chat.prompts import build_system_prompt
 
 prompt = build_system_prompt(
-    settings=settings,
-    rag_context=rag_formatted,        # Code search results
-    rag_stats_context=rag_stats,      # Collection info
-    health_context=health_formatted,  # Component status (injected LAST for emphasis)
-    usage_context=usage_formatted,    # Activity stats
-    catalog_context=catalog_formatted, # Available models
-    use_rag=True,
+    rag_context=rag_formatted,  # Code search results
     current_model="gpt-4o",
     current_provider="openai",
+    persona=agent_row_prompt,   # None: the seeded default
+    memory_context=memory,      # Saved user memory
 )
 ```
-
-!!! tip "Health Context Priority"
-    Health context is injected **last** in the prompt so the LLM weights it more heavily when answering status questions. This ensures Illiana reports what **is** running, not what **could** run.
 
 ## Cost Calculation
 

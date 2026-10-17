@@ -61,24 +61,12 @@ from app.services.ai.service.trace import (
     record_tool_result,
     tool_notice,
 )
+{%- else %}
+from app.services.ai.service import langchain_turn
+from app.services.ai.service.trace import call_args_preview, tool_notice
 {%- endif %}
 
 
-{%- if ai_framework != "pydantic-ai" %}
-def _stop_reason(metadata: dict[str, Any] | None) -> str | None:
-    """A LangChain chunk's stop reason under its provider's key, with a
-    max_tokens cut-off as "length" (pydantic-ai's spelling) for every one."""
-    if not metadata:
-        return None
-    reason = (
-        metadata.get("finish_reason")  # OpenAI
-        or metadata.get("stop_reason")  # Anthropic
-        or metadata.get("done_reason")  # Ollama
-    )
-    return "length" if reason in ("length", "max_tokens") else reason
-
-
-{% endif %}
 class StreamingMixin(ChatMixin):
     """The chat turn, streamed or run to its end."""
 
@@ -205,7 +193,7 @@ class StreamingMixin(ChatMixin):
 {%- if ai_framework == "pydantic-ai" %}
             agent, conversation_context = setup.agent, setup.conversation_context
 {%- else %}
-            llm, messages = setup.llm, setup.messages
+            llm, messages, tools = setup.llm, setup.messages, setup.tools or {}
 {%- endif %}
 
             # Start streaming
@@ -330,25 +318,37 @@ class StreamingMixin(ChatMixin):
                             },
                         )
 {%- else %}
-            # LangChain: ``astream`` yields text deltas and nothing else, so
-            # no tool ever runs and no reading is ever staged.
+            # LangChain: what the model calls runs between its rounds, as
+            # the caller, each chunk read as a ``Piece`` (``langchain_turn``).
             staged_readings: list[dict[str, Any]] = []
-            async for chunk in llm.astream(messages):
-                # The stop reason rides the last chunk, which may carry no text.
-                finish_reason = (
-                    _stop_reason(getattr(chunk, "response_metadata", None))
-                    or finish_reason
-                )
+            async for piece in langchain_turn.run(
+                llm,
+                messages,
+                tools,
+                user_id=user_id,
+                owner_user_id=owner_user_id,
+                agent_slug=agent_slug,
+                conversation_id=conversation.id,
+                subject=subject,
+                admin=admin,
+            ):
+                finish_reason = piece.stop or finish_reason
 {%- if ai_backend != "memory" %}
-                # Token counts ride the chunks that carry them, where the
-                # provider reports them while streaming (Anthropic splits
-                # input and output across two), so they add up.
-                if counts := getattr(chunk, "usage_metadata", None):
-                    for key in ("input_tokens", "output_tokens"):
-                        stream_usage[key] += counts.get(key, 0) or 0
+                for key, count in piece.usage.items():
+                    stream_usage[key] += count
 {%- endif %}
-                # Get content from chunk
-                text_chunk = chunk.content if hasattr(chunk, 'content') else str(chunk)
+                if piece.tool:
+                    # What it said before a tool call is commentary.
+                    streaming_conv.accumulated_content = ""
+                    yield tool_notice(
+                        piece.tool,
+                        args=call_args_preview(piece.args),
+                        message_id=message_id,
+                        conversation_id=conversation.id,
+                        stream_delta=stream_delta,
+                    )
+                    continue
+                text_chunk = piece.text
                 if not text_chunk:
                     continue
 

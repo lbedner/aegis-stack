@@ -9,9 +9,11 @@ bookkeeping assumed the pydantic-ai event stream had run.
 """
 
 from collections.abc import AsyncIterator
+import json
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
+from langchain_core.messages import AIMessageChunk, ToolMessage
 import pytest
 
 import app.services.ai.service.chat as chat_module
@@ -19,17 +21,18 @@ import app.services.ai.service.chat as chat_module
 import app.services.ai.service.turn as turn_module
 {%- endif %}
 from app.services.ai.domains.chat.agent_loader import DEFAULT_AGENT_SLUG, AgentConfig
-from app.services.ai.service import AIService
+from app.services.ai.service import AIService, langchain_turn
 
 PIECES = ("Hel", "lo ", "there")
 
 
 
-def _prepared(llm: Any) -> Any:
-    """An async ``_prepare_llm_and_messages`` stand-in handing back ``llm``."""
+def _prepared(llm: Any, tools: dict[str, Any] | None = None) -> Any:
+    """An async ``_prepare_llm_and_messages`` stand-in handing back ``llm``
+    and its bound ``tools``."""
 
-    async def prepare(*args: Any, **kwargs: Any) -> tuple[Any, list[Any]]:
-        return llm, []
+    async def prepare(*args: Any, **kwargs: Any) -> tuple[Any, list[Any], dict]:
+        return llm, [], tools or {}
 
     return prepare
 
@@ -67,18 +70,6 @@ def harness(
     the turn runs on the fake LLM alone."""
     service = AIService(mock_ai_settings)
 
-    async def no_health(self: AIService) -> tuple[None, None]:
-        return (None, None)
-
-    monkeypatch.setattr(AIService, "_build_health_context", no_health)
-    async def no_usage(self: AIService) -> None:
-        return None
-
-    monkeypatch.setattr(AIService, "_build_usage_context", no_usage)
-    async def no_catalog(self: AIService) -> None:
-        return None
-
-    monkeypatch.setattr(AIService, "_build_catalog_context", no_catalog)
 
     async def resolve(slug: str = DEFAULT_AGENT_SLUG, **kwargs: object) -> AgentConfig:
         return _default_config()
@@ -95,11 +86,55 @@ def harness(
     monkeypatch.setattr(service, "_record_usage", recorder)
 {%- endif %}
 
-    async def fake_prepare(self: AIService, conversation: Any, *args: Any, **kwargs: Any) -> Any:
-        return _FakeLLM(), ["messages"]
-
-    monkeypatch.setattr(AIService, "_prepare_llm_and_messages", fake_prepare)
+    monkeypatch.setattr(AIService, "_prepare_llm_and_messages", _prepared(_FakeLLM()))
     return service, recorder
+
+
+class _ToolCallingLLM:
+    """Calls ``lookup`` (after a line of commentary), then answers from
+    what it returned."""
+
+    def bind_tools(self, tools: Any) -> "_ToolCallingLLM":
+        return self
+
+    async def astream(self, history: Any) -> AsyncIterator[AIMessageChunk]:
+        answered = [m for m in history if isinstance(m, ToolMessage)]
+        if answered:
+            yield AIMessageChunk(content=f"Found {json.loads(answered[0].content)['found']}")
+            return
+        yield AIMessageChunk(
+            content="Let me look. ",
+            tool_call_chunks=[
+                {"name": "lookup", "args": '{"q": "x"}', "id": "c1", "index": 0}
+            ],
+        )
+
+
+class TestGrantedToolsRun:
+    """Granted tools run on LangChain's runtime as on Pydantic AI's: bound
+    to the model, she could call none of them before (2026-10-16)."""
+
+    async def test_a_tool_the_model_calls_runs_and_it_answers_from_it(
+        self, harness: tuple[AIService, MagicMock], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        service, _ = harness
+        asked: list[str] = []
+
+        async def lookup(q: str) -> dict[str, str]:
+            """Look ``q`` up."""
+            asked.append(q)
+            return {"found": q.upper()}
+
+        llm, tools = langchain_turn.bound(_ToolCallingLLM(), [lookup])
+        monkeypatch.setattr(
+            AIService, "_prepare_llm_and_messages", _prepared(llm, tools)
+        )
+
+        message = await service.chat("look x up")
+
+        assert asked == ["x"]
+        # What it said before calling the tool is commentary, not the answer.
+        assert message.content == "Found X"
 
 
 class TestLangChainChat:

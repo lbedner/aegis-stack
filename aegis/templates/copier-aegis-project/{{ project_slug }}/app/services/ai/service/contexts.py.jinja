@@ -1,30 +1,17 @@
-"""Per-request context builders: health, usage, catalog{% if ai_rag %}, RAG{% endif %}.
-
-Each ``_build_*`` method assembles one "what's true right now" block that
-the prompt layer injects into the system prompt. Failures degrade to
-``None`` rather than failing the chat turn.
+"""The per-request context builder{% if ai_rag %}: the code RAG retrieves for a
+turn (``_build_rag_context``), which the prompt layer injects into the
+system prompt{% endif %}. Nothing live rides there
+(``PromptMixin._system_prompt_for``).
 """
 
 {% if ai_rag %}
 from collections.abc import Sequence
-{% endif %}
 
-{% if ai_backend != "memory" %}
-from datetime import timedelta
-
-from app.core.db import get_async_session
-from app.core.time import utcnow
-from app.services.ai.domains.chat.llm_catalog_context import get_llm_catalog_context
-{% endif %}
 from app.core.log import logger
-
-from app.services.ai.domains.chat.health_context import HealthContext
-from app.services.ai.domains.chat.usage_context import UsageContext
+{% endif %}
 from app.services.ai.service.usage import UsageMixin
-from app.services.system.live_status import live_status
 {% if ai_rag %}
 from app.services.ai.domains.chat.rag_context import RAGContext
-from app.services.ai.domains.chat.rag_stats_context import RAGStatsContext
 from app.services.ai.service.base import AIServiceError
 {% endif %}
 
@@ -76,7 +63,7 @@ def _is_test_or_fixture_file(source_path: str) -> bool:
 
 {% endif %}
 class ContextsMixin(UsageMixin):
-    """Builders for the dynamic context blocks injected per request."""
+    """The context a turn retrieves before its model call."""
 
 {% if ai_rag %}
     async def _build_rag_context(
@@ -172,128 +159,4 @@ class ContextsMixin(UsageMixin):
             collection=target_collection,
             results=results_to_use,
         )
-
-    async def _build_rag_stats_context(self) -> RAGStatsContext | None:
-        """
-        Build RAG stats context from RAG service status.
-
-        Gives Illiana awareness about indexed collections, document counts,
-        and RAG configuration.
-
-        Returns:
-            RAGStatsContext with current stats, or None if unavailable
-        """
-        try:
-            status = self.rag_service.get_service_status()
-            collections = await self.rag_service.list_collections()
-
-            collection_info = []
-            for name in collections:
-                stats = await self.rag_service.get_collection_stats(name)
-                if stats:
-                    collection_info.append({
-                        "name": name,
-                        "count": stats.get("count", 0),
-                    })
-
-            return RAGStatsContext(
-                enabled=status.get("enabled", False),
-                collection_count=len(collections),
-                collections=collection_info,
-                embedding_model=status.get("embedding_model"),
-                chunk_size=status.get("chunk_size"),
-                chunk_overlap=status.get("chunk_overlap"),
-                default_top_k=status.get("default_top_k"),
-                last_activity=status.get("last_activity"),
-            )
-        except Exception as e:
-            logger.debug(f"Failed to build RAG stats context: {e}")
-            return None
-
-{% endif %}
-    async def _build_health_context(
-        self,
-    ) -> tuple[HealthContext | None, str | None]:
-        """
-        Build health context from the app's live status (``live_status``):
-        the webserver's full walk, or this process's partial one.
-
-        Returns:
-            Tuple of (HealthContext, warning_message):
-            - HealthContext with system status, or None if complete failure
-            - Warning message when the status is partial, otherwise None
-        """
-        try:
-            status, warning = await live_status()
-        except Exception as e:
-            logger.warning(f"Failed to build health context: {e}")
-            return None, None
-        return HealthContext(status=status), warning
-
-    async def _build_usage_context(self) -> UsageContext | None:
-        """
-        Build usage context from AI service statistics.
-
-        Gives Illiana self-awareness about her own usage patterns,
-        token consumption, costs, and success rates.
-
-        Returns:
-            UsageContext with current stats, or None if unavailable
-        """
-{% if ai_backend != "memory" %}
-        try:
-            stats = await self.get_usage_stats(recent_limit=5)
-            async with get_async_session() as session:
-                week = await self._get_usage_totals(
-                    session, None, utcnow() - timedelta(days=7), None
-                )
-
-            # Find top model by request count
-            top_model = None
-            top_pct = 0.0
-            models = stats.get("models", [])
-            if models:
-                top = max(models, key=lambda m: m.get("requests", 0))
-                top_model = top.get("model_title")
-                top_pct = top.get("percentage", 0.0)
-
-            return UsageContext(
-                total_tokens=stats.get("total_tokens", 0),
-                total_requests=stats.get("total_requests", 0),
-                total_cost=stats.get("total_cost", 0.0),
-                success_rate=stats.get("success_rate", 100.0),
-                top_model=top_model,
-                top_model_percentage=top_pct,
-                recent_requests=len(stats.get("recent_activity", [])),
-                week_requests=week["total_requests"],
-                week_cost=week["total_cost"],
-            )
-        except Exception as e:
-            logger.debug(f"Failed to build usage context: {e}")
-            return None
-{% else %}
-        # Usage tracking requires database backend
-        return None
-{% endif %}
-
-    async def _build_catalog_context(self) -> str | None:
-        """
-        Build LLM catalog context from database.
-
-        Provides Illiana with awareness of available LLM models,
-        their pricing, and capabilities.
-
-        Returns:
-            Formatted catalog context string, or None if unavailable
-        """
-{% if ai_backend != "memory" %}
-        try:
-            async with get_async_session() as session:
-                return await get_llm_catalog_context(session)
-        except Exception as e:
-            logger.debug(f"Failed to build catalog context: {e}")
-            return None
-{% else %}
-        # Catalog context requires database backend
-        return None
 {% endif %}

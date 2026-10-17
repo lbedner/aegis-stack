@@ -75,6 +75,9 @@ RESTIC_ENV = {
     "OFFSITE_BACKUP_ACCESS_KEY": "AWS_ACCESS_KEY_ID",
     "OFFSITE_BACKUP_SECRET_KEY": "AWS_SECRET_ACCESS_KEY",
 }
+# How long the server's own state (its backups, history, stored files) is
+# kept between commands and refreshes.
+KEPT_FOR_A_DAY = 86400
 # A restore drill's steps (``aegis deploy-restore-drill``).
 DRILL_STEPS = {
     "restore": "Restore the newest copy",
@@ -164,16 +167,18 @@ PROTOCOL: dict[str, Any] = {
         # whether each holds the database), so a rollback is picked from
         # them, never typed; and its deploy history, recorded in the
         # server's database (``deploy history`` there), never this one's.
-        # Each forgotten by any command, which may have changed it
-        # (``until_a_command``).
+        # Each read again after any command, which may have changed it
+        # (``until_a_command``), and kept a day: the Overseer shows when it
+        # was read, with a refresh, so a page never waits on the server for
+        # what it was told minutes ago.
         "backups": {
             "kept": "deploy:backups",
-            "seconds": 600,
+            "seconds": KEPT_FOR_A_DAY,
             "until_a_command": True,
         },
         "history": {
             "kept": "deploy:history",
-            "seconds": 600,
+            "seconds": KEPT_FOR_A_DAY,
             "until_a_command": True,
         },
         # The stored files the server's rows name and its store lacks (its
@@ -181,7 +186,7 @@ PROTOCOL: dict[str, Any] = {
         # looked at again after any command.
         "storage": {
             "kept": "deploy:storage",
-            "seconds": 600,
+            "seconds": KEPT_FOR_A_DAY,
             "until_a_command": True,
         },
         "upload-storage": {

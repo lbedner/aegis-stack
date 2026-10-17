@@ -19,6 +19,7 @@ import types
 import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -511,6 +512,14 @@ CATALOGUED = {"provider": "digitalocean"}
 CATALOG_KEY = "deploy:catalog:digitalocean"
 
 
+def _kept(redis: Any, key: str) -> dict[str, Any]:
+    """What the agent kept under ``key``, but when it read it
+    (``checked_at``, which every kept answer says)."""
+    found = json.loads(redis.strings[key])
+    datetime.fromisoformat(found.pop("checked_at"))
+    return found
+
+
 def test_a_catalog_is_kept_in_redis_for_the_overseer(
     project: Path, app_store: Any, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -544,7 +553,7 @@ def test_the_stacks_footprint_is_kept_in_redis_for_the_overseer(
     _serve(redis, project)
     assert _job(redis, app_store, job_id).status == "done"
     key = "deploy:footprint"
-    assert json.loads(redis.strings[key]) == measured
+    assert _kept(redis, key) == measured
     assert redis.ttl[key] == agent.PROTOCOL["actions"]["footprint"]["seconds"]
 
 
@@ -599,7 +608,7 @@ def test_the_account_is_kept_with_its_currency(
     _serve(redis, project)
     assert _job(redis, app_store, job_id).status == "done"
     key = "deploy:account:digitalocean"
-    found = json.loads(redis.strings[key])
+    found = _kept(redis, key)
     assert found == {
         "servers": [],
         "month_to_date": "3.10",
@@ -639,7 +648,7 @@ def test_the_servers_backups_are_kept_for_the_overseer(
     job_id = _request(redis, app_store, "backups", {})
     _serve(redis, project)
     assert _job(redis, app_store, job_id).status == "done"
-    assert json.loads(redis.strings["deploy:backups"]) == {"backups": LISTED}
+    assert _kept(redis, "deploy:backups") == {"backups": LISTED}
     assert seen == ["/opt/app"]
 
 
@@ -673,7 +682,7 @@ def test_the_servers_deploy_history_is_kept_for_the_overseer(
     job_id = _request(redis, app_store, "history", {})
     _serve(redis, project)
     assert _job(redis, app_store, job_id).status == "done"
-    kept = json.loads(redis.strings["deploy:history"])
+    kept = _kept(redis, "deploy:history")
     assert kept == {"deploys": rows, "events": events}
     history, done = ran
     assert "exec -T webserver python -m app.cli.main deploy history" in history
@@ -698,24 +707,63 @@ def test_the_servers_missing_files_are_kept_for_the_overseer(
     job_id = _request(redis, app_store, "storage", {})
     _serve(redis, project)
     assert _job(redis, app_store, job_id).status == "done"
-    assert json.loads(redis.strings["deploy:storage"]) == {"missing": [gone]}
+    assert _kept(redis, "deploy:storage") == {"missing": [gone]}
     (command,) = ran
     assert "exec -T webserver python -m app.cli.main storage check" in command
 
 
-def test_a_command_forgets_what_it_may_have_changed(
-    project: Path, app_store: Any
-) -> None:
-    """The backups, the history and the missing files
-    (``until_a_command``); not a catalog."""
+CHANGED = {"deploy:backups", "deploy:history", "deploy:storage"}
+
+
+def _looked_again(
+    monkeypatch: pytest.MonkeyPatch, project: Path, app_store: Any, found: Any
+) -> FakeRedis:
+    """A deploy run over answers kept before it, its look again done in
+    line (it runs beside the next command) with ``found`` as each read."""
+
+    real = threading.Thread
+
+    def thread(target: Any, args: tuple[Any, ...] = (), **kw: Any) -> Any:
+        if target is not agent._look_again:  # the heartbeat runs as it does
+            return real(target=target, args=args, **kw)
+        return SimpleNamespace(start=lambda: target(*args))
+
+    monkeypatch.setattr(agent.threading, "Thread", thread)
+    monkeypatch.setattr(agent, "_found", found)
     redis = FakeRedis()
-    changed = {"deploy:backups", "deploy:history", "deploy:storage"}
-    for key in (*changed, CATALOG_KEY):
-        redis.strings[key] = json.dumps({})
+    for key in (*CHANGED, CATALOG_KEY):
+        redis.strings[key] = json.dumps({"old": True})
     _request(redis, app_store, "deploy")
     _serve(redis, project)
-    assert set(redis.strings) & changed == set()
-    assert CATALOG_KEY in redis.strings
+    return redis
+
+
+def test_a_command_reads_again_what_it_may_have_changed(
+    monkeypatch: pytest.MonkeyPatch, project: Path, app_store: Any
+) -> None:
+    """The backups, the history and the missing files
+    (``until_a_command``), kept as they were until read again, so a page
+    never waits on the server for them; not a catalog."""
+
+    def found(root: Path, action: str, args: Any, env: Any) -> dict[str, Any]:
+        return {"read": action}
+
+    redis = _looked_again(monkeypatch, project, app_store, found)
+    for key in CHANGED:
+        assert _kept(redis, key) == {"read": key.removeprefix("deploy:")}
+    assert json.loads(redis.strings[CATALOG_KEY]) == {"old": True}
+
+
+def test_one_that_cannot_be_read_again_is_dropped(
+    monkeypatch: pytest.MonkeyPatch, project: Path, app_store: Any
+) -> None:
+    """Not left saying what it said before the command: asked for again."""
+
+    def found(root: Path, action: str, args: Any, env: Any) -> dict[str, Any]:
+        raise agent.RefusedError("the server is not answering")
+
+    redis = _looked_again(monkeypatch, project, app_store, found)
+    assert set(redis.strings) & CHANGED == set()
 
 
 def test_a_job_left_running_by_a_stopped_agent_fails_saying_so(

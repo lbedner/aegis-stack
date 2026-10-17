@@ -57,6 +57,9 @@
   {{ failed(said_failed, f) }}
   {% else %}
   {{ caller() }}
+  {# When the agent looked (kept until a refresh, or a command changes
+     it), and asking it again. #}
+  {% if f.refresh %}<p data-checked class="flex items-center gap-1.5 text-xs text-aegis-muted">{% if f.checked %}Checked {{ f.checked }}{% endif %}<button type="button" data-refresh hx-get="{{ f.refresh }}" aria-label="Check again" title="Check again" class="hover:text-aegis-text transition-colors">{{ icon("replay", "w-3.5 h-3.5") }}</button></p>{% endif %}
   {% endif %}
 </div>
 {% endmacro %}

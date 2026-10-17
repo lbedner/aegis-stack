@@ -73,7 +73,9 @@ async def test_a_spoken_turn_is_the_typed_turn(
     """Typed, then spoken, in one conversation: both turns reach the model
     as the agent (its prompt), both land in that conversation, and nothing
     else is written."""
-    from pydantic_ai.messages import ModelResponse, SystemPromptPart, TextPart
+    from collections.abc import AsyncIterator
+
+    from pydantic_ai.messages import SystemPromptPart
     from pydantic_ai.models.function import FunctionModel
     from sqlalchemy.ext.asyncio import async_sessionmaker
     from sqlmodel import select
@@ -96,7 +98,8 @@ async def test_a_spoken_turn_is_the_typed_turn(
 
     prompts: list[str] = []
 
-    async def _respond(messages: Any, info: Any) -> ModelResponse:
+    # Streamed: a turn is streamed however it is asked for.
+    async def _respond(messages: Any, info: Any) -> AsyncIterator[str]:
         prompts.append(
             "\n".join(
                 part.content
@@ -105,7 +108,7 @@ async def test_a_spoken_turn_is_the_typed_turn(
                 if isinstance(part, SystemPromptPart)
             )
         )
-        return ModelResponse(parts=[TextPart(ANSWER)])
+        yield ANSWER
 
     # Pinned to Ollama with only its model swapped, so the agent itself is
     # built the real way. Pinned because CI has no .env: the default
@@ -114,7 +117,7 @@ async def test_a_spoken_turn_is_the_typed_turn(
     for module in ("model_factory", "agents"):
         monkeypatch.setattr(
             f"app.services.ai.domains.llm.{module}._ollama_model",
-            lambda config, settings: FunctionModel(_respond),
+            lambda config, settings: FunctionModel(stream_function=_respond),
         )
 
     service = AIService(settings)

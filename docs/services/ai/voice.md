@@ -254,6 +254,34 @@ curl http://localhost:8000/voice/catalog/summary | jq
 
 ---
 
+## Live Calls
+
+The phone beside the chat's microphone opens a live call on the engine the
+voice profile names (Gemini Live, an OpenAI realtime model, or GPT-Live).
+The server holds the engine's session; the page carries the audio over one
+WebSocket. The agent on a call is built the way a typed turn builds it:
+the same prompt, memory modules, contexts and tools, plus how to talk on a
+call and a tool to end it.
+
+- **Working, not narrating.** While the agent runs a step, the page plays
+  soft key taps (the profile's "while it works" sound) instead of the agent
+  announcing its lookups.
+- **The quiet.** No provider ends a call on silence, and a call bills while
+  it is open, so the page counts real quiet: nobody speaking, the agent's
+  audio played out, nothing being worked on, not muted. After the profile's
+  "check in after" seconds the agent asks if you are still there; still
+  quiet, it says goodbye, and the call ends a moment after that has played.
+  The status line counts the last stretch down. Anything you say starts the
+  count over. The rules live in `static/js/call-state.js`, tested on Node
+  (`tests/js`).
+- **Noise.** OpenAI realtime filters a laptop mic's noise and ends your turn
+  when the thought does, not on a pause; Gemini waits 800ms of silence
+  before ending it.
+- **Mute** stops your voice going out (after a moment of silence, so the
+  engine hears you stop) and pauses the quiet count.
+
+---
+
 ## Configuration
 
 | Variable | Default | Description |

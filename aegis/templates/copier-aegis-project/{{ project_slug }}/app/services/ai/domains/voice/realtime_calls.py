@@ -164,11 +164,23 @@ def _model_settings(
                 settings["openai_live_instructions"] = instructions
             return settings
         settings["input_transcription_model"] = INPUT_TRANSCRIPTION
+        # Sounds took its turn: a laptop's keys and room set off the default
+        # detector, so it answered noise with "what's next?" and cut in on a
+        # pause mid-thought. Noise filtered for a laptop mic, and a turn
+        # that ends when the thought does.
+        settings["openai_input_noise_reduction"] = "far_field"
+        settings["openai_turn_detection"] = {"type": "semantic_vad", "eagerness": "low"}
     if model.startswith("google:"):
         # Background talk (a TV in the room) held Gemini's turn open with
         # its default detector: stricter about what STARTS a turn, quicker
-        # to END one.
-        settings["google_vad"] = {"start_sensitivity": "low", "end_sensitivity": "high"}
+        # to END one - but not on a breath mid-thought (Google's advice
+        # against cutting in is 500-800ms of silence). Gemini has no noise
+        # filter to set; the strict start is its defence against noise.
+        settings["google_vad"] = {
+            "start_sensitivity": "low",
+            "end_sensitivity": "high",
+            "silence_duration_ms": 800,
+        }
     if max_output_tokens:
         settings["max_tokens"] = max_output_tokens
     return settings
@@ -206,12 +218,16 @@ async def realtime_for(
     model: str,
     agent_slug: str | None,
     voice: str | None,
+    user_id: str,
+    admin: bool | None = None,
     instructions: str | None = None,
     max_output_tokens: int | None = None,
 ) -> Any:
     """The agent on ``model`` (a Pydantic AI realtime model string), built
-    exactly as a turn builds it. The engine's ``instructions`` (how to talk
-    on a call) lead its prompt, and ``max_output_tokens`` caps one reply."""
+    for the caller (``user_id``, ``admin``) by the function a typed turn
+    builds her with (``_build_turn``). The engine's ``instructions`` (how
+    to talk on a call) lead its prompt, and ``max_output_tokens`` caps one
+    reply."""
     from app.services.ai.domains.chat.agent_loader import resolve_agent
 
     config = await (resolve_agent(agent_slug) if agent_slug else resolve_agent())
@@ -220,9 +236,8 @@ async def realtime_for(
         config = replace(
             config, system_prompt=f"{instructions}\n\n{config.system_prompt}"
         )
-    agent, history = await ai._prepare_agent_and_context(
-        conversation, agent_config=config
-    )
+    setup = await ai._build_turn(conversation, config, user_id=user_id, admin=admin)
+    agent, history = setup.agent, setup.conversation_context
     return agent.realtime(
         model,
         instructions=await call_instructions(agent, history),

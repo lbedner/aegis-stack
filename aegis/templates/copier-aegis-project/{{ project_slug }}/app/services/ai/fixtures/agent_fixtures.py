@@ -5,7 +5,8 @@ like pre-registry chat: same system prompt, same sampling defaults. The
 agent loader resolves this row on DB backends and falls back to the same
 in-code definition on the memory backend, so this seed is the single DB
 source of the default agent. Beside it, the ``sentiment`` agent the batch
-scorer runs as, so its model is picked in Agents.
+scorer runs as, so its model is picked in Agents, and the app map, the
+memory module the default agent always has (``app_map``).
 """
 
 from collections.abc import Sequence
@@ -21,13 +22,14 @@ from app.services.ai.domains.chat.agent_loader import (
     default_agent_config,
 )
 from app.services.ai.domains.chat.agent_registry import seed_agent
+from app.services.ai.domains.chat.builtin_fetchers import APP_MAP
 from app.services.ai.domains.chat.sentiment import (
     SENTIMENT_AGENT_SLUG,
     SENTIMENT_MAX_TOKENS,
     SENTIMENT_SYSTEM_PROMPT,
     SENTIMENT_TEMPERATURE,
 )
-from app.services.ai.models.agents import Agent, Tool
+from app.services.ai.models.agents import Agent, MemoryModule, Tool
 
 # The registry only holds tools whose module was imported, and seeding runs
 # in processes that never build a chat agent (a CLI, a startup hook):
@@ -37,6 +39,7 @@ load_tools()
 
 __all__ = [
     "DEFAULT_AGENT_SLUG",
+    "attach_modules",
     "attach_tools",
     "built_in_agents",
     "default_agent_definition",
@@ -61,8 +64,7 @@ def attach_tools(session: Session, slug: str, names: Sequence[str]) -> int:
     if not missing:
         return 0  # a re-seed: nothing to look up
     rows = {
-        t.name: t
-        for t in session.exec(select(Tool).where(col(Tool.name).in_(missing)))
+        t.name: t for t in session.exec(select(Tool).where(col(Tool.name).in_(missing)))
     }
     attached = 0
     for name in missing:
@@ -73,6 +75,47 @@ def attach_tools(session: Session, slug: str, names: Sequence[str]) -> int:
         agent.tools.append(tool)
         attached += 1
     return attached
+
+
+def attach_modules(session: Session, slug: str, names: Sequence[str]) -> int:
+    """Give agent ``slug`` the memory modules ``names`` it lacks, and say
+    how many: additive by name, as ``attach_tools``. The caller commits."""
+    agent = session.exec(select(Agent).where(Agent.slug == slug)).first()
+    if agent is None:
+        return 0
+    missing = [name for name in names if name not in agent.memory_modules]
+    if not missing:
+        return 0  # a re-seed: nothing to look up
+    agent.memory_modules = [*agent.memory_modules, *missing]  # a new list: tracked
+    session.add(agent)
+    return len(missing)
+
+
+def seed_missing_modules(session: Session, definitions: list[dict[str, Any]]) -> int:
+    """Seed each of ``definitions`` whose slug has no row yet, and say how
+    many: an existing (possibly edited) row is never touched. The caller
+    commits."""
+    slugs = [definition["slug"] for definition in definitions]
+    present = set(
+        session.exec(select(MemoryModule.slug).where(col(MemoryModule.slug).in_(slugs)))
+    )
+    missing = [d for d in definitions if d["slug"] not in present]
+    session.add_all(MemoryModule(**definition) for definition in missing)
+    return len(missing)
+
+
+def app_map_module_definition() -> dict[str, Any]:
+    """The seed row for the app map: no text of its own, its fetcher's."""
+    return {
+        "slug": APP_MAP,
+        "name": "App map",
+        "description": "What the app is, read from its code: its parts, "
+        "tables and the changes to them",
+        "category": "app",
+        "fetch_function": APP_MAP,
+        "context_key": APP_MAP,
+        "priority": 10,
+    }
 
 
 def default_agent_definition() -> dict[str, Any]:
@@ -146,7 +189,8 @@ def load_agent_fixtures(session: Session) -> dict[str, int]:
         session: Database session
 
     Returns:
-        dict with counts: {"agents": N added, "tools": N added}
+        dict with counts: agents, tools and the tools and memory modules
+        granted the default agent (``tool_links``, ``module_links``)
     """
     added = seed_missing_agents(session, built_in_agents())
 
@@ -171,4 +215,18 @@ def load_agent_fixtures(session: Session) -> dict[str, int]:
     )
     if tool_links:
         session.commit()
-    return {"agents": added, "tools": tools_added, "tool_links": tool_links}
+
+    module_links = attach_modules(
+        session, DEFAULT_AGENT_SLUG, default_agent_config().memory_modules
+    )
+    # Its row, looked up only when this seed added an agent or a grant, so
+    # a re-seed looks nothing up.
+    if added or module_links:
+        seed_missing_modules(session, [app_map_module_definition()])
+        session.commit()
+    return {
+        "agents": added,
+        "tools": tools_added,
+        "tool_links": tool_links,
+        "module_links": module_links,
+    }

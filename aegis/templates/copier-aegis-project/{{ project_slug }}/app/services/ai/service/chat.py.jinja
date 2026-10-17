@@ -1,60 +1,19 @@
-"""The chat entrypoint: one non-streaming turn, end to end.
-
-``chat()`` orchestrates the full request: resolve agent row, set up the
-conversation, gather contexts (from the mixin chain below), run the
-model, record usage, persist. Streaming lives in ``streaming.py``.
+"""A turn's conversation: set up before the model runs (the agent row, the
+conversation with the message added, the runnable ``_build_turn`` makes)
+and saved after. The turn itself, streamed or run to its end, is
+``streaming.py``'s.
 """
 
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
-import uuid
-{% if ai_framework == "pydantic-ai" %}
-from pydantic_ai.exceptions import ModelRetry, UnexpectedModelBehavior
-{% endif %}
-from app.core.log import logger
+
 from app.services.ai.domains.llm.config import AIServiceConfig
-from app.services.ai.domains.chat.agent_loader import (
-    DEFAULT_AGENT_SLUG,
-    resolve_agent,
-)
-from app.services.ai.domains.chat.attachments import (
-    ChatAttachment,
-{% if ai_framework == "pydantic-ai" %}    build_user_content,
-{% endif %}    prepare_turn,
-)
-{%- if ai_backend != "memory" and ai_framework == "pydantic-ai" %}
-from app.services.ai.domains.chat.module_context import render_memory_modules
-{%- endif %}
-{%- if ai_framework == "pydantic-ai" %}
-from app.services.ai.domains.chat.readings import (
-    merge_staged_readings,
-    reading_stage,
-{%- if ai_backend != "memory" %}
-    user_readings,
-{%- endif %}
-)
-{%- endif %}
+from app.services.ai.domains.chat.agent_loader import resolve_agent
+from app.services.ai.domains.chat.attachments import ChatAttachment, prepare_turn
 from app.services.ai.domains.chat.titles import conversation_title
-{%- if ai_backend != "memory" and ai_framework == "pydantic-ai" %}
-from app.services.ai.domains.chat.user_memory import (
-    build_user_memory_context,
-    memory_user,
-)
-{%- elif ai_backend != "memory" %}
-from app.services.ai.domains.chat.user_memory import build_user_memory_context
-{%- endif %}
-from app.services.ai.models import Conversation, ConversationMessage, MessageRole
-from app.services.ai.service.base import (
-    AIServiceError,
-    ConversationError,
-{% if ai_framework == "pydantic-ai" %}    ProviderError,
-{% endif %})
-{%- if ai_backend != "memory" and ai_framework == "pydantic-ai" %}
-from app.services.ai.service.prompt import PromptMixin, history_char_budget
-{%- else %}
-from app.services.ai.service.prompt import PromptMixin
-{%- endif %}
+from app.services.ai.models import Conversation, MessageRole
+from app.services.ai.service.base import ConversationError
+from app.services.ai.service.turn import TurnMixin, TurnSetup
 
 from app.core.tools import load_tools
 {%- if ai_rag %}
@@ -66,198 +25,8 @@ from app.services.ai.domains.chat.rag_context import RAGContext
 load_tools()
 
 
-@dataclass
-class TurnSetup:
-    """What ``_assemble_turn`` hands back: the turn, ready to run."""
-
-    conversation: Conversation
-    agent_config: Any
-{% if ai_rag %}
-    rag_context: RAGContext | None = None
-{% endif %}
-{%- if ai_framework == "pydantic-ai" %}
-    agent: Any = None
-    conversation_context: str = ""
-{%- else %}
-    llm: Any = None
-    messages: list[Any] | None = None
-{%- endif %}
-
-
-class ChatMixin(PromptMixin):
-    """Non-streaming chat turn plus conversation setup/teardown."""
-
-    async def chat(
-        self,
-        message: str,
-        conversation_id: str | None = None,
-        user_id: str = "default",
-        owner_user_id: int | None = None,
-        admin: bool | None = None,
-        agent_slug: str | None = None,
-        surface: str | None = None,
-        attachments: list[ChatAttachment] | None = None,
-        subject: str | None = None,
-{% if ai_rag %}
-        use_rag: bool = False,
-        rag_collection: str | None = None,
-        rag_top_k: int | None = None,
-{% endif %}    ) -> ConversationMessage:
-        """
-        Send a chat message and get AI response.
-
-        Args:
-            message: The user's message
-            conversation_id: Optional conversation ID (creates new if None)
-            user_id: User identifier for conversation ownership
-            owner_user_id: The turn's owner (``current_owner_user_id``)
-            agent_slug: Agent row to speak as (None = the default agent)
-            surface: Originating chat surface, recorded on new
-                conversations so each embedded chat lists only its own
-                history
-            attachments: Image parts riding this turn (screenshots,
-                receipts); the model sees them alongside the message
-            subject: What the turn is about (``current_subject``): an
-                app's scope key, kept on a new conversation
-{% if ai_rag %}
-            use_rag: Enable RAG context injection from indexed codebase
-            rag_collection: Collection to search (uses config default if None)
-            rag_top_k: Number of results to retrieve (uses config default if None)
-{% endif %}
-        Returns:
-            ConversationMessage: The AI's response message
-
-        Raises:
-            AIServiceError: If service is disabled or not configured
-            ProviderError: If AI provider fails
-            ConversationError: If conversation management fails
-        """
-        if not self.config.enabled:
-            raise AIServiceError("AI service is disabled")
-
-        try:
-            setup = await self._assemble_turn(
-                message,
-                conversation_id=conversation_id,
-                user_id=user_id,
-                agent_slug=agent_slug,
-                surface=surface,
-                attachments=attachments,
-                subject=subject,
-{% if ai_rag %}
-                use_rag=use_rag,
-                rag_collection=rag_collection,
-                rag_top_k=rag_top_k,
-{% endif %}
-            )
-            conversation = setup.conversation
-{%- if ai_backend != "memory" %}
-            agent_config = setup.agent_config  # usage is attributed to the agent
-{%- endif %}
-{% if ai_rag %}
-            rag_context = setup.rag_context
-{% endif %}
-{%- if ai_framework == "pydantic-ai" %}
-            agent, conversation_context = setup.agent, setup.conversation_context
-
-            # Get AI response. The turn's user rides a ContextVar so a
-            # memory write from inside the model call knows whose it is.
-            start_time = datetime.now(UTC)
-{% if ai_backend != "memory" %}
-            with (
-                memory_user(
-                    user_id,
-                    owner_user_id=owner_user_id,
-                    agent_slug=agent_slug,
-                    conversation_id=conversation.id,
-                    subject=subject,
-                    admin=admin,
-                ),
-                reading_stage() as staged_readings,
-            ):
-{% else %}
-            with reading_stage() as staged_readings:
-{% endif %}
-                result = await agent.run(
-                    build_user_content(conversation_context, attachments)
-                )
-            # Extractions recorded mid-run outlive the image AND the
-            # thread: they belong to the user, so a new conversation
-            # opens still holding them.
-            await merge_staged_readings(
-                user_id, staged_readings, legacy=conversation.metadata.get("readings")
-            )
-            end_time = datetime.now(UTC)
-            response_time_ms = (end_time - start_time).total_seconds() * 1000
-
-            # Add AI response to conversation
-            ai_message = conversation.add_message(
-                MessageRole.ASSISTANT, result.output, message_id=str(uuid.uuid4())
-            )
-{% else %}
-            llm, messages = setup.llm, setup.messages
-
-
-            # Get AI response
-            start_time = datetime.now(UTC)
-            result = await llm.ainvoke(messages)
-            end_time = datetime.now(UTC)
-            response_time_ms = (end_time - start_time).total_seconds() * 1000
-
-            # Add AI response to conversation
-            ai_message = conversation.add_message(
-                MessageRole.ASSISTANT, result.content, message_id=str(uuid.uuid4())
-            )
-{% endif %}
-            # Store conversation ID in message metadata for easy lookup
-            ai_message.metadata["conversation_id"] = conversation.id
-            ai_message.metadata["response_time_ms"] = response_time_ms
-{% if ai_rag %}
-            # Add RAG sources to response metadata if RAG was used
-            if rag_context and rag_context.results:
-                ai_message.metadata["rag_sources"] = rag_context.to_metadata()
-                ai_message.metadata["rag_collection"] = rag_context.collection
-
-{% endif %}
-{%- if ai_backend != "memory" %}
-            # Record usage tracking, attributed to the resolved agent
-            usage = self._extract_usage(result)
-            await self._record_usage(
-                f"chat:{agent_config.slug}",
-                usage,
-                user_id,
-                duration_ms=response_time_ms,
-                conversation_id=conversation.id,
-            )
-
-            # Add TPS (tokens per second) to metadata for performance monitoring
-            output_tokens = usage.get("output_tokens", 0)
-            if output_tokens > 0 and response_time_ms > 0:
-                ai_message.metadata["gen_tps"] = round(
-                    output_tokens * 1000 / response_time_ms, 1
-                )
-            ai_message.metadata["input_tokens"] = usage.get("input_tokens", 0)
-            ai_message.metadata["output_tokens"] = output_tokens
-{% endif %}
-            # Finalize conversation (update metadata and save)
-            await self._finalize_conversation(conversation, response_time_ms)
-
-            return ai_message
-{% if ai_framework == "pydantic-ai" %}
-        except (ModelRetry, UnexpectedModelBehavior) as e:
-            error_msg = f"AI provider error: {e}"
-            logger.error(error_msg)
-            raise ProviderError(error_msg) from e
-{% endif %}
-        except AIServiceError:
-            # ConversationError and friends carry meaning for callers (the
-            # API router maps them to distinct status codes); wrapping them
-            # would collapse that distinction.
-            raise
-        except Exception as e:
-            error_msg = f"Chat processing failed: {e}"
-            logger.exception(error_msg)
-            raise AIServiceError(error_msg) from e
+class ChatMixin(TurnMixin):
+    """A turn's conversation setup and teardown."""
 
     async def _assemble_turn(
         self,
@@ -269,16 +38,17 @@ class ChatMixin(PromptMixin):
         surface: str | None,
         attachments: list[ChatAttachment] | None,
         subject: str | None = None,
+        owner_user_id: int | None = None,
+        admin: bool | None = None,
 {% if ai_rag %}
         use_rag: bool = False,
         rag_collection: str | None = None,
         rag_top_k: int | None = None,
 {% endif %}
     ) -> TurnSetup:
-        """Everything a turn needs before the model runs, streaming or not:
-        the agent row, the conversation with the user message added, every
-        context block, and the framework-specific runnable built from them.
-        ``chat()`` and ``stream_chat()`` differ only in how they run it."""
+        """Everything a turn needs before the model runs: the agent row,
+        the conversation with the user message added, and the runnable
+        ``_build_turn`` makes for it."""
         current = self.config
 
         # Resolve the requested agent definition (DB row or code default)
@@ -315,98 +85,15 @@ class ChatMixin(PromptMixin):
                 allowed_collections=agent_config.knowledge_base_ids,
             )
 
-{% endif %}            # The system status and the usage and model-catalog
-        # self-awareness belong to the default ops assistant. A custom
-        # agent (a finance analyst, say) would pay their token cost every
-        # turn without ever using them, and one that answers an app's own
-        # users must not see the app's infrastructure.
-        is_default_agent = (
-            agent_config is None or agent_config.slug == DEFAULT_AGENT_SLUG
-        )
-        health_context, health_warning = (
-            await self._build_health_context() if is_default_agent else (None, None)
-        )
-        usage_context = (
-            await self._build_usage_context() if is_default_agent else None
-        )
-        catalog_context = (
-            await self._build_catalog_context() if is_default_agent else None
-        )
-
-{% if ai_backend != "memory" %}            # Guarded per-user memory block (saved via the save_memory tool)
-        memory_context = await build_user_memory_context(user_id)
-{%- if ai_framework == "pydantic-ai" %}
-
-        # History budget scales with the EFFECTIVE model for this
-        # request (the agent's pin wins over the active default).
-        from app.services.ai.domains.llm.catalog import context_window_for
-
-        effective_model = (
-            agent_config.model_id
-            if agent_config is not None and agent_config.model_id
-            else current.model
-        )
-        context_window = await context_window_for(effective_model)
-        history_budget = history_char_budget(context_window)
-
-        # Recorded readings, from the same per-user store as the facts:
-        # an extraction belongs to the user, not to the thread it was
-        # read in, so a new conversation opens still holding it.
-        readings = await user_readings(user_id)
-
-        # The agent row's memory modules (e.g. the finance snapshot).
-        # LangChain's runtime takes neither: its prompt is the persona,
-        # the contexts and the history, clipped by message count.
-        agent_modules_context = await render_memory_modules(
-            agent_config.memory_modules, user_id=user_id, subject=subject
-        )
-{%- endif %}
-{% endif %}
-{%- if ai_rag %}
-        # Build RAG stats context (always included when RAG enabled)
-        rag_stats_context = await self._build_rag_stats_context()
-{% endif %}
-
-{%- if ai_framework == "pydantic-ai" %}
-        agent, conversation_context = await self._prepare_agent_and_context(
+{% endif %}        return await self._build_turn(
             conversation,
-{% if ai_rag %}
-            rag_context=rag_context,
-            rag_stats_context=rag_stats_context,
-{% endif %}            health_context=health_context,
-            health_warning=health_warning,
-            usage_context=usage_context,
-            catalog_context=catalog_context,
-            agent_config=agent_config,
-{% if ai_backend != "memory" %}            memory_context=memory_context,
-            agent_modules_context=agent_modules_context,
-            history_budget=history_budget,
-            context_window=context_window,
-            readings=readings,
+            agent_config,
+            user_id=user_id,
+            subject=subject,
+            owner_user_id=owner_user_id,
+            admin=admin,
+{% if ai_rag %}            rag_context=rag_context,
 {% endif %}        )
-        return TurnSetup(
-            conversation=conversation,
-            agent_config=agent_config,
-{% if ai_rag %}            rag_context=rag_context,
-{% endif %}            agent=agent,
-            conversation_context=conversation_context,
-        )
-{%- else %}
-        llm, messages = await self._prepare_llm_and_messages(
-{% if ai_rag %}
-            conversation, rag_context, rag_stats_context, health_context, health_warning, usage_context, catalog_context, agent_config=agent_config{% if ai_backend != "memory" %}, memory_context=memory_context{% endif %}
-{% else %}
-            conversation, None, None, health_context, health_warning, usage_context, catalog_context, agent_config=agent_config{% if ai_backend != "memory" %}, memory_context=memory_context{% endif %}
-{% endif %}
-        )
-        return TurnSetup(
-            conversation=conversation,
-            agent_config=agent_config,
-{% if ai_rag %}            rag_context=rag_context,
-{% endif %}            llm=llm,
-            messages=messages,
-        )
-{%- endif %}
 
     async def _setup_conversation(
         self,
@@ -466,7 +153,6 @@ class ChatMixin(PromptMixin):
         self,
         conversation: Conversation,
         response_time_ms: float,
-        is_streaming: bool = False,
     ) -> None:
         """
         Update conversation metadata and save.
@@ -474,7 +160,6 @@ class ChatMixin(PromptMixin):
         Args:
             conversation: The conversation to finalize
             response_time_ms: Response time in milliseconds
-            is_streaming: Whether this was a streaming response
         """
         # Update conversation metadata
         metadata_update = {
@@ -482,9 +167,6 @@ class ChatMixin(PromptMixin):
             "total_messages": conversation.get_message_count(),
             "last_activity": datetime.now(UTC).isoformat(),
         }
-
-        if is_streaming:
-            metadata_update["streaming"] = True
 
         conversation.metadata.update(metadata_update)
 

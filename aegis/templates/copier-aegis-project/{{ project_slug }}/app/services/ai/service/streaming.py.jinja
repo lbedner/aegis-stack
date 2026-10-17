@@ -1,8 +1,8 @@
-"""The streaming chat entrypoint.
-
-Same turn shape as ``chat()`` one file over, but yielding
-``StreamingMessage`` chunks as the model produces them, with usage
-captured after the stream drains.
+"""The chat turn: ``stream_chat()`` yields ``StreamingMessage`` chunks as
+the model produces them, with usage captured after the stream drains;
+``chat()`` runs the same turn to its end and returns the reply. One turn
+however it is asked for, so an announcement or an API call keeps the
+steps it took and their cost as the chat page does.
 """
 
 from collections.abc import AsyncIterator
@@ -41,6 +41,7 @@ from app.services.ai.domains.chat.user_memory import memory_user
 {%- endif %}
 from app.services.ai.domains.llm.providers import ProviderNotInstalledError
 from app.services.ai.models import (
+    ConversationMessage,
     MessageRole,
     StreamingConversation,
     StreamingMessage,
@@ -58,6 +59,7 @@ from app.services.ai.service.trace import (
     nested_tool_calls,
     record_tool_call,
     record_tool_result,
+    tool_notice,
 )
 {%- endif %}
 
@@ -78,27 +80,55 @@ def _stop_reason(metadata: dict[str, Any] | None) -> str | None:
 
 {% endif %}
 class StreamingMixin(ChatMixin):
-    """Streaming variant of the chat turn."""
-{% if ai_framework == "pydantic-ai" %}
-    @staticmethod
-    def _tool_notice(
-        tool_name: str,
-        *,
-        message_id: str,
-        conversation_id: str | None,
-        stream_delta: bool,
-        args: str = "",
-    ) -> StreamingMessage:
-        """A content-free chunk naming a tool call, for the UI trail."""
-        return StreamingMessage(
-            content="",
-            is_final=False,
-            is_delta=stream_delta,
-            message_id=message_id,
+    """The chat turn, streamed or run to its end."""
+
+    async def chat(
+        self,
+        message: str,
+        conversation_id: str | None = None,
+        user_id: str = "default",
+        owner_user_id: int | None = None,
+        admin: bool | None = None,
+        agent_slug: str | None = None,
+        surface: str | None = None,
+        attachments: list[ChatAttachment] | None = None,
+        subject: str | None = None,
+{% if ai_rag %}
+        use_rag: bool = False,
+        rag_collection: str | None = None,
+        rag_top_k: int | None = None,
+{% endif %}    ) -> ConversationMessage:
+        """``stream_chat`` run to its end: the reply, with the steps it
+        took, its model and its cost, as the streamed turn keeps them;
+        ``AIServiceError`` if the turn ends with no reply."""
+        final: StreamingMessage | None = None
+        async for frame in self.stream_chat(
+            message,
             conversation_id=conversation_id,
-            metadata={"event": "tool", "tool": tool_name, "args": args},
+            user_id=user_id,
+            owner_user_id=owner_user_id,
+            admin=admin,
+            agent_slug=agent_slug,
+            surface=surface,
+            attachments=attachments,
+            subject=subject,
+{% if ai_rag %}
+            use_rag=use_rag,
+            rag_collection=rag_collection,
+            rag_top_k=rag_top_k,
+{% endif %}        ):
+            if frame.is_final:
+                final = frame
+        if final is None or final.message_id is None:
+            raise AIServiceError("The turn ended without a reply.")
+        return ConversationMessage(
+            id=final.message_id,
+            role=MessageRole.ASSISTANT,
+            content=final.content,
+            timestamp=final.timestamp,
+            metadata=final.metadata,
         )
-{% endif %}
+
     async def stream_chat(
         self,
         message: str,
@@ -155,6 +185,8 @@ class StreamingMixin(ChatMixin):
                 surface=surface,
                 attachments=attachments,
                 subject=subject,
+                owner_user_id=owner_user_id,
+                admin=admin,
 {% if ai_rag %}
                 use_rag=use_rag,
                 rag_collection=rag_collection,
@@ -184,9 +216,8 @@ class StreamingMixin(ChatMixin):
 
             # Turn state the bookkeeping after the stream reads, whichever
             # framework produced the stream. Pydantic AI fills all of it
-            # from its event stream; LangChain streams text deltas only
-            # (no tool events, no per-run usage), so under LangChain these
-            # stay empty and usage is recorded as zero.
+            # from its event stream; LangChain streams text deltas (no tool
+            # events) and token counts only where its provider reports them.
 {% if ai_backend != "memory" %}
             stream_usage: dict[str, int] = {"input_tokens": 0, "output_tokens": 0}
 {% endif %}
@@ -239,7 +270,7 @@ class StreamingMixin(ChatMixin):
                             # and notify the UI which tool is running.
                             streaming_conv.accumulated_content = ""
                             record_tool_call(tool_trace, event)
-                            yield self._tool_notice(
+                            yield tool_notice(
                                 event.part.tool_name,
                                 args=call_args_preview(event.part.args),
                                 message_id=message_id,
@@ -257,7 +288,7 @@ class StreamingMixin(ChatMixin):
                             attach_cards(tool_trace, drawn_cards)
 {%- endif %}
                             for name, args in nested_tool_calls(event):
-                                yield self._tool_notice(
+                                yield tool_notice(
                                     name,
                                     args=args,
                                     message_id=message_id,
@@ -272,22 +303,9 @@ class StreamingMixin(ChatMixin):
                                 None,
                             )
 {%- if ai_backend != "memory" %}
-                            usage_obj = (
-                                event.result.usage()
-                                if callable(getattr(event.result, "usage", None))
-                                else getattr(event.result, "usage", None)
-                            )
-                            if usage_obj:
-                                stream_usage = {
-                                    "input_tokens": getattr(
-                                        usage_obj, "input_tokens", 0
-                                    )
-                                    or 0,
-                                    "output_tokens": getattr(
-                                        usage_obj, "output_tokens", 0
-                                    )
-                                    or 0,
-                                }
+                            # The shared extractor: cache-read and
+                            # cache-write tokens ride along for pricing.
+                            stream_usage = self._extract_usage(event.result)
 {%- endif %}
 
                         if not text_chunk:
@@ -321,6 +339,14 @@ class StreamingMixin(ChatMixin):
                     _stop_reason(getattr(chunk, "response_metadata", None))
                     or finish_reason
                 )
+{%- if ai_backend != "memory" %}
+                # Token counts ride the chunks that carry them, where the
+                # provider reports them while streaming (Anthropic splits
+                # input and output across two), so they add up.
+                if counts := getattr(chunk, "usage_metadata", None):
+                    for key in ("input_tokens", "output_tokens"):
+                        stream_usage[key] += counts.get(key, 0) or 0
+{%- endif %}
                 # Get content from chunk
                 text_chunk = chunk.content if hasattr(chunk, 'content') else str(chunk)
                 if not text_chunk:
@@ -375,14 +401,17 @@ class StreamingMixin(ChatMixin):
 
 {% endif %}
 {%- if ai_backend != "memory" %}
-            # Record usage, attributed to the resolved agent. Zero under
-            # LangChain, which reports no token counts while streaming.
-            await self._record_usage(
-                f"stream_chat:{agent_config.slug}",
+            # The model that answered: an agent's pin, else the global. It
+            # is what the turn is priced at and what the message reports.
+            answered_by = agent_config.model_id or current.model
+            # One price lookup: the ledger row's cost is the message's.
+            cost = await self._record_usage(
+                f"chat:{agent_config.slug}",
                 stream_usage,
                 user_id,
                 duration_ms=response_time_ms,
                 conversation_id=conversation.id,
+                model=answered_by,
             )
 {%- endif %}
             # Extractions recorded mid-run outlive the image AND the
@@ -392,10 +421,8 @@ class StreamingMixin(ChatMixin):
                 user_id, staged_readings, legacy=conversation.metadata.get("readings")
             )
 {% if ai_backend != "memory" %}
-            # Calculate cost for status line
             input_tokens = stream_usage.get("input_tokens", 0)
             output_tokens = stream_usage.get("output_tokens", 0)
-            cost = await self.calculate_cost(input_tokens, output_tokens)
 
             # Calculate TPS (tokens per second) for performance metrics
             # This is especially useful for Ollama but works for all providers
@@ -404,8 +431,11 @@ class StreamingMixin(ChatMixin):
                 gen_tps = round(output_tokens * 1000 / response_time_ms, 1)
 {% endif %}
             final_metadata: dict[str, Any] = {
+                "conversation_id": conversation.id,
                 "provider": current.provider,
-                "model": current.model,
+{% if ai_backend != "memory" %}                "model": answered_by,
+{% else %}                "model": current.model,
+{% endif %}
                 "response_time_ms": response_time_ms,
                 "stream_complete": True,
 {% if ai_backend != "memory" %}                # Token usage and cost for CLI status line
@@ -436,9 +466,7 @@ class StreamingMixin(ChatMixin):
             ai_message.metadata.update(final_metadata)
 
             # Finalize conversation (update metadata and save)
-            await self._finalize_conversation(
-                conversation, response_time_ms, is_streaming=True
-            )
+            await self._finalize_conversation(conversation, response_time_ms)
 
             yield StreamingMessage(
                 content=final_content,

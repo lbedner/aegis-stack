@@ -1,6 +1,6 @@
 """The system model's parts: every installed component and service, the
 sub-services in them (``ai.voice``, and a folder part of one: ``ai.rag``),
-the stack's own code (``system``) and the worker's queue, inside the cache.
+the app's shared code (``system``) and the worker's queue, inside the cache.
 Each with its concern, its package's first docstring line and its other
 names; ``ownership`` says which part owns any file."""
 
@@ -18,6 +18,11 @@ from app.core.source_index import ROOT
 QUEUE, QUEUE_IN = "queue", "cache"
 QUEUE_PART = Part(
     kind="component", category=Category.DATA, cli="", tier=2, role="queue", order=45
+)
+# What the queue is: it has no package whose docstring would say.
+QUEUE_ABOUT = (
+    "The worker's queue, kept in the cache's Redis: while Redis is down no "
+    "work is handed off or picked up."
 )
 # Every part with a place on the map: each declared one, and the queue.
 PLACED = {**PARTS, QUEUE: QUEUE_PART}
@@ -96,7 +101,7 @@ def _part(
 ) -> PartNode:
     if parent is not None:
         category = parent.category
-    elif kind is Kind.STACK:
+    elif kind is Kind.SHARED:
         category = Category.STACK
     else:
         category = concern(name, package)
@@ -115,18 +120,19 @@ def parts(
     components: Iterable[str], services: Iterable[str], index: source_index.Index
 ) -> list[PartNode]:
     """Every part: ``components`` and ``services`` (health names), their
-    sub-services, the queue with a worker, and the stack's own code."""
+    sub-services, the queue with a worker, and the app's shared code."""
     packages = _Packages(index)
     nodes = [
         _part(Kind.COMPONENT, n, packages.of(Kind.COMPONENT, n)) for n in components
     ]
     if "worker" in components:
         holder = next((n for n in nodes if n.name == QUEUE_IN), None)
-        nodes.append(
+        queue = (
             _part(Kind.COMPONENT, QUEUE, None, holder)
             if holder
             else PartNode(kind=Kind.COMPONENT, name=QUEUE, category=QUEUE_PART.category)
         )
+        nodes.append(queue.model_copy(update={"description": QUEUE_ABOUT}))
     for name in services:
         service = _part(Kind.SERVICE, name, packages.of(Kind.SERVICE, name))
         nodes += [service, *_subs(service, index)]
@@ -150,7 +156,7 @@ def _subs(service: PartNode, index: source_index.Index) -> list[PartNode]:
 
 def _folders(nodes: list[PartNode], index: source_index.Index) -> list[PartNode]:
     """The services folders that are no service: a sub-service of the one
-    they say they are part of (rag in AI), or the stack's own code."""
+    they say they are part of (rag in AI), or the app's shared code."""
     by_id = {n.id: n for n in nodes}
     found = []
     for module in sorted(index.paths):
@@ -160,8 +166,8 @@ def _folders(nodes: list[PartNode], index: source_index.Index) -> list[PartNode]
         owner = ownership.owner(module, index)
         if owner is None:
             continue
-        if owner.kind == ownership.STACK:
-            found.append(_part(Kind.STACK, folder, index.get(module)))
+        if owner.kind == ownership.SHARED:
+            found.append(_part(Kind.SHARED, folder, index.get(module)))
         elif owner.kind == ownership.SERVICE and owner.sub == folder:
             parent = by_id.get(node_id(Kind.SERVICE, owner.name))
             if parent is not None:
@@ -190,7 +196,7 @@ def node_of(module: str, index: source_index.Index, ids: set[str] | None) -> str
 
 def service_folders(index: source_index.Index, ids: set[str]) -> list[tuple[str, str]]:
     """Each services folder that is a node's code, with that node's id:
-    ``("rag", "service:ai.rag")``, ``("system", "stack:system")``."""
+    ``("rag", "service:ai.rag")``, ``("system", "shared:system")``."""
     return [
         (folder, found)
         for folder in index.packages_in("app.services")

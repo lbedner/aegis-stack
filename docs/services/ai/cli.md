@@ -20,7 +20,7 @@ my-app ai sentiment       # Conversation sentiment statistics
 # Agent Registry
 my-app agents list             # All agents with their grants
 my-app agents show <slug>      # One agent's full definition
-my-app agents test <slug>      # One live turn through the agent
+my-app agents test <slug>      # One chat turn as the agent
 my-app memory-modules list     # Memory module catalog
 my-app memory-modules show <slug>  # One module's definition
 
@@ -245,7 +245,7 @@ my-app agents test assistant
 my-app agents test support -m "What are your hours?"
 ```
 
-Runs one live turn through the agent's resolved configuration against the configured model and prints the reply.
+Runs one turn the way chat does (the agent's tools, memory modules and code mode, usage recorded) in a conversation of its own, deleted after, and prints the reply.
 
 ### memory-modules list / show
 

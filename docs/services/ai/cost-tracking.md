@@ -179,12 +179,13 @@ The frontend includes an analytics tab (`ai_analytics_tab/`) with real-time usag
 
 ## Cost Calculation
 
-**Location:** `app/services/ai/service.py`
+**Location:** `app/services/ai/domains/spend/recording.py`
+
+A chat turn is priced once, at the model that answered it (the agent's pinned model, else the active one): the ledger row's cost is the cost the message reports, whether the turn was streamed or run to its end. Its action is `chat:<agent slug>`.
 
 ```python
-# Simplified - actual implementation in service.py
-async def calculate_cost(input_tokens: int, output_tokens: int) -> float:
-    # Look up current model in catalog
+# Simplified - actual implementation in recording.py
+async def calculate_cost(model_id: str, input_tokens: int, output_tokens: int) -> float:
     price = get_latest_price(model_id)  # ORDER BY effective_date DESC LIMIT 1
     if not price:
         return 0.0

@@ -74,7 +74,7 @@ def _target(module: str, folder: str) -> str | None:
     anything: the component or other service that owns it (a core client
     by what it fronts), as a node's id."""
     found = ownership.owner(module) if module.startswith("app.") else None
-    if found is None or found.kind == ownership.STACK:
+    if found is None or found.kind == ownership.SHARED:
         return None
     if found.kind == ownership.SERVICE:
         return None if found.name == folder else node_id(Kind.SERVICE, found.name)

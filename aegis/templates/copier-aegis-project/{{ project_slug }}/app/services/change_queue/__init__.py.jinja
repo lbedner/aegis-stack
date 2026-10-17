@@ -53,8 +53,8 @@ from app.services.change_queue.schemas import ChangeDisplayRow
 # Registrants, loaded last: each imports ``register`` from this package.
 load_change_types()
 
-# The stack's own code, not a service (``ownership``).
-PART_OF = "stack"
+# Shared code, not a service (``ownership``).
+PART_OF = "shared"
 
 
 __all__ = [

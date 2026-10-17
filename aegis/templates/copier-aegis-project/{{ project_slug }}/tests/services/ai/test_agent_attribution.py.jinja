@@ -20,9 +20,11 @@ from pydantic_ai.run import AgentRunResultEvent
 import pytest
 
 from app.services.ai.domains.chat.agent_loader import AgentConfig, default_agent_config
+from app.services.ai.domains.chat.prompts import LEGACY_SYSTEM_PROMPT
 from app.services.ai.service import AIService
 import app.services.ai.service.chat as chat_module
 import app.services.ai.service.prompt as prompt_module
+import app.services.ai.service.turn as turn_module
 
 
 class _FakeUsage:
@@ -78,9 +80,6 @@ def _built(agent: Any) -> Any:
 
 
 class _FakeAgent:
-    async def run(self, prompt: str) -> _FakeResult:
-        return _FakeResult()
-
     @asynccontextmanager
     async def run_stream_events(self, prompt: str) -> "AsyncIterator[Any]":
         yield _FakeEventStream()
@@ -125,9 +124,9 @@ def harness(
     async def no_memory(user_id: str, **kwargs: object) -> None:
         return None
 
-    monkeypatch.setattr(chat_module, "build_user_memory_context", no_memory)
+    monkeypatch.setattr(turn_module, "build_user_memory_context", no_memory)
 
-    recorder = AsyncMock()
+    recorder = AsyncMock(return_value=0.0)  # the cost it priced
     monkeypatch.setattr(service, "_record_usage", recorder)
 
     captured: dict[str, Any] = {}
@@ -155,37 +154,46 @@ def _stub_resolve(
     monkeypatch.setattr(chat_module, "resolve_agent", resolve)
 
 
+class TestATurnIsOneTurn:
+    """``chat()`` ran its own copy of the turn and kept only text and
+    tokens: an announcement or an API call lost the steps it took and
+    their cost, and the next turn lost what the steps line carries. It runs
+    ``stream_chat()`` to its end now: one setup, one recording."""
+
+    async def test_chat_keeps_the_steps_it_took(
+        self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
+    ) -> None:
+        service, _recorder, _captured, monkeypatch = harness
+        _stub_resolve(monkeypatch, _custom_config())
+
+        reply = await service.chat("anything?", user_id="7")
+
+        assert reply.metadata["tool_trace"][0]["tool"] == "lookup"
+        assert reply.content.endswith("ok")
+
+    async def test_a_turn_is_priced_once_at_the_model_that_answered(
+        self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
+    ) -> None:
+        """An agent's pin is the model that answered: what the ledger
+        prices and what the message reports, from one price lookup."""
+        service, recorder, _captured, monkeypatch = harness
+        _stub_resolve(monkeypatch, _custom_config(model_id="pinned-model"))
+        recorder.return_value = 0.25
+
+        reply = await service.chat("anything?", user_id="7")
+
+        (call,) = recorder.await_args_list
+        assert call.args[0] == "chat:support"
+        assert call.kwargs["model"] == "pinned-model"
+        assert (reply.metadata["model"], reply.metadata["cost"]) == ("pinned-model", 0.25)
+
+
 class TestTheTurnCarriesItsUser:
     """``save_memory`` resolves its user from a ContextVar the runtime sets
     for the turn. Unset, the tool declines and returns a plain string the
     model reports as a successful save - so the user is told a fact was
-    stored while nothing was written. Both runtimes must set it.
+    stored while nothing was written. The turn must set it.
     """
-
-    async def test_chat_path_sets_the_user_for_the_turn(
-        self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
-    ) -> None:
-        from app.services.ai.domains.chat.user_memory import current_user_id
-
-        service, _recorder, _captured, monkeypatch = harness
-        _stub_resolve(monkeypatch, _custom_config())
-        seen: dict[str, Any] = {}
-
-        class _RecordingAgent(_FakeAgent):
-            async def run(self, prompt: str) -> Any:
-                seen["user_id"] = current_user_id.get()
-                return await super().run(prompt)
-
-        monkeypatch.setattr(
-            prompt_module,
-            "get_agent",
-            _built(_RecordingAgent()),
-        )
-
-        await service.chat("remember something", user_id="u42")
-
-        assert seen["user_id"] == "u42"
-        assert current_user_id.get() is None  # restored after the turn
 
     async def test_streaming_path_sets_the_user_for_the_turn(
         self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
@@ -243,26 +251,6 @@ class TestTheTurnCarriesItsSubject:
         assert seen["subject"] == "3"
         assert current_subject.get() is None
 
-    async def test_chat_path_sets_the_subject_for_the_turn(
-        self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
-    ) -> None:
-        from app.core.tools import current_subject
-
-        service, _recorder, _captured, monkeypatch = harness
-        _stub_resolve(monkeypatch, _custom_config())
-        seen: dict[str, Any] = {}
-
-        class _RecordingAgent(_FakeAgent):
-            async def run(self, prompt: str) -> Any:
-                seen["subject"] = current_subject.get()
-                return await super().run(prompt)
-
-        monkeypatch.setattr(prompt_module, "get_agent", _built(_RecordingAgent()))
-
-        await service.chat("downloads?", user_id="7", subject="3")
-
-        assert seen["subject"] == "3"
-
     async def test_a_briefing_is_fetched_for_the_subject(
         self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
     ) -> None:
@@ -276,12 +264,39 @@ class TestTheTurnCarriesItsSubject:
             asked.update(kwargs)
             return ""
 
-        monkeypatch.setattr(chat_module, "render_memory_modules", render)
+        monkeypatch.setattr(turn_module, "render_memory_modules", render)
 
         async for _chunk in service.stream_chat("downloads?", user_id="7", subject="3"):
             pass
 
         assert (asked["user_id"], asked["subject"]) == ("7", "3")
+
+    @pytest.mark.parametrize("admin", [True, False])
+    async def test_a_briefing_is_rendered_as_the_caller(
+        self,
+        harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch],
+        admin: bool,
+    ) -> None:
+        """The app map gives an admin the parts: its fetcher asks who is
+        calling, and the turn had bound nobody when it rendered, so an
+        admin's typed turn read the map anyone gets."""
+        from app.core.config import settings
+        from app.services.shared.deps import caller_is_admin
+
+        service, _recorder, _captured, monkeypatch = harness
+        _stub_resolve(monkeypatch, _custom_config(memory_modules=("app_map",)))
+        seen: list[bool] = []
+
+        async def render(modules: Any, **kwargs: Any) -> str:
+            seen.append(await caller_is_admin())
+            return ""
+
+        monkeypatch.setattr(turn_module, "render_memory_modules", render)
+        monkeypatch.setattr(settings, "AUTH_ENABLED", True)
+
+        await service.chat("hi", user_id="7", admin=admin)
+
+        assert seen == [admin]
 
     # Two listings on purpose: one subject finds it, another does not.
     @pytest.mark.queryspy(allow_n_plus_one=True)
@@ -652,6 +667,17 @@ class TestChatAttribution:
         action = recorder.call_args.args[0]
         assert action == "chat:assistant"
 
+    async def test_a_row_seeded_before_the_persona_moved_in_still_gets_it(
+        self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
+    ) -> None:
+        """Its row holds the old marker, not the persona."""
+        service, _, captured, monkeypatch = harness
+        _stub_resolve(monkeypatch, _custom_config(system_prompt=LEGACY_SYSTEM_PROMPT))
+
+        await service.chat("hello")
+
+        assert captured["system_prompt"].startswith("I'm Illiana.")
+
     async def test_custom_agent_persona_and_sampling_reach_the_provider(
         self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
     ) -> None:
@@ -689,7 +715,7 @@ class TestUserMemoryInjection:
             assert user_id == "u9"
             return "<user_memory>\n- [food] allergic to peanuts\n</user_memory>"
 
-        monkeypatch.setattr(chat_module, "build_user_memory_context", fake_memory)
+        monkeypatch.setattr(turn_module, "build_user_memory_context", fake_memory)
 
         await service.chat("hello", user_id="u9")
 
@@ -798,5 +824,5 @@ class TestStreamChatAttribution:
             pass
 
         action = recorder.call_args.args[0]
-        assert action == "stream_chat:assistant"
+        assert action == "chat:assistant"
 {% endif %}

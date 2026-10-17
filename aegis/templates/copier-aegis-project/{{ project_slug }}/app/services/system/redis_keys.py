@@ -60,17 +60,24 @@ ACTIVE_SECONDS = 5  # touched this recently counts as active
 
 
 @cache
-def families() -> tuple[KeyFamily, ...]:
-    """Every family the installed owners declare, in ``OWNERS`` order: read
-    once, as what is installed does not change while the app runs."""
-    found: list[KeyFamily] = []
+def declared() -> tuple[tuple[str, KeyFamily], ...]:
+    """Every family the installed owners declare, with the module declaring
+    it, in ``OWNERS`` order: read once, as what is installed does not change
+    while the app runs."""
+    found: list[tuple[str, KeyFamily]] = []
     for path in OWNERS:
         try:
             module = import_module(path)
         except ImportError:
             continue
-        found.extend(getattr(module, "REDIS_KEYS", ()))
+        found += [(path, family) for family in getattr(module, "REDIS_KEYS", ())]
     return tuple(found)
+
+
+@cache
+def families() -> tuple[KeyFamily, ...]:
+    """Every family the installed owners declare, in ``OWNERS`` order."""
+    return tuple(family for _, family in declared())
 
 
 def _db(family: KeyFamily) -> int:

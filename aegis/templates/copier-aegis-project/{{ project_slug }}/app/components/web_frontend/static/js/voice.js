@@ -33,12 +33,13 @@
   const box = () => chatComposer()?.querySelector('textarea');
   const voice = () => JSON.parse(mic()?.dataset.voice || '{}');
 
+  // A status line's wording, from the surface partial's template.
+  const phrase = (state) => document.getElementById('chat-mic-states')
+    ?.content.querySelector(`[data-state="${state}"]`);
   const say = (state, text) => {
     const status = document.getElementById('chat-mic-status');
     if (!status) return;
-    const phrase = state && document.getElementById('chat-mic-states')
-      ?.content.querySelector(`[data-state="${state}"]`);
-    status.textContent = text ?? phrase?.textContent ?? '';
+    status.textContent = text ?? (state && phrase(state)?.textContent) ?? '';
   };
 
   const pressed = (on) => mic()?.setAttribute('aria-pressed', String(on));
@@ -317,11 +318,13 @@
   // AudioWorklet, mic-worklet.js) and sent as PCM16; the voice comes back as
   // PCM16 at its output rate and is scheduled gap-free. The server says what
   // the call is doing in small JSON events; the thread reloads as each turn
-  // is saved, steps and cards and all.
+  // is saved, steps and cards and all. What the call does next is its rules'
+  // (call-state.js): every event goes through ``happen``.
   let call = null;
   const phone = () => document.getElementById('chat-live');
   const callBar = () => document.getElementById('chat-call');
   const FRAME = 640; // samples a frame: 40ms at 16 kHz
+  const MUTE_TAIL_MS = 1500; // past Gemini's 800ms end of speech
   // How long a saved turn takes to land before the thread is reloaded.
   const SAVE_MS = 1500;
   const engaged = (control) => {
@@ -337,8 +340,7 @@
     call.speaker?.close();
     // A turn saved as the call closed never reached this page.
     showSaved(call.conversation);
-    clearTimeout(call.quiet);
-    clearTimeout(call.idle);
+    for (const timer of ['audioEnd', 'idle', 'leave', 'grace']) clearTimeout(call[timer]);
     stopTyping();
     stopBar();
     show(phone(), 'idle');
@@ -352,7 +354,9 @@
   const showCost = (dollars) => { field('cost').textContent = `$${dollars.toFixed(2)}`; };
   const clock = (seconds) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
   const tick = () => {
-    if (call) field('timer').textContent = clock((Date.now() - call.started) / 1000);
+    if (!call) return;
+    field('timer').textContent = clock((Date.now() - call.started) / 1000);
+    if (call.state.nudged) sayState(); // the countdown
   };
   const startBar = (engine) => {
     call.started = Date.now();
@@ -370,52 +374,83 @@
     if (callBar()) callBar().hidden = true;
     if (chatComposer()) chatComposer().hidden = false;
   };
-  // Mute: the mic stops going out, and dead air does not count meanwhile.
+  // Mute: your voice stops going out (after a moment of silence, ``listen``),
+  // and the quiet is not counted meanwhile - muting is on purpose.
   const muted = (on) => {
     document.getElementById('chat-mute')?.setAttribute('aria-pressed', String(on));
     if (!call) return;
-    call.muted = on;
-    if (on) {
-      clearTimeout(call.idle);
-      say('muted');
-    } else {
-      rest();
-    }
+    call.mutedAt = on ? Date.now() : null;
+    for (const track of call.stream.getAudioTracks()) track.enabled = !on;
+    happen({ type: 'mute', on });
   };
-  // Dead air costs the same as talk: after the profile's seconds with
-  // nobody speaking and nothing being worked on, hang up (0: never).
-  const awake = () => {
-    if (!call || call.closing || call.muted) return;
-    clearTimeout(call.idle);
-    const seconds = voice().idle;
-    if (seconds > 0 && !call.working) call.idle = setTimeout(hangUp, seconds * 1000);
+  // What just happened on the call, put through its rules (call-state.js),
+  // and what they say to do: the quiet clock, the goodbye's timers, a cue
+  // for the assistant, the hang-up.
+  const arm = (name, ms) => {
+    clearTimeout(call[name]);
+    call[name] = ms == null ? null : setTimeout(() => happen({ type: name }), ms);
   };
-  // Between replies the call is listening, or - while the agent runs a
-  // step - working, with the typing under it.
-  const rest = () => {
+  const happen = (event) => {
     if (!call || call.closing) return;
-    const working = call.working > 0;
-    show(phone(), working ? 'working' : 'recording');
-    say(call.muted ? 'muted' : working ? 'working' : 'live', working ? call.step : null);
-    if (working) startTyping();
+    const was = call.state;
+    const out = callState.next(was, event);
+    const now = out.state;
+    call.state = now;
+    if (out.quiet) {
+      arm('idle', out.quiet === 'stop' ? null : now.quietMs);
+      call.quietEnds = out.quiet === 'count' ? Date.now() + now.quietMs : null;
+    }
+    if (out.leave) arm('leave', out.leave === 'arm' ? callState.LEAVE_MS : null);
+    if (out.grace) arm('grace', out.grace === 'arm' ? callState.GRACE_MS : null);
+    // A line into the quiet: the server's, named.
+    if (out.cue) call.ws.send(JSON.stringify({ type: 'cue', line: out.cue }));
+    if (out.hangUp) return hangUp();
+    // Redrawn on a change it shows: a step's own label too; the quiet's
+    // re-arming only once it is a countdown.
+    const changed = ['talking', 'working', 'muted', 'nudged'].some((key) => now[key] !== was[key]);
+    if (changed || event.type === 'begin' || event.type === 'step' || (out.quiet && now.nudged)) draw();
+  };
+  // The call as it stands: speaking, working (the typing under it while it
+  // says nothing), or listening.
+  const draw = () => {
+    const { talking, working } = call.state;
+    show(phone(), talking ? 'speaking' : working ? 'working' : 'recording');
+    if (working && !talking) startTyping();
     else stopTyping();
-    awake();
+    sayState();
   };
-  // The assistant is talking: no typing under it, no dead-air hang-up.
-  const speaking = () => {
-    stopTyping();
-    clearTimeout(call.idle);
-    show(phone(), 'speaking');
+  // The status line: the quiet counted down to the hang-up once it has
+  // checked in (a pause to think is no warning), muted, the step it is
+  // running (as the relay names it and the trail will), or listening.
+  const sayState = () => {
+    const { nudged, muted: mute, working } = call.state;
+    const left = nudged && call.quietEnds && Math.ceil((call.quietEnds - Date.now()) / 1000);
+    if (left > 0) {
+      const line = phrase('hanging-up').cloneNode(true);
+      line.querySelector('[data-countdown]').textContent = left;
+      return say(null, line.textContent);
+    }
+    say(mute ? 'muted' : working ? 'working' : 'live', working ? call.step : null);
   };
+  // A step it runs (the relay names it), and the end of its steps.
   const stepping = (step) => {
-    call.working += 1;
     call.step = step;
-    rest();
+    happen({ type: 'step', on: true });
   };
   const stepped = () => {
-    call.working = 0;
     call.step = null;
-    rest();
+    happen({ type: 'step', on: false });
+  };
+  // Its reply is done: no longer the cut one, and its steps with it.
+  const replied = () => {
+    happen({ type: 'reply' });
+    stepped();
+  };
+  // Its audio as you hear it, done ``ms`` after the last of it.
+  const heardOut = (ms) => {
+    happen({ type: 'audio', on: true });
+    clearTimeout(call.audioEnd);
+    call.audioEnd = setTimeout(() => happen({ type: 'audio', on: false }), ms);
   };
   // The thread, reloaded so a saved turn shows with its steps and cards.
   const showTurns = (id) => {
@@ -435,7 +470,13 @@
     const node = new AudioWorkletNode(call.mic, 'mic-pcm');
     let batch = [];
     node.port.onmessage = ({ data }) => {
-      if (!call || call.muted || call.ws.readyState !== WebSocket.OPEN) return;
+      if (!call || call.ws.readyState !== WebSocket.OPEN) return;
+      // Muted, a moment of silence still goes, for Gemini to hear you stop
+      // (or its turn for you never ends); then nothing - audio in is billed.
+      if (call.mutedAt && Date.now() - call.mutedAt > MUTE_TAIL_MS) {
+        batch = [];
+        return;
+      }
       batch.push(...data);
       if (batch.length < FRAME) return;
       call.ws.send(pcm16(batch));
@@ -459,30 +500,15 @@
     call.playhead = at + buffer.duration;
     call.sources.push(node);
     node.onended = () => { if (call) call.sources = call.sources.filter((s) => s !== node); };
-    speaking();
-    clearTimeout(call.quiet);
-    call.quiet = setTimeout(spoken, (call.playhead - call.speaker.currentTime) * 1000 + 300);
-  };
-  // The voice has played out: listening again, or - after the goodbye -
-  // hanging up.
-  const spoken = () => {
-    if (!call) return;
-    if (call.signingOff) return hangUp();
-    rest();
-  };
-  // The agent ended the call: hang up once its goodbye has played out, or
-  // shortly if none is queued.
-  const signOff = () => {
-    call.signingOff = true;
-    if (!call.sources.length) setTimeout(spoken, 1500);
+    heardOut((call.playhead - call.speaker.currentTime) * 1000 + 300);
   };
   // Spoken over: what was not yet heard is dropped.
   const interrupted = () => {
     for (const node of call.sources) try { node.stop(); } catch (_) {}
     call.sources = [];
     call.playhead = 0;
-    clearTimeout(call.quiet);
-    rest();
+    clearTimeout(call.audioEnd);
+    happen({ type: 'cut' });
   };
   const relayed = async (event) => {
     if (!call) return;
@@ -499,17 +525,20 @@
         return say('unsupported');
       }
       startBar(event.engine);
-      rest();
+      happen({ type: 'begin' });
     } else if (event.type === 'interrupted') {
       interrupted();
+    } else if (event.type === 'hearing') {
+      happen({ type: 'speech', on: true }); // your first transcribed words: you
+      happen({ type: 'words' });
     } else if (event.type === 'heard') {
-      awake();
+      happen({ type: 'speech', on: false });
     } else if (event.type === 'hang_up') {
-      signOff();
+      happen({ type: 'goodbye' });
     } else if (event.type === 'working') {
       stepping(event.label);
-    } else if (event.type === 'done' && call.working) {
-      stepped();
+    } else if (event.type === 'done') {
+      replied();
     } else if (event.type === 'card') {
       // A chart up while it is talked about; the saved turn replaces it.
       const slot = clone('chat-live-card');
@@ -529,7 +558,7 @@
     if (conversationId()) url.searchParams.set('conversation_id', conversationId());
     const ws = new WebSocket(url);
     ws.binaryType = 'arraybuffer';
-    call = { ws, stream, sources: [], playhead: 0, working: 0, idle: null, quiet: null };
+    call = { ws, stream, sources: [], playhead: 0, state: callState.start(voice().idle * 1000) };
     engaged(button);
     ws.addEventListener('message', ({ data }) => (typeof data === 'string' ? relayed(JSON.parse(data)) : voiceChunk(data)));
     ws.addEventListener('close', () => {
@@ -540,7 +569,7 @@
     });
   };
   document.addEventListener('click', (event) => {
-    if (event.target.closest?.('#chat-mute')) return call && muted(!call.muted);
+    if (event.target.closest?.('#chat-mute')) return call && muted(!call.state.muted);
     if (event.target.closest?.('#chat-hang-up')) return hangUp();
     const button = event.target.closest?.('#chat-live');
     if (!button) return;

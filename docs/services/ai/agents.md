@@ -30,7 +30,7 @@ There is a single chat runtime. What changes with your storage backend is where 
 - **Persistence backend** (`ai[sqlite]` or `ai[postgres]`): definitions live in the `agent` table, cached warm per process. A missing or inactive row falls back to the code default, so a half-seeded database never breaks chat.
 - **Memory backend** (the default `ai`): the code default is the only config source. Same shape, same behavior, no tables involved.
 
-Because the seeded `assistant` row is built from the same in-code default, the two sources cannot drift: a database-backed project and a memory-backed project produce identical default chat.
+Because the seeded `assistant` row is built from the same in-code default, the two sources cannot drift. The one difference is the app map: with a persistence backend the `assistant` always has the `app_map` memory module (see [Memory Modules](memory-modules.md)), which needs the module tables a memory-backed project does not have.
 
 ### What each backend provides
 
@@ -50,7 +50,7 @@ An `agent` row holds:
 | Field | Meaning |
 |---|---|
 | `slug` | Unique identifier; chat resolves the `assistant` slug by default |
-| `system_prompt` | The agent's persona. The seeded default is a marker meaning "use the service's built-in dynamic persona"; any edited text is used verbatim |
+| `system_prompt` | The agent's persona, used verbatim. The `assistant` row is seeded with Illiana's whole persona, so what the row shows is what she runs on; the model in force and the live context are appended after it |
 | `model_id` | Optional model pin. `NULL` means "use the service's active model", so the default agent tracks your configured provider. In the Overseer's agent editor it is picked from the models this install can call, grouped by vendor |
 | `temperature`, `max_tokens` | Sampling parameters applied to every request |
 | `memory_modules` | Slugs of [memory modules](memory-modules.md) rendered into this agent's context |
@@ -149,7 +149,7 @@ my-app ai sentiment
 ```bash
 my-app agents list              # every agent with grants at a glance
 my-app agents show assistant    # full definition including the prompt
-my-app agents test assistant    # one live turn through the resolved config
+my-app agents test assistant    # one chat turn as the agent
 my-app memory-modules list      # the module catalog
 ```
 

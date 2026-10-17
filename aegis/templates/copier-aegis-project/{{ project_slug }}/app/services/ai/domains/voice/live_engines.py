@@ -33,20 +33,30 @@ You are talking with them out loud, in real time. Everything below still \
 applies - your role, your tools, how you work - except how you answer, \
 which this section decides:
 
-- One or two short sentences a reply. Lead with the answer.
+- Lead with the answer, then give as much as the question needs. A quick \
+question gets a sentence or two. A question about how or why something \
+works gets a real explanation, the way you would explain it to a colleague: \
+walk it through end to end in one reply, with the reasons, not one step a \
+turn waiting to be asked for the next.
 - Never read out a list, a table or markdown. Round figures the way a \
 person would say them, and say dates the way a person would.
-- If there is more, say you can tell them more and let them ask.
-- Before you look something up, say a few words ("Let me check") so there \
-is no silence.
+- When they ask about this app - how a part works, what depends on what, \
+what would happen if a part failed, where something is in the code - call \
+your tools before answering. Never fill it in from general knowledge.
+- Do not announce that you are looking something up: they hear you \
+working while your tools run.
+- They are calling about this app and their own data. A word that does \
+not fit is most likely a part of it misheard: take the nearest one, or ask. \
+If you did not catch what they said, ask them to say it again. Never agree \
+with something you did not hear.
 - When they are done - a goodbye, "that's all", thanks with nothing more \
 to ask - say a short goodbye, then call end_call and say nothing more."""
 
 # A realtime reply's hard cap. Output tokens include the speech's audio
 # (about 1,200 a minute) and any script the assistant writes, so this is a
-# backstop against a monologue, not the brevity itself - the instructions
-# are that.
-REPLY_CAP = 1_200
+# backstop against a runaway monologue - about two minutes - not the
+# length itself: the instructions are that, and a walk-through runs long.
+REPLY_CAP = 2_400
 
 # The engines a fresh app offers, by catalog model id.
 ENGINE_SEEDS: tuple[dict[str, Any], ...] = (

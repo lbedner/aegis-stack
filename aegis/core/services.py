@@ -622,6 +622,10 @@ SERVICES: dict[str, ServiceSpec] = {
                     "app/components/web_frontend/overseer_ai_costs_views.py",
                     "app/components/web_frontend/chat_models.py",
                     "app/components/web_frontend/static/js/voice.js",
+                    # A live call's rules, loaded with voice.js, and their tests.
+                    "app/components/web_frontend/static/js/call-state.js",
+                    "tests/js/call_state.test.js",
+                    "tests/web/test_call_state.py",
                     "app/components/web_frontend/routes/partials/overseer_ai_chat.py",
                     "app/components/web_frontend/routes/partials/chat_surface.py",
                     "app/components/web_frontend/routes/partials/chat_cards.py",

@@ -15,6 +15,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 HEARTBEAT_FILE = Path("/tmp/aegis-scheduler-heartbeat")
 HEARTBEAT_JOB_ID = "scheduler_heartbeat"
+HEARTBEAT_TRIGGER = {"trigger": "interval", "seconds": 15}
 # Four missed beats at the 15s interval before the container reads unhealthy.
 MAX_AGE_SECONDS = 60
 
@@ -28,13 +29,12 @@ def register_heartbeat_job(scheduler: AsyncIOScheduler) -> None:
     """Register the beacon job on the scheduler."""
     scheduler.add_job(
         touch_scheduler_heartbeat,
-        trigger="interval",
-        seconds=15,
         id=HEARTBEAT_JOB_ID,
         name="Scheduler Heartbeat",
         max_instances=1,
         coalesce=True,
         replace_existing=True,
+        **HEARTBEAT_TRIGGER,
     )
 
 

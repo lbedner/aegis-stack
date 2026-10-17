@@ -1,22 +1,29 @@
 """Framework reference fetchers for memory modules.
 
-Two fetchers ship with the framework: ``recent_conversations`` (a real,
-useful example over the conversation tables) and ``user_profile`` (a
-shape example that returns nothing - replace it with your app's actual
-profile source). Importing this module registers both; app fetchers
-should follow the same pattern in their own modules.
+Three fetchers ship with the framework: ``recent_conversations`` (a real,
+useful example over the conversation tables), ``user_profile`` (a shape
+example that returns nothing - replace it with your app's actual profile
+source) and ``app_map`` (what the app is, read from its code: the default
+agent's). Importing this module registers them; app fetchers should
+follow the same pattern in their own modules.
 """
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.db import get_async_session
+from app.core.ontology.summary import summary, text
+from app.core.ontology.system import current
 from app.services.ai.domains.chat import queries
+from app.services.shared.deps import caller_is_admin
 
 from .fetchers import FetchContext, register_fetcher
 
 RECENT_CONVERSATION_LIMIT = 5
+# The app map's fetcher, and the memory module rendering it.
+APP_MAP = "app_map"
 
 
 async def _recent_conversations_for(
@@ -55,7 +62,17 @@ async def user_profile(ctx: FetchContext) -> str | None:
     return None
 
 
-# Built-in registration: importing this module makes both fetchers
+async def app_map(ctx: FetchContext) -> str | None:
+    """What the app is, read from its code (``ontology.summary.text``): its
+    parts for an admin, its tables and the changes to them for anyone, as
+    the ``ontology`` tool answers each. Built once a process."""
+    model = await asyncio.to_thread(current)  # the first build reads the source
+    if not await caller_is_admin():
+        model = model.domain()
+    return text(summary(model))
+
+
+# Built-in registration: importing this module makes these fetchers
 # referencable from memory_module.fetch_function. replace=True keeps
 # re-imports idempotent.
 register_fetcher(
@@ -68,5 +85,11 @@ register_fetcher(
     "user_profile",
     user_profile,
     description="App-replaceable user profile stub",
+    replace=True,
+)
+register_fetcher(
+    APP_MAP,
+    app_map,
+    description="What the app is: its parts, tables and the changes to them",
     replace=True,
 )

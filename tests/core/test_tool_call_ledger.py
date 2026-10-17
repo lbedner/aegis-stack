@@ -44,7 +44,7 @@ class TestTheSeamIsUsed:
         assert "from app.services.ai.domains.chat.tool_telemetry import instrument" in (
             source
         )
-        assert "resolved.append(instrument(entry.name, " in source
+        assert "instrument(entry.name, func)" in source
         assert "resolved.append(entry.func)" not in source
 
     def test_the_turn_is_bound_where_the_model_is_called(self) -> None:

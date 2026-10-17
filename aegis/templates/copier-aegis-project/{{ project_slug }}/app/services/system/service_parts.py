@@ -17,10 +17,17 @@ from typing import Any
 
 from app.core import source_index
 from app.core.ontology import Kind, current
-from app.core.ontology.model import node_id
+from app.core.ontology.model import node_id, parse_node_id
 from app.core.ontology.parts import node_of, service_folders
 from app.core.source_index import Index, Module, within
 from app.services.system import patterns
+from app.services.system.file_budget import (
+    DECLARATION_LINES,
+    LOGIC_LINES,
+    cap_of,
+    dominant,
+    size_note,
+)
 from app.services.system.patterns import (
     API_PACKAGE,
     SERVICE_PACKAGE,
@@ -65,13 +72,9 @@ PIECES = {
     "adapters": ("Adapters", "domains"),
 }
 DOMAINS = "domains"
-# The size budget (the "size" rule; the framework's own, held on its
-# templates by its tests). A list (DECLARATIONS) is grepped, not read.
-LOGIC_LINES = 500
-DECLARATION_LINES = 900
-DECLARATIONS = ("models", "schemas", "i18n", "seeds", "fixtures", "locales")
-SHARE = 0.4
-SHARE_LINES = 400
+# What a service keeps to itself: another service importing one reaches
+# past its facade (service.py; its schemas and deps are public too).
+INTERNALS = frozenset({DOMAINS, "adapters", "queries", "models"})
 
 
 def is_health(word: str) -> bool:
@@ -111,52 +114,6 @@ def _execs(index: Index, module: Module) -> list[int]:
     )
 
 
-def _cap(path: str) -> int:
-    """A file's line budget: a list's (a ``DECLARATIONS`` folder, a file
-    named one or ending ``_<one>``) or logic's."""
-    *folders, file = path.split("/")
-    stem = file.removesuffix(".py")
-    listed = any(
-        part in folders or stem == part or stem.endswith(f"_{part}")
-        for part in DECLARATIONS
-    )
-    return DECLARATION_LINES if listed else LOGIC_LINES
-
-
-def _dominant(modules: list[Module]) -> list[str]:
-    """Each package's largest file, where past ``SHARE`` of a package of
-    three or more and ``SHARE_LINES`` long."""
-    packages: dict[str, list[tuple[int, str]]] = {}
-    for m in modules:
-        packages.setdefault(m.path.rpartition("/")[0], []).append(
-            (len(m.lines), m.path)
-        )
-    found = []
-    for members in packages.values():
-        lines, path = max(members)
-        total = sum(n for n, _ in members)
-        if len(members) >= 3 and lines > SHARE_LINES and lines / total > SHARE:
-            found.append(path)
-    return found
-
-
-def size_note(path: str, index: Index) -> str:
-    """What makes a file too big, said: ``612 lines; the limit is 500``,
-    or, under its cap, its share of its folder (``_dominant``)."""
-    module = index.get(source_index.module_name(path))
-    lines = len(module.lines) if module else 0
-    if lines > (cap := _cap(path)):
-        return f"{lines:,} lines; the limit is {cap:,}"
-    folder = path.rpartition("/")[0]
-    package = [
-        found
-        for name, other in index.paths.items()
-        if other.rpartition("/")[0] == folder and (found := index.get(name))
-    ]
-    total = sum(len(m.lines) for m in package)
-    return f"{lines:,} of the {total:,} lines in its folder: too much for one file"
-
-
 def place_note(check: str, path: str, line: int, index: Index) -> str:
     """What one place a rule points at says: a file's size, for the size
     rule (its first line is no answer), else the line itself."""
@@ -187,6 +144,11 @@ class Folder:
     index: Index
     routers: list[Module]  # its HTTP surface, in the API package
     tested: bool  # a test imports it
+    services: dict[str, str | None]  # each folder's service; None: shared
+
+    @property
+    def service(self) -> str | None:
+        return self.services.get(self.name)
 
     @property
     def package(self) -> str:
@@ -253,9 +215,29 @@ class Folder:
     def oversized(self) -> list[str]:
         """Each file past the size budget: over its cap, or most of its
         package."""
-        over = {m.path for m in self.modules if len(m.lines) > _cap(m.path)}
-        found = over | set(_dominant(self.modules))
+        over = {m.path for m in self.modules if len(m.lines) > cap_of(m.path)}
+        found = over | set(dominant(self.modules))
         return [f"{path}:1" for path in sorted(found)]
+
+    @cached_property
+    def reaching(self) -> list[str]:
+        """Each line importing another service's ``INTERNALS``: one line
+        once, however many names it imports."""
+        found = {
+            (m.path, min(m.uses.get((local,), (1,))))
+            for m in [*self.modules, *self.routers]
+            for local, (source, member) in m.imported.items()
+            if self._internal(f"{source}.{member}" if member else source)
+        }
+        order = {m.path: n for n, m in enumerate([*self.modules, *self.routers])}
+        return [f"{p}:{n}" for p, n in sorted(found, key=lambda f: (order[f[0]], f[1]))]
+
+    def _internal(self, module: str) -> bool:
+        words = module.split(".")
+        if self.service is None or words[:2] != ["app", "services"]:
+            return False
+        theirs = self.services.get(words[2]) if len(words) > 3 else None
+        return theirs not in (None, self.service) and words[3] in INTERNALS
 
     @cached_property
     def unwired(self) -> list[str]:
@@ -303,6 +285,13 @@ def _imported(tested: Iterable[str], package: str) -> bool:
     return any(within(name, package) for name in tested)
 
 
+def _service_of(subject: str) -> str | None:
+    """The service a folder's node is part of: ``service:ai.rag`` is the
+    AI service's; shared code is none."""
+    kind, name = parse_node_id(subject)
+    return name.partition(".")[0] if kind is Kind.SERVICE else None
+
+
 def folders(source: Any = None) -> list[tuple[str, Folder]]:
     """Each services folder that is a part of the system model. ``source``
     may be another project's root (tests): each folder there a service,
@@ -310,6 +299,7 @@ def folders(source: Any = None) -> list[tuple[str, Folder]]:
     if isinstance(source, Path):
         index = source_index.at(source)
         tested = index.imports_under("tests")
+        names = index.packages_in(SERVICE_PACKAGE)
         found = [
             Folder(
                 node_id(Kind.SERVICE, name),
@@ -318,8 +308,9 @@ def folders(source: Any = None) -> list[tuple[str, Folder]]:
                 index,
                 _modules(index, f"{API_PACKAGE}.{name}"),
                 _imported(tested, f"{SERVICE_PACKAGE}.{name}"),
+                {other: other for other in names},
             )
-            for name in index.packages_in(SERVICE_PACKAGE)
+            for name in names
         ]
         return [(f.subject, f) for f in found]
     index = source_index.project()
@@ -328,6 +319,8 @@ def folders(source: Any = None) -> list[tuple[str, Folder]]:
     api = [
         (m, node_of(m.name, index, set(nodes))) for m in _modules(index, API_PACKAGE)
     ]
+    named = service_folders(index, set(nodes))
+    services = {name: _service_of(subject) for name, subject in named}
     found = [
         Folder(
             subject,
@@ -336,8 +329,9 @@ def folders(source: Any = None) -> list[tuple[str, Folder]]:
             index,
             [m for m, owner in api if owner == subject],
             _imported(tested, f"{SERVICE_PACKAGE}.{name}"),
+            services,
         )
-        for name, subject in service_folders(index, set(nodes))
+        for name, subject in named
     ]
     return [(f.subject, f) for f in found]
 
@@ -455,6 +449,19 @@ PARTS = Pattern(
             lambda f: not f.oversized,
             evidence=lambda f: f.oversized,
             action="Move some of its classes or functions into new files beside it.",
+        ),
+        Rule(
+            "through-facade",
+            "Other services through their facade",
+            "A service that imports another's domains, adapters, queries or "
+            "models depends on how that one is organised, not on what it "
+            "offers: a refactor inside it breaks a service it never knew of.",
+            lambda f: not f.reaching,
+            evidence=lambda f: f.reaching,
+            action=(
+                "Call what you need through the other service's service.py, "
+                "adding it there if it is missing."
+            ),
         ),
         Rule(
             "facade",

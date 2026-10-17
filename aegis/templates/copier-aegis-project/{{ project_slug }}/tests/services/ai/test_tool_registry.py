@@ -78,3 +78,26 @@ async def test_an_admin_tool_answers_only_an_admin() -> None:
         assert await tool() == ADMIN_ONLY
     with acting_as(None, "assistant", admin=True):
         assert await tool() == "the logs"
+
+
+async def strict(component: str) -> str:
+    """A tool refusing an argument it does not know, naming the known."""
+    raise ValueError(f"No component {component!r}; known: backend")
+
+
+def strict_sync(component: str) -> str:
+    """The same, not async."""
+    raise ValueError(f"No component {component!r}; known: backend")
+
+
+@pytest.mark.usefixtures("clean_registry")
+async def test_a_refused_argument_is_the_models_to_correct() -> None:
+    """A tool's ValueError is its answer, so the model asks again: raised,
+    it ended a whole live call (2026-10-17, ``health("service:documents")``)."""
+    register_tool("strict", strict, effect="read")
+    register_tool("strict_sync", strict_sync, effect="read")
+    tool, sync_tool = resolve_tools(["strict", "strict_sync"])
+
+    told = "ValueError: No component 'x'; known: backend"
+    assert await tool(component="x") == told
+    assert sync_tool(component="x") == told

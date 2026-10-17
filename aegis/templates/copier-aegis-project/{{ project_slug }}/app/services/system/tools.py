@@ -11,12 +11,20 @@ from typing import Any
 from starlette.datastructures import QueryParams
 
 from app.core import runtime
-from app.core.ontology import Kind, graph
+from app.core.ontology import Kind, PartNode, graph
+from app.core.ontology.model import Node
 from app.core.ontology.observed import running
 from app.core.ontology.summary import summary
 from app.core.tools import register_tool
 from app.services.shared.deps import caller_is_admin
-from app.services.system import dry_path, live_status, ui_errors, ui_logs
+from app.services.system import (
+    dry_path,
+    live_status,
+    pattern_findings,
+    service_parts,
+    ui_errors,
+    ui_logs,
+)
 from app.services.system.models import ComponentStatus
 from app.services.system.node_now import attention, checks, health_of, now_of
 
@@ -56,7 +64,8 @@ async def health(component: str | None = None) -> dict[str, Any]:
     reports (a worker's queues, the scheduler's jobs, the database's
     tables). ``counts`` counts each check once, and ``attention`` names
     every one not healthy, with its message. Start here, then read what
-    broke with ``errors`` and what led up to it with ``logs``."""
+    broke with ``errors`` and what led up to it with ``logs``. A part's
+    ontology id (``service:documents``) names its check too."""
     status, note = await live_status.live_status()
     if component is None:
         found = list(checks(status.components))
@@ -72,7 +81,8 @@ async def health(component: str | None = None) -> dict[str, Any]:
             },
             "note": note,
         }
-    found = health_of(status.components, component)
+    # An ontology id (``component:worker``) names the same check.
+    found = health_of(status.components, component.rpartition(":")[2])
     if found is None:
         known = ", ".join(_names(status.components))
         raise ValueError(f"No component {component!r}; known: {known}")
@@ -177,6 +187,15 @@ async def _dry_path(route: str) -> dict[str, Any]:
     }
 
 
+def _findings(node: Node) -> list[pattern_findings.Finding]:
+    """What the parts pattern finds in a part's code, as the map shows it
+    (read from source once a process, so off the event loop)."""
+    if not isinstance(node, PartNode):
+        return []
+    report = service_parts.report()
+    return [f for f in pattern_findings.findings(report) if f.subject == node.id]
+
+
 async def ontology(
     kind: str | None = None,
     category: str | None = None,
@@ -193,7 +212,9 @@ async def ontology(
     ``category`` or ``text``: matching nodes. ``node`` (an id like
     ``object:user``): it, its edges and neighbours ``depth`` steps out,
     and for a part what is true of it now (its health check, the errors it
-    owns, the AI service's spend by window, and when they were read); with
+    owns, the AI service's spend by window, and when they were read) and
+    what its code breaks of the service standard (``findings``: each
+    rule, how bad, why, the file:line that shows it, what to do); with
     ``to``, the paths between the two. ``route`` (``GET /api/v1/...``,
     an admin's): every hop it can take, read from the code without sending
     it, each at its file and line, and where the walk stops. An edge's
@@ -211,10 +232,13 @@ async def ontology(
         return {"paths": dumped, "note": note}
     if node:
         here, near, edges = graph.neighbors(model, node, depth)
-        now = await now_of(here)
+        now, findings = await asyncio.gather(
+            now_of(here), asyncio.to_thread(_findings, here)
+        )
         return {
             "node": here.model_dump(mode="json"),
             "now": now.model_dump(mode="json") if now else None,
+            "findings": [f.model_dump(mode="json") for f in findings],
             "edges": [e.model_dump(mode="json") for e in edges[:MAX_NODES]],
             "neighbors": [
                 n.model_dump(mode="json", include=BRIEF) for n in near[:MAX_NODES]

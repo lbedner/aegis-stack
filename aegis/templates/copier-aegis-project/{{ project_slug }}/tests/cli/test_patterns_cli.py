@@ -61,3 +61,20 @@ def test_the_real_command_prints_nothing_but_the_report() -> None:
         check=True,
     )
     assert json.loads(run.stdout)["patterns"]
+
+
+def test_touches_says_what_a_change_reaches() -> None:
+    """``patterns touches``: the parts a change's files are, as JSON alone
+    (the brief is not printed with it)."""
+    run = subprocess.run(
+        [
+            *(sys.executable, "-m", "app.cli.main", "patterns", "touches"),
+            *("app/components/backend/main.py", "README.md", "--format", "json"),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    found = json.loads(run.stdout)
+    assert "component:backend" in found["parts"]
+    assert found["elsewhere"] == ["README.md"]

@@ -155,6 +155,27 @@ def test_logic_outside_a_standard_file_belongs_in_a_domain(project: Path) -> Non
     ]
 
 
+def test_another_service_is_reached_through_its_facade(project: Path) -> None:
+    """Importing another service's domains, adapters, queries or models
+    reaches past its facade; its service.py, schemas or deps do not."""
+    for module in ("__init__", "service", "domains/__init__", "domains/tags"):
+        _write(project, f"app/services/tags/{module}.py")
+    _write(
+        project,
+        "app/services/notes/service.py",
+        """
+        from app.services.tags.service import tag
+        from app.services.tags.domains.tags import put, take
+        """,
+    )
+    _write(project, ROUTER, "from app.services.tags.domains import tags\n")
+    assert _broken(project)["through-facade"] == ["service:notes"]
+    assert _evidence(project, "through-facade") == [
+        "app/services/notes/service.py:3",
+        f"{ROUTER}:1",
+    ]
+
+
 def _lines(count: int) -> str:
     return "x = 1\n" * count
 

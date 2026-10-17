@@ -5,15 +5,21 @@ agent (or a person) to read before building: each pattern's steps, its
 rules with their reasons and every violation, the canonical example's
 source, and every instance; then the shared macros with their examples.
 Markdown by default, JSON with ``--format json``.
+
+``patterns touches``: what a change's files touch, read from the
+ontology (its parts, what depends on them, its tables, routes and jobs),
+for a pull request's job summary.
 """
 
 import contextlib
 import io
 import json
+import sys
 from typing import Annotated, Any
 
 import typer
 
+from app.core.ontology import current, touches
 from app.i18n import lazy_t
 from app.services.system import pattern_findings, patterns
 
@@ -157,15 +163,28 @@ def markdown(brief: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+Format = Annotated[str, typer.Option("--format", help=lazy_t("patterns.opt_format"))]
+
+
 @app.callback(help=lazy_t("patterns.help_show"))
-def show(
-    fmt: Annotated[
-        str,
-        typer.Option("--format", help=lazy_t("patterns.opt_format")),
-    ] = "markdown",
-) -> None:
+def show(ctx: typer.Context, fmt: Format = "markdown") -> None:
+    if ctx.invoked_subcommand:
+        return
     # Building the app and loading the queues log to stdout; that noise is
     # kept out of a report meant to be read by a program.
     with contextlib.redirect_stdout(io.StringIO()):
         brief = collect()
     typer.echo(json.dumps(brief, indent=2) if fmt == "json" else markdown(brief))
+
+
+@app.command("touches", help=lazy_t("patterns.help_touches"))
+async def touched(
+    paths: Annotated[list[str] | None, typer.Argument()] = None,
+    fmt: Format = "markdown",
+) -> None:
+    files = paths or [line.strip() for line in sys.stdin if line.strip()]
+    with contextlib.redirect_stdout(io.StringIO()):
+        found = touches.touched(current(), files)
+    typer.echo(
+        found.model_dump_json(indent=2) if fmt == "json" else touches.summary(found)
+    )

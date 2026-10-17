@@ -6801,6 +6801,14 @@ over 40% of it and 400 lines. On the map, open the Server: a service
 that breaks a rule says how many places to fix, and hovering it lists
 each one (the file linked, its size or its line) with what to do. Open
 the service and each piece says the same about its own files.
+A service that imports another's <code>domains/</code>, <code>adapters/</code>, <code>queries</code> or
+<code>models</code> is flagged too (<strong>Other services through their facade</strong>), each
+import's line listed: it depends on how the other is organised, not on
+what it offers. <code>patterns touches</code> takes a change's files (as arguments,
+or one per line from <code>git diff --name-only</code>) and says, from the app's
+ontology, which parts own them, which parts depend on those, and the
+tables, routes and jobs they define; Markdown for a pull request's job
+summary, JSON with <code>--format json</code>.
 Finance and documents also carry a <code>test_*_module_layout.py</code> stating which
 module defines what, so folding a domain back together, or dropping a
 function into whichever file was open, fails a test rather than passing

@@ -169,6 +169,14 @@ class Settings(
     DATABASE_BACKUP_DIR: str = "backups"
     DATABASE_BACKUP_KEEP: Annotated[int, Configurable(ComponentName.DATABASE, "Backups kept; older ones are removed")] = 7
 {%- endif %}
+{%- if include_deploy and include_scheduler and include_database %}
+
+    # Off-site backup (app.services.system.offsite), from .env or the store.
+    OFFSITE_BACKUP_REPOSITORY: str | None = None
+    OFFSITE_BACKUP_PASSWORD: str | None = None
+    OFFSITE_BACKUP_ACCESS_KEY: str | None = None
+    OFFSITE_BACKUP_SECRET_KEY: str | None = None
+{%- endif %}
 
     # Flet frontend settings
     FLET_ASSETS_DIR: str = "assets"  # Directory for Flet static assets (images, etc.)

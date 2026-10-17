@@ -14,10 +14,9 @@ beside it:
 - ``storage.tar.gz``: the object store, a named volume outside the
   directory.
 
-Off-box, opt-in: when the server has ``offsite_env(deploy_path)``, each
-backup is pushed with restic (client-side encrypted) to the repository it
-names, everything but ``files/``. The ``.env``, keys and the restic
-password never reach the bucket.
+These stay on the server, for rollbacks. The copy that leaves it is the
+app's own nightly backup, sent by its off-site job
+(``app.services.system.offsite``).
 
 Every function takes ``run``, the caller's remote runner, so this module
 holds the commands and ``deploy.py`` keeps the SSH.
@@ -27,7 +26,6 @@ import re
 import shlex
 import subprocess
 from collections.abc import Callable
-from pathlib import PurePosixPath
 from typing import Any
 
 import typer
@@ -111,14 +109,6 @@ def is_sqlite(answers: dict[str, Any]) -> bool:
     )
 
 
-def offsite_env(deploy_path: str) -> str:
-    """The server file that turns the off-box copy on.
-
-    Outside the deploy directory: a deploy rsyncs into it with ``--delete``.
-    """
-    return f"/etc/aegis/{PurePosixPath(deploy_path).name}.restic.env"
-
-
 def snapshot_sqlite(run: Run, compose_prefix: str, backup_dir: str) -> bool:
     """Snapshot the live database into ``<backup>/DATABASE_FILE``. False on
     failure, with nothing partial left behind."""
@@ -144,31 +134,6 @@ def archive_storage(run: Run, compose_prefix: str, backup_dir: str) -> None:
     )
     if result.returncode != 0:
         brand.warn(t("deploy.backup_storage_failed"))
-
-
-def offsite_configured(run: Run, deploy_path: str) -> bool:
-    """The server pushes its backups off the box (``offsite_env``)."""
-    return run(f"test -f {shlex.quote(offsite_env(deploy_path))}").returncode == 0
-
-
-def push_offsite(run: Run, deploy_path: str, backup_dir: str, timestamp: str) -> None:
-    """Copy the backup, minus ``files/``, off the box (a server
-    ``offsite_configured``); the repository is initialised on first use.
-
-    ponytail: runs only when a backup does (each deploy, each
-    ``deploy-backup``); schedule ``aegis deploy-backup`` for a cadence.
-    """
-    env = shlex.quote(offsite_env(deploy_path))
-    typer.echo(t("deploy.backup_offsite"))
-    backup = shlex.quote(backup_dir)
-    files = shlex.quote(f"{backup_dir}/files")
-    result = run(
-        f"set -a && . {env} && set +a"
-        " && { restic cat config >/dev/null 2>&1 || restic init; }"
-        f" && restic backup --tag {shlex.quote(timestamp)} --exclude {files} {backup}"
-    )
-    if result.returncode != 0:
-        brand.warn(t("deploy.backup_offsite_failed", error=result.stderr.strip()))
 
 
 def restore_data(

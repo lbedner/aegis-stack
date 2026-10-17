@@ -10,6 +10,7 @@ through ``docker`` (a callable, so tests answer for it).
 """
 
 import json
+import os
 import re
 import subprocess
 from collections.abc import Callable
@@ -57,8 +58,12 @@ def size_of(text: str) -> int:
     return round(float(found.group(1)) * _UNITS[found.group(2).lower()])
 
 
-def runner(root: Path) -> Docker:
-    """``docker`` itself, run in ``root``; its output, or DockerError."""
+def runner(
+    root: Path, env: dict[str, str] | None = None, seconds: int = DOCKER_SECONDS
+) -> Docker:
+    """``docker`` itself, run in ``root``; its output, or DockerError.
+    ``env`` is added to this process's, for a container to take by name
+    (``-e NAME``, never the value on a command line, where ``ps`` shows it)."""
 
     def docker(*args: str) -> str:
         try:
@@ -67,8 +72,9 @@ def runner(root: Path) -> Docker:
                 cwd=root,
                 capture_output=True,
                 text=True,
-                timeout=DOCKER_SECONDS,
+                timeout=seconds,
                 check=False,
+                env=os.environ | env if env else None,
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise DockerError(str(exc)) from None

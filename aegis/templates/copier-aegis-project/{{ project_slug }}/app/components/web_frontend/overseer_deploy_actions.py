@@ -12,10 +12,12 @@ commands.
 
 from collections.abc import AsyncIterator
 from functools import partial
+from importlib.util import find_spec
 from typing import Any
 
 from app.components.deploy import agent as deploy_agent
 from app.components.deploy.protocol import (
+    DRILL,
     PROTOCOL,
     PROVISION_STEPS,
     RefusedError,
@@ -51,9 +53,13 @@ TITLES = {
     "deploy": "Deploy",
     "backup": "Back up",
     "upload-storage": "Bring missing files",
+    DRILL: "Rehearse a restore",
     "rollback": "Roll back",
     "destroy": "Destroy",
 }
+# A restore is rehearsed on the nightly off-site copy: only a project with
+# that job (deploy, a database and the scheduler) has one to rehearse.
+DRILLS = find_spec("app.services.system.offsite") is not None
 
 
 def server_name(statuses: tuple[str, ...] = LIVE) -> str | None:
@@ -117,6 +123,7 @@ async def shared() -> dict[str, Any]:
     return {
         "agent": agent,
         "partials": PARTIALS,
+        "drill": {"verb": DRILL, "label": TITLES[DRILL]} if DRILLS else None,
         "events": EVENTS,
         "event": EVENT,
         "job": await job_context() if listening else None,
@@ -241,6 +248,8 @@ JOB_COLUMNS = [
     {"key": "started", "label": "Started"},
     {"key": "said", "label": "Last line", "wrap": True},
 ]
+# A job (or a deploy event) as a status cell: done unless one of these.
+DONE = ("Done", "ok")
 STATUS_CELLS = {"running": ("Running", "accent"), "failed": ("Failed", "error")}
 
 
@@ -276,7 +285,7 @@ def _job_row(job: JobSnapshot) -> dict[str, Any]:
             "label": TITLES[deploy_agent.action_of(job)],
             "url": job_url(job.job_id),
         },
-        "status": status_cell(*STATUS_CELLS.get(job.status, ("Done", "ok"))),
+        "status": status_cell(*STATUS_CELLS.get(job.status, DONE)),
         "started": format_relative_time(job.started_at),
         "said": job.error or job.label,
     }

@@ -97,6 +97,15 @@ class ComponentSpec(PluginSpec):
 
 
 # Component registry - single source of truth
+# Deploy's nightly off-site copy of the scheduled backup, and the restore
+# drill's checks on it, with their tests.
+OFFSITE_FILES = [
+    "app/services/system/offsite.py",
+    "app/components/deploy/drill.py",
+    "tests/services/test_offsite_backup.py",
+    "tests/components/test_restore_drill_check.py",
+]
+
 COMPONENTS: dict[str, ComponentSpec] = {
     "backend": ComponentSpec(
         readme=ReadmeWiring(
@@ -731,7 +740,14 @@ COMPONENTS: dict[str, ComponentSpec] = {
                     "app/components/backend/startup/deploy_history.py",
                     "app/cli/deploy_cli.py",
                     "tests/components/test_deploy_history.py",
+                    "tests/components/test_deploy_events.py",
+                    "tests/_deploy_events.py",
+                    *OFFSITE_FILES,
                 ],
+                # The nightly off-site copy needs the backup the scheduler
+                # takes and the database to record it in: listed under both,
+                # so it goes when either does.
+                AnswerKeys.SCHEDULER: OFFSITE_FILES,
             },
         ),
     ),

@@ -1,4 +1,20 @@
-{# Overseer > Deployments > Backups: the scheduled database backups on the
-   backup volume, newest first, or why there are none. #}
+{# Overseer > Deployments > Backups: whether they are copied off the
+   server and the last restore drill (ui_deployments.offsite), then the
+   scheduled database backups on the backup volume, newest first, or why
+   there are none. #}
+{% from "components/macros/layout.html" import card, facts %}
 {% from "components/macros/table.html" import data_table %}
+{% from "pages/overseer/deployments/_macros.html" import goto, note %}
+{% if offsite %}
+{% call card("Off the server", id="card-offsite") %}
+{% if offsite.state == "off" %}
+<p class="{{ note() }}">Not set up: these backups live only on this server, and go with it. Set the Off-site backup values in {{ goto(secrets_url, "Secrets") }} and a copy leaves each night at 02:30.</p>
+{% elif offsite.state == "waiting" %}
+<p class="{{ note() }}">No copy yet: the first leaves at 02:30.</p>
+{% else %}
+{% if offsite.error %}<p class="{{ note() }}">The last copy failed: {{ offsite.error }}</p>{% endif %}
+{{ facts(offsite.facts) }}
+{% endif %}
+{% endcall %}
+{% endif %}
 <div id="deployments-backups">{{ data_table(backup_columns, backups.rows, empty=backups.note) }}</div>

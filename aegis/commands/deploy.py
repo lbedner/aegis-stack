@@ -5,6 +5,7 @@ Provides commands for deploying Aegis projects to remote servers,
 with backup/rollback strategy and post-deploy health checks.
 """
 
+import json
 import os
 import re
 import shlex
@@ -18,6 +19,7 @@ from contextlib import contextmanager, suppress
 from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
+from typing import Any
 
 import typer
 import yaml
@@ -26,7 +28,7 @@ from ..cli import brand
 from ..constants import AnswerKeys, PostgresProviders
 from ..core.component_files import template_module
 from ..core.copier_manager import AEGIS_GIT_EMAIL, load_copier_answers
-from ..core.deploy_protocol import step
+from ..core.deploy_protocol import protocol, step
 from ..core.footprint import COMPOSE_FILES
 from ..core.template_cleanup import deploy_env_file, env_value
 from ..i18n import lazy_t, t
@@ -35,9 +37,7 @@ from .deploy_backup import (
     backup_config,
     is_sqlite,
     list_backups,
-    offsite_configured,
     prune_backups,
-    push_offsite,
     restore_data,
     snapshot_sqlite,
 )
@@ -369,7 +369,7 @@ def _record_deploy(
     deploy history have no such command; a failed write only warns."""
     fields = {
         "--build": build_id,
-        "--by": _deployer(project_root),
+        "--by": _actor(project_root),
         "--from": socket.gethostname(),
         "--health": health,
         "--backup": backup,
@@ -377,10 +377,85 @@ def _record_deploy(
     argv = [part for flag, value in fields.items() if value for part in (flag, value)]
     if rolled_back:
         argv.append("--rolled-back")
+    _tell_app(project_root, host, user, deploy_path, "record", *argv)
+
+
+def _tell_app(
+    project_root: Path, host: str, user: str, deploy_path: str, *argv: str
+) -> None:
+    """The app's ``deploy`` command, keeping what only the deployer knows;
+    projects without deploy history have no such command, and a failed
+    write only warns."""
     remote = partial(_run_remote_capture, host, user)
-    result = app_deploy(project_root, remote, deploy_path, "record", *argv)
+    result = app_deploy(project_root, remote, deploy_path, *argv)
     if result is not None and result.returncode != 0:
         brand.warn(t("deploy.record_failed", error=result.stderr.strip()))
+
+
+# Who asked, when the Overseer's deploy agent runs a command (its user);
+# at a terminal, the git user (``_deployer``).
+ACTOR_ENV = "AEGIS_ACTOR"
+FAILED = "Failed: the command's output says why."
+
+
+def _actor(project_root: Path) -> str | None:
+    return os.environ.get(ACTOR_ENV) or _deployer(project_root)
+
+
+@contextmanager
+def recorded(
+    project_root: Path, server: dict[str, Any], kind: str
+) -> Iterator[dict[str, Any]]:
+    """Record what the command does to the server as a deploy event (the
+    app's ``deploy event``, over SSH like ``deploy record``), however it
+    ends: the caller fills the ``summary`` and ``detail`` it is handed; an
+    exit with a code, or an error, records it failed. Projects without
+    deploy history have no such command (``_tell_app``)."""
+    said: dict[str, Any] = {"summary": "", "detail": {}}
+    started = datetime.now(UTC)
+    ok, failed = protocol.EVENT_OK, protocol.EVENT_FAILED
+    outcome = failed
+    try:
+        yield said
+        outcome = ok
+    except typer.Exit as exc:
+        outcome = failed if exc.exit_code else ok
+        raise
+    except Exception as exc:
+        said["summary"] = said["summary"] or f"{type(exc).__name__}: {exc}"
+        raise
+    finally:
+        event = {
+            "kind": kind,
+            "outcome": outcome,
+            "summary": said["summary"] or (FAILED if outcome == failed else ""),
+            "actor": _actor(project_root),
+            "origin": socket.gethostname(),
+            "started_at": started.isoformat(),
+            "detail": said["detail"],
+        }
+        _tell_app(
+            project_root,
+            server["host"],
+            server["user"],
+            server["path"],
+            "event",
+            json.dumps(event),
+        )
+
+
+# The project's own CLI, in one of its containers.
+APP_CLI = ["python", "-m", "app.cli.main"]
+
+
+def last_json(output: str) -> Any:
+    """What an app command printed as JSON on its last line (its logs go to
+    stderr); None when that line is not JSON, or there is none."""
+    lines = output.strip().splitlines()
+    try:
+        return json.loads(lines[-1]) if lines else None
+    except ValueError:
+        return None
 
 
 def app_deploy(
@@ -393,7 +468,7 @@ def app_deploy(
     server's webserver, through ``remote``; None for a project without it."""
     if not (project_root / "app" / "cli" / "deploy_cli.py").exists():
         return None
-    command = ["python", "-m", "app.cli.main", "deploy", *argv]
+    command = [*APP_CLI, "deploy", *argv]
     return remote(_exec_command(deploy_path, "webserver", command))
 
 
@@ -529,14 +604,12 @@ def _create_backup(
 
     # The step bar's plan (BACKUP_STEPS), in the order they run: SQLite is
     # snapshotted before the files, a Postgres dump taken after them.
-    offsite = offsite_configured(run, deploy_path)
     database = ["database"] if include_db and not neon else []
     plan = [
         *(database if sqlite else []),
         "files",
         *([] if sqlite else database),
         "documents",
-        *(["offsite"] if offsite else []),
     ]
     if include_db and sqlite:
         step(plan, "database")
@@ -588,9 +661,6 @@ def _create_backup(
     _run_remote_capture(
         host, user, f"echo -e {shlex.quote(manifest)} > {safe_backup}/manifest.yml"
     )
-    if offsite:
-        step(plan, "offsite")
-        push_offsite(run, deploy_path, backup_dir, timestamp)
     prune_backups(run, deploy_path, keep_count)
 
     brand.success(t("deploy.backup_created", timestamp=timestamp))
@@ -1619,17 +1689,21 @@ def deploy_backup_command(
 
     brand.accent(t("deploy.creating_backup_on", host=host), bold=True)
 
-    timestamp = _create_backup(
-        host,
-        user,
-        deploy_path,
-        include_db=backup_cfg["include_database"],
-        neon=_is_neon_database(project_path),
-        sqlite=is_sqlite(_project_answers(_get_project_root(project_path))),
-        keep_count=backup_cfg["keep_count"],
-    )
-    if not timestamp:
-        raise typer.Exit(1)
+    root = _get_project_root(project_path)
+    with recorded(root, config["server"], "backup") as said:
+        timestamp = _create_backup(
+            host,
+            user,
+            deploy_path,
+            include_db=backup_cfg["include_database"],
+            neon=_is_neon_database(project_path),
+            sqlite=is_sqlite(_project_answers(root)),
+            keep_count=backup_cfg["keep_count"],
+        )
+        if not timestamp:
+            raise typer.Exit(1)
+        said["summary"] = f"Backed up {timestamp}"
+        said["detail"] = {"backup": timestamp}
     brand.success(f"\n{t('deploy.backup_complete')}", bold=True)
 
 

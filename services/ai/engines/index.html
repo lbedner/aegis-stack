@@ -6417,6 +6417,7 @@
 <li>Provide identical CLI and REST API interfaces</li>
 <li>Handle conversation management the same way</li>
 <li>Support streaming responses</li>
+<li>Run an agent's granted tools: Pydantic AI natively, LangChain by binding them to the model and running what it calls between rounds (<code>app/services/ai/service/langchain_turn.py</code>)</li>
 </ul>
 <p>The difference is internal implementation, how the engine communicates with the AI models. What matters for <em>you</em>, the builder, comes down to the following: Are you going to extend the service? If so, then pick the framework you're used to.</p>
 <h2 id="pydantic-ai">Pydantic AI</h2>

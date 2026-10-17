@@ -3789,22 +3789,22 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#context-injection" class="md-nav__link">
+  <a href="#context-and-live-data" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Context Injection
+        Context and Live Data
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Context Injection">
+    <nav class="md-nav" aria-label="Context and Live Data">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#health-context" class="md-nav__link">
+  <a href="#a-parts-live-state" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Health Context
+        A part's live state
       
     </span>
   </a>
@@ -3812,10 +3812,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#usage-context" class="md-nav__link">
+  <a href="#what-is-wrong-right-now" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Usage Context
+        What is wrong right now
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-model-catalog" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The model catalog
       
     </span>
   </a>
@@ -3827,28 +3838,6 @@
     <span class="md-ellipsis">
       
         RAG Context
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#rag-stats-context" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        RAG Stats Context
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#llm-catalog-context" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        LLM Catalog Context
       
     </span>
   </a>
@@ -6539,22 +6528,22 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#context-injection" class="md-nav__link">
+  <a href="#context-and-live-data" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Context Injection
+        Context and Live Data
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Context Injection">
+    <nav class="md-nav" aria-label="Context and Live Data">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#health-context" class="md-nav__link">
+  <a href="#a-parts-live-state" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Health Context
+        A part's live state
       
     </span>
   </a>
@@ -6562,10 +6551,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#usage-context" class="md-nav__link">
+  <a href="#what-is-wrong-right-now" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Usage Context
+        What is wrong right now
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#the-model-catalog" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The model catalog
       
     </span>
   </a>
@@ -6577,28 +6577,6 @@
     <span class="md-ellipsis">
       
         RAG Context
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#rag-stats-context" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        RAG Stats Context
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#llm-catalog-context" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        LLM Catalog Context
       
     </span>
   </a>
@@ -6840,33 +6818,29 @@
 </span><span id="__span-4-14"><a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>├── timestamp: datetime (indexed)
 </span><span id="__span-4-15"><a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>└── meta_data: dict
 </span></code></pre></div>
-<h2 id="context-injection">Context Injection</h2>
-<p>Illiana receives live system data through context formatters that enrich her system prompt. This is what makes her system-aware rather than a generic chatbot.</p>
-<h3 id="health-context">Health Context</h3>
-<p><strong>Location:</strong> <code>app/services/ai/health_context.py</code></p>
-<p>Injects component health status so Illiana can answer "Is my database healthy?" or "What's the scheduler doing?"</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.ai.health_context</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_health_context</span>
+<h2 id="context-and-live-data">Context and Live Data</h2>
+<p>Illiana's system prompt holds nothing live, so a provider's prompt cache serves it turn to turn. Live data reaches her two ways: tools she calls when asked, and one line on her current message while something is wrong.</p>
+<h3 id="a-parts-live-state">A part's live state</h3>
+<p><strong>Location:</strong> <code>app/services/system/node_now.py</code></p>
+<p>The <code>ontology</code> tool's answer for one part carries <code>now</code>, a frozen Pydantic model:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.system.node_now</span><span class="w"> </span><span class="kn">import</span> <span class="n">NodeNow</span><span class="p">,</span> <span class="n">now_of</span>
 </span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">context</span> <span class="o">=</span> <span class="k">await</span> <span class="n">get_health_context</span><span class="p">()</span>
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="c1"># Returns formatted markdown with component status, uptime, resource usage</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="n">now</span><span class="p">:</span> <span class="n">NodeNow</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="k">await</span> <span class="n">now_of</span><span class="p">(</span><span class="n">node</span><span class="p">)</span>  <span class="c1"># None for a table, route or sub-part</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="n">now</span><span class="o">.</span><span class="n">health</span>        <span class="c1"># the part&#39;s ComponentStatus, or None where it has no check</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="n">now</span><span class="o">.</span><span class="n">errors</span>        <span class="c1"># the ErrorIssues it owns, latest first (up to 5)</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="n">now</span><span class="o">.</span><span class="n">errors_total</span>  <span class="c1"># how many it owns</span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="n">now</span><span class="o">.</span><span class="n">spend</span>         <span class="c1"># the AI service&#39;s UsageWindows: today, last 7 days, all time</span>
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="n">now</span><span class="o">.</span><span class="n">read_at</span>       <span class="c1"># when all of it was read</span>
 </span></code></pre></div>
-<h3 id="usage-context">Usage Context</h3>
-<p><strong>Location:</strong> <code>app/services/ai/usage_context.py</code></p>
-<p>Gives Illiana awareness of her own activity - token consumption, costs, success rates.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.ai.usage_context</span><span class="w"> </span><span class="kn">import</span> <span class="n">UsageContext</span>
+<h3 id="what-is-wrong-right-now">What is wrong right now</h3>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.system.node_now</span><span class="w"> </span><span class="kn">import</span> <span class="n">right_now</span>
 </span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="n">ctx</span> <span class="o">=</span> <span class="n">UsageContext</span><span class="p">(</span>
-</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>    <span class="n">total_tokens</span><span class="o">=</span><span class="mi">45230</span><span class="p">,</span>
-</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>    <span class="n">total_requests</span><span class="o">=</span><span class="mi">23</span><span class="p">,</span>
-</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>    <span class="n">total_cost</span><span class="o">=</span><span class="mf">0.47</span><span class="p">,</span>
-</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>    <span class="n">success_rate</span><span class="o">=</span><span class="mf">95.6</span><span class="p">,</span>
-</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>    <span class="n">top_model</span><span class="o">=</span><span class="s2">&quot;gpt-4o&quot;</span><span class="p">,</span>
-</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>    <span class="n">top_model_percentage</span><span class="o">=</span><span class="mf">65.2</span><span class="p">,</span>
-</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>    <span class="n">recent_requests</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
-</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a><span class="p">)</span>
-</span><span id="__span-6-12"><a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a><span class="n">prompt_text</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">format_for_prompt</span><span class="p">()</span>  <span class="c1"># Compact markdown for injection</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="n">line</span> <span class="o">=</span> <span class="p">(</span><span class="k">await</span> <span class="n">right_now</span><span class="p">())</span><span class="o">.</span><span class="n">line</span><span class="p">()</span>  <span class="c1"># None while every check is healthy</span>
 </span></code></pre></div>
-<p>Supports <code>compact=True</code> for small models (Ollama) where context window is limited.</p>
+<p>The default assistant's turn puts the line ahead of the current message, for typed turns and calls alike; a custom agent never gets it.</p>
+<h3 id="the-model-catalog">The model catalog</h3>
+<p><strong>Location:</strong> <code>app/services/ai/domains/llm/catalog.py</code></p>
+<p>The <code>catalog</code> tool lists the models this install could use, filtered by text, vendor or modality, each a <code>CatalogModel</code> (id, title, vendor, lab, context window, prices per million tokens, release date). The default agent is granted it with <code>ontology</code> and, for admins, <code>health</code>.</p>
 <h3 id="rag-context">RAG Context</h3>
 <p><strong>Location:</strong> <code>app/services/ai/rag_context.py</code></p>
 <p>When RAG is enabled, search results are formatted for prompt injection with file references:</p>
@@ -6877,52 +6851,18 @@
 </span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="n">sources</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">format_sources_footer</span><span class="p">()</span>      <span class="c1"># Citation-style source references</span>
 </span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="n">metadata</span> <span class="o">=</span> <span class="n">ctx</span><span class="o">.</span><span class="n">to_metadata</span><span class="p">()</span>               <span class="c1"># Storage-friendly format</span>
 </span></code></pre></div>
-<h3 id="rag-stats-context">RAG Stats Context</h3>
-<p><strong>Location:</strong> <code>app/services/ai/rag_stats_context.py</code></p>
-<p>Provides collection-level awareness (how many collections, document counts, configuration):</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.ai.rag_stats_context</span><span class="w"> </span><span class="kn">import</span> <span class="n">RAGStatsContext</span>
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>
-</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="n">ctx</span> <span class="o">=</span> <span class="n">RAGStatsContext</span><span class="p">(</span>
-</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>    <span class="n">enabled</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>    <span class="n">collection_count</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
-</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>    <span class="n">collections</span><span class="o">=</span><span class="p">[(</span><span class="s2">&quot;code&quot;</span><span class="p">,</span> <span class="mi">1500</span><span class="p">),</span> <span class="p">(</span><span class="s2">&quot;docs&quot;</span><span class="p">,</span> <span class="mi">300</span><span class="p">)],</span>
-</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>    <span class="n">embedding_model</span><span class="o">=</span><span class="s2">&quot;all-MiniLM-L6-v2&quot;</span><span class="p">,</span>
-</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>    <span class="n">chunk_size</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>
-</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a>    <span class="n">chunk_overlap</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
-</span><span id="__span-8-10"><a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a>    <span class="n">default_top_k</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
-</span><span id="__span-8-11"><a id="__codelineno-8-11" name="__codelineno-8-11" href="#__codelineno-8-11"></a><span class="p">)</span>
-</span></code></pre></div>
-<h3 id="llm-catalog-context">LLM Catalog Context</h3>
-<p><strong>Location:</strong> <code>app/services/ai/llm_catalog_context.py</code></p>
-<p>Injects top models per vendor so Illiana can recommend alternatives:</p>
-<ul>
-<li>Featured vendors: OpenAI, Anthropic, Google, xAI, Mistral, Groq, DeepSeek</li>
-<li>Top 3 newest models per vendor (by release date)</li>
-<li>Includes pricing, context window, capabilities</li>
-<li>Filters out alias models (<code>-latest</code>, <code>:latest</code> suffixes)</li>
-<li>Optimized: ~3 SQL queries total with eager loading</li>
-</ul>
 <h3 id="system-prompt-assembly">System Prompt Assembly</h3>
-<p><strong>Location:</strong> <code>app/services/ai/prompts.py</code></p>
-<p>All contexts are assembled into Illiana's system prompt via <code>build_system_prompt()</code>:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.ai.prompts</span><span class="w"> </span><span class="kn">import</span> <span class="n">build_system_prompt</span>
-</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>
-</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="n">prompt</span> <span class="o">=</span> <span class="n">build_system_prompt</span><span class="p">(</span>
-</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>    <span class="n">settings</span><span class="o">=</span><span class="n">settings</span><span class="p">,</span>
-</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>    <span class="n">rag_context</span><span class="o">=</span><span class="n">rag_formatted</span><span class="p">,</span>        <span class="c1"># Code search results</span>
-</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>    <span class="n">rag_stats_context</span><span class="o">=</span><span class="n">rag_stats</span><span class="p">,</span>      <span class="c1"># Collection info</span>
-</span><span id="__span-9-7"><a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a>    <span class="n">health_context</span><span class="o">=</span><span class="n">health_formatted</span><span class="p">,</span>  <span class="c1"># Component status (injected LAST for emphasis)</span>
-</span><span id="__span-9-8"><a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a>    <span class="n">usage_context</span><span class="o">=</span><span class="n">usage_formatted</span><span class="p">,</span>    <span class="c1"># Activity stats</span>
-</span><span id="__span-9-9"><a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a>    <span class="n">catalog_context</span><span class="o">=</span><span class="n">catalog_formatted</span><span class="p">,</span> <span class="c1"># Available models</span>
-</span><span id="__span-9-10"><a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a>    <span class="n">use_rag</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-</span><span id="__span-9-11"><a id="__codelineno-9-11" name="__codelineno-9-11" href="#__codelineno-9-11"></a>    <span class="n">current_model</span><span class="o">=</span><span class="s2">&quot;gpt-4o&quot;</span><span class="p">,</span>
-</span><span id="__span-9-12"><a id="__codelineno-9-12" name="__codelineno-9-12" href="#__codelineno-9-12"></a>    <span class="n">current_provider</span><span class="o">=</span><span class="s2">&quot;openai&quot;</span><span class="p">,</span>
-</span><span id="__span-9-13"><a id="__codelineno-9-13" name="__codelineno-9-13" href="#__codelineno-9-13"></a><span class="p">)</span>
+<p><strong>Location:</strong> <code>app/services/ai/domains/chat/prompts.py</code></p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.ai.domains.chat.prompts</span><span class="w"> </span><span class="kn">import</span> <span class="n">build_system_prompt</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="n">prompt</span> <span class="o">=</span> <span class="n">build_system_prompt</span><span class="p">(</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>    <span class="n">rag_context</span><span class="o">=</span><span class="n">rag_formatted</span><span class="p">,</span>  <span class="c1"># Code search results</span>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>    <span class="n">current_model</span><span class="o">=</span><span class="s2">&quot;gpt-4o&quot;</span><span class="p">,</span>
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a>    <span class="n">current_provider</span><span class="o">=</span><span class="s2">&quot;openai&quot;</span><span class="p">,</span>
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a>    <span class="n">persona</span><span class="o">=</span><span class="n">agent_row_prompt</span><span class="p">,</span>   <span class="c1"># None: the seeded default</span>
+</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a>    <span class="n">memory_context</span><span class="o">=</span><span class="n">memory</span><span class="p">,</span>      <span class="c1"># Saved user memory</span>
+</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="p">)</span>
 </span></code></pre></div>
-<div class="admonition tip">
-<p class="admonition-title">Health Context Priority</p>
-<p>Health context is injected <strong>last</strong> in the prompt so the LLM weights it more heavily when answering status questions. This ensures Illiana reports what <strong>is</strong> running, not what <strong>could</strong> run.</p>
-</div>
 <h2 id="cost-calculation">Cost Calculation</h2>
 <p><strong>Location:</strong> <code>app/services/ai/service.py</code></p>
 <p>Every AI request automatically:</p>
@@ -6933,54 +6873,54 @@
 <li>Calculates: <code>(input_tokens * input_cost) + (output_tokens * output_cost)</code></li>
 <li>Records to <code>LLMUsage</code> table (non-blocking - won't crash the request on failure)</li>
 </ol>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="c1"># Manual cost calculation</span>
-</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.ai.domains.spend</span><span class="w"> </span><span class="kn">import</span> <span class="n">recording</span>
-</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>
-</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="n">cost</span> <span class="o">=</span> <span class="k">await</span> <span class="n">recording</span><span class="o">.</span><span class="n">calculate_cost</span><span class="p">(</span><span class="s2">&quot;gpt-4o&quot;</span><span class="p">,</span> <span class="mi">1500</span><span class="p">,</span> <span class="mi">800</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># Manual cost calculation</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.ai.domains.spend</span><span class="w"> </span><span class="kn">import</span> <span class="n">recording</span>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="n">cost</span> <span class="o">=</span> <span class="k">await</span> <span class="n">recording</span><span class="o">.</span><span class="n">calculate_cost</span><span class="p">(</span><span class="s2">&quot;gpt-4o&quot;</span><span class="p">,</span> <span class="mi">1500</span><span class="p">,</span> <span class="mi">800</span><span class="p">)</span>
 </span></code></pre></div>
 <p>See <a href="../cost-tracking/">Cost Tracking</a> for the full analytics system.</p>
 <h2 id="provider-capabilities">Provider Capabilities</h2>
 <p><strong>Location:</strong> <code>app/services/ai/models.py</code></p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.ai.models</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>    <span class="n">AIProvider</span><span class="p">,</span>
-</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>    <span class="n">get_provider_capabilities</span><span class="p">,</span>
-</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>    <span class="n">get_free_providers</span>
-</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="p">)</span>
-</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>
-</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="c1"># Check what a provider supports</span>
-</span><span id="__span-11-8"><a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a><span class="n">caps</span> <span class="o">=</span> <span class="n">get_provider_capabilities</span><span class="p">(</span><span class="n">AIProvider</span><span class="o">.</span><span class="n">GROQ</span><span class="p">)</span>
-</span><span id="__span-11-9"><a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Streaming: </span><span class="si">{</span><span class="n">caps</span><span class="o">.</span><span class="n">supports_streaming</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-</span><span id="__span-11-10"><a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Free tier: </span><span class="si">{</span><span class="n">caps</span><span class="o">.</span><span class="n">free_tier_available</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-</span><span id="__span-11-11"><a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a>
-</span><span id="__span-11-12"><a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a><span class="c1"># Get free providers</span>
-</span><span id="__span-11-13"><a id="__codelineno-11-13" name="__codelineno-11-13" href="#__codelineno-11-13"></a><span class="n">free</span> <span class="o">=</span> <span class="n">get_free_providers</span><span class="p">()</span>
-</span><span id="__span-11-14"><a id="__codelineno-11-14" name="__codelineno-11-14" href="#__codelineno-11-14"></a><span class="c1"># [AIProvider.PUBLIC, AIProvider.GROQ, AIProvider.GOOGLE, AIProvider.COHERE]</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.ai.models</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>    <span class="n">AIProvider</span><span class="p">,</span>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>    <span class="n">get_provider_capabilities</span><span class="p">,</span>
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>    <span class="n">get_free_providers</span>
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="p">)</span>
+</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>
+</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="c1"># Check what a provider supports</span>
+</span><span id="__span-10-8"><a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a><span class="n">caps</span> <span class="o">=</span> <span class="n">get_provider_capabilities</span><span class="p">(</span><span class="n">AIProvider</span><span class="o">.</span><span class="n">GROQ</span><span class="p">)</span>
+</span><span id="__span-10-9"><a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Streaming: </span><span class="si">{</span><span class="n">caps</span><span class="o">.</span><span class="n">supports_streaming</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</span><span id="__span-10-10"><a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Free tier: </span><span class="si">{</span><span class="n">caps</span><span class="o">.</span><span class="n">free_tier_available</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</span><span id="__span-10-11"><a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a>
+</span><span id="__span-10-12"><a id="__codelineno-10-12" name="__codelineno-10-12" href="#__codelineno-10-12"></a><span class="c1"># Get free providers</span>
+</span><span id="__span-10-13"><a id="__codelineno-10-13" name="__codelineno-10-13" href="#__codelineno-10-13"></a><span class="n">free</span> <span class="o">=</span> <span class="n">get_free_providers</span><span class="p">()</span>
+</span><span id="__span-10-14"><a id="__codelineno-10-14" name="__codelineno-10-14" href="#__codelineno-10-14"></a><span class="c1"># [AIProvider.PUBLIC, AIProvider.GROQ, AIProvider.GOOGLE, AIProvider.COHERE]</span>
 </span></code></pre></div>
 <h2 id="provider-management">Provider Management</h2>
 <p><strong>Location:</strong> <code>app/services/ai/provider_management.py</code></p>
 <p>Runtime provider detection, dependency checking, and API key management:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.ai.provider_management</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>    <span class="n">check_provider_dependency_installed</span><span class="p">,</span>
-</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a>    <span class="n">install_provider_dependency</span><span class="p">,</span>
-</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a>    <span class="n">get_existing_api_key</span><span class="p">,</span>
-</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>    <span class="n">validate_provider_name</span><span class="p">,</span>
-</span><span id="__span-12-6"><a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a>    <span class="n">mask_api_key</span><span class="p">,</span>
-</span><span id="__span-12-7"><a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="p">)</span>
-</span><span id="__span-12-8"><a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a>
-</span><span id="__span-12-9"><a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a><span class="c1"># Check if provider SDK is installed</span>
-</span><span id="__span-12-10"><a id="__codelineno-12-10" name="__codelineno-12-10" href="#__codelineno-12-10"></a><span class="k">if</span> <span class="ow">not</span> <span class="n">check_provider_dependency_installed</span><span class="p">(</span><span class="s2">&quot;anthropic&quot;</span><span class="p">):</span>
-</span><span id="__span-12-11"><a id="__codelineno-12-11" name="__codelineno-12-11" href="#__codelineno-12-11"></a>    <span class="n">install_provider_dependency</span><span class="p">(</span><span class="s2">&quot;anthropic&quot;</span><span class="p">)</span>  <span class="c1"># Auto-installs via uv/pip</span>
-</span><span id="__span-12-12"><a id="__codelineno-12-12" name="__codelineno-12-12" href="#__codelineno-12-12"></a>
-</span><span id="__span-12-13"><a id="__codelineno-12-13" name="__codelineno-12-13" href="#__codelineno-12-13"></a><span class="c1"># Check for API key</span>
-</span><span id="__span-12-14"><a id="__codelineno-12-14" name="__codelineno-12-14" href="#__codelineno-12-14"></a><span class="n">key</span> <span class="o">=</span> <span class="n">get_existing_api_key</span><span class="p">(</span><span class="s2">&quot;openai&quot;</span><span class="p">)</span>  <span class="c1"># Checks env vars and .env</span>
-</span><span id="__span-12-15"><a id="__codelineno-12-15" name="__codelineno-12-15" href="#__codelineno-12-15"></a><span class="n">masked</span> <span class="o">=</span> <span class="n">mask_api_key</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>  <span class="c1"># &quot;sk-a...xyz&quot;</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.ai.provider_management</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>    <span class="n">check_provider_dependency_installed</span><span class="p">,</span>
+</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a>    <span class="n">install_provider_dependency</span><span class="p">,</span>
+</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a>    <span class="n">get_existing_api_key</span><span class="p">,</span>
+</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a>    <span class="n">validate_provider_name</span><span class="p">,</span>
+</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>    <span class="n">mask_api_key</span><span class="p">,</span>
+</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="p">)</span>
+</span><span id="__span-11-8"><a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>
+</span><span id="__span-11-9"><a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a><span class="c1"># Check if provider SDK is installed</span>
+</span><span id="__span-11-10"><a id="__codelineno-11-10" name="__codelineno-11-10" href="#__codelineno-11-10"></a><span class="k">if</span> <span class="ow">not</span> <span class="n">check_provider_dependency_installed</span><span class="p">(</span><span class="s2">&quot;anthropic&quot;</span><span class="p">):</span>
+</span><span id="__span-11-11"><a id="__codelineno-11-11" name="__codelineno-11-11" href="#__codelineno-11-11"></a>    <span class="n">install_provider_dependency</span><span class="p">(</span><span class="s2">&quot;anthropic&quot;</span><span class="p">)</span>  <span class="c1"># Auto-installs via uv/pip</span>
+</span><span id="__span-11-12"><a id="__codelineno-11-12" name="__codelineno-11-12" href="#__codelineno-11-12"></a>
+</span><span id="__span-11-13"><a id="__codelineno-11-13" name="__codelineno-11-13" href="#__codelineno-11-13"></a><span class="c1"># Check for API key</span>
+</span><span id="__span-11-14"><a id="__codelineno-11-14" name="__codelineno-11-14" href="#__codelineno-11-14"></a><span class="n">key</span> <span class="o">=</span> <span class="n">get_existing_api_key</span><span class="p">(</span><span class="s2">&quot;openai&quot;</span><span class="p">)</span>  <span class="c1"># Checks env vars and .env</span>
+</span><span id="__span-11-15"><a id="__codelineno-11-15" name="__codelineno-11-15" href="#__codelineno-11-15"></a><span class="n">masked</span> <span class="o">=</span> <span class="n">mask_api_key</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>  <span class="c1"># &quot;sk-a...xyz&quot;</span>
 </span></code></pre></div>
 <h2 id="health-monitoring">Health Monitoring</h2>
 <p><strong>Location:</strong> <code>app/services/ai/health.py</code></p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.ai.health</span><span class="w"> </span><span class="kn">import</span> <span class="n">check_ai_service_health</span>
-</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>
-</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="n">status</span> <span class="o">=</span> <span class="k">await</span> <span class="n">check_ai_service_health</span><span class="p">()</span>
-</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Status: </span><span class="si">{</span><span class="n">status</span><span class="o">.</span><span class="n">status</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>  <span class="c1"># HEALTHY, DEGRADED, or UNHEALTHY</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.ai.health</span><span class="w"> </span><span class="kn">import</span> <span class="n">check_ai_service_health</span>
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="n">status</span> <span class="o">=</span> <span class="k">await</span> <span class="n">check_ai_service_health</span><span class="p">()</span>
+</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Status: </span><span class="si">{</span><span class="n">status</span><span class="o">.</span><span class="n">status</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>  <span class="c1"># HEALTHY, DEGRADED, or UNHEALTHY</span>
 </span></code></pre></div>
 <hr />
 <p><strong>Next Steps:</strong></p>

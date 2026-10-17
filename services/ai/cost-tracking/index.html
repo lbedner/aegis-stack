@@ -6572,7 +6572,7 @@
 <li><strong>Per-user breakdown</strong> - filter usage by <code>user_id</code> to see individual consumption</li>
 <li><strong>Model breakdown</strong> - compare spend and volume across models and providers</li>
 <li><strong>Real-time dashboard</strong> - frontend analytics tab with hero stats, pie chart, and activity table</li>
-<li><strong>Illiana context</strong> - usage stats injected into Illiana's system prompt so she can answer cost questions</li>
+<li><strong>Illiana</strong> - the AI service's spend by window (today, last 7 days, all time) on its node in the ontology, so she can answer cost questions</li>
 </ul>
 <hr />
 <h2 id="how-it-works">How It Works</h2>
@@ -6844,14 +6844,12 @@
 </div>
 <hr />
 <h2 id="illiana-context">Illiana Context</h2>
-<p>Usage statistics are automatically included in Illiana's system prompt via <code>UsageContext</code> (<code>app/services/ai/usage_context.py</code>).</p>
-<p>This means Illiana can answer questions like:</p>
+<p>Illiana reads spend when asked rather than carrying it in every prompt: the AI service's node in the ontology carries its spend by window (<code>spend_windows</code> in <code>app/services/ai/domains/spend/windows.py</code>), today, the last 7 days and all time, read in one query and stamped with when. She can answer:</p>
 <ul>
-<li>"How much have I spent this month?"</li>
-<li>"Which model am I using most?"</li>
-<li>"What's my success rate?"</li>
+<li>"How much have I spent today?"</li>
+<li>"What did this week cost?"</li>
 </ul>
-<p><code>format_for_prompt(compact=True)</code> produces a condensed version for smaller models (Ollama), keeping the system prompt short.</p>
+<p>For another window she says those are the windows she has. The usage aggregates (<code>get_usage_stats</code>) return a typed <code>UsageStatsResponse</code>, the same model the API serves and Overseer reads.</p>
 <div class="admonition note">
 <p class="admonition-title">Ollama Zero-Cost</p>
 <p>Illiana knows that Ollama models report <code>$0.00</code> cost by design, local inference has no per-token billing. She won't flag zero cost as an anomaly.</p>

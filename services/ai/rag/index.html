@@ -7366,15 +7366,11 @@
 </span><span id="__span-18-5"><a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a>/sources enable   Enable source references
 </span></code></pre></div>
 <h3 id="context-injection">Context Injection</h3>
-<p>When RAG is enabled, search results are injected into Illiana's system prompt via two context objects:</p>
+<p>When RAG is enabled, search results are injected into Illiana's system prompt:</p>
 <p><strong>RAGContext</strong> (<code>app/services/ai/rag_context.py</code>):
 - <code>format_for_prompt()</code> - Markdown with file names, line numbers, syntax highlighting
 - <code>format_sources_footer()</code> - Citation-style source references (<code>[1] app/services/auth.py:42</code>)
 - <code>to_metadata()</code> - Storage-friendly format for conversation metadata</p>
-<p><strong>RAGStatsContext</strong> (<code>app/services/ai/rag_stats_context.py</code>):
-- Collection-level awareness (count, names, document counts)
-- Embedding model and chunking configuration
-- Formatted for compact prompt injection</p>
 <hr />
 <h2 id="source-files">Source Files</h2>
 <table>
@@ -7412,10 +7408,6 @@
 <tr>
 <td><code>app/services/ai/rag_context.py</code></td>
 <td>Prompt context formatting</td>
-</tr>
-<tr>
-<td><code>app/services/ai/rag_stats_context.py</code></td>
-<td>Stats context</td>
 </tr>
 <tr>
 <td><code>app/cli/rag/</code></td>

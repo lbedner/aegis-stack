@@ -3808,10 +3808,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#context-injection" class="md-nav__link">
+  <a href="#the-catalog-tool" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Context Injection
+        The Catalog Tool
       
     </span>
   </a>
@@ -6864,10 +6864,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#context-injection" class="md-nav__link">
+  <a href="#the-catalog-tool" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Context Injection
+        The Catalog Tool
       
     </span>
   </a>
@@ -6920,7 +6920,7 @@
 <li><strong>Pricing data</strong> with per-token input/output costs and price versioning</li>
 <li><strong>Capability tracking</strong> - modalities (text, image, audio, video), function calling, streaming, structured output</li>
 <li><strong>One-command switching</strong> - <code>llm use gpt-4o</code> auto-detects vendor and updates your config</li>
-<li><strong>Context injection</strong> - top models per vendor are injected into Illiana's prompts for model recommendations</li>
+<li><strong>A catalog tool</strong> - Illiana looks models up when asked, for recommendations</li>
 </ul>
 <h2 id="quick-start">Quick Start</h2>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># 1. Generate project with database backend</span>
@@ -7399,16 +7399,8 @@ which is the whole reason this is a link table.</p>
 <li><code>effective_date</code> - supports price history; latest price selected by <code>ORDER BY effective_date DESC</code></li>
 </ul>
 <hr />
-<h2 id="context-injection">Context Injection</h2>
-<p>The <code>LLMCatalogContext</code> class (<code>app/services/ai/llm_catalog_context.py</code>) builds a compact summary of featured vendors and their top models for injection into Illiana's system prompt.</p>
-<p><strong>Featured vendors</strong> (priority-ordered): OpenAI, Anthropic, Google, xAI, Mistral, Groq, DeepSeek</p>
-<p>For each vendor, the 3 newest models (by release date) are included with:
-- Model ID, title
-- Input/output cost per 1M tokens
-- Context window
-- Key capabilities (function calling, vision, structured output)</p>
-<p>Alias models (ending in <code>-latest</code> or <code>:latest</code>) are filtered out.</p>
-<p>This enables Illiana to recommend models when asked "What's the cheapest model with vision?" or "Which Anthropic model should I use?"</p>
+<h2 id="the-catalog-tool">The Catalog Tool</h2>
+<p>The <code>catalog</code> tool (<code>app/services/ai/domains/llm/catalog.py</code>) is how an agent reads the catalog: the models this install could run, newest first, filtered by text, vendor or modality (at most 50). Each row is a <code>CatalogModel</code>: id, title, vendor, the lab that made it, context window, input and output price per million tokens, release date and kind. The answer is a <code>CatalogAnswer</code> with when it was read, both frozen Pydantic models. The default assistant is granted it, so "What's the cheapest model with vision?" is a lookup, not a block in every prompt.</p>
 <hr />
 <h2 id="source-files">Source Files</h2>
 <table>
@@ -7444,8 +7436,8 @@ which is the whole reason this is a link table.</p>
 <td>Data transformation</td>
 </tr>
 <tr>
-<td><code>app/services/ai/llm_catalog_context.py</code></td>
-<td>Prompt context injection</td>
+<td><code>app/services/ai/domains/llm/catalog.py</code></td>
+<td>Catalog lookups and the <code>catalog</code> tool</td>
 </tr>
 <tr>
 <td><code>app/services/ai/models/llm/</code></td>

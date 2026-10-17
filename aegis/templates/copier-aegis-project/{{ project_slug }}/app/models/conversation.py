@@ -5,14 +5,16 @@ These tables store conversation history in the project database.
 """
 
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from uuid import uuid4
 
 from sqlalchemy import JSON, Column
 from sqlmodel import Field, Relationship, SQLModel
 
-if TYPE_CHECKING:
-    pass
+from app.core.constants import ServiceName
+
+# Whose tables these are (``ownership``): ``app/models`` is no part's folder.
+PART_OF = ServiceName.AI
 
 
 class Conversation(SQLModel, table=True):

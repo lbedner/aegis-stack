@@ -1,4 +1,4 @@
-{% if ai_framework == "pydantic-ai" %}"""Tool-call trace assembly for streamed chat turns.
+"""Tool-call trace assembly for streamed chat turns.
 
 The trace is the UI's expandable run trail: one entry per tool call
 (full script kept, result clipped), persisted on the message row and
@@ -7,6 +7,7 @@ carried on the final SSE event.
 
 import json
 from typing import Any
+{%- if ai_framework == "pydantic-ai" %}
 
 from pydantic_ai.messages import (
     FunctionToolCallEvent,
@@ -16,6 +17,7 @@ from pydantic_ai.messages import (
 )
 
 from app.core.chat_transcript import card_component
+{%- endif %}
 from app.services.ai.models import StreamingMessage
 
 
@@ -42,12 +44,6 @@ def call_args_preview(args: Any) -> str:
     return (text or "")[:120]
 
 
-# Trace-entry size caps: the trace persists on the message row and rides
-# the final SSE event, so a pathological payload must not bloat either.
-_TRACE_CODE_CAP = 6_000
-_TRACE_RESULT_CAP = 2_000
-
-
 def tool_notice(
     tool_name: str,
     *,
@@ -65,6 +61,15 @@ def tool_notice(
         conversation_id=conversation_id,
         metadata={"event": "tool", "tool": tool_name, "args": args},
     )
+
+
+{%- if ai_framework == "pydantic-ai" %}
+
+
+# Trace-entry size caps: the trace persists on the message row and rides
+# the final SSE event, so a pathological payload must not bloat either.
+_TRACE_CODE_CAP = 6_000
+_TRACE_RESULT_CAP = 2_000
 
 
 def record_tool_call(trace: list[dict[str, Any]], event: FunctionToolCallEvent) -> None:

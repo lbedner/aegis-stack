@@ -21,7 +21,7 @@ Every AI request is automatically tracked, tokens consumed, cost calculated, and
 - **Per-user breakdown** - filter usage by `user_id` to see individual consumption
 - **Model breakdown** - compare spend and volume across models and providers
 - **Real-time dashboard** - frontend analytics tab with hero stats, pie chart, and activity table
-- **Illiana context** - usage stats injected into Illiana's system prompt so she can answer cost questions
+- **Illiana** - the AI service's spend by window (today, last 7 days, all time) on its node in the ontology, so she can answer cost questions
 
 ---
 
@@ -234,15 +234,12 @@ A compound index on `(timestamp, model_id)` keeps time-range + model aggregation
 
 ## Illiana Context
 
-Usage statistics are automatically included in Illiana's system prompt via `UsageContext` (`app/services/ai/usage_context.py`).
+Illiana reads spend when asked rather than carrying it in every prompt: the AI service's node in the ontology carries its spend by window (`spend_windows` in `app/services/ai/domains/spend/windows.py`), today, the last 7 days and all time, read in one query and stamped with when. She can answer:
 
-This means Illiana can answer questions like:
+- "How much have I spent today?"
+- "What did this week cost?"
 
-- "How much have I spent this month?"
-- "Which model am I using most?"
-- "What's my success rate?"
-
-`format_for_prompt(compact=True)` produces a condensed version for smaller models (Ollama), keeping the system prompt short.
+For another window she says those are the windows she has. The usage aggregates (`get_usage_stats`) return a typed `UsageStatsResponse`, the same model the API serves and Overseer reads.
 
 !!! note "Ollama Zero-Cost"
     Illiana knows that Ollama models report `$0.00` cost by design, local inference has no per-token billing. She won't flag zero cost as an anomaly.

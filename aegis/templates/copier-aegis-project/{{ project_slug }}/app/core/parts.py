@@ -36,6 +36,9 @@ class Part:
     hosts: bool = False  # what has no process of its own runs in it
     holds_keys: bool = False  # every outside provider's key lives in it
     order: int | None = None  # in the sidebar and its row; none: last, by name
+    # What it is, in a line: what the app map says of a part with no
+    # package docstring of its own (ingress is Traefik, not Python).
+    description: str = ""
 
 
 PARTS: dict[str, Part] = {
@@ -45,6 +48,7 @@ PARTS: dict[str, Part] = {
         cli="ai",
         marker="app/services/ai",
         order=20,
+        description="AI platform: multi-provider chat, agents, and an LLM catalog",
     ),
     "auth": Part(
         kind="service",
@@ -52,6 +56,7 @@ PARTS: dict[str, Part] = {
         cli="auth",
         marker="app/services/auth",
         order=10,
+        description="User authentication and authorization with JWT tokens",
     ),
     "backend": Part(
         kind="component",
@@ -63,6 +68,7 @@ PARTS: dict[str, Part] = {
         depends_on=("database", "queue", "cache", "storage", "ollama", "browser"),
         hosts=True,
         order=10,
+        description="FastAPI backend server",
     ),
     "blog": Part(
         kind="service",
@@ -70,6 +76,7 @@ PARTS: dict[str, Part] = {
         cli="blog",
         marker="app/services/blog",
         order=90,
+        description="Markdown blog with draft/publish workflow and tags",
     ),
     "browser": Part(
         kind="component",
@@ -79,6 +86,7 @@ PARTS: dict[str, Part] = {
         containers=("browser",),
         tier=2,
         order=120,
+        description="Remote-driven browser (Playwright server)",
     ),
     "cache": Part(
         kind="component",
@@ -90,6 +98,7 @@ PARTS: dict[str, Part] = {
         page="redis",
         role="store",
         order=70,
+        description="Redis cache and message broker",
     ),
     "comms": Part(
         kind="service",
@@ -97,6 +106,7 @@ PARTS: dict[str, Part] = {
         cli="comms",
         marker="app/services/comms",
         order=30,
+        description="Communications service with email, SMS and voice",
     ),
     "database": Part(
         kind="component",
@@ -107,6 +117,7 @@ PARTS: dict[str, Part] = {
         tier=2,
         role="store",
         order=40,
+        description="Database with SQLModel ORM (SQLite or PostgreSQL)",
     ),
     "deploy": Part(
         kind="component",
@@ -114,6 +125,7 @@ PARTS: dict[str, Part] = {
         cli="deploy",
         marker="app/components/deploy",
         containers=("socket-proxy",),
+        description="Deployment target (Docker Compose), read by the Overseer",
     ),
     "documents": Part(
         kind="service",
@@ -121,6 +133,7 @@ PARTS: dict[str, Part] = {
         cli="documents",
         marker="app/services/documents",
         order=40,
+        description="Document store: keep the paper, deduped and findable",
     ),
     "finance": Part(
         kind="service",
@@ -128,12 +141,14 @@ PARTS: dict[str, Part] = {
         cli="finance",
         marker="app/services/finance",
         order=80,
+        description="Personal finance aggregation (accounts, transactions, net worth, import)",
     ),
     "frontend": Part(
         kind="component",
         category=Category.APP,
         cli="frontend",
         order=30,
+        description="Flet frontend interface",
     ),
     "ingress": Part(
         kind="component",
@@ -144,6 +159,7 @@ PARTS: dict[str, Part] = {
         tier=0,
         depends_on=("backend",),
         order=90,
+        description="Traefik reverse proxy and load balancer",
     ),
     "insights": Part(
         kind="service",
@@ -151,12 +167,14 @@ PARTS: dict[str, Part] = {
         cli="insights",
         marker="app/services/insights",
         order=60,
+        description="Adoption metrics and analytics with automated data collection",
     ),
     "mcp": Part(
         kind="component",
         category=Category.AI,
         cli="mcp",
         marker="app/components/mcp",
+        description="MCP server: an outside assistant reads the app's tools",
     ),
     "meetings": Part(
         kind="service",
@@ -164,6 +182,7 @@ PARTS: dict[str, Part] = {
         cli="meetings",
         marker="app/services/meetings",
         order=55,
+        description="A bot that joins calls and keeps the transcript",
     ),
     "observability": Part(
         kind="component",
@@ -171,6 +190,7 @@ PARTS: dict[str, Part] = {
         cli="observability",
         marker="app/components/backend/middleware/logfire_tracing.py",
         order=100,
+        description="Logfire observability, tracing, and metrics",
     ),
     "ollama": Part(
         kind="component",
@@ -181,6 +201,7 @@ PARTS: dict[str, Part] = {
         tier=2,
         page="inference",
         order=110,
+        description="Local model serving (Ollama)",
     ),
     "payment": Part(
         kind="service",
@@ -188,6 +209,7 @@ PARTS: dict[str, Part] = {
         cli="payment",
         marker="app/services/payment",
         order=70,
+        description="Payment processing with Stripe (checkout, subscriptions, webhooks)",
     ),
     "research": Part(
         kind="service",
@@ -195,6 +217,7 @@ PARTS: dict[str, Part] = {
         cli="research",
         marker="app/services/research",
         order=50,
+        description="Outside posts and threads, collected by saved searches",
     ),
     "scheduler": Part(
         kind="component",
@@ -205,6 +228,7 @@ PARTS: dict[str, Part] = {
         tier=1,
         depends_on=("database", "queue"),
         order=60,
+        description="Scheduled task execution infrastructure",
     ),
     "secrets": Part(
         kind="component",
@@ -212,6 +236,7 @@ PARTS: dict[str, Part] = {
         cli="secrets",
         marker="app/components/secrets/store.py",
         holds_keys=True,
+        description="Encrypted credential store (keys editable, live)",
     ),
     "storage": Part(
         kind="component",
@@ -222,6 +247,7 @@ PARTS: dict[str, Part] = {
         tier=2,
         role="bucket",
         order=80,
+        description="S3 object storage, SeaweedFS in dev",
     ),
     "web_frontend": Part(
         kind="component",
@@ -229,6 +255,7 @@ PARTS: dict[str, Part] = {
         cli="htmx",
         marker="app/components/web_frontend",
         order=20,
+        description="Server-rendered htmx web frontend",
     ),
     "worker": Part(
         kind="component",
@@ -240,5 +267,6 @@ PARTS: dict[str, Part] = {
         depends_on=("queue", "database"),
         consumes=("queue",),
         order=50,
+        description="Background task processing (arq, Dramatiq, or TaskIQ)",
     ),
 }

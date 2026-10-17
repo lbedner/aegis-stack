@@ -510,8 +510,7 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_dir(project_path, "tests/services/ai/chat_kit")
         remove_dir(project_path, "app/services/ai/domains/llm/etl")
         remove_dir(project_path, "app/services/ai/fixtures")
-        # Remove persistence-related contexts (keep usage_context.py - no DB deps)
-        remove_file(project_path, "app/services/ai/domains/chat/llm_catalog_context.py")
+        # Remove persistence-related catalog and LLM modules
         remove_file(project_path, "app/services/ai/domains/llm/llm_service.py")
         remove_file(project_path, "app/services/ai/domains/llm/catalog.py")
         remove_file(project_path, "app/services/ai/domains/llm/queries.py")
@@ -521,7 +520,7 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         # Remove persistence-related tests
         remove_dir(project_path, "tests/services/ai/etl")
         remove_file(project_path, "tests/services/ai/test_usage_tracking.py")
-        remove_file(project_path, "tests/services/ai/test_llm_catalog_context.py")
+        remove_file(project_path, "tests/services/ai/test_catalog_tool.py")
         # Prints catalog rows; imports sqlmodel + the llm tables removed above.
         remove_file(project_path, "tests/services/ai/test_model_id_display.py")
         remove_file(project_path, "tests/services/ai/test_llm_service.py")
@@ -566,8 +565,6 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(project_path, "tests/cli/test_rag_cli_registration.py")
         # Remove RAG-related files within AI service
         remove_file(project_path, "app/services/ai/domains/chat/rag_context.py")
-        remove_file(project_path, "app/services/ai/domains/chat/rag_stats_context.py")
-        remove_file(project_path, "tests/services/ai/test_rag_stats_context.py")
         remove_dir(project_path, "app/components/frontend/dashboard/modals/rag_tab")
 
     # chat_kit is a pydantic-ai chat engine (imports ``pydantic_ai``); it has

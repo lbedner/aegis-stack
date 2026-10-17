@@ -1,7 +1,7 @@
-"""
-Shared domain models and utilities.
-
-Common types and models used across multiple domains.
+"""What every service reaches for: who is calling and whether they may
+(``deps``: the caller's user, admin and owner), the query clauses that
+scope rows to an owner or a time window (``queries``), and the API's
+response envelopes (``models``).
 """
 
 from .models import (

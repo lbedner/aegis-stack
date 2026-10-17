@@ -3,9 +3,11 @@ users it was spent on, the span of the ledger, and what voice calls cost.
 Set-shaped inputs (a half-open ``[start, end)`` window), map-shaped outputs,
 no business logic; the Overseer's Costs section shapes them."""
 
+from collections.abc import Sequence
 from datetime import date, datetime
+from typing import Any
 
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -103,3 +105,29 @@ async def voice_spend(
     )
     spent = {action: float(cost or 0) for action, cost in rows.all()}
     return {label: spent.get(action, 0.0) for action, label in VOICE_ACTIONS.items()}
+
+
+async def usage_windows(
+    session: AsyncSession, starts: Sequence[datetime | None]
+) -> list[tuple[int, int, float]]:
+    """Requests, tokens and cost since each of ``starts`` (None: the whole
+    ledger), in one read."""
+    tokens = LLMUsage.input_tokens + LLMUsage.output_tokens
+
+    def since(start: datetime | None, value: Any) -> Any:
+        return value if start is None else case((LLMUsage.timestamp >= start, value))
+
+    columns = [
+        figure
+        for start in starts
+        for figure in (
+            func.count(since(start, LLMUsage.id)),
+            func.coalesce(func.sum(since(start, tokens)), 0),
+            func.coalesce(func.sum(since(start, LLMUsage.total_cost)), 0.0),
+        )
+    ]
+    row = (await session.exec(select(*columns))).one()
+    return [
+        (int(row[i]), int(row[i + 1]), float(row[i + 2]))
+        for i in range(0, len(columns), 3)
+    ]

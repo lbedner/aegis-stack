@@ -91,7 +91,7 @@ The **AI Service** brings a complete AI platform to your Aegis Stack project: mu
 - **Conversation Management** - In-memory or database-backed (SQLite/PostgreSQL) persistence
 - **Slash Commands** - In-chat commands (`/model`, `/rag`, `/status`, `/new`)
 - **Health Monitoring** - Service health checks with validation
-- **Context Injection** - Live system health, usage stats, RAG results, and catalog data injected into Illiana's prompts
+- **Live data on demand** - a part's health, errors and spend from the ontology tool, the model catalog from the catalog tool, and a line on the current message while something is wrong; RAG results in the prompt
 
 ## Quick Start
 

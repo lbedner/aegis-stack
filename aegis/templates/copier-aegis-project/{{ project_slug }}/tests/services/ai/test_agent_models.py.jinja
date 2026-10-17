@@ -9,6 +9,7 @@ import pytest
 from sqlmodel import Session, select
 
 from app.core.tools import register_tool, unregister_tool
+from app.services.ai.domains.chat.agent_loader import default_agent_config
 from app.services.ai.domains.chat.agent_registry import seed_agent
 from app.services.ai.domains.chat.builtin_fetchers import APP_MAP
 from app.services.ai.domains.chat.prompts import get_default_system_prompt
@@ -94,9 +95,22 @@ class TestAgentSeed:
         ).all():
             session.delete(link)
         session.commit()
-        assert load_agent_fixtures(session)["tool_links"] == 1
+        regranted = load_agent_fixtures(session)["tool_links"]
+        assert regranted == len(default_agent_config().tool_names)
         session.refresh(agent)
         assert "ontology" in {t.name for t in agent.tools}
+
+    def test_the_default_agent_looks_up_what_left_her_prompt(
+        self, session: Session
+    ) -> None:
+        """The model catalog and the app's health are tools of hers, not
+        blocks in every prompt."""
+        load_agent_fixtures(session)
+
+        agent = session.exec(
+            select(Agent).where(Agent.slug == DEFAULT_AGENT_SLUG)
+        ).one()
+        assert {"catalog", "health"} <= {t.name for t in agent.tools}
 
     def test_the_default_agent_knows_the_app_without_asking(
         self, session: Session

@@ -8,14 +8,16 @@ She is not required to use Aegis Stack, and nothing in the system depends on her
 
 ## What Makes Her Different
 
-Illiana receives live data injected into her system prompt before every response. This means she answers based on what your system is actually doing right now, not what it could theoretically do.
+Illiana answers from what your system is actually doing right now, not what it could theoretically do. She reads it when asked, through her tools, rather than carrying it in every prompt: her system prompt holds nothing live, so a provider's prompt cache serves it turn to turn.
 
-| Context | What She Knows | Example Questions |
+| Where | What She Knows | Example Questions |
 |---------|---------------|-------------------|
-| **Health** | Component status, uptime, resource usage | "Is my database healthy?" "What's the scheduler doing?" |
-| **Usage** | Her own token consumption, costs, success rate | "How much have I spent today?" "What's my most-used model?" |
-| **RAG** | Your codebase (when indexed) | "How does auth work in this project?" "Where is the scheduler configured?" |
-| **Catalog** | Available models, pricing, capabilities | "What's the cheapest model with vision?" "Compare Claude vs GPT-4o pricing" |
+| **Ontology tool** | A part's health check, the errors it owns, the AI service's spend by window (today, 7 days, all time) | "Is my database healthy?" "How much have I spent today?" |
+| **Health tool** | Every component's status (admins) | "How is the system doing?" |
+| **Catalog tool** | Available models, prices, context windows | "What's the cheapest model with vision?" |
+| **RAG** | Your codebase (when indexed) | "How does auth work in this project?" |
+
+While something is wrong, one line on her current message says what ("comms partly set up, ollama cold"), so "is anything wrong?" needs no tool call and the line never sits in her history.
 
 ```mermaid
 graph TB
@@ -34,11 +36,11 @@ graph TB
             Usage["Cost Tracking<br/>Usage Analytics"]
         end
 
-        subgraph "Context Injection"
-            Health[Health Context]
-            UsageCtx[Usage Context]
+        subgraph "Live Data, Asked For"
+            Health[Ontology and Health Tools]
+            UsageCtx[Spend by Window]
             RAGCtx[RAG Context]
-            CatalogCtx[Catalog Context]
+            CatalogCtx[Catalog Tool]
         end
 
         Providers["Providers<br/>OpenAI, Anthropic, Google<br/>Groq, Mistral, Cohere<br/>Ollama, PUBLIC"]
@@ -145,21 +147,19 @@ You: /rag off
 RAG disabled
 ```
 
-## Context Injection
+## Context and Live Data
 
-Illiana's system prompt is assembled dynamically before every response. Four context formatters inject live data:
+Illiana's system prompt is her persona, the model in force, her saved memory and her memory modules (the app map), plus retrieved code when RAG is on. Nothing in it changes turn to turn.
 
-### Health Context
+### Live data, asked for
 
-**Source:** `app/services/ai/health_context.py`
+**Sources:** `app/services/system/node_now.py`, `app/services/ai/domains/llm/catalog.py`
 
-Injects component health status. Illiana reports what **is** running, not what **could** run.
+Asking the `ontology` tool about a part returns its `now` beside its structure: its health check, the error issues it owns (latest first, with a total) and, for the AI service, what it spent today, over the last 7 days and in all, with when each was read. The `health` tool gives every component at once, and the `catalog` tool the models on offer with their prices. Each answer is a frozen Pydantic model (`NodeNow`, `CatalogAnswer`) that rejects fields it does not declare.
 
-### Usage Context
+### What is wrong right now
 
-**Source:** `app/services/ai/usage_context.py`
-
-Gives Illiana awareness of her own activity: tokens consumed, costs, success rates. Supports a compact mode for smaller models (Ollama) where context window is limited.
+`node_now.right_now()` reads every check that is not healthy; while there is one, a single line rides her current message, never her system prompt or her history.
 
 ### RAG Context
 
@@ -167,17 +167,11 @@ Gives Illiana awareness of her own activity: tokens consumed, costs, success rat
 
 When RAG is enabled, search results are formatted as markdown with file names, line numbers, and syntax highlighting. Illiana is instructed to answer from this code, not generic knowledge.
 
-### LLM Catalog Context
-
-**Source:** `app/services/ai/llm_catalog_context.py`
-
-Top models per featured vendor (OpenAI, Anthropic, Google, xAI, Mistral, Groq, DeepSeek) with pricing and capabilities. This lets Illiana recommend models when asked.
-
 ### Prompt Assembly
 
 **Source:** `app/services/ai/domains/chat/prompts.py`
 
-Her persona is the `assistant` agent's `system_prompt`, seeded with the whole text and edited like any agent's (see [Agents](agents.md)). `build_system_prompt()` appends the model in force and each context after it. Health context is injected last so the LLM weights it more heavily for status questions.
+Her persona is the `assistant` agent's `system_prompt`, seeded with the whole text and edited like any agent's (see [Agents](agents.md)). `build_system_prompt()` appends the model in force, retrieved code and saved memory after it.
 
 ## Chat Modes
 

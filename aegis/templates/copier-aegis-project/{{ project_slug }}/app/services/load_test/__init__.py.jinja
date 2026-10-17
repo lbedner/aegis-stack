@@ -1,4 +1,6 @@
-"""Load test service package.
+"""Load testing: drives any API endpoint (``api``) and, with a worker, the
+queue (``worker``) at a chosen load, and keeps each run's results and
+analysis in Redis (``common``).
 
 Provides shared load-test infrastructure under ``common/`` plus
 variant-specific subservices: ``worker/`` (when the worker component is

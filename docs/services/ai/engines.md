@@ -10,6 +10,7 @@ An "engine" is the underlying AI framework that powers your chat functionality. 
 - Provide identical CLI and REST API interfaces
 - Handle conversation management the same way
 - Support streaming responses
+- Run an agent's granted tools: Pydantic AI natively, LangChain by binding them to the model and running what it calls between rounds (`app/services/ai/service/langchain_turn.py`)
 
 The difference is internal implementation, how the engine communicates with the AI models. What matters for *you*, the builder, comes down to the following: Are you going to extend the service? If so, then pick the framework you're used to.
 

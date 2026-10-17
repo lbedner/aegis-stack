@@ -10,6 +10,7 @@ import pytest
 
 from app.integrations.main import create_integrated_app
 from app.services.ai.models import ConversationMessage, MessageRole
+from app.services.ai.schemas import UsageStatsResponse
 
 
 @pytest.fixture
@@ -20,9 +21,9 @@ def client() -> TestClient:
 
 
 @pytest.fixture
-def mock_usage_stats() -> dict[str, Any]:
-    """Sample usage stats response."""
-    return {
+def mock_usage_stats() -> UsageStatsResponse:
+    """Sample usage stats, as the service returns them."""
+    return UsageStatsResponse.model_validate({
         "total_tokens": 1500,
         "input_tokens": 1000,
         "output_tokens": 500,
@@ -55,7 +56,7 @@ def mock_usage_stats() -> dict[str, Any]:
                 "action": "chat",
             }
         ],
-    }
+    })
 
 
 {% if ai_backend != "memory" %}
@@ -63,7 +64,7 @@ class TestUsageStatsEndpoint:
     """Tests for /api/v1/ai/usage/stats endpoint."""
 
     def test_get_usage_stats_success(
-        self, client: TestClient, mock_usage_stats: dict[str, Any]
+        self, client: TestClient, mock_usage_stats: UsageStatsResponse
     ) -> None:
         """Test successful usage stats retrieval."""
         with patch(
@@ -81,7 +82,7 @@ class TestUsageStatsEndpoint:
         assert len(data["recent_activity"]) == 1
 
     def test_get_usage_stats_with_filters(
-        self, client: TestClient, mock_usage_stats: dict[str, Any]
+        self, client: TestClient, mock_usage_stats: UsageStatsResponse
     ) -> None:
         """Test usage stats with query parameters."""
         with patch(
@@ -116,7 +117,7 @@ class TestUsageStatsEndpoint:
         assert "Failed to get usage stats" in response.json()["detail"]
 
     def test_get_usage_stats_response_schema(
-        self, client: TestClient, mock_usage_stats: dict[str, Any]
+        self, client: TestClient, mock_usage_stats: UsageStatsResponse
     ) -> None:
         """Test response matches Pydantic schema."""
         with patch(
@@ -152,16 +153,16 @@ class TestUsageStatsEndpoint:
 
     def test_get_usage_stats_empty_response(self, client: TestClient) -> None:
         """Test handling of empty usage data."""
-        empty_stats = {
-            "total_tokens": 0,
-            "input_tokens": 0,
-            "output_tokens": 0,
-            "total_cost": 0.0,
-            "total_requests": 0,
-            "success_rate": 100.0,
-            "models": [],
-            "recent_activity": [],
-        }
+        empty_stats = UsageStatsResponse(
+            total_tokens=0,
+            input_tokens=0,
+            output_tokens=0,
+            total_cost=0.0,
+            total_requests=0,
+            success_rate=100.0,
+            models=[],
+            recent_activity=[],
+        )
         with patch(
             "app.components.backend.api.ai.service.ai_service.get_usage_stats",
             new_callable=AsyncMock,

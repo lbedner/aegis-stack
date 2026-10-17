@@ -24,13 +24,14 @@ from app.core.ontology.model import (
 from app.core.parts import Category
 from app.core.tools import acting_as, get_tool
 from app.services.system import health as health_module
-from app.services.system import live_status, tools, ui_errors, ui_logs
+from app.services.system import live_status, node_now, tools, ui_errors, ui_logs
 from app.services.system.errors.models import ErrorIssue
 from app.services.system.models import (
     ComponentStatus,
     ComponentStatusType,
     SystemStatus,
 )
+from app.services.system.node_now import NodeNow
 from tests._ontology import model_of
 
 UNHEALTHY = ComponentStatusType.UNHEALTHY
@@ -230,17 +231,23 @@ def _issue() -> ErrorIssue:
     )
 
 
-async def test_errors_passes_its_filters_as_the_errors_page_query(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    seen: dict[str, Any] = {}
+@pytest.fixture
+def errors_asked(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+    """One issue for any query; the query the store was asked."""
+    asked: dict[str, Any] = {}
 
     async def load(query: Mapping[str, str], part: Any = None) -> dict[str, Any]:
-        seen.update(query)
+        asked.update(query)
         return ui_errors.DEFAULTS | {"error_rows": [_issue()], "error_total": 1}
 
     monkeypatch.setattr(ui_errors, "load", load)
+    return asked
 
+
+async def test_errors_passes_its_filters_as_the_errors_page_query(
+    errors_asked: dict[str, Any],
+) -> None:
+    seen = errors_asked
     result = await tools.errors(
         text="boom", service="worker", level="error", window_seconds=3600
     )
@@ -417,6 +424,12 @@ def model(monkeypatch: pytest.MonkeyPatch) -> SystemModel:
     ]
     found = model_of([*parts, *routes, charge, table, customer, refund], edges)
     monkeypatch.setattr("app.core.ontology.system.current", lambda: found)
+
+    # Traffic other tests sent in this process is not this model's.
+    async def nothing_seen() -> dict[Any, Any]:
+        return {}
+
+    monkeypatch.setattr("app.core.edges.observed", nothing_seen)
     # Read as an admin unless a test binds otherwise: sign-in off.
     monkeypatch.setattr(settings, "AUTH_ENABLED", False)
     return found
@@ -469,6 +482,68 @@ async def test_a_node_comes_with_its_edges_and_neighbours() -> None:
     assert {e["kind"] for e in result["edges"]} >= {"calls", "contains"}
     ids = [n["id"] for n in result["neighbors"]]
     assert ids == sorted(ids)  # the same answer every call
+
+
+@pytest.mark.usefixtures("status")
+async def test_what_is_wrong_right_now_is_one_line() -> None:
+    """The line her current message carries while something is wrong
+    (2026-10-16): the system prompt keeps nothing live, so its cache
+    holds."""
+    now = await node_now.right_now()
+
+    assert [a.name for a in now.attention] == ["aegis.components.worker"]
+    line = now.line()
+    assert line is not None and "worker" in line and "1 queue stuck" in line
+
+
+async def test_health_it_could_not_read_is_not_all_clear(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Silence would read as all clear: a process that sees only part of
+    the checks says so, and a read that fails says so too, never failing
+    the turn it rides (2026-10-16)."""
+    empty = SystemStatus(
+        components={}, overall_healthy=True, timestamp=datetime.now(UTC)
+    )
+
+    async def partial() -> tuple[SystemStatus, str | None]:
+        return empty, live_status.PARTIAL
+
+    async def broken() -> tuple[SystemStatus, str | None]:
+        raise RuntimeError("checks down")
+
+    for read in (partial, broken):
+        monkeypatch.setattr(live_status, "live_status", read)
+        assert (await node_now.right_now()).line()
+
+
+def test_nothing_wrong_says_nothing() -> None:
+    assert node_now.RightNow(attention=(), read_at=datetime.now(UTC)).line() is None
+
+
+@pytest.mark.usefixtures("model", "status")
+async def test_a_part_says_what_is_true_of_it_now(
+    errors_asked: dict[str, Any],
+) -> None:
+    """Its health check and the errors it owns, read when asked, as one
+    model: live data she reads off the node, not out of her prompt
+    (2026-10-16)."""
+    asked = errors_asked
+    result = await tools.ontology(node="component:backend")
+
+    now = NodeNow.model_validate(result["now"])
+    assert now.health is not None and now.health.name == "backend"
+    assert asked == {"app_component": "backend"}
+    assert [i.fingerprint for i in now.errors] == [_issue().fingerprint]
+    assert now.errors_total == 1
+
+
+@pytest.mark.usefixtures("model", "status")
+async def test_a_table_has_no_now() -> None:
+    """What is live is a part's: a table is what its code says."""
+    result = await tools.ontology(node="object:payment_charge")
+
+    assert result["now"] is None
 
 
 @pytest.mark.usefixtures("model")

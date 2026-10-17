@@ -5,10 +5,11 @@ them. A typed turn (``chat``, ``stream_chat``) and a live call
 can.
 """
 
+import asyncio
 from dataclasses import dataclass
 from typing import Any
 
-from app.services.ai.domains.chat.agent_loader import DEFAULT_AGENT_SLUG, AgentConfig
+from app.services.ai.domains.chat.agent_loader import AgentConfig
 {%- if ai_backend != "memory" and ai_framework == "pydantic-ai" %}
 from app.services.ai.domains.chat.module_context import render_memory_modules
 from app.services.ai.domains.chat.readings import user_readings
@@ -28,6 +29,7 @@ from app.services.ai.service.prompt import PromptMixin
 {%- if ai_rag %}
 from app.services.ai.domains.chat.rag_context import RAGContext
 {%- endif %}
+from app.services.system.node_now import right_now
 
 
 @dataclass
@@ -45,6 +47,7 @@ class TurnSetup:
 {%- else %}
     llm: Any = None
     messages: list[Any] | None = None
+    tools: dict[str, Any] | None = None
 {%- endif %}
 
 
@@ -66,23 +69,12 @@ class TurnMixin(PromptMixin):
         a turn reads, as the caller (``owner_user_id``, ``admin``) sees
         them. A typed turn and a live call (``realtime_calls``) both build
         her here, so each can do what the other can."""
-        # The system status and the usage and model-catalog
-        # self-awareness belong to the default ops assistant. A custom
-        # agent (a finance analyst, say) would pay their token cost every
-        # turn without ever using them, and one that answers an app's own
-        # users must not see the app's infrastructure.
-        is_default_agent = (
-            agent_config is None or agent_config.slug == DEFAULT_AGENT_SLUG
-        )
-        health_context, health_warning = (
-            await self._build_health_context() if is_default_agent else (None, None)
-        )
-        usage_context = (
-            await self._build_usage_context() if is_default_agent else None
-        )
-        catalog_context = (
-            await self._build_catalog_context() if is_default_agent else None
-        )
+        # What is wrong right now rides the message (``_system_prompt_for``
+        # says why), where she may read the app's health: the health tool
+        # granted, and no caller known not to be an admin. Read alongside
+        # the rest of the turn's context.
+        reads_health = "health" in agent_config.tool_names and admin is not False
+        wrong = asyncio.create_task(right_now()) if reads_health else None
 
 {% if ai_backend != "memory" %}        # Guarded per-user memory block (saved via the save_memory tool)
         memory_context = await build_user_memory_context(user_id)
@@ -122,28 +114,20 @@ class TurnMixin(PromptMixin):
             )
 {%- endif %}
 {% endif %}
-{%- if ai_rag %}
-        # Build RAG stats context (always included when RAG enabled)
-        rag_stats_context = await self._build_rag_stats_context()
-{% endif %}
 
 {%- if ai_framework == "pydantic-ai" %}
         agent, conversation_context = await self._prepare_agent_and_context(
             conversation,
 {% if ai_rag %}
             rag_context=rag_context,
-            rag_stats_context=rag_stats_context,
-{% endif %}            health_context=health_context,
-            health_warning=health_warning,
-            usage_context=usage_context,
-            catalog_context=catalog_context,
-            agent_config=agent_config,
+{% endif %}            agent_config=agent_config,
 {% if ai_backend != "memory" %}            memory_context=memory_context,
             agent_modules_context=agent_modules_context,
             history_budget=history_budget,
             context_window=context_window,
             readings=readings,
-{% endif %}        )
+{% endif %}            right_now=(await wrong).line() if wrong else None,
+        )
         return TurnSetup(
             conversation=conversation,
             agent_config=agent_config,
@@ -152,12 +136,12 @@ class TurnMixin(PromptMixin):
             conversation_context=conversation_context,
         )
 {%- else %}
-        llm, messages = await self._prepare_llm_and_messages(
-{% if ai_rag %}
-            conversation, rag_context, rag_stats_context, health_context, health_warning, usage_context, catalog_context, agent_config=agent_config{% if ai_backend != "memory" %}, memory_context=memory_context{% endif %}
-{% else %}
-            conversation, None, None, health_context, health_warning, usage_context, catalog_context, agent_config=agent_config{% if ai_backend != "memory" %}, memory_context=memory_context{% endif %}
-{% endif %}
+        llm, messages, tools = await self._prepare_llm_and_messages(
+            conversation,
+{% if ai_rag %}            rag_context=rag_context,
+{% endif %}            agent_config=agent_config,
+{% if ai_backend != "memory" %}            memory_context=memory_context,
+{% endif %}            right_now=(await wrong).line() if wrong else None,
         )
         return TurnSetup(
             conversation=conversation,
@@ -165,5 +149,6 @@ class TurnMixin(PromptMixin):
 {% if ai_rag %}            rag_context=rag_context,
 {% endif %}            llm=llm,
             messages=messages,
+            tools=tools,
         )
 {%- endif %}

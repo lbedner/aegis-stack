@@ -19,6 +19,7 @@ from app.components.web_frontend import (  # noqa: E402
 )
 from app.core.config import settings  # noqa: E402
 from app.services.ai.models import PROVIDERS  # noqa: E402
+from app.services.ai.schemas import UsageStatsResponse  # noqa: E402
 from app.services.system.models import ComponentStatus  # noqa: E402
 from tests.web.dom import checked, one, select, text, triggers  # noqa: E402
 from tests.web.overseer import sign_in, status_with  # noqa: E402
@@ -215,6 +216,7 @@ USAGE: dict[str, Any] = {
             "model_id": "claude-haiku-4-5",
             "model_title": "Claude Haiku 4.5",
             "vendor": "anthropic",
+            "vendor_color": "#D4A27F",
             "requests": 30,
             "tokens": 100_000,
             "cost": 1.5,
@@ -222,8 +224,9 @@ USAGE: dict[str, Any] = {
         },
         {
             "model_id": "gpt-4o-mini",
-            "model_title": None,
+            "model_title": "gpt-4o-mini",  # the query falls back to the id
             "vendor": "openai",
+            "vendor_color": "#10A37F",
             "requests": 10,
             "tokens": 50_000,
             "cost": 1.0,
@@ -253,10 +256,10 @@ USAGE: dict[str, Any] = {
 def _usage(monkeypatch: pytest.MonkeyPatch, seen: list[Any] | None = None) -> None:
     from app.components.web_frontend import overseer_ai
 
-    async def usage_stats(**kwargs: Any) -> dict[str, Any]:
+    async def usage_stats(**kwargs: Any) -> UsageStatsResponse:
         if seen is not None:
             seen.append(kwargs)
-        return USAGE
+        return UsageStatsResponse.model_validate(USAGE)
 
     monkeypatch.setattr(overseer_ai, "usage_stats", usage_stats)
 

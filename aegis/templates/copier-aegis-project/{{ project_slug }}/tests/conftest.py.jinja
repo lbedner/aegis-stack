@@ -301,6 +301,22 @@ async def _forget_memoized_prices() -> None:
 
     await invalidate_price_cache()
 {%- endif %}
+{%- if include_ai %}
+
+@pytest.fixture(autouse=True)
+def _nothing_wrong_right_now(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A turn's status line reads the app's live health (``node_now``); a
+    test reads none unless it fakes some, so no turn waits on a walk."""
+    from datetime import UTC, datetime
+
+    from app.services.ai.service import turn
+    from app.services.system.node_now import RightNow
+
+    async def nothing_wrong() -> RightNow:
+        return RightNow(attention=(), read_at=datetime.now(UTC))
+
+    monkeypatch.setattr(turn, "right_now", nothing_wrong)
+{%- endif %}
 
 @pytest.fixture(scope="session")
 def app() -> FastAPI:

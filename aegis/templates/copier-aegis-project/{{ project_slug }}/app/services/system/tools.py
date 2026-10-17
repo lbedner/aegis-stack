@@ -6,7 +6,6 @@ Read-only."""
 
 import asyncio
 from collections import Counter
-from collections.abc import Iterator
 from typing import Any
 
 from starlette.datastructures import QueryParams
@@ -19,6 +18,7 @@ from app.core.tools import register_tool
 from app.services.shared.deps import caller_is_admin
 from app.services.system import dry_path, live_status, ui_errors, ui_logs
 from app.services.system.models import ComponentStatus
+from app.services.system.node_now import attention, checks, health_of, now_of
 
 # The most log lines one call returns, newest first.
 MAX_LINES = 500
@@ -40,28 +40,6 @@ def _tree(component: ComponentStatus) -> dict[str, Any]:
     return node
 
 
-def _checks(
-    components: dict[str, ComponentStatus], prefix: str = ""
-) -> Iterator[tuple[str, ComponentStatus]]:
-    """Each check in the tree by its dotted name, but one only passing on
-    its parts' issues (``aegis``, ``components``): it is not one more."""
-    for key, component in components.items():
-        name = f"{prefix}{key}"
-        yield from _checks(component.sub_components, f"{name}.")
-        parts = component.sub_components.values()
-        if component.healthy or all(p.healthy for p in parts):
-            yield name, component
-
-
-def _find(components: dict[str, ComponentStatus], name: str) -> ComponentStatus | None:
-    for key, component in components.items():
-        if key == name:
-            return component
-        if found := _find(component.sub_components, name):
-            return found
-    return None
-
-
 def _names(components: dict[str, ComponentStatus]) -> list[str]:
     return [
         name
@@ -81,22 +59,20 @@ async def health(component: str | None = None) -> dict[str, Any]:
     broke with ``errors`` and what led up to it with ``logs``."""
     status, note = await live_status.live_status()
     if component is None:
-        checks = list(_checks(status.components))
+        found = list(checks(status.components))
         return {
             "healthy": status.overall_healthy,
             "checked_at": status.timestamp.isoformat(),
-            "counts": Counter(c.status.value for _, c in checks),
+            "counts": Counter(c.status.value for _, c in found),
             "attention": [
-                {"name": name, "status": c.status.value, "message": c.message}
-                for name, c in checks
-                if not c.healthy
+                a.model_dump(mode="json") for a in attention(status.components)
             ],
             "components": {
                 name: _tree(part) for name, part in status.components.items()
             },
             "note": note,
         }
-    found = _find(status.components, component)
+    found = health_of(status.components, component)
     if found is None:
         known = ", ".join(_names(status.components))
         raise ValueError(f"No component {component!r}; known: {known}")
@@ -215,8 +191,10 @@ async def ontology(
     arguments: a summary (the app, counts by kind, its tables by owner with
     their links, the changes to them, and an admin's parts). ``kind``,
     ``category`` or ``text``: matching nodes. ``node`` (an id like
-    ``object:user``): it, its edges and neighbours ``depth`` steps out;
-    with ``to``, the paths between the two. ``route`` (``GET /api/v1/...``,
+    ``object:user``): it, its edges and neighbours ``depth`` steps out,
+    and for a part what is true of it now (its health check, the errors it
+    owns, the AI service's spend by window, and when they were read); with
+    ``to``, the paths between the two. ``route`` (``GET /api/v1/...``,
     an admin's): every hop it can take, read from the code without sending
     it, each at its file and line, and where the walk stops. An edge's
     ``mode`` is whether the caller waits on it (``sync``) or hands it to
@@ -233,8 +211,10 @@ async def ontology(
         return {"paths": dumped, "note": note}
     if node:
         here, near, edges = graph.neighbors(model, node, depth)
+        now = await now_of(here)
         return {
             "node": here.model_dump(mode="json"),
+            "now": now.model_dump(mode="json") if now else None,
             "edges": [e.model_dump(mode="json") for e in edges[:MAX_NODES]],
             "neighbors": [
                 n.model_dump(mode="json", include=BRIEF) for n in near[:MAX_NODES]

@@ -9,7 +9,11 @@ import sqlalchemy as sa
 from sqlalchemy import CheckConstraint, Column, String, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
+from app.core.constants import ServiceName
 from app.core.time import utcnow
+
+# Whose tables these are (``ownership``): ``app/models`` is no part's folder.
+PART_OF = ServiceName.AUTH
 
 
 class OAuthProvider(StrEnum):

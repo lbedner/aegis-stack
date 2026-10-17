@@ -3,6 +3,7 @@
 
 
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 from contextlib import asynccontextmanager
 import inspect
 from typing import Any
@@ -25,6 +26,8 @@ from app.services.ai.service import AIService
 import app.services.ai.service.chat as chat_module
 import app.services.ai.service.prompt as prompt_module
 import app.services.ai.service.turn as turn_module
+from app.services.system.models import ComponentStatusType
+from app.services.system.node_now import Attention, RightNow
 
 
 class _FakeUsage:
@@ -80,8 +83,12 @@ def _built(agent: Any) -> Any:
 
 
 class _FakeAgent:
+    def __init__(self, heard: dict[str, Any] | None = None) -> None:
+        self.heard = {} if heard is None else heard
+
     @asynccontextmanager
     async def run_stream_events(self, prompt: str) -> "AsyncIterator[Any]":
+        self.heard["message"] = prompt
         yield _FakeEventStream()
 
 
@@ -105,18 +112,6 @@ def harness(
     """AIService with provider, contexts, and recorder faked out."""
     service = AIService(mock_ai_settings)
 
-    async def no_health(self: AIService) -> tuple[None, None]:
-        return (None, None)
-
-    monkeypatch.setattr(AIService, "_build_health_context", no_health)
-    async def no_usage(self: AIService) -> None:
-        return None
-
-    monkeypatch.setattr(AIService, "_build_usage_context", no_usage)
-    async def no_catalog(self: AIService) -> None:
-        return None
-
-    monkeypatch.setattr(AIService, "_build_catalog_context", no_catalog)
 
     # The user-memory block opens the app's REAL async engine. Left unstubbed
     # it binds that engine's pool to whichever test loop touches it first,
@@ -139,7 +134,7 @@ def harness(
         captured["tools"] = kwargs.get("tools", [])
         captured["capabilities"] = kwargs.get("capabilities", [])
         captured["agent_name"] = kwargs.get("agent_name")
-        return _FakeAgent()
+        return _FakeAgent(captured)
 
     monkeypatch.setattr(prompt_module, "get_agent", fake_get_agent)
     return service, recorder, captured, monkeypatch
@@ -491,91 +486,60 @@ class TestAgentSlugSelection:
         assert seen == ["support"]
 
 
-async def _catalog_block(self: AIService) -> str:
-    return "CATALOG-BLOCK"
+def _wrong_now(monkeypatch: pytest.MonkeyPatch, wrong: tuple[Attention, ...]) -> None:
+    async def right_now() -> RightNow:
+        return RightNow(attention=wrong, read_at=datetime.now(UTC))
+
+    monkeypatch.setattr(turn_module, "right_now", right_now)
 
 
-async def _fake_usage(self: AIService) -> "_FakeUsageContext":
-    return _FakeUsageContext()
+COMMS = Attention(
+    name="aegis.services.comms",
+    status=ComponentStatusType.WARNING,
+    message="Comms service partially configured (1/3 channels)",
+)
 
 
-class _FakeUsageContext:
-    def format_for_prompt(self, compact: bool = False) -> str:
-        return "USAGE-BLOCK"
+class TestWhatIsWrongRidesTheMessage:
+    """Nothing live sits in the system prompt, so the provider's cache
+    holds it turn to turn; what is wrong right now rides the current
+    message instead. The default ops assistant's alone: one that faces an
+    app's own users must not see the app's infrastructure."""
 
-
-class _FakeHealthContext:
-    def format_for_prompt(self, compact: bool = False) -> str:
-        return "HEALTH-BLOCK"
-
-
-async def _fake_health(self: AIService) -> tuple["_FakeHealthContext", str]:
-    return _FakeHealthContext(), "SERVER-DOWN"
-
-
-class TestOpsContextScoping:
-    """The system status and the usage/model-catalog self-awareness blocks
-    belong to the default ops assistant. A custom agent (a finance analyst,
-    say) pays their token cost every turn without ever using them, and one
-    that faces an app's own users must not see the app's infrastructure."""
-
-    async def test_custom_agent_prompt_skips_system_status(
+    async def test_the_default_agent_hears_it_on_the_message(
         self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
     ) -> None:
         service, _recorder, captured, monkeypatch = harness
-        monkeypatch.setattr(AIService, "_build_health_context", _fake_health)
-        _stub_resolve(monkeypatch, _custom_config())
-
-        await service.chat("hello")
-
-        assert "HEALTH-BLOCK" not in captured["system_prompt"]
-        assert "SERVER-DOWN" not in captured["system_prompt"]
-
-    async def test_default_agent_keeps_system_status(
-        self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
-    ) -> None:
-        service, _recorder, captured, monkeypatch = harness
-        monkeypatch.setattr(AIService, "_build_health_context", _fake_health)
+        _wrong_now(monkeypatch, (COMMS,))
         _stub_resolve(monkeypatch, default_agent_config())
 
         await service.chat("hello")
 
-        assert "HEALTH-BLOCK" in captured["system_prompt"]
-        assert "SERVER-DOWN" in captured["system_prompt"]
+        assert COMMS.message in captured["message"]
+        assert COMMS.message not in captured["system_prompt"]
 
-    async def test_custom_agent_prompt_skips_usage_and_catalog(
+    async def test_a_caller_who_is_not_an_admin_hears_nothing_of_it(
+        self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
+    ) -> None:
+        """The health tool answers admins alone, so does what it would say."""
+        service, _recorder, captured, monkeypatch = harness
+        _wrong_now(monkeypatch, (COMMS,))
+        _stub_resolve(monkeypatch, default_agent_config())
+
+        await service.chat("hello", admin=False)
+
+        assert COMMS.message not in captured["message"]
+
+    async def test_a_custom_agent_hears_nothing_of_it(
         self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
     ) -> None:
         service, _recorder, captured, monkeypatch = harness
-        monkeypatch.setattr(
-            AIService, "_build_catalog_context", _catalog_block
-        )
-        monkeypatch.setattr(
-            AIService, "_build_usage_context", _fake_usage
-        )
+        _wrong_now(monkeypatch, (COMMS,))
         _stub_resolve(monkeypatch, _custom_config())
 
         await service.chat("hello")
 
-        assert "CATALOG-BLOCK" not in captured["system_prompt"]
-        assert "USAGE-BLOCK" not in captured["system_prompt"]
-
-    async def test_default_agent_keeps_usage_and_catalog(
-        self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
-    ) -> None:
-        service, _recorder, captured, monkeypatch = harness
-        monkeypatch.setattr(
-            AIService, "_build_catalog_context", _catalog_block
-        )
-        monkeypatch.setattr(
-            AIService, "_build_usage_context", _fake_usage
-        )
-        _stub_resolve(monkeypatch, default_agent_config())
-
-        await service.chat("hello")
-
-        assert "CATALOG-BLOCK" in captured["system_prompt"]
-        assert "USAGE-BLOCK" in captured["system_prompt"]
+        assert COMMS.message not in captured["message"]
 
 
 class TestHistoryBudget:

@@ -50,7 +50,7 @@ async def check_ai_service_health() -> ComponentStatus:
 
 {% if ai_backend != "memory" %}
         # Get usage statistics (includes total cost) - only with database backend
-        usage_stats = await ai_service.get_usage_stats()
+        usage_totals = await ai_service.usage_totals()
 {% endif %}
 
         # Collect comprehensive metadata using FRESH config for provider/model
@@ -78,8 +78,8 @@ async def check_ai_service_health() -> ComponentStatus:
             "persistence": "sqlite",
             "storage": "database (conversations persist across restarts)",
             # Usage tracking (requires database)
-            "total_cost": usage_stats.get("total_cost", 0.0),
-            "total_tokens": usage_stats.get("total_tokens", 0),
+            "total_cost": usage_totals.total_cost,
+            "total_tokens": usage_totals.total_tokens,
             "usage_tracking_available": True,
 {% endif %}
         }

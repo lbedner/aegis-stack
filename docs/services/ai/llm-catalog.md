@@ -14,7 +14,7 @@ The LLM Catalog is a local database of ~2000 language models synced from cloud A
 - **Pricing data** with per-token input/output costs and price versioning
 - **Capability tracking** - modalities (text, image, audio, video), function calling, streaming, structured output
 - **One-command switching** - `llm use gpt-4o` auto-detects vendor and updates your config
-- **Context injection** - top models per vendor are injected into Illiana's prompts for model recommendations
+- **A catalog tool** - Illiana looks models up when asked, for recommendations
 
 ## Quick Start
 
@@ -378,21 +378,9 @@ Per-token pricing with versioning:
 
 ---
 
-## Context Injection
+## The Catalog Tool
 
-The `LLMCatalogContext` class (`app/services/ai/llm_catalog_context.py`) builds a compact summary of featured vendors and their top models for injection into Illiana's system prompt.
-
-**Featured vendors** (priority-ordered): OpenAI, Anthropic, Google, xAI, Mistral, Groq, DeepSeek
-
-For each vendor, the 3 newest models (by release date) are included with:
-- Model ID, title
-- Input/output cost per 1M tokens
-- Context window
-- Key capabilities (function calling, vision, structured output)
-
-Alias models (ending in `-latest` or `:latest`) are filtered out.
-
-This enables Illiana to recommend models when asked "What's the cheapest model with vision?" or "Which Anthropic model should I use?"
+The `catalog` tool (`app/services/ai/domains/llm/catalog.py`) is how an agent reads the catalog: the models this install could run, newest first, filtered by text, vendor or modality (at most 50). Each row is a `CatalogModel`: id, title, vendor, the lab that made it, context window, input and output price per million tokens, release date and kind. The answer is a `CatalogAnswer` with when it was read, both frozen Pydantic models. The default assistant is granted it, so "What's the cheapest model with vision?" is a lookup, not a block in every prompt.
 
 ---
 
@@ -406,7 +394,7 @@ This enables Illiana to recommend models when asked "What's the cheapest model w
 | `app/services/ai/etl/clients/openrouter_client.py` | OpenRouter API client |
 | `app/services/ai/etl/clients/litellm_client.py` | LiteLLM API client |
 | `app/services/ai/etl/mappers/llm_mapper.py` | Data transformation |
-| `app/services/ai/llm_catalog_context.py` | Prompt context injection |
+| `app/services/ai/domains/llm/catalog.py` | Catalog lookups and the `catalog` tool |
 | `app/services/ai/models/llm/` | Database models |
 | `app/cli/llm.py` | CLI commands |
 | `app/components/backend/api/llm/router.py` | API endpoints |

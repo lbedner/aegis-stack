@@ -6586,6 +6586,10 @@
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>my-app<span class="w"> </span>meetings<span class="w"> </span>login<span class="w"> </span>--agent<span class="w"> </span>work<span class="w"> </span>--name<span class="w"> </span><span class="s2">&quot;Work Notetaker&quot;</span><span class="w"> </span>--email<span class="w"> </span>notes@work.example
 </span></code></pre></div>
 <p>Each sign-in is kept under its own secret (the first's is <code>MEETINGS_BOT_LOGIN_SECRET</code>, <code>work</code>'s <code>MEETINGS_BOT_LOGIN_SECRET__WORK</code>). A meeting is sent as one agent: the first (<code>notetaker</code>) unless another is named. A stack from before agents keeps its sign-in and its meetings as the first agent's, with nothing to do.</p>
+<p>Each agent can also have its own <strong>calendar</strong>: what it is invited to. In the agent's Google Calendar, open Settings, set "Add invitations to my calendar" to "From everyone" (Google otherwise adds only invites from senders the account knows), then copy the calendar's "Secret address in iCal format" (under Integrate calendar) into a secret: the first agent's is <code>MEETINGS_BOT_CALENDAR_SECRET</code>, <code>work</code>'s <code>MEETINGS_BOT_CALENDAR_SECRET__WORK</code>. Set it in Overseer's Secrets, or:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>my-app<span class="w"> </span>secrets<span class="w"> </span><span class="nb">set</span><span class="w"> </span>MEETINGS_BOT_CALENDAR_SECRET
+</span></code></pre></div>
+<p>The address reads everything on that calendar, so it is kept like the sign-in. Every minute the scheduler reads each agent's calendar again and keeps its meetings, from a month back to three months ahead, one row per time each happens (a repeating meeting expanded, with the times moved or cancelled on their own followed), with the link to join from the invite: the conference Google attached, or the first Meet, Teams or Zoom link in its location or description. A meeting taken off the calendar is dropped, unless the agent was already sent into it. An agent whose calendar cannot be read keeps what it had.</p>
 </div>
 <h2 id="what-you-get">What You Get</h2>
 <ul>
@@ -6601,9 +6605,9 @@
 <li><strong>Owners</strong> - a meeting belongs to whoever asked for the bot. Without an owner (no auth, the CLI) every meeting is in reach.</li>
 </ul>
 <h2 id="how-the-bot-runs-a-meeting">How the bot runs a meeting</h2>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>requested -&gt; joining -&gt; waiting -&gt; in_call -&gt; left
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>                           |          |
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>                           +----------+--&gt; failed (with the reason)
+<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>requested -&gt; joining -&gt; waiting -&gt; in_call -&gt; left
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>                           |          |
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>                           +----------+--&gt; failed (with the reason)
 </span></code></pre></div>
 <ol>
 <li>It opens the meeting in the browser container, gives its name and asks to join.</li>

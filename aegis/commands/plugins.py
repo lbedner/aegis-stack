@@ -37,6 +37,7 @@ from ..cli import brand
 from ..constants import AnswerKeys, Messages
 from ..core import project_deps
 from ..core.components import COMPONENTS
+from ..core.parts import options_of
 from ..core.plugins.compat import CompatStatus, check_compat
 from ..core.plugins.discovery import discover_plugin_cli_apps, discover_plugins
 from ..core.plugins.naming import dist_name, package_name
@@ -326,9 +327,9 @@ def plugins_info_command(
         lines.append(f"  {t('plugins.label_python_deps'):<15} {deps_preview}{more}")
 
     lines.append("")
-    if spec.options:
+    if options := options_of(spec):
         lines.append(f"[bold]{t('plugins.section_options')}[/bold]")
-        for opt in spec.options:
+        for opt in options:
             mode = getattr(opt.mode, "value", str(opt.mode))
             choices = _escape(", ".join(opt.choices)) if opt.choices else "—"
             default = (

@@ -242,6 +242,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 answer_key=AnswerKeys.AUTH_LEVEL,
                 ordered=True,
                 default=AuthLevels.BASIC,
+                about="guided.choice.auth",
             ),
             OptionSpec(
                 name="engine",
@@ -478,6 +479,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 choices=list(AIFrameworks.ALL),
                 default=AIFrameworks.PYDANTIC_AI,
                 answer_key=AnswerKeys.AI_FRAMEWORK,
+                about="guided.choice.framework",
             ),
             OptionSpec(
                 name="backend",
@@ -489,6 +491,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 ],
                 default=StorageBackends.MEMORY,
                 answer_key=AnswerKeys.AI_BACKEND,
+                about="guided.choice.storage",
                 # Persistence backends auto-add the matching database engine.
                 auto_requires=lambda v: [f"{ComponentNames.DATABASE}[{v}]"]
                 if v != StorageBackends.MEMORY
@@ -500,6 +503,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 choices=sorted(AIProviders.ALL),
                 default=list(AIProviders.DEFAULT),
                 answer_key=AnswerKeys.AI_PROVIDERS,
+                about="guided.choice.provider",
                 # Ollama is served by the inference component: choosing the
                 # provider brings the server with it (on the host, unless
                 # inference[docker] says otherwise).

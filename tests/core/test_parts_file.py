@@ -38,3 +38,27 @@ def test_every_first_party_part_has_a_category() -> None:
     assert categories["observability"] is PartCategory.PLATFORM
     assert categories["documents"] is PartCategory.DATA
     assert categories["auth"] is PartCategory.APP
+
+
+def test_every_option_a_part_can_take_reaches_the_app() -> None:
+    """What each part could be, not only what a stack is: its declared
+    options, and the axes the CLI still reads its older way, from the
+    constants that hold their choices."""
+    from aegis.constants import PostgresProviders, WorkerBackends
+
+    options = {
+        spec.name: {o.name: o for o in parts.options_of(spec)}
+        for spec in (*COMPONENTS.values(), *SERVICES.values())
+    }
+    assert options["ai"]["backend"].choices == ["memory", "sqlite", "postgres"]
+    assert options["auth"]["level"].ordered
+    assert options["worker"]["backend"].choices == WorkerBackends.ALL
+    assert options["database"]["provider"].choices == PostgresProviders.ALL
+    assert options["database"]["engine"].answer_key == "database_engine"
+    assert options["scheduler"]["backend"].default == "memory"
+    # What each choice means comes from the guided setup's own strings.
+    assert parts.about(options["worker"]["backend"])["taskiq"]
+    assert "(" in parts.about(options["ai"]["providers"])["anthropic"]  # pricing
+    rendered = parts.render()
+    assert 'answer="worker_backend"' in rendered
+    assert 'answer="ai_backend"' in rendered

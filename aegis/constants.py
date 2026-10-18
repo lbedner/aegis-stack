@@ -72,6 +72,9 @@ class StorageBackends:
     SQLITE = "sqlite"
     POSTGRES = "postgres"
 
+    SCHEDULER_DEFAULT = MEMORY  # jobs held in the process
+    DATABASE_DEFAULT = SQLITE
+
 
 class DatabaseSchemas:
     """Postgres schema names owned by in-tree services and components.
@@ -111,6 +114,8 @@ class WorkerBackends:
     DRAMATIQ = "dramatiq"
 
     ALL = [ARQ, TASKIQ, DRAMATIQ]
+
+    DEFAULT = ARQ
 
 
 class AIFrameworks:

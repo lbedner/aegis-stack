@@ -4,11 +4,14 @@ the app's shared code (``system``) and the worker's queue, inside the cache.
 Each with its concern, its package's first docstring line and its other
 names; ``ownership`` says which part owns any file."""
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from functools import cache
+from typing import Any
+
+import yaml
 
 from app.core import ownership, source_index
-from app.core.ontology.model import Kind, PartNode, node_id
+from app.core.ontology.model import Kind, PartNode, PartOption, node_id
 from app.core.parts import PARTS, Category, Part
 from app.core.source_index import ROOT
 
@@ -117,7 +120,45 @@ def _part(
         or (PLACED[name].description if name in PLACED else ""),
         cli=PARTS[name].cli if name in PARTS else None,
         page=ownership.COMPONENT_PAGES.get(name),
+        options=options_of(name, answers()) if parent is None else (),
     )
+
+
+@cache
+def answers() -> dict[str, Any]:
+    """What this stack was generated with (``.copier-answers.yml``); empty
+    where the file is gone."""
+    file = ROOT / ".copier-answers.yml"
+    return (yaml.safe_load(file.read_text()) or {}) if file.is_file() else {}
+
+
+def options_of(name: str, given: Mapping[str, Any]) -> tuple[PartOption, ...]:
+    """What part ``name`` could be (``app/core/parts.py``), each option with
+    the choice ``given`` (the stack's answers) records."""
+    part = PARTS.get(name)
+    return tuple(
+        PartOption(
+            name=o.name,
+            mode=o.mode,
+            choices=o.choices,
+            default=bool(o.default) if o.mode == "flag" else o.default,
+            chosen=_chosen(o.mode, given.get(o.answer)) if o.answer else None,
+            ordered=o.ordered,
+            about=dict(o.about),
+        )
+        for o in (part.options if part else ())
+    )
+
+
+def _chosen(mode: str, value: Any) -> str | tuple[str, ...] | bool | None:
+    if value is None:
+        return None
+    if mode == "flag":
+        return bool(value)
+    if mode == "multi":
+        held = value if isinstance(value, list) else str(value).split(",")
+        return tuple(v.strip() for v in held if str(v).strip())
+    return str(value)
 
 
 def parts(

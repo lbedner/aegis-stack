@@ -89,6 +89,11 @@ class OptionSpec:
     request at or below the project's current value is satisfied; above
     it is an upgrade. Unordered options treat any mismatch as a conflict."""
 
+    about: str | None = None
+    """Where what each choice means is written: the guided setup's locale
+    prefix (``guided.choice.storage``), whose ``<choice>`` entries the
+    generated app shows beside the choices (``app/core/parts.py``)."""
+
 
 # ---------------------------------------------------------------------
 # Parsing

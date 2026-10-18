@@ -8,7 +8,7 @@ plain ``make serve`` must not pin an engine at all.
 
 from __future__ import annotations
 
-{%- if include_finance and finance_plaid %}
+{%- if (include_finance and finance_plaid) or (include_deploy and include_redis) %}
 from pathlib import Path
 {%- endif %}
 import subprocess
@@ -44,8 +44,8 @@ def serve_kwargs(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     for name in ("ENGINE", "WEBSERVER_ENGINE", "LOOP", "WEBSERVER_LOOP"):
         monkeypatch.delenv(name, raising=False)
 {%- if include_deploy and include_redis %}
-    # No aegis CLI unless a test puts one there: never a real deploy agent.
-    monkeypatch.setattr(dev_tasks.shutil, "which", lambda _: None)
+    # Never this machine's ~/.ssh or ssh-agent, unless a test asks for them.
+    monkeypatch.setattr(dev_tasks, "_deploy_agent_ready", lambda env: None)
 {%- endif %}
     return captured
 
@@ -139,62 +139,67 @@ class TestThePlaidTunnel:
 
 
 class TestTheDeployAgent:
-    """``make serve`` runs ``aegis deploy-agent`` beside the stack, so
-    Overseer > Deployments can act with nothing else to start; it stops
-    with the stack."""
+    """``make serve`` readies what compose's ``deploy-agent`` service mounts
+    from this machine; compose runs it, beside the rest of the stack."""
 
-    class _Agent:
-        def __init__(self, cmd: list[str], env: dict[str, str]) -> None:
-            self.cmd, self.env, self.stopped = cmd, env, False
+    @pytest.fixture
+    def home(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+        monkeypatch.setenv("HOME", str(tmp_path))
+        monkeypatch.chdir(tmp_path)
+        return tmp_path
 
-        def terminate(self) -> None:
-            self.stopped = True
+    def _ssh_add(
+        self, monkeypatch: pytest.MonkeyPatch, holds: int
+    ) -> list[list[str]]:
+        """An ssh-agent that answers ``ssh-add -l`` with ``holds``."""
+        ran: list[list[str]] = []
 
-        def wait(self) -> int:
-            return 0
+        def run(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess[bytes]:
+            ran.append(cmd)
+            return subprocess.CompletedProcess(cmd, holds if cmd[1:] == ["-l"] else 0)
 
-    def _started(self, monkeypatch: pytest.MonkeyPatch) -> list[_Agent]:
-        started: list[TestTheDeployAgent._Agent] = []
+        monkeypatch.setattr(dev_tasks.shutil, "which", lambda _: "/usr/bin/ssh-add")
+        monkeypatch.setattr(dev_tasks.subprocess, "run", run)
+        return ran
 
-        def popen(cmd: list[str], env: dict[str, str]) -> TestTheDeployAgent._Agent:
-            started.append(self._Agent(cmd, env))
-            return started[-1]
-
-        monkeypatch.setattr(dev_tasks.subprocess, "Popen", popen)
-        return started
-
-    def test_serve_runs_it_and_stops_it_with_the_stack(
-        self, serve_kwargs: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+    def test_the_checkout_is_named_at_its_own_path(
+        self, home: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(dev_tasks.shutil, "which", lambda _: "/bin/aegis")
-        started = self._started(monkeypatch)
+        """The agent drives the host's Docker: a path it hands over must be
+        the host's."""
+        self._ssh_add(monkeypatch, holds=0)
+        env: dict[str, str] = {}
 
-        dev_tasks.serve()
+        dev_tasks._deploy_agent_ready(env)
 
-        assert [a.cmd for a in started] == [["/bin/aegis", "deploy-agent"]]
-        assert started[0].env == serve_kwargs["env"]
-        assert started[0].stopped
+        assert env["AEGIS_PROJECT_ROOT"] == str(Path.cwd())
 
-    def test_without_the_cli_serve_says_how_to_get_it(
-        self,
-        serve_kwargs: dict[str, Any],
-        monkeypatch: pytest.MonkeyPatch,
-        capsys: pytest.CaptureFixture[str],
+    def test_known_hosts_is_made_so_docker_mounts_a_file(
+        self, home: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        started = self._started(monkeypatch)
+        self._ssh_add(monkeypatch, holds=0)
 
-        dev_tasks.serve()
+        dev_tasks._deploy_agent_ready({})
 
-        assert not started
-        assert "aegis" in capsys.readouterr().out
+        assert (home / ".ssh" / "known_hosts").is_file()
 
-    def test_in_the_background_it_is_left_to_you(
-        self, serve_kwargs: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+    def test_an_agent_holding_no_key_is_given_one(
+        self, home: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setattr(dev_tasks.shutil, "which", lambda _: "/bin/aegis")
-        started = self._started(monkeypatch)
+        """The container signs through the ssh-agent, never the key file."""
+        ran = self._ssh_add(monkeypatch, holds=1)
 
-        dev_tasks.serve(detach=True)
+        dev_tasks._deploy_agent_ready({})
 
-        assert not started
+        assert ran[0] == ["ssh-add", "-l"] and ran[1][0] == "ssh-add"
+        assert len(ran) == 2
+
+    def test_an_agent_holding_a_key_is_left_alone(
+        self, home: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ran = self._ssh_add(monkeypatch, holds=0)
+
+        dev_tasks._deploy_agent_ready({})
+
+        assert ran == [["ssh-add", "-l"]]
 {%- endif %}

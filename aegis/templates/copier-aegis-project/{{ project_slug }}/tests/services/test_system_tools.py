@@ -130,6 +130,41 @@ async def test_health_of_one_component_carries_its_details(
     assert result["component"]["metadata"]["queues"]["system"]["queued"] == 40
 
 
+async def test_health_keeps_what_fits_a_prompt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The dashboard's details are for a page: every table's schema is tens
+    of thousands of tokens. An agent gets the rest, and the names of what
+    was left out; a URL's password is hidden in every check already."""
+    database = ComponentStatus(
+        name="database",
+        message="ok",
+        metadata={
+            "implementation": "postgresql",
+            "url": "postgresql://app:secret@db:5432/app",
+            "table_count": 50,
+            "table_schemas": [
+                {"name": f"t{i}", "columns": list("abcdefgh")} for i in range(50)
+            ],
+        },
+    )
+    current = SystemStatus(
+        components={"database": database},
+        overall_healthy=True,
+        timestamp=datetime.now(UTC),
+    )
+
+    async def fake() -> tuple[SystemStatus, str | None]:
+        return current, None
+
+    monkeypatch.setattr(live_status, "live_status", fake)
+    told = (await tools.health("database"))["component"]["metadata"]
+    assert told["implementation"] == "postgresql" and told["table_count"] == 50
+    assert "secret" not in json.dumps(told)
+    assert told["url"] == "postgresql://app:***@db:5432/app"
+    assert told["omitted"] == ["table_schemas"]
+
+
 @pytest.mark.usefixtures("status")
 async def test_health_of_a_part_takes_its_ontology_id() -> None:
     """She holds the ontology's ids (``component:worker``): the check is

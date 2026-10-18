@@ -24,13 +24,19 @@ def talks_to(
 ) -> list[str]:
     """What the code of the services folder at ``package`` talks to, as
     node ids, sorted, read from ``index``."""
-    folder = package.name
-    imported = index.imports_under(
-        source_index.module_name(package.relative_to(index.root).as_posix())
-    )
-    found = {t for name in imported if (t := _target(name, folder))}
-    found |= {node_id(Kind.EXTERNAL, p) for p, _ in providers(declared, folder)}
+    module = source_index.module_name(package.relative_to(index.root).as_posix())
+    found = set(reaches(module, index))
+    found |= {node_id(Kind.EXTERNAL, p) for p, _ in providers(declared, package.name)}
     return sorted(found)
+
+
+def reaches(module: str, index: source_index.Index) -> list[str]:
+    """What the code of ``module`` (a job's) talks to, as node ids, sorted:
+    the parts its imports belong to, its own services folder left out."""
+    folder = _folder_of(module) or ""
+    return sorted(
+        {t for name in index.imports_under(module) if (t := _target(name, folder))}
+    )
 
 
 def providers(

@@ -8,6 +8,7 @@ line an assistant's current message carries while something is."""
 import asyncio
 from collections.abc import Iterator, Mapping
 from datetime import datetime
+import json
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict
@@ -133,16 +134,43 @@ async def right_now() -> RightNow:
     return RightNow(attention=attention(status.components), read_at=utcnow(), note=note)
 
 
+# An agent's copy of a check's details: what fits a prompt. The page
+# shows the rest (every table's schema, every migration). Passwords are
+# already hidden in every check (``ComponentStatus``).
+DETAIL_CHARS = 500
+
+
 def health_of(
     components: dict[str, ComponentStatus], name: str
 ) -> ComponentStatus | None:
-    """The check named ``name``, wherever it sits in the tree."""
+    """The check named ``name``, wherever it sits in the tree, as an agent
+    reads it (``trimmed``)."""
     for key, component in components.items():
         if key == name:
-            return component
+            return trimmed(component)
         if found := health_of(component.sub_components, name):
             return found
     return None
+
+
+def trimmed(component: ComponentStatus) -> ComponentStatus:
+    """``component`` with only the details that fit a prompt, and the names
+    of those left out (``omitted``), its parts the same."""
+    kept = {
+        key: value
+        for key, value in component.metadata.items()
+        if len(json.dumps(value, default=str)) <= DETAIL_CHARS
+    }
+    if omitted := sorted(set(component.metadata) - set(kept)):
+        kept["omitted"] = omitted
+    return component.model_copy(
+        update={
+            "metadata": kept,
+            "sub_components": {
+                k: trimmed(v) for k, v in component.sub_components.items()
+            },
+        }
+    )
 
 
 async def now_of(node: Node) -> NodeNow | None:

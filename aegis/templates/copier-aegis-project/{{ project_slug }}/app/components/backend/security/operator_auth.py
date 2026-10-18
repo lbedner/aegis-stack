@@ -1,6 +1,7 @@
 """The gate on the operator's paths: the API docs (``/docs``, ``/redoc``,
-``/openapi.json``) and the detailed health tree (``/health/detailed``),
-which describes every component, its versions and tables.
+``/openapi.json``) and the health trees (``/health/detailed``,
+``/health/dashboard``), which describe every component and service, their
+versions and tables. ``/health/`` stays open: healthy or not, nothing more.
 
 Unset ``DOCS_USERNAME``/``DOCS_PASSWORD``: open in dev, 404 elsewhere
 (fail-closed). Set: HTTP Basic, compared in constant time. A caller over

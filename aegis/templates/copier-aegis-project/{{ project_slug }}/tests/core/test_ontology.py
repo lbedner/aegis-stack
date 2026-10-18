@@ -152,6 +152,14 @@ def test_each_services_calls_are_what_it_imports(model: SystemModel) -> None:
     assert all((e.mode is Mode.ASYNC) == (e.target == queue) for e in edges)
 
 
+def test_a_job_calls_what_its_module_imports(model: SystemModel) -> None:
+    """A job reaches the parts its code imports, so asking about the
+    database finds the job that backs it up."""
+    found = {(e.source, e.target) for e in model.edges if e.kind is EdgeKind.CALLS}
+    if any(n.id == "job:database_backup" for n in model.nodes):
+        assert ("job:database_backup", "component:database") in found
+
+
 def test_the_apps_own_code_is_shared_code(model: SystemModel) -> None:
     """No one part's: the code every service imports to be one."""
     system = _parts(model)["shared:system"]

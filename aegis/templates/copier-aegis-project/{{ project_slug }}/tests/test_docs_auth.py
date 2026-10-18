@@ -15,7 +15,7 @@ from app.integrations.main import create_integrated_app
 from fastapi.testclient import TestClient
 
 DOCS_PATHS = ("/docs", "/redoc", "/openapi.json")
-GATED = (*DOCS_PATHS, "/health/detailed")
+GATED = (*DOCS_PATHS, "/health/detailed", "/health/dashboard")
 
 
 @pytest.fixture

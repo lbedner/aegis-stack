@@ -79,7 +79,7 @@ async def detailed_health() -> DetailedHealthResponse:
         )
 
 
-@router.get("/dashboard")
+@router.get("/dashboard", dependencies=[Depends(require_operator)])
 async def system_dashboard() -> dict[str, Any]:
     """
     System dashboard endpoint optimized for frontend consumption.

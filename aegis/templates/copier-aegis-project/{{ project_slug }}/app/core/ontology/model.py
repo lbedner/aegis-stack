@@ -31,7 +31,7 @@ class Kind(StrEnum):
 class EdgeKind(StrEnum):
     CONTAINS = "contains"  # a part and its sub-part (AI and RAG)
     DEPENDS_ON = "depends_on"  # a process and what it needs (backend, database)
-    CALLS = "calls"  # a service and what its code reaches
+    CALLS = "calls"  # a service, or a job, and what its code reaches
     RUNS_ON = "runs_on"  # a part, or a job, and the container it runs in
     LINK = "link"  # a table and one its foreign key points at (``via``, ``to``)
     CHANGES = "changes"  # a change type and the table it changes

@@ -118,6 +118,7 @@ def system_model(app: Starlette | None = None) -> SystemModel:
         *_component_edges(found),
         *_contains(nodes),
         *_calls({n.id for n in nodes}, index),
+        *_job_calls([*jobs, *own_jobs], {n.id for n in nodes}, index),
         *_runs_on(found, jobs, own_jobs, [c.name for c in containers]),
         *links,
         *domain.changing(changes),
@@ -327,6 +328,20 @@ def _calls(ids: set[str], index: source_index.Index) -> list[Edge]:
             if target in ids and target != source
         ]
     return edges
+
+
+def _job_calls(
+    jobs: Iterable[JobNode], ids: set[str], index: source_index.Index
+) -> list[Edge]:
+    """What each job's code reaches (``calls``): the backup job, the
+    database."""
+    return [
+        Edge(source=job.id, target=target, kind=EdgeKind.CALLS)
+        for job in jobs
+        if job.module
+        for target in calls.reaches(job.module, index)
+        if target in ids and target != job.owner
+    ]
 
 
 def _containers_of(part: PartNode, containers: list[str]) -> list[str]:

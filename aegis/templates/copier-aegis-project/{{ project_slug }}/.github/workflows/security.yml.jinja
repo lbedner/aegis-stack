@@ -25,6 +25,11 @@ jobs:
       uses: github/codeql-action/init@v4
       with:
         languages: python
+        # Tests assert on URLs as plain strings ("api.example.com" in a
+        # message), which CodeQL reads as URL sanitising: scan the app only.
+        config: |
+          paths-ignore:
+            - tests
 
     - name: Autobuild
       uses: github/codeql-action/autobuild@v4

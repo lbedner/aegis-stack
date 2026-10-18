@@ -382,15 +382,19 @@
             class="w-full text-left px-3 py-1.5 text-sm {{ 'text-error' if danger else 'text-aegis-text' }} hover:bg-aegis-border/30 rounded transition-colors">{{ label }}</button></li>
 {% endmacro %}
 
+{# A menu behind a button. It opens below on the ``align`` side; app.js
+   (``placeDropdown``, keyed on ``data-dropdown``) opens it above when it
+   would run off the bottom of the window, and keeps it on a phone's
+   screen. #}
 {% macro dropdown(label, align="right") %}
-<details class="relative" @click.outside="$el.removeAttribute('open')">
+<details data-dropdown class="relative" @click.outside="$el.removeAttribute('open')">
   <summary class="list-none cursor-pointer select-none inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded border border-aegis-border text-aegis-muted hover:text-aegis-text hover:border-aegis-muted transition-colors">
     {{ label }}
     <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
     </svg>
   </summary>
-  <ul role="menu" class="absolute {{ 'right-0' if align == 'right' else 'left-0' }} top-full mt-1 z-30 min-w-[11rem] bg-aegis-card border border-aegis-border rounded-lg shadow-lg p-1">
+  <ul role="menu" class="absolute {{ 'right-0' if align == 'right' else 'left-0' }} top-full mt-1 z-30 min-w-[11rem] max-w-[calc(100vw-2rem)] bg-aegis-card border border-aegis-border rounded-lg shadow-lg p-1">
     {{ caller() }}
   </ul>
 </details>

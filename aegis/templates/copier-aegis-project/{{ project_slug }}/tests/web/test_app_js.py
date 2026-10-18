@@ -110,6 +110,38 @@ def test_clicking_off_closes_unless_something_is_unsaved() -> None:
     }
 
 
+PLACE_HARNESS = (
+    STUBS
+    + """
+window.innerHeight = 800;
+document.documentElement = { clientWidth: 400 };
+const { placeDropdown } = require(APP_JS);
+// A menu 200px tall under a button whose top is at ``top``.
+function opened(top) {
+  const menu = { style: {}, classList: { contains: (c) => c === 'left-0' },
+    getBoundingClientRect() {
+      const up = this.style.bottom === '100%';
+      const at = up ? top - 200 : top + 30;
+      return { top: at, bottom: at + 200, left: 20, right: 220 };
+    } };
+  return { open: true, lastElementChild: menu,
+           getBoundingClientRect: () => ({ top }) };
+}
+const foot = opened(700), head = opened(100);
+placeDropdown(foot); placeDropdown(head);
+console.log(JSON.stringify({ foot: foot.lastElementChild.style.bottom,
+                             head: head.lastElementChild.style.bottom }));
+"""
+)
+
+
+def test_a_dropdown_at_the_foot_of_the_window_opens_above() -> None:
+    """The Deployments "More" menu ran off the bottom of the window; one
+    that fits below still opens below."""
+    out = run(PLACE_HARNESS, APP_JS=APP_JS)
+    assert out == {"foot": "100%", "head": ""}
+
+
 COPY_HARNESS = (
     STUBS
     + """

@@ -423,11 +423,12 @@ def _default_public_key() -> str:
 def _acme_email(root: Path, email: str | None) -> str:
     """The address Let's Encrypt registers the certificate to.
 
-    ``--email`` wins, then the project's ``author_email`` unless it is still
-    the generated placeholder, which Let's Encrypt refuses. Checked before
+    ``--email`` wins, then the one TLS was turned on with, then the
+    project's ``author_email`` unless it is still the generated
+    placeholder, which Let's Encrypt refuses. Checked before
     any server exists, so a missing address costs nothing.
     """
-    found = email or known_email(_project_answers(root))
+    found = email or known_email(root, _project_answers(root))
     if found:
         return found
     brand.error(t("provision.email_required"), err=True)

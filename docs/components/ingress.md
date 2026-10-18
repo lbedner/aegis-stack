@@ -96,7 +96,7 @@ The Overseer's Ingress page tags an allowlist that admits every address as **all
 | `TRAEFIK_API_URL_LOCAL` | `http://localhost:8080` | Traefik API URL for local CLI commands |
 | `ADMIN_IP_ALLOWLIST` | loopback and private ranges | CIDR range(s) allowed to access admin endpoints |
 | `DOMAIN` | `example.com` | Domain for TLS certificate (only with TLS enabled) |
-| `ACME_EMAIL` | - | Email for Let's Encrypt notifications (only with TLS enabled) |
+| `ACME_EMAIL` | - | Email Let's Encrypt registers the certificate to (only with TLS enabled). `traefik/traefik.yml` holds `__ACME_EMAIL__`, and the production Traefik fills it in from this when it starts, so no email is committed; it refuses to start without one. `aegis ingress-enable` and `deploy-provision` keep it in `.aegis/deploy.yml`, which each deploy stamps into the server's `.env`. |
 
 ## Dev vs Production
 

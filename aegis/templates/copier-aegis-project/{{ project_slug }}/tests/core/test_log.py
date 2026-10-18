@@ -6,6 +6,7 @@ while the request waited. The traceback is what a reader needs; a frame's
 locals are one breakpoint away.
 """
 
+from collections.abc import Callable
 import logging
 import sys
 
@@ -31,16 +32,12 @@ def _formatted_failure() -> str:
     return logging.getLogger().handlers[0].format(record)
 
 
-def test_dev_tracebacks_leave_the_locals_out(monkeypatch: pytest.MonkeyPatch) -> None:
-    root = logging.getLogger()
-    saved = (root.handlers[:], root.level)
-    monkeypatch.setattr(log, "_logging_configured", False)
+def test_dev_tracebacks_leave_the_locals_out(
+    monkeypatch: pytest.MonkeyPatch, setup_logging: Callable[..., None]
+) -> None:
     monkeypatch.setattr(settings, "APP_ENV", "dev")
-    try:
-        log.setup_logging()
-        out = _formatted_failure()
-    finally:
-        root.handlers[:], _ = saved[0], root.setLevel(saved[1])
+    setup_logging()
+    out = _formatted_failure()
 
     assert "RuntimeError" in out and "boom" in out
     assert "LOCAL-VALUE-SENTINEL" not in out

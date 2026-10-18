@@ -57,6 +57,12 @@ services:
       - "80:80"
 {%- if ingress_tls %}
       - "443:443"
+    environment:
+      - ACME_EMAIL=${ACME_EMAIL:-}
+    entrypoint:
+      - sh
+      - -c
+      - '[ -n "$$ACME_EMAIL" ] || { echo "Set ACME_EMAIL in .env.deploy: the certificate needs it." >&2; exit 1; }; sed "s|__ACME_EMAIL__|$$ACME_EMAIL|" /etc/traefik/traefik.yml > /tmp/traefik.yml && exec traefik --configFile=/tmp/traefik.yml'
 {%- endif %}
       # No 8080 dashboard port exposed in production
 {% endif %}

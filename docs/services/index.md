@@ -217,6 +217,17 @@ belongs - so it names each domain and what it owns.
     ontology, which parts own them, which parts depend on those, and the
     tables, routes and jobs they define; Markdown for a pull request's job
     summary, JSON with `--format json`.
+    `patterns check` lists only the findings that are new: the ones not
+    in `.patterns-baseline.json`, the known debt, which `--update` writes
+    and afterwards only shrinks. A place is known by its rule, its part,
+    its file and the text on its line, so code added above old debt does
+    not make it new. It is advisory, always exiting 0; `--strict` exits 1
+    on a new breach of an enforced rule, for whoever chooses to block on
+    it. Under GitHub Actions each new finding is printed as an annotation
+    on the pull request's diff, and with changed files given, what they
+    touch goes in the job summary beside the new findings. No CI job
+    ships with the app; its `CLAUDE.md` asks a coding agent to run the
+    check before it finishes.
     Finance and documents also carry a `test_*_module_layout.py` stating which
     module defines what, so folding a domain back together, or dropping a
     function into whichever file was open, fails a test rather than passing

@@ -27,17 +27,14 @@ cd "$REPO" || exit 1
 uv run python - > "$OUT/stacks.txt" <<'PY'
 from tests.cli.test_stack_generation import STACK_COMBINATIONS as S
 for c in S:
-    print(f"{c.name}|{','.join(c.components or [])}|{','.join(c.services or [])}")
+    print(c.name)
 PY
 
-while IFS='|' read -r name comps svcs; do
+while read -r name; do
   [ -z "$name" ] && continue
   if [ -n "$ONLY" ] && ! grep -qx "$name" <<<"${ONLY//,/$'\n'}"; then continue; fi
-  slug="${name//_/-}"; proj="$OUT/$slug"; rm -rf "$proj"
-  args=(init "$slug" --dev --no-interactive --output-dir "$OUT")
-  [ -n "$comps" ] && args+=(-c "$comps")
-  [ -n "$svcs" ] && args+=(-s "$svcs")
-  yes | uv run aegis "${args[@]}" > "$OUT/$name.gen.log" 2>&1 || { echo "$name: GENERATE FAILED ($OUT/$name.gen.log)"; continue; }
+  proj="$OUT/${name//_/-}"; rm -rf "$proj"
+  "$REPO/scripts/generate_stack.sh" "$name" "$OUT" > "$OUT/$name.gen.log" 2>&1 || { echo "$name: GENERATE FAILED ($OUT/$name.gen.log)"; continue; }
   grep -q queryspy "$proj/pyproject.toml" 2>/dev/null || { echo "$name: no database, skipped"; continue; }
   ( cd "$proj" && uv sync > "$OUT/$name.sync.log" 2>&1 ) || { echo "$name: SYNC FAILED"; continue; }
   # Serially (-n 0), as the stacks' own `queryspy-baseline` task runs it:

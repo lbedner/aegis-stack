@@ -34,7 +34,20 @@ class Finding(BaseModel):
     @property
     def files(self) -> tuple[str, ...]:
         """Each evidence entry's file, in order (one per place it shows)."""
-        return tuple(e.rpartition(":")[0] for e in self.evidence)
+        return tuple(place(e)[0] for e in self.evidence)
+
+
+def place(evidence: str) -> tuple[str, int]:
+    """One evidence entry, ``path:line``, as its file and line."""
+    path, _, line = evidence.rpartition(":")
+    return path, int(line)
+
+
+def text_at(index: source_index.Index, path: str, line: int) -> str:
+    """The text on ``path``'s ``line``, stripped; empty where ``index`` has
+    no such module or line."""
+    module = index.get(source_index.module_name(path))
+    return module.place(line).text if module and 0 < line <= len(module.lines) else ""
 
 
 def findings(report: Report) -> list[Finding]:

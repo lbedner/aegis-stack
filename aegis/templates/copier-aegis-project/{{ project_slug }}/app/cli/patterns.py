@@ -9,19 +9,23 @@ Markdown by default, JSON with ``--format json``.
 ``patterns touches``: what a change's files touch, read from the
 ontology (its parts, what depends on them, its tables, routes and jobs),
 for a pull request's job summary.
+
+``patterns check``: the findings not in the known debt (``pattern_check``).
 """
 
 import contextlib
 import io
 import json
+import os
 import sys
 from typing import Annotated, Any
 
 import typer
 
+from app.core import source_index
 from app.core.ontology import current, touches
 from app.i18n import lazy_t
-from app.services.system import pattern_findings, patterns
+from app.services.system import pattern_check, pattern_findings, patterns
 
 app = typer.Typer(
     name="patterns", help=lazy_t("patterns.help"), invoke_without_command=True
@@ -90,15 +94,14 @@ def _macros() -> list[dict[str, Any]] | None:
     ]
 
 
+def _reports() -> list[patterns.Report]:
+    routes = _routes()
+    return [patterns.report(p, routes) for p in patterns.installed_patterns().values()]
+
+
 def collect() -> dict[str, Any]:
     """Every installed pattern's report, and the macros if there are any."""
-    routes = _routes()
-    brief: dict[str, Any] = {
-        "patterns": [
-            _pattern(patterns.report(p, routes))
-            for p in patterns.installed_patterns().values()
-        ]
-    }
+    brief: dict[str, Any] = {"patterns": [_pattern(r) for r in _reports()]}
     macros = _macros()
     if macros is not None:
         brief["macros"] = macros
@@ -163,6 +166,12 @@ def markdown(brief: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _quiet() -> contextlib.redirect_stdout[io.StringIO]:
+    """Building the app and loading the queues log to stdout; that noise is
+    kept out of a report meant to be read by a program."""
+    return contextlib.redirect_stdout(io.StringIO())
+
+
 Format = Annotated[str, typer.Option("--format", help=lazy_t("patterns.opt_format"))]
 
 
@@ -170,9 +179,7 @@ Format = Annotated[str, typer.Option("--format", help=lazy_t("patterns.opt_forma
 def show(ctx: typer.Context, fmt: Format = "markdown") -> None:
     if ctx.invoked_subcommand:
         return
-    # Building the app and loading the queues log to stdout; that noise is
-    # kept out of a report meant to be read by a program.
-    with contextlib.redirect_stdout(io.StringIO()):
+    with _quiet():
         brief = collect()
     typer.echo(json.dumps(brief, indent=2) if fmt == "json" else markdown(brief))
 
@@ -183,8 +190,31 @@ async def touched(
     fmt: Format = "markdown",
 ) -> None:
     files = paths or [line.strip() for line in sys.stdin if line.strip()]
-    with contextlib.redirect_stdout(io.StringIO()):
+    with _quiet():
         found = touches.touched(current(), files)
     typer.echo(
         found.model_dump_json(indent=2) if fmt == "json" else touches.summary(found)
     )
+
+
+@app.command("check", help=lazy_t("patterns.help_check"))
+async def check(
+    changed: Annotated[list[str] | None, typer.Argument()] = None,
+    strict: bool = False,
+    update: bool = False,
+) -> None:
+    summarised = changed and not update and "GITHUB_STEP_SUMMARY" in os.environ
+    with _quiet():
+        found = [f for r in _reports() for f in pattern_findings.findings(r)]
+        reach = touches.touched(current(), changed) if summarised else None
+    out, code = pattern_check.check(
+        found,
+        source_index.project(),
+        touched=touches.summary(reach) if reach else "",
+        strict=strict,
+        update=update,
+        env=os.environ,
+    )
+    typer.echo(out)
+    if code:
+        raise typer.Exit(code)

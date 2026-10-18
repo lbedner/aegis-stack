@@ -57,14 +57,17 @@ def mark_pieces(
     for item in stack:
         if item["key"] in keys:
             mine = [
-                (f, tuple(e for e in f.evidence if held.get(_file(e)) == item["key"]))
+                (
+                    f,
+                    tuple(
+                        e
+                        for e in f.evidence
+                        if held.get(pattern_findings.place(e)[0]) == item["key"]
+                    ),
+                )
                 for f in findings
             ]
             _mark(item, [(f, places) for f, places in mine if places], None)
-
-
-def _file(evidence: str) -> str:
-    return evidence.rpartition(":")[0]
 
 
 def _mark(
@@ -96,6 +99,6 @@ def _mark(
 def _place(
     finding: Finding, evidence: str, index: source_index.Index
 ) -> dict[str, Any]:
-    path, _, line = evidence.rpartition(":")
-    note = service_parts.place_note(finding.check, path, int(line), index)
-    return {"path": path, "line": int(line), "note": note}
+    path, line = pattern_findings.place(evidence)
+    note = service_parts.place_note(finding.check, path, line, index)
+    return {"path": path, "line": line, "note": note}

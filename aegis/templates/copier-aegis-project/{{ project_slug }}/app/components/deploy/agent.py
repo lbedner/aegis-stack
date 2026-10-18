@@ -50,8 +50,9 @@ LAST = PROTOCOL["last"]
 JOB_PREFIX = "deploy:"  # a job's name: ``deploy:<action>``
 WAITING = "Waiting for the deploy agent"
 STALE = (
-    "The deploy agent listening is older than this app. Restart it with "
-    "make serve (after uv tool upgrade aegis-stack, if the CLI is older too)."
+    "The deploy agent listening is older than this app. make serve runs one "
+    "on the aegis this project pins, or on the checkout AEGIS_STACK_SOURCE "
+    "names: update that checkout if it is behind."
 )
 
 REDIS_KEYS = (
@@ -59,7 +60,7 @@ REDIS_KEYS = (
         HEARTBEAT,
         "string",
         "Deploy agent",
-        "aegis deploy-agent on the developer's machine, refreshed while it listens",
+        "The dev stack's deploy-agent service, refreshed while it listens",
         "Deploy agent",
     ),
     KeyFamily(

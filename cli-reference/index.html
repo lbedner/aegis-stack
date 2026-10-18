@@ -7964,8 +7964,9 @@ host and user to GitHub Actions secrets, and scaffolds
 and regions, what the account already runs, the stack's footprint, a new server, a deploy, a backup, the backup list, a rollback, a destroy. The
 Overseer puts each request on the project's Redis; this takes them one at a
 time and runs the matching <code>aegis deploy-*</code> command, streaming its output back
-to the page. Run it in the project directory with the stack up, where your
-SSH key is. A cloud token comes with the request that needs it (set on
+to the page. <code>make serve</code> runs it as the dev stack's <code>deploy-agent</code> service;
+run it by hand in the project directory with the stack up, where your SSH key
+is. A cloud token comes with the request that needs it (set on
 Overseer &gt; Secrets, or in the app's <code>.env</code>), or from this machine's
 environment; a sent one wins. It reaches the command only through the
 environment, is masked in the output, and is kept nowhere (the heartbeat
@@ -7977,12 +7978,16 @@ way; only a DNS provider's own variables are accepted (anything else, such as
 (re)connect, for the port of the <code>redis</code> container compose started from this
 checkout; never <code>.env.ports</code>, whose port may since be another project's. It
 refuses to listen while another live agent does for the project, and stops
-once whoever started it (<code>make serve</code>, a shell) is gone. Requests older than five
+once whoever started it (a shell) is gone; stopped (SIGTERM, as compose stops
+the service), it finishes what it took and takes its heartbeat down, so the
+next one listens at once. When its own code changes (an editable install, as
+the service's <code>AEGIS_STACK_SOURCE</code>), it restarts on it once nothing it took is
+running. Requests older than five
 minutes are failed, not run. A new server is created only at the price you
 typed back in the Overseer, which it asks the provider for again first.
 The heartbeat also names the actions this agent runs and the protocol
 revision it speaks: one started before the CLI learned what the page asks
-for is shown as older than the app, to restart, and is not asked.</p>
+for is shown as older than the app and is not asked.</p>
 <p><strong>Usage:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-35-1"><a id="__codelineno-35-1" name="__codelineno-35-1" href="#__codelineno-35-1"></a>aegis<span class="w"> </span>deploy-agent<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
 </span></code></pre></div></p>

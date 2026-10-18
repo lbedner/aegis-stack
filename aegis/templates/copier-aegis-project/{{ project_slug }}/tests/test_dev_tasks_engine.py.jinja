@@ -202,4 +202,40 @@ class TestTheDeployAgent:
         dev_tasks._deploy_agent_ready({})
 
         assert ran == [["ssh-add", "-l"]]
+
+    def _generated_from(self, home: Path, source: str) -> None:
+        (home / ".copier-answers.yml").write_text(
+            f"_commit: None\n_src_path: {source}\nproject_name: x\n"
+        )
+
+    def test_a_stack_generated_from_a_checkout_runs_its_aegis(
+        self, home: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The pinned release may predate the agent this checkout's
+        templates expect: run the checkout the stack came from."""
+        self._ssh_add(monkeypatch, holds=0)
+        checkout = home / "aegis-stack"
+        checkout.mkdir()
+        (checkout / "pyproject.toml").write_text("")
+        self._generated_from(home, f"git+file://{checkout}")
+        env: dict[str, str] = {}
+
+        dev_tasks._deploy_agent_ready(env)
+
+        assert env["AEGIS_STACK_SOURCE"] == str(checkout)
+
+    def test_a_released_stack_or_a_chosen_checkout_is_left_alone(
+        self, home: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._ssh_add(monkeypatch, holds=0)
+        self._generated_from(home, "gh:lbedner/aegis-stack")
+        env: dict[str, str] = {}
+        dev_tasks._deploy_agent_ready(env)
+        assert "AEGIS_STACK_SOURCE" not in env
+
+        self._generated_from(home, f"git+file://{home}")
+        (home / "pyproject.toml").write_text("")
+        chosen = {"AEGIS_STACK_SOURCE": "/elsewhere"}
+        dev_tasks._deploy_agent_ready(chosen)
+        assert chosen["AEGIS_STACK_SOURCE"] == "/elsewhere"
 {%- endif %}

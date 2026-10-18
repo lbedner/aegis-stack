@@ -56,10 +56,14 @@ a new one. It drives your machine's Docker, so it sees the checkout and a
 temp directory of its own at their own paths, and it signs with your machine's ssh-agent,
 never a key file: `make serve` adds your key to the agent when it holds none
 (`ssh-add`, once per login; on macOS the passphrase is kept in the Keychain).
-Off Docker Desktop, set `DEPLOY_AGENT_SSH_SOCK` in `.env` to your agent's
-socket. Working on aegis itself, set `AEGIS_STACK_SOURCE` in `.env` to a
-checkout: the service runs it editable, each command on the code as it is, and
-the agent restarts itself on it once idle. With the stack started another way,
+Off Docker Desktop, set `DEPLOY_AGENT_SSH_SOCK` to your agent's socket.
+`AEGIS_STACK_SOURCE` names a checkout of aegis to run instead: the service
+runs it editable, each command on the code as it is, and the agent restarts
+itself on it once idle. A stack generated from a checkout (`aegis init --dev`)
+gets that checkout without asking, as the pinned release may not have the
+agent its templates expect. Both are read by compose, not the app, so set them
+in the shell (`DEPLOY_AGENT_SSH_SOCK=... make serve`), never in `.env`: the
+app refuses to start on a key it does not know. With the stack started another way,
 run `aegis deploy-agent` in the project directory yourself.
 
 The cloud token is a secret like the app's other credentials: set

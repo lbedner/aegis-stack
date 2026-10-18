@@ -290,4 +290,27 @@ class TestSigningOutIsStillFinal:
 
         assert await is_authenticated(page) is False
         assert RESUME_TOKEN_KEY not in storage.stored
+
+
+class TestNothingToResume:
+    async def test_a_tab_never_signed_in_asks_the_server_nothing(
+        self, wire: Any
+    ) -> None:
+        """Every reload reconnects the open tabs. One with no session and
+        no token to resume is not signed in, and asking ``/auth/me`` only
+        draws a 401, a refresh with no cookie and a sign-out of nothing."""
+        backend = FakeBackend()
+        page = FakePage(FakeStorage())
+        wire(page, build_client(backend, page))
+
+        assert await is_authenticated(page) is False
+        assert backend.seen == []
+
+    async def test_a_rejected_resume_stops_at_the_refusal(self, wire: Any) -> None:
+        backend = FakeBackend()
+        page = FakePage(FakeStorage({RESUME_TOKEN_KEY: "superseded-token"}))
+        wire(page, build_client(backend, page))
+
+        assert await is_authenticated(page) is False
+        assert backend.seen == ["POST /api/v1/auth/refresh"]
 {%- endif %}

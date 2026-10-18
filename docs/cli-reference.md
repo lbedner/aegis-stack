@@ -762,8 +762,9 @@ Run what Overseer > Deployments asks for on this machine: a provider's sizes
 and regions, what the account already runs, the stack's footprint, a new server, a deploy, a backup, the backup list, a rollback, a destroy. The
 Overseer puts each request on the project's Redis; this takes them one at a
 time and runs the matching `aegis deploy-*` command, streaming its output back
-to the page. Run it in the project directory with the stack up, where your
-SSH key is. A cloud token comes with the request that needs it (set on
+to the page. `make serve` runs it as the dev stack's `deploy-agent` service;
+run it by hand in the project directory with the stack up, where your SSH key
+is. A cloud token comes with the request that needs it (set on
 Overseer > Secrets, or in the app's `.env`), or from this machine's
 environment; a sent one wins. It reaches the command only through the
 environment, is masked in the output, and is kept nowhere (the heartbeat
@@ -776,12 +777,16 @@ It finds Redis with `REDIS_URL_LOCAL`, else by asking Docker, on every
 (re)connect, for the port of the `redis` container compose started from this
 checkout; never `.env.ports`, whose port may since be another project's. It
 refuses to listen while another live agent does for the project, and stops
-once whoever started it (`make serve`, a shell) is gone. Requests older than five
+once whoever started it (a shell) is gone; stopped (SIGTERM, as compose stops
+the service), it finishes what it took and takes its heartbeat down, so the
+next one listens at once. When its own code changes (an editable install, as
+the service's `AEGIS_STACK_SOURCE`), it restarts on it once nothing it took is
+running. Requests older than five
 minutes are failed, not run. A new server is created only at the price you
 typed back in the Overseer, which it asks the provider for again first.
 The heartbeat also names the actions this agent runs and the protocol
 revision it speaks: one started before the CLI learned what the page asks
-for is shown as older than the app, to restart, and is not asked.
+for is shown as older than the app and is not asked.
 
 **Usage:**
 ```bash

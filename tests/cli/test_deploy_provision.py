@@ -973,6 +973,26 @@ def test_without_ssh_key_the_first_existing_key_is_used(
     assert uploaded and uploaded[0][2]["public_key"] == PUBKEY
 
 
+def test_without_key_files_the_ssh_agents_key_is_used(
+    project: Path,
+    apis: dict[str, FakeAPI],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The deploy-agent service: the machine's ssh-agent, never its key files."""
+    monkeypatch.setenv("HOME", str(_home_with_keys(tmp_path)))
+    monkeypatch.setattr(cmd, "_agent_key", lambda: PUBKEY)
+    args = ["deploy-provision", "--project-path", str(project), "--email", EMAIL]
+
+    result = RUNNER.invoke(app, args, input="y\n")
+
+    assert result.exit_code == 0, result.output
+    uploaded = [
+        c for c in apis[hetzner.API_URL].calls if c[:2] == ("POST", "/ssh_keys")
+    ]
+    assert uploaded and uploaded[0][2]["public_key"] == PUBKEY
+
+
 def test_without_any_ssh_key_it_says_what_it_looked_for(
     project: Path,
     apis: dict[str, FakeAPI],
@@ -980,6 +1000,7 @@ def test_without_any_ssh_key_it_says_what_it_looked_for(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("HOME", str(_home_with_keys(tmp_path)))
+    monkeypatch.setattr(cmd, "_agent_key", lambda: None)
     args = ["deploy-provision", "--project-path", str(project)]
 
     result = RUNNER.invoke(app, args, input="y\n")

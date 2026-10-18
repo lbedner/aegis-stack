@@ -128,12 +128,12 @@
 <p data-deploy-state="stale" class="{{ note() }}">{{ agent.error }} <span data-agent-said>{{ agent.said }}</span></p>
 {% elif agent.state == "no-agent" %}
 <div data-deploy-state="no-agent" class="{{ note() }}">
-  <p class="flex flex-wrap items-center gap-2">No deploy agent is running: restart <code class="font-mono text-aegis-text">make serve</code>, or run {{ command(agent.command) }} in the project directory.</p>
+  <p class="flex flex-wrap items-center gap-2">No deploy agent is running: <code class="font-mono text-aegis-text">make serve</code> runs it as the stack's <code class="font-mono text-aegis-text">deploy-agent</code> service, whose log (<code class="font-mono text-aegis-text">docker compose logs deploy-agent</code>) says why it stopped, or run {{ command(agent.command) }} in the project directory.</p>
   <details data-agent-why class="text-xs">
     <summary class="cursor-pointer hover:text-aegis-text">What is the deploy agent?</summary>
     <div class="mt-2 space-y-1">
-      <p>A small process on your machine that does what you ask on this page: create a server, deploy, back up, roll back, destroy. <code class="font-mono text-aegis-text">make serve</code> starts it beside the stack when the aegis CLI is installed (<code class="font-mono text-aegis-text">uv tool install aegis-stack</code>).</p>
-      <p>It runs there, not in the app, so your SSH key never leaves your machine. The cloud token comes from Deployments &gt; Settings (or <code class="font-mono text-aegis-text">.env</code>), or from the agent's own environment.</p>
+      <p>A small process on your machine that does what you ask on this page: create a server, deploy, back up, roll back, destroy. <code class="font-mono text-aegis-text">make serve</code> runs it as the stack's <code class="font-mono text-aegis-text">deploy-agent</code> service, on the aegis this project pins.</p>
+      <p>It runs there, not in the app, and signs through your machine's ssh-agent, so your SSH key never leaves it. The cloud token comes from Deployments &gt; Settings (or <code class="font-mono text-aegis-text">.env</code>), or from the agent's own environment.</p>
     </div>
   </details>
 </div>

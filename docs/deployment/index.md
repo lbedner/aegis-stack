@@ -45,11 +45,22 @@ list backups, roll back, destroy. Until there is a server it walks you there
 in steps (the agent, where: a provider's token or a server of your own, then
 the server), each read from what is already true; after, it shows the
 server and what can be done to it. Each action is audited, and its
-output streams under Deployments > Jobs. `make serve` starts the agent that runs
-them, `aegis deploy-agent`, beside the stack and stops it with the stack, when
-the aegis CLI is installed (`uv tool install aegis-stack`). With the stack
-started another way, run `aegis deploy-agent` in the project directory
-yourself.
+output streams under Deployments > Jobs. The agent that runs them,
+`aegis deploy-agent`, is the dev stack's `deploy-agent` service: `make serve`
+starts and stops it with the rest, compose restarts it if it dies, and
+`docker compose logs deploy-agent` shows what it did. It is never on the
+server.
+
+The service is built on the aegis this project pins, so `aegis update` brings
+a new one. It drives your machine's Docker, so it sees the checkout and a
+temp directory of its own at their own paths, and it signs with your machine's ssh-agent,
+never a key file: `make serve` adds your key to the agent when it holds none
+(`ssh-add`, once per login; on macOS the passphrase is kept in the Keychain).
+Off Docker Desktop, set `DEPLOY_AGENT_SSH_SOCK` in `.env` to your agent's
+socket. Working on aegis itself, set `AEGIS_STACK_SOURCE` in `.env` to a
+checkout: the service runs it editable, each command on the code as it is, and
+the agent restarts itself on it once idle. With the stack started another way,
+run `aegis deploy-agent` in the project directory yourself.
 
 The cloud token is a secret like the app's other credentials: set
 `DIGITALOCEAN_TOKEN` (or `HCLOUD_TOKEN`) on Overseer > Deployments >
@@ -76,11 +87,11 @@ what the account already runs: its servers with what each costs a month
 month's spend. Listing needs the token's `droplet:read` scope, and the
 spend `billing:read`; without one, the page says which to add.
 
-Why a host runner: every step needs what the app's container does not have
-and should not hold (the aegis CLI, the working tree it ships, your SSH key).
-So the Overseer only asks, through the project's Redis, and
-`aegis deploy-agent` runs the same commands you would type, with the key
-staying on your machine. A deployed server's Overseer offers no deploy
+Why a separate runner: every step needs what the app's container does not
+have and should not hold (the aegis CLI, the working tree it ships, your SSH
+key, the host's Docker). So the Overseer only asks, through the project's
+Redis, and `aegis deploy-agent` runs the same commands you would type, with
+the key staying in your machine's ssh-agent. A deployed server's Overseer offers no deploy
 actions: redeploy from the dev Overseer or from CI ([`aegis deploy-cd-setup`](../cli-reference.md#aegis-deploy-cd-setup)).
 The Flet dashboard shows the commands only.
 

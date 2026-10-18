@@ -6,9 +6,11 @@ from app.core.ontology.model import (
     ChangeNode,
     Edge,
     EdgeKind,
+    JobNode,
     Kind,
     ObjectNode,
     PartNode,
+    PartOption,
 )
 from app.core.ontology.summary import summary, text
 from app.core.parts import Category
@@ -42,6 +44,41 @@ def test_the_map_names_each_part_with_what_it_is_for() -> None:
     found = text(summary(MODEL))
     assert "component:backend: The HTTP API" in found
     assert "service:payment" in found
+
+
+def test_the_map_says_how_each_part_is_built_and_what_else_it_could_be() -> None:
+    """Asked about a worker library the stack does not run, the agent must
+    already know it is one of the worker's choices, not outside the app."""
+    worker = PartNode(
+        kind=Kind.COMPONENT,
+        name="worker",
+        category=Category.COMPUTE,
+        options=(
+            PartOption(
+                name="backend",
+                mode="single",
+                choices=("arq", "taskiq", "dramatiq"),
+                chosen="taskiq",
+            ),
+            PartOption(name="rag", mode="flag", choices=("rag",), chosen=True),
+            PartOption(name="voice", mode="flag", choices=("voice",), chosen=False),
+        ),
+    )
+    found = text(summary(model_of([worker], [])))
+    assert "backend taskiq (of arq, taskiq, dramatiq)" in found
+    assert "rag on" in found and "voice off" in found
+
+
+def test_the_map_lists_the_scheduled_jobs_with_when_and_whose() -> None:
+    """Asked how the app is backed up, the agent must already know a
+    backup job runs, not conclude from the parts that none does."""
+    backup = JobNode(
+        name="database_backup",
+        schedule="trigger=cron hour=2 minute=0",
+        owner="shared:system",
+    )
+    found = text(summary(model_of([BACKEND, backup], [])))
+    assert "- database_backup (shared:system): trigger=cron hour=2 minute=0" in found
 
 
 def test_the_map_leaves_a_parts_pieces_to_the_tool() -> None:

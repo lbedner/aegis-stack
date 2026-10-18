@@ -25,7 +25,7 @@ services:
       - "traefik.http.routers.webserver-dev.entrypoints=web"
       - "traefik.http.routers.webserver-dev.service=webserver"
       # Admin paths in dev
-      - "traefik.http.routers.webserver-admin.rule=PathPrefix(`/dashboard`) || PathPrefix(`/docs`) || PathPrefix(`/redoc`) || PathPrefix(`/openapi.json`) || PathPrefix(`/health/detailed`)"
+      - "traefik.http.routers.webserver-admin.rule=PathPrefix(`/dashboard`) || PathPrefix(`/docs`) || PathPrefix(`/redoc`) || PathPrefix(`/openapi.json`) || PathPrefix(`/health/detailed`) || PathPrefix(`/health/dashboard`)"
       - "traefik.http.routers.webserver-admin.entrypoints=web"
       - "traefik.http.routers.webserver-admin.service=webserver"
       - "traefik.http.routers.webserver-admin.middlewares=admin-ipallowlist"

@@ -12,8 +12,10 @@ from pydantic import BaseModel, ConfigDict
 from app.core.ontology.model import (
     ChangeNode,
     EdgeKind,
+    JobNode,
     ObjectNode,
     PartNode,
+    PartOption,
     Stack,
     SystemModel,
     parse_node_id,
@@ -57,6 +59,7 @@ class Summary(BaseModel):
     app: Stack
     counts: dict[str, int]  # nodes by kind: an ``object`` is a table
     parts: tuple[PartNode, ...] = ()
+    jobs: tuple[JobNode, ...] = ()  # an admin's, as parts are
     tables: dict[str, dict[str, list[str]]]  # owner -> table -> tables it links to
     changes: dict[str, ChangeBrief]
 
@@ -84,6 +87,7 @@ def summary(model: SystemModel) -> Summary:
         app=model.stack,
         counts=Counter(n.kind.value for n in model.nodes),
         parts=tuple(n for n in model.nodes if isinstance(n, PartNode)),
+        jobs=tuple(n for n in model.nodes if isinstance(n, JobNode)),
         tables=tables(model),
         changes={
             n.name: ChangeBrief(
@@ -97,16 +101,19 @@ def summary(model: SystemModel) -> Summary:
 
 def text(found: Summary) -> str:
     """``found`` as a short map for a prompt: each part with what it is
-    for (its sub-parts left to the tool, as its routes are), the tables by
-    owner with what each links to, and the changes.
+    for and how it is built (its sub-parts left to the tool, as its routes
+    are), the scheduled jobs, the tables by owner with what each links to,
+    and the changes.
     Nothing live (no traffic, health or rows), so its bytes stay the same
     turn to turn and a provider's prompt cache serves them."""
     lines = [EDGE if found.parts else DATA_EDGE]
     if found.parts:
-        lines += ["", "Parts:"] + [
-            f"- {p.id}: {p.description}" if p.description else f"- {p.id}"
-            for p in found.parts
-            if p.owner is None
+        lines += ["", "Parts (as built here, and what else each could be):"] + [
+            _part_line(p) for p in found.parts if p.owner is None
+        ]
+    if found.jobs:
+        lines += ["", "Scheduled jobs (whose, and when):"] + [
+            f"- {job.name} ({job.owner}): {job.schedule}" for job in found.jobs
         ]
     if found.tables:
         lines += ["", "Tables, by owner (a table's links in brackets):"] + [
@@ -121,6 +128,23 @@ def text(found: Summary) -> str:
             for name, change in found.changes.items()
         ]
     return "\n".join(lines)
+
+
+def _part_line(part: PartNode) -> str:
+    """A part, what it is for, and each option as built: ``backend taskiq
+    (of arq, taskiq, dramatiq)``, ``rag on``; one with no recorded choice
+    is left to the tool."""
+    line = f"- {part.id}: {part.description}" if part.description else f"- {part.id}"
+    built = "; ".join(_built(o) for o in part.options if o.chosen is not None)
+    return f"{line} [{built}]" if built else line
+
+
+def _built(option: PartOption) -> str:
+    chosen = option.chosen
+    if option.mode == "flag":
+        return f"{option.name} {'on' if chosen else 'off'}"
+    said = ", ".join(chosen) if isinstance(chosen, tuple) else str(chosen)
+    return f"{option.name} {said} (of {', '.join(option.choices)})"
 
 
 def _linked(table: str, links: list[str]) -> str:

@@ -60,9 +60,10 @@ async def health(component: str | None = None) -> dict[str, Any]:
     """The app's health right now: every component (server, worker,
     scheduler, database, redis, ...) and service, each with its status
     (healthy, info, warning, unhealthy) and message, nested as Overseer
-    shows them. ``component`` narrows it to one, with everything it
-    reports (a worker's queues, the scheduler's jobs, the database's
-    tables). ``counts`` counts each check once, and ``attention`` names
+    shows them. ``component`` narrows it to one, with the details it
+    reports that fit here (a worker's queues, the scheduler's jobs, the
+    database's size and counts); ``omitted`` names those only Overseer
+    shows. ``counts`` counts each check once, and ``attention`` names
     every one not healthy, with its message. Start here, then read what
     broke with ``errors`` and what led up to it with ``logs``. A part's
     ontology id (``service:documents``) names its check too."""
@@ -208,7 +209,8 @@ async def ontology(
     """What this app is, read from its code: its tables and the changes to
     them (an admin also sees parts, routes, jobs, tools and Redis keys). No
     arguments: a summary (the app, counts by kind, its tables by owner with
-    their links, the changes to them, and an admin's parts). ``kind``,
+    their links, the changes to them, and an admin's parts and scheduled
+    jobs). ``kind``,
     ``category`` or ``text``: matching nodes. ``node`` (an id like
     ``object:user``): it, its edges and neighbours ``depth`` steps out,
     and for a part what is true of it now (its health check, the errors it
@@ -268,13 +270,16 @@ async def ontology(
             "note": note,
         }
     found = summary(model)
-    brief = found.model_dump(mode="json", exclude={"parts"}) | {"note": note}
+    brief = found.model_dump(mode="json", exclude={"parts", "jobs"}) | {"note": note}
     if not found.parts:  # the app's data alone (``domain``)
         return brief
     return brief | {
         "parts": [
             p.model_dump(mode="json", include={*BRIEF, "category"}) for p in found.parts
-        ]
+        ],
+        "jobs": [
+            j.model_dump(mode="json", include={*BRIEF, "schedule"}) for j in found.jobs
+        ],
     }
 
 

@@ -6809,6 +6809,17 @@ or one per line from <code>git diff --name-only</code>) and says, from the app's
 ontology, which parts own them, which parts depend on those, and the
 tables, routes and jobs they define; Markdown for a pull request's job
 summary, JSON with <code>--format json</code>.
+<code>patterns check</code> lists only the findings that are new: the ones not
+in <code>.patterns-baseline.json</code>, the known debt, which <code>--update</code> writes
+and afterwards only shrinks. A place is known by its rule, its part,
+its file and the text on its line, so code added above old debt does
+not make it new. It is advisory, always exiting 0; <code>--strict</code> exits 1
+on a new breach of an enforced rule, for whoever chooses to block on
+it. Under GitHub Actions each new finding is printed as an annotation
+on the pull request's diff, and with changed files given, what they
+touch goes in the job summary beside the new findings. No CI job
+ships with the app; its <code>CLAUDE.md</code> asks a coding agent to run the
+check before it finishes.
 Finance and documents also carry a <code>test_*_module_layout.py</code> stating which
 module defines what, so folding a domain back together, or dropping a
 function into whichever file was open, fails a test rather than passing

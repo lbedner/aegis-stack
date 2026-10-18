@@ -6709,7 +6709,7 @@
 <tr>
 <td><code>ACME_EMAIL</code></td>
 <td>-</td>
-<td>Email for Let's Encrypt notifications (only with TLS enabled)</td>
+<td>Email Let's Encrypt registers the certificate to (only with TLS enabled). <code>traefik/traefik.yml</code> holds <code>__ACME_EMAIL__</code>, and the production Traefik fills it in from this when it starts, so no email is committed; it refuses to start without one. <code>aegis ingress-enable</code> and <code>deploy-provision</code> keep it in <code>.aegis/deploy.yml</code>, which each deploy stamps into the server's <code>.env</code>.</td>
 </tr>
 </tbody>
 </table>

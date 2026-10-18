@@ -7863,9 +7863,12 @@ points a name at the server, waits for that name to resolve (so the first
 Let's Encrypt request does not fail), turns HTTPS on for that name (the same
 change <code>aegis ingress-enable</code> makes, so a project generated without TLS gets
 it), writes <code>.aegis/deploy.yml</code> and runs <code>aegis deploy</code>.</p>
-<p>Let's Encrypt needs an email address: <code>--email</code>, or the project's
-<code>author_email</code> when it is not the generated placeholder. Without one the
-command stops before creating anything.</p>
+<p>Let's Encrypt needs an email address: <code>--email</code>, or the one TLS was turned
+on with, or the project's <code>author_email</code> when it is not the generated
+placeholder. Without one the command stops before creating anything. The
+address is kept in <code>.aegis/deploy.yml</code> (git-ignored), never in a committed
+file: each deploy stamps it into the server's <code>.env</code> as <code>ACME_EMAIL</code>, and the
+production Traefik fills its config in from that when it starts.</p>
 <p>Tokens are read from the environment at call time and never stored or printed
 (at most the last four characters are shown):</p>
 <ul>

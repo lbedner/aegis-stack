@@ -50,9 +50,16 @@ class AgentRow(BaseModel):
     in_now: list[int]
 
 
+def secret_for(secret: str, name: str) -> str:
+    """Where the agent called ``name`` keeps ``secret`` (its sign-in, its
+    calendar): the first's under ``secret``, another's under
+    ``<secret>__<NAME>``."""
+    return secret if name == DEFAULT_AGENT else f"{secret}__{name.upper()}"
+
+
 def login_secret_for(name: str) -> str:
     """Where the agent called ``name`` keeps its sign-in."""
-    return LOGIN if name == DEFAULT_AGENT else f"{LOGIN}__{name.upper()}"
+    return secret_for(LOGIN, name)
 
 
 def agent_names(every: Iterable[tuple[int, str]]) -> dict[int | None, str]:

@@ -9,15 +9,16 @@ from typing import Any
 import pytest
 
 from app.cli import meetings as meetings_cli
+from app.core import secrets
 from app.core.config import settings
 from app.services.meetings import meet
 from app.services.meetings.domains.accounts.service import login_secret_for
-from app.services.meetings.login import LOGIN, signed_in
+from app.services.meetings.login import CALENDAR, LOGIN, signed_in
 from app.services.meetings.models import BotAccount
 from tests._cli import invoke
 from tests._meetings import MEET
-from tests._session import opens
 from tests._secret_settings import use_store
+from tests._session import opens
 
 STATE = {
     "cookies": [{"name": "SID", "value": "x", "domain": ".google.com", "path": "/"}],
@@ -185,3 +186,19 @@ def test_a_sign_in_it_cannot_keep_is_refused_before_chrome_opens(
     assert result.exit_code == 1
     assert ".env" in result.output
     assert not opened
+
+
+async def test_each_agents_calendar_is_kept_as_a_secret(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An agent's calendar address (Google's secret iCal address) reads
+    everything on it, so it is kept like the agent's sign-in: the first
+    agent's under ``CALENDAR``, another's under ``CALENDAR__<NAME>``."""
+    store = use_store(monkeypatch)
+    feed = "https://calendar.google.com/calendar/ical/x/private-y/basic.ics"
+
+    await secrets.put(CALENDAR, feed, actor="test")
+    await secrets.put(f"{CALENDAR}__WORK", feed, actor="test")
+
+    assert store.values[CALENDAR] == feed
+    assert await secrets.get(f"{CALENDAR}__WORK") == feed

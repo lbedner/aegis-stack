@@ -34,6 +34,14 @@ A bot that joins a call as a visible, announced participant, and keeps who was t
 
     Each sign-in is kept under its own secret (the first's is `MEETINGS_BOT_LOGIN_SECRET`, `work`'s `MEETINGS_BOT_LOGIN_SECRET__WORK`). A meeting is sent as one agent: the first (`notetaker`) unless another is named. A stack from before agents keeps its sign-in and its meetings as the first agent's, with nothing to do.
 
+    Each agent can also have its own **calendar**: what it is invited to. In the agent's Google Calendar, open Settings, set "Add invitations to my calendar" to "From everyone" (Google otherwise adds only invites from senders the account knows), then copy the calendar's "Secret address in iCal format" (under Integrate calendar) into a secret: the first agent's is `MEETINGS_BOT_CALENDAR_SECRET`, `work`'s `MEETINGS_BOT_CALENDAR_SECRET__WORK`. Set it in Overseer's Secrets, or:
+
+    ```bash
+    my-app secrets set MEETINGS_BOT_CALENDAR_SECRET
+    ```
+
+    The address reads everything on that calendar, so it is kept like the sign-in. Every minute the scheduler reads each agent's calendar again and keeps its meetings, from a month back to three months ahead, one row per time each happens (a repeating meeting expanded, with the times moved or cancelled on their own followed), with the link to join from the invite: the conference Google attached, or the first Meet, Teams or Zoom link in its location or description. A meeting taken off the calendar is dropped, unless the agent was already sent into it. An agent whose calendar cannot be read keeps what it had.
+
 ## What You Get
 
 - **Meetings** - one row per call the bot is asked to join: the link, its platform, the name the bot joins as, and its status, with when it joined and left.

@@ -1578,7 +1578,13 @@ SERVICES: dict[str, ServiceSpec] = {
             ],
         ),
         migrations=[MEETINGS_MIGRATION],
-        pyproject_deps=["alembic==1.16.5"],
+        # The envoys' calendars: Google's iCal feed, recurring meetings
+        # expanded into their instances.
+        pyproject_deps=[
+            "alembic==1.16.5",
+            "icalendar>=6.1,<8",
+            "recurring-ical-events>=3.8,<4",
+        ],
         template_files=[
             "app/services/meetings/",
             "app/components/backend/api/meetings/",
@@ -1606,6 +1612,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 "tests/components/frontend/test_meetings_threads_ui.py",
                 "app/components/frontend/dashboard/modals/meetings_threads.py",
                 "tests/services/test_meetings_accounts.py",
+                "tests/services/test_meetings_calendar.py",
                 "tests/api/test_meetings_agents_endpoints.py",
                 "tests/components/frontend/test_meetings_agents_ui.py",
                 "app/components/frontend/dashboard/modals/meetings_agents_tab.py",

@@ -26,8 +26,12 @@ from app.core import secrets
 from app.core.secrets import Secret
 
 LOGIN = "MEETINGS_BOT_LOGIN_SECRET"
+# The agent's Google Calendar, by its secret iCal address: what it is
+# invited to. It reads everything on the calendar, so it is a secret too.
+CALENDAR = "MEETINGS_BOT_CALENDAR_SECRET"
 SECRETS = (
     Secret(LOGIN, owner="Meetings", label="The bot's Google sign-in", family=True),
+    Secret(CALENDAR, owner="Meetings", label="The bot's calendar", family=True),
 )
 
 SIGN_IN_URL = "https://accounts.google.com/"

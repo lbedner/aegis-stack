@@ -9,6 +9,12 @@
 
 ### Added
 
+- **Meetings: each agent's calendar.** An agent's Google Calendar, by its
+  secret iCal address (`MEETINGS_BOT_CALENDAR_SECRET`, another agent's under
+  `__<NAME>`), is read every minute by the scheduler and kept as one row per
+  time each meeting happens, with its link to join: repeating meetings
+  expanded, moved and cancelled times followed, a meeting taken off dropped
+  unless the agent was sent into it.
 - **Meetings: people, and notes and guides as rows.** Everyone the owner's
   calls name is one person across their meetings (a participant is that
   person as one call named them, matched as written or ignoring case and

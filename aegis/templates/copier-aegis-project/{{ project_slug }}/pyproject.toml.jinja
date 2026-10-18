@@ -183,6 +183,12 @@ dependencies = [
 {%- if include_finance %}
     "ofxtools>=0.9.5,<2",
 {%- endif %}
+{%- if include_meetings %}
+    # The envoys' calendars: Google's iCal feed, recurring meetings
+    # expanded into their instances.
+    "icalendar>=6.1,<8",
+    "recurring-ical-events>=3.8,<4",
+{%- endif %}
 {%- if include_secrets or include_insights or (include_finance and (finance_plaid or finance_snaptrade)) %}
     "cryptography>=42.0.0,<51",  # AES-GCM at-rest encryption (app.core.encryption)
 {%- endif %}

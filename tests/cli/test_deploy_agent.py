@@ -12,6 +12,7 @@ import importlib.util
 import json
 import logging
 import os
+import signal
 import subprocess
 import sys
 import threading
@@ -1026,6 +1027,62 @@ def test_the_agent_stops_once_whoever_started_it_is_gone(
     assert not stop.wait(0.05)
     parent["pid"] = 1  # reparented
     assert stop.wait(2)
+
+
+def test_its_code_changed_it_restarts_once_idle_its_heartbeat_down(
+    project: Path, app_store: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An editable aegis (the deploy-agent service's AEGIS_STACK_SOURCE)
+    edited: the agent comes back on that code by itself, never part way
+    through what it took, so it cannot fall behind the app it serves."""
+    monkeypatch.setitem(agent.PROTOCOL, "beat_seconds", 0)
+    stamps = iter([1.0, 1.0])  # when it started, its first look; then changed
+    monkeypatch.setattr(agent, "code_stamp", lambda: next(stamps, 2.0))
+    redis, stop = FakeRedis(), threading.Event()
+    restarted: list[str | None] = []
+
+    def restart() -> None:
+        restarted.append(redis.strings.get(agent.PROTOCOL["heartbeat"]))
+        stop.set()
+
+    monkeypatch.setattr(agent, "restart", restart)
+    job_id = _request(redis, app_store, "rollback", {"backup": "2026-10-01_020000"})
+    agent.serve(redis, project, stop)
+    assert restarted == [None]  # once, its heartbeat already down
+    assert _job(redis, app_store, job_id).status == "done"
+
+
+def test_a_file_gone_mid_look_does_not_stop_the_agent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The source checkout switching branches while it looks: what is gone
+    is skipped, never the agent's end."""
+    (tmp_path / "kept.py").write_text("")
+    (tmp_path / "gone.py").symlink_to(tmp_path / "nowhere.py")
+    monkeypatch.setattr(agent, "PACKAGE", tmp_path)
+    assert agent.code_stamp() == (tmp_path / "kept.py").stat().st_mtime
+
+
+def test_a_stopped_service_stops_the_agent_the_way_out_it_cleans_up(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Compose stopping it sends SIGTERM, which would kill it where it
+    stood, its heartbeat holding the project from the next agent; it sets
+    ``stop`` instead, so ``serve`` takes the heartbeat down on its way out."""
+    handlers: dict[int, Any] = {}
+    monkeypatch.setattr(agent.signal, "signal", handlers.__setitem__)
+    monkeypatch.setattr(agent, "validate_copier_project", lambda *a: None)
+    monkeypatch.setattr(agent, "watch_parent", lambda stop: None)
+    stops: list[threading.Event] = []
+
+    def listen(root: Path, stop: threading.Event) -> None:
+        handlers[signal.SIGTERM](signal.SIGTERM, None)
+        stops.append(stop)
+
+    monkeypatch.setattr(agent, "listen", listen)
+    result = CliRunner().invoke(app, ["deploy-agent", "--project-path", str(project)])
+    assert result.exit_code == 0, result.output
+    assert stops[0].is_set()
 
 
 class _Flaky(FakeRedis):

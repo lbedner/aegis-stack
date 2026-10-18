@@ -24,6 +24,47 @@ document.addEventListener('alpine:init', () => {
   }));
 });
 
+// A dropdown (macros/layout.html) opens below, on the side its macro
+// asked for. One that would run off the bottom of the window opens above
+// instead, when there is more room there. A button that wrapped to the
+// other edge of a phone would open it off the screen, so on opening it
+// takes the other side, then slides back whatever still overhangs.
+// ``toggle`` does not bubble, so it is caught on the way down.
+function placeDropdown(details) {
+  const menu = details.lastElementChild;
+  menu.style.left = menu.style.right = menu.style.translate = '';
+  menu.style.top = menu.style.bottom = menu.style.marginTop = menu.style.marginBottom = '';
+  if (!details.open) return;
+  const below = menu.getBoundingClientRect();
+  const above = details.getBoundingClientRect().top;
+  if (below.bottom > window.innerHeight && above > window.innerHeight - below.top) {
+    menu.style.top = 'auto';
+    menu.style.bottom = '100%';
+    menu.style.marginTop = '0';
+    menu.style.marginBottom = '0.25rem'; // the macro's ``mt-1``, on the other side
+  }
+  // The page's width, not innerWidth: a phone zooms out to show a menu
+  // that overhangs, which widens innerWidth until it "fits". The gutter
+  // is the macro's ``max-w-[calc(100vw-2rem)]``.
+  const gutter = 16;
+  const width = document.documentElement.clientWidth;
+  const overhang = () => {
+    const r = menu.getBoundingClientRect();
+    if (r.left < gutter) return gutter - r.left;
+    if (r.right > width - gutter) return width - gutter - r.right;
+    return 0;
+  };
+  if (!overhang()) return;
+  const [side, other] = menu.classList.contains('right-0') ? ['right', 'left'] : ['left', 'right'];
+  menu.style[side] = 'auto';
+  menu.style[other] = '0';
+  const shift = overhang();
+  if (shift) menu.style.translate = `${shift}px 0`;
+}
+document.addEventListener('toggle', (event) => {
+  if (event.target.matches?.('details[data-dropdown]')) placeDropdown(event.target);
+}, true);
+
 function toast(text, tone) {
   window.dispatchEvent(new CustomEvent('toast', { detail: { text, tone } }));
 }
@@ -804,4 +845,4 @@ document.body.addEventListener('htmx:load', () => {
   applyMapFocus(document.getElementById('overview-stack'));
 });
 
-if (typeof module !== 'undefined') module.exports = { outsideClick, dismiss, navigates, markCurrent, spanned, inView, splitMatches, mapFocus, pathFocus, sourceColumn, kept, volumeOf };
+if (typeof module !== 'undefined') module.exports = { placeDropdown, outsideClick, dismiss, navigates, markCurrent, spanned, inView, splitMatches, mapFocus, pathFocus, sourceColumn, kept, volumeOf };

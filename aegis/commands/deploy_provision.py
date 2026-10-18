@@ -18,6 +18,8 @@ them from here.
 import ipaddress
 import os
 import re
+import shutil
+import subprocess
 from collections.abc import Callable
 from enum import Enum
 from pathlib import Path
@@ -392,12 +394,25 @@ def _on_failure(
 DEFAULT_PUBLIC_KEYS = ("id_ed25519.pub", "id_ecdsa.pub", "id_rsa.pub")
 
 
-def _default_public_key() -> Path:
-    """The first of the user's usual public keys that exists."""
+def _agent_key() -> str | None:
+    """The first key the ssh-agent holds, None without one."""
+    if shutil.which("ssh-add") is None:
+        return None
+    held = subprocess.run(["ssh-add", "-L"], capture_output=True, text=True)
+    keys = held.stdout.splitlines() if held.returncode == 0 else []
+    return keys[0].strip() if keys else None
+
+
+def _default_public_key() -> str:
+    """The first of the user's usual public keys that exists, else the
+    first the ssh-agent holds: the dev stack's ``deploy-agent`` service
+    signs through the machine's agent and has no key files."""
     ssh_dir = Path.home() / ".ssh"
     for name in DEFAULT_PUBLIC_KEYS:
         if (ssh_dir / name).exists():
-            return ssh_dir / name
+            return (ssh_dir / name).read_text().strip()
+    if held := _agent_key():
+        return held
     brand.error(
         t("provision.no_ssh_key", dir=ssh_dir, names=", ".join(DEFAULT_PUBLIC_KEYS)),
         err=True,
@@ -408,11 +423,12 @@ def _default_public_key() -> Path:
 def _acme_email(root: Path, email: str | None) -> str:
     """The address Let's Encrypt registers the certificate to.
 
-    ``--email`` wins, then the project's ``author_email`` unless it is still
-    the generated placeholder, which Let's Encrypt refuses. Checked before
+    ``--email`` wins, then the one TLS was turned on with, then the
+    project's ``author_email`` unless it is still the generated
+    placeholder, which Let's Encrypt refuses. Checked before
     any server exists, so a missing address costs nothing.
     """
-    found = email or known_email(_project_answers(root))
+    found = email or known_email(root, _project_answers(root))
     if found:
         return found
     brand.error(t("provision.email_required"), err=True)
@@ -425,7 +441,9 @@ def _read_inputs(root: Path, ssh_key: str | None) -> tuple[str, str]:
     if not setup_script.exists():
         brand.error(t("deploy.setup_script_missing", path=setup_script), err=True)
         raise typer.Exit(1)
-    pubkey_path = Path(ssh_key).expanduser() if ssh_key else _default_public_key()
+    if ssh_key is None:
+        return cloud_init_user_data(setup_script.read_text()), _default_public_key()
+    pubkey_path = Path(ssh_key).expanduser()
     if not pubkey_path.exists():
         brand.error(t("deploy.pubkey_missing", path=str(pubkey_path)), err=True)
         raise typer.Exit(1)

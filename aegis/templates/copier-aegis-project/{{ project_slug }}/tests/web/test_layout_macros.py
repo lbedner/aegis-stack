@@ -130,6 +130,14 @@ class TestDropdown:
         assert "text-error" in items[1].get("class")
 
 
+    def test_app_js_places_every_dropdown(self) -> None:
+        """One listener in app.js places any dropdown on opening, keyed on
+        ``data-dropdown`` (``tests/web/test_app_js.py``)."""
+        html = render('{% call dropdown("More") %}<li>x</li>{% endcall %}')
+        details = one(html, "details[data-dropdown]")
+        one(details, "summary + [role=menu]")
+
+
 class TestConfirm:
     def test_destructive_verb_and_a_way_out(self) -> None:
         html = render(

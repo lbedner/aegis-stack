@@ -68,16 +68,23 @@ def _plaid_configured() -> bool:
 {%- if include_deploy and include_redis %}
 
 
-def _start_deploy_agent(env: dict[str, str]) -> subprocess.Popen[bytes] | None:
-    """``aegis deploy-agent`` beside the stack, so Overseer > Deployments can
-    act: it runs the deploy commands here, where the cloud token and SSH key
-    are, and waits for Redis on its own. None, saying how to get it, when
-    the aegis CLI is not installed."""
-    aegis = shutil.which("aegis")
-    if aegis is None:
-        print("Overseer deploys need the aegis CLI: uv tool install aegis-stack")
-        return None
-    return subprocess.Popen([aegis, "deploy-agent"], env=env)
+def _deploy_agent_ready(env: dict[str, str]) -> None:
+    """What the ``deploy-agent`` service takes from this machine: the
+    checkout at its own path (``AEGIS_PROJECT_ROOT``), ``known_hosts``
+    (made, as Docker would mount a missing one as a directory), and the
+    ssh-agent holding a key, as the key itself never enters the container
+    (added once per login; ssh-add asks for its passphrase if it has one)."""
+    if os.name != "nt":  # a Windows path is no container path
+        env["AEGIS_PROJECT_ROOT"] = str(Path.cwd())
+    known = Path.home() / ".ssh" / "known_hosts"
+    known.parent.mkdir(mode=0o700, exist_ok=True)
+    known.touch()
+    if shutil.which("ssh-add") is None:
+        return
+    held = subprocess.run(["ssh-add", "-l"], capture_output=True, env=env)
+    if held.returncode == 1:  # an agent, holding no key
+        keychain = ["--apple-use-keychain"] if sys.platform == "darwin" else []
+        subprocess.run(["ssh-add", *keychain], env=env)
 {%- endif %}
 
 
@@ -111,16 +118,9 @@ def serve(*, detach: bool = False) -> None:
     if detach:
         cmd.append("-d")
 {%- if include_deploy and include_redis %}
-    agent = None if detach else _start_deploy_agent(env)
-    try:
-        subprocess.run(cmd, env=env, check=True)
-    finally:
-        if agent is not None:
-            agent.terminate()
-            agent.wait()
-{%- else %}
-    subprocess.run(cmd, env=env, check=True)
+    _deploy_agent_ready(env)
 {%- endif %}
+    subprocess.run(cmd, env=env, check=True)
 
 
 def serve_bg() -> None:

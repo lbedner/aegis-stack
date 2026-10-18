@@ -4,7 +4,8 @@
 The app cannot deploy itself: the aegis CLI and the SSH key are on the
 developer's machine, not in its container. So the
 Overseer queues a request on the project's own Redis and this command, run
-on that machine in the project directory, takes it: one at a time, through
+on that machine in the project directory (``make serve`` runs it as the dev
+stack's ``deploy-agent`` service), takes it: one at a time, through
 the same ``aegis deploy-*`` commands a person would type, their output
 streamed into the request's job (``jobs:<id>``, the app's ``RedisJobStore``
 record) for the page to show.
@@ -24,10 +25,12 @@ import contextlib
 import json
 import os
 import re
+import signal
 import socket
 import subprocess
 import sys
 import threading
+import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
@@ -75,6 +78,7 @@ POLL_SECONDS = (
     1  # how often a wait looks up (BLPOP, the parent), so a stop is noticed promptly
 )
 REDIS_RETRY_SECONDS = 2  # between tries while Redis is down
+PACKAGE = Path(__file__).resolve().parents[1]  # this aegis's code
 
 
 def validate(action: Any, args: Any) -> dict[str, str]:
@@ -502,13 +506,37 @@ def _claim(client: Any, beat: str) -> None:
     client.set(key, beat, ex=ttl)
 
 
+def code_stamp() -> float:
+    """When this aegis's code last changed: an editable install's (the
+    ``deploy-agent`` service's ``AEGIS_STACK_SOURCE``) as it is edited; a
+    pinned one's never does."""
+    stamps = []
+    for path in PACKAGE.rglob("*.py"):
+        with contextlib.suppress(OSError):  # gone mid-look (a branch switched)
+            stamps.append(path.stat().st_mtime)
+    return max(stamps, default=0.0)
+
+
+def restart() -> None:
+    """This agent again, on the code there is now (its pid kept, so it
+    takes its own place back)."""
+    sys.stdout.flush()  # what it said before, not lost with the process
+    os.execv(AEGIS[0], [*AEGIS, *sys.argv[1:]])
+
+
 def serve(client: Any, root: Path, stop: threading.Event) -> None:
     """Take requests until ``stop`` is set or Redis goes away, beating the
     whole time so the Overseer knows someone is listening; the heartbeat
-    goes when this does."""
+    goes when this does. Its code changed (``code_stamp``), it restarts
+    once nothing it took runs: an agent older than the app it serves
+    otherwise refuses it, and one stopped mid-deploy leaves a server part
+    way."""
     key, every = PROTOCOL["heartbeat"], PROTOCOL["beat_seconds"]
     beat = json.dumps(presence(root))
     stopped = threading.Event()
+    stamp, looked = code_stamp(), time.monotonic()
+    taken: list[Any] = []  # the futures of what it took, not yet finished
+    changed = False
 
     def beating() -> None:
         while not stopped.wait(every):
@@ -529,7 +557,13 @@ def serve(client: Any, root: Path, stop: threading.Event) -> None:
                     # quick) beside them, never queued behind a server being
                     # made until too old to run.
                     look = _protocol.is_kept(request.get("action"))
-                    (looks if look else commands).submit(handle, client, root, request)
+                    pool = looks if look else commands
+                    taken.append(pool.submit(handle, client, root, request))
+                taken = [future for future in taken if not future.done()]
+                if not taken and time.monotonic() - looked >= every:
+                    looked = time.monotonic()
+                    if changed := code_stamp() != stamp:
+                        break
             except redis.RedisError:
                 # The stack stopping or restarting: found again (``listen``),
                 # on whatever port it comes back on.
@@ -550,6 +584,8 @@ def serve(client: Any, root: Path, stop: threading.Event) -> None:
         thread.join()
         with contextlib.suppress(redis.RedisError):
             client.delete(key)
+    if changed:
+        restart()
 
 
 def connect(root: Path, stop: threading.Event) -> Any:
@@ -622,6 +658,9 @@ def deploy_agent_command(
     validate_copier_project(root, "deploy-agent")
     stop = threading.Event()
     watch_parent(stop)
+    # Compose stopping the service: its heartbeat taken down on the way
+    # out (``serve``), so the next agent takes over at once.
+    signal.signal(signal.SIGTERM, lambda *_: stop.set())
     try:
         listen(root, stop)
     except RefusedError as exc:

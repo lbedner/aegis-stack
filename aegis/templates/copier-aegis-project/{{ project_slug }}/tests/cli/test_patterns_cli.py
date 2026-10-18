@@ -78,3 +78,15 @@ def test_touches_says_what_a_change_reaches() -> None:
     found = json.loads(run.stdout)
     assert "component:backend" in found["parts"]
     assert found["elsewhere"] == ["README.md"]
+
+
+def test_check_is_advisory_and_says_what_is_new() -> None:
+    """``patterns check``: whatever the app's debt, it exits 0 unless
+    ``--strict``, and ends with the count against the baseline."""
+    run = subprocess.run(
+        [sys.executable, "-m", "app.cli.main", "patterns", "check"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert " new; " in run.stdout.splitlines()[-1]

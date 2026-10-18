@@ -20,7 +20,7 @@ from app.core.ontology import Kind, current
 from app.core.ontology.model import node_id, parse_node_id
 from app.core.ontology.parts import node_of, service_folders
 from app.core.source_index import Index, Module, within
-from app.services.system import patterns
+from app.services.system import pattern_findings, patterns
 from app.services.system.file_budget import (
     DECLARATION_LINES,
     LOGIC_LINES,
@@ -119,8 +119,7 @@ def place_note(check: str, path: str, line: int, index: Index) -> str:
     rule (its first line is no answer), else the line itself."""
     if check == f"{PARTS.key}.size":
         return size_note(path, index)
-    module = index.get(source_index.module_name(path))
-    return module.place(line).text if module and line <= len(module.lines) else ""
+    return pattern_findings.text_at(index, path, line)
 
 
 def _wired(index: Index, module: str, name: str) -> bool:

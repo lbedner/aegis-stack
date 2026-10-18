@@ -180,3 +180,49 @@ jobs:
               sys.exit(f"matrix drift - missing: {missing} extra: {extra}")
           print(f"matrix covers all {len(code)} combinations")
           PY
+
+  # A pull request's new conformance findings (``patterns check``), advisory.
+  # The everything stack generated from the base branch's templates gives the
+  # known debt; the one generated from this branch is checked against it, and
+  # each new finding is annotated on the template line it came from
+  # (scripts/template_annotations.py). It never fails (no ``--strict``) and
+  # is not a required check; what the change touches goes in the job summary.
+  conformance:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Generate the everything stack, from the base branch and this one
+        run: |
+          git worktree add "$RUNNER_TEMP/base-repo" "origin/${{ github.base_ref }}"
+          (cd "$RUNNER_TEMP/base-repo" && uv sync --python 3.11 --all-extras && "$GITHUB_WORKSPACE/scripts/generate_stack.sh" everything "$RUNNER_TEMP/base")
+          uv sync --python 3.11 --all-extras && scripts/generate_stack.sh everything "$RUNNER_TEMP/head"
+
+      - name: Known debt, from the base branch
+        working-directory: ${{ runner.temp }}/base/everything
+        # A base branch older than ``patterns check`` has no known debt.
+        run: |
+          if uv run python -m app.cli.main patterns check --update; then
+            cp .patterns-baseline.json "$RUNNER_TEMP/head/everything/"
+          fi
+
+      - name: New findings, annotated
+        run: |
+          stack="$RUNNER_TEMP/head/everything"
+          changed=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")
+          (cd "$stack" && uv run python -m app.cli.main patterns check $changed) \
+            | python3 scripts/template_annotations.py "$stack" \
+              "aegis/templates/copier-aegis-project/{{ project_slug }}"

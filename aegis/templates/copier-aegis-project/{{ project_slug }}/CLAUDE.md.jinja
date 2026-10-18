@@ -56,7 +56,10 @@ the right port.
   `models.py`, `queries.py`, `health.py`...), its logic in packages under
   `domains/`, what it talks to under `adapters/`; callers outside a service
   import from its `service.py`. The `patterns` command flags a module that
-  strays.
+  strays. Before finishing a change, run
+  `uv run {{ project_slug }} patterns check` and fix each new finding it
+  lists; `--update` drops the fixed ones from `.patterns-baseline.json`, the
+  known debt.
 - `tests/` mirrors the app layout: unit tests beside the code they cover, API
   tests under `tests/api/`.
 

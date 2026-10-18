@@ -114,8 +114,13 @@ async def is_authenticated(page: ft.Page) -> bool:
     # signs out - and sign-out forgets the persisted token, which is the
     # one thing the resume needs. Probe first and the restart case can
     # never work, however good the resume is.
-    if not state.api_client.has_session_cookies():
+    # Still nothing after it (never signed in, or the token was refused):
+    # not signed in, and asking would only draw a 401, a refresh with no
+    # cookie and a sign-out of nothing - on every reconnect of every tab.
+    if not state.api_client.has_session_cookies() and not (
         await try_resume_session(page)
+    ):
+        return False
     payload = await state.api_client.get("/api/v1/auth/me")
     if isinstance(payload, dict) and payload:
         # Cache the user on the session so views don't re-fetch.

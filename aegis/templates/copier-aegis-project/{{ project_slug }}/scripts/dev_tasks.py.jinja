@@ -68,6 +68,21 @@ def _plaid_configured() -> bool:
 {%- if include_deploy and include_redis %}
 
 
+def _aegis_checkout() -> str | None:
+    """The aegis-stack checkout this stack was generated from (``aegis init
+    --dev``), from ``.copier-answers.yml``; None for a released aegis. The
+    agent runs it: the pinned release may predate what its templates use."""
+    answers = Path(".copier-answers.yml")
+    lines = answers.read_text().splitlines() if answers.is_file() else []
+    source = next(
+        (x.partition(":")[2].strip() for x in lines if x.startswith("_src_path:")), ""
+    )
+    folder = Path(source.removeprefix("git+file://"))
+    if source.startswith("git+file://") and (folder / "pyproject.toml").is_file():
+        return str(folder)
+    return None
+
+
 def _deploy_agent_ready(env: dict[str, str]) -> None:
     """What the ``deploy-agent`` service takes from this machine: the
     checkout at its own path (``AEGIS_PROJECT_ROOT``), ``known_hosts``
@@ -76,6 +91,9 @@ def _deploy_agent_ready(env: dict[str, str]) -> None:
     (added once per login; ssh-add asks for its passphrase if it has one)."""
     if os.name != "nt":  # a Windows path is no container path
         env["AEGIS_PROJECT_ROOT"] = str(Path.cwd())
+        checkout = _aegis_checkout()
+        if checkout and "AEGIS_STACK_SOURCE" not in env:
+            env["AEGIS_STACK_SOURCE"] = checkout
     known = Path.home() / ".ssh" / "known_hosts"
     known.parent.mkdir(mode=0o700, exist_ok=True)
     known.touch()

@@ -6657,7 +6657,7 @@
 <li><code>/docs</code> - FastAPI Swagger UI</li>
 <li><code>/redoc</code> - FastAPI ReDoc</li>
 <li><code>/openapi.json</code> - OpenAPI schema</li>
-<li><code>/health/detailed</code> - every component's health, versions and tables (the bare <code>/health/</code> stays public for load balancers)</li>
+<li><code>/health/detailed</code> and <code>/health/dashboard</code> - every component's and service's health, versions and tables (the bare <code>/health/</code> stays public for load balancers)</li>
 </ul>
 <p>The app gates the same paths itself, with HTTP Basic (<code>DOCS_USERNAME</code>/<code>DOCS_PASSWORD</code>), so they stay closed on a stack without ingress.</p>
 <div class="language-yaml highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Docker labels on webserver service</span>

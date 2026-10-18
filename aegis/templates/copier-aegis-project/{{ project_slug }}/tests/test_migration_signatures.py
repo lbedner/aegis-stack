@@ -289,6 +289,15 @@ class TestSignatureMatching:
         assert satisfied(("column", "public.user", "locale"), facts, conn) is True
         assert satisfied(("column", "public.user", "nope"), facts, conn) is False
 
+    def test_no_column_form(self) -> None:
+        """A migration that drops a column: proven by the column's absence,
+        never by a table that is not there at all."""
+        facts, conn = self._facts()
+        satisfied = _recovery()._signature_satisfied
+        assert satisfied(("no_column", "public.user", "nope"), facts, conn) is True
+        assert satisfied(("no_column", "public.user", "locale"), facts, conn) is False
+        assert satisfied(("no_column", "absent", "locale"), facts, conn) is False
+
     def test_foreign_key_form(self) -> None:
         facts, conn = self._facts()
         satisfied = _recovery()._signature_satisfied

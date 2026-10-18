@@ -171,6 +171,9 @@ def _signature_satisfied(
         return sig[1] in facts.tables or sig[1].split(".")[-1] in facts.tables
     if kind == "column":
         return sig[2] in _by_either_spelling(facts.columns, sig[1])
+    if kind == "no_column":
+        held = _signature_satisfied(("table", sig[1]), facts, connection)
+        return held and sig[2] not in _by_either_spelling(facts.columns, sig[1])
     if kind == "foreign_key":
         return sig[2] in _by_either_spelling(facts.foreign_keys, sig[1])
     if kind == "row":

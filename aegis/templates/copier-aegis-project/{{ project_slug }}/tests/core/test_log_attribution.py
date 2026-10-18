@@ -35,22 +35,18 @@ def registered_services(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture(params=["dev", "prod"])
 def output(
-    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
-) -> Iterator[StringIO]:
-    root = logging.getLogger()
-    saved_handlers, saved_level = root.handlers[:], root.level
-    saved_config = structlog.get_config()
+    request: pytest.FixtureRequest,
+    monkeypatch: pytest.MonkeyPatch,
+    setup_logging: Callable[..., None],
+) -> StringIO:
     stream = StringIO()
-    monkeypatch.setattr(log, "_logging_configured", False)
     monkeypatch.setattr(settings, "APP_ENV", request.param)
     monkeypatch.setattr(settings, "LOG_LEVEL", "INFO")
-    log.setup_logging(stream)
-    try:
-        yield stream
-    finally:
-        root.handlers[:] = saved_handlers
-        root.setLevel(saved_level)
-        structlog.configure(**saved_config)
+    # The shared ``log.logger`` was cached on the session's processors
+    # before this test: it logs through a proxy of its own.
+    monkeypatch.setattr(log, "logger", structlog.get_logger())
+    setup_logging(stream)
+    return stream
 
 
 def function_at(path: str, body: str) -> Callable[[], Any]:

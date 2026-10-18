@@ -15,13 +15,21 @@ from ..constants import AnswerKeys, ComponentNames
 from ..core.copier_manager import load_copier_answers
 from ..core.manual_updater import PROJECT_SLUG_PLACEHOLDER, ManualUpdater
 from ..i18n import lazy_t, t
+from .deploy import _load_deploy_config, _save_deploy_config
 
 # Default placeholder email from copier template; Let's Encrypt refuses it.
 PLACEHOLDER_EMAIL = "your.email@example.com"
+# Where traefik/traefik.yml holds the certificate's email: the production
+# traefik fills it in from ACME_EMAIL when it starts.
+ACME_PLACEHOLDER = "__ACME_EMAIL__"
 
 
-def known_email(answers: dict) -> str | None:
-    """The project's ``author_email`` when it is a real address."""
+def known_email(root: Path, answers: dict) -> str | None:
+    """The certificate's email this project already has: the one TLS was
+    turned on with (``.aegis/deploy.yml``), else its ``author_email`` when
+    that is a real address."""
+    if kept := (_load_deploy_config(str(root)) or {}).get("acme_email"):
+        return str(kept)
     email = answers.get("author_email")
     return str(email) if email and email != PLACEHOLDER_EMAIL else None
 
@@ -32,12 +40,14 @@ def enable_tls(target_path: Path, domain: str, email: str) -> None:
     TLS is rendered into Traefik's static config and the prod compose labels,
     so this sets the answers and re-renders both. Shared by ``ingress-enable``
     and ``deploy-provision``; calling it again with a new name replaces the old.
+    The ``email`` goes in no committed file (a public repository would show
+    it): it is kept in the git-ignored ``.aegis/deploy.yml``, which each
+    deploy stamps into the server's .env as ACME_EMAIL (``deploy.STAMPED``).
     """
     updater = ManualUpdater(target_path)
     updated_answers = {
         **updater.answers,
         "ingress_tls": True,
-        "author_email": email,
         "ingress_domain": domain,
     }
 
@@ -59,6 +69,8 @@ def enable_tls(target_path: Path, domain: str, email: str) -> None:
         typer.echo(t("ingress.created_file", file="traefik/traefik.yml"))
 
     updater._save_answers(updated_answers)
+    config = _load_deploy_config(str(target_path)) or {}
+    _save_deploy_config(config | {"acme_email": email}, str(target_path))
 
 
 def ingress_enable_command(
@@ -133,7 +145,7 @@ def ingress_enable_command(
     if answers.get("ingress_tls") is True:
         brand.success(f"\n{t('ingress.tls_already')}")
         current_domain = answers.get("ingress_domain", "")
-        current_email = known_email(answers)
+        current_email = known_email(target_path, answers)
         if current_domain:
             typer.echo(t("ingress.domain_label", domain=current_domain))
         if current_email:
@@ -152,7 +164,7 @@ def ingress_enable_command(
 
     # Email for Let's Encrypt
     if email is None:
-        existing_email = known_email(answers)
+        existing_email = known_email(target_path, answers)
         if existing_email:
             email = existing_email
             typer.echo(t("ingress.email_reuse", email=email))

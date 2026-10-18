@@ -7,6 +7,7 @@ own ``CATEGORY`` in its package."""
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Literal
 
 
 class Category(StrEnum):
@@ -16,6 +17,20 @@ class Category(StrEnum):
     AI = "ai"
     APP = "app"
     PLATFORM = "platform"
+
+
+@dataclass(frozen=True)
+class Option:
+    """One way a part can be built: the ontology's ``PartOption`` without
+    this stack's choice, which ``answer`` keys in ``.copier-answers.yml``."""
+
+    name: str
+    mode: Literal["single", "multi", "flag"]
+    choices: tuple[str, ...]
+    default: str | tuple[str, ...] | bool | None = None
+    answer: str = ""
+    ordered: bool = False
+    about: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -39,6 +54,7 @@ class Part:
     # What it is, in a line: what the app map says of a part with no
     # package docstring of its own (ingress is Traefik, not Python).
     description: str = ""
+    options: tuple[Option, ...] = ()  # what else it could be
 
 
 PARTS: dict[str, Part] = {
@@ -49,6 +65,59 @@ PARTS: dict[str, Part] = {
         marker="app/services/ai",
         order=20,
         description="AI platform: multi-provider chat, agents, and an LLM catalog",
+        options=(
+            Option(
+                name="framework",
+                mode="single",
+                choices=("pydantic-ai", "langchain"),
+                default="pydantic-ai",
+                answer="ai_framework",
+                about=(
+                    ("pydantic-ai", "Typed and lightweight. The default."),
+                    ("langchain", "Large ecosystem, many integrations."),
+                ),
+            ),
+            Option(
+                name="backend",
+                mode="single",
+                choices=("memory", "sqlite", "postgres"),
+                default="memory",
+                answer="ai_backend",
+                about=(
+                    ("memory", "No history, nothing to set up."),
+                    ("sqlite", "Persistent chat history in a file database."),
+                    ("postgres", "Persistent and production-grade."),
+                ),
+            ),
+            Option(
+                name="providers",
+                mode="multi",
+                choices=(
+                    "anthropic",
+                    "cohere",
+                    "google",
+                    "groq",
+                    "mistral",
+                    "ollama",
+                    "openai",
+                    "public",
+                ),
+                default=("public",),
+                answer="ai_providers",
+                about=(
+                    ("anthropic", "Claude models (Paid)"),
+                    ("cohere", "Enterprise focus (Limited free)"),
+                    ("google", "Gemini models (Free tier (Flash only))"),
+                    ("groq", "Fast inference (Free tier)"),
+                    ("mistral", "Open models (Mostly paid)"),
+                    ("ollama", "Local inference (Free (local))"),
+                    ("openai", "GPT models (Paid)"),
+                    ("public", "Free public endpoint (Free, no API key)"),
+                ),
+            ),
+            Option(name="rag", mode="flag", choices=("rag",), answer="ai_rag"),
+            Option(name="voice", mode="flag", choices=("voice",), answer="ai_voice"),
+        ),
     ),
     "auth": Part(
         kind="service",
@@ -57,6 +126,25 @@ PARTS: dict[str, Part] = {
         marker="app/services/auth",
         order=10,
         description="User authentication and authorization with JWT tokens",
+        options=(
+            Option(
+                name="level",
+                mode="single",
+                choices=("basic", "rbac", "org"),
+                default="basic",
+                answer="auth_level",
+                ordered=True,
+                about=(
+                    ("basic", "Email and password with JWT sessions."),
+                    ("rbac", "Adds roles and permissions."),
+                    ("org", "Multi-tenant organizations."),
+                ),
+            ),
+            Option(name="engine", mode="single", choices=("sqlite", "postgres")),
+            Option(
+                name="oauth", mode="flag", choices=("oauth",), answer="include_oauth"
+            ),
+        ),
     ),
     "backend": Part(
         kind="component",
@@ -118,6 +206,33 @@ PARTS: dict[str, Part] = {
         role="store",
         order=40,
         description="Database with SQLModel ORM (SQLite or PostgreSQL)",
+        options=(
+            Option(
+                name="engine",
+                mode="single",
+                choices=("sqlite", "postgres"),
+                default="sqlite",
+                answer="database_engine",
+                about=(
+                    ("sqlite", "Zero-config file database. Great for development."),
+                    ("postgres", "Production-grade, pooled connections."),
+                ),
+            ),
+            Option(
+                name="provider",
+                mode="single",
+                choices=("container", "neon"),
+                default="container",
+                answer="postgres_provider",
+                about=(
+                    ("container", "Local postgres:16 container, dev and prod."),
+                    (
+                        "neon",
+                        "Serverless Postgres: cloud in prod, local container in dev.",
+                    ),
+                ),
+            ),
+        ),
     ),
     "deploy": Part(
         kind="component",
@@ -126,6 +241,15 @@ PARTS: dict[str, Part] = {
         marker="app/components/deploy",
         containers=("socket-proxy",),
         description="Deployment target (Docker Compose), read by the Overseer",
+        options=(
+            Option(
+                name="target",
+                mode="single",
+                choices=("compose",),
+                default="compose",
+                answer="deploy_target",
+            ),
+        ),
     ),
     "documents": Part(
         kind="service",
@@ -168,6 +292,15 @@ PARTS: dict[str, Part] = {
         marker="app/services/insights",
         order=60,
         description="Adoption metrics and analytics with automated data collection",
+        options=(
+            Option(
+                name="sources",
+                mode="multi",
+                choices=("github", "pypi", "plausible", "reddit"),
+                default=("github", "pypi"),
+            ),
+            Option(name="per_user", mode="flag", choices=("per_user",)),
+        ),
     ),
     "mcp": Part(
         kind="component",
@@ -202,6 +335,32 @@ PARTS: dict[str, Part] = {
         page="inference",
         order=110,
         description="Local model serving (Ollama)",
+        options=(
+            Option(
+                name="engine",
+                mode="single",
+                choices=("ollama",),
+                default="ollama",
+                answer="inference_engine",
+            ),
+            Option(
+                name="placement",
+                mode="single",
+                choices=("host", "docker"),
+                default="host",
+                answer="inference_placement",
+                about=(
+                    (
+                        "host",
+                        "Use the Ollama already running on this machine. The default.",
+                    ),
+                    (
+                        "docker",
+                        "Run Ollama as a container in the project's compose stack.",
+                    ),
+                ),
+            ),
+        ),
     ),
     "payment": Part(
         kind="service",
@@ -210,6 +369,15 @@ PARTS: dict[str, Part] = {
         marker="app/services/payment",
         order=70,
         description="Payment processing with Stripe (checkout, subscriptions, webhooks)",
+        options=(
+            Option(
+                name="provider",
+                mode="single",
+                choices=("stripe",),
+                default="stripe",
+                answer="payment_provider",
+            ),
+        ),
     ),
     "research": Part(
         kind="service",
@@ -229,6 +397,23 @@ PARTS: dict[str, Part] = {
         depends_on=("database", "queue"),
         order=60,
         description="Scheduled task execution infrastructure",
+        options=(
+            Option(
+                name="backend",
+                mode="single",
+                choices=("memory", "sqlite", "postgres"),
+                default="memory",
+                answer="scheduler_backend",
+                about=(
+                    (
+                        "memory",
+                        "No persistence. Jobs reset on restart — skip if unsure.",
+                    ),
+                    ("sqlite", "Persist job history in a file database."),
+                    ("postgres", "Persist job history, production-grade."),
+                ),
+            ),
+        ),
     ),
     "secrets": Part(
         kind="component",
@@ -237,6 +422,15 @@ PARTS: dict[str, Part] = {
         marker="app/components/secrets/store.py",
         holds_keys=True,
         description="Encrypted credential store (keys editable, live)",
+        options=(
+            Option(
+                name="backend",
+                mode="single",
+                choices=("database",),
+                default="database",
+                answer="secrets_backend",
+            ),
+        ),
     ),
     "storage": Part(
         kind="component",
@@ -268,5 +462,28 @@ PARTS: dict[str, Part] = {
         consumes=("queue",),
         order=50,
         description="Background task processing (arq, Dramatiq, or TaskIQ)",
+        options=(
+            Option(
+                name="backend",
+                mode="single",
+                choices=("arq", "taskiq", "dramatiq"),
+                default="arq",
+                answer="worker_backend",
+                about=(
+                    (
+                        "arq",
+                        "Simple, well-tested async worker with minimal configuration. Best for I/O-bound tasks. The default.",
+                    ),
+                    (
+                        "taskiq",
+                        "Async-native with per-queue brokers and Redis Streams transport with acknowledgements.",
+                    ),
+                    (
+                        "dramatiq",
+                        "Multi-process actor model. Best for CPU-bound tasks that benefit from multiple OS processes.",
+                    ),
+                ),
+            ),
+        ),
     ),
 }

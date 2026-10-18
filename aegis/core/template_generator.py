@@ -56,7 +56,7 @@ class TemplateGenerator:
         self,
         project_name: str,
         selected_components: list[str],
-        scheduler_backend: str = StorageBackends.MEMORY,
+        scheduler_backend: str = StorageBackends.SCHEDULER_DEFAULT,
         selected_services: list[str] | None = None,
         python_version: str = DEFAULT_PYTHON_VERSION,
     ):
@@ -115,7 +115,7 @@ class TemplateGenerator:
                     break
 
         # Extract worker backend from worker[backend] format
-        self.worker_backend = WorkerBackends.ARQ  # Default to arq
+        self.worker_backend = WorkerBackends.DEFAULT
         for component in self.components:
             if extract_base_component_name(component) == ComponentNames.WORKER:
                 backend = extract_engine_info(component)

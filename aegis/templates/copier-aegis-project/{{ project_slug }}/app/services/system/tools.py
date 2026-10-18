@@ -212,9 +212,13 @@ async def ontology(
     ``category`` or ``text``: matching nodes. ``node`` (an id like
     ``object:user``): it, its edges and neighbours ``depth`` steps out,
     and for a part what is true of it now (its health check, the errors it
-    owns, the AI service's spend by window, and when they were read) and
+    owns, the AI service's spend by window, and when they were read),
     what its code breaks of the service standard (``findings``: each
-    rule, how bad, why, the file:line that shows it, what to do); with
+    rule, how bad, why, the file:line that shows it, what to do), and on
+    the node what else it could be (``options``: each one's choices, the
+    default, this stack's choice and what each choice means; ``chosen`` is
+    what the stack was generated with, so the AI providers chosen are the
+    ones installed, while the model in use is picked at runtime); with
     ``to``, the paths between the two. ``route`` (``GET /api/v1/...``,
     an admin's): every hop it can take, read from the code without sending
     it, each at its file and line, and where the walk stops. An edge's

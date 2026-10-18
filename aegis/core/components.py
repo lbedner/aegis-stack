@@ -609,6 +609,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 choices=list(InferencePlacement.ALL),
                 default=InferencePlacement.DEFAULT,
                 answer_key=AnswerKeys.INFERENCE_PLACEMENT,
+                about="guided.choice.inference",
             ),
         ],
         # ``ollama_mode`` mirrors the placement; without the component there

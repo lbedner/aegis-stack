@@ -66,6 +66,24 @@ class _Node(BaseModel):
         return node_id(self.kind, self.name)
 
 
+class PartOption(BaseModel):
+    """One way a part can be built (``ai[postgres]``), chosen when the stack
+    is generated: its choices, the default, this stack's choice (None where
+    none is recorded) and what each choice means, where its name does not
+    say. ``aegis add`` raises an ordered option, turns a flag on and adds to
+    a multi one; it refuses to swap any other on an existing stack."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    name: str
+    mode: Literal["single", "multi", "flag"]
+    choices: tuple[str, ...]
+    default: str | tuple[str, ...] | bool | None = None
+    chosen: str | tuple[str, ...] | bool | None = None
+    ordered: bool = False  # the choices rise in order (auth: basic, rbac, org)
+    about: dict[str, str] = {}
+
+
 class PartNode(_Node):
     """A component, a service (``ai``) or sub-service (``ai.rag``), or the
     app's shared code (``system``)."""
@@ -75,6 +93,7 @@ class PartNode(_Node):
     description: str = ""  # its package's docstring, first line
     cli: str | None = None  # its name to the aegis CLI, where it has one
     page: str | None = None  # its Overseer page, where that is not its name
+    options: tuple[PartOption, ...] = ()  # what else it could be
 
 
 class _Code(_Node):

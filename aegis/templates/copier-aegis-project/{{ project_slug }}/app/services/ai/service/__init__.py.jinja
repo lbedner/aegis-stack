@@ -18,6 +18,11 @@ own, and this package keeps the historical import path working:
 ``from app.services.ai.service import AIService``.
 """
 
+{% if ai_framework == "pydantic-ai" and ai_backend != "memory" -%}
+# One agent writing once (the meetings' notes, the patterns review): how
+# another service reaches it, through this facade.
+from app.services.ai.domains.llm.writer import writer
+{% endif -%}
 from app.services.ai.service.base import (
     AIServiceError,
     ConversationError,
@@ -31,6 +36,9 @@ __all__ = [
     "AIServiceError",
     "ConversationError",
     "ProviderError",
+{%- if ai_framework == "pydantic-ai" and ai_backend != "memory" %}
+    "writer",
+{%- endif %}
 ]
 
 

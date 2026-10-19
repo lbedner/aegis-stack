@@ -191,6 +191,10 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    permissions:
+      contents: read
+      pull-requests: write  # Illiana's one comment, edited on each push
+      issues: write
     steps:
       - uses: actions/checkout@v7
         with:
@@ -226,3 +230,42 @@ jobs:
           (cd "$stack" && uv run python -m app.cli.main patterns check $changed) \
             | python3 scripts/template_annotations.py "$stack" \
               "aegis/templates/copier-aegis-project/{{ project_slug }}"
+
+      # Illiana's write-up of the new findings (``patterns review``): one
+      # comment, edited on each push; never fails the job.
+      - name: Is there a model key
+        id: key
+        env:
+          KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: echo "present=${KEY:+yes}" >> "$GITHUB_OUTPUT"
+
+      - name: Illiana's review, on the pull request
+        if: steps.key.outputs.present == 'yes'
+        continue-on-error: true
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          AI_PROVIDER: openai
+          AI_MODEL: gpt-6-luna
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          stack="$RUNNER_TEMP/head/everything"
+          review="$RUNNER_TEMP/review.md"
+          changed=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")
+          # Its comment as it stands: the reviews before this one, kept
+          # below it; the same findings again change nothing.
+          id=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
+            --jq '.[] | select(.body | startswith("<!-- illiana-review -->")) | .id' | head -1)
+          previous="$RUNNER_TEMP/previous.md"
+          : > "$previous"
+          [ -z "$id" ] || gh api "repos/$REPO/issues/comments/$id" --jq .body > "$previous"
+          (cd "$stack" && uv run alembic -c alembic/alembic.ini upgrade head >&2 \
+            && uv run python -m app.cli.main patterns review $changed \
+              --previous "$previous" --commit "${{ github.event.pull_request.head.sha }}") > "$review"
+          [ -s "$review" ] || exit 0
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$REPO/issues/comments/$id" -F body=@"$review" > /dev/null
+          elif ! grep -qF "No new findings against the known debt." "$review"; then
+            gh api "repos/$REPO/issues/$PR/comments" -F body=@"$review" > /dev/null
+          fi

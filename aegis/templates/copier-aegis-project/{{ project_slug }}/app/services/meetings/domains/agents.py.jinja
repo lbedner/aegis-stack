@@ -6,17 +6,12 @@ like any other agent's (each change kept in its prompt history). While a
 row is missing or off, its built-in prompt runs on the model in force.
 """
 
-from typing import Any, TypeVar
+from typing import Any
 
-from pydantic_ai import Agent
 from sqlmodel import Session
-
-from app.core.config import settings
-from app.services.ai.domains.llm import active_model
 
 NOTES_AGENT = "meeting-notes"
 GUIDE_AGENT = "meeting-guide"
-Output = TypeVar("Output")
 # Generous: a long meeting's notes run past the chat's 1000 tokens.
 MAX_TOKENS = 8000
 
@@ -56,27 +51,6 @@ relationships, politics and religion, even when it was said. Leave a part
 empty rather than guess. Give each point the ids of the lines it rests on.
 The owner's own note on them, when there is one, is what the owner knows:
 weigh it, but cite only lines."""
-
-
-async def writer(
-    slug: str, prompt: str, output_type: type[Output]
-) -> tuple[Agent[None, Output], str]:
-    """The agent ``slug`` writes with (``prompt`` while it has no row),
-    and the name of the model it runs on."""
-    # Here, not at the top: the factory loads every provider's SDK, which
-    # only a writer at work needs.
-    from app.services.ai.domains.llm import model_factory
-
-    config, instructions = await active_model.agent_in_force(settings, slug, prompt)
-    model, model_name = await model_factory.model_for(config, settings)
-    agent = Agent(
-        model,
-        instructions=instructions,
-        output_type=output_type,
-        model_settings=model_factory._model_settings(config),
-        name=slug,
-    )
-    return agent, model_name
 
 
 def _definition(slug: str, name: str, description: str, prompt: str) -> dict[str, Any]:

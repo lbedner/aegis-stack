@@ -11,12 +11,16 @@ ontology (its parts, what depends on them, its tables, routes and jobs),
 for a pull request's job summary.
 
 ``patterns check``: the findings not in the known debt (``pattern_check``).
+
+``patterns review``: Illiana's write-up of those findings (``pattern_review``).
 """
 
 import contextlib
+from importlib.util import find_spec
 import io
 import json
 import os
+from pathlib import Path
 import sys
 from typing import Annotated, Any
 
@@ -25,7 +29,12 @@ import typer
 from app.core import source_index
 from app.core.ontology import current, touches
 from app.i18n import lazy_t
-from app.services.system import pattern_check, pattern_findings, patterns
+from app.services.system import (
+    pattern_check,
+    pattern_findings,
+    pattern_review,
+    patterns,
+)
 
 app = typer.Typer(
     name="patterns", help=lazy_t("patterns.help"), invoke_without_command=True
@@ -204,13 +213,10 @@ async def check(
     update: bool = False,
 ) -> None:
     summarised = changed and not update and "GITHUB_STEP_SUMMARY" in os.environ
-    with _quiet():
-        found = [f for r in _reports() for f in pattern_findings.findings(r)]
-        reach = touches.touched(current(), changed) if summarised else None
     out, code = pattern_check.check(
-        found,
+        _findings(),
         source_index.project(),
-        touched=touches.summary(reach) if reach else "",
+        touched=_reach(changed) if summarised else "",
         strict=strict,
         update=update,
         env=os.environ,
@@ -218,3 +224,32 @@ async def check(
     typer.echo(out)
     if code:
         raise typer.Exit(code)
+
+
+@app.command("review", help=lazy_t("patterns.help_review"))
+async def review(
+    changed: Annotated[list[str] | None, typer.Argument()] = None,
+    previous: Path | None = None,
+    commit: str = "",
+) -> None:
+    if find_spec("app.services.ai.domains.llm.writer") is None:
+        typer.echo("patterns review needs the AI service on PydanticAI.", err=True)
+        return
+    fresh = pattern_check.new_spots(_findings(), source_index.project())
+    earlier = previous.read_text() if previous and previous.is_file() else ""
+    said = await pattern_review.review(fresh, _reach(changed), earlier, commit)
+    typer.echo(said, nl=False)
+
+
+def _findings() -> list[pattern_findings.Finding]:
+    """Every installed pattern's findings."""
+    with _quiet():
+        return [f for r in _reports() for f in pattern_findings.findings(r)]
+
+
+def _reach(changed: list[str] | None) -> str:
+    """What ``changed`` touches, as Markdown; none given, nothing."""
+    if not changed:
+        return ""
+    with _quiet():
+        return touches.summary(touches.touched(current(), changed))

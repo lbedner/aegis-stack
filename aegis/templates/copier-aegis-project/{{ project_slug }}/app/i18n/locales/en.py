@@ -888,6 +888,7 @@ MESSAGES: dict[str, str] = {
     "patterns.help_show": "Print the patterns detected in this app's code, and the macro catalog, as a brief to read before building.",
     "patterns.opt_format": "Output format: markdown or json",
     "patterns.help_check": "Print the findings not in .patterns-baseline.json, the known debt; it exits 0. Changed files given, what they touch goes in the GitHub step summary. --strict exits 1 on a new error; --update writes the baseline.",
+    "patterns.help_review": "Illiana's review of the findings not in the known debt, as Markdown for a pull request; changed files given, what they touch too. Needs the AI service.",
     "patterns.help_touches": "What a change's files touch, read from the ontology: its parts, what depends on them, its tables, routes and jobs. Files are given, or read one per line from stdin, as git diff --name-only prints them.",
     # ── Load Test ────────────────────────────────────────────────────
     # Help text

@@ -64,6 +64,19 @@ class TestAgentSeed:
         assert agent.system_prompt == SENTIMENT_SYSTEM_PROMPT
         assert agent.model_id is None and agent.is_active
 
+    def test_seeds_the_pull_request_reviewer(self, session: Session) -> None:
+        """Illiana reviewing (``patterns review``): her persona and the
+        reviewing on its own row, so how long it writes and on what model
+        are set in Agents, not in code."""
+        from app.services.system.pattern_review import REVIEWER
+
+        load_agent_fixtures(session)
+        agent = session.exec(select(Agent).where(Agent.slug == REVIEWER)).one()
+        assert agent.system_prompt.startswith(get_default_system_prompt().rstrip())
+        assert "pull request" in agent.system_prompt
+        assert agent.max_tokens > default_agent_config().max_tokens
+        assert agent.is_active and not agent.memory_modules
+
     def test_every_seeded_agent_records_its_seed(self, session: Session) -> None:
         """The seed is the first recorded change, so an agent's
         history starts at the text it was born with."""

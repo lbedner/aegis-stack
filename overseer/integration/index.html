@@ -6963,6 +6963,11 @@ modules. Sources reconnect with exponential backoff, capped at 30 seconds.</p>
 <td>Total retained occurrences per project; maximum 10,000</td>
 </tr>
 <tr>
+<td><code>ERROR_TRACKING_MAX_BYTES</code></td>
+<td><code>16777216</code></td>
+<td>Bytes the retained occurrences may take in Redis (16 MB); the oldest go first past it</td>
+</tr>
+<tr>
 <td><code>ERROR_TRACKING_MAX_SOURCES</code></td>
 <td><code>64</code></td>
 <td>Concurrent container streams; maximum 256</td>

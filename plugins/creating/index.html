@@ -6425,7 +6425,14 @@ runs <code>aegis add scraper</code>.</p>
   modals, CLI commands;</li>
 <li><strong>what it needs</strong>: components and services it depends on;</li>
 <li><strong>its own tables</strong>: migrations, written and applied on <code>aegis add</code>, in a
-  Postgres schema of its own when it declares one.</li>
+  Postgres schema of its own when it declares one;</li>
+<li><strong>its own worker queues</strong>: <code>worker_queues=["crawler"]</code> names a queue module
+  the plugin ships at <code>app/components/worker/queues/crawler.py</code>, and a stack
+  with the worker component runs a <code>worker-crawler</code> container for it, one
+  process, bind-mounted in dev like the stack's own workers. Gate the module on
+  <code>include_worker</code> and write one branch per <code>worker_backend</code> (arq, TaskIQ,
+  Dramatiq); without the component the file renders empty and nothing reads
+  it.</li>
 </ul>
 <p>The reference plugin, <code>aegis-stack-crawl4ai</code>, exercises most of that surface
 and is the best example to read.</p>

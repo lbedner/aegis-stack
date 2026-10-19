@@ -1,5 +1,6 @@
-"""The meeting agents over HTTP: the bot sent as one by name, and every
-agent listed for Overseer with whether its sign-in works and where it is."""
+"""The meeting agents over HTTP: the bot sent as one by name, every agent
+listed for Overseer with whether its sign-in works and where it is, and a
+their calendars."""
 
 from fastapi.testclient import TestClient
 import pytest
@@ -10,10 +11,12 @@ from app.services.meetings.domains.accounts.service import (
     NOT_SIGNED_IN,
     keep_agent,
 )
-from tests._meetings import MEET, hold_the_bot
+from app.services.meetings.domains.calendar.service import read_calendars
+from tests._meetings import MEET, STANDUP, Calendar, at, hold_the_bot
 from tests._secret_settings import use_store
 
 AGENTS = "/api/v1/meetings/admin/agents"
+CALENDAR = "/api/v1/meetings/admin/calendar"
 
 
 async def test_the_bot_is_sent_as_the_agent_named(
@@ -54,3 +57,31 @@ async def test_overseer_lists_every_agent(
     assert rows["work"]["account"]["email"] == "notes@work.example"
     assert rows["work"]["sign_in"] == NOT_SIGNED_IN
     assert rows["work"]["in_now"] == []
+
+
+async def test_overseer_reads_every_agents_calendar(
+    authenticated_client: TestClient,
+    async_db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """In the time zone asked for; one it does not know is refused, and so
+    is more than six weeks."""
+    calendar = Calendar(monkeypatch, STANDUP)
+    await read_calendars(async_db_session, calendar.read, at(18, 0))
+
+    days = {"first": "2026-10-19", "last": "2026-10-21"}
+    week = authenticated_client.get(CALENDAR, params=days | {"tz": "America/New_York"})
+    unknown = authenticated_client.get(CALENDAR, params=days | {"tz": "Mars/Olympus"})
+    too_long = authenticated_client.get(
+        CALENDAR, params={"first": "2026-10-01", "last": "2026-12-01"}
+    )
+
+    assert week.status_code == 200, week.text
+    assert [e["starts_at"][:16] for e in week.json()] == [
+        "2026-10-19T09:00",
+        "2026-10-20T09:00",
+        "2026-10-21T09:00",
+    ]
+    assert {e["agent"] for e in week.json()} == {DEFAULT_AGENT}
+    assert unknown.status_code == 422 and "Mars/Olympus" in unknown.json()["detail"]
+    assert too_long.status_code == 422

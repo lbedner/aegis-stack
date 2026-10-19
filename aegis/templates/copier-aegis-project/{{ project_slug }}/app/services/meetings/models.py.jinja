@@ -24,7 +24,7 @@ from typing import Literal
 from pydantic import BaseModel
 from pydantic import Field as Described
 from pydantic.json_schema import SkipJsonSchema
-from sqlalchemy import Index, Text, UniqueConstraint
+from sqlalchemy import JSON, Column, Index, Text, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 from app.core.time import utcnow
@@ -128,7 +128,7 @@ class CalendarEvent(SQLModel, table=True):
     last said (``domains.calendar``): kept so the agent is sent on time and
     the calendar is drawn without reading every feed. ``key`` is the event's
     UID and the time it was first set for; ``meeting_id`` is the call the
-    agent was sent into, once it was."""
+    agent was sent into, while that meeting is kept."""
 
     __tablename__ = "meeting_calendar_event"
     __table_args__ = (
@@ -149,12 +149,18 @@ class CalendarEvent(SQLModel, table=True):
     ends_at: datetime
     url: str | None = Field(default=None, max_length=2048)
     organizer: str | None = Field(default=None, max_length=320)
+    emails: list[str] = Field(
+        default_factory=list,
+        sa_column=Column(JSON, nullable=False),
+        description="Every email on the invite, the organizer's first",
+    )
     cancelled: bool = False
     meeting_id: int | None = Field(
         default=None, foreign_key="meeting.id", ondelete="SET NULL"
     )
-    read_at: datetime = Field(
-        default_factory=utcnow, description="When the calendar last listed it"
+    sent_at: datetime | None = Field(
+        default=None,
+        description="When the agent was sent in: once, even if that meeting is deleted",
     )
 
 

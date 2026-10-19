@@ -9,6 +9,7 @@ name; this is the one they share.
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 def utcnow() -> datetime:
@@ -32,3 +33,12 @@ def as_stored(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value
     return value.astimezone(UTC).replace(tzinfo=None)
+
+
+def zone_named(name: str | None) -> ZoneInfo | None:
+    """The time zone called ``name`` (``America/New_York``); None when
+    there is no such zone."""
+    try:
+        return ZoneInfo(name) if name else None
+    except (ZoneInfoNotFoundError, ValueError):
+        return None

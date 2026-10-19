@@ -21,11 +21,13 @@ from app.components.web_frontend.rendering import (
     render,
     status_cell,
     templates,
+    viewer_zone,
 )
 from app.core.formatting import format_clock, format_relative_time
 from app.services.meetings.bot import send_bot
 from app.services.meetings.deps import as_http, get_meetings_service
 from app.services.meetings.domains.accounts.service import AgentNotFoundError, agents
+from app.services.meetings.domains.calendar.owners import email_of
 from app.services.meetings.models import Meeting, MeetingRecord, MeetingStatus
 from app.services.meetings.service import (
     MeetingsService,
@@ -119,7 +121,19 @@ async def _list(request: Request, svc: MeetingsService) -> Response:
         for m in meetings
     ]
     form = send_form("/meetings", agents=agent_options(await agents(svc.db)))
-    return render(request, LIST, {"rows": rows} | form)
+    # Here, not at the top: the calendar's module imports this one.
+    from app.components.web_frontend.meeting_calendar import calendar_context
+
+    calendar = await calendar_context(
+        svc.db,
+        request.query_params,
+        viewer_zone(request),
+        "/meetings",
+        lambda meeting_id: f"/meetings/{meeting_id}",
+        "#meetings-calendar",
+        await email_of(svc.db, svc.owner_user_id),
+    )
+    return render(request, LIST, {"rows": rows, "calendar": calendar} | form)
 
 
 def body_context(record: MeetingRecord) -> dict[str, Any]:

@@ -12,11 +12,21 @@ import pytest
 from sqlalchemy import event
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.components.web_frontend.rendering import TZ_COOKIE
 from app.components.web_frontend.routes.meetings import send_and_open
 from app.services.meetings import service as meetings_service
+from app.services.meetings.domains.calendar.service import read_calendars
 from app.services.meetings.models import ActionItem, NoteItem, Notes
 from app.services.meetings.service import MeetingsService
-from tests._meetings import MEET, ended, hold_the_bot, hold_the_writer
+from tests._meetings import (
+    MEET,
+    STANDUP,
+    Calendar,
+    at,
+    ended,
+    hold_the_bot,
+    hold_the_writer,
+)
 from tests.web.dom import location, none, one, select, text
 from tests.web.overseer import page_html
 
@@ -306,3 +316,28 @@ def test_an_unknown_meeting_is_not_found(authenticated_client: TestClient) -> No
 
 def test_the_navbar_links_the_page(authenticated_client: TestClient) -> None:
     assert select(page_html(authenticated_client, "/meetings"), 'a[href="/meetings"]')
+
+
+async def test_the_page_has_the_calendar_of_the_meetings_i_am_invited_to(
+    authenticated_client: TestClient,
+    async_db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+    acting_owner_user_id: int | None,
+) -> None:
+    """A month of the agents' calendars in my time zone, moved a month at a
+    time: every meeting on them without auth, else the invites I am on
+    (this one is Dana's and Leo's)."""
+    calendar = Calendar(monkeypatch, STANDUP)
+    await read_calendars(async_db_session, calendar.read, at(18, 0))
+    authenticated_client.cookies.set(TZ_COOKIE, "America%2FNew_York")  # as app.js sets it
+
+    html = page_html(authenticated_client, "/meetings?month=2026-10")
+
+    days = select(html, "#meetings-calendar [data-day]")
+    assert len(days) == 35
+    entries = select(html, '#meetings-calendar [data-day="2026-10-19"] [data-entry]')
+    assert len(entries) == (1 if acting_owner_user_id is None else 0)
+    if entries:
+        assert "09:00" in text(entries[0])
+    [later] = select(html, "#meetings-calendar a[data-month-later]")
+    assert "month=2026-11" in (later.get("href") or "")

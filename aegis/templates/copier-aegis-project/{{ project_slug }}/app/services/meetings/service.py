@@ -79,6 +79,18 @@ class NothingToWriteError(RuntimeError):
     nothing was said, or a writer is already at it."""
 
 
+# The platforms the bot joins so far; it recognizes the others' links.
+JOINS = frozenset({Platform.MEET})
+
+
+def can_join(url: str) -> bool:
+    """Whether the bot can join the meeting at ``url`` now."""
+    try:
+        return detect_platform(url) in JOINS
+    except UnsupportedMeetingLinkError:
+        return False
+
+
 def detect_platform(url: str) -> Platform:
     """The platform a meeting link belongs to; any other link is refused."""
     parts = urlsplit(url)

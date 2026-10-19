@@ -4,6 +4,10 @@
    <script> tags. Behaviour that needs JS is registered once, on this
    file's load, and keyed off DOM events. */
 
+// The browser's time zone, for the pages that show times of day (the
+// meeting calendar): the server reads it from this cookie (viewer_zone()).
+document.cookie = 'tz=' + encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone) + '; path=/; max-age=31536000; samesite=lax';
+
 // Toasts. A route sets `HX-Trigger: {"toast": {"text", "tone"}}` (see
 // with_toast() in rendering.py); htmx raises a `toast` DOM event; the
 // region in base.html pushes it here.

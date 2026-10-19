@@ -9,7 +9,8 @@ from base64 import b64decode
 from hashlib import sha1
 import json
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import unquote, urlencode
+from zoneinfo import ZoneInfo
 
 from fastapi import Request
 from fastapi.templating import Jinja2Templates
@@ -20,6 +21,7 @@ from app.components.web_frontend.assets import COMPONENT_DIR, static_url
 from app.components.web_frontend.filters import FILTERS
 from app.core import series
 from app.core.config import settings
+from app.core.time import zone_named
 from app.services.shared.deps import operator_refusal
 from app.services.system import topology, ui_runtime
 
@@ -407,3 +409,14 @@ def dialog_done(path: str, toast: str, tone: str = "ok") -> Response:
     response = Response(status_code=200)
     navigate(response, path)
     return close_dialog(with_toast(response, toast, tone))
+
+
+# The browser's time zone, set by app.js on every page: for times of day.
+TZ_COOKIE = "tz"
+
+
+def viewer_zone(request: Request) -> ZoneInfo:
+    """The viewer's time zone, from their browser (percent-encoded there:
+    ``America%2FNew_York``); UTC until it has said (the first page they
+    ever load) or when it names no zone."""
+    return zone_named(unquote(request.cookies.get(TZ_COOKIE, ""))) or ZoneInfo("UTC")

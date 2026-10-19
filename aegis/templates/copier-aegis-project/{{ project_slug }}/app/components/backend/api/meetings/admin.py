@@ -1,17 +1,24 @@
 """Meetings for Overseer, across every owner: the list, the agents the bot
-joins as, one meeting read in full (its notes, transcript and how long
+joins as and their calendars, one meeting read in full (its notes, transcript and how long
 each speaker was heard) and its threads, which speaker its owner is, its
 notes written again, the bot asked to leave, and a meeting deleted. Reading is the admin's (``get_admin_reader``), a
 change an operator's (``get_admin_actor``); an owner's own meetings are
 ``router``'s."""
 
+from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel
 
+from app.core.time import zone_named
 from app.services.meetings.deps import as_http, get_every_owners_meetings
 from app.services.meetings.domains.accounts.service import AgentRow, overview
+from app.services.meetings.domains.calendar.entries import (
+    MOST_DAYS,
+    CalendarEntry,
+    entries_between,
+)
 from app.services.meetings.domains.threads.service import meeting_threads
 from app.services.meetings.models import Meeting, MeetingRecord, ThreadSection
 from app.services.meetings.service import MeetingsService
@@ -36,6 +43,24 @@ async def agents(svc: Every) -> list[AgentRow]:
     """Every agent the bot joins as: whether its sign-in works, and the
     meetings it is in now. Before the meeting routes: not a meeting id."""
     return await overview(svc.db)
+
+
+@router.get("/calendar", response_model=list[CalendarEntry], dependencies=READ)
+async def calendar(
+    svc: Every, first: date, last: date, tz: str = "UTC", agent: str | None = None
+) -> list[CalendarEntry]:
+    """Every agent's meetings (``agent``'s only, when named) from ``first``
+    to ``last``, whole days in time zone ``tz``, up to six weeks. Before the
+    meeting routes: not a meeting id."""
+    zone = zone_named(tz)
+    if zone is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"No time zone {tz}")
+    if not 0 <= (last - first).days < MOST_DAYS:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"From first to last is up to {MOST_DAYS} days",
+        )
+    return await entries_between(svc.db, first, last, zone, agent)
 
 
 @router.get("/{meeting_id}", response_model=MeetingRecord, dependencies=READ)

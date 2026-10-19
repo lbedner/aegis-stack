@@ -2,12 +2,14 @@
 
 from app.core.db import get_async_session
 from app.core.schedule import ServiceJob
-from app.services.meetings.domains.calendar.service import read_calendars
+from app.services.meetings.domains.calendar.service import read_calendars, send_due
 
 
 async def read_agent_calendars_job() -> None:
+    """Read every agent's calendar, then send each agent into what starts."""
     async with get_async_session() as session:
         await read_calendars(session)
+        await send_due(session)
 
 
 JOBS: tuple[ServiceJob, ...] = (

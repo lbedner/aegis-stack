@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from hashlib import sha1
 from urllib.parse import quote
+from zoneinfo import ZoneInfo
 
 from starlette.routing import BaseRoute
 
@@ -56,6 +57,8 @@ class SectionRequest:
     # The element an htmx swap replaces (``HX-Target``), so a section can
     # leave out what the swap discards; None for a whole page.
     target: str | None = None
+    # The viewer's time zone (``rendering.viewer_zone``), for times of day.
+    zone: ZoneInfo = ZoneInfo("UTC")
 
 
 @dataclass(frozen=True)

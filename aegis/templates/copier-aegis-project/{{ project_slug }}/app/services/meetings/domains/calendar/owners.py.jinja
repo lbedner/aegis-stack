@@ -1,0 +1,35 @@
+"""The users on a calendar invite, for who owns the meeting an agent
+joins from it (``service.send_due``), and whose invites a user's calendar
+shows (``email_of``)."""
+
+from collections.abc import Iterable
+
+from sqlmodel.ext.asyncio.session import AsyncSession
+{%- if include_auth %}
+
+from app.services.auth.domains.users.accounts import UserService
+{%- endif %}
+
+
+async def users_by_email(db: AsyncSession, emails: Iterable[str]) -> dict[str, int]:
+    """The user each of ``emails`` belongs to, by email; an email nobody
+    here has is missing."""
+{%- if include_auth %}
+    return await UserService(db).get_user_ids_by_emails(emails)
+{%- else %}
+    # No users without auth: every meeting is the install's.
+    return {}
+{%- endif %}
+
+
+async def email_of(db: AsyncSession, user_id: int | None) -> str | None:
+    """The user's email, for the invites they are on; None for the install
+    without auth, whose calendar is every meeting."""
+{%- if include_auth %}
+    if user_id is None:
+        return None
+    user = await UserService(db).get_user_by_id(user_id)
+    return user.email if user is not None else None
+{%- else %}
+    return None
+{%- endif %}

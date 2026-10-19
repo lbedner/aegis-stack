@@ -6775,7 +6775,7 @@
 <h2 id="architecture">Architecture</h2>
 <pre class="mermaid"><code>graph TB
     subgraph "Authentication Service Stack"
-        AuthService["🔐 Auth Service&lt;br/&gt;JWT + Refresh + User Management"]
+        AuthService["Auth Service&lt;br/&gt;JWT + Refresh + User Management"]
 
         subgraph "API Endpoints"
             Register["POST /auth/register&lt;br/&gt;Create new user"]
@@ -6786,19 +6786,19 @@
         end
 
         subgraph "Required Components"
-            Backend["⚡ Backend Component&lt;br/&gt;FastAPI Routes"]
-            Database["💾 Database Component&lt;br/&gt;SQLite / PostgreSQL"]
+            Backend["Backend Component&lt;br/&gt;FastAPI Routes"]
+            Database["Database Component&lt;br/&gt;SQLite / PostgreSQL"]
         end
 
         subgraph "Security Layer"
-            JWT["🔑 Access JWT&lt;br/&gt;short-lived, stateless&lt;br/&gt;python-jose"]
-            RefreshSvc["♻️ RefreshService&lt;br/&gt;rotation + reuse detection&lt;br/&gt;family-based revocation"]
-            Passwords["🔒 Password Hashing&lt;br/&gt;passlib + bcrypt"]
-            OAuth2["📋 OAuth2 Flow&lt;br/&gt;FastAPI Security"]
+            JWT["Access JWT&lt;br/&gt;short-lived, stateless&lt;br/&gt;python-jose"]
+            RefreshSvc["RefreshService&lt;br/&gt;rotation + reuse detection&lt;br/&gt;family-based revocation"]
+            Passwords["Password Hashing&lt;br/&gt;passlib + bcrypt"]
+            OAuth2["OAuth2 Flow&lt;br/&gt;FastAPI Security"]
         end
 
         subgraph "Database Schema"
-            Users["👥 user table&lt;br/&gt;id, email, hashed_password&lt;br/&gt;created_at, updated_at"]
+            Users["user table&lt;br/&gt;id, email, hashed_password&lt;br/&gt;created_at, updated_at"]
             RefreshTokens["refresh_token table&lt;br/&gt;token digest (PK), user_id, family_id&lt;br/&gt;expires_at, revoked_at"]
         end
     end

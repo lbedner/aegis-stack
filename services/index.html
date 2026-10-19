@@ -6570,21 +6570,23 @@
 <h2 id="service-architecture">Service Architecture</h2>
 <pre class="mermaid"><code>graph TB
     subgraph "Services Layer (Business Logic)"
-        Auth["🔐 Auth Service&lt;br/&gt;JWT + User Management&lt;br/&gt;Registration, Login, Profiles"]
-        AI["🤖 AI Service&lt;br/&gt;PydanticAI Integration&lt;br/&gt;Multi-Provider Chat"]
-        Blog["📝 Blog Service&lt;br/&gt;Markdown Publishing&lt;br/&gt;Drafts, Tags, SEO"]
-        Comms["📧 Comms Service&lt;br/&gt;Email, SMS, Voice&lt;br/&gt;Resend + Twilio"]
-        Payment["💳 Payment Service&lt;br/&gt;Stripe Integration&lt;br/&gt;Checkout, Subscriptions"]
-        Insights["📊 Insights Service&lt;br/&gt;Adoption Metrics&lt;br/&gt;GitHub, PyPI, Plausible"]
+        Auth["Auth Service&lt;br/&gt;JWT + User Management&lt;br/&gt;Registration, Login, Profiles"]
+        AI["AI Service&lt;br/&gt;PydanticAI Integration&lt;br/&gt;Multi-Provider Chat"]
+        Blog["Blog Service&lt;br/&gt;Markdown Publishing&lt;br/&gt;Drafts, Tags, SEO"]
+        Comms["Comms Service&lt;br/&gt;Email, SMS, Voice&lt;br/&gt;Resend + Twilio"]
+        Payment["Payment Service&lt;br/&gt;Stripe Integration&lt;br/&gt;Checkout, Subscriptions"]
+        Insights["Insights Service&lt;br/&gt;Adoption Metrics&lt;br/&gt;GitHub, PyPI, Plausible"]
+        Meetings["Meetings Service&lt;br/&gt;Meeting Bot&lt;br/&gt;Transcript, Notes, Themes"]
     end
 
     subgraph "Components Layer (Infrastructure)"
-        Backend["⚡ Backend&lt;br/&gt;FastAPI Routes"]
-        Database["💾 Database&lt;br/&gt;SQLite / PostgreSQL"]
-        Worker["🔄 Worker&lt;br/&gt;arq / Dramatiq / TaskIQ"]
+        Backend["Backend&lt;br/&gt;FastAPI Routes"]
+        Database["Database&lt;br/&gt;SQLite / PostgreSQL"]
+        Worker["Worker&lt;br/&gt;arq / Dramatiq / TaskIQ"]
         Scheduler["⏰ Scheduler&lt;br/&gt;APScheduler"]
-        Observability["🔍 Observability&lt;br/&gt;Logfire"]
-        Cache["🗄️ Cache&lt;br/&gt;Redis Sessions&lt;br/&gt;🚧 Coming Soon"]
+        Observability["Observability&lt;br/&gt;Logfire"]
+        Browser["Browser&lt;br/&gt;Remote Chromium"]
+        Cache["Cache&lt;br/&gt;Redis Sessions&lt;br/&gt;Coming Soon"]
     end
 
     Auth --&gt; Backend
@@ -6597,6 +6599,9 @@
     Payment --&gt; Database
     Insights --&gt; Backend
     Insights --&gt; Database
+    Meetings --&gt; Backend
+    Meetings --&gt; Database
+    Meetings --&gt; Browser
 </code></pre>
 <div class="admonition tip">
 <p class="admonition-title">Architectural Guidance</p>
@@ -6655,28 +6660,32 @@
 </code></pre>
 <h2 id="service-categories">Service Categories</h2>
 <pre class="mermaid"><code>graph TB
-    subgraph "🔐 Authentication Services"
+    subgraph "Authentication Services"
         AuthJWT["auth&lt;br/&gt;JWT + User Management"]
-        AuthOAuth["oauth&lt;br/&gt;🚧 Future: Social Login"]
-        AuthSAML["saml&lt;br/&gt;🚧 Future: Enterprise SSO"]
+        AuthOAuth["oauth&lt;br/&gt;Future: Social Login"]
+        AuthSAML["saml&lt;br/&gt;Future: Enterprise SSO"]
     end
 
-    subgraph "🤖 AI Services"
+    subgraph "AI Services"
         AIPydantic["ai&lt;br/&gt;PydanticAI Multi-Provider"]
-        AILangChain["ai_langchain&lt;br/&gt;🚧 Future: LangChain"]
+        AILangChain["ai_langchain&lt;br/&gt;Future: LangChain"]
     end
 
-    subgraph "📧 Notification Services"
+    subgraph "Notification Services"
         CommsService["comms&lt;br/&gt;Email, SMS, Voice"]
-        Push["push&lt;br/&gt;🚧 Future: Push Notifications"]
+        Push["push&lt;br/&gt;Future: Push Notifications"]
     end
 
-    subgraph "📊 Analytics Services"
+    subgraph "Analytics Services"
         InsightsService["insights&lt;br/&gt;GitHub, PyPI, Plausible, Reddit"]
     end
 
-    subgraph "📝 Content Services"
+    subgraph "Content Services"
         BlogService["blog&lt;br/&gt;Markdown Posts + Tags"]
+    end
+
+    subgraph "Meeting Services"
+        MeetingsService["meetings&lt;br/&gt;Google Meet Bot, Notes, Themes"]
     end
 </code></pre>
 <h2 id="service-development-patterns">Service Development Patterns</h2>
@@ -6905,6 +6914,7 @@ quietly.</p>
 <li><strong><a href="comms/">Communications Service</a></strong> - Email, SMS, and voice via Resend/Twilio</li>
 <li><strong><a href="documents/">Documents Service</a></strong> - Content-addressed document store with page-addressed extraction</li>
 <li><strong><a href="insights/">Insights Service</a></strong> - Adoption metrics tracking (GitHub, PyPI, Plausible, Reddit) <em>(experimental)</em></li>
+<li><strong><a href="meetings/">Meetings Service</a></strong> - A bot that joins Google Meet: transcript, notes, people and what keeps coming up <em>(experimental)</em></li>
 <li><strong><a href="payment/">Payment Service</a></strong> - Payment processing with Stripe <em>(experimental)</em></li>
 <li><strong><a href="../cli-reference/">CLI Reference</a></strong> - Service command reference</li>
 <li><strong><a href="../components/">Components Overview</a></strong> - Infrastructure layer</li>

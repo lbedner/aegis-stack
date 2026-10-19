@@ -6733,22 +6733,22 @@
 <h2 id="architecture">Architecture</h2>
 <pre class="mermaid"><code>graph TB
     subgraph "Communications Service"
-        CommsService["📧 Comms Service&lt;br/&gt;Email, SMS, Voice"]
+        CommsService["Comms Service&lt;br/&gt;Email, SMS, Voice"]
 
-        CLI["💻 CLI Interface&lt;br/&gt;comms email, sms, call"]
-        API["🌐 REST API&lt;br/&gt;/comms/email, /comms/sms, /comms/call"]
+        CLI["CLI Interface&lt;br/&gt;comms email, sms, call"]
+        API["REST API&lt;br/&gt;/comms/email, /comms/sms, /comms/call"]
 
         subgraph "Providers"
-            Resend["📨 Resend&lt;br/&gt;Email API"]
-            Twilio["📱 Twilio&lt;br/&gt;SMS &amp; Voice"]
+            Resend["Resend&lt;br/&gt;Email API"]
+            Twilio["Twilio&lt;br/&gt;SMS &amp; Voice"]
         end
     end
 
-    Backend["⚡ Backend Component&lt;br/&gt;FastAPI"]
+    Backend["Backend Component&lt;br/&gt;FastAPI"]
 
     subgraph "Worker Component"
-        ArqQueues["📋 arq Queues&lt;br/&gt;Background Jobs"]
-        Redis[("🔴 Redis&lt;br/&gt;Queue Storage")]
+        ArqQueues["arq Queues&lt;br/&gt;Background Jobs"]
+        Redis[("Redis&lt;br/&gt;Queue Storage")]
     end
 
     CommsService --&gt; CLI

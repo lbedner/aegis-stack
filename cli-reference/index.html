@@ -7366,7 +7366,7 @@
 </span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>aegis<span class="w"> </span>-v<span class="w"> </span>remove<span class="w"> </span>worker
 </span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>
 </span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="c1"># Incorrect: Global flag after command (will fail)</span>
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>aegis<span class="w"> </span>init<span class="w"> </span>my-project<span class="w"> </span>--verbose<span class="w">  </span>❌
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>aegis<span class="w"> </span>init<span class="w"> </span>my-project<span class="w"> </span>--verbose
 </span></code></pre></div></p>
 <p><strong>What --verbose Shows:</strong>
 - Detailed file operation logs
@@ -7788,19 +7788,19 @@ service needed stay; remove them separately with <code>aegis remove</code>.</p>
 </ol>
 <p><strong>What Gets Updated:</strong></p>
 <ul>
-<li>✅ Template infrastructure files</li>
-<li>✅ Shared files (docker-compose.yml, pyproject.toml, Makefile)</li>
-<li>✅ Component implementations (if unmodified)</li>
-<li>✅ Test infrastructure</li>
-<li>✅ Documentation templates</li>
+<li>Template infrastructure files</li>
+<li>Shared files (docker-compose.yml, pyproject.toml, Makefile)</li>
+<li>Component implementations (if unmodified)</li>
+<li>Test infrastructure</li>
+<li>Documentation templates</li>
 </ul>
 <p><strong>What's Preserved:</strong></p>
 <ul>
-<li>✅ Your custom business logic</li>
-<li>✅ Your environment variables (.env)</li>
-<li>✅ Your database migrations</li>
-<li>✅ Your custom models and services</li>
-<li>✅ Files you've modified (marked as conflicts)</li>
+<li>Your custom business logic</li>
+<li>Your environment variables (.env)</li>
+<li>Your database migrations</li>
+<li>Your custom models and services</li>
+<li>Files you've modified (marked as conflicts)</li>
 </ul>
 <p><strong>Important Notes:</strong></p>
 <ul>

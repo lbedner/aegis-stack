@@ -29,6 +29,11 @@ class Spot(NamedTuple):
     line: int
     key: str
 
+    @property
+    def at(self) -> str:
+        """``path:line``."""
+        return f"{self.path}:{self.line}"
+
 
 def check(
     found: Iterable[Finding],
@@ -42,9 +47,7 @@ def check(
     """What to print and the exit code. ``update`` writes the baseline:
     every place when there is none, else only the known ones still there."""
     env, baseline = env or {}, index.root / BASELINE
-    here = _spots(found, index)
-    known = json.loads(baseline.read_text())["known"] if baseline.exists() else []
-    before = Counter(known)
+    here, before = _spots(found, index), _known(index)
     if update:
         now = Counter(s.key for s in here)
         keep = now & before if baseline.exists() else now
@@ -53,19 +56,29 @@ def check(
         return f"{BASELINE}: {keep.total()} known", 0
     fresh = _new(here, before)
     lines = [
-        _annotation(s)
-        if env.get("GITHUB_ACTIONS")
-        else f"{s.path}:{s.line}: {_line(s)}"
+        _annotation(s) if env.get("GITHUB_ACTIONS") else f"{s.at}: {_line(s)}"
         for s in fresh
     ]
     lines.append(f"{len(fresh)} new; {before.total()} known in {BASELINE}")
     if summary := env.get("GITHUB_STEP_SUMMARY"):
-        rows = [f"- `{s.path}:{s.line}` {_line(s)}" for s in fresh]
+        rows = [f"- `{s.at}` {_line(s)}" for s in fresh]
         with open(summary, "a") as out:
             head = [touched] if touched else []
             out.write("\n".join([*head, "### New findings", "", *rows, ""]))
     failed = strict and any(s.finding.severity == "error" for s in fresh)
     return "\n".join(lines), int(failed)
+
+
+def new_spots(found: Iterable[Finding], index: Index) -> list[Spot]:
+    """The places ``found`` shows that the baseline does not know."""
+    return _new(_spots(found, index), _known(index))
+
+
+def _known(index: Index) -> Counter[str]:
+    baseline = index.root / BASELINE
+    return Counter(
+        json.loads(baseline.read_text())["known"] if baseline.exists() else []
+    )
 
 
 def _spots(found: Iterable[Finding], index: Index) -> list[Spot]:

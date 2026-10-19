@@ -415,6 +415,8 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         # The active-model selector reads the LLM tables removed above.
         remove_file(project_path, "app/services/ai/domains/llm/active_model.py")
         remove_file(project_path, "tests/services/ai/test_active_model.py")
+        # A writer runs as an agent row, read through the selector above.
+        remove_file(project_path, "app/services/ai/domains/llm/writer.py")
         # Agent registry models ride the same persistence gate (the memory
         # backend resolves the default agent from code, not DB rows). The
         # tools.py registry itself stays: it is DB-free and the code-config
@@ -581,6 +583,7 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         # providers.py builds its own and never imports these.
         remove_file(project_path, "app/services/ai/domains/llm/model_factory.py")
         remove_file(project_path, "app/services/ai/domains/llm/agents.py")
+        remove_file(project_path, "app/services/ai/domains/llm/writer.py")
 
     # Remove voice (TTS/STT) if not enabled: what the AI spec lists under
     # ``ai_voice``, so a new voice file is cleaned up by being listed there.

@@ -228,6 +228,17 @@ belongs - so it names each domain and what it owns.
     touch goes in the job summary beside the new findings. No CI job
     ships with the app; its `CLAUDE.md` asks a coding agent to run the
     check before it finishes.
+    `patterns review` is Illiana's write-up of the same new findings, as
+    Markdown for a pull request: every finding listed from the check with
+    her note on it, what the change touches, and anything she would add
+    set apart as opinion, so she can neither invent a finding nor drop
+    one. It is one call, no tools, as its own agent (`pr-reviewer`,
+    seeded with her persona and the reviewing, so its model and how long
+    it writes are set in Agents), spend recorded; nothing new, or the
+    same findings an earlier review covered, no call. aegis-stack's own
+    CI posts it as one comment on each pull request, edited on each push:
+    the latest review on top, each earlier one kept below it, collapsed,
+    by the commit it reviewed.
     Finance and documents also carry a `test_*_module_layout.py` stating which
     module defines what, so folding a domain back together, or dropping a
     function into whichever file was open, fails a test rather than passing

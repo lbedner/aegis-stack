@@ -14,7 +14,8 @@ request. A guide that fails keeps the last one it had, with why.
 from app.core.db import get_async_session
 from app.core.log import logger
 from app.services.ai.domains.spend.recording import extract_usage, record_usage
-from app.services.meetings.domains.agents import GUIDE_AGENT, GUIDE_PROMPT, writer
+from app.services.ai.service import writer
+from app.services.meetings.domains.agents import GUIDE_AGENT, GUIDE_PROMPT
 from app.services.meetings.domains.people import queries
 from app.services.meetings.domains.people.kept import keep_guide, keep_guide_failure
 from app.services.meetings.domains.people.service import GUIDING

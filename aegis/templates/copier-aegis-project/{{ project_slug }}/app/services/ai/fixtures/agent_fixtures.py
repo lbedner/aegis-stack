@@ -30,6 +30,7 @@ from app.services.ai.domains.chat.sentiment import (
     SENTIMENT_TEMPERATURE,
 )
 from app.services.ai.models.agents import Agent, MemoryModule, Tool
+from app.services.system.pattern_review import REVIEWER, reviewer_prompt
 
 # The registry only holds tools whose module was imported, and seeding runs
 # in processes that never build a chat agent (a CLI, a startup hook):
@@ -161,9 +162,31 @@ def sentiment_agent_definition() -> dict[str, Any]:
     }
 
 
+def reviewer_agent_definition() -> dict[str, Any]:
+    """The seed row for Illiana reviewing a pull request (``patterns
+    review``): her persona and the reviewing, the active model, and room
+    for a note on each of fifty findings; no memory, knowledge or code."""
+    return default_agent_definition() | {
+        "slug": REVIEWER,
+        "name": "Illiana, reviewing",
+        "description": "Writes a pull request's review from its new findings",
+        "category": "analysis",
+        "model_id": None,
+        "system_prompt": reviewer_prompt(default_agent_config().system_prompt),
+        "max_tokens": 8000,
+        "memory_modules": [],
+        "knowledge_base_ids": [],
+        "code_mode": False,
+    }
+
+
 def built_in_agents() -> list[dict[str, Any]]:
     """Every agent the AI service seeds."""
-    return [default_agent_definition(), sentiment_agent_definition()]
+    return [
+        default_agent_definition(),
+        sentiment_agent_definition(),
+        reviewer_agent_definition(),
+    ]
 
 
 def seed_missing_agents(session: Session, definitions: list[dict[str, Any]]) -> int:

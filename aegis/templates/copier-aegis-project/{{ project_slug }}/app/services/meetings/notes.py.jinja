@@ -17,7 +17,8 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.core.db import get_async_session
 from app.core.log import logger
 from app.services.ai.domains.spend.recording import extract_usage, record_usage
-from app.services.meetings.domains.agents import NOTES_AGENT, NOTES_PROMPT, writer
+from app.services.ai.service import writer
+from app.services.meetings.domains.agents import NOTES_AGENT, NOTES_PROMPT
 from app.services.meetings.domains.notes.service import keep_failure, keep_notes
 from app.services.meetings.domains.people import queries as people
 from app.services.meetings.domains.threads import ledger

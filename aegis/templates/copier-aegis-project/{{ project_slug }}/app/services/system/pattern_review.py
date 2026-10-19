@@ -1,0 +1,175 @@
+"""``patterns review``: Illiana's write-up of a change's new findings
+(``pattern_check.new_spots``) and what it touches, for a pull request.
+
+The facts are the findings: every one is listed from the check, with its
+place, rule and what to do, and her words sit beside each. What she sees
+past them is set apart as opinion, so she can neither invent a finding nor
+drop one. One call, as its agent row writes (``writer``, ``REVIEWER``):
+no tools; none when nothing is new, or when the findings are the ones an
+earlier review (``fingerprint``) already covered. One comment tells the
+whole sequence: the latest review on top, each earlier one below it."""
+
+import json
+import re
+
+from pydantic import BaseModel
+
+from app.services.system.errors.fingerprint import digest
+from app.services.system.node_now import FIGURES
+from app.services.system.pattern_check import Spot
+
+# The comment's first line, how CI finds it again to edit; its second,
+# which findings it covered.
+MARKER = "<!-- illiana-review -->"
+NOTHING = "No new findings against the known debt."
+# Below the latest review, the ones before it.
+EARLIER = "#### Earlier reviews"
+# GitHub refuses a comment past 65,536 characters: the oldest go first.
+MOST_CHARS = 60_000
+ACTION = "patterns_review"
+# The most she reads and the comment lists: a first run with no baseline
+# brings every finding the app has.
+MOST_LISTED = 50
+# Its agent: an ``agent`` row the AI service seeds (her persona and the
+# reviewing below), so its model and how long it writes are set in Agents.
+REVIEWER = "pr-reviewer"
+REVIEWING = """## Reviewing a pull request
+
+When I review a change for its pull request, the facts are its new findings,
+from the app's own pattern rules (each rule's why and what to do, once), and
+what it touches; nothing else about the change is known to me. For each
+finding I say in a sentence or two what it means here and what to do, by its
+place, then the change's state in two lines. Anything I would point out
+beyond the findings is opinion and goes in ``opinion``, never as a finding.
+I do not invent findings, and I do not call one fine when the rules flag it.
+"""
+
+
+def reviewer_prompt(persona: str) -> str:
+    """The reviewer's prompt: Illiana's ``persona``, then the reviewing."""
+    return f"{persona.rstrip()}\n\n{REVIEWING}"
+
+
+class Note(BaseModel):
+    """What she says of one finding, by its place (``path:line``)."""
+
+    model_config = FIGURES
+
+    place: str
+    said: str
+
+
+class Review(BaseModel):
+    model_config = FIGURES
+
+    summary: str
+    notes: tuple[Note, ...] = ()
+    opinion: str = ""
+
+
+def fingerprint(fresh: list[Spot], touched: str) -> str:
+    """Which findings (and touches) a review covers: the same, no new one."""
+    return digest([*sorted(s.key for s in fresh), touched])[:16]
+
+
+def facts(fresh: list[Spot], touched: str) -> str:
+    """What she is told, compact: each rule once, each finding by its place,
+    rule and part, and what the change touches."""
+    rules = {
+        s.finding.check: s.finding.model_dump(
+            include={"title", "severity", "why", "action"}
+        )
+        for s in fresh
+    }
+    found = [
+        {"place": s.at, "check": s.finding.check, "part": s.finding.subject}
+        for s in fresh
+    ]
+    body = {"rules": rules, "new_findings": found, "touches": touched}
+    return json.dumps(body, separators=(",", ":"))
+
+
+def markdown(fresh: list[Spot], said: Review, touched: str, commit: str = "") -> str:
+    """A review: her summary, every finding with her note (the rule's why
+    where she gave none), what the change touches, and her opinion set
+    apart; headed by the commit it reviewed."""
+    notes = {n.place: n.said for n in said.notes}
+    rows = [
+        f"- `{s.at}` **{s.finding.title}** (`{s.finding.check}`, "
+        f"{s.finding.severity}): {notes.get(s.at) or s.finding.why}"
+        for s in fresh
+    ]
+    title = (
+        f"### Illiana's review of `{commit[:7]}`" if commit else "### Illiana's review"
+    )
+    head = [MARKER, f"<!-- spots:{fingerprint(fresh, touched)} -->", title]
+    parts = [*head, "", said.summary, "", *rows, ""]
+    if touched:
+        parts += [touched]
+    if said.opinion:
+        parts += ["#### Opinion (not a finding)", "", said.opinion, ""]
+    return "\n".join(parts)
+
+
+async def review(
+    fresh: list[Spot], touched: str, previous: str = "", commit: str = ""
+) -> str:
+    """The comment for ``fresh`` at ``commit``, above the reviews before it
+    (``previous``, the comment as it stands); nothing at all when those
+    reviews already covered these findings, and no call when nothing is
+    new."""
+    if previous and _covered(previous) == fingerprint(fresh, touched):
+        return ""
+    if not fresh:
+        now = markdown([], Review(summary=NOTHING), touched, commit)
+    else:
+        shown = fresh[:MOST_LISTED]
+        said = await _ask(facts(shown, touched))
+        now = markdown(shown, said, touched, commit)
+        if more := len(fresh) - len(shown):
+            now += f"\n_... and {more} more; `patterns check` lists them all._\n"
+    return _with_earlier(now, previous)
+
+
+def _covered(previous: str) -> str:
+    """The findings a comment's latest review covered (its fingerprint)."""
+    found = re.search(r"<!-- spots:([0-9a-f]+) -->", previous)
+    return found.group(1) if found else ""
+
+
+def _with_earlier(now: str, previous: str) -> str:
+    """``now`` on top, then every earlier review, newest first, each
+    collapsed under its heading as it was written; the oldest dropped
+    where the comment would pass GitHub's limit."""
+    if not previous:
+        return now
+    was, _, earlier = previous.partition(EARLIER)
+    lines = [line for line in was.strip().splitlines() if not line.startswith("<!--")]
+    title = lines[0].removeprefix("### ") if lines else "Illiana's review"
+    body = "\n".join(lines[1:]).strip()
+    blocks = [
+        f"<details><summary>{title}</summary>\n\n{body}\n\n</details>",
+        *re.findall(r"<details>.*?</details>", earlier, re.DOTALL),
+    ]
+    while len(blocks) > 1 and len(now) + sum(map(len, blocks)) > MOST_CHARS:
+        blocks.pop()
+    return "\n".join([now.rstrip(), "", EARLIER, "", *blocks, ""])
+
+
+async def _ask(facts_text: str) -> Review:
+    """Its answer, written as its agent row writes (her persona and the
+    reviewing while the row is missing), its spend recorded."""
+    from app.services.ai.domains.chat.prompts import DEFAULT_SYSTEM_PROMPT
+    from app.services.ai.domains.spend.recording import extract_usage, record_usage
+    from app.services.ai.service import writer
+
+    prompt = reviewer_prompt(DEFAULT_SYSTEM_PROMPT)
+    agent, model_name = await writer(REVIEWER, prompt, Review)
+    result = await agent.run(f"The change's findings:\n{facts_text}")
+    await record_usage(
+        action=ACTION,
+        model_name=model_name,
+        usage=extract_usage(result),
+        user_id=None,
+    )
+    return result.output

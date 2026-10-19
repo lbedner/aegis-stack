@@ -160,7 +160,10 @@ def _entry(spec: PluginSpec) -> str:
         "category": spec.category,
         "cli": spec.name,
         "marker": spec.marker_path,
-        "containers": spec.docker_services,
+        "containers": [
+            *spec.docker_services,
+            *(f"worker-{queue}" for queue in spec.worker_queues),
+        ],
         "tier": spec.tier,
         "page": spec.page,
         "role": spec.role,

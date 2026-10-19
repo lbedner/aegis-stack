@@ -9,6 +9,12 @@
 
 ### Added
 
+- **A plugin's worker queue gets a worker.** `PluginSpec.worker_queues` names
+  the queue modules a plugin ships under `app/components/worker/queues/`, and
+  a stack with the worker component now emits a `worker-<name>` container for
+  each (one process, `<NAME>_WORKER_PROCESSES`, `_MEMORY` and `_CPUS` to
+  tune, bind-mounted in dev). Before, a plugin could register a queue that
+  nothing ran: jobs sat queued until their record expired.
 - **Meetings: each agent's calendar.** An agent's Google Calendar, by its
   secret iCal address (`MEETINGS_BOT_CALENDAR_SECRET`, another agent's under
   `__<NAME>`), is read every minute by the scheduler and kept as one row per

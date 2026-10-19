@@ -52,6 +52,14 @@ services:
     volumes:
       - .:/code
 {%- endif %}
+{%- for p in _plugins | default([]) %}
+{%- for q in p.worker_queues | default([]) %}
+
+  worker-{{ q }}:
+    volumes:
+      - .:/code
+{%- endfor %}
+{%- endfor %}
 {%- endif %}
 {%- if include_redis %}
 

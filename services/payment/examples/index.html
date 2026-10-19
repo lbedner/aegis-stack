@@ -7037,7 +7037,7 @@
 <h2 id="adding-a-new-payment-provider">Adding a New Payment Provider</h2>
 <p>The service is designed for multi-provider support. To add Paddle, PayPal, or any other:</p>
 <ol>
-<li>Create <code>app/services/payment/domains/providers/paddle.py</code> (or similar) implementing <code>BasePaymentProvider</code>.</li>
+<li>Create <code>app/services/payment/adapters/providers/paddle.py</code> (or similar) implementing <code>BasePaymentProvider</code>.</li>
 <li>Register it in <code>PaymentService._get_provider()</code> based on a new <code>PAYMENT_PROVIDER</code> env var.</li>
 <li>Add its env vars to <code>app/core/config.py</code> and <code>.env.example</code>.</li>
 </ol>

@@ -157,6 +157,7 @@ not what it is called:
 | `sources.py` | what it hands research: the sources a plugin registers | optional |
 | `adapters/` | what it talks to: providers, file formats, collectors, kept apart from what it knows (`domains/`) | optional |
 | `constants.py`, `utils.py` | shared values and helpers | optional |
+| `settings.py` | the settings mixin `app.core.config`'s `Settings` inherits (meetings', or a plugin's through `settings_mixins`) | optional |
 
 Its router lives apart, in `app/components/backend/api/<name>`, and leaves the
 database to the service. At least one test imports the service.

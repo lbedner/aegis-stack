@@ -27,7 +27,7 @@ LOOSE = "parts.domains"
 # Modules each service still keeps loose beside its standard files, held
 # the same way: lower an entry as its modules move into domains/.
 LOOSE_DEBT = {
-    "service:meetings": 6,  # landed after the domains move; ON-15
+    "service:meetings": 5,  # landed after the domains move; ON-15
 }
 
 

@@ -203,7 +203,7 @@ dependencies = [
     "email-validator==2.2.0",
 {%- endif %}
 {%- if ai_rag %}
-    "chromadb>=0.4.22,<1.0.0",  # Vector store - pin to 0.x for stability
+    "chromadb>=1.0,<2.0",  # Vector store (1.x: no native hnswlib wheel)
     "sentence-transformers>=3.0.0,<7",  # Local embeddings
     "torch>=2.0.0,<3",  # Explicit dep for CPU-only override (see [tool.uv.sources])
 {%- endif %}

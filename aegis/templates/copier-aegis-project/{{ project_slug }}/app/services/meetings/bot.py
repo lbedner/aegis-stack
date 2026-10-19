@@ -24,6 +24,7 @@ from app.services.meetings.domains.accounts.service import login_secret_of, pick
 from app.services.meetings.domains.bot.dispatch import start_meeting
 from app.services.meetings.domains.people.participants import keep_heard
 from app.services.meetings.domains.people.service import guides_writer
+from app.services.meetings.domains.series.service import themes_writer
 from app.services.meetings.meet import CallState, MeetPage, merge_caption, open_meet
 from app.services.meetings.models import (
     BotAccount,
@@ -227,12 +228,15 @@ async def _join(meeting: Meeting, login: str) -> None:
 
 
 async def _after(meeting_id: int) -> None:
-    """Once the bot is out: the notes and how to work with each person,
-    where the stack has a model to write them."""
+    """Once the bot is out: the notes, how to work with each person and
+    what the meeting's series keeps coming back to, where the stack has a
+    model to write them."""
     if (write := notes_writer()) is not None:
         await write(meeting_id)
     if (guide := guides_writer()) is not None:
         await guide(meeting_id)
+    if (themes := themes_writer()) is not None:
+        await themes(meeting_id)
 
 
 async def run_meeting(meeting_id: int) -> None:

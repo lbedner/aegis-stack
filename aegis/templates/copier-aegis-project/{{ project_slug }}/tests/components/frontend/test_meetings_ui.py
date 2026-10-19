@@ -125,7 +125,7 @@ async def test_following_stops_once_the_modal_is_closed(
     """A closed modal stops reading its meeting; a closed tab stops it too,
     after ``SessionLoops``' grace (that rule is the helper's, tested there)."""
     reads: list[Any] = []
-    monkeypatch.setattr(meetings_modal, "_api", lambda page: reads.append(page))
+    monkeypatch.setattr(meetings_modal, "api", lambda page: reads.append(page))
     monkeypatch.setattr(meetings_modal, "FOLLOW_SECONDS", 0.01)
     pane = MeetingPane(MagicMock(expires_at=None), on_change=AsyncMock())
     pane._showing = 7

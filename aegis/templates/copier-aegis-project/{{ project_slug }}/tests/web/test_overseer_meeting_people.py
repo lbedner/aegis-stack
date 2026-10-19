@@ -83,6 +83,12 @@ async def test_a_guide_opens_with_the_lines_each_point_rests_on(
 
     facts = {text(dt): text(dt.getnext()) for dt in select(html, "dl dt")}
     assert facts["Owner"] == "4242"
+    tabs = one(html, "[data-tabs]")
+    assert [text(t) for t in select(tabs, "[role=tab]")] == [
+        "How to work with them",
+        "Threads",
+        "Your note",
+    ]
     part = one(html, '[data-guide-section="information"]')
     assert "Wants the numbers first" in text(part)
     # The lines fold under the point, closed until it is opened.

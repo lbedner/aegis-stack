@@ -49,7 +49,7 @@ async def test_the_words_search_every_owner_and_a_hit_opens_its_meeting(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     api = MagicMock(get=AsyncMock(return_value=[HIT]))
-    monkeypatch.setattr(meetings_search_tab, "_api", lambda page: api)
+    monkeypatch.setattr(meetings_search_tab, "api", lambda page: api)
     pane = MagicMock(show=AsyncMock())
     tab = SearchTab(MagicMock(), pane)
     tab._words.value = " pricing "

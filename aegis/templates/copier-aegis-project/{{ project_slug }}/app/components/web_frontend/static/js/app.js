@@ -113,13 +113,51 @@ document.addEventListener('click', (event) => {
   );
 });
 
+// Tabs within a view (layout.html's ``tabbed``): a tab shows its panel and
+// hides the others. The one picked is remembered by the tabs' name, so a
+// view that re-reads itself (a meeting while the bot is in) keeps it.
+const pickedTabs = {};
+function showTab(tabs, key) {
+  pickedTabs[tabs.dataset.tabs] = key;
+  for (const tab of tabs.querySelectorAll(':scope > [role="tablist"] [data-tab]')) {
+    tab.setAttribute('aria-selected', String(tab.dataset.tab === key));
+  }
+  for (const panel of tabs.querySelectorAll(':scope > [data-tab-panel]')) {
+    panel.hidden = panel.dataset.tabPanel !== key;
+  }
+}
+document.addEventListener('click', (event) => {
+  const tab = event.target.closest('[data-tab]');
+  if (tab) showTab(tab.closest('[data-tabs]'), tab.dataset.tab);
+});
+document.body.addEventListener('htmx:load', (event) => {
+  const root = event.detail.elt;
+  if (!root.querySelectorAll) return;
+  const all = [...(root.matches('[data-tabs]') ? [root] : []), ...root.querySelectorAll('[data-tabs]')];
+  for (const tabs of all) {
+    const picked = pickedTabs[tabs.dataset.tabs];
+    if (picked && tabs.querySelector(`:scope > [data-tab-panel="${picked}"]`)) showTab(tabs, picked);
+  }
+});
+// Something in a hidden panel is shown before it is reached: a note's
+// line in the transcript, a ``data-scroll-to`` target, a search hit.
+function revealTab(target) {
+  const panel = target?.closest('[data-tab-panel]');
+  if (panel?.hidden) showTab(panel.parentElement, panel.dataset.tabPanel);
+}
+document.addEventListener('click', (event) => {
+  const link = event.target.closest('a[href^="#"]');
+  if (link && link.hash.length > 1) revealTab(document.getElementById(link.hash.slice(1)));
+});
+
 // Any ``data-scroll-to`` button brings the element its selector names into
 // view (a list's first or last row), scrolling only what it must.
 document.addEventListener('click', (event) => {
   const button = event.target.closest('[data-scroll-to]');
   if (!button) return;
-  document.querySelector(button.dataset.scrollTo)
-    ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  const target = document.querySelector(button.dataset.scrollTo);
+  revealTab(target);
+  target?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 });
 
 // The Overseer sidebar is never swapped (a link replaces only what is right
@@ -265,7 +303,9 @@ function syncDrawer(root) {
     .then(() => {
       if (!drawer.open) drawer.show();
       // Opened at one line (a search hit's ``data-hit``): bring it into view.
-      drawer.querySelector('[data-hit]')?.scrollIntoView({ block: 'center' });
+      const hit = drawer.querySelector('[data-hit]');
+      revealTab(hit);
+      hit?.scrollIntoView({ block: 'center' });
     });
 }
 document.body.addEventListener('htmx:load', (event) => syncDrawer(event.detail.elt));
@@ -849,4 +889,4 @@ document.body.addEventListener('htmx:load', () => {
   applyMapFocus(document.getElementById('overview-stack'));
 });
 
-if (typeof module !== 'undefined') module.exports = { placeDropdown, outsideClick, dismiss, navigates, markCurrent, spanned, inView, splitMatches, mapFocus, pathFocus, sourceColumn, kept, volumeOf };
+if (typeof module !== 'undefined') module.exports = { revealTab, placeDropdown, outsideClick, dismiss, navigates, markCurrent, spanned, inView, splitMatches, mapFocus, pathFocus, sourceColumn, kept, volumeOf };

@@ -1,6 +1,7 @@
-{# Commitments, contradictions and positions, a meeting's or a person's
-   (``ThreadSection``): each section, its items with whose, where they
-   stand and the lines they cite folded under them, then their other lines
+{# Commitments, contradictions and positions, a meeting's or a person's,
+   and what a series keeps coming back to (``ThreadSection``): each
+   section, its items with whose, where they stand and the lines they cite
+   folded under them, then their other lines
    (a contradiction's other side, where a commitment came up again).
    ``said`` maps a quoted line's id to when it was said and where it
    opens. #}
@@ -17,7 +18,7 @@
 {% endmacro %}
 
 {% macro thread_sections(sections, said) %}
-{% set tones = {"open": "accent", "mentioned": "warn", "done": "ok", "dropped": "muted"} %}
+{% set tones = {"open": "accent", "mentioned": "warn", "answered": "ok", "done": "ok", "dropped": "muted"} %}
 {% for section in sections %}
 <section data-thread-section="{{ section.key }}" class="grid gap-2">
   {{ heading(section.title) }}

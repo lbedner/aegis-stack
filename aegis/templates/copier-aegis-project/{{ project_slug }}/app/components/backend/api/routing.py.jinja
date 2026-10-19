@@ -70,6 +70,12 @@ from app.components.backend.api.meetings.search import (
 from app.components.backend.api.meetings.search import (
     router as meetings_search_router,
 )
+from app.components.backend.api.meetings.series import (
+    admin_router as meetings_series_admin_router,
+)
+from app.components.backend.api.meetings.series import (
+    router as meetings_series_router,
+)
 {%- endif %}
 {%- if include_finance %}
 from app.components.backend.api.finance.router import router as finance_router
@@ -154,10 +160,12 @@ def include_routers(app: FastAPI) -> None:
     app.include_router(research_router, prefix="/api/v1")
     {%- endif %}
     {%- if include_meetings %}
-    # Before the meeting routes: /meetings/admin, /people and /search are
-    # not ids.
+    # Before the meeting routes: /meetings/admin, /people, /search and
+    # /series are not ids.
     app.include_router(meetings_search_admin_router, prefix="/api/v1")
     app.include_router(meetings_search_router, prefix="/api/v1")
+    app.include_router(meetings_series_admin_router, prefix="/api/v1")
+    app.include_router(meetings_series_router, prefix="/api/v1")
     app.include_router(meetings_people_admin_router, prefix="/api/v1")
     app.include_router(meetings_people_router, prefix="/api/v1")
     app.include_router(meetings_admin_router, prefix="/api/v1")

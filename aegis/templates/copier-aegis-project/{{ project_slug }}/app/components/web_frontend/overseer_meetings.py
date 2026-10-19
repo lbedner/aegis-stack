@@ -6,9 +6,10 @@ bot asked to leave or the meeting deleted from there; a search hit opens
 it at its line (``overseer_meeting_search``). People is how to
 work with each person who speaks in them, one guide in the drawer with
 the lines each point rests on and their threads; a meeting's own threads
-load into its drawer once its notes are there. Calendar is a week of every
-agent's calendar (``meeting_calendar``); Agents is each Google account the
-bot joins as (``meeting_agents``). Registered only in projects with the
+load into its drawer once its notes are there. Calendar is a month of every
+agent's calendar (``meeting_calendar``); Series is what each series of
+meetings keeps coming back to, one in the drawer with each theme's lines;
+Agents is each Google account the bot joins as (``meeting_agents``). Registered only in projects with the
 meetings service (see ``overseer_sections``).
 """
 
@@ -19,10 +20,13 @@ from app.core.formatting import format_relative_time
 from app.services.meetings.domains.accounts.service import agent_names, agents
 from app.services.meetings.domains.people.service import PeopleService, said_when
 from app.services.meetings.domains.search.service import LINE_PARAM, MEETING_PARAM
+from app.services.meetings.domains.series.service import SeriesService
 from app.services.meetings.models import (
     GuideRecord,
     GuideRow,
     Quote,
+    SeriesRecord,
+    SeriesRow,
     ThreadSection,
 )
 from app.services.meetings.service import MeetingsService, meetings_counts
@@ -41,6 +45,7 @@ SECTIONS = (
         {
             "overview": "Overview",
             "calendar": "Calendar",
+            "series": "Series",
             "people": "People",
             "agents": "Agents",
         },
@@ -54,6 +59,9 @@ PEOPLE = f"{PAGE}/people"
 CALENDAR = f"{PAGE}/calendar"
 PEOPLE_PARTIALS = f"{PARTIALS}/people"
 PERSON_PARAM = "person"
+SERIES = f"{PAGE}/series"
+SERIES_PARTIALS = f"{PARTIALS}/series"
+SERIES_PARAM = "series"
 LIMIT = 200
 
 
@@ -64,6 +72,8 @@ async def section_context(
     the address names it; or, on People, every owner's guides."""
     if section == "people":
         return await _people(req)
+    if section == "series":
+        return await _series(req)
     if section == "agents":
         return await agents_context(req.db, meeting_url)
     if section == "calendar":
@@ -122,6 +132,39 @@ def _person_row(row: GuideRow) -> dict[str, Any]:
         "owner": row.owner_user_id,
         "meetings": row.guide.meetings,
         "written": format_relative_time(row.guide.written_at),
+    }
+
+
+async def _series(req: SectionRequest) -> dict[str, Any]:
+    """Every owner's series, latest written first, one open in the drawer
+    when the address names it."""
+    wanted = req.query.get(SERIES_PARAM) or ""
+    drawer = f"{SERIES_PARTIALS}/{wanted}/drawer" if wanted.isdigit() else None
+    rows = [_series_row(s) for s in await SeriesService(req.db, None).series()]
+    return drawer_state(SERIES_PARAM, drawer) | {"rows": rows}
+
+
+def _series_row(row: SeriesRow) -> dict[str, Any]:
+    return {
+        "series": {
+            "label": row.name,
+            "url": with_query(SERIES, **{SERIES_PARAM: str(row.series.id)}),
+        },
+        "owner": row.series.owner_user_id,
+        "meetings": row.series.meetings,
+        "written": format_relative_time(row.series.written_at),
+    }
+
+
+def series_context(record: SeriesRecord) -> dict[str, Any]:
+    """One series in the drawer: its run over time, a card per part, then
+    each theme, every point with the lines it rests on, each opening its
+    meeting."""
+    return {
+        "record": record,
+        "base": f"{SERIES_PARTIALS}/{record.series.id}",
+        "written": format_relative_time(record.series.written_at),
+        "said": said(thread_quotes([*record.over_time, *record.sections])),
     }
 
 

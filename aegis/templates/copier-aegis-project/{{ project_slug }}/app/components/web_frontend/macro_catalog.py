@@ -195,6 +195,16 @@ EXAMPLES: dict[str, dict[str, str]] = {
               {{ tab_item("Overview", href="#macro-tab_item") }}
               {{ tab_item("History", active=True, href="#macro-tab_item") }}
             {% endcall %}""",
+        "tabbed": """
+            {% call tabbed("example", [("notes", "Notes"), ("transcript", "Transcript")]) %}
+              {% call tab_panel("notes", "notes") %}<p class="text-sm">The notes.</p>{% endcall %}
+              {% call tab_panel("transcript", "notes") %}<p class="text-sm">The transcript.</p>{% endcall %}
+            {% endcall %}""",
+        "tab_panel": """
+            {% call tabbed("example-panel", [("one", "One"), ("two", "Two")], "two") %}
+              {% call tab_panel("one", "two") %}<p class="text-sm">Hidden until picked.</p>{% endcall %}
+              {% call tab_panel("two", "two") %}<p class="text-sm">Shown first.</p>{% endcall %}
+            {% endcall %}""",
         "chip": """
             <div class="flex gap-1.5">
               {{ chip("1h", href="#macro-chip") }}

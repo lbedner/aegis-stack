@@ -1,0 +1,158 @@
+{% if include_ai and ai_backend != "memory" and ai_framework == "pydantic-ai" %}
+"""What a series of meetings said over time: one pass of the
+``meeting-themes`` agent (``domains.agents``) over the notes of the
+owner's latest meetings on one link (``service.MEETINGS``), each with the
+lines it cites, for a headline, what it keeps coming back to (each theme
+citing every line it was said in), and the run a short point at a time:
+what was settled, what shifted, what is still open, the mood. Metered like every other
+model call (``meetings:themes`` in AI spend).
+
+The bot writes it once a meeting's notes and guides are written
+(``bot.run_meeting``), as soon as the link has two meetings with notes;
+Overseer writes it again on request. A pass that fails keeps the themes
+it had, with why.
+"""
+
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.core.db import get_async_session
+from app.core.log import logger
+from app.services.ai.domains.spend.recording import extract_usage, record_usage
+from app.services.ai.service import writer
+from app.services.meetings.domains.agents import THEMES_AGENT, THEMES_PROMPT
+from app.services.meetings.domains.notes.service import notes_of
+from app.services.meetings.domains.people.queries import quotes
+from app.services.meetings.domains.series import queries
+from app.services.meetings.domains.series.kept import (
+    PARTS,
+    keep_series,
+    keep_series_failure,
+)
+from app.services.meetings.domains.series.service import MEETINGS, THEMING
+from app.services.meetings.models import Meeting, Notes, Quote, SeriesNotes
+
+ACTION = "meetings:themes"
+# Fewer meetings than this are not a series yet; a theme is said in as many.
+MIN_MEETINGS = 2
+# Each part of a meeting's notes as the prompt labels its items.
+KINDS = {
+    "decisions": "Decided",
+    "action_items": "To do",
+    "open_questions": "Left open",
+    "commitments": "Committed",
+    "follow_ups": "Raised again",
+    "contradictions": "Said both ways",
+    "positions": "Stood on",
+}
+
+Read = list[tuple[Meeting, Notes]]
+
+
+async def write_themes(meeting_id: int) -> None:
+    """Write the series the meeting is in over the last, or why it could
+    not be (the themes it had stay)."""
+    async with get_async_session() as session:
+        meeting = await session.get_one(Meeting, meeting_id)
+    key = (meeting.owner_user_id, queries.series_link(meeting.url))
+    THEMING.add(key)
+    try:
+        await _write(*key)
+    finally:
+        THEMING.discard(key)
+
+
+async def _write(owner_user_id: int | None, link: str) -> None:
+    async with get_async_session() as session:
+        read, cited, name = await _read(session, owner_user_id, link)
+    if len(read) < MIN_MEETINGS:
+        return
+    try:
+        notes, model_name = await _ask(owner_user_id, read, cited)
+    except Exception as exc:
+        logger.exception("Meeting series failed", link=link)
+        async with get_async_session() as session:
+            await keep_series_failure(session, owner_user_id, link, str(exc))
+        return
+    async with get_async_session() as session:
+        await keep_series(
+            session,
+            owner_user_id,
+            link,
+            notes,
+            name=name,
+            model_name=model_name,
+            meetings=len(read),
+        )
+
+
+async def _read(
+    session: AsyncSession, owner_user_id: int | None, link: str
+) -> tuple[Read, dict[int, Quote], str]:
+    """The series' meetings with notes, oldest first; the lines their
+    items cite; and its calendar event's title."""
+    meetings = await queries.meetings_on(session, owner_user_id, link, MEETINGS)
+    kept = await notes_of(session, [m.id for m in meetings])  # type: ignore[misc]
+    read: Read = []
+    for meeting in reversed(meetings):
+        row = kept.get(meeting.id)  # type: ignore[arg-type]
+        if row is not None and row.notes is not None:
+            read.append((meeting, row.notes))
+    lines = {
+        n
+        for _, notes in read
+        for kind in KINDS
+        for item in getattr(notes, kind)
+        for n in item.lines
+    }
+    name = await queries.title_of(session, [m.id for m, _ in read])  # type: ignore[misc]
+    return read, await quotes(session, lines), name
+
+
+async def _ask(
+    owner_user_id: int | None, read: Read, cited: dict[int, Quote]
+) -> tuple[SeriesNotes, str]:
+    agent, model_name = await writer(THEMES_AGENT, THEMES_PROMPT, SeriesNotes)
+    result = await agent.run(_prompt(read, cited))
+    await record_usage(
+        action=ACTION,
+        model_name=model_name,
+        usage=extract_usage(result),
+        user_id=None if owner_user_id is None else str(owner_user_id),
+    )
+    return _cited(result.output, cited), model_name
+
+
+def _prompt(read: Read, cited: dict[int, Quote]) -> str:
+    """Each meeting, oldest first: its date, its summary, then each item of
+    its notes with the lines it cites."""
+    said: list[str] = []
+    for meeting, notes in read:
+        said += [f"Meeting {meeting.id}, {meeting.created_at:%d %b %Y}"]
+        said += [f"Summary: {notes.summary}"]
+        for kind, label in KINDS.items():
+            for item in getattr(notes, kind):
+                said.append(f"- {label}: {item.text}")
+                said += [
+                    f"  [{n}] {cited[n].speaker}: {cited[n].text}"
+                    for n in item.lines
+                    if n in cited
+                ]
+        said.append("")
+    return "\n".join(said).strip()
+
+
+def _cited(notes: SeriesNotes, cited: dict[int, Quote]) -> SeriesNotes:
+    """``notes``' points citing only lines the model was shown, each once;
+    one left citing none is dropped (it can no longer be checked), and a
+    theme said in fewer than ``MIN_MEETINGS`` meetings is not a theme."""
+    for kind in PARTS:
+        for point in getattr(notes, kind):
+            point.lines = [n for n in dict.fromkeys(point.lines) if n in cited]
+        setattr(notes, kind, [p for p in getattr(notes, kind) if p.lines])
+    notes.themes = [
+        t
+        for t in notes.themes
+        if len({cited[n].meeting_id for n in t.lines}) >= MIN_MEETINGS
+    ]
+    return notes
+{% endif %}

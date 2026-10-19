@@ -170,17 +170,6 @@ async def guide_points(
     return [(point, line) for point, line in (await db.exec(query)).all()]
 
 
-async def points_left_uncited(db: AsyncSession, point_ids: list[int]) -> list[int]:
-    """Which of ``point_ids`` cite no line any more."""
-    if not point_ids:
-        return []
-    still = select(MeetingGuidePointLine.point_id).where(
-        col(MeetingGuidePointLine.point_id).in_(point_ids)
-    )
-    citing = set((await db.exec(still)).all())
-    return [p for p in point_ids if p not in citing]
-
-
 async def drop_people_in_no_meeting(db: AsyncSession, person_ids: list[int]) -> None:
     """Drop those of ``person_ids`` no meeting has any more, their guides
     with them."""

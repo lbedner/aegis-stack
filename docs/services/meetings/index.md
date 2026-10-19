@@ -2,6 +2,9 @@
 
 A bot that joins a call as a visible, announced participant, and keeps who was there and what each of them said. It joins Google Meet today; Teams and Zoom come next.
 
+!!! warning "Experimental Service"
+    Meetings is currently experimental. The bot, notes and Overseer views are functional and covered by tests, but it joins only Google Meet, each agent needs a Google account of its own, and the data model and API may change before the first stable release.
+
 !!! info "Quick Start"
     Generate a project with the meetings service:
 

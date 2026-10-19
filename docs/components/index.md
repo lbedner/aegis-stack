@@ -38,6 +38,7 @@ graph TB
         Observability["Observability<br/>Logfire"]
         Cache["Cache Layer<br/>Redis Sessions"]
         Secrets["Secrets<br/>Encrypted Key Store"]
+        Browser["Browser<br/>Remote Chromium"]
     end
     
     API --> Frontend

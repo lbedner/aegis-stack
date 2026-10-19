@@ -47,7 +47,7 @@ The **Authentication Service** provides complete user management and JWT-based a
 ```mermaid
 graph TB
     subgraph "Authentication Service Stack"
-        AuthService["🔐 Auth Service<br/>JWT + Refresh + User Management"]
+        AuthService["Auth Service<br/>JWT + Refresh + User Management"]
 
         subgraph "API Endpoints"
             Register["POST /auth/register<br/>Create new user"]
@@ -58,19 +58,19 @@ graph TB
         end
 
         subgraph "Required Components"
-            Backend["⚡ Backend Component<br/>FastAPI Routes"]
-            Database["💾 Database Component<br/>SQLite / PostgreSQL"]
+            Backend["Backend Component<br/>FastAPI Routes"]
+            Database["Database Component<br/>SQLite / PostgreSQL"]
         end
 
         subgraph "Security Layer"
-            JWT["🔑 Access JWT<br/>short-lived, stateless<br/>python-jose"]
-            RefreshSvc["♻️ RefreshService<br/>rotation + reuse detection<br/>family-based revocation"]
-            Passwords["🔒 Password Hashing<br/>passlib + bcrypt"]
-            OAuth2["📋 OAuth2 Flow<br/>FastAPI Security"]
+            JWT["Access JWT<br/>short-lived, stateless<br/>python-jose"]
+            RefreshSvc["RefreshService<br/>rotation + reuse detection<br/>family-based revocation"]
+            Passwords["Password Hashing<br/>passlib + bcrypt"]
+            OAuth2["OAuth2 Flow<br/>FastAPI Security"]
         end
 
         subgraph "Database Schema"
-            Users["👥 user table<br/>id, email, hashed_password<br/>created_at, updated_at"]
+            Users["user table<br/>id, email, hashed_password<br/>created_at, updated_at"]
             RefreshTokens["refresh_token table<br/>token digest (PK), user_id, family_id<br/>expires_at, revoked_at"]
         end
     end

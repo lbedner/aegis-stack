@@ -41,7 +41,7 @@ That's it. [`uvx`](https://docs.astral.sh/uv/) downloads, installs, and runs Aeg
 
 **Alternative methods:** [Installation Guide](installation.md) covers `uv tool install` and `pip install` for specific workflows.
 
-## 🌱 Your Stack Grows With You
+## Your Stack Grows With You
 
 **Your choices aren't permanent.** Start with what you need today, add components when requirements change, remove what you outgrow.
 
@@ -61,8 +61,8 @@ aegis remove scheduler --project-path ./my-api
 
 | Starter | Add Later? | Remove Later? | Git Conflicts? |
 |-----------|------------|---------------|----------------|
-| **Others** | ❌ Locked at init | ❌ Manual deletion | ⚠️ High risk |
-| **Aegis Stack** | ✅ One command | ✅ One command | ✅ Merged, conflicts marked for review |
+| **Others** | Locked at init | Manual deletion | High risk |
+| **Aegis Stack** | One command | One command | Merged, conflicts marked for review |
 
 Most starters lock you in at `init`. Aegis Stack doesn't. See **[Evolving Your Stack](evolving-your-stack.md)** for the complete guide.
 
@@ -71,23 +71,25 @@ Most starters lock you in at `init`. Aegis Stack doesn't. See **[Evolving Your S
 ### Infrastructure Components
 | Component | Purpose | Status |
 |-----------|---------|--------|
-| **Core** (FastAPI + Flet) | Web API + Overseer | ✅ **Always Included** |
-| **[Web Frontend](components/web-frontend/index.md)** (htmx) | Server-rendered pages at `/`, beside the Overseer | ✅ **Available** |
-| **Database** | SQLite or PostgreSQL + SQLModel ORM | ✅ **Available** |
-| **Scheduler** | Background tasks, cron jobs | ✅ **Available** |
-| **Worker** | Task queues (arq, Dramatiq, or TaskIQ) | ✅ **Available** |
-| **Observability** | Tracing, metrics, logging (Logfire) | ✅ **Available** |
-| **Cache** | Redis caching and sessions | 🚧 **Coming Soon** |
+| **Core** (FastAPI + Flet) | Web API + Overseer | **Always Included** |
+| **[Web Frontend](components/web-frontend/index.md)** (htmx) | Server-rendered pages at `/`, beside the Overseer | **Available** |
+| **[Browser](components/browser.md)** | Remote Chromium the app drives (Playwright) | **Available** |
+| **Database** | SQLite or PostgreSQL + SQLModel ORM | **Available** |
+| **Scheduler** | Background tasks, cron jobs | **Available** |
+| **Worker** | Task queues (arq, Dramatiq, or TaskIQ) | **Available** |
+| **Observability** | Tracing, metrics, logging (Logfire) | **Available** |
+| **Cache** | Redis caching and sessions | **Coming Soon** |
 
 ### Business Services
 | Service | Purpose | Status |
 |---------|---------|--------|
-| **[AI](services/ai/index.md)** | Multi-provider AI chat | 🧪 **Experimental** |
-| **[Auth](services/auth/index.md)** | User authentication & JWT | ✅ **Available** |
-| **[Blog](services/blog/index.md)** | Markdown publishing, tags, drafts | 🧪 **Experimental** |
-| **[Comms](services/comms/index.md)** | Email, SMS, voice calls | 🧪 **Experimental** |
-| **[Insights](services/insights/index.md)** | Adoption metrics (GitHub, PyPI, Plausible, Reddit) | 🧪 **Experimental** |
-| **[Payment](services/payment/index.md)** | Stripe checkout, subscriptions, refunds, disputes | 🧪 **Experimental** |
+| **[AI](services/ai/index.md)** | Multi-provider AI chat | **Experimental** |
+| **[Auth](services/auth/index.md)** | User authentication & JWT | **Available** |
+| **[Blog](services/blog/index.md)** | Markdown publishing, tags, drafts | **Experimental** |
+| **[Comms](services/comms/index.md)** | Email, SMS, voice calls | **Experimental** |
+| **[Insights](services/insights/index.md)** | Adoption metrics (GitHub, PyPI, Plausible, Reddit) | **Experimental** |
+| **[Meetings](services/meetings/index.md)** | A bot that joins Google Meet: transcript, notes, people, themes | **Experimental** |
+| **[Payment](services/payment/index.md)** | Stripe checkout, subscriptions, refunds, disputes | **Experimental** |
 
 ### Plugins
 

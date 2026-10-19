@@ -4,7 +4,7 @@
 
 I've been developing software professionally since 2004. It started with Java, writing server code for mobile apps in the pre-iPhone era.
 
-My first task when I joined a new company in 2010 was to learn Ruby so I could work on a high volume, distributed audio encoding system, using drb (good times). I maintained that system for 15 years, watching it evolve, scale, and adapt through countless changes in technology and business requirements. Though there was one business requirment that never changed... It had to be up 24/7... Let's just say one can learn a lot about what could go wrong over the years 😊
+My first task when I joined a new company in 2010 was to learn Ruby so I could work on a high volume, distributed audio encoding system, using drb (good times). I maintained that system for 15 years, watching it evolve, scale, and adapt through countless changes in technology and business requirements. Though there was one business requirment that never changed... It had to be up 24/7... Let's just say one can learn a lot about what could go wrong over the years
 
 Around 2012, I picked up Python to write various ETLs, completing my core language toolkit. In that time I've seen old Java monorepos migrated to Python monorepos, then split up into real-time message-based microservices, only to be consolidated back into a monorepo.
 

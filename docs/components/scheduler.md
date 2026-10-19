@@ -53,13 +53,13 @@ from app.core.log import logger
 
 async def send_daily_report() -> None:
     """Generate and send daily reports."""
-    logger.info("📊 Generating daily report")
+    logger.info("Generating daily report")
     # Your report generation logic here
-    logger.info("✅ Daily report sent successfully")
+    logger.info("Daily report sent successfully")
 
 async def cleanup_temp_files() -> None:
     """Clean up temporary files."""
-    logger.info("🗑️ Cleaning temporary files")
+    logger.info("Cleaning temporary files")
     # Your cleanup logic here
 ```
 

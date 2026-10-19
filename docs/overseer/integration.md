@@ -195,12 +195,12 @@ async def check_worker_health() -> ComponentStatus:
 Health checks run every 30 seconds via dashboard polling. Avoid expensive operations.
 
 ```python
-# ❌ BAD - Slow query
+# BAD - Slow query
 async def slow_health_check() -> ComponentStatus:
     users = session.exec(select(User)).all()  # Loads ALL users
     return ComponentStatus(...)
 
-# ✅ GOOD - Limited query
+# GOOD - Limited query
 async def fast_health_check() -> ComponentStatus:
     statement = select(User).limit(101)  # Only check if >100 users
     users = list(session.exec(statement).all())
@@ -265,10 +265,10 @@ async def check_external_api_health() -> ComponentStatus:
 Messages appear in both the dashboard and CLI health output.
 
 ```python
-# ❌ BAD - Vague message
+# BAD - Vague message
 message = "Worker error"
 
-# ✅ GOOD - Specific message
+# GOOD - Specific message
 message = f"Worker queue 'system' has 50 failed jobs (failure rate: 15%)"
 ```
 
@@ -276,14 +276,14 @@ message = f"Worker queue 'system' has 50 failed jobs (failure rate: 15%)"
 Metadata powers dashboard visualizations and debugging.
 
 ```python
-# ✅ GOOD - Rich metadata for debugging
+# GOOD - Rich metadata for debugging
 metadata = {
     "queue_name": "system",
     "jobs_queued": 50,
-    "jobs_active": 0,  # ⚠️ No workers processing
+    "jobs_active": 0,  # No workers processing
     "jobs_failed": 15,
     "failure_rate": 0.15,
-    "redis_connected": False,  # 🔴 Root cause
+    "redis_connected": False,  # Root cause
 }
 ```
 

@@ -177,10 +177,10 @@ Each card displays a status indicator using the Overseer status hierarchy:
 
 | Status | Color | Visual | Meaning |
 |--------|-------|--------|---------|
-| **✅ Healthy** | Green | Solid green border | Component/service fully operational |
-| **ℹ️ Info** | Blue | Solid blue border | Informational status, not a problem |
-| **⚠️ Warning** | Yellow | Orange border | Operational but with issues |
-| **❌ Unhealthy** | Red | Red border | Component/service down or failing |
+| **Healthy** | Green | Solid green border | Component/service fully operational |
+| **Info** | Blue | Solid blue border | Informational status, not a problem |
+| **Warning** | Yellow | Orange border | Operational but with issues |
+| **Unhealthy** | Red | Red border | Component/service down or failing |
 
 **Status Propagation**: Parent components inherit the worst child status:
 

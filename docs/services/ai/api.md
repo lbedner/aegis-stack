@@ -98,9 +98,9 @@ Send a chat message and receive AI response.
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `message` | string | ✅ Yes | User's chat message |
-| `conversation_id` | string \| null | ❌ No | Existing conversation ID (creates new if null) |
-| `user_id` | string | ❌ No | User identifier (default: "api-user") |
+| `message` | string | Yes | User's chat message |
+| `conversation_id` | string \| null | No | Existing conversation ID (creates new if null) |
+| `user_id` | string | No | User identifier (default: "api-user") |
 
 **Response:**
 
@@ -342,8 +342,8 @@ List conversations for a user.
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `user_id` | string | ❌ No | "api-user" | User identifier |
-| `limit` | integer | ❌ No | 50 | Maximum conversations to return |
+| `user_id` | string | No | "api-user" | User identifier |
+| `limit` | integer | No | 50 | Maximum conversations to return |
 
 **Response:**
 
@@ -393,7 +393,7 @@ Get a specific conversation with full message history.
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `user_id` | string | ❌ No | "api-user" | User identifier for access control |
+| `user_id` | string | No | "api-user" | User identifier for access control |
 
 **Response:**
 

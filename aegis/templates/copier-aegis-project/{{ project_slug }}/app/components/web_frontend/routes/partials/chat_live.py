@@ -24,6 +24,8 @@ from pydantic_ai.messages import (
     FunctionToolCallEvent,
     PartEndEvent,
     PartStartEvent,
+    RealtimeInputSpeechEndEvent,
+    RealtimeInputSpeechStartEvent,
     RealtimeResponseInterruptedEvent,
     RealtimeTurnCompleteEvent,
     SpeechPart,
@@ -105,6 +107,12 @@ async def _tell(ws: WebSocket, event: Any) -> None:
     said: dict[str, Any] | None = None
     if isinstance(event, RealtimeResponseInterruptedEvent):
         said = {"type": "interrupted"}  # drop what has not been played
+    elif isinstance(event, RealtimeInputSpeechStartEvent):
+        # OpenAI and xAI hear you start before any word is transcribed (a
+        # transcript comes once you stop): you talking is never quiet.
+        said = {"type": "onset"}
+    elif isinstance(event, RealtimeInputSpeechEndEvent):
+        said = {"type": "turn_end"}  # its answer is owed
     elif isinstance(event, FunctionToolCallEvent):
         if event.part.tool_name == realtime_calls.END_CALL:
             said = {"type": "hang_up"}  # after the goodbye has played

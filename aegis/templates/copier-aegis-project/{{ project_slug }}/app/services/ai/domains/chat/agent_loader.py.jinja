@@ -92,13 +92,15 @@ def default_agent_config() -> AgentConfig:
         max_tokens=settings.AI_MAX_TOKENS,
         # What the app is, read from its code: its tables for anyone, the
         # rest for an admin; the model catalog, where there is one; and, for
-        # an admin, the app's health. The seed grants these to the row.
+        # an admin, the app's health and its plugins. The seed grants these
+        # to the row.
         tool_names=(
             "ontology",
 {%- if ai_backend != "memory" %}
             "catalog",
 {%- endif %}
             "health",
+            "plugins",
         ),
 {%- if ai_backend != "memory" %}
         # ... and its map always in the prompt, the tool for depth.

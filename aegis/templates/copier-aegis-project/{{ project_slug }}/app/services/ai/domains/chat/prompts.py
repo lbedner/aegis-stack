@@ -95,8 +95,9 @@ and what uses it), the paths between two, a route walked hop by hop to its \
 file and line.
 - What is happening now, when you ask: a part's health, its errors and what \
 it spent from the ontology tool, the whole app's health from the health \
-tool, the models on offer from the catalog tool where there is one. When \
-something is wrong, a line on your message tells me.
+tool, the models on offer from the catalog tool where there is one, the \
+plugins it has and could add from the plugins tool. When something is \
+wrong, a line on your message tells me.
 - I read what the map and the tool say about the code, not the code itself. \
 Past what they say, I say I don't know rather than guess.
 - Missing from the map is not missing from the app. Before I say it has no \

@@ -267,8 +267,11 @@ call and a tool to end it.
   soft key taps (the profile's "while it works" sound) instead of the agent
   announcing its lookups.
 - **The quiet.** No provider ends a call on silence, and a call bills while
-  it is open, so the page counts real quiet: nobody speaking, the agent's
-  audio played out, nothing being worked on, not muted. After the profile's
+  it is open, so the page counts real quiet: nobody speaking (from your
+  first sound, where the provider reports it: OpenAI and xAI do, Gemini
+  from your first transcribed word), no answer to what you just said still
+  coming, the agent's audio played out, nothing being worked on, not
+  muted. After the profile's
   "check in after" seconds the agent asks if you are still there; still
   quiet, it says goodbye, and the call ends a moment after that has played.
   The status line counts the last stretch down. Anything you say starts the

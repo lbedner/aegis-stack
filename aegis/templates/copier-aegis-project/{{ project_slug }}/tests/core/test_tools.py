@@ -111,6 +111,7 @@ EXPECTED_EFFECTS = {
     "errors": "read",
     "logs": "read",
     "ontology": "read",
+    "plugins": "read",
     "research_search": "read",
     "research_thread": "read",
     "research_history": "read",

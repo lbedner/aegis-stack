@@ -531,8 +531,10 @@
     } else if (event.type === 'hearing') {
       happen({ type: 'speech', on: true }); // your first transcribed words: you
       happen({ type: 'words' });
+    } else if (event.type === 'onset' || event.type === 'turn_end') {
+      happen({ type: event.type });
     } else if (event.type === 'heard') {
-      happen({ type: 'speech', on: false });
+      happen({ type: 'heard' });
     } else if (event.type === 'hang_up') {
       happen({ type: 'goodbye' });
     } else if (event.type === 'working') {

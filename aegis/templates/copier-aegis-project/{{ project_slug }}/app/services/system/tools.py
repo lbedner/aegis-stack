@@ -21,6 +21,7 @@ from app.services.system import (
     dry_path,
     live_status,
     pattern_findings,
+    plugin_directory,
     service_parts,
     ui_errors,
     ui_logs,
@@ -283,10 +284,29 @@ async def ontology(
     }
 
 
+async def plugins(text: str | None = None) -> dict[str, Any]:
+    """The plugins this app has (each with its version and the options it
+    was added with), and the ones it could add from the public directory
+    at aegis-stack.io (``text`` matches a name or summary): what each is,
+    its latest version, whether it is verified, the aegis it needs and the
+    commands that add it, its downloads, stars, repository and release.
+    The first hundred are listed and ``directory_total`` says how many
+    match; ``text`` narrows them. Nothing is installed from here."""
+    found = await plugin_directory.plugins_now(text, limit=MAX_NODES)
+    return found.model_dump(mode="json")
+
+
 register_tool(
     "health",
     health,
     description="What is wrong now: every component's status and message",
+    effect="read",
+    admin=True,
+)
+register_tool(
+    "plugins",
+    plugins,
+    description="The plugins this app has, and the ones it could add",
     effect="read",
     admin=True,
 )

@@ -21,6 +21,9 @@ const audio = (on) => ({ type: 'audio', on });
 const step = (on) => ({ type: 'step', on });
 const mute = (on) => ({ type: 'mute', on });
 const WORDS = { type: 'words' };
+const ONSET = { type: 'onset' };
+const TURN_END = { type: 'turn_end' };
+const HEARD = { type: 'heard' };
 const IDLE = { type: 'idle' };
 const CUT = { type: 'cut' };
 const REPLY = { type: 'reply' };
@@ -148,6 +151,40 @@ test('muting ends whatever the mic was last hearing', () => {
   const { state, last } = play(...GREETED, speech(true), mute(true), mute(false));
   assert.equal(state.hearing, false);
   assert.equal(last.quiet, 'count');
+});
+
+test('a turn the provider ends is owed an answer: no quiet until it begins', () => {
+  // 2026-10-19: asked mid-call, it said "Are you still there?" while still
+  // working out the answer, and the answer came after.
+  const asked = [...GREETED, ONSET, TURN_END];
+  assert.notEqual(play(...asked).last.quiet, 'count');
+  assert.equal(play(...asked).state.owed, true);
+  assert.equal(play(...asked, audio(true), audio(false)).last.quiet, 'count');
+  assert.equal(play(...asked, REPLY).last.quiet, 'count'); // a turn with nothing said
+});
+
+test('you talking is not quiet from your first sound', () => {
+  // 2026-10-19: a long sentence counted as quiet until its transcript came.
+  assert.equal(play(...GREETED, ONSET).last.quiet, 'stop');
+});
+
+test('a late transcript is owed nothing once the provider reports turns', () => {
+  // OpenAI transcribes after the turn: its words can land after the answer.
+  const late = [...GREETED, ONSET, TURN_END, audio(true), audio(false)];
+  const { state, last } = play(...late, speech(true), WORDS, HEARD);
+  assert.equal(state.owed, false);
+  assert.equal(last.quiet, 'count');
+});
+
+test('without turns from the provider, your transcript ending is the turn', () => {
+  // Gemini reports no onset or end: its transcript is all there is.
+  const { state, last } = play(...GREETED, speech(true), WORDS, HEARD);
+  assert.equal(state.owed, true);
+  assert.notEqual(last.quiet, 'count');
+});
+
+test('a noise is owed nothing', () => {
+  assert.equal(play(...GREETED, speech(true), speech(false)).last.quiet, 'count');
 });
 
 test('its steps are not quiet', () => {

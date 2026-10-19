@@ -277,3 +277,24 @@ def test_a_cue_that_is_not_one_says_nothing() -> None:
     assert chat_live._cue("not json") is None
     assert chat_live._cue('["check_in"]') is None
     assert chat_live._cue('{"line": "say something rude"}') is None
+
+
+async def test_your_speech_is_relayed_from_its_first_sound() -> None:
+    """OpenAI and xAI report speech onset before any transcript: a long
+    sentence is you talking, not quiet the page counts toward a check-in."""
+    from pydantic_ai.messages import (
+        RealtimeInputSpeechEndEvent,
+        RealtimeInputSpeechStartEvent,
+    )
+
+    from app.components.web_frontend.routes.partials import chat_live
+
+    told: list[dict[str, object]] = []
+
+    class Page:
+        async def send_json(self, message: dict[str, object]) -> None:
+            told.append(message)
+
+    await chat_live._tell(Page(), RealtimeInputSpeechStartEvent())  # type: ignore[arg-type]
+    await chat_live._tell(Page(), RealtimeInputSpeechEndEvent())  # type: ignore[arg-type]
+    assert told == [{"type": "onset"}, {"type": "turn_end"}]

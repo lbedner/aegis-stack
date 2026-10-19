@@ -6,7 +6,8 @@
    No provider ends a call on silence, and dead air costs the same as
    talk, so the quiet is counted here - only real quiet: you are not
    talking, the assistant's audio has played out, nothing is being worked
-   on, you are not muted (muting is on purpose). After the profile's
+   on, no answer to what you said is still coming, you are not muted
+   (muting is on purpose). After the profile's
    seconds it checks in; still quiet, it says goodbye; once that has played
    and you have said nothing, the call ends. Words of yours call any of it
    off.
@@ -33,9 +34,12 @@
     played: false, // ... and has played out
     spoke: false, // ... and you started speaking since
     cut: false, // its reply was spoken over and is not yet done
+    turns: false, // the provider reports when you start and stop
+    owed: false, // your turn ended: its answer is coming
   });
 
-  const counting = (s) => s.quietMs > 0 && !(s.hearing || s.talking || s.working || s.muted || s.leaving);
+  const counting = (s) =>
+    s.quietMs > 0 && !(s.hearing || s.talking || s.working || s.owed || s.muted || s.leaving);
   const over = (s) => s.leaving && s.played && !s.hearing;
 
   // One event in; the next state, and what to do:
@@ -59,6 +63,22 @@
         s.hearing = event.on;
         if (event.on) s.spoke = true;
         break;
+      case 'onset': // the provider heard you start, before any transcript
+        s.turns = true;
+        s.hearing = true;
+        s.spoke = true;
+        break;
+      case 'turn_end': // ... and stop: its answer is owed, no quiet until it comes
+        // ponytail: an answer that never comes holds the count until its
+        // turn ends ('reply'); a timeout if a provider ever drops a turn.
+        s.hearing = false;
+        s.owed = true;
+        break;
+      case 'heard': // your transcript is done: the turn's end only where
+        // the provider reports none (Gemini); elsewhere it can come late
+        s.hearing = false;
+        if (!s.turns) s.owed = true;
+        break;
       case 'words': // words of yours: the count starts over - and the goodbye
         // is off, unless they were said before it began (a late transcript)
         s.nudged = 0;
@@ -66,6 +86,7 @@
         break;
       case 'audio':
         s.talking = event.on;
+        if (event.on) s.owed = false;
         if (s.leaving) s.played = !event.on;
         break;
       case 'cut': // spoken over: no goodbye played out, and the goodbye is off
@@ -75,6 +96,7 @@
         break;
       case 'reply': // a reply of hers begins or ends: no longer the cut one
         s.cut = false;
+        s.owed = false;
         break;
       case 'goodbye': // its end_call - but a cut reply's "Talk soon." still comes in
         if (!s.leaving && !s.cut) {

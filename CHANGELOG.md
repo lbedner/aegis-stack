@@ -274,7 +274,16 @@
   every write in the app failed. The store now keeps a byte total and prunes
   the oldest past `ERROR_TRACKING_MAX_BYTES` (16 MB); a store from before is
   counted once. (#1743)
-
+- **A generated stack's tests run on every GitHub runner.** The `ai[rag]`
+  stack's vector store moves to chromadb 1.x, which carries its own index:
+  the 0.x line depended on a native `chroma-hnswlib` wheel that dies with an
+  illegal instruction on runners without the CPU extensions it was built
+  for, killing an xdist worker and every test on it. An existing
+  `data/chromadb` upgrades in place on first open, one way: keep a copy if a
+  0.x rollback must stay possible.
+- **CodeQL runs on public repositories only.** Code scanning is not available
+  to a private repository on a personal plan, so the Security workflow's job
+  skips there instead of failing every push.
 - **Seeding the model catalog reads each table once**, not once per row:
   a voice stack's tests that seed it failed the N+1 gate.
 - **Overseer charts draw again.** A second page script's `mount()` replaced
@@ -302,7 +311,8 @@
 
 - **Every service keeps its logic in `domains/`.** A service's top level
   is now only the standard files (`service.py`, `models.py`, `queries.py`,
-  `health.py`, `tools.py`...), its subsystems are packages under
+  `health.py`, `tools.py`, a settings mixin in `settings.py`...), its
+  subsystems are packages under
   `domains/`, what it talks to stays under `adapters/`, and callers outside
   a service import from its `service.py` (update imports):
   - auth: `users`, `user_*`, `refresh_tokens`, `session_history`, `orgs`,

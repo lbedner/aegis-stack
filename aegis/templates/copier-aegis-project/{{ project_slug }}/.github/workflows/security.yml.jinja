@@ -11,6 +11,7 @@ on:
 jobs:
   codeql:
     name: CodeQL Analysis
+    if: {% raw %}${{ !github.event.repository.private }}{% endraw %}
     runs-on: ubuntu-latest
     permissions:
       actions: read

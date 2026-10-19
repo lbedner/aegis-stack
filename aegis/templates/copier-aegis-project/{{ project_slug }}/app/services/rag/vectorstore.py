@@ -279,7 +279,7 @@ class VectorStoreManager:
                 name=collection_name,
                 embedding_function=await self._embedding(),
             )
-        except (ValueError, NotFoundError):
+        except NotFoundError:
             logger.warning(
                 "vectorstore.collection_not_found",
                 collection=collection_name,
@@ -334,7 +334,7 @@ class VectorStoreManager:
                 name=collection_name,
                 embedding_function=await self._embedding(),
             )
-        except (ValueError, NotFoundError):
+        except NotFoundError:
             return []
 
         # Get all documents (just metadata)
@@ -378,7 +378,7 @@ class VectorStoreManager:
                 name=collection_name,
                 embedding_function=await self._embedding(),
             )
-        except (ValueError, NotFoundError):
+        except NotFoundError:
             logger.warning(
                 "vectorstore.collection_not_found",
                 collection=collection_name,
@@ -443,15 +443,12 @@ class VectorStoreManager:
             )
             logger.debug("vectorstore.delete_collection", collection=collection_name)
             return True
-        except (ValueError, NotFoundError):
+        except NotFoundError:
             return False
 
     async def list_collections(self) -> list[str]:
         """List all collection names."""
         collections = await asyncio.to_thread(self.client.list_collections)
-        # ChromaDB 1.x returns strings, older versions return Collection objects
-        if collections and isinstance(collections[0], str):
-            return collections
         return [c.name for c in collections]
 
     async def get_collection_info(self, collection_name: str) -> CollectionInfo | None:
@@ -477,7 +474,7 @@ class VectorStoreManager:
                 doc_count=len(unique_sources),
                 metadata=collection.metadata or {},
             )
-        except (ValueError, NotFoundError):
+        except NotFoundError:
             return None
 
     async def collection_exists(self, collection_name: str) -> bool:

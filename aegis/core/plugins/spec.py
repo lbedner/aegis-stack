@@ -310,6 +310,11 @@ class PluginSpec:
     # Packaging / template
     pyproject_deps: list[str] = field(default_factory=list)
     docker_services: list[str] = field(default_factory=list)
+    # Worker queues the plugin ships, by name: each has a module at
+    # ``app/components/worker/queues/<name>.py`` in its templates, and a
+    # stack with the worker component runs a ``worker-<name>`` container
+    # for it (one process). Without the component the queue is only a file.
+    worker_queues: list[str] = field(default_factory=list)
     template_files: list[str] = field(default_factory=list)
 
     # File ownership for cleanup (R1)

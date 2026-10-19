@@ -303,6 +303,39 @@ services:
       - dev
       - prod
 {%- endif %}
+{%- for p in _plugins | default([]) %}
+{%- for q in p.worker_queues | default([]) %}
+
+  worker-{{ q }}:
+    <<: *app
+    command:
+      - worker
+      - {{ q }}
+    healthcheck:
+      disable: true
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    tty: true
+    environment:
+      - DOCKER_CONTAINER=1
+      - WORKER_QUEUE_TYPE={{ q }}
+      - WORKER_WATCH=false
+{%- if worker_backend != "arq" %}
+      - WORKER_PROCESSES={{ "${" ~ q | upper ~ "_WORKER_PROCESSES:-1}" }}
+{%- endif %}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379}
+    deploy:
+      resources:
+        limits:
+          memory: {{ "${" ~ q | upper ~ "_WORKER_MEMORY:-512M}" }}
+          cpus: '{{ "${" ~ q | upper ~ "_WORKER_CPUS:-0.5}" }}'
+    profiles:
+      - dev
+      - prod
+{%- endfor %}
+{%- endfor %}
 {%- endif %}
 
 

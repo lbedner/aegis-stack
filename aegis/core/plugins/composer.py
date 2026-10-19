@@ -90,6 +90,9 @@ def serialize_plugin_to_answer(
         # data the plugin ships unconditionally.
         "pyproject_deps": list(spec.pyproject_deps),
         "docker_services": list(spec.docker_services),
+        # Queues the plugin ships; compose runs a worker per queue, so a
+        # stack with the worker component emits ``worker-<name>`` for each.
+        "worker_queues": list(spec.worker_queues),
         # CLI verb. When set, ``app/cli/main.py``'s plugin loop registers
         # ``app/cli/<cli_name>.py`` so ``<project> <cli_name> ...`` works
         # the same way the in-tree auth/llm subcommands do. Always present

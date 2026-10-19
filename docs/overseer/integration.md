@@ -331,6 +331,7 @@ modules. Sources reconnect with exponential backoff, capped at 30 seconds.
 | `ERROR_TRACKING_ENABLED` | `true` | Enable background collection |
 | `ERROR_TRACKING_RETENTION_SECONDS` | `604800` | Maximum retained age: seven days |
 | `ERROR_TRACKING_MAX_OCCURRENCES` | `10000` | Total retained occurrences per project; maximum 10,000 |
+| `ERROR_TRACKING_MAX_BYTES` | `16777216` | Bytes the retained occurrences may take in Redis (16 MB); the oldest go first past it |
 | `ERROR_TRACKING_MAX_SOURCES` | `64` | Concurrent container streams; maximum 256 |
 
 Keys use `aegis:errors:<hash-of-PROJECT_NAME>:` and notifications use

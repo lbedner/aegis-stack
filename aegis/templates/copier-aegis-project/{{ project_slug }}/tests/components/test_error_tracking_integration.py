@@ -226,7 +226,11 @@ async def test_real_redis_outage_and_recovery(
             "redis://127.0.0.1:" + port, socket_connect_timeout=0.2, socket_timeout=0.2
         )
         repository = ErrorStore(
-            client, "outage-" + uuid4().hex, max_occurrences=10, retention_seconds=60
+            client,
+            "outage-" + uuid4().hex,
+            max_occurrences=10,
+            retention_seconds=60,
+            max_bytes=1 << 20,
         )
         instance = Instance("outage-id", "server", "webserver", "running")
         stamp = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S") + ".123456789Z "

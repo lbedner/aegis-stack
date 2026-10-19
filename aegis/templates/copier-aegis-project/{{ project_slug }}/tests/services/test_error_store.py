@@ -25,7 +25,11 @@ async def test_fencing_and_stack_isolation(store: ErrorStore) -> None:
     assert await store.insert(occurrence("a"), token="stale") == "fenced"
     assert await store.insert(occurrence("a"), token="owner") == "inserted"
     other = ErrorStore(
-        store.client, "other-" + uuid4().hex, max_occurrences=3, retention_seconds=60
+        store.client,
+        "other-" + uuid4().hex,
+        max_occurrences=3,
+        retention_seconds=60,
+        max_bytes=1 << 20,
     )
     assert await other.issues() == []
 
@@ -73,7 +77,11 @@ async def test_unavailable_is_controlled() -> None:
     try:
         with pytest.raises(StoreUnavailableError):
             await ErrorStore(
-                client, "unavailable", max_occurrences=1, retention_seconds=1
+                client,
+                "unavailable",
+                max_occurrences=1,
+                retention_seconds=1,
+                max_bytes=1 << 20,
             ).issues()
     finally:
         await client.aclose()
@@ -141,3 +149,35 @@ async def test_the_kept_summaries_and_a_filtered_search_agree(
     grouped, grouped_total = await search(store, {"level": "error"}, offset=0, limit=25)
     assert kept_total == grouped_total == 2
     assert kept == grouped
+
+
+async def test_the_store_keeps_within_its_bytes(store: ErrorStore) -> None:
+    """A storm of large tracebacks cannot outgrow the byte budget, whatever
+    the count allows: the oldest go first."""
+    store.max_occurrences = 100
+    store.max_bytes = 20_000
+    big = "x" * 4_000
+    for i in range(10):
+        event = occurrence(str(i), seconds=i - 20)
+        await store.insert(event.model_copy(update={"traceback": big}))
+    held = int(await store.client.get(store.key("bytes")))
+    assert held <= store.max_bytes
+    assert await store.detail("0") is None and await store.detail("9") is not None
+    kept = await store.client.zrange(store.key("all"), 0, -1)
+    measured = 0
+    for identity in kept:
+        measured += await store.client.hstrlen(store.key("records"), identity)
+        measured += await store.client.hstrlen(store.key("search"), identity)
+    assert held == measured
+
+
+async def test_a_store_from_before_the_budget_is_counted_once(
+    store: ErrorStore,
+) -> None:
+    store.max_occurrences = 100
+    for i in range(3):
+        await store.insert(occurrence(str(i), seconds=i - 10))
+    counted = int(await store.client.get(store.key("bytes")))
+    await store.client.delete(store.key("bytes"))
+    await store.prune()
+    assert int(await store.client.get(store.key("bytes"))) == counted

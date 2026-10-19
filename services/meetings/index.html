@@ -4020,6 +4020,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#what-keeps-coming-up" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What keeps coming up
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#search" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -6476,6 +6487,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#what-keeps-coming-up" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What keeps coming up
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#search" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -6601,6 +6623,7 @@
 <li><strong>Audio</strong> - what the bot hears, a second at a time, each second given to whoever was talking. See <a href="#what-the-bot-hears">What the bot hears</a>.</li>
 <li><strong>Notes</strong> - once the bot has left, the meeting's summary, decisions, action items (who, what, and by when if it was said) and open questions, each a row citing the transcript lines it came from. See <a href="#notes">Notes</a>.</li>
 <li><strong>Commitments, contradictions and positions</strong> - from each meeting, who said they would do what (for whom, by when), what was said one way and the opposite way, and where each person stands on a topic, each citing its lines; kept with the notes and gathered per person. See <a href="#commitments-contradictions-and-positions">Commitments, contradictions and positions</a>.</li>
+<li><strong>Series</strong> - an owner's meetings on one link, which a recurring meeting keeps, and what they keep coming back to: each theme with every line it was said in, and a summary of the run. See <a href="#what-keeps-coming-up">What keeps coming up</a>.</li>
 <li><strong>Me</strong> - which speaker you are, picked in any meeting (nobody else in that meeting is). That person is you in every meeting they are in, and decides which action items are yours; your own guide is not written or listed.</li>
 <li><strong>Agents</strong> - the Google accounts the bot joins as, each with its own name and sign-in; every meeting says which one went. See the warning above.</li>
 <li><strong>Owners</strong> - a meeting belongs to whoever asked for the bot. Without an owner (no auth, the CLI) every meeting is in reach.</li>
@@ -6645,12 +6668,15 @@
 <h2 id="how-to-work-with-each-person">How to work with each person</h2>
 <p>For everyone who speaks in an owner's meetings, a guide to working with them, read from what they say across those meetings: what they care about, how they like their information (big picture or detail, a demo or numbers, short or thorough), how they decide and commit, and what lands with them and what gets pushback. Every point cites the lines it rests on, so the read can be checked against what was said. It is only how they work: nothing about health, family, relationships, politics or religion, even when it came up.</p>
 <p>Once the notes are written, the bot writes the guide of everyone in the meeting but the owner (the speaker "I am" names), one pass of the <code>meeting-guide</code> agent over the latest ten meetings of the owner's they spoke in, metered as <code>meetings:guide</code>. Someone with fewer than three lines across them gets none yet. Each meeting writes it again, so it firms up as meetings accrue; a write that fails keeps the last guide, with why. The owner's own note on a person (what they know that the meetings do not say) is kept across every rewrite and read with the meetings. Guides are the owner's own; Overseer's admin sees every owner's. Like the notes, they need the AI service on pydantic-ai with a database.</p>
+<h2 id="what-keeps-coming-up">What keeps coming up</h2>
+<p>A recurring meeting keeps its link every time, so an owner's meetings on one link are a series: the same standup, the same weekly call, whether the bot was sent from the calendar or by hand. The link is read without what follows it (<code>?authuser=0</code>, a Zoom passcode), so the same call pasted two ways is one series. What a series keeps coming back to is a theme: an ask made again, a blocker that returns every standup, a worry nobody resolves. Each theme cites every line it was said in, across the meetings, with who raised it, how many meetings it came up in, and whether by the latest meeting it was answered, done or is still open; something said in one meeting only is not a theme. With the themes comes the run over time, a few words a point: a one-sentence headline, then what was settled (and in which meeting), what shifted (from what to what, and between which meetings), what is still open (since which meeting) and the mood, at most five points each, every point citing the lines it rests on.</p>
+<p>Once a meeting's notes and guides are written, the bot writes its series again, one pass of the <code>meeting-themes</code> agent over the notes of the latest ten meetings on the link (each item with the lines it cites, not the whole transcripts), metered as <code>meetings:themes</code>. A link with one meeting that has notes is not a series yet. A write that fails keeps the last themes, with why. A series is named for its calendar event when one of its meetings came from the calendar, else for its link. Each meeting's threads end with the themes it is part of ("Keeps coming up"), its own lines of each with the series' other meetings' beside them. Deleting a meeting takes any theme it alone was said in, and the series with its last meeting. Like the notes, the series need the AI service on pydantic-ai with a database.</p>
 <h2 id="search">Search</h2>
 <p>Every word said in a meeting, and every part of its notes, is searchable: the summary, the decisions, the action items, the open questions, and the commitments, follow-ups, contradictions and positions. A hit is the line itself, with its meeting, who said it and when in the call; a hit in the notes names its part and opens at the line it came from. Newest meeting first, each meeting's notes before its lines. Words match their other forms ("pricing" finds "priced"), and every word has to be there. It is search by words, not meaning: "pricing" does not find "$49 a month".</p>
 <p>On PostgreSQL it is full-text search (English), with a GIN index over the transcript's lines and one over the note items, which the meetings revision adds. On SQLite it is FTS5: a search table over each of the two, holding only the index (the text stays in its own table), kept by triggers and made by every startup's <code>create_all</code> (filled from what is already there) since no model can describe them. Neither needs a dependency.</p>
 <p>Each owner searches their own meetings; Overseer's admin searches every owner's. Overseer's chat has it too: the <code>meetings_search</code> tool, granted to the default agent when the meetings service seeds its agents, answers "what did Lawrence say about pricing?" from the transcripts, each line linked to the meeting at that line.</p>
 <h2 id="the-writers-are-agents">The writers are agents</h2>
-<p>The notes and the guides are each written by an agent row the meetings service seeds at startup: <code>meeting-notes</code> and <code>meeting-guide</code>, under the "meetings" category in Overseer's Agents. Their prompt, model and sampling are edited there like any other agent's, and every prompt change is kept in its history. A row left as seeded runs on the model in force; one pinned to a model runs on that model. Seeding only adds a missing row, so an edit survives restarts and upgrades. While a row is missing or turned off, its built-in prompt runs on the model in force.</p>
+<p>The notes, the guides and the series are each written by an agent row the meetings service seeds at startup: <code>meeting-notes</code>, <code>meeting-guide</code> and <code>meeting-themes</code>, under the "meetings" category in Overseer's Agents. Their prompt, model and sampling are edited there like any other agent's, and every prompt change is kept in its history. A row left as seeded runs on the model in force; one pinned to a model runs on that model. Seeding only adds a missing row, so an edit survives restarts and upgrades. While a row is missing or turned off, its built-in prompt runs on the model in force.</p>
 <h2 id="the-meetings-page">The Meetings page</h2>
 <p>With the htmx frontend, <code>/meetings</code> (linked from the navbar) sends the bot and reads what came of it, no CLI needed (signing the bot in is still <code>meetings login</code>):</p>
 <ul>
@@ -6667,8 +6693,9 @@
 <p>The Calendar tab is every agent's calendar a month at a time, in the viewer's browser time zone (UTC on the very first page they load, before the browser has said): whole weeks Monday to Sunday, today marked, each meeting a line with its start time and title, edged in its agent's color, with a dot for where it stands (upcoming, in the call, left, missed, cancelled, no link, or a platform the bot cannot join yet) and the agent, times and state on hover. A meeting the agent was sent into opens in the drawer. Move a month at a time, back to today, or pick one agent. On a phone it lists the days that have meetings, and today.</p>
 <p>Its Settings tab holds what meetings can be configured with: what the bot says in the chat when it joins (<code>MEETINGS_ANNOUNCEMENT</code>, <code>{name}</code> the name it joins as; "What is said here is transcribed." always follows, whatever it is set to), whether agents join the meetings on their calendars (<code>MEETINGS_JOIN_FROM_CALENDAR</code>; off, the calendars are still read and shown) and the folder each meeting's audio is kept in (<code>MEETINGS_KEEP_AUDIO_DIR</code>). A value saved there applies when the app restarts.</p>
 <p>The send form picks which agent goes, where there is more than one, and each meeting's row names its agent. The Agents tab lists every agent: its name, the name it joins as, its Google account, whether its sign-in still works (Signed in; Signed out once Google's session has run out, so sign it in again; Not signed in), and the meetings it is in now, each opening in the drawer.</p>
+<p>Its Series tab lists every owner's series, latest written first; a row opens one in the drawer, with a tab for its run over time (the headline, then a card each for settled, shifted, still open and the mood) and one for what it keeps coming back to, every point folding open to its lines (each opening its meeting), with "Write it again".</p>
 <p>Its People tab lists every owner's guides, latest written first; a row opens one in the drawer, each point folding open to the lines it rests on (each opening its meeting), then the person's open threads (what they said they would do and what was promised them, with whether it was done; where they stand; what they said both ways), with the owner's note and "Write it again".</p>
-<p>The Flet dashboard (<code>/dashboard</code>) has the same: a Meetings card with the counts, opening a modal that sends the bot and lists every owner's meetings beside the selected one, read in full and followed while something is happening, with the same actions. A Calendar tab shows the same month, in UTC (the dashboard renders on the server, which does not know the viewer's time zone), a Search tab searches every owner's meetings and opens a hit's meeting at its line, a People tab does the same for the guides, an Agents tab lists the agents, whose picker sits beside the send box, and both meeting and guide panes show the threads.</p>
+<p>The Flet dashboard (<code>/dashboard</code>) has the same: a Meetings card with the counts, opening a modal that sends the bot and lists every owner's meetings beside the selected one, read in full and followed while something is happening, with the same actions. A Calendar tab shows the same month, in UTC (the dashboard renders on the server, which does not know the viewer's time zone), a Search tab searches every owner's meetings and opens a hit's meeting at its line, a Series tab and a People tab do the same for the series and the guides, an Agents tab lists the agents, whose picker sits beside the send box, and both meeting and guide panes show the threads.</p>
 <h2 id="cli">CLI</h2>
 <table>
 <thead>
@@ -6806,6 +6833,29 @@
 <tr>
 <td><code>POST .../people/{id}/guide</code></td>
 <td>Write the guide again, in the background; <code>409</code> without a model or while it is being written</td>
+</tr>
+</tbody>
+</table>
+<p>What each series keeps coming back to. The caller's own series under <code>/api/v1/meetings/series</code>; every owner's, for Overseer, under <code>/api/v1/meetings/admin/series</code>, read by an admin and written again by an operator:</p>
+<table>
+<thead>
+<tr>
+<th>Route</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET .../series</code></td>
+<td>The series, latest written first, each with what it is called (<code>{"series", "name"}</code>)</td>
+</tr>
+<tr>
+<td><code>GET .../series/{id}</code></td>
+<td>One series: its summary, its meetings (newest first) and its themes as a thread section, each with every line it was said in</td>
+</tr>
+<tr>
+<td><code>POST .../series/{id}/write</code></td>
+<td>Write the series again from its latest meetings, in the background; <code>409</code> without a model or while it is being written</td>
 </tr>
 </tbody>
 </table>

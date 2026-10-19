@@ -11,7 +11,6 @@ The rules (declared names, ``.env`` wins, provider checks) are
 import sys
 from typing import Annotated
 
-from rich.table import Table
 import typer
 
 from app.cli import theme
@@ -49,10 +48,10 @@ def _state(row: secrets.SecretStatus) -> str:
 @app.command("list")
 async def list_secrets() -> None:
     """Every declared key: where it is set, never the value."""
-    table = Table(box=None, pad_edge=False)
-    for column in ("Name", "Owner", "State", "Value"):
-        table.add_column(column)
-    for row in await secrets.status():
+    rows = await secrets.status()
+    columns = ("Name", "Owner", "State", "Value")
+    table = theme.keyed_table(columns, [row.name for row in rows])
+    for row in rows:
         hint = row.hint and (f"•••• {row.hint}" if row.secret else row.hint)
         table.add_row(row.name, row.owner, _state(row), hint or "")
     console.print(table)

@@ -9,7 +9,7 @@ from base64 import b64decode
 from hashlib import sha1
 import json
 from typing import Any
-from urllib.parse import unquote, urlencode
+from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
 from fastapi import Request
@@ -416,7 +416,6 @@ TZ_COOKIE = "tz"
 
 
 def viewer_zone(request: Request) -> ZoneInfo:
-    """The viewer's time zone, from their browser (percent-encoded there:
-    ``America%2FNew_York``); UTC until it has said (the first page they
-    ever load) or when it names no zone."""
-    return zone_named(unquote(request.cookies.get(TZ_COOKIE, ""))) or ZoneInfo("UTC")
+    """The viewer's time zone, from their browser; UTC until it has said
+    (the first page they ever load) or when it names no zone."""
+    return zone_named(request.cookies.get(TZ_COOKIE)) or ZoneInfo("UTC")

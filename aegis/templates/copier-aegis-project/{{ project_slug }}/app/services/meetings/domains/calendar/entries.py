@@ -1,6 +1,6 @@
-"""Every agent's calendar as the calendar pages draw it: the days a month
-covers (``month_days``), each meeting on them in the viewer's time zone
-with its agent, the agent's color, and where it stands."""
+"""Every agent's calendar as the calendar pages draw it: each meeting in
+the viewer's time zone with its agent, the agent's color, and where it
+stands (``state``, a code; ``state_label`` says it)."""
 
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -8,8 +8,7 @@ from zoneinfo import ZoneInfo
 from pydantic import BaseModel, ConfigDict
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.core.time import as_stored, utcnow
-from app.services.meetings.domains.accounts.service import agents
+from app.core.time import as_local, as_stored, utcnow
 from app.services.meetings.models import BotAccount, CalendarEvent
 from app.services.meetings.service import can_join, status_label, voice
 
@@ -18,15 +17,19 @@ from .queries import between
 DAY = timedelta(days=1)
 # The most days one read covers: a month's six weeks.
 MOST_DAYS = 42
-UPCOMING, MISSED, CANCELLED = "Upcoming", "Missed", "Cancelled"
-NO_LINK, CANNOT_JOIN = "No link", "Cannot join yet"
+# Where a meeting the agent was not (or is no longer) in stands; one it was
+# sent into stands as that call's status (``MeetingStatus``).
+UPCOMING, MISSED, CANCELLED = "upcoming", "missed", "cancelled"
+NO_LINK, CANNOT_JOIN = "no_link", "cannot_join"
 # Sent in, and that call since deleted.
-SENT = "Sent"
+SENT = "sent"
+LABELS = {CANNOT_JOIN: "Cannot join yet"}
+NO_TITLE = "(No title)"
 
 
 class CalendarEntry(BaseModel):
     """One meeting on an agent's calendar. ``state`` is the call's status
-    once the agent was sent in, else one of the states above; ``color`` is
+    once the agent was sent in, else one of the codes above; ``color`` is
     the agent's, 1 to the chart ramp, like a speaker's."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -43,13 +46,14 @@ class CalendarEntry(BaseModel):
     meeting_id: int | None
 
 
-def month_days(day: date) -> tuple[date, date]:
-    """The days a calendar of ``day``'s month shows: Monday of its first
-    week to Sunday of its last."""
-    first = day.replace(day=1)
-    following = (first + timedelta(days=31)).replace(day=1)
-    last = following - DAY
-    return first - first.weekday() * DAY, last + (6 - last.weekday()) * DAY
+def state_label(state: str) -> str:
+    """A state as the pages say it: ``in_call`` -> "In call"."""
+    return LABELS.get(state) or status_label(state)
+
+
+def chosen(every: list[BotAccount], agent: str | None) -> list[BotAccount]:
+    """The agents a calendar shows: ``agent`` alone when named, else all."""
+    return [a for a in every if agent in (None, a.name)]
 
 
 async def entries_between(
@@ -57,18 +61,15 @@ async def entries_between(
     first: date,
     last: date,
     zone: ZoneInfo,
-    agent: str | None = None,
+    wanted: list[BotAccount],
     now: datetime | None = None,
-    every: list[BotAccount] | None = None,
     email: str | None = None,
 ) -> list[CalendarEntry]:
-    """Every agent's meetings (only ``agent``'s, when named; of ``every``,
-    the agents, when read already; only invites ``email`` is on, when
+    """The ``wanted`` agents' meetings (only invites ``email`` is on, when
     given) from ``first`` to ``last``, both days whole in ``zone``;
     earliest first."""
     start = datetime.combine(first, datetime.min.time(), zone)
     end = datetime.combine(last + DAY, datetime.min.time(), zone)
-    wanted = [a for a in every or await agents(db) if agent in (None, a.name)]
     names = {a.id: a.name for a in wanted if a.id is not None}
     if not names:
         return []
@@ -89,9 +90,9 @@ def _entry(
         id=row.id,
         agent=agent,
         color=voice(agent),
-        title=row.title,
-        starts_at=_local(row.starts_at, zone),
-        ends_at=_local(row.ends_at, zone),
+        title=row.title or NO_TITLE,
+        starts_at=as_local(row.starts_at, zone),
+        ends_at=as_local(row.ends_at, zone),
         url=row.url,
         organizer=row.organizer,
         state=_state(row, status, now),
@@ -99,16 +100,11 @@ def _entry(
     )
 
 
-def _local(stored: datetime, zone: ZoneInfo) -> datetime:
-    """A stored (naive UTC) time in ``zone``."""
-    return stored.replace(tzinfo=ZoneInfo("UTC")).astimezone(zone)
-
-
 def _state(row: CalendarEvent, status: str | None, now: datetime) -> str:
     if row.cancelled:
         return CANCELLED
     if status is not None:
-        return status_label(status)
+        return status
     if row.sent_at is not None:
         return SENT
     if not row.url:

@@ -31,6 +31,15 @@ class MeetingsSettings(BaseSettings):
             OWNER, "Folder each meeting's audio is kept in, a file per speaker"
         ),
     ] = None
+    # Who the bot says it is in the chat when it joins, ``{name}`` the name
+    # it joins as; that the call is transcribed is always said after it
+    # (``bot.announcement``).
+    MEETINGS_ANNOUNCEMENT: Annotated[
+        str,
+        Configurable(
+            OWNER, "What the bot says when it joins; {name} is the name it joins as"
+        ),
+    ] = "{name} is taking notes in this meeting"
     # Whether each agent is sent into the meetings on its calendar as they
     # start (``domains.calendar``); off, the calendars are still read and
     # shown.

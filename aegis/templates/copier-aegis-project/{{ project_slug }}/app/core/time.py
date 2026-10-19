@@ -8,6 +8,7 @@ name; this is the one they share.
 
 from __future__ import annotations
 
+import calendar
 from datetime import UTC, date, datetime
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -42,3 +43,39 @@ def zone_named(name: str | None) -> ZoneInfo | None:
         return ZoneInfo(name) if name else None
     except (ZoneInfoNotFoundError, ValueError):
         return None
+
+
+def as_local(stored: datetime, zone: ZoneInfo) -> datetime:
+    """A stored time (naive UTC, ``as_stored``) in ``zone``."""
+    return stored.replace(tzinfo=UTC).astimezone(zone)
+
+
+# Monday-first weeks, the ISO week the rest of the app reasons in.
+WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+_WEEKS = calendar.Calendar(firstweekday=0)
+
+
+def month_grid(year: int, month: int) -> list[list[date]]:
+    """Weeks of seven dates covering ``year``/``month``.
+
+    Leading and trailing cells belong to the neighbouring months, so every
+    week is a full row and a calendar never changes shape mid-month.
+    """
+    return [list(week) for week in _WEEKS.monthdatescalendar(year, month)]
+
+
+def month_days(day: date) -> tuple[date, date]:
+    """The first and last day a calendar of ``day``'s month shows."""
+    weeks = month_grid(day.year, day.month)
+    return weeks[0][0], weeks[-1][-1]
+
+
+def shift_month(anchor: date, delta: int) -> date:
+    """``anchor`` moved ``delta`` months, clamped to the 1st.
+
+    Anchored to day 1 on purpose: stepping from 31 Jan would otherwise
+    have to invent a 31 Feb, and every strategy for that (clamp, skip,
+    overflow) surprises someone.
+    """
+    index = (anchor.year * 12 + anchor.month - 1) + delta
+    return date(index // 12, index % 12 + 1, 1)

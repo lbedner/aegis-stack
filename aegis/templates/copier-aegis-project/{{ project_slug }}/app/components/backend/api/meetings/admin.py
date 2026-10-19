@@ -14,9 +14,11 @@ from pydantic import BaseModel
 from app.core.time import zone_named
 from app.services.meetings.deps import as_http, get_every_owners_meetings
 from app.services.meetings.domains.accounts.service import AgentRow, overview
+from app.services.meetings.domains.accounts.service import agents as every_agent
 from app.services.meetings.domains.calendar.entries import (
     MOST_DAYS,
     CalendarEntry,
+    chosen,
     entries_between,
 )
 from app.services.meetings.domains.threads.service import meeting_threads
@@ -60,7 +62,8 @@ async def calendar(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
             f"From first to last is up to {MOST_DAYS} days",
         )
-    return await entries_between(svc.db, first, last, zone, agent)
+    wanted = chosen(await every_agent(svc.db), agent)
+    return await entries_between(svc.db, first, last, zone, wanted)
 
 
 @router.get("/{meeting_id}", response_model=MeetingRecord, dependencies=READ)

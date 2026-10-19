@@ -1651,6 +1651,7 @@ SERVICES: dict[str, ServiceSpec] = {
                     "tests/web/test_overseer_meeting_threads.py",
                     "app/components/web_frontend/meeting_agents.py",
                     "app/components/web_frontend/meeting_calendar.py",
+                    "app/components/web_frontend/meeting_status.py",
                     "tests/web/test_overseer_meeting_agents.py",
                     "tests/web/test_overseer_meeting_calendar.py",
                     "app/components/web_frontend/overseer_meeting_search.py",

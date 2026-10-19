@@ -30,9 +30,9 @@ from app.services.meetings.models import (
     Caption,
     Meeting,
     MeetingStatus,
-    Platform,
 )
 from app.services.meetings.service import (
+    JOINS,
     NOT_DONE,
     STILL_WANTED,
     MeetingsService,
@@ -238,7 +238,7 @@ async def run_meeting(meeting_id: int) -> None:
         meeting = await MeetingsService(session, None).get(meeting_id)
         login = await login_secret_of(session, meeting.account_id)
     try:
-        if meeting.platform != Platform.MEET:
+        if meeting.platform not in JOINS:
             raise _RunEnded(
                 MeetingStatus.FAILED,
                 f"The bot joins Google Meet so far, not {meeting.platform.title()}",

@@ -42,6 +42,8 @@ A bot that joins a call as a visible, announced participant, and keeps who was t
 
     The address reads everything on that calendar, so it is kept like the sign-in. Every minute the scheduler reads each agent's calendar again and keeps its meetings, from a month back to three months ahead, one row per time each happens (a repeating meeting expanded, with the times moved or cancelled on their own followed), with the link to join from the invite: the conference Google attached, or the first Meet, Teams or Zoom link in its location or description. A meeting taken off the calendar is dropped, unless the agent was already sent into it. An agent whose calendar cannot be read keeps what it had.
 
+    **Invite the agent, it comes.** Ask the organizer to add the agent's address as a guest on the event (a recurring one once, for every time it happens). Up to a minute before each start, the agent is sent in once, as if sent from the Meetings page, and not again if that meeting is deleted: never into a meeting cancelled, one with no link, one on a platform the bot does not join yet (Teams, Zoom: it shows on the calendar all the same), or one already over. A meeting never sent into is dropped once it is a month behind. Nobody pressed send, and the people in it usually have no account here, so the meeting is owned by the first on the invite who does, the organizer first, then each attendee; when nobody does, it is nobody's, and Overseer shows it.
+
 ## What You Get
 
 - **Meetings** - one row per call the bot is asked to join: the link, its platform, the name the bot joins as, and its status, with when it joined and left.
@@ -137,6 +139,7 @@ With the htmx frontend, `/meetings` (linked from the navbar) sends the bot and r
 - **Meetings** - every meeting the bot was sent to, newest first, with its status, how long the bot was in it, and how many action items are yours. Paste a link, name the bot, and send it.
 - **One meeting** - its status while the bot joins, waits and listens (the page keeps itself current, and stops once nothing is happening), a button to ask it to leave, then the notes: the summary, your action items, everyone's, the decisions and open questions. Each item links to the line it came from, in the transcript below.
 - **Which speaker is you** - picked from the people who spoke. Your action items follow at once, with nothing written again.
+- **Calendar** - a month of the agents' calendars, in your browser's time zone: every meeting on them, or with the auth service the invites you are on. See [In Overseer](#in-overseer) for how it reads.
 
 Each meeting is its owner's: with the auth service a user sees only the meetings they sent the bot to.
 
@@ -148,11 +151,15 @@ Above the list, a search box searches every owner's transcripts and notes as you
 
 A meeting's commitments, earlier commitments raised, contradictions and positions load into its drawer once its notes are there, each folding open to its lines (and the other side, or where it came up again).
 
+The Calendar tab is every agent's calendar a month at a time, in the viewer's browser time zone (UTC on the very first page they load, before the browser has said): whole weeks Monday to Sunday, today marked, each meeting a line with its start time and title, edged in its agent's color, with a dot for where it stands (upcoming, in the call, left, missed, cancelled, no link, or a platform the bot cannot join yet) and the agent, times and state on hover. A meeting the agent was sent into opens in the drawer. Move a month at a time, back to today, or pick one agent. On a phone it lists the days that have meetings, and today.
+
+Its Settings tab holds what meetings can be configured with: whether agents join the meetings on their calendars (`MEETINGS_JOIN_FROM_CALENDAR`; off, the calendars are still read and shown) and the folder each meeting's audio is kept in (`MEETINGS_KEEP_AUDIO_DIR`). A value saved there applies when the app restarts.
+
 The send form picks which agent goes, where there is more than one, and each meeting's row names its agent. The Agents tab lists every agent: its name, the name it joins as, its Google account, whether its sign-in still works (Signed in; Signed out once Google's session has run out, so sign it in again; Not signed in), and the meetings it is in now, each opening in the drawer.
 
 Its People tab lists every owner's guides, latest written first; a row opens one in the drawer, each point folding open to the lines it rests on (each opening its meeting), then the person's open threads (what they said they would do and what was promised them, with whether it was done; where they stand; what they said both ways), with the owner's note and "Write it again".
 
-The Flet dashboard (`/dashboard`) has the same: a Meetings card with the counts, opening a modal that sends the bot and lists every owner's meetings beside the selected one, read in full and followed while something is happening, with the same actions. A Search tab searches every owner's meetings and opens a hit's meeting at its line, a People tab does the same for the guides, an Agents tab lists the agents, whose picker sits beside the send box, and both meeting and guide panes show the threads.
+The Flet dashboard (`/dashboard`) has the same: a Meetings card with the counts, opening a modal that sends the bot and lists every owner's meetings beside the selected one, read in full and followed while something is happening, with the same actions. A Calendar tab shows the same month, in UTC (the dashboard renders on the server, which does not know the viewer's time zone), a Search tab searches every owner's meetings and opens a hit's meeting at its line, a People tab does the same for the guides, an Agents tab lists the agents, whose picker sits beside the send box, and both meeting and guide panes show the threads.
 
 ## CLI
 
@@ -180,6 +187,7 @@ Overseer's routes, across every owner. Reading them takes an admin where the sta
 |-------|--------------|
 | `GET /api/v1/meetings/admin` | Every owner's meetings, newest first |
 | `GET /api/v1/meetings/admin/agents` | Every agent, the first first: who it is, its sign-in (`Signed in`, `Signed out`, `Not signed in`), and the ids of the meetings it is in now |
+| `GET /api/v1/meetings/admin/calendar?first=&last=&tz=&agent=` | Every agent's meetings (`agent`'s only, when named) from `first` to `last`, whole days in time zone `tz` (default UTC), up to six weeks: each with its agent and color, title, start and end, link, organizer, where it stands (`state`) and the meeting it became |
 | `GET /api/v1/meetings/admin/search?q=` | Search every owner's meetings |
 | `GET /api/v1/meetings/admin/{id}` | One meeting with its notes (or why there are none), transcript, how long each speaker was heard (`heard_seconds`), and which speaker the owner is (`me`) |
 | `GET /api/v1/meetings/admin/{id}/threads` | Its threads, as the owner's route reads them |

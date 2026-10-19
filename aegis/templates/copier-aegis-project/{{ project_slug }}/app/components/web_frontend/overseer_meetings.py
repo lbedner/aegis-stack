@@ -6,8 +6,9 @@ bot asked to leave or the meeting deleted from there; a search hit opens
 it at its line (``overseer_meeting_search``). People is how to
 work with each person who speaks in them, one guide in the drawer with
 the lines each point rests on and their threads; a meeting's own threads
-load into its drawer once its notes are there. Agents is each Google
-account the bot joins as (``meeting_agents``). Registered only in projects with the
+load into its drawer once its notes are there. Calendar is a week of every
+agent's calendar (``meeting_calendar``); Agents is each Google account the
+bot joins as (``meeting_agents``). Registered only in projects with the
 meetings service (see ``overseer_sections``).
 """
 
@@ -28,17 +29,29 @@ from app.services.meetings.service import MeetingsService, meetings_counts
 from app.services.system.models import ComponentStatus
 
 from .meeting_agents import agent_options, agents_context
+from .meeting_calendar import calendar_context
 from .overseer_meeting_search import search_context
 from .overseer_nav import SectionRequest, page_url
 from .rendering import drawer_state, with_query
 from .routes.meetings import row_of, send_form
 
-SECTIONS = ((None, {"overview": "Meetings", "people": "People", "agents": "Agents"}),)
+SECTIONS = (
+    (
+        None,
+        {
+            "overview": "Overview",
+            "calendar": "Calendar",
+            "people": "People",
+            "agents": "Agents",
+        },
+    ),
+)
 
 PAGE = page_url("services", "meetings")
 PARTIALS = "/partials/overseer/meetings"
 DRAWER_PARAM = MEETING_PARAM
 PEOPLE = f"{PAGE}/people"
+CALENDAR = f"{PAGE}/calendar"
 PEOPLE_PARTIALS = f"{PARTIALS}/people"
 PERSON_PARAM = "person"
 LIMIT = 200
@@ -53,6 +66,17 @@ async def section_context(
         return await _people(req)
     if section == "agents":
         return await agents_context(req.db, meeting_url)
+    if section == "calendar":
+        calendar = await calendar_context(
+            req.db,
+            req.query,
+            req.zone,
+            CALENDAR,
+            meeting_url,
+            "#overseer-main",
+            opens_here=True,
+        )
+        return {"calendar": calendar}
     counts = await meetings_counts(req.db)
     every = await agents(req.db)
     names = agent_names((a.id, a.name) for a in every)

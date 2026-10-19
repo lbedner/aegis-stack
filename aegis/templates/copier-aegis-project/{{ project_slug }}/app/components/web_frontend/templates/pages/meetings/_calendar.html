@@ -1,0 +1,40 @@
+{# The meeting calendar's month (``meeting_calendar``), one grid for
+   Overseer's Calendar and the Meetings page: whole weeks, Monday to Sunday
+   in the viewer's time zone, each meeting a line in its agent's color, a
+   dot for where it stands and the rest on hover; one the agent was sent
+   into opens where its page opens meetings (swapped in, ``opens_here``,
+   when that is the page itself). Moving a month or picking an
+   agent swaps ``cal.target``. On a phone the grid is a list of the days
+   that have meetings, and today. #}
+{% from "components/macros/layout.html" import chip %}
+{% macro month(cal) %}
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-1">
+        <a data-month-earlier href="{{ cal.earlier }}" {{ hx_replace(cal.earlier, cal.target) }} aria-label="The month before" class="px-2 py-0.5 rounded border border-aegis-border text-aegis-muted hover:text-aegis-text">←</a>
+        <a data-month-this href="{{ cal.this_month }}" {{ hx_replace(cal.this_month, cal.target) }} class="px-2 py-0.5 rounded border border-aegis-border text-xs text-aegis-muted hover:text-aegis-text">Today</a>
+        <a data-month-later href="{{ cal.later }}" {{ hx_replace(cal.later, cal.target) }} aria-label="The month after" class="px-2 py-0.5 rounded border border-aegis-border text-aegis-muted hover:text-aegis-text">→</a>
+        <h2 class="ml-2 text-base font-semibold text-aegis-text">{{ cal.month_label }}</h2>
+      </div>
+      <nav data-agent-filter aria-label="Agents" class="flex flex-wrap gap-1.5">
+        {% for a in cal.agents %}{{ chip(a.label, a.active, a.url, hx_replace(a.url, cal.target)) }}{% endfor %}
+      </nav>
+    </div>
+    <div class="grid grid-cols-1 lg:grid-cols-7 gap-px rounded-lg overflow-hidden border border-aegis-border bg-aegis-border">
+      {% for name in cal.weekdays %}
+      <div class="hidden lg:block bg-aegis-card px-2 py-1 text-xxs caps text-aegis-muted">{{ name }}</div>
+      {% endfor %}
+      {% for d in cal.days %}
+      <section data-day="{{ d.day }}" {% if d.outside %}data-outside{% endif %} aria-label="{{ d.label }}"
+               class="{{ 'flex' if d.entries or d.today else 'hidden lg:flex' }} min-w-0 flex-col gap-1 p-1.5 lg:min-h-28 transition-shadow hover:ring-1 hover:ring-inset hover:ring-aegis-teal {{ 'bg-aegis-bg' if d.outside else 'bg-aegis-card' }}">
+        <h3 class="text-xs {{ 'self-start rounded-full bg-aegis-teal px-1.5 font-semibold text-aegis-bg' if d.today else ('text-aegis-muted/60' if d.outside else 'text-aegis-muted') }}"><span class="lg:hidden">{{ d.label }}</span><span class="hidden lg:inline">{{ d.number }}</span></h3>
+        {% for e in d.entries %}
+        <div data-entry title="{{ e.detail }}" class="flex min-w-0 items-center gap-1 rounded bg-aegis-bg px-1 py-0.5 text-xs" style="border-left: 3px solid var(--aegis-chart-{{ e.color }})">
+          <span data-tone="{{ e.state.tone }}" class="toned inline-flex shrink-0" aria-label="{{ e.state.label }}"><span class="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true"></span></span>
+          <span class="shrink-0 font-mono text-aegis-muted">{{ e.time }}</span>
+          {% if e.opens %}<a data-opens href="{{ e.opens }}" {% if cal.opens_here %}{{ hx_replace(e.opens, cal.target) }}{% endif %} class="truncate text-aegis-text hover:text-aegis-teal {{ 'line-through' if e.cancelled }}">{{ e.title }}</a>{% else %}<span class="truncate {{ 'line-through text-aegis-muted' if e.cancelled else 'text-aegis-text' }}">{{ e.title }}</span>{% endif %}
+        </div>
+        {% endfor %}
+      </section>
+      {% endfor %}
+    </div>
+{% endmacro %}

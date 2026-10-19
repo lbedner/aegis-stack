@@ -42,6 +42,7 @@ from app.services.system.ui import get_component_subtitle, get_component_title
 from ..cards.card_utils import get_status_detail
 from .base_detail_popup import BaseDetailPopup
 from .meetings_agents_tab import AGENTS, AgentPicker, AgentsTab
+from .meetings_calendar_tab import CalendarTab
 from .meetings_follow import FOLLOW_SECONDS, follow
 from .meetings_people_tab import PeopleTab
 from .meetings_search_tab import SearchTab
@@ -483,6 +484,7 @@ class MeetingsDetailDialog(BaseDetailPopup):
                     expand=True,
                     tabs=[
                         ft.Tab(text="Meetings", content=MeetingsTab(page)),
+                        ft.Tab(text="Calendar", content=CalendarTab(page)),
                         ft.Tab(text="Search", content=_search_tab(page)),
                         ft.Tab(text="People", content=PeopleTab(page)),
                         ft.Tab(text="Agents", content=AgentsTab(page)),

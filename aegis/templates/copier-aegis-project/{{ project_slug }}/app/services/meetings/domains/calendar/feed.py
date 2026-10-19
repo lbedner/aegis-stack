@@ -30,6 +30,7 @@ class CalendarMeeting(BaseModel):
     ends_at: datetime
     url: str | None
     organizer: str | None
+    emails: list[str]
     cancelled: bool
 
 
@@ -59,17 +60,16 @@ def _meeting(event: Any) -> CalendarMeeting:
         ends_at=as_stored(event.decoded("DTEND", event.decoded("DTSTART"))),
         url=_link(event),
         organizer=_organizer(event.get("ORGANIZER")),
+        emails=_emails(event),
         cancelled=str(event.get("STATUS", "")).upper() == "CANCELLED",
     )
 
 
 def _link(event: Any) -> str | None:
-    """The conference Google attached, else the first link the agent can
-    join in the location or description."""
-    if conference := event.get("X-GOOGLE-CONFERENCE"):
-        return str(conference)
+    """The conference Google attached, else the first meeting link in the
+    location or description (one the bot may not join yet)."""
     text = f"{event.get('LOCATION', '')}\n{event.get('DESCRIPTION', '')}"
-    for url in LINK.findall(text):
+    for url in [str(event.get("X-GOOGLE-CONFERENCE", "")), *LINK.findall(text)]:
         try:
             detect_platform(url)
         except UnsupportedMeetingLinkError:
@@ -78,7 +78,23 @@ def _link(event: Any) -> str | None:
     return None
 
 
+def _address(prop: Any) -> str:
+    """A calendar address's email: ``mailto:dana@example.com``."""
+    return str(prop).removeprefix("mailto:").lower()
+
+
 def _organizer(organizer: Any) -> str | None:
     if organizer is None:
         return None
-    return organizer.params.get("CN") or str(organizer).removeprefix("mailto:")
+    return organizer.params.get("CN") or _address(organizer)
+
+
+def _emails(event: Any) -> list[str]:
+    """Every email on the invite, the organizer's first, lowercased: one
+    attendee is a value, several a list."""
+    attendees = event.get("ATTENDEE", [])
+    if not isinstance(attendees, list):
+        attendees = [attendees]
+    found = [event.get("ORGANIZER"), *attendees]
+    emails = (_address(a) for a in found if a is not None)
+    return list(dict.fromkeys(e for e in emails if "@" in e))

@@ -44,7 +44,7 @@ from app.components.web_frontend.overseer_sections import (
     page_for,
     rail,
 )
-from app.components.web_frontend.rendering import render
+from app.components.web_frontend.rendering import render, viewer_zone
 from app.core.audit import AuditEmitter, get_audit
 from app.services.shared.deps import actor_of
 from app.services.system.health import last_system_status
@@ -211,6 +211,7 @@ async def _overseer_detail(
             session_id(request),
             session_expires(request),
             request.headers.get("HX-Target"),
+            viewer_zone(request),
         )
         context |= {"page": page, "current": section}
         context |= await page.context(section, item.component, req)

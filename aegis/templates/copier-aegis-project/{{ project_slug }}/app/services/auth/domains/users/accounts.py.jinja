@@ -1,5 +1,6 @@
 """User management service."""
 
+from collections.abc import Iterable
 import secrets
 from datetime import datetime, timedelta
 
@@ -127,6 +128,19 @@ class UserService(
         )
         result = await self.db.exec(statement)
         return {user.id: user for user in result.all() if user.id is not None}
+
+    async def get_user_ids_by_emails(self, emails: Iterable[str]) -> dict[str, int]:
+        """``{email: id}`` for the given emails (any case) in one query;
+        soft-deleted and unknown emails are absent."""
+        wanted = {email.lower() for email in emails}
+        if not wanted:
+            return {}
+        statement = select(User.email, User.id).where(
+            User.email.in_(wanted),  # type: ignore[attr-defined]
+            User.deleted_at.is_(None),
+        )
+        result = await self.db.exec(statement)
+        return dict(result.all())  # type: ignore[arg-type]
 
     async def update_user(self, user_id: int, **updates) -> User | None:
         """Update user data asynchronously."""

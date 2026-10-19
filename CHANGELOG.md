@@ -15,6 +15,24 @@
   each (one process, `<NAME>_WORKER_PROCESSES`, `_MEMORY` and `_CPUS` to
   tune, bind-mounted in dev). Before, a plugin could register a queue that
   nothing ran: jobs sat queued until their record expired.
+- **Meetings: the calendar.** A month of every agent's calendar in Overseer
+  (Meetings > Calendar), on the Meetings page (the invites the viewer is on,
+  or every one without auth) and in the Flet dashboard: whole weeks, today
+  marked, each meeting in its agent's color with where it stands, moved a
+  month at a time or filtered to one agent; a meeting the agent was sent into
+  opens. Times are the viewer's: the browser sends its time zone in a `tz`
+  cookie (`viewer_zone`, and `SectionRequest.zone` for Overseer sections).
+  Read by `GET /api/v1/meetings/admin/calendar`.
+- **Meetings: settings in Overseer.** `MEETINGS_JOIN_FROM_CALENDAR` (on: agents
+  join the meetings on their calendars) and `MEETINGS_KEEP_AUDIO_DIR` are
+  `Configurable`, so Overseer > Meetings has a Settings tab. The card macro
+  takes `hover=False` for a card whose parts light up on their own.
+- **Meetings: invite the agent, it comes.** Each minute, every meeting on an
+  agent's calendar that is starting (with a link the bot joins, not
+  cancelled, not over) has the agent sent in, once, even if that meeting is
+  then deleted, owned by the first on the invite with an account here, the
+  organizer first; nobody's when no one has. What the bot joins is one rule
+  (`JOINS`), shared by the bot and the calendar.
 - **Meetings: each agent's calendar.** An agent's Google Calendar, by its
   secret iCal address (`MEETINGS_BOT_CALENDAR_SECRET`, another agent's under
   `__<NAME>`), is read every minute by the scheduler and kept as one row per

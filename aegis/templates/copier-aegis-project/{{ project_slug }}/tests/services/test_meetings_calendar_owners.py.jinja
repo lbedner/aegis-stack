@@ -1,0 +1,32 @@
+{% if include_auth -%}
+"""Who owns a meeting an agent joins from its calendar (``send_due``)."""
+
+import pytest
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.services.meetings.domains.calendar.service import read_calendars, send_due
+from app.services.meetings.models import Meeting
+from tests._meetings import STANDUP, Calendar, at, hold_the_bot
+
+
+@pytest.mark.queryspy(allow_n_plus_one=True)  # one send after another
+async def test_the_meeting_is_whoevers_invite_it_is(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch, user_factory
+) -> None:
+    """Nobody pressed send, so it is the first on the invite with an
+    account here, the organizer first."""
+    hold_the_bot(monkeypatch)
+    calendar = Calendar(monkeypatch, STANDUP)
+    await read_calendars(async_db_session, calendar.read, at(18, 0))
+    attendee = await user_factory(email="leo@example.com")
+
+    [first] = await send_due(async_db_session, at(19, 13))
+    organizer = await user_factory(email="dana@example.com")
+    [second] = await send_due(async_db_session, at(21, 13))
+
+    owners = [
+        (await async_db_session.get(Meeting, sent)).owner_user_id  # type: ignore[union-attr]
+        for sent in (first, second)
+    ]
+    assert owners == [attendee.id, organizer.id]
+{% endif %}

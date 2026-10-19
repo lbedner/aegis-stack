@@ -4,6 +4,7 @@ pace, and the call it opens; and the meetings those tests read."""
 import base64
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from importlib.util import find_spec
 from typing import Any
 from uuid import uuid4
@@ -17,7 +18,7 @@ from app.services.meetings import service as meetings_service
 from app.services.meetings.audio import RATE
 from app.services.meetings.domains.notes.service import keep_notes
 from app.services.meetings.domains.people.kept import guides_of, keep_guide
-from app.services.meetings.login import LOGIN
+from app.services.meetings.login import CALENDAR, LOGIN
 from app.services.meetings.models import (
     ActionItem,
     Caption,
@@ -36,6 +37,7 @@ from app.services.meetings.service import (
     transition,
     write_captions,
 )
+from tests._secret_settings import use_store
 from tests._session import opens
 
 MEET = "https://meet.google.com/abc-defg-hij"
@@ -279,3 +281,49 @@ def record(meeting: Meeting | None = None, **fields: Any) -> MeetingRecord:
         "can_rewrite": False,
     }
     return MeetingRecord(meeting=meeting, **(read | fields))
+
+
+# A week of a daily standup, the first time Monday 2026-10-19 at 9:00 in
+# New York (13:00 UTC), with its organizer, one attendee and its Meet link.
+STANDUP = f"""
+UID:standup@google.com
+DTSTART;TZID=America/New_York:20261019T090000
+DTEND;TZID=America/New_York:20261019T091500
+RRULE:FREQ=DAILY;COUNT=3
+SUMMARY:Standup
+ORGANIZER;CN=Dana:mailto:dana@example.com
+ATTENDEE;CN=Leo;PARTSTAT=ACCEPTED:mailto:Leo@Example.com
+X-GOOGLE-CONFERENCE:{MEET}
+"""
+
+
+def at(day: int, hour: int, minute: int = 0, second: int = 0) -> datetime:
+    """A moment in October 2026, UTC."""
+    return datetime(2026, 10, day, hour, minute, second, tzinfo=UTC)
+
+
+def feed(*events: str) -> str:
+    """A calendar as Google's iCal feed has it, of ``events`` (each the
+    lines inside one VEVENT)."""
+    body = "".join(f"BEGIN:VEVENT\n{event.strip()}\nEND:VEVENT\n" for event in events)
+    return f"BEGIN:VCALENDAR\nVERSION:2.0\n{body}END:VCALENDAR\n"
+
+
+class Calendar:
+    """An agent's calendar for a test: its address kept under ``secret``,
+    reading as ``events`` until ``shows`` changes them, or raising what
+    ``ics`` is set to."""
+
+    def __init__(
+        self, monkeypatch: pytest.MonkeyPatch, *events: str, secret: str = CALENDAR
+    ) -> None:
+        use_store(monkeypatch).values[secret] = f"https://calendar/{secret}"
+        self.ics: str | Exception = feed(*events)
+
+    def shows(self, *events: str) -> None:
+        self.ics = feed(*events)
+
+    async def read(self, url: str) -> str:
+        if isinstance(self.ics, Exception):
+            raise self.ics
+        return self.ics

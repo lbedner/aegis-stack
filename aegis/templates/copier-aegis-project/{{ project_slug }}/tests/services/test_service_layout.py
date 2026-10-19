@@ -27,7 +27,6 @@ LOOSE = "parts.domains"
 # Modules each service still keeps loose beside its standard files, held
 # the same way: lower an entry as its modules move into domains/.
 LOOSE_DEBT = {
-    "service:research": 1,  # registry: the plugin entry point
     "service:meetings": 6,  # landed after the domains move; ON-15
 }
 

@@ -6,6 +6,7 @@ from typing import Any
 from sqlmodel import select
 
 from app.core.time import utcnow
+from app.services.payment.adapters.providers.base import WebhookEvent
 from app.services.payment.constants import (
     TransactionStatus,
     TransactionType,
@@ -14,7 +15,6 @@ from app.services.payment.domains.base import (
     PaymentServiceBase,
     _ts_to_naive,
 )
-from app.services.payment.domains.providers.base import WebhookEvent
 from app.services.payment.domains.webhooks.events import (
     StripeInvoice,
 )

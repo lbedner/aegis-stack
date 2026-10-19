@@ -51,7 +51,7 @@ class RefundsMixin(PaymentServiceBase):
         if txn.provider_transaction_id.startswith(("pi_fake_", "ch_fake_", "re_fake_")):
             from uuid import uuid4
 
-            from app.services.payment.domains.providers.base import RefundResult
+            from app.services.payment.adapters.providers.base import RefundResult
 
             refund_amount = amount if amount is not None else txn.amount
             fake_suffix = txn.provider_transaction_id.split("_", 2)[-1]

@@ -32,6 +32,9 @@ FILES = {
         "        self.store = store\n"
         "    async def get(self) -> None:\n"
         "        return None\n"
+        "    @property\n"
+        "    def backup(self) -> Store:\n"
+        "        return Store()\n"
     ),
     "app/services/blog/models.py": (
         "from sqlmodel import SQLModel\n"
@@ -59,12 +62,14 @@ def test_a_method_is_the_classes_own_or_a_project_bases(source: Source) -> None:
 
 
 def test_an_attribute_has_the_class_it_is_given(source: Source) -> None:
-    """In ``__init__`` from an annotated parameter kept on ``self``, or
-    annotated in the class body; a library's class is not followed."""
+    """In ``__init__`` from an annotated parameter kept on ``self``,
+    annotated in the class body, or a property's return; a library's class
+    is not followed."""
     service = (SERVICE, "BlogService")
     store = ("app.services.blog.store", "Store")
     assert source.attribute(service, "store") == store
     assert source.attribute(service, "log") == store
+    assert source.attribute(service, "backup") == store
     assert source.attribute(service, "db") is None
 
 

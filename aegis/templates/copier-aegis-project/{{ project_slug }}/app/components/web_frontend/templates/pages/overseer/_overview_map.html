@@ -10,7 +10,7 @@
 {% from "components/macros/layout.html" import chip, health_badge, hint_panel, status_dot %}
 {% from "components/macros/icons.html" import icon %}
 {% from "pages/overseer/_glance_macros.html" import cause, figures %}
-{% from "pages/overseer/_macros.html" import line_link %}
+{% from "pages/overseer/_macros.html" import line_link, todos %}
 {# A node's name, linking to its page; plain for what has none: a piece of
    a service opened up in full, an outside provider muted. #}
 {% macro node_title(node, size="") -%}
@@ -98,8 +98,7 @@
       {% if node.todo %}<span data-to-fix data-tone="{{ node.todo_tone }}" class="toned text-xxs font-semibold">{{ node.todo_count }} to fix</span>{% endif %}
       {% call hint_panel("data-hint", ("right-0" if node.hint_end else "left-0") ~ " " ~ ("bottom-full pb-1.5" if node.hint_above else "top-full pt-1.5") ~ " group-hover:block") %}{{ node.message|message }}{% if node.holds %}
           <ul data-holds class="mt-1 font-mono text-aegis-text">{% for held in node.holds %}<li class="truncate">{% if held.url %}<a data-held="{{ held.name }}" href="{{ held.url }}" {{ hx_replace(held.url, map_target) }} class="hover:text-aegis-teal">{{ held.name }}</a>{% else %}{{ held.name }}{% endif %}</li>{% endfor %}{% if node.holds_more %}<li class="text-aegis-muted">{{ node.holds_more }} more</li>{% endif %}</ul>{% endif %}{% if node.reaches %}<span class="block">Uses {{ node.reaches|join(", ") }}</span>{% endif %}{% if node.note %}<span class="block">{{ node.note }}</span>{% endif %}{{ cause(node) }}
-          {% for todo in node.todo or [] %}<div data-todo class="mt-1"><p data-tone="{{ todo.tone }}" class="toned">{{ todo.action }}</p>
-            <ul class="mt-0.5 space-y-0.5">{% for place in todo.places %}<li class="break-words">{{ line_link(place.path, place.line) }} <span class="text-aegis-muted">{{ place.note }}</span></li>{% endfor %}</ul></div>{% endfor %}
+          {{ todos(node.todo) }}
           {% for fix in node.fix or [] %}<button type="button" data-fix data-write {{ hx_dialog(fix.url) }} class="mt-1 block text-aegis-teal hover:underline">Set {{ fix.name }}</button>{% endfor %}{% endcall %}
     </section>
     {% else %}

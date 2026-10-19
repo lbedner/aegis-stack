@@ -42,6 +42,11 @@
 {# A line of the project's source, linked to it in Overseer > Code:
    ``app/core/storage.py:36`` (``overseer_code.line_url``). #}
 {% macro line_link(path, line) %}{{ code_link(line_url(path, line), path ~ ":" ~ line) }}{% endmacro %}
+{# What to fix of a part (``overseer_conformance.todos``): each finding's
+   action, and every place it points at, linked to its line with what is
+   there. The map's hover and the Patterns page read the same list. #}
+{% macro todos(items) %}{% for todo in items or [] %}<div data-todo class="mt-1"><p data-tone="{{ todo.tone }}" class="toned">{{ todo.action }}</p>
+  <ul class="mt-0.5 space-y-0.5">{% for place in todo.places %}<li class="break-words">{{ line_link(place.path, place.line) }} <span class="text-aegis-muted">{{ place.note }}</span></li>{% endfor %}</ul></div>{% endfor %}{% endmacro %}
 
 {# A module of the app's own, linked to its file in Overseer > Code
    (``overseer_code.module_url``); a library's stays text. #}

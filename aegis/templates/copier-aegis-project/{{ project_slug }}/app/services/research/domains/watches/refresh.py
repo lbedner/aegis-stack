@@ -24,6 +24,11 @@ from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.time import utcnow
+from app.services.research.domains.sources.registry import (
+    SourceItem,
+    source_for,
+    validated,
+)
 from app.services.research.models import (
     ResearchItem,
     ResearchItemSnapshot,
@@ -31,7 +36,6 @@ from app.services.research.models import (
     ResearchNumbers,
     ResearchWatch,
 )
-from app.services.research.registry import SourceItem, source_for, validated
 
 logger = logging.getLogger(__name__)
 

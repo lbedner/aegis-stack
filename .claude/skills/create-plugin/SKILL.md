@@ -41,7 +41,7 @@ In the plugin repository (created by `aegis plugins create <name>`):
   - `scheduled_jobs.py`: `JOBS`, a tuple of `ServiceJob` (`app.core.schedule`).
   - `tools.py`: `register_tool(...)` calls (`app.core.tools`), for agents and
     MCP clients.
-  - `sources.py`: `register_source(...)` (`app.services.research.registry`),
+  - `sources.py`: `register_source(...)` (`app.services.research.service`),
     for a research source.
 - `src/aegis_stack_<name>/templates/{{ project_slug }}/tests/`: the template's
   tests, which run inside a generated project.

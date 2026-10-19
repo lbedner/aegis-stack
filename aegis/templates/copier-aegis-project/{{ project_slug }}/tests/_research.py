@@ -8,8 +8,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from app.services.research import registry
-from app.services.research.registry import Source, SourceItem
+from app.services.research.domains.sources import registry
+from app.services.research.domains.sources.registry import Source, SourceItem
 
 
 class FakeQuery(BaseModel):

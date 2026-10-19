@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from app.services.payment.adapters.providers.base import CatalogEntry
 from app.services.payment.constants import PriceInterval, PriceType
 from app.services.payment.domains.catalog import cache as catalog_module
 from app.services.payment.domains.catalog.cache import (
@@ -21,7 +22,6 @@ from app.services.payment.domains.catalog.cache import (
     get_catalog,
     invalidate_catalog_cache,
 )
-from app.services.payment.domains.providers.base import CatalogEntry
 
 # ---------------------------------------------------------------------------
 # CatalogEntry edge validation
@@ -215,7 +215,7 @@ class TestStripeListCatalogMapping:
 
     @pytest.mark.asyncio
     async def test_empty_when_api_key_missing(self) -> None:
-        from app.services.payment.domains.providers.stripe import StripeProvider
+        from app.services.payment.adapters.providers.stripe import StripeProvider
 
         provider = StripeProvider()
         provider._api_key = AsyncMock(return_value="")  # type: ignore[method-assign]
@@ -223,8 +223,8 @@ class TestStripeListCatalogMapping:
 
     @pytest.mark.asyncio
     async def test_maps_recurring_and_one_time(self) -> None:
-        from app.services.payment.domains.providers import stripe as stripe_mod
-        from app.services.payment.domains.providers.stripe import StripeProvider
+        from app.services.payment.adapters.providers import stripe as stripe_mod
+        from app.services.payment.adapters.providers.stripe import StripeProvider
 
         provider = StripeProvider()
         provider._api_key = AsyncMock(return_value="sk_test_fake")  # type: ignore[method-assign]
@@ -254,8 +254,8 @@ class TestStripeListCatalogMapping:
 
     @pytest.mark.asyncio
     async def test_skips_archived_products_and_tiered_prices(self) -> None:
-        from app.services.payment.domains.providers import stripe as stripe_mod
-        from app.services.payment.domains.providers.stripe import StripeProvider
+        from app.services.payment.adapters.providers import stripe as stripe_mod
+        from app.services.payment.adapters.providers.stripe import StripeProvider
 
         provider = StripeProvider()
         provider._api_key = AsyncMock(return_value="sk_test_fake")  # type: ignore[method-assign]

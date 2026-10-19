@@ -16,17 +16,25 @@ from sqlalchemy import ColumnElement, case, delete, func, or_
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.services.research.domains.sources.registry import (
+    Source,
+    SourceItem,
+    UnknownSourceError,
+    installed_sources,
+    register_source,
+    source_for,
+    validated,
+)
+from app.services.research.domains.watches.refresh import (
+    refresh_every_watch,
+    refresh_watches,
+)
 from app.services.research.models import (
     ResearchItem,
     ResearchItemSnapshot,
     ResearchMatch,
     ResearchWatch,
 )
-from app.services.research.domains.watches.refresh import (
-    refresh_every_watch,
-    refresh_watches,
-)
-from app.services.research.registry import source_for, validated
 from app.services.shared.queries import owner_filters
 
 # The most one search returns.
@@ -35,9 +43,14 @@ MAX_RESULTS = 200
 
 __all__ = [
     "ResearchService",
+    "Source",
     "SourceFailedError",
+    "SourceItem",
+    "UnknownSourceError",
     "WatchNotFoundError",
+    "installed_sources",
     "refresh_every_watch",
+    "register_source",
 ]
 
 

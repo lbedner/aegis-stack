@@ -183,44 +183,6 @@ def body(func: Any) -> list[ast.stmt] | None:
     return statements
 
 
-def _resolve(node: ast.expr, scope: dict[str, Any]) -> list[object]:
-    """Each object along a dotted call target (``job.func`` gives the job
-    and its ``func``), as far as it resolves."""
-    parts: list[str] = []
-    while isinstance(node, ast.Attribute):
-        parts.append(node.attr)
-        node = node.value
-    if not isinstance(node, ast.Name) or node.id not in scope:
-        return []
-    chain = [scope[node.id]]
-    for name in reversed(parts):
-        chain.append(getattr(chain[-1], name, None))
-    return chain
-
-
-def calls_service(func: Any) -> bool:
-    """The function calls a service: a module, function or class from
-    ``app.services``, reached by name, attribute or a lazy import."""
-    statements = body(func)
-    if statements is None:
-        return False
-    try:
-        names = inspect.getclosurevars(func)
-    except TypeError:
-        return False
-    scope = {**names.globals, **names.nonlocals}
-    for node in ast.walk(ast.Module(body=statements, type_ignores=[])):
-        if isinstance(node, ast.ImportFrom) and (node.module or "").startswith(
-            SERVICE_PACKAGE
-        ):
-            return True
-        if isinstance(node, ast.Call) and any(
-            from_services(obj) for obj in _resolve(node.func, scope)
-        ):
-            return True
-    return False
-
-
 def _logs(statement: ast.stmt) -> bool:
     """A bare ``logger.<level>(...)`` line: not work."""
     call = statement.value if isinstance(statement, ast.Expr) else None
@@ -286,7 +248,13 @@ def _injects_service(route: APIRoute) -> bool:
 
 
 def _uses_service(route: APIRoute) -> bool:
-    return _injects_service(route) or calls_service(route.endpoint)
+    """It is handed a service, or its handler's dry path reaches one (a
+    dependency living in a service, auth's current user, is not its own)."""
+    from .dry_path import entry_of, reaches_service  # the walk reads this module
+
+    return _injects_service(route) or reaches_service(
+        entry_of(route.endpoint, label(route))
+    )
 
 
 def _thin_route(route: APIRoute) -> bool:

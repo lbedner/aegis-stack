@@ -152,3 +152,23 @@ def test_the_parts_section_says_what_is_exempt_and_why(client: TestClient) -> No
     html = _get(client, "parts")
     exempt = select(html, "#pattern-exemptions [data-exemption]")
     assert exempt and all(text(one(e, "[data-why]")) for e in exempt)
+
+
+def test_each_part_lists_its_places_to_fix_as_the_map_does(
+    client: TestClient,
+) -> None:
+    """The map's hover and this page read one list (``conformance.todos``):
+    each finding's action, and every place it points at, linked to its line
+    with what is there."""
+    from app.services.system import pattern_findings, service_parts
+
+    found = pattern_findings.findings(service_parts.report())
+    html = _get(client, "parts")
+    todos = select(html, "[data-todo]")
+    assert len(todos) == len(found)
+    listed = [text(t) for t in todos]
+    for finding in found:  # each listed with its action and every place
+        places = [f"{path}:" for path in finding.files]
+        assert any(
+            finding.action in t and all(p in t for p in places) for t in listed
+        ), finding.check

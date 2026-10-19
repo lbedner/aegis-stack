@@ -13,12 +13,12 @@ import types
 import typing
 from typing import Any
 
+from app.services.system.dry_path import entry_of, reaches_service
 from app.services.system.patterns import (
     THIN_STATEMENTS,
     Pattern,
     Rule,
     Step,
-    calls_service,
     returns,
     statement_count,
     thin,
@@ -92,7 +92,8 @@ def _json_result(task: Task) -> bool:
 
 
 def _uses_service(task: Task) -> bool:
-    return calls_service(task.func)
+    """Its dry path reaches a service."""
+    return reaches_service(entry_of(task.func, task.name))
 
 
 def _rank(task: Task) -> tuple[bool, int]:

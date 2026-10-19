@@ -15,7 +15,7 @@ from app.core import secrets
 from app.core.secrets import Secret, probe
 
 from app.services.payment.constants import PriceType
-from app.services.payment.domains.providers.base import (
+from app.services.payment.adapters.providers.base import (
     BasePaymentProvider,
     CatalogEntry,
     CheckoutResult,

@@ -1,7 +1,6 @@
 """The payment service's logic, a package each, its mixins composed into
 ``PaymentService`` on the state they share (``base``):
 
-- ``providers``: the vendor adapter (Stripe), behind one interface
 - ``charges``: refunds and disputes, money moving after a charge
 - ``subscriptions``: listing, re-planning and cancelling one
 - ``webhooks``: what Stripe reports (checkout, charges, invoices, the

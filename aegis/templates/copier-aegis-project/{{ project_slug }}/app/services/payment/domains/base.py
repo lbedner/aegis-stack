@@ -9,10 +9,10 @@ from typing import TYPE_CHECKING, Any
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.services.payment.adapters.providers.base import BasePaymentProvider
 from app.services.payment.constants import (
     DisputeStatus,
 )
-from app.services.payment.domains.providers.base import BasePaymentProvider
 
 
 def _ts_to_naive(value: int | None) -> datetime | None:

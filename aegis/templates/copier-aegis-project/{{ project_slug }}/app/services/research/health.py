@@ -4,8 +4,7 @@ failure here is reported by the health walk itself."""
 
 from app.core.db import get_async_session
 from app.core.formatting import counted
-from app.services.research.registry import installed_sources
-from app.services.research.service import research_counts
+from app.services.research.service import installed_sources, research_counts
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
 RESEARCH_COMPONENT_NAME = "research"

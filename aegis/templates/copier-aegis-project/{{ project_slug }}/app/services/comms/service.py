@@ -2,7 +2,7 @@
 one way in: callers outside the service import from here, never from
 ``domains``."""
 
-from app.services.comms.domains.email.messages import (
+from app.services.comms.adapters.resend.messages import (
     EmailConfigurationError,
     EmailError,
     get_email_status,

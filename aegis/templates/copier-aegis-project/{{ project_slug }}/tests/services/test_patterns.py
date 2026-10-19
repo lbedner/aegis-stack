@@ -125,3 +125,19 @@ class TestDiagram:
         for step in ROUTE.steps:
             if step.follows and (step.applies is None or step.applies(route)):
                 assert step.follows(route), step.label
+
+
+def test_a_dependency_living_in_a_service_is_not_its_service() -> None:
+    """A guard the route depends on (auth's current user) sits in a
+    service, but the handler still does its own work."""
+    from fastapi import Depends
+
+    from app.core.time import utcnow
+    from app.services.system.health import invalidate_status_cache
+
+    app = FastAPI()
+    guard = [Depends(invalidate_status_cache)]
+    app.add_api_route("/api/v1/now", utcnow, dependencies=guard)
+    report = patterns.report(ROUTE, app.routes)
+    service = next(s for s in report.steps if s.label == "Service")
+    assert service.followed == 0

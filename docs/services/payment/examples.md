@@ -283,7 +283,7 @@ Both patterns keep the base-class persistence and dispatch intact.
 
 The service is designed for multi-provider support. To add Paddle, PayPal, or any other:
 
-1. Create `app/services/payment/domains/providers/paddle.py` (or similar) implementing `BasePaymentProvider`.
+1. Create `app/services/payment/adapters/providers/paddle.py` (or similar) implementing `BasePaymentProvider`.
 2. Register it in `PaymentService._get_provider()` based on a new `PAYMENT_PROVIDER` env var.
 3. Add its env vars to `app/core/config.py` and `.env.example`.
 

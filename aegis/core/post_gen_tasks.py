@@ -410,7 +410,7 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
     if ai_backend == StorageBackends.MEMORY:
         remove_file(project_path, "app/models/conversation.py")
         # Remove LLM tracking models (only needed with persistence)
-        # Keep app/services/ai/models/__init__.py - contains core types (AIProvider, ProviderConfig)
+        # Keep ai/models/__init__.py, providers.py and conversation.py: core types
         remove_dir(project_path, "app/services/ai/models/llm")
         # The active-model selector reads the LLM tables removed above.
         remove_file(project_path, "app/services/ai/domains/llm/active_model.py")

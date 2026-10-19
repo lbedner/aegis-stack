@@ -1,6 +1,6 @@
 """The service's logic, a package each:
 
-- ``email``: sending through Resend, and its sender settings
-- ``telephony``: SMS and voice calls through Twilio, and the client both share
+- ``telephony``: SMS and voice calls, through the Twilio client
+  (``adapters.twilio``); email is ``adapters.resend``
 - ``inbound``: what Resend and Twilio send back (delivery events, replies)
 """

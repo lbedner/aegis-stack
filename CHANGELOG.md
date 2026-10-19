@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-10-19
+
 ### Added
 
 - **Meetings: what keeps coming up.** An owner's meetings on one link are a

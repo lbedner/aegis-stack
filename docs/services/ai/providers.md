@@ -318,7 +318,7 @@ my-app llm current
 ### "Missing API key" Error
 
 ```bash
-❌ Missing API key for groq provider. Set GROQ_API_KEY environment variable.
+Missing API key for groq provider. Set GROQ_API_KEY environment variable.
 ```
 
 **Solution:** Add the API key to your `.env` file:

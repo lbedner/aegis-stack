@@ -210,28 +210,28 @@ my-app comms status
 Expected output:
 
 ```
-📧 Communications Service Status
+Communications Service Status
 ==================================================
 
-📨 Email (Resend)
-  Status: ✅ Configured
-  API Key: ✅ Set
+Email (Resend)
+  Status: Configured
+  API Key: Set
   From Email: onboarding@resend.dev
 
-📱 SMS (Twilio)
-  Status: ✅ Configured
-  Account SID: ✅ Set
-  Auth Token: ✅ Set
+SMS (Twilio)
+  Status: Configured
+  Account SID: Set
+  Auth Token: Set
   Phone Number: +15551234567
 
-📞 Voice (Twilio)
-  Status: ✅ Configured
-  Account SID: ✅ Set
-  Auth Token: ✅ Set
+Voice (Twilio)
+  Status: Configured
+  Account SID: Set
+  Auth Token: Set
   Phone Number: +15551234567
 
 ==================================================
-📊 3/3 services configured
+3/3 services configured
 ```
 
 ## Complete Test

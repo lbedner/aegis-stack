@@ -30,22 +30,22 @@ The **Communications Service** provides email, SMS, and voice call capabilities 
 ```mermaid
 graph TB
     subgraph "Communications Service"
-        CommsService["📧 Comms Service<br/>Email, SMS, Voice"]
+        CommsService["Comms Service<br/>Email, SMS, Voice"]
 
-        CLI["💻 CLI Interface<br/>comms email, sms, call"]
-        API["🌐 REST API<br/>/comms/email, /comms/sms, /comms/call"]
+        CLI["CLI Interface<br/>comms email, sms, call"]
+        API["REST API<br/>/comms/email, /comms/sms, /comms/call"]
 
         subgraph "Providers"
-            Resend["📨 Resend<br/>Email API"]
-            Twilio["📱 Twilio<br/>SMS & Voice"]
+            Resend["Resend<br/>Email API"]
+            Twilio["Twilio<br/>SMS & Voice"]
         end
     end
 
-    Backend["⚡ Backend Component<br/>FastAPI"]
+    Backend["Backend Component<br/>FastAPI"]
 
     subgraph "Worker Component"
-        ArqQueues["📋 arq Queues<br/>Background Jobs"]
-        Redis[("🔴 Redis<br/>Queue Storage")]
+        ArqQueues["arq Queues<br/>Background Jobs"]
+        Redis[("Redis<br/>Queue Storage")]
     end
 
     CommsService --> CLI

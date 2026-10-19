@@ -73,6 +73,7 @@ uvx aegis-stack init full-app --services auth,payment,comms --components worker,
 | **[CLI](https://docs.aegis-stack.io/cli-reference/)** | Typer, first-class system interface | ![Always](https://img.shields.io/badge/-always_on-2ea043) |
 | **[Frontend](https://docs.aegis-stack.io/components/frontend/)** | Flet, ships with the Overseer system dashboard | ![Always](https://img.shields.io/badge/-always_on-2ea043) |
 | **[Web Frontend](https://docs.aegis-stack.io/components/web-frontend/)** | Server-rendered pages at `/`: Jinja2 + htmx + Alpine, Tailwind/DaisyUI styling | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Browser](https://docs.aegis-stack.io/components/browser/)** | Remote Chromium in its own container, driven over Playwright: JavaScript pages, sign-ins, a bot that joins a meeting | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[Cache](https://docs.aegis-stack.io/components/)** | Redis for caching, sessions, pub/sub | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[Database](https://docs.aegis-stack.io/components/database/)** | Postgres (self-hosted or Neon serverless) or SQLite + SQLModel ORM | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[Inference](https://docs.aegis-stack.io/components/)** | Local AI models via Ollama | ![Optional](https://img.shields.io/badge/-optional-blue) |
@@ -96,6 +97,7 @@ uvx aegis-stack init full-app --services auth,payment,comms --components worker,
 | **[Comms](https://docs.aegis-stack.io/services/comms/)** | Transactional email (Resend) + SMS / voice (Twilio) | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[Documents](https://docs.aegis-stack.io/services/documents/)** | Content-addressed document store, deduped, with page-addressed extraction | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[Insights](https://docs.aegis-stack.io/services/insights/)** | Adoption metrics across GitHub, PyPI, Plausible, Reddit | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Meetings](https://docs.aegis-stack.io/services/meetings/)** | A bot that joins Google Meet as its own agent: transcript, notes, threads, people, what keeps coming up, joined from its calendar (experimental) | ![Optional](https://img.shields.io/badge/-optional-blue) |
 | **[Payments](https://docs.aegis-stack.io/services/payment/)** | Stripe checkout, subscriptions, refunds, disputes | ![Optional](https://img.shields.io/badge/-optional-blue) |
 
 [Services Docs →](https://docs.aegis-stack.io/services/)

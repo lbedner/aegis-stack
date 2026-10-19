@@ -65,12 +65,12 @@ def create_scheduler() -> AsyncIOScheduler:
         # Database available - use persistent store
         jobstore = SQLAlchemyJobStore(engine=engine, tablename='apscheduler_jobs')
         scheduler = AsyncIOScheduler(jobstores={'default': jobstore})
-        logger.info("📊 Scheduler using database for job persistence")
+        logger.info("Scheduler using database for job persistence")
         
     except ImportError:
         # No database - use memory store
         scheduler = AsyncIOScheduler()
-        logger.info("🕒 Scheduler running in memory mode")
+        logger.info("Scheduler running in memory mode")
 ```
 
 ### Automatic Backup Job

@@ -24,7 +24,7 @@ aegis --verbose add scheduler
 aegis -v remove worker
 
 # Incorrect: Global flag after command (will fail)
-aegis init my-project --verbose  ❌
+aegis init my-project --verbose
 ```
 
 **What --verbose Shows:**
@@ -544,19 +544,19 @@ aegis update --force --yes
 
 **What Gets Updated:**
 
-- ✅ Template infrastructure files
-- ✅ Shared files (docker-compose.yml, pyproject.toml, Makefile)
-- ✅ Component implementations (if unmodified)
-- ✅ Test infrastructure
-- ✅ Documentation templates
+- Template infrastructure files
+- Shared files (docker-compose.yml, pyproject.toml, Makefile)
+- Component implementations (if unmodified)
+- Test infrastructure
+- Documentation templates
 
 **What's Preserved:**
 
-- ✅ Your custom business logic
-- ✅ Your environment variables (.env)
-- ✅ Your database migrations
-- ✅ Your custom models and services
-- ✅ Files you've modified (marked as conflicts)
+- Your custom business logic
+- Your environment variables (.env)
+- Your database migrations
+- Your custom models and services
+- Files you've modified (marked as conflicts)
 
 **Important Notes:**
 

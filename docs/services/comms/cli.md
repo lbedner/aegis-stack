@@ -21,28 +21,28 @@ my-app comms status
 **Output**
 
 ```
-📧 Communications Service Status
+Communications Service Status
 ==================================================
 
-📨 Email (Resend)
-  Status: ✅ Configured
-  API Key: ✅ Set
+Email (Resend)
+  Status: Configured
+  API Key: Set
   From Email: noreply@example.com
 
-📱 SMS (Twilio)
-  Status: ✅ Configured
-  Account SID: ✅ Set
-  Auth Token: ✅ Set
+SMS (Twilio)
+  Status: Configured
+  Account SID: Set
+  Auth Token: Set
   Phone Number: +15551234567
 
-📞 Voice (Twilio)
-  Status: ✅ Configured
-  Account SID: ✅ Set
-  Auth Token: ✅ Set
+Voice (Twilio)
+  Status: Configured
+  Account SID: Set
+  Auth Token: Set
   Phone Number: +15551234567
 
 ==================================================
-📊 3/3 services configured
+3/3 services configured
 ```
 
 ## Email Commands
@@ -91,9 +91,9 @@ my-app comms email send 'user@example.com' --subject 'Important' --text 'Plain t
 **Output**
 
 ```
-📧 Sending email...
+Sending email...
 
-✅ Email sent successfully!
+Email sent successfully!
    ID: email-123456
    To: user@example.com
    Status: sent
@@ -138,9 +138,9 @@ my-app comms sms send '+15559876543' 'This is a longer message that will be spli
 **Output**
 
 ```
-📱 Sending SMS...
+Sending SMS...
 
-✅ SMS sent successfully!
+SMS sent successfully!
    SID: SM1234567890abcdef
    To: +15559876543
    Status: sent
@@ -156,10 +156,10 @@ Phone numbers must be in E.164 format:
 
 | Format | Valid |
 |--------|-------|
-| `+15551234567` | ✅ |
-| `+44201234567` | ✅ |
-| `555-123-4567` | ❌ |
-| `(555) 123-4567` | ❌ |
+| `+15551234567` | Yes |
+| `+44201234567` | Yes |
+| `555-123-4567` | No |
+| `(555) 123-4567` | No |
 
 ## Voice Call Commands
 
@@ -201,9 +201,9 @@ my-app comms call make '+15559876543' 'https://yourapp.com/twiml/greeting' --tim
 **Output**
 
 ```
-📞 Initiating call...
+Initiating call...
 
-✅ Call initiated successfully!
+Call initiated successfully!
    SID: CA1234567890abcdef
    To: +15559876543
    Status: queued
@@ -236,18 +236,18 @@ my-app comms providers
 **Output**
 
 ```
-📡 Communication Providers
+Communication Providers
 ==================================================
 
-📨 Email Provider: Resend
+Email Provider: Resend
    Website: https://resend.com
    Docs: https://resend.com/docs
 
-📱 SMS Provider: Twilio
+SMS Provider: Twilio
    Website: https://twilio.com
    Docs: https://twilio.com/docs/sms
 
-📞 Voice Provider: Twilio
+Voice Provider: Twilio
    Website: https://twilio.com
    Docs: https://twilio.com/docs/voice
 ```
@@ -259,7 +259,7 @@ my-app comms providers
 If a service is not configured, you'll see:
 
 ```
-❌ Error: Email not configured
+Error: Email not configured
 
 Missing configuration:
   - RESEND_API_KEY is not set
@@ -272,7 +272,7 @@ Run 'my-app comms status' to see full configuration status.
 If the provider returns an error:
 
 ```
-❌ Error: SMS provider error
+Error: SMS provider error
 
 Twilio error: The 'To' number +15559876543 is not a valid phone number.
 
@@ -286,7 +286,7 @@ Check:
 If required arguments are missing:
 
 ```
-❌ Error: Missing required option
+Error: Missing required option
 
 Either --text or --html is required for email content.
 

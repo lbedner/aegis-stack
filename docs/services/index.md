@@ -11,21 +11,23 @@ Services are **business-level functionality** that your application provides to 
 ```mermaid
 graph TB
     subgraph "Services Layer (Business Logic)"
-        Auth["🔐 Auth Service<br/>JWT + User Management<br/>Registration, Login, Profiles"]
-        AI["🤖 AI Service<br/>PydanticAI Integration<br/>Multi-Provider Chat"]
-        Blog["📝 Blog Service<br/>Markdown Publishing<br/>Drafts, Tags, SEO"]
-        Comms["📧 Comms Service<br/>Email, SMS, Voice<br/>Resend + Twilio"]
-        Payment["💳 Payment Service<br/>Stripe Integration<br/>Checkout, Subscriptions"]
-        Insights["📊 Insights Service<br/>Adoption Metrics<br/>GitHub, PyPI, Plausible"]
+        Auth["Auth Service<br/>JWT + User Management<br/>Registration, Login, Profiles"]
+        AI["AI Service<br/>PydanticAI Integration<br/>Multi-Provider Chat"]
+        Blog["Blog Service<br/>Markdown Publishing<br/>Drafts, Tags, SEO"]
+        Comms["Comms Service<br/>Email, SMS, Voice<br/>Resend + Twilio"]
+        Payment["Payment Service<br/>Stripe Integration<br/>Checkout, Subscriptions"]
+        Insights["Insights Service<br/>Adoption Metrics<br/>GitHub, PyPI, Plausible"]
+        Meetings["Meetings Service<br/>Meeting Bot<br/>Transcript, Notes, Themes"]
     end
 
     subgraph "Components Layer (Infrastructure)"
-        Backend["⚡ Backend<br/>FastAPI Routes"]
-        Database["💾 Database<br/>SQLite / PostgreSQL"]
-        Worker["🔄 Worker<br/>arq / Dramatiq / TaskIQ"]
+        Backend["Backend<br/>FastAPI Routes"]
+        Database["Database<br/>SQLite / PostgreSQL"]
+        Worker["Worker<br/>arq / Dramatiq / TaskIQ"]
         Scheduler["⏰ Scheduler<br/>APScheduler"]
-        Observability["🔍 Observability<br/>Logfire"]
-        Cache["🗄️ Cache<br/>Redis Sessions<br/>🚧 Coming Soon"]
+        Observability["Observability<br/>Logfire"]
+        Browser["Browser<br/>Remote Chromium"]
+        Cache["Cache<br/>Redis Sessions<br/>Coming Soon"]
     end
 
     Auth --> Backend
@@ -38,6 +40,9 @@ graph TB
     Payment --> Database
     Insights --> Backend
     Insights --> Database
+    Meetings --> Backend
+    Meetings --> Database
+    Meetings --> Browser
 
 ```
 
@@ -109,28 +114,32 @@ graph LR
 
 ```mermaid
 graph TB
-    subgraph "🔐 Authentication Services"
+    subgraph "Authentication Services"
         AuthJWT["auth<br/>JWT + User Management"]
-        AuthOAuth["oauth<br/>🚧 Future: Social Login"]
-        AuthSAML["saml<br/>🚧 Future: Enterprise SSO"]
+        AuthOAuth["oauth<br/>Future: Social Login"]
+        AuthSAML["saml<br/>Future: Enterprise SSO"]
     end
 
-    subgraph "🤖 AI Services"
+    subgraph "AI Services"
         AIPydantic["ai<br/>PydanticAI Multi-Provider"]
-        AILangChain["ai_langchain<br/>🚧 Future: LangChain"]
+        AILangChain["ai_langchain<br/>Future: LangChain"]
     end
 
-    subgraph "📧 Notification Services"
+    subgraph "Notification Services"
         CommsService["comms<br/>Email, SMS, Voice"]
-        Push["push<br/>🚧 Future: Push Notifications"]
+        Push["push<br/>Future: Push Notifications"]
     end
 
-    subgraph "📊 Analytics Services"
+    subgraph "Analytics Services"
         InsightsService["insights<br/>GitHub, PyPI, Plausible, Reddit"]
     end
 
-    subgraph "📝 Content Services"
+    subgraph "Content Services"
         BlogService["blog<br/>Markdown Posts + Tags"]
+    end
+
+    subgraph "Meeting Services"
+        MeetingsService["meetings<br/>Google Meet Bot, Notes, Themes"]
     end
 
 ```
@@ -324,6 +333,7 @@ Services automatically appear in the health dashboard alongside components, prov
 - **[Communications Service](comms/index.md)** - Email, SMS, and voice via Resend/Twilio
 - **[Documents Service](documents/index.md)** - Content-addressed document store with page-addressed extraction
 - **[Insights Service](insights/index.md)** - Adoption metrics tracking (GitHub, PyPI, Plausible, Reddit) *(experimental)*
+- **[Meetings Service](meetings/index.md)** - A bot that joins Google Meet: transcript, notes, people and what keeps coming up *(experimental)*
 - **[Payment Service](payment/index.md)** - Payment processing with Stripe *(experimental)*
 - **[CLI Reference](../cli-reference.md)** - Service command reference
 - **[Components Overview](../components/index.md)** - Infrastructure layer

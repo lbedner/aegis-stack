@@ -256,7 +256,11 @@ async def store() -> AsyncGenerator[Any]:
     redis = pytest.importorskip("redis.asyncio")
     client = redis.from_url(url, socket_connect_timeout=1)
     repository = ErrorStore(
-        client, "test-" + uuid4().hex, max_occurrences=3, retention_seconds=7 * 86400
+        client,
+        "test-" + uuid4().hex,
+        max_occurrences=3,
+        retention_seconds=7 * 86400,
+        max_bytes=1 << 20,
     )
     yield repository
     keys = [key async for key in client.scan_iter(repository.prefix + "*")]

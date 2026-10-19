@@ -250,6 +250,14 @@
 
 ### Fixed
 
+- **The error store is bounded by bytes, not just by count.** It kept up to
+  10,000 occurrences of up to 64 KB each, more than the stack's 64 MB Redis,
+  and its keys carry no TTL, so `volatile-lru` could not evict them: an error
+  storm (one failing job retried across thousands of items) filled Redis and
+  every write in the app failed. The store now keeps a byte total and prunes
+  the oldest past `ERROR_TRACKING_MAX_BYTES` (16 MB); a store from before is
+  counted once. (#1743)
+
 - **Seeding the model catalog reads each table once**, not once per row:
   a voice stack's tests that seed it failed the N+1 gate.
 - **Overseer charts draw again.** A second page script's `mount()` replaced

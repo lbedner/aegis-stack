@@ -48,6 +48,12 @@ REDIS_KEYS = tuple(
             "Occurrence index per issue",
         ),
         (
+            PREFIX + "*:bytes",
+            "string",
+            "Error store size",
+            "Bytes the retained errors take",
+        ),
+        (
             PREFIX + "*:watermark",
             "string",
             "Error replay boundary",
@@ -93,6 +99,7 @@ class ErrorStore:
         *,
         max_occurrences: int,
         retention_seconds: int,
+        max_bytes: int,
     ) -> None:
         self.client = client
         namespace = sha256(stack.encode()).hexdigest()[:24]
@@ -100,6 +107,7 @@ class ErrorStore:
         self.notifications = f"aegis:events:errors:{namespace}"
         self.max_occurrences = max_occurrences
         self.retention_seconds = retention_seconds
+        self.max_bytes = max_bytes
         self._scripts: dict[str, Any] = {}
 
     def key(self, suffix: str) -> str:
@@ -129,6 +137,7 @@ class ErrorStore:
             self.prefix,
             now.timestamp() - self.retention_seconds,
             self.max_occurrences,
+            self.max_bytes,
         ]
 
     async def insert(self, event: ErrorOccurrence, *, token: str = "") -> InsertResult:
@@ -155,12 +164,11 @@ class ErrorStore:
 
     async def prune(self, *, now: datetime | None = None) -> int:
         arguments = self._arguments(now or datetime.now(UTC))
-        # Yield between atomic batches; no Lua invocation scans full history.
+        # Yield between atomic batches; only a store from before the bytes
+        # budget is scanned in full, once, to count it.
         for _ in range(80):
-            count, first = await self.run(scripts.PRUNE, [], arguments)
-            if int(count) <= self.max_occurrences and (
-                float(first) == -1 or float(first) >= float(arguments[1])
-            ):
+            count, done = await self.run(scripts.PRUNE, [], arguments)
+            if int(done):
                 return int(count)
         raise StoreUnavailableError(
             "Error retention cleanup backlog exceeded its bound"

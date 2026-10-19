@@ -11,7 +11,7 @@
 {% call page_header("Meetings", "Send the bot to a call, then read what came of it.") %}{% endcall %}
 <div class="grid gap-6">
   {% call card("Send the bot") %}{% include "pages/meetings/_send.html" %}{% endcall %}
-  {% call card(None, id="meetings-calendar", hover=False) %}{{ month(calendar) }}{% endcall %}
+  {% call card(None, id="meetings-calendar", hover=False) %}{{ month(calendar, "#meetings-calendar") }}{% endcall %}
   {% call card("Sent to") %}
   {{ data_table([
        {"key": "meeting", "label": "Meeting", "kind": "link"},

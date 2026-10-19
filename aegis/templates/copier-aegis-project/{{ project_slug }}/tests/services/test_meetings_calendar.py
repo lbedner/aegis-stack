@@ -3,6 +3,7 @@
 the link the agent joins by; and the agent sent into each as it starts."""
 
 from datetime import date, timedelta
+from typing import Any
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -10,6 +11,7 @@ from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.config import settings
+from app.core.time import month_days
 from app.services.meetings.domains.accounts import service as accounts
 from app.services.meetings.domains.calendar.entries import (
     CANCELLED,
@@ -17,8 +19,8 @@ from app.services.meetings.domains.calendar.entries import (
     MISSED,
     NO_LINK,
     UPCOMING,
+    chosen,
     entries_between,
-    month_days,
 )
 from app.services.meetings.domains.calendar.feed import meetings_between
 from app.services.meetings.domains.calendar.service import read_calendars, send_due
@@ -204,13 +206,17 @@ async def test_every_agents_calendar_between_two_days(
     await read_calendars(async_db_session, calendar.read, NOW)
     [sent] = await send_due(async_db_session, at(19, 13))
     new_york = ZoneInfo("America/New_York")
+    every = await accounts.agents(async_db_session)
 
-    week = await entries_between(
-        async_db_session, MONDAY, SUNDAY, new_york, now=at(21, 14)
-    )
+    def between(first: date = MONDAY, wanted: Any = None, **kw: Any) -> Any:
+        """The week (from ``first``), of ``wanted`` agents (every one)."""
+        agents = every if wanted is None else wanted
+        return entries_between(async_db_session, first, SUNDAY, new_york, agents, **kw)
+
+    week = await between(now=at(21, 14))
 
     assert [(e.starts_at.day, e.starts_at.hour, e.state) for e in week] == [
-        (19, 9, "Requested"),
+        (19, 9, MeetingStatus.REQUESTED),
         (20, 10, CANCELLED),
         (21, 9, MISSED),
         (22, 13, NO_LINK),
@@ -220,20 +226,10 @@ async def test_every_agents_calendar_between_two_days(
     assert {e.agent for e in week} == {accounts.DEFAULT_AGENT}
     assert week[0].color == week[4].color
     assert week[0].starts_at.tzinfo == new_york
-    later = await entries_between(
-        async_db_session, MONDAY, SUNDAY, new_york, now=at(19, 0)
-    )
-    assert later[2].state == UPCOMING
-    one_day = await entries_between(async_db_session, SUNDAY, SUNDAY, new_york)
-    assert one_day == []
-    assert (
-        await entries_between(async_db_session, MONDAY, SUNDAY, new_york, "work") == []
-    )
-    invited = await entries_between(
-        async_db_session, MONDAY, SUNDAY, new_york, email="leo@example.com"
-    )
+    assert week[3].title == "(No title)"
+    assert (await between(now=at(19, 0)))[2].state == UPCOMING
+    assert await between(SUNDAY) == []
+    assert await between(wanted=chosen(every, "work")) == []
+    invited = await between(email="leo@example.com")
     assert [e.title for e in invited] == ["Standup"] * 2
-    nobody = await entries_between(
-        async_db_session, MONDAY, SUNDAY, new_york, email="nobody@example.com"
-    )
-    assert nobody == []
+    assert await between(email="nobody@example.com") == []

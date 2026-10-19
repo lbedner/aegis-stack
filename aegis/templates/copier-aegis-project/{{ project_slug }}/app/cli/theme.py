@@ -14,6 +14,7 @@ they also work directly in Rich markup (``f"[{theme.ACCENT}]...[/]"``) and Rich
 table column styles (``style=theme.ACCENT``).
 """
 
+from collections.abc import Sequence
 from typing import Any, NoReturn
 
 import typer
@@ -124,6 +125,20 @@ def console() -> Any:
     from rich.console import Console
 
     return Console(highlight=False)
+
+
+def keyed_table(columns: Sequence[str], keys: Sequence[str]) -> Any:
+    """A borderless Rich ``Table`` whose first column holds ``keys``, the
+    names someone types back (a setting's, a secret's): never cut short,
+    however long the rest of a row; the other columns wrap instead."""
+    from rich.table import Table
+
+    table = Table(box=None, pad_edge=False)
+    widest = max((len(key) for key in keys), default=0)
+    table.add_column(columns[0], no_wrap=True, min_width=widest)
+    for column in columns[1:]:
+        table.add_column(column, overflow="fold")
+    return table
 
 
 def questionary_style() -> Any:

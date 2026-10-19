@@ -15,25 +15,20 @@ from typing import Any
 import flet as ft
 
 from app.components.frontend.controls import SecondaryText
-from app.components.frontend.controls.calendar import month_grid, shift_month
 from app.components.frontend.state.session_state import get_session_state
 from app.components.frontend.theme import AegisTheme as Theme
-from app.core.time import today
+from app.core.time import WEEKDAYS, month_days, month_grid, shift_month, today
+from app.services.meetings.domains.calendar.entries import state_label
 
 from .modal_sections import ChartColors, EmptyStatePlaceholder
 
 CALENDAR = "/api/v1/meetings/admin/calendar"
-WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
 
 def month_params(anchor: date) -> dict[str, str]:
     """The admin API's query for ``anchor``'s month: its whole weeks."""
-    weeks = month_grid(anchor.year, anchor.month)
-    return {
-        "first": weeks[0][0].isoformat(),
-        "last": weeks[-1][-1].isoformat(),
-        "tz": "UTC",
-    }
+    first, last = month_days(anchor)
+    return {"first": first.isoformat(), "last": last.isoformat(), "tz": "UTC"}
 
 
 def _start(entry: dict[str, Any]) -> datetime:
@@ -50,7 +45,7 @@ def by_day(entries: list[dict[str, Any]]) -> dict[date, list[dict[str, Any]]]:
 
 def entry_line(entry: dict[str, Any]) -> str:
     """One meeting as its day shows it: ``09:00 Standup``."""
-    return f"{_start(entry):%H:%M} {entry.get('title') or '(No title)'}"
+    return f"{_start(entry):%H:%M} {entry.get('title')}"
 
 
 class CalendarTab(ft.Container):
@@ -186,7 +181,7 @@ class CalendarTab(ft.Container):
                 max_lines=1,
                 overflow=ft.TextOverflow.ELLIPSIS,
             ),
-            tooltip=f"{entry.get('agent')}, {entry.get('state')}",
+            tooltip=f"{entry.get('agent')}, {state_label(str(entry.get('state')))}",
             border=ft.border.only(left=ft.BorderSide(3, color)),
             padding=ft.padding.only(left=4),
         )

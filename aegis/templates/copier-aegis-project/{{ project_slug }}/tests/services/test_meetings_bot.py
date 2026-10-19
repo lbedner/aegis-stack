@@ -144,6 +144,24 @@ async def test_it_joins_announces_itself_and_leaves_when_the_call_ends(
     assert not call.left  # the call was already over
 
 
+async def test_it_announces_itself_as_set_and_always_says_it_transcribes(
+    run: Callable[..., Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Who it says it is comes from ``MEETINGS_ANNOUNCEMENT`` (``{name}`` the
+    name it joins as); that the call is transcribed is said whatever it is
+    set to."""
+    monkeypatch.setattr(
+        settings, "MEETINGS_ANNOUNCEMENT", "{name}, envoy of His Grace, is here"
+    )
+    call = FakeCall([CallState.IN_CALL, CallState.ENDED])
+
+    await run(call)
+
+    assert call.said[0] == (
+        "Notes, envoy of His Grace, is here. What is said here is transcribed."
+    )
+
+
 async def test_a_refused_join_fails_with_the_reason(run: Callable[..., Any]) -> None:
     meeting: Meeting = await run(FakeCall([CallState.WAITING, CallState.REFUSED]))
 

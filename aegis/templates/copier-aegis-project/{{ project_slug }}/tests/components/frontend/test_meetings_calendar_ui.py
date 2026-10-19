@@ -16,7 +16,7 @@ STANDUP: dict[str, Any] = {
     "title": "Standup",
     "starts_at": "2026-10-19T13:00:00Z",
     "ends_at": "2026-10-19T13:15:00Z",
-    "state": "Upcoming",
+    "state": "upcoming",
 }
 
 
@@ -28,12 +28,12 @@ def test_a_month_asks_for_its_whole_weeks_in_utc() -> None:
     }
 
 
-def test_each_day_lists_its_meetings_as_lines() -> None:
-    later = STANDUP | {"title": "", "starts_at": "2026-10-19T15:30:00Z"}
+def test_each_day_lists_its_meetings_as_lines_in_order() -> None:
+    later = STANDUP | {"title": "Review", "starts_at": "2026-10-19T15:30:00Z"}
 
-    days = by_day([STANDUP, later])
+    days = by_day([later, STANDUP])
 
     assert [entry_line(e) for e in days[date(2026, 10, 19)]] == [
         "13:00 Standup",
-        "15:30 (No title)",
+        "15:30 Review",
     ]

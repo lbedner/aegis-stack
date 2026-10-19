@@ -14,8 +14,9 @@ surface, border, radius and accent for free, and cannot be broken by a
 theme property Flet mis-serializes.
 
 The grid maths is deliberately separable from the rendering
-(``month_grid``) - which day lands in which cell, and how a month rolls
-over a year boundary, is the part worth testing without a page.
+(``app.core.time.month_grid``, which the meeting calendars share) - which
+day lands in which cell, and how a month rolls over a year boundary, is
+the part worth testing without a page.
 """
 
 from __future__ import annotations
@@ -27,36 +28,15 @@ from datetime import date
 import flet as ft
 
 from app.components.frontend.theme import AegisTheme as Theme
+from app.core.time import month_grid, shift_month
 
-# Monday-first weeks, matching the ISO week the rest of the app reasons in.
-_CAL = calendar.Calendar(firstweekday=0)
+__all__ = ["PANEL_WIDTH", "CalendarPanel", "month_grid", "shift_month"]
+
 _WEEKDAYS = ("Mo", "Tu", "We", "Th", "Fr", "Sa", "Su")
 _CELL = 34
 # 7 cells + the panel's own padding. Fixed so the grid does not reflow
 # between a 5-row month and a 6-row one.
 PANEL_WIDTH = _CELL * 7 + 24
-
-
-def month_grid(year: int, month: int) -> list[list[date]]:
-    """Weeks of seven dates covering ``year``/``month``.
-
-    Leading and trailing cells belong to the neighbouring months (they are
-    rendered muted, not blank) so every week is a full row and the grid
-    never changes shape mid-month.
-    """
-    weeks = _CAL.monthdatescalendar(year, month)
-    return [list(week) for week in weeks]
-
-
-def shift_month(anchor: date, delta: int) -> date:
-    """``anchor`` moved ``delta`` months, clamped to the 1st.
-
-    Anchored to day 1 on purpose: stepping from 31 Jan would otherwise
-    have to invent a 31 Feb, and every strategy for that (clamp, skip,
-    overflow) surprises someone.
-    """
-    index = (anchor.year * 12 + anchor.month - 1) + delta
-    return date(index // 12, index % 12 + 1, 1)
 
 
 class CalendarPanel(ft.Container):

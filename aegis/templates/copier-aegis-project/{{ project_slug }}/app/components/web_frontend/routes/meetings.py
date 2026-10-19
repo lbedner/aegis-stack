@@ -15,6 +15,8 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, Response
 
 from app.components.web_frontend.meeting_agents import agent_options
+from app.components.web_frontend.meeting_calendar import calendar_context
+from app.components.web_frontend.meeting_status import TONES, state_cell
 from app.components.web_frontend.rendering import (
     fragment,
     navigate,
@@ -28,13 +30,12 @@ from app.services.meetings.bot import send_bot
 from app.services.meetings.deps import as_http, get_meetings_service
 from app.services.meetings.domains.accounts.service import AgentNotFoundError, agents
 from app.services.meetings.domains.calendar.owners import email_of
-from app.services.meetings.models import Meeting, MeetingRecord, MeetingStatus
+from app.services.meetings.models import Meeting, MeetingRecord
 from app.services.meetings.service import (
     MeetingsService,
     UnsupportedMeetingLinkError,
     call_length,
     heard_rows,
-    status_label,
     voices,
 )
 
@@ -47,17 +48,10 @@ LIST = "pages/meetings/index.html"
 PAGE = "pages/meetings/meeting.html"
 BODY = "pages/meetings/_body.html"
 SEND = "pages/meetings/_send.html"
-TONES = {
-    MeetingStatus.JOINING: "accent",
-    MeetingStatus.WAITING: "warn",
-    MeetingStatus.IN_CALL: "ok",
-    MeetingStatus.LEAVING: "accent",
-    MeetingStatus.FAILED: "error",
-}
 
 
 def status_of(meeting: Meeting) -> dict[str, str]:
-    return status_cell(status_label(meeting.status), TONES.get(meeting.status, "muted"))
+    return state_cell(meeting.status)
 
 
 def row_of(meeting: Meeting, url: str) -> dict[str, Any]:
@@ -120,17 +114,15 @@ async def _list(request: Request, svc: MeetingsService) -> Response:
         row_of(m, f"/meetings/{m.id}") | {"mine": mine.get(m.id)}  # type: ignore[arg-type]
         for m in meetings
     ]
-    form = send_form("/meetings", agents=agent_options(await agents(svc.db)))
-    # Here, not at the top: the calendar's module imports this one.
-    from app.components.web_frontend.meeting_calendar import calendar_context
-
+    every = await agents(svc.db)
+    form = send_form("/meetings", agents=agent_options(every))
     calendar = await calendar_context(
         svc.db,
         request.query_params,
         viewer_zone(request),
         "/meetings",
         lambda meeting_id: f"/meetings/{meeting_id}",
-        "#meetings-calendar",
+        every,
         await email_of(svc.db, svc.owner_user_id),
     )
     return render(request, LIST, {"rows": rows, "calendar": calendar} | form)

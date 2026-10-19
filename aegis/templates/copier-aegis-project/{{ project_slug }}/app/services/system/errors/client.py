@@ -23,4 +23,5 @@ def repository() -> ErrorStore:
         settings.PROJECT_NAME,
         max_occurrences=settings.ERROR_TRACKING_MAX_OCCURRENCES,
         retention_seconds=settings.ERROR_TRACKING_RETENTION_SECONDS,
+        max_bytes=settings.ERROR_TRACKING_MAX_BYTES,
     )

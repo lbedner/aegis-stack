@@ -3,7 +3,7 @@ meeting in the drawer (live, with which speaker is me and the notes
 written again, as the Meetings page has them), the bot asked to leave it,
 and the meeting deleted; and one person's guide, its owner's note kept
 and the guide written again; and a meeting's threads, loaded into its
-drawer. Mounted by ``routes/pages.py`` behind
+drawer; and one series, written again. Mounted by ``routes/pages.py`` behind
 Overseer's gate; the admin reads and writes every owner's meetings (``Every``), and
 a meeting the admin sends is the admin's own (``Mine``).
 """
@@ -24,11 +24,13 @@ from app.services.meetings.deps import (
     as_http,
     get_every_owners_meetings,
     get_every_owners_people,
+    get_every_owners_series,
     get_meetings_service,
 )
 from app.services.meetings.domains.people.service import PeopleService
+from app.services.meetings.domains.series.service import SeriesService
 from app.services.meetings.domains.threads.service import meeting_threads
-from app.services.meetings.models import GuideRecord
+from app.services.meetings.models import GuideRecord, SeriesRecord
 from app.services.meetings.service import MeetingsService
 
 PREFIX = overseer_meetings.PARTIALS
@@ -36,12 +38,15 @@ router = APIRouter(prefix=PREFIX)
 Every = Annotated[MeetingsService, Depends(get_every_owners_meetings)]
 Mine = Annotated[MeetingsService, Depends(get_meetings_service)]
 People = Annotated[PeopleService, Depends(get_every_owners_people)]
+Series = Annotated[SeriesService, Depends(get_every_owners_series)]
 
 DRAWER = "pages/overseer/meetings/_drawer.html"
 BODY = "pages/overseer/meetings/_drawer_body.html"
 GUIDE = "pages/overseer/meetings/_guide.html"
 GUIDE_BODY = "pages/overseer/meetings/_guide_body.html"
 THREADS = "pages/overseer/meetings/_threads_body.html"
+SERIES = "pages/overseer/meetings/_series_drawer.html"
+SERIES_BODY = "pages/overseer/meetings/_series_body.html"
 
 
 @router.post("")
@@ -140,3 +145,29 @@ async def write_guide(guide_id: int, svc: People) -> HTMLResponse:
     """Write the guide again from every meeting, in the background."""
     with as_http():
         return _guide_body(await svc.write_again(guide_id))
+
+
+@router.get("/series/{series_id}/drawer", response_class=HTMLResponse)
+async def series(request: Request, series_id: int, svc: Series) -> Response:
+    with as_http():
+        record = await svc.read(series_id)
+    return dialog(request, SERIES, **overseer_meetings.series_context(record))
+
+
+def _series_body(record: SeriesRecord) -> HTMLResponse:
+    context = overseer_meetings.series_context(record)
+    return HTMLResponse(fragment(SERIES_BODY, **context))
+
+
+@router.get("/series/{series_id}/body", response_class=HTMLResponse)
+async def series_body(series_id: int, svc: Series) -> HTMLResponse:
+    """The series' live part, re-read while it is being written."""
+    with as_http():
+        return _series_body(await svc.read(series_id))
+
+
+@router.post("/series/{series_id}/write", response_class=HTMLResponse)
+async def write_series(series_id: int, svc: Series) -> HTMLResponse:
+    """Write the series again from its latest meetings, in the background."""
+    with as_http():
+        return _series_body(await svc.write_again(series_id))

@@ -1,0 +1,16 @@
+{# What each series of meetings (one link, met again and again) keeps
+   coming back to, every owner's, latest written first; a row opens the
+   series in the drawer (_series_drawer.html). #}
+{% from "components/macros/layout.html" import card, drawer_sync %}
+{% from "components/macros/table.html" import data_table %}
+<div class="space-y-4">
+  {% call card(None, id="overseer-meeting-series") %}
+    {{ data_table([
+      {"key": "series", "label": "Series", "kind": "link", "target": "#overseer-main"},
+      {"key": "owner", "label": "Owner"},
+      {"key": "meetings", "label": "Meetings", "align": "right"},
+      {"key": "written", "label": "Written"},
+    ], rows, empty="No series yet: one is written once a second meeting on the same link has notes.") }}
+  {% endcall %}
+</div>
+{{ drawer_sync(open_drawer, drawer_param) }}

@@ -1,6 +1,7 @@
 """Commitments, contradictions and positions, read: one meeting's (from
-its notes), one person's across an owner's meetings, and what the
-owner's earlier meetings leave for the next notes. Each thread comes with
+its notes, with what its series keeps coming back to), one person's
+across an owner's meetings, and what the owner's earlier meetings leave
+for the next notes. Each thread comes with
 the transcript lines it cites (``ThreadItem``)."""
 
 from collections.abc import Iterable
@@ -11,6 +12,7 @@ from app.services.meetings.domains.notes import queries as notes_queries
 from app.services.meetings.domains.notes.queries import first_lines
 from app.services.meetings.domains.notes.service import notes_of
 from app.services.meetings.domains.people import queries
+from app.services.meetings.domains.series.service import meeting_themes
 from app.services.meetings.domains.threads.ledger import (
     Earlier,
     Entry,
@@ -43,8 +45,9 @@ THREADS = ("commitments", "follow_ups", "contradictions", "positions")
 
 async def meeting_threads(svc: MeetingsService, meeting_id: int) -> list[ThreadSection]:
     """The meeting's threads (one ``svc``'s owner can see), each with the
-    lines it cites; empty sections for notes that have none."""
-    await svc.get(meeting_id)  # one the owner cannot see is not found
+    lines it cites, then what its series keeps coming back to that came
+    up in it; empty sections for notes that have none."""
+    meeting = await svc.get(meeting_id)  # one the owner cannot see is not found
     kept = (await svc.notes_for([meeting_id])).get(meeting_id)
     notes = (kept.notes if kept else None) or Notes(summary="")
     # Where each earlier commitment raised here was first said.
@@ -96,6 +99,7 @@ async def meeting_threads(svc: MeetingsService, meeting_id: int) -> list[ThreadS
             "Where people stand",
             [_stance(here, p, cited) for p in notes.positions],
         ),
+        await meeting_themes(svc.db, meeting),
     ]
 
 

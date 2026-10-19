@@ -1,6 +1,7 @@
 {% if include_ai and ai_backend != "memory" and ai_framework == "pydantic-ai" %}
-"""The meetings' model writers as agents: the notes of a meeting and how
-to work with each person each run as an ``agent`` row, seeded with the
+"""The meetings' model writers as agents: the notes of a meeting, how to
+work with each person and what a series of meetings keeps coming back to
+each run as an ``agent`` row, seeded with the
 prompts below, so their prompt, model and sampling are edited in Agents
 like any other agent's (each change kept in its prompt history). While a
 row is missing or off, its built-in prompt runs on the model in force.
@@ -12,6 +13,7 @@ from sqlmodel import Session
 
 NOTES_AGENT = "meeting-notes"
 GUIDE_AGENT = "meeting-guide"
+THEMES_AGENT = "meeting-themes"
 # Generous: a long meeting's notes run past the chat's 1000 tokens.
 MAX_TOKENS = 8000
 
@@ -53,6 +55,30 @@ The owner's own note on them, when there is one, is what the owner knows:
 weigh it, but cite only lines."""
 
 
+THEMES_PROMPT = """You read a series of meetings: the same meeting, held
+again and again. Each meeting starts with its heading, then its summary
+and the items of its notes; each line under an item reads
+"[id] Speaker: what they said".
+
+Write what the series said over time. Be brief: every point a few words
+(at most twelve), like a heading, not a sentence; at most five points in
+each list, the ones that matter most first; each citing the lines it
+rests on.
+- A summary: one sentence (at most twenty-five words) on where the series
+  stands now.
+- Themes: each thing raised in more than one meeting: an ask made again,
+  a blocker that keeps coming back, a worry nobody resolves. Give each
+  every line it was said in, across the meetings, and whether by the
+  latest meeting it was answered, done, or is still open.
+- Settled: each thing decided or done.
+- Shifted: each position or priority that changed, as "from → to".
+- Still open: each thing not yet resolved.
+- Mood: how the room feels about the work.
+
+Something said in one meeting only is not a theme. Leave a list empty
+rather than invent a point. Name people exactly as the lines do."""
+
+
 def _definition(slug: str, name: str, description: str, prompt: str) -> dict[str, Any]:
     return {
         "slug": slug,
@@ -79,6 +105,12 @@ def meetings_agent_definitions() -> list[dict[str, Any]]:
             "How to work with them",
             "Writes how to work with each person from what they said",
             GUIDE_PROMPT,
+        ),
+        _definition(
+            THEMES_AGENT,
+            "What keeps coming up",
+            "Writes what a series of meetings keeps coming back to, over time",
+            THEMES_PROMPT,
         ),
     ]
 

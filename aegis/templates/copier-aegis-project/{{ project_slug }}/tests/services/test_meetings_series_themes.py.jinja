@@ -1,0 +1,194 @@
+{% if include_ai and ai_backend != "memory" and ai_framework == "pydantic-ai" %}
+"""What a series of meetings keeps coming back to, written
+(``domains.series.themes``): one model pass over the notes of an owner's
+meetings on one link, each theme citing every line it was said in, and
+metered. The model is pydantic-ai's ``TestModel``: what is under test is
+the plumbing, not the read of the series."""
+
+from typing import Any
+
+from pydantic_ai import capture_run_messages
+import pytest
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.services.meetings.domains.series import themes
+from app.services.meetings.domains.series.service import THEMING, SeriesService
+from app.services.meetings.models import NoteItem, Notes, SeriesRecord
+from tests._meetings import answering, ended
+from tests._session import opens
+
+OTHER = "https://meet.google.com/xyz-wxyz-xyz"
+
+
+@pytest.fixture(autouse=True)
+def _on_the_test_session(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(themes, "get_async_session", opens(async_db_session))
+
+
+@pytest.fixture
+def metered(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+    """Each usage row the run would write."""
+    rows: list[dict[str, Any]] = []
+
+    async def record_usage(**row: Any) -> float:
+        rows.append(row)
+        return 0.0
+
+    monkeypatch.setattr(themes, "record_usage", record_usage)
+    return rows
+
+
+async def _asked(
+    session: AsyncSession, owner: int | None, said: str, url: str | None = None
+) -> tuple[int, int]:
+    """A meeting where Dana said ``said``, its notes asking for it: the
+    meeting and the line."""
+    meeting_id, ids = await ended(
+        session,
+        owner,
+        ("Dana", said),
+        notes=lambda ids: Notes(
+            summary="-", open_questions=[NoteItem(text=said, lines=ids)]
+        ),
+        **({"url": url} if url else {}),
+    )
+    return meeting_id, ids[0]
+
+
+def _prompt(messages: list[Any]) -> str:
+    return "\n".join(
+        str(part.content)
+        for message in messages
+        for part in message.parts
+        if part.part_kind == "user-prompt"
+    )
+
+
+async def _read(session: AsyncSession, owner: int | None) -> SeriesRecord:
+    (row,) = await SeriesService(session, owner).series()
+    return await SeriesService(session, owner).read(row.series.id or 0)
+
+
+async def test_read_from_the_notes_of_the_owners_meetings_on_the_link(
+    async_db_session: AsyncSession,
+    metered: list[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Each meeting's notes with the lines they cite, oldest first; another
+    owner's meetings and another link's are not read."""
+    _, first = await _asked(async_db_session, 1, "Can I get the usage report?")
+    last, second = await _asked(async_db_session, 1, "Still no usage report.")
+    await _asked(async_db_session, 2, "Another owner's call.")
+    await _asked(async_db_session, 1, "Another call.", url=OTHER)
+    answering(
+        monkeypatch,
+        {
+            "summary": "Dana keeps asking for the report.",
+            "themes": [{"text": "The usage report", "lines": [first, second]}],
+        },
+    )
+
+    with capture_run_messages() as messages:
+        await themes.write_themes(last)
+
+    prompt = _prompt(messages)
+    assert prompt.index("usage report?") < prompt.index("Still no usage report.")
+    assert f"[{first}] Dana: Can I get the usage report?" in prompt
+    assert "Another owner's call." not in prompt and "Another call." not in prompt
+    record = await _read(async_db_session, 1)
+    assert record.series.summary == "Dana keeps asking for the report."
+    assert record.series.meetings == 2
+    (theme,) = record.sections[0].items
+    assert [q.id for q in theme.quotes] == [first, second]
+    assert [row["action"] for row in metered] == ["meetings:themes"]
+    assert not THEMING
+
+
+async def test_over_time_is_written_as_points_each_citing_its_lines(
+    async_db_session: AsyncSession,
+    metered: list[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Settled, shifted, still open and the mood; a point citing no line it
+    was shown is dropped, since it can no longer be checked."""
+    _, first = await _asked(async_db_session, None, "The report?")
+    last, second = await _asked(async_db_session, None, "The report, again.")
+    answering(
+        monkeypatch,
+        {
+            "summary": "Still no report.",
+            "settled": [{"text": "Dana owns it", "lines": [second]}],
+            "shifted": [{"text": "Made up", "lines": [99999]}],
+            "still_open": [{"text": "The report", "lines": [first, second]}],
+            "mood": [{"text": "Impatient", "lines": [second]}],
+        },
+    )
+
+    await themes.write_themes(last)
+
+    record = await _read(async_db_session, None)
+    assert [c.key for c in record.over_time] == ["settled", "still_open", "mood"]
+
+
+async def test_a_theme_is_said_in_more_than_one_meeting(
+    async_db_session: AsyncSession,
+    metered: list[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One said in only one meeting is dropped, and so is a line the model
+    was not shown."""
+    _, first = await _asked(async_db_session, None, "The report?")
+    last, second = await _asked(async_db_session, None, "The report, again.")
+    answering(
+        monkeypatch,
+        {
+            "summary": "-",
+            "themes": [
+                {"text": "Once", "lines": [first, 99999]},
+                {"text": "The report", "lines": [first, second, 99999]},
+            ],
+        },
+    )
+
+    await themes.write_themes(last)
+
+    (theme,) = (await _read(async_db_session, None)).sections[0].items
+    assert theme.text == "The report"
+    assert [q.id for q in theme.quotes] == [first, second]
+
+
+async def test_one_meeting_is_not_a_series_yet(
+    async_db_session: AsyncSession,
+    metered: list[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    only, _ = await _asked(async_db_session, None, "The report?")
+    asked = answering(monkeypatch, {})
+
+    await themes.write_themes(only)
+
+    assert asked == [] and await SeriesService(async_db_session, None).series() == []
+
+
+async def test_a_failed_pass_keeps_the_themes_it_had_and_why(
+    async_db_session: AsyncSession,
+    metered: list[dict[str, Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, first = await _asked(async_db_session, None, "The report?")
+    last, second = await _asked(async_db_session, None, "The report, again.")
+    answering(
+        monkeypatch,
+        {"summary": "-", "themes": [{"text": "The report", "lines": [first, second]}]},
+    )
+    await themes.write_themes(last)
+    answering(monkeypatch, RuntimeError("model down"))
+
+    await themes.write_themes(last)
+
+    record = await _read(async_db_session, None)
+    assert record.series.error == "model down"
+    assert [t.text for t in record.sections[0].items] == ["The report"]
+{% endif %}

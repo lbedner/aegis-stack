@@ -13,33 +13,19 @@ from typing import Any
 
 import flet as ft
 
-from app.components.frontend.controls import (
-    DataTable,
-    DataTableColumn,
-    PrimaryText,
-    SecondaryText,
-)
+from app.components.frontend.controls import DataTableColumn, PrimaryText
 from app.components.frontend.controls.buttons import PulseButton
 from app.components.frontend.controls.inputs import StyledTextField
 from app.components.frontend.controls.record_detail import build_field_blocks
-from app.components.frontend.controls.snack_bar import ErrorSnackBar, SuccessSnackBar
-from app.components.frontend.state.session_state import get_session_state
+from app.components.frontend.controls.snack_bar import SuccessSnackBar
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.formatting import format_date
 
-from .meetings_follow import follow
+from .meetings_follow import ListBesidePane, WrittenPane, api, hint
 from .meetings_threads import quote_lines, thread_controls
-from .modal_sections import EmptyStatePlaceholder, SectionHeader
+from .modal_sections import SectionHeader
 
 API = "/api/v1/meetings/admin/people"
-
-
-def _api(page: ft.Page) -> Any:
-    return get_session_state(page).api_client
-
-
-def _hint(text: str) -> ft.Control:
-    return SecondaryText(text, size=Theme.Typography.BODY_SMALL)
 
 
 def guide_cells(row: dict[str, Any]) -> list[str]:
@@ -91,58 +77,29 @@ def guide_view(record: dict[str, Any]) -> ft.Column:
             )
         )
     if record.get("writing"):
-        controls.append(_hint("Writing the guide…"))
+        controls.append(hint("Writing the guide…"))
     for section in record.get("sections") or []:
         points = section.get("points") or []
         controls.append(SectionHeader(str(section.get("title") or "")))
-        controls.extend([_point(p) for p in points] or [_hint("Nothing yet.")])
+        controls.extend([_point(p) for p in points] or [hint("Nothing yet.")])
     controls.extend(thread_controls(record.get("threads") or []))
     return ft.Column(
         controls, spacing=Theme.Spacing.SM, scroll=ft.ScrollMode.AUTO, expand=True
     )
 
 
-class GuidePane(ft.Container):
+class GuidePane(WrittenPane):
     """The selected guide, read from the API, with the owner's note and the
     guide written again, followed while it is being written."""
 
     def __init__(self, page: ft.Page) -> None:
-        super().__init__()
-        self.page = page
-        self._showing: int | None = None
-        self.width = 560
-        self.padding = ft.padding.all(Theme.Spacing.MD)
-        self.border = ft.border.all(1, ft.Colors.OUTLINE_VARIANT)
-        self.border_radius = Theme.Components.CARD_RADIUS
-        self.content = EmptyStatePlaceholder("Select a person")
+        super().__init__(page, API, "Select a person")
 
-    def will_unmount(self) -> None:
-        """The modal closed: stop following."""
-        self._showing = None
+    def record_id(self, record: dict[str, Any]) -> int:
+        return int(record["guide"]["id"])
 
-    async def show(self, guide_id: int) -> None:
-        self._present(await _api(self.page).get(f"{API}/{guide_id}"))
-
-    def _present(self, record: Any) -> None:
-        if not isinstance(record, dict):
-            return
-        guide_id = int(record["guide"]["id"])
-        self._showing = guide_id
-        self._draw(record)
-        if record.get("writing"):
-            self.page.run_task(self._follow, guide_id)
-
-    async def _follow(self, guide_id: int) -> None:
-        await follow(
-            self.page,
-            lambda: _api(self.page).get(f"{API}/{guide_id}"),
-            lambda: self._showing == guide_id,
-            self._draw,
-            lambda record: bool(record.get("writing")),
-        )
-
-    def _draw(self, record: dict[str, Any]) -> None:
-        guide_id = int(record["guide"]["id"])
+    def draw(self, record: dict[str, Any]) -> None:
+        guide_id = self.record_id(record)
         note = StyledTextField(
             label="Your note",
             value=record["guide"].get("note") or "",
@@ -161,7 +118,9 @@ class GuidePane(ft.Container):
         if record.get("can_write"):
             buttons.append(
                 PulseButton(
-                    on_click_callable=lambda: self._write(guide_id),
+                    on_click_callable=lambda: self.write_again(
+                        guide_id, "guide", "This guide cannot be written now"
+                    ),
                     text="Write it again",
                     variant="muted",
                     compact=True,
@@ -176,59 +135,27 @@ class GuidePane(ft.Container):
             self.update()
 
     async def _save(self, guide_id: int, note: str) -> None:
-        record = await _api(self.page).put(
-            f"{API}/{guide_id}/note", json={"note": note}
-        )
+        record = await api(self.page).put(f"{API}/{guide_id}/note", json={"note": note})
         SuccessSnackBar("Note saved").launch(self.page)
-        self._present(record)
-
-    async def _write(self, guide_id: int) -> None:
-        record = await _api(self.page).post(f"{API}/{guide_id}/guide")
-        if record is None:
-            ErrorSnackBar("This guide cannot be written now").launch(self.page)
-            return await self.show(guide_id)
-        self._present(record)
+        self.present(record)
 
 
-class PeopleTab(ft.Container):
+class PeopleTab(ListBesidePane):
     """Every owner's guides, latest written first, beside the selected one."""
 
     def __init__(self, page: ft.Page) -> None:
-        super().__init__()
-        self.page = page
-        self._table = ft.Container(
-            content=EmptyStatePlaceholder("Loading people..."), expand=True
-        )
-        self._pane = GuidePane(page)
-        self.content = ft.Row(
-            [self._table, self._pane],
-            spacing=Theme.Spacing.MD,
-            vertical_alignment=ft.CrossAxisAlignment.STRETCH,
-            expand=True,
-        )
-        self.padding = ft.padding.all(Theme.Spacing.MD)
-        self.expand = True
-        page.run_task(self._load)
-
-    async def _load(self) -> None:
-        data = await _api(self.page).get(API)
-        guides = data if isinstance(data, list) else []
-        self._table.content = DataTable(
+        super().__init__(
+            page,
+            API,
+            GuidePane(page),
             columns=[
                 DataTableColumn("Person", width=220, style="primary"),
                 DataTableColumn("Owner", width=80, style="secondary"),
                 DataTableColumn("Meetings", width=90, style="secondary"),
                 DataTableColumn("Written", width=120, style="secondary"),
             ],
-            rows=[guide_cells(g) for g in guides],
-            scroll_height=600,
-            empty_message=(
-                "No guides yet: each person's is written after a meeting they speak in."
-            ),
-            on_row_click=lambda i: self.page.run_task(
-                self._pane.show, int(guides[i]["guide"]["id"])
-            ),
+            cells=guide_cells,
+            id_of=lambda row: int(row["guide"]["id"]),
+            loading="Loading people...",
+            empty="No guides yet: each person's is written after a meeting they speak in.",
         )
-        # ``_load`` starts before the tab is mounted: update only once it is.
-        if self._table.page:
-            self._table.update()

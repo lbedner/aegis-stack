@@ -1,8 +1,9 @@
 {# A meeting's threads in the drawer, loaded once its notes are there
-   (the slot in _sections.html): what people committed to, said both ways
-   and stood on, each with its lines (_threads.html). #}
+   (the Threads tab in _sections.html): what people committed to, said
+   both ways and stood on, and what its series keeps coming back to, each
+   with its lines (_threads.html). #}
 {% from "components/macros/layout.html" import card %}
 {% from "pages/overseer/meetings/_threads.html" import thread_sections %}
-{% call card("Commitments and positions", id="meeting-threads") %}
+{% call card(None, id="meeting-threads") %}
 <div class="space-y-6">{{ thread_sections(sections, said) }}</div>
 {% endcall %}

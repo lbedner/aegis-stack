@@ -13,6 +13,10 @@ from app.services.meetings.domains.people.service import (
     GuideNotFoundError,
     PeopleService,
 )
+from app.services.meetings.domains.series.service import (
+    SeriesNotFoundError,
+    SeriesService,
+)
 from app.services.meetings.service import (
     MeetingInProgressError,
     MeetingNotFoundError,
@@ -52,16 +56,29 @@ def get_every_owners_people(db: AsyncSession = Depends(get_async_db)) -> PeopleS
     return PeopleService(db, None)
 
 
+async def get_series_service(
+    db: AsyncSession = Depends(get_async_db),
+    owner_user_id: int | None = Depends(get_owner_user_id),
+) -> SeriesService:
+    return SeriesService(db, owner_user_id)
+
+
+def get_every_owners_series(db: AsyncSession = Depends(get_async_db)) -> SeriesService:
+    """Every owner's series, for Overseer: each route that takes it guards
+    itself as an admin's."""
+    return SeriesService(db, None)
+
+
 @contextmanager
 def as_http() -> Iterator[None]:
     """The service's refusals as HTTP, for every route over meetings (the
-    API's, the Meetings page's and Overseer's): a meeting or guide the
-    caller cannot see is a 404, one the bot is still in (or notes or a
-    guide that cannot be written now) a 409, a link it cannot join, a speaker who was not
+    API's, the Meetings page's and Overseer's): a meeting, guide or series
+    the caller cannot see is a 404, one the bot is still in (or notes, a
+    guide or a series that cannot be written now) a 409, a link it cannot join, a speaker who was not
     there or an agent there is not a 422."""
     try:
         yield
-    except (MeetingNotFoundError, GuideNotFoundError) as exc:
+    except (MeetingNotFoundError, GuideNotFoundError, SeriesNotFoundError) as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
     except (MeetingInProgressError, NothingToWriteError) as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc

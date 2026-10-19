@@ -414,6 +414,8 @@ class TestWebFrontendScaffolding:
                 "status_dot",
                 "tab_bar",
                 "tab_item",
+                "tabbed",
+                "tab_panel",
                 "theme_toggle",
             },
             "table.html": {"_cell", "_tone", "data_table", "pager", "table_row"},

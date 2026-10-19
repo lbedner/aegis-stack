@@ -13,20 +13,16 @@ import flet as ft
 from app.components.frontend.controls import DataTable, DataTableColumn
 from app.components.frontend.controls.buttons import PulseButton
 from app.components.frontend.controls.inputs import StyledTextField
-from app.components.frontend.state.session_state import get_session_state
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.meetings.domains.people.service import said_when
 
+from .meetings_follow import api
 from .modal_sections import EmptyStatePlaceholder
 
 if TYPE_CHECKING:
     from .meetings_modal import MeetingPane
 
 API = "/api/v1/meetings/admin/search"
-
-
-def _api(page: ft.Page) -> Any:
-    return get_session_state(page).api_client
 
 
 def hit_cells(hit: dict[str, Any]) -> list[str]:
@@ -83,7 +79,7 @@ class SearchTab(ft.Container):
         words = str(self._words.value or "").strip()
         if not words:
             return
-        data = await _api(self.page).get(API, params={"q": words})
+        data = await api(self.page).get(API, params={"q": words})
         self._hits = data if isinstance(data, list) else []
         self._table.content = DataTable(
             columns=[

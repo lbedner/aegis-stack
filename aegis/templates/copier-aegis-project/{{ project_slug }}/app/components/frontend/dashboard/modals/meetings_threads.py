@@ -9,24 +9,20 @@ from typing import Any
 
 import flet as ft
 
-from app.components.frontend.controls import PrimaryText, SecondaryText
-from app.components.frontend.state.session_state import get_session_state
+from app.components.frontend.controls import PrimaryText
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.formatting import counted
 from app.services.meetings.domains.people.service import said_when
 
+from .meetings_follow import api, hint
 from .modal_sections import SectionHeader
 
 API = "/api/v1/meetings/admin"
 
 
-def _hint(text: str) -> ft.Control:
-    return SecondaryText(text, size=Theme.Typography.BODY_SMALL)
-
-
 def quote_lines(quotes: list[dict[str, Any]]) -> list[ft.Control]:
     return [
-        _hint(
+        hint(
             f"{q.get('speaker')}: {q.get('text')}  "
             f"{said_when(int(q['meeting_id']), float(q.get('at') or 0))}"
         )
@@ -51,10 +47,10 @@ def _item(item: dict[str, Any], other: str | None) -> ft.Control:
     others = item.get("other") or []
     count = len(quotes) + len(others)
     lines = ft.ExpansionTile(
-        title=_hint(counted(count, "line")),
+        title=hint(counted(count, "line")),
         controls=[
             *quote_lines(quotes),
-            *([_hint(other or ""), *quote_lines(others)] if others else []),
+            *([hint(other or ""), *quote_lines(others)] if others else []),
         ],
         dense=True,
     )
@@ -69,7 +65,7 @@ def thread_controls(sections: list[dict[str, Any]]) -> list[ft.Control]:
         controls.append(SectionHeader(str(section.get("title") or "")))
         controls.extend(
             [_item(i, section.get("other")) for i in items]
-            or [_hint(str(section.get("empty") or ""))]
+            or [hint(str(section.get("empty") or ""))]
         )
     return controls
 
@@ -85,8 +81,7 @@ class ThreadsBlock(ft.Column):
         self.page.run_task(self._load)
 
     async def _load(self) -> None:
-        api = get_session_state(self.page).api_client
-        sections = await api.get(f"{API}/{self._meeting_id}/threads")
+        sections = await api(self.page).get(f"{API}/{self._meeting_id}/threads")
         self.controls = thread_controls(sections if isinstance(sections, list) else [])
         if self.page:
             self.update()

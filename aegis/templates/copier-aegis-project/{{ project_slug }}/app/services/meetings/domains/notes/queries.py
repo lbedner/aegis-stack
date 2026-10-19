@@ -214,6 +214,15 @@ async def citing(db: AsyncSession, link: Any, meeting_id: int) -> list[int]:
     return list((await db.exec(query)).all())
 
 
+async def citing_nothing(db: AsyncSession, link: Any, ids: list[int]) -> list[int]:
+    """Which of ``ids`` cite no line any more through the citation table
+    of ``link`` (its column naming what cites, as for ``citing``)."""
+    if not ids:
+        return []
+    still = set((await db.exec(select(link).where(link.in_(ids)))).all())
+    return [i for i in ids if i not in still]
+
+
 async def left_uncited(db: AsyncSession, item_ids: list[int]) -> list[int]:
     """Which of ``item_ids`` no longer stand: citing no line of their own,
     or a contradiction with no other side left."""

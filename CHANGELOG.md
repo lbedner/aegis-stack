@@ -9,6 +9,19 @@
 
 ### Added
 
+- **Meetings: what keeps coming up.** An owner's meetings on one link are a
+  series (a recurring meeting keeps its link), and once a second one has
+  notes the `meeting-themes` agent writes what it keeps coming back to: each
+  theme with every line it was said in, who raised it and whether it was
+  answered, and the run over time as cards: settled, shifted, still open,
+  the mood. In Overseer (Meetings > Series), the Flet dashboard and
+  `/api/v1/meetings/series`; each meeting's threads end with the themes it
+  is part of.
+- **Tabs within a view.** `tabbed` and `tab_panel` (layout.html) switch in
+  the browser, keep the tab picked when the view re-reads itself, and show a
+  hidden panel when a link points into it. A meeting (its notes, threads,
+  transcript and who talked), a person's guide and a series each read a tab
+  at a time; a meeting the bot left shows as done, not greyed out.
 - **Meetings: what the bot says when it joins is a setting.**
   `MEETINGS_ANNOUNCEMENT` (`{name}` the name it joins as) is who it says it is,
   set in Overseer > Meetings > Settings; "What is said here is transcribed."

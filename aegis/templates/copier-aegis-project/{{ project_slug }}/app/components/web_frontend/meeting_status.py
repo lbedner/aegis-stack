@@ -18,6 +18,8 @@ TONES = {
     MeetingStatus.WAITING: "warn",
     MeetingStatus.IN_CALL: "ok",
     MeetingStatus.LEAVING: "accent",
+    # The bot leaves when the call ends: how a meeting goes well.
+    MeetingStatus.LEFT: "ok",
     MeetingStatus.FAILED: "error",
     UPCOMING: "accent",
     MISSED: "warn",

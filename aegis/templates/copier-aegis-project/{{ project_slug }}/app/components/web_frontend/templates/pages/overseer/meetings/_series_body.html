@@ -1,0 +1,58 @@
+{# One series, live: where it was read from, then a tab each for its run
+   over time (a headline, then a card per part that has points: settled,
+   shifted, still open, the mood, each point folding open to its lines)
+   and what it keeps coming back to (_threads.html), each line opening its
+   meeting; and the series written again. While it is being written it
+   re-reads itself every few seconds. #}
+{% from "components/macros/layout.html" import card, facts, tab_panel, tabbed %}
+{% from "components/macros/form.html" import action %}
+{% from "pages/overseer/meetings/_threads.html" import quote_lines, thread_sections %}
+{% set marks = {"settled": "✓", "shifted": "↗", "still_open": "•"} %}
+{% set series = record.series %}
+<div id="series-body" class="space-y-6"
+     {% if record.writing %}hx-get="{{ base }}/body" hx-trigger="every 3s" hx-swap="outerHTML"{% endif %}>
+  {{ facts([
+    ("Owner", series.owner_user_id),
+    ("Link", series.link),
+    ("Read from", series.meetings ~ (" meeting" if series.meetings == 1 else " meetings")),
+    ("Written by", series.model_name),
+    ("Written", written),
+  ]) }}
+  {% if series.error %}<p role="alert" class="text-sm text-error">The last write failed: {{ series.error }}</p>{% endif %}
+  {% if record.writing %}<p class="text-sm text-aegis-muted">Writing the series…</p>{% endif %}
+  {% set open = "summary" %}
+  {% call tabbed("series", [("summary", "Over time"), ("themes", "Keeps coming up")], open) %}
+  {% call tab_panel("summary", open) %}
+  {% call card(None, id="series-summary", hover=False) %}
+  <p data-summary class="text-sm leading-relaxed">{{ series.summary or "Nothing yet." }}</p>
+  {% endcall %}
+  <div class="grid gap-4 sm:grid-cols-2">
+    {% for part in record.over_time %}
+    {% call card(part.title, id="series-" ~ part.key, hover=False) %}
+    <ul data-card="{{ part.key }}" class="space-y-2 text-sm">
+      {% for point in part.items %}
+      <li>
+        <details data-quotes class="group/q">
+          <summary class="list-none cursor-pointer flex items-start gap-2">
+            {% if marks.get(part.key) %}<span aria-hidden="true" class="text-aegis-teal">{{ marks[part.key] }}</span>{% endif %}
+            <span class="flex-1 min-w-0 leading-snug">{{ point.text }}</span>
+            {% if point.detail %}<span class="whitespace-nowrap text-xs text-aegis-muted">{{ point.detail }}</span>{% endif %}
+            <span aria-hidden="true" class="text-aegis-muted transition-transform group-open/q:rotate-90">›</span>
+          </summary>
+          <div class="mt-1.5 ml-4 space-y-1.5">{{ quote_lines(point.quotes, said) }}</div>
+        </details>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endcall %}
+    {% endfor %}
+  </div>
+  {% endcall %}
+  {% call tab_panel("themes", open) %}{{ thread_sections(record.sections, said) }}{% endcall %}
+  {% endcall %}
+  {% if record.can_write %}
+  <div class="flex gap-2">
+    {{ action("Write it again", 'data-write-series data-write hx-post="' ~ base ~ '/write" hx-target="#series-body" hx-swap="outerHTML"') }}
+  </div>
+  {% endif %}
+</div>

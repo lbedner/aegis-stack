@@ -281,7 +281,8 @@ SCROLL_HARNESS = (
     STUBS
     + """
 const shown = [];
-document.querySelector = (sel) => ({ scrollIntoView: (how) => shown.push([sel, how.block]) });
+document.querySelector = (sel) => ({
+  closest: () => null, scrollIntoView: (how) => shown.push([sel, how.block]) });
 require(APP_JS);
 const button = { dataset: { scrollTo: '#rows > tr:last-child' } };
 fire('click', { target: { closest: (sel) => (sel === '[data-scroll-to]' ? button : null) } });
@@ -297,6 +298,48 @@ def test_a_scroll_button_brings_its_target_into_view() -> None:
     assert run(SCROLL_HARNESS, APP_JS=APP_JS)["shown"] == [
         ["#rows > tr:last-child", "nearest"]
     ]
+
+
+TABS_HARNESS = (
+    STUBS
+    + """
+const { revealTab } = require(APP_JS);
+// A view's tabs (layout.html's ``tabbed``): its buttons and its panels.
+const view = (shown) => {
+  const tabs = { dataset: { tabs: 'meeting' }, matches: () => true };
+  const buttons = ['notes', 'transcript'].map((key) => {
+    const attrs = {};
+    return { dataset: { tab: key }, attrs, setAttribute: (k, v) => { attrs[k] = v; } };
+  });
+  const panels = ['notes', 'transcript'].map((key) => (
+    { dataset: { tabPanel: key }, hidden: key !== shown, parentElement: tabs }));
+  tabs.querySelectorAll = (sel) => (sel.includes('tablist') ? buttons : sel === '[data-tabs]' ? [] : panels);
+  tabs.querySelector = (sel) => panels.find((p) => sel.includes(`"${p.dataset.tabPanel}"`));
+  return { tabs, buttons, panels };
+};
+const first = view('notes');
+revealTab({ closest: () => first.panels[1] });
+revealTab({ closest: () => null });
+const reread = view('notes');
+fire('htmx:load', { detail: { elt: reread.tabs } });
+console.log(JSON.stringify({
+  hidden: first.panels.map((p) => p.hidden),
+  selected: first.buttons.map((b) => b.attrs['aria-selected']),
+  kept: reread.panels.map((p) => p.hidden),
+}));
+"""
+)
+
+
+def test_a_line_in_a_hidden_tab_shows_its_tab_and_a_reread_keeps_it() -> None:
+    """A note's line in the transcript shows the Transcript tab first; when
+    the view re-reads itself (a meeting while the bot is in), the tab picked
+    stays picked; something outside any tab changes nothing."""
+    assert run(TABS_HARNESS, APP_JS=APP_JS) == {
+        "hidden": [True, False],
+        "selected": ["false", "true"],
+        "kept": [True, False],
+    }
 
 
 MARK_HARNESS = (

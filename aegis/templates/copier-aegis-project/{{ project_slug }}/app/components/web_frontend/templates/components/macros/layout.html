@@ -529,6 +529,27 @@
    class="tab">{{ label }}</a>
 {% endmacro %}
 
+{# Tabs within one view, switched in the browser (app.js's ``data-tabs``):
+   ``tabs`` is each (key, label), ``open`` the key shown first (the first
+   when none), and each panel a ``tab_panel(key, open)`` in the caller. The
+   tab picked stays picked when the view re-reads itself, and a link to
+   something in a hidden panel (a note's line) shows that panel first. #}
+{% macro tabbed(name, tabs, open=None) %}
+{% set open = open or tabs[0][0] %}
+<div data-tabs="{{ name }}">
+  {% call tab_bar(name) %}
+  {% for key, label in tabs %}
+  <button type="button" role="tab" data-tab="{{ key }}" aria-selected="{{ 'true' if key == open else 'false' }}" class="tab">{{ label }}</button>
+  {% endfor %}
+  {% endcall %}
+  {{ caller() }}
+</div>
+{% endmacro %}
+
+{% macro tab_panel(key, open) %}
+<div role="tabpanel" data-tab-panel="{{ key }}" class="space-y-6"{% if key != open %} hidden{% endif %}>{{ caller() }}</div>
+{% endmacro %}
+
 {# A chip: one of a row of exclusive choices (a time window, a month, a
    view). Pulse's date-range recipe, which the Flet range chips copied:
    small, outlined, a light teal fill when chosen. #}

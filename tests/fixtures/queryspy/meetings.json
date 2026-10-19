@@ -4,6 +4,12 @@
   "entries": [
     {
       "kind": "repeated_statement",
+      "label": "SELECT ... FROM deploy_event WHERE deploy_event.kind = :kind_1 ORDER BY deploy_event.finished_at DESC LIMIT :param_1",
+      "file": "app/components/deploy/history.py",
+      "function": "latest_event"
+    },
+    {
+      "kind": "repeated_statement",
       "label": "SELECT ... FROM deployment",
       "file": "tests/components/test_deploy_history.py",
       "function": "_rows"
@@ -52,9 +58,21 @@
     },
     {
       "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting WHERE meeting.owner_user_id = :owner_user_id_1 AND (lower(meeting.url) LIKE lower(:url_1) || '%') ORDER BY meeting.created_at DESC, meeting.id DESC",
+      "file": "app/services/meetings/domains/series/queries.py",
+      "function": "meetings_on"
+    },
+    {
+      "kind": "repeated_statement",
       "label": "SELECT ... FROM meeting WHERE meeting.owner_user_id = :owner_user_id_1 ORDER BY meeting.created_at DESC, meeting.id DESC LIMIT :param_1",
       "file": "app/services/meetings/domains/notes/queries.py",
       "function": "owner_meetings"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting WHERE meeting.owner_user_id IS NULL AND (lower(meeting.url) LIKE lower(:url_1) || '%') ORDER BY meeting.created_at DESC, meeting.id DESC",
+      "file": "app/services/meetings/domains/series/queries.py",
+      "function": "meetings_on"
     },
     {
       "kind": "repeated_statement",
@@ -67,6 +85,30 @@
       "label": "SELECT ... FROM meeting_bot_account ORDER BY meeting_bot_account.id",
       "file": "app/services/meetings/domains/accounts/queries.py",
       "function": "every_account"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_calendar_event LEFT OUTER JOIN meeting ON meeting.id = meeting_calendar_event.meeting_id WHERE meeting_calendar_event.account_id IN (__[POSTCOMPILE_account_id_1]) AND meeting_calendar_event.starts_at >= :starts_at_1 AND meeting_calendar_event.starts_at < :starts_at_2 ORDER BY meeting_calendar_event.starts_at, meeting_calendar_event.id",
+      "file": "app/services/meetings/domains/calendar/queries.py",
+      "function": "between"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_calendar_event ORDER BY meeting_calendar_event.starts_at",
+      "file": "tests/services/test_meetings_calendar.py",
+      "function": "kept"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_calendar_event WHERE meeting_calendar_event.account_id IN (__[POSTCOMPILE_account_id_1]) AND (meeting_calendar_event.starts_at BETWEEN :starts_at_1 AND :starts_at_2 OR meeting_calendar_event.key IN (__[POSTCOMPILE_key_1]))",
+      "file": "app/services/meetings/domains/calendar/queries.py",
+      "function": "events_of"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_calendar_event WHERE meeting_calendar_event.starts_at <= :starts_at_1 AND meeting_calendar_event.ends_at > :ends_at_1 AND meeting_calendar_event.url IS NOT NULL AND meeting_calendar_event.cancelled IS false AND meeting_calendar_event.sent_at IS NULL ORDER BY meeting_calendar_event.starts_at, meeting_calendar_event.id",
+      "file": "app/services/meetings/domains/calendar/queries.py",
+      "function": "due"
     },
     {
       "kind": "repeated_statement",
@@ -142,6 +184,12 @@
     },
     {
       "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_person WHERE meeting_person.id IN (__[POSTCOMPILE_id_1]) AND (meeting_person.id NOT IN (SELECT meeting_participant.person_id FROM meeting_participant))",
+      "file": "app/services/meetings/domains/people/queries.py",
+      "function": "drop_people_in_no_meeting"
+    },
+    {
+      "kind": "repeated_statement",
       "label": "SELECT ... FROM meeting_person WHERE meeting_person.name = :name_1 AND meeting_person.owner_user_id = :owner_user_id_1",
       "file": "tests/_meetings.py",
       "function": "person_named"
@@ -214,9 +262,45 @@
     },
     {
       "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_series WHERE meeting_series.id = :id_1",
+      "file": "app/services/meetings/domains/series/queries.py",
+      "function": "one_series"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_series WHERE meeting_series.owner_user_id = :owner_user_id_1 AND meeting_series.link = :link_1 FOR UPDATE",
+      "file": "app/services/meetings/domains/series/queries.py",
+      "function": "series_row"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_series WHERE meeting_series.owner_user_id IS NULL AND meeting_series.link = :link_1",
+      "file": "app/services/meetings/domains/series/queries.py",
+      "function": "series_row"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_theme LEFT OUTER JOIN meeting_theme_line ON meeting_theme_line.theme_id = meeting_theme.id WHERE meeting_theme.series_id = :series_id_1 ORDER BY meeting_theme.kind, meeting_theme.ord, meeting_theme_line.ord",
+      "file": "app/services/meetings/domains/series/queries.py",
+      "function": "theme_lines"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_theme_line WHERE meeting_theme_line.theme_id IN (__[POSTCOMPILE_theme_id_1])",
+      "file": "app/services/meetings/domains/notes/queries.py",
+      "function": "citing_nothing"
+    },
+    {
+      "kind": "repeated_statement",
       "label": "SELECT ... FROM meeting_transcript_line JOIN (SELECT rowid AS id FROM meeting_line_search WHERE meeting_line_search MATCH :query) AS found ON found.id = meeting_transcript_line.id JOIN meeting ON meeting.id = meeting_transcript_line.meeting_id LEFT OUTER JOIN meeting_participant ON meeting_transcript_line.participant_id = meeting_participant.id LEFT OUTER JOIN meeting_person ON meeting_person.id = meeting_participant.person_id WHERE meeting.owner_user_id = :owner_user_id_1 ORDER BY meeting.created_at DESC, meeting.id DESC, meeting_transcript_line.start_seconds, meeting_transcript_line.id LIMIT :param_1",
       "file": "app/services/meetings/domains/search/queries.py",
       "function": "lines"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_transcript_line LEFT OUTER JOIN meeting_participant ON meeting_transcript_line.participant_id = meeting_participant.id LEFT OUTER JOIN meeting_person ON meeting_person.id = meeting_participant.person_id WHERE meeting_transcript_line.id IN (__[POSTCOMPILE_id_2])",
+      "file": "app/services/meetings/domains/people/queries.py",
+      "function": "quotes"
     },
     {
       "kind": "repeated_statement",
@@ -247,6 +331,24 @@
       "label": "SELECT ... FROM saved_query WHERE saved_query.name = :name_1",
       "file": "app/components/database/saved.py",
       "function": "keep"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT DISTINCT ... FROM meeting_guide_point_line JOIN meeting_transcript_line ON meeting_transcript_line.id = meeting_guide_point_line.line_id WHERE meeting_transcript_line.meeting_id = :meeting_id_1",
+      "file": "app/services/meetings/domains/notes/queries.py",
+      "function": "citing"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT DISTINCT ... FROM meeting_note_line JOIN meeting_transcript_line ON meeting_transcript_line.id = meeting_note_line.line_id WHERE meeting_transcript_line.meeting_id = :meeting_id_1",
+      "file": "app/services/meetings/domains/notes/queries.py",
+      "function": "citing"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT DISTINCT ... FROM meeting_theme_line JOIN meeting_transcript_line ON meeting_transcript_line.id = meeting_theme_line.line_id WHERE meeting_transcript_line.meeting_id = :meeting_id_1",
+      "file": "app/services/meetings/domains/notes/queries.py",
+      "function": "citing"
     }
   ]
 }

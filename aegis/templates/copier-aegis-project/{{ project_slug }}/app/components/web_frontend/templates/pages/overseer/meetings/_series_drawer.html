@@ -1,0 +1,5 @@
+{# One series in the drawer: what it is called, then the live part
+   (_series_body.html, which re-reads itself while it is being written). #}
+{% from "components/macros/layout.html" import dialog_title %}
+{{ dialog_title(record.name, "What keeps coming up, over time") }}
+{% include "pages/overseer/meetings/_series_body.html" %}

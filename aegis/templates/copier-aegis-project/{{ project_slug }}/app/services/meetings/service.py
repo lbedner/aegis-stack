@@ -21,6 +21,7 @@ from app.services.meetings.domains.notes import queries as notes_queries
 from app.services.meetings.domains.notes.service import notes_of
 from app.services.meetings.domains.people import participants
 from app.services.meetings.domains.people import queries as people_queries
+from app.services.meetings.domains.series import queries as series_queries
 from app.services.meetings.models import (
     UNKNOWN,
     Caption,
@@ -33,6 +34,8 @@ from app.services.meetings.models import (
     MeetingParticipant,
     MeetingRecord,
     MeetingStatus,
+    MeetingTheme,
+    MeetingThemeLine,
     Platform,
     TranscriptLine,
     TranscriptRow,
@@ -252,10 +255,10 @@ class MeetingsService:
     async def delete(self, meeting_id: int) -> None:
         """The meeting and everything kept of it (its notes, transcript and
         participants go with it), anyone who spoke only in it (and their
-        guide), and whatever elsewhere cited only its lines: another
-        meeting's note item, a guide's point, a contradiction left with
-        one side. One the bot is still in is
-        refused: ask it to leave first."""
+        guide), whatever elsewhere cited only its lines (another meeting's
+        note item, a guide's point, a series' theme, a contradiction left
+        with one side), and its series if it was the last on its link. One
+        the bot is still in is refused: ask it to leave first."""
         meeting = await self.get(meeting_id)
         if meeting.status in IN_PROGRESS:
             raise MeetingInProgressError(
@@ -265,7 +268,11 @@ class MeetingsService:
         points = await notes_queries.citing(
             self.db, MeetingGuidePointLine.point_id, meeting_id
         )
+        themes = await notes_queries.citing(
+            self.db, MeetingThemeLine.theme_id, meeting_id
+        )
         here = await people_queries.meeting_people(self.db, meeting_id)
+        owner, link = meeting.owner_user_id, series_queries.series_link(meeting.url)
         await self.db.delete(meeting)
         await self.db.flush()
         await notes_queries.delete_in(
@@ -276,8 +283,18 @@ class MeetingsService:
         await notes_queries.delete_in(
             self.db,
             MeetingGuidePoint.id,
-            await people_queries.points_left_uncited(self.db, points),
+            await notes_queries.citing_nothing(
+                self.db, MeetingGuidePointLine.point_id, points
+            ),
         )
+        await notes_queries.delete_in(
+            self.db,
+            MeetingTheme.id,
+            await notes_queries.citing_nothing(
+                self.db, MeetingThemeLine.theme_id, themes
+            ),
+        )
+        await series_queries.drop_if_empty(self.db, owner, link)
         await people_queries.drop_people_in_no_meeting(
             self.db,
             [person.id for _, person in here],  # type: ignore[misc]

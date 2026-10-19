@@ -206,10 +206,11 @@
   .sql-tab:hover .sql-tab-close, .sql-tab[aria-selected="true"] .sql-tab-close { @apply visible; }
   .sql-tab-new { @apply px-2 pt-1 pb-2 text-sm text-aegis-muted hover:text-aegis-teal; }
   .sql-tab-name { @apply w-32 bg-transparent border-b border-aegis-teal text-sm text-aegis-text outline-none; }
-  /* A tab (tab_item; Query's statements): teal underlined when it is the
-     one shown. */
+  /* A tab (tab_item, tabbed; Query's statements): underlined in teal when
+     it is the one shown. The :not()s match DaisyUI's own selected tab, so
+     its white underline does not win. */
   .tab { @apply text-sm pb-2 -mb-px border-b-2 border-transparent whitespace-nowrap transition-colors text-aegis-muted hover:text-aegis-text; }
-  .tab:is([aria-current="page"], [aria-selected="true"]) { @apply text-aegis-text border-aegis-teal; }
+  .tab:is([aria-current="page"], [aria-selected="true"]):not(.tab-disabled):not([disabled]) { @apply text-aegis-text border-aegis-teal; }
   /* A table's rows' headers (rows_table): each sorts them, the one sorted
      marked by its arrow (rows.js; on Rows, the server's order). */
   .rows-sort { @apply inline-flex items-center gap-1 hover:text-aegis-text; }

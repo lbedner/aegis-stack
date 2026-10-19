@@ -74,6 +74,43 @@ async def test_a_row_opens_its_notes_and_transcript_in_the_drawer(
     none(html, "[data-leave]")
 
 
+def _tabs(html: str) -> tuple[list[str], list[str]]:
+    """The drawer's tabs, and the panels shown (the rest hidden)."""
+    tabs = one(html, "[data-tabs]")
+    panels = select(tabs, "[data-tab-panel]")
+    return (
+        [text(tab) for tab in select(tabs, "[role=tab]")],
+        [p.get("data-tab-panel") or "" for p in panels if p.get("hidden") is None],
+    )
+
+
+async def test_a_long_call_is_read_a_tab_at_a_time(
+    overseer: TestClient, async_db_session: AsyncSession
+) -> None:
+    """Notes first; a search hit opens on the transcript, at its line."""
+    meeting_id, ids = await ended(
+        async_db_session, None, ("Ada", "Ada said this."), notes=lambda _: Notes(summary="-")
+    )
+    await keep_heard(async_db_session, meeting_id, {"Ada": 42.0})
+
+    drawer = page_html(overseer, f"{PARTIALS}/{meeting_id}/drawer")
+    at_hit = page_html(overseer, f"{PARTIALS}/{meeting_id}/drawer?line={ids[0]}")
+
+    assert _tabs(drawer) == (["Notes", "Threads", "Transcript", "Who talked"], ["notes"])
+    assert _tabs(at_hit)[1] == ["transcript"]
+
+
+async def test_a_meeting_the_bot_left_reads_as_done_not_greyed_out(
+    overseer: TestClient, async_db_session: AsyncSession
+) -> None:
+    """The bot leaves when the call ends: that is how a meeting goes well."""
+    meeting_id = await _ended(async_db_session, None)
+
+    html = page_html(overseer, f"{PARTIALS}/{meeting_id}/drawer")
+
+    assert one(html, "[data-status] [data-tone]").get("data-tone") == "ok"
+
+
 async def test_deleting_a_meeting_from_the_drawer(
     overseer: TestClient, async_db_session: AsyncSession
 ) -> None:

@@ -18,6 +18,9 @@ from app.services.meetings import service as meetings_service
 from app.services.meetings.audio import RATE
 from app.services.meetings.domains.notes.service import keep_notes
 from app.services.meetings.domains.people.kept import guides_of, keep_guide
+from app.services.meetings.domains.series import service as series_service
+from app.services.meetings.domains.series.kept import keep_series
+from app.services.meetings.domains.series.queries import series_link
 from app.services.meetings.login import CALENDAR, LOGIN
 from app.services.meetings.models import (
     ActionItem,
@@ -30,6 +33,7 @@ from app.services.meetings.models import (
     Notes,
     PersonGuide,
     Platform,
+    SeriesNotes,
 )
 from app.services.meetings.service import (
     NOT_DONE,
@@ -60,6 +64,7 @@ def bot_on(
     poll_seconds: float = 0,
     notes: Callable[[int], Awaitable[None]] | None = None,
     guides: Callable[[int], Awaitable[None]] | None = None,
+    themes: Callable[[int], Awaitable[None]] | None = None,
 ) -> None:
     """The bot runs on ``session`` and joins ``call`` instead of a browser,
     beating on every look."""
@@ -69,6 +74,7 @@ def bot_on(
     # No model writes the notes unless the test brings one.
     monkeypatch.setattr(bot, "notes_writer", lambda: notes)
     monkeypatch.setattr(bot, "guides_writer", lambda: guides)
+    monkeypatch.setattr(bot, "themes_writer", lambda: themes)
 
     @asynccontextmanager
     async def open_meet(
@@ -105,6 +111,20 @@ def hold_the_writer(monkeypatch: pytest.MonkeyPatch) -> tuple[list[int], list[An
     monkeypatch.setattr(meetings_service, "background", runs.append)
     monkeypatch.setattr(meetings_service, "WRITING", set())
     return written, runs
+
+
+def hold_the_series_writer(monkeypatch: pytest.MonkeyPatch) -> list[Any]:
+    """A series writer whose runs are held rather than started, and no
+    series being written yet: the runs to await."""
+
+    async def write(meeting_id: int) -> None:
+        return None
+
+    runs: list[Any] = []
+    monkeypatch.setattr(series_service, "themes_writer", lambda: write)
+    monkeypatch.setattr(series_service, "background", runs.append)
+    monkeypatch.setattr(series_service, "THEMING", set())
+    return runs
 
 
 def answering(
@@ -158,11 +178,12 @@ async def ended(
     owner: int | None,
     *lines: tuple[str, str],
     notes: Callable[[list[int]], Notes],
+    url: str = MEET,
 ) -> tuple[int, list[int]]:
-    """A meeting of ``owner``'s the bot has left, having heard ``lines``,
-    with the notes ``notes`` writes from their row ids. Returns its id and
-    those ids."""
-    meeting = await MeetingsService(session, owner).request(MEET, "Notes")
+    """A meeting of ``owner``'s on ``url`` the bot has left, having heard
+    ``lines``, with the notes ``notes`` writes from their row ids. Returns
+    its id and those ids."""
+    meeting = await MeetingsService(session, owner).request(url, "Notes")
     meeting_id: int = meeting.id  # type: ignore[assignment]
     await transition(session, meeting_id, MeetingStatus.LEFT, from_=NOT_DONE)
     ids = await said(session, meeting_id, *lines)
@@ -236,6 +257,42 @@ async def kept_guide(
         )
     ).one()
     return guide.id  # type: ignore[return-value]
+
+
+async def asked_twice(
+    session: AsyncSession, owner: int | None
+) -> tuple[list[int], list[int]]:
+    """Two of ``owner``'s meetings on one link where Dana asked for the
+    usage report: the meetings, and the line she asked in each."""
+    meetings, asked = [], []
+    for said in ("The usage report?", "Still no report."):
+        meeting_id, ids = await ended(
+            session, owner, ("Dana", said), notes=lambda _: Notes(summary="-")
+        )
+        meetings.append(meeting_id)
+        asked.append(ids[0])
+    return meetings, asked
+
+
+async def kept_series(
+    session: AsyncSession,
+    owner: int | None,
+    url: str = MEET,
+    name: str = "",
+    **content: Any,
+) -> int:
+    """The series of ``owner``'s meetings on ``url``, kept as the model
+    would have written it (``content`` as ``SeriesNotes``' parts); its id."""
+    notes = SeriesNotes(**({"summary": "Over time."} | content))
+    return await keep_series(
+        session,
+        owner,
+        series_link(url),
+        notes,
+        name=name,
+        model_name="test-model",
+        meetings=2,
+    )
 
 
 async def someone_else(session: AsyncSession) -> int:

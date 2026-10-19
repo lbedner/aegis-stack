@@ -23,14 +23,12 @@ from app.components.frontend.controls import (
     DataTableColumn,
     NativeDropdown,
     PrimaryText,
-    SecondaryText,
 )
 from app.components.frontend.controls.buttons import PulseButton
 from app.components.frontend.controls.inputs import StyledTextField
 from app.components.frontend.controls.record_detail import build_field_blocks
 from app.components.frontend.controls.snack_bar import ErrorSnackBar, SuccessSnackBar
 from app.components.frontend.controls.tabs import PulseTabs
-from app.components.frontend.state.session_state import get_session_state
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.formatting import format_clock, format_date
 from app.services.meetings.domains.accounts.service import agent_names
@@ -43,19 +41,16 @@ from ..cards.card_utils import get_status_detail
 from .base_detail_popup import BaseDetailPopup
 from .meetings_agents_tab import AGENTS, AgentPicker, AgentsTab
 from .meetings_calendar_tab import CalendarTab
-from .meetings_follow import FOLLOW_SECONDS, follow
+from .meetings_follow import FOLLOW_SECONDS, api, follow, hint
 from .meetings_people_tab import PeopleTab
 from .meetings_search_tab import SearchTab
+from .meetings_series_tab import SeriesTab
 from .meetings_threads import ThreadsBlock
 from .modal_sections import EmptyStatePlaceholder, SectionHeader
 
 API = "/api/v1/meetings/admin"
 # Where a meeting is sent from: the owner's route, so the admin's own.
 SEND = "/api/v1/meetings"
-
-
-def _api(page: ft.Page) -> Any:
-    return get_session_state(page).api_client
 
 
 def _when(value: Any) -> datetime | None:
@@ -97,7 +92,7 @@ def following(record: dict[str, Any]) -> bool:
 
 def _items(items: list[dict[str, Any]], empty: str) -> list[ft.Control]:
     if not items:
-        return [SecondaryText(empty, size=Theme.Typography.BODY_SMALL)]
+        return [hint(empty)]
     return [
         PrimaryText(
             " · ".join(
@@ -114,9 +109,9 @@ def _items(items: list[dict[str, Any]], empty: str) -> list[ft.Control]:
 def _notes(record: dict[str, Any]) -> list[ft.Control]:
     notes = record.get("notes")
     if record.get("under_way"):
-        return [_hint("The notes are written once the bot has left.")]
+        return [hint("The notes are written once the bot has left.")]
     if record.get("writing"):
-        return [_hint("Writing the notes…")]
+        return [hint("Writing the notes…")]
     if notes:
         me = record.get("me")
         failed = record.get("notes_error")
@@ -155,7 +150,7 @@ def _notes(record: dict[str, Any]) -> list[ft.Control]:
             )
         ]
     return [
-        _hint(
+        hint(
             "No notes yet."
             if record.get("transcript")
             else "Nothing was said, so there is nothing to note."
@@ -168,13 +163,9 @@ def has_threads(record: dict[str, Any]) -> bool:
     return bool(record.get("notes")) and not following(record)
 
 
-def _hint(text: str) -> ft.Control:
-    return SecondaryText(text, size=Theme.Typography.BODY_SMALL)
-
-
 def _transcript(lines: list[dict[str, Any]], hit: int | None) -> list[ft.Control]:
     if not lines:
-        return [SecondaryText("Nothing said yet.", size=Theme.Typography.BODY_SMALL)]
+        return [hint("Nothing said yet.")]
     return [
         PrimaryText(
             f"{format_clock(float(line.get('at') or 0))}  "
@@ -254,7 +245,7 @@ class MeetingPane(ft.Container):
     async def show(self, meeting_id: int, line: int | None = None) -> None:
         """The meeting, scrolled to ``line`` (a search hit's) when given."""
         self._line = line
-        self._present(await _api(self.page).get(f"{API}/{meeting_id}"))
+        self._present(await api(self.page).get(f"{API}/{meeting_id}"))
         if line and self._view is not None and self.page:
             self._view.scroll_to(key=f"line-{line}", duration=300)
 
@@ -277,7 +268,7 @@ class MeetingPane(ft.Container):
         try:
             if await follow(
                 self.page,
-                lambda: _api(self.page).get(f"{API}/{meeting_id}"),
+                lambda: api(self.page).get(f"{API}/{meeting_id}"),
                 lambda: self._showing == meeting_id,
                 self._draw,
                 following,
@@ -339,27 +330,27 @@ class MeetingPane(ft.Container):
     async def _set_me(self, meeting_id: int, name: str) -> None:
         """Which speaker the owner is (blank: nobody); the read it returns
         is drawn as it is."""
-        record = await _api(self.page).post(
+        record = await api(self.page).post(
             f"{API}/{meeting_id}/me", json={"name": name}
         )
         self._present(record)
 
     async def _rewrite(self, meeting_id: int) -> None:
-        record = await _api(self.page).post(f"{API}/{meeting_id}/notes")
+        record = await api(self.page).post(f"{API}/{meeting_id}/notes")
         if record is None:
             ErrorSnackBar("No notes to write now").launch(self.page)
             return await self.show(meeting_id)
         self._present(record)
 
     async def _leave(self, meeting_id: int) -> None:
-        await _api(self.page).post(f"{API}/{meeting_id}/leave")
+        await api(self.page).post(f"{API}/{meeting_id}/leave")
         SuccessSnackBar("Asked to leave").launch(self.page)
         await self._on_change()
         await self.show(meeting_id)
 
     async def _confirm_delete(self, meeting_id: int) -> None:
         async def _delete() -> None:
-            await _api(self.page).delete(f"{API}/{meeting_id}")
+            await api(self.page).delete(f"{API}/{meeting_id}")
             SuccessSnackBar("Meeting deleted").launch(self.page)
             self.clear()
             await self._on_change()
@@ -420,7 +411,7 @@ class MeetingsTab(ft.Container):
         url = str(self._link.value or "").strip()
         if not url:
             return
-        sent = await _api(self.page).post(
+        sent = await api(self.page).post(
             SEND, json={"url": url, **self._agent.chosen()}
         )
         if not isinstance(sent, dict):
@@ -433,9 +424,9 @@ class MeetingsTab(ft.Container):
         await self._pane.show(int(sent["id"]))
 
     async def _load(self) -> None:
-        data = await _api(self.page).get(API)
+        data = await api(self.page).get(API)
         meetings = data if isinstance(data, list) else []
-        listed = await _api(self.page).get(AGENTS)
+        listed = await api(self.page).get(AGENTS)
         agents = listed if isinstance(listed, list) else []
         self._agent.fill(agents)
         names = agent_names((a["account"]["id"], a["account"]["name"]) for a in agents)
@@ -486,6 +477,7 @@ class MeetingsDetailDialog(BaseDetailPopup):
                         ft.Tab(text="Meetings", content=MeetingsTab(page)),
                         ft.Tab(text="Calendar", content=CalendarTab(page)),
                         ft.Tab(text="Search", content=_search_tab(page)),
+                        ft.Tab(text="Series", content=SeriesTab(page)),
                         ft.Tab(text="People", content=PeopleTab(page)),
                         ft.Tab(text="Agents", content=AgentsTab(page)),
                     ],

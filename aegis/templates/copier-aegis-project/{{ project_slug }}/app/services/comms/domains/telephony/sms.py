@@ -12,7 +12,7 @@ from typing import Any
 from twilio.base.exceptions import TwilioRestException
 
 from app.core.log import logger
-from app.services.comms.domains.telephony.client import (
+from app.services.comms.adapters.twilio.client import (
     credential_errors,
     twilio_client,
     twilio_config,

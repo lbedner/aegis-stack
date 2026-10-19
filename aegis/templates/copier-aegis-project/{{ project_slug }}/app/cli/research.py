@@ -13,8 +13,11 @@ import typer
 from app.cli import theme
 from app.core.db import get_async_session
 from app.core.formatting import format_relative_time
-from app.services.research.registry import installed_sources
-from app.services.research.service import ResearchService, refresh_every_watch
+from app.services.research.service import (
+    ResearchService,
+    installed_sources,
+    refresh_every_watch,
+)
 
 app = typer.Typer(help="Outside posts and threads, collected by saved searches.")
 console = theme.console()

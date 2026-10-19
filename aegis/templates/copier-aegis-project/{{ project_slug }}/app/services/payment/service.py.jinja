@@ -22,13 +22,13 @@ from app.services.payment.models import (
     PaymentSubscription,
     PaymentTransaction,
 )
-from app.services.payment.domains.providers.base import (
+from app.services.payment.adapters.providers.base import (
     BasePaymentProvider,
     CatalogEntry,
     WebhookEvent,
 )
 from app.services.payment.domains.catalog.cache import get_catalog
-from app.services.payment.domains.providers.stripe import (
+from app.services.payment.adapters.providers.stripe import (
     StripeProvider,
     set_runtime_webhook_secret,
 )

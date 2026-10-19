@@ -10,6 +10,8 @@ Where the walk cannot see further it stops at that line and says why
 collapse to the nodes they join (``edges``), for a reader of the model."""
 
 from collections.abc import Iterable, Mapping
+from functools import cache
+from typing import Any
 
 from fastapi.dependencies.models import Dependant
 from fastapi.routing import APIRoute
@@ -18,11 +20,11 @@ from starlette.routing import BaseRoute
 from app.core import exposure, secrets, source_index
 from app.core.ontology import calls
 from app.core.ontology.model import Mode
-from app.core.source_index import Index
+from app.core.source_index import Index, within
 
 from .dry_names import symbol_of
 from .dry_walk import REASONS, UNSEEN, Entry, Frozen, Hop, HopKind, Need, Stop, Walker
-from .patterns import label, returns
+from .patterns import SERVICE_PACKAGE, label, returns
 
 # What callers read from here, defined beside the walk.
 __all__ = [
@@ -32,7 +34,9 @@ __all__ = [
     "Entry",
     "Need",
     "anchor",
+    "entry_of",
     "find",
+    "reaches_service",
     "trace",
     "walk",
 ]
@@ -73,6 +77,25 @@ def anchor(route: APIRoute) -> Entry:
     if handler is None:
         raise ValueError(f"{label(route)} has no handler the walk can find")
     return Entry(label(route), handler, _needs(route.dependant))
+
+
+def entry_of(func: Any, name: str) -> Entry | None:
+    """``func`` as a walk's start (a task, a job), or None where the walk
+    cannot find its source."""
+    handler = symbol_of(func)
+    return Entry(name, handler) if handler else None
+
+
+@cache
+def reaches_service(entry: Entry | None, index: Index | None = None) -> bool:
+    """Whether ``entry``'s walk (through ``index``, the project's) reaches
+    ``app.services`` past its own handler: a function, class or table of
+    one, however far down. What the patterns' Service step reads, once an
+    entry (its rows and its thin rule ask too)."""
+    return entry is not None and any(
+        hop.kind != HopKind.HANDLER and within(hop.symbol, SERVICE_PACKAGE)
+        for hop in trace(entry, index, set()).hops
+    )
 
 
 def _needs(dependant: Dependant) -> tuple[Need, ...]:

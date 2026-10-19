@@ -34,7 +34,7 @@ A source is a plugin that registers itself in its own `app/services/<service>/so
 ```python
 from pydantic import BaseModel
 
-from app.services.research.registry import Source, SourceItem, register_source
+from app.services.research.service import Source, SourceItem, register_source
 
 
 class Query(BaseModel):

@@ -21,6 +21,7 @@ from app.services.system import patterns, service_parts, ui_backend
 from app.services.system.models import ComponentStatus
 
 from . import macro_catalog
+from . import overseer_conformance as conformance
 from .overseer_nav import NavItem, SectionRequest
 from .rendering import status_cell
 
@@ -162,6 +163,9 @@ def pattern_view(report: patterns.Report) -> dict[str, Any]:
     pattern = report.pattern
     titles = {rule.key: rule.title for rule in pattern.rules}
     rows = [ROWS[pattern.key](i) | _state(i, titles) for i in report.instances]
+    if pattern.key == service_parts.PARTS.key:  # as the map's hover lists them
+        for row, instance in zip(rows, report.instances, strict=True):
+            row["todo"] = conformance.part_todos(instance.label)
     canonical = None
     if report.canonical is not None:
         code, path = patterns.source(pattern.function(report.canonical.target))

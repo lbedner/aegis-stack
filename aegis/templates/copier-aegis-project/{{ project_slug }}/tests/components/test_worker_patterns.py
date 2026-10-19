@@ -31,31 +31,6 @@ def test_every_rule_says_why() -> None:
     assert all(rule.why for rule in TASK.rules)
 
 
-def test_a_task_handing_work_to_a_lazily_imported_service_follows() -> None:
-    async def delegate(job_id: str, attempts: int) -> dict[str, bool]:
-        """Delegates to a service imported where it is used."""
-        from app.services.system.health import get_system_status
-
-        return {"ok": bool(await get_system_status())}
-
-    assert _findings(delegate) == []
-
-
-def test_a_call_through_an_attribute_reaches_the_service() -> None:
-    from app.services.system.health import get_system_status
-
-    class Job:
-        func = staticmethod(get_system_status)
-
-    job = Job()
-
-    async def run() -> dict[str, bool]:
-        """A scheduled job's wrapper."""
-        return {"ok": bool(await job.func())}
-
-    assert patterns.calls_service(run)
-
-
 def test_arguments_that_are_not_json_are_flagged() -> None:
     class Account(BaseModel):
         id: int

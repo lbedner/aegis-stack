@@ -8,6 +8,7 @@ from sqlalchemy import func
 from sqlmodel import select
 
 from app.core.time import today as utc_today
+from app.services.payment.adapters.providers.base import ProviderHealth
 from app.services.payment.constants import (
     DisputeStatus,
     SubscriptionStatus,
@@ -15,7 +16,6 @@ from app.services.payment.constants import (
     TransactionType,
 )
 from app.services.payment.domains.base import PaymentServiceBase
-from app.services.payment.domains.providers.base import ProviderHealth
 from app.services.payment.models import (
     PaymentCustomer,
     PaymentDispute,

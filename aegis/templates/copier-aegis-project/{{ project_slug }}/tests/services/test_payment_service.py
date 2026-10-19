@@ -8,19 +8,19 @@ from unittest.mock import AsyncMock
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.services.payment.adapters.providers.base import (
+    CheckoutResult,
+    CustomerResult,
+    ProviderHealth,
+    RefundResult,
+    WebhookEvent,
+)
 from app.services.payment.constants import (
     DisputeStatus,
     ProviderKeys,
     SubscriptionStatus,
     TransactionStatus,
     TransactionType,
-)
-from app.services.payment.domains.providers.base import (
-    CheckoutResult,
-    CustomerResult,
-    ProviderHealth,
-    RefundResult,
-    WebhookEvent,
 )
 from app.services.payment.models import (
     PaymentCustomer,

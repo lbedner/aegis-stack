@@ -13,10 +13,10 @@ import pytest
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.research import registry
-from app.services.research.models import ResearchItem, ResearchItemSnapshot
+from app.services.research.domains.sources import registry
+from app.services.research.domains.sources.registry import UnknownSourceError
 from app.services.research.domains.watches.refresh import refresh_every_watch
-from app.services.research.registry import UnknownSourceError
+from app.services.research.models import ResearchItem, ResearchItemSnapshot
 from app.services.research.service import (
     ResearchService,
     SourceFailedError,
@@ -380,7 +380,7 @@ def test_a_services_sources_module_registers_its_source(
         "demo_source",
         sources=(
             "from pydantic import BaseModel\n"
-            "from app.services.research.registry import Source, register_source\n"
+            "from app.services.research.service import Source, register_source\n"
             "class Q(BaseModel):\n"
             "    q: str\n"
             "async def nothing(*_):\n"
@@ -402,7 +402,7 @@ def test_a_sources_aware_time_is_stored_as_naive_utc() -> None:
     for one, so a source's times are converted as the item is built."""
     from datetime import datetime, timedelta, timezone
 
-    from app.services.research.registry import SourceItem
+    from app.services.research.domains.sources.registry import SourceItem
 
     item = SourceItem(
         external_id="1",

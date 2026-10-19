@@ -19,6 +19,7 @@ from .overseer_zoom import registry_of
 class Conformance(NamedTuple):
     findings: dict[str, list[Finding]]  # by map key
     lacks: dict[str, list[str]]  # each checked part's missing parts, by map key
+    by_part: dict[str, list[Finding]] = {}  # by the part's own label
 
 
 @cache
@@ -26,12 +27,14 @@ def conformance() -> Conformance:
     """The parts report (``service_parts.report``) by the map's keys."""
     report = service_parts.report()
     found: dict[str, list[Finding]] = {}
+    by_part: dict[str, list[Finding]] = {}
     for finding in pattern_findings.findings(report):
         found.setdefault(registry_of(finding.subject), []).append(finding)
+        by_part.setdefault(finding.subject, []).append(finding)
     lacks: dict[str, list[str]] = {}
     for instance in report.instances:
         lacks.setdefault(registry_of(instance.label), []).extend(instance.missed)
-    return Conformance(found, lacks)
+    return Conformance(found, lacks, by_part)
 
 
 def mark(stack: list[dict[str, Any]], found: Conformance) -> None:
@@ -43,7 +46,7 @@ def mark(stack: list[dict[str, Any]], found: Conformance) -> None:
             findings = found.findings.get(key, [])
             missing = found.lacks[key]
             note = f"Lacks: {', '.join(missing)}" if missing else None
-            _mark(item, [(f, f.evidence) for f in findings], note)
+            _mark(item, _whole(findings), note)
 
 
 def mark_pieces(
@@ -79,21 +82,39 @@ def _mark(
         item["note"] = note
     if not findings:
         return
-    index = source_index.project()
     item |= {
-        "todo": [
-            {
-                "action": f.action,
-                "tone": f.severity,
-                "places": [_place(f, e, index) for e in places],
-            }
-            for f, places in findings
-        ],
+        "todo": todos(findings),
         "todo_count": sum(len(places) for _, places in findings),
         "todo_tone": "error"
         if any(f.severity == "error" for f, _ in findings)
         else "warn",
     }
+
+
+def part_todos(label: str) -> list[dict[str, Any]]:
+    """The part ``label``'s places to fix: its own findings (the map folds
+    a sub-part's into its part's), every place each points at."""
+    return todos(_whole(conformance().by_part.get(label, [])))
+
+
+def _whole(findings: list[Finding]) -> list[tuple[Finding, tuple[str, ...]]]:
+    return [(f, f.evidence) for f in findings]
+
+
+def todos(findings: list[tuple[Finding, tuple[str, ...]]]) -> list[dict[str, Any]]:
+    """What to fix: each finding's action, tone and the places it points at
+    (``places``, its evidence or the part of it in one piece), each with
+    what is there (``service_parts.place_note``). The map's hover and the
+    Patterns page read this one list."""
+    index = source_index.project()
+    return [
+        {
+            "action": f.action,
+            "tone": f.severity,
+            "places": [_place(f, e, index) for e in places],
+        }
+        for f, places in findings
+    ]
 
 
 def _place(

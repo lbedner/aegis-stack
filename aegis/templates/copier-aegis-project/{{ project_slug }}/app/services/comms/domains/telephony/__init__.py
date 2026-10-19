@@ -1,1 +1,1 @@
-"""SMS and voice calls through Twilio, and the client and credentials they share."""
+"""SMS and voice calls, through the Twilio client (``adapters.twilio``)."""

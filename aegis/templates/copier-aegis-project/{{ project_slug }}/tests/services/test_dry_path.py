@@ -331,3 +331,59 @@ def test_extracting_a_document_runs_here_or_on_the_worker(app: FastAPI) -> None:
         assert task.symbol.endswith(".extract_document_task")
         assert task.mode == "async"
     assert "app.services.documents.domains.extraction.jobs.run_extraction" in by_symbol
+
+
+def test_a_function_its_engine_renamed_is_found_where_it_was_written() -> None:
+    """taskiq renames a task's function; its code keeps the name it was
+    written with."""
+    import types
+
+    from app.core.time import utcnow
+    from app.services.system.dry_names import symbol_of
+
+    renamed = types.FunctionType(utcnow.__code__, utcnow.__globals__)
+    renamed.__qualname__ = "utcnow__taskiq_original"
+    assert symbol_of(renamed) == ("app.core.time", "utcnow")
+
+
+def test_a_library_function_keeps_its_own_name() -> None:
+    """A library under the project (its ``.venv``) is not the project's
+    code: it keeps the name it gives itself."""
+    from app.services.system.dry_names import symbol_of
+
+    assert symbol_of(FastAPI.get) == (FastAPI.__module__, "FastAPI.get")
+
+
+def test_a_service_is_reached_past_the_handler(index: source_index.Index) -> None:
+    """The Service step's question: a task importing its service where it
+    uses it reaches one; a handler living in a service is not its own."""
+    task = Entry("t", ("app.components.worker.tasks.dry_tasks", "dry_named_task"))
+    job = Entry("j", ("app.services.blog.dry_jobs", "dry_work"))
+    assert dry_path.reaches_service(task, index)
+    assert not dry_path.reaches_service(Entry("r", (API, "read")), index)
+    assert not dry_path.reaches_service(job, index)
+    assert not dry_path.reaches_service(None)
+
+
+def test_a_shared_instance_is_walked_into_its_class(tmp_path: Path) -> None:
+    """One instance the routes share (``ai_service = AIService(settings)``
+    in its own module): a call on it is a call of its class's method."""
+    shared = "app/components/backend/api/blog/shared.py"
+    write_tree(
+        tmp_path,
+        FILES
+        | {
+            shared: (
+                "from app.services.blog.service import BlogService\n"
+                "blog = BlogService(None)\n"
+            ),
+            "app/components/backend/api/blog/show.py": (
+                "from app.components.backend.api.blog.shared import blog\n"
+                "async def show(slug: str) -> None:\n"
+                "    return await blog.get_post(slug)\n"
+            ),
+        },
+    )
+    entry = Entry("show", ("app.components.backend.api.blog.show", "show"))
+    hops = dry_path.trace(entry, source_index.at(tmp_path), set()).hops
+    assert "app.services.blog.service.BlogService.get_post" in {h.symbol for h in hops}

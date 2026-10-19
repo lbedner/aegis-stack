@@ -58,7 +58,7 @@ async def test_an_ai_key_is_checked_against_its_provider(
 async def test_a_send_only_resend_key_counts_as_working(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    module = _owner("app.services.comms.domains.email.messages")
+    module = _owner("app.services.comms.adapters.resend.messages")
     entry = _entry(module, "RESEND_API_KEY")
     assert entry.is_needed() and entry.verify is not None
     answering(monkeypatch, 401, '{"name": "restricted_api_key"}')
@@ -71,7 +71,7 @@ async def test_a_send_only_resend_key_counts_as_working(
 async def test_a_twilio_token_is_checked_with_its_account(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    module = _owner("app.services.comms.domains.telephony.client")
+    module = _owner("app.services.comms.adapters.twilio.client")
     entry = _entry(module, "TWILIO_AUTH_TOKEN")
     assert entry.verify is not None
     monkeypatch.setitem(settings.__dict__, "TWILIO_ACCOUNT_SID", None)
@@ -86,7 +86,7 @@ async def test_a_twilio_token_is_checked_with_its_account(
 async def test_a_restricted_stripe_key_counts_as_working(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    module = _owner("app.services.payment.domains.providers.stripe")
+    module = _owner("app.services.payment.adapters.providers.stripe")
     entry = _entry(module, "STRIPE_SECRET_KEY")
     assert entry.is_needed() and entry.verify is not None
     answering(monkeypatch, 403)
@@ -213,7 +213,7 @@ def _resend_domains(monkeypatch: pytest.MonkeyPatch, *domains: tuple[str, str]) 
 async def test_the_from_address_offers_verified_domains_and_checks_its_own(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    module = _owner("app.services.comms.domains.email.messages")
+    module = _owner("app.services.comms.adapters.resend.messages")
     entry = _entry(module, "RESEND_FROM_EMAIL")
     assert entry.choices is not None and entry.verify is not None
     _resend_domains(
@@ -234,7 +234,7 @@ async def test_twilio_offers_the_accounts_numbers_and_services(
 ) -> None:
     from types import SimpleNamespace
 
-    module = _owner("app.services.comms.domains.telephony.client")
+    module = _owner("app.services.comms.adapters.twilio.client")
     number = SimpleNamespace(phone_number="+15550001111", friendly_name="Main line")
     service = SimpleNamespace(sid="MG123", friendly_name="Alerts")
     client = SimpleNamespace(

@@ -112,13 +112,23 @@ class Source:
 
 def _annotations(node: ast.ClassDef, name: str) -> list[ast.expr]:
     """Where class ``node`` says what its attribute ``name`` is: in its
-    body, or as the ``__init__`` parameter it keeps under that name."""
+    body, as a property's return, or as the ``__init__`` parameter it keeps
+    under that name."""
     found = [
         s.annotation
         for s in node.body
         if isinstance(s, ast.AnnAssign)
         and isinstance(s.target, ast.Name)
         and s.target.id == name
+    ] + [
+        s.returns
+        for s in node.body
+        if isinstance(s, Def)
+        and s.name == name
+        and s.returns is not None
+        and any(
+            isinstance(d, ast.Name) and d.id == "property" for d in s.decorator_list
+        )
     ]
     init = next(
         (s for s in node.body if isinstance(s, Def) and s.name == "__init__"), None

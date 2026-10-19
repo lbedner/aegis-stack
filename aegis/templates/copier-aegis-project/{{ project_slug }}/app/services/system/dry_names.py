@@ -44,6 +44,10 @@ def symbol_of(found: object) -> Symbol | None:
         found = type(found).__call__
     module = getattr(found, "__module__", None)
     name = getattr(found, "__qualname__", "")
+    # The name it was written with: an engine may rename it (taskiq's
+    # ``*__taskiq_original``); its code object keeps the first.
+    code = getattr(found, "__code__", None)
+    name = code.co_qualname if code else name
     return None if not module or "<" in name else (module, name)
 
 
@@ -77,19 +81,36 @@ class Names:
         )
 
     def class_of(self, expr: ast.expr, scope: Scope) -> Symbol | None:
-        """The project class of an instance: ``self``, a typed name, an
-        attribute of one (``self.store``), or one a call makes or returns."""
+        """The project class of an instance: ``self``, a typed name, a
+        top-level one (``shared``), an attribute of one (``self.store``), or
+        one a call makes or returns."""
         if isinstance(expr, ast.Call):
             return self.made(expr, scope)
         if isinstance(expr, ast.Name):
             if expr.id in SELF and scope.owner:
                 return scope.owner
-            return scope.types.get(expr.id)
+            return scope.types.get(expr.id) or self.shared(expr.id, scope)
         if isinstance(expr, ast.Attribute) and (
             inner := self.class_of(expr.value, scope)
         ):
             return self.source.attribute(inner, expr.attr)
         return None
+
+    def shared(self, name: str, scope: Scope) -> Symbol | None:
+        """The class of a top-level instance ``name`` names, here or
+        imported (``ai_service = AIService(settings)``)."""
+        symbol = (
+            None
+            if _local(name, scope)
+            else resolve(self.index, scope.module.name, name)
+        )
+        if symbol is None or symbol[1] is None or self.source.definition(symbol):
+            return None
+        value = assigned(self.source.tree(symbol[0]), symbol[1])
+        home = self.index.get(symbol[0])
+        if not isinstance(value, ast.Call) or home is None:
+            return None
+        return self.made(value, Scope(home, scope.parent))
 
     def made(self, value: ast.expr, scope: Scope) -> Symbol | None:
         """The project class a call makes, or says it returns."""

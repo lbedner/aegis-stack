@@ -98,7 +98,7 @@ def sample_call_response():
 @pytest.fixture
 def mock_resend():
     """Mock the resend module."""
-    with patch("app.services.comms.domains.email.messages.resend") as mock:
+    with patch("app.services.comms.adapters.resend.messages.resend") as mock:
         mock.Emails.send.return_value = {"id": "email-123"}
         yield mock
 
@@ -106,9 +106,7 @@ def mock_resend():
 @pytest.fixture
 def mock_twilio_client():
     """Mock the Twilio Client."""
-    with patch(
-        "app.services.comms.domains.telephony.client.Client"
-    ) as mock_client_class:
+    with patch("app.services.comms.adapters.twilio.client.Client") as mock_client_class:
         mock_client = MagicMock()
         mock_client_class.return_value = mock_client
 

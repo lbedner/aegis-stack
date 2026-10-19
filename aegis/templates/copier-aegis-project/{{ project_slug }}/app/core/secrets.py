@@ -40,9 +40,9 @@ from app.core.log import logger
 # Modules that declare ``SECRETS``; ones this stack does not have are skipped.
 OWNERS = (
     "app.services.ai.domains.llm.provider_management",
-    "app.services.comms.domains.email.messages",
-    "app.services.comms.domains.telephony.client",
-    "app.services.payment.domains.providers.stripe",
+    "app.services.comms.adapters.resend.messages",
+    "app.services.comms.adapters.twilio.client",
+    "app.services.payment.adapters.providers.stripe",
     "app.components.backend.api.auth.oauth",
     "app.services.ops.adapters.porkbun_keys",
     "app.services.rag.config",

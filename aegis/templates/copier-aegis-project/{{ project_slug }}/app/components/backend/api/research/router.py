@@ -12,12 +12,13 @@ from app.services.research.models import (
     ResearchItemSnapshot,
     ResearchWatch,
 )
-from app.services.research.registry import UnknownSourceError, installed_sources
 from app.services.research.service import (
     MAX_RESULTS,
     ResearchService,
     SourceFailedError,
+    UnknownSourceError,
     WatchNotFoundError,
+    installed_sources,
 )
 
 router = APIRouter(prefix="/research", tags=["research"])

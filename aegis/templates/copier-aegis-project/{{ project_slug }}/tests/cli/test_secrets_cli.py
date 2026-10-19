@@ -2,6 +2,7 @@
 terminal. A value comes in through a hidden prompt or stdin, never argv,
 and nothing prints it back."""
 
+import asyncio
 from typing import Any
 
 import pytest
@@ -65,6 +66,8 @@ def test_list_shows_needed_apart_from_optional_never_a_value(store: FakeStore) -
     assert result.exit_code == 0, result.output
     assert "Missing" in result.output and "WXYZ" in result.output
     assert KEY not in result.output
+    names = [row.name for row in asyncio.run(secrets.status())]
+    assert [n for n in names if n not in result.output] == []
 
 
 def test_delete_and_test(store: FakeStore) -> None:

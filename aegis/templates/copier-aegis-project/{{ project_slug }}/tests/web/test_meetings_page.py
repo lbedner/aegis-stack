@@ -329,7 +329,7 @@ async def test_the_page_has_the_calendar_of_the_meetings_i_am_invited_to(
     (this one is Dana's and Leo's)."""
     calendar = Calendar(monkeypatch, STANDUP)
     await read_calendars(async_db_session, calendar.read, at(18, 0))
-    authenticated_client.cookies.set(TZ_COOKIE, "America%2FNew_York")  # as app.js sets it
+    authenticated_client.cookies.set(TZ_COOKIE, "America/New_York")
 
     html = page_html(authenticated_client, "/meetings?month=2026-10")
 

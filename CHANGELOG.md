@@ -9,6 +9,10 @@
 
 ### Added
 
+- **Meetings: what the bot says when it joins is a setting.**
+  `MEETINGS_ANNOUNCEMENT` (`{name}` the name it joins as) is who it says it is,
+  set in Overseer > Meetings > Settings; "What is said here is transcribed."
+  always follows it.
 - **A plugin's worker queue gets a worker.** `PluginSpec.worker_queues` names
   the queue modules a plugin ships under `app/components/worker/queues/`, and
   a stack with the worker component now emits a `worker-<name>` container for

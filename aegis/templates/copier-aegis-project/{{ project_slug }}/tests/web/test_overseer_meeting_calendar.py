@@ -41,7 +41,7 @@ async def test_a_month_of_every_agents_meetings_in_the_viewers_time(
     await read_calendars(async_db_session, calendar.read, at(18, 0))
     [sent] = await send_due(async_db_session, at(19, 13))
     await keep_agent(async_db_session, "work", "Work Notes", None)
-    overseer.cookies.set(TZ_COOKIE, "America%2FNew_York")  # as app.js sets it
+    overseer.cookies.set(TZ_COOKIE, "America/New_York")
 
     html = page_html(overseer, f"{CALENDAR}?month=2026-10")
 

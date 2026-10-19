@@ -9,7 +9,6 @@ wins and is changed there.
 
 from typing import Annotated
 
-from rich.table import Table
 import typer
 
 from app.cli import theme
@@ -31,10 +30,10 @@ def _setting(name: str) -> str:
 @app.command("list")
 async def list_settings() -> None:
     """Every setting: its value, where it comes from, and its default."""
-    table = Table(box=None, pad_edge=False)
-    for column in ("Name", "Owner", "Source", "Value", "Default"):
-        table.add_column(column)
-    for row in await secrets.status(setting=True):
+    rows = await secrets.status(setting=True)
+    columns = ("Name", "Owner", "Source", "Value", "Default")
+    table = theme.keyed_table(columns, [row.name for row in rows])
+    for row in rows:
         table.add_row(
             row.name, row.owner, row.state, row.in_effect or "", row.default or ""
         )

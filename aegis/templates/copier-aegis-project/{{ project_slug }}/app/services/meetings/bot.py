@@ -43,6 +43,9 @@ from app.services.meetings.service import (
 )
 
 POLL_SECONDS = 2.0
+# Said in every call the bot joins, after who it is: nobody is recorded
+# without being told.
+TRANSCRIBED = "What is said here is transcribed."
 ADMIT_TIMEOUT_SECONDS = 300.0
 # How long the bot stays once everyone else has gone.
 ALONE_SECONDS = 120.0
@@ -194,6 +197,14 @@ async def _stay(
                 await keep_heard(session, transcript.meeting_id, hearing.seconds)
 
 
+def announcement(name: str) -> str:
+    """What the bot says when it joins: who it is
+    (``MEETINGS_ANNOUNCEMENT``, ``{name}`` the name it joins as), then
+    that the call is transcribed, whatever the first is set to."""
+    who = settings.MEETINGS_ANNOUNCEMENT.replace("{name}", name).rstrip(" .:")
+    return f"{who}. {TRANSCRIBED}"
+
+
 async def _join(meeting: Meeting, login: str) -> None:
     """Into the call signed in as the agent it was sent as (``login``)."""
     meeting_id: int = meeting.id  # type: ignore[assignment]
@@ -208,10 +219,7 @@ async def _join(meeting: Meeting, login: str) -> None:
         await _admitted(call, pulse)
         await _step(meeting_id, MeetingStatus.IN_CALL, MeetingStatus.WAITING)
         transcript = _Transcript(meeting_id)
-        await call.say(
-            f"{meeting.bot_name} is taking notes in this meeting: "
-            "what is said here is transcribed."
-        )
+        await call.say(announcement(meeting.bot_name))
         if not await call.turn_on_captions():
             logger.warning("No captions in this call", meeting_id=meeting_id)
         await _stay(call, pulse, transcript, hearing)

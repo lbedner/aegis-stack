@@ -68,13 +68,7 @@ async def section_context(
         return await agents_context(req.db, meeting_url)
     if section == "calendar":
         calendar = await calendar_context(
-            req.db,
-            req.query,
-            req.zone,
-            CALENDAR,
-            meeting_url,
-            "#overseer-main",
-            opens_here=True,
+            req.db, req.query, req.zone, CALENDAR, meeting_url, await agents(req.db)
         )
         return {"calendar": calendar}
     counts = await meetings_counts(req.db)

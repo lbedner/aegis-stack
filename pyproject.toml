@@ -51,7 +51,7 @@ dependencies = [
     # dependabot widen this until the placement is handled upstream.
     "copier>=9.11.2,<9.15",
     "rich>=13.0.0",
-    "pillow>=12.3.0",
+    "pillow>=13.0.0",
     "packaging>=24.0",
     # Imported directly across the CLI (copier_manager, update, template_cleanup,
     # …). Guaranteed transitively via copier, but declared explicitly since we

@@ -675,7 +675,7 @@ class Settings(
             netloc = f"{netloc}:{port}"
         return urlunparse(parsed._replace(netloc=netloc))
 
-{% if ollama_mode != "none" %}
+{% if include_ai or ollama_mode != "none" %}
     @property
     def ollama_base_url_effective(self) -> str:
         """Get effective Ollama URL, preferring local override when not in Docker."""

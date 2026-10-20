@@ -120,7 +120,8 @@ class TestRedisUrlEffective:
 {% endif %}
 
 
-{% if ollama_mode != "none" %}
+{# Wherever the Ollama settings are: an AI stack may switch to Ollama later. #}
+{% if include_ai or ollama_mode != "none" %}
 class TestOllamaBaseUrlEffective:
     URL = "http://ollama:11434"
 

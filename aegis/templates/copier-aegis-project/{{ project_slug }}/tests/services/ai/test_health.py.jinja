@@ -24,6 +24,42 @@ _SETTLED_STATES = (
 )
 
 
+@pytest.mark.asyncio
+async def test_an_ollama_provider_is_checked_without_the_inference_component(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The ollama provider is selectable on any AI stack, so its check asks
+    Ollama's own API, never the inference component's client (absent unless
+    that component is installed). Unreachable is an answer, not an error."""
+    from app.core import config  # the settings the check reads, as it reads them
+
+    monkeypatch.setattr(config.settings, "AI_PROVIDER", "ollama")
+
+    status = await check_ai_service_health()
+
+    assert "ollama_error" not in status.metadata
+    assert isinstance(status.metadata.get("ollama_available"), bool)
+
+
+@pytest.mark.asyncio
+async def test_a_server_that_is_not_ollama_is_not_ollama(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Something else answering on Ollama's port (an HTML page) is Ollama
+    not being there, not a failed health check."""
+    import httpx
+
+    from app.services.ai import health
+
+    page = httpx.MockTransport(lambda _: httpx.Response(200, text="<html></html>"))
+    real = httpx.AsyncClient
+    monkeypatch.setattr(
+        health.httpx, "AsyncClient", lambda **kw: real(transport=page, **kw)
+    )
+
+    assert await health._ollama_models("http://localhost:11434") is None
+
+
 class TestAIHealthCheck:
     """Test AI service health check functionality."""
 

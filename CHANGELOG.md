@@ -24,8 +24,22 @@
   card, not only its badge, and sorts first whatever order the queues were
   declared in.
 
+### Security
+
+- **Documents stacks get Pillow 13.** Pillow 12.3.0 has eight advisories
+  (GHSA-p4wg-p73j-c528 and seven more), all fixed in 13.0.0; the template's
+  `pillow>=11,<13` kept every documents stack below the fix. It is now
+  `>=13,<14` (OCR uses only `Image.open`), and aegis's own floor is 13.0.0.
+
 ### Fixed
 
+- **An AI stack switched to the ollama provider works without the inference
+  component.** `ollama` is a provider on every AI stack, but the Ollama URL
+  (`settings.ollama_base_url_effective`) existed only on a stack generated
+  with an Ollama mode, so every model call failed; and the AI health check
+  imported the inference component's client, warning every 30 seconds. The URL
+  now follows the Ollama settings, and the health check asks Ollama's own
+  `/api/tags`, for the configured provider and for auto-discovery alike.
 - **A large object goes up in parts.** The S3 store sends anything past 8 MB
   as a multipart upload (`PART_BYTES`), so neither the webserver nor the
   store holds a whole half-gigabyte body for one request; the Overseer's

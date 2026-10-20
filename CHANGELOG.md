@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+## [0.16.1] - 2026-10-20
+
 ### Added
 
 - **A plugin's own page on the htmx Overseer.** `PluginWiring.overseer_pages`
@@ -26,6 +28,8 @@
 
 ### Security
 
+- **certifi 2026.10.19.** certifi 2025.8.3 has GHSA-6q48-6c7w-9gw2; aegis's
+  lock moves to the fix (it comes in only through other packages).
 - **Documents stacks get Pillow 13.** Pillow 12.3.0 has eight advisories
   (GHSA-p4wg-p73j-c528 and seven more), all fixed in 13.0.0; the template's
   `pillow>=11,<13` kept every documents stack below the fix. It is now

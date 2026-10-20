@@ -12,10 +12,16 @@ loop keeps serving while a 9 MB scan uploads.
 from __future__ import annotations
 
 import asyncio
+import io
 from typing import Any
 
 from app.core.secrets import Secret
 from app.core.storage import content_key, validate_key
+
+PART_BYTES = 8 * 1024 * 1024
+"""Where an upload stops being one request and becomes parts: a 486 MB
+site export sent whole restarted the dev SeaweedFS, which runs with 512
+MB. S3 allows parts from 5 MB; 8 MB is boto3's own default."""
 
 # The bucket credentials (``app.core.secrets``): read from settings when the
 # store is built at startup, so listed read-only, set in ``.env``.
@@ -129,10 +135,7 @@ class S3Storage:
     async def upload(
         self, bucket: str, key: str, data: bytes, content_type: str | None
     ) -> None:
-        extra = {"ContentType": content_type} if content_type else {}
-        await asyncio.to_thread(
-            self._client.put_object, Bucket=bucket, Key=key, Body=data, **extra
-        )
+        await asyncio.to_thread(self._write, bucket, key, data, content_type)
 
     async def remove_many(self, bucket: str, keys: list[str]) -> None:
         """Delete every key, a thousand per request (the S3 limit)."""
@@ -267,8 +270,26 @@ class S3Storage:
         if self._exists(key):
             # Same bytes, same key, same object: storing twice costs one.
             return
+        self._write(self.bucket, key, data, content_type)
+
+    def _write(
+        self, bucket: str, key: str, data: bytes, content_type: str | None
+    ) -> None:
+        """One object, however large: boto3's managed transfer sends a
+        body past ``PART_BYTES`` as a multipart upload, so neither this
+        process nor the store holds the whole thing at once."""
+        from boto3.s3.transfer import TransferConfig
+
         extra = {"ContentType": content_type} if content_type else {}
-        self._client.put_object(Bucket=self.bucket, Key=key, Body=data, **extra)
+        self._client.upload_fileobj(
+            io.BytesIO(data),
+            bucket,
+            key,
+            ExtraArgs=extra,
+            Config=TransferConfig(
+                multipart_threshold=PART_BYTES, multipart_chunksize=PART_BYTES
+            ),
+        )
 
     def _get(self, key: str) -> bytes | None:
         try:

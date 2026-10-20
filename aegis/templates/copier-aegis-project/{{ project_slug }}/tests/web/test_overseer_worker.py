@@ -175,9 +175,32 @@ class TestOverview:
         assert "40" in strip  # waiting
         assert "90.9%" in strip  # 100 of 110 finished succeeded
 
-    def test_a_card_per_queue(self, signed_in: TestClient) -> None:
+    def test_a_card_per_queue_the_failing_one_first(
+        self, signed_in: TestClient
+    ) -> None:
+        """A queue that is failing is the one to look at, so it leads
+        whatever order the queues were declared in."""
         cards = select(_get(signed_in), "#worker-queues [data-queue]")
-        assert [c.get("data-queue") for c in cards] == ["system", "load_test"]
+        assert [c.get("data-queue") for c in cards] == ["load_test", "system"]
+
+    def test_a_failing_queue_is_marked_on_the_whole_card(
+        self, signed_in: TestClient
+    ) -> None:
+        html = _get(signed_in)
+        failing = one(html, '#worker-queues [data-queue="load_test"]')
+        fine = one(html, '#worker-queues [data-queue="system"]')
+        assert failing.get("data-tone") == "error"
+        assert "tone-border" in failing.get("class", "")
+        assert fine.get("data-tone") != "error"
+
+    def test_a_queue_folds_to_its_header(self, signed_in: TestClient) -> None:
+        """Each card is a fold, open to start, named so the page keeps
+        what was folded when the queues re-send themselves."""
+        card = one(_get(signed_in), '#worker-queues [data-queue="system"]')
+        assert card.tag == "details"
+        assert card.get("open") is not None
+        assert card.get("data-fold") == "worker-queue:system"
+        assert "system" in text(one(card, "summary"))
 
     def test_slots_show_how_full_a_queue_is(self, signed_in: TestClient) -> None:
         card = one(_get(signed_in), '#worker-queues [data-queue="system"]')
@@ -248,8 +271,9 @@ class TestOverview:
         card = one(_get(signed_in), "#worker-distribution")
         waiting = select(card, '[data-bar="backlog"] [data-share]')
         finished = select(card, '[data-bar="work"] [data-share]')
-        assert [s.get("data-share") for s in waiting] == ["75", "25"]
-        assert [s.get("data-share") for s in finished] == ["82", "18"]
+        # In the cards' order: the failing load_test queue first.
+        assert [s.get("data-share") for s in waiting] == ["25", "75"]
+        assert [s.get("data-share") for s in finished] == ["18", "82"]
 
     def test_the_queues_stream_themselves(self, signed_in: TestClient) -> None:
         live = one(_get(signed_in), "#worker-live")
@@ -452,5 +476,6 @@ class TestLifecycle:
     def test_the_first_queue_by_default(
         self, signed_in: TestClient, seen: dict[str, Any]
     ) -> None:
+        """The first as the overview orders them: the failing one."""
         _get(signed_in, "lifecycle")
-        assert seen["lifecycle"] == "system"
+        assert seen["lifecycle"] == "load_test"

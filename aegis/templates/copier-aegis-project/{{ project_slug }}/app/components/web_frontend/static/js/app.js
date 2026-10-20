@@ -139,6 +139,21 @@ document.body.addEventListener('htmx:load', (event) => {
     if (picked && tabs.querySelector(`:scope > [data-tab-panel="${picked}"]`)) showTab(tabs, picked);
   }
 });
+// A fold (``<details data-fold="name">``) remembers whether it was opened or
+// closed, by name, so a block that re-sends itself (the worker's queues over
+// SSE) keeps what was folded. ``toggle`` does not bubble: caught on the way down.
+const folds = {};
+document.addEventListener('toggle', (event) => {
+  const fold = event.target;
+  if (fold.matches?.('details[data-fold]')) folds[fold.dataset.fold] = fold.open;
+}, true);
+document.body.addEventListener('htmx:load', (event) => {
+  const root = event.detail.elt;
+  if (!root.querySelectorAll) return;
+  for (const fold of root.querySelectorAll('details[data-fold]')) {
+    if (fold.dataset.fold in folds) fold.open = folds[fold.dataset.fold];
+  }
+});
 // Something in a hidden panel is shown before it is reached: a note's
 // line in the transcript, a ``data-scroll-to`` target, a search hit.
 function revealTab(target) {

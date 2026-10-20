@@ -18,6 +18,7 @@ import pytest
 from app.components.deploy import history
 from app.core.config import settings
 from app.services.system import offsite
+from app.services.system.backup import BACKUP_FILE_PREFIX, BACKUP_FILE_SUFFIX
 from tests._deploy_events import no_deploy_events  # noqa: F401
 from tests._secret_settings import FakeStore, use_store
 
@@ -70,9 +71,11 @@ def backups(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     directory = tmp_path / "backups"
     directory.mkdir()
     for night in ("20261015_020000", "20261016_020000"):
-        (directory / f"database_backup_{night}.db").write_bytes(b"SQLite")
+        (directory / f"{BACKUP_FILE_PREFIX}{night}{BACKUP_FILE_SUFFIX}").write_bytes(
+            b"db"
+        )
         (directory / f"storage_backup_{night}.tar").write_bytes(b"tar")
-    newer = directory / "database_backup_20261016_020000.db"
+    newer = directory / f"{BACKUP_FILE_PREFIX}20261016_020000{BACKUP_FILE_SUFFIX}"
     os.utime(newer, (newer.stat().st_atime, newer.stat().st_mtime + 60))
     monkeypatch.setattr(settings, "DATABASE_BACKUP_DIR", str(directory))
     return directory
@@ -117,7 +120,7 @@ async def test_the_newest_backup_is_sent_then_old_copies_thinned(
     sent = calls[2]["args"]
     assert sent[2] == "20261016_020000"
     assert sorted(Path(p).name for p in sent[3:]) == [
-        "database_backup_20261016_020000.db",
+        f"{BACKUP_FILE_PREFIX}20261016_020000{BACKUP_FILE_SUFFIX}",
         "storage_backup_20261016_020000.tar",
     ]
     assert calls[3]["args"][-1] == "--prune"

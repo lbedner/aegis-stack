@@ -285,6 +285,23 @@
   plugin kept every key it set in `.env`, which the app's Settings refuse,
   so the app would not start. The keys the removal took out of
   `.env.example` are now commented out in `.env`, values kept.
+- **An htmx stack with the AI service on its memory backend starts.** The
+  Overseer's AI partials imported a module that loaded `app.core.db` at the
+  top, and a memory backend has no database, so the web frontend failed at
+  import. (#1569)
+- **`aegis update` from a template checkout brings worker backend changes.**
+  A git diff of the template names `broker_taskiq.py`; the project, and both
+  renders, carry it as `broker.py`, so the change was skipped without a merge
+  or a conflict. Each variant now also counts under its rendered name.
+  (#1750)
+- **A Postgres stack passes its own backup tests.** The off-site test builds
+  backup names from the backup module's prefix and suffix (`.dump` on
+  Postgres), and the restore drill's tests skip off SQLite, the only engine
+  the drill restores. (#1751)
+- **The pull request reviewer's test ignores the project's `.env`.** It
+  compared the reviewer's 8000 tokens against `AI_MAX_TOKENS`, which a
+  project may set to 8000; it now compares against the shipped default.
+  (#1752)
 - **An AI service on the memory backend passes its own tests beside a
   database.** Two tests took a database in the stack (another service's) for
   a stored AI backend; they now ask what the AI service itself keeps.

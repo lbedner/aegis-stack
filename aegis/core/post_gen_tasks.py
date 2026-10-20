@@ -297,6 +297,18 @@ BACKEND_SUFFIXES = {
 }
 
 
+def with_rendered_names(paths: set[str]) -> set[str]:
+    """``paths`` plus, for each worker backend variant, the plain name init
+    renames it onto (``broker_taskiq.py`` -> ``broker.py``): a diff of the
+    template names the variant, a project and its renders the plain name."""
+    return paths | {
+        path.removesuffix(suffix) + ".py"
+        for path in paths
+        for suffix in BACKEND_SUFFIXES.values()
+        if path.endswith(suffix)
+    }
+
+
 def resolve_written_backend_variants(
     project_path: Path, written: list[str], worker_backend: str
 ) -> list[str]:

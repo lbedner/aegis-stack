@@ -74,7 +74,11 @@ class TestAgentSeed:
         agent = session.exec(select(Agent).where(Agent.slug == REVIEWER)).one()
         assert agent.system_prompt.startswith(get_default_system_prompt().rstrip())
         assert "pull request" in agent.system_prompt
-        assert agent.max_tokens > default_agent_config().max_tokens
+        # More room than the shipped default, not than this project's .env
+        # (which may set AI_MAX_TOKENS up to the reviewer's own 8000).
+        from app.core.config import Settings
+
+        assert agent.max_tokens > Settings.model_fields["AI_MAX_TOKENS"].default
         assert agent.is_active and not agent.memory_modules
 
     def test_every_seeded_agent_records_its_seed(self, session: Session) -> None:

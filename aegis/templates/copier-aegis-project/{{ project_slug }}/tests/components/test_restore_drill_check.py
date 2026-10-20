@@ -16,9 +16,16 @@ from app.core import db
 from app.core.cache import get_cache
 from app.core.config import settings
 from app.core.storage import content_key
+from app.services.system.backup import BACKUP_FILE_SUFFIX
 from tests._cli import invoke
 
-pytestmark = pytest.mark.queryspy(allow_n_plus_one=True)
+pytestmark = [
+    pytest.mark.queryspy(allow_n_plus_one=True),
+    # The drill restores SQLite only (aegis refuses the rest).
+    pytest.mark.skipif(
+        BACKUP_FILE_SUFFIX != ".db", reason="the drill restores SQLite only"
+    ),
+]
 STARTED = {"name": "startup", "ok": True, "said": ""}
 # The real one: every other test stands in for the app's startup.
 real_started = drill._started

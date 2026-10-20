@@ -10,7 +10,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.meetings.domains.people import service as people_service
 from app.services.meetings.models import NoteItem, Notes
-from tests._audit import as_admin
+from tests._audit import as_admin, let_into_overseer
 from tests._meetings import ended, kept_guide, someone_else
 
 PEOPLE = "/api/v1/meetings/people"
@@ -89,8 +89,11 @@ async def test_the_owners_note_is_kept_and_the_guide_written_again(
 
 
 async def test_the_admin_reads_every_owners_guides(
-    authenticated_client: TestClient, async_db_session: AsyncSession
+    authenticated_client: TestClient,
+    async_db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    let_into_overseer(authenticated_client, monkeypatch)
     theirs = await kept_guide(
         async_db_session, await someone_else(async_db_session), "Ada"
     )

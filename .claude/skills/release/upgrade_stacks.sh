@@ -20,6 +20,8 @@ run() {
   ( cd "$name"
     [ -d .git ] || git init -q; git add -A; git commit -qm base --no-verify >/dev/null 2>&1
     uvx "${I[@]}" "aegis-stack@$TO" update -y > "../$name.update.log" 2>&1 || { echo "$name: UPDATE FAILED"; exit; }
+    # add/add-service refuse a dirty tree; markers and .rej files are still found once committed
+    git add -A; git commit -qm update --no-verify >/dev/null 2>&1
     [ -n "${ADD:-}" ] && { uvx "${I[@]}" "aegis-stack@$TO" add "$ADD" -y > "../$name.add.log" 2>&1 || { echo "$name: ADD FAILED"; exit; }; }
     [ -n "${ADD_SERVICES:-}" ] && { uvx "${I[@]}" "aegis-stack@$TO" add-service "$ADD_SERVICES" -y > "../$name.add-service.log" 2>&1 || { echo "$name: ADD-SERVICE FAILED"; exit; }; }
     markers=$(grep -rlE '^(<<<<<<<|>>>>>>>)( |$)' --exclude-dir=.venv --exclude-dir=.git . | wc -l | tr -d ' ')

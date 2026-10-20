@@ -18,7 +18,7 @@ from app.components.web_frontend.routes import overseer
 {%- if include_auth %}
 from app.core.config import settings
 from app.models.user import User
-from app.services.auth.deps import get_optional_user
+from app.services.auth.deps import get_current_active_user, get_optional_user
 {%- endif %}
 from app.core.constants import ComponentName
 {%- if not include_auth %}
@@ -127,7 +127,10 @@ def sign_in(
         user.role = "admin" if admin else "user"
     monkeypatch.setattr(settings, "AUTH_ENABLED", True)
     monkeypatch.setattr(settings, "ADMIN_USER_EMAILS", [user.email] if admin else [])
+    # Signed in as a session cookie signs in: on every route, the strict
+    # dependency (an owner's own rows) as much as the optional one.
     app.dependency_overrides[get_optional_user] = lambda: user
+    app.dependency_overrides[get_current_active_user] = lambda: user
     return user
 {%- else %}
     if admin:

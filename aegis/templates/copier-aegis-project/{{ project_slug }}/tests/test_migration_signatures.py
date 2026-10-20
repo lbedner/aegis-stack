@@ -14,6 +14,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 import re
+from typing import Any
 
 import pytest
 
@@ -369,11 +370,18 @@ class TestAdoptionStopsAtAGap:
 
 
 def _create(table: str) -> object:
-    import sqlalchemy as sa
-
+    # alembic and sqlalchemy never share an import block: ruff counts alembic
+    # as first-party only where an alembic/ folder exists, so a shared block
+    # sorts one way before a database is added and the other way after.
     from alembic.operations import ops
 
-    return ops.CreateTableOp(table, [sa.Column("id", sa.Integer, primary_key=True)])
+    return ops.CreateTableOp(table, [_id_column()])
+
+
+def _id_column() -> Any:
+    import sqlalchemy as sa
+
+    return sa.Column("id", sa.Integer, primary_key=True)
 
 
 @pytest.fixture

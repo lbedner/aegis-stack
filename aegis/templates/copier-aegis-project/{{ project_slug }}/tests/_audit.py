@@ -2,9 +2,11 @@
 told, each event a dict with its ``event_type``; and the admin an audited
 endpoint's test acts as."""
 
+from importlib.util import find_spec
 from typing import Any
 
 from fastapi.testclient import TestClient
+import pytest
 
 from app.core.audit import get_audit
 from app.services.shared.deps import Actor, get_admin_actor
@@ -32,4 +34,22 @@ def recording(client: TestClient) -> Recorded:
 def as_admin(client: TestClient) -> TestClient:
     """``client`` acting as ``ADMIN``."""
     client.app.dependency_overrides[get_admin_actor] = lambda: ADMIN
+    return client
+
+
+def let_into_overseer(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> TestClient:
+    """``client``'s user, let in the way Overseer lets an admin in, at any
+    auth level: the admin role already does (``auth[org]``); basic auth has
+    no roles, so its ``ADMIN_USER_EMAILS`` allowlist is given the user's
+    email. Without auth Overseer is open: nothing to do."""
+    if find_spec("app.models.user") is None:
+        return client
+    from app.core.config import settings
+    from app.core.security import verify_token
+
+    token = client.headers["Authorization"].removeprefix("Bearer ")
+    claims = verify_token(token) or {}
+    monkeypatch.setitem(settings.__dict__, "ADMIN_USER_EMAILS", [claims["sub"]])
     return client

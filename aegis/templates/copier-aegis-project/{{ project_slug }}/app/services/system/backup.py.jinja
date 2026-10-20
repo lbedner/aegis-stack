@@ -25,6 +25,8 @@ import tarfile
 from app.core.config import settings
 {% if database_engine == "sqlite" %}
 from app.core.db import DATABASE_PATH
+{% else %}
+from app.core.db import client_url
 {% endif %}
 from app.core.log import logger
 from app.core.storage import FilesystemStorage, get_storage
@@ -168,7 +170,7 @@ async def backup_database_job() -> None:
         result = await _run_blocking(
             [
                 "pg_dump",
-                settings.database_url_effective,
+                client_url(),
                 "-Fc",
                 "-f",
                 str(backup_path),
@@ -254,11 +256,11 @@ def _restore_command(backup_path: Path) -> list[str]:
     object that already exists.
     """
     if backup_path.suffix == LEGACY_BACKUP_FILE_SUFFIX:
-        return ["psql", settings.database_url_effective, "-f", str(backup_path)]
+        return ["psql", client_url(), "-f", str(backup_path)]
     return [
         "pg_restore",
         "-d",
-        settings.database_url_effective,
+        client_url(),
         "--clean",
         "--if-exists",
         str(backup_path),
@@ -312,7 +314,7 @@ async def restore_database_from_backup(backup_filename: str) -> bool:
         pre_result = await _run_blocking(
             [
                 "pg_dump",
-                settings.database_url_effective,
+                client_url(),
                 "-Fc",
                 "-f",
                 str(pre_restore_path),

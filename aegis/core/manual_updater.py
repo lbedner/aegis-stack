@@ -22,6 +22,7 @@ from aegis.constants import (
     AnswerKeys,
     AuthLevels,
     ComponentNames,
+    WorkerBackends,
 )
 from aegis.i18n import t
 
@@ -529,6 +530,14 @@ class ManualUpdater:
             # before shared-file regen, mirroring where init calls it —
             # see PluginSpec.post_render (aegis-stack#921).
             self._run_post_render_hook(component, updated_answers)
+            if updated_answers.get(AnswerKeys.WORKER):
+                from .post_gen_tasks import resolve_written_backend_variants
+
+                files_modified = resolve_written_backend_variants(
+                    self.project_path,
+                    files_modified,
+                    updated_answers.get(AnswerKeys.WORKER_BACKEND, WorkerBackends.ARQ),
+                )
 
             # Regenerate shared template files with updated component configuration
             (

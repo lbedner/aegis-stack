@@ -269,6 +269,11 @@
 
 ### Fixed
 
+- **`aegis add-service` on a stack with a worker keeps one queue file.** A
+  service's queue ships one file per worker backend; the add now keeps the
+  stack's own at the canonical name and drops the others, as init does,
+  instead of leaving modules that import a backend the stack never
+  installed.
 - **The error store is bounded by bytes, not just by count.** It kept up to
   10,000 occurrences of up to 64 KB each, more than the stack's 64 MB Redis,
   and its keys carry no TTL, so `volatile-lru` could not evict them: an error

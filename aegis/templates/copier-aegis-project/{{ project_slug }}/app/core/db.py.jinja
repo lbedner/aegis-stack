@@ -59,6 +59,13 @@ def _extract_database_path(database_url: str) -> str:
         raise ValueError(f"Unsupported database URL scheme: {parsed.scheme}")
 
 DATABASE_PATH = _extract_database_path(settings.DATABASE_URL)
+{% else %}
+
+
+def client_url() -> str:
+    """The URL pg_dump and psql reach the database at, from where this
+    runs (``database_url_effective``)."""
+    return settings.database_url_effective
 {% endif %}
 
 {% if postgres_provider == "neon" %}

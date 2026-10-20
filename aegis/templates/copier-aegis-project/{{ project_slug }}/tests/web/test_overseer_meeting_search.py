@@ -11,7 +11,7 @@ from app.components.web_frontend import overseer_meetings
 from app.services.meetings.domains.search.service import hit_link, search_meetings
 from app.services.meetings.models import NoteItem, Notes
 from app.services.system.models import ComponentStatus
-from tests._meetings import ended
+from tests._meetings import THEIRS, ended
 from tests.web.dom import none, one, select, text
 from tests.web.overseer import page_html, sign_in, status_with
 
@@ -34,7 +34,7 @@ async def test_a_word_finds_every_owners_lines_and_notes(
 ) -> None:
     meeting_id, ids = await ended(
         async_db_session,
-        4242,
+        THEIRS,
         ("Lawrence", "Our pricing is too low."),
         notes=lambda ids: Notes(
             summary="-", decisions=[NoteItem(text="Raise the pricing", lines=ids)]
@@ -75,7 +75,7 @@ async def test_the_chats_link_opens_the_meeting_at_its_line(
 ) -> None:
     meeting_id, ids = await ended(
         async_db_session,
-        4242,
+        THEIRS,
         ("Ada", "Hello."),
         ("Lawrence", "Pricing."),
         notes=lambda _: Notes(summary="-"),

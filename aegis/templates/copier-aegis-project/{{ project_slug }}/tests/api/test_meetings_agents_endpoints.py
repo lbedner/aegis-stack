@@ -12,6 +12,7 @@ from app.services.meetings.domains.accounts.service import (
     keep_agent,
 )
 from app.services.meetings.domains.calendar.service import read_calendars
+from tests._audit import let_into_overseer
 from tests._meetings import MEET, STANDUP, Calendar, at, hold_the_bot
 from tests._secret_settings import use_store
 
@@ -46,6 +47,7 @@ async def test_overseer_lists_every_agent(
     async_db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    let_into_overseer(authenticated_client, monkeypatch)
     use_store(monkeypatch)
     await keep_agent(async_db_session, "work", "Work Notes", "notes@work.example")
 
@@ -66,6 +68,7 @@ async def test_overseer_reads_every_agents_calendar(
 ) -> None:
     """In the time zone asked for; one it does not know is refused, and so
     is more than six weeks."""
+    let_into_overseer(authenticated_client, monkeypatch)
     calendar = Calendar(monkeypatch, STANDUP)
     await read_calendars(async_db_session, calendar.read, at(18, 0))
 

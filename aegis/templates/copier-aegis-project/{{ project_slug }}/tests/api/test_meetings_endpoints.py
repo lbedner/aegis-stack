@@ -10,7 +10,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.services.meetings.domains.people.participants import keep_heard
 from app.services.meetings.models import MeetingStatus, Notes
 from app.services.meetings.service import MeetingsService, transition
-from tests._audit import as_admin
+from tests._audit import as_admin, let_into_overseer
 from tests._meetings import (
     MEET,
     docs_meeting,
@@ -76,9 +76,11 @@ def test_an_unknown_meeting_is_not_found(
 
 
 @pytest.fixture
-def admin(authenticated_client: TestClient) -> TestClient:
+def admin(
+    authenticated_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> TestClient:
     """Overseer's admin, reading and changing every owner's meetings."""
-    return as_admin(authenticated_client)
+    return as_admin(let_into_overseer(authenticated_client, monkeypatch))
 
 
 async def _theirs(session: AsyncSession) -> tuple[int, list[int]]:
@@ -94,9 +96,12 @@ async def _theirs(session: AsyncSession) -> tuple[int, list[int]]:
 
 
 async def test_the_admin_reads_every_owners_meetings(
-    authenticated_client: TestClient, async_db_session: AsyncSession
+    authenticated_client: TestClient,
+    async_db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Whoever Overseer lets in reads them: an admin, verified or not."""
+    let_into_overseer(authenticated_client, monkeypatch)
     meeting_id, _ = await _theirs(async_db_session)
 
     response = authenticated_client.get(ADMIN)
@@ -106,8 +111,11 @@ async def test_the_admin_reads_every_owners_meetings(
 
 
 async def test_one_meeting_comes_with_its_notes_transcript_and_what_was_heard(
-    authenticated_client: TestClient, async_db_session: AsyncSession
+    authenticated_client: TestClient,
+    async_db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    let_into_overseer(authenticated_client, monkeypatch)
     meeting_id, lines = await _theirs(async_db_session)
 
     body = authenticated_client.get(f"{ADMIN}/{meeting_id}").json()

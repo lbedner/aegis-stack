@@ -6,6 +6,7 @@ import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.meetings.models import Notes
+from tests._audit import let_into_overseer
 from tests._meetings import ended, someone_else
 
 SEARCH = "/api/v1/meetings/search"
@@ -54,8 +55,11 @@ async def test_another_owners_meetings_are_not_searched(
 
 
 async def test_the_admin_searches_every_owners_meetings(
-    authenticated_client: TestClient, async_db_session: AsyncSession
+    authenticated_client: TestClient,
+    async_db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    let_into_overseer(authenticated_client, monkeypatch)
     theirs, _ = await ended(
         async_db_session,
         await someone_else(async_db_session),

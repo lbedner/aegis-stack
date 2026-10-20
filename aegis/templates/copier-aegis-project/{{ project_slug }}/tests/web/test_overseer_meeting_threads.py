@@ -11,7 +11,7 @@ from app.components.web_frontend import overseer_meetings
 from app.services.meetings.domains.notes.service import notes_of
 from app.services.meetings.models import Commitment, Contradiction, FollowUp, Notes
 from app.services.system.models import ComponentStatus
-from tests._meetings import ended, kept_guide
+from tests._meetings import THEIRS, ended, kept_guide
 from tests.web.dom import none, one, select, text
 from tests.web.overseer import page_html, sign_in, status_with
 
@@ -33,7 +33,7 @@ async def _two_meetings(session: AsyncSession) -> tuple[int, int]:
     sent it, and said there is budget after all."""
     first, before = await ended(
         session,
-        4242,
+        THEIRS,
         ("Ada", "I'll send the deck."),
         ("Ada", "There is no budget."),
         notes=lambda ids: Notes(
@@ -46,7 +46,7 @@ async def _two_meetings(session: AsyncSession) -> tuple[int, int]:
     deck = made.commitments[0].id
     second, _ = await ended(
         session,
-        4242,
+        THEIRS,
         ("Ada", "Sent it. We do have budget."),
         notes=lambda ids: Notes(
             summary="-",
@@ -88,7 +88,7 @@ async def test_a_meeting_without_notes_loads_no_threads(
     overseer: TestClient, async_db_session: AsyncSession
 ) -> None:
     meeting_id, _ = await ended(
-        async_db_session, 4242, ("Ada", "Hi."), notes=lambda _: Notes(summary="-")
+        async_db_session, THEIRS, ("Ada", "Hi."), notes=lambda _: Notes(summary="-")
     )
     html = page_html(overseer, f"{PARTIALS}/{meeting_id}/threads")
 
@@ -100,7 +100,7 @@ async def test_a_persons_guide_shows_their_commitments_across_meetings(
     overseer: TestClient, async_db_session: AsyncSession
 ) -> None:
     await _two_meetings(async_db_session)
-    guide_id = await kept_guide(async_db_session, 4242, "Ada")
+    guide_id = await kept_guide(async_db_session, THEIRS, "Ada")
 
     html = page_html(overseer, f"{PARTIALS}/people/{guide_id}/drawer")
 

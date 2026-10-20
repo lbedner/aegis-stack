@@ -12,7 +12,7 @@ from app.components.web_frontend import overseer_meetings
 from app.services.meetings.domains.series import service as series_service
 from app.services.meetings.models import NoteItem, Theme
 from app.services.system.models import ComponentStatus
-from tests._meetings import asked_twice, hold_the_series_writer, kept_series
+from tests._meetings import THEIRS, asked_twice, hold_the_series_writer, kept_series
 from tests.web.dom import none, one, select, text
 from tests.web.overseer import page_html, sign_in, status_with
 
@@ -32,12 +32,12 @@ def overseer(
 
 
 async def _series(session: AsyncSession) -> tuple[int, list[int]]:
-    """Owner 4242's series, where Dana asked for the report twice: its id
+    """Another owner's series, where Dana asked for the report twice: its id
     and the meetings."""
-    meetings, asked = await asked_twice(session, 4242)
+    meetings, asked = await asked_twice(session, THEIRS)
     series_id = await kept_series(
         session,
-        4242,
+        THEIRS,
         name="Dev call",
         summary="Dana keeps asking for the report.",
         themes=[Theme(text="The usage report", lines=asked)],
@@ -69,7 +69,7 @@ async def test_a_series_opens_with_each_theme_and_its_lines(
     html = page_html(overseer, f"{PARTIALS}/{series_id}/drawer")
 
     facts = {text(dt): text(dt.getnext()) for dt in select(html, "dl dt")}
-    assert facts["Owner"] == "4242" and facts["Read from"] == "2 meetings"
+    assert facts["Owner"] == str(THEIRS) and facts["Read from"] == "2 meetings"
     tabs = one(html, "[data-tabs]")
     assert [text(t) for t in select(tabs, "[role=tab]")] == [
         "Over time",

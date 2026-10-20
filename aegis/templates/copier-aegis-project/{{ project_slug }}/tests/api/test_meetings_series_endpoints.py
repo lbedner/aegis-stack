@@ -8,7 +8,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.meetings.domains.series import service as series_service
 from app.services.meetings.models import Theme
-from tests._audit import as_admin
+from tests._audit import as_admin, let_into_overseer
 from tests._meetings import (
     asked_twice,
     hold_the_series_writer,
@@ -82,6 +82,7 @@ async def test_the_admin_reads_and_writes_every_owners_series(
     async_db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    let_into_overseer(authenticated_client, monkeypatch)
     admin = as_admin(authenticated_client)
     theirs = await _series(async_db_session, await someone_else(async_db_session))
     runs = hold_the_series_writer(monkeypatch)

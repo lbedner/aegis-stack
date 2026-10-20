@@ -291,6 +291,43 @@ def cleanup_worker_backend_files(project_path: Path, worker_backend: str) -> Non
         _remove_backend_files("_dramatiq.py")
 
 
+BACKEND_SUFFIXES = {
+    WorkerBackends.DRAMATIQ: "_dramatiq.py",
+    WorkerBackends.TASKIQ: "_taskiq.py",
+}
+
+
+def resolve_written_backend_variants(
+    project_path: Path, written: list[str], worker_backend: str
+) -> list[str]:
+    """Resolve the worker backend variants among files an add just wrote.
+
+    A service's queue ships one file per backend (``meetings.py``,
+    ``meetings_dramatiq.py``, ``meetings_taskiq.py``). The stack's own
+    backend is renamed onto the canonical name and the others removed, as
+    init does. Only ``written`` is touched: ``cleanup_worker_backend_files``
+    would also remove the queues the project already has (issue #672).
+
+    Returns ``written`` as it now stands on disk.
+    """
+    own = BACKEND_SUFFIXES.get(worker_backend)
+    kept: list[str] = []
+    for rel in written:
+        suffix = next((s for s in BACKEND_SUFFIXES.values() if rel.endswith(s)), None)
+        if suffix is None:
+            kept.append(rel)
+            continue
+        path = project_path / rel
+        if suffix != own:
+            path.unlink(missing_ok=True)
+            continue
+        canonical = rel.removesuffix(suffix) + ".py"
+        if path.exists():
+            path.replace(project_path / canonical)
+        kept.append(canonical)
+    return list(dict.fromkeys(kept))
+
+
 def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
     """
     Remove component files based on component selection.

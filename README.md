@@ -1,4 +1,8 @@
+<div align="center" markdown>
+
 <img src="docs/images/aegis_stack_wordmark.svg" alt="Aegis Stack" width="500">
+<br>
+*"Inspired by the Neverwinter Nights toolset, Project Zero Dawn, and Dr. Wily."*
 
 [![CI](https://github.com/lbedner/aegis-stack/workflows/CI/badge.svg)](https://github.com/lbedner/aegis-stack/actions/workflows/ci.yml)
 [![Documentation](https://github.com/lbedner/aegis-stack/workflows/Deploy%20Documentation/badge.svg)](https://github.com/lbedner/aegis-stack/actions/workflows/docs.yml)
@@ -11,6 +15,8 @@
 [![Commits per Month](https://img.shields.io/github/commit-activity/m/lbedner/aegis-stack)](https://github.com/lbedner/aegis-stack/commits)
 [![Total Commits](https://img.shields.io/github/commit-activity/t/lbedner/aegis-stack)](https://github.com/lbedner/aegis-stack/commits)
 [![Last Commit](https://img.shields.io/github/last-commit/lbedner/aegis-stack)](https://github.com/lbedner/aegis-stack/commits)
+
+</div>
 
 **Aegis Stack is an open-source CLI that scaffolds production-ready FastAPI applications and lets you add, remove, and update components and services on existing projects without rewrites.**
 

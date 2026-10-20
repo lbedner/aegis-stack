@@ -45,6 +45,9 @@ from tests._secret_settings import use_store
 from tests._session import opens
 
 MEET = "https://meet.google.com/abc-defg-hij"
+# Another owner than the one signed in. With auth, a meeting's owner is a
+# user: 999 is one conftest seeds (``KNOWN_OWNER_IDS``).
+THEIRS = 999
 # A second of someone talking, as the Meet page hands it to the bot.
 SECOND = base64.b64encode(b"\x00\x40" * RATE).decode()
 # William at 20:52 in a real call (SAID), then the same turn as Meet shows

@@ -454,3 +454,56 @@ class TestSpecsGatedOnALateComponent:
             updater._specs_left_behind("redis", ["pyproject.toml"], updater.answers)
             == []
         )
+
+
+class TestAServicesWorkerQueueOnAWorkerStack:
+    """A service's queue ships one file per worker backend; adding the
+    service keeps only the stack's own, at the canonical name, as init
+    does. The others import a backend the stack never installed."""
+
+    QUEUES = "app/components/worker/queues"
+    VARIANTS = [
+        f"app/components/worker/queues/meetings{suffix}.py"
+        for suffix in ("", "_dramatiq", "_taskiq")
+    ]
+
+    def _add(self, tmp_path: Path, backend: str) -> tuple[Path, UpdateResult]:
+        project = tmp_path / "demo"
+        (project / self.QUEUES).mkdir(parents=True)
+        (project / ".copier-answers.yml").write_text(
+            COPIER_ANSWERS + f"include_worker: true\nworker_backend: {backend}\n"
+        )
+        (project / self.QUEUES / "system.py").write_text("# the stack's own\n")
+        with (
+            patch(
+                "aegis.core.manual_updater.get_component_files",
+                return_value=list(self.VARIANTS),
+            ),
+            patch.object(
+                ManualUpdater, "_regenerate_shared_files", return_value=([], [], [])
+            ),
+        ):
+            result = _make_updater(project).add_component(
+                "meetings", run_post_gen=False
+            )
+        return project, result
+
+    @pytest.mark.parametrize(
+        ("backend", "imports"),
+        [("arq", "from arq"), ("dramatiq", "import dramatiq"), ("taskiq", "taskiq")],
+    )
+    def test_only_the_stacks_backend_is_kept(
+        self, tmp_path: Path, backend: str, imports: str
+    ) -> None:
+        project, result = self._add(tmp_path, backend)
+
+        assert result.success, result.error_message
+        queues = sorted(p.name for p in (project / self.QUEUES).iterdir())
+        assert queues == ["meetings.py", "system.py"]
+        assert imports in (project / self.QUEUES / "meetings.py").read_text()
+        assert (
+            project / self.QUEUES / "system.py"
+        ).read_text() == "# the stack's own\n"
+        assert [f for f in result.files_modified if self.QUEUES in f] == [
+            f"{self.QUEUES}/meetings.py"
+        ]

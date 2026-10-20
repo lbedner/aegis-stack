@@ -9,6 +9,7 @@ import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.meetings.models import Commitment, Notes
+from tests._audit import let_into_overseer
 from tests._meetings import ended, someone_else
 
 MEETINGS = "/api/v1/meetings"
@@ -59,8 +60,11 @@ async def test_another_owners_meeting_is_not_found(
 
 
 async def test_the_admin_reads_every_owners(
-    authenticated_client: TestClient, async_db_session: AsyncSession
+    authenticated_client: TestClient,
+    async_db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    let_into_overseer(authenticated_client, monkeypatch)
     theirs = await _promised(async_db_session, await someone_else(async_db_session))
 
     (deck,) = _commitments(authenticated_client.get(f"{ADMIN}/{theirs}/threads"))

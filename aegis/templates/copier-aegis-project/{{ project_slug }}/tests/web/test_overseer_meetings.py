@@ -14,7 +14,14 @@ from app.services.meetings.domains.people.participants import keep_heard
 from app.services.meetings.models import MeetingStatus, Notes
 from app.services.meetings.service import MeetingsService, transition
 from app.services.system.models import ComponentStatus
-from tests._meetings import MEET, docs_meeting, ended, hold_the_bot, hold_the_writer
+from tests._meetings import (
+    MEET,
+    THEIRS,
+    docs_meeting,
+    ended,
+    hold_the_bot,
+    hold_the_writer,
+)
 from tests.web.dom import location, none, one, select, text
 from tests.web.overseer import page_html, sign_in, status_with
 
@@ -47,7 +54,7 @@ async def test_the_admin_sees_every_owners_meetings(
     overseer: TestClient, async_db_session: AsyncSession
 ) -> None:
     mine = await _ended(async_db_session, None)
-    theirs = await _ended(async_db_session, 4242)
+    theirs = await _ended(async_db_session, THEIRS)
 
     rows = select(page_html(overseer, PAGE), "#overseer-meetings tbody tr")
 
@@ -89,14 +96,20 @@ async def test_a_long_call_is_read_a_tab_at_a_time(
 ) -> None:
     """Notes first; a search hit opens on the transcript, at its line."""
     meeting_id, ids = await ended(
-        async_db_session, None, ("Ada", "Ada said this."), notes=lambda _: Notes(summary="-")
+        async_db_session,
+        None,
+        ("Ada", "Ada said this."),
+        notes=lambda _: Notes(summary="-"),
     )
     await keep_heard(async_db_session, meeting_id, {"Ada": 42.0})
 
     drawer = page_html(overseer, f"{PARTIALS}/{meeting_id}/drawer")
     at_hit = page_html(overseer, f"{PARTIALS}/{meeting_id}/drawer?line={ids[0]}")
 
-    assert _tabs(drawer) == (["Notes", "Threads", "Transcript", "Who talked"], ["notes"])
+    assert _tabs(drawer) == (
+        ["Notes", "Threads", "Transcript", "Who talked"],
+        ["notes"],
+    )
     assert _tabs(at_hit)[1] == ["transcript"]
 
 
@@ -114,7 +127,7 @@ async def test_a_meeting_the_bot_left_reads_as_done_not_greyed_out(
 async def test_deleting_a_meeting_from_the_drawer(
     overseer: TestClient, async_db_session: AsyncSession
 ) -> None:
-    meeting_id = await _ended(async_db_session, 4242)
+    meeting_id = await _ended(async_db_session, THEIRS)
 
     confirm = page_html(overseer, f"{PARTIALS}/{meeting_id}/confirm-delete")
     assert "transcript" in text(one(confirm, "p"))

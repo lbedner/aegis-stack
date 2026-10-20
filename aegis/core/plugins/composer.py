@@ -36,6 +36,7 @@ from typing import Any
 from .spec import (
     FrontendWidgetWiring,
     HealthCheckWiring,
+    OverseerPageWiring,
     PluginSpec,
     PluginWiring,
     RouterWiring,
@@ -162,6 +163,9 @@ def _serialize_wiring(
         "dashboard_modals": [
             _entry_to_dict(e) for e in wiring.dashboard_modals if _entry_keeps(e, opts)
         ],
+        "overseer_pages": [
+            _entry_to_dict(e) for e in wiring.overseer_pages if _entry_keeps(e, opts)
+        ],
         "settings_mixins": [
             _entry_to_dict(e) for e in wiring.settings_mixins if _entry_keeps(e, opts)
         ],
@@ -235,6 +239,7 @@ __all__ = [
     "PLUGINS_ANSWER_KEY",
     "FrontendWidgetWiring",
     "HealthCheckWiring",
+    "OverseerPageWiring",
     "RouterWiring",
     "SymbolWiring",
     "serialize_plugin_to_answer",

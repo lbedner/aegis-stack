@@ -135,9 +135,11 @@ taskiq and a dramatiq worker (backend variants are renamed at init, a
 separate path through update and add), and htmx with `auth[org]`. It updates
 each one, then reports conflict markers, `.rej` files, stray `_taskiq` /
 `_dramatiq` queue files and the `make check` result for each. Stacks run in
-two waves of five (ten template clones at once get connections reset), and
-`make check` runs with an unreachable `BROWSER_URL` so the browser tests skip
-instead of sharing whatever browser container is up:
+two waves of five (ten template clones at once get connections reset). The
+tests that drive a live browser run apart from `make check`, one stack at a
+time, so parallel stacks never share whatever browser container is up (an
+environment override would not do: tests build their own `Settings()`). The
+script first waits until TestPyPI resolves the new version:
 
 ```bash
 # step 7: the rc on TestPyPI

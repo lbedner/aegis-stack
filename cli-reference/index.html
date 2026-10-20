@@ -7743,6 +7743,13 @@ service needed stay; remove them separately with <code>aegis remove</code>.</p>
 </span><span id="__span-23-2"><a id="__codelineno-23-2" name="__codelineno-23-2" href="#__codelineno-23-2"></a>aegis<span class="w"> </span>remove-service<span class="w"> </span>auth,ai
 </span><span id="__span-23-3"><a id="__codelineno-23-3" name="__codelineno-23-3" href="#__codelineno-23-3"></a>aegis<span class="w"> </span>--verbose<span class="w"> </span>remove-service<span class="w"> </span>auth<span class="w">  </span><span class="c1"># show each file operation</span>
 </span></code></pre></div></p>
+<p>A service with tables keeps its revisions and gains one more: it exports
+the service's tables, then drops them, so the remaining revisions still
+build exactly the remaining models. <code>alembic</code> stays a dependency while the
+<code>alembic/</code> folder does.</p>
+<p>The settings the service took out of <code>.env.example</code> are commented out in
+<code>.env</code>, values kept, since the app refuses a setting it no longer declares.
+Keys you added yourself, and keys still in <code>.env.example</code>, stay as they are.</p>
 <p><strong>Important:</strong> this deletes files. Commit your changes to git first.</p>
 <hr />
 <h3 id="aegis-update">aegis update</h3>

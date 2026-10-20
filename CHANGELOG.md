@@ -7,6 +7,21 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Overseer worker page: a failing queue leads, red as a whole.** Each queue
+  card is a fold (open to start, remembered across the live re-send) whose
+  header is its name and state; a queue that is failing is toned on the whole
+  card, not only its badge, and sorts first whatever order the queues were
+  declared in.
+
+### Fixed
+
+- **A large object goes up in parts.** The S3 store sends anything past 8 MB
+  as a multipart upload (`PART_BYTES`), so neither the webserver nor the
+  store holds a whole half-gigabyte body for one request; the Overseer's
+  upload takes the same path.
+
 ## [0.16.0] - 2026-10-20
 
 ### Added

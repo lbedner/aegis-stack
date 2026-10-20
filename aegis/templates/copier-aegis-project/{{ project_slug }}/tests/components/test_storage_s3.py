@@ -213,6 +213,31 @@ class TestFiles:
         assert asyncio.run(store.remove(store.bucket, "a.txt")) is False
 
 
+def test_a_large_object_goes_up_in_parts(store, monkeypatch) -> None:
+    """One request carrying a whole large body is what takes a small
+    store down (a 486 MB export restarted the dev SeaweedFS, capped at
+    512 MB). Past the part size, the bytes go up as parts, and the
+    object still reads back whole under its content key."""
+    from app.components.storage import s3
+
+    part = 5 * 1024 * 1024  # S3's smallest allowed part
+    monkeypatch.setattr(s3, "PART_BYTES", part)
+    bodies: list[int] = []
+    put_object = store._client.put_object
+
+    def counted(**kwargs):
+        bodies.append(len(kwargs["Body"]))
+        return put_object(**kwargs)
+
+    monkeypatch.setattr(store._client, "put_object", counted)
+    data = bytes(range(256)) * (11 * 4096)  # 11 MiB, three parts
+
+    key = asyncio.run(store.put(data, content_type="application/zip"))
+
+    assert asyncio.run(store.get(key)) == data
+    assert all(size < part for size in bodies), "a whole body went up at once"
+
+
 def test_remove_many_deletes_every_key_in_one_call(store) -> None:
     store._ensure_bucket()
     for key in ("a.txt", "b.txt", "c.txt"):

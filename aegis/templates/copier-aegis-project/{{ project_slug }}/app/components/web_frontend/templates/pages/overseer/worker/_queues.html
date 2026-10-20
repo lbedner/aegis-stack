@@ -32,14 +32,21 @@
   <div id="worker-queues" class="space-y-4">
     {% for q in w.queues %}
     {% set finished = q.completed + q.failed %}
-    <section data-queue="{{ q.name }}" class="hover-card bg-aegis-card border border-aegis-border rounded-lg p-5 flex flex-col gap-5 min-w-0">
-      <header class="flex items-start justify-between gap-3">
-        <div class="min-w-0">
-          <h3 class="font-mono text-sm font-semibold text-aegis-text">{{ q.name }}</h3>
-          {% if q.description %}<p class="text-xs text-aegis-muted truncate">{{ q.description }}</p>{% endif %}
+    {# A fold, open to start: its header is the summary, so a queue that is
+       fine folds to one line and a failing one, toned red as a whole, is
+       read first. #}
+    <details data-queue="{{ q.name }}" data-fold="worker-queue:{{ q.name }}" data-tone="{{ q.tone }}" open class="hover-card tone-border group/q bg-aegis-card border border-aegis-border rounded-lg p-5 min-w-0">
+      <summary class="list-none cursor-pointer select-none flex items-start justify-between gap-3">
+        <div class="flex items-start gap-3 min-w-0">
+          <span aria-hidden="true" class="mt-0.5 text-aegis-muted transition-transform group-open/q:rotate-90">›</span>
+          <div class="min-w-0">
+            <h3 class="font-mono text-sm font-semibold text-aegis-text">{{ q.name }}</h3>
+            {% if q.description %}<p class="text-xs text-aegis-muted truncate">{{ q.description }}</p>{% endif %}
+          </div>
         </div>
         <span data-state data-tone="{{ q.tone }}">{{ badge(q.state ~ (" · " ~ q.detail if q.detail else ""), q.tone) }}</span>
-      </header>
+      </summary>
+      <div class="flex flex-col gap-5 pt-5">
       <div class="worker-flow">
         <div data-waiting class="worker-stage">
           <div class="worker-stage__head"><span>Waiting</span><strong>{{ "{:,}".format(q.queued) }}</strong></div>
@@ -79,7 +86,8 @@
         <span class="text-xs tabular-nums {{ 'text-aegis-teal' if q.drain == 'caught up' else 'text-aegis-text' }}">{{ q.drain }}</span>
       </div>
       <p class="font-mono text-xxs text-aegis-muted">{{ q.consumers }} {{ "consumer" if q.consumers == 1 else "consumers" }}{% if q.timeout %} · {{ q.timeout }}s timeout{% endif %}{% if q.stream %} · {{ q.stream }}{% endif %}</p>
-    </section>
+      </div>
+    </details>
     {% else %}
     {% if w.problem %}
     <p data-problem class="rounded-lg border border-aegis-error/40 bg-aegis-error/10 px-4 py-3 text-sm text-error">{{ w.problem }}</p>

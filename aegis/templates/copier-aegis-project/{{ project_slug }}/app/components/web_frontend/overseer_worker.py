@@ -138,6 +138,8 @@ async def queues_view() -> dict[str, Any]:
         q["success_tone"] = color_tone(q["success_color"])
         q["pile"] = ui_worker.pile(q["queued"], PILE_CELLS)
         q["oldest"] = format_span(q["oldest_waiting"]) if q["queued"] else None
+    # A failing queue is the one to look at: first, the rest as declared.
+    view["queues"].sort(key=lambda q: q["tone"] != "error")
     return view
 
 

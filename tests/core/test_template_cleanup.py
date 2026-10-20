@@ -658,6 +658,48 @@ class TestSyncTemplateChanges:
         assert config_file.read_text() == "# new config"
         assert main_file.read_text() == "# old main"
 
+    def test_a_backend_variants_change_reaches_its_rendered_name(
+        self, tmp_path: Path
+    ) -> None:
+        """Init renames the stack's worker backend onto the plain name
+        (``broker_taskiq.py`` -> ``broker.py``), and both renders are pruned
+        the same way, but git lists the template's own path. A change to
+        ``broker_taskiq.py`` must still reach a taskiq project's ``broker.py``
+        (aegis-pulse lost ``forget_stale_consumers`` this way)."""
+        project_slug = "my-project"
+        answers = {"project_slug": project_slug}
+        worker = tmp_path / "app" / "components" / "worker"
+        worker.mkdir(parents=True)
+        (worker / "broker.py").write_text("# old taskiq broker")
+
+        def mock_run_copy(**kwargs: object) -> None:
+            rendered = Path(str(kwargs["dst_path"])) / project_slug
+            (rendered / "app" / "components" / "worker").mkdir(parents=True)
+            old = "/old" in str(kwargs["dst_path"])
+            (
+                rendered / "app" / "components" / "worker" / "broker_taskiq.py"
+            ).write_text("# old taskiq broker" if old else "# new taskiq broker")
+
+        def prune_as_init(rendered_dir: Path, _answers: dict[str, Any]) -> None:
+            folder = rendered_dir / "app" / "components" / "worker"
+            (folder / "broker_taskiq.py").rename(folder / "broker.py")
+
+        with (
+            patch("copier.run_copy", side_effect=mock_run_copy),
+            patch("aegis.core.template_cleanup._prune_render", prune_as_init),
+        ):
+            result = sync_template_changes(
+                tmp_path,
+                answers,
+                "gh:test/repo",
+                "v1.0.0",
+                template_changed_files={"app/components/worker/broker_taskiq.py"},
+                old_commit="abc123",
+            )
+
+        assert "app/components/worker/broker.py" in result.synced
+        assert (worker / "broker.py").read_text() == "# new taskiq broker"
+
     def test_gated_off_new_file_is_not_created_as_an_empty_stub(
         self, tmp_path: Path
     ) -> None:

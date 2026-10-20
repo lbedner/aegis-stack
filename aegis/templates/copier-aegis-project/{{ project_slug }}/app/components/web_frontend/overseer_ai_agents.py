@@ -15,7 +15,6 @@ registries exist only with a persistence backend.
 
 from typing import Any
 
-from app.core.db import release_lock
 from app.core.model_picker import display_title, group_models
 
 from . import chat_models
@@ -79,6 +78,10 @@ async def agent_context(db: Any, slug: str) -> dict[str, Any] | None:
     if agent is None:
         return None
     # The catalog reads on its own connection: never behind this request's.
+    # Imported here: the module loads on every AI stack, the database only
+    # comes with a persistence backend, the only one with agents to edit.
+    from app.core.db import release_lock
+
     await release_lock(db)
     return {
         "agent": agent,

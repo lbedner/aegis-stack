@@ -563,6 +563,12 @@ def sync_template_changes(
             template_changed_files = _changed_between_renders(
                 old_rendered_dir, new_rendered_dir
             )
+        elif template_changed_files is not None:
+            # A git diff of the template names a backend variant by its own
+            # path; the renders carry it at the name init renamed it onto.
+            from aegis.core.post_gen_tasks import with_rendered_names
+
+            template_changed_files = with_rendered_names(template_changed_files)
 
         # Compare and sync files. Ruff normalizes every .py merge against
         # the project's own config, so the files that carry that config

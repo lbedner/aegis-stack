@@ -569,8 +569,13 @@ STACK_COMBINATIONS = [
     StackCombination(
         name="base_htmx",
         components=["htmx"],
+        # The AI service on its memory backend: no database, so the
+        # Overseer's AI pages must load without one (the only row that has
+        # htmx and AI but no persistence).
+        services=["ai"],
         description="htmx web frontend alongside the core Flet dashboard",
         expected_files=[
+            "app/components/web_frontend/overseer_ai_agents.py",
             "app/components/web_frontend/main.py",
             "app/components/web_frontend/templates/pages/landing.html",
             "app/components/frontend/main.py",

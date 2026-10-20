@@ -92,14 +92,16 @@ Process follow-ups (a gap in this skill, a missing gate, a doc that should
 change) belong in the release they were found in. Raise them before the final
 tag (step 9), never after publishing.
 
-Before the final tag, list the bugs filed since the previous release tag, and
-for each one ask the user whether to fix it in this release or ship without
-it. Bugs often get filed from other sessions while a release is in progress:
-#1523 (`aegis add mcp` conflicts) was filed between rc1 and rc2, and 0.15.0
-shipped without it.
+Before rc1, and again before the final tag, list the open bugs filed since the
+previous release tag and fix every one in the rc being cut, together with
+whatever the upgrade check found: one rc, no fix-or-ship question per bug
+(0.16.0 took four rcs asking). Bugs often get filed from other sessions while
+a release is in progress: #1523 (`aegis add mcp` conflicts) was filed between
+rc1 and rc2, and 0.15.0 shipped without it. Unlabelled bug reports count too.
 
 ```bash
 gh issue list --state open --label bug --search "created:>=<prev-tag date>"
+gh issue list --state open --search "created:>=<prev-tag date>"
 ```
 
 ## Gates
@@ -127,10 +129,15 @@ Upgrade-path verification recipe (used in Procedure steps 7 and 10). Run it
 on several stack shapes, not one base project. A base project has too few
 files to catch most update bugs: 0.15.0rc1 passed on base but never brought
 files new to a stack to htmx projects.
-`upgrade_stacks.sh` (next to this file) creates five stacks at the previous
-release: base, everything, htmx-auth, finance-pg and worker-ai. It updates
-each one, then reports conflict markers, `.rej` files and the `make check`
-result for each:
+`upgrade_stacks.sh` (next to this file) creates eight stacks at the
+previous release: base, everything, htmx-auth, finance-pg, worker-ai, a
+taskiq and a dramatiq worker (backend variants are renamed at init, a
+separate path through update and add), and htmx with `auth[org]`. It updates
+each one, then reports conflict markers, `.rej` files, stray `_taskiq` /
+`_dramatiq` queue files and the `make check` result for each. Stacks run in
+two waves of five (ten template clones at once get connections reset), and
+`make check` runs with an unreachable `BROWSER_URL` so the browser tests skip
+instead of sharing whatever browser container is up:
 
 ```bash
 # step 7: the rc on TestPyPI
@@ -147,9 +154,23 @@ existed, and the update check alone never tests that: 0.15.0 shipped with
 release. No stack made with the previous version can already have them, so
 the add never fails because the stack already has one.
 
-Every line must read `markers=0 rej=0 check_exit=0`. The everything stack
-takes about 7 minutes, so run the script in the background. Delete
-`<scratch-dir>` afterwards.
+With `ADD_SERVICES`, two more shapes run: `removed` (updated, the services
+added, then `remove-service`d: 0.16.0rc2 left alembic unpinned and the
+service's settings in `.env`), and `reverse` (made at the new version with the
+services, then a dramatiq worker added after them).
+
+Every line must read `markers=0 rej=0 stray=0 check_exit=0`. The script
+takes about 20 minutes, so run it in the background, outside the sandbox (it
+clones the template from GitHub and writes uv's caches under your home).
+Delete `<scratch-dir>` afterwards. On macOS the everything stack's
+`test_service_memory_budget[meetings]` measures over budget; Linux CI passes
+it.
+
+The upgrade check covers updates through the installed CLI, which works its
+changed files out from two renders. An update run from a template checkout
+(`aegis update -t <repo>`, how a dev stack is updated) takes them from a git
+diff of the template instead, a separate path (#1750): when a change touches
+worker backend variants, also update one taskiq stack that way.
 
 ## Pitfalls
 

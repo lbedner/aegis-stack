@@ -39,6 +39,16 @@ def _revision_files() -> list[Path]:
     return [p for p in sorted(VERSIONS.glob("*.py")) if not p.name.startswith("__")]
 
 
+def _retired_tables() -> set[str]:
+    """Tables a later revision drops: what ``aegis remove-service`` retires.
+    The service's own revisions stay, so its signature is history then."""
+    return {
+        name
+        for p in _revision_files()
+        for name in re.findall(r"""drop_table\(\s*["']([^"']+)["']""", p.read_text())
+    }
+
+
 PROVABLE = ("create_table(", "add_column(", "create_foreign_key(", "INSERT INTO")
 
 
@@ -125,10 +135,13 @@ def test_signatures_name_real_model_objects() -> None:
     tables = set(sqlmodel.SQLModel.metadata.tables)
     bare = {t.split(".")[-1] for t in tables}
     installed = set(_service_suffixes())
+    retired = _retired_tables()
     for service, sig in signatures_module.SERVICE_MIGRATION_SIGNATURES.items():
         if service not in installed:
             continue  # signature for a service this stack doesn't ship
         name = sig[1]
+        if name.split(".")[-1] in retired:
+            continue  # a removed service's: a later revision drops it
         assert name in tables or name in bare or name.split(".")[-1] in bare, (
             f"signature for '{service}' names '{name}', which no model declares"
         )

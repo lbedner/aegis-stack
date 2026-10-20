@@ -349,6 +349,9 @@ MESSAGES: dict[str, str] = {
     "remove.plugin_success": "Plugin {name} removed.",
     # ── Manual updater ─────────────────────────────────────────────────
     "updater.processing_files": "Verarbeite {count} Komponentendateien...",
+    "updater.drop_revision_failed": "Could not write the revision dropping {name}'s tables: {error}\n   Once the app starts, run: uv run python -m app.cli.migrate_drop remove_{name}",
+    "updater.env_note": "Commented out when {name} was removed: no longer a setting.",
+    "updater.env_retired": "Commented out in .env (no longer settings): {keys}",
     "updater.updating_shared": "Aktualisiere gemeinsame Template-Dateien...",
     "updater.shared_preserved": "Lokale Änderungen beibehalten (Regenerierung übersprungen, manuell zusammenführen): {file}",
     "updater.shared_merged": "Template-Änderungen in deine angepasste Datei zusammengeführt: {file}",

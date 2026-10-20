@@ -143,6 +143,35 @@ _SWEEP_SKIP_DIRS = frozenset(
 )
 
 
+def comment_out_env_keys(env_path: Path, keys: set[str], note: str) -> list[str]:
+    """Comment out each line of ``env_path`` that sets one of ``keys``.
+
+    The settings a removal took away: the app's Settings refuse a key they
+    do not declare, so left set they stop the app starting. Each run of
+    such lines gets ``note`` above it; the values stay in the comments.
+    Returns the keys commented out.
+    """
+    if not keys or not env_path.is_file():
+        return []
+    out: list[str] = []
+    done: list[str] = []
+    in_run = False
+    for line in env_path.read_text().split("\n"):
+        name = line.split("=", 1)[0].strip()
+        if "=" in line and not line.lstrip().startswith("#") and name in keys:
+            if not in_run:
+                out.append(f"# {note}")
+            out.append(f"# {line}")
+            done.append(name)
+            in_run = True
+        else:
+            out.append(line)
+            in_run = False
+    if done:
+        env_path.write_text("\n".join(out))
+    return done
+
+
 def sweep_empty_stubs(project_path: Path) -> list[str]:
     """Delete 0-byte / whitespace-only ``.py`` files under ``project_path``.
 
@@ -772,14 +801,47 @@ class ManualUpdater:
             # ought to change looks hand-edited, the merge finds base ==
             # ours, and the file is left wired to the component we just
             # deleted. See #869.
+            env_before = self._example_keys()
             (
                 shared_files_updated,
                 shared_files_backed_up,
                 shared_files_need_manual_merge,
             ) = self._regenerate_shared_files(updated_answers, component)
+            self._retire_env_keys(env_before, component)
+
+            # The regen drops alembic once no answer needs it, but the
+            # project's revisions stay (its database was built from them),
+            # as plugin removal leaves them: keep alembic while they do.
+            has_alembic = (self.project_path / "alembic").is_dir()
+            if has_alembic:
+                from .migration_generator import _pin_alembic
+
+                _pin_alembic(self.project_path)
 
             # Update .copier-answers.yml
             self._save_answers(updated_answers)
+
+            # Its models are gone, its tables are still in every revision:
+            # as plugin removal does, one more revision exports those tables
+            # and drops them, so the revisions rebuild the models again.
+            from . import migration_generator, post_gen_tasks
+
+            if has_alembic and component in migration_generator.MIGRATION_SPECS:
+                try:
+                    migration_generator.generate_drop_revision(
+                        self.project_path, f"remove_{component}"
+                    )
+                except migration_generator.MigrationGenerationError as e:
+                    # Its files are already gone: the removal stands, and
+                    # the revision can be written once the app starts.
+                    brand.warn(
+                        "   "
+                        + t("updater.drop_revision_failed", name=component, error=e)
+                    )
+                else:
+                    post_gen_tasks.run_migrations(
+                        self.project_path, include_migrations=True
+                    )
 
             # Run post-generation tasks to clean up dependencies
             self.run_post_generation_tasks()
@@ -800,6 +862,24 @@ class ManualUpdater:
                 success=False,
                 error_message=str(e),
             )
+
+    def _example_keys(self) -> set[str]:
+        """The keys ``.env.example`` names, set or commented."""
+        example = self.project_path / ".env.example"
+        if not example.exists():
+            return set()
+        return set(self._extract_env_vars(example.read_text()))
+
+    def _retire_env_keys(self, before: set[str], removed: str) -> None:
+        """Comment out in ``.env`` what removing ``removed`` took out of
+        ``.env.example`` (``before`` its keys until then)."""
+        retired = comment_out_env_keys(
+            self.project_path / ".env",
+            before - self._example_keys(),
+            t("updater.env_note", name=removed),
+        )
+        if retired:
+            brand.muted("   " + t("updater.env_retired", keys=", ".join(retired)))
 
     def _extract_env_vars(self, content: str) -> dict[str, str]:
         """
@@ -1408,10 +1488,10 @@ class ManualUpdater:
            template tree rendered (``plugin_module_name`` locates it).
         4. Run post-generation tasks (``uv sync`` to drop deps).
 
-        Migrations are intentionally NOT rolled back — matches the
-        existing ``aegis remove-service`` behaviour. Database tables
-        belonging to the plugin remain in place; users can drop them
-        manually via ``alembic downgrade`` if desired.
+        Its revisions stay; one more exports its tables and drops them
+        (``generate_drop_revision``), so the revisions rebuild the models and
+        a re-add restores the rows. ``aegis remove-service`` writes the same
+        revision.
 
         Returns an :class:`UpdateResult`. ``success=False`` with a
         clear error message if the plugin isn't currently installed.
@@ -1447,11 +1527,13 @@ class ManualUpdater:
             # its BASE (pristine baseline) from, so saving first makes every
             # file needing regeneration look hand-edited and it gets skipped.
             # Same bug as remove_component's. See #869.
+            env_before = self._example_keys()
             (
                 shared_updated,
                 shared_backed_up,
                 shared_manual_merge,
             ) = self._regenerate_shared_files(updated_answers, spec.name)
+            self._retire_env_keys(env_before, spec.name)
 
             # Persist. If the disk cleanup below fails, the answers still
             # reflect reality and a re-run picks up where we left off.

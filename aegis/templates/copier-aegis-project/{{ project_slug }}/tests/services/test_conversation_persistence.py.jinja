@@ -335,21 +335,15 @@ class TestAIServiceConversationMemory:
             # Try to retrieve from second instance
             retrieved = await service2.conversation_manager.get_conversation(conversation.id)
 
-            # Check if using database persistence (has the async store)
-            try:
-                from app.core.db import get_async_session  # noqa: F401
-
-                uses_database = True
-            except ImportError:
-                uses_database = False
-
-            if uses_database:
-                # SQLite mode: conversations persist across instances
-                assert retrieved is not None
-                assert retrieved.id == conversation.id
-            else:
-                # In-memory mode: each instance has isolated storage
-                assert retrieved is None
+{%- if ai_backend != "memory" %}
+            # A stored backend: conversations persist across instances
+            assert retrieved is not None
+            assert retrieved.id == conversation.id
+{%- else %}
+            # The memory backend: each instance has isolated storage, even
+            # where another service brought a database
+            assert retrieved is None
+{%- endif %}
 
 
 class TestConversationMemoryEdgeCases:

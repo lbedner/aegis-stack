@@ -331,6 +331,9 @@ MESSAGES: dict[str, str] = {
     "remove.plugin_success": "Plugin {name} removed.",
     # ── Ручной updater ─────────────────────────────────────────────────
     "updater.processing_files": "Обработка файлов компонентов: {count}...",
+    "updater.drop_revision_failed": "Could not write the revision dropping {name}'s tables: {error}\n   Once the app starts, run: uv run python -m app.cli.migrate_drop remove_{name}",
+    "updater.env_note": "Commented out when {name} was removed: no longer a setting.",
+    "updater.env_retired": "Commented out in .env (no longer settings): {keys}",
     "updater.updating_shared": "Обновление общих файлов шаблонов...",
     "updater.shared_preserved": "Локальные изменения сохранены (перегенерация пропущена, объедините вручную): {file}",
     "updater.shared_merged": "Изменения шаблона объединены с вашим настроенным файлом: {file}",

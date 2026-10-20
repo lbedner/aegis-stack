@@ -22,8 +22,11 @@ from app.services.ai.domains.chat.readings import (
 
 # Staging, validation and formatting are DB-free and run on every backend.
 # Only the durable half needs somewhere to write: a memory-backend project
-# ships no ``app.core.db``, and a reading there lives for its own turn.
-_HAS_STORE = importlib.util.find_spec("app.core.db") is not None
+# ships no ``user_memory`` (whatever else brought a database), and a reading
+# there lives for its own turn.
+_HAS_STORE = (
+    importlib.util.find_spec("app.services.ai.domains.chat.user_memory") is not None
+)
 
 _ITEMS = [
     {"label": "Disposable Clear Cups 18oz 28ct", "quantity": 4, "amount_cents": 299},

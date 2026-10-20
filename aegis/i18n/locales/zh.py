@@ -274,6 +274,9 @@ MESSAGES: dict[str, str] = {
     "remove.plugin_success": "Plugin {name} removed.",
     # ── 手动更新器 ────────────────────────────────────────────────────
     "updater.processing_files": "正在处理 {count} 个文件……",
+    "updater.drop_revision_failed": "Could not write the revision dropping {name}'s tables: {error}\n   Once the app starts, run: uv run python -m app.cli.migrate_drop remove_{name}",
+    "updater.env_note": "Commented out when {name} was removed: no longer a setting.",
+    "updater.env_retired": "Commented out in .env (no longer settings): {keys}",
     "updater.updating_shared": "正在更新共享模板文件……",
     "updater.shared_preserved": "已保留本地更改（已跳过重新生成，请手动合并）：{file}",
     "updater.shared_merged": "已将模板更改合并到你的自定义文件中：{file}",

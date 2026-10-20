@@ -326,6 +326,9 @@ MESSAGES: dict[str, str] = {
     "remove.plugin_success": "Plugin {name} removed.",
     # ── Manual updater ─────────────────────────────────────────────────
     "updater.processing_files": "{count}개 컴포넌트 파일 처리 중...",
+    "updater.drop_revision_failed": "Could not write the revision dropping {name}'s tables: {error}\n   Once the app starts, run: uv run python -m app.cli.migrate_drop remove_{name}",
+    "updater.env_note": "Commented out when {name} was removed: no longer a setting.",
+    "updater.env_retired": "Commented out in .env (no longer settings): {keys}",
     "updater.updating_shared": "공유 템플릿 파일 업데이트 중...",
     "updater.shared_preserved": "로컬 변경 사항을 보존했습니다 (재생성 건너뜀, 수동으로 병합하세요): {file}",
     "updater.shared_merged": "템플릿 변경 사항을 사용자 지정 파일에 병합했습니다: {file}",

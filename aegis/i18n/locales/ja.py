@@ -341,6 +341,9 @@ MESSAGES: dict[str, str] = {
     "remove.plugin_success": "Plugin {name} removed.",
     # ── 手動アップデーター ──────────────────────────────────────────────
     "updater.processing_files": "{count} コンポーネントファイルを処理中...",
+    "updater.drop_revision_failed": "Could not write the revision dropping {name}'s tables: {error}\n   Once the app starts, run: uv run python -m app.cli.migrate_drop remove_{name}",
+    "updater.env_note": "Commented out when {name} was removed: no longer a setting.",
+    "updater.env_retired": "Commented out in .env (no longer settings): {keys}",
     "updater.updating_shared": "共通テンプレートファイルを更新中...",
     "updater.shared_preserved": "ローカルの変更を保持しました（再生成をスキップ、手動でマージしてください）: {file}",
     "updater.shared_merged": "テンプレートの変更をカスタマイズ済みファイルにマージしました: {file}",

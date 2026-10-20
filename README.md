@@ -2,7 +2,8 @@
 
 <img src="docs/images/aegis_stack_wordmark.svg" alt="Aegis Stack" width="500">
 <br>
-*"Inspired by the Neverwinter Nights toolset, Project Zero Dawn, and Dr. Wily."*
+
+*Inspired by the Neverwinter Nights toolset, Project Zero Dawn, and Dr. Wily.*
 
 [![CI](https://github.com/lbedner/aegis-stack/workflows/CI/badge.svg)](https://github.com/lbedner/aegis-stack/actions/workflows/ci.yml)
 [![Documentation](https://github.com/lbedner/aegis-stack/workflows/Deploy%20Documentation/badge.svg)](https://github.com/lbedner/aegis-stack/actions/workflows/docs.yml)

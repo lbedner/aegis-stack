@@ -507,3 +507,141 @@ class TestAServicesWorkerQueueOnAWorkerStack:
         assert [f for f in result.files_modified if self.QUEUES in f] == [
             f"{self.QUEUES}/meetings.py"
         ]
+
+
+class TestRemovingTheLastServiceWithMigrations:
+    """The answers then call for no alembic, so pyproject is re-rendered
+    without it, but the project's ``alembic/`` and its revisions stay (the
+    history its database was built from). Alembic stays pinned while they
+    do, as plugin removal does; otherwise the folder shadows the package
+    and every migrate command fails to import."""
+
+    def _remove(self, tmp_path: Path, *, with_alembic: bool) -> Path:
+        project = tmp_path / "demo"
+        project.mkdir()
+        (project / ".copier-answers.yml").write_text(
+            COPIER_ANSWERS.replace("include_database: false", "include_database: true")
+            + "include_meetings: true\n"
+        )
+        if with_alembic:
+            (project / "alembic" / "versions").mkdir(parents=True)
+            (project / "alembic" / "versions" / "001_meetings.py").write_text("")
+
+        def regenerated(*_: object, **__: object) -> tuple[list, list, list]:
+            (project / "pyproject.toml").write_text(
+                'dependencies = [\n    "sqlmodel>=0.0.14",\n]\n'
+            )
+            return [], [], []
+
+        with (
+            patch.object(ManualUpdater, "_regenerate_shared_files", regenerated),
+            patch.object(ManualUpdater, "run_post_generation_tasks"),
+            patch(
+                "aegis.core.migration_generator.generate_drop_revision"
+            ) as self.dropped,
+            patch("aegis.core.post_gen_tasks.run_migrations") as self.migrated,
+        ):
+            result = _make_updater(project).remove_component("meetings")
+        assert result.success, result.error_message
+        return project
+
+    def test_alembic_stays_pinned_while_its_folder_does(self, tmp_path: Path) -> None:
+        project = self._remove(tmp_path, with_alembic=True)
+
+        assert '"alembic==' in (project / "pyproject.toml").read_text()
+
+    def test_without_the_folder_nothing_is_pinned(self, tmp_path: Path) -> None:
+        project = self._remove(tmp_path, with_alembic=False)
+
+        assert "alembic" not in (project / "pyproject.toml").read_text()
+
+    def test_its_tables_are_exported_and_dropped(self, tmp_path: Path) -> None:
+        """As plugin removal does: one more revision exports the tables no
+        model describes now and drops them, so the revisions rebuild the
+        models again."""
+        project = self._remove(tmp_path, with_alembic=True)
+
+        self.dropped.assert_called_once_with(project, "remove_meetings")
+        self.migrated.assert_called_once()
+
+    def test_a_drop_revision_that_cannot_be_written_does_not_undo_the_removal(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Its files are already gone. The project's own ``migrate_drop`` can
+        fail (settings the removed service left in ``.env``): the removal
+        stands, and says how to write the revision later."""
+        from aegis.core.migration_generator import MigrationGenerationError
+
+        project = tmp_path / "demo"
+        project.mkdir()
+        (project / ".copier-answers.yml").write_text(
+            COPIER_ANSWERS.replace("include_database: false", "include_database: true")
+            + "include_meetings: true\n"
+        )
+        (project / "alembic").mkdir()
+        with (
+            patch.object(
+                ManualUpdater, "_regenerate_shared_files", return_value=([], [], [])
+            ),
+            patch.object(ManualUpdater, "run_post_generation_tasks"),
+            patch(
+                "aegis.core.migration_generator.generate_drop_revision",
+                side_effect=MigrationGenerationError("Settings refused AI_MODEL"),
+            ),
+            patch("aegis.core.post_gen_tasks.run_migrations") as migrated,
+        ):
+            result = _make_updater(project).remove_component("meetings")
+
+        assert result.success, result.error_message
+        migrated.assert_not_called()
+        said = capsys.readouterr().out
+        assert "Settings refused AI_MODEL" in said
+        assert "app.cli.migrate_drop remove_meetings" in said
+
+
+class TestARemovalRetiresItsSettings:
+    """``.env`` keeps every key the removed service set, and the app's
+    Settings refuse a key they do not declare: the app would not start.
+    Each key the removal took out of ``.env.example`` is commented out in
+    ``.env`` (its value kept in the comment); keys the project added itself,
+    and keys still in ``.env.example``, are left alone."""
+
+    def test_only_the_keys_the_removal_took_away_are_commented_out(
+        self, tmp_path: Path
+    ) -> None:
+        project = tmp_path / "demo"
+        project.mkdir()
+        (project / ".copier-answers.yml").write_text(
+            COPIER_ANSWERS + "include_comms: true\n"
+        )
+        (project / ".env.example").write_text(
+            "DATABASE_URL=sqlite:///x\nRESEND_API_KEY=\n# RESEND_FROM=\n"
+        )
+        (project / ".env").write_text(
+            "DATABASE_URL=sqlite:///mine\n"
+            "RESEND_API_KEY=re_123\n"
+            "RESEND_FROM=me@example.com\n"
+            "MY_OWN=1\n"
+        )
+
+        def regenerated(*_: object, **__: object) -> tuple[list, list, list]:
+            (project / ".env.example").write_text("DATABASE_URL=sqlite:///x\n")
+            return [], [], []
+
+        with (
+            patch.object(ManualUpdater, "_regenerate_shared_files", regenerated),
+            patch.object(ManualUpdater, "run_post_generation_tasks"),
+        ):
+            result = _make_updater(project).remove_component("comms")
+
+        assert result.success, result.error_message
+        lines = (project / ".env").read_text().splitlines()
+        assert "DATABASE_URL=sqlite:///mine" in lines
+        assert "MY_OWN=1" in lines
+        assert "# RESEND_API_KEY=re_123" in lines
+        assert "# RESEND_FROM=me@example.com" in lines
+        assert any(
+            "comms" in line
+            for line in lines
+            if line.startswith("# ") and "=" not in line
+        )

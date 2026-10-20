@@ -491,6 +491,15 @@ aegis remove-service auth,ai
 aegis --verbose remove-service auth  # show each file operation
 ```
 
+A service with tables keeps its revisions and gains one more: it exports
+the service's tables, then drops them, so the remaining revisions still
+build exactly the remaining models. `alembic` stays a dependency while the
+`alembic/` folder does.
+
+The settings the service took out of `.env.example` are commented out in
+`.env`, values kept, since the app refuses a setting it no longer declares.
+Keys you added yourself, and keys still in `.env.example`, stay as they are.
+
 **Important:** this deletes files. Commit your changes to git first.
 
 ---

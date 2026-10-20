@@ -274,6 +274,20 @@
   stack's own at the canonical name and drops the others, as init does,
   instead of leaving modules that import a backend the stack never
   installed.
+- **`aegis remove-service` leaves a stack whose migrations still run.**
+  Removing the last service with tables dropped `alembic` from the
+  dependencies while the `alembic/` folder stayed, so the folder shadowed the
+  package and every migrate command failed to import; and the service's
+  tables stayed in revisions no model described. Alembic now stays pinned
+  while the folder does, and the removal writes one more revision that
+  exports the service's tables and drops them, as plugin removal does.
+- **A removal leaves a `.env` the app starts with.** Removing a service or
+  plugin kept every key it set in `.env`, which the app's Settings refuse,
+  so the app would not start. The keys the removal took out of
+  `.env.example` are now commented out in `.env`, values kept.
+- **An AI service on the memory backend passes its own tests beside a
+  database.** Two tests took a database in the stack (another service's) for
+  a stored AI backend; they now ask what the AI service itself keeps.
 - **The error store is bounded by bytes, not just by count.** It kept up to
   10,000 occurrences of up to 64 KB each, more than the stack's 64 MB Redis,
   and its keys carry no TTL, so `volatile-lru` could not evict them: an error

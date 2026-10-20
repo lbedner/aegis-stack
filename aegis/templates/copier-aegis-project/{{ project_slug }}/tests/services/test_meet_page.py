@@ -206,13 +206,17 @@ async def test_the_bot_runs_a_whole_meeting_on_the_page(
     ends: the row ends left, the announcement went to the chat, and what was
     said is in the transcript."""
     bot_on(monkeypatch, async_db_session, meet, poll_seconds=0.05)
-    # The host lets the bot in; once it has spoken, Ada does, and the call ends.
+    # The host lets the bot in; once it has spoken, Ada does, and the call
+    # ends once the bot has read her (it marks what it read ``data-line``):
+    # a fixed delay lost the race on a busy machine.
     await meet.page.add_script_tag(
         content="lobby.querySelector('button').addEventListener("
         "'click', () => setTimeout(admit, 100));"
+        "const ended = () => document.querySelector('[data-line]')"
+        " ? setTimeout(() => end('The call has ended'), 100)"
+        " : setTimeout(ended, 50);"
         "chat.addEventListener('keydown', (e) => { if (e.key === 'Enter') {"
-        " caption('Ada', 'Hello there.');"
-        " setTimeout(() => end('The call has ended'), 300); } });"
+        " caption('Ada', 'Hello there.'); ended(); } });"
     )
     meeting = await MeetingsService(async_db_session, None).request(MEET, "Notes")
 

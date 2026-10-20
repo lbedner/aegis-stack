@@ -9,21 +9,37 @@
 # then adds a dramatiq worker (the reverse order).
 # usage: FROM=0.14.0 TO=0.15.0rc1 [INDEX=testpypi|pypi] [ADD=mcp] [ADD_SERVICES=research] upgrade_stacks.sh <workdir>
 : "${FROM:?set FROM}" "${TO:?set TO}"
-work=${1:?workdir}; mkdir -p "$work"; cd "$work"
+work=${1:?workdir}; mkdir -p "$work"; cd "$work"; work=$(pwd)
 I=()
 [ "${INDEX:-testpypi}" = testpypi ] && I=(--index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ --index-strategy unsafe-best-match)
 # --refresh: a version published minutes ago is missing from a cached index.
 aeg() { uvx --refresh "${I[@]}" "aegis-stack@$1" "${@:2}"; }
 commit() { git add -A; git commit -qm "$1" --no-verify >/dev/null 2>&1; }
 
+# The tests that drive a live browser, when a browser container is up. Stacks
+# run side by side and would share that one browser, so these run apart from
+# make check, one stack at a time (a mkdir lock: macOS has no flock).
+BROWSER_TESTS=(tests/components/test_browser.py tests/services/test_meet_page.py tests/services/test_meetings_audio.py)
+
 verdict() {
   markers=$(grep -rlE '^(<<<<<<<|>>>>>>>)( |$)' --exclude-dir=.venv --exclude-dir=.git . | wc -l | tr -d ' ')
   rej=$(find . -name '*.rej' -not -path './.venv/*' | wc -l | tr -d ' ')
   stray=$(ls app/components/worker/queues 2>/dev/null | grep -cE '_(taskiq|dramatiq)\.py$')
-  # No live browser: stacks run side by side and would share one container.
-  BROWSER_URL=ws://127.0.0.1:9/ make check > "../$1.check.log" 2>&1; rc=$?
+  PYTEST_ADDOPTS="${BROWSER_TESTS[*]/#/--ignore=}" make check > "../$1.check.log" 2>&1; rc=$?
+  present=(); for t in "${BROWSER_TESTS[@]}"; do [ -f "$t" ] && present+=("$t"); done
+  if [ ${#present[@]} -gt 0 ]; then
+    until mkdir "$work/.browser.lock" 2>/dev/null; do sleep 2; done
+    uv run pytest -q -p no:cacheprovider "${present[@]}" > "../$1.browser.log" 2>&1 || rc=1
+    rmdir "$work/.browser.lock"
+  fi
   echo "$1: markers=$markers rej=$rej stray=$stray check_exit=$rc $(grep -E '[0-9]+ (passed|failed)' "../$1.check.log" | tail -1)"
 }
+
+# A version published minutes ago may not resolve yet, even with --refresh.
+for _ in $(seq 1 30); do
+  aeg "$TO" --version 2>&1 | grep -qE "No solution found|no version of" || break
+  sleep 20
+done
 
 # name, components, services: init at FROM, update to TO, add what is new.
 run() {

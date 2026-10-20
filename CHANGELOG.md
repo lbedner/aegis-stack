@@ -7,6 +7,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- **A plugin's own page on the htmx Overseer.** `PluginWiring.overseer_pages`
+  (`OverseerPageWiring`: the rail entry, the module with `SECTIONS` and
+  `section_context`, the templates folder, the group) registers the page in
+  `overseer_sections.py` the way each in-tree page is, and a plugin's
+  `FileManifest.extras` group is written only while its answer key is on, so
+  the page's files arrive with `include_htmx` and not before.
+
 ### Changed
 
 - **Overseer worker page: a failing queue leads, red as a whole.** Each queue

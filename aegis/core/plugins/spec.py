@@ -162,6 +162,32 @@ class HealthCheckWiring:
 
 
 @dataclass
+class OverseerPageWiring:
+    """A page of the plugin's own on the htmx Overseer, at its entry in the
+    rail, registered by ``overseer_sections`` as the in-tree pages are.
+    Its partials, if any, are a ``RouterWiring`` whose router carries the
+    Overseer gate (``overseer_access.overseer_gate``), gated on
+    ``include_htmx`` with the page's files (``FileManifest.extras``)."""
+
+    name: str
+    """The entry it is the page of: the health check's label, the name
+    the rail lists it under."""
+
+    module: str
+    """Import path of the module exposing ``SECTIONS`` and
+    ``section_context``, e.g.
+    ``"app.components.web_frontend.overseer_crawler"``."""
+
+    folder: str
+    """Its templates' folder, ``pages/overseer/<folder>/``."""
+
+    group: str = "services"
+    """The rail group it is listed in: ``services`` or ``components``."""
+
+    when: Callable[[dict[str, Any]], bool] | None = None
+
+
+@dataclass
 class ReadmeWiring:
     """What a plugin contributes to the generated project's README.
 
@@ -215,6 +241,10 @@ class PluginWiring:
 
     dashboard_modals: list[FrontendWidgetWiring] = field(default_factory=list)
     """Frontend dashboard modals."""
+
+    overseer_pages: list[OverseerPageWiring] = field(default_factory=list)
+    """Pages on the htmx Overseer: the web frontend's counterpart of a
+    dashboard card and its modal."""
 
     settings_mixins: list[SymbolWiring] = field(default_factory=list)
     """Pydantic settings mixin classes composed into the project's

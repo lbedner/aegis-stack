@@ -152,6 +152,17 @@ def _optional_pages() -> dict[tuple[str, str], SectionedPage]:
         )
     except ImportError:  # no AI service in this project
         pass
+    # A plugin's own pages (``PluginWiring.overseer_pages``): its files
+    # arrive with it, so no import to try.
+    {%- for p in _plugins | default([]) %}
+    {%- for o in p.wiring.overseer_pages | default([]) %}
+    import {{ o.module }} as {{ o.folder }}_page
+
+    pages[("{{ o.group }}", "{{ o.name }}")] = SectionedPage(
+        "{{ o.folder }}", {{ o.folder }}_page.SECTIONS, {{ o.folder }}_page.section_context
+    )
+    {%- endfor %}
+    {%- endfor %}
     return pages
 
 

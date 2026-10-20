@@ -1280,7 +1280,11 @@ class ManualUpdater:
         ).written
 
     def render_plugin_tree(
-        self, plugin_module_name: str, *, backup_label: str | None = None
+        self,
+        plugin_module_name: str,
+        *,
+        backup_label: str | None = None,
+        extras: dict[str, list[str]] | None = None,
     ) -> PluginRenderResult:
         """Render the plugin's template tree into the project.
 
@@ -1321,6 +1325,11 @@ class ManualUpdater:
         version being replaced (e.g. ``"scraper/1.2.0"``). Defaults to
         ``"previous"`` when the caller doesn't know it.
 
+        ``extras`` is the plugin's ``FileManifest.extras``: a group whose
+        answer key is off is not written, as an in-tree spec's is not
+        (its Overseer page without ``include_htmx``). Re-rendering after
+        that answer turns on brings it.
+
         **Filesystem-only.** Uses ``Path.rglob`` and ``FileSystemLoader``
         on the resolver's returned path, which requires a real on-disk
         directory. Zipped wheels are not supported today — see
@@ -1330,6 +1339,13 @@ class ManualUpdater:
         if tree is None:
             return PluginRenderResult()
         template_root, files = tree
+        off = [
+            Path(path)
+            for key, paths in (extras or {}).items()
+            if not self.answers.get(key)
+            for path in paths
+        ]
+        files = [f for f in files if not any(f[1].is_relative_to(path) for path in off)]
 
         plugin_env = build_template_env(template_root)
         backup_root = (
@@ -1408,8 +1424,9 @@ class ManualUpdater:
         edits are snapshotted first, exactly as on an upgrade.
         """
         from .plugins.composer import PLUGINS_ANSWER_KEY
-        from .plugins.discovery import module_name_for
+        from .plugins.discovery import discover_plugins, module_name_for
 
+        specs = {spec.name: spec for spec in discover_plugins()}
         rerendered: list[str] = []
         previous_answers = self.answers
         self.answers = answers
@@ -1424,7 +1441,12 @@ class ManualUpdater:
                     # package is gone or this is another machine. Nothing
                     # to render, and not this command's problem to report.
                     continue
-                if self.render_plugin_tree(module, backup_label=name).written:
+                spec = specs.get(name)
+                if self.render_plugin_tree(
+                    module,
+                    backup_label=name,
+                    extras=spec.files.extras if spec else None,
+                ).written:
                     rerendered.append(name)
         finally:
             self.answers = previous_answers
@@ -1701,7 +1723,9 @@ class ManualUpdater:
                 else DEFAULT_PLUGIN_BACKUP_LABEL
             )
             plugin_render = self.render_plugin_tree(
-                plugin_module_name, backup_label=backup_label
+                plugin_module_name,
+                backup_label=backup_label,
+                extras=spec.files.extras,
             )
             files_modified.extend(plugin_render.written)
             if plugin_render.replaced:

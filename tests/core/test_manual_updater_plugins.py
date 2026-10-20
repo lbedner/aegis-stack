@@ -661,3 +661,33 @@ class TestPluginShipsMoreThanTemplates:
 
         written = fake_project / "app/services/test_plugin/seeds/braces.json"
         assert "{{ project_slug }}" in written.read_text()
+
+
+class TestPluginExtrasAreGated:
+    """A plugin's ``FileManifest.extras`` group lands only while its answer
+    key is on, as an in-tree spec's does: crawl4ai's Overseer page under
+    ``include_htmx``, which on a Flet-only stack would otherwise create
+    the htmx component's own directory."""
+
+    EXTRAS = {"include_seeds": ["app/services/test_plugin/seeds"]}
+
+    def test_a_group_whose_key_is_off_is_not_written(self, fake_project: Path) -> None:
+        written = (
+            ManualUpdater(fake_project)
+            .render_plugin_tree("aegis_plugin_test", extras=self.EXTRAS)
+            .written
+        )
+
+        assert "app/services/test_plugin/seeds/starter.json" not in written
+        assert "app/services/test_plugin/service.py" in written
+        assert not (fake_project / "app/services/test_plugin/seeds").exists()
+
+    def test_a_group_whose_key_is_on_is_written(self, fake_project: Path) -> None:
+        updater = ManualUpdater(fake_project)
+        updater.answers["include_seeds"] = True
+
+        written = updater.render_plugin_tree(
+            "aegis_plugin_test", extras=self.EXTRAS
+        ).written
+
+        assert "app/services/test_plugin/seeds/starter.json" in written

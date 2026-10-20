@@ -157,6 +157,8 @@ Each meeting is its owner's: with the auth service a user sees only the meetings
 
 Overseer > Services > Meetings runs meetings as fully as the Meetings page does, across every owner: send the bot to a call from there (the meeting is the admin's own), and every owner's meetings are listed, newest first, with how many there are and how many the bot is in now. A row opens the meeting in the drawer: its status, owner and how long each speaker was heard, then the same notes and transcript as the page, with "I am" (which speaker the owner is, their action items first) and "Write them again". The drawer re-reads itself every few seconds while the bot is in or the notes are being written. From there the admin also asks the bot to leave a meeting it is still in, or deletes a meeting it is out of, with its transcript, notes and speakers, and anyone who spoke only in it with their guide. Whatever else cited only its lines goes with it: another meeting's note item, a guide's point, a contradiction left with one side.
 
+![A meeting in Overseer's drawer: its transcript, each line timed and colored by speaker](../../images/meetings_overseer_transcript.png)
+
 Above the list, a search box searches every owner's transcripts and notes as you type ([Search](#search)); a hit opens its meeting in the drawer at the line, marked, with the hits kept above it.
 
 A meeting's commitments, earlier commitments raised, contradictions and positions load into its drawer once its notes are there, each folding open to its lines (and the other side, or where it came up again).
@@ -168,6 +170,8 @@ Its Settings tab holds what meetings can be configured with: what the bot says i
 The send form picks which agent goes, where there is more than one, and each meeting's row names its agent. The Agents tab lists every agent: its name, the name it joins as, its Google account, whether its sign-in still works (Signed in; Signed out once Google's session has run out, so sign it in again; Not signed in), and the meetings it is in now, each opening in the drawer.
 
 Its Series tab lists every owner's series, latest written first; a row opens one in the drawer, with a tab for its run over time (the headline, then a card each for settled, shifted, still open and the mood) and one for what it keeps coming back to, every point folding open to its lines (each opening its meeting), with "Write it again".
+
+![A series in Overseer's drawer: its run over time, the headline and a card each for settled, still open and the mood](../../images/meetings_overseer_series.png)
 
 Its People tab lists every owner's guides, latest written first; a row opens one in the drawer, each point folding open to the lines it rests on (each opening its meeting), then the person's open threads (what they said they would do and what was promised them, with whether it was done; where they stand; what they said both ways), with the owner's note and "Write it again".
 

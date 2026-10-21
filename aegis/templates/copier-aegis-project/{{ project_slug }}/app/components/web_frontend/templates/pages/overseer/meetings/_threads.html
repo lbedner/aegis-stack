@@ -33,7 +33,7 @@
           <span class="flex-1 min-w-0 leading-relaxed">
             {%- if item.speaker %}<span class="font-semibold text-aegis-text">{{ item.speaker }}</span> <span class="text-aegis-muted">·</span> {% endif -%}
             {{ item.text }}
-            {%- if item.detail %} <span class="whitespace-nowrap rounded bg-aegis-bg px-1.5 py-0.5 text-xs text-aegis-muted">{{ item.detail }}</span>{% endif %}
+            {%- if item.detail %} <span class="rounded bg-aegis-bg px-1.5 py-0.5 text-xs text-aegis-muted [overflow-wrap:anywhere]">{{ item.detail }}</span>{% endif %}
           </span>
           {% if item.status %}<span data-status class="text-xs">{{ badge(item.status|capitalize, tones.get(item.status)) }}</span>{% endif %}
           <span class="whitespace-nowrap text-xs text-aegis-muted">{{ count }} {{ "line" if count == 1 else "lines" }}</span>

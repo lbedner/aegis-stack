@@ -63,6 +63,9 @@ class FakeCall:
     async def state(self) -> CallState:
         return self.states.pop(0) if len(self.states) > 1 else self.states[0]
 
+    async def page_text(self) -> str:
+        return ""
+
     async def people(self) -> int:
         return self.counts.pop(0) if len(self.counts) > 1 else self.counts[0]
 
@@ -186,6 +189,70 @@ async def test_left_alone_it_leaves(
     monkeypatch.setattr(bot, "ALONE_SECONDS", 0)
     call = FakeCall([CallState.IN_CALL], people=[3, 1])
 
+    meeting: Meeting = await run(call)
+
+    assert call.left and meeting.status == MeetingStatus.LEFT
+
+
+async def test_in_early_it_waits_for_the_others_to_come(
+    run: Callable[..., Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The calendar sends the bot a minute early and people come late:
+    alone before anyone came is not left alone. It leaves once they have
+    come and gone."""
+    monkeypatch.setattr(bot, "ALONE_SECONDS", 0)
+    call = FakeCall([CallState.IN_CALL], people=[1, 1, 1, 3, 1])
+
+    meeting: Meeting = await run(call)
+
+    assert call.counts == [1], "left before anyone came"
+    assert call.left and meeting.status == MeetingStatus.LEFT
+
+
+async def test_people_talking_are_there_whatever_meet_counts(
+    run: Callable[..., Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Meet's People count can read 1 in a call with others in it: while
+    their captions move, the bot is not alone."""
+    monkeypatch.setattr(bot, "ALONE_SECONDS", 0)
+    monkeypatch.setattr(bot, "WAIT_FOR_OTHERS_SECONDS", 0)
+    talk = [
+        [Caption("1", "William", "Good")],
+        [Caption("1", "William", "Good morning")],
+        [Caption("1", "William", "Good morning, all.")],
+        [],
+    ]
+    call = FakeCall([CallState.IN_CALL], people=[1], captions=talk)
+
+    meeting: Meeting = await run(call)
+
+    assert call.shown == [[]], "left while they were talking"
+    assert call.left and meeting.status == MeetingStatus.LEFT
+
+
+async def test_a_moment_the_page_does_not_look_like_the_call_is_not_its_end(
+    run: Callable[..., Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Something put over the call (someone joining, a prompt) can hide
+    Leave for a look: the bot stays unless it stays that way."""
+    monkeypatch.setattr(bot, "GONE_SECONDS", 3600)
+    monkeypatch.setattr(bot, "ALONE_SECONDS", 0)
+    call = FakeCall(
+        [CallState.IN_CALL, CallState.WAITING, CallState.IN_CALL], people=[3, 3, 1]
+    )
+
+    meeting: Meeting = await run(call)
+
+    assert call.states == [CallState.IN_CALL], "left on a moment's look"
+    assert call.left and meeting.status == MeetingStatus.LEFT
+
+
+async def test_a_call_nobody_comes_to_it_leaves_in_the_end(
+    run: Callable[..., Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(bot, "WAIT_FOR_OTHERS_SECONDS", 0)
+
+    call = FakeCall([CallState.IN_CALL], people=[1])
     meeting: Meeting = await run(call)
 
     assert call.left and meeting.status == MeetingStatus.LEFT

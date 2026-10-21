@@ -6,7 +6,12 @@ from sqlalchemy import delete, or_
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.meetings.models import CalendarEvent, Meeting
+from app.services.meetings.models import (
+    BotAccount,
+    CalendarEvent,
+    Meeting,
+    MeetingParticipant,
+)
 
 # How early an agent is sent: the job runs each minute, so by the start.
 EARLY = timedelta(minutes=1)
@@ -76,5 +81,31 @@ async def between(
             CalendarEvent.starts_at < end,
         )
         .order_by(col(CalendarEvent.starts_at), col(CalendarEvent.id))
+    )
+    return list((await db.exec(query)).all())
+
+
+async def one(
+    db: AsyncSession, event_id: int
+) -> tuple[CalendarEvent, str | None, str] | None:
+    """One meeting on a calendar, the status of the call it became (if it
+    did), and the agent whose calendar it is on."""
+    query = (
+        select(CalendarEvent, Meeting.status, BotAccount.name)
+        .join(Meeting, col(Meeting.id) == CalendarEvent.meeting_id, isouter=True)
+        .join(BotAccount, col(BotAccount.id) == CalendarEvent.account_id)
+        .where(CalendarEvent.id == event_id)
+    )
+    return (await db.exec(query)).first()
+
+
+async def speakers_on(db: AsyncSession, url: str) -> list[str]:
+    """Everyone who spoke in a meeting on ``url``, by the name the call gave
+    them."""
+    query = (
+        select(MeetingParticipant.display_name)
+        .join(Meeting, col(Meeting.id) == MeetingParticipant.meeting_id)
+        .where(Meeting.url == url)
+        .distinct()
     )
     return list((await db.exec(query)).all())

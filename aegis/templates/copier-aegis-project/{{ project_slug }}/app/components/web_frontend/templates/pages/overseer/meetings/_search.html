@@ -1,14 +1,16 @@
-{# The search box over every owner's transcripts and notes
+{# The search row over every owner's transcripts and notes
    (overseer_meeting_search): typing re-requests the page with ``q``; each
    hit opens its meeting in the drawer at the line it is. #}
 {% from "components/macros/layout.html" import card %}
 {% from "components/macros/form.html" import search_input %}
-{% call card("Search what was said", id="meetings-search") %}
-  <form {{ hx_replace(search.url, "#overseer-main") }} hx-trigger="keyup changed delay:300ms from:input[name=q], search, submit">
-    {{ search_input("q", search.q, placeholder="A word said in any meeting or its notes", attrs='autocomplete="off"') }}
+<div id="meetings-search" class="space-y-3">
+  <form {{ hx_replace(search.url, "#overseer-main") }} hx-trigger="keyup changed delay:300ms from:input[name=q], search, submit"
+        class="flex flex-wrap items-center gap-3">
+    {{ search_input("q", search.q, placeholder="Search what was said", attrs='autocomplete="off"') }}
   </form>
   {% if search.hits is not none %}
-  <div id="meetings-search-hits" class="mt-3">
+  {% call card(None) %}
+  <div id="meetings-search-hits">
     {% if search.hits %}
     <ul class="divide-y divide-aegis-border text-sm">
       {% for hit in search.hits %}
@@ -25,5 +27,6 @@
     <p class="text-sm text-aegis-muted">Nothing said in any meeting has those words.</p>
     {% endif %}
   </div>
+  {% endcall %}
   {% endif %}
-{% endcall %}
+</div>

@@ -7,8 +7,10 @@
 
 {% from "components/macros/icons.html" import icon %}
 
+{# The height of every control below (``_control_classes``: same text, border
+   and padding), so a button sits level with the fields beside it. #}
 {%- set _primary_button_classes -%}
-text-sm text-aegis-text border border-aegis-teal bg-aegis-teal/10 rounded px-4 py-2.5 hover:bg-aegis-teal/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2
+text-sm text-aegis-text border border-aegis-teal bg-aegis-teal/10 rounded px-4 py-1.5 hover:bg-aegis-teal/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2
 {%- endset -%}
 
 
@@ -145,9 +147,9 @@ bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-
 </div>
 {% endmacro %}
 
-{% macro text_input(name, value=None, placeholder="", required=False, autofocus=False, pattern=None) %}
+{% macro text_input(name, value=None, placeholder="", required=False, autofocus=False, pattern=None, attrs="") %}
 <input type="text" name="{{ name }}" value="{{ value or '' }}" placeholder="{{ placeholder }}"
-       {% if required %}required{% endif %} {% if autofocus %}autofocus{% endif %} {% if pattern %}pattern="{{ pattern }}"{% endif %}
+       {% if required %}required{% endif %} {% if autofocus %}autofocus{% endif %} {% if pattern %}pattern="{{ pattern }}"{% endif %} {{ attrs|safe }}
        class="{{ _control_classes }} w-full mt-1">
 {% endmacro %}
 

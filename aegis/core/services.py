@@ -1499,6 +1499,30 @@ SERVICES: dict[str, ServiceSpec] = {
                     prefix="/api/v1",
                 ),
                 RouterWiring(
+                    module="app.components.backend.api.meetings.moments",
+                    symbol="runs_router",
+                    alias="meetings_runs_router",
+                    prefix="/api/v1",
+                ),
+                RouterWiring(
+                    module="app.components.backend.api.meetings.moments",
+                    symbol="tokens_router",
+                    alias="meetings_runner_tokens_router",
+                    prefix="/api/v1",
+                ),
+                RouterWiring(
+                    module="app.components.backend.api.meetings.moments",
+                    symbol="admin_router",
+                    alias="meetings_moments_admin_router",
+                    prefix="/api/v1",
+                ),
+                RouterWiring(
+                    module="app.components.backend.api.meetings.moments",
+                    symbol="router",
+                    alias="meetings_moments_router",
+                    prefix="/api/v1",
+                ),
+                RouterWiring(
                     module="app.components.backend.api.meetings.series",
                     symbol="admin_router",
                     alias="meetings_series_admin_router",
@@ -1615,6 +1639,14 @@ SERVICES: dict[str, ServiceSpec] = {
                 "tests/components/frontend/test_meetings_search_ui.py",
                 "tests/api/test_meetings_endpoints.py",
                 "tests/_meetings.py",
+                # What a call throws up, and what is done with it.
+                "tests/services/test_meetings_moments.py",
+                "tests/services/test_meetings_actions.py",
+                "tests/services/test_meetings_runner.py",
+                "tests/services/test_meetings_runner_tokens.py",
+                "tests/api/test_meetings_moments_endpoints.py",
+                "tests/components/frontend/test_meetings_moments_ui.py",
+                "app/components/frontend/dashboard/modals/meetings_moments.py",
             ],
             extras={
                 # The Meetings page and Overseer's, only where the htmx
@@ -1637,6 +1669,7 @@ SERVICES: dict[str, ServiceSpec] = {
                     "tests/web/test_overseer_meeting_calendar.py",
                     "app/components/web_frontend/overseer_meeting_search.py",
                     "tests/web/test_overseer_meeting_search.py",
+                    "tests/web/test_overseer_meeting_moments.py",
                 ],
                 # The bot's own queue, where the stack has a worker: a call
                 # outlives any webserver restart.

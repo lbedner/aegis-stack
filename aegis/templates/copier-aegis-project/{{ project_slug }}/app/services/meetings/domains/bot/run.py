@@ -53,6 +53,14 @@ TRANSCRIBED = "What is said here is transcribed."
 ADMIT_TIMEOUT_SECONDS = 300.0
 # How long the bot stays once everyone else has gone.
 ALONE_SECONDS = 120.0
+# How long it waits in a call nobody else has come to yet: the calendar
+# sends it a minute early, and people come late.
+WAIT_FOR_OTHERS_SECONDS = 900.0
+# How long Leave can be gone before the bot takes the call as over: what
+# Meet puts over the call (someone joining, a prompt) can hide it for a
+# look. A page that says the call ended, or the bot was removed, is over
+# at once.
+GONE_SECONDS = 10.0
 # How often the run beats and reads back its status: a leave request waits
 # at most this long, and on SQLite each beat takes the write lock.
 BEAT_SECONDS = 10.0
@@ -170,26 +178,51 @@ async def _admitted(call: MeetPage, pulse: _Pulse) -> None:
 async def _stay(
     call: MeetPage, pulse: _Pulse, transcript: _Transcript, hearing: Hearing
 ) -> None:
-    """Back when the bot should leave: asked to, or alone too long. Ends
-    the run when the call ends on its own (any page but the call's). Each
-    look keeps what was said since the last, and gives what was heard to
-    its speaker once the captions have caught up."""
+    """Back when the bot should leave: asked to, alone too long once the
+    others have gone (nobody counted by Meet, nobody talking), or nobody
+    came. Ends the run when the call ends on its own (any page but the
+    call's). Each look keeps what was said since the last, and gives what
+    was heard to its speaker once the captions have caught up."""
     loop = asyncio.get_running_loop()
-    alone_since: float | None = None
+    # Alone since the others went, or since the bot came while nobody had.
+    alone_since: float | None = loop.time()
+    others_came = False
+    gone_since: float | None = None
     try:
         while True:
-            if await call.state() != CallState.IN_CALL:
-                raise _RunEnded(MeetingStatus.LEFT)
+            state = await call.state()
+            if state != CallState.IN_CALL:
+                gone_since = loop.time() if gone_since is None else gone_since
+                # Only Leave missing (WAITING) waits out GONE_SECONDS.
+                gone = loop.time() - gone_since >= GONE_SECONDS
+                if state != CallState.WAITING or gone:
+                    await _left_because(call, transcript.meeting_id, state)
+                    raise _RunEnded(MeetingStatus.LEFT)
+                await asyncio.sleep(POLL_SECONDS)
+                continue
+            gone_since = None
+            spoke = len(transcript.spoke)
             await transcript.take(await call.captions())
             hearing.settle(transcript.spoke, loop.time())
             if not await pulse.still_wanted():
                 return
+            # A caption that moved is someone here, whatever Meet's People
+            # count says: it can read 1 with others in the call.
+            talking = len(transcript.spoke) > spoke
             people = await call.people()
-            if people is None or people > 1:
+            if talking or people is None or people > 1:
+                others_came = others_came or talking or people is not None
                 alone_since = None
             elif alone_since is None:
                 alone_since = loop.time()
-            elif loop.time() - alone_since >= ALONE_SECONDS:
+            elif loop.time() - alone_since >= (
+                ALONE_SECONDS if others_came else WAIT_FOR_OTHERS_SECONDS
+            ):
+                logger.info(
+                    "Leaving: alone in the call",
+                    meeting_id=transcript.meeting_id,
+                    others_came=others_came,
+                )
                 return
             await asyncio.sleep(POLL_SECONDS)
     finally:
@@ -199,6 +232,17 @@ async def _stay(
         if hearing.seconds:
             async with get_async_session() as session:
                 await keep_heard(session, transcript.meeting_id, hearing.seconds)
+
+
+async def _left_because(call: MeetPage, meeting_id: int, state: CallState) -> None:
+    """Say why the call is over for the bot, with what the page showed: the
+    one record of a call it left on its own."""
+    logger.warning(
+        "The call is over for the bot",
+        meeting_id=meeting_id,
+        state=state,
+        page=await call.page_text(),
+    )
 
 
 def announcement(name: str) -> str:

@@ -7,16 +7,18 @@
    or when there are no notes. #}
 {% from "components/macros/form.html" import action, select %}
 {% from "components/macros/layout.html" import card, ranked_rows, tab_panel, tabbed %}
-{% from "pages/meetings/_macros.html" import heading, items, notes_view, transcript %}
+{% from "pages/meetings/_macros.html" import heading, items, moments, notes_view, transcript %}
 {% set hx_body = 'hx-target="#meeting-body" hx-swap="outerHTML"' %}
 {% set has_notes = notes or notes_error or can_write %}
 {% set has_threads = with_threads is defined and notes and not (under_way or writing) %}
 {% set tabs = [] %}
 {% if has_notes %}{% set _ = tabs.append(("notes", "Notes")) %}{% endif %}
 {% if has_threads %}{% set _ = tabs.append(("threads", "Threads")) %}{% endif %}
+{% for kind, title, _ in heard %}{% set _ = tabs.append(("heard-" ~ kind, title)) %}{% endfor %}
 {% set _ = tabs.append(("transcript", "Transcript")) %}
 {% if talk %}{% set _ = tabs.append(("talk", "Who talked")) %}{% endif %}
-{% set open = "transcript" if hit_line or not has_notes else "notes" %}
+{# A call still going opens on what it threw up; a search hit on its line. #}
+{% set open = "transcript" if hit_line else ("heard-" ~ heard[0][0] if heard and under_way else ("notes" if has_notes else "transcript")) %}
 {% call tabbed("meeting", tabs, open) %}
 {% if has_notes %}
 {% call tab_panel("notes", open) %}
@@ -51,6 +53,11 @@
 <div data-threads hx-get="{{ base }}/threads" hx-trigger="load" hx-swap="outerHTML"></div>
 {% endcall %}
 {% endif %}
+{% for kind, title, found in heard %}
+{% call tab_panel("heard-" ~ kind, open) %}
+{% call card(None, id="meeting-heard-" ~ kind) %}{{ moments(found, clock, voices, base, hx_body) }}{% endcall %}
+{% endcall %}
+{% endfor %}
 {% call tab_panel("transcript", open) %}
 {% call card(None, id="meeting-transcript") %}
 {% if turns %}

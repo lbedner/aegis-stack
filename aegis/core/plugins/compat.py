@@ -258,7 +258,9 @@ def check_aegis_version_compat(
             f"valid PEP 440 version: {e}",
         )
 
-    if current in spec_set:
+    # Pre-releases only when the constraint names one, as pip has it:
+    # packaging 26 accepts them by default, so it is said here.
+    if spec_set.contains(current, prereleases=bool(spec_set.prereleases)):
         return (True, "")
     return (
         False,

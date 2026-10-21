@@ -7,11 +7,12 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from pydantic import BaseModel
-from sqlalchemy import Index
+from sqlalchemy import Index, Text
 from sqlmodel import Field, SQLModel
 
 from app.core.time import utcnow
 from app.services.meetings.models.base import _OWNER_FK, MeetingStatus
+from app.services.meetings.models.moments import MomentRecord
 from app.services.meetings.models.notes import ActionItem, Notes
 
 
@@ -32,6 +33,11 @@ class Meeting(SQLModel, table=True):
         description="Who asked for the bot; NULL on a project without auth",
     )
     url: str = Field(max_length=2048)
+    title: str | None = Field(
+        default=None,
+        sa_type=Text,
+        description="What its calendar calls it, when its link is on one",
+    )
     platform: str = Field(max_length=16)
     status: str = Field(default=MeetingStatus.REQUESTED, max_length=16)
     failure_reason: str | None = Field(
@@ -140,3 +146,8 @@ class MeetingRecord(BaseModel):
     # A model to write notes with, and whether they can be written again now.
     can_write: bool
     can_rewrite: bool
+    # What the call threw up (``domains.moments``).
+    moments: list[MomentRecord] = []
+    # Read it again every few seconds: the bot is in or on its way, the
+    # notes are being written, or an action asked in the call is running.
+    following: bool = False

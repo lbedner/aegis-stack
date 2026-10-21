@@ -94,3 +94,37 @@
 {{ empty_state("Nothing said yet", "Lines appear here as the call's captions write them.") }}
 {% endif %}
 {% endmacro %}
+
+{# What the call threw up of one kind (``moments``): each with who said it
+   and when, a button per action it offers (a browser action copies its
+   prompt; the others are asked, at ``base``), and every run asked of it,
+   with where it stands and what it came back with. #}
+{% macro moments(list, clock, voices, base, hx_body) %}
+{% from "components/macros/form.html" import action %}
+{% from "components/macros/layout.html" import copy_button %}
+<ul class="grid gap-3">
+  {% for moment in list %}
+  <li data-moment="{{ moment.id }}" class="grid gap-2 rounded-lg border border-aegis-border p-3">
+    <div class="flex flex-wrap items-baseline gap-x-2 text-xs">
+      {{ speaker(moment.speaker, voices) }}
+      <span class="tabular-nums text-aegis-muted">{{ clock.get(moment.line_id, "") }}</span>
+    </div>
+    <p class="text-sm text-aegis-text">{{ moment.text }}</p>
+    {% if moment.actions %}
+    <div class="flex flex-wrap gap-2">
+      {% for choice in moment.actions %}
+      {% if choice.where == "browser" %}{{ copy_button(choice.prompt, choice.label) }}
+      {% else %}{{ action(choice.label, 'data-action="' ~ choice.name ~ '" data-write hx-post="' ~ base ~ '/moments/' ~ moment.id ~ '/runs" ' ~ hx_body, vals={"action": choice.name}) }}{% endif %}
+      {% endfor %}
+    </div>
+    {% endif %}
+    {% for run in moment.runs %}
+    <div data-run="{{ run.status }}" class="grid gap-1 border-l-2 pl-3 {{ 'border-aegis-teal' if run.status == 'done' else ('border-aegis-error' if run.status == 'failed' else 'border-aegis-border') }}">
+      <p class="text-xs text-aegis-muted">{{ run.label }} · {{ run.state }}</p>
+      {% if run.result %}<div class="prose prose-sm max-w-none text-sm {{ 'text-error' if run.status == 'failed' else 'text-aegis-text' }}">{{ run.result|markdown }}</div>{% endif %}
+    </div>
+    {% endfor %}
+  </li>
+  {% endfor %}
+</ul>
+{% endmacro %}

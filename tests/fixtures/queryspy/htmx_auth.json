@@ -83,8 +83,20 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM meeting WHERE meeting.id = :pk_1",
+      "file": "app/services/meetings/domains/actions/prompt.py",
+      "function": "excerpt"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting WHERE meeting.id = :pk_1",
       "file": "app/services/meetings/domains/bot/row.py",
       "function": "write_captions"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting WHERE meeting.id = :pk_1",
+      "file": "app/services/meetings/domains/moments/service.py",
+      "function": "moments_of"
     },
     {
       "kind": "repeated_statement",
@@ -118,9 +130,39 @@
     },
     {
       "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_action_run JOIN meeting_moment ON meeting_moment.id = meeting_action_run.moment_id JOIN meeting ON meeting.id = meeting_moment.meeting_id WHERE meeting.owner_user_id = :owner_user_id_1 AND meeting_action_run.status = :status_1 AND meeting_action_run.action IN (__[POSTCOMPILE_action_1]) ORDER BY meeting_action_run.asked_at, meeting_action_run.id LIMIT :param_1",
+      "file": "app/services/meetings/domains/actions/queries.py",
+      "function": "waiting"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_action_run JOIN meeting_moment ON meeting_moment.id = meeting_action_run.moment_id JOIN meeting ON meeting.id = meeting_moment.meeting_id WHERE meeting_action_run.id = :id_1",
+      "file": "app/services/meetings/domains/actions/queries.py",
+      "function": "run"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_action_run JOIN meeting_moment ON meeting_moment.id = meeting_action_run.moment_id JOIN meeting ON meeting.id = meeting_moment.meeting_id WHERE meeting_action_run.status = :status_1 AND meeting_action_run.action IN (__[POSTCOMPILE_action_1]) ORDER BY meeting_action_run.asked_at, meeting_action_run.id LIMIT :param_1",
+      "file": "app/services/meetings/domains/actions/queries.py",
+      "function": "waiting"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_action_run WHERE meeting_action_run.moment_id IN (__[POSTCOMPILE_moment_id_1]) ORDER BY meeting_action_run.asked_at, meeting_action_run.id",
+      "file": "app/services/meetings/domains/moments/queries.py",
+      "function": "runs_of"
+    },
+    {
+      "kind": "repeated_statement",
       "label": "SELECT ... FROM meeting_bot_account ORDER BY meeting_bot_account.id",
       "file": "app/services/meetings/domains/accounts/queries.py",
       "function": "every_account"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_calendar_event LEFT OUTER JOIN meeting ON meeting.id = meeting_calendar_event.meeting_id JOIN meeting_bot_account ON meeting_bot_account.id = meeting_calendar_event.account_id WHERE meeting_calendar_event.id = :id_1",
+      "file": "app/services/meetings/domains/calendar/queries.py",
+      "function": "one"
     },
     {
       "kind": "repeated_statement",
@@ -148,9 +190,33 @@
     },
     {
       "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_calendar_event WHERE meeting_calendar_event.url = :url_1 AND meeting_calendar_event.title != :title_1 ORDER BY meeting_calendar_event.starts_at DESC LIMIT :param_1",
+      "file": "app/services/meetings/queries.py",
+      "function": "title_for"
+    },
+    {
+      "kind": "repeated_statement",
       "label": "SELECT ... FROM meeting_guide_point LEFT OUTER JOIN meeting_guide_point_line ON meeting_guide_point_line.point_id = meeting_guide_point.id WHERE meeting_guide_point.guide_id IN (__[POSTCOMPILE_guide_id_1]) ORDER BY meeting_guide_point.guide_id, meeting_guide_point.ord, meeting_guide_point_line.ord",
       "file": "app/services/meetings/domains/people/queries.py",
       "function": "guide_points"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_moment JOIN meeting ON meeting.id = meeting_moment.meeting_id WHERE meeting_moment.id = :id_1",
+      "file": "app/services/meetings/domains/actions/queries.py",
+      "function": "moment"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_moment JOIN meeting_transcript_line ON meeting_transcript_line.id = meeting_moment.line_id LEFT OUTER JOIN meeting_participant ON meeting_transcript_line.participant_id = meeting_participant.id LEFT OUTER JOIN meeting_person ON meeting_person.id = meeting_participant.person_id WHERE meeting_moment.meeting_id = :meeting_id_1 ORDER BY meeting_transcript_line.start_seconds, meeting_moment.id",
+      "file": "app/services/meetings/domains/moments/queries.py",
+      "function": "of_meeting"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_moment WHERE meeting_moment.line_id IN (__[POSTCOMPILE_line_id_1])",
+      "file": "app/services/meetings/domains/moments/queries.py",
+      "function": "on_lines"
     },
     {
       "kind": "repeated_statement",
@@ -298,6 +364,30 @@
     },
     {
       "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_runner_token WHERE meeting_runner_token.owner_user_id = :owner_user_id_1 AND meeting_runner_token.revoked_at IS NULL ORDER BY meeting_runner_token.created_at DESC",
+      "file": "app/services/meetings/domains/actions/queries.py",
+      "function": "live_tokens"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_runner_token WHERE meeting_runner_token.owner_user_id IS NULL AND meeting_runner_token.revoked_at IS NULL ORDER BY meeting_runner_token.created_at DESC",
+      "file": "app/services/meetings/domains/actions/queries.py",
+      "function": "live_tokens"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_runner_token WHERE meeting_runner_token.revoked_at IS NULL AND meeting_runner_token.digest = :digest_1",
+      "file": "app/services/meetings/domains/actions/queries.py",
+      "function": "live_token"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_runner_token WHERE meeting_runner_token.revoked_at IS NULL AND meeting_runner_token.id = :id_1 AND meeting_runner_token.owner_user_id IS NULL",
+      "file": "app/services/meetings/domains/actions/queries.py",
+      "function": "live_token"
+    },
+    {
+      "kind": "repeated_statement",
       "label": "SELECT ... FROM meeting_series WHERE meeting_series.id = :id_1",
       "file": "app/services/meetings/domains/series/queries.py",
       "function": "one_series"
@@ -340,15 +430,39 @@
     },
     {
       "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_transcript_line LEFT OUTER JOIN meeting_participant ON meeting_transcript_line.participant_id = meeting_participant.id LEFT OUTER JOIN meeting_person ON meeting_person.id = meeting_participant.person_id WHERE meeting_transcript_line.id IN (__[POSTCOMPILE_id_1])",
+      "file": "app/services/meetings/domains/moments/queries.py",
+      "function": "speakers"
+    },
+    {
+      "kind": "repeated_statement",
       "label": "SELECT ... FROM meeting_transcript_line LEFT OUTER JOIN meeting_participant ON meeting_transcript_line.participant_id = meeting_participant.id LEFT OUTER JOIN meeting_person ON meeting_person.id = meeting_participant.person_id WHERE meeting_transcript_line.id IN (__[POSTCOMPILE_id_2])",
       "file": "app/services/meetings/domains/people/queries.py",
       "function": "quotes"
     },
     {
       "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_transcript_line LEFT OUTER JOIN meeting_participant ON meeting_transcript_line.participant_id = meeting_participant.id LEFT OUTER JOIN meeting_person ON meeting_person.id = meeting_participant.person_id WHERE meeting_transcript_line.meeting_id = :meeting_id_1 AND meeting_transcript_line.start_seconds <= :start_seconds_1 ORDER BY meeting_transcript_line.start_seconds DESC, meeting_transcript_line.id DESC LIMIT :param_1",
+      "file": "app/services/meetings/domains/moments/queries.py",
+      "function": "said"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_transcript_line LEFT OUTER JOIN meeting_participant ON meeting_transcript_line.participant_id = meeting_participant.id LEFT OUTER JOIN meeting_person ON meeting_person.id = meeting_participant.person_id WHERE meeting_transcript_line.meeting_id = :meeting_id_1 ORDER BY meeting_transcript_line.start_seconds, meeting_transcript_line.id",
+      "file": "app/services/meetings/domains/moments/queries.py",
+      "function": "said"
+    },
+    {
+      "kind": "repeated_statement",
       "label": "SELECT ... FROM meeting_transcript_line LEFT OUTER JOIN meeting_participant ON meeting_transcript_line.participant_id = meeting_participant.id LEFT OUTER JOIN meeting_person ON meeting_person.id = meeting_participant.person_id WHERE meeting_transcript_line.meeting_id = :meeting_id_1 ORDER BY meeting_transcript_line.start_seconds, meeting_transcript_line.id",
       "file": "app/services/meetings/queries.py",
       "function": "transcript"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_transcript_line WHERE meeting_transcript_line.id = :pk_1",
+      "file": "app/services/meetings/domains/actions/prompt.py",
+      "function": "excerpt"
     },
     {
       "kind": "repeated_statement",

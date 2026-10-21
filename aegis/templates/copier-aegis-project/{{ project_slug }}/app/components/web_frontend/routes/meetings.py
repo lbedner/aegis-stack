@@ -9,6 +9,7 @@ notes being written), and stops once nothing is.
 
 from collections.abc import Callable
 from itertools import groupby
+from operator import attrgetter
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Form, Request
@@ -33,6 +34,7 @@ from app.services.meetings.models import Meeting, MeetingRecord
 from app.services.meetings.service import (
     MeetingsService,
     UnsupportedMeetingLinkError,
+    by_kind,
     call_length,
     heard_rows,
     send_bot,
@@ -59,11 +61,20 @@ def row_of(meeting: Meeting, url: str) -> dict[str, Any]:
     Overseer's)."""
     return {
         "id": meeting.id,
-        "meeting": {"label": meeting.url, "url": url},
+        # Its calendar's name for it, the link under it; else the link.
+        "meeting": {
+            "label": meeting.title or meeting.url,
+            "url": url,
+            "sub": meeting.url if meeting.title else None,
+        },
         "requested": format_relative_time(meeting.created_at),
         "status": status_of(meeting),
         "length": call_length(meeting.joined_at, meeting.left_at),
     }
+
+
+# How many links the bot was sent to before the send form offers.
+RECENT_LINKS = 10
 
 
 def send_form(
@@ -73,9 +84,14 @@ def send_form(
     error: str | None = None,
     agents: list[dict[str, str]] | None = None,
     agent: str | None = None,
+    meetings: list[Meeting] | None = None,
 ) -> dict[str, Any]:
     """The send form's context (_send.html), posting to ``send_url``, with
-    the agents to pick from (``agent_options``)."""
+    the agents to pick from (``agent_options``) and the links of
+    ``meetings`` (newest first) offered as the link, each once."""
+    links: dict[str, str | None] = {}
+    for m in meetings or []:  # newest first: each link where it was last used
+        links[m.url] = links.get(m.url) or m.title
     return {
         "send_url": send_url,
         "url": url,
@@ -83,6 +99,10 @@ def send_form(
         "error": error,
         "agents": agents or [],
         "agent": agent,
+        "links": [
+            {"url": link, "title": title}
+            for link, title in list(links.items())[:RECENT_LINKS]
+        ],
     }
 
 
@@ -102,7 +122,8 @@ async def send_and_open(
         meeting = await send_bot(svc, url, bot_name, agent, every)
     except (UnsupportedMeetingLinkError, AgentNotFoundError) as exc:
         options = agent_options(every)
-        form = send_form(send_url, url, bot_name, str(exc), options, agent)
+        sent = await svc.list_meetings()
+        form = send_form(send_url, url, bot_name, str(exc), options, agent, sent)
         return HTMLResponse(fragment(SEND, **form), status_code=422)
     return navigate(Response(), opened(meeting.id))  # type: ignore[arg-type]
 
@@ -115,7 +136,7 @@ async def _list(request: Request, svc: MeetingsService) -> Response:
         for m in meetings
     ]
     every = await agents(svc.db)
-    form = send_form("/meetings", agents=agent_options(every))
+    form = send_form("/meetings", agents=agent_options(every), meetings=meetings)
     calendar = await calendar_context(
         svc.db,
         request.query_params,
@@ -158,6 +179,11 @@ def body_context(record: MeetingRecord) -> dict[str, Any]:
         ],
         "clock": {row.id: format_clock(row.at) for row in record.transcript},
         "people": [{"id": name, "name": name} for name in record.people],
+        # What the call threw up, a tab per kind, in the order first heard.
+        "heard": [
+            (found[0].kind, found[0].title, found)
+            for found in by_kind(record.moments, attrgetter("kind"))
+        ],
     }
 
 
@@ -239,6 +265,18 @@ def meeting_routes(
         """Write the notes again, over the old ones."""
         with as_http():
             return drawn(await svc.write_notes_again(meeting_id))
+
+    @router.post("/{meeting_id}/moments/{moment_id}/runs", response_class=HTMLResponse)
+    async def ask(
+        svc: scoped,  # type: ignore[valid-type]
+        meeting_id: int,
+        moment_id: int,
+        action: Annotated[str, Form()],
+    ) -> HTMLResponse:
+        """Ask an action of something heard in the call."""
+        with as_http():
+            await svc.ask(meeting_id, moment_id, action)
+        return await read(svc, meeting_id)
 
 
 meeting_routes(router, get_meetings_service, BODY, "/meetings")

@@ -73,7 +73,7 @@ requested -> joining -> waiting -> in_call -> left
 2. It waits up to five minutes for the host to let it in. Refused or never admitted, the meeting ends as `failed` with the reason.
 3. Once in, it answers whatever Meet puts over the call: a meeting with Gemini (or another notetaker) taking notes asks every newcomer to confirm with "Join now", and camera tips ask for "Got it". Unanswered, they cover the chat, the captions and Leave. Then it posts in the meeting chat that it is taking notes. Some places require everyone's consent to record, so this is not optional.
 4. It turns on Meet's captions, in its own view only (nobody else sees them), and keeps them as the transcript: one line per turn, under the speaker's name, timed from when it joined. A line Meet is still writing (it corrects words as it goes) is updated in place, and keeps the time it was first captioned. Meet keeps a long turn short on screen by trimming its start as it grows; the line keeps the whole turn.
-5. It leaves when the call ends, when it is removed, when it has been alone for two minutes, or when asked (`meetings leave`, `POST /api/v1/meetings/{id}/leave`), within ten seconds. Asked before it joins, it never does.
+5. It leaves when the call ends, when it is removed, when it has been alone for two minutes after the others have gone (nobody in Meet's People count, nobody talking; it waits up to fifteen for anyone to come), or when asked (`meetings leave`, `POST /api/v1/meetings/{id}/leave`), within ten seconds. Asked before it joins, it never does.
 
 The browser closes whatever happens, so no Chrome outlives its meeting. Once it is out, the notes are written (below). A bot stopped from outside (Ctrl-C, its process shutting down) writes none; the page can.
 
@@ -138,9 +138,65 @@ On PostgreSQL it is full-text search (English), with a GIN index over the transc
 
 Each owner searches their own meetings; Overseer's admin searches every owner's. Overseer's chat has it too: the `meetings_search` tool, granted to the default agent when the meetings service seeds its agents, answers "what did Lawrence say about pricing?" from the transcripts, each line linked to the meeting at that line.
 
+## Questions asked in the call
+
+While the bot is in a call, it watches what is said for moments: something heard that something can be done with. The kind it knows is a **question**: another speaker's line that ends in a question mark (your own questions are not picked out). Each one is kept as it is captioned, and follows its line as Meet corrects it, so a question shows up while the call is still on.
+
+The meeting's page, Overseer's drawer and the Flet modal give each kind its own tab (Questions), opened first while the call is on: each question with who asked it and when, and what can be done with it:
+
+- **Copy for agent** - copies a prompt for a coding agent: the last twenty lines of the call, then the question, and to answer it from the repository's code without changing anything. Paste it into Claude Code, Codex or whatever you use.
+- **Ask agent** - asks a coding agent on a machine you choose to answer it (see [The runner](#the-runner)). The answer shows under the question.
+- **Ask AI** - the stack's own model answers from what was said so far, as the `meeting-answers` agent, metered as `meetings:ask`. Only with the AI service on pydantic-ai with a database.
+
+Each time one is asked it is a run, listed under its question: waiting for a runner, answering (on which runner), then answered or failed, with what came back. The page and the drawer keep themselves current while any run is going, even after the call ends. A run claimed and never finished (its runner died, or a restart took an Ask AI with it) fails half an hour after it was claimed, on the same once-a-minute check that closes interrupted meetings.
+
+To have every question asked of an action as it is heard, set `MEETINGS_AUTO_ACTIONS` (Overseer > Meetings > Settings) to `kind=action` pairs: `question=agent` asks the coding agent about every question, `question=ai` the model.
+
+### The runner
+
+The coding agent does not run in the app: a runner on your machine (or any other) asks the app for waiting runs over its API, answers each one, and posts back what it printed. Nothing needs to be running in the app for it, and nothing in the app can reach the machine.
+
+Make a token for the runner, shown once (or `POST /api/v1/meetings/runner-tokens` as yourself):
+
+```bash
+my-app meetings runner-token create laptop
+```
+
+Then start it where the agent and the repository are:
+
+```bash
+export MEETINGS_RUNNER_TOKEN=mrt_...
+my-app meetings runner \
+  --url https://my-app.example.com \
+  --repo ~/code/my-service \
+  --command 'claude -p {prompt} --permission-mode plan'
+```
+
+For each run it fetches the repository and makes a fresh worktree of `--ref` (`origin/main` by default) in a temporary folder, runs the command there with `{prompt}` replaced by the run's prompt (on stdin when the command has no `{prompt}`), posts what it printed (or why it failed, after fifteen minutes at most), and removes the worktree. So it never touches your checkout, and any headless agent works: `codex exec {prompt}`, `aider --message {prompt}`. Without `--repo` it runs where it was started. `--action` names which actions it answers (`agent` by default; repeat it for more), `--once` answers one waiting run and stops, `--poll` is how often it looks while idle.
+
+A token claims its owner's runs only. One made with the CLI and no `--owner` claims every owner's. `meetings runner-token list` lists the live ones, and `meetings runner-token revoke <id>` refuses its runner from then on. Only a digest of each token is kept.
+
+### Other kinds and actions
+
+What makes a moment, and what can be done with one, are each registered by name, so a stack can add its own: in a `meeting_moments.py` beside any service's `service.py` (`app/services/<name>/meeting_moments.py`), found on disk like its `tools.py` and imported before moments are first read. A detector reads each line (who said it, whether it is you, what was said so far) and returns the moment's text or nothing:
+
+```python
+from app.services.meetings.domains.moments.detectors import register_detector
+
+register_detector("decision", lambda heard: heard.text if "we decided" in heard.text.lower() else None, title="Decisions")
+```
+
+An action takes some kinds of moment and runs in one place: `browser` (only its prompt, copied), `app` (its `run` is called in the app with the prompt and the owner, and returns the answer) or `runner` (a runner started with `--action` and its name claims it). Its `frame` turns the moment and what led up to it into the prompt:
+
+```python
+from app.services.meetings.domains.actions.registry import Action, register_action
+
+register_action(Action("ticket", "File a ticket", frozenset({"question"}), "runner"))
+```
+
 ## The writers are agents
 
-The notes, the guides and the series are each written by an agent row the meetings service seeds at startup: `meeting-notes`, `meeting-guide` and `meeting-themes`, under the "meetings" category in Overseer's Agents. Their prompt, model and sampling are edited there like any other agent's, and every prompt change is kept in its history. A row left as seeded runs on the model in force; one pinned to a model runs on that model. Seeding only adds a missing row, so an edit survives restarts and upgrades. While a row is missing or turned off, its built-in prompt runs on the model in force.
+The notes, the guides and the series are each written by an agent row the meetings service seeds at startup: `meeting-notes`, `meeting-guide` and `meeting-themes`, with `meeting-answers` for Ask AI, under the "meetings" category in Overseer's Agents. Their prompt, model and sampling are edited there like any other agent's, and every prompt change is kept in its history. A row left as seeded runs on the model in force; one pinned to a model runs on that model. Seeding only adds a missing row, so an edit survives restarts and upgrades. While a row is missing or turned off, its built-in prompt runs on the model in force.
 
 ## The Meetings page
 
@@ -186,6 +242,10 @@ The Flet dashboard (`/dashboard`) has the same: a Meetings card with the counts,
 | `meetings leave <id>` | Ask the bot to leave |
 | `meetings list [-n LIMIT]` | The meetings, newest first |
 | `meetings show <id>` | One meeting: its status and its transcript |
+| `meetings runner [--command CMD] [--repo PATH] [--ref REF] [--action NAME] [--url URL] [--token TOKEN] [--once] [--poll SECONDS]` | Answer waiting runs on this machine: each in a fresh worktree of `--repo`, with `CMD` (`{prompt}` its prompt). See [The runner](#the-runner) |
+| `meetings runner-token create <name> [--owner ID]` | A token for a runner, shown once |
+| `meetings runner-token list [--owner ID]` | The live runner tokens |
+| `meetings runner-token revoke <id> [--owner ID]` | Revoke one |
 
 ## API
 
@@ -196,6 +256,18 @@ The Flet dashboard (`/dashboard`) has the same: a Meetings card with the counts,
 | `GET /api/v1/meetings/{id}/threads` | Its commitments, earlier commitments raised, contradictions and positions, each with the lines it cites |
 | `POST /api/v1/meetings/{id}/leave` | Ask the bot to leave |
 | `GET /api/v1/meetings/search?q=` | The caller's meetings' lines and note items with the words, newest meeting first |
+| `GET /api/v1/meetings/{id}/moments` | What the call threw up (its questions), each with who said it, the actions it offers and the runs asked of it |
+| `POST /api/v1/meetings/{id}/moments/{moment_id}/runs` | `{"action": ...}`: ask an action of a moment; `202` with the run, `404` for an action that cannot be asked (a browser one) |
+| `GET /api/v1/meetings/runner-tokens` | The caller's live runner tokens |
+| `POST /api/v1/meetings/runner-tokens` | `{"name": ...}`: a runner token; `201` with its `value`, shown this once |
+| `DELETE /api/v1/meetings/runner-tokens/{id}` | Revoke one; `404` for one that is not the caller's |
+
+A runner's routes take its token (`Authorization: Bearer mrt_...`), not a user:
+
+| Route | What it does |
+|-------|--------------|
+| `POST /api/v1/meetings/runs/claim` | `{"actions": [...]}`: the oldest waiting run of those actions among the token's owner's meetings, now the runner's, with its prompt; `204` when there is none |
+| `POST /api/v1/meetings/runs/{id}/finish` | `{"ok": ..., "result": ...}`: what the run came back with |
 
 Overseer's routes, across every owner. Reading them takes an admin where the stack has auth; a change is an operator's (an admin, or without auth only the local dev build):
 
@@ -203,10 +275,13 @@ Overseer's routes, across every owner. Reading them takes an admin where the sta
 |-------|--------------|
 | `GET /api/v1/meetings/admin` | Every owner's meetings, newest first |
 | `GET /api/v1/meetings/admin/agents` | Every agent, the first first: who it is, its sign-in (`Signed in`, `Signed out`, `Not signed in`), and the ids of the meetings it is in now |
-| `GET /api/v1/meetings/admin/calendar?first=&last=&tz=&agent=` | Every agent's meetings (`agent`'s only, when named) from `first` to `last`, whole days in time zone `tz` (default UTC), up to six weeks: each with its agent and color, title, start and end, link, organizer, where it stands (`state`: the call's status once the agent was sent in, else `upcoming`, `missed`, `cancelled`, `no_link`, `cannot_join` or `sent`) and the meeting it became |
+| `GET /api/v1/meetings/admin/calendar?first=&last=&tz=&agent=` | Every agent's meetings (`agent`'s only, when named) from `first` to `last`, whole days in time zone `tz` (default UTC), up to six weeks: each with its agent and color, title, start and end, link, organizer, everyone invited (`emails`), where it stands (`state`: the call's status once the agent was sent in, else `upcoming`, `missed`, `cancelled`, `no_link`, `cannot_join` or `sent`) and the meeting it became |
+| `GET /api/v1/meetings/admin/calendar/{event_id}?tz=` | One meeting on a calendar: all of the above, what its organizer wrote (`description`, Google's join and dial-in lines left out), and who is invited (`invited`: each email, with the name and color of whoever spoke on its link and plainly is them) |
 | `GET /api/v1/meetings/admin/search?q=` | Search every owner's meetings |
 | `GET /api/v1/meetings/admin/{id}` | One meeting with its notes (or why there are none), transcript, how long each speaker was heard (`heard_seconds`), and which speaker the owner is (`me`) |
 | `GET /api/v1/meetings/admin/{id}/threads` | Its threads, as the owner's route reads them |
+| `GET /api/v1/meetings/admin/{id}/moments` | Its moments, as the owner's route reads them |
+| `POST /api/v1/meetings/admin/{id}/moments/{moment_id}/runs` | Ask an action of one |
 | `POST /api/v1/meetings/admin/{id}/leave` | Ask the bot to leave |
 | `POST /api/v1/meetings/admin/{id}/me` | `{"name": ...}`: which speaker the owner is (`null`: nobody); returns the meeting read in full |
 | `POST /api/v1/meetings/admin/{id}/notes` | Write the notes again, in the background; `409` while the bot is in, when nothing was said, or while a writer is at it |

@@ -49,3 +49,10 @@ class MeetingsSettings(BaseSettings):
             OWNER, "Agents join the meetings on their calendars as they start"
         ),
     ] = True
+    # The action each new moment of a kind asks by itself, as
+    # ``kind=action`` pairs (``question=agent``); none by default, since an
+    # action can cost (a model call, a coding agent's run).
+    MEETINGS_AUTO_ACTIONS: Annotated[
+        str,
+        Configurable(OWNER, "Actions each new moment asks by itself (question=agent)"),
+    ] = ""

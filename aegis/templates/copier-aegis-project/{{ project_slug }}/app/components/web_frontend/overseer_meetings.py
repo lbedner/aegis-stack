@@ -18,6 +18,7 @@ from typing import Any
 
 from app.core.formatting import format_relative_time
 from app.services.meetings.domains.accounts.service import agent_names, agents
+from app.services.meetings.domains.calendar.entries import CalendarEventDetail
 from app.services.meetings.domains.people.service import PeopleService, said_when
 from app.services.meetings.domains.search.service import LINE_PARAM, MEETING_PARAM
 from app.services.meetings.domains.series.service import SeriesService
@@ -34,6 +35,7 @@ from app.services.system.models import ComponentStatus
 
 from .meeting_agents import agent_options, agents_context
 from .meeting_calendar import calendar_context
+from .meeting_status import state_cell
 from .overseer_meeting_search import search_context
 from .overseer_nav import SectionRequest, page_url
 from .rendering import drawer_state, with_query
@@ -57,6 +59,7 @@ PARTIALS = "/partials/overseer/meetings"
 DRAWER_PARAM = MEETING_PARAM
 PEOPLE = f"{PAGE}/people"
 CALENDAR = f"{PAGE}/calendar"
+EVENT_PARAM = "event"
 PEOPLE_PARTIALS = f"{PARTIALS}/people"
 PERSON_PARAM = "person"
 SERIES = f"{PAGE}/series"
@@ -77,17 +80,15 @@ async def section_context(
     if section == "agents":
         return await agents_context(req.db, meeting_url)
     if section == "calendar":
-        calendar = await calendar_context(
-            req.db, req.query, req.zone, CALENDAR, meeting_url, await agents(req.db)
-        )
-        return {"calendar": calendar}
+        return await _calendar(req)
     counts = await meetings_counts(req.db)
     every = await agents(req.db)
     names = agent_names((a.id, a.name) for a in every)
+    meetings = await MeetingsService(req.db, None).list_meetings(LIMIT)
     rows = [
         row_of(m, meeting_url(m.id))  # type: ignore[arg-type]
         | {"owner": m.owner_user_id, "agent": names.get(m.account_id)}
-        for m in await MeetingsService(req.db, None).list_meetings(LIMIT)
+        for m in meetings
     ]
     wanted = req.query.get(DRAWER_PARAM) or ""
     # A search hit opens its meeting at its line (``overseer_meeting_search``).
@@ -105,8 +106,38 @@ async def section_context(
             ],
             "rows": rows,
         }
-        | send_form(PARTIALS, agents=agent_options(every))
+        | send_form(PARTIALS, agents=agent_options(every), meetings=meetings)
     )
+
+
+async def _calendar(req: SectionRequest) -> dict[str, Any]:
+    """Every agent's month, any meeting on it open in the drawer when the
+    address names it (``?event=``)."""
+    calendar = await calendar_context(
+        req.db,
+        req.query,
+        req.zone,
+        CALENDAR,
+        meeting_url,
+        await agents(req.db),
+        details=EVENT_PARAM,
+    )
+    wanted = req.query.get(EVENT_PARAM) or ""
+    drawer = f"{PARTIALS}/calendar/{wanted}/drawer" if wanted.isdigit() else None
+    return drawer_state(EVENT_PARAM, drawer) | {"calendar": calendar}
+
+
+def event_context(entry: CalendarEventDetail) -> dict[str, Any]:
+    """One meeting on a calendar in the drawer: when, whose calendar, where
+    it stands, who organized it and who is invited, its link, and the call
+    the agent was sent into, when it was."""
+    return {
+        "entry": entry,
+        "when": f"{entry.starts_at:%a %b} {entry.starts_at.day}, "
+        f"{entry.starts_at:%H:%M} - {entry.ends_at:%H:%M}",
+        "state": state_cell(entry.state),
+        "opens": meeting_url(entry.meeting_id) if entry.meeting_id else None,
+    }
 
 
 def meeting_url(meeting_id: int) -> str:

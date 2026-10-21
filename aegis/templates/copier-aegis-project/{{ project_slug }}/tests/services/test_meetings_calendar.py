@@ -20,14 +20,17 @@ from app.services.meetings.domains.calendar.entries import (
     MISSED,
     NO_LINK,
     UPCOMING,
+    EventNotFoundError,
     chosen,
     entries_between,
+    entry_of,
+    who_is,
 )
 from app.services.meetings.domains.calendar.feed import meetings_between
 from app.services.meetings.domains.calendar.service import read_calendars, send_due
 from app.services.meetings.models import CalendarEvent, Meeting, MeetingStatus
 from app.services.meetings.service import MeetingsService, transition
-from tests._meetings import MEET, STANDUP, Calendar, at, feed, hold_the_bot
+from tests._meetings import MEET, STANDUP, Calendar, at, feed, hold_the_bot, said
 
 NOW = at(18, 0)
 WEEK = (NOW, at(25, 0))
@@ -171,6 +174,82 @@ async def test_the_agent_is_sent_into_each_meeting_as_it_starts(
     assert await send_due(async_db_session, at(22, 17)) == []
     assert await send_due(async_db_session, at(23, 15)) == []
     assert started == [sent]
+
+
+async def test_a_meeting_is_called_what_its_calendar_calls_it(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Sent by the calendar or by hand to a link on it, a meeting takes the
+    event's title; a link on no calendar has none, and is shown by link."""
+    hold_the_bot(monkeypatch)
+    await read_calendars(async_db_session, Calendar(monkeypatch, STANDUP).read, NOW)
+    svc = MeetingsService(async_db_session, None)
+
+    [sent] = await send_due(async_db_session, at(19, 12, 59, 30))
+    by_hand = await svc.request(MEET, "Notes")
+    elsewhere = await svc.request("https://meet.google.com/zzz-zzzz-zzz", "Notes")
+
+    assert (await svc.get(sent)).title == "Standup"
+    assert by_hand.title == "Standup"
+    assert elsewhere.title is None
+
+
+async def test_one_meeting_on_a_calendar_with_who_is_invited(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Each email on the invite, named for whoever spoke in a meeting on
+    its link, in their color; an email nobody there matches stays one."""
+    await read_calendars(async_db_session, Calendar(monkeypatch, STANDUP).read, NOW)
+    [first, *_] = await kept(async_db_session)
+    zone = ZoneInfo("America/New_York")
+    earlier = await MeetingsService(async_db_session, None).request(MEET, "Notes")
+    await said(async_db_session, earlier.id or 0, ("Dana Okafor", "Morning."))
+
+    entry = await entry_of(async_db_session, first.id or 0, zone, NOW)
+
+    assert (entry.title, entry.organizer, entry.state) == ("Standup", "Dana", UPCOMING)
+    assert entry.emails == ["dana@example.com", "leo@example.com"]
+    assert entry.starts_at.hour == 9
+    assert [(i.email, i.name) for i in entry.invited] == [
+        ("dana@example.com", "Dana Okafor"),
+        ("leo@example.com", None),
+    ]
+    assert entry.invited[0].color and entry.invited[1].color is None
+    with pytest.raises(EventNotFoundError):
+        await entry_of(async_db_session, 0, zone)
+
+
+def test_an_email_is_whoever_it_plainly_names() -> None:
+    """``first.last``, a first name alone, or a surname at its end, among
+    the people who spoke on the link; nobody when it names none, or two."""
+    people = ["Lisa Atalese", "William Ferro", "Lawrence Casely-Hayford"]
+
+    assert who_is("lisa.atalese@acme.com", people) == "Lisa Atalese"
+    assert who_is("lawrence@acme.com", people) == "Lawrence Casely-Hayford"
+    assert who_is("drferro@acme.com", people) == "William Ferro"
+    assert who_is("ryanf@acme.com", people) is None
+    assert who_is("lisa@acme.com", [*people, "Lisa Park"]) is None
+
+
+def test_the_description_is_the_invites_own_words() -> None:
+    """Google's join and dial-in lines are left out: an invite with nothing
+    else has no description."""
+    agenda = f"""
+UID:sync@google.com
+DTSTART:20261021T130000Z
+DTEND:20261021T133000Z
+SUMMARY:Sync
+DESCRIPTION:Agenda: pricing\\nJoin with Google Meet: {MEET}\\nOr dial: (US) +1
+  513-480-5150 PIN: 280441255#\\nLearn more about Meet at: https://support.goog
+ le.com/a/users/answer/9282720
+X-GOOGLE-CONFERENCE:{MEET}
+"""
+    only_google = agenda.replace("Agenda: pricing\\n", "").replace("sync@", "s2@")
+
+    [sync, bare] = meetings_between(feed(agenda, only_google), *WEEK)
+
+    assert sync.description == "Agenda: pricing"
+    assert bare.description is None
 
 
 def test_a_month_is_whole_weeks_monday_to_sunday() -> None:

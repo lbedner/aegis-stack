@@ -3,7 +3,7 @@ meeting in the drawer (live, with which speaker is me and the notes
 written again, as the Meetings page has them), the bot asked to leave it,
 and the meeting deleted; and one person's guide, its owner's note kept
 and the guide written again; and a meeting's threads, loaded into its
-drawer; and one series, written again. Mounted by ``routes/pages.py`` behind
+drawer; and one series, written again; and one meeting on a calendar. Mounted by ``routes/pages.py`` behind
 Overseer's gate; the admin reads and writes every owner's meetings (``Every``), and
 a meeting the admin sends is the admin's own (``Mine``).
 """
@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, Response
 
 from app.components.web_frontend import overseer_meetings
-from app.components.web_frontend.rendering import dialog, fragment
+from app.components.web_frontend.rendering import dialog, fragment, viewer_zone
 from app.components.web_frontend.routes.meetings import (
     meeting_context,
     meeting_routes,
@@ -27,6 +27,7 @@ from app.services.meetings.deps import (
     get_every_owners_series,
     get_meetings_service,
 )
+from app.services.meetings.domains.calendar.entries import entry_of
 from app.services.meetings.domains.people.service import PeopleService
 from app.services.meetings.domains.series.service import SeriesService
 from app.services.meetings.domains.threads.service import meeting_threads
@@ -47,6 +48,7 @@ GUIDE_BODY = "pages/overseer/meetings/_guide_body.html"
 THREADS = "pages/overseer/meetings/_threads_body.html"
 SERIES = "pages/overseer/meetings/_series_drawer.html"
 SERIES_BODY = "pages/overseer/meetings/_series_body.html"
+EVENT = "pages/overseer/meetings/_event_drawer.html"
 
 
 @router.post("")
@@ -145,6 +147,14 @@ async def write_guide(guide_id: int, svc: People) -> HTMLResponse:
     """Write the guide again from every meeting, in the background."""
     with as_http():
         return _guide_body(await svc.write_again(guide_id))
+
+
+@router.get("/calendar/{event_id}/drawer", response_class=HTMLResponse)
+async def calendar_event(request: Request, event_id: int, svc: Every) -> Response:
+    """One meeting on any agent's calendar, in the viewer's time zone."""
+    with as_http():
+        entry = await entry_of(svc.db, event_id, viewer_zone(request))
+    return dialog(request, EVENT, **overseer_meetings.event_context(entry))
 
 
 @router.get("/series/{series_id}/drawer", response_class=HTMLResponse)

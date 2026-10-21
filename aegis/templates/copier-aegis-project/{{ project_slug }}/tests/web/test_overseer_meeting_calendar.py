@@ -12,8 +12,8 @@ from app.components.web_frontend.rendering import TZ_COOKIE
 from app.services.meetings.domains.accounts.service import DEFAULT_AGENT, keep_agent
 from app.services.meetings.domains.calendar.service import read_calendars, send_due
 from app.services.system.models import ComponentStatus
-from tests._meetings import STANDUP, Calendar, at, hold_the_bot
-from tests.web.dom import select, text
+from tests._meetings import MEET, STANDUP, Calendar, at, hold_the_bot
+from tests.web.dom import one, select, text
 from tests.web.overseer import page_html, sign_in, status_with
 
 CALENDAR = f"{overseer_meetings.PAGE}/calendar"
@@ -58,8 +58,8 @@ async def test_a_month_of_every_agents_meetings_in_the_viewers_time(
     assert len(monday) == 1
     assert "09:00" in text(monday[0]) and "Standup" in text(monday[0])
     assert "Requested" in (monday[0].get("title") or "")
-    [opens] = select(html, '[data-day="2026-10-19"] [data-entry] a[data-opens]')
-    assert opens.get("href") == overseer_meetings.meeting_url(sent)
+    [details] = select(html, '[data-day="2026-10-19"] [data-entry] a[data-details]')
+    assert "month=2026-10" in (details.get("href") or "")
     assert "13:00" in text(select(html, '[data-day="2026-10-22"] [data-entry]')[0])
     agents = [text(a) for a in select(html, "[data-agent-filter] a")]
     assert agents == ["All agents", DEFAULT_AGENT, "work"]
@@ -67,6 +67,37 @@ async def test_a_month_of_every_agents_meetings_in_the_viewers_time(
     assert "month=2026-09" in (earlier.get("href") or "")
     [later] = select(html, "a[data-month-later]")
     assert "month=2026-11" in (later.get("href") or "")
+
+
+@pytest.mark.queryspy(allow_n_plus_one=True)  # the calendar read, then a send
+async def test_a_meeting_on_it_opens_with_what_its_invite_says(
+    overseer: TestClient,
+    async_db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Any meeting on the calendar opens in the drawer: when, whose calendar,
+    where it stands, who organized it and who is invited, its link, and the
+    call the agent was sent into, when it was."""
+    hold_the_bot(monkeypatch)
+    calendar = Calendar(monkeypatch, STANDUP)
+    await read_calendars(async_db_session, calendar.read, at(18, 0))
+    [sent] = await send_due(async_db_session, at(19, 13))
+
+    html = page_html(overseer, f"{CALENDAR}?month=2026-10")
+    [details] = select(html, '[data-day="2026-10-19"] [data-entry] a[data-details]')
+    opened = page_html(overseer, details.get("href") or "")
+    drawer_url = one(opened, "[data-drawer-sync]").get("data-drawer-url") or ""
+    drawer = page_html(overseer, drawer_url)
+
+    assert "Standup" in text(one(drawer, "h2"))
+    facts = [text(d) for d in select(drawer, "dd")]
+    assert DEFAULT_AGENT in facts and "Dana" in facts
+    invited = [text(li) for li in select(drawer, "[data-invited] li")]
+    assert invited == ["dana@example.com", "leo@example.com"]
+    assert one(drawer, "a[data-link]").get("href") == MEET
+    assert one(drawer, "a[data-opens]").get("href") == overseer_meetings.meeting_url(
+        sent
+    )
 
 
 @pytest.mark.queryspy(allow_n_plus_one=True)  # two renders

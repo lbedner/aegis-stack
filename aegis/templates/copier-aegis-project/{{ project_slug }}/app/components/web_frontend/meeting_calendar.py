@@ -2,7 +2,8 @@
 calendars (``domains.calendar.entries``), whole weeks Monday to Sunday in
 the viewer's time zone, each agent in its own color, filtered to one agent
 by ``?agent=`` and moved a month at a time by ``?month=`` (``2026-10``).
-A meeting the agent was sent into opens where the page opens meetings.
+A meeting the agent was sent into opens where the page opens meetings;
+on a page with ``details``, any meeting opens its own details instead.
 Overseer's shows every invite; the Meetings page's those of its viewer
 (``email``), or every one without auth. One month grid draws both
 (``pages/meetings/_calendar.html``).
@@ -40,10 +41,12 @@ async def calendar_context(
     opened: Callable[[int], str],
     every: list[BotAccount],
     email: str | None = None,
+    details: str | None = None,
 ) -> dict[str, Any]:
     """The month ``?month=`` names (this one by default) on ``page``, of
     ``every`` agent (one, by ``?agent=``); each sent meeting opening
-    ``opened(meeting id)``."""
+    ``opened(meeting id)``, or, with ``details`` (a query parameter), each
+    meeting opening the page with its id there."""
     today = datetime.now(zone).date()
     month = _month(query.get(MONTH_PARAM)) or today.replace(day=1)
     agent = query.get(AGENT_PARAM) or None
@@ -55,8 +58,13 @@ async def calendar_context(
     for entry in entries:
         by_day[entry.starts_at.date()].append(entry)
 
-    def at(day: date, who: str | None = agent) -> str:
-        return with_query(page, **{MONTH_PARAM: f"{day:%Y-%m}", AGENT_PARAM: who})
+    def at(day: date, who: str | None = agent, **more: str) -> str:
+        return with_query(
+            page, **{MONTH_PARAM: f"{day:%Y-%m}", AGENT_PARAM: who}, **more
+        )
+
+    def detailed(event_id: int) -> str | None:
+        return at(month, **{details: str(event_id)}) if details else None
 
     return {
         "month_label": f"{month:%B %Y}",
@@ -70,7 +78,7 @@ async def calendar_context(
         ],
         "weekdays": WEEKDAYS,
         "days": [
-            _day(first + n * DAY, month, today, by_day, opened)
+            _day(first + n * DAY, month, today, by_day, opened, detailed)
             for n in range((last - first).days + 1)
         ],
     }
@@ -90,6 +98,7 @@ def _day(
     today: date,
     by_day: Mapping[date, list[CalendarEntry]],
     opened: Callable[[int], str],
+    detailed: Callable[[int], str | None],
 ) -> dict[str, Any]:
     return {
         "day": day.isoformat(),
@@ -97,19 +106,23 @@ def _day(
         "label": f"{day:%a %b} {day.day}",
         "today": day == today,
         "outside": day.month != month.month,
-        "entries": [_entry(e, opened) for e in by_day.get(day, [])],
+        "entries": [_entry(e, opened, detailed) for e in by_day.get(day, [])],
     }
 
 
-def _entry(entry: CalendarEntry, opened: Callable[[int], str]) -> dict[str, Any]:
+def _entry(
+    entry: CalendarEntry,
+    opened: Callable[[int], str],
+    detailed: Callable[[int], str | None],
+) -> dict[str, Any]:
     state = state_cell(entry.state)
     span = f"{entry.starts_at:%H:%M} - {entry.ends_at:%H:%M}"
     return {
         "time": f"{entry.starts_at:%H:%M}",
         "title": entry.title,
         "detail": f"{entry.agent}, {span}, {state['label']}",
-        "color": entry.color,
         "state": state,
         "cancelled": entry.state == CANCELLED,
         "opens": opened(entry.meeting_id) if entry.meeting_id else None,
+        "details": detailed(entry.id),
     }

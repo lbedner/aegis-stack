@@ -9,8 +9,8 @@ when the backend starts up (only when database component is included).
 
 {% if database_engine == "sqlite" %}
 from pathlib import Path
-from typing import Any
 {% endif %}
+from typing import Any
 
 from app.components.backend.startup.schema_recovery import (
     _adoptable,

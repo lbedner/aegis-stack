@@ -10,6 +10,8 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.time import utcnow
 from app.services.meetings import queries
+from app.services.meetings.domains.actions import runs
+from app.services.meetings.domains.moments import service as moments
 from app.services.meetings.domains.people import participants
 from app.services.meetings.models import (
     IN_PROGRESS,
@@ -108,4 +110,6 @@ async def write_captions(
         await queries.update_lines(db, changed)
     await db.flush()
     rows |= {line: row.id for line, row in added.items()}
+    made = await moments.seen(db, meeting_id, {rows[c.line]: c.text for c in captions})
+    await runs.ask_for_new(db, made)
     await db.commit()

@@ -1,7 +1,7 @@
 {% if include_ai and ai_backend != "memory" and ai_framework == "pydantic-ai" %}
 """The meetings' model writers as agents: the notes of a meeting, how to
-work with each person and what a series of meetings keeps coming back to
-each run as an ``agent`` row, seeded with the
+work with each person, what a series of meetings keeps coming back to and
+an answer to a question asked in a call each run as an ``agent`` row, seeded with the
 prompts below, so their prompt, model and sampling are edited in Agents
 like any other agent's (each change kept in its prompt history). While a
 row is missing or off, its built-in prompt runs on the model in force.
@@ -14,6 +14,7 @@ from sqlmodel import Session
 NOTES_AGENT = "meeting-notes"
 GUIDE_AGENT = "meeting-guide"
 THEMES_AGENT = "meeting-themes"
+ANSWER_AGENT = "meeting-answers"
 # Generous: a long meeting's notes run past the chat's 1000 tokens.
 MAX_TOKENS = 8000
 
@@ -79,6 +80,15 @@ Something said in one meeting only is not a theme. Leave a list empty
 rather than invent a point. Name people exactly as the lines do."""
 
 
+ANSWER_PROMPT = """Someone asked a question in a meeting that is still going
+on. You get what was said so far, one line each as "Speaker: what they
+said", then the question.
+
+Answer it briefly, in a sentence or two, from what was said in the meeting
+and what is generally known. When the meeting does not hold the answer and
+it depends on facts you do not have (a system's code, a number, a date),
+say so plainly instead of guessing."""
+
 def _definition(slug: str, name: str, description: str, prompt: str) -> dict[str, Any]:
     return {
         "slug": slug,
@@ -111,6 +121,12 @@ def meetings_agent_definitions() -> list[dict[str, Any]]:
             "What keeps coming up",
             "Writes what a series of meetings keeps coming back to, over time",
             THEMES_PROMPT,
+        ),
+        _definition(
+            ANSWER_AGENT,
+            "Answers in a call",
+            "Answers a question asked in a meeting, from the meeting so far",
+            ANSWER_PROMPT,
         ),
     ]
 

@@ -48,7 +48,8 @@ async def test_a_theme_reads_with_every_line_it_was_said_in(
     (item,) = _themes(record.sections).items
     assert record.series.summary == "Over time."
     assert record.meetings == meetings[::-1]
-    assert (item.text, item.speaker, item.status) == (report.text, "Dana", "open")
+    # Who said it is on each line: a theme raised by many reads as itself.
+    assert (item.text, item.speaker, item.status) == (report.text, None, "open")
     assert item.detail == "2 meetings"
     assert [q.meeting_id for q in item.quotes] == meetings
 

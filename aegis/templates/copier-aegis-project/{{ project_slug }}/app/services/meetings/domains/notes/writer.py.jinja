@@ -7,7 +7,7 @@ meetings left open raised again; ``domains.threads``), each citing the
 transcript lines it came from. Metered like every other model call
 (``meetings:notes`` in AI spend).
 
-The bot writes them once it is out of the call (``bot.run_meeting``);
+The bot writes them once it is out of the call (``domains.bot.run.run_meeting``);
 the Meetings page writes them again on request, over the old ones, so a
 better model or a corrected "me" never needs the call again.
 """
@@ -16,8 +16,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.db import get_async_session
 from app.core.log import logger
-from app.services.ai.domains.spend.recording import extract_usage, record_usage
-from app.services.ai.service import writer
+from app.services.ai.service import extract_usage, record_usage, writer
 from app.services.meetings.domains.agents import NOTES_AGENT, NOTES_PROMPT
 from app.services.meetings.domains.notes.service import keep_failure, keep_notes
 from app.services.meetings.domains.people import queries as people

@@ -45,6 +45,9 @@ check-all: lint typecheck test-all ## Run comprehensive checks (includes slow te
 parts: ## Write each part's PluginSpec facts into the template (app/core/parts.py)
 	@uv run python -m aegis.core.parts
 
+readme: ## Render the README's and docs' component and service tables from the specs
+	@uv run python -m aegis.core.catalog_docs
+
 install: ## Install dependencies with uv
 	uv sync --all-extras
 

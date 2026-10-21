@@ -587,6 +587,8 @@ class TestBreadcrumbs:
     def test_screen_shows_visible_docs_url(self) -> None:
         # Plain URLs the terminal auto-linkifies — styled OSC 8 links
         # proved unreliable, mirroring the post-init "Docs:" line instead.
+        import dataclasses
+
         from rich.console import Console
 
         from aegis.cli.guided import _Choice, _docs_url
@@ -596,7 +598,8 @@ class TestBreadcrumbs:
             _docs_url(COMPONENTS["worker"])
             == "https://docs.aegis-stack.io/components/worker/"
         )
-        assert _docs_url(COMPONENTS["redis"]) is None  # no page, no link
+        unlinked = dataclasses.replace(COMPONENTS["worker"], docs_path="")
+        assert _docs_url(unlinked) is None  # no page, no link
 
         ui = GuidedSelectionUI(keys=[])
         choices = [_Choice("yes", "Add"), _Choice("no", "Skip")]
@@ -606,7 +609,7 @@ class TestBreadcrumbs:
             console.export_text()
         )
         console = Console(width=100, record=True)
-        console.print(ui._body("Add?", choices, 0, COMPONENTS["redis"], True))
+        console.print(ui._body("Add?", choices, 0, unlinked, True))
         assert "docs.aegis-stack.io" not in console.export_text()
 
     def test_postgres_provider_screen_shows_neon_docs_url(self) -> None:

@@ -8,7 +8,7 @@ from rich.table import Table
 
 from app.cli import theme
 from app.i18n import t
-from app.services.ai.domains.llm.etl import CatalogStats, SyncResult
+from app.services.ai.service import CatalogStats, SyncResult
 
 console = theme.console()
 

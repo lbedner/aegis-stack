@@ -7,14 +7,13 @@ with them, each point citing the lines it rests on. Metered like every other mod
 (``meetings:guide`` in AI spend).
 
 The bot writes the guide of everyone in a meeting but the owner once the
-notes are written (``bot.run_meeting``); Overseer writes one again on
+notes are written (``domains.bot.run.run_meeting``); Overseer writes one again on
 request. A guide that fails keeps the last one it had, with why.
 """
 
 from app.core.db import get_async_session
 from app.core.log import logger
-from app.services.ai.domains.spend.recording import extract_usage, record_usage
-from app.services.ai.service import writer
+from app.services.ai.service import extract_usage, record_usage, writer
 from app.services.meetings.domains.agents import GUIDE_AGENT, GUIDE_PROMPT
 from app.services.meetings.domains.people import queries
 from app.services.meetings.domains.people.kept import keep_guide, keep_guide_failure

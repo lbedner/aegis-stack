@@ -30,6 +30,10 @@ ACTION = "patterns_review"
 # The most she reads and the comment lists: a first run with no baseline
 # brings every finding the app has.
 MOST_LISTED = 50
+# Places of one rule listed as they are; past this, folded under a count.
+SHOWN = 3
+TOUCHES = "What this change touches"
+OPINION = "#### Beyond the findings (my opinion)"
 # Its agent: an ``agent`` row the AI service seeds (her persona and the
 # reviewing below), so its model and how long it writes are set in Agents.
 REVIEWER = "pr-reviewer"
@@ -37,10 +41,19 @@ REVIEWING = """## Reviewing a pull request
 
 When I review a change for its pull request, the facts are its new findings,
 from the app's own pattern rules (each rule's why and what to do, once), and
-what it touches; nothing else about the change is known to me. For each
-finding I say in a sentence or two what it means here and what to do, by its
-place, then the change's state in two lines. Anything I would point out
-beyond the findings is opinion and goes in ``opinion``, never as a finding.
+what it touches; nothing else about the change is known to me. I write to
+the person who made the change, as myself: "I", "you", plain sentences.
+
+- ``summary``: two to four sentences on what the findings mean together and
+  whether I would merge it as it is. The findings, their places and what the
+  change touches are shown under my words, so I never list them or count
+  them again.
+- ``notes``: one per rule that fired, by its ``check``: what it means in
+  this change and what to do, in a sentence or two, without repeating the
+  rule's own why.
+- ``opinion``: anything I would point out beyond the findings, never as a
+  finding.
+
 I do not invent findings, and I do not call one fine when the rules flag it.
 """
 
@@ -51,11 +64,11 @@ def reviewer_prompt(persona: str) -> str:
 
 
 class Note(BaseModel):
-    """What she says of one finding, by its place (``path:line``)."""
+    """What she says of one rule's findings, by its ``check``."""
 
     model_config = FIGURES
 
-    place: str
+    check: str
     said: str
 
 
@@ -90,25 +103,58 @@ def facts(fresh: list[Spot], touched: str) -> str:
 
 
 def markdown(fresh: list[Spot], said: Review, touched: str, commit: str = "") -> str:
-    """A review: her summary, every finding with her note (the rule's why
-    where she gave none), what the change touches, and her opinion set
-    apart; headed by the commit it reviewed."""
-    notes = {n.place: n.said for n in said.notes}
-    rows = [
-        f"- `{s.at}` **{s.finding.title}** (`{s.finding.check}`, "
-        f"{s.finding.severity}): {notes.get(s.at) or s.finding.why}"
-        for s in fresh
-    ]
+    """A review: her words, then each rule that fired once (her note on it,
+    else its why) with its places, her opinion set apart, and what the
+    change touches folded away; headed by the commit it reviewed."""
+    notes = {n.check: n.said for n in said.notes}
     title = (
         f"### Illiana's review of `{commit[:7]}`" if commit else "### Illiana's review"
     )
     head = [MARKER, f"<!-- spots:{fingerprint(fresh, touched)} -->", title]
-    parts = [*head, "", said.summary, "", *rows, ""]
-    if touched:
-        parts += [touched]
+    parts = [*head, "", said.summary, ""]
+    for check, spots in _by_rule(fresh).items():
+        found = spots[0].finding
+        parts += [
+            f"**{found.title}** · `{check}` · {found.severity}",
+            "",
+            notes.get(check) or found.why,
+            "",
+            _places(spots),
+            "",
+        ]
     if said.opinion:
-        parts += ["#### Opinion (not a finding)", "", said.opinion, ""]
+        parts += [OPINION, "", said.opinion, ""]
+    if touched:
+        parts += [_folded(touched), ""]
     return "\n".join(parts)
+
+
+def _by_rule(fresh: list[Spot]) -> dict[str, list[Spot]]:
+    """The findings by the rule that fired, in the order each first came."""
+    found: dict[str, list[Spot]] = {}
+    for spot in fresh:
+        found.setdefault(spot.finding.check, []).append(spot)
+    return found
+
+
+def _places(spots: list[Spot]) -> str:
+    """A rule's places, folded under their count past ``SHOWN``."""
+    listed = "\n".join(f"- `{s.at}`" for s in spots)
+    if len(spots) <= SHOWN:
+        return listed
+    return f"<details><summary>{len(spots)} places</summary>\n\n{listed}\n\n</details>"
+
+
+def _folded(touched: str) -> str:
+    """What the change touches (``touches.summary``) under its own heading,
+    closed."""
+    lines = touched.strip().splitlines()
+    heading = TOUCHES
+    if lines and lines[0].startswith("#"):
+        heading = lines[0].lstrip("# ").strip()
+        lines = lines[1:]
+    body = "\n".join(lines).strip()
+    return f"<details><summary>{heading}</summary>\n\n{body}\n\n</details>"
 
 
 async def review(
@@ -159,9 +205,12 @@ def _with_earlier(now: str, previous: str) -> str:
 async def _ask(facts_text: str) -> Review:
     """Its answer, written as its agent row writes (her persona and the
     reviewing while the row is missing), its spend recorded."""
-    from app.services.ai.domains.chat.prompts import DEFAULT_SYSTEM_PROMPT
-    from app.services.ai.domains.spend.recording import extract_usage, record_usage
-    from app.services.ai.service import writer
+    from app.services.ai.service import (
+        DEFAULT_SYSTEM_PROMPT,
+        extract_usage,
+        record_usage,
+        writer,
+    )
 
     prompt = reviewer_prompt(DEFAULT_SYSTEM_PROMPT)
     agent, model_name = await writer(REVIEWER, prompt, Review)

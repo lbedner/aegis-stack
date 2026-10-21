@@ -1,4 +1,4 @@
-"""The call's audio (``meetings.audio``): what the browser hears reaches
+"""The call's audio (``meetings.domains.bot.audio``): what the browser hears reaches
 the bot a second at a time, and each second goes to whoever Meet's
 captions say was talking then. Meet mixes the call into a few streams
 that follow the loudest speakers, so a stream never says who it is."""
@@ -8,7 +8,12 @@ import base64
 from pathlib import Path
 import wave
 
-from app.services.meetings.audio import CHUNK_BYTES, Hearing, listen, speaker_at
+from app.services.meetings.domains.bot.audio import (
+    CHUNK_BYTES,
+    Hearing,
+    listen,
+    speaker_at,
+)
 from tests._browser import live_browser
 from tests._meetings import SECOND
 

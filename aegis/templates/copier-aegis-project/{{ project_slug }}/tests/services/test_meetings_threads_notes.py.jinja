@@ -1,6 +1,6 @@
 {% if include_ai and ai_backend != "memory" and ai_framework == "pydantic-ai" %}
 """Commitments, contradictions and positions, written in the same model
-pass as the notes (``meetings.notes``), with what the owner's earlier
+pass as the notes (``meetings.domains.notes.writer``), with what the owner's earlier
 meetings left open: each item cites lines the model was shown, and a
 follow-up names a commitment it was shown, or it is dropped."""
 
@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.meetings import notes
+from app.services.meetings.domains.notes import writer as notes
 from app.services.meetings.domains.notes.service import notes_of
 from app.services.meetings.models import Commitment, Notes, Position
 from app.services.meetings.service import MeetingsService

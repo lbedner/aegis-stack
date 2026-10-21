@@ -7,7 +7,7 @@ once."""
 import app.components.worker.broker  # noqa: F401
 import dramatiq
 from app.core.constants import ServiceName
-from app.services.meetings.bot import run_meeting
+from app.services.meetings.service import run_meeting
 
 # ponytail: Dramatiq always has a time limit (ten minutes by default); a
 # day stands in for none (the bot's own rules decide when it leaves).

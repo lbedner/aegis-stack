@@ -22,23 +22,23 @@ from app.cli.llm_rendering import (
 from app.core.db import engine
 from app.core.log import suppress_logs
 from app.i18n import lazy_t, t
-from app.services.ai.domains.llm.etl import CatalogStats, SyncResult, get_catalog_stats
-from app.services.ai.domains.llm.etl.llm_sync_service import sync_llm_catalog
-from app.services.ai.domains.llm.llm_service import (
+from app.services.ai.service import (
+    CatalogStats,
+    LargeLanguageModel,
+    LLMDeployment,
+    LLMModality,
+    LLMOrg,
+    LLMPrice,
+    SyncResult,
     clear_active_model,
+    get_catalog_stats,
     get_current_config,
     get_model_info,
     list_modalities,
     list_models,
     list_vendors,
     set_active_model,
-)
-from app.services.ai.models.llm import (
-    LargeLanguageModel,
-    LLMDeployment,
-    LLMModality,
-    LLMOrg,
-    LLMPrice,
+    sync_llm_catalog,
 )
 
 app = typer.Typer(help=lazy_t("llm.help"))

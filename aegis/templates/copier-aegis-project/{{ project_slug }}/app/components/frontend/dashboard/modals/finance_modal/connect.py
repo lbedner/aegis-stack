@@ -12,8 +12,7 @@ from app.components.frontend.controls import (
 from app.components.frontend.controls.snack_bar import ErrorSnackBar, SuccessSnackBar
 from app.core import secrets
 from app.core.config import settings
-from app.services.finance.adapters.providers.plaid import PLAID_KEYS
-from app.services.finance.adapters.providers.snaptrade import SNAPTRADE_KEYS
+from app.services.finance.service import PLAID_KEYS, SNAPTRADE_KEYS
 
 # Named rows in the import review's detail sections before the tail folds
 # into a count. A Quicken tree can carry hundreds of new categories, and a

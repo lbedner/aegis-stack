@@ -44,7 +44,7 @@ async def provider_icon(
 ) -> Response:
     """A provider's mark, for the browser to cache; the page only links to
     one the catalog holds, so a 404 here is a mark since removed."""
-    from app.services.ai.domains.llm.queries import org_icons
+    from app.services.ai.service import org_icons
 
     icon = (await org_icons(db, [slug])).get(slug)
     if icon is None:
@@ -66,7 +66,7 @@ async def model_drawer(
 async def set_active_model(model_id: str, force: bool = False) -> Any:
     """The catalog's switch (a persistence backend's module): stored, and
     live for the next request."""
-    from app.services.ai.domains.llm.llm_service import set_active_model as switch
+    from app.services.ai.service import set_active_model as switch
 
     return await switch(model_id, force=force)
 
@@ -98,7 +98,7 @@ async def agent_drawer(
 
 async def update_agent(db: Db, slug: str, changes: dict[str, Any]) -> Any:
     """The registry's update (validates, saves, drops the cached config)."""
-    from app.services.ai.domains.chat.agent_registry import update_agent as update
+    from app.services.ai.service import update_agent as update
 
     return await update(slug, changes, session=db)
 
@@ -139,7 +139,7 @@ async def module_drawer(
 
 async def update_module(db: Db, slug: str, changes: dict[str, Any]) -> Any:
     """The module registry's update (keeps the content invariant)."""
-    from app.services.ai.domains.chat.memory_modules import update_memory_module
+    from app.services.ai.service import update_memory_module
 
     return await update_memory_module(slug, session=db, **changes)
 
@@ -191,7 +191,7 @@ async def fact_form(
 
 
 async def correct_fact(db: Db, index: int, fact: str, category: str) -> Any:
-    from app.services.ai.domains.chat.user_memory import (
+    from app.services.ai.service import (
         DEFAULT_MEMORY_USER_ID,
         update_user_fact,
     )
@@ -239,7 +239,7 @@ async def confirm_forget(
 
 
 async def forget_fact(db: Db, index: int) -> Any:
-    from app.services.ai.domains.chat.user_memory import (
+    from app.services.ai.service import (
         DEFAULT_MEMORY_USER_ID,
         delete_user_fact,
     )

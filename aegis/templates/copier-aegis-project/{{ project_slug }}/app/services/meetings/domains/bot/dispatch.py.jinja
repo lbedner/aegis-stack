@@ -21,7 +21,7 @@ from app.core.concurrency import background
 async def start_meeting(meeting_id: int) -> None:
     """Run the bot in this process, without waiting for it."""
     # Imported here: the bot imports this module to start itself.
-    from app.services.meetings.bot import run_meeting
+    from app.services.meetings.domains.bot.run import run_meeting
 
     background(run_meeting(meeting_id))
 {%- endif %}

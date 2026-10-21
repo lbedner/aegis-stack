@@ -32,12 +32,12 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.usage import UsageLimits
 
-from app.services.ai.domains.chat.agent_loader import (
+from app.services.ai.service import (
     CODE_MODE_TOOL_CALLS_LIMIT,
     AgentConfig,
     agent_capabilities,
+    resolve_tools,
 )
-from app.services.ai.domains.chat.tools import resolve_tools
 from app.services.ai.service.trace import call_args_preview, sandbox_calls
 
 from .server import TEXT_CAP, McpStep, reachable, sandbox_steps

@@ -215,7 +215,7 @@ class UserFactsSection(ft.Column):
     async def load(self, page: ft.Page) -> None:
         """Fetch and render. Called by the tab once it is mounted."""
         from app.components.frontend.state.session_state import get_session_state
-        from app.services.ai.domains.chat.user_memory import MEMORY_CATEGORIES
+        from app.services.ai.service import MEMORY_CATEGORIES
 
         self._categories = list(MEMORY_CATEGORIES)
         api = get_session_state(page).api_client

@@ -1,0 +1,30 @@
+"""Finance service facade: what callers outside it import (``app.services.shared.facade``)."""
+
+# ruff: noqa: F401
+
+from typing import TYPE_CHECKING
+
+from app.services.shared import facade
+
+if TYPE_CHECKING:
+    from app.services.finance.adapters.providers import connections
+    from app.services.finance.adapters.providers.plaid import (
+        PLAID_KEYS,
+        set_runtime_webhook_url,
+    )
+    from app.services.finance.adapters.providers.snaptrade import (
+        SNAPTRADE_KEYS,
+        SnapTradeError,
+    )
+{%- if include_ai and ai_backend != "memory" %}
+    from app.services.finance.domains.detection.analyst import (
+        load_finance_agent_fixtures,
+    )
+    from app.services.finance.domains.detection.analyst.shared import (
+        STANDALONE_USER_ID,
+    )
+{%- endif %}
+    from app.services.finance.domains.ledger.accounts import effective_balance
+    from app.services.finance.service.finance_service import FinanceService
+
+__getattr__, __all__ = facade.lazy(__name__, __file__)

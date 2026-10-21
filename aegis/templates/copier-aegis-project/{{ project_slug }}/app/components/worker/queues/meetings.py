@@ -10,7 +10,7 @@ from app.components.worker import arq_hooks
 from app.core.config import settings
 from app.core.constants import ServiceName
 from app.core.queue_workers import concurrency_for
-from app.services.meetings.bot import run_meeting
+from app.services.meetings.service import run_meeting
 
 # ponytail: arq always has a job timeout; a day stands in for none (the
 # bot's own rules decide when it leaves).

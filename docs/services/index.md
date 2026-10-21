@@ -6,45 +6,22 @@ Services are **business-level functionality** that your application provides to 
     **Services** = What your app does (auth, AI, insights)
     **Components** = How your app works (database, workers, API)
 
-## Service Architecture
+## Services
 
-```mermaid
-graph TB
-    subgraph "Services Layer (Business Logic)"
-        Auth["Auth Service<br/>JWT + User Management<br/>Registration, Login, Profiles"]
-        AI["AI Service<br/>PydanticAI Integration<br/>Multi-Provider Chat"]
-        Blog["Blog Service<br/>Markdown Publishing<br/>Drafts, Tags, SEO"]
-        Comms["Comms Service<br/>Email, SMS, Voice<br/>Resend + Twilio"]
-        Payment["Payment Service<br/>Stripe Integration<br/>Checkout, Subscriptions"]
-        Insights["Insights Service<br/>Adoption Metrics<br/>GitHub, PyPI, Plausible"]
-        Meetings["Meetings Service<br/>Meeting Bot<br/>Transcript, Notes, Themes"]
-    end
-
-    subgraph "Components Layer (Infrastructure)"
-        Backend["Backend<br/>FastAPI Routes"]
-        Database["Database<br/>SQLite / PostgreSQL"]
-        Worker["Worker<br/>arq / Dramatiq / TaskIQ"]
-        Scheduler["⏰ Scheduler<br/>APScheduler"]
-        Observability["Observability<br/>Logfire"]
-        Browser["Browser<br/>Remote Chromium"]
-        Cache["Cache<br/>Redis Sessions<br/>Coming Soon"]
-    end
-
-    Auth --> Backend
-    Auth --> Database
-    AI --> Backend
-    Blog --> Backend
-    Blog --> Database
-    Comms --> Backend
-    Payment --> Backend
-    Payment --> Database
-    Insights --> Backend
-    Insights --> Database
-    Meetings --> Backend
-    Meetings --> Database
-    Meetings --> Browser
-
-```
+<!-- aegis:services -->
+| Service | What you get | |
+|---|---|---|
+| **[AI](https://docs.aegis-stack.io/services/ai/)** | Conversational agents, RAG, model catalog, TTS and STT (PydanticAI / LangChain across 7 providers) | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Auth](https://docs.aegis-stack.io/services/auth/)** | Persistent sessions with refresh-token rotation, GitHub/Google sign-in, RBAC, multi-tenant Organizations | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Blog](https://docs.aegis-stack.io/services/blog/)** | Markdown publishing with drafts, tags, and an Overseer editor | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Comms](https://docs.aegis-stack.io/services/comms/)** | Transactional email (Resend) + SMS / voice (Twilio) | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Documents](https://docs.aegis-stack.io/services/documents/)** | Content-addressed document store, deduped, with page-addressed extraction | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Finance](https://docs.aegis-stack.io/services/finance/)** | Personal finance aggregation (accounts, transactions, net worth, import) | ![Optional](https://img.shields.io/badge/-optional-blue) ![Experimental](https://img.shields.io/badge/-experimental-orange) |
+| **[Insights](https://docs.aegis-stack.io/services/insights/)** | Adoption metrics across GitHub, PyPI, Plausible, Reddit | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Meetings](https://docs.aegis-stack.io/services/meetings/)** | A bot that joins Google Meet as its own agent: transcript, notes, threads, people, what keeps coming up, joined from its calendar | ![Optional](https://img.shields.io/badge/-optional-blue) ![Experimental](https://img.shields.io/badge/-experimental-orange) |
+| **[Payment](https://docs.aegis-stack.io/services/payment/)** | Stripe checkout, subscriptions, refunds, disputes | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Research](https://docs.aegis-stack.io/services/research/)** | Outside posts and threads, collected by saved searches | ![Optional](https://img.shields.io/badge/-optional-blue) |
+<!-- /aegis:services -->
 
 !!! tip "Architectural Guidance"
     This page covers **which services are available** and how to add them to your project. For detailed patterns on **how services integrate with components** and how to structure your code, see **[Integration Patterns](../integration-patterns.md)**.
@@ -208,7 +185,8 @@ belongs - so it names each domain and what it owns.
     this standard as a pattern: **Overseer > Patterns > Service parts** shows
     which parts each one has and which rules it breaks, with the file and line
     that shows it, and `patterns --format json` prints the same report. The
-    enforced rules (reads in queries, every job wired, a health check) are held
+    enforced rules (reads in queries, every job wired, a health check, other
+    services through their facade) are held
     by `tests/services/test_service_layout.py`; reads still outside a queries
     module are recorded there as debt that may only shrink. A module at a
     service's top level that the table above does not name is flagged too
@@ -222,7 +200,10 @@ belongs - so it names each domain and what it owns.
     A service that imports another's `domains/`, `adapters/`, `queries` or
     `models` is flagged too (**Other services through their facade**), each
     import's line listed: it depends on how the other is organised, not on
-    what it offers. `patterns touches` takes a change's files (as arguments,
+    what it offers. A facade composed of many modules (AI's and finance's
+    `service/` packages) costs nothing to import: what its `if TYPE_CHECKING:`
+    block imports is all it offers, each name loaded on first use
+    (`app/services/shared/facade.py`). `patterns touches` takes a change's files (as arguments,
     or one per line from `git diff --name-only`) and says, from the app's
     ontology, which parts own them, which parts depend on those, and the
     tables, routes and jobs they define; Markdown for a pull request's job

@@ -26,7 +26,6 @@ from app.components.web_frontend.rendering import (
     viewer_zone,
 )
 from app.core.formatting import format_clock, format_relative_time
-from app.services.meetings.bot import send_bot
 from app.services.meetings.deps import as_http, get_meetings_service
 from app.services.meetings.domains.accounts.service import AgentNotFoundError, agents
 from app.services.meetings.domains.calendar.owners import email_of
@@ -36,6 +35,7 @@ from app.services.meetings.service import (
     UnsupportedMeetingLinkError,
     call_length,
     heard_rows,
+    send_bot,
     voices,
 )
 

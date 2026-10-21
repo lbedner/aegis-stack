@@ -16,8 +16,7 @@ from rich.table import Table
 
 from app.cli import theme
 from app.i18n import lazy_t, t
-from app.services.ai.domains.chat.agent_loader import AgentConfig
-from app.services.ai.models.agents import Agent, AgentPromptChange, MemoryModule
+from app.services.ai.service import Agent, AgentConfig, AgentPromptChange, MemoryModule
 
 app = typer.Typer(help=lazy_t("agents.help"))
 modules_app = typer.Typer(help=lazy_t("agents.modules_help"))
@@ -47,20 +46,20 @@ async def _load_agent(slug: str) -> Agent | None:
 
 
 async def _load_history(slug: str) -> list[AgentPromptChange]:
-    from app.services.ai.domains.chat.agent_registry import prompt_history
+    from app.services.ai.service import prompt_history
 
     return await prompt_history(slug)
 
 
 async def _set_prompt(slug: str, prompt: str, note: str) -> None:
-    from app.services.ai.domains.chat.agent_registry import update_agent
+    from app.services.ai.service import update_agent
 
     await update_agent(slug, {"system_prompt": prompt}, source="cli", note=note)
 
 
 async def _load_modules() -> list[MemoryModule]:
     from app.core.db import get_async_session
-    from app.services.ai.domains.chat.memory_modules import list_memory_modules
+    from app.services.ai.service import list_memory_modules
 
     async with get_async_session() as session:
         return await list_memory_modules(session, active_only=False)
@@ -71,8 +70,7 @@ async def _run_test_turn(slug: str, message: str) -> tuple[AgentConfig, str]:
     mode, usage recorded - in a conversation of its own, deleted after. A
     bare model call on the prompt alone tested another agent."""
     from app.core.config import settings
-    from app.services.ai.domains.chat.agent_loader import resolve_agent
-    from app.services.ai.service import AIService
+    from app.services.ai.service import AIService, resolve_agent
 
     config = await resolve_agent(slug)
     service = AIService(settings)
@@ -201,7 +199,7 @@ def set_prompt(
 ) -> None:
     import sys
 
-    from app.services.ai.domains.chat.agent_registry import (
+    from app.services.ai.service import (
         AgentNotFoundError,
         InvalidAgentUpdateError,
     )
@@ -230,7 +228,7 @@ def set_prompt(
 def show_prompt_history(slug: str = typer.Argument(...)) -> None:
     import sys
 
-    from app.services.ai.domains.chat.agent_registry import AgentNotFoundError
+    from app.services.ai.service import AgentNotFoundError
 
     try:
         changes = asyncio.run(_load_history(slug))

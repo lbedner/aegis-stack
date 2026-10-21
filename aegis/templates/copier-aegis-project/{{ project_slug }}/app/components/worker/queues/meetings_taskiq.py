@@ -8,7 +8,7 @@ from app.components.worker.broker import PausableRedisStreamBroker
 from app.components.worker.middleware import EventPublishMiddleware
 from app.core.config import settings
 from app.core.constants import ServiceName
-from app.services.meetings.bot import run_meeting
+from app.services.meetings.service import run_meeting
 
 redis_url = settings.redis_url_effective
 

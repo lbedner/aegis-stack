@@ -1,4 +1,4 @@
-"""The bot's Google sign-in (``meetings.login``): kept as a secret, and put
+"""The bot's Google sign-in (``meetings.domains.bot.login``): kept as a secret, and put
 on the browser the bot joins with, so Meet lets it in as that account."""
 
 from collections.abc import AsyncIterator
@@ -11,9 +11,9 @@ import pytest
 from app.cli import meetings as meetings_cli
 from app.core import secrets
 from app.core.config import settings
-from app.services.meetings import meet
 from app.services.meetings.domains.accounts.service import login_secret_for
-from app.services.meetings.login import CALENDAR, LOGIN, signed_in
+from app.services.meetings.domains.bot import meet
+from app.services.meetings.domains.bot.login import CALENDAR, LOGIN, signed_in
 from app.services.meetings.models import BotAccount
 from tests._cli import invoke
 from tests._meetings import MEET

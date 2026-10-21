@@ -572,6 +572,22 @@ async def test_health_it_could_not_read_is_not_all_clear(
         assert (await node_now.right_now()).line()
 
 
+async def test_an_ai_that_keeps_no_ledger_reads_no_spend(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An AI service without a database keeps no ledger, so its facade
+    offers no spend: the AI node reads none rather than raising."""
+    ai = pytest.importorskip("app.services.ai.service")
+
+    def offered(name: str) -> Any:
+        raise AttributeError(name)
+
+    monkeypatch.setattr(ai, "__all__", [n for n in ai.__all__ if n != "spend_windows"])
+    monkeypatch.setattr(ai, "__getattr__", offered)
+    node = PartNode(kind=Kind.SERVICE, name="ai", category=Category.APP)
+    assert await node_now._spend(node) == ()
+
+
 def test_nothing_wrong_says_nothing() -> None:
     assert node_now.RightNow(attention=(), read_at=datetime.now(UTC)).line() is None
 

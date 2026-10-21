@@ -116,7 +116,7 @@ SERVICES: dict[str, ServiceSpec] = {
         docs_path="services/auth",
         marker_path="app/services/auth",
         type=ServiceType.AUTH,
-        description="User authentication and authorization with JWT tokens",
+        description="Persistent sessions with refresh-token rotation, GitHub/Google sign-in, RBAC, multi-tenant Organizations",
         long_description=(
             "Complete user management with JWT authentication, session "
             "cookies, and refresh-token rotation. Three levels: basic "
@@ -390,12 +390,13 @@ SERVICES: dict[str, ServiceSpec] = {
             ],
         ),
         name="ai",
+        title="AI",
         category=PartCategory.AI,
         order=20,
         docs_path="services/ai",
         marker_path="app/services/ai",
         type=ServiceType.AI,
-        description="AI platform: multi-provider chat, agents, and an LLM catalog",
+        description="Conversational agents, RAG, model catalog, TTS and STT (PydanticAI / LangChain across 7 providers)",
         long_description=(
             "A complete AI platform: multi-provider chat, a database-"
             "driven agent registry with tools and memory modules, an LLM "
@@ -693,7 +694,7 @@ SERVICES: dict[str, ServiceSpec] = {
         docs_path="services/comms",
         marker_path="app/services/comms",
         type=ServiceType.NOTIFICATION,
-        description="Communications service with email, SMS and voice",
+        description="Transactional email (Resend) + SMS / voice (Twilio)",
         long_description=(
             "Email, SMS, and voice calls using industry providers: Resend "
             "for email, Twilio for SMS and voice. Both have free tiers, so "
@@ -771,7 +772,7 @@ SERVICES: dict[str, ServiceSpec] = {
         docs_path="services/insights",
         marker_path="app/services/insights",
         type=ServiceType.ANALYTICS,
-        description="Adoption metrics and analytics with automated data collection",
+        description="Adoption metrics across GitHub, PyPI, Plausible, Reddit",
         long_description=(
             "Automated tracking of your project's adoption across GitHub, "
             "PyPI, Plausible Analytics, and Reddit. Collects on a "
@@ -907,7 +908,7 @@ SERVICES: dict[str, ServiceSpec] = {
         docs_path="services/payment",
         marker_path="app/services/payment",
         type=ServiceType.PAYMENT,
-        description="Payment processing with Stripe (checkout, subscriptions, webhooks)",
+        description="Stripe checkout, subscriptions, refunds, disputes",
         long_description=(
             "Payment processing with Stripe: checkout sessions, "
             "subscriptions, webhooks, and refunds. Stripe's test mode "
@@ -1027,7 +1028,7 @@ SERVICES: dict[str, ServiceSpec] = {
         docs_path="services/blog",
         marker_path="app/services/blog",
         type=ServiceType.CONTENT,
-        description="Markdown blog with draft/publish workflow and tags",
+        description="Markdown publishing with drafts, tags, and an Overseer editor",
         long_description=(
             "First-party Markdown publishing with database-backed posts, "
             "tags, drafts, and an editor UI in the dashboard. Import and "
@@ -1333,7 +1334,7 @@ SERVICES: dict[str, ServiceSpec] = {
         docs_path="services/documents",
         marker_path="app/services/documents",
         type=ServiceType.STORAGE,
-        description="Document store: keep the paper, deduped and findable",
+        description="Content-addressed document store, deduped, with page-addressed extraction",
         long_description=(
             "Durable storage for the paper an application accumulates: "
             "scans, statements, letters, forms. Bytes are addressed by "
@@ -1501,12 +1502,13 @@ SERVICES: dict[str, ServiceSpec] = {
             ],
         ),
         name="meetings",
+        experimental=True,
         category=PartCategory.AI,
         order=55,
         docs_path="services/meetings",
         marker_path="app/services/meetings",
         type=ServiceType.AI,
-        description="A bot that joins calls and keeps the transcript",
+        description="A bot that joins Google Meet as its own agent: transcript, notes, threads, people, what keeps coming up, joined from its calendar",
         long_description=(
             "A bot that joins a Google Meet, Teams or Zoom call as a visible, "
             "announced participant, and keeps who was there and what each "

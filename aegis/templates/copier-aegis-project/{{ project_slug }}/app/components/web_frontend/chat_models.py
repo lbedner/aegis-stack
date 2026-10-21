@@ -60,12 +60,12 @@ async def call_models() -> list[dict[str, Any]]:
     """The realtime models a live call can reach: a vendor the call path
     serves, by the vendor's own id (the catalog's routed copies, "gemini/...",
     are not reachable)."""
-    from app.services.ai.domains.voice.live_engines import CALL_VENDORS
+    from app.services.ai.service import live_engines
 
     return [
         m
         for m in await catalog("realtime")
-        if m.get("vendor") in CALL_VENDORS and "/" not in m["model_id"]
+        if m.get("vendor") in live_engines.CALL_VENDORS and "/" not in m["model_id"]
     ]
 
 
@@ -74,7 +74,7 @@ async def calling_model() -> str | None:
     engine), or None."""
     from app.core.config import settings
     from app.core.db import get_async_session
-    from app.services.ai.domains.voice import live_engines
+    from app.services.ai.service import live_engines
 
     async with get_async_session() as db:
         engine = await live_engines.resolve(db, settings.VOICE_LIVE_ENGINE)
@@ -87,7 +87,7 @@ async def use_for_calls(model_id: str) -> str | None:
     from app.components.backend.api.ai.service import ai_service
     from app.core.config import settings
     from app.core.db import get_async_session
-    from app.services.ai.domains.voice import live_engines, profiles
+    from app.services.ai.service import live_engines, profiles
 
     async with get_async_session() as db:
         engine = await live_engines.choose(db, model_id)
@@ -116,7 +116,7 @@ async def current_config() -> Any:
     from .chat_surface import PERSISTED
 
     if PERSISTED:
-        from app.services.ai.domains.llm.llm_service import (
+        from app.services.ai.service import (
             get_current_config as current,
         )
 
@@ -145,7 +145,7 @@ async def running_model() -> str:
 
 async def recent_ids() -> list[str]:
     from app.core.db import get_async_session
-    from app.services.ai.domains.llm.queries import recent_model_ids
+    from app.services.ai.service import recent_model_ids
 
     async with get_async_session() as db:
         return await recent_model_ids(db, RECENT_LOOKBACK)
@@ -153,7 +153,7 @@ async def recent_ids() -> list[str]:
 
 async def switch(model_id: str) -> str | None:
     """Make ``model_id`` the active model; why not, when it was refused."""
-    from app.services.ai.domains.llm.llm_service import set_active_model
+    from app.services.ai.service import set_active_model
 
     result = await set_active_model(model_id)
     return None if result.success else result.message

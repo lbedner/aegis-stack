@@ -4,6 +4,9 @@ the bot will write."""
 
 import asyncio
 from datetime import timedelta
+from pathlib import Path
+import subprocess
+import sys
 
 import pytest
 from sqlmodel import select
@@ -495,3 +498,16 @@ def test_every_speaker_in_a_meeting_has_a_color_of_their_own() -> None:
     assert len(set(colors.values())) == len(names)
     assert set(colors.values()) <= set(range(1, 10))
     assert voices(["Ada"]) == {"Ada": voice("Ada")}
+
+
+
+def test_the_service_imports_without_its_ai_half() -> None:
+    """The meetings' agents (``domains.agents``) render only with an AI
+    service that runs them; the service must load on a stack without."""
+    script = (
+        "import sys\n"
+        "sys.modules['app.services.meetings.domains.agents'] = None\n"
+        "import app.services.meetings.service\n"
+    )
+    root = Path(__file__).resolve().parents[2]
+    subprocess.run([sys.executable, "-c", script], check=True, cwd=root)

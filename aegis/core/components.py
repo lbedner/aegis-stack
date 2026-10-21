@@ -121,7 +121,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
         order=10,
         docs_path="components/backend",
         type=ComponentType.CORE,
-        description="FastAPI backend server",
+        description="FastAPI on uvicorn or granian, lifecycle hooks, in-memory request metrics, API load testing for every route",
         long_description=(
             "A FastAPI application serving your API, async from the ground "
             "up: typed routes, automatic OpenAPI docs, health checks, and a "
@@ -142,7 +142,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
         order=30,
         docs_path="components/frontend",
         type=ComponentType.CORE,
-        description="Flet frontend interface",
+        description="Flet, ships with the Overseer system dashboard",
         long_description=(
             "A Flet dashboard showing live system health and the status of "
             "every component you pick here, ready to grow into your own "
@@ -166,7 +166,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
         order=50,
         docs_path="components/worker",
         type=ComponentType.INFRASTRUCTURE,
-        description="Background task processing (arq, Dramatiq, or TaskIQ)",
+        description="Pluggable Arq, Taskiq, or Dramatiq",
         long_description=(
             "Background task processing with your choice of backend: arq "
             "(the default), Dramatiq, or TaskIQ. Offload slow work like "
@@ -266,7 +266,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
         order=60,
         docs_path="components/scheduler",
         type=ComponentType.INFRASTRUCTURE,
-        description="Scheduled task execution infrastructure",
+        description="APScheduler with persistent jobs",
         long_description=(
             "Background task scheduling and cron jobs using APScheduler. "
             "Run periodic work like cleanups, reports, and health checks "
@@ -345,7 +345,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
         order=40,
         docs_path="components/database",
         type=ComponentType.INFRASTRUCTURE,
-        description="Database with SQLModel ORM (SQLite or PostgreSQL)",
+        description="Postgres (self-hosted or Neon serverless) or SQLite + SQLModel ORM",
         long_description=(
             "Persistent storage with the SQLModel ORM, Alembic migrations, "
             "and connection pooling. SQLite gives you a zero-config file "
@@ -411,6 +411,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
             env_groups=["COMPONENT SETTINGS"],
         ),
         name="redis",
+        docs_path="components/redis",
         category=PartCategory.DATA,
         health_name="cache",
         tier=2,
@@ -418,7 +419,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
         role="store",
         order=70,
         type=ComponentType.INFRASTRUCTURE,
-        description="Redis cache and message broker",
+        description="Redis for caching, sessions, pub/sub",
         long_description=(
             "In-memory data store used as a cache and message broker. "
             "Powers background job queues and pub/sub messaging between "
@@ -452,7 +453,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
         order=80,
         docs_path="components/storage",
         type=ComponentType.INFRASTRUCTURE,
-        description="S3 object storage, SeaweedFS in dev",
+        description="S3 object storage for the files an app keeps, SeaweedFS in dev",
         long_description=(
             "An S3 backend for the object store every stack already has: "
             "documents, chat attachments, anything addressed by its content "
@@ -484,7 +485,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
         order=90,
         docs_path="components/ingress",
         type=ComponentType.INFRASTRUCTURE,
-        description="Traefik reverse proxy and load balancer",
+        description="Traefik v3 reverse proxy with TLS",
         long_description=(
             "Reverse proxy and traffic routing with Traefik: automatic "
             "service discovery, admin endpoint protection, and optional "
@@ -511,7 +512,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
         order=100,
         docs_path="components/observability",
         type=ComponentType.INFRASTRUCTURE,
-        description="Logfire observability, tracing, and metrics",
+        description="Pydantic Logfire tracing + metrics + logging",
         long_description=(
             "Distributed tracing, metrics, and log correlation with "
             "Pydantic Logfire. Auto-instruments your application and "
@@ -535,12 +536,13 @@ COMPONENTS: dict[str, ComponentSpec] = {
             reach="Server-rendered pages at /",
         ),
         name="htmx",
+        title="Web Frontend",
         category=PartCategory.APP,
         health_name="web_frontend",
         order=20,
         docs_path="components/web-frontend",
         type=ComponentType.FRONTEND,
-        description="Server-rendered htmx web frontend",
+        description="Server-rendered pages at `/`: Jinja2 + htmx + Alpine, Tailwind/DaisyUI styling",
         long_description=(
             "Server-rendered pages with Jinja2, htmx, and Alpine.js, styled "
             "with Tailwind and DaisyUI, served at / by the existing "
@@ -586,7 +588,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
         page="inference",
         order=110,
         type=ComponentType.INFRASTRUCTURE,
-        description="Local model serving (Ollama)",
+        description="Local AI models via Ollama",
         long_description=(
             "Runs language models locally: an Ollama server on the machine, "
             "where a Mac's GPU is, or as a compose service. The AI service's "
@@ -657,7 +659,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
         holds_keys=True,
         docs_path="components/secrets",
         type=ComponentType.INFRASTRUCTURE,
-        description="Encrypted credential store (keys editable, live)",
+        description="Encrypted credential store: keys set while the app runs, checked with the provider on paste, never shown again",
         long_description=(
             "Makes credentials writable without a restart: keys are stored "
             "encrypted in the database, read live by the webserver, worker and "
@@ -761,10 +763,11 @@ COMPONENTS: dict[str, ComponentSpec] = {
             ),
         ),
         name="mcp",
+        title="MCP",
         category=PartCategory.AI,
         docs_path="components/mcp",
         type=ComponentType.INFRASTRUCTURE,
-        description="MCP server: an outside assistant reads the app's tools",
+        description="Serves the app's own tools to Claude Desktop, Claude Code or a local model over MCP: the tools you grant, never a write",
         long_description=(
             "Serves the app's own registered tools to an outside assistant "
             "(Claude Desktop, Claude Code, a local model) over MCP, through "
@@ -835,7 +838,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
         order=120,
         docs_path="components/browser",
         type=ComponentType.INFRASTRUCTURE,
-        description="Remote-driven browser (Playwright server)",
+        description="Remote Chromium in its own container, driven over Playwright: JavaScript pages, sign-ins, a bot that joins a meeting",
         long_description=(
             "A Chromium the app drives over Playwright's remote protocol, in "
             "its own container: pages that need JavaScript, sign-ins, a bot "

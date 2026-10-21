@@ -59,7 +59,7 @@ async def _apply_active_model() -> None:
     """The active-model selection is a database row: replay it, so every
     process answers on the model that was picked, not on ``.env``'s."""
     from app.core.config import settings
-    from app.services.ai.domains.llm import active_model
+    from app.services.ai.service import active_model
 
     try:
         applied = await active_model.sync_from_db(settings)

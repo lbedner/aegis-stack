@@ -102,7 +102,7 @@ async def assistant_name(chat: ChatSurface, session: Any = None) -> str:
     """The answering agent's name, as the registry holds it. A route that
     holds a session passes it: a second one would wait on SQLite's write
     lock and fail ("database is locked")."""
-    from app.services.ai.domains.chat.agent_loader import resolve_agent
+    from app.services.ai.service import resolve_agent
 
     if chat.agent_slug:
         agent = await resolve_agent(chat.agent_slug, session=session)
@@ -190,7 +190,7 @@ async def read_attachment(key: str) -> bytes | None:
 def spoken(text: str) -> str:
     """A message as it is said: its attachment note and the marks that only
     mean something on the page come off (``to_spoken``)."""
-    from app.services.ai.domains.voice.spoken import to_spoken
+    from app.services.ai.service import to_spoken
 
     return to_spoken(strip_attachment_marker(text))
 
@@ -198,7 +198,7 @@ def spoken(text: str) -> str:
 async def synthesize(text: str, tts: Any = None) -> bytes:
     """``text`` said aloud by the configured text-to-speech, or by ``tts``
     (a voice being previewed)."""
-    from app.services.ai.domains.voice.models import SpeechRequest
+    from app.services.ai.service import SpeechRequest
 
     speaker = tts or ai_service.tts
     try:
@@ -287,9 +287,9 @@ def drawn_card_urls(chat: ChatSurface, trace: list[dict[str, Any]]) -> list[str]
     rows, so none without a database."""
     if not PERSISTED:
         return []
-    from app.services.ai.domains.chat.cards import MARKER
+    from app.services.ai.service import cards
 
-    drawn = [m for e in trace for m in card_markers(e) if m["kind"] == MARKER]
+    drawn = [m for e in trace for m in card_markers(e) if m["kind"] == cards.MARKER]
     return [f"{chat.path}/cards/{drawn[-1]['id']}"] if drawn else []
 
 

@@ -16,6 +16,7 @@ from aegis.cli.interactive import (
     clear_ai_framework_selection,
     clear_ai_provider_selection,
 )
+from aegis.core.services import SERVICES
 from tests.cli.conftest import GenerationCalls, ProjectFactory
 from tests.cli.test_utils import run_aegis_command, strip_ansi_codes
 
@@ -65,7 +66,7 @@ class TestServicesCommand:
 
         # Check for auth service details
         assert "auth" in output
-        assert "User authentication and authorization with JWT tokens" in output
+        assert SERVICES["auth"].description in output
         assert "Requires components: backend, database" in output
 
         # Check for usage guidance

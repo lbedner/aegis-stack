@@ -7,7 +7,7 @@ from collections.abc import Iterable
 from sqlmodel.ext.asyncio.session import AsyncSession
 {%- if include_auth %}
 
-from app.services.auth.domains.users.accounts import UserService
+from app.services.auth.service import UserService
 {%- endif %}
 
 

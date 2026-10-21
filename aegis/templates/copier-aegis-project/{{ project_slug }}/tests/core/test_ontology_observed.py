@@ -100,6 +100,14 @@ def test_an_unknown_host_becomes_a_node_of_its_own() -> None:
     assert "external:example.org" in {n.id for n in found.nodes}
 
 
+def test_a_table_the_model_has_no_node_for_is_no_edge() -> None:
+    """Postgres reflection reads its catalog (``pg_class``): a table the
+    app does not define, so no edge may point at it."""
+    found = overlaid(_model(), {("component:backend", "object:pg_class"): _seen()}, NOW)
+    ids = {n.id for n in found.nodes}
+    assert all(e.source in ids and e.target in ids for e in found.edges)
+
+
 def test_a_declared_edge_never_seen_is_dead_only_after_a_day_of_traffic() -> None:
     young = {("service:ai", "component:database"): _seen()}
     old = {("service:ai", "component:database"): _seen(first=NOW - DEAD_AFTER - 1)}

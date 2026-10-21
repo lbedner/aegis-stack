@@ -67,7 +67,7 @@ def overlaid(model: SystemModel, seen: dict[Key, Seen], now: float) -> SystemMod
             state=_state(s, (a, b) in declared),
         )
         for (a, b), s in sorted(pairs.items())
-        if (a, b) not in known
+        if (a, b) not in known and _known(a, ids) and _known(b, ids)
     ]
     hosts: list[Node] = [
         ExternalNode(name=parse_node_id(e.target)[1])
@@ -94,10 +94,16 @@ def _pairs(seen: dict[Key, Seen], ids: set[str]) -> dict[Key, Seen]:
 
 
 def _node(node: str, ids: set[str]) -> str:
-    if node in ids or node.startswith(f"{Kind.EXTERNAL}:"):
+    if _known(node, ids):
         return node
     part = edges.part_of(node)
     return part if part in ids else node
+
+
+def _known(node: str, ids: set[str]) -> bool:
+    """A node of the model, or a host that becomes one; not a table the app
+    never defined (Postgres reflection reading ``pg_class``)."""
+    return node in ids or node.startswith(f"{Kind.EXTERNAL}:")
 
 
 def _declared(model: SystemModel, pairs: dict[Key, Seen]) -> set[Key]:

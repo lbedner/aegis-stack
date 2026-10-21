@@ -3275,10 +3275,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#service-architecture" class="md-nav__link">
+  <a href="#services" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Service Architecture
+        Services
       
     </span>
   </a>
@@ -6407,10 +6407,10 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#service-architecture" class="md-nav__link">
+  <a href="#services" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Service Architecture
+        Services
       
     </span>
   </a>
@@ -6567,42 +6567,71 @@
 <p><strong>Services</strong> = What your app does (auth, AI, insights)
 <strong>Components</strong> = How your app works (database, workers, API)</p>
 </div>
-<h2 id="service-architecture">Service Architecture</h2>
-<pre class="mermaid"><code>graph TB
-    subgraph "Services Layer (Business Logic)"
-        Auth["Auth Service&lt;br/&gt;JWT + User Management&lt;br/&gt;Registration, Login, Profiles"]
-        AI["AI Service&lt;br/&gt;PydanticAI Integration&lt;br/&gt;Multi-Provider Chat"]
-        Blog["Blog Service&lt;br/&gt;Markdown Publishing&lt;br/&gt;Drafts, Tags, SEO"]
-        Comms["Comms Service&lt;br/&gt;Email, SMS, Voice&lt;br/&gt;Resend + Twilio"]
-        Payment["Payment Service&lt;br/&gt;Stripe Integration&lt;br/&gt;Checkout, Subscriptions"]
-        Insights["Insights Service&lt;br/&gt;Adoption Metrics&lt;br/&gt;GitHub, PyPI, Plausible"]
-        Meetings["Meetings Service&lt;br/&gt;Meeting Bot&lt;br/&gt;Transcript, Notes, Themes"]
-    end
+<h2 id="services">Services</h2>
+<!-- aegis:services -->
+<table>
+<thead>
+<tr>
+<th>Service</th>
+<th>What you get</th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong><a href="https://docs.aegis-stack.io/services/ai/">AI</a></strong></td>
+<td>Conversational agents, RAG, model catalog, TTS and STT (PydanticAI / LangChain across 7 providers)</td>
+<td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a></td>
+</tr>
+<tr>
+<td><strong><a href="https://docs.aegis-stack.io/services/auth/">Auth</a></strong></td>
+<td>Persistent sessions with refresh-token rotation, GitHub/Google sign-in, RBAC, multi-tenant Organizations</td>
+<td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a></td>
+</tr>
+<tr>
+<td><strong><a href="https://docs.aegis-stack.io/services/blog/">Blog</a></strong></td>
+<td>Markdown publishing with drafts, tags, and an Overseer editor</td>
+<td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a></td>
+</tr>
+<tr>
+<td><strong><a href="https://docs.aegis-stack.io/services/comms/">Comms</a></strong></td>
+<td>Transactional email (Resend) + SMS / voice (Twilio)</td>
+<td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a></td>
+</tr>
+<tr>
+<td><strong><a href="https://docs.aegis-stack.io/services/documents/">Documents</a></strong></td>
+<td>Content-addressed document store, deduped, with page-addressed extraction</td>
+<td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a></td>
+</tr>
+<tr>
+<td><strong><a href="https://docs.aegis-stack.io/services/finance/">Finance</a></strong></td>
+<td>Personal finance aggregation (accounts, transactions, net worth, import)</td>
+<td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a> <a class="glightbox" href="https://img.shields.io/badge/-experimental-orange" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Experimental" src="https://img.shields.io/badge/-experimental-orange" /></a></td>
+</tr>
+<tr>
+<td><strong><a href="https://docs.aegis-stack.io/services/insights/">Insights</a></strong></td>
+<td>Adoption metrics across GitHub, PyPI, Plausible, Reddit</td>
+<td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a></td>
+</tr>
+<tr>
+<td><strong><a href="https://docs.aegis-stack.io/services/meetings/">Meetings</a></strong></td>
+<td>A bot that joins Google Meet as its own agent: transcript, notes, threads, people, what keeps coming up, joined from its calendar</td>
+<td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a> <a class="glightbox" href="https://img.shields.io/badge/-experimental-orange" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Experimental" src="https://img.shields.io/badge/-experimental-orange" /></a></td>
+</tr>
+<tr>
+<td><strong><a href="https://docs.aegis-stack.io/services/payment/">Payment</a></strong></td>
+<td>Stripe checkout, subscriptions, refunds, disputes</td>
+<td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a></td>
+</tr>
+<tr>
+<td><strong><a href="https://docs.aegis-stack.io/services/research/">Research</a></strong></td>
+<td>Outside posts and threads, collected by saved searches</td>
+<td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a></td>
+</tr>
+</tbody>
+</table>
+<!-- /aegis:services -->
 
-    subgraph "Components Layer (Infrastructure)"
-        Backend["Backend&lt;br/&gt;FastAPI Routes"]
-        Database["Database&lt;br/&gt;SQLite / PostgreSQL"]
-        Worker["Worker&lt;br/&gt;arq / Dramatiq / TaskIQ"]
-        Scheduler["⏰ Scheduler&lt;br/&gt;APScheduler"]
-        Observability["Observability&lt;br/&gt;Logfire"]
-        Browser["Browser&lt;br/&gt;Remote Chromium"]
-        Cache["Cache&lt;br/&gt;Redis Sessions&lt;br/&gt;Coming Soon"]
-    end
-
-    Auth --&gt; Backend
-    Auth --&gt; Database
-    AI --&gt; Backend
-    Blog --&gt; Backend
-    Blog --&gt; Database
-    Comms --&gt; Backend
-    Payment --&gt; Backend
-    Payment --&gt; Database
-    Insights --&gt; Backend
-    Insights --&gt; Database
-    Meetings --&gt; Backend
-    Meetings --&gt; Database
-    Meetings --&gt; Browser
-</code></pre>
 <div class="admonition tip">
 <p class="admonition-title">Architectural Guidance</p>
 <p>This page covers <strong>which services are available</strong> and how to add them to your project. For detailed patterns on <strong>how services integrate with components</strong> and how to structure your code, see <strong><a href="../integration-patterns/">Integration Patterns</a></strong>.</p>
@@ -6804,7 +6833,8 @@ is one flat package or four small ones. Every service is checked against
 this standard as a pattern: <strong>Overseer &gt; Patterns &gt; Service parts</strong> shows
 which parts each one has and which rules it breaks, with the file and line
 that shows it, and <code>patterns --format json</code> prints the same report. The
-enforced rules (reads in queries, every job wired, a health check) are held
+enforced rules (reads in queries, every job wired, a health check, other
+services through their facade) are held
 by <code>tests/services/test_service_layout.py</code>; reads still outside a queries
 module are recorded there as debt that may only shrink. A module at a
 service's top level that the table above does not name is flagged too
@@ -6818,7 +6848,10 @@ the service and each piece says the same about its own files.
 A service that imports another's <code>domains/</code>, <code>adapters/</code>, <code>queries</code> or
 <code>models</code> is flagged too (<strong>Other services through their facade</strong>), each
 import's line listed: it depends on how the other is organised, not on
-what it offers. <code>patterns touches</code> takes a change's files (as arguments,
+what it offers. A facade composed of many modules (AI's and finance's
+<code>service/</code> packages) costs nothing to import: what its <code>if TYPE_CHECKING:</code>
+block imports is all it offers, each name loaded on first use
+(<code>app/services/shared/facade.py</code>). <code>patterns touches</code> takes a change's files (as arguments,
 or one per line from <code>git diff --name-only</code>) and says, from the app's
 ontology, which parts own them, which parts depend on those, and the
 tables, routes and jobs they define; Markdown for a pull request's job

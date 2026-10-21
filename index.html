@@ -6672,6 +6672,7 @@
 <p><strong>Components</strong> are infrastructure pieces (database, workers, scheduler, cache). <strong>Services</strong> are business capabilities (auth, AI, payments, comms).</p>
 <p><strong>Don't worry about what you pick today.</strong> Add anything later with a single command and remove what you outgrow. Where a change touches files you've edited, your edits are merged in, and anything that can't merge cleanly is marked for you to review.</p>
 <h3 id="components">Components</h3>
+<!-- aegis:components -->
 <table>
 <thead>
 <tr>
@@ -6697,18 +6698,8 @@
 <td><a class="glightbox" href="https://img.shields.io/badge/-always_on-2ea043" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Always" src="https://img.shields.io/badge/-always_on-2ea043" /></a></td>
 </tr>
 <tr>
-<td><strong><a href="components/web-frontend/">Web Frontend</a></strong></td>
-<td>Server-rendered pages at <code>/</code>: Jinja2 + htmx + Alpine, Tailwind/DaisyUI styling</td>
-<td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a></td>
-</tr>
-<tr>
 <td><strong><a href="components/browser/">Browser</a></strong></td>
 <td>Remote Chromium in its own container, driven over Playwright: JavaScript pages, sign-ins, a bot that joins a meeting</td>
-<td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a></td>
-</tr>
-<tr>
-<td><strong><a href="components/">Cache</a></strong></td>
-<td>Redis for caching, sessions, pub/sub</td>
 <td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a></td>
 </tr>
 <tr>
@@ -6717,7 +6708,12 @@
 <td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a></td>
 </tr>
 <tr>
-<td><strong><a href="components/">Inference</a></strong></td>
+<td><strong><a href="components/deploy/">Deploy</a></strong></td>
+<td>Deployment target (Docker Compose), read by the Overseer</td>
+<td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a></td>
+</tr>
+<tr>
+<td><strong><a href="components/inference/">Inference</a></strong></td>
 <td>Local AI models via Ollama</td>
 <td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a></td>
 </tr>
@@ -6737,8 +6733,8 @@
 <td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a></td>
 </tr>
 <tr>
-<td><strong><a href="components/storage/">Storage</a></strong></td>
-<td>S3 object storage for the files an app keeps, SeaweedFS in dev</td>
+<td><strong><a href="components/redis/">Redis</a></strong></td>
+<td>Redis for caching, sessions, pub/sub</td>
 <td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a></td>
 </tr>
 <tr>
@@ -6752,14 +6748,27 @@
 <td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a></td>
 </tr>
 <tr>
+<td><strong><a href="components/storage/">Storage</a></strong></td>
+<td>S3 object storage for the files an app keeps, SeaweedFS in dev</td>
+<td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a></td>
+</tr>
+<tr>
+<td><strong><a href="components/web-frontend/">Web Frontend</a></strong></td>
+<td>Server-rendered pages at <code>/</code>: Jinja2 + htmx + Alpine, Tailwind/DaisyUI styling</td>
+<td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a></td>
+</tr>
+<tr>
 <td><strong><a href="components/worker/">Worker</a></strong></td>
 <td>Pluggable Arq, Taskiq, or Dramatiq</td>
 <td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a></td>
 </tr>
 </tbody>
 </table>
+<!-- /aegis:components -->
+
 <p><a href="components/">Components Docs →</a></p>
 <h3 id="services">Services</h3>
+<!-- aegis:services -->
 <table>
 <thead>
 <tr>
@@ -6795,22 +6804,34 @@
 <td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a></td>
 </tr>
 <tr>
+<td><strong><a href="services/finance/">Finance</a></strong></td>
+<td>Personal finance aggregation (accounts, transactions, net worth, import)</td>
+<td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a> <a class="glightbox" href="https://img.shields.io/badge/-experimental-orange" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Experimental" src="https://img.shields.io/badge/-experimental-orange" /></a></td>
+</tr>
+<tr>
 <td><strong><a href="services/insights/">Insights</a></strong></td>
 <td>Adoption metrics across GitHub, PyPI, Plausible, Reddit</td>
 <td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a></td>
 </tr>
 <tr>
 <td><strong><a href="services/meetings/">Meetings</a></strong></td>
-<td>A bot that joins Google Meet as its own agent: transcript, notes, threads, people, what keeps coming up, joined from its calendar (experimental)</td>
+<td>A bot that joins Google Meet as its own agent: transcript, notes, threads, people, what keeps coming up, joined from its calendar</td>
+<td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a> <a class="glightbox" href="https://img.shields.io/badge/-experimental-orange" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Experimental" src="https://img.shields.io/badge/-experimental-orange" /></a></td>
+</tr>
+<tr>
+<td><strong><a href="services/payment/">Payment</a></strong></td>
+<td>Stripe checkout, subscriptions, refunds, disputes</td>
 <td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a></td>
 </tr>
 <tr>
-<td><strong><a href="services/payment/">Payments</a></strong></td>
-<td>Stripe checkout, subscriptions, refunds, disputes</td>
+<td><strong><a href="services/research/">Research</a></strong></td>
+<td>Outside posts and threads, collected by saved searches</td>
 <td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a></td>
 </tr>
 </tbody>
 </table>
+<!-- /aegis:services -->
+
 <p><a href="services/">Services Docs →</a></p>
 <h3 id="plugins">Plugins</h3>
 <p>What the built-in services don't cover can come from a plugin: a Python package that adds routes, tables, a CLI and a dashboard card, and goes in and out the same way (<code>aegis add &lt;name&gt;</code>, <code>aegis remove &lt;name&gt;</code>). Browse them at <a href="https://aegis-stack.io/plugins">aegis-stack.io/plugins</a> or with <code>aegis plugins search</code>, and start your own with <code>aegis plugins create</code>.</p>

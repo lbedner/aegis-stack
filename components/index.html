@@ -867,10 +867,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#component-architecture" class="md-nav__link">
+  <a href="#components" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Component Architecture
+        Components
       
     </span>
   </a>
@@ -6324,10 +6324,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#component-architecture" class="md-nav__link">
+  <a href="#components" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Component Architecture
+        Components
       
     </span>
   </a>
@@ -6383,32 +6383,101 @@
 <li><strong>Update templates</strong>: Stay current with upstream improvements</li>
 </ul>
 <p>For complete workflows with real-world examples, see <strong><a href="../evolving-your-stack/">Evolving Your Stack →</a></strong></p>
-<h2 id="component-architecture">Component Architecture</h2>
-<pre class="mermaid"><code>graph TB
-    subgraph "Always Included"
-        API["FastAPI Backend&lt;br/&gt;REST API + Health"]
-        Frontend["Flet Frontend&lt;br/&gt;Cross-platform UI"]
-        CLI["CLI Commands&lt;br/&gt;Management Interface"]
-    end
+<h2 id="components">Components</h2>
+<!-- aegis:components -->
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>What you get</th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong><a href="https://docs.aegis-stack.io/components/backend/">Backend</a></strong></td>
+<td>FastAPI on uvicorn or granian, lifecycle hooks, in-memory request metrics, API load testing for every route</td>
+<td><a class="glightbox" href="https://img.shields.io/badge/-always_on-2ea043" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Always" src="https://img.shields.io/badge/-always_on-2ea043" /></a></td>
+</tr>
+<tr>
+<td><strong><a href="https://docs.aegis-stack.io/cli-reference/">CLI</a></strong></td>
+<td>Typer, first-class system interface</td>
+<td><a class="glightbox" href="https://img.shields.io/badge/-always_on-2ea043" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Always" src="https://img.shields.io/badge/-always_on-2ea043" /></a></td>
+</tr>
+<tr>
+<td><strong><a href="https://docs.aegis-stack.io/components/frontend/">Frontend</a></strong></td>
+<td>Flet, ships with the Overseer system dashboard</td>
+<td><a class="glightbox" href="https://img.shields.io/badge/-always_on-2ea043" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Always" src="https://img.shields.io/badge/-always_on-2ea043" /></a></td>
+</tr>
+<tr>
+<td><strong><a href="https://docs.aegis-stack.io/components/browser/">Browser</a></strong></td>
+<td>Remote Chromium in its own container, driven over Playwright: JavaScript pages, sign-ins, a bot that joins a meeting</td>
+<td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a></td>
+</tr>
+<tr>
+<td><strong><a href="https://docs.aegis-stack.io/components/database/">Database</a></strong></td>
+<td>Postgres (self-hosted or Neon serverless) or SQLite + SQLModel ORM</td>
+<td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a></td>
+</tr>
+<tr>
+<td><strong><a href="https://docs.aegis-stack.io/components/deploy/">Deploy</a></strong></td>
+<td>Deployment target (Docker Compose), read by the Overseer</td>
+<td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a></td>
+</tr>
+<tr>
+<td><strong><a href="https://docs.aegis-stack.io/components/inference/">Inference</a></strong></td>
+<td>Local AI models via Ollama</td>
+<td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a></td>
+</tr>
+<tr>
+<td><strong><a href="https://docs.aegis-stack.io/components/ingress/">Ingress</a></strong></td>
+<td>Traefik v3 reverse proxy with TLS</td>
+<td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a></td>
+</tr>
+<tr>
+<td><strong><a href="https://docs.aegis-stack.io/components/mcp/">MCP</a></strong></td>
+<td>Serves the app's own tools to Claude Desktop, Claude Code or a local model over MCP: the tools you grant, never a write</td>
+<td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a></td>
+</tr>
+<tr>
+<td><strong><a href="https://docs.aegis-stack.io/components/observability/">Observability</a></strong></td>
+<td>Pydantic Logfire tracing + metrics + logging</td>
+<td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a></td>
+</tr>
+<tr>
+<td><strong><a href="https://docs.aegis-stack.io/components/redis/">Redis</a></strong></td>
+<td>Redis for caching, sessions, pub/sub</td>
+<td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a></td>
+</tr>
+<tr>
+<td><strong><a href="https://docs.aegis-stack.io/components/scheduler/">Scheduler</a></strong></td>
+<td>APScheduler with persistent jobs</td>
+<td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a></td>
+</tr>
+<tr>
+<td><strong><a href="https://docs.aegis-stack.io/components/secrets/">Secrets</a></strong></td>
+<td>Encrypted credential store: keys set while the app runs, checked with the provider on paste, never shown again</td>
+<td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a></td>
+</tr>
+<tr>
+<td><strong><a href="https://docs.aegis-stack.io/components/storage/">Storage</a></strong></td>
+<td>S3 object storage for the files an app keeps, SeaweedFS in dev</td>
+<td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a></td>
+</tr>
+<tr>
+<td><strong><a href="https://docs.aegis-stack.io/components/web-frontend/">Web Frontend</a></strong></td>
+<td>Server-rendered pages at <code>/</code>: Jinja2 + htmx + Alpine, Tailwind/DaisyUI styling</td>
+<td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a></td>
+</tr>
+<tr>
+<td><strong><a href="https://docs.aegis-stack.io/components/worker/">Worker</a></strong></td>
+<td>Pluggable Arq, Taskiq, or Dramatiq</td>
+<td><a class="glightbox" href="https://img.shields.io/badge/-optional-blue" data-type="image" data-width="100%" data-height="auto" data-desc-position="bottom"><img alt="Optional" src="https://img.shields.io/badge/-optional-blue" /></a></td>
+</tr>
+</tbody>
+</table>
+<!-- /aegis:components -->
 
-    subgraph "Optional Infrastructure"
-        Scheduler["Scheduler&lt;br/&gt;APScheduler Jobs"]
-        Database["Database&lt;br/&gt;SQLite / PostgreSQL"]
-        Worker["Worker Queues&lt;br/&gt;arq / Dramatiq / TaskIQ"]
-        Ingress["Ingress&lt;br/&gt;Traefik Proxy"]
-        Observability["Observability&lt;br/&gt;Logfire"]
-        Cache["Cache Layer&lt;br/&gt;Redis Sessions"]
-        Secrets["Secrets&lt;br/&gt;Encrypted Key Store"]
-        Browser["Browser&lt;br/&gt;Remote Chromium"]
-    end
-
-    API --&gt; Frontend
-    API --&gt; CLI
-
-    Scheduler -.-&gt;|persistence| Database
-    Worker -.-&gt;|requires| Cache
-    Scheduler -.-&gt;|backup job| Database
-    Secrets -.-&gt;|requires| Database</code></pre>
 <h2 id="component-deployment">Component Deployment</h2>
 <p>Understanding how components deploy and scale is crucial for architectural decisions:</p>
 <pre class="mermaid"><code>graph TB

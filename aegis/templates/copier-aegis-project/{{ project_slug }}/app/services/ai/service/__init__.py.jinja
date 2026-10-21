@@ -1,50 +1,117 @@
-"""AI service facade.
+"""AI service facade: what callers outside it import (``app.services.shared.facade``)."""
 
-``AIService`` is composed from one mixin per concern, chained so each
-layer may call the ones beneath it:
+# ruff: noqa: F401
 
-    AIServiceBase        state: settings, config, conversation manager
-      └─ UsageMixin      token extraction, pricing, usage rollups
-         └─ ContextsMixin   {% if ai_rag %}the code RAG retrieves for a turn{% else %}empty: RAG's retrieval, when installed{% endif %}
-            └─ PromptMixin    persona overlay + per-request runtime construction
-               └─ TurnMixin      the agent for a turn, typed or spoken
-                  └─ ChatMixin      a turn's conversation setup and teardown
-                     └─ StreamingMixin  the turn: stream_chat, and chat run to its end
-                        └─ VoiceMixin     {% if ai_voice %}STT -> chat -> TTS{% else %}empty (voice off){% endif %}
-    StatusMixin          conversations, status, validation (base only)
+from typing import TYPE_CHECKING
 
-The composition below is the whole class - it declares no methods of its
-own, and this package keeps the historical import path working:
-``from app.services.ai.service import AIService``.
-"""
+from app.services.shared import facade
 
-{% if ai_framework == "pydantic-ai" and ai_backend != "memory" -%}
-# One agent writing once (the meetings' notes, the patterns review): how
-# another service reaches it, through this facade.
-from app.services.ai.domains.llm.writer import writer
-{% endif -%}
-from app.services.ai.service.base import (
-    AIServiceError,
-    ConversationError,
-    ProviderError,
-)
-from app.services.ai.service.status import StatusMixin
-from app.services.ai.service.voice import VoiceMixin
-
-__all__ = [
-    "AIService",
-    "AIServiceError",
-    "ConversationError",
-    "ProviderError",
-{%- if ai_framework == "pydantic-ai" and ai_backend != "memory" %}
-    "writer",
+if TYPE_CHECKING:
+{%- if ai_backend != "memory" %}
+    from app.services.ai.domains.chat import cards
 {%- endif %}
-]
+    from app.services.ai.domains.chat.agent_loader import (
+{%- if ai_framework == "pydantic-ai" and ai_backend != "memory" %}
+        CODE_MODE_TOOL_CALLS_LIMIT,
+{%- endif %}
+        DEFAULT_AGENT_SLUG,
+        AgentConfig,
+{%- if ai_framework == "pydantic-ai" and ai_backend != "memory" %}
+        agent_capabilities,
+{%- endif %}
+        resolve_agent,
+    )
+{%- if ai_backend != "memory" %}
+    from app.services.ai.domains.chat.agent_registry import (
+        AgentNotFoundError,
+        InvalidAgentUpdateError,
+        prompt_history,
+        seed_agent,
+        update_agent,
+    )
+{%- endif %}
+    from app.services.ai.domains.chat.fetchers import FetchContext, register_fetcher
+{%- if ai_backend != "memory" %}
+    from app.services.ai.domains.chat.memory_modules import (
+        list_memory_modules,
+        update_memory_module,
+    )
+{%- endif %}
+    from app.services.ai.domains.chat.prompts import DEFAULT_SYSTEM_PROMPT
+    from app.services.ai.domains.chat.tools import resolve_tools
+{%- if ai_backend != "memory" %}
+    from app.services.ai.domains.chat.user_memory import (
+        DEFAULT_MEMORY_USER_ID,
+        MEMORY_CATEGORIES,
+        delete_user_fact,
+        update_user_fact,
+    )
+    from app.services.ai.domains.llm import active_model
+{%- endif %}
+    from app.services.ai.domains.llm.base import ProviderError as ProviderSetupError
+{%- if ai_backend != "memory" %}
+    from app.services.ai.domains.llm.etl import (
+        CatalogStats,
+        SyncResult,
+        get_catalog_stats,
+        sync_llm_catalog,
+    )
+    from app.services.ai.domains.llm.etl.queries import (
+        catalog_is_populated,
+        ollama_models_present,
+    )
+    from app.services.ai.domains.llm.llm_service import (
+        clear_active_model,
+        get_current_config,
+        get_model_info,
+        list_modalities,
+        list_models,
+        list_vendors,
+        set_active_model,
+    )
+{%- endif %}
+    from app.services.ai.domains.llm.provider_management import (
+        check_provider_dependency_installed,
+        get_existing_api_key,
+    )
+    from app.services.ai.domains.llm.providers import model_for
+{%- if ai_backend != "memory" %}
+    from app.services.ai.domains.llm.queries import org_icons, recent_model_ids
+{%- endif %}
+{%- if ai_framework == "pydantic-ai" and ai_backend != "memory" %}
+    from app.services.ai.domains.llm.writer import writer
+{%- endif %}
+{%- if ai_backend != "memory" %}
+    from app.services.ai.domains.spend.recording import extract_usage, record_usage
+    from app.services.ai.domains.spend.windows import spend_windows
+{%- endif %}
+{%- if ai_voice and ai_backend != "memory" %}
+    from app.services.ai.domains.voice import live_engines, profiles, realtime_calls
+{%- endif %}
+{%- if ai_voice %}
+    from app.services.ai.domains.voice.models import SpeechRequest
+    from app.services.ai.domains.voice.spoken import to_spoken
+    from app.services.ai.domains.voice.tts import TTSService
+{%- endif %}
+    from app.services.ai.models import AIProvider
+{%- if ai_backend != "memory" %}
+    from app.services.ai.models.agents import Agent, AgentPromptChange, MemoryModule
+    from app.services.ai.models.llm import (
+        LargeLanguageModel,
+        LLMDeployment,
+        LLMModality,
+        LLMOrg,
+        LLMPrice,
+    )
+{%- endif %}
+{%- if ai_voice and ai_backend != "memory" %}
+    from app.services.ai.models.voice import LiveEngine, VoiceProfile
+{%- endif %}
+    from app.services.ai.service.ai_service import AIService
+    from app.services.ai.service.base import (
+        AIServiceError,
+        ConversationError,
+        ProviderError,
+    )
 
-
-class AIService(VoiceMixin, StatusMixin):
-    """
-    Core AI service for chat functionality.
-
-    Handles chat completions, conversation management, and provider abstraction.
-    """
+__getattr__, __all__ = facade.lazy(__name__, __file__)

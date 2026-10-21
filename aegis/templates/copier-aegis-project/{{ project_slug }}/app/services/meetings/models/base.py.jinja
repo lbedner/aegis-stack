@@ -1,0 +1,38 @@
+"""What every meetings table shares: the owner column's foreign key, the
+platforms, a meeting's statuses and how they group, and the name for a
+line nobody's caption named."""
+
+from enum import StrEnum
+
+# Who said a line nobody's caption named.
+UNKNOWN = "Unknown"
+
+# An owner column references ``user.id`` only when the stack has auth (a
+# deleted user takes their meetings and people with them); without it the
+# owner is a plain nullable integer, NULL on every row.
+_OWNER_FK: str | None = {% if include_auth %}"user.id"{% else %}None{% endif %}
+
+
+class Platform(StrEnum):
+    MEET = "meet"
+    TEAMS = "teams"
+    ZOOM = "zoom"
+
+
+class MeetingStatus(StrEnum):
+    REQUESTED = "requested"
+    JOINING = "joining"
+    WAITING = "waiting"  # in the lobby, waiting to be admitted
+    IN_CALL = "in_call"
+    LEAVING = "leaving"  # asked to leave; the bot goes on its next look
+    LEFT = "left"
+    FAILED = "failed"
+
+
+# A meeting the bot is on its way into or in, and not asked to leave.
+STILL_WANTED = (MeetingStatus.JOINING, MeetingStatus.WAITING, MeetingStatus.IN_CALL)
+# Those, and one it is on its way out of: its run beats (``seen_at``) meanwhile.
+IN_PROGRESS = (*STILL_WANTED, MeetingStatus.LEAVING)
+NOT_DONE = (MeetingStatus.REQUESTED, *IN_PROGRESS)
+# One the bot can still be asked to leave (``ask_to_leave``).
+LEAVABLE = (MeetingStatus.REQUESTED, *STILL_WANTED)

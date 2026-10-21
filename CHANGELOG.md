@@ -22,6 +22,37 @@
   history row. The jobs API names each job's run (`run_id`: the worker task
   the store handed it to). Work logs as it always did; nothing to call.
 
+### Changed
+
+- **Meetings keeps its logic in domains.** The bot's run, Meet's page, the
+  call's audio and the bot's sign-in move to `domains/bot/` (the run's row
+  keeping in `domains/bot/row.py`), the notes writer to
+  `domains/notes/writer.py`, and every statement the service ran to a
+  `queries.py`. The models become a package, one module per domain.
+  `app.services.meetings.service` still offers `run_meeting`, `send_bot`,
+  `transition`, `heartbeat`, `fail_interrupted` and `write_captions`, loaded
+  when used; `app.services.meetings.models` still offers every model.
+- **The README's and the docs' component and service tables come from the
+  specs.** `aegis/core/catalog_docs.py` renders them between markers in
+  `README.md`, `docs/components/index.md` and `docs/services/index.md` (the
+  two mermaid overviews go), `make readme` rewrites them, and a test fails on
+  drift. Deploy, finance and research now appear; each part's `description`
+  carries the README's wording, `PluginSpec.title` names the few parts whose
+  name is not their title, redis links to its own page, and meetings is
+  flagged experimental. The shadowed `docs/index.md` is deleted.
+- **AI and finance are reached through their facades, and the facades cost
+  nothing to import.** Code outside a service imports it from
+  `app.services.<x>.service` only. A facade that is a package (AI's and
+  finance's) offers what its `if TYPE_CHECKING:` block imports, each name
+  loaded on first use (`app/services/shared/facade.py`), so importing the AI
+  facade went from about 1 s to what every app module already loads.
+  `AIService` and `FinanceService` keep their import path. The parts
+  pattern's **Other services through their facade** rule is now enforced.
+- **Illiana's pull request review reads as her talking to you.** Each rule
+  that fired is said once, with her note on it and its places (folded past
+  three); her summary no longer repeats what the findings and the touched
+  parts already show, and what the change touches is folded away.
+
 ### Fixed
 
 - **Illiana's `ontology` tool no longer fails on a part that read Postgres's

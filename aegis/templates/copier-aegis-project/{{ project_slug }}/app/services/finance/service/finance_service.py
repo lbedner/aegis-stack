@@ -1,6 +1,4 @@
-"""Finance service facade.
-
-``FinanceService`` is a thin delegating facade: every method forwards to a
+"""``FinanceService``: a thin delegating facade: every method forwards to a
 domain module (``accounts``, ``transactions``, ``budgets``, ...) as
 ``module.func(self.db, ...)``. New code should call the domain modules
 directly; the facade exists so routes, jobs, and the CLI keep a single
@@ -9,7 +7,8 @@ injection point (``deps.get_finance_service``).
 One mixin per domain area, each sitting opposite the module it forwards
 to, so "where does the facade expose budgets" has an answer that is a
 filename rather than a line number. The composition below is the whole
-class - it declares no methods of its own.
+class - it declares no methods of its own. Callers import it from the
+facade: ``from app.services.finance.service import FinanceService``.
 
 Every read statement lives in a per-package ``queries.py`` under
 ``domains/`` and ``adapters/``; domain modules
@@ -18,10 +17,8 @@ NOT commit - the caller (route / CLI / scheduler job) owns the transaction
 boundary. Rows are owner-scoped by ``owner_user_id``.
 """
 
-# Aliased, and it has to be: importing ``service.budgets`` below binds that
-# submodule onto this package as the attribute ``budgets``, which silently
-# replaces an unaliased ``planning.budgets`` import and turns the gate
-# mirrors underneath into AttributeErrors.
+# Aliased: ``budgets`` and ``recurring`` also name the mixin modules beside
+# this one, and the gate mirrors underneath want planning's.
 from app.services.finance.domains.planning import budgets as planning_budgets
 from app.services.finance.domains.planning import recurring as planning_recurring
 from app.services.finance.service.accounts import AccountsMixin
@@ -64,6 +61,3 @@ class FinanceService(
     _BUDGET_UNUSUAL_BAND = planning_budgets._BUDGET_UNUSUAL_BAND
     _STREAM_DIRECTIONS = planning_recurring._STREAM_DIRECTIONS
     _STREAM_FREQUENCIES = planning_recurring._STREAM_FREQUENCIES
-
-
-__all__ = ["FinanceService"]

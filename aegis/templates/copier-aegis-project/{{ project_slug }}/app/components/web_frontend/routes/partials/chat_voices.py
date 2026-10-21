@@ -22,9 +22,7 @@ from app.components.web_frontend.chat_surface import ChatSurface
 from app.components.web_frontend.rendering import dialog, templates, with_toast
 from app.core.config import settings
 from app.core.db import get_async_db
-from app.services.ai.domains.voice import profiles
-from app.services.ai.domains.voice.tts import TTSService
-from app.services.ai.models.voice import VoiceProfile
+from app.services.ai.service import TTSService, VoiceProfile, profiles
 
 TEMPLATE = "partials/chat/voices.html"
 

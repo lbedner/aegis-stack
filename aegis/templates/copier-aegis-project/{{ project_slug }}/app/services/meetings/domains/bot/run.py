@@ -19,29 +19,32 @@ from pathlib import Path
 from app.core.config import settings
 from app.core.db import get_async_session
 from app.core.log import logger
-from app.services.meetings.audio import Hearing
 from app.services.meetings.domains.accounts.service import login_secret_of, pick
+from app.services.meetings.domains.bot.audio import Hearing
 from app.services.meetings.domains.bot.dispatch import start_meeting
+from app.services.meetings.domains.bot.meet import (
+    CallState,
+    MeetPage,
+    merge_caption,
+    open_meet,
+)
+from app.services.meetings.domains.bot.row import (
+    heartbeat,
+    transition,
+    write_captions,
+)
 from app.services.meetings.domains.people.participants import keep_heard
 from app.services.meetings.domains.people.service import guides_writer
 from app.services.meetings.domains.series.service import themes_writer
-from app.services.meetings.meet import CallState, MeetPage, merge_caption, open_meet
 from app.services.meetings.models import (
+    NOT_DONE,
+    STILL_WANTED,
     BotAccount,
     Caption,
     Meeting,
     MeetingStatus,
 )
-from app.services.meetings.service import (
-    JOINS,
-    NOT_DONE,
-    STILL_WANTED,
-    MeetingsService,
-    heartbeat,
-    notes_writer,
-    transition,
-    write_captions,
-)
+from app.services.meetings.service import JOINS, MeetingsService, notes_writer
 
 POLL_SECONDS = 2.0
 # Said in every call the bot joins, after who it is: nobody is recorded

@@ -24,7 +24,7 @@ class MeetingsSettings(BaseSettings):
     # agent's is kept under ``<this>__<NAME>``.
     MEETINGS_BOT_CALENDAR_SECRET: str | None = None
     # A folder to keep each meeting's audio in, one WAV per speaker under the
-    # meeting's id (``meetings.audio``); unset, the audio is heard, not kept.
+    # meeting's id (``meetings.domains.bot.audio``); unset, the audio is heard, not kept.
     MEETINGS_KEEP_AUDIO_DIR: Annotated[
         str | None,
         Configurable(

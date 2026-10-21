@@ -15,8 +15,8 @@ from app.core.config import settings
 from app.core.log import logger
 from app.core.time import as_stored, utcnow
 from app.services.meetings.domains.accounts.service import agents, secret_for
+from app.services.meetings.domains.bot.login import CALENDAR
 from app.services.meetings.domains.notes.queries import delete_in
-from app.services.meetings.login import CALENDAR
 from app.services.meetings.models import BotAccount, CalendarEvent
 from app.services.meetings.service import MeetingsService, can_join
 
@@ -112,7 +112,7 @@ async def send_due(db: AsyncSession, now: datetime | None = None) -> list[int]:
     meetings sent, by id."""
     # Here, not at the top: the bot loads the browser driver, which only a
     # send needs, not every run of the scheduler.
-    from app.services.meetings.bot import send_bot
+    from app.services.meetings.domains.bot.run import send_bot
 
     if not settings.MEETINGS_JOIN_FROM_CALENDAR:
         return []

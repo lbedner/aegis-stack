@@ -52,7 +52,7 @@ OWNERS = (
     "app.services.finance.adapters.providers.plaid_keys",
     "app.services.finance.adapters.providers.snaptrade",
     "app.services.insights.adapters.collectors.base",
-    "app.services.meetings.login",
+    "app.services.meetings.domains.bot.login",
 )
 # Shorter than this, the last four characters are most of the value.
 HINT_MIN_LENGTH = 12

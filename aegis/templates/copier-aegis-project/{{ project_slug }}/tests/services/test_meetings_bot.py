@@ -1,4 +1,4 @@
-"""The meeting bot's run (``bot.run_meeting``): it asks to join, waits to be
+"""The meeting bot's run (``domains.bot.run.run_meeting``): it asks to join, waits to be
 admitted, says who it is, stays until there is a reason to leave, and
 writes each step on the meeting row, never over a leave request or a
 failure written elsewhere. A scripted call stands in for the browser; the
@@ -13,8 +13,8 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.config import settings
-from app.services.meetings import bot
-from app.services.meetings.meet import CallState
+from app.services.meetings.domains.bot import run as bot
+from app.services.meetings.domains.bot.meet import CallState
 from app.services.meetings.models import (
     Caption,
     Meeting,

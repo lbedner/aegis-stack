@@ -23,38 +23,38 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM meeting",
-      "file": "app/services/meetings/service.py",
-      "function": "meetings_counts"
+      "file": "app/services/meetings/queries.py",
+      "function": "counts"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM meeting ORDER BY meeting.created_at DESC, meeting.id DESC LIMIT :param_1",
-      "file": "app/services/meetings/service.py",
-      "function": "list_meetings"
+      "file": "app/services/meetings/queries.py",
+      "function": "meetings_of"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM meeting WHERE meeting.id = :id_1",
-      "file": "app/services/meetings/service.py",
-      "function": "get"
+      "file": "app/services/meetings/queries.py",
+      "function": "meeting"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM meeting WHERE meeting.id = :id_1 AND meeting.owner_user_id = :owner_user_id_1",
-      "file": "app/services/meetings/service.py",
-      "function": "get"
+      "file": "app/services/meetings/queries.py",
+      "function": "meeting"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting WHERE meeting.id = :pk_1",
+      "file": "app/services/meetings/domains/bot/row.py",
+      "function": "write_captions"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM meeting WHERE meeting.id = :pk_1",
       "file": "app/services/meetings/domains/notes/service.py",
       "function": "keep_notes"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM meeting WHERE meeting.id = :pk_1",
-      "file": "app/services/meetings/service.py",
-      "function": "write_captions"
     },
     {
       "kind": "repeated_statement",
@@ -305,7 +305,7 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM meeting_transcript_line LEFT OUTER JOIN meeting_participant ON meeting_transcript_line.participant_id = meeting_participant.id LEFT OUTER JOIN meeting_person ON meeting_person.id = meeting_participant.person_id WHERE meeting_transcript_line.meeting_id = :meeting_id_1 ORDER BY meeting_transcript_line.start_seconds, meeting_transcript_line.id",
-      "file": "app/services/meetings/service.py",
+      "file": "app/services/meetings/queries.py",
       "function": "transcript"
     },
     {

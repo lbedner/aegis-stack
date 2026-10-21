@@ -19,7 +19,7 @@ from pydantic import ValidationError
 from app.components.web_frontend import chat_surface as chat
 from app.components.web_frontend.chat_surface import ChatSurface
 from app.components.web_frontend.rendering import dialog, templates
-from app.services.ai.domains.chat import cards
+from app.services.ai.service import cards
 
 MISSING = "partials/chat/card_missing.html"
 

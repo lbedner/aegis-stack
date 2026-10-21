@@ -20,35 +20,28 @@ Unlike most starters that lock you in at `init`, Aegis Stack lets you evolve:
 
 For complete workflows with real-world examples, see **[Evolving Your Stack →](../evolving-your-stack.md)**
 
-## Component Architecture
+## Components
 
-```mermaid
-graph TB
-    subgraph "Always Included"
-        API["FastAPI Backend<br/>REST API + Health"]
-        Frontend["Flet Frontend<br/>Cross-platform UI"]
-        CLI["CLI Commands<br/>Management Interface"]
-    end
-    
-    subgraph "Optional Infrastructure"
-        Scheduler["Scheduler<br/>APScheduler Jobs"]
-        Database["Database<br/>SQLite / PostgreSQL"]
-        Worker["Worker Queues<br/>arq / Dramatiq / TaskIQ"]
-        Ingress["Ingress<br/>Traefik Proxy"]
-        Observability["Observability<br/>Logfire"]
-        Cache["Cache Layer<br/>Redis Sessions"]
-        Secrets["Secrets<br/>Encrypted Key Store"]
-        Browser["Browser<br/>Remote Chromium"]
-    end
-    
-    API --> Frontend
-    API --> CLI
-    
-    Scheduler -.->|persistence| Database
-    Worker -.->|requires| Cache
-    Scheduler -.->|backup job| Database
-    Secrets -.->|requires| Database
-```
+<!-- aegis:components -->
+| Component | What you get | |
+|---|---|---|
+| **[Backend](https://docs.aegis-stack.io/components/backend/)** | FastAPI on uvicorn or granian, lifecycle hooks, in-memory request metrics, API load testing for every route | ![Always](https://img.shields.io/badge/-always_on-2ea043) |
+| **[CLI](https://docs.aegis-stack.io/cli-reference/)** | Typer, first-class system interface | ![Always](https://img.shields.io/badge/-always_on-2ea043) |
+| **[Frontend](https://docs.aegis-stack.io/components/frontend/)** | Flet, ships with the Overseer system dashboard | ![Always](https://img.shields.io/badge/-always_on-2ea043) |
+| **[Browser](https://docs.aegis-stack.io/components/browser/)** | Remote Chromium in its own container, driven over Playwright: JavaScript pages, sign-ins, a bot that joins a meeting | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Database](https://docs.aegis-stack.io/components/database/)** | Postgres (self-hosted or Neon serverless) or SQLite + SQLModel ORM | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Deploy](https://docs.aegis-stack.io/components/deploy/)** | Deployment target (Docker Compose), read by the Overseer | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Inference](https://docs.aegis-stack.io/components/inference/)** | Local AI models via Ollama | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Ingress](https://docs.aegis-stack.io/components/ingress/)** | Traefik v3 reverse proxy with TLS | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[MCP](https://docs.aegis-stack.io/components/mcp/)** | Serves the app's own tools to Claude Desktop, Claude Code or a local model over MCP: the tools you grant, never a write | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Observability](https://docs.aegis-stack.io/components/observability/)** | Pydantic Logfire tracing + metrics + logging | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Redis](https://docs.aegis-stack.io/components/redis/)** | Redis for caching, sessions, pub/sub | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Scheduler](https://docs.aegis-stack.io/components/scheduler/)** | APScheduler with persistent jobs | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Secrets](https://docs.aegis-stack.io/components/secrets/)** | Encrypted credential store: keys set while the app runs, checked with the provider on paste, never shown again | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Storage](https://docs.aegis-stack.io/components/storage/)** | S3 object storage for the files an app keeps, SeaweedFS in dev | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Web Frontend](https://docs.aegis-stack.io/components/web-frontend/)** | Server-rendered pages at `/`: Jinja2 + htmx + Alpine, Tailwind/DaisyUI styling | ![Optional](https://img.shields.io/badge/-optional-blue) |
+| **[Worker](https://docs.aegis-stack.io/components/worker/)** | Pluggable Arq, Taskiq, or Dramatiq | ![Optional](https://img.shields.io/badge/-optional-blue) |
+<!-- /aegis:components -->
 
 ## Component Deployment
 

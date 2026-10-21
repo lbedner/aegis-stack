@@ -16,7 +16,6 @@ for a pull request's job summary.
 """
 
 import contextlib
-from importlib.util import find_spec
 import io
 import json
 import os
@@ -232,13 +231,23 @@ async def review(
     previous: Path | None = None,
     commit: str = "",
 ) -> None:
-    if find_spec("app.services.ai.domains.llm.writer") is None:
+    if not _writes():
         typer.echo("patterns review needs the AI service on PydanticAI.", err=True)
         return
     fresh = pattern_check.new_spots(_findings(), source_index.project())
     earlier = previous.read_text() if previous and previous.is_file() else ""
     said = await pattern_review.review(fresh, _reach(changed), earlier, commit)
     typer.echo(said, nl=False)
+
+
+def _writes() -> bool:
+    """Whether this stack's AI service has the one-shot writer a review
+    runs on (PydanticAI, with a database)."""
+    try:
+        from app.services.ai import service as ai
+    except ImportError:  # no AI service
+        return False
+    return "writer" in ai.__all__
 
 
 def _findings() -> list[pattern_findings.Finding]:

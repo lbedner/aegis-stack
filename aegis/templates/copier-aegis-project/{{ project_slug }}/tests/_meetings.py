@@ -13,16 +13,18 @@ import pytest
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.meetings import bot
 from app.services.meetings import service as meetings_service
-from app.services.meetings.audio import RATE
+from app.services.meetings.domains.bot import run as bot
+from app.services.meetings.domains.bot.audio import RATE
+from app.services.meetings.domains.bot.login import CALENDAR, LOGIN
+from app.services.meetings.domains.bot.row import transition, write_captions
 from app.services.meetings.domains.notes.service import keep_notes
 from app.services.meetings.domains.people.kept import guides_of, keep_guide
 from app.services.meetings.domains.series import service as series_service
 from app.services.meetings.domains.series.kept import keep_series
 from app.services.meetings.domains.series.queries import series_link
-from app.services.meetings.login import CALENDAR, LOGIN
 from app.services.meetings.models import (
+    NOT_DONE,
     ActionItem,
     Caption,
     Guide,
@@ -35,12 +37,7 @@ from app.services.meetings.models import (
     Platform,
     SeriesNotes,
 )
-from app.services.meetings.service import (
-    NOT_DONE,
-    MeetingsService,
-    transition,
-    write_captions,
-)
+from app.services.meetings.service import MeetingsService
 from tests._secret_settings import use_store
 from tests._session import opens
 

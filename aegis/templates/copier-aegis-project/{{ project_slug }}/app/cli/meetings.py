@@ -12,7 +12,6 @@ from app.core import secrets
 from app.core.audit import cli_actor
 from app.core.db import get_async_session
 from app.core.formatting import format_clock, format_relative_time
-from app.services.meetings.bot import run_meeting
 from app.services.meetings.domains.accounts.service import (
     DEFAULT_AGENT,
     AgentNameError,
@@ -22,12 +21,13 @@ from app.services.meetings.domains.accounts.service import (
     login_secret_for,
     pick,
 )
-from app.services.meetings.login import (
+from app.services.meetings.domains.bot.login import (
     LoginError,
     capture_login,
     find_chrome,
     save_login,
 )
+from app.services.meetings.domains.bot.run import run_meeting
 from app.services.meetings.models import MeetingRecord
 from app.services.meetings.service import (
     MeetingNotFoundError,

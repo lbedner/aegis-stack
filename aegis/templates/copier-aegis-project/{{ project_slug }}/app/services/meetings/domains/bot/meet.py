@@ -19,8 +19,8 @@ from playwright.async_api import Page
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from app.components.browser.client import connect
-from app.services.meetings.audio import listen
-from app.services.meetings.login import LOGIN, stored_login
+from app.services.meetings.domains.bot.audio import listen
+from app.services.meetings.domains.bot.login import LOGIN, stored_login
 from app.services.meetings.models import Caption
 
 # A fake camera and microphone granted without a prompt: the bot joins with

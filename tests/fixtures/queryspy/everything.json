@@ -1751,14 +1751,20 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM meeting WHERE meeting.id = :id_1",
-      "file": "app/services/meetings/service.py",
-      "function": "get"
+      "file": "app/services/meetings/queries.py",
+      "function": "meeting"
     },
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM meeting WHERE meeting.id = :id_1 AND meeting.owner_user_id = :owner_user_id_1",
-      "file": "app/services/meetings/service.py",
-      "function": "get"
+      "file": "app/services/meetings/queries.py",
+      "function": "meeting"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting WHERE meeting.id = :pk_1",
+      "file": "app/services/meetings/domains/bot/row.py",
+      "function": "write_captions"
     },
     {
       "kind": "repeated_statement",
@@ -1771,12 +1777,6 @@
       "label": "SELECT ... FROM meeting WHERE meeting.id = :pk_1",
       "file": "app/services/meetings/domains/series/themes.py",
       "function": "write_themes"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT ... FROM meeting WHERE meeting.id = :pk_1",
-      "file": "app/services/meetings/service.py",
-      "function": "write_captions"
     },
     {
       "kind": "repeated_statement",
@@ -2063,7 +2063,7 @@
     {
       "kind": "repeated_statement",
       "label": "SELECT ... FROM meeting_transcript_line LEFT OUTER JOIN meeting_participant ON meeting_transcript_line.participant_id = meeting_participant.id LEFT OUTER JOIN meeting_person ON meeting_person.id = meeting_participant.person_id WHERE meeting_transcript_line.meeting_id = :meeting_id_1 ORDER BY meeting_transcript_line.start_seconds, meeting_transcript_line.id",
-      "file": "app/services/meetings/service.py",
+      "file": "app/services/meetings/queries.py",
       "function": "transcript"
     },
     {

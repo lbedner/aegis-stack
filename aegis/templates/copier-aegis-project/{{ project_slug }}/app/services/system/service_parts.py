@@ -457,6 +457,7 @@ PARTS = Pattern(
             "models depends on how that one is organised, not on what it "
             "offers: a refactor inside it breaks a service it never knew of.",
             lambda f: not f.reaching,
+            enforced=True,
             evidence=lambda f: f.reaching,
             action=(
                 "Call what you need through the other service's service.py, "

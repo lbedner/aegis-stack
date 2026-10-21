@@ -8,11 +8,7 @@ from sqlmodel import (
 )
 
 from app.core.log import logger
-from app.services.ai.domains.chat.agent_registry import seed_agent
-from app.services.ai.models.agents import (
-    Agent,
-    MemoryModule,
-)
+from app.services.ai.service import Agent, MemoryModule, seed_agent
 
 from app.core.tools import load_tools
 from app.services.finance.domains.detection.analyst.prompts import (

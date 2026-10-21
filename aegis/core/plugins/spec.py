@@ -290,6 +290,11 @@ class PluginSpec:
     # in a terminal. Empty string degrades to ``description``.
     long_description: str = ""
 
+    # How the README and docs tables name the part (``catalog_docs``):
+    # empty means its name, capitalised. Set only where that is wrong
+    # (``htmx`` is the Web Frontend).
+    title: str = ""
+
     # Site-relative path of this plugin's documentation page (e.g.
     # ``components/worker``), joined onto the published docs base URL by
     # renderers that emit terminal hyperlinks. Empty string means the

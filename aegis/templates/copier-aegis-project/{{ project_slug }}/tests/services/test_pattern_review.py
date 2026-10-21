@@ -12,11 +12,13 @@ from app.services.system.pattern_review import Note, Review
 from tests._files import write_tree
 
 STORE = "app/services/notes/store.py"
+CHECK = "parts.reads-in-queries"
+TOUCHED = "### What this change touches\n\n- **Parts:** `service:notes`\n"
 
 
 def _finding(*evidence: str) -> Finding:
     return Finding(
-        check="parts.reads-in-queries",
+        check=CHECK,
         subject="service:notes",
         severity="error",
         title="Reads live in queries",
@@ -37,16 +39,16 @@ def test_every_finding_is_listed_whatever_she_says(fresh: list) -> None:  # type
     said = Review(
         summary="One read sits outside queries.",
         notes=(
-            Note(place=f"{STORE}:2", said="This read belongs in queries.py."),
-            Note(place="app/elsewhere.py:9", said="An invented finding."),
+            Note(check=CHECK, said="This read belongs in queries.py."),
+            Note(check="parts.invented", said="An invented finding."),
         ),
         opinion="The module could be split.",
     )
-    text = pattern_review.markdown(fresh, said, touched="### Touches\n")
+    text = pattern_review.markdown(fresh, said, touched=TOUCHED)
     assert f"`{STORE}:2`" in text and "Reads live in queries" in text
     assert "This read belongs in queries.py." in text
-    assert "app/elsewhere.py" not in text  # not a finding: not listed
-    assert "Opinion" in text and "The module could be split." in text
+    assert "An invented finding." not in text  # not a finding's rule: not listed
+    assert text.index(pattern_review.OPINION) < text.index("The module could be split.")
     assert text.startswith(pattern_review.MARKER)
 
 
@@ -131,7 +133,7 @@ async def test_each_review_keeps_the_ones_before_it(
     async def ask(_: str) -> Review:
         return Review(
             summary="One read outside queries.",
-            notes=(Note(place=f"{STORE}:2", said="Move it into queries.py."),),
+            notes=(Note(check=CHECK, said="Move it into queries.py."),),
         )
 
     monkeypatch.setattr(pattern_review, "_ask", ask)
@@ -145,3 +147,40 @@ async def test_each_review_keeps_the_ones_before_it(
     assert pattern_review.NOTHING in earlier  # the clean one, kept
     assert earlier.count("Move it into queries.py.") == 1  # the first, as written
     assert third.startswith(pattern_review.MARKER)
+
+
+def _spots(tmp_path: Path, count: int) -> list:  # type: ignore[type-arg]
+    lines = "".join(f"x{i} = await session.exec(q)\n" for i in range(count))
+    write_tree(tmp_path, {STORE: lines})
+    places = (f"{STORE}:{i}" for i in range(1, count + 1))
+    return new_spots([_finding(*places)], source_index.at(tmp_path))
+
+
+def test_a_rule_is_said_once_however_many_places_break_it(tmp_path: Path) -> None:
+    """Five places breaking one rule: its title, its check and her note on
+    it once, each place listed under it."""
+    said = Review(
+        summary="Reads moved.", notes=(Note(check=CHECK, said="Batch them."),)
+    )
+    text = pattern_review.markdown(_spots(tmp_path, 5), said, touched="")
+    assert text.count("Reads live in queries") == 1
+    assert text.count(f"`{CHECK}`") == 1
+    assert text.count("Batch them.") == 1
+    assert all(f"`{STORE}:{i}`" in text for i in range(1, 6))
+
+
+def test_a_few_places_show_and_many_fold(tmp_path: Path) -> None:
+    said = Review(summary="Reads.")
+    few = pattern_review.markdown(_spots(tmp_path, pattern_review.SHOWN), said, "")
+    many = pattern_review.markdown(_spots(tmp_path, pattern_review.SHOWN + 1), said, "")
+    assert "<details>" not in few
+    assert f"<summary>{pattern_review.SHOWN + 1} places</summary>" in many
+
+
+def test_what_the_change_touches_is_folded_away(fresh: list) -> None:  # type: ignore[type-arg]
+    """Her words and the findings are what is read; what the change touches
+    is there to open, under its own heading, never said twice."""
+    text = pattern_review.markdown(fresh, Review(summary="Fine."), touched=TOUCHED)
+    assert "<summary>What this change touches</summary>" in text
+    assert "### What this change touches" not in text
+    assert text.count("`service:notes`") == 1

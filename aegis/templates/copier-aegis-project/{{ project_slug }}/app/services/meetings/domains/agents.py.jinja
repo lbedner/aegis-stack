@@ -120,7 +120,7 @@ def load_meetings_agent_fixtures(session: Session) -> dict[str, int]:
     is never touched. The default agent, Overseer's chat, is granted the
     meetings search (``tools.meetings_search``)."""
     # Here, not at the top: the AI fixtures package loads these seeds.
-    from app.services.ai.domains.chat.agent_loader import DEFAULT_AGENT_SLUG
+    from app.services.ai.service import DEFAULT_AGENT_SLUG
     from app.services.ai.fixtures.agent_fixtures import (
         attach_tools,
         seed_missing_agents,

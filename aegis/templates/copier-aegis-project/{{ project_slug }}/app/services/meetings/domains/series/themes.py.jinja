@@ -8,7 +8,7 @@ what was settled, what shifted, what is still open, the mood. Metered like every
 model call (``meetings:themes`` in AI spend).
 
 The bot writes it once a meeting's notes and guides are written
-(``bot.run_meeting``), as soon as the link has two meetings with notes;
+(``domains.bot.run.run_meeting``), as soon as the link has two meetings with notes;
 Overseer writes it again on request. A pass that fails keeps the themes
 it had, with why.
 """
@@ -17,8 +17,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.db import get_async_session
 from app.core.log import logger
-from app.services.ai.domains.spend.recording import extract_usage, record_usage
-from app.services.ai.service import writer
+from app.services.ai.service import extract_usage, record_usage, writer
 from app.services.meetings.domains.agents import THEMES_AGENT, THEMES_PROMPT
 from app.services.meetings.domains.notes.service import notes_of
 from app.services.meetings.domains.people.queries import quotes

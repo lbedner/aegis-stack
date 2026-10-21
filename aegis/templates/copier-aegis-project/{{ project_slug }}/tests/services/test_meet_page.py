@@ -9,8 +9,8 @@ from collections.abc import AsyncIterator
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.meetings import bot
-from app.services.meetings.meet import CallState, MeetPage, merge_caption
+from app.services.meetings.domains.bot import run as bot
+from app.services.meetings.domains.bot.meet import CallState, MeetPage, merge_caption
 from app.services.meetings.models import MeetingStatus
 from app.services.meetings.service import MeetingsService
 from tests._browser import live_browser

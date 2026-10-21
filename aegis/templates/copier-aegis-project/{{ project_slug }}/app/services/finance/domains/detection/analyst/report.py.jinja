@@ -6,7 +6,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.db import get_async_session
 from app.core.log import logger
-from app.services.ai.domains.chat.fetchers import FetchContext, register_fetcher
+from app.services.ai.service import FetchContext, register_fetcher
 from app.services.finance.domains.detection.analyst.activity import (
     _anomalies_section,
     _cashflow_section,

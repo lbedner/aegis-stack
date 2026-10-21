@@ -34,7 +34,7 @@ from app.components.frontend.dashboard.modals.modal_sections import (
     ledger_amount_color,
 )
 from app.components.frontend.theme import AegisTheme as Theme
-from app.services.finance.domains.ledger.accounts import effective_balance
+from app.services.finance.service import effective_balance
 
 
 def _usd(cents: int | None) -> str:

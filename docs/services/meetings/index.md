@@ -83,7 +83,7 @@ A meeting the bot has not started yet is over as soon as it is asked to leave. W
 
 Every status change moves only from the status the bot expects, so a leave request (or a failure recorded elsewhere) is never overwritten by the bot's next step: it stops instead.
 
-Everything the bot knows about Meet's page (its buttons, its chat, its captions, how it says you were turned away) lives in `app/services/meetings/meet.py`. When Meet changes its page, that module is the fix.
+Everything the bot knows about Meet's page (its buttons, its chat, its captions, how it says you were turned away) lives in `app/services/meetings/domains/bot/meet.py`. When Meet changes its page, that module is the fix.
 
 ## What the bot hears
 

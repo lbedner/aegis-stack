@@ -206,12 +206,10 @@ async def _owned(store: ErrorStore, query: Mapping[str, str]) -> dict[str, Any]:
 async def _spend(node: PartNode) -> tuple[UsageWindow, ...]:
     if node.id != AI:
         return ()
-    try:
-        from app.services.ai.domains.spend.windows import spend_windows
-    except ModuleNotFoundError as missing:
-        # An AI service without a database keeps no ledger; any other
-        # import failure is a bug, and raises.
-        if (missing.name or "").startswith("app.services.ai"):
-            return ()
-        raise
-    return await spend_windows()
+    from app.services.ai import service as ai
+
+    # An AI service without a database keeps no ledger: its facade offers
+    # no spend.
+    if "spend_windows" not in ai.__all__:
+        return ()
+    return await ai.spend_windows()

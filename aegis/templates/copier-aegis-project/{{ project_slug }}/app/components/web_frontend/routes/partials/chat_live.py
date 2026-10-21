@@ -38,9 +38,12 @@ from app.core.chat_transcript import trace_label
 from app.core.config import settings
 from app.core.db import get_async_session
 from app.core.log import logger
-from app.services.ai.domains.voice import live_engines, realtime_calls
-from app.services.ai.models import AIProvider
-from app.services.ai.models.voice import LiveEngine
+from app.services.ai.service import (
+    AIProvider,
+    LiveEngine,
+    live_engines,
+    realtime_calls,
+)
 from app.services.ai.service.trace import record_tool_call
 
 # Sent the moment the call is up, so the assistant speaks first: a cue

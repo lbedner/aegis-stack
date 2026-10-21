@@ -13,6 +13,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.core.config import settings
 from app.core.time import month_days
 from app.services.meetings.domains.accounts import service as accounts
+from app.services.meetings.domains.bot.login import CALENDAR
 from app.services.meetings.domains.calendar.entries import (
     CANCELLED,
     CANNOT_JOIN,
@@ -24,7 +25,6 @@ from app.services.meetings.domains.calendar.entries import (
 )
 from app.services.meetings.domains.calendar.feed import meetings_between
 from app.services.meetings.domains.calendar.service import read_calendars, send_due
-from app.services.meetings.login import CALENDAR
 from app.services.meetings.models import CalendarEvent, Meeting, MeetingStatus
 from app.services.meetings.service import MeetingsService, transition
 from tests._meetings import MEET, STANDUP, Calendar, at, feed, hold_the_bot

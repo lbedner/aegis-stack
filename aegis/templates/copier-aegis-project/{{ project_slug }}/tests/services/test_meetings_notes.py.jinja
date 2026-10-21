@@ -1,5 +1,5 @@
 {% if include_ai and ai_backend != "memory" and ai_framework == "pydantic-ai" %}
-"""Meeting notes (``meetings.notes``): one model pass over the finished
+"""Meeting notes (``meetings.domains.notes.writer``): one model pass over the finished
 transcript, kept with the lines each item came from, and metered. The
 model is pydantic-ai's ``TestModel``: what is under test is the plumbing,
 not the prose."""
@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.meetings import notes
+from app.services.meetings.domains.notes import writer as notes
 from app.services.meetings.service import WRITING, MeetingsService
 from tests._meetings import MEET, answering, said
 from tests._session import opens

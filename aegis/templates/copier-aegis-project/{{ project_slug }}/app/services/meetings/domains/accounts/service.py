@@ -19,9 +19,9 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core import secrets
 from app.core.log import logger
-from app.services.meetings.login import LOGIN, signed_in
-from app.services.meetings.models import BotAccount
-from app.services.meetings.service import DEFAULT_BOT_NAME, IN_PROGRESS
+from app.services.meetings.domains.bot.login import LOGIN, signed_in
+from app.services.meetings.models import IN_PROGRESS, BotAccount
+from app.services.meetings.service import DEFAULT_BOT_NAME
 
 from .queries import every_account, give_unsent_meetings, meetings_in
 

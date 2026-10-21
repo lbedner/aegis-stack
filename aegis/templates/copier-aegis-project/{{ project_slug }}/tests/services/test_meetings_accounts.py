@@ -12,10 +12,10 @@ import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core import secrets
-from app.services.meetings import bot
 from app.services.meetings.domains.accounts import service as accounts
-from app.services.meetings.login import LOGIN
-from app.services.meetings.meet import CallState
+from app.services.meetings.domains.bot import run as bot
+from app.services.meetings.domains.bot.login import LOGIN
+from app.services.meetings.domains.bot.meet import CallState
 from app.services.meetings.models import MeetingStatus
 from app.services.meetings.service import DEFAULT_BOT_NAME, MeetingsService, transition
 from tests._meetings import MEET, bot_on, hold_the_bot, signed_in_state

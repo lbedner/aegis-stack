@@ -38,6 +38,7 @@ def _her(
     built: dict[str, Any] | None = None,
     on_end: Callable[[], Awaitable[None]] | None = None,
     instructions: str | None = None,
+    owner_user_id: int | None = None,
 ) -> AbstractAsyncContextManager[LiveVoice | None]:
     """Her live voice on ``realtime`` as the engine's call, its audio kept,
     what she was built with in ``built``."""
@@ -57,6 +58,7 @@ def _her(
         play=play,
         surface="meetings",
         user_id="7",
+        owner_user_id=owner_user_id,
         on_end=on_end,
         instructions=instructions,
     )
@@ -112,6 +114,31 @@ async def test_gpt_live_spoken_to_in_text_is_never_opened(
     ) as voice:
         assert voice is None
     assert built == {}
+
+
+async def test_her_call_is_its_owners(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A meeting's call is its owner's: she is built for them and her tools
+    run as them for the call's length (``drive`` binds the owner afresh,
+    so one it is not given is no one)."""
+    built: dict[str, Any] = {}
+    driven: dict[str, Any] = {}
+    real_drive = module.drive
+
+    async def drive(*args: Any, **kwargs: Any) -> Any:
+        driven.update(kwargs)
+        return await real_drive(*args, **kwargs)
+
+    monkeypatch.setattr(module, "drive", drive)
+    realtime = FakeRealtime([], after_text=True)
+    async with _her(
+        async_db_session, monkeypatch, realtime, [], built, owner_user_id=7
+    ):
+        pass
+
+    assert built["owner_user_id"] == 7
+    assert driven["owner_user_id"] == 7
 
 
 async def test_how_she_talks_is_the_callers_else_the_engines(

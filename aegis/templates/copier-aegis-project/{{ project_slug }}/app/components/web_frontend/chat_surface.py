@@ -77,8 +77,9 @@ class ChatSurface:
     subject: str | None = None
     # This request's mount: a FastAPI dependency (so it may depend on the
     # app's signed-in user and active project) returning the mount with
-    # ``user`` and ``subject`` set. None serves the mount as declared. The
-    # live call's socket keeps the declared mount.
+    # ``user`` and ``subject`` set. None serves the mount as declared. A
+    # live call's socket binds through it too, so it may depend on what a
+    # WebSocket carries (the session, headers), never on ``Request``.
     bind: Callable[..., Awaitable["ChatSurface"]] | None = None
     # A FastAPI dependency run before a turn reaches the model (a plan's
     # entitlement, a daily budget): the reason it is refused, or None.
@@ -87,16 +88,14 @@ class ChatSurface:
     # set what the whole install answers with. A mount for an app's own
     # users turns them off, keeping the microphone and a reply read aloud;
     # its ``bind`` may turn them back on for the request of someone who
-    # runs the install (an admin). The live call needs them too, and a
-    # mount not bound per request: it runs as the declared mount.
+    # runs the install (an admin). The live call needs them too.
     operator_controls: bool = True
 
 
 def offers_calls(chat: ChatSurface) -> bool:
-    """Whether the mount takes live calls: voice, a database, the operator's
-    controls, and no ``bind`` (the call's socket serves the declared mount,
-    so a mount bound per user and subject would call as no one)."""
-    return HAS_VOICE and PERSISTED and chat.operator_controls and chat.bind is None
+    """Whether the mount takes live calls: voice, a database and the
+    operator's controls."""
+    return HAS_VOICE and PERSISTED and chat.operator_controls
 
 
 async def assistant_name(chat: ChatSurface, session: Any = None) -> str:

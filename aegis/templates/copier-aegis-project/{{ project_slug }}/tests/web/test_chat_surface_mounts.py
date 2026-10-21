@@ -204,8 +204,8 @@ def test_a_bound_mount_gives_its_operators_the_controls_and_no_one_else(
     turns: list[dict[str, Any]],
 ) -> None:
     """``bind`` decides per request: an operator's request gets the model
-    and voice chips and their routes, anyone else's neither. A bound mount
-    offers no live call to anyone (the call runs as the declared mount)."""
+    and voice chips and their routes and the live call, anyone else's
+    none of them (a call binds as the page does: ``chat_live``)."""
 
     async def bind_by_role(request: Request) -> ChatSurface:
         return replace(
@@ -230,4 +230,5 @@ def test_a_bound_mount_gives_its_operators_the_controls_and_no_one_else(
     if chat_surface.HAS_VOICE:
         assert 'id="chat-voice"' in operator.get("/chat/drawer").text
         assert customer.get("/chat/voices").status_code == 404
-        assert 'id="chat-live"' not in operator.get("/chat/drawer").text
+        assert 'id="chat-live"' in operator.get("/chat/drawer").text
+        assert 'id="chat-live"' not in customer.get("/chat/drawer").text

@@ -8,6 +8,7 @@ same socket under its own path.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from importlib.util import find_spec
 import json
 import threading
@@ -28,9 +29,12 @@ import pytest
 from starlette.websockets import WebSocketDisconnect
 
 from app.components.web_frontend import overseer_access
+from app.components.web_frontend.chat_surface import ChatSurface
 from app.components.web_frontend.overseer_ai_chat import OVERSEER
 from app.components.web_frontend.routes.partials import chat_live
+from app.core.tools import current_owner_user_id, current_subject
 from app.services.ai.domains.voice import realtime_calls
+from app.services.shared.deps import get_optional_owner_user_id
 from app.services.system.models import ComponentStatus
 from tests._realtime import ENGINE, VOICE, FakeRealtime
 from tests.web.dom import one
@@ -86,6 +90,7 @@ def gemini(monkeypatch: pytest.MonkeyPatch) -> FakeRealtime:
         return ENGINE, {"label": ENGINE.llm.title}
 
     async def built(*args: Any, **kwargs: Any) -> Any:
+        fake.built = kwargs  # who she was built for
         return fake
 
     monkeypatch.setattr(chat_live, "_engine_now", engine_now)
@@ -242,6 +247,99 @@ class TestTheCall:
         ):
             ws.receive_json()
         assert refused.value.code == 1008
+
+
+async def _let_in() -> None:
+    return None
+
+
+class TestABoundCall:
+    """A call is a turn: bound as the mount's pages are (``bind``), owned
+    by the signed-in user (``get_optional_owner_user_id``) and let through
+    by the mount's ``gate``."""
+
+    @staticmethod
+    def _calls(mount: ChatSurface) -> TestClient:
+        calls = FastAPI()
+        calls.include_router(chat_live.live_router(mount, _let_in))
+
+        async def owner() -> int:
+            return 7
+
+        calls.dependency_overrides[get_optional_owner_user_id] = owner
+        return TestClient(calls)
+
+    def test_it_calls_as_the_mount_binds_it(
+        self,
+        app: FastAPI,  # the database, set up
+        gemini: FakeRealtime,
+        ended: threading.Event,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """The conversation it starts is the bound user's, about the bound
+        subject, answered by the bound mount's voice agent, and its tools
+        run as them: each event seen in their turn."""
+        during: list[tuple[str | None, int | None]] = []
+
+        async def tell(ws: Any, event: Any) -> None:
+            during.append((current_subject.get(), current_owner_user_id.get()))
+
+        async def bound() -> ChatSurface:
+            return replace(OVERSEER, user="7", subject="42", voice_agent_slug="voice")
+
+        monkeypatch.setattr(chat_live, "_tell", tell)
+        with self._calls(replace(OVERSEER, bind=bound)).websocket_connect(
+            SOCKET
+        ) as ws:
+            ws.receive_json()
+            ws.send_bytes(b"\x10\x20")  # the fake plays once it hears you
+            ws.close()
+            assert ended.wait(5)
+
+        built = gemini.built
+        meta = built["conversation"].metadata
+        assert (meta["user_id"], meta["subject"]) == ("7", "42")
+        assert (built["user_id"], built["owner_user_id"]) == ("7", 7)
+        assert (built["subject"], built["agent_slug"]) == ("42", "voice")
+        assert during and set(during) == {("42", 7)}
+
+    def test_a_call_the_gate_refuses_never_opens(self, gemini: FakeRealtime) -> None:
+        """Over a plan's budget, a call is refused as a typed turn is."""
+
+        async def spent() -> str:
+            return "Today's budget is spent."
+
+        with (
+            pytest.raises(WebSocketDisconnect) as refused,
+            self._calls(replace(OVERSEER, gate=spent)).websocket_connect(
+                SOCKET
+            ) as ws,
+        ):
+            ws.receive_json()
+        assert (refused.value.code, refused.value.reason) == (
+            1008,
+            "Today's budget is spent.",
+        )
+        assert not hasattr(gemini, "built")
+
+    def test_a_caller_the_mount_gives_no_controls_never_opens(
+        self, gemini: FakeRealtime
+    ) -> None:
+        """No phone on their page is no call on the socket either: the
+        socket refuses whom ``bind`` gives no operator controls."""
+
+        async def customer() -> ChatSurface:
+            return replace(OVERSEER, operator_controls=False)
+
+        with (
+            pytest.raises(WebSocketDisconnect) as refused,
+            self._calls(replace(OVERSEER, bind=customer)).websocket_connect(
+                SOCKET
+            ) as ws,
+        ):
+            ws.receive_json()
+        assert refused.value.code == 1008
+        assert not hasattr(gemini, "built")
 
 
 def test_a_call_into_a_conversation_does_not_meet_them_again() -> None:

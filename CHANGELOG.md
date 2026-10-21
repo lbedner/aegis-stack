@@ -7,6 +7,16 @@
 
 ## [Unreleased]
 
+### Added
+
+- **A live call on a mount bound per request.** A call now runs its
+  mount's `bind`, the signed-in owner and the mount's `gate`, as a typed
+  turn does, so an app's chat for its own users can take calls: the call
+  is that user's, about what they are looking at, and refused when the
+  gate refuses (a spent budget). The session lookup works on a socket
+  (`get_session_token`), and the meeting bot's live voice is its meeting
+  owner's. (#1672)
+
 ## [0.17.0] - 2026-10-28
 
 ### Added

@@ -23,10 +23,9 @@ from app.services.auth.domains.orgs.organizations import (
 {% endif %}
 from fastapi import HTTPException, status
 {% if include_auth_rbac %}
-from fastapi import Cookie, Depends
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import Depends
 
-from app.core.security import SESSION_COOKIE, VALID_ROLES
+from app.core.security import VALID_ROLES
 {% endif %}
 
 # What callers outside the service use of its domains.
@@ -127,8 +126,6 @@ async def get_current_user_from_token(
 
 {% if include_auth_rbac %}
 
-_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token", auto_error=False)
-
 
 def require_role(*required_roles: str):
     """FastAPI dependency that checks user has one of the required roles.
@@ -148,18 +145,14 @@ def require_role(*required_roles: str):
 
     # Imported lazily to avoid a circular import:
     # ``auth.deps`` imports ``get_current_user_from_token`` from this module.
-    from app.services.auth.deps import get_user_service
+    from app.services.auth.deps import get_session_token, get_user_service
 
     async def dependency(
-        bearer_token: str | None = Depends(_oauth2_scheme),
-        session_cookie: str | None = Cookie(default=None, alias=SESSION_COOKIE),
+        token: str | None = Depends(get_session_token),
         user_service: UserService = Depends(get_user_service),
     ) -> User:
         if not settings.AUTH_ENABLED:
             return _build_dev_user()
-        # Cookie wins (browser flows are the primary path); bearer is the
-        # fallback for CLIs and tests. Mirrors ``get_session_token``.
-        token = session_cookie or bearer_token
         user = await get_current_user_from_token(token, user_service)
         if user.role not in required_roles:
             raise HTTPException(

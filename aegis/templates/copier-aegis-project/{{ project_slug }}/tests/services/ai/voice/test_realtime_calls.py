@@ -201,10 +201,18 @@ class TestACallKnowsWhoSheIs:
         can."""
         from app.services.ai.domains.chat import agent_loader
 
-        built, realtime = await _built(monkeypatch, admin=True)
+        built, realtime = await _built(
+            monkeypatch, admin=True, owner_user_id=7, subject="42"
+        )
 
         slug = agent_loader.default_agent_config().slug
-        assert built == {"user_id": USER, "admin": True, "slug": slug}
+        assert built == {
+            "user_id": USER,
+            "owner_user_id": 7,
+            "subject": "42",
+            "admin": True,
+            "slug": slug,
+        }
         assert realtime["toolsets"] == [CALL_TOOLS]  # she can hang up
 
     @pytest.mark.asyncio

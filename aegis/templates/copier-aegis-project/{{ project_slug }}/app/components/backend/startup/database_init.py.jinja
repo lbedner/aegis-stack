@@ -9,6 +9,7 @@ when the backend starts up (only when database component is included).
 
 {% if database_engine == "sqlite" %}
 from pathlib import Path
+from typing import Any
 {% endif %}
 
 from app.components.backend.startup.schema_recovery import (
@@ -231,39 +232,47 @@ def _run_migrations() -> bool:
 {% endif %}
 
 
+def schema_gaps(engine: Any = None, metadata: Any = None) -> dict[str, set[str]]:
+    """What the code's models expect that the database lacks: each table
+    missing columns, with them, and each missing table, with none. Empty
+    when the database is what the code reads; a rolling deploy restarts
+    nothing onto a gap (aegis-stack#1789). ``engine`` and ``metadata``
+    default to the app's own."""
+    from sqlalchemy import inspect as sa_inspect
+    from sqlmodel import SQLModel
+
+    if engine is None:
+        from app.core.db import engine
+    metadata = metadata if metadata is not None else SQLModel.metadata
+    inspector = sa_inspect(engine)
+    existing = _existing_tables_by_schema(inspector, metadata)
+    gaps: dict[str, set[str]] = {}
+    for key, table in metadata.tables.items():
+        if key == "alembic_version":
+            continue
+        if key not in existing:
+            gaps[key] = set()
+            continue
+        found = {
+            c["name"] for c in inspector.get_columns(table.name, schema=table.schema)
+        }
+        if missing := {c.name for c in table.columns} - found:
+            gaps[key] = missing
+    return gaps
+
+
 def _check_schema_mismatch() -> None:
     """
-    Detect missing columns/tables and warn user.
+    Detect missing columns/tables and warn user (``schema_gaps``).
 
     Compares SQLModel metadata (what the code expects) against
     the actual database schema. Only checks tables registered
     in SQLModel metadata — user-created tables are ignored.
     """
     try:
-        from sqlalchemy import inspect as sa_inspect
-        from sqlmodel import SQLModel
-
-        from app.core.db import engine
-
-        inspector = sa_inspect(engine)
-        existing_tables = _existing_tables_by_schema(inspector)
-
-        # Only check tables in SQLModel metadata (our models)
-        expected_tables = set(SQLModel.metadata.tables.keys())
-        missing_tables = expected_tables - existing_tables - {"alembic_version"}
-
-        # Check columns for tables that exist in both
-        missing_columns: dict[str, set[str]] = {}
-        for table_key in expected_tables & existing_tables:
-            table_obj = SQLModel.metadata.tables[table_key]
-            model_cols = {c.name for c in table_obj.columns}
-            db_cols = {
-                c["name"]
-                for c in inspector.get_columns(table_obj.name, schema=table_obj.schema)
-            }
-            missing = model_cols - db_cols
-            if missing:
-                missing_columns[table_key] = missing
+        gaps = schema_gaps()
+        missing_tables = {table for table, cols in gaps.items() if not cols}
+        missing_columns = {table: cols for table, cols in gaps.items() if cols}
 
         if missing_tables or missing_columns:
             logger.error("=" * 60)

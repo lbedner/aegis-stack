@@ -17,16 +17,18 @@ from typing import Any, NamedTuple
 from app.core.log import logger
 
 
-def _existing_tables_by_schema(inspector: Any) -> set[str]:
+def _existing_tables_by_schema(inspector: Any, metadata: Any = None) -> set[str]:
     """Existing tables across every schema our models use, keyed to match
     ``SQLModel.metadata.tables``: schema-qualified (``schema.name``) for
     non-default schemas, bare otherwise. Without the qualification a table
     in a component schema (e.g. ``scheduler``) reads as missing.
+    ``metadata``: the models to look for, the app's own by default.
     """
     from sqlalchemy.exc import SQLAlchemyError
     from sqlmodel import SQLModel
 
-    model_schemas = {table.schema for table in SQLModel.metadata.tables.values()}
+    tables = (metadata or SQLModel.metadata).tables.values()
+    model_schemas = {table.schema for table in tables}
     existing: set[str] = set()
     for schema in model_schemas:
         try:

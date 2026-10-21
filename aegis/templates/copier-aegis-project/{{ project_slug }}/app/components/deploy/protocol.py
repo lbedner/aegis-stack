@@ -45,6 +45,18 @@ DEPLOY_STEPS = {
     "health": "Check it answers",
 }
 
+# A deploy that keeps the site up (``--rolling``): the database is brought
+# up to the new code before anything restarts on it, then the scheduler
+# and workers restart and the webserver is swapped for a healthy new one.
+ROLLING_STEPS = {
+    "backup": "Back up",
+    "upload": "Send the code",
+    "build": "Build",
+    "migrate": "Update the database",
+    "swap": "Swap in the new code",
+    "health": "Check it answers",
+}
+
 # A backup's steps, as its step bar names them: those it takes, in the
 # order it takes them (``database`` before ``files`` for SQLite, after for
 # Postgres).
@@ -158,6 +170,10 @@ PROTOCOL: dict[str, Any] = {
         "deploy": {
             "command": ["deploy"],
             "steps": DEPLOY_STEPS,
+        },
+        "deploy-rolling": {
+            "command": ["deploy", "--rolling"],
+            "steps": ROLLING_STEPS,
         },
         "backup": {
             "command": ["deploy-backup"],

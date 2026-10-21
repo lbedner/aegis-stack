@@ -28,6 +28,8 @@
 {% with storage = actions.storage %}{% include "pages/overseer/deployments/_storage.html" %}{% endwith %}
 <div data-idle class="flex flex-wrap items-center gap-2">
   {{ ask("Deploy", actions.partials, "deploy", "primary") }}
+  {# Keeps the site up and nobody signed out; additive migrations only. #}
+  {{ ask("Deploy without downtime", actions.partials, "deploy-rolling") }}
   {{ ask("Back up now", actions.partials, "backup") }}
   {% if actions.drill %}{{ ask(actions.drill.label, actions.partials, actions.drill.verb) }}{% endif %}
   {# Rolling back and destroying are rare: folded into a menu, asked there. #}

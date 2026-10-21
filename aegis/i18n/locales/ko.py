@@ -860,6 +860,13 @@ MESSAGES: dict[str, str] = {
     "deploy.complete": "배포 완료!",
     "deploy.rolling_starting": "{host}에 롤링 배포 중...",
     "deploy.rolling_building": "웹서버 이미지 빌드 중...",
+    "deploy.rolling_migrating": (
+        "Bringing the database up to the new code before anything restarts..."
+    ),
+    "deploy.rolling_migrate_failed": (
+        "The database could not be brought up to the new code; nothing was "
+        "restarted and the old code is still serving. See the output above."
+    ),
     "deploy.rolling_pausing": "워커 큐 일시중지 중...",
     "deploy.rolling_pause_failed": (
         "일시중지 플래그를 설정하지 못했습니다. 워커가 작업 도중 SIGTERM될 수 있습니다."
@@ -966,9 +973,9 @@ MESSAGES: dict[str, str] = {
     "deploy.help_opt_backup": "배포 전에 백업 생성",
     "deploy.help_opt_health": "배포 후 헬스 체크 실행",
     "deploy.help_opt_rolling": (
-        "HTTP 다운타임 없는 코드 전용 배포. docker-rollout으로 "
-        "웹서버를 롤링하고 워커 큐를 일시중지해 진행 중인 작업이 "
-        "안전하게 완료되도록 합니다. DB 마이그레이션은 건너뜁니다."
+        "Deploy without downtime: back up, bring the database up to the new "
+        "code, pause the worker queue so in-flight jobs finish, then swap the "
+        "webserver for a healthy new replica. Additive migrations only."
     ),
     "deploy.help_opt_drain_timeout": (
         "롤링 배포 시 큐를 일시중지한 후 워커가 드레인될 때까지 "

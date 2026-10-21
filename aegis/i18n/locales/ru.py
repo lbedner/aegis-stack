@@ -871,6 +871,13 @@ MESSAGES: dict[str, str] = {
     "deploy.complete": "Развёртывание завершено!",
     "deploy.rolling_starting": "Плавное развёртывание на {host}...",
     "deploy.rolling_building": "Сборка образа веб-сервера...",
+    "deploy.rolling_migrating": (
+        "Bringing the database up to the new code before anything restarts..."
+    ),
+    "deploy.rolling_migrate_failed": (
+        "The database could not be brought up to the new code; nothing was "
+        "restarted and the old code is still serving. See the output above."
+    ),
     "deploy.rolling_pausing": "Приостановка очереди воркеров...",
     "deploy.rolling_pause_failed": (
         "Не удалось установить флаг паузы; воркеры могут получить "
@@ -982,10 +989,9 @@ MESSAGES: dict[str, str] = {
     "deploy.help_opt_backup": "Создать бэкап перед деплоем",
     "deploy.help_opt_health": "Выполнить проверку работоспособности после деплоя",
     "deploy.help_opt_rolling": (
-        "Развёртывание только кода без HTTP-простоя. Перекатывает "
-        "веб-сервер через docker-rollout и приостанавливает очередь "
-        "воркеров, чтобы выполняющиеся задачи завершились корректно. "
-        "Пропускает миграции БД."
+        "Deploy without downtime: back up, bring the database up to the new "
+        "code, pause the worker queue so in-flight jobs finish, then swap the "
+        "webserver for a healthy new replica. Additive migrations only."
     ),
     "deploy.help_opt_drain_timeout": (
         "Секунд ожидания завершения работы воркеров после приостановки "

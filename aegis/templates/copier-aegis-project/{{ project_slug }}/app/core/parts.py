@@ -54,6 +54,8 @@ class Part:
     # What it is, in a line: what the app map says of a part with no
     # package docstring of its own (ingress is Traefik, not Python).
     description: str = ""
+    # Its schema, APIs and CLI may change between releases.
+    experimental: bool = False
     options: tuple[Option, ...] = ()  # what else it could be
 
 
@@ -266,6 +268,7 @@ PARTS: dict[str, Part] = {
         marker="app/services/finance",
         order=80,
         description="Personal finance aggregation (accounts, transactions, net worth, import)",
+        experimental=True,
     ),
     "frontend": Part(
         kind="component",
@@ -316,6 +319,7 @@ PARTS: dict[str, Part] = {
         marker="app/services/meetings",
         order=55,
         description="A bot that joins Google Meet as its own agent: transcript, notes, threads, people, what keeps coming up, joined from its calendar",
+        experimental=True,
     ),
     "observability": Part(
         kind="component",

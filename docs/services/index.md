@@ -207,7 +207,11 @@ belongs - so it names each domain and what it owns.
     or one per line from `git diff --name-only`) and says, from the app's
     ontology, which parts own them, which parts depend on those, and the
     tables, routes and jobs they define; Markdown for a pull request's job
-    summary, JSON with `--format json`.
+    summary, JSON with `--format json`. `ontology export` writes the same
+    model for other tools: `--format markdown` (the docs' *What It Is Made
+    Of* page, `stack.md`, built with the docs), `--format backstage` (a
+    `catalog-info.yaml`) or `--format otel` (a process's resource
+    attributes).
     `patterns check` lists only the findings that are new: the ones not
     in `.patterns-baseline.json`, the known debt, which `--update` writes
     and afterwards only shrinks. A place is known by its rule, its part,

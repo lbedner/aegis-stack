@@ -93,6 +93,7 @@ class PartNode(_Node):
     description: str = ""  # its package's docstring, first line
     cli: str | None = None  # its name to the aegis CLI, where it has one
     page: str | None = None  # its Overseer page, where that is not its name
+    experimental: bool = False  # its schema, APIs and CLI may still change
     options: tuple[PartOption, ...] = ()  # what else it could be
 
 
@@ -229,6 +230,20 @@ class Stack(BaseModel):
     env: str
     build: str
     aegis_version: str
+
+
+def stack() -> Stack:
+    """This app as it names itself, from its settings: the one reader of
+    its name, environment and build for the model, its exports and the
+    traces it sends."""
+    from app.core.config import settings
+
+    return Stack(
+        name=settings.PROJECT_NAME,
+        env=settings.APP_ENV,
+        build=settings.BUILD_ID,
+        aegis_version=settings.AEGIS_STACK_VERSION,
+    )
 
 
 class SystemModel(BaseModel):

@@ -1,52 +1,23 @@
 """
 Tests for service registry and specifications.
 
-Tests the core service infrastructure including ServiceSpec,
-ServiceType enum, and service registry operations.
+Tests the core service infrastructure including ServiceSpec, how
+services group by category, and service registry operations.
 """
 
 import pytest
 
+from aegis.core.plugins.spec import PartCategory
 from aegis.core.services import (
+    SERVICE_GROUPS,
     SERVICES,
     ServiceSpec,
-    ServiceType,
     get_service,
     get_service_dependencies,
-    get_services_by_type,
     list_available_services,
+    services_in,
     validate_service_dependencies,
 )
-
-
-class TestServiceType:
-    """Test ServiceType enum."""
-
-    def test_service_type_values(self):
-        """Test that ServiceType has expected values."""
-        assert ServiceType.AUTH.value == "auth"
-        assert ServiceType.PAYMENT.value == "payment"
-        assert ServiceType.AI.value == "ai"
-        assert ServiceType.NOTIFICATION.value == "notification"
-        assert ServiceType.ANALYTICS.value == "analytics"
-        assert ServiceType.STORAGE.value == "storage"
-        assert ServiceType.CONTENT.value == "content"
-        assert ServiceType.FINANCE.value == "finance"
-
-    def test_service_type_enum_completeness(self):
-        """Test that we have all expected service types."""
-        expected_types = {
-            "auth",
-            "payment",
-            "ai",
-            "notification",
-            "analytics",
-            "storage",
-            "content",
-            "finance",
-        }
-        actual_types = {st.value for st in ServiceType}
-        assert actual_types == expected_types
 
 
 class TestServiceSpec:
@@ -56,7 +27,6 @@ class TestServiceSpec:
         """Test creating a ServiceSpec with all fields."""
         spec = ServiceSpec(
             name="test_service",
-            type=ServiceType.AUTH,
             description="Test service description",
             required_components=["backend", "database"],
             recommended_components=["redis"],
@@ -67,7 +37,7 @@ class TestServiceSpec:
         )
 
         assert spec.name == "test_service"
-        assert spec.type == ServiceType.AUTH
+        assert spec.category is PartCategory.APP
         assert spec.description == "Test service description"
         assert spec.required_components == ["backend", "database"]
         assert spec.recommended_components == ["redis"]
@@ -80,12 +50,11 @@ class TestServiceSpec:
         """Test creating a ServiceSpec with only required fields."""
         spec = ServiceSpec(
             name="minimal_service",
-            type=ServiceType.PAYMENT,
             description="Minimal service",
         )
 
         assert spec.name == "minimal_service"
-        assert spec.type == ServiceType.PAYMENT
+        assert spec.category is PartCategory.APP
         assert spec.description == "Minimal service"
         assert spec.required_components == []
         assert spec.recommended_components == []
@@ -98,7 +67,6 @@ class TestServiceSpec:
         """Test that default_factory creates empty lists for optional fields."""
         spec = ServiceSpec(
             name="test",
-            type=ServiceType.AI,
             description="Test",
         )
 
@@ -127,7 +95,7 @@ class TestServicesRegistry:
         spec = SERVICES["insights"]
 
         assert spec.name == "insights"
-        assert spec.type == ServiceType.ANALYTICS
+        assert spec.category is PartCategory.APP
         assert spec.description
         assert "backend" in spec.required_components
         assert "database" in spec.required_components
@@ -151,7 +119,7 @@ class TestServicesRegistry:
         auth_spec = SERVICES["auth"]
 
         assert auth_spec.name == "auth"
-        assert auth_spec.type == ServiceType.AUTH
+        assert auth_spec.category is PartCategory.APP
         assert auth_spec.description
         assert "backend" in auth_spec.required_components
         assert "database" in auth_spec.required_components
@@ -191,7 +159,7 @@ class TestServicesRegistry:
         spec = SERVICES["payment"]
 
         assert spec.name == "payment"
-        assert spec.type == ServiceType.PAYMENT
+        assert spec.category is PartCategory.APP
         assert spec.description
         assert "backend" in spec.required_components
         assert "database" in spec.required_components
@@ -219,7 +187,7 @@ class TestServicesRegistry:
         spec = SERVICES["finance"]
 
         assert spec.name == "finance"
-        assert spec.type == ServiceType.FINANCE
+        assert spec.category is PartCategory.APP
         assert spec.description
         assert "backend" in spec.required_components
         assert "database" in spec.required_components
@@ -247,7 +215,7 @@ class TestServicesRegistry:
         spec = SERVICES["blog"]
 
         assert spec.name == "blog"
-        assert spec.type == ServiceType.CONTENT
+        assert spec.category is PartCategory.APP
         assert spec.description
         assert ComponentNames.BACKEND in spec.required_components
         assert ComponentNames.DATABASE in spec.required_components
@@ -338,36 +306,22 @@ class TestServiceRegistryFunctions:
         """Test getting an existing service."""
         service = get_service("auth")
         assert service.name == "auth"
-        assert service.type == ServiceType.AUTH
+        assert service.category is PartCategory.APP
 
     def test_get_service_unknown(self):
         """Test getting an unknown service raises ValueError."""
         with pytest.raises(ValueError, match="Unknown service: nonexistent"):
             get_service("nonexistent")
 
-    def test_get_services_by_type(self):
-        """Test filtering services by type."""
-        auth_services = get_services_by_type(ServiceType.AUTH)
-        assert "auth" in auth_services
-        assert all(spec.type == ServiceType.AUTH for spec in auth_services.values())
-
-        storage_services = get_services_by_type(ServiceType.STORAGE)
-        assert "documents" in storage_services
-        assert all(
-            spec.type == ServiceType.STORAGE for spec in storage_services.values()
-        )
-
-        # Every declared type is claimed by at least one service: a type
-        # nobody uses is a category we invented and never filled, and the
-        # filter should not be tested against one that cannot occur.
-        for service_type in ServiceType:
-            assert get_services_by_type(service_type), service_type
-
-        content_services = get_services_by_type(ServiceType.CONTENT)
-        assert "blog" in content_services
-        assert all(
-            spec.type == ServiceType.CONTENT for spec in content_services.values()
-        )
+    def test_services_group_by_category(self):
+        """The CLI lists and offers services by their category, the one
+        concern each declares (``PluginSpec.category``): app services first,
+        so auth (whose setup asks about the database) comes first."""
+        assert SERVICE_GROUPS[0] is PartCategory.APP
+        assert list(services_in(PartCategory.APP))[0] == "auth"
+        grouped = [name for c in SERVICE_GROUPS for name in services_in(c)]
+        assert sorted(grouped) == sorted(SERVICES)  # each once, none left out
+        assert "documents" in services_in(PartCategory.DATA)
 
     def test_list_available_services(self):
         """Test listing all available services."""
@@ -459,7 +413,6 @@ class TestServiceValidation:
         # Create a test spec with conflicts
         test_spec = ServiceSpec(
             name="test_conflict",
-            type=ServiceType.AUTH,
             description="Test conflict service",
             conflicts=["auth"],
         )
@@ -488,10 +441,10 @@ class TestServiceValidation:
 class TestServiceRegistryIntegrity:
     """Test integrity and consistency of the service registry."""
 
-    def test_all_services_have_valid_types(self):
-        """Test that all services have valid ServiceType values."""
-        for _name, spec in SERVICES.items():
-            assert isinstance(spec.type, ServiceType)
+    def test_all_services_are_in_a_listed_group(self):
+        """Every service's category is one the CLI lists services under."""
+        for name, spec in SERVICES.items():
+            assert spec.category in SERVICE_GROUPS, name
 
     def test_all_services_have_descriptions(self):
         """Test that all services have non-empty descriptions."""

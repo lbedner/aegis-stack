@@ -14,7 +14,7 @@ import pytest
 from aegis.core.components import COMPONENTS, ComponentSpec, ComponentType
 from aegis.core.file_manifest import FileManifest
 from aegis.core.plugins.spec import PluginKind, PluginSpec
-from aegis.core.services import SERVICES, ServiceSpec, ServiceType
+from aegis.core.services import SERVICES, ServiceSpec
 
 
 class TestPluginSpec:
@@ -89,7 +89,7 @@ class TestSubclassAliases:
     """
 
     def test_servicespec_defaults_kind_service(self) -> None:
-        spec = ServiceSpec(name="x", type=ServiceType.AUTH, description="d")
+        spec = ServiceSpec(name="x", description="d")
         assert spec.kind is PluginKind.SERVICE
         assert isinstance(spec, PluginSpec)
         assert isinstance(spec, ServiceSpec)
@@ -107,7 +107,6 @@ class TestSubclassAliases:
         spec = ServiceSpec(
             name="x",
             kind=PluginKind.COMPONENT,
-            type=ServiceType.AUTH,
             description="d",
         )
         assert spec.kind is PluginKind.COMPONENT
@@ -122,7 +121,7 @@ class TestRegistryShape:
             assert isinstance(spec, PluginSpec)
             assert spec.kind is PluginKind.SERVICE, name
             assert spec.verified is True, f"{name} should be verified=True"
-            assert isinstance(spec.type, ServiceType), f"{name} type wrong"
+            assert spec.type is None, f"{name}: a service has no ComponentType"
 
     def test_every_component_is_first_party(self) -> None:
         for name, spec in COMPONENTS.items():

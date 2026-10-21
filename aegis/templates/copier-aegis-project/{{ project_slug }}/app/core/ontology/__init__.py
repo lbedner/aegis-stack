@@ -14,7 +14,7 @@ from app.core.ontology.model import (
     PartNode,
     SystemModel,
 )
-from app.core.ontology.system import current, system_model
+from app.core.ontology.system import current, system_model, with_app
 
 __all__ = [
     "SCHEMA_VERSION",
@@ -28,4 +28,5 @@ __all__ = [
     "SystemModel",
     "current",
     "system_model",
+    "with_app",
 ]

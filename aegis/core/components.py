@@ -528,6 +528,7 @@ COMPONENTS: dict[str, ComponentSpec] = {
                 "app/components/frontend/dashboard/cards/observability_card.py",
                 "app/components/frontend/dashboard/modals/observability_modal",
                 "tests/components/test_observability_query.py",
+                "tests/components/test_logfire_identity.py",
             ],
         ),
     ),

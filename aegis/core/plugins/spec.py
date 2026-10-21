@@ -271,11 +271,10 @@ class PluginSpec:
       (``component.requires``, ``component.recommends``). Construction via
       those names is intentionally not supported — pass the canonical names.
 
-    The ``type`` field is a sub-classification facet that is meaningful per
-    ``kind``: when ``kind=SERVICE`` it carries a ``ServiceType`` (AUTH,
-    PAYMENT, ...); when ``kind=COMPONENT`` it carries a ``ComponentType``
-    (CORE, INFRASTRUCTURE). Typed as ``Any`` here to avoid a circular
-    import; consumers narrow as needed.
+    The ``type`` field is a component's ``ComponentType`` (CORE,
+    INFRASTRUCTURE, FRONTEND): whether it is always there. A service has
+    none; what groups any part is its ``category``. Typed as ``Any`` here to
+    avoid a circular import; consumers narrow as needed.
     """
 
     # Identity
@@ -303,8 +302,7 @@ class PluginSpec:
     # a real source file under ``docs/``.
     docs_path: str = ""
 
-    # Sub-classification — ServiceType when kind=SERVICE,
-    # ComponentType when kind=COMPONENT.
+    # A component's ComponentType; None for a service.
     type: Any = None
 
     # The concern it belongs to (``PartCategory``), and the name the
@@ -448,6 +446,12 @@ class PluginSpec:
     cli_name: str | None = None
 
     # ----- Read-only legacy aliases -------------------------------------
+
+    @property
+    def display_title(self) -> str:
+        """How the docs tables and the CLI's questions name the part: its
+        ``title``, else its name, capitalised."""
+        return self.title or self.name.capitalize()
 
     @property
     def app_name(self) -> str:

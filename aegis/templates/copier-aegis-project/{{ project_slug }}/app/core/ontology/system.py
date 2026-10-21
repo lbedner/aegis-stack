@@ -20,7 +20,6 @@ from starlette.routing import Route
 import yaml
 
 from app.core import ownership, runtime, secrets, source_index
-from app.core.config import settings
 from app.core.constants import ComponentName, QueueName
 from app.core.ontology import calls, domain
 from app.core.ontology.model import (
@@ -36,11 +35,11 @@ from app.core.ontology.model import (
     Node,
     PartNode,
     RouteNode,
-    Stack,
     SystemModel,
     ToolNode,
     node_id,
     parse_node_id,
+    stack,
 )
 from app.core.ontology.parts import node_of, on_disk, parts, service_folders
 from app.core.parts import PARTS
@@ -70,6 +69,14 @@ def _registered() -> bool:
 
     names = health.registered_health_names()
     return bool(names["components"] or names["services"])
+
+
+def with_app() -> SystemModel:
+    """The model built with the whole app, its routes in it: what a process
+    with no running backend (the CLI, a docs build) reads."""
+    from app.integrations.main import create_integrated_app
+
+    return system_model(create_integrated_app())
 
 
 def system_model(app: Starlette | None = None) -> SystemModel:
@@ -125,12 +132,7 @@ def system_model(app: Starlette | None = None) -> SystemModel:
     ]
     return SystemModel(
         partial=partial,
-        stack=Stack(
-            name=settings.PROJECT_NAME,
-            env=settings.APP_ENV,
-            build=settings.BUILD_ID,
-            aegis_version=settings.AEGIS_STACK_VERSION,
-        ),
+        stack=stack(),
         nodes=tuple(nodes),
         edges=tuple(dict.fromkeys(map(_moded, edges))),
     )

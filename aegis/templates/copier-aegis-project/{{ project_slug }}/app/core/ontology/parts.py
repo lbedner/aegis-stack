@@ -120,6 +120,7 @@ def _part(
         or (PLACED[name].description if name in PLACED else ""),
         cli=PARTS[name].cli if name in PARTS else None,
         page=ownership.COMPONENT_PAGES.get(name),
+        experimental=PARTS[name].experimental if name in PARTS else False,
         options=options_of(name, answers()) if parent is None else (),
     )
 

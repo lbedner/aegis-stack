@@ -176,7 +176,7 @@ class TestHeadlessSelection:
 
     def test_finance_services(self) -> None:
         state = blueprint_selection(BLUEPRINTS["finance"])
-        assert state.services == ["ai[sqlite,pydantic-ai,ollama]", "finance"]
+        assert state.services == ["finance", "ai[sqlite,pydantic-ai,ollama]"]
 
     def test_finance_backends(self) -> None:
         state = blueprint_selection(BLUEPRINTS["finance"])
@@ -234,7 +234,7 @@ class TestEscFromBlueprintReview:
         keys = ["down", "\r", "\r", "esc", "down", "\r", "\r", "\r"]
         ui = GuidedSelectionUI(keys=keys)
         plan, _ = run_guided_init_flow("demo", "3.13", ui=ui)
-        assert plan.services == ["ai[sqlite,pydantic-ai,ollama]", "finance"]
+        assert plan.services == ["finance", "ai[sqlite,pydantic-ai,ollama]"]
 
 
 class TestReviewSidebar:

@@ -5,13 +5,7 @@ Services command implementation.
 import typer
 
 from ..cli import brand
-from ..core.services import (
-    SERVICE_TYPE_I18N_KEYS as _SERVICE_TYPE_KEYS,
-)
-from ..core.services import (
-    ServiceType,
-    get_services_by_type,
-)
+from ..core.services import SERVICE_GROUPS, group_header_key, services_in
 from ..i18n import t
 
 
@@ -28,16 +22,14 @@ def services_command() -> None:
     typer.echo(f"\n{t('services.title')}")
     typer.echo("=" * 40)
 
-    # Group services by type, in enum-declaration order (single source of
-    # truth — a new ServiceType shows up here automatically).
-    service_types = list(ServiceType)
-
+    # Grouped by each service's category (``PluginSpec.category``), in
+    # ``SERVICE_GROUPS`` order.
     services_found = False
-    for service_type in service_types:
-        type_services = get_services_by_type(service_type)
+    for category in SERVICE_GROUPS:
+        type_services = services_in(category)
         if type_services:
             services_found = True
-            header = t(_SERVICE_TYPE_KEYS[service_type])
+            header = t(group_header_key(category))
             typer.echo(f"\n{header}")
             typer.echo("-" * 40)
 

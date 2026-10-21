@@ -85,7 +85,9 @@ graph TB
     QA -->|LOGFIRE_READ_TOKEN| Modal
 ```
 
-The middleware is auto-discovered by the backend hook system, no manual registration needed. On startup it configures Logfire with your project name and environment, then instruments each available integration.
+The middleware is auto-discovered by the backend hook system, no manual registration needed. On startup it configures Logfire, then instruments each available integration.
+
+Each process reports its traces under its own name, in the stack's namespace: `service.name` is `webserver`, `worker` or `scheduler`, `service.namespace` is the project name, `service.version` is the deployed build and `deployment.environment.name` is `APP_ENV`. One stack's processes are told apart and kept together; `<app> ontology export --format otel --unit worker` prints what a process reports.
 
 When `LOGFIRE_TOKEN` is set, traces are sent to Logfire cloud. Without a token, instrumentation still runs locally (useful for development and structured logging).
 

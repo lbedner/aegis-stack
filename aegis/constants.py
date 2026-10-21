@@ -56,8 +56,8 @@ class ServiceNames:
 
     These key ``MIGRATION_SPECS`` and drive the spec-variant resolution in
     ``aegis.core.migration_generator`` (per-user insights,
-    schema-qualified finance). Distinct from ``ServiceType``, which
-    classifies a service rather than naming its migration.
+    schema-qualified finance). Distinct from a spec's ``category``, which
+    groups a service rather than naming its migration.
     """
 
     INSIGHTS = "insights"

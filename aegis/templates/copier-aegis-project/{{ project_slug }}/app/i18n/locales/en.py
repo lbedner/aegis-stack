@@ -884,6 +884,12 @@ MESSAGES: dict[str, str] = {
     # Help text
     "docs.help": "Show documentation links",
     "docs.help_show": "Display documentation links for installed components and services.",
+    "ontology.help": 'Export what this app is, from its code, for other tools',
+    "ontology.help_export": "Print the app's system model in another tool's format: markdown (the docs' stack page), backstage (catalog-info.yaml) or otel (a process's resource attributes).",
+    "ontology.opt_format": 'Format: markdown, backstage or otel',
+    "ontology.opt_owner": 'The owner Backstage lists the entities under (default: a group named for the app)',
+    "ontology.opt_unit": 'The process the otel attributes are for: webserver, worker or scheduler',
+    "ontology.unknown_format": 'Unknown format {fmt}: one of {formats}',
     "patterns.help": "Show how this app is built: its patterns and macros",
     "patterns.help_show": "Print the patterns detected in this app's code, and the macro catalog, as a brief to read before building.",
     "patterns.opt_format": "Output format: markdown or json",

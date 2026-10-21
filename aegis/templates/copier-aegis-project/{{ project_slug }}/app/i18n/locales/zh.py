@@ -882,6 +882,12 @@ MESSAGES: dict[str, str] = {
     # 帮助文本
     "docs.help": "查看已安装组件和服务的文档链接",
     "docs.help_show": "查看已安装组件和服务的文档链接",
+    "ontology.help": "从代码导出本应用的组成，供其他工具使用",
+    "ontology.help_export": "以其他工具的格式输出应用的系统模型：markdown（文档的技术栈页面）、backstage（catalog-info.yaml）或 otel（进程的资源属性）。",
+    "ontology.opt_format": "格式：markdown、backstage 或 otel",
+    "ontology.opt_owner": "Backstage 登记实体所用的所有者（默认：以应用命名的组）",
+    "ontology.opt_unit": "otel 属性所属的进程：webserver、worker 或 scheduler",
+    "ontology.unknown_format": "未知格式 {fmt}：应为 {formats} 之一",
     "patterns.help": "查看应用的构建方式：模式与宏",
     "patterns.help_show": "输出从代码中检测到的模式和宏目录，动手开发前先读一读",
     "patterns.opt_format": "输出格式：markdown 或 json",

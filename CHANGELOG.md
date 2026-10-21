@@ -22,6 +22,17 @@
   history row. The jobs API names each job's run (`run_id`: the worker task
   the store handed it to). Work logs as it always did; nothing to call.
 
+### Fixed
+
+- **Illiana's `ontology` tool no longer fails on a part that read Postgres's
+  catalog.** Postgres reflection (the database browser, the scheduler's
+  table checks) queries `pg_class`, `pg_namespace` and the rest, and each
+  was counted as a hop to an `object:pg_*` table the model has no node
+  for. `ontology.observed.overlaid` laid those on as edges, so asking about
+  `component:backend` or `component:scheduler` raised
+  `KeyError: 'object:pg_class'` and ended the chat. A pair seen at runtime
+  is an edge only when both ends are nodes of the model or outside hosts.
+
 ## [0.16.1] - 2026-10-20
 
 ### Added

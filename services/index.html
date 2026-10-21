@@ -15,7 +15,7 @@
         <link rel="canonical" href="https://docs.aegis-stack.io/services/">
       
       
-        <link rel="prev" href="../components/observability/">
+        <link rel="prev" href="../components/deploy/">
       
       
         <link rel="next" href="ai/">
@@ -1752,6 +1752,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../components/browser/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Browser
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -2203,34 +2231,6 @@
     
   
     MCP
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../components/browser/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Browser
   
 
     
@@ -3087,14 +3087,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../components/deploy/" class="md-nav__link">
+      <a href="../components/observability/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Deploy
+    Observability
   
 
     
@@ -3108,6 +3108,66 @@
 
               
             
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_7" id="__nav_3_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Stack
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Stack
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
               
                 
   
@@ -3115,14 +3175,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../components/observability/" class="md-nav__link">
+      <a href="../components/deploy/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Observability
+    Deploy
   
 
     
@@ -4041,7 +4101,7 @@
   <span class="md-ellipsis">
     
   
-    Meetings
+    Meetings (Experimental)
   
 
     
@@ -4057,7 +4117,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Meetings
+    Meetings (Experimental)
   
 
           </label>
@@ -4655,7 +4715,7 @@
   <span class="md-ellipsis">
     
   
-    Payment (Experimental)
+    Payment
   
 
     
@@ -4671,7 +4731,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Payment (Experimental)
+    Payment
   
 
           </label>
@@ -5083,7 +5143,7 @@
   <span class="md-ellipsis">
     
   
-    Blog (Experimental)
+    Blog
   
 
     
@@ -5099,7 +5159,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Blog (Experimental)
+    Blog
   
 
           </label>
@@ -5283,7 +5343,7 @@
   <span class="md-ellipsis">
     
   
-    Finance
+    Finance (Experimental)
   
 
     
@@ -5299,7 +5359,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Finance
+    Finance (Experimental)
   
 
           </label>
@@ -5651,7 +5711,7 @@
   <span class="md-ellipsis">
     
   
-    Insights (Experimental)
+    Insights
   
 
     
@@ -5667,7 +5727,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Insights (Experimental)
+    Insights
   
 
           </label>
@@ -6855,7 +6915,11 @@ block imports is all it offers, each name loaded on first use
 or one per line from <code>git diff --name-only</code>) and says, from the app's
 ontology, which parts own them, which parts depend on those, and the
 tables, routes and jobs they define; Markdown for a pull request's job
-summary, JSON with <code>--format json</code>.
+summary, JSON with <code>--format json</code>. <code>ontology export</code> writes the same
+model for other tools: <code>--format markdown</code> (the docs' <em>What It Is Made
+Of</em> page, <code>stack.md</code>, built with the docs), <code>--format backstage</code> (a
+<code>catalog-info.yaml</code>) or <code>--format otel</code> (a process's resource
+attributes).
 <code>patterns check</code> lists only the findings that are new: the ones not
 in <code>.patterns-baseline.json</code>, the known debt, which <code>--update</code> writes
 and afterwards only shrinks. A place is known by its rule, its part,

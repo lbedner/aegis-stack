@@ -15,10 +15,10 @@
         <link rel="canonical" href="https://docs.aegis-stack.io/components/observability/">
       
       
-        <link rel="prev" href="../deploy/">
+        <link rel="prev" href="../secrets/how-it-works/">
       
       
-        <link rel="next" href="../../services/">
+        <link rel="next" href="../deploy/">
       
       
         
@@ -1760,6 +1760,34 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../browser/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Browser
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -2217,34 +2245,6 @@
     
   
     MCP
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../browser/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Browser
   
 
     
@@ -3106,34 +3106,6 @@
                 
   
   
-  
-  
-    <li class="md-nav__item">
-      <a href="../deploy/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Deploy
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
     
   
   
@@ -3344,6 +3316,97 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_3_7" id="__nav_3_7_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Stack
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_3_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Stack
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../deploy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Deploy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -4066,7 +4129,7 @@
   <span class="md-ellipsis">
     
   
-    Meetings
+    Meetings (Experimental)
   
 
     
@@ -4082,7 +4145,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Meetings
+    Meetings (Experimental)
   
 
           </label>
@@ -4674,7 +4737,7 @@
   <span class="md-ellipsis">
     
   
-    Payment (Experimental)
+    Payment
   
 
     
@@ -4690,7 +4753,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Payment (Experimental)
+    Payment
   
 
           </label>
@@ -5102,7 +5165,7 @@
   <span class="md-ellipsis">
     
   
-    Blog (Experimental)
+    Blog
   
 
     
@@ -5118,7 +5181,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Blog (Experimental)
+    Blog
   
 
           </label>
@@ -5302,7 +5365,7 @@
   <span class="md-ellipsis">
     
   
-    Finance
+    Finance (Experimental)
   
 
     
@@ -5318,7 +5381,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Finance
+    Finance (Experimental)
   
 
           </label>
@@ -5670,7 +5733,7 @@
   <span class="md-ellipsis">
     
   
-    Insights (Experimental)
+    Insights
   
 
     
@@ -5686,7 +5749,7 @@
             <span class="md-nav__icon md-icon"></span>
             
   
-    Insights (Experimental)
+    Insights
   
 
           </label>
@@ -6667,7 +6730,8 @@
 
     QA --&gt;|LOGFIRE_READ_TOKEN| Card
     QA --&gt;|LOGFIRE_READ_TOKEN| Modal</code></pre>
-<p>The middleware is auto-discovered by the backend hook system, no manual registration needed. On startup it configures Logfire with your project name and environment, then instruments each available integration.</p>
+<p>The middleware is auto-discovered by the backend hook system, no manual registration needed. On startup it configures Logfire, then instruments each available integration.</p>
+<p>Each process reports its traces under its own name, in the stack's namespace: <code>service.name</code> is <code>webserver</code>, <code>worker</code> or <code>scheduler</code>, <code>service.namespace</code> is the project name, <code>service.version</code> is the deployed build and <code>deployment.environment.name</code> is <code>APP_ENV</code>. One stack's processes are told apart and kept together; <code>&lt;app&gt; ontology export --format otel --unit worker</code> prints what a process reports.</p>
 <p>When <code>LOGFIRE_TOKEN</code> is set, traces are sent to Logfire cloud. Without a token, instrumentation still runs locally (useful for development and structured logging).</p>
 <h2 id="environment-variables">Environment Variables</h2>
 <table>

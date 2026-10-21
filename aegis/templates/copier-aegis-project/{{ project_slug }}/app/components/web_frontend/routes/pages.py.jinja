@@ -46,6 +46,7 @@ from app.components.web_frontend.routes.partials import (
     overseer_deployments as overseer_deployments_partials,
 )
 from app.components.web_frontend.routes.partials import overseer_errors as overseer_errors_partials
+from app.components.web_frontend.routes.partials import overseer_runs as overseer_runs_partials
 from app.components.web_frontend.routes.partials import overseer_runtime as overseer_runtime_partials
 {%- if include_scheduler %}
 from app.components.web_frontend.routes.partials import (
@@ -189,6 +190,7 @@ router.include_router(overseer_server_partials.router)
 router.include_router(overseer_server_partials.load_tests_router)
 router.include_router(overseer_server_partials.requests_router)
 router.include_router(overseer_runtime_partials.router)
+router.include_router(overseer_runs_partials.router)
 {%- if include_database %}
 router.include_router(overseer_database_partials.router)
 {%- endif %}

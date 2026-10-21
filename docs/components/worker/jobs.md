@@ -117,6 +117,12 @@ data: {"job_id": "...", "status": "done", "result": {"read": 7}}
 
 The stream sends the current state first, then every change, then exactly one terminal frame and closes. A client reads until the terminal status; it never has to poll.
 
+### What a job logged
+
+A job is a run: everything the work logs while it runs, through `logger` or the standard library, is also kept under the run's id, and the Overseer shows it under the row that started the run. On the Worker page each task in the history opens into its log, live while the task is on; a scheduled run's row on the Scheduler page does the same. Nothing in the task has to change: a `logger.info` inside it is the whole contract.
+
+The run's id is the worker task's, so a job the store handed to a worker names it (`run_id` in the job snapshot). The lines live in Redis beside the task history, capped at 5,000 per run and gone when the history row is; on a stack without Redis they stay in the process that ran the job.
+
 From a Flet surface:
 
 ```python

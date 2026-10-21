@@ -164,9 +164,24 @@ def _execution_rows(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "job_id": record.get("job_id"),
                 "scheduled": format_timestamp(record.get("scheduled_run_time")),
                 "finished": format_timestamp(record.get("finished_at")),
+                "log": f"{PARTIALS}/executions/{record.get('id')}/log",
             }
         )
     return rows
+
+
+async def load_execution_log(
+    *, db: Db, execution_id: int
+) -> tuple[bool, list[str]] | None:
+    """Whether the run is still on, and what it logged (on the row once it
+    finished); None for no such run. Reads on the request's own session,
+    only when a row is opened: the list never carries the log."""
+    from app.services.scheduler.models import JobExecution
+
+    row = await db.get(JobExecution, execution_id)
+    if row is None:
+        return None
+    return row.status == "running", (row.log or "").splitlines()
 
 
 async def _history(req: SectionRequest, metadata: dict[str, Any]) -> dict[str, Any]:

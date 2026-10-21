@@ -2,6 +2,7 @@
 """Tests for scheduler execution-history logging (execution_log.py)."""
 
 from contextlib import contextmanager
+from typing import Any
 
 import pytest
 from sqlmodel import Session, select
@@ -69,6 +70,21 @@ def test_record_job_finished_failure_captures_error(db_session: Session) -> None
     assert row.status == "failed"
     assert row.error_message == "boom"
     assert row.traceback == "trace"
+
+
+def test_a_finished_run_keeps_what_it_logged(
+    db_session: Session, run_log_sink: Any
+) -> None:
+    """The run log lives in Redis for a day; the row lives as long as the
+    history does, so the lines under the row's id are copied onto it when
+    the run ends."""
+    execution_id = record_job_started("job1", "Job One")
+    run_log_sink.append(str(execution_id), "a")
+    run_log_sink.append(str(execution_id), "b")
+
+    record_job_finished(execution_id, "job1", success=True)
+
+    assert _rows(db_session)[0].log == "a\nb"
 
 
 def test_record_job_finished_without_start_inserts_completed_row(

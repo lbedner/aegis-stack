@@ -7,7 +7,7 @@ table (migrations not yet run) never stops a process from booting: it runs
 on ``.env``, which is already in effect.
 """
 
-from app.core import edges_http, saved_settings
+from app.core import edges_http, run_log, saved_settings
 from app.core.log import apply_log_level, logger, setup_logging
 
 
@@ -42,6 +42,15 @@ async def apply_saved_overrides() -> None:
         if applied:
             logger.info("Saved settings applied: %s", ", ".join(applied))
     apply_log_level()
+{%- if include_redis %}
+    # A run's log where every process reads it: the webserver what a worker
+    # or the scheduler wrote.
+    from app.core.config import settings
+
+    run_log.attach_redis(
+        settings.redis_url_effective{% if include_worker %}, settings.TASK_HISTORY_TTL_SECONDS{% endif %}
+    )
+{%- endif %}
 {%- if include_ai and ai_backend in ("sqlite", "postgres") %}
     await _apply_active_model()
 

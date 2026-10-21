@@ -8,6 +8,7 @@ small script that prints its arguments.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import importlib.util
 import json
 import logging
@@ -159,6 +160,9 @@ def app_store(monkeypatch: pytest.MonkeyPatch) -> Any:
     log = types.ModuleType("app.core.log")
     log.logger = logging.getLogger("app")  # type: ignore[attr-defined]
     monkeypatch.setitem(sys.modules, "app.core.log", log)
+    run_log = types.ModuleType("app.core.run_log")
+    run_log.bind_run = lambda _run_id: contextlib.nullcontext()  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "app.core.run_log", run_log)
     _load("app.services.system.jobs", SYSTEM / "jobs.py", monkeypatch)
     return _load(
         "app.services.system.job_store", SYSTEM / "job_store.py", monkeypatch

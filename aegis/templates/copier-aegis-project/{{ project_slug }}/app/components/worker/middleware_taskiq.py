@@ -18,7 +18,7 @@ from app.components.worker import runtime
 from app.components.worker.events import publish_event
 from app.components.worker.heartbeat import mark_busy, mark_idle, worker_id
 from app.components.worker.patterns import unwrap
-from app.core import edges
+from app.core import edges, run_log
 from app.core.boot import apply_saved_overrides
 from app.core.config import settings
 from app.core.log import logger
@@ -99,6 +99,7 @@ class EventPublishMiddleware(TaskiqMiddleware):
             broker.keep_claim(message.task_id)
         if broker is not None:
             edges.into(unwrap(broker.find_task(message.task_name)), source=edges.QUEUE)
+        run_log.bind(message.task_id)
         if self._redis:
             await mark_busy(self._redis)
             await publish_event(
@@ -130,6 +131,7 @@ class EventPublishMiddleware(TaskiqMiddleware):
         """
         if hasattr(broker := getattr(self, "broker", None), "release_claim"):
             broker.release_claim(message.task_id)
+        run_log.unbind()
         if self._redis:
             event_type = "job.failed" if result.is_err else "job.completed"
             await publish_event(

@@ -163,7 +163,8 @@ CREATE TABLE scheduler.job_execution (
     duration_ms        FLOAT,
     status             VARCHAR NOT NULL,  -- running | success | failed | missed
     error_message      VARCHAR(2000),
-    traceback          VARCHAR(8000)
+    traceback          VARCHAR(8000),
+    log                TEXT               -- what the run logged, copied when it finished
 );
 ```
 

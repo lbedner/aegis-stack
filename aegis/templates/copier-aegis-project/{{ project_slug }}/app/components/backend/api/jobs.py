@@ -37,6 +37,7 @@ class JobStatusResponse(BaseModel):
     result: dict[str, Any] | None = None
     error: str | None = None
     started_at: str = ""
+    run_id: str = ""  # the run whose log is the job's (``JobSnapshot``)
 
 
 class JobStartedResponse(BaseModel):

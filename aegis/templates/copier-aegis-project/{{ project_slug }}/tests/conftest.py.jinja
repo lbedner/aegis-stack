@@ -241,6 +241,18 @@ def _no_load_cost_measuring(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture
+def run_log_sink() -> Generator[Any, None, None]:
+    """A run log of this test's own (``run_log.MemorySink``), put back after."""
+    from app.core import run_log
+
+    previous = run_log.sink()
+    memory = run_log.MemorySink()
+    run_log.use(memory)
+    yield memory
+    run_log.use(previous)
+
+
+@pytest.fixture
 async def store() -> AsyncGenerator[Any]:
     """The error store's Lua against a real Redis, only when one is named:
     the suite never writes to the developer's running Redis. Point
@@ -277,6 +289,7 @@ def _no_real_redis():
     event loop at import, and each test gets a fresh one. The job store's
     stand-in is one in-memory Redis, as one server would be."""
     from app.components.backend.middleware import traffic
+    from app.core import run_log
     import app.core.cache as cache_module
     from app.services.system.job_store import RedisJobStore
     from tests._fake_redis import FakeRedis
@@ -288,6 +301,8 @@ def _no_real_redis():
         patch.setattr(
             RedisJobStore, "from_url", classmethod(lambda cls, _url: cls(memory))
         )
+        # The run log stays in this process (``run_log_sink`` for a test's own).
+        patch.setattr(run_log, "attach_redis", lambda *_args, **_kwargs: None)
         yield
 
 

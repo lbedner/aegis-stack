@@ -46,7 +46,9 @@ async def start_extraction(
     try:
         await store.create(job_id, f"documents-extract:{document_id}", "Queued...")
         try:
-            await _enqueue(job_id, document_id, owner_user_id, force)
+            run_id = await _enqueue(job_id, document_id, owner_user_id, force)
+            # The worker binds its task id as the run: the job's log is there.
+            await store.set_run(job_id, run_id)
         except Exception as exc:
             # The record outlives this function, so a failed hand-off has to
             # be written into it: otherwise the job sits "Queued..." until it
@@ -61,12 +63,13 @@ async def start_extraction(
 
 async def _enqueue(
     job_id: str, document_id: int, owner_user_id: int | None, force: bool
-) -> None:
-    from app.components.worker.pools import enqueue_task
+) -> str:
+    """Hand the job to the worker; the task id it runs under."""
+    from app.components.worker import pools
     from app.core.constants import QueueName
 
     # The one way work reaches the queue: its feed, its history, its edge.
-    await enqueue_task(
+    handle = await pools.enqueue_task(
         "extract_document_task",
         QueueName.SYSTEM,
         job_id,
@@ -74,6 +77,7 @@ async def _enqueue(
         owner_user_id,
         force,
     )
+    return pools.job_id(handle)
 {%- else %}
 
 

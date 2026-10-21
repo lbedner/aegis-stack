@@ -206,6 +206,19 @@ class TestOneWayToNarrate:
     alternative is a wrapper closure per lane, which is two homes for one
     idea - and the second home is the one that goes stale."""
 
+    def test_a_job_names_the_run_whose_log_to_read(self, store) -> None:
+        """Its own id until the worker's task id is known: the run log is
+        kept under whichever id the process doing the work was bound to."""
+        asyncio.run(store.create("j1", "documents-extract:5", "Queued..."))
+        first = asyncio.run(store.get("j1"))
+        assert first is not None and first.run_id == "j1"
+
+        asyncio.run(store.set_run("j1", "task-42"))
+
+        snapshot = asyncio.run(store.get("j1"))
+        assert snapshot is not None and snapshot.run_id == "task-42"
+        assert snapshot.as_dict()["run_id"] == "task-42"
+
     def test_the_store_hands_out_a_writer_for_one_job(self, store) -> None:
         asyncio.run(store.create("j1", "finance-import:x.csv", "Queued..."))
 

@@ -46,12 +46,12 @@ def test_a_run_that_succeeds_logs_nothing() -> None:
 
 
 def test_the_scheduler_only_enqueues() -> None:
-    from app.components.worker.pools import enqueue_task
+    from app.components.scheduler.main import scheduled_run
 
     scheduled = _scheduled()
     for job in service_jobs():
-        assert scheduled[job.id].func is enqueue_task, job.id
-        assert list(scheduled[job.id].args) == [job.task_name, "system"]
+        assert scheduled[job.id].func is scheduled_run, job.id
+        assert list(scheduled[job.id].args) == [job.id, job.task_name]
 
 
 def test_every_enqueued_name_is_a_system_task() -> None:
@@ -134,11 +134,11 @@ def test_a_worker_task_runs_its_job_under_its_own_name() -> None:
 
 
 def test_without_a_worker_the_scheduler_runs_each_job() -> None:
-    from app.core.schedule import run_service_job
+    from app.components.scheduler.main import scheduled_run
 
     scheduled = _scheduled()
     for job in service_jobs():
-        assert scheduled[job.id].func is run_service_job, job.id
+        assert scheduled[job.id].func is scheduled_run, job.id
         assert list(scheduled[job.id].args) == [job.id]
 {%- endif %}
 {%- if scheduler_backend != "memory" %}
@@ -151,15 +151,18 @@ async def test_running_a_job_by_hand_passes_its_stored_args(
     "Run Now" calling it bare would fail every time."""
     from app.services.scheduler import trigger
 
+    import structlog
+
     monkeypatch.setattr(trigger, "record_job_started", lambda *_: 1)
     monkeypatch.setattr(trigger, "record_job_finished", lambda *_, **__: None)
     seen: list[tuple[Any, ...]] = []
 
     async def job(*args: Any) -> None:
-        seen.append(args)
+        # Bound as its history row, so the row keeps what it logs.
+        seen.append((*args, structlog.contextvars.get_contextvars().get("run_id")))
 
     assert await trigger.run_triggered_job(job, "id", "Name", ["a_job", "system"])
-    assert seen == [("a_job", "system")]
+    assert seen == [("a_job", "system", "1")]
 {%- endif %}
 
 def test_interval_jobs_keep_their_times_across_restarts(

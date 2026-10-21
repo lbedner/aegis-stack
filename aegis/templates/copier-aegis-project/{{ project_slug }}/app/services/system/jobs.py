@@ -24,6 +24,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 import uuid
 
+from app.core import run_log
 from app.core.log import logger
 
 if TYPE_CHECKING:
@@ -47,6 +48,12 @@ class JobSnapshot:
     result: dict[str, Any] | None
     error: str | None
     started_at: str = ""  # ISO 8601, UTC; what "newest first" sorts on
+    # The run whose log is the job's (``run_log``): its own id, or the
+    # worker task's once the store knows it.
+    run_id: str = ""
+
+    def __post_init__(self) -> None:
+        self.run_id = self.run_id or self.job_id
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -57,6 +64,7 @@ class JobSnapshot:
             "result": self.result,
             "error": self.error,
             "started_at": self.started_at,
+            "run_id": self.run_id,
         }
 
 
@@ -263,13 +271,14 @@ class JobRunner:
         return job.snapshot()
 
     async def _run(self, job: _Job, work: JobWork) -> None:
-        try:
-            job.result = await work(JobHandle(job, self))
-            job.status = "done"
-        except Exception as e:
-            logger.exception(f"Job failed: {job.name}")
-            job.status = "failed"
-            job.error = str(e) or type(e).__name__
+        with run_log.bind_run(job.job_id):
+            try:
+                job.result = await work(JobHandle(job, self))
+                job.status = "done"
+            except Exception as e:
+                logger.exception(f"Job failed: {job.name}")
+                job.status = "failed"
+                job.error = str(e) or type(e).__name__
         self._publish(job, final=True)
 
     def _publish(self, job: _Job, final: bool = False) -> None:

@@ -211,6 +211,7 @@ EXAMPLES: dict[str, dict[str, str]] = {
               {{ chip("24h", active=True, href="#macro-chip") }}
               {{ chip("7d", href="#macro-chip") }}
             </div>""",
+        "lazy": """{{ lazy("/partials/overseer/runs/abc123/log", 'data-run-log-of="abc123"', "Loading…") }}""",
         "copy_button": """{{ copy_button("redis://localhost:6379/0") }}""",
         "command": """<p class="flex items-center gap-2">{{ command("make serve") }}</p>""",
         "sparkline": """{{ sparkline("0.0,20.0 30.0,8.0 60.0,14.0 90.0,2.0 120.0,10.0", extra="w-40 h-6") }}""",

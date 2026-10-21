@@ -15,6 +15,7 @@ from datetime import UTC, datetime
 
 from sqlmodel import col, delete, select
 
+from app.core import run_log
 from app.core.db import db_session
 from app.core.log import logger
 from app.core.time import utcnow
@@ -67,7 +68,9 @@ def record_job_finished(
 ) -> None:
     """Mark a run finished. Updates the ``running`` row when its id is known,
     otherwise inserts a completed row (e.g. the scheduler restarted between
-    submit and completion)."""
+    submit and completion). What the run logged under the row's id
+    (``run_log``) is copied onto the row, since the run log expires before
+    the history does."""
     try:
         now = utcnow()
         with db_session(autocommit=True) as session:
@@ -87,6 +90,8 @@ def record_job_finished(
                 row.error_message = str(error)[:2000]
             if traceback:
                 row.traceback = str(traceback)[:8000]
+            if row.id is not None:
+                row.log = "\n".join(run_log.sink().read(str(row.id))) or None
     except Exception as e:
         logger.debug(f"Failed to record job finish for {job_id}: {e}")
 

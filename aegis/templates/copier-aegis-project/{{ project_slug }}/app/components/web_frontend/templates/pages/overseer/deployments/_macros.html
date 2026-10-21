@@ -74,9 +74,15 @@
 
 {% macro asks(url) %}data-write hx-post="{{ url }}" hx-target="#deploy-job" hx-swap="innerHTML"{% endmacro %}
 
+{% macro ask_attrs(partials, verb) %}{{ asks(partials ~ "/" ~ verb) }} data-ask="{{ verb }}"{% endmacro %}
+
 {% macro ask(label, partials, verb, tone="default") %}
-{% set attrs %}{{ asks(partials ~ "/" ~ verb) }} data-ask="{{ verb }}"{% endset %}
-{{ action(label, attrs, tone) }}
+{{ action(label, ask_attrs(partials, verb), tone) }}
+{% endmacro %}
+
+{# ``ask`` as a row of a dropdown() menu. #}
+{% macro ask_item(label, partials, verb, hint=None) %}
+{{ menu_item(label, ask_attrs(partials, verb), hint=hint) }}
 {% endmacro %}
 
 {% macro destroy_form(partials, name) %}

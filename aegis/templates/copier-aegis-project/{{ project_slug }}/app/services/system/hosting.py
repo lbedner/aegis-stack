@@ -4,8 +4,9 @@ Flet alike.
 ``running_on()``: the cloud this server is on, read from that cloud's own
 metadata service at 169.254.169.254, which every one of them answers on the
 server itself and nowhere else. Asked once per process (a server does not
-move); nothing answering is ``Local`` before any deploy, ``Self-hosted``
-after. ``deploys_to()``: where this project deploys to, from ``aegis
+move); nothing answering is ``Local`` before any deploy (wearing the
+mark of the OS ``make serve`` named), ``Self-hosted`` after.
+``deploys_to()``: where this project deploys to, from ``aegis
 deploy-provision``'s record in ``.aegis/deploy.yml``, which stays on the
 machine you deploy from (it is never synced to the server). ``providers()``:
 the providers ``aegis`` knows, and what it can do on each, from
@@ -18,6 +19,7 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -25,7 +27,7 @@ import httpx
 import yaml
 
 from app.core import exposure
-from app.core.brand_icons import favicon_url
+from app.core.brand_icons import domain_of, favicon_url
 
 METADATA = "http://169.254.169.254"
 PROBE_SECONDS = 0.5  # a link-local answer is instant; off a cloud, nothing is
@@ -88,13 +90,18 @@ _running: dict[str, Any] | None = None
 
 
 def _where(
-    key: str | None, name: str, facts: list[tuple[str, Any]], console: str | None
+    key: str | None,
+    name: str,
+    facts: list[tuple[str, Any]],
+    console: str | None,
+    logo: str | None = None,
 ) -> dict[str, Any]:
+    """``logo``: where no provider is, a mark of its own (Local's OS)."""
     provider = BY_KEY.get(key or "")
     return {
         "key": key,
         "name": name,
-        "logo": provider.logo if provider else None,
+        "logo": provider.logo if provider else logo,
         "facts": [
             (label, str(value)) for label, value in facts if value not in (None, "")
         ],
@@ -199,8 +206,13 @@ async def _detect(transport: httpx.AsyncBaseTransport | None) -> dict[str, Any]:
     for where in found:
         if where is not None:
             return where
-    name = "Self-hosted" if exposure.deployed() else "Local"
-    return _where(None, name, [], None)
+    if exposure.deployed():
+        return _where(None, "Self-hosted", [], None)
+    # The machine running Docker, as make serve names it (a fact it stamps,
+    # not a setting anyone configures).
+    domain = domain_of(os.environ.get("HOST_OS_URL"))
+    logo = favicon_url(domain) if domain else None
+    return _where(None, "Local", [("OS", os.environ.get("HOST_OS"))], None, logo)
 
 
 def deploy_config(path: Path = DEPLOY_CONFIG) -> dict[str, Any]:

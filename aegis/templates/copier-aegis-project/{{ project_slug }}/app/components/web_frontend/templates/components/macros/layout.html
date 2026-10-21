@@ -379,10 +379,11 @@
 
 {# One entry in a dropdown() menu. ``attrs`` carries the htmx verb
    (``hx-get``/``hx-post``/``hx-delete`` plus target and swap); the menu
-   closes itself on the click, so a dialog never opens over it. #}
-{% macro menu_item(label, attrs, danger=False) %}
+   closes itself on the click, so a dialog never opens over it.
+   ``hint``: a muted line under the label, what choosing it costs. #}
+{% macro menu_item(label, attrs, danger=False, hint=None) %}
 <li><button type="button" {{ attrs|safe }} @click="$el.closest('details').removeAttribute('open')"
-            class="w-full text-left px-3 py-1.5 text-sm {{ 'text-error' if danger else 'text-aegis-text' }} hover:bg-aegis-border/30 rounded transition-colors">{{ label }}</button></li>
+            class="w-full text-left px-3 py-1.5 text-sm {{ 'text-error' if danger else 'text-aegis-text' }} hover:bg-aegis-border/30 rounded transition-colors">{{ label }}{% if hint %}<span data-hint class="block text-xs text-aegis-muted">{{ hint }}</span>{% endif %}</button></li>
 {% endmacro %}
 
 {# A menu behind a button. It opens below on the ``align`` side; app.js

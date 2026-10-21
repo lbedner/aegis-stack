@@ -15,6 +15,9 @@ services:
       - "127.0.0.1:${WEBSERVER_HOST_PORT:-${PORT:-8000}}:${PORT:-8000}"
     environment:
       - WATCHFILES_FORCE_POLLING=true
+      # The machine running Docker (make serve names it): Local's mark.
+      - HOST_OS=${HOST_OS:-}
+      - HOST_OS_URL=${HOST_OS_URL:-}
 {%- if include_finance and finance_plaid %}
       - PLAID_TUNNEL_METRICS_URL=http://plaid-tunnel:20241
 {%- endif %}

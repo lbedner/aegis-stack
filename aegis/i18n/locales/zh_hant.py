@@ -749,6 +749,13 @@ MESSAGES: dict[str, str] = {
     "deploy.complete": "部署完成",
     "deploy.rolling_starting": "正在向 {host} 滾動部署...",
     "deploy.rolling_building": "正在建置 Web 伺服器映像...",
+    "deploy.rolling_migrating": (
+        "Bringing the database up to the new code before anything restarts..."
+    ),
+    "deploy.rolling_migrate_failed": (
+        "The database could not be brought up to the new code; nothing was "
+        "restarted and the old code is still serving. See the output above."
+    ),
     "deploy.rolling_pausing": "正在暫停 worker 佇列...",
     "deploy.rolling_pause_failed": (
         "暫停旗標設定失敗，worker 可能在任務執行中被 SIGTERM。"
@@ -855,9 +862,9 @@ MESSAGES: dict[str, str] = {
     "deploy.help_opt_backup": "部署前先建立備份",
     "deploy.help_opt_health": "部署完成後執行健康檢查",
     "deploy.help_opt_rolling": (
-        "僅程式碼、HTTP 零停機部署。透過 docker-rollout 滾動更新 Web "
-        "伺服器，並暫停 worker 佇列，讓在途任務平穩收尾。跳過資料庫 "
-        "遷移。"
+        "Deploy without downtime: back up, bring the database up to the new "
+        "code, pause the worker queue so in-flight jobs finish, then swap the "
+        "webserver for a healthy new replica. Additive migrations only."
     ),
     "deploy.help_opt_drain_timeout": (
         "滾動部署時暫停佇列後，等待 worker 完成處理的秒數（預設 90）。"

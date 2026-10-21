@@ -905,6 +905,13 @@ MESSAGES: dict[str, str] = {
     "deploy.complete": "Déploiement terminé !",
     "deploy.rolling_starting": "Déploiement continu vers {host}...",
     "deploy.rolling_building": "Construction de l'image du serveur web...",
+    "deploy.rolling_migrating": (
+        "Bringing the database up to the new code before anything restarts..."
+    ),
+    "deploy.rolling_migrate_failed": (
+        "The database could not be brought up to the new code; nothing was "
+        "restarted and the old code is still serving. See the output above."
+    ),
     "deploy.rolling_pausing": "Mise en pause de la file des workers...",
     "deploy.rolling_pause_failed": (
         "Impossible d'activer le drapeau de pause ; les workers risquent "
@@ -1019,10 +1026,9 @@ MESSAGES: dict[str, str] = {
     "deploy.help_opt_backup": "Créer une sauvegarde avant le déploiement",
     "deploy.help_opt_health": "Exécuter un contrôle de santé après le déploiement",
     "deploy.help_opt_rolling": (
-        "Déploiement code-only sans interruption HTTP. Roule le serveur "
-        "web via docker-rollout et met en pause la file des workers pour "
-        "que les jobs en cours se terminent proprement. Ignore les "
-        "migrations de base de données."
+        "Deploy without downtime: back up, bring the database up to the new "
+        "code, pause the worker queue so in-flight jobs finish, then swap the "
+        "webserver for a healthy new replica. Additive migrations only."
     ),
     "deploy.help_opt_drain_timeout": (
         "Secondes d'attente pour le drainage des workers après la mise "

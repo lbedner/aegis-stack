@@ -887,6 +887,13 @@ MESSAGES: dict[str, str] = {
     "deploy.complete": "デプロイ完了！",
     "deploy.rolling_starting": "{host} へローリングデプロイ中...",
     "deploy.rolling_building": "Webサーバーイメージをビルド中...",
+    "deploy.rolling_migrating": (
+        "Bringing the database up to the new code before anything restarts..."
+    ),
+    "deploy.rolling_migrate_failed": (
+        "The database could not be brought up to the new code; nothing was "
+        "restarted and the old code is still serving. See the output above."
+    ),
     "deploy.rolling_pausing": "ワーカーキューを一時停止中...",
     "deploy.rolling_pause_failed": (
         "一時停止フラグの設定に失敗。ワーカーがジョブの途中で "
@@ -1000,10 +1007,9 @@ MESSAGES: dict[str, str] = {
     "deploy.help_opt_backup": "デプロイ前にバックアップを作成",
     "deploy.help_opt_health": "デプロイ完了後にヘルスチェックを実行",
     "deploy.help_opt_rolling": (
-        "HTTPダウンタイムなしのコードのみデプロイ。docker-rollout で "
-        "Webサーバーをロールし、ワーカーキューを一時停止して実行中の "
-        "ジョブを安全に終わらせます。DB マイグレーションはスキップ "
-        "します。"
+        "Deploy without downtime: back up, bring the database up to the new "
+        "code, pause the worker queue so in-flight jobs finish, then swap the "
+        "webserver for a healthy new replica. Additive migrations only."
     ),
     "deploy.help_opt_drain_timeout": (
         "ローリングデプロイでキューを一時停止した後、ワーカーが "

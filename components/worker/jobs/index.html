@@ -1503,6 +1503,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Watching a Job">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-a-job-logged" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What a job logged
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -6413,6 +6430,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Watching a Job">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-a-job-logged" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What a job logged
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -6573,6 +6607,9 @@
 </span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>data: {&quot;job_id&quot;: &quot;...&quot;, &quot;status&quot;: &quot;done&quot;, &quot;result&quot;: {&quot;read&quot;: 7}}
 </span></code></pre></div>
 <p>The stream sends the current state first, then every change, then exactly one terminal frame and closes. A client reads until the terminal status; it never has to poll.</p>
+<h3 id="what-a-job-logged">What a job logged</h3>
+<p>A job is a run: everything the work logs while it runs, through <code>logger</code> or the standard library, is also kept under the run's id, and the Overseer shows it under the row that started the run. On the Worker page each task in the history opens into its log, live while the task is on; a scheduled run's row on the Scheduler page does the same. Nothing in the task has to change: a <code>logger.info</code> inside it is the whole contract.</p>
+<p>The run's id is the worker task's, so a job the store handed to a worker names it (<code>run_id</code> in the job snapshot). The lines live in Redis beside the task history, capped at 5,000 per run and gone when the history row is; on a stack without Redis they stay in the process that ran the job.</p>
 <p>From a Flet surface:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.components.frontend.controls.jobs</span><span class="w"> </span><span class="kn">import</span> <span class="n">follow_job</span><span class="p">,</span> <span class="n">follow_jobs</span>
 </span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>

@@ -6542,7 +6542,7 @@
 <li>Duration</li>
 <li>Relative start time ("2 minutes ago")</li>
 </ul>
-<p>Expanding a row shows the full job ID, the scheduled run time, and the finished time. Failed rows also surface the error message.</p>
+<p>Expanding a row shows the full job ID, the scheduled run time, the finished time, and what the run logged: every line the job wrote while it ran, live while it is still running. Failed rows also surface the error message. With a worker in the stack the scheduler only enqueues, so the row's log names the worker task that did the work; its own log is under that task on the Worker page.</p>
 <h2 id="cli">CLI</h2>
 <p>The generated <code>tasks</code> CLI can trigger jobs and inspect their history without the backend running. With a worker in the project, <code>tasks trigger</code> hands the job to the worker, like the API; without one, it runs the job in-process and waits for the result, so it composes with scripts and CI.</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Run a job now (on the worker, if there is one)</span>

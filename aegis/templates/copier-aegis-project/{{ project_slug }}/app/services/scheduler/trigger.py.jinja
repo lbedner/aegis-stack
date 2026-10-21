@@ -14,6 +14,7 @@ from typing import Any
 
 from starlette.concurrency import run_in_threadpool
 
+from app.core import run_log
 from app.core.log import logger
 
 from .execution_log import record_job_finished, record_job_started
@@ -49,10 +50,12 @@ async def run_triggered_job(
     """
     execution_id = await run_in_threadpool(record_job_started, job_id, job_name)
     try:
-        if inspect.iscoroutinefunction(func):
-            await func(*args)
-        else:
-            await run_in_threadpool(func, *args)
+        # Bound as its row, like a scheduled run, so the row keeps its log.
+        with run_log.bind_run(str(execution_id) if execution_id is not None else None):
+            if inspect.iscoroutinefunction(func):
+                await func(*args)
+            else:
+                await run_in_threadpool(func, *args)
         await run_in_threadpool(
             record_job_finished, execution_id, job_id, success=True
         )

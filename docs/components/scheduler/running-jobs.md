@@ -23,7 +23,7 @@ Shows paginated execution history with a status filter. Each row displays:
 - Duration
 - Relative start time ("2 minutes ago")
 
-Expanding a row shows the full job ID, the scheduled run time, and the finished time. Failed rows also surface the error message.
+Expanding a row shows the full job ID, the scheduled run time, the finished time, and what the run logged: every line the job wrote while it ran, live while it is still running. Failed rows also surface the error message. With a worker in the stack the scheduler only enqueues, so the row's log names the worker task that did the work; its own log is under that task on the Worker page.
 
 ## CLI
 

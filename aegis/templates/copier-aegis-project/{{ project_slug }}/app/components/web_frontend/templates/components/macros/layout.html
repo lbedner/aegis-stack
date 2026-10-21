@@ -573,6 +573,12 @@
         class="shrink-0 text-xxs caps px-2 py-0.5 rounded border border-aegis-border text-aegis-muted hover:text-aegis-text hover:border-aegis-muted transition-colors">{{ label }}</button>
 {% endmacro %}
 
+{# A part read when it first comes on screen (a detail row's load), from
+   ``url`` into this element; ``attrs`` is markup that marks it. #}
+{% macro lazy(url, attrs="", placeholder="") %}
+<div hx-get="{{ url }}" hx-trigger="intersect once" hx-swap="innerHTML" {{ attrs|safe }}>{{ placeholder }}</div>
+{% endmacro %}
+
 {# A command to run, in monospace, with its copy button. #}
 {% macro command(value) %}<code class="font-mono text-aegis-text">{{ value }}</code>{{ copy_button(value) }}{% endmacro %}
 

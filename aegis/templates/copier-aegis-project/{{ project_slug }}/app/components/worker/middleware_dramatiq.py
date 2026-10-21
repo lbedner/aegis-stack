@@ -22,7 +22,7 @@ import redis
 from app.components.worker import runtime
 from app.components.worker.heartbeat import mark_busy_sync, mark_idle_sync, worker_id
 from app.components.worker.patterns import unwrap
-from app.core import edges
+from app.core import edges, run_log
 from app.core.boot import apply_saved_overrides
 from app.core.config import settings
 from app.core.log import logger
@@ -200,6 +200,7 @@ class EventPublishMiddleware(dramatiq.Middleware):
         dequeued but before the actor function runs.
         """
         edges.into(unwrap(broker.get_actor(message.actor_name)), source=edges.QUEUE)
+        run_log.bind(message.message_id)
         if self._redis:
             mark_busy_sync(self._redis)
             _sync_publish(
@@ -233,6 +234,7 @@ class EventPublishMiddleware(dramatiq.Middleware):
         actor function returns (or raises), with the exception available
         for inspection.
         """
+        run_log.unbind()
         if self._redis:
             event_type = "job.failed" if exception else "job.completed"
             _sync_publish(

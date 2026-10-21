@@ -18,6 +18,7 @@ from structlog.types import Processor
 
 from app.core.config import settings
 from app.core.log_attribution import add_service_attribution
+from app.core.run_log import record_run_line
 
 # A global logger instance for easy access throughout the application
 logger: structlog.stdlib.BoundLogger = structlog.get_logger()
@@ -58,11 +59,16 @@ def setup_logging(stream: TextIO = sys.stdout) -> None:
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
+        # Last: a line logged inside a run, rendered whole, to its run's log.
+        record_run_line,
     ]
 
     # Configure structlog
     structlog.configure(
-        processors=shared_processors
+        # First: a structlog line under the level does no work and reaches no
+        # sink (a standard-library line is filtered before its formatter).
+        processors=[structlog.stdlib.filter_by_level]
+        + shared_processors
         + [
             # Prepare event dict for `ProcessorFormatter`.
             structlog.stdlib.ProcessorFormatter.wrap_for_formatter,

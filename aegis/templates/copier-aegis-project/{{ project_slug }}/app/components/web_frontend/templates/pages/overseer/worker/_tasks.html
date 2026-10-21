@@ -1,4 +1,4 @@
-{% from "components/macros/layout.html" import card, chip, stat_row %}
+{% from "components/macros/layout.html" import card, chip, lazy, stat_row %}
 {% from "components/macros/form.html" import action %}
 {% from "components/macros/table.html" import data_table, pager as pager_links %}
 {% macro task_detail(row) %}
@@ -11,6 +11,7 @@
   </div>
   {% endif %}
   {{ stat_row([("Job ID", row.job_id), ("Started", row.started), ("Finished", row.finished)]) }}
+  {{ lazy(row.log, 'data-run-log-of="' ~ row.job_id ~ '"') }}
 </div>
 {% endmacro %}
 {% call card("Task history", "Newest first") %}

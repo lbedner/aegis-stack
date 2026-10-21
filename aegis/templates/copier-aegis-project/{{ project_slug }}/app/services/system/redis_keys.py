@@ -35,6 +35,7 @@ OWNERS = (
     "app.components.worker.events",
     "app.components.worker.heartbeat",
     "app.components.worker.task_history.shared",
+    "app.core.run_log",
     "app.components.worker.middleware",
     "app.components.worker.broker",
     "app.components.worker.registry",

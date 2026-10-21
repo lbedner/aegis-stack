@@ -112,6 +112,25 @@ async def test_pre_execute_publishes_job_started() -> None:
 
 
 @pytest.mark.asyncio
+async def test_a_task_runs_as_a_run_of_its_own_id() -> None:
+    """What the task logs lands under its id (``run_log``): bound before
+    it runs, unbound after, whether or not Redis events are on."""
+    import structlog
+
+    mw = EventPublishMiddleware().set_queue_name("system")
+    message = MagicMock()
+    message.task_id = "task-7"
+    message.task_name = "cleanup"
+
+    await mw.pre_execute(message)
+    assert structlog.contextvars.get_contextvars()["run_id"] == "task-7"
+    result = MagicMock()
+    result.is_err = False
+    await mw.post_execute(message, result)
+    assert "run_id" not in structlog.contextvars.get_contextvars()
+
+
+@pytest.mark.asyncio
 async def test_a_running_job_holds_its_claim_from_start_to_finish() -> None:
     """Only a job that really runs keeps its claim fresh: one the receiver
     drops (an unknown task) never starts, so a live worker still lets it go."""

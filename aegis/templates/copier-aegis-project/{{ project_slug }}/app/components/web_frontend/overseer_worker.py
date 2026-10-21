@@ -20,7 +20,7 @@ from app.core.formatting import (
 from app.services.system import ui_worker
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
-from . import overseer_worker_load_tests
+from . import overseer_runs, overseer_worker_load_tests
 from .filters import color_tone
 from .overseer_live import fragment_events
 from .overseer_nav import SectionRequest
@@ -196,6 +196,9 @@ def _task_rows(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "job_id": r.get("job_id"),
                 "started": format_timestamp(r.get("started_at")),
                 "finished": format_timestamp(r.get("finished_at")),
+                "log": overseer_runs.log_url(
+                    str(r.get("job_id")), live=r.get("status") == "running"
+                ),
             }
         )
     return rows

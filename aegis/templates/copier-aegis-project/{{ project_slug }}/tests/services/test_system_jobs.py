@@ -36,6 +36,26 @@ class TestJobRunner:
         assert snapshot.error == "QIF import requires a target account_id."
 
     @pytest.mark.asyncio
+    async def test_a_job_runs_as_a_run_of_its_own_id(self) -> None:
+        """What the work logs lands under the job's id (``run_log``), and
+        the snapshot says which run to read."""
+        import structlog
+
+        runner = JobRunner()
+        seen: list[str] = []
+
+        async def work(handle: JobHandle) -> dict:
+            seen.append(structlog.contextvars.get_contextvars().get("run_id", ""))
+            return {}
+
+        job_id = runner.start("bound", work)
+        snapshot = await runner.wait(job_id)
+
+        assert seen == [job_id]
+        assert snapshot.run_id == job_id
+        assert "run_id" not in structlog.contextvars.get_contextvars()
+
+    @pytest.mark.asyncio
     async def test_subscribers_see_labels_then_the_terminal_event(self) -> None:
         runner = JobRunner()
         release = asyncio.Event()

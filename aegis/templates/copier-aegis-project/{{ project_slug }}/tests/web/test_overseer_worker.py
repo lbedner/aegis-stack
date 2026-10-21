@@ -373,6 +373,14 @@ class TestTasks:
         detail = text(one(html, "tr[data-detail]"))
         assert "Redis timed out" in detail and "abc123" in detail
 
+    def test_a_task_opens_into_its_log(self, signed_in: TestClient) -> None:
+        """The task is a run of its own id (``run_log``): the row loads the
+        run's log once opened."""
+        html = _get(signed_in, "tasks")
+        loader = one(html, "tr[data-detail] [data-run-log-of='abc123']")
+        assert loader.get("hx-get") == "/partials/overseer/runs/abc123/log"
+        assert loader.get("hx-trigger") == "intersect once"
+
     def test_filters_by_queue_and_status(
         self, signed_in: TestClient, seen: dict[str, Any]
     ) -> None:

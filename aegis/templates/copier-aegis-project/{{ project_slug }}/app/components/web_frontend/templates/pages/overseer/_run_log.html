@@ -1,0 +1,6 @@
+{# A run's log (overseer_runs): the lines so far and, while the run is on
+   (``events``), the lines again over SSE whenever they grow. #}
+<div data-run-log class="space-y-1"{% if events %} hx-ext="sse" sse-connect="{{ events }}"{% endif %}>
+  <p class="text-xs font-semibold text-aegis-muted">Log</p>
+  <pre class="code-block max-h-96 overflow-auto"{% if events %} sse-swap="{{ event }}" hx-swap="innerHTML"{% endif %}>{% include "pages/overseer/_run_log_lines.html" %}</pre>
+</div>

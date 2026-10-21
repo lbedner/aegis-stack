@@ -69,6 +69,11 @@ class RedisJobStore:
     async def set_label(self, job_id: str, label: str) -> None:
         await self._write(job_id, label=label)
 
+    async def set_run(self, job_id: str, run_id: str) -> None:
+        """The worker task the job was handed to: the run whose log is
+        the job's, since the worker binds its own task id."""
+        await self._write(job_id, run=run_id)
+
     def label_writer(self, job_id: str) -> SetLabel:
         """One job's label as a ``SetLabel``, so work running on a worker
         narrates itself the same way in-process work does."""
@@ -112,6 +117,7 @@ class RedisJobStore:
             result=json.loads(fields["result"]) if fields.get("result") else None,
             error=fields.get("error") or None,
             started_at=fields.get("started_at", ""),
+            run_id=fields.get("run", ""),
         )
 
     async def aclose(self) -> None:

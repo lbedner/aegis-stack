@@ -21,7 +21,11 @@ class _FakeStore:
         self.labels: list[str] = []
         self.failed: list[tuple[str, str]] = []
         self.finished: list[dict[str, Any]] = []
+        self.runs: list[str] = []
         self.closed = False
+
+    async def set_run(self, job_id: str, run_id: str) -> None:
+        self.runs.append(run_id)
 
     async def create(self, job_id: str, name: str, label: str) -> None:
         self.created.append((job_id, name, label))
@@ -71,6 +75,23 @@ async def test_an_enqueue_that_fails_marks_the_job_failed(
     assert store.failed, "a job nobody will run was left running"
     assert "no broker" in store.failed[0][1]
     assert store.closed
+
+
+@pytest.mark.asyncio
+async def test_the_job_points_at_the_task_that_runs_it(
+    store: _FakeStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The worker binds its own task id as the run, so the job record
+    names it: that is where the job's log is."""
+
+    async def _handed(job_id: str, *args: Any) -> str:
+        return "task-42"
+
+    monkeypatch.setattr(dispatch, "_enqueue", _handed)
+
+    await dispatch.start_extraction(1, owner_user_id=None, force=False)
+
+    assert store.runs == ["task-42"]
 
 
 @pytest.mark.asyncio

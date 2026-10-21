@@ -47,6 +47,7 @@ METADATA: dict[str, Any] = {
 
 EXECUTIONS = [
     {
+        "id": 3,
         "job_id": "database_backup",
         "job_name": "Daily Database Backup",
         "status": "failed",
@@ -324,6 +325,45 @@ class TestHistory:
         assert "1.5s" in text(row)
         assert one(row, "[data-tone]").get("data-tone") == "error"
         assert "disk full" in text(one(html, "tr[data-detail]"))
+
+    def test_a_run_opens_into_what_it_logged(
+        self, signed_in: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The row loads its run's log once opened: the row's own copy once
+        it finished, the live run log while it is on (``run_log``)."""
+        loader = one(_get(signed_in, "history"), "tr[data-detail] [data-run-log-of]")
+        assert loader.get("hx-get") == "/partials/overseer/scheduler/executions/3/log"
+        assert loader.get("hx-trigger") == "intersect once"
+
+        async def finished(*, db: Any, execution_id: int) -> tuple[bool, list[str]]:
+            return False, ["dumping", "ERROR disk full"]
+
+        monkeypatch.setattr(overseer_scheduler, "load_execution_log", finished)
+        box = one(
+            signed_in.get("/partials/overseer/scheduler/executions/3/log").text,
+            "[data-run-log]",
+        )
+        assert text(one(box, "pre")) == "dumping ERROR disk full"
+        assert box.get("sse-connect") is None
+
+        async def running(*, db: Any, execution_id: int) -> tuple[bool, list[str]]:
+            return True, []
+
+        monkeypatch.setattr(overseer_scheduler, "load_execution_log", running)
+        box = one(
+            signed_in.get("/partials/overseer/scheduler/executions/7/log").text,
+            "[data-run-log]",
+        )
+        assert box.get("sse-connect") == "/partials/overseer/runs/7/log/events"
+
+        async def gone(*, db: Any, execution_id: int) -> None:
+            return None
+
+        monkeypatch.setattr(overseer_scheduler, "load_execution_log", gone)
+        assert (
+            signed_in.get("/partials/overseer/scheduler/executions/9/log").status_code
+            == 404
+        )
 
     def test_reads_on_the_request_session(
         self, signed_in: TestClient, seen: dict[str, Any]

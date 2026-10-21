@@ -7,6 +7,21 @@
 
 ## [Unreleased]
 
+### Added
+
+- **A run's log, under the row that started it.** `app/core/run_log.py`: a
+  background job, a worker task or a scheduled run, scheduled or run by
+  hand, is bound as a run for its duration (the job runner, the worker's
+  hooks on every backend, the scheduler's `scheduled_run`, `run_triggered_job`),
+  and every line logged inside it, structlog's or the standard library's, is
+  also kept under its id: a capped Redis list that expires with the task
+  history (attached in `boot.apply_saved_overrides`, so every process has
+  it), in memory on a stack without Redis.
+  The Overseer's worker task rows and scheduler history rows open into it,
+  live while the run is on; a finished scheduled run keeps its log on its
+  history row. The jobs API names each job's run (`run_id`: the worker task
+  the store handed it to). Work logs as it always did; nothing to call.
+
 ## [0.16.1] - 2026-10-20
 
 ### Added

@@ -919,6 +919,13 @@ MESSAGES: dict[str, str] = {
     "deploy.complete": "Deployment complete!",
     "deploy.rolling_starting": "Rolling deploy to {host}...",
     "deploy.rolling_building": "Building webserver image...",
+    "deploy.rolling_migrating": (
+        "Bringing the database up to the new code before anything restarts..."
+    ),
+    "deploy.rolling_migrate_failed": (
+        "The database could not be brought up to the new code; nothing was "
+        "restarted and the old code is still serving. See the output above."
+    ),
     "deploy.rolling_pausing": "Pausing worker queue...",
     "deploy.rolling_pause_failed": (
         "Could not SET pause flag; workers may get SIGTERMed mid-job."
@@ -1064,9 +1071,9 @@ MESSAGES: dict[str, str] = {
     "deploy.help_opt_backup": "Create backup before deploying",
     "deploy.help_opt_health": "Run health check after deploying",
     "deploy.help_opt_rolling": (
-        "Zero-HTTP-downtime code-only deploy. Rolls the webserver by "
-        "health-polling a new replica and pauses the worker queue so "
-        "in-flight jobs finish cleanly. Skips DB migrations."
+        "Deploy without downtime: back up, bring the database up to the new "
+        "code, pause the worker queue so in-flight jobs finish, then swap the "
+        "webserver for a healthy new replica. Additive migrations only."
     ),
     "deploy.help_opt_drain_timeout": (
         "Seconds to wait for workers to drain after pausing the queue "

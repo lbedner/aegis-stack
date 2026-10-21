@@ -51,6 +51,7 @@ TITLES = {
     "provision": "New server",
     "resume": "Resume the server",
     "deploy": "Deploy",
+    "deploy-rolling": "Deploy without downtime",
     "backup": "Back up",
     "upload-storage": "Bring missing files",
     DRILL: "Rehearse a restore",

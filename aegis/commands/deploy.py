@@ -894,6 +894,27 @@ ROLLING_HEALTH_POLL_SECONDS = 2
 # deliberately long so a slow-but-healthy boot is never killed by a wall
 # clock — the bug that made docker-rollout's 60s default fickle.
 ROLLING_ROLLOUT_TIMEOUT_DEFAULT = 900  # seconds
+# The webserver's own boot step (migrations, schema checks), run from the
+# new image before anything restarts on it: the scheduler and workers
+# restart before the webserver, so new code would otherwise meet the old
+# schema. The step logs a failed migration and carries on, as a boot must,
+# so the database is then asked what it lacks (``schema_gaps``, where the
+# project has it), and any gap stops the deploy. A project without the
+# step has nothing to bring up.
+ROLLING_MIGRATE = """\
+import asyncio, importlib, sys
+name = "app.components.backend.startup.database_init"
+try:
+    boot = importlib.import_module(name)
+except ModuleNotFoundError as error:
+    if not name.startswith(error.name or "-"):
+        raise
+    sys.exit(0)
+asyncio.run(boot.startup_database_init())
+gaps = getattr(boot, "schema_gaps", dict)()
+if gaps:
+    sys.exit(f"The database lacks what the new code reads: {gaps}")
+"""
 
 
 def _rolling_compose_prefix(deploy_path: str) -> str:
@@ -1131,6 +1152,17 @@ def _rolling_swap_webserver(
     return scale_down.returncode == 0
 
 
+def _rolling_plan(backed_up: bool, built: bool, checked: bool) -> list[str]:
+    """The ROLLING_STEPS a rolling deploy takes (the protocol says which)."""
+    return [
+        *(["backup"] if backed_up else []),
+        "upload",
+        *(["build", "migrate"] if built else []),
+        "swap",
+        *(["health"] if checked else []),
+    ]
+
+
 def _run_rolling_deploy(
     host: str,
     user: str,
@@ -1142,6 +1174,7 @@ def _run_rolling_deploy(
     health_command: str,
     drain_timeout: int,
     rollout_timeout: int,
+    backup: Callable[[], str | None] | None = None,
 ) -> None:
     """Zero-HTTP-downtime deploy of code-only changes.
 
@@ -1153,11 +1186,20 @@ def _run_rolling_deploy(
     complete cleanly instead of being SIGTERMed. Database, Redis, and
     Traefik are untouched.
 
-    Skips DB migrations — use the standard ``aegis deploy`` for those.
+    ``backup`` takes one first. The new image brings the database up to
+    its code (``ROLLING_MIGRATE``) while the old code serves, so only
+    additive migrations belong here; one that drops or renames what the
+    old code reads needs the standard ``aegis deploy``.
     """
     brand.accent(t("deploy.rolling_starting", host=host), bold=True)
+    plan = _rolling_plan(backup is not None, build, health_check)
+    backup_timestamp = None
+    if backup is not None:
+        step(plan, "backup")
+        backup_timestamp = backup()
 
     # Step 1: rsync working tree
+    step(plan, "upload")
     typer.echo(t("deploy.syncing"))
     with _tracked_tree(project_root) as shipped:
         rsync_result = subprocess.run(
@@ -1177,12 +1219,24 @@ def _run_rolling_deploy(
     )
     has_webserver = "webserver" in running
 
-    # Step 3: build the webserver image (new code lands here)
+    # Step 3: build the webserver image (new code lands here), and bring
+    # the database up to it before anything restarts on it.
     if build and has_webserver:
+        step(plan, "build")
         typer.echo(t("deploy.rolling_building"))
         build_result = _run_remote(host, user, f"{prefix} build webserver")
         if build_result.returncode != 0:
             brand.error(t("deploy.start_failed"), err=True)
+            raise typer.Exit(1)
+        step(plan, "migrate")
+        typer.echo(t("deploy.rolling_migrating"))
+        # Past the image's entrypoint, which takes only its named roles.
+        migrate = (
+            "run --rm --no-deps --entrypoint python webserver "
+            f"-c {shlex.quote(ROLLING_MIGRATE)}"
+        )
+        if _run_remote(host, user, f"{prefix} {migrate}").returncode != 0:
+            brand.error(t("deploy.rolling_migrate_failed"), err=True)
             raise typer.Exit(1)
 
     # Step 4 + 5: pause the queue and wait for in-flight jobs to drain
@@ -1206,6 +1260,7 @@ def _run_rolling_deploy(
                 raise typer.Exit(1)
 
         # Step 6: recreate scheduler + workers (no --deps so deps stay up)
+        step(plan, "swap")
         if worker_services:
             typer.echo(
                 t("deploy.rolling_recreating", services=" ".join(worker_services))
@@ -1243,11 +1298,20 @@ def _run_rolling_deploy(
 
     # Step 9: health check
     if health_check:
+        step(plan, "health")
         healthy = _run_health_check(
             host, user, health_command, retries=health_cfg["retries"]
         )
     health = None if not health_check else "passed" if healthy else "failed"
-    _record_deploy(project_root, host, user, deploy_path, build_id, health=health)
+    _record_deploy(
+        project_root,
+        host,
+        user,
+        deploy_path,
+        build_id,
+        health=health,
+        backup=backup_timestamp,
+    )
     if health == "failed":
         brand.warn(t("deploy.health_failed_hint"))
         raise typer.Exit(1)
@@ -1494,10 +1558,11 @@ def deploy_command(
     check afterward. If the health check fails, auto-rollback restores
     the previous version.
 
-    Pass ``--rolling`` for zero-HTTP-downtime code-only deploys: the
-    webserver rolls over by health-polling a new replica and the worker
-    queue is paused so in-flight jobs finish cleanly before workers
-    restart. Skips DB migrations — use the standard path for those.
+    Pass ``--rolling`` to keep the site up: after a backup, the new image
+    brings the database up to its code, the worker queue is paused so
+    in-flight jobs finish before workers restart, and the webserver rolls
+    over by health-polling a new replica. Additive migrations only; one
+    that drops or renames what the old code reads needs the standard path.
 
     Examples:
         - aegis deploy
@@ -1536,6 +1601,18 @@ def deploy_command(
             health_command=health_command,
             drain_timeout=drain_timeout,
             rollout_timeout=rollout_timeout,
+            backup=partial(
+                _create_backup,
+                host,
+                user,
+                deploy_path,
+                include_db=backup_cfg["include_database"],
+                neon=neon,
+                sqlite=sqlite,
+                keep_count=backup_cfg["keep_count"],
+            )
+            if backup
+            else None,
         )
         _print_deployed(
             config, allowlist_set=_admin_allowlist_set(project_root), tls=tls

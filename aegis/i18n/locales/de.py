@@ -901,6 +901,13 @@ MESSAGES: dict[str, str] = {
     "deploy.complete": "Deployment abgeschlossen!",
     "deploy.rolling_starting": "Rolling-Deployment nach {host}...",
     "deploy.rolling_building": "Webserver-Image wird gebaut...",
+    "deploy.rolling_migrating": (
+        "Bringing the database up to the new code before anything restarts..."
+    ),
+    "deploy.rolling_migrate_failed": (
+        "The database could not be brought up to the new code; nothing was "
+        "restarted and the old code is still serving. See the output above."
+    ),
     "deploy.rolling_pausing": "Worker-Queue wird pausiert...",
     "deploy.rolling_pause_failed": (
         "Pause-Flag konnte nicht gesetzt werden; Worker werden eventuell "
@@ -1015,9 +1022,9 @@ MESSAGES: dict[str, str] = {
     "deploy.help_opt_backup": "Vor dem Deployment ein Backup erstellen",
     "deploy.help_opt_health": "Nach dem Deployment einen Health-Check ausführen",
     "deploy.help_opt_rolling": (
-        "Code-only Deployment ohne HTTP-Downtime. Rollt den Webserver per "
-        "docker-rollout und pausiert die Worker-Queue, damit laufende "
-        "Jobs sauber abgeschlossen werden. Überspringt DB-Migrationen."
+        "Deploy without downtime: back up, bring the database up to the new "
+        "code, pause the worker queue so in-flight jobs finish, then swap the "
+        "webserver for a healthy new replica. Additive migrations only."
     ),
     "deploy.help_opt_drain_timeout": (
         "Sekunden, die auf das Leeren der Worker gewartet wird, nachdem "

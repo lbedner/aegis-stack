@@ -12,7 +12,9 @@ Pins regressions caught during the deploy-cd-setup PR review:
 from __future__ import annotations
 
 import subprocess
+import sys
 from pathlib import Path
+from typing import Any
 
 import pytest
 import typer
@@ -764,3 +766,123 @@ def test_deploy_refuses_an_open_env_before_touching_the_server(
     result = CliRunner().invoke(app, ["deploy", "--project-path", str(tmp_path)])
     assert result.exit_code == 1
     assert "AUTH_ENABLED" in result.output and ".env" in result.output
+
+
+# ---------------------------------------------------------------------------
+# A rolling deploy backs up, and brings the database up to the new code
+# before anything restarts on it (aegis-stack#1789).
+# ---------------------------------------------------------------------------
+
+
+def _quiet_rolling(
+    monkeypatch: pytest.MonkeyPatch, calls: list[str], fail: str = ""
+) -> None:
+    """A rolling deploy with every remote step recorded in ``calls``; the
+    one whose command holds ``fail`` fails."""
+
+    def remote(host: str, user: str, command: str) -> subprocess.CompletedProcess:
+        calls.append(command)
+        failed = bool(fail) and fail in command
+        return subprocess.CompletedProcess([], returncode=int(failed), stdout="")
+
+    monkeypatch.setattr(
+        deploy_mod.subprocess,
+        "run",
+        lambda *a, **k: subprocess.CompletedProcess([], returncode=0),
+    )
+    monkeypatch.setattr(deploy_mod, "_upload_env", lambda *a, **k: "build1")
+    monkeypatch.setattr(
+        deploy_mod,
+        "_rolling_running_services",
+        lambda *a, **k: {"webserver", "scheduler", "worker-system"},
+    )
+    monkeypatch.setattr(deploy_mod, "_rolling_wait_for_drain", lambda *a, **k: True)
+    monkeypatch.setattr(
+        deploy_mod,
+        "_rolling_swap_webserver",
+        lambda *a, **k: calls.append("swap") or True,
+    )
+    monkeypatch.setattr(deploy_mod, "_rolling_new_services", lambda *a, **k: [])
+    monkeypatch.setattr(deploy_mod, "_run_remote", remote)
+    monkeypatch.setattr(deploy_mod, "_record_deploy", lambda *a, **k: None)
+    monkeypatch.setattr(deploy_mod, "_prune_docker", lambda *a, **k: None)
+
+
+def _roll(tmp_path: Path, **kwargs: Any) -> None:
+    deploy_mod._run_rolling_deploy(
+        "h",
+        "u",
+        "/srv/app",
+        tmp_path,
+        build=True,
+        health_check=False,
+        health_cfg={},
+        health_command="",
+        drain_timeout=1,
+        rollout_timeout=1,
+        **kwargs,
+    )
+
+
+def test_a_rolling_deploy_backs_up_then_migrates_before_anything_restarts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[str] = []
+    _quiet_rolling(monkeypatch, calls)
+
+    _roll(tmp_path, backup=lambda: calls.append("backup") or "2026-10-21_000000")
+
+    migrate = "run --rm --no-deps --entrypoint python webserver -c"
+    marks = ("backup", " build webserver", migrate, "--force-recreate", "swap")
+    order = [next(i for i, c in enumerate(calls) if mark in c) for mark in marks]
+    assert order == sorted(order)
+
+
+def test_a_failed_migration_restarts_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The old code keeps serving: nothing has been swapped."""
+    calls: list[str] = []
+    _quiet_rolling(monkeypatch, calls, fail="run --rm")
+
+    with pytest.raises(typer.Exit):
+        _roll(tmp_path)
+
+    assert not [c for c in calls if "--force-recreate" in c or c == "swap"]
+
+
+def _boot_step(root: Path, gaps: str | None) -> int:
+    """Run ``ROLLING_MIGRATE`` against a project whose boot module reports
+    ``gaps`` (None: a project without one); its exit code."""
+    if gaps is not None:
+        module = root / "app/components/backend/startup"
+        module.mkdir(parents=True)
+        for part in (
+            root / "app",
+            root / "app/components",
+            root / "app/components/backend",
+            module,
+        ):
+            (part / "__init__.py").touch()
+        (module / "database_init.py").write_text(
+            "async def startup_database_init() -> None: ...\n"
+            f"def schema_gaps() -> dict: return {gaps}\n"
+        )
+    return subprocess.run(
+        [sys.executable, "-c", deploy_mod.ROLLING_MIGRATE],
+        cwd=root,
+        env={"PYTHONPATH": str(root)},
+        capture_output=True,
+    ).returncode
+
+
+@pytest.mark.parametrize(
+    ("gaps", "code"),
+    [(None, 0), ("{}", 0), ("{'ledger': {'payee_key'}}", 1)],
+)
+def test_the_boot_step_fails_when_the_database_lacks_what_the_code_reads(
+    tmp_path: Path, gaps: str | None, code: int
+) -> None:
+    """The boot step logs a failed migration and carries on, as a boot
+    must; the rolling deploy asks ``schema_gaps`` after it, and stops."""
+    assert _boot_step(tmp_path, gaps) == code

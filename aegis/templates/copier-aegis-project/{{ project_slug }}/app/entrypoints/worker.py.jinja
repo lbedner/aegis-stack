@@ -24,7 +24,7 @@ try:
 except ImportError:  # observability component not installed
     pass
 else:
-    install_auto_tracing()
+    install_auto_tracing(unit="worker")
 
 from importlib import import_module  # noqa: E402
 from typing import Any  # noqa: E402

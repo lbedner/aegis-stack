@@ -1303,6 +1303,12 @@ def run_post_generation_tasks(
         generation fails. Other tasks (env setup, migrations, formatting, sync) are
         non-critical and won't cause hard failures.
     """
+    from .catalog_docs import fill_readme
+
+    # The README's list of what the project has, from its answers: written
+    # at generation and again on every update, so it follows ``aegis add``.
+    fill_readme(project_path)
+
     typer.echo()
     brand.accent(t("postgen.setup_start"), bold=True)
 

@@ -27,12 +27,12 @@ from ..constants import (
     WorkerBackends,
 )
 from ..core.components import COMPONENTS, CORE_COMPONENTS, ComponentSpec, ComponentType
-from ..core.plugins.spec import PluginSpec
+from ..core.plugins.spec import PartCategory, PluginSpec
 from ..core.services import (
-    SERVICE_TYPE_I18N_KEYS,
+    SERVICE_GROUPS,
     SERVICES,
-    ServiceType,
-    get_services_by_type,
+    group_header_key,
+    services_in,
 )
 from ..i18n import t
 from . import brand
@@ -405,7 +405,9 @@ def _step_worker(spec: ComponentSpec, state: ProjectSelection, ui: SelectionUI) 
     prompt_key = (
         "interactive.add_prompt" if redis_selected else "interactive.add_with_redis"
     )
-    if not ui.confirm(f"  {t(prompt_key, description=desc)}", context=spec):
+    if not ui.confirm(
+        f"  {t(prompt_key, name=spec.display_title, description=desc)}", context=spec
+    ):
         return
 
     backend = ui.choose_worker_backend()
@@ -432,7 +434,8 @@ def _step_scheduler(
     """
     desc = _translated_desc(spec.name, spec.description)
     if not ui.confirm(
-        f"  {t('interactive.add_prompt', description=desc)}", context=spec
+        f"  {t('interactive.add_prompt', name=spec.display_title, description=desc)}",
+        context=spec,
     ):
         return
 
@@ -475,7 +478,8 @@ def _step_database(
 
     desc = _translated_desc(spec.name, spec.description)
     if not ui.confirm(
-        f"  {t('interactive.add_prompt', description=desc)}", context=spec
+        f"  {t('interactive.add_prompt', name=spec.display_title, description=desc)}",
+        context=spec,
     ):
         return
 
@@ -506,7 +510,10 @@ def _step_generic_component(
     if any(comp.partition("[")[0] == spec.name for comp in state.components):
         return
     desc = _translated_desc(spec.name, spec.description)
-    if ui.confirm(f"  {t('interactive.add_prompt', description=desc)}", context=spec):
+    if ui.confirm(
+        f"  {t('interactive.add_prompt', name=spec.display_title, description=desc)}",
+        context=spec,
+    ):
         state.components.append(spec.name)
 
 
@@ -516,7 +523,8 @@ def _step_inference(
     """Inference prompt, then where Ollama runs; host stays the plain name."""
     desc = _translated_desc(spec.name, spec.description)
     if not ui.confirm(
-        f"  {t('interactive.add_prompt', description=desc)}", context=spec
+        f"  {t('interactive.add_prompt', name=spec.display_title, description=desc)}",
+        context=spec,
     ):
         return
     placement = ui.choose_inference_placement()
@@ -590,17 +598,17 @@ def run_project_selection(ui: SelectionUI) -> ProjectSelection:
             f"{ComponentNames.SCHEDULER}[{state.scheduler_backend}]"
         )
 
-    # Service selection: every registered service, grouped by type in
-    # ServiceType declaration order. Derived from the registry so a new
-    # service (or type) is offered automatically — the hand-written
-    # AUTH/AI/CONTENT trio this replaced silently skipped comms, insights,
-    # and payment at init.
+    # Service selection: every registered service, grouped by its category
+    # in ``SERVICE_GROUPS`` order. Derived from the registry so a new
+    # service is offered automatically — the hand-written AUTH/AI/CONTENT
+    # trio this replaced silently skipped comms, insights, and payment at
+    # init.
     if SERVICES:  # Only show services if any are available
         ui.section(t("interactive.service_selection"), newline_before=True)
         ui.echo(t("interactive.services_intro") + "\n")
         first = True
-        for service_type in ServiceType:
-            shown = _step_services_of_type(state, ui, service_type, first=first)
+        for category in SERVICE_GROUPS:
+            shown = _step_services_of_type(state, ui, category, first=first)
             first = first and not shown
 
     return state
@@ -609,28 +617,28 @@ def run_project_selection(ui: SelectionUI) -> ProjectSelection:
 def _step_services_of_type(
     state: ProjectSelection,
     ui: SelectionUI,
-    service_type: ServiceType,
+    category: PartCategory,
     *,
     first: bool,
 ) -> bool:
-    """Offer every service of one type. Returns True when any were shown.
+    """Offer every service of one category. Returns True when any were shown.
 
     Services with extra interactive configuration (auth's level + database
     dance, AI's full setup) run their configurator from
     ``_SERVICE_INIT_CONFIGURATORS``; everything else is confirm-and-add.
     """
-    type_services = get_services_by_type(service_type)
+    type_services = services_in(category)
     if not type_services:
         return False
 
-    header = t(SERVICE_TYPE_I18N_KEYS[service_type])
+    header = t(group_header_key(category))
     ui.echo(header if first else f"\n{header}")
     for service_name, service_spec in type_services.items():
         desc = _translated_desc(service_name, service_spec.description)
         if service_spec.experimental:
             desc = f"{desc} {brand.experimental_badge()}"
         if not ui.confirm(
-            f"  {t('interactive.add_prompt', description=desc)}",
+            f"  {t('interactive.add_prompt', name=service_spec.display_title, description=desc)}",
             context=service_spec,
         ):
             continue
@@ -1471,22 +1479,22 @@ def interactive_service_selection(project_path: Path) -> list[str]:
             brand.success(f"  {service_name}: {service_spec.description}")
         typer.echo()
 
-    # Show available services grouped by type, in ServiceType declaration
-    # order. Derived from the registry: a new service (or service type) is
-    # offered here automatically instead of needing another copy-pasted
-    # branch — the hand-written branches this replaced covered only
-    # AUTH/AI/PAYMENT/CONTENT, so comms and insights were never offered.
+    # Show available services grouped by category, in ``SERVICE_GROUPS``
+    # order. Derived from the registry: a new service is offered here
+    # automatically instead of needing another copy-pasted branch — the
+    # hand-written branches this replaced covered only AUTH/AI/PAYMENT/
+    # CONTENT, so comms and insights were never offered.
     selected_services: list[str] = []
     first_header = True
 
-    for service_type in ServiceType:
-        type_services = get_services_by_type(service_type)
+    for category in SERVICE_GROUPS:
+        type_services = services_in(category)
         if not type_services:
             continue
 
         if not first_header:
             typer.echo()
-        typer.echo(f"{t(SERVICE_TYPE_I18N_KEYS[service_type])}:")
+        typer.echo(f"{t(group_header_key(category))}:")
         first_header = False
 
         for service_name, service_spec in type_services.items():

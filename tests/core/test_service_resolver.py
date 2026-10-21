@@ -9,7 +9,7 @@ from unittest import mock
 import pytest
 
 from aegis.core.service_resolver import ServiceResolver
-from aegis.core.services import SERVICES, ServiceSpec, ServiceType
+from aegis.core.services import SERVICES, ServiceSpec
 
 
 class TestServiceResolver:
@@ -72,7 +72,6 @@ class TestServiceResolver:
         # Create a test service that conflicts with auth
         test_service = ServiceSpec(
             name="conflicting_auth",
-            type=ServiceType.AUTH,
             description="Conflicting auth service",
             conflicts=["auth"],
         )
@@ -95,7 +94,6 @@ class TestServiceResolver:
         # Create a test service that requires auth
         test_service = ServiceSpec(
             name="profile_service",
-            type=ServiceType.AUTH,
             description="User profile service",
             required_services=["auth"],
         )
@@ -195,7 +193,6 @@ class TestServiceResolver:
         # Create a test service with recommendations
         test_service = ServiceSpec(
             name="test_service",
-            type=ServiceType.AI,
             description="Test service with recommendations",
             required_components=["backend"],
             recommended_components=["redis", "worker"],

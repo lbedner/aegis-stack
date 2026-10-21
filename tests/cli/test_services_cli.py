@@ -61,7 +61,7 @@ class TestServicesCommand:
         assert "=" * 40 in output
 
         # Check for auth service section
-        assert "Authentication Services" in output
+        assert "App Services" in output
         assert "-" * 40 in output
 
         # Check for auth service details
@@ -99,10 +99,8 @@ class TestServicesCommand:
 
     def test_services_command_with_empty_registry(self):
         """Test services command behavior with empty registry."""
-        with mock.patch(
-            "aegis.commands.services.get_services_by_type"
-        ) as mock_get_services:
-            # Mock all service types to return empty dict
+        with mock.patch("aegis.commands.services.services_in") as mock_get_services:
+            # Every category comes back empty
             mock_get_services.return_value = {}
 
             result = run_aegis_command("services")
@@ -740,7 +738,7 @@ class TestAuthServiceMigrationIntegration:
         output = result.stdout
 
         # Should show auth service with clear requirements
-        assert "Authentication Services" in output
+        assert "App Services" in output
         assert "auth" in output
         assert "Requires components: backend, database" in output
 

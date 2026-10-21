@@ -43,6 +43,7 @@ class ComponentName(StrEnum):
     MCP = "mcp"
     BROWSER = "browser"
     OLLAMA = "ollama"
+    DEPLOY = "deploy"
 
 
 class ServiceName(StrEnum):

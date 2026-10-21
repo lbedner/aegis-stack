@@ -6,7 +6,6 @@ and metadata used for project generation and validation.
 """
 
 from dataclasses import dataclass
-from enum import Enum
 
 from ..constants import (
     AIFrameworks,
@@ -53,34 +52,6 @@ from .plugins.spec import (
 )
 
 
-class ServiceType(Enum):
-    """Service type classifications."""
-
-    AUTH = "auth"  # Authentication and authorization
-    PAYMENT = "payment"  # Payment processing
-    AI = "ai"  # AI and ML integrations
-    NOTIFICATION = "notification"  # Email, SMS, push notifications
-    ANALYTICS = "analytics"  # Usage analytics and metrics
-    STORAGE = "storage"  # File storage and CDN
-    CONTENT = "content"  # Content publishing and editorial workflows
-    FINANCE = "finance"  # Personal finance aggregation and ledger
-
-
-# Translation key for each service type's display header. Used by the
-# ``aegis services`` listing and the interactive service-selection loops so
-# a new ServiceType needs exactly one label entry per locale.
-SERVICE_TYPE_I18N_KEYS: dict[ServiceType, str] = {
-    ServiceType.AUTH: "services.type_auth",
-    ServiceType.PAYMENT: "services.type_payment",
-    ServiceType.AI: "services.type_ai",
-    ServiceType.NOTIFICATION: "services.type_notification",
-    ServiceType.ANALYTICS: "services.type_analytics",
-    ServiceType.STORAGE: "services.type_storage",
-    ServiceType.CONTENT: "services.type_content",
-    ServiceType.FINANCE: "services.type_finance",
-}
-
-
 @dataclass(kw_only=True)
 class ServiceSpec(PluginSpec):
     """Service-flavoured PluginSpec — back-compat alias for pre-R2 callers.
@@ -115,7 +86,6 @@ SERVICES: dict[str, ServiceSpec] = {
         order=10,
         docs_path="services/auth",
         marker_path="app/services/auth",
-        type=ServiceType.AUTH,
         description="Persistent sessions with refresh-token rotation, GitHub/Google sign-in, RBAC, multi-tenant Organizations",
         long_description=(
             "Complete user management with JWT authentication, session "
@@ -395,7 +365,6 @@ SERVICES: dict[str, ServiceSpec] = {
         order=20,
         docs_path="services/ai",
         marker_path="app/services/ai",
-        type=ServiceType.AI,
         description="Conversational agents, RAG, model catalog, TTS and STT (PydanticAI / LangChain across 7 providers)",
         long_description=(
             "A complete AI platform: multi-provider chat, a database-"
@@ -693,7 +662,6 @@ SERVICES: dict[str, ServiceSpec] = {
         order=30,
         docs_path="services/comms",
         marker_path="app/services/comms",
-        type=ServiceType.NOTIFICATION,
         description="Transactional email (Resend) + SMS / voice (Twilio)",
         long_description=(
             "Email, SMS, and voice calls using industry providers: Resend "
@@ -771,7 +739,6 @@ SERVICES: dict[str, ServiceSpec] = {
         order=60,
         docs_path="services/insights",
         marker_path="app/services/insights",
-        type=ServiceType.ANALYTICS,
         description="Adoption metrics across GitHub, PyPI, Plausible, Reddit",
         long_description=(
             "Automated tracking of your project's adoption across GitHub, "
@@ -907,7 +874,6 @@ SERVICES: dict[str, ServiceSpec] = {
         order=70,
         docs_path="services/payment",
         marker_path="app/services/payment",
-        type=ServiceType.PAYMENT,
         description="Stripe checkout, subscriptions, refunds, disputes",
         long_description=(
             "Payment processing with Stripe: checkout sessions, "
@@ -1027,7 +993,6 @@ SERVICES: dict[str, ServiceSpec] = {
         order=90,
         docs_path="services/blog",
         marker_path="app/services/blog",
-        type=ServiceType.CONTENT,
         description="Markdown publishing with drafts, tags, and an Overseer editor",
         long_description=(
             "First-party Markdown publishing with database-backed posts, "
@@ -1126,7 +1091,6 @@ SERVICES: dict[str, ServiceSpec] = {
         order=80,
         docs_path="services/finance",
         marker_path="app/services/finance",
-        type=ServiceType.FINANCE,
         description="Personal finance aggregation (accounts, transactions, net worth, import)",
         experimental=True,
         long_description=(
@@ -1333,7 +1297,6 @@ SERVICES: dict[str, ServiceSpec] = {
         order=40,
         docs_path="services/documents",
         marker_path="app/services/documents",
-        type=ServiceType.STORAGE,
         description="Content-addressed document store, deduped, with page-addressed extraction",
         long_description=(
             "Durable storage for the paper an application accumulates: "
@@ -1444,7 +1407,6 @@ SERVICES: dict[str, ServiceSpec] = {
         order=50,
         docs_path="services/research",
         marker_path="app/services/research",
-        type=ServiceType.ANALYTICS,
         description="Outside posts and threads, collected by saved searches",
         long_description=(
             "What other people published elsewhere (a story, a thread, a "
@@ -1507,7 +1469,6 @@ SERVICES: dict[str, ServiceSpec] = {
         order=55,
         docs_path="services/meetings",
         marker_path="app/services/meetings",
-        type=ServiceType.AI,
         description="A bot that joins Google Meet as its own agent: transcript, notes, threads, people, what keeps coming up, joined from its calendar",
         long_description=(
             "A bot that joins a Google Meet, Teams or Zoom call as a visible, "
@@ -1702,9 +1663,27 @@ def get_service(name: str) -> ServiceSpec:
     return SERVICES[name]
 
 
-def get_services_by_type(service_type: ServiceType) -> dict[str, ServiceSpec]:
-    """Get all services of a specific type."""
-    return {name: spec for name, spec in SERVICES.items() if spec.type == service_type}
+# The order the CLI lists and offers services in, by category: the app's
+# first, so auth (whose setup asks about the database) comes first; every
+# category a part can declare, so a plugin's own is never left out.
+SERVICE_GROUPS: tuple[PartCategory, ...] = (
+    PartCategory.APP,
+    PartCategory.AI,
+    PartCategory.DATA,
+    PartCategory.COMPUTE,
+    PartCategory.PLATFORM,
+    PartCategory.STACK,
+)
+
+
+def services_in(category: PartCategory) -> dict[str, ServiceSpec]:
+    """The services of ``category``, in registry order."""
+    return {name: spec for name, spec in SERVICES.items() if spec.category is category}
+
+
+def group_header_key(category: PartCategory) -> str:
+    """The translation key of the header services of ``category`` list under."""
+    return f"services.category_{category.value}"
 
 
 def list_available_services() -> list[str]:

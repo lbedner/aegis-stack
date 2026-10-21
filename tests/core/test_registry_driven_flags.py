@@ -19,7 +19,7 @@ import pytest
 from aegis.constants import AnswerKeys
 from aegis.core.components import COMPONENTS, ComponentSpec, ComponentType
 from aegis.core.copier_manager import derive_include_flags
-from aegis.core.services import SERVICES, ServiceSpec, ServiceType
+from aegis.core.services import SERVICES, ServiceSpec
 from aegis.core.template_generator import TemplateGenerator
 
 FAKE_COMPONENT = "faketestcomp"
@@ -41,7 +41,6 @@ def fake_component(monkeypatch: pytest.MonkeyPatch) -> ComponentSpec:
 def fake_service(monkeypatch: pytest.MonkeyPatch) -> ServiceSpec:
     spec = ServiceSpec(
         name=FAKE_SERVICE,
-        type=ServiceType.ANALYTICS,
         description="Throwaway service for registry-derivation tests",
     )
     monkeypatch.setitem(SERVICES, FAKE_SERVICE, spec)

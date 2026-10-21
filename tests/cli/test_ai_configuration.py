@@ -18,6 +18,11 @@ from aegis.cli.interactive import (
     interactive_project_selection,
     set_database_engine_selection,
 )
+from tests.cli.test_utils import asked_services
+
+# One "no" for each service screen before AI's and after it.
+BEFORE_AI = [False] * asked_services().index("ai")
+AFTER_AI = [False] * (len(asked_services()) - asked_services().index("ai") - 1)
 
 
 class TestAIProviderSelection:
@@ -45,8 +50,7 @@ class TestAIProviderSelection:
             False,  # deploy
             False,  # mcp
             False,  # browser
-            False,  # auth service
-            False,  # payment
+            *BEFORE_AI,
             True,  # AI service
             False,  # Use PydanticAI? (framework, default True)
             False,  # Enable usage tracking with SQLite? No (memory backend)
@@ -60,13 +64,7 @@ class TestAIProviderSelection:
             False,  # ollama
             True,  # Enable RAG? Yes (default)
             True,  # Enable voice?
-            False,  # meetings
-            False,  # comms
-            False,  # insights
-            False,  # research
-            False,  # blog service
-            False,  # finance service
-            False,  # documents service
+            *AFTER_AI,
         ]
 
         components, scheduler_backend, services, _ = interactive_project_selection()
@@ -97,8 +95,7 @@ class TestAIProviderSelection:
             False,  # deploy
             False,  # mcp
             False,  # browser
-            False,  # auth service
-            False,  # payment
+            *BEFORE_AI,
             True,  # AI service
             True,  # Use LangChain? Yes
             False,  # Enable usage tracking with SQLite? No (memory backend)
@@ -112,13 +109,7 @@ class TestAIProviderSelection:
             False,  # ollama
             True,  # Enable RAG? Yes (default)
             True,  # Enable voice?
-            False,  # meetings
-            False,  # comms
-            False,  # insights
-            False,  # research
-            False,  # blog service
-            False,  # finance service
-            False,  # documents service
+            *AFTER_AI,
         ]
 
         components, scheduler_backend, services, _ = interactive_project_selection()
@@ -150,8 +141,7 @@ class TestAIProviderSelection:
             False,  # deploy
             False,  # mcp
             False,  # browser
-            False,  # auth service
-            False,  # payment
+            *BEFORE_AI,
             True,  # AI service
             False,  # Use LangChain? No (use PydanticAI)
             False,  # Enable usage tracking with SQLite? No (memory backend)
@@ -165,13 +155,7 @@ class TestAIProviderSelection:
             False,  # ollama
             True,  # Enable RAG? Yes (default)
             True,  # Enable voice?
-            False,  # meetings
-            False,  # comms
-            False,  # insights
-            False,  # research
-            False,  # blog service
-            False,  # finance service
-            False,  # documents service
+            *AFTER_AI,
         ]
 
         components, scheduler_backend, services, _ = interactive_project_selection()
@@ -203,16 +187,9 @@ class TestAIProviderSelection:
             False,  # deploy
             False,  # mcp
             False,  # browser
-            False,  # auth service
-            False,  # payment
+            *BEFORE_AI,
             False,  # AI service
-            False,  # meetings
-            False,  # comms
-            False,  # insights
-            False,  # research
-            False,  # blog service
-            False,  # finance service
-            False,  # documents service
+            *AFTER_AI,
         ]
 
         components, scheduler_backend, services, _ = interactive_project_selection()
@@ -259,8 +236,7 @@ class TestAIBackendSelection:
                 False,  # deploy
                 False,  # mcp
                 False,  # browser
-                False,  # auth service
-                False,  # payment
+                *BEFORE_AI,
                 True,  # AI service
                 False,  # Use LangChain? No (use PydanticAI)
                 True,  # Enable usage tracking? Yes
@@ -275,13 +251,7 @@ class TestAIBackendSelection:
                 False,  # ollama
                 True,  # Enable RAG? Yes (default)
                 True,  # Enable voice?
-                False,  # meetings
-                False,  # comms
-                False,  # insights
-                False,  # research
-                False,  # blog service
-                False,  # finance service
-                False,  # documents service
+                *AFTER_AI,
             ]
 
             components, scheduler_backend, services, _ = interactive_project_selection()
@@ -326,8 +296,7 @@ class TestAIBackendSelection:
                 False,  # deploy
                 False,  # mcp
                 False,  # browser
-                False,  # auth service
-                False,  # payment
+                *BEFORE_AI,
                 True,  # AI service
                 False,  # Use LangChain? No (use PydanticAI)
                 # (no usage-tracking confirm: project database is reused)
@@ -342,13 +311,7 @@ class TestAIBackendSelection:
                 False,  # ollama
                 True,  # Enable RAG? Yes (default)
                 True,  # Enable voice?
-                False,  # meetings
-                False,  # comms
-                False,  # insights
-                False,  # research
-                False,  # blog service
-                False,  # finance service
-                False,  # documents service
+                *AFTER_AI,
             ]
 
             components, scheduler_backend, services, _ = interactive_project_selection()
@@ -384,8 +347,7 @@ class TestAIBackendSelection:
             False,  # deploy
             False,  # mcp
             False,  # browser
-            False,  # auth service
-            False,  # payment
+            *BEFORE_AI,
             True,  # AI service
             False,  # Use LangChain? No (use PydanticAI)
             False,  # Enable usage tracking with SQLite? No (memory)
@@ -399,13 +361,7 @@ class TestAIBackendSelection:
             False,  # ollama
             True,  # Enable RAG? Yes (default)
             True,  # Enable voice?
-            False,  # meetings
-            False,  # comms
-            False,  # insights
-            False,  # research
-            False,  # blog service
-            False,  # finance service
-            False,  # documents service
+            *AFTER_AI,
         ]
 
         components, scheduler_backend, services, _ = interactive_project_selection()
@@ -560,8 +516,7 @@ class TestAIConfigurationEndToEnd:
             False,  # deploy
             False,  # mcp
             False,  # browser
-            False,  # No auth service
-            False,  # payment
+            *BEFORE_AI,
             True,  # Yes AI service
             True,  # Use LangChain? Yes
             False,  # Enable usage tracking with SQLite? No (memory backend)
@@ -575,13 +530,7 @@ class TestAIConfigurationEndToEnd:
             False,  # Provider selection (openai yes, anthropic no, google yes, groq yes, mistral no, cohere no, ollama no)
             True,  # Enable RAG? Yes (default)
             True,  # Enable voice?
-            False,  # meetings
-            False,  # comms
-            False,  # insights
-            False,  # research
-            False,  # blog service
-            False,  # finance service
-            False,  # documents service
+            *AFTER_AI,
         ]
 
         # Run interactive selection
@@ -675,8 +624,7 @@ class TestOllamaModeSelection:
             False,  # deploy
             False,  # mcp
             False,  # browser
-            False,  # auth service
-            False,  # payment
+            *BEFORE_AI,
             True,  # AI service
             False,  # Use LangChain? No
             False,  # Enable usage tracking? No
@@ -691,13 +639,7 @@ class TestOllamaModeSelection:
             True,  # Ollama mode: connect to host (True = HOST)
             True,  # Enable RAG
             True,  # Enable voice?
-            False,  # meetings
-            False,  # comms
-            False,  # insights
-            False,  # research
-            False,  # blog service
-            False,  # finance service
-            False,  # documents service
+            *AFTER_AI,
         ]
 
         interactive_project_selection()

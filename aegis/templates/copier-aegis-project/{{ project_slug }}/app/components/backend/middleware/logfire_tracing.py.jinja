@@ -25,12 +25,17 @@ from fastapi import FastAPI
 
 from app.core.config import settings
 from app.core.log import logger
+from app.core.ontology.exports import otel
+from app.core.ontology.model import stack
 
 
 _configured: bool | None = None
+# The process a configuration names when its caller says nothing: the
+# webserver, whose middleware discovery reaches here first.
+WEBSERVER = "webserver"
 
 
-def configure_logfire() -> bool:
+def configure_logfire(unit: str = WEBSERVER) -> bool:
     """Configure Logfire + the process-wide instrumentations (HTTPX,
     SQLAlchemy). Returns whether observability is active. Idempotent -
     the bootstrap call in the app factory and the middleware-discovery
@@ -67,6 +72,14 @@ def configure_logfire() -> bool:
     os.environ.setdefault(
         "OTEL_BSP_SCHEDULE_DELAY", str(settings.OTEL_BSP_SCHEDULE_DELAY)
     )
+    # Who is reporting (``exports.otel``): this process (``unit``) by its
+    # own name, in the stack's namespace, so the webserver, the worker
+    # and the scheduler of one stack are told apart and kept together.
+    identity = otel(stack(), unit)
+    os.environ.setdefault(
+        "OTEL_RESOURCE_ATTRIBUTES",
+        f"service.namespace={identity['service.namespace']}",
+    )
 
     # Hand over the token the guard above just read. Logfire otherwise
     # resolves it from ``os.environ``, which ``.env`` never populates --
@@ -77,8 +90,9 @@ def configure_logfire() -> bool:
     # why this only shows up outside a container (aegis-stack#1135).
     logfire.configure(
         token=settings.LOGFIRE_TOKEN,
-        service_name=settings.PROJECT_NAME,
-        environment=settings.APP_ENV,
+        service_name=identity["service.name"],
+        service_version=identity["service.version"],
+        environment=identity["deployment.environment.name"],
         send_to_logfire=True,
         console=False,
     )
@@ -166,7 +180,7 @@ def _harden_pydantic_ai_result_serializer() -> None:
 SERVICE_MODULES = ("app.services",)
 
 
-def install_auto_tracing(*modules: str) -> None:
+def install_auto_tracing(*modules: str, unit: str = WEBSERVER) -> None:
     """Span every call slower than 10ms in the services, plus ``modules``.
 
     The generic answer to "instrument the business logic": Logfire's
@@ -182,8 +196,9 @@ def install_auto_tracing(*modules: str) -> None:
     build blocks every in-flight request, and without spans there that
     stall is a 4-second hole in the trace with no visible culprit. The
     worker and scheduler never import the UI, so they pass nothing.
+    ``unit`` is the process: what its traces report as their service.
     """
-    if not configure_logfire():
+    if not configure_logfire(unit):
         return
     import logfire
 

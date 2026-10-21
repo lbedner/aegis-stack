@@ -24,6 +24,24 @@
 
 ### Changed
 
+- **What a stack is made of, said once and read everywhere.** Services group
+  by their `category` (App, AI, Data) in `aegis services` and the setup
+  wizard, `ServiceType` gone; the wizard asks "Add Payment? Stripe checkout,
+  ..." rather than a description posed as a question. The docs nav files
+  each part under its category (Browser under Compute, Deploy under Stack)
+  and labels experimental what the spec says, held by tests.
+- **A generated app says what it has.** Its README lists exactly its
+  components and services (with where to reach each, Redis included when it
+  is on), written from its answers at generation and on update; its docs get
+  a *What It Is Made Of* page built from its code. `<app> ontology export`
+  writes the same model as Markdown, a Backstage `catalog-info.yaml`
+  (validated against Backstage's schemas) or OpenTelemetry resource
+  attributes.
+- **Traces name their process.** The webserver, worker and scheduler report
+  as `service.name` webserver, worker and scheduler under one
+  `service.namespace` (the project), with the build as `service.version`.
+  Dashboards keyed on the project name as `service.name` need the namespace.
+
 - **Meetings keeps its logic in domains.** The bot's run, Meet's page, the
   call's audio and the bot's sign-in move to `domains/bot/` (the run's row
   keeping in `domains/bot/row.py`), the notes writer to

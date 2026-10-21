@@ -83,6 +83,7 @@ nav:
         - Database Persistence: components/scheduler/persistence.md
         - Running Jobs: components/scheduler/running-jobs.md
       - Ingress: components/ingress.md
+      - Browser: components/browser.md
     - Data:
       - Database:
         - Getting Started: components/database.md
@@ -95,7 +96,6 @@ nav:
     - AI:
       - Inference: components/inference.md
       - MCP: components/mcp.md
-      - Browser: components/browser.md
     - App:
       - Frontend:
         - Flet Dashboard:
@@ -119,8 +119,9 @@ nav:
         - Needed & Verified: components/secrets/needed-and-verified.md
         - Settings: components/secrets/settings.md
         - How It Works: components/secrets/how-it-works.md
-      - Deploy: components/deploy.md
       - Observability: components/observability.md
+    - Stack:
+      - Deploy: components/deploy.md
   - Services:
     - Overview: services/index.md
     - AI:
@@ -141,7 +142,7 @@ nav:
         - Examples: services/ai/examples.md
       - Research:
         - Getting Started: services/research/index.md
-      - Meetings:
+      - Meetings (Experimental):
         - Getting Started: services/meetings/index.md
     - Data:
       - Documents:
@@ -157,7 +158,7 @@ nav:
         - Service Layer: services/auth/integration.md
         - CLI Commands: services/auth/cli.md
         - Examples: services/auth/examples.md
-      - Payment (Experimental):
+      - Payment:
         - Getting Started: services/payment/index.md
         - Provider Setup: services/payment/setup.md
         - Dashboard: services/payment/dashboard.md
@@ -170,13 +171,13 @@ nav:
         - API Reference: services/comms/api.md
         - CLI Commands: services/comms/cli.md
         - Examples: services/comms/examples.md
-      - Blog (Experimental):
+      - Blog:
         - Getting Started: services/blog/index.md
         - API Reference: services/blog/api.md
         - Dashboard: services/blog/dashboard.md
         - CLI Commands: services/blog/cli.md
         - Examples: services/blog/examples.md
-      - Finance:
+      - Finance (Experimental):
         - Getting Started: services/finance/index.md
         - Accounts and the Register: services/finance/accounts.md
         - Bills and Income: services/finance/bills.md
@@ -188,7 +189,7 @@ nav:
         - Chat: services/finance/chat.md
         - API Reference: services/finance/api.md
         - CLI Commands: services/finance/cli.md
-      - Insights (Experimental):
+      - Insights:
         - Getting Started: services/insights/index.md
         - Data Sources: services/insights/data-sources.md
         - CLI Commands: services/insights/cli.md

@@ -7,7 +7,7 @@ prep): the worker+redis bundling, auth's database-confirmation dance, the
 plain content-service path, and the decline-everything baseline.
 
 Prompt order (must hold for the scripted side_effect lists): every component
-in INFRASTRUCTURE_ORDER, then every service grouped by ServiceType order.
+in INFRASTRUCTURE_ORDER, then every service in the order ``asked_services`` gives.
 Accepting worker bundles redis AND skips the redis prompt;
 accepting auth without a database inserts a database-confirmation prompt.
 """
@@ -19,6 +19,7 @@ from unittest.mock import patch
 
 from aegis.cli.interactive import interactive_project_selection
 from aegis.constants import ComponentNames, WorkerBackends
+from tests.cli.test_utils import asked_services
 
 # One confirm per optional component: where the service confirms start.
 _COMPONENTS = len(ComponentNames.INFRASTRUCTURE_ORDER)
@@ -155,10 +156,10 @@ class TestAuthDatabaseDance:
 class TestContentServices:
     @patch("typer.confirm")
     def test_blog_selected_as_plain_name(self, mock_confirm: Any) -> None:
-        # Decline everything except blog. Services are asked in ServiceType
-        # order, and blog's CONTENT slot is second to last, ahead of
-        # finance - so the accept sits one before the end.
-        mock_confirm.side_effect = [False] * (_prompt_count() - 2) + [True, False]
+        # Decline everything except blog.
+        mock_confirm.side_effect = [False] * _COMPONENTS + [
+            s == "blog" for s in asked_services()
+        ]
         _, _, services, _ = interactive_project_selection()
         assert services == ["blog"]
 
@@ -254,13 +255,11 @@ class TestEngineWithScriptedUI:
         # worker=y (bundles redis, redis prompt skipped), scheduler=y
         # (backend via choose_scheduler_backend, db auto-added and skipped),
         # storage=n, ingress=n, observability=n, htmx=n, inference=n, secrets=n,
-        # deploy=n, mcp=n, browser=n, then services in ServiceType
-        # order: auth=y, payment=n, ai=y, meetings=n, comms=n, insights=n,
-        # research=n, documents=n, blog=y, finance=n
+        # deploy=n, mcp=n, browser=n, then the services: auth, ai and blog
         ui = ScriptedUI(
             confirms=[True, True, False, False, False, False, False, False, False]
             + [False, False]
-            + [True, False, True, False, False, False, False, False, True, False],
+            + [s in {"auth", "ai", "blog"} for s in asked_services()],
             worker_backend="taskiq",
             scheduler_backend="postgres",
             database_engine="postgres",
@@ -281,8 +280,8 @@ class TestEngineWithScriptedUI:
         # second database is appended.
         assert state.services == [
             "auth[rbac]",
-            "ai[postgres,langchain,openai,rag]",
             "blog",
+            "ai[postgres,langchain,openai,rag]",
         ]
         assert sum("database" in c for c in state.components) == 1
 
@@ -307,9 +306,7 @@ class TestEngineWithScriptedUI:
         from aegis.cli.interactive import run_project_selection
 
         ui = ScriptedUI(
-            confirms=[False] * (_COMPONENTS + 2)  # every component, auth, payment
-            + [True]  # ai
-            + [False] * (_prompt_count() - _COMPONENTS - 3),
+            confirms=[False] * _COMPONENTS + [s == "ai" for s in asked_services()],
             ai_config=("postgres", "pydantic-ai", ["public"], False, False),
             postgres_provider="neon",
         )
@@ -452,3 +449,18 @@ def test_a_rerun_forgets_a_placement_it_no_longer_chose() -> None:
         assert get_ollama_mode_selection("ai") == "none"
     finally:
         clear_ollama_mode_selection()
+
+
+def test_each_question_names_the_part_then_says_what_it_is() -> None:
+    """A part is asked for by its name, then described: "Add Payment?
+    Stripe checkout, ...", never its description posing as a question."""
+    from aegis.cli.interactive import run_project_selection
+    from aegis.core.components import COMPONENTS
+    from aegis.core.services import SERVICES
+
+    ui = ScriptedUI([False] * _prompt_count())
+    run_project_selection(ui)
+    asked = [line for line in ui.transcript if line.startswith("[confirm]")]
+    for spec in [*SERVICES.values(), COMPONENTS["scheduler"]]:
+        question = next(line for line in asked if spec.description in line)
+        assert f"Add {spec.display_title}? {spec.description}" in question

@@ -14,3 +14,12 @@ print("--- Running gen_docs.py ---")
 with open("README.md") as readme, open("docs/index.md", "w") as index:
     index.write(readme.read())
     print("✓ Copied README.md to docs/index.md")
+
+# What the app is made of, read from its code at build time
+# (``ontology export``): its components and services, each with what it
+# holds. Built with the app, never a database or Redis.
+from app.core.ontology import exports, with_app  # noqa: E402
+
+with mkdocs_gen_files.open("stack.md", "w") as page:
+    page.write(exports.markdown(with_app()))
+    print("✓ Generated stack.md from the system model")

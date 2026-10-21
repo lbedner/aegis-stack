@@ -16,7 +16,7 @@ try:
 except ImportError:  # observability component not installed
     pass
 else:
-    install_auto_tracing()
+    install_auto_tracing(unit="scheduler")
 
 from app.components.scheduler.main import run_scheduler  # noqa: E402
 from app.core.log import setup_logging  # noqa: E402

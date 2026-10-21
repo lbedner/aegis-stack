@@ -173,6 +173,7 @@ def _entry(spec: PluginSpec) -> str:
         "holds_keys": spec.holds_keys,
         "order": spec.order,
         "description": spec.description,
+        "experimental": spec.experimental,
     }
     lines = [
         f"        {name}=Category.{value.name},"
@@ -221,6 +222,8 @@ class Part:
     # What it is, in a line: what the app map says of a part with no
     # package docstring of its own (ingress is Traefik, not Python).
     description: str = ""
+    # Its schema, APIs and CLI may change between releases.
+    experimental: bool = False
     options: tuple[Option, ...] = ()  # what else it could be
 """
 

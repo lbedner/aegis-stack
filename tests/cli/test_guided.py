@@ -8,8 +8,8 @@ test, only the key->action wiring. Quick mode and guided mode converge on the
 same state object.
 
 Confirm prompts accept ``y``/``n`` shortcuts; the engine asks about each
-optional component in INFRASTRUCTURE_ORDER, then every service grouped by
-ServiceType order.
+optional component in INFRASTRUCTURE_ORDER, then every service in the
+order ``asked_services`` gives.
 """
 
 from __future__ import annotations
@@ -25,6 +25,7 @@ from aegis.cli.guided import (
 from aegis.cli.interactive import run_project_selection
 from aegis.constants import ComponentNames
 from aegis.core.services import SERVICES
+from tests.cli.test_utils import asked_services
 
 
 def _ui(keys: list[str]) -> GuidedSelectionUI:
@@ -59,6 +60,12 @@ _DECLINE_ALL = ["n"] * _expected_screen_count()
 
 # One "no" per optional component: where the service screens start.
 _DECLINE_COMPONENTS = ["n"] * len(ComponentNames.INFRASTRUCTURE_ORDER)
+
+
+def _before(service: str) -> list[str]:
+    """One "no" for each service screen ahead of ``service``."""
+    return ["n"] * asked_services().index(service)
+
 
 # The full init flow opens with the starting-point screen; enter selects
 # Blank canvas. (run_guided_selection alone never shows it.)
@@ -137,15 +144,22 @@ class TestGuidedDrivesEngine:
         # comms, insights, and payment were silently skipped by the old
         # hand-written AUTH/AI/CONTENT trio; accepting their confirms must
         # now land them in the selection.
-        keys = _DECLINE_COMPONENTS + ["n", "y", "n", "n", "y", "y", "n", "n"]
+        wanted = {"payment", "comms", "insights"}
+        keys = _DECLINE_COMPONENTS + [
+            "y" if s in wanted else "n" for s in asked_services()
+        ]
         state = _drive(keys)
-        assert state.services == ["payment", "comms", "insights"]
+        assert state.services == [s for s in asked_services() if s in wanted]
 
     def test_ai_rag_and_voice_toggles(self) -> None:
         # Accept AI: framework chip (enter = pydantic-ai), storage chip
         # (enter = memory), providers (up wraps to Continue, enter keeps
         # the recommended default), rag yes, voice no; rest declined.
-        keys = _DECLINE_COMPONENTS + ["n", "n", "y", "\r", "\r", "up", "\r", "y", "n"]
+        keys = (
+            _DECLINE_COMPONENTS
+            + _before("ai")
+            + ["y", "\r", "\r", "up", "\r", "y", "n"]
+        )
         keys += ["n", "n", "n", "n"]
         state = _drive(keys)
         assert state.services == ["ai[memory,pydantic-ai,public,rag]"]
@@ -156,7 +170,8 @@ class TestGuidedDrivesEngine:
         # right+enter picks Neon for the auto-added database.
         keys = (
             _DECLINE_COMPONENTS
-            + ["n", "n", "y", "\r"]  # auth n, payment n, ai y -> framework
+            + _before("ai")
+            + ["y", "\r"]  # ai y -> framework
             + ["right", "right", "\r"]  # storage: PostgreSQL
             + ["up", "\r"]  # providers: Continue with the default
             + ["n", "n"]  # rag, voice
@@ -177,8 +192,15 @@ class TestGuidedDrivesEngine:
             # postgres, host -> local container
             + _DECLINE_COMPONENTS[3:]  # every component after the database
             # (db auto-skipped)
-            + ["n", "n", "y", "\r", "up", "\r", "n", "n"]  # auth n, payment n,
-            # ai y -> framework, providers (Continue), rag n, voice n
+            + _before("ai")
+            + [
+                "y",
+                "\r",
+                "up",
+                "\r",
+                "n",
+                "n",
+            ]  # ai y -> framework, providers (Continue), rag n, voice n
             # (NO storage screen)
             + ["n", "n", "n", "n"]  # comms, insights, blog, finance
         )
@@ -198,7 +220,8 @@ class TestGuidedDrivesEngine:
                 "\r",
             ]  # database accepted, engine=sqlite
             + _DECLINE_COMPONENTS[3:]  # every component after the database
-            + ["n", "n", "y", "\r", "up", "\r", "n", "n"]  # ai: framework,
+            + _before("ai")
+            + ["y", "\r", "up", "\r", "n", "n"]  # ai: framework,
             # providers (Continue), rag, voice — no storage screen
             + ["n", "n", "n", "n"]
         )
@@ -211,7 +234,8 @@ class TestGuidedDrivesEngine:
         # TOGGLES it (OpenAI here), and only Continue advances.
         keys = (
             _DECLINE_COMPONENTS
-            + ["n", "n", "y", "\r", "\r"]  # ai y, framework, storage memory
+            + _before("ai")
+            + ["y", "\r", "\r"]  # ai y, framework, storage memory
             + ["down", "\r", "up", "up", "\r"]  # toggle openai via enter,
             # wrap up to Continue, accept
             + ["n", "n"]  # rag, voice
@@ -224,7 +248,8 @@ class TestGuidedDrivesEngine:
         # Unchecking everything still yields the free tier, like quick mode.
         keys = (
             _DECLINE_COMPONENTS
-            + ["n", "n", "y", "\r", "\r"]
+            + _before("ai")
+            + ["y", "\r", "\r"]
             + [" ", "up", "\r"]  # uncheck LLM7.io, Continue with none
             + ["n", "n"]
             + ["n", "n", "n", "n"]
@@ -549,7 +574,8 @@ class TestBreadcrumbs:
         # AI alone choosing sqlite storage auto-adds Database — sidebar too.
         keys = (
             _DECLINE_COMPONENTS
-            + ["n", "n", "y", "\r", "right", "\r", "up", "\r", "n", "n"]
+            + _before("ai")
+            + ["y", "\r", "right", "\r", "up", "\r", "n", "n"]
             # ai -> framework, storage right (sqlite), providers Continue,
             # rag n, voice n
             + ["n", "n", "n", "n"]
@@ -563,7 +589,8 @@ class TestBreadcrumbs:
 
         keys = (
             _DECLINE_COMPONENTS
-            + ["n", "n", "y", "\r", "right", "\r", "up", "\r", "n", "n"]
+            + _before("ai")
+            + ["y", "\r", "right", "\r", "up", "\r", "n", "n"]
             + ["n", "n", "n", "n"]
         )
         ui = _ui(keys)

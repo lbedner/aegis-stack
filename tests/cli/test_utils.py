@@ -45,6 +45,15 @@ STANDARD_ENV_OVERRIDES = {
 }
 
 
+def asked_services() -> list[str]:
+    """Every service, in the order init asks about them: grouped by
+    category (``SERVICE_GROUPS``). Scripts find a service here by name
+    rather than counting screens, so adding one breaks none of them."""
+    from aegis.core.services import SERVICE_GROUPS, services_in
+
+    return [name for group in SERVICE_GROUPS for name in services_in(group)]
+
+
 def find_project_root() -> Path:
     """Find the project root directory by looking for pyproject.toml."""
     current_path = Path(__file__).resolve()

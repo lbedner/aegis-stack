@@ -3,49 +3,10 @@
 
 {{ project_description }}
 
-## Components
+## What It Is Made Of
 
-This Aegis Stack project includes the following components:
-
-- **Backend**: FastAPI-based async web server
-- **Frontend**: Flet-based Python UI framework (Overseer dashboard at `/dashboard`)
-{%- if include_htmx %}
-- **Web Frontend**: Server-rendered pages at `/` (Jinja2 + htmx + Alpine, Tailwind/DaisyUI)
-{%- endif %}
-{%- if include_scheduler %}
-- **Scheduler**: APScheduler-based async task scheduling
-{%- endif %}
-{%- if include_database %}
-{%- if database_engine == "postgres" %}
-{%- if postgres_provider == "neon" %}
-- **Database**: Neon serverless Postgres with SQLModel ORM
-{%- else %}
-- **Database**: PostgreSQL with SQLModel ORM
-{%- endif %}
-{%- else %}
-- **Database**: SQLite database with SQLModel ORM
-{%- endif %}
-{%- endif %}
-{%- if include_cache %}
-- **Cache**: Redis-based async caching
-{%- endif %}
-
-{% if include_auth or include_ai or include_comms or include_insights %}
-## Services
-
-{%- if include_auth %}
-- **Auth**: JWT authentication with user management{% if include_oauth %} + GitHub/Google OAuth social login{% endif %}
-{%- endif %}
-{%- if include_ai %}
-- **AI**: Multi-provider AI integration with PydanticAI
-{%- endif %}
-{%- if include_comms %}
-- **Comms**: Email, SMS, and voice communications
-{%- endif %}
-{%- if include_insights %}
-- **Insights**: Adoption metrics tracking (GitHub, PyPI, Plausible, Reddit)
-{%- endif %}
-{% endif %}
+<!-- what-it-has -->
+<!-- /what-it-has -->
 
 ## Getting Started
 

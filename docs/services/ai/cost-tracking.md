@@ -21,7 +21,7 @@ Every AI request is automatically tracked, tokens consumed, cost calculated, and
 - **Per-user breakdown** - filter usage by `user_id` to see individual consumption
 - **Model breakdown** - compare spend and volume across models and providers
 - **Real-time dashboard** - frontend analytics tab with hero stats, pie chart, and activity table
-- **Illiana** - the AI service's spend by window (today, last 7 days, all time) on its node in the ontology, so she can answer cost questions
+- **Illiana** - the AI service's spend by window (today, last 7 days, all time) on its node in the [Twin](../../overseer/twin.md) (its ontology layer), so she can answer cost questions
 
 ---
 

@@ -9,6 +9,20 @@
 
 ### Added
 
+- **The requests the server kept, read outside Overseer.** One typed read
+  (`app/services/system/kept_requests.py`: `RequestSummary`,
+  `RequestHops`, frozen Pydantic models) serves `GET /api/v1/requests`
+  (recent, newest first, `route=` and `limit`), `GET
+  /api/v1/requests/{id}` (a malformed id refused before any lookup),
+  admins only, the `requests` tool (admin; granted to the default agent
+  and in the default MCP grant) and
+  Overseer's replay alike. A hop names its parts as the dry path does (a
+  sub-part only where the model has one) and each line of code with the
+  service piece it is in. Reading them is not kept. They are kept in the
+  shared cache for a day (`replays.keep`, a capped list,
+  `CacheService.push`), so with Redis a restart loses none and every
+  process reads the same ones; Docker's health probe is not kept.
+
 - **A project's own site takes the root.** When
   `app/components/web_frontend/routes/site.py` exists, `main.py` mounts its
   router last, outside the Overseer's gate, and the landing steps aside: `/`
@@ -106,6 +120,30 @@
   optionally in scenes with chapters.
 
 ### Changed
+
+- **A stack keeps its port across restarts.** `make serve` / `poe serve`
+  take the host port the last run published (`.env.ports`) while it is
+  still free, before scanning up from the base, so a URL saved for a stack
+  (an MCP client's, a bookmark) keeps reaching it when other stacks start
+  first. A base set in the environment (`WEBSERVER_PORT_BASE=...`) still
+  wins.
+
+- **The AI service's spend says where it went.** Each window its node
+  carries (today, 7 days, all time) splits the cost by vendor, by what
+  it was for (chat, live calls, transcription) and by voice or text, so
+  Illiana can say what voice cost against chat. Its figures are in
+  cents, as said aloud: a ledger's fractions of a cent had her reading
+  $0.012 as twelve cents.
+
+- **Illiana reads errors.** Her default grant adds the `errors` tool, so
+  "which service has the most open errors?" is read, not guessed.
+
+- **A line of the app's code in a chat reply links to it.** A path set as
+  code (`app/core/cache.py:10`) opens in Overseer > Code at that line,
+  while that page is on and shows the file.
+
+- **A component's memory warning says how high.** "Memory at 87% on
+  my-app-worker-1", not only "Memory high".
 
 - **Overseer's Logs read in the development console's colors.** Every
   line leads with its level (info green), then the message, its logger in

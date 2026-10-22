@@ -11,6 +11,7 @@ from app.core.ontology import Kind
 from app.core.ontology.model import parse_node_id
 from app.core.ontology.parts import node_of
 from app.core.source_index import Module
+from app.services.system import service_parts
 from app.services.system.service_parts import DOMAINS, PIECES, ROUTER, Folder, piece_of
 
 # The standard's pieces in the order they are drawn: what callers reach
@@ -71,6 +72,26 @@ def pieces(folder: Folder) -> list[Piece]:
         return ORDER.index(piece.title), ""
 
     return sorted(found, key=rank)
+
+
+def folder_of(subject: str) -> Folder | None:
+    """The services folder of ``subject`` (``service:auth``) the parts
+    pattern holds to the standard; None for a part without one."""
+    return next(
+        (
+            instance.target
+            for instance in service_parts.report().instances
+            if instance.label == subject and instance.target.held
+        ),
+        None,
+    )
+
+
+def held(subject: str) -> list[Piece]:
+    """``subject``'s pieces, none for a part with no folder of its own
+    held to the standard (read from source: off the event loop)."""
+    folder = folder_of(subject)
+    return pieces(folder) if folder else []
 
 
 def links(folder: Folder, found: list[Piece], ids: set[str]) -> dict[str, list[str]]:

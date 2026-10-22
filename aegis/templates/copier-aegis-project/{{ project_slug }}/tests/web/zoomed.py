@@ -9,6 +9,7 @@ import pytest
 from app.components.web_frontend import overseer_container, overseer_zoom
 from app.core.ontology import calls
 from app.core.ontology.model import Edge, EdgeKind
+from app.services.system import kept_requests, service_pieces
 from app.services.system.models import ComponentStatus
 from app.services.system.pattern_findings import Finding
 from app.services.system.service_pieces import Piece
@@ -81,6 +82,7 @@ def zoomable(
         ]
     )
     monkeypatch.setattr(overseer_container, "current", lambda: model)
+    monkeypatch.setattr(kept_requests, "current", lambda: model)
     monkeypatch.setattr(
         calls,
         "providers",
@@ -100,6 +102,11 @@ def auth_opens(monkeypatch: pytest.MonkeyPatch) -> None:
         lambda subject, model: (PIECES, LINES)
         if subject == "service:auth"
         else ([], {}),
+    )
+    monkeypatch.setattr(
+        service_pieces,
+        "held",
+        lambda subject: PIECES if subject == "service:auth" else [],
     )
 
 

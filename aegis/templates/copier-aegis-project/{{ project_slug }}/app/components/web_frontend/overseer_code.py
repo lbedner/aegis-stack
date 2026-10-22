@@ -131,14 +131,19 @@ def line_url(path: str, line: int) -> str:
     return f"{Scope().url(path)}#{LINE_ANCHOR}-{line}"
 
 
+def file_url(path: str, line: int | None = None) -> str | None:
+    """Where one of the app's own files opens here, at ``line`` when given;
+    None for one the tree does not show, or while the page is off."""
+    if not (enabled() and shown(path)):
+        return None
+    return line_url(path, line) if line else Scope().url(path)
+
+
 def module_url(module: str) -> str | None:
     """Where one of the app's own modules (``app.core.log``) opens here
-    (``source_index.module_paths``); None for a library's, one the tree
-    does not show, or while the page is off."""
-    if not enabled():
-        return None
-    found = next((p for p in source_index.module_paths(module) if shown(p)), None)
-    return Scope().url(found) if found else None
+    (``source_index.module_paths``); None for a library's (``file_url``)."""
+    paths = source_index.module_paths(module)
+    return next((url for path in paths if (url := file_url(path))), None)
 
 
 @dataclass(frozen=True)

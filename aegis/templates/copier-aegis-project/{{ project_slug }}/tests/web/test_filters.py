@@ -12,6 +12,7 @@ from typing import Any
 import pytest
 from fastapi import FastAPI
 
+from app.components.web_frontend import overseer_code
 from app.components.web_frontend.filters import (
     cents_to_input,
     exactly,
@@ -191,6 +192,32 @@ class TestMarkdown:
         would write to disk. Model markdown must not steer either."""
         out = markdown('```python full=true,title="x"\nx = 1\n```')
         assert "<html" not in out and "<style" not in out
+
+    def test_a_line_of_the_apps_code_links_to_it(
+        self, markdown: Callable[..., str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A path the Code page shows, set as code (with its line or not),
+        opens there; one it does not show stays code."""
+        monkeypatch.setattr(overseer_code, "enabled", lambda: True)
+        out = markdown(
+            "At `app/core/cache.py:10`, `app/core/cache.py` and `app/no.py`."
+        )
+        links = select(out, "a")
+        assert [link.get("href") for link in links] == [
+            overseer_code.line_url("app/core/cache.py", 10),
+            overseer_code.Scope().url("app/core/cache.py"),
+        ]
+        assert [text(link) for link in links] == [
+            "app/core/cache.py:10",
+            "app/core/cache.py",
+        ]
+        assert "<code>app/no.py</code>" in out
+
+    def test_code_stays_code_while_the_code_page_is_off(
+        self, markdown: Callable[..., str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(overseer_code, "enabled", lambda: False)
+        assert "<a" not in markdown("`app/core/cache.py:10`")
 
     def test_code_inside_a_fence_is_escaped(self, markdown: Callable[..., str]) -> None:
         out = markdown("```html\n<script>alert(1)</script>\n```")

@@ -342,6 +342,19 @@ async def usage_totals(
     ).first()
 
 
+# Who served a ledger row's model: its catalog vendor, ``unknown`` for a
+# model no longer in the catalog (``with_vendor`` joins it, left, so those
+# rows still count).
+VENDOR = func.coalesce(LLMOrg.name, "unknown")
+
+
+def with_vendor(stmt: Any) -> Any:
+    """``stmt`` over the ledger, joined to each row's vendor (``VENDOR``)."""
+    return stmt.outerjoin(
+        LargeLanguageModel, LLMUsage.model_id == LargeLanguageModel.model_id
+    ).outerjoin(LLMOrg, LargeLanguageModel.served_by_org_id == LLMOrg.id)
+
+
 async def usage_by_model(
     session: AsyncSession,
     *,
@@ -352,20 +365,19 @@ async def usage_by_model(
     """Per-model rows (model_id, title, vendor, vendor_color, requests,
     tokens, cost), busiest first. LEFT-joined so ledger rows for models
     no longer in the catalog still count."""
+    stmt = select(
+        LLMUsage.model_id,
+        func.coalesce(LargeLanguageModel.title, LLMUsage.model_id).label("title"),
+        VENDOR.label("vendor"),
+        func.coalesce(LLMOrg.color, "#808080").label("vendor_color"),
+        func.count(LLMUsage.id).label("requests"),
+        func.coalesce(
+            func.sum(LLMUsage.input_tokens + LLMUsage.output_tokens), 0
+        ).label("tokens"),
+        func.coalesce(func.sum(LLMUsage.total_cost), 0.0).label("cost"),
+    )
     stmt = (
-        select(
-            LLMUsage.model_id,
-            func.coalesce(LargeLanguageModel.title, LLMUsage.model_id).label("title"),
-            func.coalesce(LLMOrg.name, "unknown").label("vendor"),
-            func.coalesce(LLMOrg.color, "#808080").label("vendor_color"),
-            func.count(LLMUsage.id).label("requests"),
-            func.coalesce(
-                func.sum(LLMUsage.input_tokens + LLMUsage.output_tokens), 0
-            ).label("tokens"),
-            func.coalesce(func.sum(LLMUsage.total_cost), 0.0).label("cost"),
-        )
-        .outerjoin(LargeLanguageModel, LLMUsage.model_id == LargeLanguageModel.model_id)
-        .outerjoin(LLMOrg, LargeLanguageModel.served_by_org_id == LLMOrg.id)
+        with_vendor(stmt)
         .group_by(
             LLMUsage.model_id,
             LargeLanguageModel.title,

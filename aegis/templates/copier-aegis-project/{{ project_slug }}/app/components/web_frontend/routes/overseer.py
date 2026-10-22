@@ -51,6 +51,7 @@ from app.components.web_frontend.rendering import render, viewer_zone
 from app.core import replays
 from app.core.audit import AuditEmitter, get_audit
 from app.services.shared.deps import actor_of
+from app.services.system import kept_requests
 from app.services.system.health import last_system_status
 
 router = APIRouter()
@@ -123,7 +124,7 @@ async def overseer_replays(
     request: Request, user: Viewer = Depends(viewer)
 ) -> Response:
     """The requests the app served lately, to replay one."""
-    return _replay_page(request, user, overseer_replay.recent())
+    return _replay_page(request, user, await overseer_replay.recent())
 
 
 @router.get(
@@ -142,7 +143,7 @@ async def overseer_replay_page(
     if not replays.is_id(request_id):
         raise HTTPException(status_code=404)
     navigation = build_navigation(last_system_status())
-    recording = replays.find(request_id)
+    recording = await kept_requests.find(request_id)
     if recording is None:
         context: dict[str, Any] = {"replay": None}
     elif view == overseer_replay.LIST_VIEW:

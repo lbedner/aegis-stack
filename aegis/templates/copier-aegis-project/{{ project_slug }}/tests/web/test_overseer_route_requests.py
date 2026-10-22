@@ -2,6 +2,7 @@
 under each route to send one request (Execute); Load Tests shows the same
 form to send it many times."""
 
+import asyncio
 from collections.abc import Generator
 from typing import Any
 from urllib.parse import quote
@@ -134,7 +135,7 @@ class TestExecute:
         assert one(response.text, "[data-status]").get("data-tone") == "ok"
         href = one(response.text, "[data-replay]").get("href")
         assert href.startswith("/overseer/replay/")
-        assert replays.find(href.rsplit("/", 1)[1]) is not None
+        assert asyncio.run(replays.find(href.rsplit("/", 1)[1])) is not None
 
     def test_a_write_waits_for_its_confirmation(self, signed_in: TestClient) -> None:
         form = {"route": NEW, "body": '{"name": "pen"}'}

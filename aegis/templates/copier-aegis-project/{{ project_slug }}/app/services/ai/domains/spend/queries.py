@@ -11,6 +11,7 @@ from sqlalchemy import case, func
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.services.ai.domains.llm.queries import VENDOR, with_vendor
 from app.services.ai.domains.spend.recording import VOICE_ACTIONS
 from app.services.ai.models.llm import LLMUsage
 from app.services.shared.queries import within
@@ -109,9 +110,9 @@ async def voice_spend(
 
 async def usage_windows(
     session: AsyncSession, starts: Sequence[datetime | None]
-) -> list[tuple[int, int, float]]:
+) -> dict[tuple[str, str], list[tuple[int, int, float]]]:
     """Requests, tokens and cost since each of ``starts`` (None: the whole
-    ledger), in one read."""
+    ledger), per vendor (``VENDOR``) and action, in one read."""
     tokens = LLMUsage.input_tokens + LLMUsage.output_tokens
 
     def since(start: datetime | None, value: Any) -> Any:
@@ -126,8 +127,12 @@ async def usage_windows(
             func.coalesce(func.sum(since(start, LLMUsage.total_cost)), 0.0),
         )
     ]
-    row = (await session.exec(select(*columns))).one()
-    return [
-        (int(row[i]), int(row[i + 1]), float(row[i + 2]))
-        for i in range(0, len(columns), 3)
-    ]
+    by = (VENDOR, LLMUsage.action)
+    rows = (await session.exec(with_vendor(select(*by, *columns)).group_by(*by))).all()
+    return {
+        (str(row[0]), str(row[1])): [
+            (int(row[i]), int(row[i + 1]), float(row[i + 2]))
+            for i in range(len(by), len(by) + len(columns), 3)
+        ]
+        for row in rows
+    }

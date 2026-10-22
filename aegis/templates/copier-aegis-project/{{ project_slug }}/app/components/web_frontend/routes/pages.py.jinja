@@ -120,10 +120,6 @@ from fastapi.responses import HTMLResponse
 router = APIRouter(dependencies=[Depends(overseer_gate)])
 
 
-@router.get("/", response_class=HTMLResponse, include_in_schema=False)
-async def landing(request: Request) -> HTMLResponse:
-    """Landing page."""
-    return templates.TemplateResponse(request=request, name="pages/landing.html")
 {%- if include_auth %}
 
 

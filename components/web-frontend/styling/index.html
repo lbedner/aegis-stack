@@ -6479,21 +6479,34 @@ a new template directory) will not be in the compiled CSS. If you add a
 template location, add its glob to <code>content</code> in <code>tailwind.config.js</code>.</p>
 </div>
 <h2 id="the-single-rebrand-point">The single rebrand point</h2>
-<p>The stack uses the appearance system from Aegis Steward. Theme controls
-voice and shape (<code>aegis</code> or <code>steward</code>); mode controls the palette (<code>dark</code>,
-<code>light</code>, or the system preference). The four resolved DaisyUI themes are
-<code>aegis-dark</code>, <code>aegis-light</code>, <code>steward-dark</code>, and <code>steward-light</code>.</p>
-<p><code>tailwind.config.js</code> is the single source for palettes, shapes, light-mode
-tints, and chart colors. Its <code>PALETTES</code>, <code>SHAPES</code>, and <code>TINTS</code> tables generate
-the four themes. Tailwind's <code>aegis-*</code> utilities read DaisyUI's active color
-variables, so a color is defined once. <code>static/input.css</code> supplies shared
-components and applies the theme's scale and label style. <code>static/js/charts.js</code>
-reads the same color variables.</p>
+<p>Two axes cross. A theme is a shape and a type; a mode is a palette
+(<code>dark</code>, <code>light</code>, or the system preference). Every theme is one file under
+<code>app/components/web_frontend/themes/</code>, named for it (<code>aegis.json</code>,
+<code>steward.json</code>; a project adds its own beside them, and commits it), and
+<code>tailwind.config.js</code> reads the folder to generate one DaisyUI theme per
+theme and mode, named <code>&lt;theme&gt;-&lt;mode&gt;</code>. The modes' palettes and the chart
+colors live in the config; a theme file holds its shape (radius, label
+case, scale), its type (a display face, a body face, and the stylesheet
+that loads them, if any) and any tint it gives a mode's palette (steward's
+light mode is warmer). A theme's <code>fonts</code> may be a local stylesheet for
+self-hosted faces; a Google Fonts URL sends every visitor's address to
+Google.</p>
+<p>Tailwind's <code>aegis-*</code> utilities read DaisyUI's active color variables, so a
+color is defined once. <code>font-display</code> and <code>font-body</code> read the theme's
+faces; the body wears <code>font-body</code> by default. <code>static/input.css</code> supplies
+shared components and applies the theme's scale and label style.
+<code>static/js/charts.js</code> reads the same color variables.</p>
+<p>The server reads the same files (<code>web_frontend/themes.py</code>). <code>WEB_THEME</code>
+names the theme the Overseer opens with, and a name no file has fails at
+boot, listing the ones that exist. A layout puts <code>appearance_head(theme)</code>
+(<code>components/macros/layout.html</code>) in its <code>&lt;head&gt;</code>: the theme script, told
+which themes exist and which this page opens with, then the theme's type,
+then the stylesheet. A public layout passes <code>fixed=true</code> to wear its own
+theme whatever the viewer chose elsewhere; the viewer still picks the mode.</p>
 <p><code>static/js/theme.js</code> applies the stored theme and mode before the stylesheet
 paints. It exposes <code>appearance()</code> and <code>setAppearance(key, value)</code> to the
-<code>theme_toggle()</code> macro in <code>components/macros/layout.html</code>, which appears on
-navigation and auth pages. System mode follows <code>prefers-color-scheme</code>. The
-default is <code>aegis-dark</code>, set on <code>&lt;html&gt;</code> in <code>base.html</code>. Existing
+<code>theme_toggle()</code> macro, which offers every theme and appears on navigation
+and auth pages. System mode follows <code>prefers-color-scheme</code>. Existing
 <code>aegis-light</code> preferences are migrated to theme <code>aegis</code>, mode <code>light</code>.</p>
 <p>Nothing else names a color. A test fails on any hex literal, and on any
 theme-blind class such as <code>text-white</code> or <code>bg-black</code>, in templates or

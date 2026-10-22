@@ -56,6 +56,16 @@
 
 ### Changed
 
+- **Local wears the host OS's mark.** The container sees only Linux, so
+  `make serve` names the machine's OS (macOS, Windows, a Linux distro by
+  its os-release, Omarchy by its own directory) as `HOST_OS`/`HOST_OS_URL`;
+  the Overseer's Local card wears that page's favicon and says which OS.
+
+- **Deployments' actions fold into a Deploy menu and More.** Both deploys
+  sit behind one Deploy menu, each with a line on what it costs
+  (`menu_item`'s new `hint`); Back up now stays a button; Rehearse a
+  restore joins rolling back and destroying in More.
+
 - **What a stack is made of, said once and read everywhere.** Services group
   by their `category` (App, AI, Data) in `aegis services` and the setup
   wizard, `ServiceType` gone; the wizard asks "Add Payment? Stripe checkout,

@@ -2,11 +2,11 @@
    one of four views. A deployed server says where redeploys come from.
    Without a server yet, the way to one (New server); one being made,
    the way to it there. With a server, the
-   server, what can be asked of ``aegis deploy-agent`` for it (rolling
-   back and destroying folded into More), and, while one runs, its newest
+   server, what can be asked of ``aegis deploy-agent`` for it (deploys
+   in one menu; rehearsing, rolling back and destroying folded into More), and, while one runs, its newest
    job (whole under Jobs). #}
 {% from "components/macros/layout.html" import card, dropdown, facts %}
-{% from "pages/overseer/deployments/_macros.html" import agent_note, ask, deployed_card, destroy_form, goto, job_panel, note, place %}
+{% from "pages/overseer/deployments/_macros.html" import agent_note, ask, ask_item, deployed_card, destroy_form, goto, job_panel, note, place %}
 {% if actions.view == "deployed" %}
 {{ deployed_card(actions) }}
 {% elif actions.view == "no-server" %}
@@ -27,13 +27,17 @@
 {% with live = actions.live %}{% include "pages/overseer/deployments/_live.html" %}{% endwith %}
 {% with storage = actions.storage %}{% include "pages/overseer/deployments/_storage.html" %}{% endwith %}
 <div data-idle class="flex flex-wrap items-center gap-2">
-  {{ ask("Deploy", actions.partials, "deploy", "primary") }}
-  {# Keeps the site up and nobody signed out; additive migrations only. #}
-  {{ ask("Deploy without downtime", actions.partials, "deploy-rolling") }}
+  {# Both deploys behind one menu, each saying what it costs. #}
+  {% call dropdown("Deploy", align="left") %}
+  {{ ask_item("Deploy", actions.partials, "deploy", hint="Restarts everything; a moment offline") }}
+  {# Additive migrations only. #}
+  {{ ask_item("Deploy without downtime", actions.partials, "deploy-rolling", hint="Site stays up, nobody signed out") }}
+  {% endcall %}
   {{ ask("Back up now", actions.partials, "backup") }}
-  {% if actions.drill %}{{ ask(actions.drill.label, actions.partials, actions.drill.verb) }}{% endif %}
-  {# Rolling back and destroying are rare: folded into a menu, asked there. #}
+  {# Rehearsing a restore, rolling back and destroying are rare: folded
+     into a menu, asked there. #}
   {% call dropdown("More", align="left") %}
+  {% if actions.drill %}{{ ask_item(actions.drill.label, actions.partials, actions.drill.verb) }}{% endif %}
   <li data-rollback-item class="w-80 p-2">{% with r = actions.rollback %}{% include "pages/overseer/deployments/_rollback.html" %}{% endwith %}</li>
   {% if actions.destroy %}<li data-destroy class="w-80 p-2 border-t border-aegis-border">{{ destroy_form(actions.partials, actions.destroy) }}</li>{% endif %}
   {% endcall %}

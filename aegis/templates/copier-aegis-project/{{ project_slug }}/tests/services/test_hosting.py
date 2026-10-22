@@ -9,6 +9,7 @@ from pathlib import Path
 import httpx
 import pytest
 
+from app.core.brand_icons import favicon_url
 from app.core.config import settings
 from app.services.system import hosting
 
@@ -94,6 +95,28 @@ async def test_no_cloud_is_local_or_self_hosted(
     monkeypatch.setattr(settings, "BUILD_ID", build)
     found = await hosting.running_on(transport=_cloud({}))
     assert (found["key"], found["name"]) == (None, name)
+
+
+async def test_local_wears_the_host_os_mark(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``make serve`` names the machine's OS (the container only knows
+    Linux): Local wears its mark, and says which."""
+    monkeypatch.setattr(settings, "BUILD_ID", "dev")
+    monkeypatch.setenv("HOST_OS", "Arch Linux")
+    monkeypatch.setenv("HOST_OS_URL", "https://archlinux.org/")
+    found = await hosting.running_on(transport=_cloud({}))
+    assert found["name"] == "Local"
+    assert found["logo"] == favicon_url("archlinux.org")
+    assert ("OS", "Arch Linux") in found["facts"]
+
+
+async def test_a_server_never_wears_the_deploying_machines_os(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "BUILD_ID", "abc1234")
+    monkeypatch.setenv("HOST_OS", "macOS")
+    monkeypatch.setenv("HOST_OS_URL", "https://apple.com")
+    found = await hosting.running_on(transport=_cloud({}))
+    assert (found["logo"], found["facts"]) == (None, [])
 
 
 async def test_it_asks_once_per_process() -> None:

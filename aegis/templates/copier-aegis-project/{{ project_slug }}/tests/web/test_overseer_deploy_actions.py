@@ -1780,3 +1780,24 @@ def test_a_deploy_can_keep_the_site_up(
     TestClient(app).post(f"{actions.PARTIALS}/deploy-rolling")
     assert _queued(redis)[-1]["action"] == "deploy-rolling"
     assert PROTOCOL["actions"]["deploy-rolling"]["command"] == ["deploy", "--rolling"]
+
+
+def test_the_row_is_a_deploy_menu_back_up_and_more(
+    redis: FakeRedis, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Five buttons were clutter (#556): both deploys sit behind one
+    Deploy menu, each saying what it costs; a restore rehearsal is rare,
+    so it is in More with rolling back and destroying."""
+    deployed(monkeypatch, {"server": BOX, "provision": READY})
+    row = one(_card(TestClient(app), PAGE), "[data-idle]")
+    menus = select(row, ":scope > details[data-dropdown]")
+    assert [text(one(m, "summary")) for m in menus] == ["Deploy", "More"]
+    deploys = menus[0]
+    assert [b.get("data-ask") for b in select(deploys, "[data-ask]")] == [
+        "deploy",
+        "deploy-rolling",
+    ]
+    assert all(text(one(b, "[data-hint]")) for b in select(deploys, "[data-ask]"))
+    assert [b.get("data-ask") for b in select(row, ":scope > [data-ask]")] == ["backup"]
+    if actions.DRILLS:
+        one(menus[1], '[data-ask="restore-drill"]')

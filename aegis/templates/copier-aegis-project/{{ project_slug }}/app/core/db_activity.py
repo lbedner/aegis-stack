@@ -114,8 +114,9 @@ def _statement_ran(
 def _hop(conn: Any, context: Any, *, error: bool) -> None:
     started = conn.info.pop("statement_at", None) if conn is not None else None
     ms = (time.perf_counter() - started) * 1000 if started else 0.0
-    chain = edges.hop(DATABASE, ms=ms, error=error)
-    for table in _tables(context) if chain else ():
+    tables = _tables(context)
+    chain = edges.hop(DATABASE, ms=ms, error=error, tables=tables)
+    for table in tables if chain else ():
         edges.count(chain[-2], f"object:{table}", ms=ms, error=error)
 
 

@@ -14,7 +14,9 @@ shared cache every ``FLUSH_SECONDS`` under its own key a build (Redis when
 the stack has it, so the webserver reads the worker's too; this process's
 memory otherwise). Never a read-modify-write, so processes never race;
 ``observed`` adds them up. Bounded: ``CAP`` hops a process, then
-``other``; ``HOST_CAP`` outside hosts, then ``external:other``.
+``other``; ``HOST_CAP`` outside hosts, then ``external:other``. While a
+request is being recorded (``replays``), each hop is noted there too, in
+the order it ran.
 """
 
 import asyncio
@@ -24,7 +26,7 @@ import inspect
 import time
 from typing import Any, Self
 
-from app.core import frames, ownership
+from app.core import frames, ownership, replays
 from app.core.cache import get_cache
 from app.core.concurrency import background
 from app.core.config import settings
@@ -80,6 +82,7 @@ class Seen:
         self.first_seen = min(firsts, default=0.0)
 
 
+_SHARED = f"{ownership.SHARED}:"  # the app's shared code, by its parts' prefix
 _seen: dict[Key, Seen] = {}
 _hosts: set[str] = set()
 _flushed = 0.0
@@ -94,16 +97,28 @@ def hop(
     ms: float = 0.0,
     error: bool = False,
     bypass: bool = False,
+    where: replays.Line | None = None,
+    lines: list[replays.Line] | None = None,
+    tables: list[str] | None = None,
 ) -> list[str]:
-    """Count a hop to ``to`` from the parts on the stack (``callers``; or
-    ``via``, the callers already known), each between them too. Returns
-    the chain counted."""
-    chain = _chain(callers() if via is None else via, to)
+    """Count a hop to ``to`` from the parts on the stack (``on_stack``; or
+    ``via``, the callers already known, and their ``lines`` where read
+    with them), each between them too; a request being recorded notes it,
+    made at ``where`` (else through those lines), with the ``tables`` a
+    query touched. Returns the chain counted."""
+    if via is None:
+        via, lines = on_stack(lines=replays.current() is not None)
+    chain = _chain(via, to)
     now = time.time()
     for pair in zip(chain, chain[1:], strict=False):
         _count(pair, now, ms, error, bypass)
     if chain:
         _flush_soon(now)
+        if replays.taking():
+            if where is None and lines is None:
+                lines = on_stack(lines=True)[1]
+            trail = (where,) if where else tuple(lines or ())
+            replays.note(chain, ms, error, trail, tables or [])
     return chain
 
 
@@ -112,21 +127,33 @@ def count(source: str, to: str, *, ms: float = 0.0, error: bool = False) -> None
     _count((source, to), time.time(), ms, error, False)
 
 
-def callers() -> list[str]:
-    """The distinct parts whose code is on the stack, outermost first."""
-    found: list[str] = []
+def on_stack(*, lines: bool = False) -> tuple[list[str], list[replays.Line]]:
+    """One read of the stack: the distinct parts whose code is on it and,
+    asked for (a request being recorded), the lines of the parts' own code
+    (not the app's shared code: what a replayed hop opens a part up
+    along), each outermost first."""
+    owners: list[str] = []
+    found: list[replays.Line] = []
     for frame in frames.frames():
         owner = _owner(frame.f_code.co_filename)
-        if owner and (not found or found[-1] != owner):
-            found.append(owner)
-    return found[::-1]
+        if not owner:
+            continue
+        if not owners or owners[-1] != owner:
+            owners.append(owner)
+        if (
+            lines
+            and not owner.startswith(_SHARED)
+            and (path := frames.app_path(frame.f_code.co_filename))
+        ):
+            found.append((path, frame.f_lineno))
+    return owners[::-1], found[::-1]
 
 
 def _chain(callers: list[str], to: str) -> list[str]:
     """``callers`` then ``to``: the app's shared code dropped, and the
     runners while a part is calling (all but the outermost where none is),
     each part once in a row."""
-    parts = [c for c in callers if not c.startswith(f"{ownership.SHARED}:")]
+    parts = [c for c in callers if not c.startswith(_SHARED)]
     if any(part_of(p) not in RUNNERS for p in parts):
         parts = [p for p in parts if part_of(p) not in RUNNERS]
     else:
@@ -172,14 +199,18 @@ def into(func: Any, *, source: str, ms: float = 0.0, error: bool = False) -> Non
     """A hop from ``source`` into the part ``func`` is code of: the server
     running a route, the queue handing over a task, the scheduler running
     a job. A runner's own code (a wrapper) is no part to go into."""
-    module = getattr(inspect.unwrap(func), "__module__", None) if func else None
+    target = inspect.unwrap(func) if func else None
+    module = getattr(target, "__module__", None)
     node = _node(ownership.owner(module)) if module else None
-    if (
-        node
-        and not node.startswith(f"{ownership.SHARED}:")
-        and part_of(node) not in RUNNERS
-    ):
-        hop(node, via=[source], ms=ms, error=error)
+    if node and not node.startswith(_SHARED) and part_of(node) not in RUNNERS:
+        hop(node, via=[source], ms=ms, error=error, where=_defined(target))
+
+
+def _defined(func: Any) -> replays.Line | None:
+    """Where ``func`` is defined in the app's code."""
+    code = getattr(func, "__code__", None)
+    path = frames.app_path(code.co_filename) if code else None
+    return (path, code.co_firstlineno) if code and path else None
 
 
 def outside(host: str) -> str:

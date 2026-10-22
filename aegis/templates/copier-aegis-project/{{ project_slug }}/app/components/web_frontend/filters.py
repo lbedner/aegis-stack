@@ -13,6 +13,7 @@ from typing import Any
 
 from markupsafe import Markup
 
+from app.core.formatting import counted
 from app.core.time import today as utc_today
 from app.services.system.models import ComponentStatusType
 from app.services.system.ui import get_status_color_name
@@ -275,6 +276,12 @@ def worst_tone(tones: Iterable[str]) -> str:
     return next((tone for tone in _WORST_FIRST if tone in found), "ok")
 
 
+def answer_tone(status: int) -> str:
+    """The tone of an HTTP answer: a failure (5xx) error, a refusal (4xx,
+    the server working) warn, the rest ok."""
+    return "error" if status >= 500 else "warn" if status >= 400 else "ok"
+
+
 def health_tone(state: str) -> str:
     """The badge tone for a health status value."""
     try:
@@ -295,5 +302,7 @@ FILTERS: dict[str, Callable[..., Any]] = {
     "docstring": docstring,
     "message": message,
     "health_tone": health_tone,
+    "answer_tone": answer_tone,
+    "counted": counted,
     "color_tone": color_tone,
 }

@@ -17,22 +17,22 @@ from app.core.constants import ComponentName
 from app.core.ontology import EdgeKind, SystemModel, current
 from app.core.ontology.model import parse_node_id
 from app.core.ownership import HOST
-from app.services.system import (
-    topology,
-    ui_resources,
-    ui_runtime,
-    ui_worker,
-)
+from app.services.system import topology, ui_resources, ui_runtime
 from app.services.system.models import ComponentStatusType
 from app.services.system.ui import (
-    get_component_label,
     get_component_title,
     is_service,
     registry_entry,
     registry_key,
 )
 
-from . import overseer_conformance, overseer_heat, overseer_map, overseer_zoom
+from . import (
+    overseer_conformance,
+    overseer_heat,
+    overseer_map,
+    overseer_worker,
+    overseer_zoom,
+)
 from .filters import health_tone, worst_tone
 from .overseer_live import chart_frames, chart_panel, fragments_events
 from .overseer_nav import NavItem, current_navigation, runtime_page_url
@@ -194,13 +194,15 @@ async def overview(
     query: Mapping[str, str] | None = None,
     *,
     wait: bool = False,
+    path: overseer_zoom.Path | None = None,
 ) -> dict[str, Any]:
     """Every sidebar entry, in its order: as cards (a page with containers
     behind it with their glance and trend, anything else with its health
     check's line and a few figures; the default, and where an old link to
     the list it once had lands), or as a map, placed, or, zoomed into the
     Server, what runs inside it as its own map (``overseer_zoom``), toned
-    by an overlay when one is asked for (``map_state``). One read of the
+    by an overlay when one is asked for (``map_state``), or only the
+    ``path`` a request went (a replay's). One read of the
     containers and one of their trends, whatever the stack's size. A
     failing entry names the failing ones it depends on (``cause``)."""
     state = map_state(query or {})
@@ -241,7 +243,7 @@ async def overview(
             item |= _card(trend, item["glance"], entry.details)
         stack.append(item)
     if drawn:
-        placed = await _drawn(stack, [e for e, _ in entries], state)
+        placed = await _drawn(stack, [e for e, _ in entries], state, path)
     else:
         model = await asyncio.to_thread(current)
         _name_causes(stack, _cause_links(model, stack))
@@ -263,7 +265,10 @@ async def overview(
 
 
 async def _drawn(
-    stack: list[dict[str, Any]], entries: list[NavItem], state: MapState
+    stack: list[dict[str, Any]],
+    entries: list[NavItem],
+    state: MapState,
+    path: overseer_zoom.Path | None = None,
 ) -> dict[str, Any]:
     """The Map's or the Flow's entries placed (``overseer_map.layout``):
     with the worker's queue; opened up into the Server when zoomed (its
@@ -275,8 +280,9 @@ async def _drawn(
     service = zoom if zoom != HOST else None  # a service opened up, by its key
     worker = next((e for e in entries if e.name == ComponentName.WORKER), None)
     if worker:
-        stack.append(_queue(worker))
+        stack.append(overseer_worker.queue_node(worker))
     _inherit(stack)
+    whole = {item["key"]: item for item in stack} if path else {}  # unopened
     model = await asyncio.to_thread(current)
     shape, pieces, links, tones = None, [], [], {}
     if zoom == HOST:
@@ -289,7 +295,7 @@ async def _drawn(
     # The parts report, read once opened up: what each part should fix.
     found = (
         await asyncio.to_thread(overseer_conformance.conformance)
-        if zoomed
+        if zoomed and not path
         else overseer_conformance.Conformance({}, {})
     )
     if service:
@@ -299,6 +305,11 @@ async def _drawn(
             overseer_zoom.service_opened, stack, model, pieces, lines
         )
         stack += overseer_zoom.missing(found.lacks.get(service, []))
+    # Only what it went through, laid out afresh.
+    if path and service:
+        stack, links, tones = overseer_zoom.along_service(stack, tones, path, whole)
+    elif path and shape is not None:
+        stack, shape, tones = overseer_zoom.along_server(stack, shape, path, whole)
     # A key line says why an outside provider cannot be used; no failure
     # follows it, so causes are named before it is drawn.
     drawn = links if service else shape.links if shape else None
@@ -321,15 +332,16 @@ async def _drawn(
         if item["key"] == HOST and not (zoomed or flow):
             item["zoom"] = zoom_url(HOST)
     placed = (
-        overseer_map.lanes(stack, links, tones)
+        overseer_map.lanes(stack, links, tones, used_only=path is not None)
         if service
         else overseer_map.layout(
-            stack, shape, compact=zoomed, across=flow, opened=zoomed
+            stack, shape, compact=zoomed, across=flow, opened=zoomed, tones=tones
         )
     )
     return placed | {
         "overview_stack": stack,
         "map_line_key": overseer_zoom.LINE_KEY,
+        "map_natural": path is not None,  # a replay's: its own height
         # The way back up, a level at a time.
         "map_trail": _trail(zoom),
         "map_back": with_query(HOME, view=MAP_VIEW),
@@ -344,7 +356,9 @@ async def _drawn(
                     HOME, **state | {"overlay": None if key == overlay else key}
                 ),
             }
-            for key, (label, says) in _overlays(state["view"], zoom).items()
+            for key, (label, says) in (
+                {} if path else _overlays(state["view"], zoom)
+            ).items()
         ],
         "map_legend": _legend(placed) if flow else [],
     }
@@ -360,26 +374,6 @@ def _trail(zoom: str | None) -> list[dict[str, Any]]:
         return [server]
     opened = {"title": get_component_title(zoom), "url": None}
     return [server | {"url": zoom_url(HOST)}, opened]
-
-
-def _queue(worker: NavItem) -> dict[str, Any]:
-    """The worker's queue (``topology.QUEUE``) as a node, from the worker's
-    own health check (``ui_worker.backlog``)."""
-    found = ui_worker.backlog(worker.component)
-    holder = topology.INSIDE[topology.QUEUE]
-    return {
-        "key": topology.QUEUE,
-        "registry": topology.QUEUE,
-        "title": get_component_title(topology.QUEUE),
-        "url": worker.url,
-        "status": found.status.value,
-        "tone": health_tone(found.status.value),
-        "message": found.message,
-        "figure": f"{found.queued} queued",
-        "note": f"In {get_component_label(holder)}, beside the "
-        f"{get_component_title(holder)}",
-        "glance": None,
-    }
 
 
 def _inherit(stack: list[dict[str, Any]]) -> None:

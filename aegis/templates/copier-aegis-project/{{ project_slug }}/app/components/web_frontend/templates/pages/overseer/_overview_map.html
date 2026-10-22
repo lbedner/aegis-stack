@@ -58,12 +58,14 @@
 </p>
 {% endif %}
 {# At least the rest of the window (map-fill; the Flow scrolls sideways,
-   so keeps its own height), the lines' viewBox stretching with it. #}
-<div class="overflow-x-auto">
-  <div data-map{% if map_compact %} data-compact{% endif %}{% if map_across %} data-across{% endif %} class="relative min-w-[960px] {{ '' if map_across else 'map-fill' }}" style="height: {{ map_height }}px">
+   so keeps its own height, as a map drawn ``map_natural`` does: a
+   replay's, with room around it for a lit node's ring and glow, which the
+   sideways scroll would clip), the lines' viewBox stretching with it. #}
+<div class="overflow-x-auto{{ ' py-5' if map_natural }}">
+  <div data-map{% if map_compact %} data-compact{% endif %}{% if map_across %} data-across{% endif %} class="relative min-w-[960px] {{ '' if map_across or map_natural else 'map-fill' }}" style="height: {{ map_height }}px">
     <svg class="absolute inset-0 w-full h-full" viewBox="0 0 {{ map_width }} {{ map_height }}" preserveAspectRatio="none" aria-hidden="true">
       {% if map_lanes %}<defs><marker id="map-arrow" viewBox="0 0 6 6" refX="5" refY="3" markerUnits="userSpaceOnUse" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L6,3 L0,6 z" class="fill-aegis-teal" /></marker></defs>{% endif %}
-      {% for link in map_links %}<path data-link data-from="{{ link.start }}" data-to="{{ link.end }}"{% if link.queued %} data-queued{% endif %}{% if link.key %} data-key{% endif %} class="map-link" data-tone="{{ link.tone }}" d="{{ link.d }}"{% if link.arrow %} marker-end="url(#map-arrow)"{% endif %} />{% if link.why %}<path data-hit="{{ loop.index }}" class="map-hit" d="{{ link.d }}" />{% endif %}{% endfor %}
+      {% for link in map_links %}<path data-link data-from="{{ link.start }}" data-to="{{ link.end }}"{% if link.queued %} data-queued{% endif %}{% if link.key %} data-key{% endif %}{% if link.observed %} data-observed{% endif %} class="map-link" data-tone="{{ link.tone }}" d="{{ link.d }}"{% if link.arrow %} marker-end="url(#map-arrow)"{% endif %} />{% if link.why %}<path data-hit="{{ loop.index }}" class="map-hit" d="{{ link.d }}" />{% endif %}{% endfor %}
     </svg>
     {# A line's label at its middle, always shown (a key's details, at a
        glance; the whole of it on hover). #}

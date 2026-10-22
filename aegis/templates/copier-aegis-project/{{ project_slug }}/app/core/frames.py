@@ -1,5 +1,6 @@
-"""Where code is running: this thread's stack and the running task's chain
-of awaits, innermost first, and which of their files are the app's own.
+"""Where code is running: this thread's stack and the greenlets it was
+switched from, innermost first (a task's chain of awaits, for another
+task), and which of their files are the app's own.
 What a record says came from where (``db_activity``'s callers, ``edges``'
 hops) is read from here."""
 
@@ -23,12 +24,25 @@ def current_task() -> asyncio.Task[Any] | None:
 
 
 def frames() -> Iterator[FrameType]:
-    """Innermost first: this thread's stack, then the running task's chain
-    of awaits. An async session runs its statements in a greenlet whose
-    stack stops at SQLAlchemy; the coroutine that asked is on that chain."""
+    """Innermost first: this thread's stack, then the stacks of the
+    greenlets it was switched from. An async session runs its statements
+    in a greenlet whose stack stops at SQLAlchemy; the code that awaited it
+    waits in the greenlet that switched to it, still running. A running
+    task's own chain of awaits is on the stack already (``awaits`` reads
+    another task's)."""
     yield from stack(sys._getframe(1))
-    if (task := current_task()) is not None:
-        yield from awaits(task)
+    yield from switched_from()
+
+
+def switched_from() -> Iterator[FrameType]:
+    """The stacks of the greenlets this one was switched to from, nearest
+    first; none outside a greenlet (or where greenlet is not installed:
+    then nothing runs in one)."""
+    greenlet = sys.modules.get("greenlet")
+    parent = greenlet.getcurrent().parent if greenlet else None
+    while parent is not None:
+        yield from stack(parent.gr_frame)
+        parent = parent.parent
 
 
 def stack(frame: FrameType | None) -> Iterator[FrameType]:

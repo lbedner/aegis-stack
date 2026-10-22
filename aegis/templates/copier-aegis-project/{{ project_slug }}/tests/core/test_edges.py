@@ -2,6 +2,7 @@
 counted where it happens, the caller read from the code on the stack."""
 
 from collections.abc import Callable, Iterator
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -75,6 +76,41 @@ def test_what_carries_the_call_is_no_hop_of_its_own() -> None:
     edges.reset()
     _in("app/components/backend/main.py", lambda: edges.hop("component:database"))()
     assert _seen() == {("component:backend", "component:database"): 1}
+
+
+async def test_an_async_query_is_a_hop_from_the_code_that_awaited_it(
+    tmp_path: Path,
+) -> None:
+    """An async session runs its statement in a greenlet whose own stack
+    stops at SQLAlchemy; the code that awaited it waits on the greenlet
+    it switched from, and that is where the caller is read."""
+    pytest.importorskip("aiosqlite")  # a Postgres stack has no SQLite driver
+    db_activity = pytest.importorskip("app.core.db_activity")  # needs a database
+    from sqlalchemy import text
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'hops.db'}")
+    db_activity.watch(engine.sync_engine)
+
+    async def query() -> None:
+        async with engine.begin() as conn:
+            await conn.execute(text("SELECT 1"))
+
+    # AI's code awaiting Finance's, awaiting the query.
+    scope: dict[str, Any] = {"query": query}
+    deep = "async def deep():\n    await query()\n"
+    exec(compile(deep, str(ROOT / FINANCE), "exec"), scope)
+    exec(compile("async def run():\n    await deep()\n", str(ROOT / AI), "exec"), scope)
+    try:
+        await scope["run"]()
+    finally:
+        await engine.dispose()
+    # Each frame read once (the greenlet's parent holds the chain of
+    # awaits too): no line back from Finance to AI that never ran.
+    assert _seen() == {
+        ("service:ai", "service:finance"): 1,
+        ("service:finance", "component:database"): 1,
+    }
 
 
 def test_past_the_cap_hops_are_counted_as_other() -> None:

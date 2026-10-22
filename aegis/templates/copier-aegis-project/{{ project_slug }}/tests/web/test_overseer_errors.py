@@ -15,7 +15,7 @@ from app.services.system.models import ComponentStatus
 from app.services.system.patterns import PROJECT_ROOT
 from tests._error_store import occurrence
 from tests._fake_runtime import REDIS, STOPPED, WORKER, FakeRuntime, use_runtime
-from tests.web.dom import one, select, text
+from tests.web.dom import none, one, select, text
 from tests.web.overseer import CACHE, page_html, sign_in, status_with
 
 
@@ -89,6 +89,28 @@ def test_bookmarkable_detail_escapes_trace(errors_client: TestClient) -> None:
     assert text(own) == "app/core/log.py:1"
     facts = [text(dt) for dt in select(html, "#error-detail dl dt")]
     assert "Application service" in facts and "Runtime" in facts
+
+
+def test_an_error_logged_in_a_request_links_to_its_replay(
+    errors_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A line logged while a request ran carries its id (``replays``): the
+    occurrence opens that request on the map. One logged outside any has
+    no link."""
+    shown = ui_errors.load
+    url = "/partials/overseer/errors/detail?issue=same&occurrence=one"
+    none(page_html(errors_client, url), "#error-detail [data-replay]")
+
+    async def with_request(query: Mapping[str, str], part: Any = ui_errors.load_list) -> dict[str, Any]:
+        found = await shown(query, part)
+        if event := found.get("error_detail"):
+            fields = event.fields | {"request_id": "ab" * 16}
+            found["error_detail"] = event.model_copy(update={"fields": fields})
+        return found
+
+    monkeypatch.setattr(ui_errors, "load", with_request)
+    link = one(page_html(errors_client, url), "#error-detail [data-replay]")
+    assert link.get("href") == f"/overseer/replay/{'ab' * 16}"
 
 
 def test_partial_and_filter_state(errors_client: TestClient) -> None:

@@ -20,48 +20,8 @@ from app.services.system.service_pieces import Piece
 from tests._ontology import model_of
 from tests.web.dom import none, one, select, text
 from tests.web.overseer import page_html
-from tests.web.zoomed import finding_of, zoomable
+from tests.web.zoomed import LINES, PIECES, ROUTER, auth_opens, finding_of, zoomable
 
-ROUTER = "app.components.backend.api.auth.router"
-PIECES = [
-    Piece(
-        "piece:router",
-        "Router",
-        "entry",
-        (ROUTER,),
-        ("app/components/backend/api/auth/router.py",),
-    ),
-    Piece(
-        "piece:facade",
-        "Facade",
-        "facade",
-        ("app.services.auth.service",),
-        ("app/services/auth/service.py",),
-    ),
-    Piece(
-        "piece:queries",
-        "Queries",
-        "data",
-        ("app.services.auth.queries",),
-        ("app/services/auth/queries.py",),
-    ),
-    Piece(
-        "piece:health",
-        "Health",
-        "probe",
-        ("app.services.auth.health",),
-        ("app/services/auth/health.py",),
-    ),
-]
-DB = "component:database"
-LINES = {
-    # Past the facade to data (red); to the Server it lives in (no line);
-    # the database, used by every piece: a rail.
-    "piece:router": ["piece:facade", "piece:queries", "component:backend", DB],
-    "piece:facade": ["piece:queries", DB],
-    "piece:queries": ["piece:facade", DB],  # back a lane (amber)
-    "piece:health": ["piece:router", DB],  # a probe: no lines
-}
 OPENED = "/overseer?view=map&zoom=service_auth"
 
 
@@ -82,13 +42,7 @@ def _opened(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setattr(overseer_container, "current", lambda: model)
     lacking = overseer_conformance.Conformance({}, {"service_auth": ["Tests"]})
     monkeypatch.setattr(overseer_conformance, "conformance", lambda: lacking)
-    monkeypatch.setattr(
-        overseer_zoom,
-        "pieces_of",
-        lambda subject, model: (PIECES, LINES)
-        if subject == "service:auth"
-        else ([], {}),
-    )
+    auth_opens(monkeypatch)
     return client
 
 

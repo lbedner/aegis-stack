@@ -1,0 +1,74 @@
+{% extends "pages/overseer/_shell.html" %}
+{% from "components/macros/layout.html" import page_header %}
+{% from "components/macros/feedback.html" import empty_state %}
+{% from "components/macros/player.html" import player %}
+{% from "components/macros/table.html" import data_table %}
+{% from "pages/overseer/_macros.html" import line_link %}
+
+{% block title %}Replay - {{ project_name }}{% endblock %}
+{% block overseer_width %}{{ "workspace" if replay is defined and replay else "document" }}{% endblock %}
+
+{# A route of the recent requests, in the tone of its worst answer. #}
+{% macro _route(group) %}<span data-route data-tone="{{ group.tone }}" class="toned font-mono">{{ group.route }}</span>{% endmacro %}
+{# Each request to it, newest first, opening its replay. #}
+{% macro _requests(group) %}<ol data-replay-requests class="space-y-1 text-xs">
+  {% for kept in group.requests %}{% set url = replay_url(kept.id) %}
+  <li><a href="{{ url }}" {{ hx_replace(url, "#overseer-main") }} class="flex gap-4 font-mono text-aegis-muted hover:text-aegis-teal">
+    <span class="min-w-0 flex-1 truncate">{{ kept.path }}</span>
+    <span data-tone="{{ kept.status|answer_tone }}" class="toned tabular-nums">{{ kept.status }}</span>
+    <span class="tabular-nums text-aegis-text">{{ kept.ms }} ms</span>
+    <span class="tabular-nums">{{ kept.hops|length|counted("hop") }}</span>
+  </a></li>
+  {% endfor %}
+</ol>{% endmacro %}
+
+{% block overseer_content %}
+{% if replay is defined %}
+{# One request a level at a time (overseer_replay.replay), or its hops as
+   a list (overseer_replay.listed). #}
+{% if replay %}
+{% set other, other_label = replay_switch %}
+{# How it was answered, in its tone: a refusal amber, a failure red. #}
+{% set said %}<span data-answer data-tone="{{ replay.status|answer_tone }}" class="toned">{{ replay.status }}</span> in {{ replay.ms }} ms, {{ replay.hops|length|counted("hop") }}{{ ", " ~ replay.dropped ~ " more not kept" if replay.dropped }}{% endset %}
+{% call page_header(replay.method ~ " " ~ replay.path, said) %}
+<nav class="flex items-center gap-4 text-sm">
+  <a data-replay-view href="{{ other }}" {{ hx_replace(other, "#overseer-main") }} class="text-aegis-muted hover:text-aegis-teal">{{ other_label }}</a>
+  <a href="{{ replay_url() }}" {{ hx_replace(replay_url(), "#overseer-main") }} class="text-aegis-muted hover:text-aegis-teal">Other requests</a>
+</nav>
+{% endcall %}
+{% if replay_rows is defined %}
+<ol data-hops class="space-y-1 text-xs">
+  {% for row in replay_rows %}{% set hop = row.hop %}
+  <li data-hop="{{ loop.index0 }}" class="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)_5rem] items-center gap-3 rounded px-2 py-1.5 hover:bg-aegis-card">
+    <span class="min-w-0"><span class="block truncate"><span class="text-aegis-text">{{ row.label }}</span>{% if hop.tables %} <span class="text-aegis-muted">{{ hop.tables|join(", ") }}</span>{% endif %}{% if hop.error %} <span class="text-error">failed</span>{% endif %}</span>
+      {% if row.line %}<span class="block truncate font-mono text-aegis-muted">{{ line_link(*row.line) }}</span>{% endif %}</span>
+    <span class="relative h-2 rounded bg-aegis-border/40" aria-hidden="true"><span class="absolute inset-y-0 rounded{{ ' bg-error' if hop.error else ' bg-aegis-teal' }}" style="left: {{ row.left }}%; width: {{ row.width }}%"></span></span>
+    <span class="text-right tabular-nums text-aegis-muted">{{ hop.ms }} ms</span>
+  </li>
+  {% endfor %}
+</ol>
+{% else %}
+{% call player(replay_steps, chapters=replay_scenes) %}
+{% for scene in replay_scenes %}<div data-play-scene="{{ scene.key }}" data-play-at="{{ scene.at }}" data-play-ms="{{ scene.ms }}" data-play-lead="{{ scene.lead }}"{% if not loop.first %} hidden{% endif %}><div data-scene-map inert>{{ scene.map }}</div></div>{% endfor %}
+{% endcall %}
+{% endif %}
+{% else %}
+{% call page_header("Replay") %}{% endcall %}
+<div data-replay-empty>{{ empty_state("This request is no longer kept", "The server keeps its last " ~ replay_keep ~ " requests, until it restarts.") }}</div>
+{% endif %}
+{% else %}
+{# The requests kept (overseer_replay.recent): a row a route, the latest
+   first, opening to each request to it, newest first. #}
+{% call page_header("Replay", "Pick a request to watch it cross the map, hop by hop, at its real timing") %}{% endcall %}
+{% if replay_routes %}
+{{ data_table([
+  {"key": "route", "label": "Route", "render": _route, "row": True},
+  {"key": "count", "label": "Requests", "kind": "int", "align": "right"},
+  {"key": "slowest", "label": "Slowest", "align": "right"},
+  {"key": "hops", "label": "Hops", "kind": "int", "align": "right"},
+], replay_routes, detail=_requests, flush=False) }}
+{% else %}
+{{ empty_state("No requests yet", "Each request the app serves is kept here, its last " ~ replay_keep ~ "; Overseer's own pages are left out.") }}
+{% endif %}
+{% endif %}
+{% endblock %}

@@ -3,10 +3,12 @@ what runs inside it, by registry key, what each reaches (the model's
 calls, live providers), and the outside providers whose key is not set,
 each with its key's set dialog one click away. And a service opened up
 below it (``?zoom=service_<name>``): its pieces (``service_pieces``), what
-hangs off each, and the parts they reach."""
+hangs off each, and the parts they reach. Either as one request went
+through it (``along_server``, ``along_service``: a replay's), nothing
+else drawn."""
 
 from collections import Counter
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import PurePosixPath
 from typing import Any
 
@@ -19,7 +21,12 @@ from app.core.ownership import HOST
 from app.core.source_index import Module
 from app.services.system import service_parts, service_pieces, topology
 from app.services.system.service_pieces import Piece
-from app.services.system.ui import is_service, registry_entry, registry_key
+from app.services.system.ui import (
+    get_component_title,
+    is_service,
+    registry_entry,
+    registry_key,
+)
 
 from . import overseer_code, overseer_map, overseer_secrets
 
@@ -34,6 +41,18 @@ HANGING = {
 }
 Lines = dict[str, list[str]]
 Pair = tuple[str, str]
+Tones = dict[Pair, dict[str, Any]]
+
+
+@dataclass(frozen=True)
+class Path:
+    """The way a request went through a level: the parts, in the order it
+    reached them, and the lines it went along (``along_server``)."""
+
+    nodes: list[str]
+    links: list[Pair]
+
+
 RAIL = 3  # ponytail: a part this many pieces use rides the rail; tune by eye
 HOLDS = 12  # what a piece's hint names of what it holds; the rest counted
 # What each tone ``_tones`` gives a line means: the map's key.
@@ -345,11 +364,81 @@ def with_key_lines(
     return replace(shape, links=[*shape.links, *lines])
 
 
+def along_server(
+    stack: list[dict[str, Any]],
+    shape: topology.Shape,
+    path: Path,
+    whole: dict[str, dict[str, Any]],
+) -> tuple[list[dict[str, Any]], topology.Shape, Tones]:
+    """The Server opened up as ``path`` went through it, nothing else,
+    laid out afresh (a caller above what it calls), a line the model
+    (``shape``) has none for marked as seen only; the way in drawn from
+    the ``whole`` stack's (``_on``)."""
+    found, went = _on(stack, path, whole)
+    targets = {b for _, b in went}
+    callers = [
+        key for key in found if key not in targets or any(a == key for a, _ in went)
+    ]
+    seen = {pair: {"observed": True} for pair in went if pair not in shape.links}
+    calls = {key: [b for a, b in went if a == key] for key in callers}
+    return list(found.values()), topology.zoomed(callers, calls), seen
+
+
+def along_service(
+    stack: list[dict[str, Any]],
+    tones: Tones,
+    path: Path,
+    whole: dict[str, dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[Pair], Tones]:
+    """A service opened up as ``path`` went through it, nothing else, its
+    lines toned as ``tones``: the way in in lanes of its own ahead of it
+    (``overseer_map.WAY_IN``), what it reached outside it in the last,
+    none on the rail."""
+    found, went = _on(stack, path, whole)
+    toned = {pair: tones[pair] for pair in went if pair in tones}
+    return [_laned(item) for item in found.values()], went, toned
+
+
+def _on(
+    stack: list[dict[str, Any]], path: Path, whole: dict[str, dict[str, Any]]
+) -> tuple[dict[str, dict[str, Any]], list[Pair]]:
+    """``path``'s parts as this level draws them (one from outside it, the
+    way in, as the ``whole`` stack's; an outside provider as its own), and
+    its lines between them."""
+    items = whole | {item["key"]: item for item in stack}
+    found = {
+        key: items.get(key) or _outside(key)
+        for key in path.nodes
+        if key in items or key.startswith(OUTSIDE)
+    }
+    return found, [(a, b) for a, b in path.links if a in found and b in found]
+
+
+def _laned(item: dict[str, Any]) -> dict[str, Any]:
+    """A piece in its lane, what it uses throughout unbadged (no rail is
+    drawn); the way in in its own (``overseer_map.WAY_IN``); anything else
+    in the last lane, outside the service."""
+    if "badges" in item:
+        return item | {"badges": [], "uses": []}
+    if item["key"] in topology.EDGE:
+        return item | {"place": "edge"}
+    return item | {"place": "server" if item["key"] == HOST else "outside"}
+
+
+def title_of(key: str) -> str:
+    """What a map key is called: an outside provider by its name."""
+    return (
+        key.removeprefix(OUTSIDE)
+        if key.startswith(OUTSIDE)
+        else get_component_title(key)
+    )
+
+
 def _outside(key: str) -> dict[str, Any]:
     """An outside provider's node: no page, no health check of ours."""
     return _node(
         key,
-        key.removeprefix(OUTSIDE),
+        title_of(key),
         topology.ROLE_LABELS[topology.Role.OUTSIDE],
         role=topology.Role.OUTSIDE,
     )

@@ -5,7 +5,6 @@ from pathlib import Path
 import re
 from typing import Any
 
-from fastapi.testclient import TestClient
 import pytest
 
 from app.components.frontend.dashboard.modals.modal_sections.chart_primitives import (
@@ -145,10 +144,10 @@ class TestNoLiterals:
 
 
 class TestSwitching:
-    def test_theme_script_runs_before_first_paint(self, client: TestClient) -> None:
+    def test_theme_script_runs_before_first_paint(self, shell: str) -> None:
         """A sync script in <head>, ahead of the stylesheet, applies the
         stored theme so a light-theme user never sees a dark flash."""
-        page = client.get("/").text
+        page = shell
         head = one(page, "head")
         srcs = [
             (el.tag, el.get("src") or el.get("href") or "")
@@ -159,16 +158,16 @@ class TestSwitching:
         assert theme < stylesheet
         assert one(head, 'script[src*="js/theme"]').get("defer") is None
 
-    def test_html_carries_the_default_theme(self, client: TestClient) -> None:
-        page = client.get("/").text
+    def test_html_carries_the_default_theme(self, shell: str) -> None:
+        page = shell
         assert one(page, "html").get("data-theme") == f"{settings.WEB_THEME}-dark"
         script = one(page, 'script[src*="js/theme"]')
         assert script.get("data-theme") == settings.WEB_THEME
         assert script.get("data-themes").split() == list(themes())
         assert script.get("data-fixed") is None, "the Overseer's viewer may switch"
 
-    def test_navbar_offers_every_theme(self, client: TestClient) -> None:
-        page = client.get("/").text
+    def test_navbar_offers_every_theme(self, shell: str) -> None:
+        page = shell
         assert one(page, "summary[data-theme-toggle]").get("aria-label")
         offered = [b.get("data-set-theme") for b in select(page, "[data-set-theme]")]
         assert offered == list(themes())

@@ -7,7 +7,6 @@ region in the base layout shows it. No reload, no storage.
 
 import json
 
-from fastapi.testclient import TestClient
 import pytest
 from starlette.responses import Response
 
@@ -48,8 +47,8 @@ class TestWithToast:
 
 class TestToastRegion:
     @pytest.fixture
-    def page(self, client: TestClient) -> str:
-        return client.get("/").text
+    def page(self, shell: str) -> str:
+        return shell
 
     def test_present_outside_the_content_area(self, page: str) -> None:
         """Lives in the base layout, not the swap target, so it survives

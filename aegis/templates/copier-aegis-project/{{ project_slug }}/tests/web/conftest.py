@@ -54,3 +54,14 @@ def add_template() -> Generator[Callable[[str, str], None]]:
 
     yield _add
     env.loader = original
+
+
+@pytest.fixture
+def shell(client: TestClient) -> str:
+    """A page in the framework's own shell (``base.html``): the landing,
+    or, where the project's site owns the root, the Overseer's door."""
+    from tests.shell import shell_path
+
+    response = client.get(shell_path())
+    assert response.status_code == 200, (shell_path(), response.status_code)
+    return response.text

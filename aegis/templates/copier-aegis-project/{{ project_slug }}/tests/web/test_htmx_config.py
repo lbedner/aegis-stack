@@ -9,15 +9,14 @@ import json
 import re
 from typing import Any
 
-from fastapi.testclient import TestClient
 import pytest
 
 from tests.web.dom import one, select
 
 
 @pytest.fixture
-def page(client: TestClient) -> str:
-    return client.get("/").text
+def page(shell: str) -> str:
+    return shell
 
 
 @pytest.fixture

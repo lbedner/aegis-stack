@@ -2,7 +2,6 @@
 
 import json
 
-from fastapi.testclient import TestClient
 import pytest
 
 from app.components.web_frontend.rendering import templates
@@ -94,8 +93,8 @@ class TestDialog:
         one(dialog, "#dialog-body")
         assert one(dialog, "button[aria-label='Close']") is not None
 
-    def test_mounted_once_by_the_base_layout(self, client: TestClient) -> None:
-        page = client.get("/").text
+    def test_mounted_once_by_the_base_layout(self, shell: str) -> None:
+        page = shell
         one(page, "dialog#dialog")
         one(page, "dialog#drawer")
         none(one(page, "main#app-content"), "dialog")
@@ -128,7 +127,6 @@ class TestDropdown:
         assert items[0].get("hx-get") == "/x/edit"
         assert "details" in (items[0].get("@click") or "")
         assert "text-error" in items[1].get("class")
-
 
     def test_app_js_places_every_dropdown(self) -> None:
         """One listener in app.js places any dropdown on opening, keyed on
@@ -298,5 +296,7 @@ class TestStatRow:
 
 def test_a_toggle_action_shows_when_it_is_on() -> None:
     """Wrap, Pause: a pressed action reads as on, as a pressed chip does."""
-    html = render('{% from "components/macros/form.html" import action %}{{ action("Wrap", \'aria-pressed="true"\') }}')
+    html = render(
+        '{% from "components/macros/form.html" import action %}{{ action("Wrap", \'aria-pressed="true"\') }}'
+    )
     assert "action" in one(html, "button").get("class").split()  # input.css

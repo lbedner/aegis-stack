@@ -26,6 +26,18 @@ registers plugin directives at init, so loading core first leaves `x-collapse`
 silently dead. The SSE extension is loaded after htmx core for the mirror
 reason: it registers against the global htmx defines.
 
+
+### A project's own site
+
+A project with a public face of its own (a blog, a storefront, a journal)
+puts its routes in `app/components/web_frontend/routes/site.py`. When that
+module exists, `main.py` mounts its router last, outside the Overseer's
+gate, so none of its routes can stand in front of the framework's, and the
+framework's landing steps aside, so `/` is the site's. The framework's own
+shell tests fetch a page of the shell through the `shell` fixture
+(`tests/web/conftest.py`), which is the landing, or the Overseer's door
+where a site owns the root.
+
 ## One route, two render paths
 
 A view has one URL and one template. Whether the browser gets a full page or

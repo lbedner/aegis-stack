@@ -808,6 +808,22 @@ class TestDockerAndComposeWiring:
         assert "npx tailwindcss" in rendered
         assert "--minify" in rendered
 
+    def test_a_project_site_mounts_last_and_the_landing_steps_aside(self) -> None:
+        """A project's routes/site.py owns the root without standing in
+        front of any framework route: mounted after them all, the landing
+        (its own router) mounted only where there is no site."""
+        main = (_web_frontend_tree() / "main.py").read_text()
+        landing = main.index("find_spec(SITE) is None")
+        assert landing < main.index("include_router(pages_router")
+        assert main.index("include_router(pages_router") < main.index(
+            "find_spec(SITE) is not None"
+        )
+        assert (_web_frontend_tree() / "routes/landing.py").is_file()
+        pages = _render(
+            "app/components/web_frontend/routes/pages.py.jinja", _ctx(include_htmx=True)
+        )
+        assert '@router.get("/"' not in pages, "the landing is its own router"
+
     def test_css_build_sees_everything_the_config_reads(self) -> None:
         """The config reads the theme files at build; a path it reads that
         the stage does not copy fails the image build. The dev watcher
@@ -942,7 +958,8 @@ class TestAuthPages:
         assert "app.services.auth" not in off
         assert "overseer_auth" not in off
         # ...but the landing page still works without auth.
-        assert 'name="pages/landing.html"' in off
+        landing = (_web_frontend_tree() / "routes/landing.py").read_text()
+        assert 'name="pages/landing.html"' in landing
 
     def test_auth_handlers_appear_with_auth(self) -> None:
         on = _render(

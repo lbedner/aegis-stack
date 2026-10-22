@@ -9,6 +9,13 @@
 
 ### Added
 
+- **A project's own site takes the root.** When
+  `app/components/web_frontend/routes/site.py` exists, `main.py` mounts its
+  router last, outside the Overseer's gate, and the landing steps aside: `/`
+  is the site's, and no route of the site's can stand in front of the
+  framework's. The shell's tests fetch a shell page through a `shell`
+  fixture (the landing, or the Overseer's door where a site owns the root).
+
 - **Themes as files, every one at parity.** A theme (shape, type, tints)
   is one file under `app/components/web_frontend/themes/` (`aegis.json`,
   `steward.json`; a project adds its own beside them). `tailwind.config.js`

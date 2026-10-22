@@ -2790,6 +2790,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="The base layout">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a-projects-own-site" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A project's own site
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -6568,6 +6585,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="The base layout">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#a-projects-own-site" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A project's own site
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -6845,6 +6879,15 @@ The Alpine <em>collapse plugin</em> is loaded before Alpine core, deliberately: 
 registers plugin directives at init, so loading core first leaves <code>x-collapse</code>
 silently dead. The SSE extension is loaded after htmx core for the mirror
 reason: it registers against the global htmx defines.</p>
+<h3 id="a-projects-own-site">A project's own site</h3>
+<p>A project with a public face of its own (a blog, a storefront, a journal)
+puts its routes in <code>app/components/web_frontend/routes/site.py</code>. When that
+module exists, <code>main.py</code> mounts its router last, outside the Overseer's
+gate, so none of its routes can stand in front of the framework's, and the
+framework's landing steps aside, so <code>/</code> is the site's. The framework's own
+shell tests fetch a page of the shell through the <code>shell</code> fixture
+(<code>tests/web/conftest.py</code>), which is the landing, or the Overseer's door
+where a site owns the root.</p>
 <h2 id="one-route-two-render-paths">One route, two render paths</h2>
 <p>A view has one URL and one template. Whether the browser gets a full page or
 just the part htmx will swap in is decided per request by

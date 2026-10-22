@@ -4102,6 +4102,45 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#questions-asked-in-the-call" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Questions asked in the call
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Questions asked in the call">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-runner" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The runner
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#other-kinds-and-actions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Other kinds and actions
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#the-writers-are-agents" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -6569,6 +6608,45 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#questions-asked-in-the-call" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Questions asked in the call
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Questions asked in the call">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-runner" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The runner
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#other-kinds-and-actions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Other kinds and actions
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#the-writers-are-agents" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -6702,7 +6780,7 @@
 <li>It waits up to five minutes for the host to let it in. Refused or never admitted, the meeting ends as <code>failed</code> with the reason.</li>
 <li>Once in, it answers whatever Meet puts over the call: a meeting with Gemini (or another notetaker) taking notes asks every newcomer to confirm with "Join now", and camera tips ask for "Got it". Unanswered, they cover the chat, the captions and Leave. Then it posts in the meeting chat that it is taking notes. Some places require everyone's consent to record, so this is not optional.</li>
 <li>It turns on Meet's captions, in its own view only (nobody else sees them), and keeps them as the transcript: one line per turn, under the speaker's name, timed from when it joined. A line Meet is still writing (it corrects words as it goes) is updated in place, and keeps the time it was first captioned. Meet keeps a long turn short on screen by trimming its start as it grows; the line keeps the whole turn.</li>
-<li>It leaves when the call ends, when it is removed, when it has been alone for two minutes, or when asked (<code>meetings leave</code>, <code>POST /api/v1/meetings/{id}/leave</code>), within ten seconds. Asked before it joins, it never does.</li>
+<li>It leaves when the call ends, when it is removed, when it has been alone for two minutes after the others have gone (nobody in Meet's People count, nobody talking; it waits up to fifteen for anyone to come), or when asked (<code>meetings leave</code>, <code>POST /api/v1/meetings/{id}/leave</code>), within ten seconds. Asked before it joins, it never does.</li>
 </ol>
 <p>The browser closes whatever happens, so no Chrome outlives its meeting. Once it is out, the notes are written (below). A bot stopped from outside (Ctrl-C, its process shutting down) writes none; the page can.</p>
 <p><code>meetings join</code> runs the bot in the terminal and waits for it. The pages and the API hand it to the worker when the stack has one: each call is a job on the worker's own <code>meetings</code> queue, so a webserver restart (a reload, a deploy) leaves the call alone, and the queue's concurrency (<code>WORKER_QUEUES</code>) is how many calls run at once. The job has no timeout that ends a call and is never retried: a job delivered twice finds its meeting taken and does nothing. The <code>worker-meetings</code> container does not reload when code changes in dev (<code>WORKER_WATCH=false</code>), since a reload would end the call; restart it to pick up a change. A stack without a worker runs the bot in the background of the webserver instead, which ends the call when it restarts. Either way, a process that shuts down takes the bot out of the call (<code>left</code>).</p>
@@ -6739,8 +6817,43 @@
 <p>Every word said in a meeting, and every part of its notes, is searchable: the summary, the decisions, the action items, the open questions, and the commitments, follow-ups, contradictions and positions. A hit is the line itself, with its meeting, who said it and when in the call; a hit in the notes names its part and opens at the line it came from. Newest meeting first, each meeting's notes before its lines. Words match their other forms ("pricing" finds "priced"), and every word has to be there. It is search by words, not meaning: "pricing" does not find "$49 a month".</p>
 <p>On PostgreSQL it is full-text search (English), with a GIN index over the transcript's lines and one over the note items, which the meetings revision adds. On SQLite it is FTS5: a search table over each of the two, holding only the index (the text stays in its own table), kept by triggers and made by every startup's <code>create_all</code> (filled from what is already there) since no model can describe them. Neither needs a dependency.</p>
 <p>Each owner searches their own meetings; Overseer's admin searches every owner's. Overseer's chat has it too: the <code>meetings_search</code> tool, granted to the default agent when the meetings service seeds its agents, answers "what did Lawrence say about pricing?" from the transcripts, each line linked to the meeting at that line.</p>
+<h2 id="questions-asked-in-the-call">Questions asked in the call</h2>
+<p>While the bot is in a call, it watches what is said for moments: something heard that something can be done with. The kind it knows is a <strong>question</strong>: another speaker's line that ends in a question mark (your own questions are not picked out). Each one is kept as it is captioned, and follows its line as Meet corrects it, so a question shows up while the call is still on.</p>
+<p>The meeting's page, Overseer's drawer and the Flet modal give each kind its own tab (Questions), opened first while the call is on: each question with who asked it and when, and what can be done with it:</p>
+<ul>
+<li><strong>Copy for agent</strong> - copies a prompt for a coding agent: the last twenty lines of the call, then the question, and to answer it from the repository's code without changing anything. Paste it into Claude Code, Codex or whatever you use.</li>
+<li><strong>Ask agent</strong> - asks a coding agent on a machine you choose to answer it (see <a href="#the-runner">The runner</a>). The answer shows under the question.</li>
+<li><strong>Ask AI</strong> - the stack's own model answers from what was said so far, as the <code>meeting-answers</code> agent, metered as <code>meetings:ask</code>. Only with the AI service on pydantic-ai with a database.</li>
+</ul>
+<p>Each time one is asked it is a run, listed under its question: waiting for a runner, answering (on which runner), then answered or failed, with what came back. The page and the drawer keep themselves current while any run is going, even after the call ends. A run claimed and never finished (its runner died, or a restart took an Ask AI with it) fails half an hour after it was claimed, on the same once-a-minute check that closes interrupted meetings.</p>
+<p>To have every question asked of an action as it is heard, set <code>MEETINGS_AUTO_ACTIONS</code> (Overseer &gt; Meetings &gt; Settings) to <code>kind=action</code> pairs: <code>question=agent</code> asks the coding agent about every question, <code>question=ai</code> the model.</p>
+<h3 id="the-runner">The runner</h3>
+<p>The coding agent does not run in the app: a runner on your machine (or any other) asks the app for waiting runs over its API, answers each one, and posts back what it printed. Nothing needs to be running in the app for it, and nothing in the app can reach the machine.</p>
+<p>Make a token for the runner, shown once (or <code>POST /api/v1/meetings/runner-tokens</code> as yourself):</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>my-app<span class="w"> </span>meetings<span class="w"> </span>runner-token<span class="w"> </span>create<span class="w"> </span>laptop
+</span></code></pre></div>
+<p>Then start it where the agent and the repository are:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">MEETINGS_RUNNER_TOKEN</span><span class="o">=</span>mrt_...
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>my-app<span class="w"> </span>meetings<span class="w"> </span>runner<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">  </span>--url<span class="w"> </span>https://my-app.example.com<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="w">  </span>--repo<span class="w"> </span>~/code/my-service<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">  </span>--command<span class="w"> </span><span class="s1">&#39;claude -p {prompt} --permission-mode plan&#39;</span>
+</span></code></pre></div>
+<p>For each run it fetches the repository and makes a fresh worktree of <code>--ref</code> (<code>origin/main</code> by default) in a temporary folder, runs the command there with <code>{prompt}</code> replaced by the run's prompt (on stdin when the command has no <code>{prompt}</code>), posts what it printed (or why it failed, after fifteen minutes at most), and removes the worktree. So it never touches your checkout, and any headless agent works: <code>codex exec {prompt}</code>, <code>aider --message {prompt}</code>. Without <code>--repo</code> it runs where it was started. <code>--action</code> names which actions it answers (<code>agent</code> by default; repeat it for more), <code>--once</code> answers one waiting run and stops, <code>--poll</code> is how often it looks while idle.</p>
+<p>A token claims its owner's runs only. One made with the CLI and no <code>--owner</code> claims every owner's. <code>meetings runner-token list</code> lists the live ones, and <code>meetings runner-token revoke &lt;id&gt;</code> refuses its runner from then on. Only a digest of each token is kept.</p>
+<h3 id="other-kinds-and-actions">Other kinds and actions</h3>
+<p>What makes a moment, and what can be done with one, are each registered by name, so a stack can add its own: in a <code>meeting_moments.py</code> beside any service's <code>service.py</code> (<code>app/services/&lt;name&gt;/meeting_moments.py</code>), found on disk like its <code>tools.py</code> and imported before moments are first read. A detector reads each line (who said it, whether it is you, what was said so far) and returns the moment's text or nothing:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.meetings.domains.moments.detectors</span><span class="w"> </span><span class="kn">import</span> <span class="n">register_detector</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="n">register_detector</span><span class="p">(</span><span class="s2">&quot;decision&quot;</span><span class="p">,</span> <span class="k">lambda</span> <span class="n">heard</span><span class="p">:</span> <span class="n">heard</span><span class="o">.</span><span class="n">text</span> <span class="k">if</span> <span class="s2">&quot;we decided&quot;</span> <span class="ow">in</span> <span class="n">heard</span><span class="o">.</span><span class="n">text</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span> <span class="n">title</span><span class="o">=</span><span class="s2">&quot;Decisions&quot;</span><span class="p">)</span>
+</span></code></pre></div>
+<p>An action takes some kinds of moment and runs in one place: <code>browser</code> (only its prompt, copied), <code>app</code> (its <code>run</code> is called in the app with the prompt and the owner, and returns the answer) or <code>runner</code> (a runner started with <code>--action</code> and its name claims it). Its <code>frame</code> turns the moment and what led up to it into the prompt:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.meetings.domains.actions.registry</span><span class="w"> </span><span class="kn">import</span> <span class="n">Action</span><span class="p">,</span> <span class="n">register_action</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="n">register_action</span><span class="p">(</span><span class="n">Action</span><span class="p">(</span><span class="s2">&quot;ticket&quot;</span><span class="p">,</span> <span class="s2">&quot;File a ticket&quot;</span><span class="p">,</span> <span class="nb">frozenset</span><span class="p">({</span><span class="s2">&quot;question&quot;</span><span class="p">}),</span> <span class="s2">&quot;runner&quot;</span><span class="p">))</span>
+</span></code></pre></div>
 <h2 id="the-writers-are-agents">The writers are agents</h2>
-<p>The notes, the guides and the series are each written by an agent row the meetings service seeds at startup: <code>meeting-notes</code>, <code>meeting-guide</code> and <code>meeting-themes</code>, under the "meetings" category in Overseer's Agents. Their prompt, model and sampling are edited there like any other agent's, and every prompt change is kept in its history. A row left as seeded runs on the model in force; one pinned to a model runs on that model. Seeding only adds a missing row, so an edit survives restarts and upgrades. While a row is missing or turned off, its built-in prompt runs on the model in force.</p>
+<p>The notes, the guides and the series are each written by an agent row the meetings service seeds at startup: <code>meeting-notes</code>, <code>meeting-guide</code> and <code>meeting-themes</code>, with <code>meeting-answers</code> for Ask AI, under the "meetings" category in Overseer's Agents. Their prompt, model and sampling are edited there like any other agent's, and every prompt change is kept in its history. A row left as seeded runs on the model in force; one pinned to a model runs on that model. Seeding only adds a missing row, so an edit survives restarts and upgrades. While a row is missing or turned off, its built-in prompt runs on the model in force.</p>
 <h2 id="the-meetings-page">The Meetings page</h2>
 <p>With the htmx frontend, <code>/meetings</code> (linked from the navbar) sends the bot and reads what came of it, no CLI needed (signing the bot in is still <code>meetings login</code>):</p>
 <ul>
@@ -6791,6 +6904,22 @@
 <td><code>meetings show &lt;id&gt;</code></td>
 <td>One meeting: its status and its transcript</td>
 </tr>
+<tr>
+<td><code>meetings runner [--command CMD] [--repo PATH] [--ref REF] [--action NAME] [--url URL] [--token TOKEN] [--once] [--poll SECONDS]</code></td>
+<td>Answer waiting runs on this machine: each in a fresh worktree of <code>--repo</code>, with <code>CMD</code> (<code>{prompt}</code> its prompt). See <a href="#the-runner">The runner</a></td>
+</tr>
+<tr>
+<td><code>meetings runner-token create &lt;name&gt; [--owner ID]</code></td>
+<td>A token for a runner, shown once</td>
+</tr>
+<tr>
+<td><code>meetings runner-token list [--owner ID]</code></td>
+<td>The live runner tokens</td>
+</tr>
+<tr>
+<td><code>meetings runner-token revoke &lt;id&gt; [--owner ID]</code></td>
+<td>Revoke one</td>
+</tr>
 </tbody>
 </table>
 <h2 id="api">API</h2>
@@ -6822,6 +6951,45 @@
 <td><code>GET /api/v1/meetings/search?q=</code></td>
 <td>The caller's meetings' lines and note items with the words, newest meeting first</td>
 </tr>
+<tr>
+<td><code>GET /api/v1/meetings/{id}/moments</code></td>
+<td>What the call threw up (its questions), each with who said it, the actions it offers and the runs asked of it</td>
+</tr>
+<tr>
+<td><code>POST /api/v1/meetings/{id}/moments/{moment_id}/runs</code></td>
+<td><code>{"action": ...}</code>: ask an action of a moment; <code>202</code> with the run, <code>404</code> for an action that cannot be asked (a browser one)</td>
+</tr>
+<tr>
+<td><code>GET /api/v1/meetings/runner-tokens</code></td>
+<td>The caller's live runner tokens</td>
+</tr>
+<tr>
+<td><code>POST /api/v1/meetings/runner-tokens</code></td>
+<td><code>{"name": ...}</code>: a runner token; <code>201</code> with its <code>value</code>, shown this once</td>
+</tr>
+<tr>
+<td><code>DELETE /api/v1/meetings/runner-tokens/{id}</code></td>
+<td>Revoke one; <code>404</code> for one that is not the caller's</td>
+</tr>
+</tbody>
+</table>
+<p>A runner's routes take its token (<code>Authorization: Bearer mrt_...</code>), not a user:</p>
+<table>
+<thead>
+<tr>
+<th>Route</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>POST /api/v1/meetings/runs/claim</code></td>
+<td><code>{"actions": [...]}</code>: the oldest waiting run of those actions among the token's owner's meetings, now the runner's, with its prompt; <code>204</code> when there is none</td>
+</tr>
+<tr>
+<td><code>POST /api/v1/meetings/runs/{id}/finish</code></td>
+<td><code>{"ok": ..., "result": ...}</code>: what the run came back with</td>
+</tr>
 </tbody>
 </table>
 <p>Overseer's routes, across every owner. Reading them takes an admin where the stack has auth; a change is an operator's (an admin, or without auth only the local dev build):</p>
@@ -6843,7 +7011,11 @@
 </tr>
 <tr>
 <td><code>GET /api/v1/meetings/admin/calendar?first=&amp;last=&amp;tz=&amp;agent=</code></td>
-<td>Every agent's meetings (<code>agent</code>'s only, when named) from <code>first</code> to <code>last</code>, whole days in time zone <code>tz</code> (default UTC), up to six weeks: each with its agent and color, title, start and end, link, organizer, where it stands (<code>state</code>: the call's status once the agent was sent in, else <code>upcoming</code>, <code>missed</code>, <code>cancelled</code>, <code>no_link</code>, <code>cannot_join</code> or <code>sent</code>) and the meeting it became</td>
+<td>Every agent's meetings (<code>agent</code>'s only, when named) from <code>first</code> to <code>last</code>, whole days in time zone <code>tz</code> (default UTC), up to six weeks: each with its agent and color, title, start and end, link, organizer, everyone invited (<code>emails</code>), where it stands (<code>state</code>: the call's status once the agent was sent in, else <code>upcoming</code>, <code>missed</code>, <code>cancelled</code>, <code>no_link</code>, <code>cannot_join</code> or <code>sent</code>) and the meeting it became</td>
+</tr>
+<tr>
+<td><code>GET /api/v1/meetings/admin/calendar/{event_id}?tz=</code></td>
+<td>One meeting on a calendar: all of the above, what its organizer wrote (<code>description</code>, Google's join and dial-in lines left out), and who is invited (<code>invited</code>: each email, with the name and color of whoever spoke on its link and plainly is them)</td>
 </tr>
 <tr>
 <td><code>GET /api/v1/meetings/admin/search?q=</code></td>
@@ -6856,6 +7028,14 @@
 <tr>
 <td><code>GET /api/v1/meetings/admin/{id}/threads</code></td>
 <td>Its threads, as the owner's route reads them</td>
+</tr>
+<tr>
+<td><code>GET /api/v1/meetings/admin/{id}/moments</code></td>
+<td>Its moments, as the owner's route reads them</td>
+</tr>
+<tr>
+<td><code>POST /api/v1/meetings/admin/{id}/moments/{moment_id}/runs</code></td>
+<td>Ask an action of one</td>
 </tr>
 <tr>
 <td><code>POST /api/v1/meetings/admin/{id}/leave</code></td>

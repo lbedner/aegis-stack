@@ -32,7 +32,12 @@ def test_each_writer_is_seeded_once_and_an_edit_is_kept(db_session: Session) -> 
     agents.load_meetings_agent_fixtures(db_session)
 
     assert _slugs(db_session) == sorted(
-        [agents.NOTES_AGENT, agents.GUIDE_AGENT, agents.THEMES_AGENT]
+        [
+            agents.NOTES_AGENT,
+            agents.GUIDE_AGENT,
+            agents.THEMES_AGENT,
+            agents.ANSWER_AGENT,
+        ]
     )
     db_session.refresh(guide)
     assert guide.system_prompt == "Mine."

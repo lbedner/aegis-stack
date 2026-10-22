@@ -14,16 +14,28 @@ its citations with it.
 ``Notes`` and ``Guide`` are what the model writes and what the pages read;
 the rows are how they are kept (``domains.notes``, ``domains.people``).
 
-One module per domain the tables belong to (``accounts``, ``calendar``,
-``notes``, ``people``, ``series``), the meeting itself (``meeting``), and
-what they all share (``base``). Importing this package imports every
-table module, which is the point: a model never imported is absent from
-``SQLModel.metadata``, and alembic autogenerate reads that metadata.
+One module per domain the tables belong to (``accounts``, ``actions``,
+``calendar``, ``moments``, ``notes``, ``people``, ``series``), the meeting
+itself (``meeting``), and what they all share (``base``). Importing this
+package imports every table module, which is the point: a model never
+imported is absent from ``SQLModel.metadata``, and alembic autogenerate
+reads that metadata.
 """
 
 # Search's SQLite tables, made beside these by every ``create_all``.
 from app.services.meetings.domains.search import fts  # noqa: F401
 from app.services.meetings.models.accounts import BotAccount
+from app.services.meetings.models.actions import (
+    ASKED,
+    CLAIMED,
+    DONE,
+    FAILED,
+    IN_THE_APP,
+    ActionChoice,
+    MeetingActionRun,
+    MeetingRunnerToken,
+    RunRecord,
+)
 from app.services.meetings.models.base import (
     IN_PROGRESS,
     LEAVABLE,
@@ -42,6 +54,7 @@ from app.services.meetings.models.meeting import (
     TranscriptLine,
     TranscriptRow,
 )
+from app.services.meetings.models.moments import MeetingMoment, MomentRecord
 from app.services.meetings.models.notes import (
     ActionItem,
     Commitment,
@@ -82,12 +95,17 @@ from app.services.meetings.models.series import (
 )
 
 __all__ = [
+    "ASKED",
+    "ActionChoice",
     "ActionItem",
     "BotAccount",
+    "CLAIMED",
     "CalendarEvent",
     "Caption",
     "Commitment",
     "Contradiction",
+    "DONE",
+    "FAILED",
     "FollowUp",
     "GUIDE_SECTIONS",
     "Guide",
@@ -96,21 +114,26 @@ __all__ = [
     "GuideRow",
     "GuideSection",
     "IN_PROGRESS",
+    "IN_THE_APP",
     "KeptNotes",
     "LEAVABLE",
     "Meeting",
+    "MeetingActionRun",
     "MeetingGuidePoint",
     "MeetingGuidePointLine",
+    "MeetingMoment",
     "MeetingNoteItem",
     "MeetingNoteLine",
     "MeetingNotes",
     "MeetingParticipant",
     "MeetingPerson",
     "MeetingRecord",
+    "MeetingRunnerToken",
     "MeetingSeries",
     "MeetingStatus",
     "MeetingTheme",
     "MeetingThemeLine",
+    "MomentRecord",
     "NOT_DONE",
     "NoteItem",
     "Notes",
@@ -119,6 +142,7 @@ __all__ = [
     "Platform",
     "Position",
     "Quote",
+    "RunRecord",
     "STILL_WANTED",
     "SeriesNotes",
     "SeriesRecord",

@@ -276,11 +276,15 @@ class TestServicesRegistry:
         spec = SERVICES["meetings"]
 
         assert "browser" in spec.required_components
-        # Before the meeting routes: /meetings/admin, /people, /search and
-        # /series are not ids.
+        # Before the meeting routes: /meetings/admin, /people, /runs,
+        # /runner-tokens, /search and /series are not ids.
         assert [r.alias for r in spec.wiring.routers] == [
             "meetings_search_admin_router",
             "meetings_search_router",
+            "meetings_runs_router",
+            "meetings_runner_tokens_router",
+            "meetings_moments_admin_router",
+            "meetings_moments_router",
             "meetings_series_admin_router",
             "meetings_series_router",
             "meetings_people_admin_router",

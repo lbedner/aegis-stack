@@ -9,6 +9,26 @@
 
 ### Added
 
+- **Questions asked in a call, answered while it is still on.** The
+  meetings bot picks out moments as it captions: a line another speaker
+  ends with a question mark is a question (detectors are registered by
+  kind, `domains/moments/detectors.py`). The meeting page, Overseer's
+  drawer and the Flet modal list them in a Questions tab, each with what
+  can be done with it: copy a prompt for a coding agent (the call so far,
+  then the question), ask a coding agent, or ask the stack's model (the new
+  `meeting-answers` agent, metered as `meetings:ask`). Actions are
+  registered by name with the kinds they take and where they run (the
+  browser, the app, or a runner), so a stack adds its own, detectors too,
+  in a `meeting_moments.py` beside any service; every ask is a run,
+  followed until it is answered or failed, finished only by what claimed
+  it, and one never finished fails after half an hour. `meetings runner` answers runs on another
+  machine over the API, each in a fresh git worktree of the repository,
+  with any headless command (`claude -p {prompt} --permission-mode plan`),
+  holding a runner token (`meetings runner-token create`, or
+  `/api/v1/meetings/runner-tokens`; only a digest is kept).
+  `MEETINGS_AUTO_ACTIONS` (`question=agent`) asks one of every new
+  question. New tables `meeting_moment`, `meeting_action_run` and
+  `meeting_runner_token`, which `aegis update` adds to an existing stack.
 - **A run's log, under the row that started it.** `app/core/run_log.py`: a
   background job, a worker task or a scheduled run, scheduled or run by
   hand, is bound as a run for its duration (the job runner, the worker's
@@ -52,6 +72,26 @@
   `service.namespace` (the project), with the build as `service.version`.
   Dashboards keyed on the project name as `service.name` need the namespace.
 
+- **A meeting is called what its calendar calls it.** A meeting sent to a
+  link on an agent's calendar, by the calendar or by hand, keeps the
+  event's title (`meeting.title`), and the lists, the page header, the
+  drawer and the Flet pane show it, the link under it; a link on no
+  calendar still reads as its link. The send form offers the links the
+  bot was sent to before. Overseer's meetings search is a plain search
+  row like every other page's, and a primary button is now the height of
+  the fields beside it, everywhere. A theme that keeps coming up no
+  longer leads with everyone who said it (each line names its speaker), a
+  long position wraps instead of running off the drawer, the calendar's
+  meetings lose their colored bar, and a series opens in a wider drawer.
+  Any meeting on the calendar opens with what its invite says, in both
+  Overseers: when, whose calendar, where it stands, the organizer, what
+  they wrote on it (Google's join and dial-in lines left out), its link,
+  everyone invited, and the call the agent went into. An invitee whose
+  email plainly names someone who spoke on that link (`lisa.atalese@`,
+  `drferro@`) reads as that person, with their color; anyone else stays an
+  email. The admin calendar API carries each invite's emails, and
+  `GET /api/v1/meetings/admin/calendar/{event_id}` the whole of one.
+
 - **Meetings keeps its logic in domains.** The bot's run, Meet's page, the
   call's audio and the bot's sign-in move to `domains/bot/` (the run's row
   keeping in `domains/bot/row.py`), the notes writer to
@@ -91,6 +131,24 @@
   `component:backend` or `component:scheduler` raised
   `KeyError: 'object:pg_class'` and ended the chat. A pair seen at runtime
   is an edge only when both ends are nodes of the model or outside hosts.
+- **The meetings bot no longer leaves a call people are in.** It counted
+  itself alone from the moment it joined, by Meet's People count alone:
+  sent a minute early by the calendar, or with that count reading 1 in a
+  call where people were talking, it left after two minutes. Alone now
+  starts once the others have gone, and anyone whose captions are moving
+  is there; a call nobody comes to, it leaves after fifteen minutes. Leave
+  hidden for a moment (what Meet puts over the call when someone joins)
+  no longer ends its run either: only gone for ten seconds, or a page
+  saying the call ended or it was removed. When it leaves on its own it
+  logs why, with what the page said.
+- **virtualenv 21.14.12** (four advisories in 21.14.1), which brings
+  packaging 26. Packaging 26 accepts pre-releases by default; a plugin's
+  `aegis_version` still accepts a pre-release CLI only when it names one
+  itself, as pip has it.
+- **A Postgres stack on Python 3.13 starts again.** The database startup
+  hook's `schema_gaps` annotated with `Any`, imported only on SQLite; 3.14
+  defers annotations, so only 3.13 raised `NameError` at import and the
+  backend did not start.
 
 ## [0.16.1] - 2026-10-20
 

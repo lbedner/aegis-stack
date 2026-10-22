@@ -106,3 +106,11 @@
     transform: translateX(100%);
   }
 }
+
+/* A drawer whose content asks for room (``data-drawer-wide``: a series,
+   read across its meetings) opens wider, the list still beside it. */
+@media (min-width: 640px) {
+  .aegis-drawer:has([data-drawer-wide]) {
+    width: min(64rem, 90vw);
+  }
+}

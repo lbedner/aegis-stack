@@ -18,6 +18,7 @@ from app.services.meetings.domains.bot import run as bot
 from app.services.meetings.domains.bot.audio import RATE
 from app.services.meetings.domains.bot.login import CALENDAR, LOGIN
 from app.services.meetings.domains.bot.row import transition, write_captions
+from app.services.meetings.domains.moments.service import moments_of
 from app.services.meetings.domains.notes.service import keep_notes
 from app.services.meetings.domains.people.kept import guides_of, keep_guide
 from app.services.meetings.domains.series import service as series_service
@@ -272,6 +273,30 @@ async def asked_twice(
         meetings.append(meeting_id)
         asked.append(ids[0])
     return meetings, asked
+
+
+async def asked_a_question(
+    session: AsyncSession,
+    owner: int | None = None,
+    *,
+    status: MeetingStatus | None = None,
+) -> tuple[int, int]:
+    """One of ``owner``'s meetings where, after some talk, Dana asks whether
+    the CSV export can ship this week (moved to ``status``, when given): its
+    id and the question's moment id."""
+    meeting = await MeetingsService(session, owner).request(MEET, "Notes")
+    meeting_id: int = meeting.id  # type: ignore[assignment]
+    await said(
+        session,
+        meeting_id,
+        ("Sam", "Let's talk about the beta."),
+        ("Dana", "The usage report is late."),
+        ("Dana", "Can the CSV export ship this week?"),
+    )
+    if status is not None:
+        await transition(session, meeting_id, status, from_=NOT_DONE)
+    (moment,) = await moments_of(session, meeting_id)
+    return meeting_id, moment.id
 
 
 async def kept_series(

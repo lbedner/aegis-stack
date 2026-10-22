@@ -57,6 +57,18 @@ from app.components.backend.api.research.router import router as research_router
 {%- endif %}
 {%- if include_meetings %}
 from app.components.backend.api.meetings.admin import router as meetings_admin_router
+from app.components.backend.api.meetings.moments import (
+    admin_router as meetings_moments_admin_router,
+)
+from app.components.backend.api.meetings.moments import (
+    router as meetings_moments_router,
+)
+from app.components.backend.api.meetings.moments import (
+    runs_router as meetings_runs_router,
+)
+from app.components.backend.api.meetings.moments import (
+    tokens_router as meetings_runner_tokens_router,
+)
 from app.components.backend.api.meetings.people import (
     admin_router as meetings_people_admin_router,
 )
@@ -160,10 +172,14 @@ def include_routers(app: FastAPI) -> None:
     app.include_router(research_router, prefix="/api/v1")
     {%- endif %}
     {%- if include_meetings %}
-    # Before the meeting routes: /meetings/admin, /people, /search and
-    # /series are not ids.
+    # Before the meeting routes: /meetings/admin, /people, /runs,
+    # /runner-tokens, /search and /series are not ids.
     app.include_router(meetings_search_admin_router, prefix="/api/v1")
     app.include_router(meetings_search_router, prefix="/api/v1")
+    app.include_router(meetings_runs_router, prefix="/api/v1")
+    app.include_router(meetings_runner_tokens_router, prefix="/api/v1")
+    app.include_router(meetings_moments_admin_router, prefix="/api/v1")
+    app.include_router(meetings_moments_router, prefix="/api/v1")
     app.include_router(meetings_series_admin_router, prefix="/api/v1")
     app.include_router(meetings_series_router, prefix="/api/v1")
     app.include_router(meetings_people_admin_router, prefix="/api/v1")

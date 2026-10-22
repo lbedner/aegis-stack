@@ -7,8 +7,8 @@
 {% from "pages/meetings/_macros.html" import failure, status_line %}
 {% set base = prefix ~ "/" ~ meeting.id %}
 <div id="meeting-body" class="grid gap-6"
-     {% if under_way or writing %}hx-get="{{ base }}/body" hx-trigger="every 3s" hx-swap="outerHTML"{% endif %}>
-  {% call page_header("Meeting " ~ meeting.id, meeting.url) %}
+     {% if following %}hx-get="{{ base }}/body" hx-trigger="every 3s" hx-swap="outerHTML"{% endif %}>
+  {% call page_header(meeting.title or "Meeting " ~ meeting.id, meeting.url) %}
     {{ status_line(status, length) }}
     {% if can_leave %}{{ action("Ask it to leave", 'data-leave hx-post="' ~ base ~ '/leave" hx-target="#meeting-body" hx-swap="outerHTML"', tone="warn") }}{% endif %}
   {% endcall %}

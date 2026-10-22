@@ -1,5 +1,5 @@
 {# One meeting in the drawer: its title, then the live part
    (_drawer_body.html, which re-reads itself). #}
 {% from "components/macros/layout.html" import dialog_title %}
-{{ dialog_title("Meeting " ~ meeting.id, meeting.url) }}
+{{ dialog_title(meeting.title or "Meeting " ~ meeting.id, meeting.url) }}
 {% include "pages/overseer/meetings/_drawer_body.html" %}

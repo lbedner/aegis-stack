@@ -39,6 +39,8 @@ JOIN_BUTTON = (
 # Meet draws its lobby a while after the page loads.
 LOBBY_TIMEOUT_MS = 30_000
 LEAVE_BUTTON = 'button[aria-label*="Leave call"]'
+# How much of the page a log of why the bot left keeps.
+PAGE_TEXT_KEPT = 1000
 # The participant count badge: named "People" by aria-labelledby, not a label.
 PEOPLE_BUTTON = 'role=button[name="People"]'
 CHAT_BUTTON = 'button[aria-label*="Chat with everyone"]'
@@ -159,6 +161,10 @@ class MeetPage:
         if await self._shown(LEAVE_BUTTON):
             return CallState.IN_CALL
         return CallState.WAITING
+
+    async def page_text(self) -> str:
+        """What the page says, cut to what a log line can carry."""
+        return (await self.page.inner_text("body"))[:PAGE_TEXT_KEPT]
 
     async def people(self) -> int | None:
         """How many are in the call, the bot included; None when the page

@@ -132,15 +132,15 @@ def themes_section(items: list[ThreadItem], other: str | None = None) -> ThreadS
 def _theme(
     theme: Theme, cited: dict[int, Quote], here: int | None = None
 ) -> ThreadItem:
-    """A theme as a thread: who raised it, in how many meetings, where it
-    stands; its lines, or, in meeting ``here``, its lines there and the
-    other meetings' as its other lines."""
+    """A theme as a thread: in how many meetings, where it stands; its
+    lines, each with who said it (no names on the theme itself: one raised
+    by everyone would read as a list of them), or, in meeting ``here``, its
+    lines there and the other meetings' as its other lines."""
     said = [cited[n] for n in theme.lines if n in cited]
     meetings = {q.meeting_id for q in said}
     return ThreadItem(
         meeting_id=said[0].meeting_id if said else 0,
         text=theme.text,
-        speaker=", ".join(dict.fromkeys(q.speaker for q in said)) or None,
         detail=counted(len(meetings), "meeting"),
         status=theme.status,
         quotes=[q for q in said if here is None or q.meeting_id == here],

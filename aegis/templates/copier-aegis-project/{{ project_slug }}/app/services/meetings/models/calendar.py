@@ -34,6 +34,11 @@ class CalendarEvent(SQLModel, table=True):
     ends_at: datetime
     url: str | None = Field(default=None, max_length=2048)
     organizer: str | None = Field(default=None, max_length=320)
+    description: str | None = Field(
+        default=None,
+        sa_type=Text,
+        description="What the organizer wrote on the invite, Google's join lines left out",
+    )
     emails: list[str] = Field(
         default_factory=list,
         sa_column=Column(JSON, nullable=False),

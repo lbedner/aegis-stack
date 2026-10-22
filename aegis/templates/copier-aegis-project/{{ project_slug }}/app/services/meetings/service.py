@@ -15,7 +15,9 @@ from app.core.concurrency import background
 from app.core.constants import CHART_RAMP
 from app.core.formatting import format_clock, format_span
 from app.services.meetings import queries
+from app.services.meetings.domains.actions import runs
 from app.services.meetings.domains.bot.row import transition
+from app.services.meetings.domains.moments import service as moments
 from app.services.meetings.domains.notes import queries as notes_queries
 from app.services.meetings.domains.notes.service import notes_of
 from app.services.meetings.domains.people import participants
@@ -29,6 +31,7 @@ from app.services.meetings.models import (
     UNKNOWN,
     KeptNotes,
     Meeting,
+    MeetingActionRun,
     MeetingGuidePoint,
     MeetingGuidePointLine,
     MeetingNoteItem,
@@ -44,10 +47,12 @@ from app.services.meetings.models import (
 from app.services.shared import facade
 
 if TYPE_CHECKING:
-    # What callers outside the service reach through here, each loaded
-    # when used (``app.services.shared.facade``): the bot's run and its
-    # row, and the agents' seeds, which render only with an AI that runs
-    # them.
+    # What callers outside reach through here, each loaded when used
+    # (``app.services.shared.facade``); the agents' seeds render only
+    # with an AI that runs them.
+    from app.services.meetings.domains.actions.runs import (  # noqa: F401
+        fail_abandoned,
+    )
     from app.services.meetings.domains.agents import (  # noqa: F401
         load_meetings_agent_fixtures,
     )
@@ -60,6 +65,9 @@ if TYPE_CHECKING:
     from app.services.meetings.domains.bot.run import (  # noqa: F401
         run_meeting,
         send_bot,
+    )
+    from app.services.meetings.domains.moments.service import (  # noqa: F401
+        by_kind,
     )
 
 DEFAULT_BOT_NAME = "Notetaker"
@@ -132,13 +140,14 @@ class MeetingsService:
     async def request(
         self, url: str, bot_name: str = DEFAULT_BOT_NAME, account_id: int | None = None
     ) -> Meeting:
-        """Record a meeting for the bot to join as ``account_id`` (an agent);
-        a link it cannot join raises ``UnsupportedMeetingLinkError`` before
-        anything is stored."""
+        """Record a meeting for the bot to join as ``account_id`` (an agent),
+        called what its calendar calls it; a link it cannot join raises
+        ``UnsupportedMeetingLinkError`` before anything is stored."""
         url = url.strip()
         meeting = Meeting(
             owner_user_id=self.owner_user_id,
             url=url,
+            title=await queries.title_for(self.db, url),
             platform=detect_platform(url),
             bot_name=bot_name,
             account_id=account_id,
@@ -175,6 +184,7 @@ class MeetingsService:
         transcript, and what the pages say of it."""
         meeting = await self.get(meeting_id)
         kept = (await self.notes_for([meeting_id])).get(meeting_id)
+        lines = await self.transcript(meeting)
         transcript = [
             TranscriptRow(
                 id=line.id,  # type: ignore[arg-type]
@@ -182,7 +192,7 @@ class MeetingsService:
                 at=line.start_seconds,
                 text=line.text,
             )
-            for speaker, line in await self.transcript(meeting)
+            for speaker, line in lines
         ]
         notes = kept.notes if kept else None
         here = await people_queries.meeting_people(self.db, meeting_id)
@@ -195,8 +205,13 @@ class MeetingsService:
         under_way = meeting.status in NOT_DONE
         writing = meeting_id in WRITING
         can_write = notes_writer() is not None
+        found = await moments.moments_of(
+            self.db, meeting_id, [(row.speaker, row.id, row.text) for row in transcript]
+        )
         return MeetingRecord(
             meeting=meeting,
+            moments=found,
+            following=under_way or writing or moments.answering(found),
             notes=notes,
             notes_error=kept.error if kept else None,
             model_name=kept.model_name if kept else None,
@@ -228,7 +243,20 @@ class MeetingsService:
             raise NothingToWriteError("No notes to write now")
         WRITING.add(meeting_id)
         background(write(meeting_id))
-        return record.model_copy(update={"writing": True, "can_rewrite": False})
+        return record.model_copy(
+            update={"writing": True, "following": True, "can_rewrite": False}
+        )
+
+    async def ask(self, meeting_id: int, moment_id: int, name: str) -> MeetingActionRun:
+        """Ask the action ``name`` of a moment in one of the owner's meetings:
+        in the app it starts at once; on a runner it waits to be claimed."""
+        return await runs.ask(
+            self.db,
+            moment_id,
+            name,
+            owner_user_id=self.owner_user_id,
+            meeting_id=meeting_id,
+        )
 
     async def transcript(self, meeting: Meeting) -> list[tuple[str, TranscriptLine]]:
         """Each line of ``meeting`` (one ``get`` returned) with its speaker's

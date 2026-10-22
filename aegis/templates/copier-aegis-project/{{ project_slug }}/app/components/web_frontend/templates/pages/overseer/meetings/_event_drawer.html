@@ -1,0 +1,34 @@
+{# One meeting on an agent's calendar in the drawer
+   (``overseer_meetings.event_context``): when, whose calendar, where it
+   stands, who organized it, what they wrote on it, its link, who is
+   invited (named, in their color, where someone who spoke on the link
+   plainly is them), and the call the agent was sent into, when it was. #}
+{% from "components/macros/layout.html" import badge, chart_dot, dialog_title, facts %}
+{{ dialog_title(entry.title, when) }}
+<div class="space-y-5">
+  {{ facts([
+    ("Calendar", entry.agent),
+    ("Organizer", entry.organizer),
+  ]) }}
+  <div class="flex flex-wrap items-center gap-3 text-sm">
+    {{ badge(state.label, state.tone) }}
+    {% if opens %}<a data-opens href="{{ opens }}" {{ hx_replace(opens, "#overseer-main") }} class="text-aegis-teal hover:underline">Open the meeting</a>{% endif %}
+  </div>
+  {% if entry.description %}
+  <p data-description class="whitespace-pre-line break-words text-sm leading-relaxed">{{ entry.description }}</p>
+  {% endif %}
+  {% if entry.url %}
+  <p class="text-sm"><a data-link href="{{ entry.url }}" target="_blank" rel="noopener" class="break-all text-aegis-text hover:text-aegis-teal">{{ entry.url }}</a></p>
+  {% endif %}
+  {% if entry.invited %}
+  <section class="space-y-2">
+    <h3 class="text-xxs caps text-aegis-muted">Invited ({{ entry.invited|length }})</h3>
+    <ul data-invited class="space-y-1 text-sm">
+      {% for i in entry.invited %}
+      {% if i.name %}<li title="{{ i.email }}">{{ chart_dot(i.color) }}{{ i.name }}</li>
+      {% else %}<li class="break-all pl-3.5 text-aegis-muted">{{ i.email }}</li>{% endif %}
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+</div>

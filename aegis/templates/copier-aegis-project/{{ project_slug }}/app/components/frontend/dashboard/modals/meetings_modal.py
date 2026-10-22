@@ -42,6 +42,7 @@ from .base_detail_popup import BaseDetailPopup
 from .meetings_agents_tab import AGENTS, AgentPicker, AgentsTab
 from .meetings_calendar_tab import CalendarTab
 from .meetings_follow import FOLLOW_SECONDS, api, follow, hint
+from .meetings_moments import Ask, Copy, moment_actions, moments_controls
 from .meetings_people_tab import PeopleTab
 from .meetings_search_tab import SearchTab
 from .meetings_series_tab import SeriesTab
@@ -60,11 +61,11 @@ def _when(value: Any) -> datetime | None:
 def meeting_cells(
     meeting: dict[str, Any], agents: dict[int | None, str] | None = None
 ) -> list[str]:
-    """One meeting's row: its link, owner, agent (by id, ``agents``), when
-    asked, status and length."""
+    """One meeting's row: what its calendar calls it (else its link),
+    owner, agent (by id, ``agents``), when asked, status and length."""
     length = call_length(_when(meeting.get("joined_at")), _when(meeting.get("left_at")))
     return [
-        str(meeting.get("url") or "-"),
+        str(meeting.get("title") or meeting.get("url") or "-"),
         str(meeting.get("owner_user_id") or "-"),
         (agents or {}).get(meeting.get("account_id")) or "-",
         format_date(meeting.get("created_at")) or "-",
@@ -85,9 +86,9 @@ def actions_for(record: dict[str, Any]) -> list[str]:
 
 
 def following(record: dict[str, Any]) -> bool:
-    """Read again every few seconds: the bot is in or on its way, or the
-    notes are being written."""
-    return bool(record.get("under_way") or record.get("writing"))
+    """Read again every few seconds, while the service says something is
+    happening (``MeetingRecord.following``)."""
+    return bool(record.get("following"))
 
 
 def _items(items: list[dict[str, Any]], empty: str) -> list[ft.Control]:
@@ -183,12 +184,16 @@ def _transcript(lines: list[dict[str, Any]], hit: int | None) -> list[ft.Control
     ]
 
 
-def record_view(record: dict[str, Any], hit: int | None = None) -> ft.Column:
+def record_view(
+    record: dict[str, Any], hit: int | None = None, acts: tuple[Ask, Copy] | None = None
+) -> ft.Column:
     """One meeting read in full (``MeetingRecord``): who and how it went,
     its notes, then what was said; ``hit``, the line a search opened it
     at, marked."""
     meeting = record["meeting"]
+    name = str(meeting.get("title") or meeting.get("url") or "")
     facts = [
+        ("Link", meeting.get("url") if meeting.get("title") else None),
         ("Status", record.get("status")),
         ("Length", record.get("length")),
         ("Bot", meeting.get("bot_name")),
@@ -199,10 +204,11 @@ def record_view(record: dict[str, Any], hit: int | None = None) -> ft.Column:
     ]
     return ft.Column(
         [
-            PrimaryText(str(meeting.get("url") or ""), size=Theme.Typography.BODY),
+            PrimaryText(name, size=Theme.Typography.BODY),
             *build_field_blocks([("", facts)]),
             SectionHeader("Notes"),
             *_notes(record),
+            *(moments_controls(record, *acts) if acts else []),
             *([ThreadsBlock(int(meeting["id"]))] if has_threads(record) else []),
             SectionHeader("Transcript"),
             *_transcript(record.get("transcript") or [], hit),
@@ -314,7 +320,10 @@ class MeetingPane(ft.Container):
                 self._set_me, meeting_id, str(e.control.value or "")
             ),
         )
-        self._view = record_view(record, self._line)
+        acts = moment_actions(
+            self.page, f"{API}/{meeting_id}", lambda: self.show(meeting_id)
+        )
+        self._view = record_view(record, self._line, acts)
         self.content = ft.Column(
             [
                 ft.Row([buttons[a] for a in actions_for(record)], spacing=8),

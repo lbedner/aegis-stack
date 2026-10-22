@@ -1,9 +1,10 @@
 {# Overseer > Meetings > Calendar: every agent's calendar, a month at a
-   time (``pages/meetings/_calendar.html``); a meeting the agent was sent
-   into opens in the Meetings drawer. #}
-{% from "components/macros/layout.html" import card %}
+   time (``pages/meetings/_calendar.html``); any meeting on it opens its
+   details in the drawer (_event_drawer.html). #}
+{% from "components/macros/layout.html" import card, drawer_sync %}
 {% from "pages/meetings/_calendar.html" import month %}
 {% call card(None, id="overseer-meeting-calendar", hover=False) %}
   {{ month(calendar, "#overseer-main", opens_here=True) }}
   <p class="text-xs text-aegis-muted">Each agent's calendar, read every minute. Give one its calendar under the secret <code class="font-mono">MEETINGS_BOT_CALENDAR_SECRET</code> (another agent's under <code class="font-mono">__&lt;NAME&gt;</code>).</p>
 {% endcall %}
+{{ drawer_sync(open_drawer, drawer_param) }}

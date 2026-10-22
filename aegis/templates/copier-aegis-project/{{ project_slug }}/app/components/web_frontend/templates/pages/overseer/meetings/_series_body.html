@@ -9,7 +9,7 @@
 {% from "pages/overseer/meetings/_threads.html" import quote_lines, thread_sections %}
 {% set marks = {"settled": "✓", "shifted": "↗", "still_open": "•"} %}
 {% set series = record.series %}
-<div id="series-body" class="space-y-6"
+<div id="series-body" data-drawer-wide class="space-y-6"
      {% if record.writing %}hx-get="{{ base }}/body" hx-trigger="every 3s" hx-swap="outerHTML"{% endif %}>
   {{ facts([
     ("Owner", series.owner_user_id),

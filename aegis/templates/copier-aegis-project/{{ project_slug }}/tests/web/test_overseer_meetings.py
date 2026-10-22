@@ -50,6 +50,32 @@ async def _ended(session: AsyncSession, owner: int | None) -> int:
     return meeting_id
 
 
+async def test_a_meeting_reads_as_its_calendar_names_it_and_its_link_is_offered(
+    overseer: TestClient, async_db_session: AsyncSession
+) -> None:
+    """A row names the call as its calendar does, its link under it; one on
+    no calendar reads as its link. The send form offers each link sent to
+    before, once, newest first."""
+    svc = MeetingsService(async_db_session, None)
+    named = await svc.request(MEET, "Notes")
+    named.title = "New Dev Call"
+    async_db_session.add(named)
+    await async_db_session.commit()
+    other = "https://meet.google.com/zzz-zzzz-zzz"
+    await svc.request(other, "Notes")
+    await svc.request(MEET, "Notes")
+
+    html = page_html(overseer, PAGE)
+
+    cells = [
+        text(c) for c in select(html, "#overseer-meetings tbody tr td:first-child")
+    ]
+    assert any("New Dev Call" in c and MEET in c for c in cells)
+    assert other in cells
+    offered = [o.get("value") for o in select(html, "datalist#meeting-links option")]
+    assert offered == [MEET, other]
+
+
 async def test_the_admin_sees_every_owners_meetings(
     overseer: TestClient, async_db_session: AsyncSession
 ) -> None:

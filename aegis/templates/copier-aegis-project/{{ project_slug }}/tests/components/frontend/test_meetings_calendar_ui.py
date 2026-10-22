@@ -1,5 +1,6 @@
 """Meetings > Calendar in the Flet Overseer, minus the runtime: the month it
-asks the admin API for, and each day's meetings as lines."""
+asks the admin API for, each day's meetings as lines, and what one shows
+when it is opened."""
 
 from datetime import date
 from typing import Any
@@ -7,6 +8,7 @@ from typing import Any
 from app.components.frontend.dashboard.modals.meetings_calendar_tab import (
     by_day,
     entry_line,
+    event_sections,
     month_params,
 )
 
@@ -37,3 +39,24 @@ def test_each_day_lists_its_meetings_as_lines_in_order() -> None:
         "13:00 Standup",
         "15:30 Review",
     ]
+
+
+def test_a_meeting_opens_with_what_its_invite_says() -> None:
+    invite = STANDUP | {
+        "organizer": "Dana",
+        "url": "https://meet.google.com/abc-defg-hij",
+        "description": "Agenda: pricing",
+        "invited": [
+            {"email": "dana@example.com", "name": "Dana Okafor", "color": 2},
+            {"email": "leo@example.com", "name": None, "color": None},
+        ],
+    }
+
+    [(_, fields)] = event_sections(invite)
+
+    shown = dict(fields)
+    assert shown["Calendar"] == "notetaker" and shown["Organizer"] == "Dana"
+    assert shown["Where it stands"] == "Upcoming"
+    assert shown["Link"] == invite["url"]
+    assert shown["About"] == "Agenda: pricing"
+    assert shown["Invited"] == "Dana Okafor\nleo@example.com"

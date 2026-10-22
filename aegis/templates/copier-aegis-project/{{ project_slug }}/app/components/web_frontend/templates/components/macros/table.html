@@ -11,8 +11,9 @@
    ``int``, ``status`` (the value is
    ``{"label", "tone"}``, rendered as a ``badge``), ``code`` (monospace,
    wrapping: a key, a rule, a command) or ``link`` (the value is
-   ``{"label", "url"}``; the link replaces ``target``, default
-   ``#app-content``, the way a list's row opens its item), ``avatar`` (the
+   ``{"label", "url"}``, and ``sub``, a muted second line under it; the
+   link replaces ``target``, default ``#app-content``, the way a list's
+   row opens its item), ``avatar`` (the
    row's ``icon_url`` brand mark, or the initial, before the name); ``wrap`` lets a
    long text cell wrap instead of running on. A row marked ``group`` reads as a
    heading and the ``child`` rows after it are indented (a total and its
@@ -59,6 +60,7 @@
 {%- set icon_url = row["icon_url"] if row is mapping and "icon_url" in row else row|attr("icon_url") -%}
 <span class="inline-flex items-center gap-2">{{ avatar(value.label, icon_url if icon_url is string else None) }}{{ link }}</span>
 {%- else -%}{{ link }}{%- endif -%}
+{%- if value.sub %}<div class="text-xs text-aegis-muted">{{ value.sub }}</div>{% endif -%}
 {%- else -%}
 {{ value }}
 {%- endif -%}

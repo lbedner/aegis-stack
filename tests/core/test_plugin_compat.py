@@ -165,6 +165,15 @@ class TestCheckAegisVersionCompat:
         assert not compatible
         assert "0.7.0rc1" in msg
 
+    def test_pre_release_accepted_when_the_constraint_names_one(self) -> None:
+        """A constraint that itself names a pre-release accepts them, as
+        pip does: the author asked for it."""
+        spec = _spec("scraper", aegis_version=">=0.7.0rc1")
+        compatible, _ = check_aegis_version_compat(
+            spec, current_aegis_version="0.7.0rc2"
+        )
+        assert compatible
+
     def test_stable_in_range_accepted(self) -> None:
         spec = _spec("scraper", aegis_version=">=0.6,<0.8")
         compatible, msg = check_aegis_version_compat(

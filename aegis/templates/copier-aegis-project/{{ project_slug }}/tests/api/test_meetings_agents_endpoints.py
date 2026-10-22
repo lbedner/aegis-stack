@@ -88,3 +88,27 @@ async def test_overseer_reads_every_agents_calendar(
     assert {e["agent"] for e in week.json()} == {DEFAULT_AGENT}
     assert unknown.status_code == 422 and "Mars/Olympus" in unknown.json()["detail"]
     assert too_long.status_code == 422
+
+
+async def test_overseer_opens_one_meeting_on_a_calendar(
+    authenticated_client: TestClient,
+    async_db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With who is invited; an id on no calendar is a 404."""
+    let_into_overseer(authenticated_client, monkeypatch)
+    await read_calendars(
+        async_db_session, Calendar(monkeypatch, STANDUP).read, at(18, 0)
+    )
+    days = {"first": "2026-10-19", "last": "2026-10-19"}
+    [standup] = authenticated_client.get(CALENDAR, params=days).json()
+
+    opened = authenticated_client.get(f"{CALENDAR}/{standup['id']}")
+    missing = authenticated_client.get(f"{CALENDAR}/0")
+
+    assert opened.status_code == 200, opened.text
+    assert [i["email"] for i in opened.json()["invited"]] == [
+        "dana@example.com",
+        "leo@example.com",
+    ]
+    assert missing.status_code == 404

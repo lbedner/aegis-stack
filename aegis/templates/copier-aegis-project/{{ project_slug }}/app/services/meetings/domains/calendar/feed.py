@@ -31,6 +31,7 @@ class CalendarMeeting(BaseModel):
     url: str | None
     organizer: str | None
     emails: list[str]
+    description: str | None = None
     cancelled: bool
 
 
@@ -61,6 +62,7 @@ def _meeting(event: Any) -> CalendarMeeting:
         url=_link(event),
         organizer=_organizer(event.get("ORGANIZER")),
         emails=_emails(event),
+        description=_description(event),
         cancelled=str(event.get("STATUS", "")).upper() == "CANCELLED",
     )
 
@@ -76,6 +78,28 @@ def _link(event: Any) -> str | None:
             continue
         return url
     return None
+
+
+# Lines Google writes into every invite with a Meet: not the organizer's.
+GOOGLE_LINES = (
+    "Join with Google Meet",
+    "Join by phone",
+    "Or dial:",
+    "More phone numbers:",
+    "Learn more about Meet",
+    "Meeting link:",
+    "-::~",
+)
+
+
+def _description(event: Any) -> str | None:
+    """What the organizer wrote on the invite, Google's join and dial-in
+    lines left out; None when that leaves nothing."""
+    # ponytail: line prefixes, as Google writes them in English; an HTML
+    # description or another locale's wording passes through whole.
+    lines = str(event.get("DESCRIPTION", "")).splitlines()
+    kept = [line for line in lines if not line.strip().startswith(GOOGLE_LINES)]
+    return "\n".join(kept).strip() or None
 
 
 def _address(prop: Any) -> str:

@@ -11,13 +11,12 @@ commits them.
 """
 
 from collections.abc import Iterable
-import hashlib
-import secrets
 
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.time import utcnow
+from app.core.tokens import digest, mint
 from app.core.tools import mcp_servable
 
 from .models.tokens import McpToken
@@ -35,34 +34,30 @@ def scoped(grant: Iterable[str], scope: str) -> list[str]:
     return mcp_servable(grant, SCOPES[scope])
 
 
-def _digest(value: str) -> str:
-    return hashlib.sha256(value.encode()).hexdigest()
-
-
 async def create(
     db: AsyncSession, user_id: int, name: str, scope: str
 ) -> tuple[McpToken, str]:
     """A new token for ``user_id``: its row, and its value (shown once)."""
     if scope not in SCOPES:
         raise ValueError(f"Unknown scope {scope!r}: one of {', '.join(SCOPES)}")
-    value = PREFIX + secrets.token_urlsafe(32)
+    minted = mint(PREFIX)
     row = McpToken(
         user_id=user_id,
         name=name,
         scope=scope,
-        token_hash=_digest(value),
-        hint=value[: len(PREFIX) + 4],
+        token_hash=minted.digest,
+        hint=minted.hint,
     )
     db.add(row)
     await db.flush()
-    return row, value
+    return row, minted.value
 
 
 async def resolve(db: AsyncSession, value: str) -> McpToken | None:
     """The live token ``value`` is, noting its use; None if it is unknown
     or revoked."""
     query = select(McpToken).where(
-        McpToken.token_hash == _digest(value), col(McpToken.revoked_at).is_(None)
+        McpToken.token_hash == digest(value), col(McpToken.revoked_at).is_(None)
     )
     row = (await db.exec(query)).first()
     if row is None:

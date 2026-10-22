@@ -63,6 +63,7 @@ def test_a_row_says_whose_it_is_how_it_went_and_how_long() -> None:
 
     assert MEET in cells and "4242" in cells and "Left" in cells
     assert "30:30" in cells
+    assert meeting_cells(MEETING | {"title": "New Dev Call"})[0] == "New Dev Call"
 
 
 def test_a_meeting_reads_with_its_notes_transcript_and_what_was_heard() -> None:
@@ -114,8 +115,7 @@ def test_my_items_come_first_once_i_say_which_speaker_i_am() -> None:
 
 
 def test_it_follows_a_meeting_while_something_is_happening() -> None:
-    assert following(_record(under_way=True))
-    assert following(_record(writing=True))
+    assert following(_record(following=True))
     assert not following(_record())
 
 

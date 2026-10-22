@@ -18,8 +18,10 @@ from app.services.meetings.domains.accounts.service import agents as every_agent
 from app.services.meetings.domains.calendar.entries import (
     MOST_DAYS,
     CalendarEntry,
+    CalendarEventDetail,
     chosen,
     entries_between,
+    entry_of,
 )
 from app.services.meetings.domains.threads.service import meeting_threads
 from app.services.meetings.models import Meeting, MeetingRecord, ThreadSection
@@ -64,6 +66,22 @@ async def calendar(
         )
     wanted = chosen(await every_agent(svc.db), agent)
     return await entries_between(svc.db, first, last, zone, wanted)
+
+
+@router.get(
+    "/calendar/{event_id}", response_model=CalendarEventDetail, dependencies=READ
+)
+async def calendar_event(
+    event_id: int, svc: Every, tz: str = "UTC"
+) -> CalendarEventDetail:
+    """One meeting on any agent's calendar, in time zone ``tz``: what its
+    organizer wrote, and who is invited, named for whoever spoke on its
+    link. Before the meeting routes: not a meeting id."""
+    zone = zone_named(tz)
+    if zone is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"No time zone {tz}")
+    with as_http():
+        return await entry_of(svc.db, event_id, zone)
 
 
 @router.get("/{meeting_id}", response_model=MeetingRecord, dependencies=READ)

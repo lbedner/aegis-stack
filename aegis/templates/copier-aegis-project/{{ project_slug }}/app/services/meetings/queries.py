@@ -13,6 +13,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.meetings.domains.notes import queries as notes_queries
 from app.services.meetings.models import (
+    CalendarEvent,
     Meeting,
     MeetingParticipant,
     MeetingStatus,
@@ -32,6 +33,18 @@ async def meetings_of(
         .limit(limit)
     )
     return list((await db.exec(query)).all())
+
+
+async def title_for(db: AsyncSession, url: str) -> str | None:
+    """What a calendar last called the meeting on ``url``; None when it is
+    on none."""
+    query = (
+        select(CalendarEvent.title)
+        .where(CalendarEvent.url == url, CalendarEvent.title != "")
+        .order_by(col(CalendarEvent.starts_at).desc())
+        .limit(1)
+    )
+    return (await db.exec(query)).first()
 
 
 async def meeting(

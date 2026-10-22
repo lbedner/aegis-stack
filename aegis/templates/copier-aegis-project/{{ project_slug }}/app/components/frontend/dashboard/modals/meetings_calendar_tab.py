@@ -1,5 +1,5 @@
 """Meetings > Calendar in the Flet Overseer: every agent's calendar, a month
-at a time, each meeting a line in its agent's color. The same month as the
+at a time, each meeting a line that opens what its invite says. The same month as the
 htmx Overseer's Calendar, over the admin API (``api/meetings/admin.py``),
 in UTC: the Flet app renders on the server, which does not know the
 viewer's time zone.
@@ -15,12 +15,16 @@ from typing import Any
 import flet as ft
 
 from app.components.frontend.controls import SecondaryText
+from app.components.frontend.controls.record_detail import (
+    DetailSection,
+    RecordDetailDialog,
+)
 from app.components.frontend.state.session_state import get_session_state
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.time import WEEKDAYS, month_days, month_grid, shift_month, today
 from app.services.meetings.domains.calendar.entries import state_label
 
-from .modal_sections import ChartColors, EmptyStatePlaceholder
+from .modal_sections import EmptyStatePlaceholder
 
 CALENDAR = "/api/v1/meetings/admin/calendar"
 
@@ -46,6 +50,26 @@ def by_day(entries: list[dict[str, Any]]) -> dict[date, list[dict[str, Any]]]:
 def entry_line(entry: dict[str, Any]) -> str:
     """One meeting as its day shows it: ``09:00 Standup``."""
     return f"{_start(entry):%H:%M} {entry.get('title')}"
+
+
+def event_sections(entry: dict[str, Any]) -> list[DetailSection]:
+    """One meeting opened (the admin API's ``CalendarEventDetail``): whose
+    calendar, where it stands, who organized it, what they wrote, its link,
+    and everyone invited, one a line, by name where someone is known."""
+    invited = [i.get("name") or i.get("email") for i in entry.get("invited") or []]
+    return [
+        (
+            "",
+            [
+                ("Calendar", entry.get("agent")),
+                ("Where it stands", state_label(str(entry.get("state")))),
+                ("Organizer", entry.get("organizer")),
+                ("About", entry.get("description")),
+                ("Link", entry.get("url")),
+                ("Invited", "\n".join(str(i) for i in invited)),
+            ],
+        )
+    ]
 
 
 class CalendarTab(ft.Container):
@@ -170,9 +194,6 @@ class CalendarTab(ft.Container):
         )
 
     def _entry(self, entry: dict[str, Any]) -> ft.Control:
-        color = ChartColors.RAMP[
-            (int(entry.get("color") or 1) - 1) % len(ChartColors.RAMP)
-        ]
         return ft.Container(
             content=ft.Text(
                 entry_line(entry),
@@ -182,6 +203,20 @@ class CalendarTab(ft.Container):
                 overflow=ft.TextOverflow.ELLIPSIS,
             ),
             tooltip=f"{entry.get('agent')}, {state_label(str(entry.get('state')))}",
-            border=ft.border.only(left=ft.BorderSide(3, color)),
             padding=ft.padding.only(left=4),
+            on_click=lambda _e: self.page.run_task(self._open, entry),
         )
+
+    async def _open(self, entry: dict[str, Any]) -> None:
+        """The meeting's invite, read whole, in a dialog over the month."""
+        api = get_session_state(self.page).api_client
+        detail = await api.get(f"{CALENDAR}/{entry['id']}", params={"tz": "UTC"})
+        if not isinstance(detail, dict):
+            return
+        start, end = _start(detail), datetime.fromisoformat(str(detail["ends_at"]))
+        RecordDetailDialog(
+            self.page,
+            str(detail.get("title")),
+            event_sections(detail),
+            subtitle=f"{start:%a %b} {start.day}, {start:%H:%M} - {end:%H:%M} UTC",
+        ).show()

@@ -2838,6 +2838,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#animations-the-player" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Animations: the player
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#feedback" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -6633,6 +6644,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#animations-the-player" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Animations: the player
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#feedback" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -6937,13 +6959,39 @@ result list, a dialog body. Those handlers return the fragment directly with
 <code>templates.TemplateResponse</code> and live under <code>routes/partials/</code>, mounted with a
 <code>/partials/...</code> prefix in <code>create_web_frontend_app()</code>. Fragment templates have
 no <code>{% extends %}</code>.</p>
+<h2 id="animations-the-player">Animations: the player</h2>
+<p>Anything that plays out over time (Overseer's request replay is the first)
+uses one player, <code>static/js/timeline.js</code>, and its controls macro,
+<code>components/macros/player.html</code>. A page hands it steps; it knows nothing of
+what they mean:</p>
+<div class="language-jinja highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="cp">{%</span> <span class="k">from</span> <span class="s2">&quot;components/macros/player.html&quot;</span> <span class="k">import</span> <span class="nv">player</span> <span class="cp">%}</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="cp">{%</span> <span class="k">call</span> <span class="nv">player</span><span class="o">(</span><span class="nv">steps</span><span class="o">)</span> <span class="cp">%}</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="x">  ... what the steps light: a map, a list, anything ...</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="cp">{%</span> <span class="k">endcall</span> <span class="cp">%}</span>
+</span></code></pre></div>
+<p>Each step is <code>{"at": ms, "ms": ms, "targets": [css selectors], "state":
+"active" | "refused" | "stall" | "failed"}</code>. At any moment the player sets
+<code>data-play-state</code> on what is lit (and <code>done</code> on what ran before) and leaves
+the look to CSS (<code>input.css</code>, under <code>[data-play-state]</code>), so a new animation is
+a function that turns its data into steps and, at most, a few CSS rules. It
+plays, pauses, steps back and forward, seeks and slows down (real time to 1000x slower);
+with reduced motion it moves a step at a time and nothing runs between.</p>
+<p>A step may also carry <code>"says"</code>: the latest one to start is shown in words
+under the controls. To play in scenes, one after another (the replay's
+levels), put each in a <code>data-play-scene="key"</code> element inside the player
+with <code>data-play-at</code> and <code>data-play-ms</code>: only the scene whose span holds the
+moment shows, and the clock counts within it. Staged beats ahead of its real
+time (the replay's way in) go in <code>data-play-lead</code>; the clock holds at 0
+through them, and at its end through any after. <code>player(steps,
+chapters=[{"key": ..., "title": ...}, ...])</code> adds a button per scene that goes to its
+start.</p>
 <h2 id="feedback">Feedback</h2>
 <h3 id="toasts">Toasts</h3>
 <p>A route attaches a toast to any response:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.components.web_frontend.rendering</span><span class="w"> </span><span class="kn">import</span> <span class="n">render</span><span class="p">,</span> <span class="n">with_toast</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="n">response</span> <span class="o">=</span> <span class="n">render</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="s2">&quot;pages/accounts.html&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;rows&quot;</span><span class="p">:</span> <span class="n">rows</span><span class="p">})</span>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="k">return</span> <span class="n">with_toast</span><span class="p">(</span><span class="n">response</span><span class="p">,</span> <span class="s2">&quot;Account saved&quot;</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.components.web_frontend.rendering</span><span class="w"> </span><span class="kn">import</span> <span class="n">render</span><span class="p">,</span> <span class="n">with_toast</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="n">response</span> <span class="o">=</span> <span class="n">render</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="s2">&quot;pages/accounts.html&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;rows&quot;</span><span class="p">:</span> <span class="n">rows</span><span class="p">})</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="k">return</span> <span class="n">with_toast</span><span class="p">(</span><span class="n">response</span><span class="p">,</span> <span class="s2">&quot;Account saved&quot;</span><span class="p">)</span>
 </span></code></pre></div>
 <p><code>with_toast</code> writes an <code>HX-Trigger</code> header. htmx raises a <code>toast</code> DOM event,
 and the region the base layout mounts (<code>toast_region()</code> from
@@ -6997,8 +7045,8 @@ re-render instead of restoring a snapshot.</p>
 <h2 id="the-macro-kit">The macro kit</h2>
 <p>Macros live under <code>templates/components/macros/</code>, one file per concern, one
 macro per control. Import what you need:</p>
-<div class="language-html highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>{% from &quot;components/macros/form.html&quot; import primary_button, or_divider %}
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>{% from &quot;components/macros/table.html&quot; import data_table %}
+<div class="language-html highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>{% from &quot;components/macros/form.html&quot; import primary_button, or_divider %}
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>{% from &quot;components/macros/table.html&quot; import data_table %}
 </span></code></pre></div>
 <table>
 <thead>
@@ -7024,6 +7072,10 @@ macro per control. Import what you need:</p>
 <td><code>feedback.html</code></td>
 <td><code>toast_region</code>, <code>empty_state</code>, <code>error_banner</code>, <code>oob(id, tag)</code> (an out-of-band sibling rendered next to a swapped row)</td>
 </tr>
+<tr>
+<td><code>player.html</code></td>
+<td><code>player(steps, label, chapters)</code>: the player's controls and steps around what they light, body via <code>{% call %}</code> (see <em>Animations: the player</em>)</td>
+</tr>
 </tbody>
 </table>
 <p><code>chart_panel(id, title, kind, data)</code> renders a canvas plus a JSON block;
@@ -7048,26 +7100,26 @@ report for an agent to read before building.</p>
 <h3 id="a-table-page">A table page</h3>
 <p>Declare the columns, hand over the rows the service already returns, and
 let <code>kind</code> do the formatting. Nobody writes a <code>&lt;table&gt;</code> by hand.</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="n">COLUMNS</span> <span class="o">=</span> <span class="p">[</span>
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    <span class="p">{</span><span class="s2">&quot;key&quot;</span><span class="p">:</span> <span class="s2">&quot;date&quot;</span><span class="p">,</span> <span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="s2">&quot;Date&quot;</span><span class="p">,</span> <span class="s2">&quot;kind&quot;</span><span class="p">:</span> <span class="s2">&quot;date&quot;</span><span class="p">},</span>
-</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    <span class="p">{</span><span class="s2">&quot;key&quot;</span><span class="p">:</span> <span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="s2">&quot;Name&quot;</span><span class="p">},</span>
-</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>    <span class="p">{</span><span class="s2">&quot;key&quot;</span><span class="p">:</span> <span class="s2">&quot;amount&quot;</span><span class="p">,</span> <span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="s2">&quot;Amount&quot;</span><span class="p">,</span> <span class="s2">&quot;kind&quot;</span><span class="p">:</span> <span class="s2">&quot;money&quot;</span><span class="p">,</span> <span class="s2">&quot;align&quot;</span><span class="p">:</span> <span class="s2">&quot;right&quot;</span><span class="p">},</span>
-</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="p">]</span>
-</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>
-</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="nd">@router</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/transactions&quot;</span><span class="p">,</span> <span class="n">include_in_schema</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">transactions</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Response</span><span class="p">:</span>
-</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>    <span class="n">rows</span> <span class="o">=</span> <span class="k">await</span> <span class="n">list_transactions</span><span class="p">()</span>
-</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>    <span class="k">return</span> <span class="n">render</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="s2">&quot;pages/transactions.html&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;rows&quot;</span><span class="p">:</span> <span class="n">rows</span><span class="p">,</span> <span class="s2">&quot;columns&quot;</span><span class="p">:</span> <span class="n">COLUMNS</span><span class="p">})</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="n">COLUMNS</span> <span class="o">=</span> <span class="p">[</span>
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    <span class="p">{</span><span class="s2">&quot;key&quot;</span><span class="p">:</span> <span class="s2">&quot;date&quot;</span><span class="p">,</span> <span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="s2">&quot;Date&quot;</span><span class="p">,</span> <span class="s2">&quot;kind&quot;</span><span class="p">:</span> <span class="s2">&quot;date&quot;</span><span class="p">},</span>
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>    <span class="p">{</span><span class="s2">&quot;key&quot;</span><span class="p">:</span> <span class="s2">&quot;name&quot;</span><span class="p">,</span> <span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="s2">&quot;Name&quot;</span><span class="p">},</span>
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>    <span class="p">{</span><span class="s2">&quot;key&quot;</span><span class="p">:</span> <span class="s2">&quot;amount&quot;</span><span class="p">,</span> <span class="s2">&quot;label&quot;</span><span class="p">:</span> <span class="s2">&quot;Amount&quot;</span><span class="p">,</span> <span class="s2">&quot;kind&quot;</span><span class="p">:</span> <span class="s2">&quot;money&quot;</span><span class="p">,</span> <span class="s2">&quot;align&quot;</span><span class="p">:</span> <span class="s2">&quot;right&quot;</span><span class="p">},</span>
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="p">]</span>
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="nd">@router</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/transactions&quot;</span><span class="p">,</span> <span class="n">include_in_schema</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">transactions</span><span class="p">(</span><span class="n">request</span><span class="p">:</span> <span class="n">Request</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Response</span><span class="p">:</span>
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>    <span class="n">rows</span> <span class="o">=</span> <span class="k">await</span> <span class="n">list_transactions</span><span class="p">()</span>
+</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>    <span class="k">return</span> <span class="n">render</span><span class="p">(</span><span class="n">request</span><span class="p">,</span> <span class="s2">&quot;pages/transactions.html&quot;</span><span class="p">,</span> <span class="p">{</span><span class="s2">&quot;rows&quot;</span><span class="p">:</span> <span class="n">rows</span><span class="p">,</span> <span class="s2">&quot;columns&quot;</span><span class="p">:</span> <span class="n">COLUMNS</span><span class="p">})</span>
 </span></code></pre></div>
-<div class="language-html highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>{% extends layout %}
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>{% from &quot;components/macros/layout.html&quot; import card %}
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>{% from &quot;components/macros/table.html&quot; import data_table %}
-</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>
-</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>{% block app_content %}
-</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>{% call card(&quot;Transactions&quot;) %}
-</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>{{ data_table(columns, rows, empty=&quot;No transactions yet&quot;) }}
-</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>{% endcall %}
-</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>{% endblock %}
+<div class="language-html highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>{% extends layout %}
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>{% from &quot;components/macros/layout.html&quot; import card %}
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>{% from &quot;components/macros/table.html&quot; import data_table %}
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>{% block app_content %}
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>{% call card(&quot;Transactions&quot;) %}
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>{{ data_table(columns, rows, empty=&quot;No transactions yet&quot;) }}
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>{% endcall %}
+</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>{% endblock %}
 </span></code></pre></div>
 <p>Rows may be objects or dicts. <code>money</code> reads the row's <code>currency</code> when it
 has one, a blank value renders as a dash, and zero rows render the
@@ -7076,8 +7128,8 @@ has one, a blank value renders as a dash, and zero rows render the
 <p><code>dialog()</code> is mounted once by the base layout; it is a target, not a
 component you instantiate. Any swap into <code>#dialog-body</code> opens it, Escape
 or the close button closes it, and closing clears the body.</p>
-<div class="language-html highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="p">&lt;</span><span class="nt">button</span> <span class="na">type</span><span class="o">=</span><span class="s">&quot;button&quot;</span>
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>        <span class="na">hx-get</span><span class="o">=</span><span class="s">&quot;/transactions/42/edit&quot;</span> <span class="na">hx-target</span><span class="o">=</span><span class="s">&quot;#dialog-body&quot;</span><span class="p">&gt;</span>Edit<span class="p">&lt;/</span><span class="nt">button</span><span class="p">&gt;</span>
+<div class="language-html highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="p">&lt;</span><span class="nt">button</span> <span class="na">type</span><span class="o">=</span><span class="s">&quot;button&quot;</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>        <span class="na">hx-get</span><span class="o">=</span><span class="s">&quot;/transactions/42/edit&quot;</span> <span class="na">hx-target</span><span class="o">=</span><span class="s">&quot;#dialog-body&quot;</span><span class="p">&gt;</span>Edit<span class="p">&lt;/</span><span class="nt">button</span><span class="p">&gt;</span>
 </span></code></pre></div>
 <p>The handler returns a bare fragment (a fragment-only route; no layout).
 A form inside it posts back the same way, with <code>hx-target="#dialog-body"</code>
@@ -7124,8 +7176,8 @@ for "re-request this URL and replace <code>target</code> with the same element f
 response": filter forms, pagers, and list links that keep their state in the
 URL. It always swaps <code>outerHTML</code>, because selecting the element you target
 with the default inner swap nests a copy on every request.</p>
-<div class="language-html highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="p">&lt;</span><span class="nt">form</span> <span class="err">{{</span> <span class="na">hx_replace</span><span class="err">(</span><span class="na">request</span><span class="err">.</span><span class="na">url</span><span class="err">.</span><span class="na">path</span><span class="err">,</span> <span class="err">&quot;#</span><span class="na">register</span><span class="err">&quot;)</span> <span class="err">}}</span> <span class="na">hx-trigger</span><span class="o">=</span><span class="s">&quot;change&quot;</span><span class="p">&gt;</span>
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="p">&lt;</span><span class="nt">a</span> <span class="na">href</span><span class="o">=</span><span class="s">&quot;{{ pager.next }}&quot;</span> <span class="err">{{</span> <span class="na">hx_replace</span><span class="err">(</span><span class="na">pager</span><span class="err">.</span><span class="na">next</span><span class="err">,</span> <span class="err">&quot;#</span><span class="na">items</span><span class="err">&quot;)</span> <span class="err">}}</span><span class="p">&gt;</span>Next<span class="p">&lt;/</span><span class="nt">a</span><span class="p">&gt;</span>
+<div class="language-html highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="p">&lt;</span><span class="nt">form</span> <span class="err">{{</span> <span class="na">hx_replace</span><span class="err">(</span><span class="na">request</span><span class="err">.</span><span class="na">url</span><span class="err">.</span><span class="na">path</span><span class="err">,</span> <span class="err">&quot;#</span><span class="na">register</span><span class="err">&quot;)</span> <span class="err">}}</span> <span class="na">hx-trigger</span><span class="o">=</span><span class="s">&quot;change&quot;</span><span class="p">&gt;</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="p">&lt;</span><span class="nt">a</span> <span class="na">href</span><span class="o">=</span><span class="s">&quot;{{ pager.next }}&quot;</span> <span class="err">{{</span> <span class="na">hx_replace</span><span class="err">(</span><span class="na">pager</span><span class="err">.</span><span class="na">next</span><span class="err">,</span> <span class="err">&quot;#</span><span class="na">items</span><span class="err">&quot;)</span> <span class="err">}}</span><span class="p">&gt;</span>Next<span class="p">&lt;/</span><span class="nt">a</span><span class="p">&gt;</span>
 </span></code></pre></div>
 <p>The htmx config in <code>base.html</code> sets <code>attributesToSettle</code> to an empty list.
 htmx's settle step otherwise copies <code>class</code> and <code>style</code> from the old element
@@ -7141,12 +7193,12 @@ has just applied.</p>
 <li><code>dom.select</code>, <code>one</code>, <code>none</code> and <code>text</code>, so assertions target elements
   rather than substrings of the response.</li>
 </ul>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">tests.web.dom</span><span class="w"> </span><span class="kn">import</span> <span class="n">none</span><span class="p">,</span> <span class="n">one</span><span class="p">,</span> <span class="n">text</span>
-</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>
-</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_accounts_fragment</span><span class="p">(</span><span class="n">hx</span><span class="p">):</span>
-</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>    <span class="n">fragment</span> <span class="o">=</span> <span class="n">hx</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/accounts&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">text</span>
-</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>    <span class="k">assert</span> <span class="n">text</span><span class="p">(</span><span class="n">one</span><span class="p">(</span><span class="n">fragment</span><span class="p">,</span> <span class="s2">&quot;h1&quot;</span><span class="p">))</span> <span class="o">==</span> <span class="s2">&quot;Accounts&quot;</span>
-</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a>    <span class="n">none</span><span class="p">(</span><span class="n">fragment</span><span class="p">,</span> <span class="s2">&quot;html&quot;</span><span class="p">)</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">tests.web.dom</span><span class="w"> </span><span class="kn">import</span> <span class="n">none</span><span class="p">,</span> <span class="n">one</span><span class="p">,</span> <span class="n">text</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="k">def</span><span class="w"> </span><span class="nf">test_accounts_fragment</span><span class="p">(</span><span class="n">hx</span><span class="p">):</span>
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>    <span class="n">fragment</span> <span class="o">=</span> <span class="n">hx</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;/accounts&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">text</span>
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>    <span class="k">assert</span> <span class="n">text</span><span class="p">(</span><span class="n">one</span><span class="p">(</span><span class="n">fragment</span><span class="p">,</span> <span class="s2">&quot;h1&quot;</span><span class="p">))</span> <span class="o">==</span> <span class="s2">&quot;Accounts&quot;</span>
+</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>    <span class="n">none</span><span class="p">(</span><span class="n">fragment</span><span class="p">,</span> <span class="s2">&quot;html&quot;</span><span class="p">)</span>
 </span></code></pre></div>
 
 

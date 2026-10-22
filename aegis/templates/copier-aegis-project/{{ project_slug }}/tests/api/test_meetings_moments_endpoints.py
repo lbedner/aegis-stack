@@ -146,3 +146,23 @@ async def test_an_owner_makes_lists_and_revokes_runner_tokens(
     assert [(t["name"], "value" in t) for t in listed.json()] == [("laptop", False)]
     assert revoked.status_code == 204
     assert authenticated_client.get(TOKENS).json() == []
+
+
+async def test_an_owner_has_a_meeting_read_over_again(
+    authenticated_client: TestClient,
+    async_db_session: AsyncSession,
+    acting_owner_user_id: int | None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Its call read over for moments: what it holds after."""
+    from app.services.meetings.domains.moments import tidy
+
+    monkeypatch.setattr(tidy, "cleaner", lambda: None)
+    meeting_id, _ = await asked_a_question(async_db_session, acting_owner_user_id)
+
+    found = authenticated_client.post(f"{MEETINGS}/{meeting_id}/moments/find")
+    missing = authenticated_client.post(f"{MEETINGS}/0/moments/find")
+
+    assert found.status_code == 200, found.text
+    assert [m["kind"] for m in found.json()] == ["question"]
+    assert missing.status_code == 404

@@ -1,0 +1,85 @@
+{% if include_ai and ai_backend != "memory" and ai_framework == "pydantic-ai" %}
+"""The questions a call threw up, cleaned up after it
+(``meetings.domains.moments.clean``): one pass of the
+``meeting-questions`` agent keeps each card that asks what the system, its
+code or its data could answer, names it by its topic (cards on one topic
+become one), and drops the rest, unless something was asked of it. The
+model is pydantic-ai's ``TestModel``: what is under test is the plumbing."""
+
+from typing import Any
+
+import pytest
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.services.ai.domains.spend import recording
+from app.services.meetings.domains.actions.runs import ask
+from app.services.meetings.domains.moments import clean
+from app.services.meetings.domains.moments.service import moments_of
+from tests._meetings import a_meeting, answering, said
+from tests._session import opens
+
+
+@pytest.fixture(autouse=True)
+def _on_the_test_session(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(clean, "get_async_session", opens(async_db_session))
+
+    async def record_usage(**_: Any) -> float:
+        return 0.0
+
+    monkeypatch.setattr(recording, "record_usage", record_usage)
+
+
+async def test_the_cards_worth_asking_are_kept_and_named_by_topic(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A card on the same topic as another becomes one with it; one the
+    model drops goes, unless something was already asked of it."""
+    meeting_id = await a_meeting(async_db_session)
+    await said(
+        async_db_session,
+        meeting_id,
+        ("Dana", "How do members return a scale?"),
+        ("Tom", "Did lunch arrive yet?"),
+        ("Priya", "What does the assistant say on returns?"),
+        ("Tom", "Is the projector on?"),
+        apart=300.0,
+    )
+    returns, lunch, again, projector = await moments_of(async_db_session, meeting_id)
+    await ask(async_db_session, projector.id, "agent", owner_user_id=None)
+    topic = "Scale returns"
+    answering(
+        monkeypatch,
+        {
+            "questions": [
+                {"id": returns.id, "keep": True, "topic": topic},
+                {"id": lunch.id, "keep": False, "topic": "Lunch"},
+                {"id": again.id, "keep": True, "topic": topic},
+                {"id": projector.id, "keep": False, "topic": "Projector"},
+            ]
+        },
+    )
+
+    await clean.clean_up(meeting_id)
+
+    kept = await moments_of(async_db_session, meeting_id)
+    assert [(card.id, card.topic) for card in kept] == [
+        (returns.id, topic),
+        (projector.id, None),
+    ]
+    assert [m.id for m in kept[0].also] == [again.id]
+
+
+async def test_a_model_that_fails_leaves_the_questions_as_they_were(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    meeting_id = await a_meeting(async_db_session)
+    await said(async_db_session, meeting_id, ("Dana", "How do members return a scale?"))
+    answering(monkeypatch, RuntimeError("model down"))
+
+    await clean.clean_up(meeting_id)
+
+    (card,) = await moments_of(async_db_session, meeting_id)
+    assert card.topic is None
+{% endif %}

@@ -1,6 +1,7 @@
 {# What one meeting came to, drawn the same on the Meetings page and in
    Overseer's drawer. ``clock`` maps a transcript line's id to its time. #}
 {% from "components/macros/feedback.html" import empty_state %}
+{% import "components/macros/layout.html" as layout %}
 {% from "components/macros/layout.html" import badge, chart_dot %}
 
 {# Where the bot is with the call, and how long it was in. #}
@@ -95,35 +96,67 @@
 {% endif %}
 {% endmacro %}
 
+{# One moment as its card shows it: who, when, and what was said. #}
+{% macro said_line(moment, clock, voices) -%}
+<div class="flex flex-wrap items-baseline gap-x-2 text-xs">
+  {{ speaker(moment.speaker, voices) }}
+  <span class="tabular-nums text-aegis-muted">{{ clock.get(moment.line_id, "") }}</span>
+</div>
+<p class="text-sm text-aegis-text">{{ moment.text }}</p>
+{%- endmacro %}
+
 {# What the call threw up of one kind (``moments``): each with who said it
    and when, a button per action it offers (a browser action copies its
    prompt; the others are asked, at ``base``), and every run asked of it,
    with where it stands and what it came back with. #}
 {% macro moments(list, clock, voices, base, hx_body) %}
 {% from "components/macros/form.html" import action %}
-{% from "components/macros/layout.html" import copy_button %}
+{% from "components/macros/layout.html" import copy_button, fold_mark %}
+{# A run's tone (``RunRecord.tone``) as its dot and its answer's edge. #}
+{% set dots = {"ok": "bg-aegis-teal", "error": "bg-aegis-error", "muted": "bg-aegis-border"} %}
+{% set edges = {"ok": "border-aegis-teal", "error": "border-aegis-error", "muted": "border-aegis-border"} %}
 <ul class="grid gap-3">
   {% for moment in list %}
-  <li data-moment="{{ moment.id }}" class="grid gap-2 rounded-lg border border-aegis-border p-3">
-    <div class="flex flex-wrap items-baseline gap-x-2 text-xs">
-      {{ speaker(moment.speaker, voices) }}
-      <span class="tabular-nums text-aegis-muted">{{ clock.get(moment.line_id, "") }}</span>
-    </div>
-    <p class="text-sm text-aegis-text">{{ moment.text }}</p>
+  {# Folded to what was asked, and how its answers stand, a dot each; open
+     while one is going. ``data-fold`` keeps it as the reader left it
+     across the page's re-reads (app.js). #}
+  <li>
+  <details data-moment="{{ moment.id }}" data-fold="moment:{{ moment.id }}"{% if moment.runs|selectattr("going")|list %} open{% endif %}
+           class="rounded-lg border border-aegis-border">
+    <summary class="list-none cursor-pointer select-none flex items-start gap-3 p-3">
+      {{ fold_mark("mt-0.5") }}
+      <span class="min-w-0 flex-1">
+        <span {% if moment.topic %}data-topic {% endif %}class="line-clamp-2 text-sm text-aegis-text {{ 'font-semibold' if moment.topic }}">{{ moment.topic or moment.text }}</span>
+        {% if moment.also %}<span class="text-xs text-aegis-muted">{{ moment.also|length + 1 }} asked</span>{% endif %}
+      </span>
+      {% for run in moment.runs %}
+      <span data-run-dot="{{ run.status }}" title="{{ run.label }} · {{ run.state }}"
+            class="mt-1.5 h-2 w-2 shrink-0 rounded-full {{ 'animate-pulse bg-aegis-teal' if run.going else dots[run.tone] }}"></span>
+      {% endfor %}
+    </summary>
+    <div class="grid gap-2 px-3 pb-3">
+    {{ said_line(moment, clock, voices) }}
+    {# The rest of its card: said right after it, or on its topic. #}
+    {% for more in moment.also %}
+    <div data-also="{{ more.id }}" class="grid gap-1 border-l border-aegis-border pl-3">{{ said_line(more, clock, voices) }}</div>
+    {% endfor %}
     {% if moment.actions %}
     <div class="flex flex-wrap gap-2">
       {% for choice in moment.actions %}
       {% if choice.where == "browser" %}{{ copy_button(choice.prompt, choice.label) }}
-      {% else %}{{ action(choice.label, 'data-action="' ~ choice.name ~ '" data-write hx-post="' ~ base ~ '/moments/' ~ moment.id ~ '/runs" ' ~ hx_body, vals={"action": choice.name}) }}{% endif %}
+      {% else %}{{ action(choice.label, 'data-action="' ~ choice.name ~ '" data-write hx-disabled-elt="this" hx-post="' ~ base ~ '/moments/' ~ moment.id ~ '/runs" ' ~ hx_body ~ (' disabled' if choice.busy else ''), vals={"action": choice.name}) }}{% endif %}
       {% endfor %}
     </div>
     {% endif %}
     {% for run in moment.runs %}
-    <div data-run="{{ run.status }}" class="grid gap-1 border-l-2 pl-3 {{ 'border-aegis-teal' if run.status == 'done' else ('border-aegis-error' if run.status == 'failed' else 'border-aegis-border') }}">
-      <p class="text-xs text-aegis-muted">{{ run.label }} · {{ run.state }}</p>
-      {% if run.result %}<div class="prose prose-sm max-w-none text-sm {{ 'text-error' if run.status == 'failed' else 'text-aegis-text' }}">{{ run.result|markdown }}</div>{% endif %}
+    <div data-run="{{ run.status }}" class="grid gap-1 border-l-2 pl-3 {{ edges[run.tone] }}">
+      <p class="text-xs text-aegis-muted">{% if run.going %}<span class="mr-1 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-aegis-teal align-middle" aria-hidden="true"></span>{% endif %}{{ run.label }} · {{ run.state }}</p>
+      {% if run.result and run.status == 'failed' %}<p class="text-sm text-error whitespace-pre-wrap" data-answer>{{ run.result }}</p>
+      {% elif run.result %}<div class="{{ layout.prose }}" data-answer>{{ run.result|markdown }}</div>{% endif %}
     </div>
     {% endfor %}
+    </div>
+  </details>
   </li>
   {% endfor %}
 </ul>

@@ -178,6 +178,24 @@ elif [ "$run_command" = "build-watch" ]; then
     # source) rewrites them, so the manifest never goes stale in dev.
     exec "${RUN[@]}" python -m app.components.web_frontend.build_watch
 {%- endif %}
+{%- if include_meetings %}
+elif [ "$run_command" = "meetings-runner" ]; then
+    # The dev stack's meetings-runner: its keys and command come from
+    # .env.meetings-runner. Without a token it waits instead of failing,
+    # so a stack nobody set it up on starts clean.
+    if [ -z "$MEETINGS_RUNNER_TOKEN" ]; then
+        echo "No MEETINGS_RUNNER_TOKEN in .env.meetings-runner: not answering runs."
+        exec sleep infinity
+    fi
+    # Its own variable: the } in {prompt} would end a ${...:-default}.
+    default_command="claude -p {prompt} --permission-mode plan"
+    args=(--url "$MEETINGS_RUNNER_URL"
+        --command "${MEETINGS_RUNNER_COMMAND:-$default_command}")
+    if [ -n "$MEETINGS_RUNNER_REPO" ]; then
+        args+=(--repo "$MEETINGS_RUNNER_REPO")
+    fi
+    exec "${RUN[@]}" python -m app.cli.main meetings runner "${args[@]}" "$@"
+{%- endif %}
 elif [ "$run_command" = "lint" ]; then
     "${RUN[@]}" ruff check .
 elif [ "$run_command" = "typecheck" ]; then

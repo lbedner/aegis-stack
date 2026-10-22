@@ -330,6 +330,10 @@ class PluginSpec:
     hosts: bool = False
     holds_keys: bool = False
     order: int | None = None
+    # Dev-only compose services that act on the developer's machine for
+    # Overseer (deploy-agent): shown on its page and in its logs, never on
+    # the map.
+    agents: list[str] = field(default_factory=list)
 
     # Dependencies
     required_components: list[str] = field(default_factory=list)

@@ -2,7 +2,7 @@
 pace, and the call it opens; and the meetings those tests read."""
 
 import base64
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from importlib.util import find_spec
@@ -14,10 +14,12 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.meetings import service as meetings_service
+from app.services.meetings.domains.actions import tokens
 from app.services.meetings.domains.bot import run as bot
 from app.services.meetings.domains.bot.audio import RATE
 from app.services.meetings.domains.bot.login import CALENDAR, LOGIN
 from app.services.meetings.domains.bot.row import transition, write_captions
+from app.services.meetings.domains.moments import tidy
 from app.services.meetings.domains.moments.service import moments_of
 from app.services.meetings.domains.notes.service import keep_notes
 from app.services.meetings.domains.people.kept import guides_of, keep_guide
@@ -114,6 +116,24 @@ def hold_the_writer(monkeypatch: pytest.MonkeyPatch) -> tuple[list[int], list[An
     return written, runs
 
 
+def hold_the_cleaner(monkeypatch: pytest.MonkeyPatch) -> tuple[list[int], list[Any]]:
+    """A question clean-up that only says which meetings it cleaned (done
+    with ``CLEANING`` after, as ``clean_up`` is), its runs held rather than
+    started, and none being cleaned yet: the meetings cleaned, and the runs
+    to await."""
+    cleaned: list[int] = []
+
+    async def clean(meeting_id: int) -> None:
+        cleaned.append(meeting_id)
+        tidy.CLEANING.discard(meeting_id)
+
+    runs: list[Any] = []
+    monkeypatch.setattr(tidy, "cleaner", lambda: clean)
+    monkeypatch.setattr(tidy, "background", runs.append)
+    monkeypatch.setattr(tidy, "CLEANING", set())
+    return cleaned, runs
+
+
 def hold_the_series_writer(monkeypatch: pytest.MonkeyPatch) -> list[Any]:
     """A series writer whose runs are held rather than started, and no
     series being written yet: the runs to await."""
@@ -161,17 +181,29 @@ def answering(
 
 
 async def said(
-    session: AsyncSession, meeting_id: int, *lines: tuple[str, str]
+    session: AsyncSession,
+    meeting_id: int,
+    *lines: tuple[str, str],
+    apart: float = 1.0,
+    at: Sequence[float] | None = None,
 ) -> list[int]:
-    """``lines`` (speaker, text) as the meeting's transcript, a second
-    apart, the way the bot keeps captions; their row ids, in order."""
+    """``lines`` (speaker, text) as the meeting's transcript, ``apart``
+    seconds apart (or at the seconds ``at`` names), the way the bot keeps
+    captions; their row ids, in order."""
     rows: dict[str, int] = {}
-    for at, (speaker, text) in enumerate(lines):
-        caption = Caption(str(at), speaker, text)
+    for n, (speaker, text) in enumerate(lines):
+        when = at[n] if at is not None else n * apart
+        caption = Caption(str(n), speaker, text)
         await write_captions(
-            session, meeting_id, [caption], rows, float(at), {caption.line: float(at)}
+            session, meeting_id, [caption], rows, when, {caption.line: when}
         )
-    return [rows[str(at)] for at in range(len(lines))]
+    return [rows[str(n)] for n in range(len(lines))]
+
+
+async def a_runner_looked_in(session: AsyncSession) -> None:
+    """A runner for every owner has just asked for runs: one is running."""
+    _, value = await tokens.create(session, None, "laptop")
+    await tokens.resolve(session, value)
 
 
 async def ended(
@@ -275,6 +307,20 @@ async def asked_twice(
     return meetings, asked
 
 
+async def a_meeting(session: AsyncSession, owner: int | None = None) -> int:
+    """A meeting of ``owner``'s the bot was just asked to join: its id."""
+    meeting = await MeetingsService(session, owner).request(MEET, "Notes")
+    return meeting.id  # type: ignore[return-value]
+
+
+async def topic(session: AsyncSession, moment_ids: list[int], name: str) -> None:
+    """These moments named one card's topic, as a clean-up names them
+    (``tidy.keep_topics``)."""
+    await tidy.keep_topics(
+        session, {moment_ids[0]: moment_ids}, [(moment_ids[0], True, name)]
+    )
+
+
 async def asked_a_question(
     session: AsyncSession,
     owner: int | None = None,
@@ -284,8 +330,7 @@ async def asked_a_question(
     """One of ``owner``'s meetings where, after some talk, Dana asks whether
     the CSV export can ship this week (moved to ``status``, when given): its
     id and the question's moment id."""
-    meeting = await MeetingsService(session, owner).request(MEET, "Notes")
-    meeting_id: int = meeting.id  # type: ignore[assignment]
+    meeting_id = await a_meeting(session, owner)
     await said(
         session,
         meeting_id,

@@ -227,7 +227,7 @@ def meeting_routes(
 ) -> None:
     """The routes one meeting's live body answers: it re-reads itself, asks
     the bot to leave, says which speaker the owner is, writes the notes
-    again. The Meetings page and Overseer's drawer register the same ones,
+    again, reads the call over again for moments. The Meetings page and Overseer's drawer register the same ones,
     each with its own service scope, body template and URL ``prefix`` (the
     router's own)."""
     scoped = Annotated[MeetingsService, Depends(service)]
@@ -265,6 +265,12 @@ def meeting_routes(
         """Write the notes again, over the old ones."""
         with as_http():
             return drawn(await svc.write_notes_again(meeting_id))
+
+    @router.post("/{meeting_id}/moments/find", response_class=HTMLResponse)
+    async def look_over(svc: scoped, meeting_id: int) -> HTMLResponse:  # type: ignore[valid-type]
+        """Read the call over again for moments."""
+        with as_http():
+            return drawn(await svc.look_over(meeting_id))
 
     @router.post("/{meeting_id}/moments/{moment_id}/runs", response_class=HTMLResponse)
     async def ask(

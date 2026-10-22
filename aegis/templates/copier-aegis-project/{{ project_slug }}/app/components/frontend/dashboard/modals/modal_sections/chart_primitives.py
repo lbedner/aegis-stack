@@ -46,9 +46,23 @@ class ChartColors:
     EMERALD = "#10B981"
     ORANGE = "#F97316"
     LIME = "#84CC16"
+    FUCHSIA = "#D946EF"
+    YELLOW = "#EAB308"
     # One colour per series on a multi-series chart, in the htmx charts'
-    # order (--aegis-chart-1..9), so a series reads the same in both UIs.
-    RAMP = (TEAL, VIOLET, AMBER, BLUE, PINK, EMERALD, ORANGE, CYAN, LIME)
+    # order (--aegis-chart-1..11), so a series reads the same in both UIs.
+    RAMP = (
+        TEAL,
+        VIOLET,
+        AMBER,
+        BLUE,
+        PINK,
+        EMERALD,
+        ORANGE,
+        CYAN,
+        LIME,
+        FUCHSIA,
+        YELLOW,
+    )
 
 
 def chart_tooltip_kwargs() -> dict[str, Any]:

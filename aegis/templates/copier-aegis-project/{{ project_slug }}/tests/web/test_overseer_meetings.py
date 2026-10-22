@@ -105,6 +105,7 @@ async def test_a_row_opens_its_notes_and_transcript_in_the_drawer(
     assert "Ada" in text(one(html, "#meeting-heard"))
     assert one(html, "[hx-get$='/confirm-delete']") is not None
     none(html, "[data-leave]")
+    one(html, "#meeting-body[data-drawer-wide]")  # a call reads wide, as a series does
 
 
 def _tabs(html: str) -> tuple[list[str], list[str]]:

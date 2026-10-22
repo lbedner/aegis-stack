@@ -14,6 +14,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.cli.meetings import describe
 from app.components.backend.startup import meetings_recovery
+from app.core.constants import CHART_RAMP
 from app.core.time import utcnow
 from app.services.meetings.domains.notes.service import keep_failure, keep_notes
 from app.services.meetings.domains.people.participants import keep_heard
@@ -479,7 +480,7 @@ async def test_notes_are_written_again_only_when_they_can_be(
 
 
 def test_every_speaker_in_a_meeting_has_a_color_of_their_own() -> None:
-    """Up to the theme's nine colors none is shared, the eight speakers of a
+    """Up to the theme's ramp of colors none is shared, the eight speakers of a
     real call included; a speaker keeps their name's color unless someone
     in the meeting already has it."""
     names = [
@@ -496,7 +497,7 @@ def test_every_speaker_in_a_meeting_has_a_color_of_their_own() -> None:
     colors = voices(names)
 
     assert len(set(colors.values())) == len(names)
-    assert set(colors.values()) <= set(range(1, 10))
+    assert set(colors.values()) <= set(range(1, CHART_RAMP + 1))
     assert voices(["Ada"]) == {"Ada": voice("Ada")}
 
 

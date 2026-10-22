@@ -4,7 +4,7 @@
    (_threads.html), and the owner's own note with the guide written
    again. While it is being written it re-reads itself every few
    seconds. #}
-{% from "components/macros/layout.html" import facts, tab_panel, tabbed %}
+{% from "components/macros/layout.html" import facts, fold_mark, tab_panel, tabbed %}
 {% from "components/macros/form.html" import action, textarea %}
 {% from "pages/meetings/_macros.html" import heading %}
 {% from "pages/overseer/meetings/_threads.html" import quote_lines, thread_sections %}
@@ -31,9 +31,9 @@
       {% for point in section.points %}
       <li>
         {% if point.quotes %}
-        <details data-quotes class="group/q">
+        <details data-quotes>
           <summary class="list-none cursor-pointer flex items-start gap-2">
-            <span aria-hidden="true" class="text-aegis-muted transition-transform group-open/q:rotate-90">›</span>
+            {{ fold_mark() }}
             <span class="leading-relaxed">{{ point.text }}</span>
             <span class="ml-auto whitespace-nowrap text-xs text-aegis-muted">{{ point.quotes|length }} {{ "line" if point.quotes|length == 1 else "lines" }}</span>
           </summary>

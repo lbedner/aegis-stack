@@ -28,10 +28,33 @@
   ones that exist); `appearance_head(theme, fixed=true)` lets a public
   layout wear its own theme while the viewer still picks the mode.
 
+- **A meetings runner in the dev stack.** `make serve` runs
+  `meetings runner` as a `meetings-runner` service beside the app, with
+  git and Claude Code installed, so **Ask agent** is answered without a
+  terminal left open. It sees your home folder at the same path (a
+  repository, the agent's user skills, the other repositories on disk);
+  its token, the agent's login and the command go in
+  `.env.meetings-runner`, and `.env` stays out of its environment. Without
+  a token it waits, saying so.
 - **Questions asked in a call, answered while it is still on.** The
-  meetings bot picks out moments as it captions: a line another speaker
-  ends with a question mark is a question (detectors are registered by
-  kind, `domains/moments/detectors.py`). The meeting page, Overseer's
+  meetings bot picks out moments as it captions: a question is a line
+  another speaker asks as one, its last sentence opening on a question
+  word or an auxiliary or ending on a tag (`..., right?`), since captions put a
+  question mark on anything said with a rising tone, and one put to
+  someone in the call (by name, as *you*, or asking leave) is theirs to
+  answer, not an agent's (detectors are
+  registered by kind, `domains/moments/detectors.py`). Questions asked
+  within 90 seconds of the first of a burst are one card, asked of
+  together, each action keeping one answer. Once the call is over, the
+  new `meeting-questions` agent cleans them up where the stack has a
+  model: it keeps the cards that ask what the system, its code or its
+  data could answer, names each by its topic (cards on one topic become
+  one, however far apart), and drops the rest (`meeting_moment.topic`). A call kept before
+  (or before a detector changed) is read over again: **Look over the call
+  again** on the meeting page, Overseer's drawer and the Flet modal,
+  `meetings look-over [ID...] [--series ID] [--all]`, or
+  `POST /api/v1/meetings/{id}/moments/find` (from a page, the model's
+  pass runs in the background and the page follows it). The meeting page, Overseer's
   drawer and the Flet modal list them in a Questions tab, each with what
   can be done with it: copy a prompt for a coding agent (the call so far,
   then the question), ask a coding agent, or ask the stack's model (the new
@@ -40,7 +63,11 @@
   browser, the app, or a runner), so a stack adds its own, detectors too,
   in a `meeting_moments.py` beside any service; every ask is a run,
   followed until it is answered or failed, finished only by what claimed
-  it, and one never finished fails after half an hour. `meetings runner` answers runs on another
+  it, and one never finished fails after half an hour. Asked again while
+  it is still going, an action is that same run (its button greys out, a
+  run in progress pulses); one asked of a runner while none is running
+  says how to start one, and the page does not keep re-reading itself for
+  it. `meetings runner` answers runs on another
   machine over the API, each in a fresh git worktree of the repository,
   with any headless command (`claude -p {prompt} --permission-mode plan`),
   holding a runner token (`meetings runner-token create`, or

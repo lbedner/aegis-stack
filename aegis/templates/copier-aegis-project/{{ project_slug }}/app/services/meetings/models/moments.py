@@ -26,6 +26,11 @@ class MeetingMoment(SQLModel, table=True):
     line_id: int = Field(foreign_key="meeting_transcript_line.id", ondelete="CASCADE")
     kind: str = Field(max_length=32)
     text: str = Field(sa_type=Text)
+    topic: str | None = Field(
+        default=None,
+        sa_type=Text,
+        description="What it is about, once the call is cleaned up: one card per topic",
+    )
     created_at: datetime = Field(default_factory=utcnow)
 
 
@@ -39,8 +44,13 @@ class MomentRecord(BaseModel):
     kind: str
     # What heads moments of its kind (``Questions``).
     title: str
+    # What its card is about, once the call is cleaned up (``moments.clean``).
+    topic: str | None = None
     text: str
     speaker: str
     at: float
     actions: list[ActionChoice] = []
     runs: list[RunRecord] = []
+    # The moments of its kind said right after it, on the same thing
+    # (``moments.service.GAP_SECONDS``): shown and asked of with it.
+    also: list[MomentRecord] = []

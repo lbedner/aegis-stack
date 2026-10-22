@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from datetime import datetime
+from functools import partial
 from typing import Any
 
 import flet as ft
@@ -42,7 +43,7 @@ from .base_detail_popup import BaseDetailPopup
 from .meetings_agents_tab import AGENTS, AgentPicker, AgentsTab
 from .meetings_calendar_tab import CalendarTab
 from .meetings_follow import FOLLOW_SECONDS, api, follow, hint
-from .meetings_moments import Ask, Copy, moment_actions, moments_controls
+from .meetings_moments import Acts, moment_actions, moments_controls
 from .meetings_people_tab import PeopleTab
 from .meetings_search_tab import SearchTab
 from .meetings_series_tab import SeriesTab
@@ -77,11 +78,12 @@ def meeting_cells(
 def actions_for(record: dict[str, Any]) -> list[str]:
     """What the admin can do to it now, as the service's read says
     (``MeetingRecord``): ask the bot to leave, delete it, write the notes
-    again."""
+    again, read the call over again for moments."""
     return [
         *(["leave"] if record.get("can_leave") else []),
         *(["delete"] if record.get("can_delete") else []),
         *(["rewrite"] if record.get("can_rewrite") else []),
+        *(["look_over"] if record.get("can_look_over") else []),
     ]
 
 
@@ -185,7 +187,7 @@ def _transcript(lines: list[dict[str, Any]], hit: int | None) -> list[ft.Control
 
 
 def record_view(
-    record: dict[str, Any], hit: int | None = None, acts: tuple[Ask, Copy] | None = None
+    record: dict[str, Any], hit: int | None = None, acts: Acts | None = None
 ) -> ft.Column:
     """One meeting read in full (``MeetingRecord``): who and how it went,
     its notes, then what was said; ``hit``, the line a search opened it
@@ -286,25 +288,20 @@ class MeetingPane(ft.Container):
 
     def _draw(self, record: dict[str, Any]) -> None:
         meeting_id = int(record["meeting"]["id"])
+        doing = {
+            "leave": ("Ask it to leave", "amber", self._leave),
+            "delete": ("Delete", "stop", self._confirm_delete),
+            "rewrite": ("Write the notes again", "muted", self._rewrite),
+            "look_over": ("Look over the call again", "muted", self._look_over),
+        }
         buttons = {
-            "leave": PulseButton(
-                on_click_callable=lambda: self._leave(meeting_id),
-                text="Ask it to leave",
-                variant="amber",
+            key: PulseButton(
+                on_click_callable=partial(act, meeting_id),
+                text=text,
+                variant=variant,
                 compact=True,
-            ),
-            "delete": PulseButton(
-                on_click_callable=lambda: self._confirm_delete(meeting_id),
-                text="Delete",
-                variant="stop",
-                compact=True,
-            ),
-            "rewrite": PulseButton(
-                on_click_callable=lambda: self._rewrite(meeting_id),
-                text="Write the notes again",
-                variant="muted",
-                compact=True,
-            ),
+            )
+            for key, (text, variant, act) in doing.items()
         }
         speaker = NativeDropdown(
             label="I am",
@@ -350,6 +347,10 @@ class MeetingPane(ft.Container):
             ErrorSnackBar("No notes to write now").launch(self.page)
             return await self.show(meeting_id)
         self._present(record)
+
+    async def _look_over(self, meeting_id: int) -> None:
+        await api(self.page).post(f"{API}/{meeting_id}/moments/find")
+        await self.show(meeting_id)
 
     async def _leave(self, meeting_id: int) -> None:
         await api(self.page).post(f"{API}/{meeting_id}/leave")

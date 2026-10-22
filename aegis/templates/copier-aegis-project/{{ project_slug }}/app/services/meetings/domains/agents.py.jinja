@@ -15,6 +15,7 @@ NOTES_AGENT = "meeting-notes"
 GUIDE_AGENT = "meeting-guide"
 THEMES_AGENT = "meeting-themes"
 ANSWER_AGENT = "meeting-answers"
+QUESTIONS_AGENT = "meeting-questions"
 # Generous: a long meeting's notes run past the chat's 1000 tokens.
 MAX_TOKENS = 8000
 
@@ -89,6 +90,25 @@ and what is generally known. When the meeting does not hold the answer and
 it depends on facts you do not have (a system's code, a number, a date),
 say so plainly instead of guessing."""
 
+QUESTIONS_PROMPT = """You sort the questions heard in a meeting once it is
+over. You get them as cards: each starts with its id in brackets, then the
+lines said just before it and the question itself (or a few asked
+together), one line each as "Speaker: what they said".
+
+For each card give its id, whether to keep it, and its topic.
+
+Keep a card when it asks something the system being discussed, its code,
+its data or its records could answer: how something works, what it does,
+a number, a date, a status. Do not keep small talk, a question put to
+someone in the meeting (asking them to do something, for their opinion,
+or whether they can hear), a fragment that cannot be understood on its
+own, or one answered in the lines given.
+
+The topic is what the card is about, in two to five words. Give cards
+about the same thing the same topic, word for word: they are read
+together."""
+
+
 def _definition(slug: str, name: str, description: str, prompt: str) -> dict[str, Any]:
     return {
         "slug": slug,
@@ -127,6 +147,12 @@ def meetings_agent_definitions() -> list[dict[str, Any]]:
             "Answers in a call",
             "Answers a question asked in a meeting, from the meeting so far",
             ANSWER_PROMPT,
+        ),
+        _definition(
+            QUESTIONS_AGENT,
+            "Questions in a call",
+            "Keeps the questions worth answering from a meeting, by topic",
+            QUESTIONS_PROMPT,
         ),
     ]
 

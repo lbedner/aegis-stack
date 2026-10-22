@@ -9,7 +9,7 @@
 {% from "pages/meetings/_macros.html" import failure, status_line %}
 {% set base = prefix ~ "/" ~ meeting.id %}
 {% set with_threads = true %}
-<div id="meeting-body" class="space-y-6"
+<div id="meeting-body" data-drawer-wide class="space-y-6"
      {% if following %}hx-get="{{ base }}/body" hx-trigger="every 3s" hx-swap="outerHTML"{% endif %}>
   <div class="flex flex-wrap items-center justify-between gap-3">
     <span class="flex items-center gap-3">{{ status_line(status, length) }}</span>

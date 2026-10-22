@@ -130,15 +130,13 @@ document.addEventListener('click', (event) => {
   const tab = event.target.closest('[data-tab]');
   if (tab) showTab(tab.closest('[data-tabs]'), tab.dataset.tab);
 });
-document.body.addEventListener('htmx:load', (event) => {
-  const root = event.detail.elt;
-  if (!root.querySelectorAll) return;
-  const all = [...(root.matches('[data-tabs]') ? [root] : []), ...root.querySelectorAll('[data-tabs]')];
+function restoreTabs(root) {
+  const all = [...(root.matches?.('[data-tabs]') ? [root] : []), ...root.querySelectorAll('[data-tabs]')];
   for (const tabs of all) {
     const picked = pickedTabs[tabs.dataset.tabs];
     if (picked && tabs.querySelector(`:scope > [data-tab-panel="${picked}"]`)) showTab(tabs, picked);
   }
-});
+}
 // A fold (``<details data-fold="name">``) remembers whether it was opened or
 // closed, by name, so a block that re-sends itself (the worker's queues over
 // SSE) keeps what was folded. ``toggle`` does not bubble: caught on the way down.
@@ -147,13 +145,23 @@ document.addEventListener('toggle', (event) => {
   const fold = event.target;
   if (fold.matches?.('details[data-fold]')) folds[fold.dataset.fold] = fold.open;
 }, true);
-document.body.addEventListener('htmx:load', (event) => {
-  const root = event.detail.elt;
-  if (!root.querySelectorAll) return;
+function restoreFolds(root) {
   for (const fold of root.querySelectorAll('details[data-fold]')) {
     if (fold.dataset.fold in folds) fold.open = folds[fold.dataset.fold];
   }
-});
+}
+// The tabs picked and the folds left, back on whatever htmx brings in;
+// again the moment new content is in, before the browser paints it: htmx
+// fires ``load`` only once the swap settles, a frame later, and a view
+// re-reading itself every few seconds would flash its first tab, and shut
+// the folds held open, each time.
+function restoreView(root) {
+  if (!root?.querySelectorAll) return;
+  restoreTabs(root);
+  restoreFolds(root);
+}
+document.body.addEventListener('htmx:load', (event) => restoreView(event.detail.elt));
+document.body.addEventListener('htmx:afterSwap', () => restoreView(document.body));
 // Something in a hidden panel is shown before it is reached: a note's
 // line in the transcript, a ``data-scroll-to`` target, a search hit.
 function revealTab(target) {

@@ -16,11 +16,13 @@ from typing import Any
 def walk(node: Any) -> Iterator[Any]:
     """Every control in the tree, depth-first: the node itself, its
     ``content``, then ``controls`` - the two container conventions every
-    Flet control uses."""
+    Flet control uses - with a tile's ``title`` and ``subtitle`` before
+    them (an ``ExpansionTile`` folds its controls under those)."""
     if node is None:
         return
     yield node
-    yield from walk(getattr(node, "content", None))
+    for slot in ("title", "subtitle", "content"):
+        yield from walk(getattr(node, slot, None))
     for child in getattr(node, "controls", None) or []:
         yield from walk(child)
 

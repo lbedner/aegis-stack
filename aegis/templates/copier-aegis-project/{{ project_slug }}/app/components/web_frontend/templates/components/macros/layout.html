@@ -8,6 +8,9 @@
 {% from "components/macros/form.html" import action %}
 {% from "components/macros/icons.html" import icon %}
 
+{# Rendered markdown's typography (``|markdown``): an answer in the chat or
+   from a meeting's agent, styled once. #}
+{% set prose = "text-sm leading-relaxed text-aegis-text [&_p]:my-2 [&_h1]:text-xl [&_h1]:font-semibold [&_h1]:mt-5 [&_h1]:mb-2 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:mt-5 [&_h2]:mb-2 [&_h3]:font-semibold [&_h3]:mt-4 [&_h3]:mb-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-2 [&_li]:my-0.5 [&_strong]:font-semibold [&_code]:font-mono [&_code]:text-xs [&_code]:text-aegis-teal [&_pre]:rounded [&_pre]:bg-aegis-bg [&_pre]:border [&_pre]:border-aegis-border [&_pre]:p-3 [&_pre]:my-2 [&_pre]:overflow-x-auto [&_pre_code]:text-aegis-text [&_table]:my-2 [&_th]:text-left [&_th]:font-medium [&_th]:pr-4 [&_td]:pr-4 [&_td]:py-0.5 [&_a]:text-aegis-teal [&_blockquote]:border-l-2 [&_blockquote]:border-aegis-border [&_blockquote]:pl-3 [&_blockquote]:text-aegis-muted" %}
 
 {# Navigation icons share one outline style. Unknown plugin entries use the
    four-square icon, so every installed item has an icon. #}
@@ -368,9 +371,15 @@
 
 {# A health status as a dot in its tone, its word for a reader: the
    sidebar's, the sub-menu's, a map chip's, and a healthy badge. #}
-{# A chart-ramp color as a small dot (--aegis-chart-``n``, 1 to 9): how a
+{# A chart-ramp color as a small dot (--aegis-chart-``n``, 1 to 11): how a
    list marks whose a row is (a service's log lines, a meeting's speaker),
    leaving the text itself plain. #}
+{# A fold's mark, in its ``<summary>``: turned while the fold is open
+   (``.fold-mark``). ``classes`` place it (``mt-0.5`` beside a heading). #}
+{% macro fold_mark(classes="") -%}
+<span aria-hidden="true" class="fold-mark {{ classes }}">›</span>
+{%- endmacro %}
+
 {% macro chart_dot(n) -%}
 <span data-dot class="mr-1.5 inline-block h-2 w-2 rounded-full align-middle" style="background: var(--aegis-chart-{{ n }})" aria-hidden="true"></span>
 {%- endmacro %}

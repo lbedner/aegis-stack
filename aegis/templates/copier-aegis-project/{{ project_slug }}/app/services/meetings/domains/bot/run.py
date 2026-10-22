@@ -33,6 +33,7 @@ from app.services.meetings.domains.bot.row import (
     transition,
     write_captions,
 )
+from app.services.meetings.domains.moments.tidy import cleaner
 from app.services.meetings.domains.people.participants import keep_heard
 from app.services.meetings.domains.people.service import guides_writer
 from app.services.meetings.domains.series.service import themes_writer
@@ -275,11 +276,13 @@ async def _join(meeting: Meeting, login: str) -> None:
 
 
 async def _after(meeting_id: int) -> None:
-    """Once the bot is out: the notes, how to work with each person and
-    what the meeting's series keeps coming back to, where the stack has a
-    model to write them."""
+    """Once the bot is out: the notes, the questions cleaned up, how to work
+    with each person and what the meeting's series keeps coming back to,
+    where the stack has a model to write them."""
     if (write := notes_writer()) is not None:
         await write(meeting_id)
+    if (clean := cleaner()) is not None:
+        await clean(meeting_id)
     if (guide := guides_writer()) is not None:
         await guide(meeting_id)
     if (themes := themes_writer()) is not None:

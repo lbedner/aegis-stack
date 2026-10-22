@@ -21,6 +21,11 @@ PREFIX = "mrt_"
 NOTED_EVERY = timedelta(minutes=1)
 
 
+# A runner polls every few seconds and its token's use is noted once a
+# minute: unseen for longer than this, none is running.
+LISTENING = 2 * NOTED_EVERY
+
+
 class RunnerTokenNotFoundError(LookupError):
     """No live runner token by that id is this owner's."""
 
@@ -51,6 +56,11 @@ async def resolve(db: AsyncSession, value: str) -> MeetingRunnerToken | None:
         db.add(row)
         await db.commit()
     return row
+
+
+async def listening(db: AsyncSession, owner_user_id: int | None) -> bool:
+    """Whether a runner that claims the owner's runs is running now."""
+    return await queries.used_since(db, owner_user_id, utcnow() - LISTENING)
 
 
 async def live(db: AsyncSession, owner_user_id: int | None) -> list[MeetingRunnerToken]:

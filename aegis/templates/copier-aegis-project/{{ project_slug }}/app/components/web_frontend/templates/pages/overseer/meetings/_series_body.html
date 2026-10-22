@@ -4,7 +4,7 @@
    and what it keeps coming back to (_threads.html), each line opening its
    meeting; and the series written again. While it is being written it
    re-reads itself every few seconds. #}
-{% from "components/macros/layout.html" import card, facts, tab_panel, tabbed %}
+{% from "components/macros/layout.html" import card, facts, fold_mark, tab_panel, tabbed %}
 {% from "components/macros/form.html" import action %}
 {% from "pages/overseer/meetings/_threads.html" import quote_lines, thread_sections %}
 {% set marks = {"settled": "✓", "shifted": "↗", "still_open": "•"} %}
@@ -32,12 +32,12 @@
     <ul data-card="{{ part.key }}" class="space-y-2 text-sm">
       {% for point in part.items %}
       <li>
-        <details data-quotes class="group/q">
+        <details data-quotes>
           <summary class="list-none cursor-pointer flex items-start gap-2">
             {% if marks.get(part.key) %}<span aria-hidden="true" class="text-aegis-teal">{{ marks[part.key] }}</span>{% endif %}
             <span class="flex-1 min-w-0 leading-snug">{{ point.text }}</span>
             {% if point.detail %}<span class="whitespace-nowrap text-xs text-aegis-muted">{{ point.detail }}</span>{% endif %}
-            <span aria-hidden="true" class="text-aegis-muted transition-transform group-open/q:rotate-90">›</span>
+            {{ fold_mark() }}
           </summary>
           <div class="mt-1.5 ml-4 space-y-1.5">{{ quote_lines(point.quotes, said) }}</div>
         </details>

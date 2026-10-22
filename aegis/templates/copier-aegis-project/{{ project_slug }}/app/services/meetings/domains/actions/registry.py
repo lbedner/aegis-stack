@@ -14,10 +14,9 @@ another service registers its own in its ``meeting_moments`` module
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from importlib import import_module
-from importlib.util import find_spec
 from typing import Literal
 
+from app.core.discovery import optional
 from app.services.meetings.domains.actions.prompt import Excerpt, for_an_agent
 from app.services.meetings.domains.moments.detectors import load_extensions
 
@@ -65,5 +64,4 @@ register_action(Action("copy", "Copy for agent", frozenset({"question"}), "brows
 register_action(Action("agent", "Ask agent", frozenset({"question"}), "runner"))
 
 # The stack's model answers too, where it has one.
-if find_spec("app.services.meetings.domains.actions.ask_ai") is not None:
-    import_module("app.services.meetings.domains.actions.ask_ai")
+optional("app.services.meetings.domains.actions.ask_ai")

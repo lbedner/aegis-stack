@@ -10,6 +10,7 @@
 #}
 {% from "components/macros/icons.html" import icon %}
 {% from "components/macros/layout.html" import avatar, copy_icon %}
+{% import "components/macros/layout.html" as layout %}
 
 {# The chat's buttons: outlined and quiet, so the conversation stays louder
    than the controls. ``tone`` primary is teal; ``size`` sm or xs. #}
@@ -107,9 +108,6 @@ btn btn-outline {{ {"sm": "btn-sm", "xs": "btn-xs"}[size] }} {{ tones.get(tone, 
 {% endif %}
 {% endmacro %}
 
-{# The answer's typography: what the markdown filter emits, styled once. #}
-{% set prose = "text-sm leading-relaxed text-aegis-text [&_p]:my-2 [&_h1]:text-xl [&_h1]:font-semibold [&_h1]:mt-5 [&_h1]:mb-2 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:mt-5 [&_h2]:mb-2 [&_h3]:font-semibold [&_h3]:mt-4 [&_h3]:mb-1 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:my-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:my-2 [&_li]:my-0.5 [&_strong]:font-semibold [&_code]:font-mono [&_code]:text-xs [&_code]:text-aegis-teal [&_pre]:rounded [&_pre]:bg-aegis-bg [&_pre]:border [&_pre]:border-aegis-border [&_pre]:p-3 [&_pre]:my-2 [&_pre]:overflow-x-auto [&_pre_code]:text-aegis-text [&_table]:my-2 [&_th]:text-left [&_th]:font-medium [&_th]:pr-4 [&_td]:pr-4 [&_td]:py-0.5 [&_a]:text-aegis-teal [&_blockquote]:border-l-2 [&_blockquote]:border-aegis-border [&_blockquote]:pl-3 [&_blockquote]:text-aegis-muted" %}
-
 {# The assistant's name over an answer, in both bubbles. #}
 {# The agent's name over a reply. With ``url`` it opens that agent's
    settings in the side drawer; inside the trail's summary the click must not
@@ -138,7 +136,7 @@ btn btn-outline {{ {"sm": "btn-sm", "xs": "btn-xs"}[size] }} {{ tones.get(tone, 
     {% else %}
     <div class="flex items-center gap-2 mb-1">{{ assistant_name(assistant, message.agent_url) }}</div>
     {% endif %}
-    <div class="{{ prose }}" data-body>{{ message.content|markdown }}</div>
+    <div class="{{ layout.prose }}" data-body>{{ message.content|markdown }}</div>
     {# The card the reply drew, then the approval cards its tools proposed,
        loaded fresh so a change shows its state now, not when it was filed. #}
     {% for url in message.cards %}{{ card_loader(url, "the chart") }}{% endfor %}
@@ -168,7 +166,7 @@ btn btn-outline {{ {"sm": "btn-sm", "xs": "btn-xs"}[size] }} {{ tones.get(tone, 
 <li {{ assistant_row() }} data-stream data-text="{{ text }}" {% if conversation_id %}data-conversation-id="{{ conversation_id }}"{% endif %}>
   <div class="flex items-center gap-2 mb-1">{{ assistant_name(assistant) }}</div>
   <ul class="{{ trail_classes }}" data-trail hidden></ul>
-  <div class="{{ prose }}" data-body></div>
+  <div class="{{ layout.prose }}" data-body></div>
   <div class="mt-2 flex items-center gap-2 py-1" data-busy aria-label="Thinking">
     <span class="flex gap-1">
       <span class="w-1.5 h-1.5 rounded-full bg-aegis-muted/60 animate-pulse"></span>

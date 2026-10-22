@@ -3,7 +3,11 @@
 as the ``meeting-answers`` agent (``domains.agents``), so its prompt and
 model are edited in Agents. Runs in the app; metered as ``meetings:ask``."""
 
-from app.services.meetings.domains.actions.prompt import Excerpt, said_before
+from app.services.meetings.domains.actions.prompt import (
+    Excerpt,
+    said_before,
+    the_question,
+)
 from app.services.meetings.domains.actions.registry import Action, register_action
 
 METER = "meetings:ask"
@@ -12,28 +16,25 @@ METER = "meetings:ask"
 def for_the_model(heard: Excerpt) -> str:
     """The excerpt as the model reads it: the meeting so far, then the
     moment."""
-    return (
-        f"The meeting so far:\n{said_before(heard)}\n\n"
-        f"{heard.speaker} asked:\n{heard.text}"
-    )
+    return f"The meeting so far:\n{said_before(heard)}\n\n{the_question(heard)}"
 
 
 async def answer(prompt: str, owner_user_id: int | None) -> str:
     # Here, not at the top: the AI service loads every tool, the meetings'
     # among them, which reach back into the meetings service this registers
     # from; and the agents load only when an answer is asked for.
-    from app.services.ai.service import extract_usage, record_usage, writer
+    from app.services.ai.service import write
     from app.services.meetings.domains.agents import ANSWER_AGENT, ANSWER_PROMPT
 
-    agent, model_name = await writer(ANSWER_AGENT, ANSWER_PROMPT, str)
-    result = await agent.run(prompt)
-    await record_usage(
+    answer, _ = await write(
+        ANSWER_AGENT,
+        ANSWER_PROMPT,
+        str,
+        prompt,
         action=METER,
-        model_name=model_name,
-        usage=extract_usage(result),
-        user_id=None if owner_user_id is None else str(owner_user_id),
+        owner_user_id=owner_user_id,
     )
-    return result.output
+    return answer
 
 
 register_action(

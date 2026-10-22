@@ -3,8 +3,6 @@ on a project without auth reads every meeting)."""
 
 from collections.abc import Awaitable, Callable, Iterable
 from datetime import datetime
-import importlib
-from importlib.util import find_spec
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
 import zlib
@@ -13,11 +11,12 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.concurrency import background
 from app.core.constants import CHART_RAMP
+from app.core.discovery import optional
 from app.core.formatting import format_clock, format_span
 from app.services.meetings import queries
-from app.services.meetings.domains.actions import runs
 from app.services.meetings.domains.bot.row import transition
 from app.services.meetings.domains.moments import service as moments
+from app.services.meetings.domains.moments import tidy
 from app.services.meetings.domains.notes import queries as notes_queries
 from app.services.meetings.domains.notes.service import notes_of
 from app.services.meetings.domains.people import participants
@@ -204,14 +203,16 @@ class MeetingsService:
         )
         under_way = meeting.status in NOT_DONE
         writing = meeting_id in WRITING
+        cleaning = meeting_id in tidy.CLEANING
         can_write = notes_writer() is not None
+        finished = bool(transcript) and not under_way
         found = await moments.moments_of(
             self.db, meeting_id, [(row.speaker, row.id, row.text) for row in transcript]
         )
         return MeetingRecord(
             meeting=meeting,
             moments=found,
-            following=under_way or writing or moments.answering(found),
+            following=under_way or writing or cleaning or moments.answering(found),
             notes=notes,
             notes_error=kept.error if kept else None,
             model_name=kept.model_name if kept else None,
@@ -229,9 +230,8 @@ class MeetingsService:
             can_leave=meeting.status in LEAVABLE,
             can_delete=meeting.status not in IN_PROGRESS,
             can_write=can_write,
-            can_rewrite=(
-                can_write and bool(transcript) and not under_way and not writing
-            ),
+            can_rewrite=can_write and finished and not writing,
+            can_look_over=finished,
         )
 
     async def write_notes_again(self, meeting_id: int) -> MeetingRecord:
@@ -247,15 +247,17 @@ class MeetingsService:
             update={"writing": True, "following": True, "can_rewrite": False}
         )
 
+    async def look_over(self, meeting_id: int) -> MeetingRecord:
+        """Read the call over again; the read it returns follows its clean-up."""
+        await self.get(meeting_id)
+        await tidy.look_over(self.db, [meeting_id], wait=False)
+        return await self.read(meeting_id)
+
     async def ask(self, meeting_id: int, moment_id: int, name: str) -> MeetingActionRun:
-        """Ask the action ``name`` of a moment in one of the owner's meetings:
-        in the app it starts at once; on a runner it waits to be claimed."""
-        return await runs.ask(
-            self.db,
-            moment_id,
-            name,
-            owner_user_id=self.owner_user_id,
-            meeting_id=meeting_id,
+        """Ask the action ``name`` of a moment in one of the owner's meetings
+        (of its burst): in the app it starts at once; on a runner it waits."""
+        return await moments.ask(
+            self.db, meeting_id, moment_id, name, self.owner_user_id
         )
 
     async def transcript(self, meeting: Meeting) -> list[tuple[str, TranscriptLine]]:
@@ -336,9 +338,7 @@ class MeetingsService:
 
 def notes_writer() -> Callable[[int], Awaitable[None]] | None:
     """What writes a meeting's notes, where the stack has a model to."""
-    if find_spec(NOTES) is None:
-        return None
-    return importlib.import_module(NOTES).write_notes
+    return optional(NOTES, "write_notes")
 
 
 def voice(name: str) -> int:

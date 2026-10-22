@@ -9,7 +9,7 @@
 
 const CHART_JS = 'https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.js';
 const CHART_JS_SRI = 'sha384-zYPBGXwO4633CABX/5Spf6emCKUJCfoOkhOMYyxMsatqQZPnDblmmOewfjsIVWCM';
-const RAMP = 9; // --aegis-chart-1 .. -9 in tailwind.config.js; cycles past that
+const RAMP = 11; // --aegis-chart-1 .. -11 in tailwind.config.js; cycles past that
 
 // Colors come from the active theme's tokens, read at mount time so a
 // theme switch repaints charts in the new palette.

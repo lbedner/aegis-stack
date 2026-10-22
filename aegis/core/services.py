@@ -1465,6 +1465,7 @@ SERVICES: dict[str, ServiceSpec] = {
         ),
         name="meetings",
         experimental=True,
+        agents=["meetings-runner"],
         category=PartCategory.AI,
         order=55,
         docs_path="services/meetings",
@@ -1641,6 +1642,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 "tests/_meetings.py",
                 # What a call throws up, and what is done with it.
                 "tests/services/test_meetings_moments.py",
+                "tests/services/test_meetings_questions.py",
                 "tests/services/test_meetings_actions.py",
                 "tests/services/test_meetings_runner.py",
                 "tests/services/test_meetings_runner_tokens.py",

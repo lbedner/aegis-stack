@@ -351,6 +351,9 @@
      card shares; after the tones, so it wins over them. */
   .hover-card { @apply transition-colors; }
   .hover-card:hover { @apply border-aegis-teal stroke-aegis-teal; }
+  /* A fold's mark (``fold_mark``, in its summary): turned while it is open. */
+  .fold-mark { @apply text-aegis-muted transition-transform; }
+  details[open] > summary .fold-mark { @apply rotate-90; }
   /* A map node under a heat (overseer_heat): filled in its tone, so the
      hot ones read across the room, a data shape's outline filled too. */
   [data-heat][data-tone="ok"] { @apply bg-aegis-teal/10; }

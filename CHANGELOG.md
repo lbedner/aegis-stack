@@ -61,7 +61,35 @@
   history row. The jobs API names each job's run (`run_id`: the worker task
   the store handed it to). Work logs as it always did; nothing to call.
 
+- **Replay a request on the Overseer map.** `app/core/replays.py` keeps
+  the last 200 requests the server answered (its middleware starts and ends
+  each), every hop `edges` sees noted in order with its real start, length,
+  tables and the lines of code it was made through; no tracer or Logfire
+  needed. `/overseer/replay/<id>` plays one a level at a time, the Server
+  opened up when it went past one service, then each service it ran in
+  opened up to its pieces in only the lanes it used, the first opening on
+  the way in (ingress, Server) and, on one screen, the answer going back
+  out, each drawing only what the request went through (a hop
+  the model has no line for drawn as seen), the current hop said under the
+  controls; its Hops view lists every hop at its line of code. Every
+  answer carries `X-Request-Id` and every line logged during it
+  `request_id`, so Routes' Execute and an error's occurrence link to their
+  request. The player is generic (`static/js/timeline.js`,
+  `macros/player.html`): steps in, `data-play-state` out, CSS for the look,
+  optionally in scenes with chapters.
+
 ### Changed
+
+- **Overseer's Logs read in the development console's colors.** Every
+  line leads with its level (info green), then the message, its logger in
+  blue and its fields, its attribution among them, as cyan keys and
+  magenta values. A console line's `[logger]` and the `key=value` pairs
+  after it are read into fields (`runtime.parse_log_line`), and one
+  `runtime.message_of` gives the message without them, so a console line
+  reads as its JSON twin everywhere: Logs, the Flet dashboard, the MCP
+  `logs` tool (now with `logger` and `fields`) and error grouping (a
+  development console error with no traceback groups as its JSON twin,
+  so those issues regroup once).
 
 - **Local wears the host OS's mark.** The container sees only Linux, so
   `make serve` names the machine's OS (macOS, Windows, a Linux distro by
@@ -141,6 +169,21 @@
   parts already show, and what the change touches is folded away.
 
 ### Fixed
+
+- **An async query is counted from the code that awaited it.** The frame
+  walk (`app/core/frames.py`) now reads the greenlets an async session's
+  statement was switched from, where its caller waits; before, a query from
+  an async session was a hop from nothing (the map's traffic missed it) and
+  a held transaction named the outermost coroutine rather than its caller.
+
+- **A line of code is plain text while Overseer > Code is off.** Every
+  `path:line` Overseer shows (what a part should fix, a route's dry path, a
+  replayed hop) linked to the Code page even when that page was off.
+
+- **The map's Traffic counts a call within a part once.** A service's
+  calls through its own sub-part (Auth to its users) were counted as calls
+  into and out of it, so a service querying through one read twice its
+  traffic.
 
 - **Illiana's `ontology` tool no longer fails on a part that read Postgres's
   catalog.** Postgres reflection (the database browser, the scheduler's

@@ -224,10 +224,11 @@ def _line(
 ) -> ft.Control:
     """One line: time, its service in its own color (with ``titles``) and
     which of its containers when it has several (``source``), level, then
-    the message (the lead the time repeats left out, the search marked) and
-    its fields; a traceback folds under it. Hovering it shows a
+    the message (the lead the time repeats left out, the search marked), its
+    logger and its fields; a traceback folds under it. Hovering it shows a
     copy of the whole line."""
     fields = " ".join(f"{key}={value}" for key, value in row["fields"])
+    logger = f"[{row['logger']}]" if row["logger"] else ""
     service = titles.get(row["page"], row["page"]) if titles else ""
     level = row["level"] or ""
     head = ft.Row(
@@ -257,7 +258,10 @@ def _line(
                 "",
                 size=12,
                 selectable=True,
-                spans=_marked(row["message"], query),
+                spans=[
+                    *_marked(row["message"], query),
+                    *([ft.TextSpan(f" {logger}", MUTED)] if logger else []),
+                ],
             ),
             BodyText(
                 "",
@@ -286,6 +290,7 @@ def _line(
             row["instance"],
             level,
             row["prefix"] + row["message"],
+            logger,
             fields,
         )
         if part

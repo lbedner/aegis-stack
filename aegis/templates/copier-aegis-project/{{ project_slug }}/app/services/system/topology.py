@@ -33,6 +33,8 @@ _ORDERED = sorted(PLACED, key=placement)
 # Each tier's processes, by health name, in drawing order: the edge, the
 # app, its data.
 TIERS = tuple(tuple(n for n in _ORDERED if PLACED[n].tier == t) for t in range(3))
+# What a request comes in through from outside the stack, first: the edge.
+EDGE = TIERS[0]
 # Who talks to whom: requests in through the ingress; the app's processes
 # to their stores; work handed to the queue, and taken from it.
 LINKS = tuple((n, d) for tier in TIERS for n in tier for d in PLACED[n].depends_on)

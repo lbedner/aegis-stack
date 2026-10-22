@@ -126,14 +126,15 @@ def test_every_cell_copies_what_it_shows(client: TestClient) -> None:
     ]
 
 
-def test_a_line_is_three_cells_with_its_level_as_a_tag(client: TestClient) -> None:
-    """Time, source and the line: the level sits in the line, and only when
-    it has one."""
+def test_a_line_is_three_cells_with_its_level_leading_it(client: TestClient) -> None:
+    """Time, source and the line: the level leads the line, info too, in
+    its own color (``data-level``, input.css)."""
     failed, ready = select(page_html(client, PAGE), "#logs-lines tr")
     assert len(select(failed, "td")) == 3
-    assert text(one(failed, "td:last-child [data-level]")) == "error"
+    level = one(failed, "td:last-child [data-level]")
+    assert (text(level), level.get("data-level")) == ("error", "error")
     assert len(select(ready, "td")) == 3
-    none(ready, "[data-level]")  # info is the normal case: no tag
+    assert one(ready, "[data-level]").get("data-level") == "info"
 
 
 def test_buttons_scroll_to_either_end(client: TestClient) -> None:
@@ -619,7 +620,7 @@ async def test_live_rows_carry_their_application_service(
 
 
 @pytest.mark.parametrize("structured", [False, True])
-def test_attributed_logs_put_dot_first_and_keep_metadata_in_expanded_row(
+def test_attributed_logs_put_dot_first_and_read_alike_from_either_renderer(
     app: FastAPI,
     monkeypatch: pytest.MonkeyPatch,
     structured: bool,
@@ -632,7 +633,15 @@ def test_attributed_logs_put_dot_first_and_keep_metadata_in_expanded_row(
         "pathname": "/code/app/services/ai/usage.py",
     }
     raw = (
-        json.dumps({"level": "info", "event": "Usage recorded", "cost": 0, **fields})
+        json.dumps(
+            {
+                "level": "info",
+                "event": "Usage recorded",
+                "logger": "app.core.log",
+                "cost": 0,
+                **fields,
+            }
+        )
         if structured
         else "2026-10-03 20:45:01 [info ] Usage recorded [app.core.log] app_service=ai cost=0 emitting_service=ai pathname=/code/app/services/ai/usage.py"
     )
@@ -644,12 +653,15 @@ def test_attributed_logs_put_dot_first_and_keep_metadata_in_expanded_row(
     assert source[0].get("data-dot") is not None
     assert text(one(source, "[data-app-service]")) == AI_TITLE
     assert "text-aegis-muted" in one(source, "a").get("class")
-    message = text(one(row, ".log-line"))
-    assert "Usage recorded" in message and "cost" in message
-    assert all(key not in message for key in fields)
-    details = one(row, "[data-log-metadata]")
-    assert "log-trace" in details.get("class")
-    assert all(f"{key}={value}" in text(details) for key, value in fields.items())
+    # Either renderer reads the same: the message, its logger, then its
+    # fields, the attribution among them, in order as the console prints them.
+    assert text(one(row, "[data-message]")) == "Usage recorded"
+    assert text(one(row, "[data-logger]")) == "[app.core.log]"
+    line = one(row, ".log-line")
+    keys = [text(key).rstrip("=") for key in select(line, "[data-field-key]")]
+    assert keys == sorted(["cost", *fields])
+    values = [text(value) for value in select(line, "[data-field-value]")]
+    assert values == [dict(cost="0", **fields)[key] for key in keys]
 
 
 def test_a_frame_links_only_while_code_is_on(

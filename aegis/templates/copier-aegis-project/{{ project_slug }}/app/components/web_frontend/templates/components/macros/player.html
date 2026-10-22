@@ -1,0 +1,39 @@
+{# The player (static/js/timeline.js), for any page that plays something:
+   ``player(steps)`` wraps what it lights (``{% call %}``) with its steps
+   and its controls; each step lights CSS selectors inside it, and the
+   latest to start says what it is under them. Played in scenes
+   (``[data-play-scene]`` inside it), ``chapters`` (each its ``key`` and
+   ``title``) go to each, where there are two or more. #}
+{% from "components/macros/form.html" import action %}
+{% from "components/macros/icons.html" import icon %}
+
+{# The speeds offered, fastest first: real time, and slowed so a few
+   milliseconds show. The player starts at one of these (timeline.js). #}
+{% set SPEEDS = ((1, "Real time"), (0.2, "5x slower"), (0.1, "10x slower"), (0.02, "50x slower"), (0.01, "100x slower"), (0.001, "1000x slower")) %}
+
+{% macro player(steps, label="Replay", chapters=()) %}
+<div data-player class="space-y-3">
+  <script type="application/json" data-play-steps>{{ steps|tojson }}</script>
+  <div role="toolbar" aria-label="{{ label }}" class="flex flex-wrap items-center gap-2 text-xs">
+    {{ action("Step back", 'data-play-do="back"', glyph="backward") }}
+    {# ``action``'s primary look, with an icon for each of its two states. #}
+    <button type="button" data-play-do="play" title="Play or pause" class="action px-2.5 py-1 text-xs rounded border transition-colors border-aegis-teal text-aegis-text hover:bg-aegis-teal/10">
+      <span data-when-paused>{{ icon("play") }}</span><span data-when-playing>{{ icon("pause") }}</span><span class="sr-only">Play or pause</span>
+    </button>
+    {{ action("Step forward", 'data-play-do="forward"', glyph="forward") }}
+    {{ action("From the start", 'data-play-do="restart"', glyph="replay") }}
+    <input type="range" data-play-seek min="0" max="0" step="any" value="0" aria-label="Where in it" class="range range-xs range-primary min-w-40 flex-1">
+    <span data-play-clock class="tabular-nums text-aegis-muted whitespace-nowrap"></span>
+    <select data-play-speed aria-label="Speed" class="select select-sm select-caret pr-8">
+      {% for value, name in SPEEDS %}<option value="{{ value }}">{{ name }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+    {% if chapters|length > 1 %}<nav aria-label="Scenes" class="flex items-center gap-1 text-xs">
+      {% for chapter in chapters %}{% if not loop.first %}<span class="text-aegis-muted" aria-hidden="true">›</span>{% endif %}<button type="button" data-play-chapter="{{ chapter.key }}" class="rounded px-2 py-0.5 text-aegis-muted hover:text-aegis-text">{{ chapter.title }}</button>{% endfor %}
+    </nav>{% endif %}
+    <p data-play-caption aria-live="polite" class="min-h-5 min-w-0 flex-1 truncate font-mono text-xs text-aegis-text"></p>
+  </div>
+  {{ caller() }}
+</div>
+{% endmacro %}

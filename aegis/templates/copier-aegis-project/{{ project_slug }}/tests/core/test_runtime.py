@@ -85,6 +85,23 @@ class TestLogLines:
     ) -> None:
         assert parse_log_line(raw, "stdout").level == level
 
+    def test_a_console_line_reads_its_logger_and_the_pairs_after_it(self) -> None:
+        line = parse_log_line(
+            "12:00:01 [info     ] route changed   [app.core.log] raw=/ route=/x",
+            "stdout",
+        )
+        assert line.fields == (
+            ("logger", "app.core.log"),
+            ("raw", "/"),
+            ("route", "/x"),
+        )
+
+    def test_a_bracket_ending_another_kind_of_line_is_not_a_logger(self) -> None:
+        line = parse_log_line(
+            'INFO:     1.2.3.4:5 - "WebSocket /ws" [accepted]', "stdout"
+        )
+        assert line.fields == ()
+
     def test_a_line_without_a_timestamp_keeps_its_text(self) -> None:
         line = parse_log_line("plain text", "stdout")
         assert line.timestamp is None

@@ -387,9 +387,38 @@
   /* A map node hovered: what it is not joined to dims (app.js mapFocus). */
   [data-map] :is([data-node], .map-link) { transition: opacity 150ms; }
   [data-map] [data-dim] { opacity: 0.35; }  /* context, not disabled */
+  /* The player (timeline.js, macros/player.html): what a step lights. A
+     part running now is ringed in teal, the slowest held in amber and
+     breathing, a failure flashing red, what ran before ringed softly;
+     while it plays, the rest steps back. A line running carries a moving
+     dash, the way the call went. */
+  [data-player][data-playing] :is([data-node], .map-link):not([data-play-state]) { opacity: 0.35; }
+  [data-player] [data-node][data-play-state="active"] { @apply ring-2 ring-aegis-teal; }
+  [data-player] [data-node][data-play-state="refused"] { @apply ring-2 ring-aegis-amber; }  /* answered no (4xx) */
+  [data-player] [data-node][data-play-state="stall"] { @apply ring-2 ring-aegis-amber text-aegis-amber; animation: clock-next 1.2s ease-in-out infinite; }
+  [data-player] [data-node][data-play-state="failed"] { @apply ring-2 ring-aegis-error; animation: play-flash 0.5s ease-in-out 3; }
+  [data-player] [data-node][data-play-state="done"] { @apply ring-1 ring-aegis-teal/40; }
+  .map-link[data-play-state] { @apply opacity-100; }
+  .map-link:is([data-play-state="active"], [data-play-state="stall"], [data-play-state="refused"]) { stroke-width: 2.5; stroke-dasharray: 6 6; animation: play-flow 0.6s linear infinite; }
+  .map-link[data-play-state="failed"] { @apply text-aegis-error; stroke-width: 2.5; }
+  .map-link[data-play-state="refused"] { @apply text-aegis-amber; }
+  .map-link[data-observed] { stroke-dasharray: 2 4; }  /* ran, though the model has no such call */
+  [data-play-chapter][aria-current] { @apply bg-aegis-teal/15 text-aegis-text; }  /* the scene showing */
+  [data-play-scene]:not([hidden]) { animation: play-scene 0.5s ease-out; }  /* a scene fades in */
+  [data-player]:not([data-playing]) [data-when-playing],
+  [data-player][data-playing] [data-when-paused] { display: none; }
   /* A log line on one line, cut at the edge; opened (a click) or wrapped
      (Wrap), whole, with its traceback. A volume bar stacks its tones. */
   .log-line { @apply truncate; }
+  /* A log line in the development console's colors: its level in its
+     tone (``.toned``; info green), a message structlog wrote bold (its
+     logger after it), its logger blue, each field's key cyan and value
+     magenta. */
+  .log-line [data-message]:has(+ [data-logger]) { @apply font-semibold; }
+  .log-line [data-level="info"] { color: var(--aegis-chart-6); }
+  .log-line [data-logger] { @apply text-secondary; }
+  .log-line [data-field-key] { @apply text-info; }
+  .log-line [data-field-value] { color: var(--aegis-chart-5); }
   :is(.logs-wrap, .log-row[data-open]) .log-line { @apply whitespace-normal break-all; }
   /* What a row holds beyond its line (a trace; a table row's keys, the row under it) shows while it is open. */
   .log-row:not([data-open]) .log-trace, .log-row:not([data-open]) + tr[data-links], :is(.logs-wrap, .log-row[data-open]) .log-trace-hint { @apply hidden; }
@@ -417,6 +446,16 @@
 @keyframes clock-next {
   0%, 100% { box-shadow: 0 0 0 0 transparent; }
   50% { box-shadow: 0 0 16px 2px currentColor; }
+}
+
+/* The player's motion (see [data-play-state]): a running line's dash
+   travels; the slowest part breathes (clock-next); a failure flashes. Reduced motion
+   keeps the states and drops the motion. */
+@keyframes play-flow { to { stroke-dashoffset: -12; } }
+@keyframes play-flash { 50% { opacity: 0.4; } }
+@keyframes play-scene { from { opacity: 0; transform: scale(0.98); } }
+@media (prefers-reduced-motion: reduce) {
+  :is([data-play-state], [data-play-scene]) { animation: none !important; }
 }
 
 /* A key family the app is writing right now. */

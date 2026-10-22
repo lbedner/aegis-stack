@@ -154,6 +154,12 @@ LANES = (
     ("data", "Data"),
     ("outside", "Outside"),
 )
+# Ahead of them, drawn only for a replay (``used_only``): the way a request
+# came in, the stack's edge and the Server, standing taller than a piece:
+# room for a track in and one back out (``_on_track``).
+WAY_IN = (("edge", "Edge"), ("server", "Server"))
+WAY_IN_HEIGHT = 2 * COMPACT_HEIGHT
+TRACK = 0.25  # how far off a node's middle a track runs, of its height
 LANE_TOP = 40  # room above the nodes for the lanes' names
 ASIDE = 48  # how far an arrow within a lane bows out to the side
 CLEAR = 4  # how far a line past a lane keeps off the nodes in it
@@ -165,29 +171,46 @@ def lanes(
     stack: list[dict[str, Any]],
     links: list[tuple[str, str]],
     tones: dict[tuple[str, str], dict[str, str]],
+    *,
+    used_only: bool = False,
 ) -> dict[str, Any]:
     """A service opened up: each entry stacked in its ``place``'s lane, its
     probes under its ways in, what rides the rail listed above it; its
     links as lines between (one side to the next; within a lane, an arrow
-    out to the side), toned (and why) where ``tones`` says."""
-    width = ACROSS_FILL * 100 / len(LANES)
+    out to the side), toned (and why) where ``tones`` says; a line both
+    ways between two lanes on two tracks (``_on_track``). ``used_only``,
+    only the lanes something is in, side by side (a replay's way through)."""
+    # A probe is drawn under the ways in.
+    places = {"entry" if i.get("place") == "probe" else i.get("place") for i in stack}
+    shown = (
+        [lane for lane in (*WAY_IN, *LANES) if lane[0] in places]
+        if used_only
+        else list(LANES)
+    )
+    width = ACROSS_FILL * 100 / len(shown)
     half = width / 100 * WIDTH / 2
-    columns = {key: (i + 0.5) / len(LANES) * WIDTH for i, (key, _) in enumerate(LANES)}
+    column = WIDTH / len(shown)
+    columns = {key: (i + 0.5) * column for i, (key, _) in enumerate(shown)}
     place: dict[str, tuple[float, float, float]] = {}
     tops = dict.fromkeys(columns, float(LANE_TOP))
     for item in stack:
         if (lane := item["place"]) in columns:
-            height = float(_height(item, COMPACT_HEIGHT, True))
+            way_in = lane in dict(WAY_IN)
+            height = float(
+                WAY_IN_HEIGHT if way_in else _height(item, COMPACT_HEIGHT, True)
+            )
             place[item["key"]] = (columns[lane], tops[lane], height)
             tops[lane] += height + LANE_GAP
-    tops["entry"] += PROBE_GAP - LANE_GAP
-    for item in stack:
-        if item.get("place") == "probe":
-            place[item["key"]] = (columns["entry"], tops["entry"], COMPACT_HEIGHT)
-            tops["entry"] += COMPACT_HEIGHT + LANE_GAP
+    probes = [item for item in stack if item.get("place") == "probe"]
+    if probes:
+        tops["entry"] += PROBE_GAP - LANE_GAP
+    for item in probes:
+        place[item["key"]] = (columns["entry"], tops["entry"], COMPACT_HEIGHT)
+        tops["entry"] += COMPACT_HEIGHT + LANE_GAP
     height = max((top + h for _, top, h in place.values()), default=0.0)
     items = {item["key"]: item for item in stack}
     placed = list(place.values())
+    both = {(a, b) for a, b in links if (b, a) in links}
     return {
         "map_nodes": [
             _placed(item, x, top, h, width, True)
@@ -197,7 +220,14 @@ def lanes(
             for x, top, h in [place[item["key"]]]
         ],
         "map_links": [
-            _lane_line(place[a], place[b], a, items[b], half, placed)
+            _lane_line(
+                *_on_track(place[a], place[b], (a, b) in both),
+                a,
+                items[b],
+                half,
+                placed,
+                column,
+            )
             | tones.get((a, b), {})
             for a, b in links
             if a in place and b in place
@@ -207,11 +237,25 @@ def lanes(
         "map_compact": True,
         "map_across": False,
         "map_lanes": [
-            {"label": label, "left": columns[key] / WIDTH * 100} for key, label in LANES
+            {"label": label, "left": columns[key] / WIDTH * 100} for key, label in shown
         ],
         "map_rail": [item for item in stack if item.get("place") == "rail"],
         "map_target": MAIN,
     }
+
+
+def _on_track(
+    start: tuple[float, float, float], end: tuple[float, float, float], both: bool
+) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
+    """A line's ends, moved onto its track where it runs ``both`` ways
+    between two lanes: going right above each node's middle, coming back
+    below it (``TRACK``); a line within a lane, or one way, at the middle."""
+    if not both or start[0] == end[0]:
+        return start, end
+    shift = -TRACK if end[0] > start[0] else TRACK
+    x1, y1, h1 = start
+    x2, y2, h2 = end
+    return (x1, y1 + shift * h1, h1), (x2, y2 + shift * h2, h2)
 
 
 def _lane_line(
@@ -221,6 +265,7 @@ def _lane_line(
     target: dict[str, Any],
     half: float,
     placed: list[tuple[float, float, float]],
+    column: float,
 ) -> dict[str, Any]:
     """A line between lanes, side to side (a line back a lane from its
     node's left), past any lane between along a gap clear of its nodes;
@@ -241,7 +286,7 @@ def _lane_line(
     if not blocks:  # side to side, as ``_line`` draws it
         return line | {"mid": _mid((a + b) / 2, (y1 + y2) / 2)}
     run = _gap(blocks, y1, y2)
-    step = way * (WIDTH / len(LANES) - 2 * half)
+    step = way * (column - 2 * half)
     d = (
         f"M {a:.0f} {y1:.0f} C {a + step / 2:.0f} {y1:.0f}, {a + step / 2:.0f} {run:.0f}, {a + step:.0f} {run:.0f} "
         f"L {b - step:.0f} {run:.0f} "

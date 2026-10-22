@@ -195,7 +195,7 @@ def test_a_statement_is_a_hop_to_the_database_and_to_its_tables(
     notes = sa.Table("notes", sa.MetaData(), sa.Column("id", sa.Integer))
     notes.metadata.create_all(engine)
     edges.reset()
-    monkeypatch.setattr(edges, "callers", lambda: ["service:finance"])
+    monkeypatch.setattr(edges, "on_stack", lambda **_: (["service:finance"], []))
 
     with engine.connect() as conn:
         conn.execute(sa.select(notes)).all()

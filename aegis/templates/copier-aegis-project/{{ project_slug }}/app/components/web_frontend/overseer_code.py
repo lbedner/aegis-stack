@@ -199,6 +199,7 @@ templates.env.globals.update(
     own_frames=own_frames,
     line_url=line_url,
     module_url=module_url,
+    code_shown=lambda: enabled(),  # where a line of code links (``line_link``)
     code_owners=owners,
     # The page's fixed names, for its templates: no template spells them.
     code_page={

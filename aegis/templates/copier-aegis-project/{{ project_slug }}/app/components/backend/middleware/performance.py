@@ -20,18 +20,20 @@ Auto-discovered by ``backend_hooks`` because the file lives in
 
 from __future__ import annotations
 
-import statistics
-import time
 from collections import defaultdict, deque
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+import statistics
+import time
 from typing import Any
 
 from fastapi import FastAPI, Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
+import structlog
 
-from app.core import edges
+from app.core import edges, replays
 from app.core.log import logger
 
 # Recent-sample cap. 100 datapoints is enough for percentile math
@@ -53,7 +55,9 @@ class EndpointMetrics:
     total_ms: float = 0.0
     min_ms: float = float("inf")
     max_ms: float = 0.0
-    recent_ms: deque[float] = field(default_factory=lambda: deque(maxlen=_RECENT_SAMPLES))
+    recent_ms: deque[float] = field(
+        default_factory=lambda: deque(maxlen=_RECENT_SAMPLES)
+    )
     last_request_at: datetime | None = None
 
     def record(self, duration_ms: float) -> None:
@@ -141,9 +145,7 @@ class RequestMetricsService:
             else (all_recent[0] if all_recent else 0.0)
         )
 
-        slowest_key, slowest = max(
-            self._metrics.items(), key=lambda kv: kv[1].avg_ms
-        )
+        slowest_key, slowest = max(self._metrics.items(), key=lambda kv: kv[1].avg_ms)
         return {
             "total_requests": total_requests,
             "tracked_endpoints": len(self._metrics),
@@ -187,10 +189,12 @@ _UNMATCHED_ROUTE = "__unmatched__"
 # Endpoints that exist to *view* the metrics. Recording them means
 # opening the Performance tab inflates its own numbers, and the
 # summary tile drifts away from the per-endpoint table mid-view.
-_SELF_REFERENTIAL_ROUTES = frozenset({
-    "/api/v1/metrics/summary",
-    "/api/v1/metrics/endpoints",
-})
+_SELF_REFERENTIAL_ROUTES = frozenset(
+    {
+        "/api/v1/metrics/summary",
+        "/api/v1/metrics/endpoints",
+    }
+)
 
 
 def _route_pattern(request: Request) -> str:
@@ -220,32 +224,54 @@ class PerformanceMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Any) -> Response:
         start = time.perf_counter()
         response: Response | None = None
+        # Kept to replay (``replays``); a line logged meanwhile names it.
+        token = replays.start(request.method, request.url.path)
+        recording = replays.current() if token else None
+        named = (
+            structlog.contextvars.bound_contextvars(request_id=recording.id)
+            if recording
+            else nullcontext()
+        )
         try:
-            response = await call_next(request)
+            with named:
+                response = await call_next(request)
             return response
         finally:
             # Time and record in ``finally`` so 500s (where ``call_next``
             # raised) still appear on the Performance tab — that's
             # exactly the data you want when something is breaking.
             duration_ms = (time.perf_counter() - start) * 1000.0
+            pattern = _route_pattern(request)
+            status = response.status_code if response is not None else 500
             try:
-                pattern = _route_pattern(request)
                 if pattern not in _SELF_REFERENTIAL_ROUTES:
-                    metrics_service.record(
-                        request.method, pattern, duration_ms
-                    )
+                    metrics_service.record(request.method, pattern, duration_ms)
                     if endpoint := request.scope.get("endpoint"):
-                        failed = response is None or response.status_code >= 500
                         edges.into(
-                            endpoint, source=edges.SERVER, ms=duration_ms, error=failed
+                            endpoint,
+                            source=edges.SERVER,
+                            ms=duration_ms,
+                            error=status >= 500,
                         )
             except Exception as e:
                 # Never block the response on bookkeeping.
                 logger.debug(f"PerformanceMiddleware: record failed: {e}")
+            kept = replays.finish(
+                token,
+                route=pattern,
+                status=status,
+                ms=duration_ms,
+                streamed=response is not None
+                and response.headers.get("content-type", "").startswith(
+                    "text/event-stream"
+                ),
+            )
             # Header only lands on the happy path — there is no response
             # object to mutate when ``call_next`` raised.
             if response is not None:
                 response.headers["X-Response-Time"] = f"{duration_ms:.2f}ms"
+                if kept:
+                    response.headers["X-Request-Id"] = kept
 
 
 def register_middleware(app: FastAPI) -> None:

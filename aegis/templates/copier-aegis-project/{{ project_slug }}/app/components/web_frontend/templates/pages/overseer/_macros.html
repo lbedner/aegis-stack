@@ -40,8 +40,9 @@
 {% macro code_link(url, label) %}<a href="{{ url }}" class="font-mono text-aegis-teal hover:underline">{{ label }}</a>{% endmacro %}
 
 {# A line of the project's source, linked to it in Overseer > Code:
-   ``app/core/storage.py:36`` (``overseer_code.line_url``). #}
-{% macro line_link(path, line) %}{{ code_link(line_url(path, line), path ~ ":" ~ line) }}{% endmacro %}
+   ``app/core/storage.py:36`` (``overseer_code.line_url``); plain text
+   while that page is off. #}
+{% macro line_link(path, line) %}{% if code_shown() %}{{ code_link(line_url(path, line), path ~ ":" ~ line) }}{% else %}<span class="font-mono">{{ path }}:{{ line }}</span>{% endif %}{% endmacro %}
 {# What to fix of a part (``overseer_conformance.todos``): each finding's
    action, and every place it points at, linked to its line with what is
    there. The map's hover and the Patterns page read the same list. #}

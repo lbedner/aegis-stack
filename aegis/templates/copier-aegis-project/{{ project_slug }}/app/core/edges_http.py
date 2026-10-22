@@ -16,7 +16,7 @@ from urllib.parse import urlsplit
 
 import httpx
 
-from app.core import edges
+from app.core import edges, replays
 from app.core.parts import PARTS
 
 AI = "service:ai"
@@ -58,10 +58,11 @@ def target(host: str) -> tuple[str, bool]:
 
 def _called(host: str, started: float, response: Any) -> None:
     node, model = target(host)
-    chain = edges.callers()
+    chain, lines = edges.on_stack(lines=replays.current() is not None)
     edges.hop(
         node,
         via=chain,
+        lines=lines,
         ms=(time.perf_counter() - started) * 1000,
         error=response is None or getattr(response, "status_code", 200) >= 500,
         bypass=model and all(edges.part_of(c) != AI for c in chain),

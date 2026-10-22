@@ -13,6 +13,7 @@ import pytest
 
 from app.components.web_frontend import overseer_requests, overseer_server_load_tests
 from app.components.web_frontend.rendering import with_query
+from app.core import replays
 from app.core.config import AppEnv, settings
 from app.services.load_test.api import auth
 from app.services.system.models import ComponentStatus
@@ -122,6 +123,18 @@ class TestExecute:
         assert one(response.text, "[data-status]").text.strip() == "200"
         assert '"item_id": 7' in text(one(response.text, "[data-body] pre"))
         assert "curl -X GET" in text(one(response.text, "[data-curl]"))
+
+    def test_the_request_sent_can_be_replayed(self, signed_in: TestClient) -> None:
+        """The answer names the request the server kept: Replay opens it."""
+        response = signed_in.post(
+            f"{overseer_requests.PARTIALS}/execute",
+            data={"route": ITEM, "path.item_id": "7"},
+        )
+        # Its status in the tone every answer has (``answer_tone``).
+        assert one(response.text, "[data-status]").get("data-tone") == "ok"
+        href = one(response.text, "[data-replay]").get("href")
+        assert href.startswith("/overseer/replay/")
+        assert replays.find(href.rsplit("/", 1)[1]) is not None
 
     def test_a_write_waits_for_its_confirmation(self, signed_in: TestClient) -> None:
         form = {"route": NEW, "body": '{"name": "pen"}'}

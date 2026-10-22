@@ -188,14 +188,50 @@ _TAGGED = re.compile(
 
 
 # The attribution the development console prints as ``key=value``
-# (``log_attribution``): read into a line's fields here, once.
-METADATA_KEYS = ("app_service", "app_component", "emitting_service", "pathname")
+# (``log_attribution``; ``request_id``, the request a line was logged in,
+# from ``replays``): read into a line's fields here, once.
+METADATA_KEYS = (
+    "app_service",
+    "app_component",
+    "emitting_service",
+    "pathname",
+    "request_id",
+)
 _METADATA = re.compile(r"(?<!\S)(" + "|".join(METADATA_KEYS) + r")=(\S+)")
+
+
+# What structlog's console prints after a line's message: ``[logger]``
+# and the ``key=value`` pairs bound to it (a value with a space ends it).
+_TAIL = re.compile(r"(?<! ) +\[([\w.:-]+)\]((?: +[\w.]+=\S*)*) *$")
+_PAIR = re.compile(r"([\w.]+)=(\S*)")
 
 
 def without_metadata(text: str) -> str:
     """A console line's text with its attribution taken out."""
     return re.sub(r" {2,}", " ", _METADATA.sub("", text)).strip()
+
+
+def _tail(text: str) -> re.Match[str] | None:
+    """The logger and pairs after a line structlog's console printed (its
+    level bracketed); None on any other line."""
+    tagged = _TAGGED.match(text)
+    return _TAIL.search(text) if tagged and tagged.group(0).endswith("]") else None
+
+
+def _console_fields(text: str) -> tuple[tuple[str, str], ...]:
+    """A console line's fields: its logger and the pairs after it, else its
+    attribution alone."""
+    tail = _tail(text)
+    if tail is None:
+        return tuple(_METADATA.findall(text))
+    return (("logger", tail.group(1)), *_PAIR.findall(tail.group(2)))
+
+
+def message_of(line: LogLine, text: str) -> str:
+    """A console ``line``'s message, ``text`` (its lead split off), as Logs
+    and errors read it: what structlog printed after it (its fields now)
+    taken out, else its attribution."""
+    return _TAIL.sub("", text) if _tail(line.text) else without_metadata(text)
 
 
 def _level(given: object, text: str) -> str | None:
@@ -234,13 +270,14 @@ def parse_log_line(raw: str, stream: str) -> LogLine:
                 for key, value in record.items()
                 if key not in _READ and key not in _TRACES
             )
-    if not text.startswith("{") and _level(level, text):
-        fields = tuple(_METADATA.findall(text))
+    level = _level(level, text)
+    if not text.startswith("{") and level:
+        fields = _console_fields(text)
     return LogLine(
         text=text,
         stream=stream,
         timestamp=timestamp,
-        level=_level(level, text),
+        level=level,
         event=str(event) if event is not None else None,
         fields=fields,
         trace=trace,

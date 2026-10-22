@@ -193,6 +193,7 @@ def _row(**given: object) -> dict[str, object]:
         "instance": REDIS.name,
         "source": "",
         "level": None,
+        "logger": None,
         "prefix": "",
         "message": "Write failed",
         "fields": [],

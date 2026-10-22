@@ -349,6 +349,8 @@ def _line(level: str, message: str) -> dict[str, Any]:
         "instance": "my-app-worker-1",
         "level": level,
         "message": message,
+        "logger": None,
+        "fields": [],
         "trace": None,
         "color": 3,
         "copy_text": message,
@@ -402,6 +404,8 @@ async def test_logs_keeps_what_a_reader_needs_up_to_the_limit(
         "container",
         "level",
         "message",
+        "logger",
+        "fields",
         "trace",
     }
 

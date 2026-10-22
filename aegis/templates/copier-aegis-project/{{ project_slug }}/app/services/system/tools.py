@@ -168,6 +168,8 @@ def _line(row: dict[str, Any]) -> dict[str, Any]:
         "container": row["instance"],
         "level": row["level"],
         "message": row["message"],
+        "logger": row["logger"],
+        "fields": dict(row["fields"]),
         "trace": row["trace"],
     }
 

@@ -102,6 +102,38 @@ result list, a dialog body. Those handlers return the fragment directly with
 `/partials/...` prefix in `create_web_frontend_app()`. Fragment templates have
 no `{% extends %}`.
 
+## Animations: the player
+
+Anything that plays out over time (Overseer's request replay is the first)
+uses one player, `static/js/timeline.js`, and its controls macro,
+`components/macros/player.html`. A page hands it steps; it knows nothing of
+what they mean:
+
+```jinja
+{% from "components/macros/player.html" import player %}
+{% call player(steps) %}
+  ... what the steps light: a map, a list, anything ...
+{% endcall %}
+```
+
+Each step is `{"at": ms, "ms": ms, "targets": [css selectors], "state":
+"active" | "refused" | "stall" | "failed"}`. At any moment the player sets
+`data-play-state` on what is lit (and `done` on what ran before) and leaves
+the look to CSS (`input.css`, under `[data-play-state]`), so a new animation is
+a function that turns its data into steps and, at most, a few CSS rules. It
+plays, pauses, steps back and forward, seeks and slows down (real time to 1000x slower);
+with reduced motion it moves a step at a time and nothing runs between.
+
+A step may also carry `"says"`: the latest one to start is shown in words
+under the controls. To play in scenes, one after another (the replay's
+levels), put each in a `data-play-scene="key"` element inside the player
+with `data-play-at` and `data-play-ms`: only the scene whose span holds the
+moment shows, and the clock counts within it. Staged beats ahead of its real
+time (the replay's way in) go in `data-play-lead`; the clock holds at 0
+through them, and at its end through any after. `player(steps,
+chapters=[{"key": ..., "title": ...}, ...])` adds a button per scene that goes to its
+start.
+
 ## Feedback
 
 ### Toasts
@@ -195,6 +227,7 @@ macro per control. Import what you need:
 | `layout.html` | `page_header(title, subtitle)` (the title row, with the caller's figures, chips and actions on the right), `figures(items)` (headline numbers), `stats_strip(cells)` (one bordered strip of N cells, each optionally a door), `ranked_rows(rows)` (name, count, amount, bar), `tab_bar` + `tab_item` (underline tabs), `chip(label, active, href, hx)`, `card` (titled section, body via `{% call %}`; a `None` title drops the header), `stat_tile(label, value, negative, caption, attrs)` (a caption line; `attrs` makes it a clickable cell), `progress(ratio, tone)`, `chart_panel`, `dialog`, `badge(label, tone)` (ok / warn / error / muted / accent), `dropdown` + `menu_item(label, attrs, danger)` (a `<details>` menu whose items close it), `confirm(title, body, url, label, method)` (a dialog body with one destructive verb), `theme_toggle`, `modal_scrim`, `popover_panel`, `hover_hint`, `info_tooltip` |
 | `table.html` | `data_table(columns, rows, empty=..., row_id=...)`: declare columns (`key`, `label`, `kind` of text/money/date/int/status, `align`, `signed` or `toned` for money), hand over objects or dicts, formatting goes through the filters. `row_id` names each row so an action can swap it back; a `{% call(row) %}` block adds an actions column. `table_row(columns, row, id, oob, actions)` renders one row on its own, the usual answer to a row action. `pager`. The only table in the app. |
 | `feedback.html` | `toast_region`, `empty_state`, `error_banner`, `oob(id, tag)` (an out-of-band sibling rendered next to a swapped row) |
+| `player.html` | `player(steps, label, chapters)`: the player's controls and steps around what they light, body via `{% call %}` (see *Animations: the player*) |
 
 `chart_panel(id, title, kind, data)` renders a canvas plus a JSON block;
 `static/js/charts.js` mounts Chart.js over every `canvas[data-chart]` on

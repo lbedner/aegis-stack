@@ -32,10 +32,9 @@ from app.core.log_records import LogAssembler, LogRecord
 from app.core.log_records import split_lead as _split_lead
 from app.core.ownership import component_of
 from app.core.runtime import (
-    METADATA_KEYS,
     LogLine,
     RuntimeUnavailableError,
-    without_metadata,
+    message_of,
 )
 from app.core.time import utcnow
 from app.services.system import ui_runtime
@@ -76,19 +75,6 @@ RAMP = CHART_RAMP
 _PAGES = sorted(runtime.PAGES)
 
 
-def _presentation(
-    line: LogLine, message: str
-) -> tuple[str, list[tuple[str, str]], list[tuple[str, str]]]:
-    """Keep attribution metadata out of the collapsed message in both renderers."""
-    if line.event is None and line.level:
-        message = without_metadata(message)
-    return (
-        message,
-        [(key, value) for key, value in line.fields if key not in METADATA_KEYS],
-        [(key, value) for key, value in line.fields if key in METADATA_KEYS],
-    )
-
-
 def color_of(page: str) -> int:
     """A page's color, an index into the chart ramp: the same on every page
     and in both UIs, and (with no more pages than colors) no two alike."""
@@ -117,20 +103,23 @@ class _Row:
             ("", self.line.event) if self.line.event else _split_lead(self.line.text)
         )
         copy_text = lead + message
-        message, fields, metadata = _presentation(self.line, message)
+        if self.line.event is None and self.line.level:
+            message = message_of(self.line, message)
+        fields = dict(self.line.fields)
         return {
             "at": format_timestamp(when.isoformat()) if when else "-",
             "ms": _ms(when) if when else None,
             "page": self.page,
-            **{key: dict(self.line.fields).get(key) for key in OWNER_PICKS},
+            **{key: fields.get(key) for key in OWNER_PICKS},
             "color": color_of(self.page),
             "instance": self.instance,
             "source": self.source,
             "level": self.line.level,
+            "logger": fields.pop("logger", None),
             "prefix": lead,
             "message": message,
-            "fields": fields,
-            "metadata": metadata,
+            # The rest, the attribution among them, as the console orders them.
+            "fields": sorted(fields.items()),
             "copy_text": copy_text,
             "trace": self.trace,
         }

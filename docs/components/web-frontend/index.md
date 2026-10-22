@@ -52,7 +52,23 @@ cards or a map of the stack, each linking to its own page. The map's Traffic
 chip tones each node by how much ran through it instead of its health:
 every call along the lines touching it, Overseer's own reads included,
 counted as it happens with no tracer needed. Opened up, each service that
-breaks the service standard says how many places it should fix. To sign in
+breaks the service standard says how many places it should fix. **Replay a
+request** (`/overseer/replay`) picks one of the last 200 the server answered
+and plays it a level at a time: the Server opened up when the request went
+past one service, then each service it ran in opened up (Router, Facade, a
+domain, and the Database beside the code that queried it), the first
+opening on the way in (the ingress, where there is one, then the Server),
+each drawing only what the request went through. A request one service
+answered is one screen, its answer going back out the way it came in on a
+track of its own; the
+clock counts only the request's own time. Each hop it made (a service calling another, a
+query and its tables, a provider called, work queued) is lit as it ran, at
+its real timing slowed down to watch, the slowest held, a failure flashed,
+and said in words under the controls. Its Hops view lists them in the order
+they ran, each at its line in Overseer > Code.
+Routes' Execute answer and an error logged during a request link straight to
+it (the request's id rides every answer as `X-Request-Id` and every line it
+logs as `request_id`). Overseer's own pages are not kept. To sign in
 to it, and keep it to admins, add auth:
 
 ```bash

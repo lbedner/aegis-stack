@@ -41,6 +41,27 @@ def test_plain_stderr_and_error_words_are_not_errors(fields: dict[str, str]) -> 
     assert normalized(event("error rate is zero", **fields)) is None
 
 
+def test_a_console_error_groups_as_its_json_twin() -> None:
+    """The development console prints a line's logger and pairs after its
+    message; read as fields, they leave the message as the JSON line's."""
+    assembly = LogAssembler()
+    assembly.feed(
+        "container-id",
+        parse_log_line(
+            # Docker's time, then the line as printed.
+            "2026-10-22T13:24:24.330106000Z"
+            " 2026-10-22T13:24:24.330106Z [error    ] failed   [app.pay] order=7",
+            "stderr",
+        ),
+        now=0,
+    )
+    console = normalized(assembly.flush()[0])
+    twin = normalized(event("failed", level="error", logger="app.pay", order=7))
+    assert console is not None and twin is not None
+    assert (console.message, console.logger) == ("failed", "app.pay")
+    assert console.fingerprint == twin.fingerprint
+
+
 def test_message_only_error_has_no_invented_trace() -> None:
     result = normalized(event("failed", level="error"))
     assert (

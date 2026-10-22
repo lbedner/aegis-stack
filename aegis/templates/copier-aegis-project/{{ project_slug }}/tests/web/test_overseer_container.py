@@ -730,12 +730,14 @@ def test_the_traffic_heat_tones_each_node_by_what_ran_through_it(
     """The busiest the hottest, each saying how much: from the edges the
     running app counted, the map's one heat. A query is one call, though
     it is counted to the database and to its table; a part a call passes
-    through (served once, querying nine times) made nine, not ten."""
+    through (served once, querying nine times) made nine, not ten, its
+    own sub-part's calls (its users) its own, not more of them."""
     client = zoomable(app, monkeypatch)
     counted = {
         (edges.SERVER, "service:auth"): edges.Seen(count=1),
-        ("service:auth", "component:database"): edges.Seen(count=9),
-        ("service:auth", "object:user"): edges.Seen(count=9),
+        ("service:auth", "service:auth.users"): edges.Seen(count=9),
+        ("service:auth.users", "component:database"): edges.Seen(count=9),
+        ("service:auth.users", "object:user"): edges.Seen(count=9),
     }
 
     async def observed() -> dict[edges.Key, edges.Seen]:

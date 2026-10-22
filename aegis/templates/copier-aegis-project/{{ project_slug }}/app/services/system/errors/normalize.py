@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 
 from app.core.log_records import TERMINAL, LogRecord, split_lead
-from app.core.runtime import without_metadata
+from app.core.runtime import message_of
 
 from . import redact
 from .fingerprint import digest, fingerprint
@@ -32,7 +32,7 @@ def normalize(
     message = redact.text(
         line.event
         if line.event is not None
-        else without_metadata(split_lead(line.text)[1])
+        else message_of(line, split_lead(line.text)[1])
     )
     trace = redact.text(trace) if trace else None
     types = [

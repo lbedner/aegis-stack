@@ -33,15 +33,18 @@ async def _traffic() -> Values:
     """Calls by node: the more of what came in and what went out, so a
     call passing through (served once, querying three times) is three,
     not four. A query is counted to the database and to its table: the
-    table's is left out, so it is one call, not two."""
+    table's is left out, so it is one call, not two; a call within a part
+    (Auth to its users) is no call between nodes."""
     into: Counter[str] = Counter()
     out: Counter[str] = Counter()
     for (source, target), seen in (await edges.observed()).items():
         pair = (source, target)
         if edges.OTHER in pair or any(n.startswith(f"{Kind.OBJECT}:") for n in pair):
             continue
-        out[registry_of(source)] += seen.count
-        into[registry_of(target)] += seen.count
+        if (key := registry_of(source)) == (into_key := registry_of(target)):
+            continue
+        out[key] += seen.count
+        into[into_key] += seen.count
     return {key: max(into[key], out[key]) for key in into | out}
 
 

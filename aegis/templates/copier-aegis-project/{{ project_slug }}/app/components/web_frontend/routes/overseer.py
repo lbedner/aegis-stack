@@ -3,6 +3,7 @@ its gate (``overseer_access``), after
 the partial routers, so a partial's path wins over the catch-all pages."""
 
 from functools import partial
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import (
@@ -17,6 +18,7 @@ from app.components.web_frontend import (
     overseer_connections,
     overseer_container,
     overseer_redis,
+    overseer_replay,
     overseer_secrets,
     overseer_server_load_tests,
     overseer_worker,
@@ -34,6 +36,7 @@ from app.components.web_frontend.overseer_events import health_events
 from app.components.web_frontend.overseer_live import event_stream
 from app.components.web_frontend.overseer_nav import (
     Audit,
+    NavItem,
     SectionRequest,
     build_navigation,
     find_item,
@@ -45,6 +48,7 @@ from app.components.web_frontend.overseer_sections import (
     rail,
 )
 from app.components.web_frontend.rendering import render, viewer_zone
+from app.core import replays
 from app.core.audit import AuditEmitter, get_audit
 from app.services.shared.deps import actor_of
 from app.services.system.health import last_system_status
@@ -111,6 +115,61 @@ async def overseer_server_connections(request: Request) -> StreamingResponse:
     """The Server page's connections table, filters and all, while it is open."""
     return event_stream(
         overseer_connections.connections_events(dict(request.query_params))
+    )
+
+
+@router.get(overseer_replay.HOME, response_class=HTMLResponse, include_in_schema=False)
+async def overseer_replays(
+    request: Request, user: Viewer = Depends(viewer)
+) -> Response:
+    """The requests the app served lately, to replay one."""
+    return _replay_page(request, user, overseer_replay.recent())
+
+
+@router.get(
+    overseer_replay.HOME + "/{request_id}",
+    response_class=HTMLResponse,
+    include_in_schema=False,
+)
+async def overseer_replay_page(
+    request: Request,
+    request_id: str,
+    view: str | None = None,
+    user: Viewer = Depends(viewer),
+) -> Response:
+    """One request replayed on the map, or its hops listed (``view``);
+    checked to be an id before any lookup."""
+    if not replays.is_id(request_id):
+        raise HTTPException(status_code=404)
+    navigation = build_navigation(last_system_status())
+    recording = replays.find(request_id)
+    if recording is None:
+        context: dict[str, Any] = {"replay": None}
+    elif view == overseer_replay.LIST_VIEW:
+        context = overseer_replay.listed(recording)
+    else:
+        context = await overseer_replay.replay(navigation, recording)
+    return _replay_page(request, user, context, navigation)
+
+
+def _replay_page(
+    request: Request,
+    user: Viewer,
+    context: dict[str, Any],
+    navigation: dict[str, list[NavItem]] | None = None,
+) -> Response:
+    status = last_system_status()
+    return render(
+        request,
+        name="pages/overseer/replay.html",
+        context={
+            "user": user,
+            "navigation": navigation or build_navigation(status),
+            "status": status,
+            "replay_keep": replays.KEEP,
+        }
+        | context,
+        page_layout="layouts/overseer.html",
     )
 
 

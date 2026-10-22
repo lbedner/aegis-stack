@@ -17,13 +17,14 @@ from app.core.formatting import (
     format_timestamp,
     page_number,
 )
-from app.services.system import ui_worker
+from app.services.system import topology, ui_worker
 from app.services.system.models import ComponentStatus, ComponentStatusType
+from app.services.system.ui import get_component_label, get_component_title
 
 from . import overseer_runs, overseer_worker_load_tests
-from .filters import color_tone
+from .filters import color_tone, health_tone
 from .overseer_live import fragment_events
-from .overseer_nav import SectionRequest
+from .overseer_nav import NavItem, SectionRequest
 from .rendering import fragment, pager, status_cell, with_query
 
 SECTIONS = (
@@ -314,3 +315,23 @@ async def section_context(
     if section == "lifecycle":
         return await _lifecycle(req)
     return {}
+
+
+def queue_node(worker: NavItem) -> dict[str, Any]:
+    """The worker's queue (``topology.QUEUE``) as a node, from the worker's
+    own health check (``ui_worker.backlog``): drawn on Overseer's map."""
+    found = ui_worker.backlog(worker.component)
+    holder = topology.INSIDE[topology.QUEUE]
+    return {
+        "key": topology.QUEUE,
+        "registry": topology.QUEUE,
+        "title": get_component_title(topology.QUEUE),
+        "url": worker.url,
+        "status": found.status.value,
+        "tone": health_tone(found.status.value),
+        "message": found.message,
+        "figure": f"{found.queued} queued",
+        "note": f"In {get_component_label(holder)}, beside the "
+        f"{get_component_title(holder)}",
+        "glance": None,
+    }

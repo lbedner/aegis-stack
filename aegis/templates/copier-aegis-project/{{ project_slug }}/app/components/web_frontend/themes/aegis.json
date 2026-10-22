@@ -1,0 +1,14 @@
+{
+  "shape": {
+    "--rounded-box": "0.5rem",
+    "--rounded-btn": "0.25rem",
+    "--rounded-badge": "0.25rem",
+    "--aegis-label-case": "uppercase",
+    "--aegis-label-tracking": "0.05em",
+    "--aegis-scale": "100%"
+  },
+  "type": {
+    "display": "ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, sans-serif",
+    "body": "ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, sans-serif"
+  }
+}

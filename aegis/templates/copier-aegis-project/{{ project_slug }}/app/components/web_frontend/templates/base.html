@@ -7,10 +7,10 @@
    ``render()`` in rendering.py and the two layouts under layouts/).
 #}
 {% from "components/macros/feedback.html" import toast_region %}
-{% from "components/macros/layout.html" import theme_toggle, dialog, drawer %}
+{% from "components/macros/layout.html" import appearance_head, theme_toggle, dialog, drawer %}
 {% from "components/macros/icons.html" import sprite %}
 <!DOCTYPE html>
-<html lang="en" data-theme="aegis-dark">
+<html lang="en" data-theme="{{ default_theme.name }}-dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -24,11 +24,10 @@
 
   {# Tailwind + DaisyUI, precompiled — no runtime JIT, no CDN. Built into
      static/dist by the asset pipeline; static() returns the fingerprinted
-     URL once a build exists and the raw source path before then. #}
-  {# Applies the stored theme to the document element before the
-     stylesheet paints; a sync script on purpose (see static/js/theme.js). #}
-  <script src="{{ static('js/theme.js') }}"></script>
-  <link rel="stylesheet" href="{{ static('dist/app.css') }}">
+     URL once a build exists and the raw source path before then. The
+     theme script ahead of it applies the stored theme before the
+     stylesheet paints (see static/js/theme.js). #}
+  {{ appearance_head(default_theme) }}
 
   {# htmx. History snapshots are disabled deliberately: htmx's default
      back-button behavior saves the live DOM to localStorage and re-injects

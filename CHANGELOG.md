@@ -9,6 +9,18 @@
 
 ### Added
 
+- **Themes as files, every one at parity.** A theme (shape, type, tints)
+  is one file under `app/components/web_frontend/themes/` (`aegis.json`,
+  `steward.json`; a project adds its own beside them). `tailwind.config.js`
+  reads the folder and generates one DaisyUI theme per theme and mode; the
+  server reads the same files (`web_frontend/themes.py`), so the toggle
+  offers every theme and the stylesheet has every one. A theme names its
+  type too: `font-display` and `font-body` read it, the body wears it, and
+  the layout loads its faces when it has any. `WEB_THEME` names the theme
+  the Overseer opens with (a name no file has fails at boot, listing the
+  ones that exist); `appearance_head(theme, fixed=true)` lets a public
+  layout wear its own theme while the viewer still picks the mode.
+
 - **Questions asked in a call, answered while it is still on.** The
   meetings bot picks out moments as it captions: a line another speaker
   ends with a question mark is a question (detectors are registered by

@@ -1,0 +1,22 @@
+{
+  "shape": {
+    "--rounded-box": "0.75rem",
+    "--rounded-btn": "0.5rem",
+    "--rounded-badge": "1rem",
+    "--aegis-label-case": "none",
+    "--aegis-label-tracking": "0",
+    "--aegis-scale": "106.25%"
+  },
+  "type": {
+    "display": "ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, sans-serif",
+    "body": "ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, \"Helvetica Neue\", Arial, sans-serif"
+  },
+  "tints": {
+    "light": {
+      "primary": "#0F8A7E",
+      "base-200": "#FAF9F7",
+      "base-300": "#E8E5E0",
+      "neutral": "#66707C"
+    }
+  }
+}

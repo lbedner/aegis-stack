@@ -1,6 +1,7 @@
 """Overseer's reads as tools (``app.core.tools.load_tools``): what is wrong
-now (``health``), what broke (``errors``), what led up to it (``logs``)
-and what the app is (``ontology``), for an agent or an MCP client. The
+now (``health``), what broke (``errors``), what led up to it (``logs``),
+what a request did (``requests``) and what the app is (``ontology``), for
+an agent or an MCP client. The
 same reads Overseer's pages make, so a tool and a page never disagree.
 Read-only."""
 
@@ -10,7 +11,7 @@ from typing import Any
 
 from starlette.datastructures import QueryParams
 
-from app.core import runtime
+from app.core import replays, runtime
 from app.core.ontology import Kind, PartNode, graph
 from app.core.ontology.model import Node
 from app.core.ontology.observed import running
@@ -19,6 +20,7 @@ from app.core.tools import register_tool
 from app.services.shared.deps import caller_is_admin
 from app.services.system import (
     dry_path,
+    kept_requests,
     live_status,
     pattern_findings,
     plugin_directory,
@@ -174,6 +176,30 @@ def _line(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+async def requests(
+    request_id: str | None = None, route: str | None = None
+) -> dict[str, Any]:
+    """The requests the server answered, as it ran them: the latest
+    hundred, newest first (``kept`` says how many it keeps), each with its route,
+    status, length and hop count; ``route`` (as declared,
+    ``/api/v1/users/{id}``) keeps one route's. ``request_id`` (a
+    request's ``id``, or the ``X-Request-Id`` an answer carries) reads
+    one with its hops in the order they started: what each went through
+    (``chain``, model node ids, as ``ontology``'s dry path names them),
+    when it started and how long it took (real milliseconds), whether it
+    failed, the tables a query touched and the lines of code it was made
+    through, each with the service and piece it is in. The server's last
+    requests, kept a day."""
+    if request_id is None:
+        found = await kept_requests.recent(route, MAX_NODES)
+        listed = [r.model_dump(mode="json") for r in found]
+        return {"requests": listed, "kept": replays.KEEP}
+    one = await kept_requests.find(request_id)
+    if one is None:
+        raise ValueError(f"No request {request_id!r} kept; list them with no id.")
+    return {"request": one.model_dump(mode="json")}
+
+
 async def _dry_path(route: str) -> dict[str, Any]:
     if not await caller_is_admin():
         raise ValueError("A route's dry path is its code: an admin's to read.")
@@ -316,6 +342,13 @@ register_tool(
     "errors",
     errors,
     description="What broke: retained errors grouped into issues, with tracebacks",
+    effect="read",
+    admin=True,
+)
+register_tool(
+    "requests",
+    requests,
+    description="What a request did: the recent ones, or one hop by hop",
     effect="read",
     admin=True,
 )

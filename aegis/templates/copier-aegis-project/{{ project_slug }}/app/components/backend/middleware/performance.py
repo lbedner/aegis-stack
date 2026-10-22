@@ -29,11 +29,13 @@ import time
 from typing import Any
 
 from fastapi import FastAPI, Request, Response
+from starlette.background import BackgroundTask
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 import structlog
 
 from app.core import edges, replays
+from app.core.concurrency import background
 from app.core.log import logger
 
 # Recent-sample cap. 100 datapoints is enough for percentile math
@@ -271,7 +273,12 @@ class PerformanceMiddleware(BaseHTTPMiddleware):
             if response is not None:
                 response.headers["X-Response-Time"] = f"{duration_ms:.2f}ms"
                 if kept:
-                    response.headers["X-Request-Id"] = kept
+                    response.headers["X-Request-Id"] = kept.id
+            # Kept once answered, so the write never holds the response.
+            if kept and response is not None and response.background is None:
+                response.background = BackgroundTask(replays.keep, kept)
+            elif kept:
+                background(replays.keep(kept))
 
 
 def register_middleware(app: FastAPI) -> None:

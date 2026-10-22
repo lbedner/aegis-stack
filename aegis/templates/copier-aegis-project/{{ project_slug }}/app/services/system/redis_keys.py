@@ -45,6 +45,7 @@ OWNERS = (
     "app.components.deploy.agent",
     "app.core.series_keys",
     "app.core.edges",
+    "app.core.replays",
     "app.components.backend.middleware.connections",
     "app.components.secrets.store",
     "app.services.system.db_trend",

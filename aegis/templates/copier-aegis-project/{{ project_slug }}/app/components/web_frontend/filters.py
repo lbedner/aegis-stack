@@ -130,9 +130,37 @@ def _safe_markdown() -> Any:
         def render_fenced_code(self, element: Any) -> str:
             return highlight(element.children[0].children, element.lang)
 
+    class CodeLink:
+        def render_code_span(self, element: Any) -> str:
+            span: str = super().render_code_span(element)  # type: ignore[misc]
+            return _code_link(element.children, span)
+
     return Markdown(
-        extensions=[GFM, MarkoExtension(renderer_mixins=[Highlight, EscapeHTML])]
+        extensions=[
+            GFM,
+            MarkoExtension(renderer_mixins=[Highlight, CodeLink, EscapeHTML]),
+        ]
     )
+
+
+# A file of the app's own named as code, its line or not: ``app/x.py:12``.
+_CODE_PATH = re.compile(r"(?P<path>[\w./-]+\.\w+)(?::(?P<line>\d+))?")
+
+
+def _code_link(code: str, span: str) -> str:
+    """``span`` linked to the file it names in Overseer > Code, at its
+    line, as every link to code is (``code_link``); as it was for a file
+    the page does not show, or while it is off."""
+    from .overseer_code import file_url  # it imports this module
+    from .rendering import templates
+
+    found = _CODE_PATH.fullmatch(code)
+    line = found and found["line"]
+    url = found and file_url(found["path"], int(line) if line else None)
+    if not url:
+        return span
+    macros = templates.env.get_template("pages/overseer/_macros.html").module
+    return str(macros.code_link(url, Markup(span)))
 
 
 # The prefix of each numbered line's address: ``L-42`` (``linespans``).

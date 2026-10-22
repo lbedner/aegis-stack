@@ -9,9 +9,9 @@ import asyncio
 from collections.abc import Iterator, Mapping
 from datetime import datetime
 import json
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 
 from app.core.edges_http import AI
 from app.core.log import logger
@@ -31,6 +31,11 @@ NOW_ERRORS = 5
 # it was read, is refused (the AI service's ``schemas.FIGURES``; this
 # module ships where that one does not).
 FIGURES = ConfigDict(frozen=True, extra="forbid")
+# Money as an agent reads it, and says it aloud: to the cent (a ledger's
+# fractions of one were read as more than they are). Less than half of one
+# rounds to none.
+Cents = Annotated[float, AfterValidator(lambda usd: round(usd, 2))]
+HALF_CENT = 0.005
 
 
 class UsageWindow(BaseModel):
@@ -43,7 +48,13 @@ class UsageWindow(BaseModel):
     since: datetime | None
     total_requests: int
     total_tokens: int
-    total_cost: float  # USD
+    total_cost: Cents  # USD
+    # The cost by who served it (``unknown``: a model not in the catalog),
+    # by what it was for (chat, a voice kind) and by ``voice`` or ``text``,
+    # largest first.
+    by_vendor: dict[str, Cents] = Field(default_factory=dict)
+    by_action: dict[str, Cents] = Field(default_factory=dict)
+    by_mode: dict[str, Cents] = Field(default_factory=dict)
 
 
 class NodeNow(BaseModel):

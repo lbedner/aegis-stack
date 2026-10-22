@@ -199,6 +199,7 @@ nav:
   - Overseer:
     - Overview: overseer/index.md
     - The Story: overseer/story.md
+    - The Twin: overseer/twin.md
     - Integration: overseer/integration.md
   - Deployment:
     - Getting Started: deployment/index.md

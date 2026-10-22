@@ -4,27 +4,29 @@ level, the Server then each service it ran in opened up, each drawn once
 through; the hops as the player's steps and as a list beside it, in the
 order they ran; and the recent requests to pick one from."""
 
-from collections.abc import Iterator
+from collections.abc import AsyncIterator
 import json
 
 from fastapi import FastAPI
 import pytest
 
-from app.components.web_frontend import overseer_map, overseer_replay, overseer_zoom
+from app.components.web_frontend import overseer_map, overseer_zoom
 from app.components.web_frontend.overseer_zoom import title_of
 from app.core import edges, exposure, replays
 from app.core.replays import Hop
+from app.services.system import service_pieces
 from app.services.system.models import ComponentStatus
+from tests._replays import kept
 from tests.web.dom import none, one, select, text
 from tests.web.overseer import page_html, reported_only
 from tests.web.zoomed import DB, auth_opens, zoomable
 
 
 @pytest.fixture(autouse=True)
-def fresh() -> Iterator[None]:
-    replays.reset()
+async def fresh() -> AsyncIterator[None]:
+    await replays.reset()
     yield
-    replays.reset()
+    await replays.reset()
 
 
 ROUTES = "app/components/backend/api/auth/router.py"
@@ -35,16 +37,11 @@ INGRESS = ComponentStatus(name="ingress", message="Routing", metadata={})
 AUTH = '[data-play-scene="service_auth"]'
 
 
-def _recorded(*hops: Hop, status: int = 200) -> replays.Recording:
+async def _recorded(*hops: Hop, status: int = 200) -> replays.Recording:
     """A request to Auth's route that made ``hops``, the server running
     the route spanning it, answered with ``status``."""
-    token = replays.start("GET", "/api/v1/auth/me")
-    recording = replays.current()
-    assert recording is not None
     route = Hop((edges.SERVER, "service:auth"), 0.0, 20.0, False, ((ROUTES, 9),))
-    recording.hops += [route, *hops]
-    assert replays.finish(token, route="/api/v1/auth/me", status=status, ms=20.0)
-    return replays.recent()[0]
+    return await kept("/api/v1/auth/me", route, *hops, status=status)
 
 
 def _from(source: str, to: str, at: float, *paths: str, error: bool = False) -> Hop:
@@ -57,7 +54,7 @@ def _nodes(scene: object) -> set[str]:
     return {node.get("data-node") for node in select(scene, "[data-node]")}
 
 
-def test_a_request_plays_in_through_the_ingress_then_inside_auth(
+async def test_a_request_plays_in_through_the_ingress_then_inside_auth(
     app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     client = zoomable(app, monkeypatch, INGRESS)
@@ -66,11 +63,11 @@ def test_a_request_plays_in_through_the_ingress_then_inside_auth(
     trail = tuple((path, 1) for path in (ROUTES, FACADE, QUERIES))
     query = Hop(("service:auth", "service:auth.users", DB), 5.0, 2.0, False, trail)
     query.tables.append("user")
-    kept = _recorded(
+    found = await _recorded(
         query,
         _from("service:auth", "external:Stripe", 9.0, ROUTES, FACADE, error=True),
     )
-    html = page_html(client, f"/overseer/replay/{kept.id}")
+    html = page_html(client, f"/overseer/replay/{found.id}")
     player = one(html, "[data-player]")
     # Speeds said plainly.
     speeds = [text(option) for option in select(player, "[data-play-speed] option")]
@@ -162,7 +159,7 @@ def test_a_request_plays_in_through_the_ingress_then_inside_auth(
     # The map has the page; the hops in a list are a view of their own.
     none(html, "[data-hops]")
     listed = one(html, "a[data-replay-view]").get("href")
-    assert listed == f"/overseer/replay/{kept.id}?view=hops"
+    assert listed == f"/overseer/replay/{found.id}?view=hops"
     hops = page_html(client, listed)
     none(hops, "[data-player]")
     rows = [text(row) for row in select(hops, "[data-hops] [data-hop]")]
@@ -174,7 +171,7 @@ def test_a_request_plays_in_through_the_ingress_then_inside_auth(
     assert "user" in rows[1]  # the table it queried
     assert rows[1].count(title_of("service_auth")) == 1  # its users are Auth's
     back = one(hops, "a[data-replay-view]").get("href")
-    assert back == f"/overseer/replay/{kept.id}"
+    assert back == f"/overseer/replay/{found.id}"
     # Each at its line of code, linked while Overseer > Code is on.
     assert one(hops, '[data-hop="1"] a').get("href").startswith("/overseer/code")
     monkeypatch.setattr(exposure, "shown", lambda name: False)
@@ -185,7 +182,7 @@ def test_a_request_plays_in_through_the_ingress_then_inside_auth(
     ("status", "tone", "state"),
     [(200, "ok", "active"), (401, "warn", "refused"), (503, "error", "failed")],
 )
-def test_the_answer_goes_back_out_in_its_tone(
+async def test_the_answer_goes_back_out_in_its_tone(
     app: FastAPI, monkeypatch: pytest.MonkeyPatch, status: int, tone: str, state: str
 ) -> None:
     """How it was answered, said where it shows: the status at the top and
@@ -193,7 +190,7 @@ def test_the_answer_goes_back_out_in_its_tone(
     failure (5xx) is red."""
     client = zoomable(app, monkeypatch, INGRESS)
     auth_opens(monkeypatch)
-    html = page_html(client, f"/overseer/replay/{_recorded(status=status).id}")
+    html = page_html(client, f"/overseer/replay/{(await _recorded(status=status)).id}")
     answer = one(html, "[data-answer]")
     assert (text(answer), answer.get("data-tone")) == (str(status), tone)
     assert text(answer.getparent()).endswith(" 1 hop")
@@ -201,15 +198,17 @@ def test_the_answer_goes_back_out_in_its_tone(
     assert [step["state"] for step in steps[-2:]] == [state, state]
 
 
-def test_a_hop_the_map_has_no_line_for_is_drawn_as_seen(
+async def test_a_hop_the_map_has_no_line_for_is_drawn_as_seen(
     app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Replay, not the plan: a call the model does not declare still ran,
     so it gets a line of its own, marked as seen only."""
     client = zoomable(app, monkeypatch)
     reported_only(monkeypatch)  # not what another test registered
-    kept = _recorded(_from("service:auth", DB, 2.0), _from(DB, "external:Stripe", 4.0))
-    html = page_html(client, f"/overseer/replay/{kept.id}")
+    found = await _recorded(
+        _from("service:auth", DB, 2.0), _from(DB, "external:Stripe", 4.0)
+    )
+    html = page_html(client, f"/overseer/replay/{found.id}")
     # Past Auth (the Database calling out): the Server opened up shows it,
     # first; no ingress, so straight in.
     scene = one(html, SERVER)
@@ -231,7 +230,7 @@ def test_a_malformed_id_is_not_looked_up(
     def looked_up(_: str) -> None:
         raise AssertionError("looked up")
 
-    monkeypatch.setattr(overseer_replay.replays, "find", looked_up)
+    monkeypatch.setattr(replays, "find", looked_up)
     assert client.get("/overseer/replay/not-an-id").status_code == 404
 
 
@@ -243,7 +242,7 @@ def test_a_request_no_longer_kept_says_so(
     assert "no longer kept" in text(one(html, "[data-replay-empty]"))
 
 
-def test_the_recent_requests_one_row_a_route_newest_first(
+async def test_the_recent_requests_one_row_a_route_newest_first(
     app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Requests to one route are one row (how many, the slowest, the most
@@ -251,13 +250,12 @@ def test_the_recent_requests_one_row_a_route_newest_first(
     newest first, each a replay."""
     client = zoomable(app, monkeypatch)
     none(page_html(client, "/overseer/replay"), "[data-route]")
-    first, second = _recorded(), _recorded(status=401)
-    token = replays.start("GET", "/health/")
-    replays.finish(token, route="/health/", status=200, ms=1.0)
+    first, second = await _recorded(), await _recorded(status=401)
+    await kept("/health/detailed")
     html = page_html(client, "/overseer/replay")
     routes = select(html, "[data-route]")
     assert [(text(r), r.get("data-tone")) for r in routes] == [
-        ("GET /health/", "ok"),
+        ("GET /health/detailed", "ok"),
         ("GET /api/v1/auth/me", "warn"),
     ]
     requests = select(html, "[data-replay-requests]")
@@ -268,14 +266,15 @@ def test_the_recent_requests_one_row_a_route_newest_first(
     assert "1 hop" in text(requests[1]) and "1 hops" not in text(requests[1])
 
 
-def test_a_request_answered_in_the_server_goes_no_way_out(
+async def test_a_request_answered_in_the_server_goes_no_way_out(
     app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Drawn on the Server opened up (no service of its own to open), its
     way in has one track: no way back out over it."""
     client = zoomable(app, monkeypatch)
     monkeypatch.setattr(overseer_zoom, "pieces_of", lambda subject, model: ([], {}))
-    html = page_html(client, f"/overseer/replay/{_recorded().id}")
+    monkeypatch.setattr(service_pieces, "held", lambda subject: [])
+    html = page_html(client, f"/overseer/replay/{(await _recorded()).id}")
     one(html, SERVER)
     steps = json.loads(text(one(html, "script[data-play-steps]")))
     assert not [step for step in steps if step["says"].startswith("Back out")]

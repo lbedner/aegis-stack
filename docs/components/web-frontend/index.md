@@ -54,7 +54,7 @@ every call along the lines touching it, Overseer's own reads included,
 counted as it happens with no tracer needed. Opened up, each service that
 breaks the service standard says how many places it should fix. **Replay a
 request** (`/overseer/replay`) picks one of the last 200 the server answered
-and plays it a level at a time: the Server opened up when the request went
+(the same ones `GET /api/v1/requests` and the `requests` tool read) and plays it a level at a time: the Server opened up when the request went
 past one service, then each service it ran in opened up (Router, Facade, a
 domain, and the Database beside the code that queried it), the first
 opening on the way in (the ingress, where there is one, then the Server),

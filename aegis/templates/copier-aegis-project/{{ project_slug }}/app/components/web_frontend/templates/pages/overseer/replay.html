@@ -17,7 +17,7 @@
     <span class="min-w-0 flex-1 truncate">{{ kept.path }}</span>
     <span data-tone="{{ kept.status|answer_tone }}" class="toned tabular-nums">{{ kept.status }}</span>
     <span class="tabular-nums text-aegis-text">{{ kept.ms }} ms</span>
-    <span class="tabular-nums">{{ kept.hops|length|counted("hop") }}</span>
+    <span class="tabular-nums">{{ kept.hop_count|counted("hop") }}</span>
   </a></li>
   {% endfor %}
 </ol>{% endmacro %}
@@ -41,7 +41,7 @@
   {% for row in replay_rows %}{% set hop = row.hop %}
   <li data-hop="{{ loop.index0 }}" class="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)_5rem] items-center gap-3 rounded px-2 py-1.5 hover:bg-aegis-card">
     <span class="min-w-0"><span class="block truncate"><span class="text-aegis-text">{{ row.label }}</span>{% if hop.tables %} <span class="text-aegis-muted">{{ hop.tables|join(", ") }}</span>{% endif %}{% if hop.error %} <span class="text-error">failed</span>{% endif %}</span>
-      {% if row.line %}<span class="block truncate font-mono text-aegis-muted">{{ line_link(*row.line) }}</span>{% endif %}</span>
+      {% if row.line %}<span class="block truncate font-mono text-aegis-muted">{{ line_link(row.line.path, row.line.line) }}</span>{% endif %}</span>
     <span class="relative h-2 rounded bg-aegis-border/40" aria-hidden="true"><span class="absolute inset-y-0 rounded{{ ' bg-error' if hop.error else ' bg-aegis-teal' }}" style="left: {{ row.left }}%; width: {{ row.width }}%"></span></span>
     <span class="text-right tabular-nums text-aegis-muted">{{ hop.ms }} ms</span>
   </li>
@@ -54,7 +54,7 @@
 {% endif %}
 {% else %}
 {% call page_header("Replay") %}{% endcall %}
-<div data-replay-empty>{{ empty_state("This request is no longer kept", "The server keeps its last " ~ replay_keep ~ " requests, until it restarts.") }}</div>
+<div data-replay-empty>{{ empty_state("This request is no longer kept", "The server keeps its last " ~ replay_keep ~ " requests, for a day.") }}</div>
 {% endif %}
 {% else %}
 {# The requests kept (overseer_replay.recent): a row a route, the latest

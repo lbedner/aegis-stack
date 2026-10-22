@@ -205,7 +205,7 @@ belongs - so it names each domain and what it owns.
     block imports is all it offers, each name loaded on first use
     (`app/services/shared/facade.py`). `patterns touches` takes a change's files (as arguments,
     or one per line from `git diff --name-only`) and says, from the app's
-    ontology, which parts own them, which parts depend on those, and the
+    ontology (the model layer of the [Twin](../overseer/twin.md)), which parts own them, which parts depend on those, and the
     tables, routes and jobs they define; Markdown for a pull request's job
     summary, JSON with `--format json`. `ontology export` writes the same
     model for other tools: `--format markdown` (the docs' *What It Is Made

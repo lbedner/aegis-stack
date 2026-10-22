@@ -2,6 +2,7 @@ from fastapi import FastAPI
 
 from app.components.backend.api import health
 from app.components.backend.api import jobs
+from app.components.backend.api import kept_requests
 from app.components.backend.api import load_test_api
 from app.components.backend.api import metrics
 from app.components.backend.api import ontology
@@ -118,6 +119,7 @@ def include_routers(app: FastAPI) -> None:
     """Include all API routers in the FastAPI app"""
     app.include_router(health.router, prefix="/health", tags=["health"])
     app.include_router(jobs.router, prefix="/api/v1")
+    app.include_router(kept_requests.router, prefix="/api/v1")
     app.include_router(metrics.router, prefix="/api/v1")
     app.include_router(ontology.router, prefix="/api/v1")
     app.include_router(pastebox.router, prefix="/api/v1")

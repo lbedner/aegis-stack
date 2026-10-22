@@ -4,30 +4,29 @@ request went past one service, then each service it ran in opened up (one
 with pieces of its own), the first opening on the way in (the stack's
 edge, the Server), each drawing only what the request went through
 (``overseer_zoom.along_*``) and drawn once (no stream: a live frame would
-wipe the replay). The request's hops (``replays``) are the player's steps
-(``static/js/timeline.js``) in each, at their real timing; in a view of
+wipe the replay). The request's hops, read as every reader reads them
+(``kept_requests``: each line of code with its service's piece), are the
+player's steps (``static/js/timeline.js``) in each, at their real timing; in a view of
 their own (``LIST_VIEW``) they are a list in the order they ran, each at
 its line of code. And the recent requests, to pick one from
 (``/overseer/replay``)."""
 
-import asyncio
 from collections.abc import Iterable
 from itertools import groupby, pairwise
 from typing import Any
 
 from markupsafe import Markup
 
-from app.core import replays
 from app.core.edges import SERVER
 from app.core.ownership import HOST
-from app.core.replays import Hop, Recording
-from app.services.system import topology
+from app.services.system import kept_requests, topology
+from app.services.system.kept_requests import RequestHop, RequestHops, RequestSummary
 from app.services.system.ui import is_service
 
-from . import overseer_container, overseer_zoom
+from . import overseer_container
 from .filters import answer_tone, worst_tone
 from .overseer_nav import NavItem
-from .overseer_zoom import Path, registry_of, title_of
+from .overseer_zoom import Path, registry_of, subject_of, title_of
 from .rendering import fragment, templates, with_query
 
 HOME = "/overseer/replay"
@@ -48,11 +47,11 @@ def url(request_id: str = "", view: str | None = None) -> str:
 templates.env.globals["replay_url"] = url
 
 
-def recent() -> dict[str, Any]:
+async def recent() -> dict[str, Any]:
     """The requests kept, one row a route (the latest first): how many,
     the slowest, the most hops, and each of them, newest first."""
-    routes: dict[str, list[Recording]] = {}
-    for kept in replays.recent():
+    routes: dict[str, list[RequestSummary]] = {}
+    for kept in await kept_requests.recent():
         routes.setdefault(f"{kept.method} {kept.route or kept.path}", []).append(kept)
     return {
         "replay_routes": [
@@ -61,7 +60,7 @@ def recent() -> dict[str, Any]:
                 "requests": kept,
                 "count": len(kept),
                 "slowest": f"{max(r.ms for r in kept)} ms",
-                "hops": max(len(r.hops) for r in kept),
+                "hops": max(r.hop_count for r in kept),
                 "tone": worst_tone(answer_tone(r.status) for r in kept),
             }
             for route, kept in routes.items()
@@ -70,7 +69,7 @@ def recent() -> dict[str, Any]:
 
 
 async def replay(
-    navigation: dict[str, list[NavItem]], recording: Recording
+    navigation: dict[str, list[NavItem]], recording: RequestHops
 ) -> dict[str, Any]:
     """``recording`` level by level, one after the other, each at the
     request's real timing; the first opens on the way in (the stack's
@@ -83,7 +82,7 @@ async def replay(
     installed = {entry.name for entry in navigation["components"]}
     way = [*(key for key in topology.EDGE if key in installed), HOST]
     beat = span / BEATS
-    services = await asyncio.to_thread(_services, hops, parts)
+    services = _services(hops, parts)
     server = [[key for key in keys if key != HOST] for keys in parts]
     # One service's scene shows all the Server opened up would: every hop
     # was made in it.
@@ -116,7 +115,7 @@ async def replay(
     }
 
 
-def listed(recording: Recording) -> dict[str, Any]:
+def listed(recording: RequestHops) -> dict[str, Any]:
     """``recording``'s hops in a list (``LIST_VIEW``), in the order they
     ran: what each went through, its timing as a bar on the request's, and
     the line of code that made it (linked while Overseer > Code is on)."""
@@ -125,7 +124,7 @@ def listed(recording: Recording) -> dict[str, Any]:
         {
             "label": _path_words(map(title_of, _parts(hop))),
             "hop": hop,
-            "line": hop.trail[-1] if hop.trail else None,
+            "line": hop.lines[-1] if hop.lines else None,
             "left": hop.at_ms / span * 100,
             "width": max(hop.ms / span * 100, 0.5),
         }
@@ -138,9 +137,9 @@ def listed(recording: Recording) -> dict[str, Any]:
     }
 
 
-def _timed(recording: Recording) -> tuple[list[Hop], float]:
-    """Its hops in the order they started, and how long it all ran."""
-    hops = sorted(recording.hops, key=lambda hop: hop.at_ms)
+def _timed(recording: RequestHops) -> tuple[tuple[RequestHop, ...], float]:
+    """Its hops, and how long it all ran."""
+    hops = recording.hops
     return hops, max(recording.ms, *(hop.at_ms + hop.ms for hop in hops), 0.001)
 
 
@@ -174,7 +173,7 @@ async def _scene(
 def _steps(
     scene: str,
     offset: float,
-    hops: list[Hop],
+    hops: tuple[RequestHop, ...],
     lit: list[list[str]],
     titles: dict[str, str],
 ) -> list[dict[str, Any]]:
@@ -239,41 +238,40 @@ def _targets(scene: str, nodes: list[str], lines: Any) -> list[str]:
     ]
 
 
-def _parts(hop: Hop) -> list[str]:
+def _parts(hop: RequestHop) -> list[str]:
     """What ``hop`` went through, by map key, each once in a row: a part of
     a service's (Auth's users) is the service's."""
     return [key for key, _ in groupby(map(registry_of, hop.chain))]
 
 
 def _services(
-    hops: list[Hop], parts: list[list[str]]
+    hops: tuple[RequestHop, ...], parts: list[list[str]]
 ) -> list[tuple[str, dict[str, str], list[list[str]]]]:
     """Each service the request ran in that opens up, in the order it
     reached them: its key, its pieces' titles, and what each hop went
     through in it (``_in``)."""
-    model = overseer_container.current()
     found = []
     for key in filter(is_service, dict.fromkeys(k for keys in parts for k in keys)):
-        pieces, _ = overseer_zoom.pieces_of(overseer_zoom.subject_of(key), model)
-        files = {path: piece.key for piece in pieces for path in piece.paths}
-        lit = [_in(key, files, keys, hop) for keys, hop in zip(parts, hops)]
+        subject = subject_of(key)
+        lit = [_in(key, subject, keys, hop) for keys, hop in zip(parts, hops)]
         if any(lit):
-            found.append((key, {p.key: p.title for p in pieces}, lit))
+            titles = {p.key: p.title for hop in hops for p in hop.pieces(subject)}
+            found.append((key, titles, lit))
     return found
 
 
-def _in(service: str, files: dict[str, str], keys: list[str], hop: Hop) -> list[str]:
-    """The pieces of ``service`` (by their ``files``) ``hop`` was made
-    through (its trail), then where it went from them; none for a hop not
+def _in(service: str, subject: str, keys: list[str], hop: RequestHop) -> list[str]:
+    """The pieces of ``service`` (``subject``, its node) ``hop`` was made
+    through (its lines), then where it went from them; none for a hop not
     in it (``keys``, what it went through)."""
     if service not in keys:
         return []
-    went = [files.get(path) for path, _ in hop.trail]
+    went = [piece.key for piece in hop.pieces(subject)]
     after = keys[keys.index(service) + 1 :][:1]
-    return [k for k, _ in groupby([*filter(None, went), *after])]
+    return [k for k, _ in groupby([*went, *after])]
 
 
-def _says(hop: Hop, titles: list[str]) -> str:
+def _says(hop: RequestHop, titles: list[str]) -> str:
     """A hop in words: what it went through, the tables it read, how long
     it took, where in the code it was made."""
     said = [_path_words(titles), ", ".join(hop.tables), f"{hop.ms} ms", hop.where]

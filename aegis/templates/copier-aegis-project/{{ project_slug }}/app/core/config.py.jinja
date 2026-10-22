@@ -187,10 +187,9 @@ class Settings(
     # build writes fingerprinted output into its ``dist/`` subdirectory.
     WEB_TEMPLATES_DIR: str = "app/components/web_frontend/templates"
     WEB_STATIC_DIR: str = "app/components/web_frontend/static"
-    # One-liner describing the project. Rendered in the landing hero and
-    # in its SEO meta description; defaults to what you typed when
-    # generating the project.
+    # One line on the project: the landing hero and its SEO description.
     PROJECT_DESCRIPTION: str = "{{ project_description }}"
+    WEB_THEME: str = "aegis"  # the Overseer's theme: a file in web_frontend/themes/
     OVERSEER_CODE_ENABLED: Annotated[bool, Configurable(ComponentName.WEB_FRONTEND, "Show the project's source on Overseer > Code outside dev (admins only)")] = False
     OVERSEER_DATABASE_ROWS_ENABLED: Annotated[bool, Configurable(ComponentName.WEB_FRONTEND, "Show the tables' rows on Overseer > Database outside dev (admins only)")] = False
 {%- endif %}

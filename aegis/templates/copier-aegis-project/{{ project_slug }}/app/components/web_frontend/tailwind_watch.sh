@@ -21,7 +21,7 @@ CHECK=${TAILWIND_CHECK_SECONDS:-15}
 WEB="$ROOT/app/components/web_frontend"
 IN="$WEB/static/input.css"
 OUT="$WEB/static/dist/app.css"
-SOURCES="$WEB/templates $WEB/static/js $IN $ROOT/tailwind.config.js"
+SOURCES="$WEB/templates $WEB/static/js $WEB/themes $IN $ROOT/tailwind.config.js"
 
 BUILT=$(mktemp)
 LISTED=$(mktemp)

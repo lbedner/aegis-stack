@@ -91,6 +91,9 @@ EXAMPLES: dict[str, dict[str, str]] = {
               {{ avatar("Anthropic") }} {{ avatar("OpenAI") }} {{ avatar("Groq") }}
             </span>""",
         "theme_toggle": "{{ theme_toggle() }}",
+        # A layout's <head>, not a page's: shown here as it renders (the
+        # theme script, the theme's faces if any, the stylesheet).
+        "appearance_head": "{{ appearance_head(default_theme) }}",
         "modal_scrim": """
             <div x-data="{ open: false }">
               <button type="button" class="chip" @click="open = true">Open</button>

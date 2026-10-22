@@ -1,4 +1,5 @@
-"""The four Steward-derived themes share one Tailwind/DaisyUI token source."""
+"""Every theme, one file each, crossed with the two modes: one
+Tailwind/DaisyUI token source, every generated theme at parity."""
 
 from pathlib import Path
 import re
@@ -10,13 +11,23 @@ import pytest
 from app.components.frontend.dashboard.modals.modal_sections.chart_primitives import (
     ChartColors,
 )
+from app.components.web_frontend.rendering import templates
+from app.components.web_frontend.themes import (
+    THEMES_DIR,
+    Theme,
+    Typeface,
+    theme_named,
+    themes,
+)
+from app.core.config import settings
 from tests.web.dom import one, select
 from tests.web.node import run
 
 WEB = Path("app/components/web_frontend")
 INPUT_CSS = WEB / "static/input.css"
 TAILWIND = Path("tailwind.config.js")
-THEMES = ("aegis-dark", "aegis-light", "steward-dark", "steward-light")
+MODES = ("dark", "light")
+THEMES = tuple(f"{name}-{mode}" for name in themes() for mode in MODES)
 
 HEX = re.compile(r"#[0-9A-Fa-f]{6}\b|#[0-9A-Fa-f]{3}\b(?![\w-])")
 # Classes that name a literal color rather than a token; they look right
@@ -55,17 +66,29 @@ def theme_config() -> dict[str, dict[str, str]]:
     }
 
 
+class TestThemeFiles:
+    def test_a_theme_is_its_file(self) -> None:
+        assert set(themes()) == {p.stem for p in THEMES_DIR.glob("*.json")}
+        assert {"aegis", "steward"} <= set(themes())
+        assert theme_named("aegis").label == "Aegis"
+
+    def test_a_theme_that_is_not_there_names_the_ones_that_are(self) -> None:
+        with pytest.raises(ValueError, match="aegis"):
+            theme_named("parchment")
+
+
 class TestTokens:
-    def test_all_theme_pairs_share_tokens(self) -> None:
-        themes = theme_config()
-        assert set(themes) == set(THEMES)
-        assert len({frozenset(body) for body in themes.values()}) == 1
-        for body in themes.values():
+    def test_all_generated_themes_share_tokens(self) -> None:
+        generated = theme_config()
+        assert set(generated) == set(THEMES)
+        assert len({frozenset(body) for body in generated.values()}) == 1
+        for body in generated.values():
             chart = [key for key in body if key.startswith("--aegis-chart-")]
             assert len(chart) == len(ChartColors.RAMP)
+            assert body["--aegis-font-body"] and body["--aegis-font-display"]
         assert (
-            themes["aegis-dark"]["--rounded-box"]
-            != themes["steward-dark"]["--rounded-box"]
+            generated["aegis-dark"]["--rounded-box"]
+            != generated["steward-dark"]["--rounded-box"]
         )
 
     def test_tailwind_colors_read_daisyui_variables(self) -> None:
@@ -91,8 +114,10 @@ class TestTokens:
         config = TAILWIND.read_text()
         assert 'DEFAULT: "var(--rounded-btn)"' in config
         assert 'lg: "var(--rounded-box)"' in config
+        assert 'display: "var(--aegis-font-display)"' in config
         css = INPUT_CSS.read_text()
         assert "font-size: var(--aegis-scale)" in css
+        assert "font-family: var(--aegis-font-body)" in css
         assert "var(--aegis-label-case)" in css
 
 
@@ -135,8 +160,43 @@ class TestSwitching:
         assert one(head, 'script[src*="js/theme"]').get("defer") is None
 
     def test_html_carries_the_default_theme(self, client: TestClient) -> None:
-        assert one(client.get("/").text, "html").get("data-theme") == "aegis-dark"
+        page = client.get("/").text
+        assert one(page, "html").get("data-theme") == f"{settings.WEB_THEME}-dark"
+        script = one(page, 'script[src*="js/theme"]')
+        assert script.get("data-theme") == settings.WEB_THEME
+        assert script.get("data-themes").split() == list(themes())
+        assert script.get("data-fixed") is None, "the Overseer's viewer may switch"
 
-    def test_navbar_has_a_theme_toggle(self, client: TestClient) -> None:
-        toggle = one(client.get("/").text, "summary[data-theme-toggle]")
-        assert toggle.get("aria-label")
+    def test_navbar_offers_every_theme(self, client: TestClient) -> None:
+        page = client.get("/").text
+        assert one(page, "summary[data-theme-toggle]").get("aria-label")
+        offered = [b.get("data-set-theme") for b in select(page, "[data-set-theme]")]
+        assert offered == list(themes())
+
+    def test_a_layout_may_fix_its_theme_and_load_its_type(self) -> None:
+        """A public site wears its own theme whatever the viewer chose on
+        the Overseer, and its faces load before the stylesheet."""
+        serif = Theme(
+            name="parchment",
+            shape={},
+            type=Typeface(
+                display="serif", body="serif", fonts="https://fonts.test/css2"
+            ),
+        )
+        head = templates.env.from_string(
+            '{% from "components/macros/layout.html" import appearance_head %}'
+            "{{ appearance_head(theme, fixed=true) }}"
+        ).render(theme=serif)
+        script = one(head, 'script[src*="js/theme"]')
+        assert (script.get("data-theme"), script.get("data-fixed")) == ("parchment", "")
+        fonts = one(head, "link[data-theme-fonts]")
+        assert fonts.get("href") == "https://fonts.test/css2"
+        order = [
+            el.get("src") or el.get("href")
+            for el in select(head, "script[src], link[rel=stylesheet]")
+        ]
+        assert [("theme" in u, "fonts" in u, "app" in u) for u in order] == [
+            (True, False, False),
+            (False, True, False),
+            (False, False, True),
+        ], order

@@ -293,6 +293,15 @@ def _web_frontend_tree() -> Path:
     )
 
 
+def _appearance_head() -> str:
+    """The head macro every layout shares (components/macros/layout.html)."""
+    macros = (
+        _web_frontend_tree() / "templates/components/macros/layout.html"
+    ).read_text()
+    start = macros.index("{% macro appearance_head(")
+    return macros[start : macros.index("{% endmacro %}", start)]
+
+
 class TestWebFrontendScaffolding:
     """The shape the web_frontend tree ships in.
 
@@ -418,6 +427,7 @@ class TestWebFrontendScaffolding:
                 "tabbed",
                 "tab_panel",
                 "theme_toggle",
+                "appearance_head",
             },
             "table.html": {"_cell", "_tone", "data_table", "pager", "table_row"},
             # Telling the user what happened, including the out-of-band
@@ -454,8 +464,14 @@ class TestWebFrontendScaffolding:
         """Assets go through static() so they pick up fingerprinted URLs once
         an asset build exists, rather than being hardcoded."""
         html = (_web_frontend_tree() / "templates/base.html").read_text()
-        for asset in ("css/app.css", "js/app.js", "favicon.svg", "dist/app.css"):
+        for asset in ("css/app.css", "js/app.js", "favicon.svg"):
             assert f"static('{asset}')" in html, asset
+        # The theme script and the stylesheet come through the head macro
+        # every layout shares.
+        head = _appearance_head()
+        for asset in ("js/theme.js", "dist/app.css"):
+            assert f"static('{asset}')" in head, asset
+        assert "appearance_head(default_theme)" in html
 
     def test_landing_extends_the_base_layout(self) -> None:
         html = (_web_frontend_tree() / "templates/pages/landing.html").read_text()
@@ -605,8 +621,9 @@ class TestNodePipeline:
     def test_theme_script_precedes_the_stylesheet(self) -> None:
         """Applies the stored theme before first paint; no dark flash for a
         light-theme user. Sync on purpose."""
+        head = _appearance_head()
+        assert head.index("js/theme.js") < head.index("dist/app.css")
         html = (_web_frontend_tree() / "templates/base.html").read_text()
-        assert html.index("js/theme.js") < html.index("dist/app.css")
         assert "theme_toggle()" in html
 
     def test_base_layout_requests_the_daisyui_theme(self) -> None:
@@ -614,11 +631,9 @@ class TestNodePipeline:
         import re
 
         html = (_web_frontend_tree() / "templates/base.html").read_text()
-        match = re.search(r'<html[^>]*data-theme="([\w-]+)"', html)
+        match = re.search(r'<html[^>]*data-theme="([^"]+)"', html)
         assert match, "base.html names no default theme"
-        default = match.group(1)
-        names = {n for entry in self._tailwind_config()["themes"] for n in entry}
-        assert default in names
+        assert match.group(1) == "{{ default_theme.name }}-dark"
 
     def test_input_css_pulls_in_tailwind_layers(self) -> None:
         source = (_web_frontend_tree() / "static/input.css").read_text()
@@ -792,6 +807,17 @@ class TestDockerAndComposeWiring:
         assert "FROM node:22-alpine AS css-build" in rendered
         assert "npx tailwindcss" in rendered
         assert "--minify" in rendered
+
+    def test_css_build_sees_everything_the_config_reads(self) -> None:
+        """The config reads the theme files at build; a path it reads that
+        the stage does not copy fails the image build. The dev watcher
+        lists the same paths, so a theme file edit rebuilds."""
+        rendered = _render("Dockerfile.jinja", _ctx(include_htmx=True))
+        stage = rendered.split("FROM python:", 1)[0]
+        watcher = (_web_frontend_tree() / "tailwind_watch.sh").read_text()
+        for folder in ("themes", "templates", "static/js"):
+            assert f"app/components/web_frontend/{folder}" in stage, folder
+            assert f"$WEB/{folder}" in watcher, folder
 
     def test_runtime_layer_has_no_node(self) -> None:
         """The whole point of a separate stage: the shipped image runs

@@ -6121,6 +6121,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../../overseer/twin/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The Twin
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../../overseer/integration/" class="md-nav__link">
         
   
@@ -6797,7 +6825,7 @@
 <tbody>
 <tr>
 <td><strong>Ontology tool</strong></td>
-<td>A part's health check, the errors it owns, the AI service's spend by window (today, 7 days, all time)</td>
+<td>The <a href="../../../overseer/twin/">Twin</a>, the app's model of itself (its ontology layer and, on each part, its live state): a part's health check, the errors it owns, the AI service's spend by window (today, 7 days, all time)</td>
 <td>"Is my database healthy?" "How much have I spent today?"</td>
 </tr>
 <tr>
@@ -6809,6 +6837,16 @@
 <td><strong>Catalog tool</strong></td>
 <td>Available models, prices, context windows</td>
 <td>"What's the cheapest model with vision?"</td>
+</tr>
+<tr>
+<td><strong>Errors tool</strong></td>
+<td>What broke: errors grouped into issues by where they come from, each with its traceback (admins)</td>
+<td>"Which service has the most open errors?"</td>
+</tr>
+<tr>
+<td><strong>Requests tool</strong></td>
+<td>The requests the server answered, each hop by hop at its real timing, named as the dry path names it (admins)</td>
+<td>"Why was that request slow?" "What did the 401 do?"</td>
 </tr>
 <tr>
 <td><strong>Plugins tool</strong></td>
@@ -6962,7 +7000,7 @@
 <p>Illiana's system prompt is her persona, the model in force, her saved memory and her memory modules (the app map), plus retrieved code when RAG is on. Nothing in it changes turn to turn. The app map names each part with what it is for and how it is built (each option as chosen, and what else it could be: <code>backend taskiq (of arq, taskiq, dramatiq)</code>), the scheduled jobs with whose they are and when they run, the tables and the changes that can be proposed. A job reaches the parts its code imports, so asking about the database finds the job that backs it up.</p>
 <h3 id="live-data-asked-for">Live data, asked for</h3>
 <p><strong>Sources:</strong> <code>app/services/system/node_now.py</code>, <code>app/services/ai/domains/llm/catalog.py</code></p>
-<p>Asking the <code>ontology</code> tool about a part returns its <code>now</code> beside its structure: its health check (trimmed to what fits a prompt; <code>omitted</code> names the rest), the error issues it owns (latest first, with a total) and, for the AI service, what it spent today, over the last 7 days and in all, with when each was read. Beside it, <code>findings</code>: what the part's code breaks of the service standard, the same findings Overseer's map shows (each rule, how bad, why, the file and line, what to do), so she can say how a part is built, not only how it is doing. The part itself carries <code>options</code>: what else it could be, generated from the aegis CLI's own declarations (the AI backend's <code>memory</code>, <code>sqlite</code> and <code>postgres</code>, auth's levels, the worker's backends), each with its default, the choice this stack was generated with and what each choice means. Asked whether the AI service needs a database, she can say it does not: memory is the default, and this stack chose sqlite. The <code>health</code> tool gives every component at once, the <code>catalog</code> tool the models on offer with their prices, and the <code>plugins</code> tool what this app has installed and what the public directory lists (the first hundred, with how many match; its search text narrows them). Each answer is a frozen Pydantic model (<code>NodeNow</code>, <code>CatalogAnswer</code>) that rejects fields it does not declare.</p>
+<p>Asking the <code>ontology</code> tool about a part returns its <code>now</code> beside its structure: its health check (trimmed to what fits a prompt; <code>omitted</code> names the rest), the error issues it owns (latest first, with a total) and, for the AI service, what it spent today, over the last 7 days and in all, each split by vendor (who served the model), by what it was for (chat, live calls, transcription) and by voice or text, with when each was read. Beside it, <code>findings</code>: what the part's code breaks of the service standard, the same findings Overseer's map shows (each rule, how bad, why, the file and line, what to do), so she can say how a part is built, not only how it is doing. The part itself carries <code>options</code>: what else it could be, generated from the aegis CLI's own declarations (the AI backend's <code>memory</code>, <code>sqlite</code> and <code>postgres</code>, auth's levels, the worker's backends), each with its default, the choice this stack was generated with and what each choice means. Asked whether the AI service needs a database, she can say it does not: memory is the default, and this stack chose sqlite. The <code>health</code> tool gives every component at once, the <code>catalog</code> tool the models on offer with their prices, and the <code>plugins</code> tool what this app has installed and what the public directory lists (the first hundred, with how many match; its search text narrows them). Each answer is a frozen Pydantic model (<code>NodeNow</code>, <code>CatalogAnswer</code>) that rejects fields it does not declare.</p>
 <h3 id="what-is-wrong-right-now">What is wrong right now</h3>
 <p><code>node_now.right_now()</code> reads every check that is not healthy; while there is one, a single line rides her current message, never her system prompt or her history.</p>
 <h3 id="rag-context">RAG Context</h3>

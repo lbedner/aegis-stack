@@ -47,7 +47,9 @@ def _troubles(row: dict[str, Any]) -> Iterator[_Trouble]:
         yield ComponentStatusType.WARNING, f"Docker's healthcheck fails on {name}"
     if (memory := row.get("memory_status")) in _TROUBLED:
         figure = ui_runtime.FIGURES[ui_runtime.MEMORY]
-        yield ComponentStatusType(memory), f"{figure} high on {name}"
+        share = row.get("memory_percent")
+        level = f"at {share:g}%" if share is not None else "high"
+        yield ComponentStatusType(memory), f"{figure} {level} on {name}"
 
 
 def _worst(check: ComponentStatus, troubles: list[_Trouble]) -> ComponentStatus:

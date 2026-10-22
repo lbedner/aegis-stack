@@ -139,14 +139,7 @@ def pieces_of(subject: str, model: SystemModel) -> tuple[list[Piece], Lines]:
 
 
 def _pieces(subject: str, ids: set[str]) -> tuple[list[Piece], Lines]:
-    folder = next(
-        (
-            i.target
-            for i in service_parts.report().instances
-            if i.label == subject and i.target.held
-        ),
-        None,
-    )
+    folder = service_pieces.folder_of(subject)
     if folder is None:
         return [], {}
     found = service_pieces.pieces(folder)

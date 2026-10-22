@@ -16,6 +16,7 @@ import asyncio
 import pytest
 
 from app.core.cache import CacheService
+from tests._fake_redis import FakeRedis
 
 
 class TestCacheService:
@@ -187,6 +188,35 @@ class TestClaims:
         cache = CacheService()
         assert await cache.claim("series-claim:a", ttl=60) is True
         assert await cache.claim("series-claim:a", ttl=60) is False
+
+
+class TestCappedLists:
+    """A list a key, newest first, keeping only its newest entries: one
+    step whoever writes it (each process's requests, kept to replay), and
+    each push says what it pushed out."""
+
+    @pytest.mark.parametrize("backend", ["memory", "redis"])
+    async def test_it_keeps_the_newest_first_and_drops_the_rest(
+        self, backend: str
+    ) -> None:
+        cache = CacheService()
+        if backend == "redis":
+            cache._redis, cache._store = FakeRedis(), None  # type: ignore[assignment]
+        pushed_out = [
+            await cache.push("replays:recent", value, keep=2, ttl=60)
+            for value in ({"n": 1}, {"n": 2}, {"n": 3})
+        ]
+        assert await cache.listed("replays:recent") == [{"n": 3}, {"n": 2}]
+        assert pushed_out == [[], [], [{"n": 1}]]
+        assert await cache.listed("replays:none") == []
+
+    async def test_it_lapses_a_while_after_the_last_push(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        cache = CacheService()
+        await cache.push("replays:recent", 1, keep=5, ttl=1)
+        monkeypatch.setattr("app.core.cache.time.time", lambda: 10**12)
+        assert await cache.listed("replays:recent") == []
 
 
 class TestUnreadableEntries:

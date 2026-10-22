@@ -254,6 +254,44 @@ class TestResolvePorts:
 
         assert "STALE_KEY" not in ports_file.read_text()
 
+    @pytest.mark.parametrize(
+        ("free", "base", "expected"),
+        [
+            (True, None, 41500),  # last run's port, still free: kept
+            (False, None, 8000),  # taken since: the scan from the base
+            (True, "41430", 41430),  # a base asked for: it wins
+        ],
+    )
+    def test_a_stack_keeps_last_runs_port_while_it_is_free(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        free: bool,
+        base: str | None,
+        expected: int,
+    ) -> None:
+        """A restart lands where the last run did, so what was saved with
+        the URL (a bookmark, an MCP client) keeps reaching this stack."""
+        monkeypatch.delenv("WEBSERVER_PORT_BASE", raising=False)
+        if base:
+            monkeypatch.setenv("WEBSERVER_PORT_BASE", base)
+        monkeypatch.setattr(resolve_ports_module, "_is_free", lambda port: free)
+        ports_file = tmp_path / ".env.ports"
+        ports_file.write_text("# last run\nWEBSERVER_HOST_PORT=41500\n")
+
+        ports = resolve_ports(
+            ingress=False,
+            postgres=False,
+            redis=False,
+            ollama=False,
+            browser=False,
+            storage=False,
+            ports_file=ports_file,
+        )
+
+        assert ports["WEBSERVER_HOST_PORT"] == expected
+        assert f"WEBSERVER_HOST_PORT={expected}" in ports_file.read_text()
+
 
 class TestDocsPort:
     """``make docs-serve`` picks a port the way ``make serve`` does.

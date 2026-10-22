@@ -110,6 +110,7 @@ EXPECTED_EFFECTS = {
     "health": "read",
     "errors": "read",
     "logs": "read",
+    "requests": "read",
     "ontology": "read",
     "plugins": "read",
     "research_search": "read",

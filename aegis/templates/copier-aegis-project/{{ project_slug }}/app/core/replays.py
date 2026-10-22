@@ -5,25 +5,48 @@ lines of code it was made through and the tables a query touched.
 
 The server's middleware starts a recording per request (``start``) and ends
 it (``finish``); it lives in a context variable, so the tasks a request
-starts record into it too. The last ``KEEP`` are kept in this process's
-memory. Overseer's own pages are not recorded (they would crowd out the
-app's), nor is a stream (it runs for minutes).
+starts record into it too. Answered, it is kept (``keep``) in the shared
+cache, the last ``KEEP`` for a day: Redis on a stack that has it, so a
+restart loses none and every process (every replica) reads the same
+ones; this process's memory otherwise. The list holds each one's
+``Summary``, its hops under a key of its own (``find``): a list is read
+far more often than one request. They are read as typed models by
+``services.system.kept_requests``. Overseer's own pages and the health
+probe are not recorded (they would crowd out the app's), nor is a stream
+(it runs for minutes).
 """
 
-from collections import deque
 from contextvars import ContextVar, Token
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 import re
 import time
+from typing import Any
 from uuid import uuid4
 
-# ponytail: one process's memory, as one webserver process serves the
-# app; behind several replicas a request is replayable on the one that
-# served it. Shared storage when that is the shape.
+from app.core.cache import get_cache
+from app.core.constants import APIEndpoints
+from app.core.key_family import KeyFamily
+
+KEY = "replays:recent"
+ONE = "replays:request:"  # + a request's id: the request with its hops
 KEEP = 200
+KEEP_SECONDS = 86_400
 HOPS = 500  # the most a request keeps; the rest are counted
-SKIPPED = ("/overseer", "/partials/overseer", "/static")
-_ID = re.compile(r"[0-9a-f]{32}")
+# Not kept: Overseer's own pages and the reads of what the server did
+# (kept requests, its metrics: a page polls them), which would crowd out
+# the app's, and static files.
+SKIPPED = (
+    "/overseer",
+    "/partials/overseer",
+    "/api/v1/requests",
+    "/api/v1/metrics",
+    "/static",
+)
+# The container's health probe (``docker-compose.yml``): every 30 seconds,
+# it would push out every request a person made within the hour.
+PROBES = frozenset({APIEndpoints.HEALTH_BASIC, APIEndpoints.HEALTH_BASIC.rstrip("/")})
+ID = r"^[0-9a-f]{32}$"  # a request's id (``uuid4().hex``)
+_ID = re.compile(ID)
 Line = tuple[str, int]  # a line of the app's code: its path, its number
 
 
@@ -36,11 +59,6 @@ class Hop:
     # The lines of the parts' own code it was made through, outermost first.
     trail: tuple[Line, ...]
     tables: list[str] = field(default_factory=list)
-
-    @property
-    def where(self) -> str | None:
-        """The line that made it (the innermost), as ``path:line``."""
-        return "{}:{}".format(*self.trail[-1]) if self.trail else None
 
 
 @dataclass
@@ -59,13 +77,60 @@ class Recording:
     closed: bool = False
 
 
+@dataclass(frozen=True)
+class Summary:
+    """A kept request as the list says it: how it was answered, its hops
+    counted, not read."""
+
+    id: str
+    method: str
+    path: str
+    route: str
+    status: int
+    ms: float
+    hop_count: int
+    dropped: int
+
+
+def summary(recording: Recording) -> Summary:
+    return Summary(
+        recording.id,
+        recording.method,
+        recording.path,
+        recording.route,
+        recording.status,
+        recording.ms,
+        len(recording.hops),
+        recording.dropped,
+    )
+
+
+REDIS_KEYS = (
+    KeyFamily(
+        KEY,
+        "list",
+        "Request replays",
+        "The last requests the server answered, newest first, to replay",
+        "Replay",
+        db="CACHE_REDIS_DB",
+        holds="request",
+    ),
+    KeyFamily(
+        ONE + "*",
+        "string",
+        "A request replayed",
+        "One kept request with its hops, while the list keeps it",
+        "Replay",
+        db="CACHE_REDIS_DB",
+    ),
+)
+
 _current: ContextVar[Recording | None] = ContextVar("replays", default=None)
-_kept: deque[Recording] = deque(maxlen=KEEP)
 
 
 def start(method: str, path: str) -> Token[Recording | None] | None:
     """Record the request now starting; None for one not kept."""
-    if path.startswith(SKIPPED):
+    if path.startswith(SKIPPED) or path in PROBES:
         return None
     recording = Recording(uuid4().hex, method, path, time.perf_counter())
     return _current.set(recording)
@@ -78,9 +143,9 @@ def finish(
     status: int,
     ms: float,
     streamed: bool = False,
-) -> str | None:
-    """End the request ``token`` started and keep it (not a stream);
-    its id."""
+) -> Recording | None:
+    """End the request ``token`` started: the recording to ``keep`` (none
+    for a stream)."""
     if token is None:
         return None
     recording = _current.get()
@@ -91,8 +156,17 @@ def finish(
     if streamed:
         return None
     recording.route, recording.status, recording.ms = route, status, round(ms, 2)
-    _kept.appendleft(recording)
-    return recording.id
+    return recording
+
+
+async def keep(recording: Recording) -> None:
+    """Keep an answered request, as data a later build can read too; one
+    it pushes out of the list goes with its hops."""
+    cache = get_cache()
+    await cache.set(ONE + recording.id, asdict(recording), KEEP_SECONDS)
+    out = await cache.push(KEY, asdict(summary(recording)), KEEP, KEEP_SECONDS)
+    for gone in out:
+        await cache.invalidate(ONE + str(gone.get("id")))
 
 
 def current() -> Recording | None:
@@ -130,9 +204,10 @@ def note(
     recording.hops.append(hop)
 
 
-def recent() -> list[Recording]:
-    """The requests kept, newest first."""
-    return list(_kept)
+async def recent() -> list[Summary]:
+    """The requests kept, newest first; one a build with other fields
+    wrote is left out."""
+    return [s for kept in await get_cache().listed(KEY) if (s := _listed(kept))]
 
 
 def is_id(text: str) -> bool:
@@ -140,12 +215,32 @@ def is_id(text: str) -> bool:
     return bool(_ID.fullmatch(text))
 
 
-def find(request_id: str) -> Recording | None:
-    """A kept request by its id; never looked for unless it is one."""
+async def find(request_id: str) -> Recording | None:
+    """A kept request with its hops; never looked for unless it is an id."""
     if not is_id(request_id):
         return None
-    return next((r for r in _kept if r.id == request_id), None)
+    kept = await get_cache().get(ONE + request_id)
+    return _revived(kept) if kept is not None else None
 
 
-def reset() -> None:
-    _kept.clear()
+def _listed(kept: dict[str, Any]) -> Summary | None:
+    """A listed request as this build's; None for one another build wrote."""
+    try:
+        return Summary(**kept)
+    except TypeError:
+        return None
+
+
+def _revived(kept: dict[str, Any]) -> Recording | None:
+    """A kept request as this build's; None for one a build with other
+    fields wrote."""
+    try:
+        return Recording(**{**kept, "hops": [Hop(**hop) for hop in kept["hops"]]})
+    except (KeyError, TypeError):
+        return None
+
+
+async def reset() -> None:
+    cache = get_cache()
+    await cache.invalidate(KEY)
+    await cache.invalidate_prefix(ONE)

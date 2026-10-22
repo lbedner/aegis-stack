@@ -10,7 +10,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.core.time import utcnow
 from app.services.ai.domains.spend import queries, windows
 from app.services.ai.domains.spend.schemas import ActionSpend
-from app.services.ai.models.llm import LLMUsage
+from app.services.ai.models.llm import LargeLanguageModel, LLMOrg, LLMUsage
 from tests._session import opens
 
 START = datetime(2026, 9, 1)
@@ -140,14 +140,19 @@ async def test_a_window_ends_before_its_end(async_db_session: AsyncSession) -> N
 async def test_usage_over_several_windows_in_one_read(
     async_db_session: AsyncSession,
 ) -> None:
-    """Each window's requests, tokens and cost; None is the whole ledger."""
+    """Each window's requests, tokens and cost per vendor (``unknown``: a
+    model not in the catalog) and action; None is the whole ledger."""
     await _ledger(async_db_session)
 
     found = await queries.usage_windows(
         async_db_session, [datetime(2026, 9, 4), START, None]
     )
 
-    assert found == [(1, 15, 2.0), (3, 45, 3.5), (4, 60, 12.5)]
+    assert found == {
+        ("unknown", "stream_chat:assistant"): [(0, 0, 0.0), (1, 15, 1.0), (1, 15, 1.0)],
+        ("unknown", "chat:assistant"): [(0, 0, 0.0), (1, 15, 0.5), (2, 30, 9.5)],
+        ("unknown", "document_extraction"): [(1, 15, 2.0)] * 3,
+    }
 
 
 async def test_the_ai_services_spend_by_window(
@@ -167,3 +172,52 @@ async def test_the_ai_services_spend_by_window(
         ("all time", 1, 0.25),
     ]
     assert found[-1].since is None
+
+
+async def test_a_window_reads_in_cents(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Money as a person says it: a ledger's fractions of a cent would be
+    read aloud as more than they are."""
+    async_db_session.add_all(
+        [
+            _call(utcnow(), "realtime", 2.282995),
+            _call(utcnow(), "chat:assistant", 0.012076),
+        ]
+    )
+    await async_db_session.commit()
+    monkeypatch.setattr(windows, "get_async_session", opens(async_db_session))
+
+    week = (await windows.spend_windows())[1]
+
+    assert week.total_cost == 2.3
+    assert week.by_mode == {"voice": 2.28, "text": 0.01}
+
+
+async def test_each_window_says_what_it_cost_by_vendor_by_action_and_by_mode(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Who served it (the catalog's vendor; ``unknown`` for a model not in
+    it), what it was for (a voice kind by its name) and whether it was
+    voice or text, largest first."""
+    org = LLMOrg(slug="openai", name="openai", color="#000", icon_path="")
+    async_db_session.add(org)
+    await async_db_session.commit()
+    await async_db_session.refresh(org)
+    async_db_session.add(
+        LargeLanguageModel(model_id="gpt-x", title="GPT X", served_by_org_id=org.id)
+    )
+    call = _call(utcnow(), "realtime", 1.0)
+    call.model_id = "voice-y"
+    async_db_session.add_all([_call(utcnow(), "chat:assistant", 0.25), call])
+    await async_db_session.commit()
+    monkeypatch.setattr(windows, "get_async_session", opens(async_db_session))
+
+    week = (await windows.spend_windows())[1]
+
+    assert list(week.by_vendor.items()) == [("unknown", 1.0), ("openai", 0.25)]
+    assert list(week.by_action.items()) == [
+        ("Live calls", 1.0),
+        ("chat:assistant", 0.25),
+    ]
+    assert list(week.by_mode.items()) == [("voice", 1.0), ("text", 0.25)]

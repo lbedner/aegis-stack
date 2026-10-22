@@ -83,6 +83,24 @@ def family(key: str) -> str:
     return ":".join(key.split(":")[:2])
 
 
+_UNREADABLE = object()
+
+
+def _unpickled(key: str, blob: bytes) -> Any:
+    """``blob`` read back; ``_UNREADABLE`` for one pickled by another build
+    (a class since moved, or one this build lacks)."""
+    try:
+        return pickle.loads(blob)
+    except (pickle.UnpicklingError, AttributeError, ImportError) as exc:
+        logger.warning("cache.unreadable", key=key, error=str(exc))
+        return _UNREADABLE
+
+
+def _readable(key: str, blobs: list[bytes]) -> list[Any]:
+    """``blobs`` read back, leaving out any this build cannot read."""
+    return [v for b in blobs if (v := _unpickled(key, b)) is not _UNREADABLE]
+
+
 class CacheService:
     """Async TTL cache with pluggable backend (Redis or in-memory dict).
 
@@ -136,14 +154,12 @@ class CacheService:
             blob = await self._redis.get(key)
             if blob is None:
                 return None
-            try:
-                return pickle.loads(blob)
-            except (pickle.UnpicklingError, AttributeError, ImportError) as exc:
-                # Pickled by another build (a class since moved, or one this
-                # build lacks): no reading, so whoever asked takes a fresh one.
-                logger.warning("cache.unreadable", key=key, error=str(exc))
+            value = _unpickled(key, blob)
+            if value is _UNREADABLE:
+                # Whoever asked takes a fresh one.
                 await self._redis.delete(key)
                 return None
+            return value
         assert self._store is not None
         entry = self._store.get(key)
         if entry is None:
@@ -180,6 +196,32 @@ class CacheService:
             return
         assert self._store is not None
         self._store[key] = (value, time.time() + ttl_eff)
+
+    async def push(self, key: str, value: Any, keep: int, ttl: int) -> list[Any]:
+        """``value`` onto the list at ``key``, which keeps only its newest
+        ``keep`` and lapses ``ttl`` seconds after the last push: one step
+        on Redis, so writers in several processes never lose each other's.
+        What it pushed out, oldest first (each seen by one push only)."""
+        self._stats.setdefault(family(key), CacheStats()).sets += 1
+        if self._redis is not None:
+            pipe = self._redis.pipeline()
+            pipe.rpush(key, pickle.dumps(value))
+            pipe.lrange(key, 0, -keep - 1)
+            pipe.ltrim(key, -keep, -1)
+            pipe.expire(key, ttl)
+            _, out, *_ = await pipe.execute()
+            return _readable(key, out)
+        assert self._store is not None
+        kept = [*(await self._lookup(key) or []), value]
+        self._store[key] = (kept[-keep:], time.time() + ttl)
+        return kept[:-keep]
+
+    async def listed(self, key: str) -> list[Any]:
+        """The list ``push`` keeps at ``key``, newest first; an entry
+        another build pickled, and this one cannot read, is left out."""
+        if self._redis is not None:
+            return _readable(key, await self._redis.lrange(key, 0, -1))[::-1]
+        return list(reversed(await self._lookup(key) or []))
 
     @property
     def backend_name(self) -> str:

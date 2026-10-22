@@ -77,6 +77,7 @@ async def test_its_containers_memory_carries_up(
     assert found["cache"].status == expected
     if expected != ComponentStatusType.HEALTHY:
         assert REDIS.name in found["cache"].message
+        assert f"{percent[level]:g}%" in found["cache"].message
     assert found["ingress"].status == ComponentStatusType.HEALTHY
 
 

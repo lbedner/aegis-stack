@@ -19,6 +19,7 @@ from starlette.responses import Response
 
 from app.components.web_frontend.assets import COMPONENT_DIR, static_url
 from app.components.web_frontend.filters import FILTERS
+from app.components.web_frontend.themes import theme_named, themes
 from app.core import series
 from app.core.config import settings
 from app.core.time import zone_named
@@ -28,6 +29,11 @@ from app.services.system import topology, ui_runtime
 templates = Jinja2Templates(directory=str(COMPONENT_DIR / "templates"))
 
 templates.env.globals["static"] = static_url
+# The themes a page may wear, as the toggle offers them, and the one the
+# stack opens with; a name no theme file has fails here, at boot, naming
+# the ones that exist.
+templates.env.globals["theme_choices"] = [(t.name, t.label) for t in themes().values()]
+templates.env.globals["default_theme"] = theme_named(settings.WEB_THEME)
 # Every page's <title> and navbar name the project, so these are globals
 # rather than something each route has to remember to pass through.
 templates.env.globals["project_name"] = settings.PROJECT_DISPLAY_NAME

@@ -1,8 +1,18 @@
-/* Steward appearance: theme (voice and shape) x mode (color palette). */
+/* Appearance: theme (voice, shape, type) x mode (color palette).
+   The page says which themes exist and which one it opens with, on this
+   script's own tag (appearance_head in components/macros/layout.html):
+   data-themes, data-theme, and data-fixed when the layout owns its theme
+   (a public site's) and only the mode is the viewer's. */
 (() => {
   const root = document.documentElement;
-  const choices = { theme: ['aegis', 'steward'], mode: ['dark', 'light', 'system'], sidebar: ['wide', 'rail'] };
-  const state = { theme: 'aegis', mode: 'dark', sidebar: 'wide' };
+  const tag = document.currentScript?.dataset ?? {};
+  const fixed = 'fixed' in tag;
+  const choices = {
+    theme: (tag.themes || 'aegis').split(' '),
+    mode: ['dark', 'light', 'system'],
+    sidebar: ['wide', 'rail'],
+  };
+  const state = { theme: tag.theme || choices.theme[0], mode: 'dark', sidebar: 'wide' };
   const media = window.matchMedia('(prefers-color-scheme: dark)');
   try {
     const legacy = localStorage.getItem('theme');
@@ -11,7 +21,7 @@
       localStorage.setItem('theme', 'aegis');
       localStorage.setItem('mode', 'light');
     } else {
-      if (choices.theme.includes(legacy)) state.theme = legacy;
+      if (!fixed && choices.theme.includes(legacy)) state.theme = legacy;
       const storedMode = localStorage.getItem('mode');
       if (choices.mode.includes(storedMode)) state.mode = storedMode;
     }
@@ -34,7 +44,7 @@
       location.reload();
       return;
     }
-    if (!choices[key]?.includes(value)) return;
+    if (!choices[key]?.includes(value) || (fixed && key === 'theme')) return;
     state[key] = value;
     try { localStorage.setItem(key === 'sidebar' ? 'overseer_sidebar' : key, value); } catch (_) { /* Session only. */ }
     apply();

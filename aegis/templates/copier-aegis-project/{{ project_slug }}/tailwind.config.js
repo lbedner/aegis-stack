@@ -7,18 +7,13 @@
 // put Tailwind classes anywhere outside the globs below (a Python string, a
 // new template directory), add that path here or they will not be emitted.
 //
-// THEMES: the single rebrand point.
-//
-// Two axes. A MODE is a color palette (dark, light). A THEME is a voice and
-// a shape (aegis: operational, uppercase micro-labels, tight radius;
-// steward: personal, sentence case, softer radius, a touch larger). The
-// four DaisyUI themes below are generated from those tables, named
-// `<theme>-<mode>`, and applied as `<html data-theme>` by static/js/theme.js.
+// THEMES: the modes' palettes live here; every theme (its shape, type and
+// tints) is a file under app/components/web_frontend/themes/, read here and
+// by the server. See docs/components/web-frontend/styling.md.
 //
 // Every `aegis-*` color name reads a DaisyUI variable, so `bg-aegis-card`
-// follows whatever theme is on <html> and no value is written twice. Charts
-// read the same variables (see charts.js). Change a color or a shape here,
-// nowhere else; tests/web/test_theme.py holds the four themes to parity.
+// follows whatever theme is on <html> and no value is written twice.
+// Charts read the same variables (see charts.js).
 
 const PALETTES = {
   dark: {
@@ -71,42 +66,28 @@ const PALETTES = {
   },
 };
 
-const SHAPES = {
-  aegis: {
-    "--rounded-box": "0.5rem", // cards, menus, dialogs (rounded-lg)
-    "--rounded-btn": "0.25rem", // controls, chips, rows (rounded)
-    "--rounded-badge": "0.25rem",
-    "--aegis-label-case": "uppercase", // micro-labels: ASSETS, 5 GROUPS
-    "--aegis-label-tracking": "0.05em",
-    "--aegis-scale": "100%", // root font size; every rem follows
-  },
-  steward: {
-    "--rounded-box": "0.75rem",
-    "--rounded-btn": "0.5rem",
-    "--rounded-badge": "1rem",
-    "--aegis-label-case": "none",
-    "--aegis-label-tracking": "0",
-    "--aegis-scale": "106.25%", // 17px
-  },
-};
+const fs = require("fs");
+const path = require("path");
 
-// Where a theme wants a different tint of a mode's palette: steward's
-// light mode is warmer and its borders quieter, so it reads as a personal
-// product rather than a console.
-const TINTS = {
-  steward: {
-    light: {
-      primary: "#0F8A7E",
-      "base-200": "#FAF9F7",
-      "base-300": "#E8E5E0",
-      neutral: "#66707C",
-    },
-  },
-};
+const THEMES_DIR = path.join(__dirname, "app/components/web_frontend/themes");
+const THEMES = fs
+  .readdirSync(THEMES_DIR)
+  .filter((file) => file.endsWith(".json"))
+  .sort()
+  .map((file) => ({
+    name: path.basename(file, ".json"),
+    ...JSON.parse(fs.readFileSync(path.join(THEMES_DIR, file), "utf8")),
+  }));
 
-const themes = Object.entries(SHAPES).flatMap(([theme, shape]) =>
+const themes = THEMES.flatMap((theme) =>
   Object.entries(PALETTES).map(([mode, palette]) => ({
-    [`${theme}-${mode}`]: { ...palette, ...(TINTS[theme]?.[mode] ?? {}), ...shape },
+    [`${theme.name}-${mode}`]: {
+      ...palette,
+      ...(theme.tints?.[mode] ?? {}),
+      ...theme.shape,
+      "--aegis-font-display": theme.type.display,
+      "--aegis-font-body": theme.type.body,
+    },
   })),
 );
 
@@ -137,6 +118,12 @@ module.exports = {
       borderRadius: {
         DEFAULT: "var(--rounded-btn)",
         lg: "var(--rounded-box)",
+      },
+      // A theme's type: `font-display` for titles, `font-body` for the rest
+      // (the body's default); never a family name in a template.
+      fontFamily: {
+        display: "var(--aegis-font-display)",
+        body: "var(--aegis-font-body)",
       },
       fontSize: {
         xxs: ["0.625rem", "0.875rem"],

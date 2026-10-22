@@ -1,10 +1,12 @@
-/* Tailwind and DaisyUI share Steward's four theme definitions in tailwind.config.js. */
+/* Tailwind and DaisyUI share one source of themes: tailwind.config.js reads
+   the files under web_frontend/themes/. */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   html { font-size: var(--aegis-scale); }
+  body { font-family: var(--aegis-font-body); }
 }
 
 @layer components {

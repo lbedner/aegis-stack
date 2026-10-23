@@ -148,6 +148,12 @@
     },
     {
       "kind": "repeated_statement",
+      "label": "SELECT ... FROM \"user\" WHERE \"user\".id IN (__[POSTCOMPILE_id_1]) AND \"user\".deleted_at IS NULL",
+      "file": "app/services/auth/domains/users/accounts.py",
+      "function": "get_users_by_ids"
+    },
+    {
+      "kind": "repeated_statement",
       "label": "SELECT ... FROM agent AS agent_1 JOIN agent_tool AS agent_tool_1 ON agent_1.id = agent_tool_1.agent_id JOIN tool ON tool.id = agent_tool_1.tool_id WHERE agent_1.id IN (__[POSTCOMPILE_primary_keys])",
       "file": "app/services/ai/domains/chat/queries.py",
       "function": "agent_by_slug"
@@ -1777,6 +1783,12 @@
       "label": "SELECT ... FROM meeting WHERE meeting.id = :pk_1",
       "file": "app/services/meetings/domains/series/themes.py",
       "function": "write_themes"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting WHERE meeting.id = :pk_1",
+      "file": "tests/services/test_meetings_calendar_owners.py",
+      "function": "_given"
     },
     {
       "kind": "repeated_statement",

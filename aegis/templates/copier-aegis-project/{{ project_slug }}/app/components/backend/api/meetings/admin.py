@@ -1,7 +1,10 @@
 """Meetings for Overseer, across every owner: the list, the agents the bot
 joins as and their calendars, one meeting read in full (its notes, transcript and how long
 each speaker was heard) and its threads, which speaker its owner is, its
-notes written again, the bot asked to leave, and a meeting deleted. Reading is the admin's (``get_admin_reader``), a
+notes written again, the bot asked to leave, and a meeting deleted; and
+who owns what nobody pressed send for: a meeting nobody owns given to
+someone, and who an agent's calendar meetings go to when nobody on the
+invite has an account here. Reading is the admin's (``get_admin_reader``), a
 change an operator's (``get_admin_actor``); an owner's own meetings are
 ``router``'s."""
 
@@ -13,7 +16,11 @@ from pydantic import BaseModel
 
 from app.core.time import zone_named
 from app.services.meetings.deps import as_http, get_every_owners_meetings
-from app.services.meetings.domains.accounts.service import AgentRow, overview
+from app.services.meetings.domains.accounts.service import (
+    AgentRow,
+    overview,
+    set_default_owner,
+)
 from app.services.meetings.domains.accounts.service import agents as every_agent
 from app.services.meetings.domains.calendar.entries import (
     MOST_DAYS,
@@ -23,8 +30,15 @@ from app.services.meetings.domains.calendar.entries import (
     entries_between,
     entry_of,
 )
+from app.services.meetings.domains.calendar.owners import Owner, owners
+from app.services.meetings.domains.people.participants import give as give_away
 from app.services.meetings.domains.threads.service import meeting_threads
-from app.services.meetings.models import Meeting, MeetingRecord, ThreadSection
+from app.services.meetings.models import (
+    BotAccount,
+    Meeting,
+    MeetingRecord,
+    ThreadSection,
+)
 from app.services.meetings.service import MeetingsService
 from app.services.shared.deps import get_admin_actor, get_admin_reader
 
@@ -47,6 +61,29 @@ async def agents(svc: Every) -> list[AgentRow]:
     """Every agent the bot joins as: whether its sign-in works, and the
     meetings it is in now. Before the meeting routes: not a meeting id."""
     return await overview(svc.db)
+
+
+class Owned(BaseModel):
+    user_id: int | None = None
+
+
+class Given(BaseModel):
+    user_id: int
+
+
+@router.put("/agents/{name}/owner", response_model=BotAccount, dependencies=CHANGE)
+async def agent_owner(name: str, body: Owned, svc: Every) -> BotAccount:
+    """Who owns a meeting the agent joins from its calendar when nobody on
+    the invite has an account here (none: nobody)."""
+    with as_http():
+        return await set_default_owner(svc.db, name, body.user_id)
+
+
+@router.get("/owners", response_model=list[Owner], dependencies=READ)
+async def every_owner(svc: Every) -> list[Owner]:
+    """Everyone a meeting can be given to, by email; nobody without auth.
+    Before the meeting routes: not a meeting id."""
+    return await owners(svc.db)
 
 
 @router.get("/calendar", response_model=list[CalendarEntry], dependencies=READ)
@@ -110,6 +147,14 @@ async def threads(meeting_id: int, svc: Every) -> list[ThreadSection]:
     """Its commitments, contradictions and positions, with their lines."""
     with as_http():
         return await meeting_threads(svc, meeting_id)
+
+
+@router.post("/{meeting_id}/owner", response_model=MeetingRecord, dependencies=CHANGE)
+async def give(meeting_id: int, body: Given, svc: Every) -> MeetingRecord:
+    """Give a meeting nobody owns to someone, its people and notes with it."""
+    with as_http():
+        await give_away(svc.db, await svc.get(meeting_id), body.user_id)
+        return await svc.read(meeting_id)
 
 
 class Speaker(BaseModel):

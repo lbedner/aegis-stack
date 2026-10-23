@@ -1,6 +1,8 @@
 """Meetings > Agents in the Flet Overseer: each Google account the bot joins
-calls as, who it is, whether its sign-in still works and which meeting it
-is in now; and the picker the Meetings tab sends the bot with. The same as
+calls as, who it is, whether its sign-in still works, which meeting it is
+in now and, with accounts here, who owns a meeting it joins from its
+calendar that nobody on the invite owns (``meetings_owners``); and the
+picker the Meetings tab sends the bot with. The same as
 the htmx Overseer's Agents page, over the admin API
 (``api/meetings/admin.py``). An agent is made by signing it in:
 ``meetings login --agent``.
@@ -21,6 +23,7 @@ from app.components.frontend.controls import (
 from app.components.frontend.state.session_state import get_session_state
 from app.components.frontend.theme import AegisTheme as Theme
 
+from .meetings_owners import OwnerPicker, owners_of
 from .modal_sections import EmptyStatePlaceholder
 
 AGENTS = "/api/v1/meetings/admin/agents"
@@ -95,18 +98,41 @@ class AgentsTab(ft.Container):
     async def _load(self) -> None:
         data = await get_session_state(self.page).api_client.get(AGENTS)
         rows = data if isinstance(data, list) else []
+        owners = await owners_of(self.page)
+        columns = [
+            DataTableColumn("Agent", width=140, style="primary"),
+            DataTableColumn("Joins as", width=180),
+            DataTableColumn("Google account", width=240, style="secondary"),
+            DataTableColumn("Sign-in", width=120),
+            DataTableColumn("In now", width=220, style="secondary"),
+        ]
+        cells = [agent_cells(r) for r in rows]
+        if owners:
+            columns.append(DataTableColumn("Default owner", width=280))
+            for row, line in zip(rows, cells, strict=True):
+                line.append(self._owner_picker(row["account"], owners))
         self._table.content = DataTable(
-            columns=[
-                DataTableColumn("Agent", width=140, style="primary"),
-                DataTableColumn("Joins as", width=180),
-                DataTableColumn("Google account", width=240, style="secondary"),
-                DataTableColumn("Sign-in", width=120),
-                DataTableColumn("In now", width=220, style="secondary"),
-            ],
-            rows=[agent_cells(r) for r in rows],
+            columns=columns,
+            rows=cells,
             scroll_height=600,
             empty_message="No agents yet",
         )
         # ``_load`` starts before the tab is mounted: update only once it is.
         if self._table.page:
             self._table.update()
+
+    def _owner_picker(
+        self, account: dict[str, Any], owners: list[dict[str, Any]]
+    ) -> OwnerPicker:
+        """Who the agent's calendar meetings go to when nobody on the invite
+        has an account here."""
+
+        def pick(user_id: int | None) -> None:
+            self.page.run_task(self._set_owner, str(account["name"]), user_id)
+
+        return OwnerPicker("", owners, account.get("default_owner_id"), pick)
+
+    async def _set_owner(self, name: str, user_id: int | None) -> None:
+        await get_session_state(self.page).api_client.put(
+            f"{AGENTS}/{name}/owner", json={"user_id": user_id}
+        )

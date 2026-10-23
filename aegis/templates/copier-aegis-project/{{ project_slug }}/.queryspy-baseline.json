@@ -130,6 +130,12 @@
     },
     {
       "kind": "repeated_statement",
+      "label": "SELECT ... FROM \"user\" WHERE \"user\".deleted_at IS NULL AND \"user\".id != :id_1 ORDER BY \"user\".created_at DESC",
+      "file": "app/services/auth/domains/users/accounts.py",
+      "function": "list_users"
+    },
+    {
+      "kind": "repeated_statement",
       "label": "SELECT ... FROM \"user\" WHERE \"user\".email = :email_1 AND \"user\".deleted_at IS NULL",
       "file": "app/services/auth/domains/users/accounts.py",
       "function": "get_user_by_email"
@@ -151,6 +157,12 @@
       "label": "SELECT ... FROM \"user\" WHERE \"user\".id = :id_1",
       "file": "app/services/auth/domains/users/deletion.py",
       "function": "restore_user"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM \"user\" WHERE \"user\".id IN (__[POSTCOMPILE_id_1]) AND \"user\".deleted_at IS NULL",
+      "file": "app/services/auth/domains/users/accounts.py",
+      "function": "get_users_by_ids"
     },
     {
       "kind": "repeated_statement",
@@ -1992,6 +2004,12 @@
       "kind": "repeated_statement",
       "label": "SELECT ... FROM meeting WHERE meeting.id = :pk_1",
       "file": "tests/services/test_meetings_calendar_owners.py",
+      "function": "_given"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting WHERE meeting.id = :pk_1",
+      "file": "tests/services/test_meetings_calendar_owners.py",
       "function": "test_the_meeting_is_whoevers_invite_it_is"
     },
     {
@@ -2017,6 +2035,12 @@
       "label": "SELECT ... FROM meeting WHERE meeting.owner_user_id IS NULL ORDER BY meeting.created_at DESC, meeting.id DESC LIMIT :param_1",
       "file": "app/services/meetings/domains/notes/queries.py",
       "function": "owner_meetings"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting WHERE meeting.status IN (__[POSTCOMPILE_status_1]) ORDER BY meeting.id",
+      "file": "app/services/meetings/domains/accounts/queries.py",
+      "function": "meetings_in"
     },
     {
       "kind": "repeated_statement",

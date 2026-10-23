@@ -6,7 +6,7 @@ there, and the lines anything cites."""
 from collections.abc import Iterable
 from typing import Any
 
-from sqlalchemy import delete, update
+from sqlalchemy import case, delete, update
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -16,6 +16,7 @@ from app.services.meetings.models import (
     Meeting,
     MeetingGuidePoint,
     MeetingGuidePointLine,
+    MeetingNoteItem,
     MeetingParticipant,
     MeetingPerson,
     PersonGuide,
@@ -168,6 +169,26 @@ async def guide_points(
         )
     )
     return [(point, line) for point, line in (await db.exec(query)).all()]
+
+
+async def repoint_people(
+    db: AsyncSession, meeting_id: int, moved: dict[int, int]
+) -> None:
+    """The meeting's participants and note items pointed at the people
+    ``moved`` maps theirs to. A note item's person ``moved`` does not name
+    (someone known from another meeting) is let go, the name it was
+    written with kept."""
+    for column in (
+        MeetingParticipant.person_id,
+        MeetingNoteItem.person_id,
+        MeetingNoteItem.to_person_id,
+    ):
+        table = column.class_
+        await db.exec(  # type: ignore[call-overload]
+            update(table)
+            .where(table.meeting_id == meeting_id)
+            .values({column.key: case(moved, value=col(column)) if moved else None})
+        )
 
 
 async def drop_people_in_no_meeting(db: AsyncSession, person_ids: list[int]) -> None:

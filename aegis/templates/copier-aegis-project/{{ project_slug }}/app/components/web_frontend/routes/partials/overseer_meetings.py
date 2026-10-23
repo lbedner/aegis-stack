@@ -3,7 +3,9 @@ meeting in the drawer (live, with which speaker is me and the notes
 written again, as the Meetings page has them), the bot asked to leave it,
 and the meeting deleted; and one person's guide, its owner's note kept
 and the guide written again; and a meeting's threads, loaded into its
-drawer; and one series, written again; and one meeting on a calendar. Mounted by ``routes/pages.py`` behind
+drawer; and one series, written again; and one meeting on a calendar;
+and who owns what nobody pressed send for: a meeting nobody owns given to
+someone, an agent's calendar meetings' default owner. Mounted by ``routes/pages.py`` behind
 Overseer's gate; the admin reads and writes every owner's meetings (``Every``), and
 a meeting the admin sends is the admin's own (``Mine``).
 """
@@ -14,6 +16,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, Response
 
 from app.components.web_frontend import overseer_meetings
+from app.components.web_frontend.meeting_agents import agents_context
 from app.components.web_frontend.rendering import dialog, fragment, viewer_zone
 from app.components.web_frontend.routes.meetings import (
     meeting_context,
@@ -27,7 +30,9 @@ from app.services.meetings.deps import (
     get_every_owners_series,
     get_meetings_service,
 )
+from app.services.meetings.domains.accounts.service import set_default_owner
 from app.services.meetings.domains.calendar.entries import entry_of
+from app.services.meetings.domains.people.participants import give as give_away
 from app.services.meetings.domains.people.service import PeopleService
 from app.services.meetings.domains.series.service import SeriesService
 from app.services.meetings.domains.threads.service import meeting_threads
@@ -49,6 +54,7 @@ THREADS = "pages/overseer/meetings/_threads_body.html"
 SERIES = "pages/overseer/meetings/_series_drawer.html"
 SERIES_BODY = "pages/overseer/meetings/_series_body.html"
 EVENT = "pages/overseer/meetings/_event_drawer.html"
+AGENTS = "pages/overseer/meetings/_agents.html"
 
 
 @router.post("")
@@ -76,13 +82,40 @@ async def drawer(
 ) -> Response:
     """The meeting, at ``line`` (a search hit's) when given."""
     context = await meeting_context(svc, meeting_id) | {"prefix": PREFIX}
+    context |= await overseer_meetings.owner_context(svc)
     return dialog(request, DRAWER, **context, hit_line=line)
 
 
 # The drawer's live part: re-read while the bot is in or the notes are being
 # written; the bot asked to leave, which speaker the owner is, the notes
 # written again, the same routes as the Meetings page's.
-meeting_routes(router, get_every_owners_meetings, BODY, PREFIX)
+meeting_routes(
+    router, get_every_owners_meetings, BODY, PREFIX, overseer_meetings.owner_context
+)
+
+
+@router.post("/{meeting_id}/owner", response_class=HTMLResponse)
+async def give(
+    meeting_id: int, svc: Every, user_id: Annotated[int, Form()]
+) -> HTMLResponse:
+    """Give a meeting nobody owns to someone, its people and notes with it."""
+    with as_http():
+        await give_away(svc.db, await svc.get(meeting_id), user_id)
+    context = await meeting_context(svc, meeting_id) | {"prefix": PREFIX}
+    context |= await overseer_meetings.owner_context(svc)
+    return HTMLResponse(fragment(BODY, **context))
+
+
+@router.post("/agents/{name}/owner", response_class=HTMLResponse)
+async def agent_owner(
+    name: str, svc: Every, user_id: Annotated[str, Form()] = ""
+) -> HTMLResponse:
+    """Who owns a meeting the agent joins from its calendar when nobody on
+    the invite has an account here (blank: nobody)."""
+    with as_http():
+        await set_default_owner(svc.db, name, int(user_id) if user_id else None)
+    context = await agents_context(svc.db, overseer_meetings.meeting_url)
+    return HTMLResponse(fragment(AGENTS, **context, partials=PREFIX))
 
 
 @router.get("/{meeting_id}/threads", response_class=HTMLResponse)

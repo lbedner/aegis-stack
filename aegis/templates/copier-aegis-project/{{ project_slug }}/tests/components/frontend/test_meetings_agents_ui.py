@@ -1,5 +1,6 @@
 """Meetings > Agents in the Flet Overseer, minus the runtime: an agent's
-row, the picker the bot is sent with, and which agent a meeting was."""
+row, the picker the bot is sent with, which agent a meeting was, and the
+picker a meeting or an agent's calendar meetings are given with."""
 
 from typing import Any
 
@@ -8,6 +9,7 @@ from app.components.frontend.dashboard.modals.meetings_agents_tab import (
     agent_cells,
 )
 from app.components.frontend.dashboard.modals.meetings_modal import meeting_cells
+from app.components.frontend.dashboard.modals.meetings_owners import OwnerPicker
 from app.services.meetings.domains.accounts.service import agent_names
 
 WORK: dict[str, Any] = {
@@ -56,3 +58,17 @@ def test_the_picker_shows_only_when_there_is_a_choice() -> None:
     assert picker.chosen() == {"agent": "notetaker"}
     picker.value = "work"
     assert picker.chosen() == {"agent": "work"}
+
+
+def test_the_owner_picker_offers_everyone_here_and_nobody() -> None:
+    picked: list[int | None] = []
+    owners = [{"id": 3, "email": "leo@example.com"}]
+
+    picker = OwnerPicker("Default owner", owners, 3, picked.append)
+
+    assert [(o.key, o.text) for o in picker.options or []] == [
+        ("", "Nobody"),
+        ("3", "leo@example.com"),
+    ]
+    assert picker.value == "3" and picker.visible
+    assert not OwnerPicker("Default owner", [], None, picked.append).visible

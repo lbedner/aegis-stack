@@ -20,6 +20,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.core import secrets
 from app.core.log import logger
 from app.services.meetings.domains.bot.login import LOGIN, signed_in
+from app.services.meetings.domains.calendar.owners import check_owner
 from app.services.meetings.models import IN_PROGRESS, BotAccount
 from app.services.meetings.service import DEFAULT_BOT_NAME
 
@@ -131,6 +132,21 @@ async def keep_agent(
         )
     account.display_name = display_name or account.display_name
     account.email = email or account.email
+    db.add(account)
+    await db.commit()
+    return account
+
+
+async def set_default_owner(
+    db: AsyncSession, name: str, user_id: int | None
+) -> BotAccount:
+    """Who owns a meeting the agent called ``name`` joins from its calendar
+    when nobody on the invite has an account here (None: nobody);
+    ``NoSuchOwnerError`` for an id nobody here has."""
+    if user_id is not None:
+        await check_owner(db, user_id)
+    account = await pick(db, name)
+    account.default_owner_id = user_id
     db.add(account)
     await db.commit()
     return account

@@ -1,14 +1,48 @@
-"""The users on a calendar invite, for who owns the meeting an agent
-joins from it (``service.send_due``), and whose invites a user's calendar
-shows (``email_of``)."""
+"""The users a meeting can be owned by: those on a calendar invite, for
+who owns the meeting an agent joins from it (``service.send_due``), whose
+invites a user's calendar shows (``email_of``), and everyone a meeting or
+an agent's calendar meetings can be given to (``owners``)."""
 
 from collections.abc import Iterable
 
+from pydantic import BaseModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 {%- if include_auth %}
 
 from app.services.auth.service import UserService
 {%- endif %}
+
+
+class NoSuchOwnerError(ValueError):
+    """Nobody with an account here has that id."""
+
+
+class Owner(BaseModel):
+    """Someone a meeting can be given to."""
+
+    id: int
+    email: str
+
+
+async def owners(db: AsyncSession) -> list[Owner]:
+    """Everyone with an account here, by email; nobody without auth, where
+    every meeting is the install's."""
+{%- if include_auth %}
+    users = await UserService(db).list_users()
+    every = (Owner(id=u.id, email=u.email) for u in users)  # type: ignore[arg-type]
+    return sorted(every, key=lambda owner: owner.email)
+{%- else %}
+    return []
+{%- endif %}
+
+
+async def check_owner(db: AsyncSession, user_id: int) -> None:
+    """``NoSuchOwnerError`` unless ``user_id`` has an account here."""
+{%- if include_auth %}
+    if user_id in await UserService(db).get_users_by_ids([user_id]):
+        return
+{%- endif %}
+    raise NoSuchOwnerError(f"Nobody here has the id {user_id}")
 
 
 async def users_by_email(db: AsyncSession, emails: Iterable[str]) -> dict[str, int]:

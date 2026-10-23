@@ -7,6 +7,7 @@ from datetime import datetime
 from sqlmodel import Field, SQLModel
 
 from app.core.time import utcnow
+from app.services.meetings.models.base import _OWNER_FK
 
 
 class BotAccount(SQLModel, table=True):
@@ -28,5 +29,14 @@ class BotAccount(SQLModel, table=True):
     email: str | None = Field(default=None, max_length=320)
     login_secret: str = Field(
         max_length=128, description="The secret its saved sign-in is kept under"
+    )
+    default_owner_id: int | None = Field(
+        default=None,
+        foreign_key=_OWNER_FK,
+        ondelete="SET NULL",
+        description=(
+            "Who owns a meeting it joins from its calendar when nobody on the"
+            " invite has an account here; NULL: nobody"
+        ),
     )
     created_at: datetime = Field(default_factory=utcnow)

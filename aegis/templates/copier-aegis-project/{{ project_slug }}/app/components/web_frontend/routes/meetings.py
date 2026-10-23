@@ -7,7 +7,7 @@ something is still happening (the bot on its way in or in the call, the
 notes being written), and stops once nothing is.
 """
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from itertools import groupby
 from operator import attrgetter
 from typing import Annotated, Any
@@ -223,21 +223,28 @@ async def meeting_page(request: Request, svc: Service, meeting_id: int) -> Respo
 
 
 def meeting_routes(
-    router: APIRouter, service: Callable[..., Any], body: str, prefix: str
+    router: APIRouter,
+    service: Callable[..., Any],
+    body: str,
+    prefix: str,
+    more: Callable[[MeetingsService], Awaitable[dict[str, Any]]] | None = None,
 ) -> None:
     """The routes one meeting's live body answers: it re-reads itself, asks
     the bot to leave, says which speaker the owner is, writes the notes
     again, reads the call over again for moments. The Meetings page and Overseer's drawer register the same ones,
     each with its own service scope, body template and URL ``prefix`` (the
-    router's own)."""
+    router's own), and what else its body shows (``more``)."""
     scoped = Annotated[MeetingsService, Depends(service)]
 
-    def drawn(record: MeetingRecord) -> HTMLResponse:
-        return HTMLResponse(fragment(body, **body_context(record), prefix=prefix))
+    async def drawn(svc: MeetingsService, record: MeetingRecord) -> HTMLResponse:
+        extra = await more(svc) if more else {}
+        context = body_context(record) | extra
+        return HTMLResponse(fragment(body, **context, prefix=prefix))
 
     async def read(svc: MeetingsService, meeting_id: int) -> HTMLResponse:
         with as_http():
-            return drawn(await svc.read(meeting_id))
+            record = await svc.read(meeting_id)
+        return await drawn(svc, record)
 
     @router.get("/{meeting_id}/body", response_class=HTMLResponse)
     async def live(svc: scoped, meeting_id: int) -> HTMLResponse:  # type: ignore[valid-type]
@@ -264,13 +271,15 @@ def meeting_routes(
     async def write_notes(svc: scoped, meeting_id: int) -> HTMLResponse:  # type: ignore[valid-type]
         """Write the notes again, over the old ones."""
         with as_http():
-            return drawn(await svc.write_notes_again(meeting_id))
+            record = await svc.write_notes_again(meeting_id)
+        return await drawn(svc, record)
 
     @router.post("/{meeting_id}/moments/find", response_class=HTMLResponse)
     async def look_over(svc: scoped, meeting_id: int) -> HTMLResponse:  # type: ignore[valid-type]
         """Read the call over again for moments."""
         with as_http():
-            return drawn(await svc.look_over(meeting_id))
+            record = await svc.look_over(meeting_id)
+        return await drawn(svc, record)
 
     @router.post("/{meeting_id}/moments/{moment_id}/runs", response_class=HTMLResponse)
     async def ask(

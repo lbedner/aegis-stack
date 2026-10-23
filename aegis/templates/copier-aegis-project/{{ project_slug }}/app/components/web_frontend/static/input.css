@@ -346,11 +346,14 @@
   .tone-border { @apply border-aegis-border stroke-aegis-border; }
   .tone-border[data-tone="warn"] { @apply border-aegis-amber/70 stroke-aegis-amber/70; }
   .tone-border[data-tone="error"] { @apply border-aegis-error/70 stroke-aegis-error/70; }
-  /* Any card (a card section, a list of rows on the card surface, a map
-     node), hovered: its border goes teal, whatever its tone. One hover every
-     card shares; after the tones, so it wins over them. */
+  /* A card a click acts on (``hover-card``), hovered where the click
+     lands: its border goes teal, whatever its tone. A fold lights only
+     while the pointer is on the header that opens it; a card the pointer
+     merely passes over carries no hover-card and stays as it is. After the
+     tones, so it wins over them. */
   .hover-card { @apply transition-colors; }
-  .hover-card:hover { @apply border-aegis-teal stroke-aegis-teal; }
+  .hover-card:not(details):hover,
+  .hover-card:has(> summary:hover) { @apply border-aegis-teal; }
   /* A fold's mark (``fold_mark``, in its summary): turned while it is open. */
   .fold-mark { @apply text-aegis-muted transition-transform; }
   details[open] > summary .fold-mark { @apply rotate-90; }

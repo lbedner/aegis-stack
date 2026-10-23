@@ -60,13 +60,11 @@
 
 {# A titled surface. The body comes via {% call %}; the heading id ties the
    section to its title for assistive tech. ``id`` lets a page target the
-   card with htmx; it defaults to a slug of the title. ``hover=False``
-   leaves out its outline on hover, for a card whose parts light up on
-   their own (the meeting calendar's days). #}
-{% macro card(title=None, subtitle=None, id=None, hover=True) %}
+   card with htmx; it defaults to a slug of the title. #}
+{% macro card(title=None, subtitle=None, id=None) %}
 {% set card_id = id or ("card-" ~ title|lower|replace(" ", "-")) %}
 <section id="{{ card_id }}" {% if title %}aria-labelledby="{{ card_id }}-title"{% endif %}
-         class="{{ 'hover-card ' if hover }}bg-aegis-card border border-aegis-border rounded-lg p-5 flex flex-col gap-4 min-w-0">
+         class="bg-aegis-card border border-aegis-border rounded-lg p-5 flex flex-col gap-4 min-w-0">
   {# A card whose page title already names it (the forecast's chart) goes
      without a header rather than repeating the words. #}
   {% if title %}
@@ -84,7 +82,7 @@
    Red once a figure goes negative and nothing otherwise: when every
    healthy number is coloured, colour stops meaning anything. #}
 {% macro stat_tile(label, value, negative=False, caption=None, attrs="") %}
-<div {{ attrs|safe }} class="hover-card bg-aegis-card border border-aegis-border rounded-lg px-5 py-4{% if attrs %} cursor-pointer{% endif %}">
+<div {{ attrs|safe }} class="{{ 'hover-card cursor-pointer ' if attrs }}bg-aegis-card border border-aegis-border rounded-lg px-5 py-4">
   <dt class="text-xxs text-aegis-muted caps">{{ label }}</dt>
   <dd class="mt-1 text-2xl font-semibold tabular-nums {{ 'text-error' if negative else 'text-aegis-text' }}">{{ value }}</dd>
   {% if caption %}<dd class="mt-1 text-xxs text-aegis-muted">{{ caption }}</dd>{% endif %}

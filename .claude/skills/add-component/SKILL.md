@@ -52,7 +52,9 @@ Registry (`ComponentSpec` is a thin alias of `PluginSpec` pinned to
   `description`/`long_description`, `required_components` (hard deps, e.g.
   worker requires `["redis"]`), `recommended_components`, `pyproject_deps`,
   `docker_services` (compose service names this component owns, used by
-  stack-generation tests), `template_files` (display list), `marker_path`
+  stack-generation tests), `agents` (dev-only compose services that act on
+  the developer's machine for Overseer, like `deploy-agent`: shown on the
+  part's page and in its logs, never on the map), `template_files` (display list), `marker_path`
   (the path used to detect the component on disk - for `reconcile_answers_from_disk`
   and dev-mode cleanup context), `docs_path` (see docs section below), and
   `migrations=[...]` only if the component owns tables (see `SCHEDULER_MIGRATION`

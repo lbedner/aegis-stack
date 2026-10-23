@@ -13,7 +13,7 @@
   <section id="document-pages" aria-label="Pages" class="flex flex-wrap gap-2">
     {% for p in pages %}
     <button type="button" {{ hx_dialog(p.preview) }} title="Page {{ p.number }}: {{ p.status }}"
-            class="w-16 h-20 rounded border border-aegis-border bg-aegis-bg overflow-hidden flex items-center justify-center text-xs text-aegis-muted hover:border-aegis-teal transition-colors{{ ' opacity-50' if p.status != 'read' }}">
+            class="w-16 h-20 rounded border border-aegis-border bg-aegis-bg overflow-hidden flex items-center justify-center text-xs text-aegis-muted hover-card hover:ring-2 hover:ring-aegis-teal{{ ' opacity-50' if p.status != 'read' }}">
       {% if p.image %}<img src="{{ p.image }}" alt="Page {{ p.number }}" width="64" height="80" loading="lazy" class="w-full h-full object-cover object-top">{% else %}{{ p.number }}{% endif %}
     </button>
     {% else %}

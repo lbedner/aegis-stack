@@ -23,12 +23,12 @@
   {% set open = "summary" %}
   {% call tabbed("series", [("summary", "Over time"), ("themes", "Keeps coming up")], open) %}
   {% call tab_panel("summary", open) %}
-  {% call card(None, id="series-summary", hover=False) %}
+  {% call card(None, id="series-summary") %}
   <p data-summary class="text-sm leading-relaxed">{{ series.summary or "Nothing yet." }}</p>
   {% endcall %}
   <div class="grid gap-4 sm:grid-cols-2">
     {% for part in record.over_time %}
-    {% call card(part.title, id="series-" ~ part.key, hover=False) %}
+    {% call card(part.title, id="series-" ~ part.key) %}
     <ul data-card="{{ part.key }}" class="space-y-2 text-sm">
       {% for point in part.items %}
       <li>

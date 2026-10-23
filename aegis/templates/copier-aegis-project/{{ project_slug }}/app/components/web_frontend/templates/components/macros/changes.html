@@ -11,7 +11,7 @@
    caller's body, then ``rows``. A batch is a form so its "skip" boxes ride
    along: htmx sends the enclosing form's fields with a button's POST. #}
 {% macro _card(tag, id, data, title, side, by=none) %}
-<{{ tag }} id="{{ id }}" {{ data }} class="hover-card my-2 border border-aegis-border rounded-lg p-3 text-sm bg-aegis-card">
+<{{ tag }} id="{{ id }}" {{ data }} class="my-2 border border-aegis-border rounded-lg p-3 text-sm bg-aegis-card">
   <div class="flex items-center justify-between gap-3">
     <span class="font-medium text-aegis-text">{{ title }}</span>
     <span class="text-xxs">{{ side }}</span>

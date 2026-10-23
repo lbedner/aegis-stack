@@ -19,7 +19,7 @@ which is what the settled message draws from.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Awaitable, Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -32,6 +32,7 @@ from pydantic import BaseModel, ValidationError, computed_field, model_validator
 from app.core.chat_transcript import card_markers
 from app.core.db import get_async_session
 from app.core.tools import current_conversation_id, register_tool
+from app.services.ai.domains.chat import path_card
 from app.services.ai.models.chat_card import ChatCard
 
 MARKER = "chat_card"
@@ -42,19 +43,33 @@ Unit = Literal["money", "count"]
 @dataclass(frozen=True, slots=True)
 class CardKind:
     """One drawable kind. ``rows`` is its own ceiling (0: nothing to cap):
-    a ranking and a two-figure comparison want very different limits."""
+    a ranking and a two-figure comparison want very different limits. A
+    kind the server fills in (``prepare``: a path staged from the request
+    she names) keeps what it made, not what she asked: ``stored``, the
+    shape a drawn card is kept in and read back through (its schema, for
+    the rest)."""
 
     name: str
     schema: type[BaseModel]
     template: str
     rows: int
+    stored: type[BaseModel]
+    prepare: Callable[[Any], Awaitable[BaseModel]] | None = None
 
 
 _KINDS: dict[str, CardKind] = {}
 
 
-def register_kind(name: str, schema: type[BaseModel], *, rows: int) -> CardKind:
-    kind = CardKind(name, schema, f"partials/chat/cards/{name}.html", rows)
+def register_kind(
+    name: str,
+    schema: type[BaseModel],
+    *,
+    rows: int,
+    stored: type[BaseModel] | None = None,
+    prepare: Callable[[Any], Awaitable[BaseModel]] | None = None,
+) -> CardKind:
+    template = f"partials/chat/cards/{name}.html"
+    kind = CardKind(name, schema, template, rows, stored or schema, prepare)
     _KINDS[name] = kind
     return kind
 
@@ -191,6 +206,13 @@ register_kind("bar", BarPayload, rows=ROW_CAP)
 register_kind("pie", PiePayload, rows=SLICE_CAP)
 register_kind("compare", ComparePayload, rows=0)
 register_kind("trend", TrendPayload, rows=400)
+register_kind(
+    "path",
+    path_card.PathAsk,
+    rows=0,
+    stored=path_card.PathCard,
+    prepare=path_card.prepare,
+)
 
 
 def shape_of(schema: type[BaseModel], depth: int = 0) -> str:
@@ -277,6 +299,12 @@ async def draw_card(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
         parts of a whole -> pie
         rows each carrying several values -> table
         one figure, or none -> no card, just say it
+        a flow on the map -> path: a request's replay (request_id), a
+          route's code path (route: what its code can do, never run) or,
+          for a flow neither shows, its stops (node ids from ontology, in
+          order: the server joins them along the map's own lines and
+          refuses a stop none reaches); call it a flow, a replay or a
+          code path, never a "path card"
 
     Compute the data first, then call this with the kind and the data
     (from your script, in code mode) - it displays what you give it and
@@ -323,6 +351,11 @@ async def draw_card(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
             "error": f"{declared.name} card takes at most {declared.rows} rows, "
             f"got {held}. Narrow it and say the rest in prose."
         }
+    if declared.prepare is not None:
+        try:
+            data = await declared.prepare(data)
+        except ValueError as exc:
+            return {"error": f"{declared.name} card: {exc}"}
     card = ChatCard(
         conversation_id=conversation_id,
         kind=declared.name,

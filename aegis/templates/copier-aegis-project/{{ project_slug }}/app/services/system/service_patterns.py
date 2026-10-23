@@ -17,15 +17,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from app.core import source_index
-from app.core.log import logger
 from app.core.source_functions import Function
+from app.core.source_index import Module
 from app.services.system.patterns import (
-    PROJECT_ROOT,
     Pattern,
     Rule,
     SourceText,
     Step,
+    read_functions,
 )
 
 SERVICES = "app/services"  # the services' folder, from the project's root
@@ -55,14 +54,17 @@ class ServiceFunction:
         return self.path.split("/")[0]
 
     @property
+    def group(self) -> str:
+        """What the Patterns page groups it by: its service."""
+        return self.service
+
+    @property
     def entry_point(self) -> bool:
         stem = Path(self.path).stem
         return stem in ENTRY_POINTS or stem.startswith("health_")
 
 
-def _function(
-    function: Function, path: str, lines: tuple[str, ...]
-) -> ServiceFunction | None:
+def _function(function: Function, module: Module, path: str) -> ServiceFunction | None:
     """``function`` as the pattern reads it, if it touches the database:
     takes a session (by name or annotation) or opens one."""
     params = [
@@ -82,32 +84,14 @@ def _function(
         opens=opens,
         typed=any("Session" in (p.annotation or "") for p in params),
         statements=function.statements,
-        source=SourceText(
-            "\n".join(lines[function.start - 1 : function.end]),
-            f"{SERVICES}/{path}",
-            function.start,
-        ),
+        source=SourceText.of(function, module.lines, f"{SERVICES}/{path}"),
     )
 
 
 def services(source: Any = None) -> list[tuple[str, ServiceFunction]]:
     """Every service function that touches the database. ``source`` may be
     another services root (tests); anything else means this project's."""
-    if isinstance(source, Path):
-        index, prefix = source_index.at(source), ""
-    else:
-        index, prefix = source_index.at(PROJECT_ROOT, SERVICES), f"{SERVICES}/"
-    found = []
-    for name, path in sorted(index.paths.items(), key=lambda item: item[1]):
-        module = index.get(name)
-        if module is None:
-            logger.warning("Service pattern skipped an unreadable module", path=path)
-            continue
-        relative = path.removeprefix(prefix)
-        for function in module.functions:
-            if read := _function(function, relative, module.lines):
-                found.append((f"{relative}: {read.qualname}", read))
-    return found
+    return read_functions(source, SERVICES, _function)
 
 
 def _follows(f: ServiceFunction) -> bool:

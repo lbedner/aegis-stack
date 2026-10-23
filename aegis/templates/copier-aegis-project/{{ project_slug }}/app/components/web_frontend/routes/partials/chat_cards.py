@@ -17,9 +17,10 @@ from fastapi.responses import HTMLResponse, Response
 from pydantic import ValidationError
 
 from app.components.web_frontend import chat_surface as chat
+from app.components.web_frontend import overseer_replay
 from app.components.web_frontend.chat_surface import ChatSurface
 from app.components.web_frontend.rendering import dialog, templates
-from app.services.ai.service import cards
+from app.services.ai.service import PathCard, cards
 
 MISSING = "partials/chat/card_missing.html"
 
@@ -43,19 +44,24 @@ def add_card_routes(router: APIRouter, mount: ChatSurface) -> None:
         ):
             return templates.TemplateResponse(request=request, name=MISSING)
         try:
-            # Read through the kind's schema: its defaults fill in, and a
-            # payload an old version stored in another shape is missing,
-            # not a template error.
-            payload = kind.schema.model_validate(row.payload).model_dump()
+            # Read through the shape the kind keeps: its defaults fill in,
+            # and a payload an old version stored in another shape is
+            # missing, not a template error.
+            kept = kind.stored.model_validate(row.payload)
         except ValidationError:
             return templates.TemplateResponse(request=request, name=MISSING)
+        large = size == "large"
         context = {
-            "card": payload,
+            "card": kept.model_dump(),
             "card_id": row.id,
             "card_url": f"{mount.path}/cards/{row.id}",
-            "large": size == "large",
+            "large": large,
         }
-        if context["large"]:
+        # A path card's map and steps, played as the Replay page plays
+        # them: drawn from its hops, not kept with them.
+        if isinstance(kept, PathCard):
+            context |= await overseer_replay.card(kept.path, large)
+        if large:
             return dialog(request, kind.template, **context)
         return templates.TemplateResponse(
             request=request, name=kind.template, context=context

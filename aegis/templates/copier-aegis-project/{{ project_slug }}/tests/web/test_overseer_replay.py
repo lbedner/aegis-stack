@@ -310,3 +310,17 @@ def test_the_way_in_runs_on_two_tracks() -> None:
     lands = float(lines[("backend", "ingress")][-1])
     top, height = nodes["ingress"]["top"], nodes["ingress"]["height"]
     assert top < leaves < top + height / 2 < lands < top + height
+
+
+async def test_a_request_whose_server_hop_was_not_kept_still_plays_the_way_in(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A request always came in through the Server: its own hop for that is
+    noted last and can be dropped (past what a request keeps), and the
+    way in plays all the same."""
+    client = zoomable(app, monkeypatch, INGRESS)
+    auth_opens(monkeypatch)
+    found = await kept("/api/v1/auth/me", _from("service:auth", DB, 2.0, QUERIES))
+    html = page_html(client, f"/overseer/replay/{found.id}")
+    steps = json.loads(text(one(html, "script[data-play-steps]")))
+    assert steps[0]["says"] == title_of("ingress")

@@ -25,7 +25,7 @@ from app.services.system.ui import is_service
 
 from . import overseer_container
 from .filters import answer_tone, worst_tone
-from .overseer_nav import NavItem
+from .overseer_nav import NavItem, current_navigation
 from .overseer_zoom import Path, registry_of, subject_of, title_of
 from .rendering import fragment, templates, with_query
 
@@ -69,18 +69,24 @@ async def recent() -> dict[str, Any]:
 
 
 async def replay(
-    navigation: dict[str, list[NavItem]], recording: RequestHops
+    navigation: dict[str, list[NavItem]],
+    recording: RequestHops,
+    scenes: int | None = None,
 ) -> dict[str, Any]:
     """``recording`` level by level, one after the other, each at the
-    request's real timing; the first opens on the way in (the stack's
-    edge, the Server), a beat a part, drawn ahead of what ran its route.
-    On one service's screen, the answer goes back out the same way after
-    it, on a track of its own (on several, the way in is not on the last;
-    on the Server opened up, there is no second track)."""
+    request's real timing (staged, a beat a hop); the first opens on the
+    way in (the stack's edge, the Server), a beat a part, drawn ahead of
+    what ran its route. On one service's screen, the answer goes back out
+    the same way after it, on a track of its own (on several, the way in
+    is not on the last; on the Server opened up, there is no second
+    track). ``scenes``: the first so many levels drawn (all when None)."""
     hops, span = _timed(recording)
     parts = [_parts(hop) for hop in hops]
     installed = {entry.name for entry in navigation["components"]}
-    way = [*(key for key in topology.EDGE if key in installed), HOST]
+    # A request came in through the Server, even where its own hop for
+    # that was not kept; a staged flow may start anywhere.
+    entered = not recording.staged or any(hop.chain[0] == SERVER for hop in hops)
+    way = [*(k for k in topology.EDGE if k in installed), HOST] if entered else []
     beat = span / BEATS
     services = _services(hops, parts)
     server = [[key for key in keys if key != HOST] for keys in parts]
@@ -97,21 +103,33 @@ async def replay(
     lead = beat * len(way)
     out = [*entry, *reversed(way)] if len(levels) == 1 and key != HOST else []
     ways = [*lit, way + entry, *([out] if out else [])]
-    scenes = [await _scene(navigation, key, ways, 0.0, span, lead)]
-    found = _beats(key, [(None, way[0]), *pairwise(way)], 0.0, beat)
-    found += _steps(key, lead, hops, lit, titles)
+    drawn = [await _scene(navigation, key, ways, 0.0, span, lead)]
+    found = _beats(key, [(None, way[0]), *pairwise(way)], 0.0, beat) if way else []
+    found += _steps(key, lead, hops, lit, titles, recording.staged)
     if out:
         answered = ANSWERED[answer_tone(recording.status)]
         found += _beats(key, list(pairwise(out)), lead + span, beat, answered=answered)
-    for key, titles, lit in levels[1:]:
-        at = scenes[-1]["at"] + scenes[-1]["lead"] + scenes[-1]["ms"]
-        scenes.append(await _scene(navigation, key, lit, at, span))
-        found += _steps(key, at, hops, lit, titles)
+    for key, titles, lit in levels[1:scenes]:
+        at = drawn[-1]["at"] + drawn[-1]["lead"] + drawn[-1]["ms"]
+        drawn.append(await _scene(navigation, key, lit, at, span))
+        found += _steps(key, at, hops, lit, titles, recording.staged)
     return {
         "replay": recording,
-        "replay_scenes": scenes,
+        "replay_scenes": drawn,
         "replay_steps": found,
         "replay_switch": (url(recording.id, LIST_VIEW), "Hops"),
+    }
+
+
+async def card(path: RequestHops, large: bool) -> dict[str, Any]:
+    """A path card's stage (``path_card``): its hops replayed as the
+    Replay page replays them; in the thread (not ``large``), its first
+    scene alone, the thumbnail."""
+    scenes = None if large else 1
+    played = await replay(current_navigation(), path, scenes)
+    return {
+        "path_steps": played["replay_steps"],
+        "path_scenes": played["replay_scenes"],
     }
 
 
@@ -176,6 +194,7 @@ def _steps(
     hops: tuple[RequestHop, ...],
     lit: list[list[str]],
     titles: dict[str, str],
+    staged: bool,
 ) -> list[dict[str, Any]]:
     """Each hop as the player's step in ``scene``, ``offset`` on: what it
     lights there (where it went, the lines between; a hop into one part,
@@ -195,7 +214,9 @@ def _steps(
                 "ms": hop.ms,
                 "targets": _targets(scene, keys[1:] or keys, pairwise(keys)),
                 "state": state,
-                "says": _says(hop, [titles.get(key) or title_of(key) for key in keys]),
+                "says": _says(
+                    hop, [titles.get(key) or title_of(key) for key in keys], staged
+                ),
             }
         )
     return found
@@ -247,15 +268,16 @@ def _parts(hop: RequestHop) -> list[str]:
 def _services(
     hops: tuple[RequestHop, ...], parts: list[list[str]]
 ) -> list[tuple[str, dict[str, str], list[list[str]]]]:
-    """Each service the request ran in that opens up, in the order it
-    reached them: its key, its pieces' titles, and what each hop went
-    through in it (``_in``)."""
+    """Each service the request ran in that opens up (one it went through
+    pieces of: opened up, one it only went past is the Server's map again),
+    in the order it reached them: its key, its pieces' titles, and what
+    each hop went through in it (``_in``)."""
     found = []
     for key in filter(is_service, dict.fromkeys(k for keys in parts for k in keys)):
         subject = subject_of(key)
-        lit = [_in(key, subject, keys, hop) for keys, hop in zip(parts, hops)]
-        if any(lit):
-            titles = {p.key: p.title for hop in hops for p in hop.pieces(subject)}
+        titles = {p.key: p.title for hop in hops for p in hop.pieces(subject)}
+        if titles:
+            lit = [_in(key, subject, keys, hop) for keys, hop in zip(parts, hops)]
             found.append((key, titles, lit))
     return found
 
@@ -271,10 +293,12 @@ def _in(service: str, subject: str, keys: list[str], hop: RequestHop) -> list[st
     return [k for k, _ in groupby([*went, *after])]
 
 
-def _says(hop: RequestHop, titles: list[str]) -> str:
+def _says(hop: RequestHop, titles: list[str], staged: bool) -> str:
     """A hop in words: what it went through, the tables it read, how long
-    it took, where in the code it was made."""
-    said = [_path_words(titles), ", ".join(hop.tables), f"{hop.ms} ms", hop.where]
+    it took (staged, it took no time of the app's), where in the code it
+    was made."""
+    took = "" if staged else f"{hop.ms} ms"
+    said = [_path_words(titles), ", ".join(hop.tables), took, hop.where]
     return " · ".join(part for part in said if part) + (" failed" if hop.error else "")
 
 

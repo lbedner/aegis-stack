@@ -53,6 +53,7 @@ REDIS_KEYS = (
 QUEUE = "component:queue"  # where work handed off waits (``ontology.parts``)
 SERVER = f"component:{ownership.HOST}"
 SCHEDULER = "component:scheduler"
+DATABASE = "component:database"  # what a query is a hop into (``db_activity``)
 # What runs the others' code: dropped from a chain a part is in.
 RUNNERS = frozenset(
     f"component:{name}" for name, part in PARTS.items() if part.tier == 1

@@ -9,6 +9,7 @@ Where the walk cannot see further it stops at that line and says why
 (``Reason``); what no static walk sees is ``UNSEEN``. The hops also
 collapse to the nodes they join (``edges``), for a reader of the model."""
 
+import asyncio
 from collections.abc import Iterable, Mapping
 from functools import cache
 from typing import Any
@@ -107,6 +108,19 @@ def _needs(dependant: Dependant) -> tuple[Need, ...]:
         typed = symbol_of(given) if isinstance(given, type) else None
         found.append(Need(symbol, d.name, typed, _needs(d)))
     return tuple(found)
+
+
+async def of(key: str) -> DryPath:
+    """The running app's route behind ``key`` (``"GET /api/v1/..."``),
+    walked off the event loop (it reads the source); ValueError naming the
+    form when there is none."""
+    from app.components.backend.main import get_configured_app
+
+    app = get_configured_app()
+    found = find(app.routes if app else [], key)
+    if found is None:
+        raise ValueError(f"No route {key!r}; name one as 'METHOD /path'.")
+    return await asyncio.to_thread(walk, found)
 
 
 def walk(route: APIRoute) -> DryPath:

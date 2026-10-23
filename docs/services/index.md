@@ -219,7 +219,11 @@ belongs - so it names each domain and what it owns.
     not make it new. Illiana gives the verdict, last: blocked when a new
     place breaks a rule that holds a change (an enforced rule, or a gated
     one, whose known debt stands while new breaches block: the service
-    standard's `takes-session` is gated), else clear. It always exits 0
+    standard's `takes-session` is gated, as is the async pattern's
+    `off-the-loop`: an async function hands blocking work, such as the
+    system model's build, `time.sleep` or a subprocess, to a thread with
+    `await asyncio.to_thread(...)` rather than calling it on the event
+    loop every request shares; the CLI's commands are exempt), else clear. It always exits 0
     but under `--strict`, which exits 1 when blocked. Under GitHub Actions
     each new finding is an annotation on the pull request's diff, an
     error (red) where it blocks and a warning where it is advisory, titled

@@ -1,0 +1,129 @@
+"""A path staged as the hops a replay plays: a route's code path (``dry``,
+``route``), or a flow's stops joined along the lines the model declares
+(``joined``), each hop a beat after the one before and no timing of its
+own. Shaped as a kept request is (``kept_requests.RequestHops``), so
+whatever plays a request (Overseer's replay, a path card) plays these the
+same way."""
+
+from collections.abc import Sequence
+from itertools import pairwise
+
+from app.core.edges import DATABASE, SERVER
+from app.core.ontology import Kind, graph
+from app.core.ontology.model import Edge, EdgeKind, SystemModel, parse_node_id
+from app.services.system import dry_path
+from app.services.system.dry_path import DryPath
+from app.services.system.kept_requests import RequestHop, RequestHops
+
+BEAT_MS = 100.0  # a staged hop's length, and the gap to the next
+# What a flow's line can be: a call or a need, the way it points; a part
+# holding a sub-part or a table, either way. And what the map places.
+FOLLOWED = frozenset({EdgeKind.CALLS, EdgeKind.DEPENDS_ON})
+PLACED = frozenset({Kind.COMPONENT, Kind.SERVICE, Kind.EXTERNAL, Kind.OBJECT})
+SAID = 12  # the most a refusal names of what a stop does reach
+
+
+def joined(model: SystemModel, stops: Sequence[str]) -> RequestHops:
+    """``stops`` (model node ids, in order) as hops, each joined to the
+    next by the shortest way along the lines ``model`` has (declared, or
+    seen in traffic where it is the running one; ``_lines``), never one
+    it has none for; a stop not in it, or none reaches, is refused saying
+    what to name instead."""
+    lines = _lines(model)
+    chains = []
+    for start, end in pairwise(stops):
+        found = graph.paths(lines, start, end, directed=True)
+        if not found:
+            reached = sorted({e.target for e in lines.edges if e.source == start})
+            raise ValueError(
+                f"Nothing on the map takes {start} to {end}; {start} reaches: "
+                f"{', '.join(reached[:SAID]) or 'nothing'}."
+            )
+        here = start
+        for edge in found[0]:
+            # A table calls nothing: leaving one is its read returning.
+            if parse_node_id(here)[0] is not Kind.OBJECT:
+                chains.append(_read(here, edge.target))
+            here = edge.target
+    return _staged(chains, method="", path="")
+
+
+def _lines(model: SystemModel) -> SystemModel:
+    """``model`` with only the lines a flow can take between parts the map
+    places: its calls and needs as they point, a part and what it holds
+    both ways, and the Server to each part it runs (sharing its
+    container)."""
+    kinds = {node.id: node.kind for node in model.nodes}
+    placed = {key for key, kind in kinds.items() if kind in PLACED}
+    host = {e.source: e.target for e in model.edges if e.kind is EdgeKind.RUNS_ON}
+    lines = [
+        Edge(source=SERVER, target=key, kind=EdgeKind.CALLS)
+        for key, container in host.items()
+        if key != SERVER and key in placed and container == host.get(SERVER)
+    ]
+    for edge in model.edges:
+        if edge.source not in placed or edge.target not in placed:
+            continue
+        if edge.kind in FOLLOWED:
+            lines.append(edge)
+        elif edge.kind is EdgeKind.CONTAINS:
+            lines += [
+                edge,
+                edge.model_copy(update={"source": edge.target, "target": edge.source}),
+            ]
+    return model.model_copy(update={"edges": tuple(lines)})
+
+
+def dry(walked: DryPath) -> RequestHops:
+    """``walked`` as hops: its handler's part entered from the server, then
+    each edge it collapses to, a table read a hop into the database
+    naming the table, as a kept request's query is."""
+    entry = next((hop.node for hop in walked.hops if hop.node), None)
+    chains: list[tuple[tuple[str, ...], tuple[str, ...]]] = []
+    if entry:
+        chains.append(((SERVER, entry), ()))
+    chains += [_read(step.source, step.target) for step in walked.edges]
+    method, _, path = walked.route.partition(" ")
+    return _staged(chains, method=method, path=path)
+
+
+def _read(source: str, target: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """A line as a hop the map can place: into a table (an object, no part
+    of the map's), the database reading it, named."""
+    kind, name = parse_node_id(target)
+    if kind is Kind.OBJECT:
+        return (source, DATABASE), (name,)
+    return (source, target), ()
+
+
+async def route(key: str) -> RequestHops:
+    """The route behind ``key`` (``"GET /api/v1/..."``), walked dry."""
+    return dry(await dry_path.of(key))
+
+
+def _staged(
+    chains: Sequence[tuple[tuple[str, ...], tuple[str, ...]]], *, method: str, path: str
+) -> RequestHops:
+    hops = tuple(
+        RequestHop(
+            chain=chain,
+            at_ms=index * BEAT_MS,
+            ms=BEAT_MS,
+            error=False,
+            tables=tables,
+            lines=(),
+        )
+        for index, (chain, tables) in enumerate(chains)
+    )
+    return RequestHops(
+        id="",
+        method=method,
+        path=path,
+        route=path,
+        status=200,
+        ms=len(hops) * BEAT_MS,
+        hop_count=len(hops),
+        dropped=0,
+        hops=hops,
+        staged=True,
+    )

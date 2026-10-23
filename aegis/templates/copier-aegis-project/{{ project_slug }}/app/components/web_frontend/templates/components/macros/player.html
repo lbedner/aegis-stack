@@ -11,8 +11,10 @@
    milliseconds show. The player starts at one of these (timeline.js). #}
 {% set SPEEDS = ((1, "Real time"), (0.2, "5x slower"), (0.1, "10x slower"), (0.02, "50x slower"), (0.01, "100x slower"), (0.001, "1000x slower")) %}
 
+{# ``relative``: its controls' screen-reader labels (``sr-only``, absolute)
+   place within it, not against the page from inside a scrolling thread. #}
 {% macro player(steps, label="Replay", chapters=()) %}
-<div data-player class="space-y-3">
+<div data-player class="relative space-y-3">
   <script type="application/json" data-play-steps>{{ steps|tojson }}</script>
   <div role="toolbar" aria-label="{{ label }}" class="flex flex-wrap items-center gap-2 text-xs">
     {{ action("Step back", 'data-play-do="back"', glyph="backward") }}
@@ -36,4 +38,13 @@
   </div>
   {{ caller() }}
 </div>
+{% endmacro %}
+
+{# A replay's levels on the player (``overseer_replay.replay``): each scene
+   its map, drawn once and inert, the first shown. The Replay page and a
+   path card in a reply both play through this. #}
+{% macro stage(steps, scenes) %}
+{% call player(steps, chapters=scenes) %}
+{% for scene in scenes %}<div data-play-scene="{{ scene.key }}" data-play-at="{{ scene.at }}" data-play-ms="{{ scene.ms }}" data-play-lead="{{ scene.lead }}"{% if not loop.first %} hidden{% endif %}><div data-scene-map inert>{{ scene.map }}</div></div>{% endfor %}
+{% endcall %}
 {% endmacro %}

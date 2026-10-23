@@ -36,6 +36,7 @@ if TYPE_CHECKING:
         list_memory_modules,
         update_memory_module,
     )
+    from app.services.ai.domains.chat.path_card import PathCard
 {%- endif %}
     from app.services.ai.domains.chat.prompts import DEFAULT_SYSTEM_PROMPT
     from app.services.ai.domains.chat.tools import resolve_tools

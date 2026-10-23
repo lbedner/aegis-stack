@@ -1,0 +1,17 @@
+{# A flow on the map (``path_card``), on the Replay page's own player and
+   steps (``overseer_replay.card``): in the thread its first scene, still,
+   marked to play; opened larger, it plays. #}
+{% from "partials/chat/cards/_frame.html" import card_frame %}
+{% from "components/macros/player.html" import stage %}
+{% from "components/macros/icons.html" import icon %}
+{% set path = card["path"] %}
+{% if not path["staged"] %}{% set said = "Replay · " ~ path["method"] ~ " " ~ path["path"] ~ " · " ~ path["status"] ~ " in " ~ path["ms"] ~ " ms" %}
+{% elif path["method"] %}{% set said = "Code path · " ~ path["method"] ~ " " ~ path["path"] ~ " · read from the code, not run" %}
+{% else %}{% set said = "Flow · along the map's lines" %}{% endif %}
+{% call card_frame("path", card["title"], said, card_url, large) %}
+  {% if large %}<div class="px-3 py-3 overflow-x-auto">{{ stage(path_steps, path_scenes) }}</div>
+  {% else %}<div data-thumb class="relative h-56 overflow-hidden">
+    <div data-scene-map inert class="pointer-events-none px-3 py-3 [zoom:0.4]">{{ path_scenes[0].map }}</div>
+    <span data-play-badge class="absolute inset-0 flex items-center justify-center"><span class="rounded-full border border-aegis-teal bg-aegis-bg/85 p-3 text-aegis-text">{{ icon("play", class="w-6 h-6") }}</span></span>
+  </div>{% endif %}
+{% endcall %}

@@ -207,13 +207,7 @@ async def requests(
 async def _dry_path(route: str) -> dict[str, Any]:
     if not await caller_is_admin():
         raise ValueError("A route's dry path is its code: an admin's to read.")
-    from app.components.backend.main import get_configured_app
-
-    app = get_configured_app()
-    found = dry_path.find(app.routes if app else [], route)
-    if found is None:
-        raise ValueError(f"No route {route!r}; name one as 'METHOD /path'.")
-    walked = await asyncio.to_thread(dry_path.walk, found)
+    walked = await dry_path.of(route)
     return {
         "dry_path": walked.model_dump(mode="json", exclude={"hops"})
         | {"hops": [h.model_dump(mode="json") for h in walked.hops[:MAX_NODES]]},

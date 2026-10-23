@@ -10,6 +10,7 @@ Google account the bot joins as) has its own: the first's is ``LOGIN``,
 another's ``LOGIN__<NAME>`` (``domains.accounts``).
 """
 
+import asyncio
 from collections.abc import Iterator
 from contextlib import contextmanager
 import json
@@ -72,7 +73,10 @@ async def capture_login(chrome: str) -> dict[str, Any]:
     """Chrome at Google's sign-in, until the person quits it; then the
     login it kept. Raises LoginError when nobody signed in."""
     with tempfile.TemporaryDirectory() as profile:
-        subprocess.run(
+        # Waits until the person quits Chrome: off the loop, so nothing
+        # else stalls behind it.
+        await asyncio.to_thread(
+            subprocess.run,
             _chrome(chrome, profile, SIGN_IN_URL),
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,

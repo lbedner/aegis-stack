@@ -108,8 +108,8 @@ async def send_due(db: AsyncSession, now: datetime | None = None) -> list[int]:
     is then deleted: with a link the bot can join, not cancelled; none
     while ``MEETINGS_JOIN_FROM_CALENDAR`` is off. Nobody
     pressed send, so each is owned by the first on its invite with an
-    account here, the organizer first; nobody's when no one has. The
-    meetings sent, by id."""
+    account here, the organizer first; when no one has, the agent's
+    default owner's, else nobody's. The meetings sent, by id."""
     # Here, not at the top: the bot loads the browser driver, which only a
     # send needs, not every run of the scheduler.
     from app.services.meetings.domains.bot.run import send_bot
@@ -122,12 +122,15 @@ async def send_due(db: AsyncSession, now: datetime | None = None) -> list[int]:
         return []
     every = await agents(db)
     names = {agent.id: agent.name for agent in every}
+    defaults = {agent.id: agent.default_owner_id for agent in every}
     users = await users_by_email(db, (e for row in rows for e in row.emails))
     sent = []
     # ponytail: two runs overlapping could send one twice; a run takes
     # seconds and comes once a minute. A claim on the row if that changes.
     for row in rows:
-        owner = next((users[e] for e in row.emails if e in users), None)
+        owner = next(
+            (users[e] for e in row.emails if e in users), defaults[row.account_id]
+        )
         meeting = await send_bot(
             MeetingsService(db, owner), row.url or "", "", names[row.account_id], every
         )

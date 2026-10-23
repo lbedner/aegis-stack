@@ -16,6 +16,8 @@ from app.services.meetings.domains.actions.runs import (
     RunNotFoundError,
 )
 from app.services.meetings.domains.calendar.entries import EventNotFoundError
+from app.services.meetings.domains.calendar.owners import NoSuchOwnerError
+from app.services.meetings.domains.people.participants import MeetingOwnedError
 from app.services.meetings.domains.people.service import (
     GuideNotFoundError,
     PeopleService,
@@ -81,9 +83,9 @@ def get_every_owners_series(db: AsyncSession = Depends(get_async_db)) -> SeriesS
 def as_http() -> Iterator[None]:
     """The service's refusals as HTTP, for every route over meetings (the
     API's, the Meetings page's and Overseer's): a meeting, guide or series
-    the caller cannot see is a 404, one the bot is still in (or notes, a
-    guide or a series that cannot be written now) a 409, a link it cannot join, a speaker who was not
-    there or an agent there is not a 422. A moment, action, claimed run or
+    the caller cannot see is a 404, one the bot is still in or someone owns
+    already (or notes, a guide or a series that cannot be written now) a 409, a link it cannot join, a speaker who was not
+    there, an agent there is not or an owner nobody here is a 422. A moment, action, claimed run or
     runner token the caller cannot reach is a 404 too, as is a meeting on no
     calendar."""
     try:
@@ -99,9 +101,14 @@ def as_http() -> Iterator[None]:
         EventNotFoundError,
     ) as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
-    except (MeetingInProgressError, NothingToWriteError) as exc:
+    except (MeetingInProgressError, MeetingOwnedError, NothingToWriteError) as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
-    except (UnsupportedMeetingLinkError, NotASpeakerError, AgentNotFoundError) as exc:
+    except (
+        UnsupportedMeetingLinkError,
+        NotASpeakerError,
+        AgentNotFoundError,
+        NoSuchOwnerError,
+    ) as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
 
 

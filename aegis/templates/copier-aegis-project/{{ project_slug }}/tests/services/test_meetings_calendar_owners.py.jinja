@@ -1,12 +1,46 @@
 {% if include_auth -%}
-"""Who owns a meeting an agent joins from its calendar (``send_due``)."""
+"""Who owns a meeting nobody pressed send for: one an agent joins from its
+calendar (``send_due``), and one nobody owns, given to someone (``give``);
+and both over the admin API."""
 
+from fastapi.testclient import TestClient
 import pytest
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.services.meetings.domains.accounts.service import (
+    DEFAULT_AGENT,
+    set_default_owner,
+)
+from app.services.meetings.domains.calendar.owners import NoSuchOwnerError
 from app.services.meetings.domains.calendar.service import read_calendars, send_due
-from app.services.meetings.models import Meeting
-from tests._meetings import STANDUP, Calendar, at, hold_the_bot
+from app.services.meetings.domains.people.participants import (
+    MeetingOwnedError,
+    give,
+)
+from app.services.meetings.models import (
+    Meeting,
+    MeetingNoteItem,
+    MeetingParticipant,
+    MeetingPerson,
+)
+from tests._audit import as_admin, let_into_overseer
+from tests._meetings import (
+    STANDUP,
+    Calendar,
+    at,
+    docs_meeting,
+    hold_the_bot,
+    person_named,
+)
+
+API = "/api/v1/meetings/admin"
+
+
+async def _given(session: AsyncSession, meeting_id: int, user_id: int) -> None:
+    meeting = await session.get(Meeting, meeting_id)
+    assert meeting is not None
+    await give(session, meeting, user_id)
 
 
 @pytest.mark.queryspy(allow_n_plus_one=True)  # one send after another
@@ -29,4 +63,98 @@ async def test_the_meeting_is_whoevers_invite_it_is(
         for sent in (first, second)
     ]
     assert owners == [attendee.id, organizer.id]
+
+
+async def test_nobody_on_the_invite_leaves_it_with_the_agents_default_owner(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch, user_factory
+) -> None:
+    hold_the_bot(monkeypatch)
+    calendar = Calendar(monkeypatch, STANDUP)
+    await read_calendars(async_db_session, calendar.read, at(18, 0))
+    pat = await user_factory(email="pat@example.com")
+    await set_default_owner(async_db_session, DEFAULT_AGENT, pat.id)
+
+    [sent] = await send_due(async_db_session, at(19, 13))
+
+    meeting = await async_db_session.get(Meeting, sent)
+    assert meeting is not None and meeting.owner_user_id == pat.id
+
+
+async def test_given_away_its_people_and_notes_go_with_it(
+    async_db_session: AsyncSession, user_factory
+) -> None:
+    """Ada, nobody's, is the Ada its new owner already knows (ignoring
+    case), and the action item the notes gave her is hers there."""
+    meeting_id = await docs_meeting(async_db_session, None)
+    leo = await user_factory(email="leo@example.com")
+    known = MeetingPerson(owner_user_id=leo.id, name="ada")
+    async_db_session.add(known)
+    await async_db_session.flush()
+
+    await _given(async_db_session, meeting_id, leo.id)
+
+    meeting = await async_db_session.get(Meeting, meeting_id)
+    assert meeting is not None and meeting.owner_user_id == leo.id
+    where = {
+        MeetingParticipant: MeetingParticipant.meeting_id == meeting_id,
+        MeetingNoteItem: MeetingNoteItem.meeting_id == meeting_id,
+    }
+    people = {
+        row.person_id
+        for table, clause in where.items()
+        for row in (await async_db_session.exec(select(table).where(clause))).all()
+    }
+    assert people - {None} == {known.id}
+    assert await person_named(async_db_session, None, "Ada") is None
+
+
+async def test_one_someone_owns_is_not_given_away(
+    async_db_session: AsyncSession, user_factory
+) -> None:
+    leo = await user_factory(email="leo@example.com")
+    dana = await user_factory(email="dana@example.com")
+    meeting_id = await docs_meeting(async_db_session, leo.id)
+
+    with pytest.raises(MeetingOwnedError):
+        await _given(async_db_session, meeting_id, dana.id)
+
+
+async def test_only_someone_with_an_account_here_is_given_it(
+    async_db_session: AsyncSession,
+) -> None:
+    meeting_id = await docs_meeting(async_db_session, None)
+
+    with pytest.raises(NoSuchOwnerError):
+        await _given(async_db_session, meeting_id, 424242)
+    with pytest.raises(NoSuchOwnerError):
+        await set_default_owner(async_db_session, DEFAULT_AGENT, 424242)
+
+
+async def test_the_admin_api_gives_a_meeting_and_an_agents_default_owner(
+    authenticated_client: TestClient,
+    async_db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+    user_factory,
+) -> None:
+    as_admin(let_into_overseer(authenticated_client, monkeypatch))
+    leo = await user_factory(email="leo@example.com")
+    meeting_id = await docs_meeting(async_db_session, None)
+
+    owners = authenticated_client.get(f"{API}/owners")
+    given = authenticated_client.post(
+        f"{API}/{meeting_id}/owner", json={"user_id": leo.id}
+    )
+    again = authenticated_client.post(
+        f"{API}/{meeting_id}/owner", json={"user_id": leo.id}
+    )
+    agent = authenticated_client.put(
+        f"{API}/agents/{DEFAULT_AGENT}/owner", json={"user_id": leo.id}
+    )
+
+    assert {"id": leo.id, "email": "leo@example.com"} in owners.json()
+    assert given.status_code == 200, given.text
+    assert given.json()["meeting"]["owner_user_id"] == leo.id
+    assert again.status_code == 409
+    assert agent.status_code == 200, agent.text
+    assert agent.json()["default_owner_id"] == leo.id
 {% endif %}

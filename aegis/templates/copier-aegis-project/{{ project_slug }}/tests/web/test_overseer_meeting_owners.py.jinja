@@ -1,0 +1,71 @@
+{% if include_auth -%}
+"""Overseer's say in who owns what nobody pressed send for: a meeting
+nobody owns given to someone from its drawer, and an agent's default
+owner set on the Agents tab."""
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+import pytest
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.components.web_frontend import overseer_meetings
+from app.services.meetings.domains.accounts.service import DEFAULT_AGENT
+from app.services.system.models import ComponentStatus
+from tests._meetings import docs_meeting
+from tests.web.dom import none, one, text
+from tests.web.dom import select as select_all
+from tests.web.overseer import page_html, sign_in, status_with
+
+PARTIALS = overseer_meetings.PARTIALS
+AGENTS = f"{overseer_meetings.PAGE}/agents"
+MEETINGS = ComponentStatus(name="meetings", message="Meetings ready")
+HX = {"HX-Request": "true"}
+
+
+@pytest.fixture
+def overseer(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch, async_client_with_db: TestClient
+) -> TestClient:
+    """Signed in as an admin, on the test's own session."""
+    sign_in(app, monkeypatch, status_with(services=[MEETINGS]))
+    return async_client_with_db
+
+
+async def test_overseer_gives_a_meeting_nobody_owns_from_its_drawer(
+    overseer: TestClient, async_db_session: AsyncSession, user_factory
+) -> None:
+    leo = await user_factory(email="leo@example.com")
+    meeting_id = await docs_meeting(async_db_session, None)
+
+    drawer = page_html(overseer, f"{PARTIALS}/{meeting_id}/drawer")
+    picker = one(drawer, "select[data-give]")
+    emails = [text(o) for o in select_all(picker, "option")]
+    assert "leo@example.com" in emails
+
+    given = overseer.post(
+        f"{PARTIALS}/{meeting_id}/owner", data={"user_id": leo.id}, headers=HX
+    )
+
+    assert given.status_code == 200, given.text
+    assert "leo@example.com" in given.text
+    none(given.text, "select[data-give]")
+
+
+async def test_overseer_sets_an_agents_default_owner(
+    overseer: TestClient, async_db_session: AsyncSession, user_factory
+) -> None:
+    leo = await user_factory(email="leo@example.com")
+
+    agent = f"select[data-default-owner='{DEFAULT_AGENT}']"
+    picker = one(page_html(overseer, AGENTS), agent)
+    set_ = overseer.post(
+        f"{PARTIALS}/agents/{DEFAULT_AGENT}/owner",
+        data={"user_id": leo.id},
+        headers=HX,
+    )
+
+    assert "leo@example.com" in text(picker)
+    assert set_.status_code == 200, set_.text
+    chosen = one(set_.text, f"{agent} option[selected]")
+    assert text(chosen) == "leo@example.com"
+{% endif %}

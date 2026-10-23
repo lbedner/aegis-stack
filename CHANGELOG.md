@@ -9,6 +9,14 @@
 
 ### Added
 
+- **Who owns a meeting nobody pressed send for.** With auth, an agent
+  has an optional default owner: a meeting it joins from its calendar
+  that nobody on the invite owns goes to them. A meeting nobody owns is
+  given to someone from either Overseer, its people matched to the ones
+  the new owner already knows and its action items with them. Admin API:
+  `GET /meetings/admin/owners`, `PUT /meetings/admin/agents/{name}/owner`,
+  `POST /meetings/admin/{id}/owner`.
+
 - **Illiana holds the line on a pull request.** `patterns check` ends
   with her verdict: blocked when a new place breaks a rule that holds a
   change, else clear. A rule can be gated: its known debt stands while a

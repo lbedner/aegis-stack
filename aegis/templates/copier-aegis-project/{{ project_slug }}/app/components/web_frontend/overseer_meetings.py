@@ -19,6 +19,7 @@ from typing import Any
 from app.core.formatting import format_relative_time
 from app.services.meetings.domains.accounts.service import agent_names, agents
 from app.services.meetings.domains.calendar.entries import CalendarEventDetail
+from app.services.meetings.domains.calendar.owners import owners
 from app.services.meetings.domains.people.service import PeopleService, said_when
 from app.services.meetings.domains.search.service import LINE_PARAM, MEETING_PARAM
 from app.services.meetings.domains.series.service import SeriesService
@@ -33,7 +34,7 @@ from app.services.meetings.models import (
 from app.services.meetings.service import MeetingsService, meetings_counts
 from app.services.system.models import ComponentStatus
 
-from .meeting_agents import agent_options, agents_context
+from .meeting_agents import agent_options, agents_context, owner_options
 from .meeting_calendar import calendar_context
 from .meeting_status import state_cell
 from .overseer_meeting_search import search_context
@@ -78,7 +79,7 @@ async def section_context(
     if section == "series":
         return await _series(req)
     if section == "agents":
-        return await agents_context(req.db, meeting_url)
+        return await agents_context(req.db, meeting_url) | {"partials": PARTIALS}
     if section == "calendar":
         return await _calendar(req)
     counts = await meetings_counts(req.db)
@@ -125,6 +126,12 @@ async def _calendar(req: SectionRequest) -> dict[str, Any]:
     wanted = req.query.get(EVENT_PARAM) or ""
     drawer = f"{PARTIALS}/calendar/{wanted}/drawer" if wanted.isdigit() else None
     return drawer_state(EVENT_PARAM, drawer) | {"calendar": calendar}
+
+
+async def owner_context(svc: MeetingsService) -> dict[str, Any]:
+    """Everyone the drawer's meeting can be given to while nobody owns it
+    (nobody without auth); its owner shows by their email."""
+    return {"owners": owner_options(await owners(svc.db))}
 
 
 def event_context(entry: CalendarEventDetail) -> dict[str, Any]:

@@ -1,13 +1,11 @@
 """Meetings service detail modal: the bot sent to a call, and every owner's
 meetings beside a pane that reads the selected one in full (my action
 items once I say which speaker I am, the notes, the transcript, how long
-each speaker was heard), following it while the bot is in or the notes
-are being written, where the notes are written again, the bot asked to
-leave or the meeting deleted. The same as the htmx Overseer's drawer, over
-the owner's send route and the admin API (``api/meetings/admin.py``).
-Search (``meetings_search_tab``) opens a hit's meeting in a pane of its
-own, at its line.
-"""
+each speaker was heard), followed while the bot is in or the notes are
+being written; there the notes are written again, the bot asked to leave,
+the meeting deleted or, nobody's, given (``meetings_owners``). As the htmx
+drawer, over the owner's send route and the admin API. Search opens a
+hit's meeting in a pane of its own, at its line."""
 
 from __future__ import annotations
 
@@ -44,6 +42,7 @@ from .meetings_agents_tab import AGENTS, AgentPicker, AgentsTab
 from .meetings_calendar_tab import CalendarTab
 from .meetings_follow import FOLLOW_SECONDS, api, follow, hint
 from .meetings_moments import Acts, moment_actions, moments_controls
+from .meetings_owners import give_box
 from .meetings_people_tab import PeopleTab
 from .meetings_search_tab import SearchTab
 from .meetings_series_tab import SeriesTab
@@ -325,6 +324,7 @@ class MeetingPane(ft.Container):
             [
                 ft.Row([buttons[a] for a in actions_for(record)], spacing=8),
                 *([speaker] if record.get("people") else []),
+                *give_box(self.page, record, self._present),
                 self._view,
             ],
             spacing=Theme.Spacing.MD,

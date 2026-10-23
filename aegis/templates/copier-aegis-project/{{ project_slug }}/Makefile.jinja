@@ -19,7 +19,7 @@ WEB_JS_DIR = app/components/web_frontend/static/js
 
 build: ## Build Docker image
 	@echo "Building Docker image..."
-	@$(COMPOSE_DEV) build webserver
+	@$(COMPOSE_DEV) build webserver{% if include_meetings %} meetings-runner{% endif %}
 {%- if include_htmx %}
 
 build-static: ## Compile Tailwind CSS and fingerprint assets into static/dist

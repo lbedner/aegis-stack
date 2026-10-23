@@ -2,7 +2,7 @@
 
 - ``router`` / ``admin_router``: a meeting's moments with what each offers
   (a browser action with the prompt it copies) and what was asked of it,
-  and an action asked of one. The caller's own
+  an action asked of one, and its call read over again for them. The caller's own
   (``get_meetings_service``), or every owner's for Overseer: reading the
   admin's (``get_admin_reader``), asking an operator's (``get_admin_actor``).
 - ``runs_router``: a runner on another machine claims a run of the actions
@@ -113,6 +113,21 @@ def _routes(
         with as_http():
             run = await svc.ask(meeting_id, moment_id, body.action)
         return AskedRun(id=run.id or 0, action=run.action, status=run.status)
+
+    @router.post(
+        "/{meeting_id}/moments/find",
+        response_model=list[MomentRecord],
+        dependencies=change,
+    )
+    async def find(
+        meeting_id: int, svc: MeetingsService = scoped
+    ) -> list[MomentRecord]:
+        """Read the call over again for moments (one kept before they were
+        looked for, or before a detector changed): what it holds now. Where
+        the stack has a model, its questions are cleaned up after, in the
+        background."""
+        with as_http():
+            return (await svc.look_over(meeting_id)).moments
 
 
 router = APIRouter(prefix="/meetings", tags=["meetings"])

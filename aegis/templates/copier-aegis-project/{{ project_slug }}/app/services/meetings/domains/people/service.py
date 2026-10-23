@@ -3,14 +3,12 @@
 each point with the lines it rests on, and the owner's own note on them."""
 
 from collections.abc import Callable, Coroutine
-import importlib
-from importlib.util import find_spec
-from types import ModuleType
 from typing import Any
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.concurrency import background
+from app.core.discovery import optional
 from app.core.formatting import format_clock
 from app.services.meetings.domains.people import queries
 from app.services.meetings.domains.people.kept import guides_of
@@ -123,17 +121,11 @@ def _section(guide: Guide, key: str, cited: dict[int, Quote]) -> GuideSection:
     )
 
 
-def _guides() -> ModuleType | None:
-    return importlib.import_module(GUIDES) if find_spec(GUIDES) else None
-
-
 def guide_writer() -> Callable[[int], Coroutine[Any, Any, None]] | None:
     """What writes one person's guide, where the stack has a model to."""
-    module = _guides()
-    return None if module is None else module.write_guide
+    return optional(GUIDES, "write_guide")
 
 
 def guides_writer() -> Callable[[int], Coroutine[Any, Any, None]] | None:
     """What writes the guide of everyone in a meeting but the owner."""
-    module = _guides()
-    return None if module is None else module.write_guides
+    return optional(GUIDES, "write_guides")

@@ -79,7 +79,7 @@ if TYPE_CHECKING:
     from app.services.ai.domains.llm.queries import org_icons, recent_model_ids
 {%- endif %}
 {%- if ai_framework == "pydantic-ai" and ai_backend != "memory" %}
-    from app.services.ai.domains.llm.writer import writer
+    from app.services.ai.domains.llm.writer import write, writer
 {%- endif %}
 {%- if ai_backend != "memory" %}
     from app.services.ai.domains.spend.recording import extract_usage, record_usage

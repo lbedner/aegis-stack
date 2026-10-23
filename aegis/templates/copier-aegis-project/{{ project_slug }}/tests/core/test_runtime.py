@@ -32,6 +32,8 @@ from tests._fake_runtime import REDIS, SERVER, FakeRuntime, use_runtime
         ("traefik", "ingress"),
         ("ollama", "inference"),
         ("socket-proxy", None),
+        ("deploy-agent", "deployments"),
+        ("meetings-runner", "meetings"),
     ],
 )
 def test_each_compose_service_maps_to_its_overseer_page(

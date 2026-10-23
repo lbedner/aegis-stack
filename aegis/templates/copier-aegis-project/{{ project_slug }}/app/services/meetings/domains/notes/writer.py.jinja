@@ -16,7 +16,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.db import get_async_session
 from app.core.log import logger
-from app.services.ai.service import extract_usage, record_usage, writer
+from app.services.ai.service import write
 from app.services.meetings.domains.agents import NOTES_AGENT, NOTES_PROMPT
 from app.services.meetings.domains.notes.service import keep_failure, keep_notes
 from app.services.meetings.domains.people import queries as people
@@ -68,18 +68,16 @@ async def _earlier(session: AsyncSession, meeting: Meeting) -> Earlier:
 async def _ask(
     meeting: Meeting, lines: list[tuple[str, TranscriptLine]], before: Earlier
 ) -> tuple[Notes, str]:
-    agent, model_name = await writer(NOTES_AGENT, NOTES_PROMPT, Notes)
     said = "\n".join(f"[{line.id}] {speaker}: {line.text}" for speaker, line in lines)
-    result = await agent.run(
-        f"{before.text}\n\nThis meeting:\n{said}" if before.text else said
-    )
-    await record_usage(
+    notes, model_name = await write(
+        NOTES_AGENT,
+        NOTES_PROMPT,
+        Notes,
+        f"{before.text}\n\nThis meeting:\n{said}" if before.text else said,
         action=ACTION,
-        model_name=model_name,
-        usage=extract_usage(result),
-        user_id=None if meeting.owner_user_id is None else str(meeting.owner_user_id),
+        owner_user_id=meeting.owner_user_id,
     )
-    return _cited(result.output, {line.id for _, line in lines}, before), model_name
+    return _cited(notes, {line.id for _, line in lines}, before), model_name
 
 
 def _cited(notes: Notes, said: set[int | None], before: Earlier) -> Notes:

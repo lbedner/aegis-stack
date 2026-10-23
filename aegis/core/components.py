@@ -714,6 +714,8 @@ COMPONENTS: dict[str, ComponentSpec] = {
             "the webserver ever holding the socket."
         ),
         docker_services=["socket-proxy"],
+        agents=["deploy-agent"],
+        page="deployments",
         options=[
             OptionSpec(
                 name="target",

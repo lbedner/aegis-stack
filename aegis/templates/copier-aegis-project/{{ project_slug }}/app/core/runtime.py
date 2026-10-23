@@ -34,12 +34,11 @@ from app.core.time import as_stored, utcnow
 BACKEND_MODULE = "app.components.deploy.docker"
 
 # Compose service -> the Overseer page that shows it: each process's own
-# containers, on its page (``parts.PARTS``).
+# containers, and its agents, on its page (``parts.PARTS``).
 _PAGES = {
     container: ownership.page_of_part(name)
     for name, part in PARTS.items()
-    if part.tier is not None
-    for container in part.containers
+    for container in (part.containers if part.tier is not None else ()) + part.agents
 }
 
 # Every page some container belongs on: the Container section shows there.

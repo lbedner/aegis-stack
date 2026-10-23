@@ -10,6 +10,8 @@ from fastapi.testclient import TestClient
 import pytest
 
 from app.components.web_frontend import overseer_code, overseer_logs
+from app.components.web_frontend.overseer_nav import runtime_page_url
+from app.components.web_frontend.overseer_sections import SECTIONED_PAGES
 from app.core.config import settings
 from app.core.runtime import LogLine, parse_log_line
 from app.services.system.models import ComponentStatus
@@ -669,3 +671,21 @@ def test_a_frame_links_only_while_code_is_on(
 ) -> None:
     monkeypatch.setattr(settings, "APP_ENV", "prod")
     none(one(page_html(client, PAGE), "[data-log-trace]"), "a")
+
+
+@pytest.mark.parametrize(
+    ("page", "shown_on", "url"),
+    [
+        ("server", ("components", "backend"), "/overseer/components/backend"),
+        ("meetings", ("services", "meetings"), "/overseer/services/meetings"),
+        ("deployments", ("deployments", "deployments"), "/overseer/deployments"),
+    ],
+)
+def test_a_line_links_to_the_page_its_container_shows_on(
+    page: str, shown_on: tuple[str, str], url: str
+) -> None:
+    """A component's containers link to its page, a service's agent to the
+    service's, deploy's agent to Deployments."""
+    if shown_on not in SECTIONED_PAGES:
+        pytest.skip(f"no {shown_on[1]} page in this stack")
+    assert runtime_page_url(page) == url

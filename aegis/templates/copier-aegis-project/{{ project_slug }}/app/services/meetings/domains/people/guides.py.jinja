@@ -13,7 +13,7 @@ request. A guide that fails keeps the last one it had, with why.
 
 from app.core.db import get_async_session
 from app.core.log import logger
-from app.services.ai.service import extract_usage, record_usage, writer
+from app.services.ai.service import write
 from app.services.meetings.domains.agents import GUIDE_AGENT, GUIDE_PROMPT
 from app.services.meetings.domains.people import queries
 from app.services.meetings.domains.people.kept import keep_guide, keep_guide_failure
@@ -75,15 +75,15 @@ async def _write(person_id: int) -> None:
 async def _ask(
     person: MeetingPerson, note: str | None, lines: Said
 ) -> tuple[Guide, str]:
-    agent, model_name = await writer(GUIDE_AGENT, GUIDE_PROMPT, Guide)
-    result = await agent.run(_prompt(person, note, lines))
-    await record_usage(
+    guide, model_name = await write(
+        GUIDE_AGENT,
+        GUIDE_PROMPT,
+        Guide,
+        _prompt(person, note, lines),
         action=ACTION,
-        model_name=model_name,
-        usage=extract_usage(result),
-        user_id=None if person.owner_user_id is None else str(person.owner_user_id),
+        owner_user_id=person.owner_user_id,
     )
-    return _cited(result.output, {line.id for _, _, line in lines}), model_name
+    return _cited(guide, {line.id for _, _, line in lines}), model_name
 
 
 def _prompt(person: MeetingPerson, note: str | None, lines: Said) -> str:

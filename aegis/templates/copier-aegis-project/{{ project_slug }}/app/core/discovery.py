@@ -10,9 +10,11 @@ edit anywhere else.
 """
 
 import importlib
+from importlib.util import find_spec
 from pathlib import Path
 import pkgutil
 from types import ModuleType
+from typing import Any
 
 
 def modules_named(package: ModuleType, name: str) -> list[str]:
@@ -32,3 +34,12 @@ def import_modules_named(package: ModuleType, name: str) -> list[ModuleType]:
     """Import every ``modules_named(package, name)``, in name order: how a
     service's convention module registers what it declares."""
     return [importlib.import_module(found) for found in modules_named(package, name)]
+
+
+def optional(module: str, name: str | None = None) -> Any:
+    """``module`` (or its ``name``) where the stack has it, else None: a
+    part rendered only with what it needs (a writer that asks a model)."""
+    if find_spec(module) is None:
+        return None
+    found = importlib.import_module(module)
+    return found if name is None else getattr(found, name)

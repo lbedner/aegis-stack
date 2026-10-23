@@ -64,6 +64,7 @@
 {# Kept in view while reading: back to the notes, to the start, to the
    latest line (app.js's ``data-scroll-to``). #}
 <div class="sticky top-0 z-10 -mx-2 mb-2 flex justify-end gap-1.5 bg-aegis-card/95 px-2 py-1.5 backdrop-blur">
+  {% if can_look_over %}{{ action("Look over the call again", 'data-write data-look-over hx-disabled-elt="this" hx-post="' ~ base ~ '/moments/find" ' ~ hx_body) }}{% endif %}
   {% if has_notes %}{{ action("Notes", 'data-scroll-to="#meeting-notes"') }}{% endif %}
   {{ action("Start of the transcript", 'data-scroll-to="#meeting-transcript [data-turn]:first-child"', glyph="arrow-up") }}
   {{ action("Latest line", 'data-scroll-to="#meeting-transcript [data-turn]:last-child"', glyph="arrow-down") }}

@@ -390,6 +390,7 @@ class TestWebFrontendScaffolding:
                 "chart_dot",
                 "chart_panel",
                 "chip",
+                "fold_mark",
                 "code_block",
                 "highlighted",
                 "command",

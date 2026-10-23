@@ -26,7 +26,7 @@ def series_link(url: str) -> str:
 
 
 async def meetings_on(
-    db: AsyncSession, owner_user_id: int | None, link: str, limit: int
+    db: AsyncSession, owner_user_id: int | None, link: str, limit: int | None = None
 ) -> list[Meeting]:
     """The owner's latest meetings on ``link`` (None: the standalone
     install's), newest first."""

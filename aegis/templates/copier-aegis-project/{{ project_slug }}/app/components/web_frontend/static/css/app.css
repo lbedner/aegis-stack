@@ -107,8 +107,8 @@
   }
 }
 
-/* A drawer whose content asks for room (``data-drawer-wide``: a series,
-   read across its meetings) opens wider, the list still beside it. */
+/* A drawer whose content asks for room (``data-drawer-wide``: a meeting
+   or a series, read at length) opens wider, the list still beside it. */
 @media (min-width: 640px) {
   .aegis-drawer:has([data-drawer-wide]) {
     width: min(64rem, 90vw);

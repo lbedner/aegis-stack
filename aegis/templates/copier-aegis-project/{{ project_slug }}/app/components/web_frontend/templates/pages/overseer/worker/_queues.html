@@ -2,7 +2,7 @@
    per queue read left to right (waiting, running, done, then how the
    backlog is trending) and each queue's share of the waiting and finished
    work. #}
-{% from "components/macros/layout.html" import stats_strip, card, badge, sparkline %}
+{% from "components/macros/layout.html" import stats_strip, card, badge, fold_mark, sparkline %}
 {% from "components/macros/feedback.html" import empty_state %}
 {% set w = worker %}
 {% macro shares(key, total, label) %}
@@ -35,10 +35,10 @@
     {# A fold, open to start: its header is the summary, so a queue that is
        fine folds to one line and a failing one, toned red as a whole, is
        read first. #}
-    <details data-queue="{{ q.name }}" data-fold="worker-queue:{{ q.name }}" data-tone="{{ q.tone }}" open class="hover-card tone-border group/q bg-aegis-card border border-aegis-border rounded-lg p-5 min-w-0">
+    <details data-queue="{{ q.name }}" data-fold="worker-queue:{{ q.name }}" data-tone="{{ q.tone }}" open class="hover-card tone-border bg-aegis-card border border-aegis-border rounded-lg p-5 min-w-0">
       <summary class="list-none cursor-pointer select-none flex items-start justify-between gap-3">
         <div class="flex items-start gap-3 min-w-0">
-          <span aria-hidden="true" class="mt-0.5 text-aegis-muted transition-transform group-open/q:rotate-90">›</span>
+          {{ fold_mark("mt-0.5") }}
           <div class="min-w-0">
             <h3 class="font-mono text-sm font-semibold text-aegis-text">{{ q.name }}</h3>
             {% if q.description %}<p class="text-xs text-aegis-muted truncate">{{ q.description }}</p>{% endif %}

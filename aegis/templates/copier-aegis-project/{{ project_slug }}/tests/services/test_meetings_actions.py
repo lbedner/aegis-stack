@@ -19,8 +19,8 @@ from app.services.meetings.domains.actions.runs import (
     finish,
 )
 from app.services.meetings.domains.moments.service import moments_of
-from app.services.meetings.models import MeetingMoment
-from tests._meetings import asked_a_question
+from app.services.meetings.models import MeetingActionRun, MeetingMoment
+from tests._meetings import a_meeting, a_runner_looked_in, asked_a_question, said, topic
 
 
 @pytest.fixture
@@ -49,6 +49,179 @@ async def test_the_prompt_is_the_question_and_what_led_to_it(
     assert "Can the CSV export ship this week?" in run.prompt
     assert "Dana: The usage report is late." in run.prompt
     assert run.prompt.index("usage report") < run.prompt.index("CSV export")
+
+
+async def test_asking_again_while_it_runs_is_the_same_run(
+    async_db_session: AsyncSession,
+) -> None:
+    """A second click while the first is still going asks nothing new; once
+    it is done, asking again does."""
+    _, moment_id = await asked_a_question(async_db_session)
+
+    first = await ask(async_db_session, moment_id, "agent", owner_user_id=None)
+    again = await ask(async_db_session, moment_id, "agent", owner_user_id=None)
+    assert again.id == first.id
+    claimed = await claim(async_db_session, None, ["agent"], runner="laptop")
+    await finish(
+        async_db_session, claimed.id or 0, None, "Done.", ok=True, runner="laptop"
+    )  # type: ignore[union-attr]
+
+    later = await ask(async_db_session, moment_id, "agent", owner_user_id=None)
+    assert (later.status, later.result) == ("asked", None)
+
+
+async def test_asking_again_keeps_only_the_latest_answer(
+    async_db_session: AsyncSession,
+) -> None:
+    """One answer per action per moment: asking again once it is back
+    replaces it, so a moment never piles up old answers."""
+    meeting_id, moment_id = await asked_a_question(async_db_session)
+    first = await ask(async_db_session, moment_id, "agent", owner_user_id=None)
+    await claim(async_db_session, None, ["agent"], runner="laptop")
+    await finish(
+        async_db_session, first.id or 0, None, "Old.", ok=True, runner="laptop"
+    )
+
+    later = await ask(async_db_session, moment_id, "agent", owner_user_id=None)
+
+    (moment,) = await moments_of(async_db_session, meeting_id)
+    assert [r.id for r in moment.runs] == [later.id]
+
+
+async def test_a_run_waits_on_a_runner_only_while_one_is_listening(
+    async_db_session: AsyncSession,
+) -> None:
+    """Asked of a runner while none is running, a run says so and the page
+    does not keep reading itself for it; once a runner has looked in, it
+    waits for it. Either way its button is busy."""
+    from app.services.meetings.domains.moments.service import answering
+
+    meeting_id, moment_id = await asked_a_question(async_db_session)
+    await ask(async_db_session, moment_id, "agent", owner_user_id=None)
+
+    (alone,) = await moments_of(async_db_session, meeting_id)
+    (run,) = alone.runs
+    assert not run.going and "No runner" in run.state
+    assert not answering([alone])
+    assert {a.name: a.busy for a in alone.actions}["agent"]
+
+    await a_runner_looked_in(async_db_session)
+
+    (watched,) = await moments_of(async_db_session, meeting_id)
+    assert watched.runs[0].state == "Waiting for a runner"
+    assert answering([watched])
+
+
+async def test_asking_any_question_of_a_burst_asks_them_all(
+    async_db_session: AsyncSession,
+) -> None:
+    """The run is the burst's, kept on its first question, its prompt
+    every question in it and what was said between them."""
+    from app.services.meetings.domains.moments import service as moments
+
+    meeting_id = await a_meeting(async_db_session)
+    lines = await said(
+        async_db_session,
+        meeting_id,
+        ("Dana", "Can the export ship this week?"),
+        ("Tom", "It depends on billing."),
+        ("Dana", "Did billing sign off on it?"),
+    )
+    (led,) = await moments_of(async_db_session, meeting_id)
+    (follow,) = led.also
+
+    run = await moments.ask(async_db_session, meeting_id, follow.id, "agent", None)
+
+    assert run.moment_id == led.id and led.line_id == lines[0]
+    assert "export ship" in run.prompt and "billing sign off" in run.prompt
+    assert "It depends on billing." in run.prompt
+
+
+async def test_a_burst_asked_by_itself_is_asked_once(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``MEETINGS_AUTO_ACTIONS`` asks a card, not each question in it: a
+    follow-up said while the first is being answered is that run."""
+    monkeypatch.setattr(settings, "MEETINGS_AUTO_ACTIONS", "question=agent")
+    meeting_id = await a_meeting(async_db_session)
+    await said(
+        async_db_session,
+        meeting_id,
+        ("Dana", "Can the export ship this week?"),
+        ("Dana", "Did billing sign off on it?"),
+    )
+
+    (card,) = await moments_of(async_db_session, meeting_id)
+    assert len(card.runs) == 1
+
+
+async def test_a_card_keeps_one_answer_whichever_question_it_was_on(
+    async_db_session: AsyncSession,
+) -> None:
+    """Cards merge by topic once a call is cleaned up, bringing each
+    question's earlier answer with them: asking the card again replaces
+    them all, and one still going on any of them is that run."""
+    from app.services.meetings.domains.moments import service as moments
+
+    meeting_id = await a_meeting(async_db_session)
+    await said(
+        async_db_session,
+        meeting_id,
+        ("Dana", "How do members return a scale?"),
+        ("Tom", "What does the assistant say on returns?"),
+        apart=600.0,
+    )
+    first, second = await moments_of(async_db_session, meeting_id)
+    earlier = MeetingActionRun(
+        moment_id=second.id, action="agent", prompt="?", status="done", result="Old."
+    )
+    async_db_session.add(earlier)
+    await topic(async_db_session, [first.id, second.id], "Scale returns")
+
+    run = await moments.ask(async_db_session, meeting_id, first.id, "agent", None)
+    again = await moments.ask(async_db_session, meeting_id, second.id, "agent", None)
+
+    (card,) = await moments_of(async_db_session, meeting_id)
+    assert [r.id for r in card.runs] == [run.id] and again.id == run.id
+
+
+async def test_a_card_asked_across_a_long_call_reads_only_what_it_needs(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A topic card's questions can sit an hour apart: its prompt is them
+    and what led to the first, read without the whole call between."""
+    from app.services.meetings.domains.actions import prompt
+    from app.services.meetings.domains.moments import service as moments
+
+    meeting_id = await a_meeting(async_db_session)
+    chatter = [("Tom", f"Status item {n}.") for n in range(3 * prompt.CONTEXT_LINES)]
+    await said(
+        async_db_session,
+        meeting_id,
+        ("Dana", "Returns are up this month."),
+        ("Dana", "How do members return a scale?"),
+        *chatter,
+        ("Tom", "What does the assistant say on returns?"),
+        apart=60.0,
+    )
+    first, second = await moments_of(async_db_session, meeting_id)
+    await topic(async_db_session, [first.id, second.id], "Scale returns")
+    read: list[int] = []
+    real = prompt.moments_queries.said
+
+    async def counted(*args: Any, **kwargs: Any) -> list[tuple[str, int, str]]:
+        rows = await real(*args, **kwargs)
+        read.append(len(rows))
+        return rows
+
+    monkeypatch.setattr(prompt.moments_queries, "said", counted)
+
+    run = await moments.ask(async_db_session, meeting_id, first.id, "agent", None)
+
+    assert "Returns are up this month." in run.prompt
+    assert "return a scale" in run.prompt and "assistant say" in run.prompt
+    assert "Status item 0." not in run.prompt
+    assert max(read) <= 2 * prompt.CONTEXT_LINES + 1
 
 
 async def test_a_runner_claims_a_run_once_and_finishes_it(
@@ -104,16 +277,20 @@ async def test_a_run_that_fails_says_why(async_db_session: AsyncSession) -> None
 
 
 async def test_a_run_whose_runner_went_quiet_fails(
-    async_db_session: AsyncSession,
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A runner that died with its run, or a restart that took an in-app
     run with it, never finishes it; past its time it fails, so nothing
     waits on it."""
+    _register(
+        monkeypatch,
+        Action("ticket", "File a ticket", frozenset({"question"}), "runner"),
+    )
     _, moment_id = await asked_a_question(async_db_session)
     await ask(async_db_session, moment_id, "agent", owner_user_id=None)
-    await ask(async_db_session, moment_id, "agent", owner_user_id=None)
+    await ask(async_db_session, moment_id, "ticket", owner_user_id=None)
     gone = await claim(async_db_session, None, ["agent"], runner="laptop")
-    live = await claim(async_db_session, None, ["agent"], runner="desk")
+    live = await claim(async_db_session, None, ["ticket"], runner="desk")
     gone.claimed_at -= runs.ABANDONED_AFTER  # type: ignore[union-attr, operator]
     async_db_session.add(gone)
     await async_db_session.commit()

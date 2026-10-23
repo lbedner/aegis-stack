@@ -14,7 +14,6 @@ from datetime import timedelta
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.concurrency import background
-from app.core.config import settings
 from app.core.db import get_async_session
 from app.core.log import logger
 from app.core.time import utcnow
@@ -56,18 +55,28 @@ async def ask(
     *,
     owner_user_id: int | None,
     meeting_id: int | None = None,
+    together: list[MeetingMoment] | None = None,
 ) -> MeetingActionRun:
-    """Ask ``action_name`` of the moment (in ``meeting_id``, when given): a
-    run, with the prompt the action frames. One that runs in the app starts
-    at once."""
+    """Ask ``action_name`` of the moment (in ``meeting_id``, when given), and
+    of those said ``together`` with it after it (its burst): a run on the
+    moment, with the prompt the action frames from them all. One that runs
+    in the app starts at once. Asked again while the last is still going,
+    it is that run; once that is back, the new run replaces it (one answer
+    per action, over every moment of the card)."""
     action = action_named(action_name)
     if action is None or action.where == "browser":
         raise ActionNotFoundError(action_name)
     moment = await _moment(db, moment_id, owner_user_id, meeting_id)
+    card = [moment, *(together or [])]
+    ids = [m.id or 0 for m in card]
+    going = await queries.going(db, ids, action.name)
+    if going is not None:
+        return going
+    await queries.drop_runs(db, ids, action.name)
     run = MeetingActionRun(
         moment_id=moment_id,
         action=action.name,
-        prompt=action.frame(await excerpt(db, moment)),
+        prompt=action.frame(await excerpt(db, card)),
     )
     db.add(run)
     await db.commit()
@@ -111,22 +120,6 @@ async def finish(
     return run
 
 
-async def ask_for_new(db: AsyncSession, moments: list[MeetingMoment]) -> None:
-    """Ask, for each new moment, the action ``MEETINGS_AUTO_ACTIONS`` names
-    for its kind (``question=agent,mention=ticket``); none by default."""
-    wanted = _auto_actions()
-    asks = [(m, wanted[m.kind]) for m in moments if m.kind in wanted]
-    if not asks:
-        return
-    # Every moment of one batch is the same meeting's (``moments.seen``).
-    owner = (await db.get_one(Meeting, asks[0][0].meeting_id)).owner_user_id
-    for moment, name in asks:
-        try:
-            await ask(db, moment.id or 0, name, owner_user_id=owner)
-        except ActionNotFoundError:
-            logger.warning("MEETINGS_AUTO_ACTIONS names no action", action=name)
-
-
 async def fail_abandoned(db: AsyncSession) -> int:
     """Fail every run claimed longer ago than ``ABANDONED_AFTER``: how many."""
     failed = await queries.fail_claimed_before(
@@ -155,15 +148,6 @@ async def _run_in_the_app(run_id: int, action: Action) -> None:
         result, ok = str(exc) or type(exc).__name__, False
     async with get_async_session() as db:
         await finish(db, run_id, owner, result, ok=ok, runner=IN_THE_APP)
-
-
-def _auto_actions() -> dict[str, str]:
-    pairs = (p.partition("=") for p in settings.MEETINGS_AUTO_ACTIONS.split(","))
-    return {
-        kind.strip(): name.strip()
-        for kind, _, name in pairs
-        if kind.strip() and name.strip()
-    }
 
 
 async def _take(db: AsyncSession, run_id: int, runner: str) -> bool:

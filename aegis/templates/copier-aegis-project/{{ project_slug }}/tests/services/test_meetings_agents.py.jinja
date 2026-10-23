@@ -10,6 +10,7 @@ from sqlmodel import Session, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.ai.domains.chat.agent_loader import AgentConfig
+from app.services.ai.domains.spend import recording
 from app.services.ai.models.agents import Agent
 from app.services.meetings.domains.notes import writer as notes
 from app.services.meetings.domains import agents
@@ -37,6 +38,7 @@ def test_each_writer_is_seeded_once_and_an_edit_is_kept(db_session: Session) -> 
             agents.GUIDE_AGENT,
             agents.THEMES_AGENT,
             agents.ANSWER_AGENT,
+            agents.QUESTIONS_AGENT,
         ]
     )
     db_session.refresh(guide)
@@ -78,7 +80,7 @@ def _on_the_test_session(
     async def record_usage(**_: object) -> float:
         return 0.0
 
-    monkeypatch.setattr(notes, "record_usage", record_usage)
+    monkeypatch.setattr(recording, "record_usage", record_usage)
 
 
 async def test_the_rows_prompt_and_model_write_the_notes(

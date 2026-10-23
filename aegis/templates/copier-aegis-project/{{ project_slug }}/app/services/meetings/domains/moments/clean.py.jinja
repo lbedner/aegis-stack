@@ -1,0 +1,101 @@
+{% if include_ai and ai_backend != "memory" and ai_framework == "pydantic-ai" %}
+"""A call's questions cleaned up once it is over: one pass of the
+``meeting-questions`` agent (``domains.agents``) over the question cards
+(``moments.service.bursts``), each with the lines said just before it,
+keeps the cards that ask what the system, its code or its data could
+answer and names each by its topic, so cards on one topic become one; the
+rest go, unless something was already asked of them
+(``moments.tidy.keep_topics``). Metered as ``meetings:questions``.
+
+The rules that find questions as the call goes stay in front: they cost
+nothing, and a stack without a model keeps them alone.
+"""
+
+from pydantic import BaseModel, Field
+
+from app.core.db import get_async_session
+from app.core.log import logger
+from app.services.ai.service import write
+from app.services.meetings.domains.actions.prompt import Said, covered, turns
+from app.services.meetings.domains.agents import QUESTIONS_AGENT, QUESTIONS_PROMPT
+from app.services.meetings.domains.moments import queries
+from app.services.meetings.domains.moments.detectors import QUESTION
+from app.services.meetings.domains.moments.service import Found, bursts
+from app.services.meetings.domains.moments.tidy import CLEANING, keep_topics
+from app.services.meetings.models import Meeting
+
+ACTION = "meetings:questions"
+# Lines said before a card that come with it, for what led to it.
+BEFORE = 3
+
+
+class Verdict(BaseModel):
+    id: int = Field(description="The card's id, as given")
+    keep: bool = Field(
+        description="Whether it asks what the system, its code or its data could answer"
+    )
+    topic: str = Field(
+        description="What it is about, in two to five words; the same words "
+        "for cards about the same thing"
+    )
+
+
+class Verdicts(BaseModel):
+    questions: list[Verdict]
+
+
+async def clean_up(meeting_id: int) -> None:
+    """Sort the meeting's question cards (``CLEANING`` while it does); a
+    model that fails leaves them as they were."""
+    CLEANING.add(meeting_id)
+    try:
+        await _clean_up(meeting_id)
+    finally:
+        CLEANING.discard(meeting_id)
+
+
+async def _clean_up(meeting_id: int) -> None:
+    async with get_async_session() as db:
+        found = [
+            f for f in await queries.of_meeting(db, meeting_id) if f[0].kind == QUESTION
+        ]
+        if not found:
+            return
+        said = await queries.said(db, meeting_id)
+        owner = (await db.get_one(Meeting, meeting_id)).owner_user_id
+    # By time only: what the model is to sort, not the topics it gave
+    # before (cards by topic would overlap, and span the call).
+    cards = bursts(found, by_topic=False)
+    try:
+        verdicts = await _ask(cards, said, owner)
+    except Exception:
+        logger.exception("Questions not cleaned up", meeting_id=meeting_id)
+        return
+    async with get_async_session() as db:
+        await keep_topics(
+            db,
+            {card[0][0].id or 0: [m.id or 0 for m, _, _ in card] for card in cards},
+            ((v.id, v.keep, v.topic) for v in verdicts.questions),
+        )
+
+
+async def _ask(
+    cards: list[list[Found]], said: Said, owner: int | None
+) -> Verdicts:
+    verdicts, _ = await write(
+        QUESTIONS_AGENT,
+        QUESTIONS_PROMPT,
+        Verdicts,
+        "\n\n".join(_card(card, said) for card in cards),
+        action=ACTION,
+        owner_user_id=owner,
+    )
+    return verdicts
+
+
+def _card(card: list[Found], said: Said) -> str:
+    """One card as the model reads it: its id, then ``BEFORE`` lines said
+    before its first question and the lines it covers."""
+    first, lines = covered(said, [moment for moment, _, _ in card])
+    return f"[{card[0][0].id}]\n" + turns(said[max(0, first - BEFORE) : first] + lines)
+{% endif %}

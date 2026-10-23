@@ -205,20 +205,14 @@ def _with_earlier(now: str, previous: str) -> str:
 async def _ask(facts_text: str) -> Review:
     """Its answer, written as its agent row writes (her persona and the
     reviewing while the row is missing), its spend recorded."""
-    from app.services.ai.service import (
-        DEFAULT_SYSTEM_PROMPT,
-        extract_usage,
-        record_usage,
-        writer,
-    )
+    from app.services.ai.service import DEFAULT_SYSTEM_PROMPT, write
 
-    prompt = reviewer_prompt(DEFAULT_SYSTEM_PROMPT)
-    agent, model_name = await writer(REVIEWER, prompt, Review)
-    result = await agent.run(f"The change's findings:\n{facts_text}")
-    await record_usage(
+    review, _ = await write(
+        REVIEWER,
+        reviewer_prompt(DEFAULT_SYSTEM_PROMPT),
+        Review,
+        f"The change's findings:\n{facts_text}",
         action=ACTION,
-        model_name=model_name,
-        usage=extract_usage(result),
-        user_id=None,
+        owner_user_id=None,
     )
-    return result.output
+    return review

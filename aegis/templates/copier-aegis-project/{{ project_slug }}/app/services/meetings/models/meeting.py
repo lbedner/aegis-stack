@@ -146,6 +146,9 @@ class MeetingRecord(BaseModel):
     # A model to write notes with, and whether they can be written again now.
     can_write: bool
     can_rewrite: bool
+    # Its call read over again for moments (``moments.find_again``): once
+    # it is over and something was said.
+    can_look_over: bool = False
     # What the call threw up (``domains.moments``).
     moments: list[MomentRecord] = []
     # Read it again every few seconds: the bot is in or on its way, the

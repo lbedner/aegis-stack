@@ -40,6 +40,9 @@ class Part:
     cli: str  # its name to the aegis CLI
     marker: str = ""  # a path only a stack with it has; empty: every stack
     containers: tuple[str, ...] = ()  # the compose services it adds
+    # Dev-only services that act on the developer's machine for Overseer
+    # (deploy-agent): shown on its page and in its logs, never on the map.
+    agents: tuple[str, ...] = ()
     # Overseer's map: its row as a process of its own (0 the edge, 1 the
     # app, 2 its data; None: inside the webserver), data's shape (store,
     # bucket), the parts it calls and the ones it takes work from.
@@ -242,6 +245,8 @@ PARTS: dict[str, Part] = {
         cli="deploy",
         marker="app/components/deploy",
         containers=("socket-proxy",),
+        agents=("deploy-agent",),
+        page="deployments",
         description="Deployment target (Docker Compose), read by the Overseer",
         options=(
             Option(
@@ -317,6 +322,7 @@ PARTS: dict[str, Part] = {
         category=Category.AI,
         cli="meetings",
         marker="app/services/meetings",
+        agents=("meetings-runner",),
         order=55,
         description="A bot that joins Google Meet as its own agent: transcript, notes, threads, people, what keeps coming up, joined from its calendar",
         experimental=True,

@@ -164,6 +164,7 @@ def _entry(spec: PluginSpec) -> str:
             *spec.docker_services,
             *(f"worker-{queue}" for queue in spec.worker_queues),
         ],
+        "agents": spec.agents,
         "tier": spec.tier,
         "page": spec.page,
         "role": spec.role,
@@ -208,6 +209,9 @@ class Part:
     cli: str  # its name to the aegis CLI
     marker: str = ""  # a path only a stack with it has; empty: every stack
     containers: tuple[str, ...] = ()  # the compose services it adds
+    # Dev-only services that act on the developer's machine for Overseer
+    # (deploy-agent): shown on its page and in its logs, never on the map.
+    agents: tuple[str, ...] = ()
     # Overseer's map: its row as a process of its own (0 the edge, 1 the
     # app, 2 its data; None: inside the webserver), data's shape (store,
     # bucket), the parts it calls and the ones it takes work from.

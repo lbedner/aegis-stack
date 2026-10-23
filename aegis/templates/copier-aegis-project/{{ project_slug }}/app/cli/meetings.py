@@ -34,6 +34,7 @@ from app.services.meetings.domains.bot.login import (
     save_login,
 )
 from app.services.meetings.domains.bot.run import run_meeting
+from app.services.meetings.domains.moments import tidy
 from app.services.meetings.models import MeetingRecord
 from app.services.meetings.service import (
     MeetingNotFoundError,
@@ -231,6 +232,27 @@ async def runner(
         console.print("Answered one." if await run_once(found) else "Nothing waits.")
         return
     await run_forever(found)
+
+
+@app.command("look-over")
+async def look_over(
+    meeting_ids: list[int] | None = typer.Argument(None, help="The meetings' ids"),
+    series: int | None = typer.Option(None, "--series", help="A series' meetings"),
+    every: bool = typer.Option(False, "--all", help="Every meeting"),
+) -> None:
+    """Read kept calls over again for moments (questions first): ones kept
+    before they were looked for, or after a detector changed. What is found
+    now is kept; what no longer is goes, unless something was asked of it.
+    Where the stack has a model, each call's questions are then cleaned up."""
+    async with get_async_session() as session:
+        if not (meeting_ids or series is not None or every):
+            theme.fail("Name meetings, a --series or --all.")
+        try:
+            wanted = meeting_ids or await tidy.meeting_ids_of(session, series)
+        except LookupError as exc:
+            theme.fail(str(exc))
+        await tidy.look_over(session, wanted)
+    console.print(f"Read {len(wanted)} meeting(s) over.")
 
 
 @runner_tokens.command("create")

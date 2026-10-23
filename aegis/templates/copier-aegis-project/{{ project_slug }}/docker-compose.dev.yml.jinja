@@ -161,6 +161,48 @@ services:
     profiles:
       - dev
 {%- endif %}
+{%- if include_meetings %}
+
+  meetings-runner:{# meetings runner, answering what Overseer asks of a coding
+    agent; on this machine only, with the developer's agent login. It sees
+    the host's home at the same path (HOME too), so MEETINGS_RUNNER_REPO,
+    the agent's user skills and the other repos on disk read as they do on
+    the host. Its keys (MEETINGS_RUNNER_TOKEN, CLAUDE_CODE_OAUTH_TOKEN, the
+    command) live in .env.meetings-runner; .env stays out of its
+    environment, so the agent never holds the app's secrets (the app reads
+    it from /code). The image is the app's with git and Claude Code added;
+    the source is mounted as for every other service. #}
+    image: {{ project_slug }}-meetings-runner:latest
+    build:
+      context: .
+      additional_contexts:
+        app: service:webserver
+      dockerfile_inline: |
+        FROM app
+        RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/* && git config --system --add safe.directory '*'
+        RUN curl -fsSL https://claude.ai/install.sh | bash && ln -s /root/.local/bin/claude /usr/local/bin/claude
+    init: true
+    restart: unless-stopped
+    command:
+      - meetings-runner
+    healthcheck:
+      disable: true
+    env_file:
+      - path: .env.meetings-runner
+        required: false
+    environment:
+      - DOCKER_CONTAINER=1
+      - HOME=${HOME}
+      - DISABLE_AUTOUPDATER=1
+      - MEETINGS_RUNNER_URL=http://webserver:${PORT:-8000}
+    volumes:
+      - .:/code
+      - ${HOME}:${HOME}
+    depends_on:
+      - webserver
+    profiles:
+      - dev
+{%- endif %}
 
   test_runner:
     volumes:

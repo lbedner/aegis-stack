@@ -140,7 +140,13 @@ Each owner searches their own meetings; Overseer's admin searches every owner's.
 
 ## Questions asked in the call
 
-While the bot is in a call, it watches what is said for moments: something heard that something can be done with. The kind it knows is a **question**: another speaker's line that ends in a question mark (your own questions are not picked out). Each one is kept as it is captioned, and follows its line as Meet corrects it, so a question shows up while the call is still on.
+While the bot is in a call, it watches what is said for moments: something heard that something can be done with. The kind it knows is a **question**: another speaker's line asked as one. Its last sentence opens on a question word or a verb turned to ask (*what*, *how*, *can*, *did*), or ends on a tag (*..., right?*); captions put a question mark on anything said with a rising tone, so a filler or a lone *right?* is not one. A question put to someone in the call is theirs to answer, not an agent's, and is left out too: one naming a person who has spoken in it (*Is that correct, Leonard?*), one asked as *you* (*can you send that over?*, *what do you mean?*), or one asking leave (*can I say something?*). Your own questions are not picked out. Each one is kept as it is captioned, and follows its line as Meet corrects it, so a question shows up while the call is still on.
+
+Questions asked close together are one: a question said within 90 seconds of the first of a burst joins it (a follow-up, a fragment like "Which one?", the same thing asked again), so the burst reads as one card, led by its first question, the rest under it. An action is asked of the whole burst, its prompt every question in it and what was said between them, and its answer is kept once: asking again replaces it, and asking while it is still going is that same run. A run asked of a runner while none is running says how to start one.
+
+Once the call is over, where the stack has a model, the `meeting-questions` agent cleans the questions up (metered as `meetings:questions`; its prompt is edited in Agents like the other writers). It reads each card with the lines said just before it, keeps the ones that ask what the system, its code or its data could answer, and names each by its topic: cards on one topic become one, however far apart in the call they were asked, under the topic. The rest go, unless something was already asked of them. A stack without a model keeps the rules alone.
+
+A call kept before its questions were looked for, or before a detector changed, is read over again from its transcript (and cleaned up again, where there is a model): **Look over the call again** on the meeting's page, in Overseer's drawer or the Flet modal, or `meetings look-over` for some meetings, a series or all of them. From a page, the model's pass runs in the background and the page follows it until it is done. What is found now is kept; what no longer is goes, unless something was already asked of it.
 
 The meeting's page, Overseer's drawer and the Flet modal give each kind its own tab (Questions), opened first while the call is on: each question with who asked it and when, and what can be done with it:
 
@@ -174,6 +180,17 @@ my-app meetings runner \
 
 For each run it fetches the repository and makes a fresh worktree of `--ref` (`origin/main` by default) in a temporary folder, runs the command there with `{prompt}` replaced by the run's prompt (on stdin when the command has no `{prompt}`), posts what it printed (or why it failed, after fifteen minutes at most), and removes the worktree. So it never touches your checkout, and any headless agent works: `codex exec {prompt}`, `aider --message {prompt}`. Without `--repo` it runs where it was started. `--action` names which actions it answers (`agent` by default; repeat it for more), `--once` answers one waiting run and stops, `--poll` is how often it looks while idle.
 
+In the dev stack (`make serve`) a `meetings-runner` service runs it for you, beside the app, with git and Claude Code installed. It sees your home folder at the same path, so a repository, your agent's user skills and the other repositories on disk read as they do on your machine. Its settings go in `.env.meetings-runner`, never `.env` (the app refuses a key it does not know):
+
+```bash
+MEETINGS_RUNNER_TOKEN=mrt_...
+CLAUDE_CODE_OAUTH_TOKEN=...          # claude setup-token, once
+MEETINGS_RUNNER_REPO=/Users/you/code/my-service
+# MEETINGS_RUNNER_COMMAND=claude -p {prompt} --permission-mode plan
+```
+
+Make the token with `docker compose exec webserver my-app meetings runner-token create docker`, then restart the service. Without a token it waits, saying so in its log. Without `MEETINGS_RUNNER_REPO` it answers from the stack's own code.
+
 A token claims its owner's runs only. One made with the CLI and no `--owner` claims every owner's. `meetings runner-token list` lists the live ones, and `meetings runner-token revoke <id>` refuses its runner from then on. Only a digest of each token is kept.
 
 ### Other kinds and actions
@@ -196,7 +213,7 @@ register_action(Action("ticket", "File a ticket", frozenset({"question"}), "runn
 
 ## The writers are agents
 
-The notes, the guides and the series are each written by an agent row the meetings service seeds at startup: `meeting-notes`, `meeting-guide` and `meeting-themes`, with `meeting-answers` for Ask AI, under the "meetings" category in Overseer's Agents. Their prompt, model and sampling are edited there like any other agent's, and every prompt change is kept in its history. A row left as seeded runs on the model in force; one pinned to a model runs on that model. Seeding only adds a missing row, so an edit survives restarts and upgrades. While a row is missing or turned off, its built-in prompt runs on the model in force.
+The notes, the guides and the series are each written by an agent row the meetings service seeds at startup: `meeting-notes`, `meeting-guide` and `meeting-themes`, with `meeting-answers` for Ask AI and `meeting-questions` for cleaning up a call's questions, under the "meetings" category in Overseer's Agents. Their prompt, model and sampling are edited there like any other agent's, and every prompt change is kept in its history. A row left as seeded runs on the model in force; one pinned to a model runs on that model. Seeding only adds a missing row, so an edit survives restarts and upgrades. While a row is missing or turned off, its built-in prompt runs on the model in force.
 
 ## The Meetings page
 
@@ -243,6 +260,7 @@ The Flet dashboard (`/dashboard`) has the same: a Meetings card with the counts,
 | `meetings list [-n LIMIT]` | The meetings, newest first |
 | `meetings show <id>` | One meeting: its status and its transcript |
 | `meetings runner [--command CMD] [--repo PATH] [--ref REF] [--action NAME] [--url URL] [--token TOKEN] [--once] [--poll SECONDS]` | Answer waiting runs on this machine: each in a fresh worktree of `--repo`, with `CMD` (`{prompt}` its prompt). See [The runner](#the-runner) |
+| `meetings look-over [ID...] [--series ID] [--all]` | Read kept calls over again for moments: those meetings, a series' or every one |
 | `meetings runner-token create <name> [--owner ID]` | A token for a runner, shown once |
 | `meetings runner-token list [--owner ID]` | The live runner tokens |
 | `meetings runner-token revoke <id> [--owner ID]` | Revoke one |
@@ -257,6 +275,7 @@ The Flet dashboard (`/dashboard`) has the same: a Meetings card with the counts,
 | `POST /api/v1/meetings/{id}/leave` | Ask the bot to leave |
 | `GET /api/v1/meetings/search?q=` | The caller's meetings' lines and note items with the words, newest meeting first |
 | `GET /api/v1/meetings/{id}/moments` | What the call threw up (its questions), each with who said it, the actions it offers and the runs asked of it |
+| `POST /api/v1/meetings/{id}/moments/find` | Read the call over again for moments: what it holds after |
 | `POST /api/v1/meetings/{id}/moments/{moment_id}/runs` | `{"action": ...}`: ask an action of a moment; `202` with the run, `404` for an action that cannot be asked (a browser one) |
 | `GET /api/v1/meetings/runner-tokens` | The caller's live runner tokens |
 | `POST /api/v1/meetings/runner-tokens` | `{"name": ...}`: a runner token; `201` with its `value`, shown this once |
@@ -281,6 +300,7 @@ Overseer's routes, across every owner. Reading them takes an admin where the sta
 | `GET /api/v1/meetings/admin/{id}` | One meeting with its notes (or why there are none), transcript, how long each speaker was heard (`heard_seconds`), and which speaker the owner is (`me`) |
 | `GET /api/v1/meetings/admin/{id}/threads` | Its threads, as the owner's route reads them |
 | `GET /api/v1/meetings/admin/{id}/moments` | Its moments, as the owner's route reads them |
+| `POST /api/v1/meetings/admin/{id}/moments/find` | Its call read over again |
 | `POST /api/v1/meetings/admin/{id}/moments/{moment_id}/runs` | Ask an action of one |
 | `POST /api/v1/meetings/admin/{id}/leave` | Ask the bot to leave |
 | `POST /api/v1/meetings/admin/{id}/me` | `{"name": ...}`: which speaker the owner is (`null`: nobody); returns the meeting read in full |

@@ -183,6 +183,11 @@ EXAMPLES: dict[str, dict[str, str]] = {
               <span class="inline-flex items-center gap-2">{{ chart_dot(4) }} Grace</span>
               <span class="inline-flex items-center gap-2">{{ chart_dot(7) }} Linus</span>
             </span>""",
+        "fold_mark": """
+            <details open class="text-sm">
+              <summary class="list-none cursor-pointer flex items-center gap-2">{{ fold_mark() }} Two quotes</summary>
+              <p class="pl-5 text-aegis-muted">Open: the mark turns down.</p>
+            </details>""",
         "ranked_rows": """
             {{ ranked_rows([
               {"label": "load_test", "count": "3 workers", "value": "1,204", "ratio": 1.0},

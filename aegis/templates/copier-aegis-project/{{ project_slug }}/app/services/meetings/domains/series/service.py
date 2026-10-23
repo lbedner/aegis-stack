@@ -4,13 +4,12 @@ it keeps coming back to, each theme with every line it was said in, and
 beside a meeting's own threads, the themes it is part of."""
 
 from collections.abc import Callable, Coroutine
-import importlib
-from importlib.util import find_spec
 from typing import Any
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.concurrency import background
+from app.core.discovery import optional
 from app.core.formatting import counted
 from app.services.meetings.domains.people.queries import quotes
 from app.services.meetings.domains.series import queries
@@ -176,6 +175,4 @@ def _when(kind: str, meetings: list[int]) -> str | None:
 
 def themes_writer() -> Callable[[int], Coroutine[Any, Any, None]] | None:
     """What writes a meeting's series, where the stack has a model to."""
-    if find_spec(THEMES) is None:
-        return None
-    return importlib.import_module(THEMES).write_themes
+    return optional(THEMES, "write_themes")

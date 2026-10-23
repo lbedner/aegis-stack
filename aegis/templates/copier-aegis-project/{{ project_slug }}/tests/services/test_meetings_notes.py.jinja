@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.services.ai.domains.spend import recording
 from app.services.meetings.domains.notes import writer as notes
 from app.services.meetings.service import WRITING, MeetingsService
 from tests._meetings import MEET, answering, said
@@ -31,7 +32,7 @@ def metered(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
         rows.append(row)
         return 0.0
 
-    monkeypatch.setattr(notes, "record_usage", record_usage)
+    monkeypatch.setattr(recording, "record_usage", record_usage)
     return rows
 
 

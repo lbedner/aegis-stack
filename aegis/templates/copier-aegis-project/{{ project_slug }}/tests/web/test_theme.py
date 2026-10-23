@@ -19,6 +19,7 @@ from app.components.web_frontend.themes import (
     themes,
 )
 from app.core.config import settings
+from app.core.constants import CHART_RAMP
 from tests.web.dom import one, select
 from tests.web.node import run
 
@@ -77,6 +78,14 @@ class TestThemeFiles:
 
 
 class TestTokens:
+    def test_the_ramp_is_one_size_everywhere_it_is_counted(self) -> None:
+        """The theme's ramp, Flet's, the htmx charts' cycle and the colors a
+        speaker or a logs page is given: one count, or the two UIs color
+        the same thing apart."""
+        charts = (WEB / "static/js/charts.js").read_text()
+        cycle = re.search(r"const RAMP = (\d+);", charts)
+        assert cycle and int(cycle[1]) == CHART_RAMP == len(ChartColors.RAMP)
+
     def test_all_generated_themes_share_tokens(self) -> None:
         generated = theme_config()
         assert set(generated) == set(THEMES)

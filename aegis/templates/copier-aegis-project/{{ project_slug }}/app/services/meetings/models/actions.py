@@ -14,6 +14,10 @@ from app.services.meetings.models.base import _OWNER_FK
 
 # Where a run stands: asked, claimed by what runs it, then done or failed.
 ASKED, CLAIMED, DONE, FAILED = "asked", "claimed", "done", "failed"
+# A run not back yet: asked, or claimed by what runs it.
+GOING = (ASKED, CLAIMED)
+# How a run reads in both Overseers, by its status; any other is muted.
+TONES = {DONE: "ok", FAILED: "error"}
 # What claims a run of an action that runs in the app.
 IN_THE_APP = "app"
 
@@ -66,6 +70,8 @@ class ActionChoice(BaseModel):
     where: str
     # A browser action's prompt, to copy: it runs nowhere else.
     prompt: str | None = None
+    # Asked of this moment already, and not yet back: not asked twice.
+    busy: bool = False
 
 
 class RunRecord(BaseModel):
@@ -78,6 +84,11 @@ class RunRecord(BaseModel):
     status: str
     # Where it stands, as the pages say it (``Answered on laptop``).
     state: str
+    # Still going, and something is coming for it: the pages follow it.
+    # One asked of a runner while none is running is not: nothing comes for
+    # it until one starts.
+    going: bool = False
+    tone: str = "muted"  # ok, error or muted (``TONES``)
     result: str | None = None
     runner: str | None = None
     asked_at: datetime

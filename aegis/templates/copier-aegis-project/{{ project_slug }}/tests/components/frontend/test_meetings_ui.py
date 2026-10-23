@@ -97,6 +97,7 @@ def test_the_actions_are_the_ones_the_read_allows() -> None:
     assert actions_for(_record(can_leave=True, can_delete=False)) == ["leave"]
     assert actions_for(_record(can_leave=True)) == ["leave", "delete"]
     assert actions_for(_record(can_delete=False)) == []
+    assert actions_for(_record(can_delete=False, can_look_over=True)) == ["look_over"]
     assert actions_for(_record()) == ["delete"]
     assert actions_for(_record(can_rewrite=True)) == ["delete", "rewrite"]
 

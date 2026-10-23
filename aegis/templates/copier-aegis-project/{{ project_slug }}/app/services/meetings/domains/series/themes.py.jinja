@@ -17,7 +17,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.db import get_async_session
 from app.core.log import logger
-from app.services.ai.service import extract_usage, record_usage, writer
+from app.services.ai.service import write
 from app.services.meetings.domains.agents import THEMES_AGENT, THEMES_PROMPT
 from app.services.meetings.domains.notes.service import notes_of
 from app.services.meetings.domains.people.queries import quotes
@@ -110,15 +110,15 @@ async def _read(
 async def _ask(
     owner_user_id: int | None, read: Read, cited: dict[int, Quote]
 ) -> tuple[SeriesNotes, str]:
-    agent, model_name = await writer(THEMES_AGENT, THEMES_PROMPT, SeriesNotes)
-    result = await agent.run(_prompt(read, cited))
-    await record_usage(
+    notes, model_name = await write(
+        THEMES_AGENT,
+        THEMES_PROMPT,
+        SeriesNotes,
+        _prompt(read, cited),
         action=ACTION,
-        model_name=model_name,
-        usage=extract_usage(result),
-        user_id=None if owner_user_id is None else str(owner_user_id),
+        owner_user_id=owner_user_id,
     )
-    return _cited(result.output, cited), model_name
+    return _cited(notes, cited), model_name
 
 
 def _prompt(read: Read, cited: dict[int, Quote]) -> str:

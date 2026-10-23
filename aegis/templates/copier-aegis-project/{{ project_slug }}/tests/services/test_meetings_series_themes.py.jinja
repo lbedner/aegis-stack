@@ -11,6 +11,7 @@ from pydantic_ai import capture_run_messages
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.services.ai.domains.spend import recording
 from app.services.meetings.domains.series import themes
 from app.services.meetings.domains.series.service import THEMING, SeriesService
 from app.services.meetings.models import NoteItem, Notes, SeriesRecord
@@ -36,7 +37,7 @@ def metered(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
         rows.append(row)
         return 0.0
 
-    monkeypatch.setattr(themes, "record_usage", record_usage)
+    monkeypatch.setattr(recording, "record_usage", record_usage)
     return rows
 
 

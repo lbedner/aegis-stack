@@ -6,7 +6,7 @@ runner tokens."""
 from datetime import datetime
 from typing import Any
 
-from sqlmodel import col, select, update
+from sqlmodel import col, delete, select, update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.time import utcnow
@@ -14,12 +14,13 @@ from app.services.meetings.models import (
     ASKED,
     CLAIMED,
     FAILED,
+    GOING,
     Meeting,
     MeetingActionRun,
     MeetingMoment,
     MeetingRunnerToken,
 )
-from app.services.shared.queries import owner_clause, owner_filters
+from app.services.shared.queries import owner_clause, owner_filters, visible_to
 
 
 def _owned(query: Any, owner_user_id: int | None) -> Any:
@@ -104,6 +105,43 @@ async def moment(
         *([MeetingMoment.meeting_id == meeting_id] if meeting_id else []),
     )
     return (await db.exec(query)).first()
+
+
+async def going(
+    db: AsyncSession, moment_ids: list[int], action: str
+) -> MeetingActionRun | None:
+    """The run of ``action`` on any of these moments (a card's) still
+    going, if any."""
+    query = select(MeetingActionRun).where(
+        col(MeetingActionRun.moment_id).in_(moment_ids),
+        MeetingActionRun.action == action,
+        col(MeetingActionRun.status).in_(GOING),
+    )
+    return (await db.exec(query)).first()
+
+
+async def drop_runs(db: AsyncSession, moment_ids: list[int], action: str) -> None:
+    """Delete these moments' (a card's) runs of ``action``: a new one
+    replaces them. The caller commits."""
+    await db.exec(  # type: ignore[call-overload]
+        delete(MeetingActionRun).where(
+            col(MeetingActionRun.moment_id).in_(moment_ids),
+            MeetingActionRun.action == action,
+        )
+    )
+
+
+async def used_since(
+    db: AsyncSession, owner_user_id: int | None, since: datetime
+) -> bool:
+    """Whether a runner token that claims the owner's runs (theirs, or one
+    for every owner) was used since ``since``."""
+    query = select(MeetingRunnerToken.id).where(
+        col(MeetingRunnerToken.revoked_at).is_(None),
+        col(MeetingRunnerToken.last_used_at) >= since,
+        *visible_to(MeetingRunnerToken.owner_user_id, owner_user_id),
+    )
+    return (await db.exec(query.limit(1))).first() is not None
 
 
 async def live_token(

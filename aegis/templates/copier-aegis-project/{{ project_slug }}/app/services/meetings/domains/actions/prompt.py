@@ -5,6 +5,7 @@ framing asks a coding agent, sitting in the repository of the system
 being discussed, to answer from the code.
 """
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -28,41 +29,79 @@ class Excerpt:
     before: list[tuple[str, str]]
 
 
-async def excerpt(db: AsyncSession, moment: MeetingMoment) -> Excerpt:
-    """``moment`` with the lines said up to it, read from the database."""
-    meeting = await db.get_one(Meeting, moment.meeting_id)
-    line = await db.get_one(TranscriptLine, moment.line_id)
+async def excerpt(db: AsyncSession, moments: list[MeetingMoment]) -> Excerpt:
+    """``moments`` (one, or a burst of them, in order) with the lines said
+    up to them, read from the database: the call's last lines up to the
+    card's last moment, or, for a card asked across the call, what led to
+    its first moment and its moments' own lines."""
+    meeting = await db.get_one(Meeting, moments[0].meeting_id)
+    meeting_id = meeting.id or 0
+    end = await db.get_one(TranscriptLine, moments[-1].line_id)
     said = await moments_queries.said(
-        db, moment.meeting_id, up_to=line.start_seconds, last=CONTEXT_LINES + 1
+        db, meeting_id, up_to=end.start_seconds, last=2 * CONTEXT_LINES + 1
     )
-    return excerpt_from(said, moment, meeting.url)
+    if moments[0].line_id not in {line_id for _, line_id, _ in said}:
+        start = await db.get_one(TranscriptLine, moments[0].line_id)
+        lead = await moments_queries.said(
+            db, meeting_id, up_to=start.start_seconds, last=CONTEXT_LINES + 1
+        )
+        own = {moment.line_id for moment in moments}
+        lines = await moments_queries.said(db, meeting_id, line_ids=own)
+        said = [line for line in lead if line[1] not in own] + lines
+    return excerpt_from(said, moments, meeting.url)
 
 
-def excerpt_from(
-    said: list[tuple[str, int, str]], moment: MeetingMoment, link: str
-) -> Excerpt:
-    """``moment`` with the lines said up to it, from ``said`` (the call's
+Said = list[tuple[str, int, str]]
+
+
+def excerpt_from(said: Said, moments: list[MeetingMoment], link: str) -> Excerpt:
+    """``moments`` with the lines said up to them, from ``said`` (the call's
     lines so far as speaker, line id and text, in order): at most
-    ``CONTEXT_LINES`` before its own."""
-    ids = [line_id for _, line_id, _ in said]
-    at = ids.index(moment.line_id) if moment.line_id in ids else len(said)
-    speaker = said[at][0] if at < len(said) else ""
-    before = [(who, text) for who, _, text in said[:at][-CONTEXT_LINES:]]
-    return Excerpt(moment.kind, link, speaker, moment.text, before)
+    ``CONTEXT_LINES`` before the first. A card of several is the lines it
+    covers (``covered``), a line per turn, under no one speaker."""
+    first, lines = covered(said, moments)
+    before = [(who, text) for who, _, text in said[:first][-CONTEXT_LINES:]]
+    if len(moments) == 1:
+        speaker = lines[0][0] if lines else ""
+        return Excerpt(moments[0].kind, link, speaker, moments[0].text, before)
+    return Excerpt(moments[0].kind, link, "", turns(lines), before)
+
+
+def covered(said: Said, moments: list[MeetingMoment]) -> tuple[int, Said]:
+    """Where a card (its moments, in order) starts in ``said``, and the
+    lines it covers: from its first moment's to its last's, what was said
+    between them too; or, past ``CONTEXT_LINES`` (a topic asked across the
+    call, not a burst), its moments' own lines alone."""
+    at = {line_id: i for i, (_, line_id, _) in enumerate(said)}
+    first = at.get(moments[0].line_id, len(said))
+    lines = said[first : at.get(moments[-1].line_id, first) + 1]
+    if len(lines) > CONTEXT_LINES:
+        own = {moment.line_id for moment in moments}
+        lines = [line for line in lines if line[1] in own]
+    return first, lines
+
+
+def turns(lines: Iterable[tuple[str, int, str]]) -> str:
+    """Lines as a framing quotes them, one per turn: ``Speaker: text``."""
+    return "\n".join(f"{who}: {text}" for who, _, text in lines)
 
 
 def said_before(heard: Excerpt) -> str:
-    """What led to the moment, a line per turn (``Speaker: text``), for a
-    framing to quote."""
-    said = "\n".join(f"{speaker}: {text}" for speaker, text in heard.before)
-    return said or "(nothing)"
+    """What led to the moment, a line per turn, for a framing to quote."""
+    return turns((who, 0, text) for who, text in heard.before) or "(nothing)"
+
+
+def the_question(heard: Excerpt) -> str:
+    """What was asked, and by whom when one person asked it."""
+    who = f"Then {heard.speaker} asked" if heard.speaker else "Then this was asked"
+    return f"{who}:\n\n{heard.text}"
 
 
 def for_an_agent(heard: Excerpt) -> str:
     """The excerpt as a coding agent in the system's repository reads it."""
     return (
         f"In a meeting ({heard.link}), this was said:\n\n{said_before(heard)}\n\n"
-        f"Then {heard.speaker} asked:\n\n{heard.text}\n\n"
+        f"{the_question(heard)}\n\n"
         "Answer it from the code in this repository: briefly, naming the files "
         "and functions that show it, and saying so plainly when the code does "
         "not answer it. Do not change anything."

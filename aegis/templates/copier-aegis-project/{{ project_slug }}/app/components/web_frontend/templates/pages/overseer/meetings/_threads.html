@@ -5,7 +5,7 @@
    (a contradiction's other side, where a commitment came up again).
    ``said`` maps a quoted line's id to when it was said and where it
    opens. #}
-{% from "components/macros/layout.html" import badge %}
+{% from "components/macros/layout.html" import badge, fold_mark %}
 {% from "pages/meetings/_macros.html" import heading %}
 
 {% macro quote_lines(quotes, said) %}
@@ -27,9 +27,9 @@
     {% for item in section.items %}
     {% set count = item.quotes|length + item.other|length %}
     <li data-thread>
-      <details data-quotes class="group/q">
+      <details data-quotes>
         <summary class="list-none cursor-pointer flex items-start gap-2">
-          <span aria-hidden="true" class="text-aegis-muted transition-transform group-open/q:rotate-90">›</span>
+          {{ fold_mark() }}
           <span class="flex-1 min-w-0 leading-relaxed">
             {%- if item.speaker %}<span class="font-semibold text-aegis-text">{{ item.speaker }}</span> <span class="text-aegis-muted">·</span> {% endif -%}
             {{ item.text }}

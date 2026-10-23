@@ -3,7 +3,7 @@
 {% from "components/macros/layout.html" import sparkline, stat_row %}
 {% from "components/macros/table.html" import data_table %}
 {% set facts = detail.facts if detail else {} %}
-<section id="redis-family" class="hover-card lg:col-span-2 bg-aegis-card border border-aegis-border rounded-lg p-5 min-w-0 space-y-4">
+<section id="redis-family" class="lg:col-span-2 bg-aegis-card border border-aegis-border rounded-lg p-5 min-w-0 space-y-4">
   <div>
     <h3 class="text-base font-semibold text-aegis-text">{{ row.family.name }}</h3>
     <p data-purpose class="mt-1 text-sm text-aegis-text">{{ row.family.purpose }}</p>

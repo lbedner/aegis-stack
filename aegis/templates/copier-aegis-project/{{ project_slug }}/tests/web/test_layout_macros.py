@@ -28,11 +28,6 @@ class TestCard:
         assert section.get("aria-labelledby") == heading.get("id")
         one(section, "#body")
 
-    def test_its_border_goes_teal_on_hover(self) -> None:
-        """Every card shares one hover (``.hover-card`` in input.css)."""
-        html = render('{% call card("Top payees") %}x{% endcall %}')
-        assert "hover-card" in (one(html, "section").get("class") or "").split()
-
     def test_optional_subtitle(self) -> None:
         html = render('{% call card("Spending", "last 90 days") %}x{% endcall %}')
         assert "last 90 days" in text(one(html, "section p"))
@@ -43,6 +38,14 @@ class TestStatTile:
         html = render('{{ stat_tile("Assets", "$100.00") }}')
         assert text(one(html, "dt")) == "Assets"
         assert text(one(html, "dd")) == "$100.00"
+
+    def test_it_lights_on_hover_only_when_a_click_does_something(self) -> None:
+        """A teal border says "click me": a tile given attributes to act on
+        carries the card hover, a plain figure does not."""
+        plain = render('{{ stat_tile("Assets", "$1") }}')
+        acting = render('{{ stat_tile("Assets", "$1", attrs=\'hx-get="/x"\') }}')
+        assert "hover-card" not in (one(plain, "div").get("class") or "").split()
+        assert "hover-card" in (one(acting, "div").get("class") or "").split()
 
     def test_negative_tone_marks_the_value(self) -> None:
         """Red once a figure goes negative; nothing for healthy figures,
@@ -300,3 +303,19 @@ def test_a_toggle_action_shows_when_it_is_on() -> None:
         '{% from "components/macros/form.html" import action %}{{ action("Wrap", \'aria-pressed="true"\') }}'
     )
     assert "action" in one(html, "button").get("class").split()  # input.css
+
+
+def test_a_primary_button_is_as_tall_as_an_action() -> None:
+    """Save stands as tall as Read pages: one button height, whichever
+    macro drew it."""
+    html = render(
+        '{% from "components/macros/form.html" import action, primary_button %}'
+        '{{ primary_button("Save") }}{{ action("Read pages", "", "primary") }}'
+    )
+    save, read = select(html, "button")
+
+    def size(button: object) -> set[str]:
+        classes = (button.get("class") or "").split()  # type: ignore[attr-defined]
+        return {c for c in classes if c.startswith(("text-xs", "text-sm", "py-", "px-"))}
+
+    assert size(save) == size(read)

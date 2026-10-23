@@ -7,10 +7,11 @@
 
 {% from "components/macros/icons.html" import icon %}
 
-{# The height of every control below (``_control_classes``: same text, border
-   and padding), so a button sits level with the fields beside it. #}
+{# One button height: a primary button (Save) stands as tall as an action
+   (Read pages). Only a form's full-width submit (sign in) is larger. #}
+{%- set _button_size = "px-2.5 py-1 text-xs" -%}
 {%- set _primary_button_classes -%}
-text-sm text-aegis-text border border-aegis-teal bg-aegis-teal/10 rounded px-4 py-1.5 hover:bg-aegis-teal/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2
+text-aegis-text border border-aegis-teal bg-aegis-teal/10 rounded hover:bg-aegis-teal/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2
 {%- endset -%}
 
 
@@ -21,7 +22,7 @@ text-sm text-aegis-text border border-aegis-teal bg-aegis-teal/10 rounded px-4 p
    ``:disabled``, ``aria-*``) without bloating the macro signature. #}
 {% macro primary_button(label, type="button", attrs="") %}
 <button type="{{ type }}" {{ attrs|safe }}
-  class="{{ _primary_button_classes }}">{{ label }}</button>
+  class="{{ _primary_button_classes }} {{ _button_size }}">{{ label }}</button>
 {% endmacro %}
 
 
@@ -31,7 +32,7 @@ text-sm text-aegis-text border border-aegis-teal bg-aegis-teal/10 rounded px-4 p
    can't double-submit. #}
 {% macro submit_button(idle_label, loading_label) %}
 <button type="submit" :disabled="loading"
-  class="{{ _primary_button_classes }} w-full">
+  class="{{ _primary_button_classes }} text-sm px-4 py-1.5 w-full">
   <span x-show="!loading">{{ idle_label }}</span>
   <span x-show="loading" x-cloak class="inline-flex items-center gap-2">
     {{ icon("spinner", "animate-spin w-4 h-4") }}
@@ -333,5 +334,5 @@ bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-
    recipe every compact button uses. #}
 {% macro action(label, attrs, tone="default", vals=None, glyph=None, type="button") %}
 {% set tones = {"default": "border-aegis-border text-aegis-muted hover:text-aegis-text hover:border-aegis-muted", "primary": "border-aegis-teal text-aegis-text hover:bg-aegis-teal/10", "danger": "border-aegis-error/40 text-error hover:border-aegis-error", "warn": "border-aegis-amber/40 text-aegis-text hover:border-aegis-amber"} %}
-<button type="{{ type }}" {{ attrs|safe }} {% if vals is not none %}hx-vals='{{ vals|tojson }}'{% endif %} {% if glyph %}title="{{ label }}" {% endif %}class="action px-2.5 py-1 text-xs rounded border whitespace-nowrap transition-colors disabled:opacity-40 disabled:pointer-events-none {{ tones.get(tone, tones['default']) }}">{% if glyph %}{{ icon(glyph) }}<span class="sr-only">{{ label }}</span>{% else %}{{ label }}{% endif %}</button>
+<button type="{{ type }}" {{ attrs|safe }} {% if vals is not none %}hx-vals='{{ vals|tojson }}'{% endif %} {% if glyph %}title="{{ label }}" {% endif %}class="action {{ _button_size }} rounded border whitespace-nowrap transition-colors disabled:opacity-40 disabled:pointer-events-none {{ tones.get(tone, tones['default']) }}">{% if glyph %}{{ icon(glyph) }}<span class="sr-only">{{ label }}</span>{% else %}{{ label }}{% endif %}</button>
 {% endmacro %}

@@ -154,6 +154,13 @@
 
 ### Changed
 
+- **Only what a click acts on lights up.** The teal hover border marks a
+  card you can click (a stat tile with a link, a fold's header, a landing
+  feature) and nothing else; a card the pointer merely passes over stays
+  as it is. A document's page thumbnails take a thicker teal ring. Every
+  primary button (Save, Add, Search) is now as tall as an action button
+  (Read pages); only a sign-in form's full-width submit stays larger.
+
 - **Illiana works in code mode, as the finance assistant does.** Her
   reads run inside one script (`run_code`): fetched, counted and joined
   there, only the answer printed back, so a question over several reads

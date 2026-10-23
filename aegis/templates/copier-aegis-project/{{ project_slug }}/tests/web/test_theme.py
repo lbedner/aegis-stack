@@ -78,6 +78,14 @@ class TestThemeFiles:
 
 
 class TestTokens:
+    def test_only_a_card_you_can_click_lights_up_on_hover(self) -> None:
+        """A teal border says "click me": ``hover-card`` goes on cards a
+        click acts on, and a fold lights only while the pointer is on the
+        header that opens it, never for passing over its body."""
+        css = INPUT_CSS.read_text()
+        assert ".hover-card:not(details):hover" in css
+        assert ".hover-card:has(> summary:hover)" in css
+
     def test_the_ramp_is_one_size_everywhere_it_is_counted(self) -> None:
         """The theme's ramp, Flet's, the htmx charts' cycle and the colors a
         speaker or a logs page is given: one count, or the two UIs color

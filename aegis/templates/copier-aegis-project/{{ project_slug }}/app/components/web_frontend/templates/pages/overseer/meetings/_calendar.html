@@ -3,7 +3,7 @@
    details in the drawer (_event_drawer.html). #}
 {% from "components/macros/layout.html" import card, drawer_sync %}
 {% from "pages/meetings/_calendar.html" import month %}
-{% call card(None, id="overseer-meeting-calendar", hover=False) %}
+{% call card(None, id="overseer-meeting-calendar") %}
   {{ month(calendar, "#overseer-main", opens_here=True) }}
   <p class="text-xs text-aegis-muted">Each agent's calendar, read every minute. Give one its calendar under the secret <code class="font-mono">MEETINGS_BOT_CALENDAR_SECRET</code> (another agent's under <code class="font-mono">__&lt;NAME&gt;</code>).</p>
 {% endcall %}

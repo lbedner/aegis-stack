@@ -82,11 +82,14 @@ def test_touches_says_what_a_change_reaches() -> None:
 
 def test_check_is_advisory_and_says_what_is_new() -> None:
     """``patterns check``: whatever the app's debt, it exits 0 unless
-    ``--strict``, and ends with the count against the baseline."""
+    ``--strict``, and ends with Illiana's verdict, the known debt beside
+    it."""
     run = subprocess.run(
         [sys.executable, "-m", "app.cli.main", "patterns", "check"],
         capture_output=True,
         text=True,
         check=True,
     )
-    assert " new; " in run.stdout.splitlines()[-1]
+    last = run.stdout.splitlines()[-1]
+    assert last.startswith(("Illiana: blocked.", "Illiana: clear."))
+    assert " known in .patterns-baseline.json" in last

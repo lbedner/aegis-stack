@@ -30,6 +30,13 @@ class Finding(BaseModel):
     evidence: tuple[str, ...]  # ``path:line``, from the project's root
     action: str
     fingerprint: str
+    gated: bool = False  # a new place blocks a change, its debt aside
+
+    @property
+    def blocking(self) -> bool:
+        """Whether a new place breaking it blocks a change: an enforced
+        rule's (an error), or a gated one's."""
+        return self.severity == "error" or self.gated
 
     @property
     def files(self) -> tuple[str, ...]:
@@ -71,6 +78,7 @@ def findings(report: Report) -> list[Finding]:
                     check=check,
                     subject=about,
                     severity="error" if rule.enforced else "warn",
+                    gated=rule.gate,
                     title=rule.title,
                     why=rule.why,
                     evidence=evidence,

@@ -5,8 +5,10 @@
 @tailwind utilities;
 
 @layer base {
-  html { font-size: var(--aegis-scale); }
-  body { font-family: var(--aegis-font-body); }
+  /* No rubber-band bounce past a page's ends (macOS, iOS): an app's
+     surfaces stay put; a scroll inside one (a thread) stops at its edge. */
+  html { font-size: var(--aegis-scale); overscroll-behavior: none; }
+  body { font-family: var(--aegis-font-body); overscroll-behavior: none; }
 }
 
 @layer components {

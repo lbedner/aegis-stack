@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -14,6 +15,15 @@ except ImportError:  # observability component not installed
     pass
 else:
     install_auto_tracing("app.components.frontend")
+
+from fastapi import Depends, FastAPI  # noqa: E402
+from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html  # noqa: E402
+from fastapi.openapi.utils import get_openapi  # noqa: E402
+{%- if include_htmx %}
+from fastapi.responses import HTMLResponse  # noqa: E402
+{%- else %}
+from fastapi.responses import HTMLResponse, RedirectResponse  # noqa: E402
+{%- endif %}
 
 from app.components.backend.hooks import backend_hooks  # noqa: E402
 from app.components.backend.main import create_backend_app  # noqa: E402
@@ -36,17 +46,15 @@ from app.components.web_frontend.main import (  # noqa: E402
     create_web_frontend_app,
 )
 {%- endif %}
+from app.core import ontology  # noqa: E402
+from app.core.concurrency import background  # noqa: E402
 from app.core.config import settings  # noqa: E402
 from app.core.constants import dashboard_upload_dir  # noqa: E402
 from app.core.log import logger, setup_logging  # noqa: E402
-from fastapi import Depends, FastAPI  # noqa: E402
-from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html  # noqa: E402
-from fastapi.openapi.utils import get_openapi  # noqa: E402
-{%- if include_htmx %}
-from fastapi.responses import HTMLResponse  # noqa: E402
-{%- else %}
-from fastapi.responses import HTMLResponse, RedirectResponse  # noqa: E402
-{%- endif %}
+
+
+async def _build_model() -> None:
+    await asyncio.to_thread(ontology.current)
 
 
 @asynccontextmanager
@@ -69,6 +77,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
     # Execute backend startup hooks
     await backend_hooks.execute_startup_hooks()
+
+    # Every part has registered: build the system model now, off the loop,
+    # so its first reader (a map, a flow card) never parses the source
+    # mid-request, holding the server.
+    background(_build_model())
 
     logger.info("--- Application startup complete ---")
 

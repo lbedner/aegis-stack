@@ -9,7 +9,7 @@ import pytest
 
 from app.core import source_index
 from app.core.ontology import calls
-from app.services.system import service_patterns
+from app.services.system import patterns, service_patterns
 from tests._files import write_tree
 
 FILES = {
@@ -121,7 +121,7 @@ def test_each_file_is_parsed_once_whoever_reads_it(
         return parse(source, *args, **kwargs)
 
     monkeypatch.setattr(source_index.ast, "parse", counted)
-    monkeypatch.setattr(service_patterns, "PROJECT_ROOT", project)
+    monkeypatch.setattr(patterns, "PROJECT_ROOT", project)
     notes = project / "app" / "services" / "notes"
     for _ in range(2):
         index = source_index.at(project)

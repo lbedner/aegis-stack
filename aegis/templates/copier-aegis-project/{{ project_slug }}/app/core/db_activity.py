@@ -40,7 +40,6 @@ from app.core.log import logger
 PREFIX = "db_activity:"
 KEEP_SECONDS = 3600
 SHOWN = 50
-DATABASE = "component:database"
 # The tables each compiled statement touches, worked out once a statement.
 _tables_of: WeakKeyDictionary[Any, list[str]] = WeakKeyDictionary()
 DATABASE_LAYER = ("app/core/db.py", "app/core/db_activity.py")
@@ -115,7 +114,7 @@ def _hop(conn: Any, context: Any, *, error: bool) -> None:
     started = conn.info.pop("statement_at", None) if conn is not None else None
     ms = (time.perf_counter() - started) * 1000 if started else 0.0
     tables = _tables(context)
-    chain = edges.hop(DATABASE, ms=ms, error=error, tables=tables)
+    chain = edges.hop(edges.DATABASE, ms=ms, error=error, tables=tables)
     for table in tables if chain else ():
         edges.count(chain[-2], f"object:{table}", ms=ms, error=error)
 

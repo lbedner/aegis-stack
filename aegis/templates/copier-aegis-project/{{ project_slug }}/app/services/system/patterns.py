@@ -20,7 +20,7 @@ from pathlib import Path
 import textwrap
 from types import ModuleType
 import typing
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, Self, TypeVar
 
 from fastapi.routing import APIRoute
 from pydantic import BaseModel
@@ -28,7 +28,10 @@ from starlette.responses import StreamingResponse
 from starlette.routing import BaseRoute
 
 from app.core import source_index
+from app.core.log import logger
 from app.core.route_auth import route_requires_auth
+from app.core.source_functions import Function
+from app.core.source_index import Module
 
 API_PACKAGE = "app.components.backend.api"
 SERVICE_PACKAGE = "app.services"
@@ -109,6 +112,39 @@ class SourceText(NamedTuple):
     text: str
     path: str
     line: int = 1
+
+    @classmethod
+    def of(cls, function: Function, lines: tuple[str, ...], path: str) -> Self:
+        """``function``'s own lines of its module's ``lines``, at ``path``."""
+        text = "\n".join(lines[function.start - 1 : function.end])
+        return cls(text, path, function.start)
+
+
+Read = TypeVar("Read")
+
+
+def read_functions(
+    source: Any, folder: str, read: Callable[[Function, Module, str], Read | None]
+) -> list[tuple[str, Read]]:
+    """What ``read`` makes of each function under ``folder`` (from the
+    project's root; ``source``, when a ``Path``, is another root: tests),
+    each labelled ``path: qualname`` by its path under ``folder``. Read
+    with ``ast``, never imported: no import side effects."""
+    if isinstance(source, Path):
+        index, prefix = source_index.at(source), ""
+    else:
+        index, prefix = source_index.at(PROJECT_ROOT, folder), f"{folder}/"
+    found = []
+    for name, path in sorted(index.paths.items(), key=lambda item: item[1]):
+        module = index.get(name)
+        if module is None:
+            logger.warning("A pattern skipped an unreadable module", path=path)
+            continue
+        relative = path.removeprefix(prefix)
+        for function in module.functions:
+            if (made := read(function, module, relative)) is not None:
+                found.append((f"{relative}: {function.qualname}", made))
+    return found
 
 
 class Instance(NamedTuple):
@@ -424,12 +460,14 @@ def source(func: Any) -> tuple[str, str]:
 
 
 def installed_patterns() -> dict[str, Pattern]:
-    """Every pattern this project has: routes, services and their parts
-    always, worker tasks when the worker component is installed."""
+    """Every pattern this project has: routes, services and their parts,
+    and async functions always, worker tasks when the worker component is
+    installed."""
+    from app.services.system.async_patterns import ASYNC
     from app.services.system.service_parts import PARTS
     from app.services.system.service_patterns import SERVICE
 
-    found = {"route": ROUTE, "service": SERVICE, "parts": PARTS}
+    found = {"route": ROUTE, "service": SERVICE, "parts": PARTS, "async": ASYNC}
     try:
         from app.components.worker.patterns import TASK
     except ImportError:  # no worker component in this project

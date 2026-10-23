@@ -170,6 +170,7 @@
         @close="if (!$el.open) $el.querySelector('#dialog-body').innerHTML = ''"
         class="bg-aegis-card text-aegis-text border border-aegis-border rounded-lg shadow-2xl p-0 w-full max-w-md
                has-[[data-card]]:bg-aegis-bg
+               has-[[data-card=path]]:max-w-[min(90rem,calc(100vw-2rem))]
                has-[[data-card=table]]:w-fit has-[[data-card=table]]:max-w-[calc(100vw-2rem)]
                backdrop:bg-aegis-scrim/60 backdrop:backdrop-blur-sm">
   <div class="flex justify-end px-3 pt-3">

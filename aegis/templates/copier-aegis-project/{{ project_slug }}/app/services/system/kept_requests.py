@@ -82,9 +82,12 @@ class RequestSummary(_Read):
 
 
 class RequestHops(RequestSummary):
-    """A request with its hops, in the order they started."""
+    """A request with its hops, in the order they started; ``staged``, a
+    path staged a beat a hop (``staged_paths``: read from the code or the
+    model, not run), timed by none of the app's."""
 
     hops: tuple[RequestHop, ...]
+    staged: bool = False
 
 
 async def recent(

@@ -63,11 +63,13 @@ def neighbors(
     return found, [by_id[i] for i in sorted(seen - {node_id})], list(edges)
 
 
-def paths(model: SystemModel, start: str, end: str) -> list[list[Edge]]:
+def paths(
+    model: SystemModel, start: str, end: str, *, directed: bool = False
+) -> list[list[Edge]]:
     """The shortest paths from ``start`` to ``end`` (up to ``MAX_PATHS``),
-    each the edges walked, in order, whichever way they point: one walk
-    keeping each node's edges in from the step before, then back from
-    ``end``."""
+    each the edges walked, in order, whichever way they point (``directed``:
+    only the way they point): one walk keeping each node's edges in from
+    the step before, then back from ``end``."""
     node(model, start)
     node(model, end)
     touching = _touching(model)
@@ -79,6 +81,8 @@ def paths(model: SystemModel, start: str, end: str) -> list[list[Edge]]:
         if end in depth and depth[here] >= depth[end]:
             break
         for edge in touching.get(here, []):
+            if directed and edge.source != here:
+                continue
             there = _other(edge, here)
             if there not in depth:
                 depth[there] = depth[here] + 1

@@ -86,10 +86,12 @@ def _task_row(instance: patterns.Instance) -> dict[str, Any]:
     }
 
 
-def _service_row(instance: patterns.Instance) -> dict[str, Any]:
+def _function_row(instance: patterns.Instance) -> dict[str, Any]:
+    """A function read from the source (a service's, an async one), grouped
+    by the part it is in."""
     function = instance.target
     return {
-        "group": function.service,
+        "group": function.group,
         "name": function.qualname,
         "file": function.path,
         "statements": function.statements,
@@ -112,8 +114,9 @@ def _parts_row(instance: patterns.Instance) -> dict[str, Any]:
 ROWS = {
     "route": _route_row,
     "task": _task_row,
-    "service": _service_row,
+    "service": _function_row,
     "parts": _parts_row,
+    "async": _function_row,
 }
 
 _STATUS = [
@@ -126,6 +129,12 @@ _STATEMENTS = {
     "kind": "int",
     "align": "right",
 }
+_FUNCTIONS = [
+    {"key": "name", "label": "Function"},
+    {"key": "file", "label": "File"},
+    _STATEMENTS,
+    *_STATUS,
+]
 COLUMNS = {
     "task": [
         {"key": "name", "label": "Task"},
@@ -133,12 +142,8 @@ COLUMNS = {
         _STATEMENTS,
         *_STATUS,
     ],
-    "service": [
-        {"key": "name", "label": "Function"},
-        {"key": "file", "label": "File"},
-        _STATEMENTS,
-        *_STATUS,
-    ],
+    "service": _FUNCTIONS,
+    "async": _FUNCTIONS,
     "parts": [
         {"key": "name", "label": "Part"},
         {"key": "has", "label": "Has"},

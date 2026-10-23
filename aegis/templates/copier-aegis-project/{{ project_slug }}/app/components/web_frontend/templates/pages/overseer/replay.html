@@ -1,7 +1,7 @@
 {% extends "pages/overseer/_shell.html" %}
 {% from "components/macros/layout.html" import page_header %}
 {% from "components/macros/feedback.html" import empty_state %}
-{% from "components/macros/player.html" import player %}
+{% from "components/macros/player.html" import stage %}
 {% from "components/macros/table.html" import data_table %}
 {% from "pages/overseer/_macros.html" import line_link %}
 
@@ -48,9 +48,7 @@
   {% endfor %}
 </ol>
 {% else %}
-{% call player(replay_steps, chapters=replay_scenes) %}
-{% for scene in replay_scenes %}<div data-play-scene="{{ scene.key }}" data-play-at="{{ scene.at }}" data-play-ms="{{ scene.ms }}" data-play-lead="{{ scene.lead }}"{% if not loop.first %} hidden{% endif %}><div data-scene-map inert>{{ scene.map }}</div></div>{% endfor %}
-{% endcall %}
+{{ stage(replay_steps, replay_scenes) }}
 {% endif %}
 {% else %}
 {% call page_header("Replay") %}{% endcall %}

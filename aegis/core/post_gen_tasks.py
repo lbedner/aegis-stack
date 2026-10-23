@@ -494,11 +494,14 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         # A drawn card is a row (chat_card): no cards without persistence.
         remove_file(project_path, "app/services/ai/models/chat_card.py")
         remove_file(project_path, "app/services/ai/domains/chat/cards.py")
+        remove_file(project_path, "app/services/ai/domains/chat/path_card.py")
         remove_file(
             project_path, "app/components/web_frontend/routes/partials/chat_cards.py"
         )
         remove_file(project_path, "tests/services/ai/test_chat_cards.py")
+        remove_file(project_path, "tests/services/ai/test_path_card.py")
         remove_file(project_path, "tests/web/test_chat_cards.py")
+        remove_file(project_path, "tests/web/test_path_card.py")
         # Voice profiles and live engines are tables. ai_voice gates them,
         # but persistence gates whether there is anywhere to put a table at
         # all - without it the model registry walks into an unimportable

@@ -17,6 +17,30 @@
   `GET /meetings/admin/owners`, `PUT /meetings/admin/agents/{name}/owner`,
   `POST /meetings/admin/{id}/owner`.
 
+- **Blocking work stays off the event loop.** A new conformance pattern,
+  Async function, flags an async function that calls blocking work on the
+  loop (the system model's build, `time.sleep`, a subprocess) instead of
+  handing it to a thread; its `off-the-loop` rule is gated, so a new
+  breach blocks a change in `patterns check --strict`. Calls are known
+  through the module's imports, however they are spelled. The system
+  model is now built once startup finishes, off the loop, so the first
+  map, flow card or ontology read no longer stalls the server for
+  seconds while it parses the source.
+
+- **Illiana draws flows.** A flow plays across the map under her answer,
+  with the Replay page's own player and steps: a request's replay
+  (`request_id`) at its real timing, a route's code path (`route`: what
+  its code can do, read without running it), or a flow's stops (`stops`)
+  joined along the lines the running model has (declared, or seen in
+  traffic), staged a beat a hop and claiming no timing. Every hop is the
+  app's own, never guessed: a stop nothing reaches is refused, naming
+  what it does reach. The card's subtitle says which. The server stages
+  it once, when drawn, so it plays after the request is no longer kept.
+  In the thread it is a still thumbnail of its first scene; opened
+  larger, it plays. `graph.paths` can walk edges only the way they point
+  (`directed=True`). Card kinds can now be filled in by the server
+  before they are kept (`register_kind(prepare=, stored=)`).
+
 - **Illiana holds the line on a pull request.** `patterns check` ends
   with her verdict: blocked when a new place breaks a rule that holds a
   change, else clear. A rule can be gated: its known debt stands while a

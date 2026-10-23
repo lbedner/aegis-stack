@@ -587,3 +587,40 @@ class TestDrivingACall:
         stored = await ai_service.get_conversation(conversation.id)
         trace = stored.messages[-1].metadata["tool_trace"]
         assert trace[-1]["component"] == [{"kind": cards.MARKER, "id": "c1"}]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("ends", [False, True])
+    async def test_a_call_says_who_ended_it(
+        self,
+        async_db_session: AsyncSession,
+        monkeypatch: pytest.MonkeyPatch,
+        ends: bool,
+    ) -> None:
+        """The person hanging up and the provider ending the session look
+        the same on the page (the call drops): ``drive`` says which, so a
+        dropped call is in the log, not a mystery."""
+        import asyncio
+
+        from app.services.ai.domains.voice.realtime_calls import drive
+        from tests._realtime import FakeRealtime
+
+        await _priced(async_db_session, monkeypatch)
+        conversation = await _conversation()
+
+        async def alongside(session: object) -> None:
+            if ends:  # the person stays on; the provider ends it
+                await asyncio.Event().wait()
+            await asyncio.sleep(0)
+            await session.close()  # type: ignore[attr-defined]
+
+        ended = await drive(
+            ai_service,
+            FakeRealtime(_turn(), ends=ends),
+            conversation_id=conversation.id,
+            model="google:gemini-3.8-live",
+            agent_slug="voice",
+            user_id=USER,
+            alongside=alongside,
+        )
+
+        assert ended == ("provider" if ends else "page")

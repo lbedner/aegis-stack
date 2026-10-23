@@ -153,4 +153,34 @@ class TestPendingListingMarker:
         )
 
         assert "component" not in trace[0]
+
+
+def test_each_result_lands_on_its_own_call() -> None:
+    """Calls to one tool made at once finish in any order: each result is
+    its call's (by id), not the latest unanswered one of that name."""
+    from app.services.ai.service.trace import record_tool_call, record_tool_result
+
+    def call(call_id: str, node: str) -> Any:
+        part = SimpleNamespace(
+            tool_name="ontology", args={"node": node}, tool_call_id=call_id
+        )
+        return SimpleNamespace(part=part)
+
+    def answered(call_id: str, node: str) -> Any:
+        part = SimpleNamespace(
+            tool_name="ontology", content=node, metadata=None, tool_call_id=call_id
+        )
+        return SimpleNamespace(part=part)
+
+    trace: list[dict[str, Any]] = []
+    for call_id, node in (("a", "service:auth"), ("b", "service:blog")):
+        record_tool_call(trace, call(call_id, node))
+    # The one it filled, for a card drawn by it to ride (``attach_cards``).
+    assert record_tool_result(trace, answered("a", "service:auth")) is trace[0]
+    record_tool_result(trace, answered("b", "service:blog"))
+
+    assert [(json.loads(e["args"])["node"], e["result"]) for e in trace] == [
+        ("service:auth", "service:auth"),
+        ("service:blog", "service:blog"),
+    ]
 {%- endif %}

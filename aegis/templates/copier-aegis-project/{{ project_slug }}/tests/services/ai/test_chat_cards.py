@@ -85,6 +85,21 @@ class TestDrawing:
         assert staged == []
 
     @pytest.mark.asyncio
+    async def test_a_table_is_read_through_not_ranked(self) -> None:
+        """Every component and its status runs past a top ten; a table
+        still stops short of a dump."""
+
+        def table(count: int) -> dict[str, Any]:
+            rows = [{"label": f"Part {n}", "values": ["Healthy"]} for n in range(count)]
+            return {"title": "Health", "columns": ["Part", "Status"], "rows": rows}
+
+        drawn, _ = await _drawn("table", table(cards.TABLE_ROWS))
+        assert "id" in drawn
+        result, staged = await _drawn("table", table(cards.TABLE_ROWS + 1))
+        assert f"at most {cards.TABLE_ROWS}" in result["error"]
+        assert staged == []
+
+    @pytest.mark.asyncio
     async def test_a_pie_is_a_few_slices_not_a_confetti(self) -> None:
         rows = [{"label": f"Category {n}", "value": n + 1} for n in range(9)]
         result, staged = await _drawn(
@@ -97,29 +112,48 @@ class TestDrawing:
         for name in cards.kind_names():
             assert f"- {name}" in (draw_card.__doc__ or "")
 
-    def test_a_table_names_its_label_column_too(self) -> None:
+    def test_a_table_names_its_label_column_or_leaves_it_unnamed(self) -> None:
+        """Columns naming only the values (the shape a model keeps writing)
+        draw with the label column unnamed, not a refusal and a second
+        round trip; any other count is still refused."""
+        named = cards.TablePayload(
+            title="t",
+            columns=["Payee", "Spent", "Count"],
+            rows=[{"label": "a", "values": [1, 2]}],
+        )
+        unnamed = cards.TablePayload(
+            title="t",
+            columns=["Spent", "Count"],
+            rows=[{"label": "a", "values": [1, 2]}],
+        )
+        assert named.columns == ["Payee", "Spent", "Count"]
+        assert unnamed.columns == ["", "Spent", "Count"]
         with pytest.raises(ValueError, match="values"):
             cards.TablePayload(
                 title="t",
                 columns=["Payee", "Spent"],
-                rows=[{"label": "a", "values": [1, 2]}],
+                rows=[{"label": "a", "values": [1, 2, 3]}],
             )
 
 
 class TestTheTrail:
-    def test_drawn_cards_ride_the_script_that_drew_them(self) -> None:
-        trace: list[dict[str, Any]] = [{"tool": "run_code", "result": "ok"}]
+    def test_drawn_cards_ride_the_entry_that_finished(self) -> None:
+        """The entry is the finishing call's (``record_tool_result``), not
+        whichever is last: two run at once finish in any order."""
+        drew: dict[str, Any] = {"tool": "run_code", "result": "ok"}
+        trace = [drew, {"tool": "run_code"}]
         drawn = [{"kind": "chat_card", "id": "abc"}]
 
-        attach_cards(trace, drawn)
+        attach_cards(drew, drawn)
 
-        assert trace[-1]["component"] == [{"kind": "chat_card", "id": "abc"}]
+        assert drew["component"] == [{"kind": "chat_card", "id": "abc"}]
+        assert "component" not in trace[1]
         assert drawn == []  # drained: the next script starts clean
 
     def test_nothing_drawn_leaves_the_trace_alone(self) -> None:
-        trace: list[dict[str, Any]] = [{"tool": "run_code", "result": "ok"}]
-        attach_cards(trace, [])
-        assert "component" not in trace[-1]
+        entry: dict[str, Any] = {"tool": "run_code", "result": "ok"}
+        attach_cards(entry, [])
+        assert "component" not in entry
 
 
 def test_it_is_a_tool_an_agent_can_be_granted() -> None:

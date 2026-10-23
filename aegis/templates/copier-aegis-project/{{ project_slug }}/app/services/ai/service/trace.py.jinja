@@ -70,11 +70,16 @@ def tool_notice(
 # the final SSE event, so a pathological payload must not bloat either.
 _TRACE_CODE_CAP = 6_000
 _TRACE_RESULT_CAP = 2_000
+# A call's id, on its entry: what its result is matched by.
+CALL_ID = "call_id"
 
 
 def record_tool_call(trace: list[dict[str, Any]], event: FunctionToolCallEvent) -> None:
-    """Append a trace entry for a starting tool call (full code kept)."""
+    """Append a trace entry for a starting tool call (full code kept), with
+    the id its result is matched by (``record_tool_result``)."""
     entry: dict[str, Any] = {"tool": event.part.tool_name}
+    if call_id := getattr(event.part, "tool_call_id", None):
+        entry[CALL_ID] = call_id
     args = event.part.args
     parsed: Any = None
     if isinstance(args, str):
@@ -94,12 +99,20 @@ def record_tool_call(trace: list[dict[str, Any]], event: FunctionToolCallEvent) 
 
 def record_tool_result(
     trace: list[dict[str, Any]], event: FunctionToolResultEvent
-) -> None:
+) -> dict[str, Any]:
     """Attach a completing call's result (and nested dispatches) to its
-    trace entry, creating one if the call event was never seen."""
+    trace entry, creating one if the call event was never seen, and return
+    it. Its own by id: calls to one tool made at once finish in any order."""
     name = event.part.tool_name
+    call_id = getattr(event.part, "tool_call_id", None)
     entry = next(
-        (e for e in reversed(trace) if e["tool"] == name and "result" not in e),
+        (
+            e
+            for e in reversed(trace)
+            if e["tool"] == name
+            and "result" not in e
+            and e.get(CALL_ID, call_id) == call_id
+        ),
         None,
     )
     if entry is None:
@@ -114,6 +127,7 @@ def record_tool_result(
     nested = nested_tool_calls(event)
     if nested:
         entry["nested"] = [{"tool": n, "args": a} for n, a in nested]
+    return entry
 
 
 def sandbox_calls(part: Any) -> list[tuple[ToolCallPart, ToolReturnPart | None]]:

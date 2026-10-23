@@ -163,13 +163,15 @@
 {# The one modal. Native <dialog>: focus trap, Escape and backdrop come
    free. Content is loaded by htmx into ``#dialog-body`` (pattern 4);
    app.js opens the dialog when a swap lands there, and closing clears it
-   so a stale body never flashes on the next open. Mounted once by the
-   app shell, outside ``#app-content``. #}
+   so a stale body never flashes on the next open. A chat card opened
+   larger sits on the page's own black, as it does in the thread. Mounted
+   once by the app shell, outside ``#app-content``. #}
 {% macro dialog() %}
 <dialog id="dialog"
         x-data="{}"
         @close="if (!$el.open) $el.querySelector('#dialog-body').innerHTML = ''"
         class="bg-aegis-card text-aegis-text border border-aegis-border rounded-lg shadow-2xl p-0 w-full max-w-md
+               has-[[data-card]]:bg-aegis-bg
                has-[[data-card=table]]:w-fit has-[[data-card=table]]:max-w-[calc(100vw-2rem)]
                backdrop:bg-aegis-scrim/60 backdrop:backdrop-blur-sm">
   <div class="flex justify-end px-3 pt-3">

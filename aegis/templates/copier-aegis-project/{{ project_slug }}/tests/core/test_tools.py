@@ -112,6 +112,9 @@ EXPECTED_EFFECTS = {
     "logs": "read",
     "requests": "read",
     "ontology": "read",
+    # What the app holds: its database (with that component) and buckets.
+    "query": "read",
+    "storage": "read",
     "plugins": "read",
     "research_search": "read",
     "research_thread": "read",

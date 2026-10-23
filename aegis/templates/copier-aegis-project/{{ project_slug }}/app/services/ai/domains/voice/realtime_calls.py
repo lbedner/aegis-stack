@@ -15,7 +15,7 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, Literal
 
 from pydantic_ai.messages import (
     FunctionToolCallEvent,
@@ -44,6 +44,12 @@ OPENAI_VOICE = "marin"
 # cut resumes it; after, it is a new call. The conversation is the memory;
 # this is only its age.
 RESUME_WINDOW = timedelta(minutes=15)
+# Who ended a call: the person (the page hung up), the provider (it closed
+# the session, the page still on), or an error.
+CallEnd = Literal["page", "provider", "error"]
+# How long a call whose events stopped waits for the page to have hung up
+# before it reads as the provider's end.
+HANG_UP_GRACE = 0.5
 
 
 def end_call() -> str:
@@ -92,9 +98,9 @@ class TurnLog:
         elif isinstance(event, FunctionToolCallEvent):
             record_tool_call(self.trace, event)
         elif isinstance(event, FunctionToolResultEvent):
-            record_tool_result(self.trace, event)
+            finished = record_tool_result(self.trace, event)
             self.shown = [marker["id"] for marker in self.drawn]
-            attach_cards(self.trace, self.drawn)
+            attach_cards(finished, self.drawn)
         return isinstance(event, RealtimeTurnCompleteEvent)
 
     def take(self) -> tuple[str, str, list[dict[str, Any]]] | None:
@@ -259,9 +265,10 @@ async def drive(
     on_event: Callable[[Any], Awaitable[None]] | None = None,
     on_saved: Callable[[float], Awaitable[None]] | None = None,
     on_drawn: Callable[[list[str]], Awaitable[None]] | None = None,
-) -> None:
-    """Run one call to its end: the agent's tools in a turn's context, each
-    finished turn saved into the conversation, the priced usage ledgered.
+) -> CallEnd:
+    """Run one call to its end, and say who ended it (``CallEnd``): the
+    agent's tools in a turn's context, each finished turn saved into the
+    conversation, the priced usage ledgered.
     ``alongside`` runs beside the events for the length of the call (the
     audio both ways), ``on_event`` sees every event, ``on_saved`` hears of
     each saved turn with the call's cost so far, and ``on_drawn`` of the
@@ -269,6 +276,7 @@ async def drive(
     talked about, not once the turn is saved."""
     started = datetime.now(UTC)
     usage = None
+    ended: CallEnd = "provider"
     log = TurnLog()
     provider, _, bare = model.rpartition(":")
     # The call so far, at the last saved turn: each turn keeps its share.
@@ -322,6 +330,10 @@ async def drive(
                                 await on_saved(cost)
                         if log.shown and on_drawn:
                             await on_drawn(log.shown)
+                    if beside is not None:
+                        done, _ = await asyncio.wait({beside}, timeout=HANG_UP_GRACE)
+                        if done:
+                            ended = "page"
                 finally:
                     # A dropped call still used what it used, and still
                     # said and ran what it did: the turn it cut is kept.
@@ -334,6 +346,7 @@ async def drive(
                     if beside:
                         beside.cancel()
     except Exception:
+        ended = "error"
         logger.exception("A live call ended with an error")
     finally:
         if usage is not None:
@@ -345,3 +358,11 @@ async def drive(
                 rates=rates,
                 user_id=user_id,
             )
+        logger.info(
+            "Live call ended",
+            ended_by=ended,
+            seconds=round((datetime.now(UTC) - started).total_seconds(), 1),
+            model=model,
+            conversation_id=conversation_id,
+        )
+    return ended

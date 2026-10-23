@@ -60,5 +60,12 @@ and the agent's tool attachments decide what those scripts can call.
 
 Code mode earns its keep when the answer requires combining or computing
 over data. For a single lookup ("what is my balance") a plain tool call is
-one round trip and needs no sandbox. Keep conversational agents unflagged
-and grant `code_mode` to the agents whose job is analysis.
+one round trip and needs no sandbox; turn `code_mode` off for an agent that
+only ever looks one thing up. The default assistant and the finance
+assistant run with it on: their questions ("chart the open errors by
+page") read several things and count them.
+
+While an agent's `code_mode` is on, the sandbox's rules (one whole script
+per answer, top-level `await`, print plain data) follow its own prompt
+(`app/services/ai/domains/chat/code_mode.py`), so a persona never has to
+carry them.

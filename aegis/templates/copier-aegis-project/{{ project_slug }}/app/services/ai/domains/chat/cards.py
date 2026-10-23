@@ -68,9 +68,12 @@ def lookup(name: str) -> CardKind | None:
 
 
 # --- the kinds ---------------------------------------------------------------
-# Ten rows is a top-10, which is what a card in a conversation is for; the
-# long tail belongs in the prose, or on the page that already lists it.
+# Ten rows is a top-10, which is what a ranking in a conversation is for;
+# the long tail belongs in the prose, or on the page that already lists it.
 ROW_CAP = 10
+# A table is read through, not ranked (every component and its status runs
+# past ten); fifty still stops short of a dump.
+TABLE_ROWS = 50
 
 
 # A figure as the assistant writes one: "$1,800.00", "-25%", "(12.5)", "3k".
@@ -84,7 +87,8 @@ class TableRow(BaseModel):
 
 
 class TablePayload(BaseModel):
-    """``columns`` names EVERY column, the label one first."""
+    """``columns`` names EVERY column, the label one first (named only the
+    values, the label column is left unnamed)."""
 
     title: str
     columns: list[str]
@@ -92,6 +96,8 @@ class TablePayload(BaseModel):
 
     @model_validator(mode="after")
     def _columns_match_rows(self) -> TablePayload:
+        if self.rows and all(len(r.values) == len(self.columns) for r in self.rows):
+            self.columns = ["", *self.columns]
         if len(self.columns) < 2:
             raise ValueError("columns: the label column, then one per value")
         wanted = len(self.columns) - 1
@@ -180,7 +186,7 @@ class TrendPayload(BaseModel):
     rows: list[TrendPoint]
 
 
-register_kind("table", TablePayload, rows=ROW_CAP)
+register_kind("table", TablePayload, rows=TABLE_ROWS)
 register_kind("bar", BarPayload, rows=ROW_CAP)
 register_kind("pie", PiePayload, rows=SLICE_CAP)
 register_kind("compare", ComparePayload, rows=0)
@@ -250,29 +256,42 @@ def card_stage() -> Iterator[list[dict[str, Any]]]:
         _staged.reset(token)
 
 
-def attach_cards(trace: list[dict[str, Any]], drawn: list[dict[str, Any]]) -> None:
+def attach_cards(entry: dict[str, Any], drawn: list[dict[str, Any]]) -> None:
     """Move the cards drawn so far onto the trace entry that just finished
-    (the ``run_code`` that drew them), emptying ``drawn``."""
-    if not drawn or not trace:
+    (``record_tool_result``'s: the ``run_code`` that drew them), emptying
+    ``drawn``."""
+    if not drawn:
         return
-    entry = trace[-1]
     entry["component"] = [*card_markers(entry), *drawn]
     drawn.clear()
 
 
 async def draw_card(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
-    """Draw a card under your answer. Compute the data first, then call this
-    from your script with the kind and the data - it displays what you give
-    it and computes nothing itself.
+    """Draw a card under your answer. Asked for a table, chart or graph,
+    draw it here: a table typed into your answer is not a card. Asked for
+    a kind (a table, a pie), draw that kind. Otherwise the numbers your
+    answer rests on choose for you, whatever the subject:
+        two figures to hold against each other -> compare
+        one measure across many dates -> trend
+        three or more, ranked -> bar
+        parts of a whole -> pie
+        rows each carrying several values -> table
+        one figure, or none -> no card, just say it
+
+    Compute the data first, then call this with the kind and the data
+    (from your script, in code mode) - it displays what you give it and
+    computes nothing itself.
 
     Pass data only: layout and colours belong to the kind. Money is integer
     cents (unit "money", the default); use unit "count" for anything else.
-    Keep a card to what it shows and say the rest in prose - a card is a
-    top-10, not a dump - and say what it shows in your answer too, so the
-    reply still reads to someone who cannot see it. One card per answer:
-    drawing again replaces the one before, so fix a card by redrawing it.
+    Keep a card within its kind's rows (below) and say the rest in prose.
+    Your answer says what the card means, not its rows again, and still
+    reads to someone who cannot see it. One card per answer: drawing again
+    replaces the one before, so fix a card by redrawing it.
 
-    Returns {'kind', 'id'}, or {'error'} saying what to fix.
+    Returns {'kind', 'id'}, or {'error'} saying what to fix. An error drew
+    nothing: fix what it says and call again before you answer, never
+    answer as if the card were there.
 
     Kinds, and the payload each takes:
     """

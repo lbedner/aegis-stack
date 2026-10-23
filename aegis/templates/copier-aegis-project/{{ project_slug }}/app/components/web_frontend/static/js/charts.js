@@ -275,8 +275,8 @@ function build(Chart, canvas) {
       plugins: {
         legend: {
           display: kind !== 'line' || data.series.length > 1,
-          position: kind === 'doughnut' ? 'right' : 'top',
-          labels: { color: muted, boxWidth: 10, filter: (item, chart) => !chart.datasets[item.datasetIndex].guide },
+          position: legendPosition(kind, canvas.clientWidth),
+          labels: { color: muted, boxWidth: 10, filter: legendShows },
         },
         tooltip: {
           backgroundColor: token('--b2'),
@@ -301,6 +301,19 @@ function build(Chart, canvas) {
       onClick: drilldownHandler(canvas, data),
     },
   });
+}
+
+// A legend entry, unless it names a guide line. A doughnut's entries are
+// its slices, which carry ``index`` and no ``datasetIndex``.
+function legendShows(item, data) {
+  return !data.datasets[item.datasetIndex]?.guide;
+}
+
+// A doughnut's legend beside it, where there is room: on a phone it
+// squeezes the ring to nothing, so there it goes below.
+function legendPosition(kind, width) {
+  if (kind !== 'doughnut') return 'top';
+  return width < 480 ? 'bottom' : 'right';
 }
 
 // A time series moving on: the points older than the new window leave from
@@ -393,4 +406,4 @@ if (typeof document !== 'undefined') {
   document.addEventListener('theme-changed', () => mount(document));
 }
 
-if (typeof module !== 'undefined') module.exports = { datasets, formatValue, refresh, timeTicks, byteStep };
+if (typeof module !== 'undefined') module.exports = { datasets, formatValue, refresh, timeTicks, byteStep, legendShows, legendPosition };

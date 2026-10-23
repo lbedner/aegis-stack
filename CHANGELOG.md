@@ -9,6 +9,26 @@
 
 ### Added
 
+- **What the app holds, as tools.** `storage` (with the storage
+  component, granted to the default agent): the buckets, or one level of
+  one. `query` (an admin's MCP
+  client may opt in through `MCP_TOOLS`; no agent is granted it): one
+  read-only SQL statement as Overseer's Database > Query runs it, secrets
+  hidden, writes refused, every run audited. Illiana's persona gives a
+  figure only from a tool she called for it.
+
+- **A dropped call says who dropped it.** A live call that ends logs
+  whether the page hung up, the provider closed the session, or it
+  failed, and how long it ran. Overseer's Database > Query and the
+  `query` tool read one outcome for a statement (`db_query.attempt`).
+
+- **Illiana draws cards.** The default agent's grant adds `draw_card`
+  (with a database), so she can put a table, bar, pie, before-and-after
+  or trend under her answer from figures she just read, as a direct call,
+  no code mode needed. A table card takes up to 50 rows (a ranking stays a
+  top ten): every component and its status runs past ten. A card opened
+  larger sits on the page's black, as in the thread, not the dialog's grey.
+
 - **The requests the server kept, read outside Overseer.** One typed read
   (`app/services/system/kept_requests.py`: `RequestSummary`,
   `RequestHops`, frozen Pydantic models) serves `GET /api/v1/requests`
@@ -120,6 +140,15 @@
   optionally in scenes with chapters.
 
 ### Changed
+
+- **Illiana works in code mode, as the finance assistant does.** Her
+  reads run inside one script (`run_code`): fetched, counted and joined
+  there, only the answer printed back, so a question over several reads
+  is one model step. The sandbox's rules (Monty's subset: one whole
+  script, top-level `await`, print plain data) moved out of the finance
+  prompt into `chat/code_mode.py` and ride the setting: added to any
+  agent's prompt, after its persona, while its code mode is on, once. On
+  by default with PydanticAI and a database.
 
 - **A stack keeps its port across restarts.** `make serve` / `poe serve`
   take the host port the last run published (`.env.ports`) while it is
@@ -234,6 +263,30 @@
   parts already show, and what the change touches is folded away.
 
 ### Fixed
+
+- **A tool's result lands on its own call.** Calls to one tool made at
+  once finish in any order, and each result was attached to the latest
+  unanswered call of that name: the trail (Overseer's, and the chat's)
+  showed Auth's question with Documents' answer. Matched by call id now,
+  and a card drawn rides the call that drew it, not the last one listed.
+
+- **A table card takes the columns a model writes.** Columns naming only
+  the values (the label column left out) drew a refusal and a second
+  round trip on most tables; they now draw with the label column
+  unnamed. A kind asked for by name (a table) wins over the kind the
+  numbers would pick.
+
+- **An assistant's every turn no longer waits 30 seconds on SQLite.**
+  Her app map (a memory module) asked whether the caller is an admin
+  while the prompt's render held SQLite's write lock, and the lookup
+  opened a second session, so every turn waited out the lock, then went
+  without the map. The render settles who is asking before it opens its
+  session.
+
+- **A pie card draws.** A doughnut's legend entries are its slices, which
+  carry no dataset index, and the legend filter read a guide flag off
+  `datasets[undefined]`: it threw, and the card stayed blank. Its legend
+  now also goes below the ring where a phone has no room beside it.
 
 - **An async query is counted from the code that awaited it.** The frame
   walk (`app/core/frames.py`) now reads the greenlets an async session's

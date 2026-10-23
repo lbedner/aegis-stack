@@ -1,22 +1,25 @@
 """Overseer's reads as tools (``app.core.tools.load_tools``): what is wrong
 now (``health``), what broke (``errors``), what led up to it (``logs``),
-what a request did (``requests``) and what the app is (``ontology``), for
-an agent or an MCP client. The
-same reads Overseer's pages make, so a tool and a page never disagree.
-Read-only."""
+what a request did (``requests``), what the app is (``ontology``) and what
+it holds (``query`` over its database, ``storage`` over its buckets), for
+an agent or an MCP client. The same reads Overseer's pages make, so a tool
+and a page never disagree. Read-only."""
 
 import asyncio
 from collections import Counter
+import importlib.util
 from typing import Any
 
 from starlette.datastructures import QueryParams
 
 from app.core import replays, runtime
+from app.core import storage as storage_seam
+from app.core.audit import audit_emitter
 from app.core.ontology import Kind, PartNode, graph
 from app.core.ontology.model import Node
 from app.core.ontology.observed import running
 from app.core.ontology.summary import summary
-from app.core.tools import register_tool
+from app.core.tools import current_agent_slug, register_tool
 from app.services.shared.deps import caller_is_admin
 from app.services.system import (
     dry_path,
@@ -33,7 +36,8 @@ from app.services.system.node_now import attention, checks, health_of, now_of
 
 # The most log lines one call returns, newest first.
 MAX_LINES = 500
-# The most nodes (and edges) an ``ontology`` call lists; ``total`` says all.
+# The most a listing tool returns (an ``ontology`` call's nodes and edges,
+# requests, plugins, a bucket's files); each says when there were more.
 MAX_NODES = 100
 # What a node is, in a list.
 BRIEF = {"id", "kind", "name", "owner"}
@@ -236,7 +240,9 @@ async def ontology(
     route: str | None = None,
 ) -> dict[str, Any]:
     """What this app is, read from its code: its tables and the changes to
-    them (an admin also sees parts, routes, jobs, tools and Redis keys). No
+    them (an admin also sees parts, routes, jobs, tools and Redis keys:
+    ``kind="keys"``, every key family the app keeps there, what each holds
+    and its type). No
     arguments: a summary (the app, counts by kind, its tables by owner with
     their links, the changes to them, and an admin's parts and scheduled
     jobs). ``kind``,
@@ -324,6 +330,48 @@ async def plugins(text: str | None = None) -> dict[str, Any]:
     return found.model_dump(mode="json")
 
 
+async def query(sql: str) -> dict[str, Any]:
+    """One read-only SQL statement over the app's database, as Overseer's
+    Database > Query runs it: count, group and join the app's tables
+    (``SELECT kind, count(*) FROM job_execution GROUP BY kind``) rather
+    than guess a figure. The first 200 rows (``more`` says there were
+    more); a write is refused, a secret reads as hidden, a slow one is
+    stopped. Each run is audited. Know a table's columns before you write
+    the statement: ``ontology`` with ``node="object:<table>"`` lists them
+    (``kind="object"`` lists the tables); never read a row to learn them,
+    and never guess one."""
+    from app.services.system import db_query, db_rows  # the database component's
+
+    try:
+        outcome, found = await asyncio.to_thread(db_query.attempt, sql)
+    except db_rows.RowsHiddenError as exc:
+        outcome, found = "refused", str(exc)
+    await audit_emitter.emit(
+        "database.query",
+        actor_id=f"agent:{current_agent_slug.get() or 'tool'}",
+        detail=sql,
+        outcome=outcome,
+    )
+    if isinstance(found, str):
+        raise ValueError(found)
+    return {"columns": found.columns, "rows": found.rows, "more": found.more}
+
+
+async def storage(bucket: str | None = None, prefix: str = "") -> dict[str, Any]:
+    """The app's object storage, as Overseer's Storage browses it: no
+    ``bucket``, the buckets it can see; a ``bucket``, one level of it under
+    ``prefix`` (``docs/``): its folders and its files (key, size, when
+    modified), the first hundred. How the store is doing is the
+    ``health`` tool's."""
+    store: Any = storage_seam.get_storage()
+    if not hasattr(store, "browse"):
+        raise ValueError("Files are kept on the filesystem here, not in a bucket.")
+    if bucket is None:
+        return {"buckets": [b["name"] for b in await store.buckets()]}
+    level = await store.browse(bucket, prefix, MAX_NODES)
+    return {"bucket": bucket, "prefix": prefix, **level}
+
+
 register_tool(
     "health",
     health,
@@ -368,3 +416,19 @@ register_tool(
     ),
     effect="read",
 )
+if importlib.util.find_spec("app.services.system.db_query"):
+    register_tool(
+        "query",
+        query,
+        description="What the database holds: one read-only SQL statement",
+        effect="read",
+        admin=True,
+    )
+if importlib.util.find_spec("app.components.storage"):
+    register_tool(
+        "storage",
+        storage,
+        description="What the buckets hold: the buckets, or one level of one",
+        effect="read",
+        admin=True,
+    )

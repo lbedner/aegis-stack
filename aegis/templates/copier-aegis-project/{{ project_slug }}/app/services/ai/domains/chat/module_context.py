@@ -20,9 +20,11 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.db import get_async_session
 from app.core.log import logger
+from app.core.tools import current_admin
 from app.services.ai.domains.chat import queries
 from app.services.ai.domains.chat.fetchers import FetchContext, run_fetcher
 from app.services.ai.models.agents import MemoryModule
+from app.services.shared.deps import caller_is_admin
 
 # Rough chars-per-token heuristic for modules without an explicit
 # token_estimate. Deliberately conservative and cheap; authors who care
@@ -128,16 +130,26 @@ async def render_memory_modules(
         return None
 
     if session is None:
-        # Open ONE session for the whole render so every module's fetcher
-        # reuses it (via FetchContext.session) instead of opening its own.
-        async with get_async_session() as owned_session:
-            return await render_memory_modules(
-                module_slugs,
-                user_id=user_id,
-                token_budget=token_budget,
-                session=owned_session,
-                subject=subject,
-            )
+        # Who is asking, settled before the render's session holds SQLite's
+        # write lock: a fetcher asking then (the app map) would open a
+        # second session and wait it out.
+        settled = None
+        if current_admin.get() is None:
+            settled = current_admin.set(await caller_is_admin())
+        try:
+            # ONE session for the whole render, so every module's fetcher
+            # reuses it (via FetchContext.session) instead of opening its own.
+            async with get_async_session() as owned_session:
+                return await render_memory_modules(
+                    module_slugs,
+                    user_id=user_id,
+                    token_budget=token_budget,
+                    session=owned_session,
+                    subject=subject,
+                )
+        finally:
+            if settled is not None:
+                current_admin.reset(settled)
 
     modules = await _load_modules(session, module_slugs)
 

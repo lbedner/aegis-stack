@@ -6813,7 +6813,7 @@
 <p><strong>Illiana</strong> is the conversational AI interface that ships with every AI-enabled Aegis Stack project. She is not a generic chatbot. She has live awareness of your running system through context injection, and she can search your codebase when RAG is enabled.</p>
 <p>She is not required to use Aegis Stack, and nothing in the system depends on her being present. When enabled, she becomes another way to understand what your application is doing and why, alongside the CLI and Overseer.</p>
 <h2 id="what-makes-her-different">What Makes Her Different</h2>
-<p>Illiana answers from what your system is actually doing right now, not what it could theoretically do. She reads it when asked, through her tools, rather than carrying it in every prompt: her system prompt holds nothing live, so a provider's prompt cache serves it turn to turn.</p>
+<p>Illiana answers from what your system is actually doing right now, not what it could theoretically do. She works in code mode (with PydanticAI): her reads run inside one short script that fetches, counts and joins them, and only the answer comes back to her. She reads it when asked, through her tools, rather than carrying it in every prompt: her system prompt holds nothing live, so a provider's prompt cache serves it turn to turn.</p>
 <table>
 <thead>
 <tr>
@@ -6847,6 +6847,16 @@
 <td><strong>Requests tool</strong></td>
 <td>The requests the server answered, each hop by hop at its real timing, named as the dry path names it (admins)</td>
 <td>"Why was that request slow?" "What did the 401 do?"</td>
+</tr>
+<tr>
+<td><strong>Storage tool</strong></td>
+<td>What the buckets hold: the buckets, or one level of one (admins)</td>
+<td>"What's in the my-app bucket?"</td>
+</tr>
+<tr>
+<td><strong>Cards</strong></td>
+<td>A table, bar, pie, before-and-after or trend drawn under her answer, from figures she just read (<code>draw_card</code>; with a database)</td>
+<td>"Chart my spend by vendor this week."</td>
 </tr>
 <tr>
 <td><strong>Plugins tool</strong></td>

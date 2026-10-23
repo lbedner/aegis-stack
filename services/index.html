@@ -6955,7 +6955,11 @@ its file and the text on its line, so code added above old debt does
 not make it new. Illiana gives the verdict, last: blocked when a new
 place breaks a rule that holds a change (an enforced rule, or a gated
 one, whose known debt stands while new breaches block: the service
-standard's <code>takes-session</code> is gated), else clear. It always exits 0
+standard's <code>takes-session</code> is gated, as is the async pattern's
+<code>off-the-loop</code>: an async function hands blocking work, such as the
+system model's build, <code>time.sleep</code> or a subprocess, to a thread with
+<code>await asyncio.to_thread(...)</code> rather than calling it on the event
+loop every request shares; the CLI's commands are exempt), else clear. It always exits 0
 but under <code>--strict</code>, which exits 1 when blocked. Under GitHub Actions
 each new finding is an annotation on the pull request's diff, an
 error (red) where it blocks and a warning where it is advisory, titled

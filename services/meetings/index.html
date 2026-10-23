@@ -6782,7 +6782,7 @@
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>my-app<span class="w"> </span>secrets<span class="w"> </span><span class="nb">set</span><span class="w"> </span>MEETINGS_BOT_CALENDAR_SECRET
 </span></code></pre></div>
 <p>The address reads everything on that calendar, so it is kept like the sign-in. Every minute the scheduler reads each agent's calendar again and keeps its meetings, from a month back to three months ahead, one row per time each happens (a repeating meeting expanded, with the times moved or cancelled on their own followed), with the link to join from the invite: the conference Google attached, or the first Meet, Teams or Zoom link in its location or description. A meeting taken off the calendar is dropped, unless the agent was already sent into it. An agent whose calendar cannot be read keeps what it had.</p>
-<p><strong>Invite the agent, it comes.</strong> Ask the organizer to add the agent's address as a guest on the event (a recurring one once, for every time it happens). Up to a minute before each start, the agent is sent in once, as if sent from the Meetings page, and not again if that meeting is deleted: never into a meeting cancelled, one with no link, one on a platform the bot does not join yet (Teams, Zoom: it shows on the calendar all the same), or one already over. A meeting never sent into is dropped once it is a month behind. Nobody pressed send, and the people in it usually have no account here, so the meeting is owned by the first on the invite who does, the organizer first, then each attendee; when nobody does, it is nobody's, and Overseer shows it.</p>
+<p><strong>Invite the agent, it comes.</strong> Ask the organizer to add the agent's address as a guest on the event (a recurring one once, for every time it happens). Up to a minute before each start, the agent is sent in once, as if sent from the Meetings page, and not again if that meeting is deleted: never into a meeting cancelled, one with no link, one on a platform the bot does not join yet (Teams, Zoom: it shows on the calendar all the same), or one already over. A meeting never sent into is dropped once it is a month behind. Nobody pressed send, and the people in it usually have no account here, so the meeting is owned by the first on the invite who does, the organizer first, then each attendee; when nobody does, it goes to the agent's default owner (set in Overseer &gt; Meetings &gt; Agents), and without one it is nobody's. Overseer shows a meeting nobody owns, and its drawer gives it to someone: the people in it become the ones the new owner already knows by those names, and its action items follow them. Both need auth; without it every meeting is the install's.</p>
 </div>
 <h2 id="what-you-get">What You Get</h2>
 <ul>
@@ -7056,12 +7056,24 @@
 <td>Every agent, the first first: who it is, its sign-in (<code>Signed in</code>, <code>Signed out</code>, <code>Not signed in</code>), and the ids of the meetings it is in now</td>
 </tr>
 <tr>
+<td><code>PUT /api/v1/meetings/admin/agents/{name}/owner</code></td>
+<td>Who owns a meeting the agent joins from its calendar when nobody on the invite has an account here (<code>{"user_id": 3}</code>, or <code>null</code> for nobody); 422 for an id nobody here has</td>
+</tr>
+<tr>
+<td><code>GET /api/v1/meetings/admin/owners</code></td>
+<td>Everyone a meeting can be given to, by email (<code>id</code>, <code>email</code>); empty without auth</td>
+</tr>
+<tr>
 <td><code>GET /api/v1/meetings/admin/calendar?first=&amp;last=&amp;tz=&amp;agent=</code></td>
 <td>Every agent's meetings (<code>agent</code>'s only, when named) from <code>first</code> to <code>last</code>, whole days in time zone <code>tz</code> (default UTC), up to six weeks: each with its agent and color, title, start and end, link, organizer, everyone invited (<code>emails</code>), where it stands (<code>state</code>: the call's status once the agent was sent in, else <code>upcoming</code>, <code>missed</code>, <code>cancelled</code>, <code>no_link</code>, <code>cannot_join</code> or <code>sent</code>) and the meeting it became</td>
 </tr>
 <tr>
 <td><code>GET /api/v1/meetings/admin/calendar/{event_id}?tz=</code></td>
 <td>One meeting on a calendar: all of the above, what its organizer wrote (<code>description</code>, Google's join and dial-in lines left out), and who is invited (<code>invited</code>: each email, with the name and color of whoever spoke on its link and plainly is them)</td>
+</tr>
+<tr>
+<td><code>POST /api/v1/meetings/admin/{id}/owner</code></td>
+<td>Give a meeting nobody owns to someone (<code>{"user_id": 3}</code>), its people and action items with it; 409 if someone owns it, 422 for an id nobody here has</td>
 </tr>
 <tr>
 <td><code>GET /api/v1/meetings/admin/search?q=</code></td>

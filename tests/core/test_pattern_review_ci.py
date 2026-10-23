@@ -1,6 +1,7 @@
-"""The conformance job finds Illiana's earlier comment by its marker, and
-skips posting a review with nothing new by its text: both written in
-``pattern_review``, so a reworded one cannot leave CI posting twice."""
+"""The conformance job finds Illiana's earlier comment by its marker,
+written in ``pattern_review``, so a reworded one cannot leave CI posting
+twice; and it posts every review she writes, her seal of approval on a
+change with nothing new included."""
 
 import re
 from pathlib import Path
@@ -20,7 +21,10 @@ def _constant(name: str) -> str:
     return found.group(1)
 
 
-def test_the_workflow_reads_the_reviews_own_words() -> None:
-    workflow = WORKFLOW.read_text()
-    assert _constant("MARKER") in workflow
-    assert _constant("NOTHING") in workflow
+def test_the_workflow_finds_her_comment_by_its_marker() -> None:
+    assert _constant("MARKER") in WORKFLOW.read_text()
+
+
+def test_the_workflow_posts_her_seal_too() -> None:
+    """Nothing in the job holds back a review by what it says."""
+    assert _constant("SEAL") not in WORKFLOW.read_text()

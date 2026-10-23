@@ -286,7 +286,7 @@ jobs:
           [ -s "$review" ] || exit 0
           if [ -n "$id" ]; then
             gh api -X PATCH "repos/$REPO/issues/comments/$id" -F body=@"$review" > /dev/null
-          elif ! grep -qF "No new findings against the known debt." "$review"; then
+          else
             gh api "repos/$REPO/issues/$PR/comments" -F body=@"$review" > /dev/null
           fi
 

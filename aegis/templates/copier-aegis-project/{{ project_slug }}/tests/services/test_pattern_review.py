@@ -52,13 +52,16 @@ def test_every_finding_is_listed_whatever_she_says(fresh: list) -> None:  # type
     assert text.startswith(pattern_review.MARKER)
 
 
-async def test_nothing_new_asks_no_one(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_nothing_new_gets_her_seal_and_asks_no_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     async def never(*_: object) -> None:
         raise AssertionError("no model call without a new finding")
 
     monkeypatch.setattr(pattern_review, "_ask", never)
     text = await pattern_review.review([], touched="")
-    assert pattern_review.NOTHING in text
+    assert "**Clear.**" in text
+    assert pattern_review.SEAL in text
 
 
 async def test_she_is_asked_with_the_facts(
@@ -144,7 +147,7 @@ async def test_each_review_keeps_the_ones_before_it(
     current, _, earlier = third.partition("#### Earlier reviews")
     assert "review of `ccccccc`" in current
     assert earlier.index("review of `bbbbbbb`") < earlier.index("review of `aaaaaaa`")
-    assert pattern_review.NOTHING in earlier  # the clean one, kept
+    assert pattern_review.SEAL in earlier  # the clean one, kept
     assert earlier.count("Move it into queries.py.") == 1  # the first, as written
     assert third.startswith(pattern_review.MARKER)
 

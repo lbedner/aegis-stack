@@ -5,8 +5,9 @@ The facts are the findings: every one is listed from the check, with its
 place, rule and what to do, and her words sit beside each. What she sees
 past them is set apart as opinion, so she can neither invent a finding nor
 drop one. One call, as its agent row writes (``writer``, ``REVIEWER``):
-no tools; none when nothing is new, or when the findings are the ones an
-earlier review (``fingerprint``) already covered. One comment tells the
+no tools; none when nothing is new (her seal of approval, ``SEAL``,
+instead), or when the findings are the ones an earlier review
+(``fingerprint``) already covered. One comment tells the
 whole sequence: the latest review on top, each earlier one below it."""
 
 import json
@@ -22,7 +23,8 @@ from app.services.system.pattern_check import Spot, breaks
 # The comment's first line, how CI finds it again to edit; its second,
 # which findings it covered.
 MARKER = "<!-- illiana-review -->"
-NOTHING = "No new findings against the known debt."
+# A change with nothing new: her seal of approval, posted like any review.
+SEAL = "Nothing new against any rule I hold. This has my seal of approval."
 # What stands for her write-up when the model does not answer: the verdict
 # and every place are the rules', so a change is reviewed either way.
 UNSAID = (
@@ -184,7 +186,7 @@ async def review(
     if previous and _covered(previous) == fingerprint(fresh, touched):
         return ""
     if not fresh:
-        now = markdown([], Review(summary=NOTHING), touched, commit)
+        now = markdown([], Review(summary=SEAL), touched, commit)
     else:
         shown = fresh[:MOST_LISTED]
         try:

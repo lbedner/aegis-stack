@@ -154,6 +154,11 @@
 
 ### Changed
 
+- **Illiana signs off on a clean change.** A pull request with nothing
+  new against her rules gets her review too, her seal of approval in
+  place of silence: "Nothing new against any rule I hold. This has my
+  seal of approval."
+
 - **Only what a click acts on lights up.** The teal hover border marks a
   card you can click (a stat tile with a link, a fold's header, a landing
   feature) and nothing else; a card the pointer merely passes over stays

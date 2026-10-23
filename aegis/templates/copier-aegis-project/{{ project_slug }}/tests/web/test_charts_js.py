@@ -219,3 +219,33 @@ def test_a_stacked_chart_fills_each_line_on_the_one_below() -> None:
     assert (server["color"], server["fill"]) == ("--aegis-chart-3", "origin")
     assert (cache["color"], cache["fill"]) == ("--aegis-chart-6", "-1")
     assert host["fill"] is False and host["dash"] and host["stack"] == "dashed"
+
+
+LEGEND = """
+const c = require(CHARTS_JS);
+const data = { datasets: [{ label: 'Spent', data: [3, 2] }, { label: 'Limit', guide: true }] };
+console.log(JSON.stringify({
+  slice: c.legendShows({ text: 'Voice', index: 0 }, data),
+  line: c.legendShows({ text: 'Spent', datasetIndex: 0 }, data),
+  guide: c.legendShows({ text: 'Limit', datasetIndex: 1 }, data),
+  phone: c.legendPosition('doughnut', 360),
+  wide: c.legendPosition('doughnut', 800),
+  bar: c.legendPosition('bar', 360),
+}));
+"""
+
+
+def test_a_doughnut_legend_names_its_slices() -> None:
+    """A doughnut's legend items carry ``index``, not ``datasetIndex``:
+    reading a guide flag off ``datasets[undefined]`` threw, and the chart
+    (a pie card) stayed blank. A guide line is still left out. Beside the
+    chart a legend squeezes a phone's doughnut to nothing, so there it goes
+    below."""
+    assert run(LEGEND, CHARTS_JS=CHARTS_JS) == {
+        "slice": True,
+        "line": True,
+        "guide": False,
+        "phone": "bottom",
+        "wide": "right",
+        "bar": "top",
+    }

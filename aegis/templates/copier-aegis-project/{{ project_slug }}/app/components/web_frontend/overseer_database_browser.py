@@ -475,13 +475,11 @@ async def query(sql: str) -> tuple[str, dict[str, Any]]:
     from app.services.system import db_query, db_rows  # with the database component
 
     try:
-        found = await asyncio.to_thread(db_query.run, sql)
+        outcome, found = await asyncio.to_thread(db_query.attempt, sql)
     except db_rows.RowsHiddenError:
         raise HTTPException(status_code=404) from None
-    except db_query.QueryError as exc:
-        return "refused", {"query_error": str(exc)}
-    except db_rows.ReadTooSlowError as exc:
-        return "stopped", {"query_error": str(exc)}
+    if isinstance(found, str):
+        return outcome, {"query_error": found}
     shown = counted(len(found.rows), "row")
     if found.more:
         shown = f"the first {format_number(db_query.LIMIT)} rows"

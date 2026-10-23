@@ -16,6 +16,7 @@ from app.services.ai.domains.chat.agent_loader import AgentConfig, agent_capabil
 {% else %}
 from app.services.ai.domains.chat.agent_loader import AgentConfig
 {% endif %}
+from app.services.ai.domains.chat.code_mode import with_sandbox_rules
 from app.services.ai.domains.chat.tools import resolve_tools
 from app.services.ai.domains.chat.prompts import (
     DEFAULT_SYSTEM_PROMPT,
@@ -83,12 +84,15 @@ class PromptMixin(ContextsMixin):
 
     def _agent_persona(self, agent_config: AgentConfig | None) -> str | None:
         """The agent row's prompt, or None (no agent) for the default. A row
-        still holding ``LEGACY_SYSTEM_PROMPT`` gets the default it meant."""
+        still holding ``LEGACY_SYSTEM_PROMPT`` gets the default it meant.
+        In code mode the sandbox's rules follow it, in the prompt's stable
+        head, as the chat-kit runtime has them."""
         if agent_config is None:
             return None
-        if agent_config.system_prompt == LEGACY_SYSTEM_PROMPT:
-            return DEFAULT_SYSTEM_PROMPT
-        return agent_config.system_prompt
+        persona = agent_config.system_prompt
+        if persona == LEGACY_SYSTEM_PROMPT:
+            persona = DEFAULT_SYSTEM_PROMPT
+        return with_sandbox_rules(persona, code_mode=agent_config.code_mode)
 
     def _system_prompt_for(
         self,

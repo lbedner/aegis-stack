@@ -8,7 +8,7 @@ She is not required to use Aegis Stack, and nothing in the system depends on her
 
 ## What Makes Her Different
 
-Illiana answers from what your system is actually doing right now, not what it could theoretically do. She reads it when asked, through her tools, rather than carrying it in every prompt: her system prompt holds nothing live, so a provider's prompt cache serves it turn to turn.
+Illiana answers from what your system is actually doing right now, not what it could theoretically do. She works in code mode (with PydanticAI): her reads run inside one short script that fetches, counts and joins them, and only the answer comes back to her. She reads it when asked, through her tools, rather than carrying it in every prompt: her system prompt holds nothing live, so a provider's prompt cache serves it turn to turn.
 
 | Where | What She Knows | Example Questions |
 |---------|---------------|-------------------|
@@ -17,6 +17,8 @@ Illiana answers from what your system is actually doing right now, not what it c
 | **Catalog tool** | Available models, prices, context windows | "What's the cheapest model with vision?" |
 | **Errors tool** | What broke: errors grouped into issues by where they come from, each with its traceback (admins) | "Which service has the most open errors?" |
 | **Requests tool** | The requests the server answered, each hop by hop at its real timing, named as the dry path names it (admins) | "Why was that request slow?" "What did the 401 do?" |
+| **Storage tool** | What the buckets hold: the buckets, or one level of one (admins) | "What's in the my-app bucket?" |
+| **Cards** | A table, bar, pie, before-and-after or trend drawn under her answer, from figures she just read (`draw_card`; with a database) | "Chart my spend by vendor this week." |
 | **Plugins tool** | The plugins this app has, and those it could add from the directory at aegis-stack.io, with what each is, its downloads, stars and the commands that add it (admins) | "What plugins could I add for scraping?" |
 | **RAG** | Your codebase (when indexed) | "How does auth work in this project?" |
 

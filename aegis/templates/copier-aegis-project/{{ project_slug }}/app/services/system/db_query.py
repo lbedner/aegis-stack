@@ -125,6 +125,18 @@ def run(
     )
 
 
+def attempt(sql: str) -> tuple[str, Answer | str]:
+    """``sql`` run (``run``) and how it went, for the audit: ``ran`` with its
+    answer, else ``refused`` or ``stopped`` with why. Rows hidden here
+    (``RowsHiddenError``) is no attempt, and raises."""
+    try:
+        return "ran", run(sql)
+    except QueryError as exc:
+        return "refused", str(exc)
+    except db_rows.ReadTooSlowError as exc:
+        return "stopped", str(exc)
+
+
 def _vet(
     conn: Connection,
     one: str,

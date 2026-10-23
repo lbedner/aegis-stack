@@ -29,6 +29,7 @@ from app.core.log import logger
 from app.services.ai.domains.chat import queries
 from app.services.ai.domains.chat.builtin_fetchers import APP_MAP
 from app.services.ai.domains.chat.chat_kit import ContextProvider, ToolChatAgent
+from app.services.ai.domains.chat.code_mode import with_sandbox_rules
 from app.services.ai.domains.chat.module_context import MemoryModuleContextProvider
 from app.services.ai.domains.chat.prompts import get_default_system_prompt
 from app.services.ai.domains.chat.tools import resolve_tools
@@ -91,17 +92,25 @@ def default_agent_config() -> AgentConfig:
         temperature=settings.AI_TEMPERATURE,
         max_tokens=settings.AI_MAX_TOKENS,
         # What the app is, read from its code: its tables for anyone, the
-        # rest for an admin; the model catalog, where there is one; and, for
-        # an admin, the app's health, its errors, the requests it answered
-        # and its plugins. The seed grants these to the row.
+        # rest for an admin; the model catalog and a card under the answer,
+        # where there is a database; and, for an admin, the app's health, its
+        # errors, the requests it answered, what its buckets hold and its
+        # plugins. The seed grants these to the row.
+        # Her reads run inside one script (``run_code``): fetched, counted
+        # and joined there, only the answer printed back.
+        code_mode={{ "True" if ai_framework == "pydantic-ai" and ai_backend != "memory" else "False" }},
         tool_names=(
             "ontology",
 {%- if ai_backend != "memory" %}
             "catalog",
+            "draw_card",
 {%- endif %}
             "health",
             "errors",
             "requests",
+{%- if include_storage %}
+            "storage",
+{%- endif %}
             "plugins",
         ),
 {%- if ai_backend != "memory" %}
@@ -336,7 +345,9 @@ def build_chat_agent(
     return ToolChatAgent(
         model=model,
         model_name=model_name,
-        instructions=config.system_prompt,
+        instructions=with_sandbox_rules(
+            config.system_prompt, code_mode=config.code_mode
+        ),
         deps_type=deps_type,
         tools=resolve_tools(config.tool_names),
         context_providers=providers,

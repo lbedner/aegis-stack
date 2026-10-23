@@ -294,4 +294,47 @@ class TestProvider:
         provider = MemoryModuleContextProvider(("rules",))
 
         assert await provider.build(object()) is None
+
+
+class TestTheCaller:
+    async def test_who_asks_is_settled_before_the_render_holds_a_session(
+        self, session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A fetcher asking whether the caller is an admin (the app map)
+        finds it settled: looked up inside the render's session, it would
+        open a second one and wait out the first's write lock (SQLite)."""
+        from contextlib import asynccontextmanager
+
+        from app.core.tools import acting_as, current_admin
+        import app.services.ai.domains.chat.module_context as module_context_module
+
+        opened: list[str] = []
+        seen: list[bool | None] = []
+
+        @asynccontextmanager
+        async def fake_session() -> AsyncGenerator[AsyncSession]:
+            opened.append("render")
+            yield session
+
+        async def admin_lookup() -> bool:
+            opened.append("lookup")
+            return True
+
+        async def asks(ctx: FetchContext) -> str | None:
+            seen.append(current_admin.get())
+            return "MAP"
+
+        monkeypatch.setattr(module_context_module, "get_async_session", fake_session)
+        monkeypatch.setattr(module_context_module, "caller_is_admin", admin_lookup)
+        register_fetcher("asks", asks)
+        await create_memory_module(
+            slug="map", name="Map", fetch_function="asks", session=session
+        )
+
+        with acting_as(1, "assistant"):
+            await render_memory_modules(["map"], user_id="u1")
+            assert current_admin.get() is None  # put back as it was
+
+        assert opened == ["lookup", "render"]
+        assert seen == [True]
 {% endif %}

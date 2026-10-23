@@ -184,3 +184,38 @@ def test_what_the_change_touches_is_folded_away(fresh: list) -> None:  # type: i
     assert "<summary>What this change touches</summary>" in text
     assert "### What this change touches" not in text
     assert text.count("`service:notes`") == 1
+
+
+def test_her_verdict_leads_and_is_the_checks_not_hers(
+    fresh: list,  # type: ignore[type-arg]
+) -> None:
+    """Blocked or clear is decided by the rules (``Finding.blocking``), said
+    first; what she writes cannot soften it."""
+    said = Review(summary="Nothing to worry about.", notes=())
+    text = pattern_review.markdown(fresh, said, touched="")
+    lines = [ln for ln in text.splitlines() if ln and not ln.startswith("<!--")]
+    assert lines[1].startswith("**Blocked.** 1 new place breaks")
+    assert "· blocks" in text
+    advisory = [
+        s._replace(finding=s.finding.model_copy(update={"severity": "warn"}))
+        for s in fresh
+    ]
+    clear = pattern_review.markdown(advisory, said, touched="")
+    assert "**Clear.**" in clear and "· advisory" in clear
+
+
+async def test_her_review_stands_when_the_model_does_not_answer(
+    fresh: list,  # type: ignore[type-arg]
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The verdict and every place, in the rules' own words: a model down
+    never leaves a change unreviewed."""
+
+    async def down(facts: str) -> Review:
+        raise RuntimeError("model unavailable")
+
+    monkeypatch.setattr(pattern_review, "_ask", down)
+    text = await pattern_review.review(fresh, touched="")
+    assert "**Blocked.**" in text and f"`{STORE}:2`" in text
+    assert "One place, batched." in text
+    assert pattern_review.UNSAID in text

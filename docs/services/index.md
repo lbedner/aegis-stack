@@ -216,16 +216,22 @@ belongs - so it names each domain and what it owns.
     in `.patterns-baseline.json`, the known debt, which `--update` writes
     and afterwards only shrinks. A place is known by its rule, its part,
     its file and the text on its line, so code added above old debt does
-    not make it new. It is advisory, always exiting 0; `--strict` exits 1
-    on a new breach of an enforced rule, for whoever chooses to block on
-    it. Under GitHub Actions each new finding is printed as an annotation
-    on the pull request's diff, and with changed files given, what they
-    touch goes in the job summary beside the new findings. No CI job
+    not make it new. Illiana gives the verdict, last: blocked when a new
+    place breaks a rule that holds a change (an enforced rule, or a gated
+    one, whose known debt stands while new breaches block: the service
+    standard's `takes-session` is gated), else clear. It always exits 0
+    but under `--strict`, which exits 1 when blocked. Under GitHub Actions
+    each new finding is an annotation on the pull request's diff, an
+    error (red) where it blocks and a warning where it is advisory, titled
+    with her name; with changed files given, what they touch and her
+    verdict, each place marked as blocking or advisory, go in the job
+    summary. No CI job
     ships with the app; its `CLAUDE.md` asks a coding agent to run the
     check before it finishes.
     `patterns review` is Illiana's write-up of the same new findings, as
-    Markdown for a pull request: every finding listed from the check with
-    her note on it, what the change touches, and anything she would add
+    Markdown for a pull request: her verdict first (blocked or clear, the
+    rules', never hers), every finding listed from the check with her note
+    on it, what the change touches, and anything she would add
     set apart as opinion, so she can neither invent a finding nor drop
     one. It is one call, no tools, as its own agent (`pr-reviewer`,
     seeded with her persona and the reviewing, so its model and how long

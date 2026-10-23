@@ -9,6 +9,19 @@
 
 ### Added
 
+- **Illiana holds the line on a pull request.** `patterns check` ends
+  with her verdict: blocked when a new place breaks a rule that holds a
+  change, else clear. A rule can be gated: its known debt stands while a
+  new breach blocks (`takes-session`, the second session that waits out
+  SQLite's write lock, is). Blocking places are red annotations titled
+  with her name, advisory ones yellow; the job summary marks each. Her
+  review leads with the same verdict (the rules', never the model's), and
+  posts without the model: the verdict and every place in the rules' own
+  words. In aegis-stack's CI the job is named "Illiana", runs `--strict`
+  and fails when she blocks, after her comment is posted; with a
+  `ILLIANA_APP_ID` and `ILLIANA_APP_PRIVATE_KEY` she posts as her own
+  GitHub App, her name and face, instead of the Actions bot.
+
 - **What the app holds, as tools.** `storage` (with the storage
   component, granted to the default agent): the buckets, or one level of
   one. `query` (an admin's MCP

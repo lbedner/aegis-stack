@@ -3,8 +3,10 @@ in ``.patterns-baseline.json`` (``check``).
 
 Each place a finding shows (one ``path:line`` of its evidence) is known by
 its rule, its part, its file and the text on that line, not the line's
-number: code added above known debt does not make it new. Advisory: the
-exit code is 0 unless ``strict`` and a new place breaks an enforced rule.
+number: code added above known debt does not make it new. Illiana gives
+the verdict, last: blocked when a new place breaks a rule that holds a
+change (an enforced or a gated one, ``Finding.blocking``), else clear.
+The exit code is 0 unless ``strict`` and blocked.
 Under GitHub Actions each new place is a workflow command, which GitHub
 shows on the pull request's diff; with ``GITHUB_STEP_SUMMARY`` set, what
 the change touches and its new findings are written there too."""
@@ -55,18 +57,36 @@ def check(
         baseline.write_text(json.dumps(body, indent=2) + "\n")
         return f"{BASELINE}: {keep.total()} known", 0
     fresh = _new(here, before)
+    blocked = sum(s.finding.blocking for s in fresh)
     lines = [
         _annotation(s) if env.get("GITHUB_ACTIONS") else f"{s.at}: {_line(s)}"
         for s in fresh
     ]
-    lines.append(f"{len(fresh)} new; {before.total()} known in {BASELINE}")
+    lines.append(_verdict(blocked, len(fresh) - blocked, before.total()))
     if summary := env.get("GITHUB_STEP_SUMMARY"):
-        rows = [f"- `{s.at}` {_line(s)}" for s in fresh]
+        rows = [f"- {_weight(s)} `{s.at}` {_line(s)}" for s in fresh]
+        heading = f"### Illiana: {'blocked' if blocked else 'clear'}"
         with open(summary, "a") as out:
             head = [touched] if touched else []
-            out.write("\n".join([*head, "### New findings", "", *rows, ""]))
-    failed = strict and any(s.finding.severity == "error" for s in fresh)
-    return "\n".join(lines), int(failed)
+            out.write("\n".join([*head, heading, "", *rows, ""]))
+    return "\n".join(lines), int(strict and blocked > 0)
+
+
+def _weight(spot: Spot) -> str:
+    return "**Blocks**" if spot.finding.blocking else "Advisory"
+
+
+def _verdict(blocked: int, advisory: int, known: int) -> str:
+    """Illiana's verdict on the new places, with the known debt beside it."""
+    tail = f"{advisory} advisory; {known} known in {BASELINE}"
+    if not blocked:
+        return f"Illiana: clear. {tail}"
+    return f"Illiana: blocked. {breaks(blocked)} a rule that holds a change; {tail}"
+
+
+def breaks(blocked: int) -> str:
+    """How many new places break a rule that holds a change, as said."""
+    return "1 new place breaks" if blocked == 1 else f"{blocked} new places break"
 
 
 def new_spots(found: Iterable[Finding], index: Index) -> list[Spot]:
@@ -111,7 +131,9 @@ def _annotation(spot: Spot) -> str:
     shows only the message for each past GitHub's first ten."""
     f, at = spot.finding, f"{spot.path}:{spot.line}"
     where = f"file={_escape(spot.path, True)},line={spot.line}"
-    return f"::warning {where},title={_escape(f.check, True)}::" + _escape(
+    level = "error" if f.blocking else "warning"
+    title = _escape(f"Illiana: {f.title}", True)
+    return f"::{level} {where},title={title}::" + _escape(
         f"{at} {f.check}: {f.why} {f.action}"
     )
 

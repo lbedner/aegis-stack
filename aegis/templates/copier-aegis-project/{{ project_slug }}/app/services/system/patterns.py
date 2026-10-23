@@ -59,6 +59,9 @@ class Rule:
     # Enforced rules are held at zero violations by the test suite; the
     # rest are reported on the page and left to judgement.
     enforced: bool = False
+    # A gated rule's known debt stands, but a new place breaking it blocks
+    # a change (``patterns check --strict``), as an enforced rule's does.
+    gate: bool = False
     # The ``path:line``s that show an instance breaks it (where the
     # instance is, when None), and what to do about it (its title, when "").
     evidence: Callable[[Any], list[str]] | None = None

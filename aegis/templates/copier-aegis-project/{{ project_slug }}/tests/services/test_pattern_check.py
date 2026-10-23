@@ -11,11 +11,12 @@ STORE = "app/services/notes/store.py"
 READ = "    return await session.exec(q)\n"
 
 
-def _finding(*evidence: str, severity: str = "error") -> Finding:
+def _finding(*evidence: str, severity: str = "error", gated: bool = False) -> Finding:
     return Finding(
         check="parts.reads-in-queries",
         subject="service:notes",
         severity=severity,  # type: ignore[arg-type]
+        gated=gated,
         title="Reads live in queries",
         why="One place, batched.",
         evidence=evidence,
@@ -56,19 +57,46 @@ def test_advisory_unless_strict_and_strict_only_on_an_error(tmp_path: Path) -> N
     assert check([warn], index, strict=True)[1] == 0
 
 
+def test_a_gated_rule_blocks_a_new_place_while_its_debt_stands(
+    tmp_path: Path,
+) -> None:
+    """Advisory on the page (a warning, its known debt allowed), yet a new
+    place breaking it blocks the change under ``strict``."""
+    write_tree(tmp_path, {STORE: READ + READ})
+    index = _at(tmp_path)
+    check([_finding(f"{STORE}:1", severity="warn", gated=True)], index, update=True)
+    known = _finding(f"{STORE}:1", severity="warn", gated=True)
+    assert check([known], index, strict=True)[1] == 0
+    fresh = _finding(f"{STORE}:1", f"{STORE}:2", severity="warn", gated=True)
+    out, code = check([fresh], index, strict=True)
+    assert code == 1
+    assert out.splitlines()[-1].startswith("Illiana: blocked. 1 new place breaks")
+
+
+def test_illiana_says_her_verdict_last(tmp_path: Path) -> None:
+    write_tree(tmp_path, {STORE: READ})
+    warn = _finding(f"{STORE}:1", severity="warn")
+    out, _ = check([warn], _at(tmp_path))
+    assert out.splitlines()[-1].startswith("Illiana: clear.")
+
+
 def test_under_github_actions_each_is_annotated_and_summarised(
     tmp_path: Path,
 ) -> None:
     write_tree(tmp_path, {STORE: READ})
     summary = tmp_path / "summary.md"
     env = {"GITHUB_ACTIONS": "true", "GITHUB_STEP_SUMMARY": str(summary)}
-    found = [_finding(f"{STORE}:1")]
+    found = [_finding(f"{STORE}:1"), _finding(f"{STORE}:1", severity="warn")]
     out, _ = check(found, _at(tmp_path), env=env, touched="### Touches\n")
-    assert out.splitlines()[0] == (
-        f"::warning file={STORE},line=1,title=parts.reads-in-queries::"
+    blocking, advisory = out.splitlines()[:2]
+    assert advisory.startswith("::warning ")
+    assert blocking == (
+        f"::error file={STORE},line=1,title=Illiana%3A Reads live in queries::"
         f"{STORE}:1 parts.reads-in-queries: One place, batched. "
         "Move the read into queries.py."
     )
     written = summary.read_text()
     assert written.startswith("### Touches")
-    assert f"`{STORE}:1`" in written
+    assert "### Illiana: blocked" in written
+    assert f"- **Blocks** `{STORE}:1`" in written
+    assert f"- Advisory `{STORE}:1`" in written

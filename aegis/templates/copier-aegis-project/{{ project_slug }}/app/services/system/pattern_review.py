@@ -14,14 +14,21 @@ import re
 
 from pydantic import BaseModel
 
+from app.core.log import logger
 from app.services.system.errors.fingerprint import digest
 from app.services.system.node_now import FIGURES
-from app.services.system.pattern_check import Spot
+from app.services.system.pattern_check import Spot, breaks
 
 # The comment's first line, how CI finds it again to edit; its second,
 # which findings it covered.
 MARKER = "<!-- illiana-review -->"
 NOTHING = "No new findings against the known debt."
+# What stands for her write-up when the model does not answer: the verdict
+# and every place are the rules', so a change is reviewed either way.
+UNSAID = (
+    "My write-up did not come through this time, so each rule speaks for "
+    "itself below. The verdict stands either way."
+)
 # Below the latest review, the ones before it.
 EARLIER = "#### Earlier reviews"
 # GitHub refuses a comment past 65,536 characters: the oldest go first.
@@ -44,8 +51,10 @@ from the app's own pattern rules (each rule's why and what to do, once), and
 what it touches; nothing else about the change is known to me. I write to
 the person who made the change, as myself: "I", "you", plain sentences.
 
-- ``summary``: two to four sentences on what the findings mean together and
-  whether I would merge it as it is. The findings, their places and what the
+- ``summary``: two to four sentences on what the findings mean together.
+  The verdict is the rules', said above my words: a finding that ``blocks``
+  holds the change, and then I say why it holds and what clears it, never
+  that it could merge as it is. The findings, their places and what the
   change touches are shown under my words, so I never list them or count
   them again.
 - ``notes``: one per rule that fired, by its ``check``: what it means in
@@ -89,9 +98,8 @@ def facts(fresh: list[Spot], touched: str) -> str:
     """What she is told, compact: each rule once, each finding by its place,
     rule and part, and what the change touches."""
     rules = {
-        s.finding.check: s.finding.model_dump(
-            include={"title", "severity", "why", "action"}
-        )
+        s.finding.check: s.finding.model_dump(include={"title", "why", "action"})
+        | {"blocks": s.finding.blocking}
         for s in fresh
     }
     found = [
@@ -111,11 +119,12 @@ def markdown(fresh: list[Spot], said: Review, touched: str, commit: str = "") ->
         f"### Illiana's review of `{commit[:7]}`" if commit else "### Illiana's review"
     )
     head = [MARKER, f"<!-- spots:{fingerprint(fresh, touched)} -->", title]
-    parts = [*head, "", said.summary, ""]
+    parts = [*head, "", _verdict(fresh), "", said.summary, ""]
     for check, spots in _by_rule(fresh).items():
         found = spots[0].finding
+        weight = "blocks" if found.blocking else "advisory"
         parts += [
-            f"**{found.title}** · `{check}` · {found.severity}",
+            f"**{found.title}** · `{check}` · {weight}",
             "",
             notes.get(check) or found.why,
             "",
@@ -127,6 +136,14 @@ def markdown(fresh: list[Spot], said: Review, touched: str, commit: str = "") ->
     if touched:
         parts += [_folded(touched), ""]
     return "\n".join(parts)
+
+
+def _verdict(fresh: list[Spot]) -> str:
+    """Blocked or clear, the rules' (``Finding.blocking``), never hers."""
+    blocked = sum(s.finding.blocking for s in fresh)
+    if blocked:
+        return f"**Blocked.** {breaks(blocked)} a rule that holds a change."
+    return "**Clear.** Nothing new here holds the change."
 
 
 def _by_rule(fresh: list[Spot]) -> dict[str, list[Spot]]:
@@ -170,7 +187,11 @@ async def review(
         now = markdown([], Review(summary=NOTHING), touched, commit)
     else:
         shown = fresh[:MOST_LISTED]
-        said = await _ask(facts(shown, touched))
+        try:
+            said = await _ask(facts(shown, touched))
+        except Exception:
+            logger.exception("Illiana's review write-up failed; the rules speak")
+            said = Review(summary=UNSAID)
         now = markdown(shown, said, touched, commit)
         if more := len(fresh) - len(shown):
             now += f"\n_... and {more} more; `patterns check` lists them all._\n"

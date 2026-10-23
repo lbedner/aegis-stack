@@ -185,9 +185,13 @@ jobs:
   # The everything stack generated from the base branch's templates gives the
   # known debt; the one generated from this branch is checked against it, and
   # each new finding is annotated on the template line it came from
-  # (scripts/template_annotations.py). It never fails (no ``--strict``) and
-  # is not a required check; what the change touches goes in the job summary.
+  # (scripts/template_annotations.py). Illiana gives the verdict: a new place
+  # breaking a rule that holds a change (enforced, or gated) blocks it
+  # (``--strict``), known debt aside; her comment explains it, and posts
+  # whether or not the model answers. What the change touches goes in the
+  # job summary. Make "Illiana" a required check to hold the merge on it.
   conformance:
+    name: Illiana
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -224,29 +228,45 @@ jobs:
           fi
 
       - name: New findings, annotated
+        id: findings
+        # Her verdict is held to the last step, so her comment still posts.
         run: |
+          set +e
           stack="$RUNNER_TEMP/head/everything"
           changed=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")
-          (cd "$stack" && uv run python -m app.cli.main patterns check $changed) \
+          (cd "$stack" && uv run python -m app.cli.main patterns check --strict $changed) \
             | python3 scripts/template_annotations.py "$stack" \
               "aegis/templates/copier-aegis-project/{{ project_slug }}"
+          echo "code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
 
       # Illiana's write-up of the new findings (``patterns review``): one
       # comment, edited on each push; never fails the job.
-      - name: Is there a model key
+      - name: Is there her app
         id: key
         env:
-          KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: echo "present=${KEY:+yes}" >> "$GITHUB_OUTPUT"
+          APP: ${{ secrets.ILLIANA_APP_ID }}
+        run: |
+          echo "app=${APP:+yes}" >> "$GITHUB_OUTPUT"
 
+      # Her own GitHub App (her name and face on the comment), where its
+      # secrets are set; the workflow's bot otherwise.
+      - name: Illiana's token
+        id: app
+        if: steps.key.outputs.app == 'yes'
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.ILLIANA_APP_ID }}
+          private-key: ${{ secrets.ILLIANA_APP_PRIVATE_KEY }}
+
+      # Without a model key she still posts: the verdict and every place,
+      # in the rules' own words (``pattern_review.UNSAID``).
       - name: Illiana's review, on the pull request
-        if: steps.key.outputs.present == 'yes'
         continue-on-error: true
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           AI_PROVIDER: openai
           AI_MODEL: gpt-6-luna
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app.outputs.token || github.token }}
           REPO: ${{ github.repository }}
           PR: ${{ github.event.pull_request.number }}
         run: |
@@ -269,3 +289,6 @@ jobs:
           elif ! grep -qF "No new findings against the known debt." "$review"; then
             gh api "repos/$REPO/issues/$PR/comments" -F body=@"$review" > /dev/null
           fi
+
+      - name: Illiana's verdict
+        run: exit "${{ steps.findings.outputs.code }}"

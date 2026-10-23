@@ -153,6 +153,7 @@ SERVICE = Pattern(
             "session themselves.",
             lambda f: not f.opens,
             exempt=lambda f: f.entry_point,
+            gate=True,
         ),
         Rule(
             "required-session",

@@ -37,9 +37,16 @@
   what it does reach. The card's subtitle says which. The server stages
   it once, when drawn, so it plays after the request is no longer kept.
   In the thread it is a still thumbnail of its first scene; opened
-  larger, it plays. `graph.paths` can walk edges only the way they point
-  (`directed=True`). Card kinds can now be filled in by the server
-  before they are kept (`register_kind(prepare=, stored=)`).
+  larger, it plays. She can also draw how one part is wired (`node`):
+  the edges the `ontology` tool answers for it and for what it holds
+  (calls, hand-offs to the queue, traffic seen), on the Server's map,
+  still. Every map's line key now also says what a dashed line (handed
+  to the queue), a dotted one (seen in traffic, not in the code) and a
+  fine-dotted one (a key not set) mean, when one is drawn. `graph.paths` can
+  walk edges only the way they point (`directed=True`). Card kinds can
+  now be filled in by the server before they are kept
+  (`register_kind(prepare=, stored=)`). The `ontology` tool answers
+  several nodes in one call (`node=[...]`).
 
 - **Illiana holds the line on a pull request.** `patterns check` ends
   with her verdict: blocked when a new place breaks a rule that holds a

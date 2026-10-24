@@ -220,6 +220,8 @@ async def test_a_hop_the_map_has_no_line_for_is_drawn_as_seen(
         scene, 'path[data-link][data-from="service_auth"][data-to="database"]'
     )
     assert declared.get("data-observed") is None
+    key = text(one(scene, "[data-line-key]"))
+    assert overseer_zoom.LINE_STYLES["observed"] in key
 
 
 def test_a_malformed_id_is_not_looked_up(

@@ -341,6 +341,7 @@ async def _drawn(
     return placed | {
         "overview_stack": stack,
         "map_line_key": overseer_zoom.LINE_KEY,
+        "map_line_styles": overseer_zoom.LINE_STYLES,
         "map_natural": path is not None,  # a replay's: its own height
         # The way back up, a level at a time.
         "map_trail": _trail(zoom),

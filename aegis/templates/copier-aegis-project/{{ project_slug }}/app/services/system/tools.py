@@ -16,7 +16,7 @@ from app.core import replays, runtime
 from app.core import storage as storage_seam
 from app.core.audit import audit_emitter
 from app.core.ontology import Kind, PartNode, graph
-from app.core.ontology.model import Node
+from app.core.ontology.model import Node, SystemModel
 from app.core.ontology.observed import running
 from app.core.ontology.summary import summary
 from app.core.tools import current_agent_slug, register_tool
@@ -224,11 +224,32 @@ def _findings(node: Node) -> list[pattern_findings.Finding]:
     return [f for f in pattern_findings.findings(report) if f.subject == node.id]
 
 
+async def _node(
+    model: SystemModel, node_id: str, depth: int, note: str | None
+) -> dict[str, Any]:
+    """One node's answer (``ontology``'s ``node``)."""
+    here, near, edges = graph.neighbors(model, node_id, depth)
+    now, findings = await asyncio.gather(
+        now_of(here), asyncio.to_thread(_findings, here)
+    )
+    return {
+        "node": here.model_dump(mode="json"),
+        "now": now.model_dump(mode="json") if now else None,
+        "findings": [f.model_dump(mode="json") for f in findings],
+        "edges": [e.model_dump(mode="json") for e in edges[:MAX_NODES]],
+        "neighbors": [
+            n.model_dump(mode="json", include=BRIEF) for n in near[:MAX_NODES]
+        ],
+        "total": {"edges": len(edges), "neighbors": len(near)},
+        "note": note,
+    }
+
+
 async def ontology(
     kind: str | None = None,
     category: str | None = None,
     text: str | None = None,
-    node: str | None = None,
+    node: str | list[str] | None = None,
     to: str | None = None,
     depth: int = 1,
     route: str | None = None,
@@ -249,8 +270,9 @@ async def ontology(
     the node what else it could be (``options``: each one's choices, the
     default, this stack's choice and what each choice means; ``chosen`` is
     what the stack was generated with, so the AI providers chosen are the
-    ones installed, while the model in use is picked at runtime); with
-    ``to``, the paths between the two. ``route`` (``GET /api/v1/...``,
+    ones installed, while the model in use is picked at runtime); a list
+    of ids: each one's answer, in one call (``nodes``); with ``to``, the
+    paths between the two. ``route`` (``GET /api/v1/...``,
     an admin's): every hop it can take, read from the code without sending
     it, each at its file and line, and where the walk stops. An edge's
     ``mode`` is whether the caller waits on it (``sync``) or hands it to
@@ -261,26 +283,17 @@ async def ontology(
     if not await caller_is_admin():
         model = model.domain()
     note = "Partial: built outside the webserver." if model.partial else None
+    if isinstance(node, list):
+        if to:
+            raise ValueError("Paths run from one node: name one with `to`.")
+        read = (_node(model, n, depth, note) for n in node)
+        return {"nodes": list(await asyncio.gather(*read))}
     if node and to:
         found = graph.paths(model, node, to)
         dumped = [[e.model_dump(mode="json") for e in path] for path in found]
         return {"paths": dumped, "note": note}
     if node:
-        here, near, edges = graph.neighbors(model, node, depth)
-        now, findings = await asyncio.gather(
-            now_of(here), asyncio.to_thread(_findings, here)
-        )
-        return {
-            "node": here.model_dump(mode="json"),
-            "now": now.model_dump(mode="json") if now else None,
-            "findings": [f.model_dump(mode="json") for f in findings],
-            "edges": [e.model_dump(mode="json") for e in edges[:MAX_NODES]],
-            "neighbors": [
-                n.model_dump(mode="json", include=BRIEF) for n in near[:MAX_NODES]
-            ],
-            "total": {"edges": len(edges), "neighbors": len(near)},
-            "note": note,
-        }
+        return await _node(model, node, depth, note)
     if kind is not None and kind not in set(Kind):
         raise ValueError(f"No kind {kind!r}; known: {', '.join(Kind)}")
     if kind or category or text:

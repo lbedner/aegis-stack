@@ -303,8 +303,12 @@ async def draw_card(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
           route's code path (route: what its code can do, never run) or,
           for a flow neither shows, its stops (node ids from ontology, in
           order: the server joins them along the map's own lines and
-          refuses a stop none reaches); call it a flow, a replay or a
-          code path, never a "path card"
+          refuses a stop none reaches)
+        how a part is wired, what it connects to or what uses it -> path
+          with its node (its id: what the ontology joins it to, on the map)
+        call these a flow, a replay, a code path or its wiring, never a
+          "path card"; a diagram of parts is this card, never arrows
+          typed in your answer
 
     Compute the data first, then call this with the kind and the data
     (from your script, in code mode) - it displays what you give it and

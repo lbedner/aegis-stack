@@ -384,7 +384,7 @@
   .map-link:is([data-tone="warn"], [data-tone="error"]) { @apply opacity-100; }
   /* A flagged line's hover target (opening its why): wider than it, unseen. */
   .map-hit { fill: none; stroke: transparent; stroke-width: 12; vector-effect: non-scaling-stroke; pointer-events: stroke; }
-  .map-link[data-queued] { stroke-dasharray: 5 4; }
+  .map-link[data-queued] { stroke-dasharray: 8 5; }
   .map-link[data-key] { stroke-dasharray: 1 4; stroke-linecap: round; }
   /* A data node's outline: its tone's stroke (inherited from .tone-border),
      filled like a card so the lines behind it stop at its edge. */
@@ -410,7 +410,10 @@
   .map-link:is([data-play-state="active"], [data-play-state="stall"], [data-play-state="refused"]) { stroke-width: 2.5; stroke-dasharray: 6 6; animation: play-flow 0.6s linear infinite; }
   .map-link[data-play-state="failed"] { @apply text-aegis-error; stroke-width: 2.5; }
   .map-link[data-play-state="refused"] { @apply text-aegis-amber; }
-  .map-link[data-observed] { stroke-dasharray: 2 4; }  /* ran, though the model has no such call */
+  /* Ran, though the model has no such call: round dots, grey while not
+     lit (off the plan), told apart from a queue's dashes at a glance. */
+  .map-link[data-observed] { stroke-dasharray: 0 5; stroke-linecap: round; stroke-width: 2; }
+  .map-link[data-observed]:not([data-play-state]) { @apply text-aegis-muted; }
   [data-play-chapter][aria-current] { @apply bg-aegis-teal/15 text-aegis-text; }  /* the scene showing */
   [data-play-scene]:not([hidden]) { animation: play-scene 0.5s ease-out; }  /* a scene fades in */
   [data-player]:not([data-playing]) [data-when-playing],

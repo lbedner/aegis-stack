@@ -18,6 +18,9 @@ from typing import Any
 from markupsafe import Markup
 
 from app.core.edges import SERVER
+from app.core.ontology import graph
+from app.core.ontology.model import Edge, EdgeKind, State
+from app.core.ontology.observed import running
 from app.core.ownership import HOST
 from app.services.system import kept_requests, topology
 from app.services.system.kept_requests import RequestHop, RequestHops, RequestSummary
@@ -36,6 +39,7 @@ LIST_VIEW = "hops"  # a request's hops as a list (``listed``)
 # The way back out as it was answered (``filters.answer_tone``): fine,
 # refused (4xx), or failed (5xx).
 ANSWERED = {"ok": "active", "warn": "refused", "error": "failed"}
+UNDECLARED = (State.OBSERVED_ONLY, State.BYPASS)  # an edge seen, never declared
 
 
 def url(request_id: str = "", view: str | None = None) -> str:
@@ -133,6 +137,33 @@ async def card(path: RequestHops, large: bool) -> dict[str, Any]:
     }
 
 
+async def wiring(node_id: str) -> dict[str, Any]:
+    """A path card's wiring (its ``node``): the edges the ontology tool
+    answers for it and for what it holds (``graph.neighbors``: calls,
+    hand-offs, what holds it, traffic seen; the cache's queue's users
+    reach the cache), drawn on the Server's map as a replay draws a path,
+    so the card shows what she read; still, nothing to play."""
+    model = await running()
+    _, _, edges = graph.neighbors(model, node_id)
+    held = [e.target for e in edges if e.kind is EdgeKind.CONTAINS]
+    edges += [e for part in held for e in graph.neighbors(model, part)[2]]
+    pairs: dict[tuple[str, str], list[Edge]] = {}
+    for edge in edges:
+        pair = registry_of(edge.source), registry_of(edge.target)
+        pairs.setdefault(pair, []).append(edge)
+    ways = [[a, b] for a, b in pairs if a != b]
+    # Seen only where no edge of it is declared: a line its code draws is not.
+    seen = frozenset(
+        p for p, found in pairs.items() if all(e.state in UNDECLARED for e in found)
+    )
+    scene = await _scene(current_navigation(), HOST, ways, 0.0, 0.0, seen=seen)
+    return {
+        "path_steps": [],
+        "path_scenes": [scene],
+        "path_wired": title_of(registry_of(node_id)),
+    }
+
+
 def listed(recording: RequestHops) -> dict[str, Any]:
     """``recording``'s hops in a list (``LIST_VIEW``), in the order they
     ran: what each went through, its timing as a bar on the request's, and
@@ -168,13 +199,16 @@ async def _scene(
     at: float,
     ms: float,
     lead: float = 0.0,
+    seen: frozenset[tuple[str, str]] | None = None,
 ) -> dict[str, Any]:
     """A level's scene: its map drawing only the ``ways`` through it (a
-    hop's each), shown from ``at``, ``ms`` of the request after a
-    ``lead`` of staged beats."""
+    hop's each; ``seen``, its lines seen in traffic only, as ``Path``),
+    shown from ``at``, ``ms`` of the request after a ``lead`` of staged
+    beats."""
     path = Path(
         list(dict.fromkeys(k for keys in ways for k in keys)),
         list(dict.fromkeys(pair for keys in ways for pair in pairwise(keys))),
+        seen,
     )
     query = {"view": overseer_container.MAP_VIEW, "zoom": key}
     view = await overseer_container.overview(navigation, query, path=path)

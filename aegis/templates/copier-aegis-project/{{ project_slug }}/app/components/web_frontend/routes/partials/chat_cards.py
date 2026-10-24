@@ -59,7 +59,9 @@ def add_card_routes(router: APIRouter, mount: ChatSurface) -> None:
         }
         # A path card's map and steps, played as the Replay page plays
         # them: drawn from its hops, not kept with them.
-        if isinstance(kept, PathCard):
+        if isinstance(kept, PathCard) and kept.node:
+            context |= await overseer_replay.wiring(kept.node)
+        elif isinstance(kept, PathCard) and kept.path:
             context |= await overseer_replay.card(kept.path, large)
         if large:
             return dialog(request, kind.template, **context)

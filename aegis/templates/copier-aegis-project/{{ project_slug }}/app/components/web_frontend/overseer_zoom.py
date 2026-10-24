@@ -47,16 +47,25 @@ Tones = dict[Pair, dict[str, Any]]
 @dataclass(frozen=True)
 class Path:
     """The way a request went through a level: the parts, in the order it
-    reached them, and the lines it went along (``along_server``)."""
+    reached them, and the lines it went along (``along_server``); of them,
+    the ones seen in traffic only (unknown: the ones the level has none
+    for, as a request's are)."""
 
     nodes: list[str]
     links: list[Pair]
+    seen: frozenset[Pair] | None = None
 
 
 RAIL = 3  # ponytail: a part this many pieces use rides the rail; tune by eye
 HOLDS = 12  # what a piece's hint names of what it holds; the rest counted
 # What each tone ``_tones`` gives a line means: the map's key.
 LINE_KEY = {"error": "Skips the facade, or a loop", "warn": "Goes back a lane"}
+# What each way a line is drawn means (``_overview_map.html``), by its flag.
+LINE_STYLES = {
+    "queued": "Handed to the queue",
+    "observed": "Seen in traffic, not in the code",
+    "key": "A key it needs is not set",
+}
 # Each module's code nodes by kind: each one's name, and the top-level name
 # defining it there (a table's class), where its code opens.
 Held = dict[str, dict[Kind, list[tuple[str, str]]]]
@@ -372,7 +381,8 @@ def along_server(
     callers = [
         key for key in found if key not in targets or any(a == key for a, _ in went)
     ]
-    seen = {pair: {"observed": True} for pair in went if pair not in shape.links}
+    only = path.seen if path.seen is not None else set(went) - set(shape.links)
+    seen = {pair: {"observed": True} for pair in went if pair in only}
     calls = {key: [b for a, b in went if a == key] for key in callers}
     return list(found.values()), topology.zoomed(callers, calls), seen
 

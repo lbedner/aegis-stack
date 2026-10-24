@@ -11,7 +11,7 @@ pytest.importorskip(
     "app.services.system.health_worker_rules", reason="no worker in this stack"
 )
 
-from app.components.web_frontend import overseer_container  # noqa: E402
+from app.components.web_frontend import overseer_container, overseer_zoom  # noqa: E402
 from app.services.system import topology  # noqa: E402
 from app.services.system.models import (  # noqa: E402
     ComponentStatus,
@@ -64,6 +64,9 @@ def test_the_map_shows_the_queue_between_who_enqueues_and_the_worker(
         for p in select(html, f'svg path[data-to="{topology.QUEUE}"]')
     }
     assert into == {"backend": True, "worker": True}
+    key = text(one(html, "[data-line-key]"))  # what a dashed line means, drawn
+    assert overseer_zoom.LINE_STYLES["queued"] in key
+    assert overseer_zoom.LINE_STYLES["observed"] not in key  # none drawn
     none(page_html(client, "/overseer?view=cards"), f'[data-card="{topology.QUEUE}"]')
 
 

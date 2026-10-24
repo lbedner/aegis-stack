@@ -49,12 +49,17 @@
 {% endif %}
 {% set line_key = map_line_key|default({}) %}
 {% set flagged = map_links|selectattr("why", "defined")|map(attribute="tone")|select("in", line_key)|unique|sort|list %}
-{% if flagged %}
-{# What a red or amber line means (overseer_zoom.LINE_KEY), only those drawn;
-   each line says its own why on hover (a plain one too: a key's details). #}
+{% set line_styles = map_line_styles|default({}) %}
+{% set styled = [] %}{% for style in line_styles if map_links|selectattr(style)|first %}{% set _ = styled.append(style) %}{% endfor %}
+{% if flagged or styled %}
+{# What a red or amber line means (overseer_zoom.LINE_KEY) and what a
+   dashed or dotted one does (LINE_STYLES), only those drawn, each sample
+   drawn as the map draws its lines; each line says its own why on hover
+   (a plain one too: a key's details). #}
 <p data-line-key class="mb-3 flex flex-wrap items-center gap-3 text-xs text-aegis-muted">
   {% for tone in flagged %}<span class="flex items-center gap-1.5"><span data-tone="{{ tone }}" class="toned inline-block h-0.5 w-4 bg-current" aria-hidden="true"></span>{{ line_key[tone] }}</span>{% endfor %}
-  <span>Hover a line for why</span>
+  {% for style in styled %}<span class="flex items-center gap-1.5"><svg class="h-2 w-5" aria-hidden="true"><path class="map-link" data-{{ style }} d="M0 4 H20" /></svg>{{ line_styles[style] }}</span>{% endfor %}
+  {% if flagged %}<span>Hover a line for why</span>{% endif %}
 </p>
 {% endif %}
 {# At least the rest of the window (map-fill; the Flow scrolls sideways,

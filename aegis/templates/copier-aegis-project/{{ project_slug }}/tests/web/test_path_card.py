@@ -11,8 +11,10 @@ from fastapi.testclient import TestClient
 import pytest
 
 from app.components.backend.api.ai.service import ai_service
+from app.components.web_frontend import overseer_replay
 from app.components.web_frontend.overseer_ai_chat import OVERSEER
 from app.core import edges, replays
+from app.core.ontology.model import EdgeKind, SystemModel
 from app.core.replays import Hop
 from app.services.ai.domains.chat.path_card import PathCard
 from app.services.ai.models import AIProvider
@@ -22,7 +24,7 @@ from app.services.system.kept_requests import RequestHops
 from app.services.system.models import ComponentStatus
 from tests._ontology import dry_walk, edge_of, model_of, node_of
 from tests._replays import kept
-from tests.web.dom import none, one, text
+from tests.web.dom import none, one, select, text
 from tests.web.overseer import page_html
 from tests.web.zoomed import DB, auth_opens, zoomable
 
@@ -171,3 +173,61 @@ async def test_a_flow_not_entered_through_the_server_has_no_way_in(
     none(card, '[data-node="ingress"]')
     assert _steps(card)[0]["at"] == 0.0
     assert "Flow · along the map's lines" in text(one(card, "[data-card=path]"))
+
+
+def _drawn(html: str) -> set[str]:
+    return {str(n.get("data-node")) for n in select(html, "[data-node]")}
+
+
+def _wired(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The model the ontology tool reads: Auth calls the database, the
+    Server needs it, and Auth holds the user table and its sessions,
+    which call Stripe."""
+    sessions, stripe = "service:auth.sessions", "external:Stripe"
+    model = model_of(
+        [node_of(k) for k in ("service:auth", DB, edges.SERVER, sessions, stripe)],
+        [
+            edge_of("service:auth", DB),
+            edge_of(edges.SERVER, DB, EdgeKind.DEPENDS_ON),
+            edge_of("service:auth", sessions, EdgeKind.CONTAINS),
+            edge_of(sessions, stripe),
+        ],
+    )
+
+    async def running() -> SystemModel:
+        return model
+
+    monkeypatch.setattr(overseer_replay, "running", running)
+
+
+async def test_a_parts_wiring_draws_the_edges_she_read_and_nothing_else(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The edges the ontology tool answers for the database (whatever
+    their kind, the Server outside the Server's map included), on the
+    map; what nothing joins it to (Secrets) left off; still in the
+    thread, nothing to play."""
+    client = zoomable(app, monkeypatch, INGRESS)
+    _wired(monkeypatch)
+    card_id = await _card(PathCard(title="Database", node=DB))
+    client.headers["HX-Request"] = "true"
+    inline = client.get(f"{CARDS}/{card_id}").text
+
+    assert _drawn(inline) == {"database", "service_auth", "backend"}
+    none(inline, "[data-link][data-observed]")  # declared, not seen only
+    assert "Wiring · Database" in text(one(inline, "[data-card=path]"))
+    none(inline, "[data-play-badge]")
+
+
+async def test_opened_larger_a_wiring_is_still_a_map(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A service's wiring: what it calls, and what the parts it holds
+    call (its sessions, Stripe), opened larger with no player."""
+    client = zoomable(app, monkeypatch, INGRESS)
+    _wired(monkeypatch)
+    card_id = await _card(PathCard(title="Auth", node="service:auth"))
+    opened = _opened(client, card_id)
+
+    assert _drawn(opened) == {"service_auth", "database", "outside:Stripe"}
+    none(opened, "[data-player]")

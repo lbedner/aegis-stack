@@ -69,6 +69,23 @@ async def test_a_flows_stops_are_joined_on_the_running_model(
         await path_card.prepare(PathAsk(title="x", stops=[db, auth]))
 
 
+async def test_a_nodes_wiring_names_a_node_the_running_model_has(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Drawn from the map when opened, so kept as the node alone; a node
+    the model does not have is refused by name."""
+    auth = "service:auth"
+
+    async def running() -> SystemModel:
+        return model_of([node_of(auth)], [])
+
+    monkeypatch.setattr(path_card, "running", running)
+    card = await path_card.prepare(PathAsk(title="Auth", node=auth))
+    assert card == PathCard(title="Auth", node=auth)
+    with pytest.raises(ValueError, match="service:auths"):
+        await path_card.prepare(PathAsk(title="x", node="service:auths"))
+
+
 async def test_a_route_is_its_dry_path(monkeypatch: pytest.MonkeyPatch) -> None:
     async def route(key: str) -> RequestHops:
         assert key == "GET /api/v1/auth/me"

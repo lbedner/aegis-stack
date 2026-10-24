@@ -543,6 +543,22 @@ async def test_a_node_comes_with_its_edges_and_neighbours() -> None:
     assert ids == sorted(ids)  # the same answer every call
 
 
+@pytest.mark.usefixtures("model")
+async def test_several_nodes_are_one_call_each_answered_as_alone() -> None:
+    """A part and its neighbours asked at once read as one call, not one a
+    part (2026-10-23: nine calls to say how AI was wired)."""
+    asked = ["service:payment", "component:database"]
+    result = await tools.ontology(node=asked)
+
+    alone = [await tools.ontology(node=n) for n in asked]
+    same = ("node", "edges", "neighbors", "findings")
+    assert [{k: a[k] for k in same} for a in result["nodes"]] == [
+        {k: a[k] for k in same} for a in alone
+    ]
+    with pytest.raises(ValueError, match="one node"):
+        await tools.ontology(node=asked, to="component:database")
+
+
 @pytest.mark.usefixtures("status")
 async def test_what_is_wrong_right_now_is_one_line() -> None:
     """The line her current message carries while something is wrong

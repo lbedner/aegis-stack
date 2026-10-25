@@ -253,7 +253,7 @@ jobs:
       - name: Illiana's token
         id: app
         if: steps.key.outputs.app == 'yes'
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.ILLIANA_APP_ID }}
           private-key: ${{ secrets.ILLIANA_APP_PRIVATE_KEY }}

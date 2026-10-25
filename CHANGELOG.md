@@ -447,6 +447,15 @@
   a reason, as in a stack without AI. The `documents_auth` matrix row now
   carries `ai[pydantic-ai]`.
 
+- **A Gemini preview no longer spins for hours.** A Gemini speech model
+  out of its quota (the free tier's is ten requests a day for each)
+  answers 429 at once, and its SDK retried that on the answer's
+  Retry-After, hours. Its client now retries only a server's own trouble;
+  a 429, or a try with no answer in 20 seconds, is said on the lite model
+  (its quota is its own), and when neither can, it fails at once with
+  Google's reason in the log. Each voice's Listen also plays on the model
+  picked below it, not always the voice's default.
+
 - **A database the scheduler cannot read says so.** Its persistence check
   turned any database error into "no persistence", so its health said the
   jobs table was not found while it was there; the error now reads as

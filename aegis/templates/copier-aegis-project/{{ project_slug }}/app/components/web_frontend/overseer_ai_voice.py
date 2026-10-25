@@ -17,7 +17,7 @@ from urllib.parse import urlencode
 
 from fastapi import UploadFile
 
-from .overseer_ai_common import PARTIALS, section_url
+from .overseer_ai_common import PARTIALS, icon_url, section_url
 
 if TYPE_CHECKING:
     # Only a stack with a database has it; a voice-only one does not.
@@ -122,6 +122,8 @@ async def _editor(db: "AsyncSession", query: Mapping[str, str]) -> dict[str, Any
         "view": view,
         "step": step,
         "chosen_listen": _speak(view.voice, view.model),
+        # Each provider's logo, served by the AI page's icon route.
+        "marks": {p: icon_url(logo.org) for p, logo in view.logos.items()},
         # The accent checklist follows the other filters: a new id when its
         # options change, so the page draws them (a checklist is preserved).
         "accent_id": "ai-voice-accent-"

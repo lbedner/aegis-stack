@@ -18,6 +18,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.config import settings as app_settings
 from app.core.voice_settings import TTS_SPEED_MAX, TTS_SPEED_MIN
+from app.services.ai.domains.llm.queries import org_icons
 from app.services.ai.domains.voice import library, profiles
 from app.services.ai.domains.voice.catalog import (
     get_tts_models,
@@ -39,6 +40,7 @@ from app.services.ai.domains.voice.finder import Finding, VoiceChoice, find
 from app.services.ai.domains.voice.models import (
     DEFAULT_TTS_VOICE,
     TTS_KEYS,
+    TTS_ORGS,
     TTSProvider,
 )
 from app.services.ai.domains.voice.overview import (
@@ -126,6 +128,14 @@ class ProfileSummary(Frozen):
     active: bool
 
 
+class Logo(Frozen):
+    """A speech provider's logo: the catalog org that holds it (whose icon
+    route serves it) and the image itself, base64."""
+
+    org: str
+    icon: str
+
+
 class DesignView(Frozen):
     """An editor as it is drawn: the profile; the chosen voice and the Voice
     step's search for others, with the providers locked out; the styles and the dials the
@@ -138,6 +148,8 @@ class DesignView(Frozen):
     # The chosen voice, pinned above the search (``find``).
     chosen: VoiceChoice | None
     find: Finding
+    # Each speech provider's logo, where the catalog holds one.
+    logos: dict[str, Logo]
     locked: list[LockedProvider]
     styles: dict[str, StyleChoice]
     # Each dial's choices, by value and as labeled; accent only where the
@@ -195,6 +207,16 @@ async def _voices(chosen: str) -> tuple[list[VoiceChoice], list[LockedProvider]]
     return voices, locked
 
 
+async def _logos(db: AsyncSession) -> dict[str, Logo]:
+    """Each speech provider's logo, as the catalog holds its org's mark."""
+    held = await org_icons(db, TTS_ORGS.values())
+    return {
+        provider.value: Logo(org=org, icon=held[org])
+        for provider, org in TTS_ORGS.items()
+        if org in held
+    }
+
+
 def _fit(speed: float, model: str) -> float:
     """``speed`` within what ``model`` takes (as it would be spoken)."""
     span = speeds(model)
@@ -245,6 +267,7 @@ async def design_view(
         steps=STEPS,
         chosen=chosen,
         find=find(voices, chosen, query),
+        logos=await _logos(db),
         locked=locked,
         styles={"": PLAIN}
         | {

@@ -9,6 +9,11 @@
 
 ### Added
 
+- **Each voice wears its provider's logo.** In both Overseers' voice
+  editor, every voice, and the one chosen, shows its provider's mark (the
+  catalog's, as the Providers page shows it: Gemini's is Google's), or its
+  initial where the catalog holds none.
+
 - **What each of a part's containers uses.** The ontology's answer for a
   part says, per container, its memory against its limit, CPU, state and
   restarts, as its Overseer page last sampled them, so Illiana can say

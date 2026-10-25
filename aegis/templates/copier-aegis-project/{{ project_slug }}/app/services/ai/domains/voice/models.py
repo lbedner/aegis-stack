@@ -82,6 +82,11 @@ TTS_KEYS: dict[TTSProvider, str] = {
     TTSProvider.OPENAI: "OPENAI_API_KEY",
     TTSProvider.GEMINI: "GOOGLE_API_KEY",
 }
+# The catalog org whose logo each speech provider shows (Gemini is Google's).
+TTS_ORGS: dict[TTSProvider, str] = {
+    TTSProvider.OPENAI: "openai",
+    TTSProvider.GEMINI: "google",
+}
 STT_KEYS: dict[STTProvider, str] = {
     STTProvider.OPENAI_WHISPER: "OPENAI_API_KEY",
     STTProvider.GROQ_WHISPER: "GROQ_API_KEY",

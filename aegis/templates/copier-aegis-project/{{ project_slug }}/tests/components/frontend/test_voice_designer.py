@@ -71,6 +71,7 @@ VIEW: dict[str, Any] = {
         "limit": 50,
     },
     "locked": [{"provider_name": "Gemini", "voices": 30, "key": "GOOGLE_API_KEY"}],
+    "logos": {},
     "styles": {
         "": {"label": "Plain", "sounds": "No style; just the dials", "dials": {}},
         "calm": {
@@ -245,3 +246,14 @@ async def test_editing_opens_fine_tune_on_what_was_tuned(
     await editor.load({})
 
     assert _found(editor._how(), ft.ExpansionTile)[0].initially_expanded is True
+
+
+def test_each_voice_wears_its_providers_mark() -> None:
+    from app.components.frontend.controls.provider_icon import ProviderIcon
+
+    editor = _editor(
+        VIEW | {"logos": {"openai": {"org": "openai", "icon": "iVBORw0KGgo="}}}
+    )
+
+    marks = _found(editor._who(), ProviderIcon)
+    assert len(marks) == 2  # the chosen one and the one listed

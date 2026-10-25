@@ -15,9 +15,9 @@ import re
 
 from pydantic import BaseModel
 
+from app.core.figures import FIGURES
 from app.core.log import logger
 from app.services.system.errors.fingerprint import digest
-from app.services.system.node_now import FIGURES
 from app.services.system.pattern_check import Spot, breaks
 
 # The comment's first line, how CI finds it again to edit; its second,

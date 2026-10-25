@@ -115,6 +115,8 @@ commands' worth of before/after.
 Procedures load on demand from `.claude/skills/<name>/SKILL.md` when the task
 matches the skill's description. Reach for:
 
+- `plan-framework-change` - before planning any code change: the existing home,
+  the standards, what it touches, the checklist and gates
 - `add-service` - add a new business-capability service to the framework
 - `add-component` - add a new component, or a variant axis on an existing one
 - `create-plugin` - build an Aegis Stack plugin (a separate `aegis-stack-<name>` package)

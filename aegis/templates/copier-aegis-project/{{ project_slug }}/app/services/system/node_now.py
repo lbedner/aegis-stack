@@ -12,9 +12,10 @@ from datetime import datetime
 import json
 from typing import Annotated, Any
 
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field
+from pydantic import AfterValidator, BaseModel, Field
 
 from app.core.edges_http import AI
+from app.core.figures import FIGURES
 from app.core.log import logger
 from app.core.ontology import Kind
 from app.core.ontology.model import Node, PartNode, QueueNode
@@ -28,10 +29,6 @@ from app.services.system.models import ComponentStatus, ComponentStatusType
 # The most issues a part's ``now`` lists, latest first; ``errors_total``
 # counts them all.
 NOW_ERRORS = 5
-# What an agent reads: a field that is not one, or a figure changed after
-# it was read, is refused (the AI service's ``schemas.FIGURES``; this
-# module ships where that one does not).
-FIGURES = ConfigDict(frozen=True, extra="forbid")
 # Money as an agent reads it, and says it aloud: to the cent (a ledger's
 # fractions of one were read as more than they are). Less than half of one
 # rounds to none.

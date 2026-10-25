@@ -39,6 +39,8 @@ In the plugin repository (created by `aegis plugins create <name>`):
   - `models.py` (or `models/`): tables, picked up by the model registry.
   - `change_types.py`: changes a model proposes and a user approves.
   - `scheduled_jobs.py`: `JOBS`, a tuple of `ServiceJob` (`app.core.schedule`).
+  - `aggregates.py`: `AGGREGATES`, a tuple of `Aggregate` (`app.core.aggregates`):
+    what the plugin's data holds, as figures an agent reads, never rows.
   - `tools.py`: `register_tool(...)` calls (`app.core.tools`), for agents and
     MCP clients.
   - `sources.py`: `register_source(...)` (`app.services.research.service`),

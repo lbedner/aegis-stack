@@ -1,0 +1,44 @@
+{%- if scheduler_backend != "memory" %}
+"""What the scheduler holds, as figures (``app.core.aggregates``): its
+job runs by job and status, and by day."""
+
+from pydantic import BaseModel
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.core import ranges
+from app.core.aggregates import Aggregate
+from app.core.figures import FIGURES
+
+from .queries import runs_by_day
+
+
+class JobRuns(BaseModel):
+    """Runs in the window (every one kept, at most): by job, each job's by
+    status, and every run by day (``YYYY-MM-DD``)."""
+
+    model_config = FIGURES
+
+    total: int
+    by_job: dict[str, dict[str, int]]
+    by_day: dict[str, int]
+
+
+async def runs(session: AsyncSession, days: int | None) -> JobRuns:
+    rows = await runs_by_day(session, ranges.start(days))
+    by_job: dict[str, dict[str, int]] = {}
+    by_day: dict[str, int] = {}
+    for job_id, status, day, n in rows:
+        statuses = by_job.setdefault(job_id, {})
+        statuses[status] = statuses.get(status, 0) + n
+        by_day[day] = by_day.get(day, 0) + n
+    return JobRuns(total=sum(by_day.values()), by_job=by_job, by_day=by_day)
+
+
+AGGREGATES = (
+    Aggregate("runs", "Scheduled job runs by job and status, and by day", runs),
+)
+{%- else %}
+"""No run history without a database job store: nothing to count."""
+
+AGGREGATES = ()
+{%- endif %}

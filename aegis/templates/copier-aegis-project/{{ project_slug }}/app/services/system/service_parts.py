@@ -59,6 +59,7 @@ PIECES = {
     "queries": ("Queries", "data"),
     "jobs": ("Jobs", "entry"),
     "scheduled_jobs": ("Jobs", "entry"),
+    "aggregates": ("Aggregates", "entry"),
     "health": ("Health", "probe"),
     "schemas": ("Schemas", "rail"),
     "deps": ("Deps", "wiring"),

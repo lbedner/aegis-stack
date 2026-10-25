@@ -14,7 +14,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.services.ai.domains.llm.queries import VENDOR, with_vendor
 from app.services.ai.domains.spend.recording import VOICE_ACTIONS
 from app.services.ai.models.llm import LLMUsage
-from app.services.shared.queries import within
+from app.services.shared.queries import day_of, within
 
 from .schemas import ActionSpend
 
@@ -30,10 +30,7 @@ async def daily_spend(
         .where(*within(LLMUsage.timestamp, start, end))
         .group_by(day)
     )
-    return {
-        (d if isinstance(d, date) else date.fromisoformat(str(d))): float(cost or 0)
-        for d, cost in rows.all()
-    }
+    return {date.fromisoformat(day_of(d)): float(cost or 0) for d, cost in rows.all()}
 
 
 async def spend_by_action(
@@ -128,7 +125,10 @@ async def usage_windows(
         )
     ]
     by = (VENDOR, LLMUsage.action)
-    rows = (await session.exec(with_vendor(select(*by, *columns)).group_by(*by))).all()
+    stmt = with_vendor(select(*by, *columns))
+    if starts and None not in starts:  # only the rows the widest window holds
+        stmt = stmt.where(LLMUsage.timestamp >= min(s for s in starts if s))
+    rows = (await session.exec(stmt.group_by(*by))).all()
     return {
         (str(row[0]), str(row[1])): [
             (int(row[i]), int(row[i + 1]), float(row[i + 2]))

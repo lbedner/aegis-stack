@@ -61,6 +61,7 @@ disk, and picks up a plugin's the same way as its own.
 | `models.py` (or a `models/` package) | the plugin's tables |
 | `change_types.py` | changes a model proposes and the user approves |
 | `scheduled_jobs.py` | `JOBS`, the jobs that run on a schedule |
+| `aggregates.py` | `AGGREGATES`, what the plugin's data says about itself (`Aggregate` from `app.core.aggregates`): counts and sums an agent reads with `aggregate`, never rows |
 | `tools.py` | tools an agent or an MCP client can be granted (`register_tool`) |
 
 A scheduled job is a `ServiceJob` from `app.core.schedule`: the job

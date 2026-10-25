@@ -20,7 +20,12 @@ from pathlib import Path
 
 import pytest
 
+from app.services.system.service_parts import PIECES
+
 SPINE = {"service.py", "models.py", "queries.py", "health.py", "deps.py"}
+# What the service standard has a service hand the app at its root, found
+# there by name (its tools, its aggregates): not a domain.
+CONVENTIONS = {f"{name}.py" for name, (_, kind) in PIECES.items() if kind == "entry"}
 WORKER = "app.components.worker"
 
 # Public callable -> the module that must DEFINE it.
@@ -48,15 +53,17 @@ def _package_root() -> Path:
 
 
 def test_the_root_is_the_spine_and_nothing_else() -> None:
-    """Anything that is not the spine is a domain, not a root module."""
+    """Anything that is not the spine, or a convention module, is a domain,
+    not a root module."""
     root = _package_root()
     modules = {
         f.name for f in root.glob("*.py") if f.name not in {"__init__.py"}
     }
 
     assert SPINE <= modules, f"the spine is incomplete: {sorted(SPINE - modules)}"
-    assert not modules - SPINE, (
-        f"these belong in a domain package, not at the root: {sorted(modules - SPINE)}"
+    strays = modules - SPINE - CONVENTIONS
+    assert not strays, (
+        f"these belong in a domain package, not at the root: {sorted(strays)}"
     )
 
 

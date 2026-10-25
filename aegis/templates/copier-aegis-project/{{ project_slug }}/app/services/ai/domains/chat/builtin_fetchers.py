@@ -18,6 +18,7 @@ from app.core.ontology.summary import summary, text
 from app.core.ontology.system import current
 from app.services.ai.domains.chat import queries
 from app.services.shared.deps import caller_is_admin
+from app.services.system.aggregate_reads import listed
 
 from .fetchers import FetchContext, register_fetcher
 
@@ -65,11 +66,12 @@ async def user_profile(ctx: FetchContext) -> str | None:
 async def app_map(ctx: FetchContext) -> str | None:
     """What the app is, read from its code (``ontology.summary.text``): its
     parts for an admin, its tables and the changes to them for anyone, as
-    the ``ontology`` tool answers each. Built once a process."""
+    the ``ontology`` tool answers each; for an admin, also the aggregates
+    the ``aggregate`` tool reads. The model is built once a process."""
     model = await asyncio.to_thread(current)  # the first build reads the source
     if not await caller_is_admin():
-        model = model.domain()
-    return text(summary(model))
+        return text(summary(model.domain()))
+    return "\n\n".join(part for part in (text(summary(model)), listed()) if part)
 
 
 # Built-in registration: importing this module makes these fetchers

@@ -100,6 +100,33 @@ class TestDrawing:
         assert staged == []
 
     @pytest.mark.asyncio
+    async def test_a_card_with_no_rows_is_not_drawn(self) -> None:
+        """Drawn before the lookup came back, a card is an empty frame
+        under an answer that names six jobs."""
+        result, staged = await _drawn(
+            "table", {"title": "Jobs", "columns": ["Job", "Status"], "rows": []}
+        )
+        assert "no rows" in result["error"]
+        assert staged == []
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("kind", ["bar", "pie"])
+    async def test_a_chart_of_nothing_is_not_drawn(self, kind: str) -> None:
+        """An idle worker's task counts are all 0: a chart of nothing is
+        said in words, not drawn (2026-10-24)."""
+        rows = [{"label": "Queued", "value": 0}, {"label": "Failed", "value": 0}]
+        result, staged = await _drawn(
+            kind, {"title": "Worker tasks", "measure": "Count", "rows": rows}
+        )
+        assert "every value is 0" in result["error"]
+        assert staged == []
+        flat = {"title": "Spend", "measure": "Spent", "before_label": "Aug"}
+        result, _ = await _drawn(
+            "compare", flat | {"before": 0, "after_label": "Sep", "after": 0}
+        )
+        assert "every value is 0" in result["error"]
+
+    @pytest.mark.asyncio
     async def test_a_pie_is_a_few_slices_not_a_confetti(self) -> None:
         rows = [{"label": f"Category {n}", "value": n + 1} for n in range(9)]
         result, staged = await _drawn(

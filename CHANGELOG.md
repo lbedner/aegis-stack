@@ -9,6 +9,16 @@
 
 ### Added
 
+- **What each of a part's containers uses.** The ontology's answer for a
+  part says, per container, its memory against its limit, CPU, state and
+  restarts, as its Overseer page last sampled them, so Illiana can say
+  which worker is using the memory. A part's health check carries the
+  same.
+
+- **What a queue runs.** The worker's health check names each queue's
+  tasks beside its concurrency and timeout, the same for every worker
+  backend.
+
 - **Who owns a meeting nobody pressed send for.** With auth, an agent
   has an optional default owner: a meeting it joins from its calendar
   that nobody on the invite owns goes to them. A meeting nobody owns is
@@ -26,6 +36,30 @@
   model is now built once startup finishes, off the loop, so the first
   map, flow card or ontology read no longer stalls the server for
   seconds while it parses the source.
+
+- **One model list, by modality.** The chat's model picker narrows to
+  All, Text or Voice, and what a live call runs on sits under its own
+  vendor, marked Voice with its price, instead of a group apart at the foot
+  of the list; the model a call runs on leads beside the chat model's,
+  both checked. Picking one still sets the active voice's engine.
+
+- **A path card follows what Illiana names.** Each part a path card
+  draws is named by its map title (Authentication) or its own name
+  (auth). In a settled answer every such name is marked: hover or tap it
+  and the card lights that part and its lines, still, the rest stepping
+  back. On a live call she draws a card as she would in a typed answer
+  (the call manners now say they can see the screen), and the card she
+  drew on that call lights the part she named last as you hear it (timed
+  to the audio queued ahead, not to when the words arrive); her words
+  reach the page as she speaks (`saying`). An answer's Listen button
+  plays it back with its card following along. Names only
+  match parts the card draws; nothing is marked up in what she writes.
+  A code path card stops where a loop over a registry fans out (every
+  part's health check, read each turn): the walk marks each hop it
+  reached through one (`through`) and each step only those make
+  (`fanned`); the card leaves those out, while the `ontology` tool's
+  route answer still has every hop. The tool also leaves out a field at
+  its default, so a call that waits no longer says `sync`.
 
 - **Illiana draws flows.** A flow plays across the map under her answer,
   with the Replay page's own player and steps: a request's replay
@@ -327,6 +361,83 @@
   parts already show, and what the change touches is folded away.
 
 ### Fixed
+
+- **The card keeps lighting until she stops talking.** A call saves her
+  answer when it is written, before it has all been heard; the card she
+  drew moved into the saved answer and stopped following her. It is now
+  followed wherever it is, by its own address, until the next question.
+
+- **A job's wiring is its part's.** A job has no box on the map, so its
+  wiring card drew the part that runs it alone; it now draws the lines
+  that part is joined by.
+
+- **A card with no rows is not drawn.** Drawn before its lookup came
+  back, a table showed "Nothing here yet" under an answer naming six
+  jobs; `draw_card` now refuses it and says to draw from what the lookup
+  returned.
+
+- **A card drawn again takes its place.** On a call, a chart she drew a
+  second time for one answer showed twice until the turn was saved; it
+  now replaces the first, as the saved answer does.
+
+- **A bar chart measures from zero.** Its axis started at the lowest
+  value, so two workers at 190 and 199 MB drew one bar as nothing.
+
+- **A chart of nothing is not drawn.** An idle worker's task counts came
+  back as a bar chart of zeros; a chart whose every value is 0 is
+  refused, and said in words.
+
+- **A call's card stays with its turn.** A turn that ended with nothing
+  said lost track of the cards, so the next one she drew showed under
+  the following answer instead of its own.
+
+- **A call ends on a goodbye, not a noise.** A turn with no words in it
+  (a noise, her own voice heard back) read as "that's all", and she said
+  goodbye and hung up.
+
+- **A card stays up while she talks about it.** A call reloads the
+  thread as each turn is saved, mid-sentence, and every card in it was
+  drawn again; the card already up is now moved into place.
+
+- **A job's next run says its time zone.** It was read back from the
+  scheduler's store as a local time with no zone, so a reader could not
+  tell it was UTC; it is UTC, and says so.
+
+- **Illiana sees the scheduler's jobs.** A component's details are cut to
+  what fits a prompt; the cut (500 characters a detail) dropped short
+  lists too, such as the scheduler's jobs and when each runs next. It now
+  keeps up to 2,000, a few dozen short rows; a schema is still left out.
+
+- **A code path plays smoothly.** Read function by function, a code path
+  folds onto a few parts on the map, and it relit the same line over and
+  over (Auth to Database, once a table). A hop through parts an earlier
+  one lit now joins it, its table named there, and the rest play a beat
+  apart.
+
+- **Cards stay put on a call.** Each saved turn reloads the thread; its
+  cards no longer load again (a flash of "Loading the chart..." each
+  time): a drawn card's markup is kept by its address and put straight
+  back.
+
+- **A call shows wherever the chat is.** Leaving the Chat page mid-call
+  kept the call talking with nothing on screen to show it, and the
+  drawer's phone then read idle, so pressing it hung up the call you
+  could hear. The chat that comes in next now shows the call as it
+  stands: phone pressed, the call bar with its time, engine and cost.
+
+- **A route defined inside a function can be walked.** The dry path
+  names a handler written inside the function that adds it (every chat
+  surface's routes) and reads its source there, so a chat page's route
+  has a code path like any other.
+
+- **Hot reloads leave no Stripe forwarder behind.** On Linux the
+  `stripe listen` the test-mode webhook forwarder starts now stops with
+  its server; a reload that timed out shutting down left one running
+  each time.
+
+- **Chat follows a card to the bottom.** A settling answer no longer
+  drops the thread's hold on the newest message: its card reloading made
+  the page shorter for a moment, which read as the reader scrolling up.
 
 - **A tool's result lands on its own call.** Calls to one tool made at
   once finish in any order, and each result was attached to the latest

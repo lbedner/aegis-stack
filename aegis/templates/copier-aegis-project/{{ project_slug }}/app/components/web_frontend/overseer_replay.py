@@ -18,11 +18,11 @@ from typing import Any
 from markupsafe import Markup
 
 from app.core.edges import SERVER
-from app.core.ontology import graph
+from app.core.ontology import PartNode, graph
 from app.core.ontology.model import Edge, EdgeKind, State
 from app.core.ontology.observed import running
 from app.core.ownership import HOST
-from app.services.system import kept_requests, topology
+from app.services.system import kept_requests, staged_paths, topology
 from app.services.system.kept_requests import RequestHop, RequestHops, RequestSummary
 from app.services.system.ui import is_service
 
@@ -84,6 +84,7 @@ async def replay(
     the same way after it, on a track of its own (on several, the way in
     is not on the last; on the Server opened up, there is no second
     track). ``scenes``: the first so many levels drawn (all when None)."""
+    recording = _folded(recording)
     hops, span = _timed(recording)
     parts = [_parts(hop) for hop in hops]
     installed = {entry.name for entry in navigation["components"]}
@@ -107,7 +108,9 @@ async def replay(
     lead = beat * len(way)
     out = [*entry, *reversed(way)] if len(levels) == 1 and key != HOST else []
     ways = [*lit, way + entry, *([out] if out else [])]
-    drawn = [await _scene(navigation, key, ways, 0.0, span, lead)]
+    # Staged (read from the code, or joined on the map), nothing was seen.
+    seen = frozenset() if recording.staged else None
+    drawn = [await _scene(navigation, key, ways, 0.0, span, lead, seen)]
     found = _beats(key, [(None, way[0]), *pairwise(way)], 0.0, beat) if way else []
     found += _steps(key, lead, hops, lit, titles, recording.staged)
     if out:
@@ -115,7 +118,7 @@ async def replay(
         found += _beats(key, list(pairwise(out)), lead + span, beat, answered=answered)
     for key, titles, lit in levels[1:scenes]:
         at = drawn[-1]["at"] + drawn[-1]["lead"] + drawn[-1]["ms"]
-        drawn.append(await _scene(navigation, key, lit, at, span))
+        drawn.append(await _scene(navigation, key, lit, at, span, seen=seen))
         found += _steps(key, at, hops, lit, titles, recording.staged)
     return {
         "replay": recording,
@@ -144,14 +147,21 @@ async def wiring(node_id: str) -> dict[str, Any]:
     reach the cache), drawn on the Server's map as a replay draws a path,
     so the card shows what she read; still, nothing to play."""
     model = await running()
-    _, _, edges = graph.neighbors(model, node_id)
+    here, _, edges = graph.neighbors(model, node_id)
+    # Code the map has no box for (a job) runs as its part does: the
+    # part's lines are its own.
+    if here.owner and not isinstance(here, PartNode):
+        edges += graph.neighbors(model, here.owner)[2]
     held = [e.target for e in edges if e.kind is EdgeKind.CONTAINS]
     edges += [e for part in held for e in graph.neighbors(model, part)[2]]
     pairs: dict[tuple[str, str], list[Edge]] = {}
     for edge in edges:
         pair = registry_of(edge.source), registry_of(edge.target)
         pairs.setdefault(pair, []).append(edge)
-    ways = [[a, b] for a, b in pairs if a != b]
+    # A part joined to it both ways (seen calling it, and called) is drawn
+    # once, as its caller: above it, not tangled through what it calls.
+    key = registry_of(node_id)
+    ways = [[a, b] for a, b in pairs if a != b and not (a == key and (b, a) in pairs)]
     # Seen only where no edge of it is declared: a line its code draws is not.
     seen = frozenset(
         p for p, found in pairs.items() if all(e.state in UNDECLARED for e in found)
@@ -160,7 +170,7 @@ async def wiring(node_id: str) -> dict[str, Any]:
     return {
         "path_steps": [],
         "path_scenes": [scene],
-        "path_wired": title_of(registry_of(node_id)),
+        "path_wired": title_of(key),
     }
 
 
@@ -184,6 +194,26 @@ def listed(recording: RequestHops) -> dict[str, Any]:
         "replay_rows": rows,
         "replay_switch": (url(recording.id), "Replay"),
     }
+
+
+def _folded(recording: RequestHops) -> RequestHops:
+    """A staged path as it plays: read function by function, it folds onto
+    a few parts on the map, so a hop through the parts an earlier one went
+    through is that one again; it joins it (its tables named there) rather
+    than lighting the same line again, and the rest play a beat apart. A
+    request that ran keeps every hop at its own time."""
+    if not recording.staged:
+        return recording
+    kept: dict[tuple[str, ...], RequestHop] = {}
+    for hop in recording.hops:
+        # What the map lights for it (the Server's own map draws no Server).
+        key = tuple(k for k in _parts(hop) if k != HOST)
+        if (first := kept.get(key)) is None:
+            kept[key] = hop
+        else:
+            tables = tuple(dict.fromkeys((*first.tables, *hop.tables)))
+            kept[key] = first.model_copy(update={"tables": tables})
+    return staged_paths.paced(recording, kept.values())
 
 
 def _timed(recording: RequestHops) -> tuple[tuple[RequestHop, ...], float]:

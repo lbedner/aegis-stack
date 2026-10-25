@@ -26,9 +26,12 @@ the subprocess on exit.
 """
 
 import asyncio
+import ctypes
 import re
 import shutil
+import signal
 import subprocess
+import sys
 from typing import Any
 
 from app.core import secrets
@@ -63,6 +66,15 @@ def _stripe_listen_args(port: int, api_key: str) -> list[str]:
 
 
 STRIPE_KEYS = ("STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET")
+PR_SET_PDEATHSIG = 1  # prctl(2): the signal a child gets when its parent dies
+
+
+def _dies_with_server() -> None:
+    """In the forked ``stripe listen``, before it runs: the kernel sends it
+    SIGTERM when the server process dies (Linux). A hot reload that times
+    out shutting down never runs the shutdown hook, and each one would
+    otherwise leave a forwarder behind."""
+    ctypes.CDLL(None, use_errno=True).prctl(PR_SET_PDEATHSIG, signal.SIGTERM)
 
 
 def _should_auto_forward(keys: dict[str, str | None]) -> tuple[bool, str]:
@@ -206,6 +218,7 @@ async def startup_payment_webhook_forwarder() -> None:
             stderr=subprocess.STDOUT,
             text=True,
             bufsize=1,  # line-buffered — secret arrives as a single line
+            preexec_fn=_dies_with_server if sys.platform == "linux" else None,
         )
     except OSError as e:
         logger.warning("Stripe webhook forwarder failed to launch: %s", e)

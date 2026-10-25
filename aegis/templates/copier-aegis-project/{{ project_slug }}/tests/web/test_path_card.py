@@ -14,7 +14,7 @@ from app.components.backend.api.ai.service import ai_service
 from app.components.web_frontend import overseer_replay
 from app.components.web_frontend.overseer_ai_chat import OVERSEER
 from app.core import edges, replays
-from app.core.ontology.model import EdgeKind, SystemModel
+from app.core.ontology.model import EdgeKind, JobNode, SystemModel
 from app.core.replays import Hop
 from app.services.ai.domains.chat.path_card import PathCard
 from app.services.ai.models import AIProvider
@@ -113,8 +113,30 @@ async def test_a_staged_path_says_what_it_went_through_not_how_long(
 
     steps = _steps(card)
     assert steps and not any(" ms" in str(step["says"]) for step in steps)
+    none(card, "[data-link][data-observed]")  # read from the code, not seen
     said = text(one(card, "[data-card=path]"))
     assert "Code path · GET /api/v1/auth/me · read from the code" in said
+
+
+async def test_a_code_path_plays_each_way_through_the_map_once(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A code path reads function by function; on the map they fold onto
+    a few parts, so a hop through parts an earlier one lit is that one
+    again: it joins it (its table named there) rather than blinking the
+    same line on and off (2026-10-24: "choppy as hell")."""
+    client = zoomable(app, monkeypatch, INGRESS)
+    auth_opens(monkeypatch)
+    users = "service:auth.users"
+    staged = _code_path(
+        ("service:auth", DB), ("service:auth", users), (users, "object:user")
+    )
+    card_id = await _card(PathCard(title="Me", path=staged))
+    steps = _steps(_opened(client, card_id))
+
+    lit = [tuple(step["targets"]) for step in steps]
+    assert len(lit) == len(set(lit))
+    assert any("user" in str(step["says"]) for step in steps)
 
 
 async def test_a_flow_with_nothing_inside_a_service_is_one_scene(
@@ -184,13 +206,21 @@ def _wired(monkeypatch: pytest.MonkeyPatch) -> None:
     Server needs it, and Auth holds the user table and its sessions,
     which call Stripe."""
     sessions, stripe = "service:auth.sessions", "external:Stripe"
+    job = JobNode(name="sweep", owner="service:auth", schedule="every 1h")
     model = model_of(
-        [node_of(k) for k in ("service:auth", DB, edges.SERVER, sessions, stripe)],
         [
+            *(node_of(k) for k in ("service:auth", DB, edges.SERVER, sessions, stripe)),
+            job,
+        ],
+        [
+            edge_of("service:auth", "job:sweep", EdgeKind.CONTAINS),
             edge_of("service:auth", DB),
             edge_of(edges.SERVER, DB, EdgeKind.DEPENDS_ON),
             edge_of("service:auth", sessions, EdgeKind.CONTAINS),
             edge_of(sessions, stripe),
+            # Seen both ways in traffic: the Server calls Auth, and back.
+            edge_of(edges.SERVER, "service:auth"),
+            edge_of("service:auth", edges.SERVER),
         ],
     )
 
@@ -219,15 +249,33 @@ async def test_a_parts_wiring_draws_the_edges_she_read_and_nothing_else(
     none(inline, "[data-play-badge]")
 
 
+async def test_a_job_is_drawn_where_its_part_runs_it(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A job has no box on the map: its wiring is its part's, the lines
+    the part that runs it is joined by (2026-10-24: the heartbeat's card
+    drew the Scheduler alone)."""
+    client = zoomable(app, monkeypatch, INGRESS)
+    _wired(monkeypatch)
+    card_id = await _card(PathCard(title="Sweep", node="job:sweep"))
+    client.headers["HX-Request"] = "true"
+    inline = client.get(f"{CARDS}/{card_id}").text
+
+    assert {"service_auth", "database"} <= _drawn(inline)
+
+
 async def test_opened_larger_a_wiring_is_still_a_map(
     app: FastAPI, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """A service's wiring: what it calls, and what the parts it holds
-    call (its sessions, Stripe), opened larger with no player."""
+    call (its sessions, Stripe), opened larger with no player; a part
+    joined to it both ways is drawn once, as its caller."""
     client = zoomable(app, monkeypatch, INGRESS)
     _wired(monkeypatch)
     card_id = await _card(PathCard(title="Auth", node="service:auth"))
     opened = _opened(client, card_id)
 
-    assert _drawn(opened) == {"service_auth", "database", "outside:Stripe"}
+    assert _drawn(opened) == {"service_auth", "database", "outside:Stripe", "backend"}
+    one(opened, '[data-link][data-from="backend"][data-to="service_auth"]')
+    none(opened, '[data-link][data-from="service_auth"][data-to="backend"]')
     none(opened, "[data-player]")

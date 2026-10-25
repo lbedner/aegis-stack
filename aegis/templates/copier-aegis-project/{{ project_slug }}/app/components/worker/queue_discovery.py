@@ -127,6 +127,21 @@ def build_metadata(
     }
 
 
+def configuration(queues: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """What the health check says of each of ``queues`` (``build_metadata``'s):
+    what it is for, how many jobs it runs at once, how long one may take,
+    and the tasks it runs."""
+    return {
+        name: {
+            "description": config["description"],
+            "max_jobs": config["max_jobs"],
+            "timeout_seconds": config["timeout"],
+            "tasks": config["tasks"],
+        }
+        for name, config in queues.items()
+    }
+
+
 def collect_metadata(
     discover: Callable[[], list[str]],
     metadata_for: Callable[[str], dict[str, Any]],

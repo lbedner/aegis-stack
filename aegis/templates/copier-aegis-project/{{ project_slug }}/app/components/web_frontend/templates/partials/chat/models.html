@@ -1,7 +1,9 @@
 {# The model picker, in the modal: ONE list of the models this install can
    call, grouped by vendor and searched in one box; the recently used lead
-   it. Kept quiet: teal means exactly one thing, the model in use, and says
-   it once (the check). A search re-requests only the list. #}
+   it. With calls, what a live call runs on is in it too, under its vendor,
+   marked Voice, and the list narrows to Text or Voice. Kept quiet: teal
+   means exactly one thing, a model in use, and says it once (the check).
+   A search or a filter re-requests only the list. #}
 {% from "components/macros/icons.html" import icon %}
 {% from "components/macros/chat.html" import model_chip %}
 {% from "components/macros/layout.html" import avatar, dialog_title %}
@@ -12,7 +14,7 @@
   {% for row in section.rows %}
   <li>
     <form hx-post="{{ picker.path }}" hx-target="#dialog-body" hx-swap="innerHTML">
-      <input type="hidden" name="q" value="{{ picker.query }}">
+      <input type="hidden" name="q" value="{{ picker.query }}"><input type="hidden" name="show" value="{{ picker.show }}">
       {# What a pick sets: the chat model, or what a live call runs on. #}
       <input type="hidden" name="kind" value="{{ row.kind }}">
       <button type="submit" name="model_id" value="{{ row.model_id }}" data-model-id="{{ row.model_id }}" {% if row.model_id in picker.active %}aria-current="true"{% endif %}
@@ -22,6 +24,7 @@
           <span class="block text-sm text-aegis-text truncate">{{ row.title }}</span>
           <span class="block text-xs text-aegis-muted truncate">{{ row.model_id }}</span>
         </span>
+        {% if row.voice %}<span class="micro-label text-aegis-muted" data-voice>Voice</span>{% endif %}
         {% if row.facts %}<span class="text-xs text-aegis-muted whitespace-nowrap">{{ row.facts }}</span>{% endif %}
         {% if row.model_id in picker.active %}{{ icon("check", "w-4 h-4 text-aegis-teal shrink-0", 2) }}{% endif %}
       </button>
@@ -38,9 +41,19 @@
   {# Only the list moves: swapping the search box mid-keystroke takes the
      caret with it. #}
   <form hx-get="{{ picker.path }}" hx-target="#model-list" hx-select="#model-list" hx-swap="outerHTML"
-        hx-trigger="input changed delay:200ms from:input[name=q]">
+        hx-trigger="input changed delay:200ms from:input[name=q], change from:input[name=show]" class="space-y-3">
     <input type="search" name="q" value="{{ picker.query }}" placeholder="Search models" aria-label="Search models" autofocus
            class="input input-bordered input-sm w-full bg-aegis-bg">
+    {% if picker.filters %}
+    <fieldset class="flex gap-1" aria-label="Show" data-filters>
+      {% for option, label in picker.filters %}
+      <label class="cursor-pointer">
+        <input type="radio" name="show" value="{{ option }}" class="peer sr-only" {% if option == picker.show %}checked{% endif %}>
+        <span class="chip peer-checked:border-aegis-teal peer-checked:text-aegis-text peer-focus-visible:border-aegis-teal">{{ label }}</span>
+      </label>
+      {% endfor %}
+    </fieldset>
+    {% endif %}
   </form>
   <div id="model-list" class="mt-3 h-[60vh] overflow-y-auto divide-y divide-aegis-border/60" data-models>
     {% if picker.empty %}

@@ -73,13 +73,16 @@ function chatComposer() {
     if (force) setPinned(true);
     if (pinned) el.scrollTop = el.scrollHeight;
   };
-  // Only going UP unpins: content arriving scrolls too, and must not drop
-  // the intent it is waiting for. Coming back to the bottom pins again.
+  // Only going UP, away from the bottom, unpins: content arriving scrolls
+  // too, and must not drop the intent it is waiting for. A settling answer
+  // shrinks for a moment (its card reloads) and the browser pulls the
+  // scroll up to the new bottom: still at the bottom, so still pinned.
+  // Coming back to the bottom pins again.
   let lastTop = 0;
   document.addEventListener('scroll', (event) => {
     const el = scroller();
     if (!el || event.target !== el) return;
-    if (el.scrollTop < lastTop - 1) setPinned(false);
+    if (el.scrollTop < lastTop - 1 && !nearBottom(el)) setPinned(false);
     else if (nearBottom(el)) setPinned(true);
     lastTop = el.scrollTop;
   }, true);

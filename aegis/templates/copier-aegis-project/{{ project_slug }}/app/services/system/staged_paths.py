@@ -5,7 +5,7 @@ own. Shaped as a kept request is (``kept_requests.RequestHops``), so
 whatever plays a request (Overseer's replay, a path card) plays these the
 same way."""
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from itertools import pairwise
 
 from app.core.edges import DATABASE, SERVER
@@ -82,7 +82,9 @@ def dry(walked: DryPath) -> RequestHops:
     chains: list[tuple[tuple[str, ...], tuple[str, ...]]] = []
     if entry:
         chains.append(((SERVER, entry), ()))
-    chains += [_read(step.source, step.target) for step in walked.edges]
+    # What only a loop over a registry reaches (every part's health check)
+    # is what is registered when it runs: the card stops where the loop is.
+    chains += [_read(s.source, s.target) for s in walked.edges if not s.fanned]
     method, _, path = walked.route.partition(" ")
     return _staged(chains, method=method, path=path)
 
@@ -101,29 +103,37 @@ async def route(key: str) -> RequestHops:
     return dry(await dry_path.of(key))
 
 
+def paced(recording: RequestHops, hops: Iterable[RequestHop]) -> RequestHops:
+    """``recording`` playing ``hops`` a beat apart, the way a staged path
+    plays (its own and the card's folded copy alike)."""
+    beats = tuple(
+        hop.model_copy(update={"at_ms": index * BEAT_MS, "ms": BEAT_MS})
+        for index, hop in enumerate(hops)
+    )
+    return recording.model_copy(
+        update={"hops": beats, "hop_count": len(beats), "ms": len(beats) * BEAT_MS}
+    )
+
+
 def _staged(
     chains: Sequence[tuple[tuple[str, ...], tuple[str, ...]]], *, method: str, path: str
 ) -> RequestHops:
-    hops = tuple(
+    hops = (
         RequestHop(
-            chain=chain,
-            at_ms=index * BEAT_MS,
-            ms=BEAT_MS,
-            error=False,
-            tables=tables,
-            lines=(),
+            chain=chain, at_ms=0, ms=BEAT_MS, error=False, tables=tables, lines=()
         )
-        for index, (chain, tables) in enumerate(chains)
+        for chain, tables in chains
     )
-    return RequestHops(
+    shell = RequestHops(
         id="",
         method=method,
         path=path,
         route=path,
         status=200,
-        ms=len(hops) * BEAT_MS,
-        hop_count=len(hops),
+        ms=0,
+        hop_count=0,
         dropped=0,
-        hops=hops,
+        hops=(),
         staged=True,
     )
+    return paced(shell, hops)

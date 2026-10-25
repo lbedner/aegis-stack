@@ -162,7 +162,8 @@
    free. Content is loaded by htmx into ``#dialog-body`` (pattern 4);
    app.js opens the dialog when a swap lands there, and closing clears it
    so a stale body never flashes on the next open. A chat card opened
-   larger sits on the page's own black, as it does in the thread. Mounted
+   larger sits on the page's own black, as it does in the thread; a tool
+   run (its script and output, read line by line) gets room. Mounted
    once by the app shell, outside ``#app-content``. #}
 {% macro dialog() %}
 <dialog id="dialog"
@@ -172,6 +173,7 @@
                has-[[data-card]]:bg-aegis-bg
                has-[[data-card=path]]:max-w-[min(90rem,calc(100vw-2rem))]
                has-[[data-card=table]]:w-fit has-[[data-card=table]]:max-w-[calc(100vw-2rem)]
+               has-[[data-run]]:max-w-4xl
                backdrop:bg-aegis-scrim/60 backdrop:backdrop-blur-sm">
   <div class="flex justify-end px-3 pt-3">
     <button type="button" aria-label="Close" @click="$el.closest('dialog').close()"

@@ -79,6 +79,7 @@ class Hop(Frozen):
     text: str
     guard: str | None = None  # the ``if`` it is under, as written
     mode: Mode = Mode.SYNC
+    through: str | None = None  # the registry a loop over it reached it by
 
 
 class Stop(Frozen):
@@ -132,6 +133,7 @@ class Walker:
         *,
         parent: int | None = None,
         mode: Mode | None = None,
+        through: str | None = None,
     ) -> int:
         """A hop at ``line`` of the scope's module, made by its code (by
         hop ``parent``, given one)."""
@@ -145,6 +147,7 @@ class Walker:
                 **asdict(scope.module.place(line)),
                 guard=guard,
                 mode=mode or scope.mode,
+                through=through,
             )
         )
         return len(self.hops)
@@ -314,9 +317,15 @@ class Walker:
         return None
 
     def _reach(
-        self, target: Symbol, line: int, scope: Scope, guard: str | None
+        self,
+        target: Symbol,
+        line: int,
+        scope: Scope,
+        guard: str | None,
+        through: str | None = None,
     ) -> None:
-        """A hop into ``target``: a core client's component, else the
+        """A hop into ``target`` (reached by a loop over the registry
+        ``through``, given one): a core client's component, else the
         function, its outside providers, and its body."""
         module = self.index.get(target[0])
         if module and (fronts := module.declared.fronts):
@@ -324,10 +333,18 @@ class Walker:
             if used not in self.used:
                 self.used.add(used)
                 component = self._node(module.name)
-                self._add(HopKind.USES, target, component, line, scope, guard)
+                self._add(
+                    HopKind.USES, target, component, line, scope, guard, through=through
+                )
             return
         hop = self._add(
-            HopKind.CALLS, target, self._node(target[0]), line, scope, guard
+            HopKind.CALLS,
+            target,
+            self._node(target[0]),
+            line,
+            scope,
+            guard,
+            through=through,
         )
         package = target[0].rpartition(".")[0]
         if package not in self.reached:
@@ -382,7 +399,9 @@ class Walker:
         if entries:
             scope.covered |= names
         for entry in entries:
-            self._reach(entry, loop.lineno, scope, guard)
+            self._reach(
+                entry, loop.lineno, scope, guard, ".".join(filter(None, symbol))
+            )
 
 
 def _given(needs: tuple[Need, ...]) -> dict[str, Symbol]:

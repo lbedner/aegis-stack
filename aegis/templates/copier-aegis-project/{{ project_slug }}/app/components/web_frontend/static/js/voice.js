@@ -191,6 +191,7 @@
   // --- Speaking ---------------------------------------------------------------
   const stop = () => {
     if (player?.reply) mood('idle');
+    mentions.along(player?.answer, null);
     player?.pause();
     playing?.setAttribute('aria-pressed', 'false');
     show(playing, 'idle');
@@ -210,6 +211,11 @@
     show(button, 'thinking'); // fetching and synthesizing
     player = voiced(`${button.dataset.speak}${query}`, button, reply);
     player.reply = reply;
+    // Its card follows along as it plays (mentions.js).
+    player.answer = button.closest('[data-role=assistant]');
+    player.addEventListener('timeupdate', function () {
+      if (Number.isFinite(this.duration)) mentions.along(this.answer, this.currentTime / this.duration);
+    });
     playing = button;
     button.setAttribute('aria-pressed', 'true');
     player.addEventListener('ended', stop);
@@ -341,6 +347,7 @@
     // A turn saved as the call closed never reached this page.
     showSaved(call.conversation);
     for (const timer of ['audioEnd', 'idle', 'leave', 'grace']) clearTimeout(call[timer]);
+    unfollow();
     stopTyping();
     stopBar();
     show(phone(), 'idle');
@@ -351,22 +358,33 @@
   // --- The call bar: the composer row gives way to it for the call. The
   // cost is the server's, priced as each turn is saved.
   const field = (name) => callBar()?.querySelector(`[data-call-${name}]`);
-  const showCost = (dollars) => { field('cost').textContent = `$${dollars.toFixed(2)}`; };
+  const showCost = (dollars) => {
+    call.cost = dollars;
+    if (field('cost')) field('cost').textContent = `$${dollars.toFixed(2)}`;
+  };
   const clock = (seconds) => `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
   const tick = () => {
-    if (!call) return;
+    if (!call || !field('timer')) return; // no chat on screen to show it in
     field('timer').textContent = clock((Date.now() - call.started) / 1000);
     if (call.state.nudged) sayState(); // the countdown
   };
+  // The call bar in the composer's place, as the call stands: drawn as
+  // it starts and again in a chat that comes in mid-call (``reattach``).
+  const paintBar = () => {
+    if (chatComposer()) chatComposer().hidden = true;
+    if (!callBar()) return;
+    callBar().hidden = false;
+    field('engine').textContent = call.engine?.label || '';
+    field('cost-later').hidden = call.cost != null;
+    if (call.cost != null) showCost(call.cost);
+    else field('cost').textContent = '';
+    tick();
+  };
   const startBar = (engine) => {
     call.started = Date.now();
-    field('engine').textContent = engine?.label || '';
-    field('cost').textContent = '';
-    field('cost-later').hidden = false;
-    chatComposer().hidden = true;
-    callBar().hidden = false;
+    call.engine = engine;
     call.ticker = setInterval(tick, 1000);
-    tick();
+    paintBar();
   };
   const stopBar = () => {
     clearInterval(call?.ticker);
@@ -436,13 +454,35 @@
   const stepping = (step) => {
     call.step = step;
     happen({ type: 'step', on: true });
+    shown(step);
+  };
+  // Each step in the thread as it runs, under her name, as a typed turn's
+  // are; the saved turn redraws the thread with them. One row a turn.
+  const shown = (step) => {
+    if (!step || !chatThread() || !document.getElementById('chat-live-turn')) return;
+    if (!call.turn?.isConnected) {
+      call.turn = clone('chat-live-turn');
+      chatThread().append(call.turn);
+    }
+    const row = document.createElement('li');
+    row.textContent = step;
+    call.turn.querySelector('[data-trail]').append(row);
   };
   const stepped = () => {
     call.step = null;
     happen({ type: 'step', on: false });
   };
   // Its reply is done: no longer the cut one, and its steps with it.
+  // The card she drew for the answer she is giving, wherever it is now:
+  // in its live slot, or in the saved turn that replaced it while she was
+  // still talking (saved when written, heard after). One she drew for an
+  // earlier answer is never it.
+  const drawnCard = () => {
+    if (!call?.drawn || !chatThread()) return null;
+    return [...chatThread().querySelectorAll(`[data-card="path"][hx-get^="${call.drawn}"]`)].pop() || null;
+  };
   const replied = () => {
+    call.turn = null; // the next turn's steps go under a row of their own
     happen({ type: 'reply' });
     stepped();
   };
@@ -454,7 +494,7 @@
   };
   // The thread, reloaded so a saved turn shows with its steps and cards.
   const showTurns = (id) => {
-    if (!id) return;
+    if (!id || !phone() || !chatThread()) return; // no chat on screen to show it in
     setConversation(id);
     htmx.ajax('GET', phone().dataset.thread + id, { target: chatThread(), swap: 'innerHTML' });
   };
@@ -502,9 +542,15 @@
     node.onended = () => { if (call) call.sources = call.sources.filter((s) => s !== node); };
     heardOut((call.playhead - call.speaker.currentTime) * 1000 + 300);
   };
+  // The card's lighting still to come, dropped: never to be heard.
+  const unfollow = () => {
+    call.follows.forEach(clearTimeout);
+    call.follows = [];
+  };
   // Spoken over: what was not yet heard is dropped.
   const interrupted = () => {
     for (const node of call.sources) try { node.stop(); } catch (_) {}
+    unfollow();
     call.sources = [];
     call.playhead = 0;
     clearTimeout(call.audioEnd);
@@ -532,8 +578,10 @@
       happen({ type: 'speech', on: true }); // your first transcribed words: you
       happen({ type: 'words' });
     } else if (event.type === 'onset' || event.type === 'turn_end') {
+      if (event.type === 'turn_end') call.drawn = call.slot = null; // a new question: no card yet
       happen({ type: event.type });
     } else if (event.type === 'heard') {
+      call.drawn = call.slot = null; // a new question (Gemini's end of it): no card yet
       happen({ type: 'heard' });
     } else if (event.type === 'hang_up') {
       happen({ type: 'goodbye' });
@@ -541,17 +589,45 @@
       stepping(event.label);
     } else if (event.type === 'done') {
       replied();
+    } else if (event.type === 'saying') {
+      // Lit as it is heard, not as it is written: her words come with the
+      // audio made for them, which plays once what is queued ahead has.
+      const ahead = call.speaker ? Math.max(0, call.playhead - call.speaker.currentTime) : 0;
+      const said = event.text;
+      call.follows.push(setTimeout(() => {
+        const card = drawnCard();
+        if (card) mentions.follow(card, said);
+      }, ahead * 1000));
     } else if (event.type === 'card') {
+      call.drawn = event.url; // what she names lights here (``drawnCard``)
       // A chart up while it is talked about; the saved turn replaces it.
-      const slot = clone('chat-live-card');
-      chatThread().append(slot);
-      htmx.ajax('GET', event.url, { target: slot, swap: 'innerHTML' });
+      // One a question: drawn again, it takes the first one's place, as
+      // the saved turn keeps only the last.
+      if (!chatThread()) return; // no chat on screen: the saved turn has it
+      if (!call.slot?.isConnected) call.slot = chatThread().appendChild(clone('chat-live-card'));
+      htmx.ajax('GET', event.url, { target: call.slot, swap: 'innerHTML' });
     } else if (event.type === 'saved') {
       showTurns(call.conversation);
       showCost(event.cost);
-      field('cost-later').hidden = true;
+      if (field('cost-later')) field('cost-later').hidden = true;
     }
   };
+  // A call outlives the chat it began in: leave the Chat page and it keeps
+  // talking. The chat that comes in next (the drawer, the Chat page again)
+  // shows it as it stands, never an idle phone over a live call, so its
+  // phone hangs up the call you can hear on purpose.
+  const reattach = () => {
+    if (!call || call.closing || !phone()) return;
+    phone().setAttribute('aria-pressed', 'true');
+    if (!call.ready) return show(phone(), 'thinking');
+    paintBar();
+    document.getElementById('chat-mute')?.setAttribute('aria-pressed', String(!!call.state.muted));
+    draw();
+  };
+  document.body.addEventListener('htmx:load', (event) => {
+    const elt = event.detail.elt;
+    if (elt.id === 'chat-live' || elt.querySelector?.('#chat-live')) reattach();
+  });
   const dial = async (button) => {
     const stream = await microphone(window.AudioWorkletNode);
     if (!stream) return;
@@ -560,7 +636,7 @@
     if (conversationId()) url.searchParams.set('conversation_id', conversationId());
     const ws = new WebSocket(url);
     ws.binaryType = 'arraybuffer';
-    call = { ws, stream, sources: [], playhead: 0, state: callState.start(voice().idle * 1000) };
+    call = { ws, stream, sources: [], follows: [], playhead: 0, state: callState.start(voice().idle * 1000) };
     engaged(button);
     ws.addEventListener('message', ({ data }) => (typeof data === 'string' ? relayed(JSON.parse(data)) : voiceChunk(data)));
     ws.addEventListener('close', () => {

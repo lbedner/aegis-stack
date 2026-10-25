@@ -53,9 +53,11 @@ HANG_UP_GRACE = 0.5
 
 
 def end_call() -> str:
-    """End the call. Use it once they are done - a goodbye, "that's all",
-    thanks with nothing more to ask - right after your short goodbye, and
-    say nothing after it."""
+    """End the call. Use it once they have said they are done - a goodbye,
+    "that's all", thanks with nothing more to ask - right after your short
+    goodbye, and say nothing after it. Never on a turn with no words of
+    theirs in it (a noise, a breath, your own voice heard back): that is
+    not a goodbye, so carry on or ask what they meant."""
     return "The call ends when your goodbye has played. Say nothing more."
 
 
@@ -71,6 +73,9 @@ class TurnLog:
 
     def __init__(self) -> None:
         self._reset()
+        # The cards the call's steps draw (its card stage), moved onto the
+        # step that drew them; the call's, not a turn's.
+        self.drawn: list[dict[str, Any]] = []
         # The cards the last event's step drew, for the page at once.
         self.shown: list[str] = []
 
@@ -78,7 +83,6 @@ class TurnLog:
         self.heard: list[str] = []
         self.said: list[str] = []
         self.trace: list[dict[str, Any]] = []
-        self.drawn: list[dict[str, Any]] = []
 
     def observe(self, event: Any) -> bool:
         """Take in one event; True when it finished a turn. Ending the call
@@ -324,7 +328,6 @@ async def drive(
                         if on_event:
                             await on_event(event)
                         if log.observe(event) and (turn := log.take()):
-                            log.drawn = drawn
                             cost = await keep(session, turn, interrupted=False)
                             if on_saved:
                                 await on_saved(cost)

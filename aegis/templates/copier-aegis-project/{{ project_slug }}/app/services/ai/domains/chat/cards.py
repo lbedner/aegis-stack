@@ -146,6 +146,13 @@ def _figure(value: str | int | float) -> bool:
     return not isinstance(value, str) or bool(FIGURE.match(value.strip()))
 
 
+def _something(values: list[float]) -> None:
+    """A chart of nothing is said in words, not drawn: an idle worker's
+    task counts, all 0."""
+    if values and all(value == 0 for value in values):
+        raise ValueError("every value is 0, nothing to chart. Say it in words instead")
+
+
 class BarRow(BaseModel):
     label: str
     value: float
@@ -159,6 +166,11 @@ class BarPayload(BaseModel):
     unit: Unit = "money"
     rows: list[BarRow]
 
+    @model_validator(mode="after")
+    def _drawn(self) -> BarPayload:
+        _something([row.value for row in self.rows])
+        return self
+
 
 class PiePayload(BaseModel):
     """Parts of a whole: each row a slice, drawn like the Overview's
@@ -168,6 +180,11 @@ class PiePayload(BaseModel):
     measure: str
     unit: Unit = "money"
     rows: list[BarRow]
+
+    @model_validator(mode="after")
+    def _drawn(self) -> PiePayload:
+        _something([row.value for row in self.rows])
+        return self
 
 
 # The chart palette has eight colours; a ninth slice would repeat one.
@@ -186,6 +203,11 @@ class ComparePayload(BaseModel):
     after_label: str
     after: float
 
+    @model_validator(mode="after")
+    def _drawn(self) -> ComparePayload:
+        _something([self.before, self.after])
+        return self
+
 
 class TrendPoint(BaseModel):
     date: str  # YYYY-MM-DD
@@ -199,6 +221,11 @@ class TrendPayload(BaseModel):
     measure: str
     unit: Unit = "money"
     rows: list[TrendPoint]
+
+    @model_validator(mode="after")
+    def _drawn(self) -> TrendPayload:
+        _something([row.value for row in self.rows])
+        return self
 
 
 register_kind("table", TablePayload, rows=TABLE_ROWS)
@@ -300,15 +327,21 @@ async def draw_card(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
         rows each carrying several values -> table
         one figure, or none -> no card, just say it
         a flow on the map -> path: a request's replay (request_id), a
-          route's code path (route: what its code can do, never run) or,
+          route's code path (route: what its code can do, never run;
+          also what a route touches, what happens when someone signs
+          up, pays, uploads: its route) or,
           for a flow neither shows, its stops (node ids from ontology, in
           order: the server joins them along the map's own lines and
           refuses a stop none reaches)
-        how a part is wired, what it connects to or what uses it -> path
-          with its node (its id: what the ontology joins it to, on the map)
+        how a part or a table is wired, what it connects to, what uses
+          it, what breaks if it fails -> path with its node (its id, a
+          table's object:<name> too: what the ontology joins it to, on
+          the map)
         call these a flow, a replay, a code path or its wiring, never a
           "path card"; a diagram of parts is this card, never arrows
-          typed in your answer
+          typed in your answer. Name its parts as the map titles them
+          (Server, Authentication, Cache): each one you name lights on
+          the card as it is read or heard
 
     Compute the data first, then call this with the kind and the data
     (from your script, in code mode) - it displays what you give it and
@@ -318,8 +351,9 @@ async def draw_card(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
     cents (unit "money", the default); use unit "count" for anything else.
     Keep a card within its kind's rows (below) and say the rest in prose.
     Your answer says what the card means, not its rows again, and still
-    reads to someone who cannot see it. One card per answer: drawing again
-    replaces the one before, so fix a card by redrawing it.
+    reads to someone who cannot see it: never a line standing in for it
+    ("[diagram]", "the card shows its connections"). One card per answer:
+    drawing again replaces the one before, so fix a card by redrawing it.
 
     Returns {'kind', 'id'}, or {'error'} saying what to fix. An error drew
     nothing: fix what it says and call again before you answer, never
@@ -350,6 +384,11 @@ async def draw_card(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
             f"It takes {shape_of(declared.schema)}."
         }
     held = len(getattr(data, "rows", None) or [])
+    if declared.rows and not held:
+        return {
+            "error": f"{declared.name} card has no rows. Draw it from what "
+            "the lookup returned, in the same script, after it returns."
+        }
     if declared.rows and held > declared.rows:
         return {
             "error": f"{declared.name} card takes at most {declared.rows} rows, "

@@ -13,7 +13,7 @@ import sys
 
 from app.core.ontology.model import Mode
 from app.core.source_index import Index, Module, Symbol, resolve, within
-from app.core.source_members import Def, Source, assigned
+from app.core.source_members import LOCALS, Def, Source, assigned
 
 SELF = frozenset({"self", "cls"})
 WORKER = "app.components.worker"  # where a task by name is looked for
@@ -48,7 +48,10 @@ def symbol_of(found: object) -> Symbol | None:
     # ``*__taskiq_original``); its code object keeps the first.
     code = getattr(found, "__code__", None)
     name = code.co_qualname if code else name
-    return None if not module or "<" in name else (module, name)
+    # A function defined inside another (a route a factory adds) is named
+    # through it; one with no name of its own (a lambda) is not.
+    unnamed = "<" in name.replace(LOCALS, "")
+    return None if not module or unnamed else (module, name)
 
 
 class Names:

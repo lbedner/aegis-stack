@@ -118,7 +118,9 @@ def test_cards_waiting_for_approval_sit_beside_the_thread(
 
 def test_the_assistant_is_the_agent_by_name(client: TestClient) -> None:
     html = _chat_page(client)
-    assert text(one(html, "[data-role=assistant] [data-assistant]")) == "Illiana"
+    # Her rows and the live call's row template name her, the same.
+    names = {text(n) for n in select(html, "[data-role=assistant] [data-assistant]")}
+    assert names == {"Illiana"}
     assert one(html, "#chat-composer textarea").get("placeholder") == "Message Illiana"
 
 
@@ -326,16 +328,29 @@ def test_the_hooks_the_scripts_read_are_the_ones_the_markup_emits(
     script = "".join((SCRIPTS / name).read_text() for name in ("chat.js", "voice.js"))
     ids = set(re.findall(r"getElementById\('([\w-]+)'\)", script))
     hooks = set(re.findall(r"\[(data-[\w-]+)[\]=]", script))
+    from app.components.web_frontend.rendering import templates
+
+    # A drawn card, and its loader, as an answer with a card emits them.
+    macros = templates.env.get_template("components/macros/chat.html").module
+    frames = templates.env.get_template("partials/chat/cards/_frame.html").module
     pages = [
         _chat_page(client),
         client.post(f"{CHAT}/turns", data={"message": "hi"}).text,
+        str(macros.card_loader("/cards/x", "the chart")),
+        str(frames.card_frame("path", "A flow", None, "/cards/x", caller=lambda: "")),
     ]
     optional = {"dialog", "dialog-body"}
     if not chat_surface.HAS_VOICE:
         optional |= {"chat-mic", "chat-mic-states", "data-speak", "data-state"}
     # A live call needs voice and a database (profiles and engines are rows).
     if not (chat_surface.HAS_VOICE and chat_surface.PERSISTED):
-        optional |= {"chat-live", "chat-call", "chat-mute", "data-countdown"}
+        optional |= {
+            "chat-live",
+            "chat-call",
+            "chat-mute",
+            "chat-live-turn",
+            "data-countdown",
+        }
     for element_id in ids - optional:
         assert any(select(h, f"#{element_id}") for h in pages), element_id
     for hook in hooks - optional:
@@ -408,7 +423,7 @@ class TestModelPicker:
         rows = [
             b.get("data-model-id")
             for b in select(picker, "[data-model-id]")
-            if b.get("data-model-id") != LIVE  # the live-call group, below
+            if b.get("data-model-id") != LIVE  # a voice model, under its vendor
         ]
         # The model in use and the recently used lead, then each vendor's group.
         assert rows[:2] == ["llama3", "claude-x"]
@@ -457,6 +472,29 @@ class TestModelPicker:
         }
         assert current == {"llama3", LIVE}  # the chat model and the call's
         assert text(one(response.text, "#chat-model [data-model]")) == "llama3"
+
+    def test_text_or_voice_narrows_one_list_and_voice_sits_with_its_vendor(
+        self, client: TestClient
+    ) -> None:
+        """One list of every model she runs on, narrowed by modality: a
+        live model is a row under its own vendor, marked Voice, not a group
+        apart at the foot of the chat models."""
+        if not (chat_surface.HAS_VOICE and chat_surface.PERSISTED):
+            pytest.skip("no live calls in this stack")
+        every = client.get(f"{CHAT}/models").text
+        groups = {
+            text(one(group, "summary")).split()[0]: group
+            for group in select(every, "#model-list details")
+        }
+        assert "Live" not in groups
+        one(groups["google"], f'[data-model-id="{LIVE}"] [data-voice]')
+
+        def shown(show: str) -> set[str]:
+            found = client.get(f"{CHAT}/models", params={"show": show}).text
+            return {b.get("data-model-id") for b in select(found, "[data-model-id]")}
+
+        assert shown("voice") == {LIVE}
+        assert shown("text") == {"llama3", "claude-x"}
 
     def test_a_refused_pick_says_why(self, client: TestClient) -> None:
         response = client.post(f"{CHAT}/models", data={"model_id": "nope"})

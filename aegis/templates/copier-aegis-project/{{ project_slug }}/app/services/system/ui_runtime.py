@@ -223,6 +223,14 @@ async def containers(page: str, *, wait: bool = True) -> dict[str, Any]:
     return (await containers_of([page], wait=wait))[page]
 
 
+async def sampled(page: str) -> dict[str, Any]:
+    """``containers`` as last sampled, for a reader that is not watching
+    the page (an agent's): no ``watch``, so Docker stays at its idle pace."""
+    if not runtime.deployed():
+        return _note(NO_DEPLOY)
+    return _view(page, await series.latest(SAMPLER), None)
+
+
 async def containers_of(
     pages: list[str], *, wait: bool = True
 ) -> dict[str, dict[str, Any]]:

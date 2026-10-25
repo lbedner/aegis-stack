@@ -22,6 +22,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, WebSocket
 from pydantic_ai.messages import (
     FunctionToolCallEvent,
+    PartDeltaEvent,
     PartEndEvent,
     PartStartEvent,
     RealtimeInputSpeechEndEvent,
@@ -29,6 +30,7 @@ from pydantic_ai.messages import (
     RealtimeResponseInterruptedEvent,
     RealtimeTurnCompleteEvent,
     SpeechPart,
+    SpeechPartDelta,
 )
 
 from app.components.backend.api.ai.service import ai_service
@@ -133,6 +135,15 @@ async def _tell(ws: WebSocket, event: Any) -> None:
         # Gemini reports no onset of speech: your first transcribed words
         # are it, and "heard" is the end. No quiet counts in between.
         said = {"type": "hearing"}
+    elif (
+        isinstance(event, PartDeltaEvent)
+        and isinstance(event.delta, SpeechPartDelta)
+        and event.delta.speaker == "assistant"
+        and event.delta.transcript
+    ):
+        # Her words so far, as she says them: a card on screen follows
+        # the part she names (mentions.js).
+        said = {"type": "saying", "text": event.delta.transcript}
     elif isinstance(event, PartEndEvent) and isinstance(event.part, SpeechPart):
         side = "heard" if event.part.speaker == "user" else "said"
         said = {"type": side, "text": event.part.transcript or ""}

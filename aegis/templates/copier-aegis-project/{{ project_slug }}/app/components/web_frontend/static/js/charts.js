@@ -111,6 +111,12 @@ function highest(data) {
 function timed(data) {
   return data.x === 'time';
 }
+// What measures from zero: a bar, whose height is its value, and a time
+// chart, so a small change reads as small. A line by labels keeps the
+// range its values span.
+function fromZero(kind, data) {
+  return kind === 'bar' || timed(data);
+}
 // A time axis spans the data's ``window`` (from then to now) when it has
 // one, its own first and last points otherwise.
 function span(data) {
@@ -249,10 +255,9 @@ function build(Chart, canvas) {
         grid: { color: grid },
       }
       : { ticks: { color: muted }, grid: { color: grid } },
-    // A time chart measures from zero, so a small change reads as small.
     y: {
       stacked: data.style === 'stacked',
-      beginAtZero: timed(data),
+      beginAtZero: fromZero(kind, data),
       ticks: {
         color: muted,
         callback: (v) => formatValue(v, data.format),
@@ -406,4 +411,4 @@ if (typeof document !== 'undefined') {
   document.addEventListener('theme-changed', () => mount(document));
 }
 
-if (typeof module !== 'undefined') module.exports = { datasets, formatValue, refresh, timeTicks, byteStep, legendShows, legendPosition };
+if (typeof module !== 'undefined') module.exports = { datasets, formatValue, refresh, timeTicks, byteStep, legendShows, legendPosition, fromZero };

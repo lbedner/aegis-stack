@@ -7,10 +7,9 @@
 {% from "components/macros/chat.html" import chat_toolbar %}
 <div x-data="chatDrawer('{{ chat_path }}')" @htmx:after-settle.window="settled()">
   <button type="button" id="chat-fab" x-show="!onChat && !open" x-cloak @click="show()"
-          class="fixed bottom-5 right-5 z-40 inline-flex items-center gap-2 rounded-full border border-aegis-teal bg-aegis-card text-aegis-teal text-sm pl-4 pr-5 py-2.5 shadow-lg hover:bg-aegis-teal/10 transition-colors"
-          aria-label="Open chat">
-    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M8 10h8M8 14h5m-9 6.5 2.6-2H18a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v14.5Z"/></svg>
-    Chat
+          class="fixed bottom-5 right-5 z-40 rounded-xl transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-aegis-teal"
+          aria-label="Open chat" title="Chat">
+    <img src="{{ static('illiana.png') }}" alt="" width="64" height="64" class="w-16 h-16 drop-shadow-lg">
   </button>
   <template x-teleport="body">
     <div x-show="open" x-cloak @keydown.escape.window="open = false" class="fixed inset-0 z-50 flex justify-end">

@@ -17,8 +17,8 @@ exclude_docs: |
 theme:
   name: material
   custom_dir: docs/overrides
-  logo: images/aegis_stack_layered_shield.svg
-  favicon: images/aegis_stack_layered_shield.svg
+  logo: images/aegis_shield.png
+  favicon: images/aegis_shield_favicon.png
   palette:
     # Palette toggle for light vs dark mode. ``primary: custom`` is paired
     # with the ``--md-primary-fg-color*`` overrides in

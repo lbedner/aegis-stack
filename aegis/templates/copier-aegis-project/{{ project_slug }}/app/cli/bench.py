@@ -120,7 +120,7 @@ def _row(engine: str, loop: str, sample: Sample) -> str:
     )
 
 
-def _resolve_target(
+async def _resolve_target(
     method: str,
     path: str,
     path_param: list[str],
@@ -132,7 +132,7 @@ def _resolve_target(
     anon: bool,
 ) -> Target:
     headers = parse_kv_flag(header, "--header")
-    apply_auto_auth(headers, as_admin=as_admin, as_user=as_user, anon=anon, quiet=True)
+    await apply_auto_auth(headers, as_admin=as_admin, as_user=as_user, anon=anon, quiet=True)
     body = Path(payload_file).read_text() if payload_file else payload
     return Target(
         method=method.upper(),
@@ -143,7 +143,7 @@ def _resolve_target(
 
 
 @app.command()
-def engines(
+async def engines(
     path: Annotated[
         str, typer.Option(help="Route to hit; `api-load-test list` shows them")
     ] = "/health/",
@@ -176,7 +176,7 @@ def engines(
         raise typer.Exit(2)
 
     try:
-        target = _resolve_target(
+        target = await _resolve_target(
             method,
             path,
             path_param or [],

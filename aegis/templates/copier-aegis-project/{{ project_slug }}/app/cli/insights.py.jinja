@@ -5,7 +5,6 @@ Command-line interface for viewing adoption metrics, triggering collection,
 managing Reddit posts, and logging events.
 """
 
-import asyncio
 from typing import TYPE_CHECKING
 
 from rich.console import Console
@@ -27,8 +26,8 @@ app.add_typer(reddit_app, name="reddit")
 
 
 @app.command(help=lazy_t("insights.help_status"))
-def status() -> None:
-    asyncio.run(_status())
+async def status() -> None:
+    await _status()
 
 
 async def _status() -> None:
@@ -92,7 +91,7 @@ async def _status() -> None:
 
 
 @app.command(help=lazy_t("insights.help_collect"))
-def collect(
+async def collect(
     source: str | None = typer.Argument(
         None, help=lazy_t("insights.arg_source")
     ),
@@ -100,7 +99,7 @@ def collect(
         1, "--lookback-days", "-d", help=lazy_t("insights.opt_lookback_days"),
     ),
 ) -> None:
-    asyncio.run(_collect(source, lookback_days))
+    await _collect(source, lookback_days)
 
 
 async def _collect(source: str | None, lookback_days: int = 1) -> None:
@@ -153,10 +152,10 @@ def _print_collection_result(result: "CollectionResult") -> None:
 
 
 @app.command(help=lazy_t("insights.help_stars"))
-def stars(
+async def stars(
     limit: int = typer.Option(20, "--limit", "-n", help=lazy_t("insights.opt_limit")),
 ) -> None:
-    asyncio.run(_stars(limit))
+    await _stars(limit)
 
 
 async def _stars(limit: int) -> None:
@@ -192,8 +191,8 @@ async def _stars(limit: int) -> None:
 
 
 @app.command(help=lazy_t("insights.help_records"))
-def records() -> None:
-    asyncio.run(_records())
+async def records() -> None:
+    await _records()
 
 
 async def _records() -> None:
@@ -230,8 +229,8 @@ async def _records() -> None:
 
 
 @app.command(help=lazy_t("insights.help_sources"))
-def sources() -> None:
-    asyncio.run(_sources())
+async def sources() -> None:
+    await _sources()
 
 
 async def _sources() -> None:
@@ -263,10 +262,10 @@ async def _sources() -> None:
 
 
 @reddit_app.command("add", help=lazy_t("insights.help_reddit_add"))
-def reddit_add(
+async def reddit_add(
     url: str = typer.Argument(..., help=lazy_t("insights.arg_url")),
 ) -> None:
-    asyncio.run(_reddit_add(url))
+    await _reddit_add(url)
 
 
 async def _reddit_add(url: str) -> None:
@@ -288,13 +287,13 @@ async def _reddit_add(url: str) -> None:
 
 
 @app.command("event", help=lazy_t("insights.help_event"))
-def log_event(
+async def log_event(
     event_type: str = typer.Argument(..., help=lazy_t("insights.arg_event_type")),
     description: str = typer.Argument(..., help=lazy_t("insights.arg_description")),
     date: str | None = typer.Option(None, "--date", help=lazy_t("insights.opt_event_date")),
     category: str | None = typer.Option(None, "--category", help=lazy_t("insights.opt_event_category")),
 ) -> None:
-    asyncio.run(_log_event(event_type, description, date, category))
+    await _log_event(event_type, description, date, category)
 
 
 async def _log_event(

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import sys
 
 from app.cli import theme
@@ -31,7 +30,7 @@ def _get_auth_dependency() -> object | None:
 console = theme.console()
 
 
-def apply_auto_auth(
+async def apply_auto_auth(
     headers: dict[str, str],
     *,
     as_admin: bool,
@@ -78,7 +77,7 @@ def apply_auto_auth(
         sys.exit(2)
 
     role = ADMIN if as_admin or (not as_user and admin_available()) else USER
-    headers.update(asyncio.run(bearer_header(role)))
+    headers.update(await bearer_header(role))
     if not quiet:
         theme.label(
             f"Authenticating as {role} ({email_for(role)}); pass --anon to disable"

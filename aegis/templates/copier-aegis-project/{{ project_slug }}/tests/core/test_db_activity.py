@@ -12,7 +12,7 @@ import time
 from unittest.mock import AsyncMock
 
 import pytest
-from sqlalchemy import Engine, create_engine, text
+from sqlalchemy import Engine, create_engine, event, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -77,6 +77,43 @@ async def test_an_async_session_names_its_caller(path: Path) -> None:
         await watched.dispose()
     (event,) = await _recorded()
     assert "test_an_async_session_names_its_caller" in event["caller"]
+
+
+async def test_a_cancelled_statement_ends_as_a_cancel(path: Path) -> None:
+    """Ctrl+C (or a client gone) cancels a statement mid-flight, which leaves
+    its connection invalid; the rollback that cleans it up runs these
+    listeners, and one that reads the connection's ``info`` there raised
+    "Can't reconnect until invalid transaction is rolled back" in place of
+    the cancel (``ai chat`` printed it as its error)."""
+    pytest.importorskip("aiosqlite")
+    watched = create_async_engine(f"sqlite+aiosqlite:///{path}")
+    db_activity.watch(watched.sync_engine)
+    slow = text(
+        "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c"
+        " WHERE x < 3000000) SELECT count(*) FROM c"
+    )
+
+    sent = asyncio.Event()
+
+    @event.listens_for(watched.sync_engine, "before_cursor_execute")
+    def _sending(_conn: object, _cursor: object, statement: str, *_: object) -> None:
+        if "RECURSIVE" in statement:
+            sent.set()
+
+    async def query() -> None:
+        async with watched.begin() as conn:
+            await conn.execute(slow)
+
+    try:
+        running = asyncio.create_task(query())
+        # Set just before the driver call, so the task is now waiting on
+        # the statement: cancelled there however fast the machine.
+        await sent.wait()
+        running.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await running
+    finally:
+        await watched.dispose()
 
 
 async def test_a_transaction_is_seen_while_it_is_held(path: Path) -> None:

@@ -164,8 +164,9 @@ def main() -> None:
             click.echo()
         click.echo(f"Error: {e.format_message()}", err=True)
         sys.exit(2)
-    except click.exceptions.Abort:
-        # User cancelled (e.g., Ctrl+C)
+    except (click.exceptions.Abort, KeyboardInterrupt):
+        # User cancelled (e.g., Ctrl+C): Click's Abort for a sync command,
+        # the loop's own KeyboardInterrupt for an async one
         sys.exit(1)
     except click.exceptions.Exit as e:
         # Normal exit requested (e.g., after showing error message)

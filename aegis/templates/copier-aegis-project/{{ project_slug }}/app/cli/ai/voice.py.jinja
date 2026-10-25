@@ -1,7 +1,5 @@
 """The voice round trip: speak, transcribe, answer, speak back."""
 
-import asyncio
-
 import typer
 
 from app.cli import theme
@@ -16,7 +14,7 @@ from ...core.log import suppress_logs
 
 
 @app.command(help=lazy_t("ai.help_voice"))
-def voice(
+async def voice(
     audio_file: str = typer.Argument(..., help=lazy_t("ai.arg_audio_file")),
     conversation_id: str | None = typer.Option(
         None, "--conversation-id", "-c", help=lazy_t("ai.opt_conversation_id")
@@ -132,4 +130,4 @@ def voice(
             console.print(f"[{theme.ERROR}]{t('shared.error')}[/{theme.ERROR}] {e}")
             raise typer.Exit(1)
 
-    asyncio.run(run_voice())
+    await run_voice()

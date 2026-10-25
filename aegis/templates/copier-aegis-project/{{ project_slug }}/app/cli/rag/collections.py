@@ -1,6 +1,5 @@
 """The collections an index is divided into."""
 
-import asyncio
 from pathlib import Path
 from typing import Annotated
 
@@ -24,11 +23,11 @@ from app.cli.rag.shared import app, console, get_rag_service
 
 
 @app.command("list", help=lazy_t("rag.help_list"))
-def list_collections() -> None:
+async def list_collections() -> None:
     rag_service = get_rag_service()
 
     try:
-        collections = asyncio.run(rag_service.list_collections())
+        collections = await rag_service.list_collections()
 
         if not collections:
             console.print(f"[dim]{t('rag.no_collections')}[/dim]")
@@ -41,7 +40,7 @@ def list_collections() -> None:
         table.add_column(t("rag.documents_column"), justify="right")
 
         for name in collections:
-            stats = asyncio.run(rag_service.get_collection_stats(name))
+            stats = await rag_service.get_collection_stats(name)
             count = stats.get("count", 0) if stats else 0
             table.add_row(name, str(count))
 
@@ -55,7 +54,7 @@ def list_collections() -> None:
 
 
 @app.command("delete", help=lazy_t("rag.help_delete"))
-def delete_collection(
+async def delete_collection(
     collection: Annotated[
         str,
         typer.Argument(help=lazy_t("rag.arg_collection")),
@@ -75,7 +74,7 @@ def delete_collection(
             return
 
     try:
-        deleted = asyncio.run(rag_service.delete_collection(collection))
+        deleted = await rag_service.delete_collection(collection)
 
         if deleted:
             console.print(f"[{theme.ACCENT}]{t('rag.deleted_collection')}[/] {collection}")

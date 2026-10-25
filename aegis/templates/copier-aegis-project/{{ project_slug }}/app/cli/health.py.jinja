@@ -4,7 +4,6 @@ Health monitoring CLI commands.
 Command-line interface for system health checking and monitoring via API endpoints.
 """
 
-import asyncio
 import json
 import sys
 
@@ -106,7 +105,7 @@ async def is_system_healthy() -> bool:
 
 
 @app.command("status", help=lazy_t("health.help_status"))
-def health_status(
+async def health_status(
     detailed: bool = typer.Option(
         False, "--detailed", "-d", help=lazy_t("health.opt_detailed")
     ),
@@ -118,7 +117,7 @@ def health_status(
         endpoint = (
             APIEndpoints.HEALTH_DETAILED if detailed else APIEndpoints.HEALTH_BASIC
         )
-        health_data = asyncio.run(get_health_data(endpoint))
+        health_data = await get_health_data(endpoint)
 
         if json_output:
             print(json.dumps(health_data.model_dump(), indent=2))
@@ -138,9 +137,9 @@ def health_status(
 
 
 @app.command("probe", help=lazy_t("health.help_probe"))
-def health_probe() -> None:
+async def health_probe() -> None:
     try:
-        healthy = asyncio.run(is_system_healthy())
+        healthy = await is_system_healthy()
 
         if healthy:
             console.print(f"[{theme.ACCENT}]{t('health.system_healthy')}[/]")

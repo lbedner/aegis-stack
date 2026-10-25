@@ -435,6 +435,12 @@
   deploy) ends on `KeyboardInterrupt`; below error level that is no
   longer filed as an issue on the Errors page.
 
+- **The worker endpoint tests no longer take ten minutes.** Their client
+  ran the backend's startup hooks and never its shutdown hooks, so what
+  the hooks started was still running as each test's loop closed, and
+  Python waited 300 seconds for it; they now shut down as their siblings
+  do.
+
 - **The card keeps lighting until she stops talking.** A call saves her
   answer when it is written, before it has all been heard; the card she
   drew moved into the saved answer and stopped following her. It is now

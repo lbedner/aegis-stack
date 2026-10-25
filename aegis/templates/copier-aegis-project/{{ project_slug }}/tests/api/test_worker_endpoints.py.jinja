@@ -51,6 +51,10 @@ class TestWorkerEndpoints:
             yield client
 
         app.dependency_overrides.clear()
+
+        # Clean up after test: what the startup hooks began, stopped (left
+        # running, the test's loop waits 300s for it as it closes).
+        await backend_hooks.execute_shutdown_hooks()
 {%- else %}
     @pytest.fixture
     async def async_client(self) -> AsyncIterator[AsyncClient]:
@@ -71,6 +75,10 @@ class TestWorkerEndpoints:
             transport=transport, base_url="http://test"
         ) as client:
             yield client
+
+        # Clean up after test: what the startup hooks began, stopped (left
+        # running, the test's loop waits 300s for it as it closes).
+        await backend_hooks.execute_shutdown_hooks()
 {%- endif %}
 
 {% if worker_backend == "arq" %}

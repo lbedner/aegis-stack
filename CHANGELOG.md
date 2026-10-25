@@ -434,6 +434,10 @@
 
 ### Fixed
 
+- **`ai conversations` runs again.** The asyncio.run -> await port
+  (#1821) left `await list_conversations(...)[:limit]`, which slices the
+  coroutine before awaiting it: a TypeError on every run. (#1835)
+
 - **The twin, and the app's health, answer without Redis.** Observed
   calls and the containers' last reading are read from Redis; with none
   to reach (Redis down, or a shell, or CI) every twin answer failed, and

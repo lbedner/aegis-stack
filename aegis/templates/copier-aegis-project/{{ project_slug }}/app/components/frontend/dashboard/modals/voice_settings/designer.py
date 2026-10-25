@@ -19,6 +19,7 @@ from app.components.frontend.controls import (
     SecondaryText,
 )
 from app.components.frontend.controls.buttons import PulseButton
+from app.components.frontend.controls.provider_icon import ProviderIcon
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.config import settings
 
@@ -231,7 +232,14 @@ class VoiceEditor(ft.Column):
                         [
                             ft.Row(
                                 [
-                                    ft.Radio(value=v["id"], label=v["name"], width=200),
+                                    ft.Radio(value=v["id"], width=32),
+                                    ProviderIcon(
+                                        v["provider_name"],
+                                        view["logos"]
+                                        .get(v["provider"], {})
+                                        .get("icon"),
+                                    ),
+                                    BodyText(v["name"], width=170),
                                     SecondaryText(v["detail"], expand=True),
                                     ft.IconButton(
                                         ft.Icons.VOLUME_UP,

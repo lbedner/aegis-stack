@@ -108,10 +108,10 @@ class Settings(
     def _default_api_base_url(self) -> "Settings":
         """Point the CLI at wherever this app is actually reachable."""
         if not self.API_BASE_URL:
-            # The published host port is the host's business: .env.ports
-            # carries it into the container, naming a port nothing serves.
-            host_port = None if self.is_docker else self.WEBSERVER_HOST_PORT
-            self.API_BASE_URL = f"http://localhost:{host_port or self.PORT}"
+            # In a container, the webserver by name on its own port (not the host's).
+            docker = f"webserver:{self.PORT}" if self.is_docker else None
+            local = f"localhost:{self.WEBSERVER_HOST_PORT or self.PORT}"
+            self.API_BASE_URL = f"http://{docker or local}"
         return self
 
     # Development settings

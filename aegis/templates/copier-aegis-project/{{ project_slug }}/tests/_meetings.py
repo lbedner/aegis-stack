@@ -14,10 +14,13 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.meetings import service as meetings_service
+from app.services.meetings.domains.actions import runs as action_runs
 from app.services.meetings.domains.actions import tokens
 from app.services.meetings.domains.bot import run as bot
+from app.services.meetings.domains.bot import transcript
 from app.services.meetings.domains.bot.audio import RATE
 from app.services.meetings.domains.bot.login import CALENDAR, LOGIN
+from app.services.meetings.domains.bot.meet import CallState
 from app.services.meetings.domains.bot.row import transition, write_captions
 from app.services.meetings.domains.moments import tidy
 from app.services.meetings.domains.moments.service import moments_of
@@ -80,6 +83,7 @@ def bot_on(
     monkeypatch.setattr(bot, "get_async_session", opens(session))
     monkeypatch.setattr(bot, "POLL_SECONDS", poll_seconds)
     monkeypatch.setattr(bot, "BEAT_SECONDS", 0)
+    monkeypatch.setattr(transcript, "BEAT_SECONDS", 0)
     # No model writes the notes unless the test brings one.
     monkeypatch.setattr(bot, "notes_writer", lambda: notes)
     monkeypatch.setattr(bot, "guides_writer", lambda: guides)
@@ -146,6 +150,80 @@ def hold_the_cleaner(monkeypatch: pytest.MonkeyPatch) -> tuple[list[int], list[A
     monkeypatch.setattr(tidy, "background", runs.append)
     monkeypatch.setattr(tidy, "CLEANING", set())
     return cleaned, runs
+
+
+def hold_the_answers(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A line put to the bot asks her answer as it is said: held here, never
+    run (no model is called)."""
+    monkeypatch.setattr(action_runs, "background", lambda work: work.close())
+
+
+class FakeCall:
+    """A call whose states are scripted: one per look, the last repeating.
+    ``during`` runs a hook at a named moment, as another process would."""
+
+    def __init__(
+        self,
+        states: list[CallState],
+        people: list[int] | None = None,
+        during: dict[str, Callable[[], Any]] | None = None,
+        captions: list[list[Caption]] | None = None,
+        sound: bool = False,
+    ):
+        self.states = states
+        self.counts = people or [3]
+        self.shown = captions or [[]]
+        self.captions_on = False
+        self.during = during or {}
+        self.said: list[str] = []
+        self.asked_as: str | None = None
+        self.left = False
+        # A second of the call reaches the bot on every look, while ``sound``.
+        self.sound = sound
+        self.on_audio: Callable[[str], None] | None = None
+        # What its camera showed (each change) and what it said aloud.
+        self.cards: list[dict[str, Any]] = []
+        self.spoken: list[bytes] = []
+        self.captions_offered = True
+
+    async def _at(self, moment: str) -> None:
+        if moment in self.during:
+            await self.during[moment]()
+
+    async def ask_to_join(self, bot_name: str) -> None:
+        self.asked_as = bot_name
+        await self._at("ask_to_join")
+
+    async def state(self) -> CallState:
+        return self.states.pop(0) if len(self.states) > 1 else self.states[0]
+
+    async def page_text(self) -> str:
+        return ""
+
+    async def people(self) -> int:
+        return self.counts.pop(0) if len(self.counts) > 1 else self.counts[0]
+
+    async def say(self, text: str) -> None:
+        self.said.append(text)
+        await self._at("say")
+
+    async def leave(self) -> None:
+        self.left = True
+
+    async def turn_on_captions(self) -> bool:
+        self.captions_on = self.captions_offered
+        return self.captions_offered
+
+    async def show(self, **update: Any) -> None:
+        self.cards.append(update)
+
+    async def speak(self, audio: bytes) -> None:
+        self.spoken.append(audio)
+
+    async def captions(self) -> list[Caption]:
+        if self.sound and self.on_audio is not None:
+            self.on_audio(SECOND)
+        return self.shown.pop(0) if len(self.shown) > 1 else self.shown[0]
 
 
 def hold_the_series_writer(monkeypatch: pytest.MonkeyPatch) -> list[Any]:
@@ -340,18 +418,17 @@ async def asked_a_question(
     owner: int | None = None,
     *,
     status: MeetingStatus | None = None,
-) -> tuple[int, int]:
-    """One of ``owner``'s meetings where, after some talk, Dana asks whether
-    the CSV export can ship this week (moved to ``status``, when given): its
-    id and the question's moment id."""
-    meeting_id = await a_meeting(session, owner)
-    await said(
-        session,
-        meeting_id,
+    lines: Sequence[tuple[str, str]] = (
         ("Sam", "Let's talk about the beta."),
         ("Dana", "The usage report is late."),
         ("Dana", "Can the CSV export ship this week?"),
-    )
+    ),
+) -> tuple[int, int]:
+    """One of ``owner``'s meetings where, after some talk, Dana asks whether
+    the CSV export can ship this week (or the one moment ``lines`` say;
+    moved to ``status``, when given): its id and the moment's id."""
+    meeting_id = await a_meeting(session, owner)
+    await said(session, meeting_id, *lines)
     if status is not None:
         await transition(session, meeting_id, status, from_=NOT_DONE)
     (moment,) = await moments_of(session, meeting_id)

@@ -45,6 +45,11 @@ class BotAccount(SQLModel, table=True):
     camera: bool = Field(
         default=True, description="Its camera on in a call, showing its card"
     )
+    answers_anyone: bool = Field(
+        default=True,
+        description="Answers anyone in a call who puts a question to it by "
+        "name; off: only its meeting's owner",
+    )
 
 
 class AgentImage(SQLModel, table=True):

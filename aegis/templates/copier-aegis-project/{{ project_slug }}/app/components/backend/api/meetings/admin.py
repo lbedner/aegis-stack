@@ -5,7 +5,7 @@ notes written again, the bot asked to leave, and a meeting deleted; and
 who owns what nobody pressed send for: a meeting nobody owns given to
 someone, and who an agent's calendar meetings go to when nobody on the
 invite has an account here; and each agent's card in a call, its picture
-and whether its camera is on. Reading is the admin's (``get_admin_reader``), a
+and its on/off settings (camera, answers anyone). Reading is the admin's (``get_admin_reader``), a
 change an operator's (``get_admin_actor``); an owner's own meetings are
 ``router``'s."""
 
@@ -24,10 +24,11 @@ from app.services.meetings.deps import (
 )
 from app.services.meetings.domains.accounts.service import (
     AgentRow,
+    Switch,
     clear_image,
     overview,
-    set_camera,
     set_default_owner,
+    set_switch,
 )
 from app.services.meetings.domains.accounts.service import agents as every_agent
 from app.services.meetings.domains.calendar.entries import (
@@ -87,15 +88,19 @@ async def agent_owner(name: str, body: Owned, svc: Every) -> BotAccount:
         return await set_default_owner(svc.db, name, body.user_id)
 
 
-class Camera(BaseModel):
+class Turned(BaseModel):
     on: bool
 
 
-@router.put("/agents/{name}/camera", response_model=BotAccount, dependencies=CHANGE)
-async def agent_camera(name: str, body: Camera, svc: Every) -> BotAccount:
-    """Whether the agent shows its card in a call."""
+@router.put("/agents/{name}/{switch}", response_model=BotAccount, dependencies=CHANGE)
+async def agent_switch(
+    name: str, switch: Switch, body: Turned, svc: Every
+) -> BotAccount:
+    """One of the agent's on/off settings: ``camera``, whether it shows its
+    card in a call; ``answers_anyone``, whether anyone in one may ask it
+    something by name (off: only the meeting's owner)."""
     with as_http():
-        return await set_camera(svc.db, name, body.on)
+        return await set_switch(svc.db, name, switch, body.on)
 
 
 @router.post("/agents/{name}/image", response_model=BotAccount, dependencies=CHANGE)

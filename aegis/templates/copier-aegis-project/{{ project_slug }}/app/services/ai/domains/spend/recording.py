@@ -14,6 +14,7 @@ from app.core import series
 from app.core.db import get_async_session
 from app.core.log import logger
 from app.core.time import utcnow
+from app.core.tools import current_owner_user_id
 from app.services.ai.domains.llm import queries as llm_queries
 from app.services.ai.models.llm import LLMUsage
 
@@ -158,10 +159,15 @@ def _priced_input_cost(usage: dict[str, int], rates: llm_queries.Rates) -> float
 
 
 async def _write(row: LLMUsage, what: str) -> None:
-    """One ledger row, its model named bare like every other; a failed
+    """One ledger row, its model named bare like every other, and its user
+    whoever it is done for where the caller names none; a failed
     write is logged and swallowed - usage tracking must never fail the
     calling request."""
     row.model_id = _bare_model_name(row.model_id)
+    # Whose it is, where the caller names nobody: whoever it is being done
+    # for (``acting_as``, bound once by a turn or a meeting's bot).
+    owner = current_owner_user_id.get()
+    row.user_id = row.user_id or (None if owner is None else str(owner))
     # Naive UTC: asyncpg rejects an aware value for a ``timestamp without
     # time zone`` column, and the except below would swallow that as a
     # lost row.

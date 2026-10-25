@@ -27,78 +27,17 @@ from app.services.meetings.models import (
     MeetingStatus,
 )
 from app.services.meetings.service import MeetingsService, transition
-from tests._meetings import MEET, SAID, SECOND, SHOWN, asked_a_question, bot_on
+from tests._meetings import (
+    MEET,
+    SAID,
+    SHOWN,
+    FakeCall,
+    asked_a_question,
+    bot_on,
+)
 
 # The run beats on every look here (BEAT_SECONDS is 0), by design.
 pytestmark = pytest.mark.queryspy(allow_n_plus_one=True)
-
-
-class FakeCall:
-    """A call whose states are scripted: one per look, the last repeating.
-    ``during`` runs a hook at a named moment, as another process would."""
-
-    def __init__(
-        self,
-        states: list[CallState],
-        people: list[int] | None = None,
-        during: dict[str, Callable[[], Any]] | None = None,
-        captions: list[list[Caption]] | None = None,
-        sound: bool = False,
-    ):
-        self.states = states
-        self.counts = people or [3]
-        self.shown = captions or [[]]
-        self.captions_on = False
-        self.during = during or {}
-        self.said: list[str] = []
-        self.asked_as: str | None = None
-        self.left = False
-        # A second of the call reaches the bot on every look, while ``sound``.
-        self.sound = sound
-        self.on_audio: Callable[[str], None] | None = None
-        # What its camera showed (each change) and what it said aloud.
-        self.cards: list[dict[str, Any]] = []
-        self.spoken: list[bytes] = []
-        self.captions_offered = True
-
-    async def _at(self, moment: str) -> None:
-        if moment in self.during:
-            await self.during[moment]()
-
-    async def ask_to_join(self, bot_name: str) -> None:
-        self.asked_as = bot_name
-        await self._at("ask_to_join")
-
-    async def state(self) -> CallState:
-        return self.states.pop(0) if len(self.states) > 1 else self.states[0]
-
-    async def page_text(self) -> str:
-        return ""
-
-    async def people(self) -> int:
-        return self.counts.pop(0) if len(self.counts) > 1 else self.counts[0]
-
-    async def say(self, text: str) -> None:
-        self.said.append(text)
-        await self._at("say")
-
-    async def leave(self) -> None:
-        self.left = True
-
-    async def turn_on_captions(self) -> bool:
-        self.captions_on = self.captions_offered
-        return self.captions_offered
-
-    async def show(self, **update: Any) -> None:
-        self.cards.append(update)
-
-    async def speak(self, audio: bytes) -> None:
-        self.spoken.append(audio)
-
-    async def captions(self) -> list[Caption]:
-        if self.sound and self.on_audio is not None:
-            self.on_audio(SECOND)
-        return self.shown.pop(0) if len(self.shown) > 1 else self.shown[0]
 
 
 @pytest.fixture
@@ -624,7 +563,7 @@ async def test_an_agents_picture_and_camera_setting_come_with_it(
     await accounts.set_image(
         async_db_session, accounts.DEFAULT_AGENT, b"png", "image/png"
     )
-    await accounts.set_camera(async_db_session, accounts.DEFAULT_AGENT, False)
+    await accounts.set_switch(async_db_session, accounts.DEFAULT_AGENT, "camera", False)
     call = FakeCall([CallState.IN_CALL, CallState.ENDED])
 
     await run(call)

@@ -41,6 +41,9 @@ MIC_ON = 'button[aria-label^="Turn on microphone"]'
 MIC_OFF = 'button[aria-label^="Turn off microphone"]'
 # After its words, a moment before it mutes: the end is not cut off.
 SPOKEN_TAIL = 0.3
+# Before its first words in a call, a moment after unmuting: Meet opens the
+# microphone late the first time, and cut "Let me look that up" short.
+FIRST_UNMUTE = 0.4
 NAME_INPUT = 'input[type="text"]'
 JOIN_BUTTON = (
     'button:has-text("Join now"), button:has-text("Ask to join"), '
@@ -134,6 +137,7 @@ class MeetPageError(RuntimeError):
 class MeetPage:
     def __init__(self, page: Page) -> None:
         self.page = page
+        self.spoken = False  # whether it has said anything yet
 
     async def _shown(self, selector: str) -> bool:
         """On the page and visible: Meet keeps controls it is not showing."""
@@ -213,7 +217,9 @@ class MeetPage:
     async def speak(self, audio: bytes) -> None:
         """Say ``audio`` into the call: unmuted only while it plays."""
         await self._answer_prompts()
-        await self._click_if_visible(MIC_ON)
+        if await self._click_if_visible(MIC_ON) and not self.spoken:
+            await asyncio.sleep(FIRST_UNMUTE)
+        self.spoken = True
         try:
             seconds = await card.speak(self.page, audio)
             await asyncio.sleep(seconds + SPOKEN_TAIL)

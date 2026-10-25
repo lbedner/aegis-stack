@@ -18,7 +18,11 @@ from typing import Literal
 
 from app.core.discovery import optional
 from app.services.meetings.domains.actions.prompt import Excerpt, for_an_agent
-from app.services.meetings.domains.moments.detectors import load_extensions
+from app.services.meetings.domains.moments.detectors import (
+    ADDRESSED,
+    QUESTION,
+    load_extensions,
+)
 
 Where = Literal["browser", "app", "runner"]
 # What an action that runs in the app does: given its prompt and the owner,
@@ -60,8 +64,13 @@ def actions_for(kind: str) -> list[Action]:
     return [a for a in _actions.values() if kind in a.kinds]
 
 
-register_action(Action("copy", "Copy for agent", frozenset({"question"}), "browser"))
-register_action(Action("agent", "Ask agent", frozenset({"question"}), "runner"))
+# Her action (``ask_ai``): she answers, where the stack has her.
+ANSWERS = "ai"
+# What a coding agent can take: a question, asked of the bot by name or not.
+QUESTIONS = frozenset({QUESTION, ADDRESSED})
+
+register_action(Action("copy", "Copy for agent", QUESTIONS, "browser"))
+register_action(Action("agent", "Ask agent", QUESTIONS, "runner"))
 
 # The stack's model answers too, where it has one.
 optional("app.services.meetings.domains.actions.ask_ai")

@@ -1,45 +1,76 @@
 {% if include_ai and ai_backend != "memory" and ai_framework == "pydantic-ai" %}
-"""Ask AI: the stack's own model answers a moment from the meeting so far,
-as the ``meeting-answers`` agent (``domains.agents``), so its prompt and
-model are edited in Agents. Runs in the app; metered as ``meetings:ask``."""
+"""Ask AI: Illiana answers a moment herself (Overseer's own agent: her
+prompt, model and tools, the system's ontology among them), from the
+meeting so far, in a conversation of the meetings' own (``SURFACE``, kept
+out of her chat's list). Runs in the app; metered as her turns are. A
+question put to her by name (``addressed``) is answered unasked."""
+
+from typing import Any
 
 from app.services.meetings.domains.actions.prompt import (
     Excerpt,
     said_before,
     the_question,
 )
-from app.services.meetings.domains.actions.registry import Action, register_action
+from app.services.meetings.domains.actions.registry import (
+    ANSWERS,
+    QUESTIONS,
+    Action,
+    register_action,
+)
 
-METER = "meetings:ask"
+# The chat surface her answers are kept under.
+SURFACE = "meetings"
+# How she answers in a call: what she says is heard, not read.
+SAY_IT = (
+    "Answer it as you would out loud in the meeting: briefly, in two or "
+    "three sentences, with no lists or markdown. When the meeting does not "
+    "hold the answer, look it up with your tools; when you cannot find it, "
+    "say so plainly instead of guessing."
+)
 
 
 def for_the_model(heard: Excerpt) -> str:
-    """The excerpt as the model reads it: the meeting so far, then the
-    moment."""
-    return f"The meeting so far:\n{said_before(heard)}\n\n{the_question(heard)}"
+    """The excerpt as she reads it: the meeting so far, the moment, and how
+    to answer it."""
+    return (
+        f"The meeting so far:\n{said_before(heard)}\n\n"
+        f"{the_question(heard)}\n\n{SAY_IT}"
+    )
+
+
+def her() -> Any:
+    """The AI service she answers through."""
+    # Here, not at the top: the AI service loads every tool, the meetings'
+    # among them, which reach back into the meetings service this registers
+    # from; and she loads only when an answer is asked for.
+    from app.core.config import settings
+    from app.services.ai.service import AIService
+
+    return AIService(settings)
 
 
 async def answer(prompt: str, owner_user_id: int | None) -> str:
-    # Here, not at the top: the AI service loads every tool, the meetings'
-    # among them, which reach back into the meetings service this registers
-    # from; and the agents load only when an answer is asked for.
-    from app.services.ai.service import write
-    from app.services.meetings.domains.agents import ANSWER_AGENT, ANSWER_PROMPT
-
-    answer, _ = await write(
-        ANSWER_AGENT,
-        ANSWER_PROMPT,
-        str,
+    """Her answer: a turn of her own agent, as the meeting's owner."""
+    owner = {} if owner_user_id is None else {"user_id": str(owner_user_id)}
+    said = await her().chat(
         prompt,
-        action=METER,
         owner_user_id=owner_user_id,
+        agent_slug=None,
+        surface=SURFACE,
+        **owner,
     )
-    return answer
+    return said.content
 
 
 register_action(
     Action(
-        "ai", "Ask AI", frozenset({"question"}), "app", run=answer, frame=for_the_model
+        ANSWERS,
+        "Ask AI",
+        QUESTIONS,
+        "app",
+        run=answer,
+        frame=for_the_model,
     )
 )
 {% endif %}

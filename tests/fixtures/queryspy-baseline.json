@@ -1966,6 +1966,12 @@
     },
     {
       "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting LEFT OUTER JOIN meeting_bot_account ON meeting.account_id = meeting_bot_account.id WHERE meeting.id IN (__[POSTCOMPILE_id_1])",
+      "file": "app/services/meetings/domains/moments/queries.py",
+      "function": "wakers_in"
+    },
+    {
+      "kind": "repeated_statement",
       "label": "SELECT ... FROM meeting ORDER BY meeting.created_at DESC, meeting.id DESC LIMIT :param_1",
       "file": "app/services/meetings/queries.py",
       "function": "meetings_of"
@@ -2064,6 +2070,12 @@
       "kind": "repeated_statement",
       "label": "SELECT ... FROM meeting_action_run WHERE meeting_action_run.moment_id IN (__[POSTCOMPILE_moment_id_1]) AND meeting_action_run.action = :action_1 AND meeting_action_run.status IN (__[POSTCOMPILE_status_1])",
       "file": "app/services/meetings/domains/actions/queries.py",
+      "function": "answered"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_action_run WHERE meeting_action_run.moment_id IN (__[POSTCOMPILE_moment_id_1]) AND meeting_action_run.action = :action_1 AND meeting_action_run.status IN (__[POSTCOMPILE_status_1])",
+      "file": "app/services/meetings/domains/actions/queries.py",
       "function": "going"
     },
     {
@@ -2155,6 +2167,12 @@
       "label": "SELECT ... FROM meeting_moment JOIN meeting_transcript_line ON meeting_transcript_line.id = meeting_moment.line_id LEFT OUTER JOIN meeting_participant ON meeting_transcript_line.participant_id = meeting_participant.id LEFT OUTER JOIN meeting_person ON meeting_person.id = meeting_participant.person_id WHERE meeting_moment.meeting_id = :meeting_id_1 ORDER BY meeting_transcript_line.start_seconds, meeting_moment.id",
       "file": "app/services/meetings/domains/moments/queries.py",
       "function": "of_meeting"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_moment WHERE meeting_moment.meeting_id IN (__[POSTCOMPILE_meeting_id_1]) AND meeting_moment.kind = :kind_1",
+      "file": "app/services/meetings/domains/moments/queries.py",
+      "function": "_put_to_it"
     },
     {
       "kind": "repeated_statement",
@@ -2437,6 +2455,12 @@
       "label": "SELECT ... FROM meeting_transcript_line LEFT OUTER JOIN meeting_participant ON meeting_transcript_line.participant_id = meeting_participant.id LEFT OUTER JOIN meeting_person ON meeting_person.id = meeting_participant.person_id WHERE meeting_transcript_line.meeting_id = :meeting_id_1 ORDER BY meeting_transcript_line.start_seconds, meeting_transcript_line.id",
       "file": "app/services/meetings/queries.py",
       "function": "transcript"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_transcript_line LEFT OUTER JOIN meeting_participant ON meeting_transcript_line.participant_id = meeting_participant.id LEFT OUTER JOIN meeting_person ON meeting_person.id = meeting_participant.person_id WHERE meeting_transcript_line.meeting_id IN (__[POSTCOMPILE_meeting_id_1]) ORDER BY meeting_transcript_line.meeting_id, meeting_transcript_line.start_seconds, meeting_transcript_line.id",
+      "file": "app/services/meetings/domains/moments/queries.py",
+      "function": "_lines"
     },
     {
       "kind": "repeated_statement",

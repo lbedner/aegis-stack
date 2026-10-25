@@ -10,6 +10,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.core.config import settings
 from app.core.discovery import optional
 from app.core.log import logger
+from app.services.meetings.domains.moments.detectors import SENTENCES
 
 TTS = "app.services.ai.domains.voice.tts"
 AI = "app.services.ai.service"
@@ -41,3 +42,11 @@ async def spoken(text: str, voice: Any | None) -> bytes | None:
         logger.exception("The bot's speech could not be made; it writes only")
         return None
     return result.audio
+
+
+def sentences(text: str) -> list[str]:
+    """``text`` as it is said aloud, a sentence at a time: written for a
+    chat, its markdown is made plain first (the AI service's
+    ``to_spoken``), lists and all, where the stack has it."""
+    plain = getattr(optional(AI), "to_spoken", lambda said: said)(text)
+    return SENTENCES.split(plain.strip())

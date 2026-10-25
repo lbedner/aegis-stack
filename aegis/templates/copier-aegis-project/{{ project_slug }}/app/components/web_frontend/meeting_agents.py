@@ -3,7 +3,7 @@ sent as (the Meetings page's send form and Overseer's), which agent each
 meeting was, and Overseer > Meetings > Agents, where each says who it is,
 whether its sign-in still works, which meeting it is in now and who owns
 a meeting it joins from its calendar that nobody on the invite owns, and
-its card in a call (its picture, its camera). An agent is made by signing
+its card in a call (its picture) and its on/off settings. An agent is made by signing
 it in: ``meetings login --agent``.
 """
 
@@ -16,6 +16,7 @@ from app.services.meetings.domains.accounts.service import (
     IMAGE_TYPES,
     NOT_SIGNED_IN,
     SIGNED_IN,
+    SWITCHES,
     AgentRow,
     overview,
 )
@@ -69,7 +70,10 @@ def _row(row: AgentRow, opened: Callable[[int], str]) -> dict[str, Any]:
             "agent": account.name,
             # Its version, which its address carries (cached for good).
             "image": int(row.image.timestamp() * 1000) if row.image else None,
-            "camera": account.camera,
+            "switches": [
+                {"name": s, "label": label, "on": getattr(account, s)}
+                for s, label in SWITCHES.items()
+            ],
             "initials": row.initials,
             "accept": ACCEPT,
         },

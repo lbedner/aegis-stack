@@ -125,6 +125,10 @@ async def test_overseer_sets_an_agents_picture_and_camera(
     shown = client.get(image)
     listed = client.get(AGENTS).json()
     camera = client.put(f"{AGENTS}/{DEFAULT_AGENT}/camera", json={"on": False})
+    owner_only = client.put(
+        f"{AGENTS}/{DEFAULT_AGENT}/answers_anyone", json={"on": False}
+    )
+    unknown = client.put(f"{AGENTS}/{DEFAULT_AGENT}/sings", json={"on": True})
     refused = client.post(image, files={"file": ("a.pdf", b"%PDF", "application/pdf")})
     gone = client.delete(image)
 
@@ -132,6 +136,8 @@ async def test_overseer_sets_an_agents_picture_and_camera(
     assert shown.content == PIXEL_PNG and shown.headers["content-type"] == "image/png"
     assert listed[0]["image"] is not None
     assert camera.json()["camera"] is False
+    assert owner_only.json()["answers_anyone"] is False
+    assert unknown.status_code in (404, 405, 422)
     assert refused.status_code == 422
     assert gone.status_code == 204
     assert client.get(image).status_code == 404

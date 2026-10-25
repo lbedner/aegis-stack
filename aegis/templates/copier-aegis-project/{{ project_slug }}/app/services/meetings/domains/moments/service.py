@@ -16,9 +16,15 @@ from app.core.log import logger
 from app.services.meetings.domains.actions import runs as action_runs
 from app.services.meetings.domains.actions import tokens
 from app.services.meetings.domains.actions.prompt import excerpt_from
-from app.services.meetings.domains.actions.registry import action_named, actions_for
+from app.services.meetings.domains.actions.registry import (
+    ANSWERS,
+    action_named,
+    actions_for,
+)
 from app.services.meetings.domains.moments import queries
 from app.services.meetings.domains.moments.detectors import (
+    ADDRESSED,
+    Before,
     Detector,
     Heard,
     detectors,
@@ -47,16 +53,22 @@ GAP_SECONDS = 90.0
 
 
 async def seen(
-    db: AsyncSession, meeting_id: int, lines: dict[int, str]
+    db: AsyncSession,
+    meeting_id: int,
+    lines: dict[int, str],
+    before: dict[int, Before] | None = None,
 ) -> list[MeetingMoment]:
     """Every detector over ``lines`` (row id -> what was said so far): a
-    moment found on a line is made, or its text follows the line. Returns
-    the moments made now."""
+    moment found on a line is made, or its text follows the line. The line
+    before each (``Before``) is the writer's, kept as it went (the bot's
+    ``Transcript``), else read back. Returns the moments made now."""
     if not lines or not detectors():
         return []
-    people = (await queries.people_in(db, [meeting_id])).get(meeting_id, frozenset())
+    heard = await queries.hearing(db, [meeting_id])
+    if before is None:
+        before = await queries.before_in(db, [meeting_id])
     hits = _hits(
-        Heard(line_id, speaker, lines[line_id], is_me, people)
+        heard(line_id, meeting_id, speaker, lines[line_id], is_me, before.get(line_id))
         for line_id, speaker, is_me in await queries.speakers(db, lines)
     )
     if not hits:  # most flushes: nothing to keep, so nothing more to read
@@ -155,6 +167,9 @@ def bursts(found: list[Found], by_topic: bool = True) -> list[list[Found]]:
     on_topic: dict[tuple[str, str], list[Found]] = {}
     for said in found:
         moment, at, _ = said
+        if moment.kind == ADDRESSED:  # put to her by name: each is answered
+            groups.append([said])
+            continue
         if by_topic and moment.topic:
             key = (moment.kind, moment.topic.casefold())
             if key not in on_topic:
@@ -218,12 +233,16 @@ async def ask_for_new(db: AsyncSession, made: list[MeetingMoment]) -> None:
     The cards read once; a card two new moments share is asked once, and a
     follow-up said while its card is being answered is that run."""
     wanted = _auto_actions()
+    if name := answerer():
+        wanted[ADDRESSED] = name
     asks = [(m, wanted[m.kind]) for m in made if m.kind in wanted]
     if not asks:
         return
     # Every moment of one batch is the same meeting's (``seen``).
     meeting = await db.get_one(Meeting, asks[0][0].meeting_id)
-    cards = await cards_of(db, meeting.id or 0)
+    # A line put to the bot is a card of its own (``bursts``): no others read.
+    alone = all(moment.kind == ADDRESSED for moment, _ in asks)
+    cards = {} if alone else await cards_of(db, meeting.id or 0)
     asked: set[tuple[int, str]] = set()
     for moment, name in asks:
         card = cards.get(moment.id or 0)
@@ -237,6 +256,16 @@ async def ask_for_new(db: AsyncSession, made: list[MeetingMoment]) -> None:
             )
         except action_runs.ActionNotFoundError:
             logger.warning("MEETINGS_AUTO_ACTIONS names no action", action=name)
+
+
+def answerer() -> str | None:
+    """The action that answers a line put to the bot by name, unasked: one
+    ``MEETINGS_AUTO_ACTIONS`` names for it, else hers (``ANSWERS``) where
+    the stack has her; None where nothing can (none registered, or one a
+    person runs in their browser). The bot in the call waits on this one."""
+    name = _auto_actions().get(ADDRESSED, ANSWERS)
+    action = action_named(name)
+    return name if action is not None and action.where != "browser" else None
 
 
 def _auto_actions() -> dict[str, str]:

@@ -26,6 +26,7 @@ WORK: dict[str, Any] = {
         "display_name": "Work Notes",
         "email": "notes@work.example",
         "camera": True,
+        "answers_anyone": True,
     },
     "sign_in": "Signed in",
     "in_now": [7, 9],
@@ -96,7 +97,8 @@ def test_an_agents_card_shows_its_initials_until_it_has_a_picture() -> None:
 
     assert not any(isinstance(c, ft.Image) for c in plain.controls)
     assert any(isinstance(c, ft.Image) for c in pictured.controls)
-    assert plain.camera.value is True
+    assert plain.switches["camera"].value is True
+    assert plain.switches["answers_anyone"].value is True
 
 
 class _Refused:
@@ -136,13 +138,13 @@ async def test_a_picture_the_card_cannot_take_says_why(
     assert said == ["A card takes GIF, JPEG, PNG, SVG, WEBP"] and not reloaded
 
 
-async def test_a_camera_change_that_fails_is_put_back(
+async def test_a_switch_that_fails_to_change_is_put_back(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     said = _said(monkeypatch)
     card = AgentCard(None, WORK, None, _nothing)  # type: ignore[arg-type]
-    card.camera.value = False
+    card.switches["answers_anyone"].value = False
 
-    await card._camera(False)
+    await card._switch("answers_anyone", False)
 
-    assert card.camera.value is True and said
+    assert card.switches["answers_anyone"].value is True and said

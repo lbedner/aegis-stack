@@ -1,6 +1,6 @@
 """An agent's card in a call, in its row of the Flet Overseer's Agents tab:
-its picture (else its initials), a button to change it, and whether its
-camera is on. The same as the htmx Overseer's, over the admin API
+its picture (else its initials), a button to change it, and its on/off
+settings (``SWITCHES``). The same as the htmx Overseer's, over the admin API
 (``api/meetings/admin.py``)."""
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from app.components.frontend.controls.buttons import PulseButton
 from app.components.frontend.controls.snack_bar import ErrorSnackBar
 from app.components.frontend.controls.uploads import BrowserUploads
 from app.components.frontend.theme import AegisTheme as Theme
-from app.services.meetings.service import IMAGE_TYPES
+from app.services.meetings.service import IMAGE_TYPES, SWITCHES
 
 from .meetings_follow import api
 
@@ -63,10 +63,20 @@ class AgentCard(ft.Row):
         self._name = str(row["account"]["name"])
         self._changed = changed
         self._uploads = BrowserUploads(self._upload)
-        self.camera = ThemedSwitch(
-            value=bool(row["account"]["camera"]),
-            on_change=lambda e: page.run_task(self._camera, bool(e.control.value)),
-        )
+        self.switches = {
+            s: ThemedSwitch(
+                value=bool(row["account"][s]),
+                on_change=lambda e, s=s: page.run_task(
+                    self._switch, s, bool(e.control.value)
+                ),
+            )
+            for s in SWITCHES
+        }
+        named = [
+            part
+            for s, label in SWITCHES.items()
+            for part in (SecondaryText(label), self.switches[s])
+        ]
         pick = PulseButton(
             on_click_callable=self._pick,
             text="Change picture" if picture else "Add picture",
@@ -74,7 +84,7 @@ class AgentCard(ft.Row):
             compact=True,
         )
         super().__init__(
-            [face(row, picture), pick, SecondaryText("Camera"), self.camera],
+            [face(row, picture), pick, *named],
             spacing=Theme.Spacing.SM,
             vertical_alignment=ft.CrossAxisAlignment.CENTER,
         )
@@ -106,8 +116,10 @@ class AgentCard(ft.Row):
         if await self._send("POST", "image", files={"file": (filename, data, kind)}):
             await self._changed()
 
-    async def _camera(self, on: bool) -> None:
-        if not await self._send("PUT", "camera", json={"on": on}):
-            self.camera.value = not on
-            if self.camera.page:
-                self.camera.update()
+    async def _switch(self, switch: str, on: bool) -> None:
+        """One of the agent's on/off settings, put back when refused."""
+        if not await self._send("PUT", switch, json={"on": on}):
+            turned = self.switches[switch]
+            turned.value = not on
+            if turned.page:
+                turned.update()

@@ -13,6 +13,7 @@ from app.core.time import utcnow
 from app.services.meetings.models import (
     ASKED,
     CLAIMED,
+    DONE,
     FAILED,
     GOING,
     Meeting,
@@ -118,6 +119,21 @@ async def going(
         col(MeetingActionRun.status).in_(GOING),
     )
     return (await db.exec(query)).first()
+
+
+async def answered(
+    db: AsyncSession, moment_ids: list[int], action: str
+) -> dict[int, tuple[str, str | None]]:
+    """These moments' runs of ``action`` that are over (done or failed):
+    each one's status and result, by moment."""
+    query = select(
+        MeetingActionRun.moment_id, MeetingActionRun.status, MeetingActionRun.result
+    ).where(
+        col(MeetingActionRun.moment_id).in_(moment_ids),
+        MeetingActionRun.action == action,
+        col(MeetingActionRun.status).in_((DONE, FAILED)),
+    )
+    return {m: (status, result) for m, status, result in (await db.exec(query)).all()}
 
 
 async def going_in(db: AsyncSession, meeting_id: int) -> set[str]:

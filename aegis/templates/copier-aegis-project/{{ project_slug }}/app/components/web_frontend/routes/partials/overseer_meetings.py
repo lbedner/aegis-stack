@@ -34,9 +34,10 @@ from app.services.meetings.deps import (
 )
 from app.services.meetings.domains.accounts.service import (
     AgentImageError,
+    Switch,
     clear_image,
-    set_camera,
     set_default_owner,
+    set_switch,
 )
 from app.services.meetings.domains.calendar.entries import entry_of
 from app.services.meetings.domains.people.participants import give as give_away
@@ -149,13 +150,14 @@ async def agent_image_clear(name: str, svc: Every) -> HTMLResponse:
     return await _agents(svc)
 
 
-@router.post("/agents/{name}/camera", response_class=HTMLResponse)
-async def agent_camera(
-    name: str, svc: Every, on: Annotated[str, Form()] = ""
+@router.post("/agents/{name}/{switch}", response_class=HTMLResponse)
+async def agent_switch(
+    name: str, switch: Switch, svc: Every, on: Annotated[str, Form()] = ""
 ) -> HTMLResponse:
-    """Whether the agent shows its card in a call (unticked: off)."""
+    """One of the agent's on/off settings (unticked: off). After the
+    agent's other routes: any other name is not a switch."""
     with as_http():
-        await set_camera(svc.db, name, bool(on))
+        await set_switch(svc.db, name, switch, bool(on))
     return await _agents(svc)
 
 

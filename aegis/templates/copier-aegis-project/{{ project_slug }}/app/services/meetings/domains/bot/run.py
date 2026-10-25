@@ -25,6 +25,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.core.config import settings
 from app.core.db import get_async_session
 from app.core.log import logger
+from app.core.tools import acting_as
 from app.services.meetings.domains.accounts.service import (
     image_named,
     pick,
@@ -32,19 +33,12 @@ from app.services.meetings.domains.accounts.service import (
 )
 from app.services.meetings.domains.actions.queries import going_in
 from app.services.meetings.domains.bot import card
+from app.services.meetings.domains.bot.answers import Answers
 from app.services.meetings.domains.bot.audio import Hearing
 from app.services.meetings.domains.bot.dispatch import start_meeting
-from app.services.meetings.domains.bot.meet import (
-    CallState,
-    MeetPage,
-    merge_caption,
-    open_meet,
-)
-from app.services.meetings.domains.bot.row import (
-    heartbeat,
-    transition,
-    write_captions,
-)
+from app.services.meetings.domains.bot.meet import CallState, MeetPage, open_meet
+from app.services.meetings.domains.bot.row import heartbeat, transition
+from app.services.meetings.domains.bot.transcript import BEAT_SECONDS, Transcript
 from app.services.meetings.domains.bot.voice import spoken, voice_of
 from app.services.meetings.domains.moments.tidy import cleaner
 from app.services.meetings.domains.people.participants import keep_heard
@@ -54,13 +48,15 @@ from app.services.meetings.models import (
     NOT_DONE,
     STILL_WANTED,
     BotAccount,
-    Caption,
     Meeting,
     MeetingStatus,
 )
 from app.services.meetings.service import JOINS, MeetingsService, notes_writer
 
 POLL_SECONDS = 2.0
+# How often instead while a line for the bot is held or its answer awaited:
+# a beat of the slower one would be on every answer.
+QUICK_POLL_SECONDS = 0.5
 # Said in every call the bot joins, after who it is: nobody is recorded
 # without being told.
 TRANSCRIBED = "What is said here is transcribed."
@@ -75,9 +71,6 @@ WAIT_FOR_OTHERS_SECONDS = 900.0
 # look. A page that says the call ended, or the bot was removed, is over
 # at once.
 GONE_SECONDS = 10.0
-# How often the run beats and reads back its status: a leave request waits
-# at most this long, and on SQLite each beat takes the write lock.
-BEAT_SECONDS = 10.0
 
 
 class _RunEnded(Exception):  # noqa: N818 - control flow, not an error
@@ -124,52 +117,6 @@ class _Card:
             await self.call.show(status=status)
 
 
-class _Transcript:
-    """The call's captions as transcript lines, timed from when the bot got
-    in. What changed is written every ``BEAT_SECONDS`` (each write takes
-    SQLite's write lock), and what is left by ``flush`` on the way out."""
-
-    def __init__(self, meeting_id: int) -> None:
-        self.meeting_id = meeting_id
-        self.started = self.written_at = asyncio.get_running_loop().time()
-        self.rows: dict[str, int] = {}  # caption line -> transcript row
-        self.seen: dict[str, str] = {}  # caption line -> its text, last look
-        self.text: dict[str, str] = {}  # caption line -> all of it heard so far
-        # caption line -> when it was first captioned, from when the bot got in
-        self.first_seen: dict[str, float] = {}
-        self.pending: dict[str, Caption] = {}
-        # When each speaker's caption last moved: who was talking when.
-        self.spoke: list[tuple[float, str]] = []
-
-    async def take(self, captions: list[Caption]) -> None:
-        now = asyncio.get_running_loop().time()
-        for c in captions:
-            if self.seen.get(c.line) != c.text:
-                self.seen[c.line] = c.text
-                self.text[c.line] = merge_caption(self.text.get(c.line, ""), c.text)
-                self.first_seen.setdefault(c.line, now - self.started)
-                self.pending[c.line] = Caption(c.line, c.speaker, self.text[c.line])
-                self.spoke.append((now, c.speaker))
-        if now - self.written_at >= BEAT_SECONDS:
-            await self.flush()
-
-    async def flush(self) -> None:
-        loop = asyncio.get_running_loop()
-        self.written_at = loop.time()
-        if not self.pending:
-            return
-        async with get_async_session() as session:
-            await write_captions(
-                session,
-                self.meeting_id,
-                list(self.pending.values()),
-                self.rows,
-                self.written_at - self.started,
-                starts=self.first_seen,
-            )
-        self.pending = {}
-
-
 async def _move(
     meeting_id: int,
     to: MeetingStatus,
@@ -210,9 +157,10 @@ async def _admitted(call: MeetPage, pulse: _Pulse) -> None:
 async def _stay(
     call: MeetPage,
     pulse: _Pulse,
-    transcript: _Transcript,
+    transcript: Transcript,
     hearing: Hearing,
     shown: _Card,
+    answering: Answers,
 ) -> None:
     """Back when the bot should leave: asked to, alone too long once the
     others have gone (nobody counted by Meet, nobody talking), or nobody
@@ -238,7 +186,13 @@ async def _stay(
                 continue
             gone_since = None
             spoke = len(transcript.spoke)
-            await transcript.take(await call.captions())
+            if writing := transcript.take(await call.captions()):
+                async with get_async_session() as session:
+                    made = await transcript.write(session, writing)
+                await answering.heard(made)
+            if answering.waiting:
+                async with get_async_session() as session:
+                    await answering.answer(session)
             hearing.settle(transcript.spoke, loop.time())
             if not await pulse.still_wanted():
                 return
@@ -261,9 +215,12 @@ async def _stay(
                     others_came=others_came,
                 )
                 return
-            await asyncio.sleep(POLL_SECONDS)
+            quick = transcript.held or answering.waiting
+            await asyncio.sleep(QUICK_POLL_SECONDS if quick else POLL_SECONDS)
     finally:
-        await transcript.flush()
+        if rest := transcript.rest():
+            async with get_async_session() as session:
+                await transcript.write(session, rest)
         hearing.settle(transcript.spoke, math.inf)
         hearing.close()
         if hearing.seconds:
@@ -325,7 +282,7 @@ async def _join(
             await _step(meeting_id, MeetingStatus.WAITING, MeetingStatus.JOINING)
             await _admitted(call, pulse)
             await _step(meeting_id, MeetingStatus.IN_CALL, MeetingStatus.WAITING)
-            transcript = _Transcript(meeting_id)
+            transcript = Transcript(meeting_id, meeting.bot_name)
             await call.say(said)
             if (aloud := await speech) is not None:
                 await call.speak(aloud)
@@ -334,7 +291,11 @@ async def _join(
                 logger.warning("No captions in this call", meeting_id=meeting_id)
             shown = _Card(call, pulse, captions)
             await shown.update()
-            await _stay(call, pulse, transcript, hearing, shown)
+            answering = Answers(call, voice)
+            try:
+                await _stay(call, pulse, transcript, hearing, shown, answering)
+            finally:
+                answering.close()
             await call.show(status=card.LEAVING)
             await call.leave()
     finally:
@@ -367,25 +328,28 @@ async def run_meeting(meeting_id: int) -> None:
         account = await sent_as(session, meeting.account_id)
         start = await _start(session, meeting, account)
         voice = await voice_of(session)
-    try:
-        if meeting.platform not in JOINS:
-            raise _RunEnded(
-                MeetingStatus.FAILED,
-                f"The bot joins Google Meet so far, not {meeting.platform.title()}",
-            )
-        await _join(meeting, account.login_secret, start, voice)
-        await _move(meeting_id, MeetingStatus.LEFT, NOT_DONE)
-    except _RunEnded as ended:
-        await _move(meeting_id, ended.status, NOT_DONE, ended.reason)
-    except asyncio.CancelledError:
-        # Stopped from outside (Ctrl-C, the app shutting down): the browser
-        # closed on the way out, so the bot has left the call.
-        await _move(meeting_id, MeetingStatus.LEFT, NOT_DONE)
-        raise
-    except Exception as exc:
-        logger.exception("Meeting bot failed", meeting_id=meeting_id)
-        await _move(meeting_id, MeetingStatus.FAILED, NOT_DONE, str(exc))
-    await _after(meeting_id)
+    # What the bot spends (her answers, its speech, the notes after) is the
+    # meeting owner's, bound once for the run.
+    with acting_as(meeting.owner_user_id, None):
+        try:
+            if meeting.platform not in JOINS:
+                raise _RunEnded(
+                    MeetingStatus.FAILED,
+                    f"The bot joins Google Meet so far, not {meeting.platform.title()}",
+                )
+            await _join(meeting, account.login_secret, start, voice)
+            await _move(meeting_id, MeetingStatus.LEFT, NOT_DONE)
+        except _RunEnded as ended:
+            await _move(meeting_id, ended.status, NOT_DONE, ended.reason)
+        except asyncio.CancelledError:
+            # Stopped from outside (Ctrl-C, the app shutting down): the browser
+            # closed on the way out, so the bot has left the call.
+            await _move(meeting_id, MeetingStatus.LEFT, NOT_DONE)
+            raise
+        except Exception as exc:
+            logger.exception("Meeting bot failed", meeting_id=meeting_id)
+            await _move(meeting_id, MeetingStatus.FAILED, NOT_DONE, str(exc))
+        await _after(meeting_id)
 
 
 async def send_bot(

@@ -570,3 +570,24 @@ async def test_a_search_that_matches_nothing_says_so(
 
     assert one(html, "[data-voice-chosen]") and not _cards(html)
     assert "clear a filter" in text(one(html, "[data-voice-none]"))
+
+
+async def test_each_voice_shows_its_providers_mark(
+    client: TestClient, hers: VoiceProfile, heard: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every voice wears its provider's logo, the catalog's mark the
+    Providers page shows (Gemini's is Google's); one without a mark shows
+    its initial."""
+    from app.services.ai.domains.voice import design
+
+    async def marks(db: Any, orgs: Any) -> dict[str, str]:
+        return {"openai": "iVBORw0KGgo="}  # Google's not held
+
+    monkeypatch.setattr(design, "org_icons", marks)
+    html = _editor(client, hers, filtered="1", provider=["openai", "gemini"])
+
+    marin = one(html, '[data-voice-card="marin"] img')
+    assert marin.get("src").endswith("/icons/openai")
+    assert not select(html, '[data-voice-card="Kore"] img')
+    chosen = one(html, "[data-voice-chosen] img")  # Alloy's, OpenAI
+    assert chosen.get("src").endswith("/icons/openai")

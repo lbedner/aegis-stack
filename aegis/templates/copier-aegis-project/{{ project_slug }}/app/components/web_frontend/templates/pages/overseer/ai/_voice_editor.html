@@ -4,6 +4,7 @@
    one form from step to step (``v.form``: what a step does not show it
    carries hidden), and the form is drawn again as it changes. #}
 {% from "components/macros/chat.html" import speak_button %}
+{% from "components/macros/layout.html" import avatar %}
 {% from "components/macros/form.html" import checklist, field, primary_button, range_chips, search_input, textarea %}
 {% set v = view %}
 {% set d = v.delivery %}
@@ -14,6 +15,7 @@
 {% if v.chosen %}
 <div data-voice-chosen class="flex items-center gap-3 rounded border border-aegis-border px-3 py-2">
   {% if pick %}<input type="radio" name="voice" value="{{ v.chosen.id }}" checked class="radio radio-xs radio-primary" aria-label="{{ v.chosen.name }}">{% else %}<span class="text-xs text-aegis-muted">Voice</span>{% endif %}
+  {{ avatar(v.chosen.provider_name, marks.get(v.chosen.provider)) }}
   <span class="text-sm text-aegis-text">{{ v.chosen.name }}</span>
   <span class="flex-1 text-xs text-aegis-muted">{{ v.chosen.detail }}{% if not pick %} · on <span class="font-mono">{{ v.model }}</span>{% endif %}</span>
   {{ speak_button(chosen_listen, "text-aegis-muted hover:text-aegis-text") }}
@@ -55,6 +57,7 @@
       {% for c in f.cards %}
       <label data-voice-card="{{ c.id }}" class="flex items-center gap-3 px-2 py-1.5 cursor-pointer hover:bg-aegis-border/20">
         <input type="radio" name="voice" value="{{ c.id }}" class="radio radio-xs radio-primary">
+        {{ avatar(c.provider_name, marks.get(c.provider)) }}
         <span class="w-44 truncate text-sm text-aegis-text">{{ c.name }}</span>
         <span class="flex-1 text-xs text-aegis-muted">{{ c.detail }}</span>
         {{ speak_button(sample_url ~ c.id, "text-aegis-muted hover:text-aegis-text") }}

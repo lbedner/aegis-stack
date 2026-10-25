@@ -440,6 +440,13 @@
   so did the whole health status, though neither needs it. A reader now
   goes on without them, and the log says the cache did not answer.
 
+- **Documents with AI on the memory backend imports.** The vision reader
+  imported the active model and the usage recorder, which only a database
+  backend has, so a documents + `ai[pydantic-ai]` stack failed at import.
+  On the memory backend there is no vision reader: scans stay unread with
+  a reason, as in a stack without AI. The `documents_auth` matrix row now
+  carries `ai[pydantic-ai]`.
+
 - **A database the scheduler cannot read says so.** Its persistence check
   turned any database error into "no persistence", so its health said the
   jobs table was not found while it was there; the error now reads as

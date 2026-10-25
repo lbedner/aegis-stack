@@ -469,10 +469,13 @@ STACK_COMBINATIONS = [
         # and the generated suite 401'd on every request in that shape while
         # the matrix stayed green (#1179). ``documents_worker`` below is the
         # same service WITHOUT auth, so both shapes stay covered and this
-        # costs no extra runner.
+        # costs no extra runner. ``ai[pydantic-ai]`` too: naming no backend
+        # it takes memory, which has no active-model or usage tables, and the
+        # vision reader imported them anyway, so every documents + ai stack
+        # on it failed at import (#1823) with no row generating one.
         components=["database", "htmx"],
-        services=["auth", "documents"],
-        description="Document store service + auth (owner-scoped) + database",
+        services=["auth", "documents", "ai[pydantic-ai]"],
+        description="Document store + auth (owner-scoped) + ai (memory) + database",
         expected_files=[
             "app/services/auth/",
             "app/services/documents/",

@@ -299,6 +299,11 @@
 
 ### Changed
 
+- **A new shield, and Illiana's own.** The Aegis shield is now the docs'
+  logo and favicon, and the favicon of every generated app (the htmx
+  pages and the Flet dashboard); the chat button wears Illiana's rose
+  shield.
+
 - **Illiana signs off on a clean change.** A pull request with nothing
   new against her rules gets her review too, her seal of approval in
   place of silence: "Nothing new against any rule I hold. This has my
@@ -433,6 +438,10 @@
   parts already show, and what the change touches is folded away.
 
 ### Fixed
+
+- **`ai conversations` runs again.** The asyncio.run -> await port
+  (#1821) left `await list_conversations(...)[:limit]`, which slices the
+  coroutine before awaiting it: a TypeError on every run. (#1835)
 
 - **The twin, and the app's health, answer without Redis.** Observed
   calls and the containers' last reading are read from Redis; with none

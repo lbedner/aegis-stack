@@ -198,21 +198,13 @@ async def test_the_voice_step_opens_on_the_profiles_voice(
     monkeypatch.setattr(settings, "OPENAI_API_KEY", "set")
     html = _editor(client, hers)
 
-    assert one(html, "input[name=voice][checked]").get("value") == "alloy"
+    assert (
+        one(html, "[data-voice-chosen] input[name=voice][checked]").get("value")
+        == "alloy"
+    )
     assert one(html, "[aria-current=step]").get("value") == "voice"
     assert "GOOGLE_API_KEY" in text(one(html, "[data-voice-locked]"))
     assert not html.count('data-voice-card="Kore"')
-
-
-async def test_who_it_sounds_like_narrows_the_voices_the_chosen_one_kept(
-    client: TestClient, hers: VoiceProfile, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(settings, "OPENAI_API_KEY", "set")
-    html = _editor(client, hers, gender="female", family="warm")
-
-    cards = [c.get("data-voice-card") for c in select(html, "[data-voice-card]")]
-    assert cards[0] == "alloy"  # chosen, so shown whatever the filters
-    assert "marin" in cards and "onyx" not in cards
 
 
 async def test_the_delivery_step_says_who_was_picked(
@@ -380,18 +372,6 @@ async def test_delivery_says_the_model_and_when_it_ignores_the_choices(
     one(html, "input[type=hidden][name=model][value=tts-1]")  # carried
 
 
-async def test_an_accent_is_picked_with_the_voice(
-    client: TestClient, hers: VoiceProfile, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr(settings, "OPENAI_API_KEY", "set")
-    # The form sends every filter; Any is the empty one.
-    html = _editor(client, hers, gender="", family="", accent_of="British")
-
-    cards = [c.get("data-voice-card") for c in select(html, "[data-voice-card]")]
-    assert cards == ["alloy", "fable"]  # the chosen one, then the British one
-    assert "British" in text(one(html, '[data-voice-card="fable"]'))
-
-
 async def test_fine_tune_offers_an_accent_only_where_the_model_steers_it(
     client: TestClient, hers: VoiceProfile, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -482,32 +462,111 @@ async def test_editing_opens_fine_tune_on_what_was_tuned(
     assert (await fine_tune(calm)).get("open") is None
 
 
-async def test_the_voice_step_opens_on_who_the_voice_is(
-    client: TestClient,
-    hers: VoiceProfile,
-    async_db_session: AsyncSession,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Opened to edit (or come back to), the Voice step's filters are the
-    chosen voice's own; one set to Any stays Any."""
+def _cards(html: str) -> list[str]:
+    return [c.get("data-voice-card") for c in select(html, "[data-voice-card]")]
+
+
+def _ticked(html: str, name: str) -> list[str]:
+    return [i.get("value") for i in select(html, f"input[name={name}][checked]")]
+
+
+@pytest.fixture
+def heard(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Both providers' voices can be heard."""
     monkeypatch.setattr(settings, "OPENAI_API_KEY", "set")
+    monkeypatch.setattr(settings, "GOOGLE_API_KEY", "set")
+
+
+async def test_the_voice_step_opens_on_who_the_voice_is(
+    client: TestClient, hers: VoiceProfile, heard: None, async_db_session: AsyncSession
+) -> None:
+    """Opened, the chosen voice is pinned above the search, which is for
+    voices like it: its provider and accent."""
     hers.tts_voice, hers.tts_model = "marin", "gpt-realtime-2.1-mini"
     async_db_session.add(hers)
     await async_db_session.commit()
 
-    def picked(html: str) -> dict[str, str]:
-        return {
-            name: one(html, f'input[name="{name}"][checked]').get("value")
-            for name in ("gender", "family", "accent_of")
-        }
+    html = _editor(client, hers)
 
-    opened = _editor(client, hers)
-    assert picked(opened) == {
-        "gender": "female",
-        "family": "warm",
-        "accent_of": "American",
-    }
-    widened = _editor(
-        client, hers, step="voice", voice="marin", gender="", family="", accent_of=""
+    assert "Marin" in text(one(html, "[data-voice-chosen]"))
+    assert "marin" not in _cards(html)  # pinned, not listed again
+    assert _ticked(html, "provider") == ["openai"]
+    assert _ticked(html, "accent_of") == ["General American"]
+    assert not _ticked(html, "gender") and not _ticked(html, "family")
+    assert {"cedar", "alloy"} <= set(_cards(html))
+
+
+async def test_the_filters_narrow_and_a_cleared_one_stays_cleared(
+    client: TestClient, hers: VoiceProfile, heard: None
+) -> None:
+    men = _editor(client, hers, filtered="1", provider="openai", gender="male")
+    every = _editor(client, hers, filtered="1")  # every filter cleared
+
+    assert "onyx" in _cards(men) and "marin" not in _cards(men)
+    assert {"marin", "Kore"} <= set(_cards(every))
+    assert not _ticked(every, "gender")
+
+
+async def test_accents_are_grouped_by_language_and_a_language_takes_them_all(
+    client: TestClient, hers: VoiceProfile, heard: None
+) -> None:
+    """OpenAI's voices speak two accents; a language ticked takes every
+    accent of it."""
+    openai = _editor(client, hers, filtered="1", provider="openai")
+    english = _editor(client, hers, filtered="1", provider="openai", language="English")
+    british = _editor(
+        client, hers, filtered="1", provider="openai", accent_of="British"
     )
-    assert picked(widened) == {"gender": "", "family": "", "accent_of": ""}
+
+    options = select(
+        openai,
+        "[data-checklist] input[name=language], [data-checklist] input[name=accent_of]",
+    )
+    assert [(o.get("name"), o.get("value")) for o in options] == [
+        ("language", "English"),
+        ("accent_of", "British"),
+        ("accent_of", "General American"),
+    ]
+    assert {"fable", "marin"} <= set(_cards(english))
+    assert _cards(british) == ["fable"]
+
+
+async def test_the_library_is_one_search_away(
+    client: TestClient, hers: VoiceProfile, heard: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Gemini's library runs to thousands: searched and filtered like any
+    voice, the first few listed and how many more there are said."""
+    from app.services.ai.domains.voice import finder, library
+    from app.services.ai.domains.voice.models import VoiceInfo
+
+    amelia = VoiceInfo(
+        id="voice_en_gb_amelia",
+        name="Amelia",
+        provider_id="gemini",
+        model_ids=["gemini-3.8-flash-tts"],
+        description="Soft, calm voice.",
+        gender="female",
+        tone="Soft",
+        accent="Glasgow English",
+    )
+    monkeypatch.setattr(library, "KEPT", {amelia.id: amelia})
+    monkeypatch.setattr(finder, "LIMIT", 5)
+
+    glasgow = _editor(client, hers, filtered="1", accent_of="Glasgow English")
+    searched = _editor(client, hers, filtered="1", q="amelia")
+    gemini = _editor(client, hers, filtered="1", provider="gemini")
+
+    assert _cards(glasgow) == _cards(searched) == ["voice_en_gb_amelia"]
+    assert len(_cards(gemini)) == 5
+    assert "The first 5 of 31" in text(one(gemini, "[data-voice-more]"))
+
+
+async def test_a_search_that_matches_nothing_says_so(
+    client: TestClient, hers: VoiceProfile, heard: None
+) -> None:
+    """The chosen voice stays pinned, so the list going empty is said, not
+    left looking as if nothing happened."""
+    html = _editor(client, hers, filtered="1", q="nobody-sounds-like-this")
+
+    assert one(html, "[data-voice-chosen]") and not _cards(html)
+    assert "clear a filter" in text(one(html, "[data-voice-none]"))

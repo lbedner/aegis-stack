@@ -33,6 +33,36 @@ def preview(voice: str, model: str | None = None) -> str:
     )
 
 
+# The search's filters were sent (``finder.SENT``): a cleared one stays so.
+SENT = "filtered"
+
+
+def ticked(options: list[dict[str, Any]], named: bool = False) -> str:
+    """A checklist's first ticked option, as a dropdown's value."""
+    found = next((o for o in options if o["checked"]), None)
+    if found is None:
+        return ""
+    return f"{found['name']}:{found['value']}" if named else found["value"]
+
+
+def accent_choices(options: list[dict[str, Any]]) -> dict[str, str]:
+    """The accent checklist as one dropdown: each language (all its
+    accents), its accents indented under it."""
+    return {"": "Any"} | {
+        f"{o['name']}:{o['value']}": f"    {o['label']}"
+        if o["indent"]
+        else f"{o['label']} (all)"
+        for o in options
+    }
+
+
+def accent_picked(value: str) -> dict[str, list[str]]:
+    """An accent dropdown's value as the filters it sets: a language, or
+    one accent."""
+    name, _, picked = value.partition(":")
+    return {"language": [], "accent_of": []} | ({name: [picked]} if picked else {})
+
+
 def api(page: ft.Page) -> Any:
     from app.components.frontend.state.session_state import get_session_state
 
@@ -64,19 +94,19 @@ class VoiceEditor(ft.Column):
     def _api(self) -> Any:
         return api(self.page)
 
-    async def load(self, query: dict[str, str]) -> None:
+    async def load(self, query: dict[str, Any]) -> None:
         query = {"profile": str(self._profile_id)} | query
-        view = await self._api().get(f"{API}/design?{urlencode(query)}")
+        view = await self._api().get(f"{API}/design?{urlencode(query, doseq=True)}")
         if isinstance(view, dict):
             if not self._view:  # opened to edit: Fine-tune open where tuned
                 self._tuning = view["tuned"]
             self._show(view)
 
-    def _query(self, **picks: Any) -> dict[str, str]:
-        """The design and the filters as the server reads them, ``picks``
-        over them."""
-        view = self._view
-        return view["form"] | view["filters"] | {k: str(v) for k, v in picks.items()}
+    def _query(self, **picks: Any) -> dict[str, Any]:
+        """The design and the search as the server reads them, ``picks``
+        over them (a filter's values a list)."""
+        view, find = self._view, self._view["find"]
+        return view["form"] | find["filters"] | {SENT: "1", "q": find["q"]} | picks
 
     def _pick(self, **picks: Any) -> None:
         """A pick or a filter asks the server again: the voices narrowed,
@@ -144,30 +174,47 @@ class VoiceEditor(ft.Column):
         )
 
     def _who(self) -> ft.Control:
-        view, filters = self._view, self._view["filters"]
+        view, find = self._view, self._view["find"]
+        options = find["options"]
+        listed = ([view["chosen"]] if view["chosen"] else []) + find["cards"]
+        more = find["matched"] - len(find["cards"])
         return ft.Column(
             [
                 ft.Row(
                     [
-                        self._choose(
-                            "Gender",
-                            {"": "Any"} | view["genders"],
-                            filters["gender"],
-                            lambda v: self._pick(gender=v),
+                        ft.TextField(
+                            label="Search voices",
+                            value=find["q"],
+                            width=220,
+                            dense=True,
+                            on_submit=lambda e: self._pick(q=e.control.value or ""),
                         ),
-                        self._choose(
-                            "Tone",
-                            {"": "Any"} | view["families"],
-                            filters["family"],
-                            lambda v: self._pick(family=v),
+                        *(
+                            self._choose(
+                                label,
+                                {"": "Any"}
+                                | {o["value"]: o["label"] for o in options[key]},
+                                ticked(options[key]),
+                                lambda v, name=name: self._pick(
+                                    **{name: [v] if v else []}
+                                ),
+                                width=170,
+                            )
+                            for key, name, label in (
+                                ("provider", "provider", "Provider"),
+                                ("gender", "gender", "Gender"),
+                                ("family", "family", "Tone"),
+                            )
                         ),
                         self._choose(
                             "Accent",
-                            {"": "Any"} | view["accents"],
-                            filters["accent_of"],
-                            lambda v: self._pick(accent_of=v),
+                            accent_choices(options["accent"]),
+                            ticked(options["accent"], named=True),
+                            lambda v: self._pick(**accent_picked(v)),
+                            width=220,
                         ),
                     ],
+                    wrap=True,
                     spacing=Theme.Spacing.MD,
                 ),
                 *(
@@ -184,7 +231,7 @@ class VoiceEditor(ft.Column):
                         [
                             ft.Row(
                                 [
-                                    ft.Radio(value=v["id"], label=v["name"], width=160),
+                                    ft.Radio(value=v["id"], label=v["name"], width=200),
                                     SecondaryText(v["detail"], expand=True),
                                     ft.IconButton(
                                         ft.Icons.VOLUME_UP,
@@ -194,12 +241,22 @@ class VoiceEditor(ft.Column):
                                             self.page, self._held, preview(v["id"])
                                         ),
                                     ),
-                                ]
+                                ],
+                                data="chosen" if v is view["chosen"] else None,
                             )
-                            for v in view["cards"]
+                            for v in listed
                         ],
                         spacing=0,
                     ),
+                ),
+                SecondaryText(
+                    "No other voice matches all of those: clear a filter or the search.",
+                    visible=not find["cards"],
+                ),
+                SecondaryText(
+                    f"The first {len(find['cards'])} of {find['matched']:,}; "
+                    "search or narrow to see the rest.",
+                    visible=more > 0,
                 ),
                 self._choose(
                     "Spoken on",

@@ -802,3 +802,28 @@ def test_a_saved_profile_is_heard_in_its_own_voice(client: TestClient) -> None:
 
     assert response.status_code == 200 and heard
     assert missing.status_code == 404
+
+
+def test_the_models_table_leaves_out_the_library(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Thousands of library voices would bury the table: they are reached
+    through the editor's accents instead."""
+    from app.services.ai.domains.voice import library
+    from app.services.ai.domains.voice.models import VoiceInfo
+
+    amelia = VoiceInfo(
+        id="voice_en_gb_amelia",
+        name="Amelia",
+        provider_id="gemini",
+        model_ids=["gemini-3.8-flash-tts"],
+        description="Bright",
+        gender="female",
+    )
+    monkeypatch.setattr(library, "KEPT", {amelia.id: amelia})
+    monkeypatch.setattr(library, "TRIED", {"gemini"})
+
+    rows = client.get("/api/v1/voice/overview").json()["rows"]
+
+    assert "Amelia" not in {r["name"] for r in rows}
+    assert "Kore" in {r["name"] for r in rows}

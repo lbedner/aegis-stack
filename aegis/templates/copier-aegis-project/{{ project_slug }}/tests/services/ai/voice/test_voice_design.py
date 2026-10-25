@@ -28,8 +28,9 @@ async def test_the_designer_opens_on_the_profile(
     view = await design.design_view(async_db_session, hers.id, None)
 
     assert view.voice == "alloy" and view.profile.id == hers.id
-    assert {"female", "male", "neutral"} <= set(view.genders)
-    assert "warm" in view.families and "calm" in view.styles
+    options = view.find.options
+    assert {"female", "male", "neutral"} <= {o.value for o in options["gender"]}
+    assert "warm" in {o.value for o in options["family"]} and "calm" in view.styles
     assert view.instructions == compose(view.delivery)
 
 
@@ -87,9 +88,10 @@ def test_every_tone_falls_in_one_family() -> None:
     """The designer offers a handful of tone families, not every word a
     provider uses: a tone outside them could never be picked."""
     from app.services.ai.domains.voice.catalog import get_tts_voices
+    from app.services.ai.domains.voice.traits import TONE_FAMILIES, family_of
 
     for voice in get_tts_voices():
-        assert design.family_of(voice.tone or "") in design.TONE_FAMILIES, voice.id
+        assert family_of(voice.tone or "") in TONE_FAMILIES, voice.id
 
 
 async def test_a_provider_without_its_key_is_one_line_not_its_voices(
@@ -98,10 +100,10 @@ async def test_a_provider_without_its_key_is_one_line_not_its_voices(
     monkeypatch.setattr(settings, "GOOGLE_API_KEY", None)
     monkeypatch.setattr(settings, "OPENAI_API_KEY", "set")
 
-    every = {"gender": "", "family": "", "accent_of": ""}
-    view = await design.design_view(async_db_session, hers.id, None, every)
+    view = await design.design_view(async_db_session, hers.id, None, {"filtered": "1"})
 
-    assert view.cards and all(v.provider_name != "Gemini" for v in view.cards)
+    assert view.find.cards
+    assert all(v.provider_name != "Gemini" for v in view.find.cards)
     [gemini] = view.locked
     assert (gemini.provider_name, gemini.voices, gemini.key) == (
         "Gemini",

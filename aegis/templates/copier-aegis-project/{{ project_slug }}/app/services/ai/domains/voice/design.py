@@ -11,7 +11,6 @@ the form fields the server reads back (``parse_design``).
 Needs a database, as voice profiles do.
 """
 
-from collections.abc import Mapping
 from typing import Any, Self
 
 from pydantic import ValidationError, model_validator
@@ -19,7 +18,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.config import settings as app_settings
 from app.core.voice_settings import TTS_SPEED_MAX, TTS_SPEED_MIN
-from app.services.ai.domains.voice import profiles
+from app.services.ai.domains.voice import library, profiles
 from app.services.ai.domains.voice.catalog import (
     get_tts_models,
     get_tts_providers,
@@ -36,7 +35,7 @@ from app.services.ai.domains.voice.delivery import (
     compose,
     tuned,
 )
-from app.services.ai.domains.voice.library import gemini_library
+from app.services.ai.domains.voice.finder import Finding, VoiceChoice, find
 from app.services.ai.domains.voice.models import (
     DEFAULT_TTS_VOICE,
     TTS_KEYS,
@@ -50,14 +49,12 @@ from app.services.ai.domains.voice.overview import (
     provider_key,
     read_keys,
 )
+from app.services.ai.domains.voice.traits import family_of, language_of
 from app.services.ai.models.voice import VoiceProfile
 
 SPEED_RANGE = (TTS_SPEED_MIN, TTS_SPEED_MAX)
 # A profile's editor, in three steps: who it is, how it talks, a last look.
 STEPS = {"voice": "Voice", "delivery": "Delivery", "review": "Review"}
-# The Voice step's filters: each by the name it rides in the query as, and
-# the voice's own field it narrows by.
-FILTERS = {"gender": "gender", "family": "family", "accent_of": "accent"}
 # One passage for every preview, so voices are compared on the same words:
 # a figure, some bad news, and a question.
 PREVIEW_TEXT = (
@@ -86,50 +83,6 @@ class Design(Frozen):
         if not low <= self.speed <= high:
             raise ValueError(f"Speed is a number from {low} to {high}.")
         return self
-
-
-# The handful of tone families the designer narrows by, each the words
-# providers use for it.
-TONE_FAMILIES: dict[str, tuple[str, frozenset[str]]] = {
-    "warm": (
-        "Warm and soft",
-        frozenset(
-            {"Warm", "Soft", "Gentle", "Breathy", "Smooth", "Easy-going", "Friendly",
-             "Casual", "Breezy"}
-        ),
-    ),
-    "bright": (
-        "Bright and upbeat",
-        frozenset({"Bright", "Upbeat", "Lively", "Excitable", "Youthful", "Forward"}),
-    ),
-    "calm": ("Calm and even", frozenset({"Calm", "Even", "Clear", "Mature"})),
-    "firm": (
-        "Firm and authoritative",
-        frozenset({"Firm", "Informative", "Knowledgeable", "Gravelly"}),
-    ),
-    "expressive": ("Expressive", frozenset({"Expressive"})),
-}  # fmt: skip
-
-
-def family_of(tone: str) -> str | None:
-    """The family a provider's tone word falls in."""
-    return next(
-        (key for key, (_, tones) in TONE_FAMILIES.items() if tone in tones), None
-    )
-
-
-class VoiceChoice(Frozen):
-    """A voice as the designer offers it: who it sounds like (``detail``,
-    as a line), and the tone family it falls in."""
-
-    id: str
-    name: str
-    provider_name: str
-    gender: str
-    tone: str
-    family: str | None
-    accent: str | None = None
-    detail: str
 
 
 class ModelChoice(Frozen):
@@ -174,23 +127,18 @@ class ProfileSummary(Frozen):
 
 
 class DesignView(Frozen):
-    """An editor as it is drawn: the profile; the Voice step's filters,
-    their choices and the voices they keep (``cards``, the chosen one
-    first), with the providers locked out; the styles and the dials the
+    """An editor as it is drawn: the profile; the chosen voice and the Voice
+    step's search for others, with the providers locked out; the styles and the dials the
     model takes; what is picked, what it makes, and the design as the form
     fields the server reads back (``form``)."""
 
     profile: ProfileRef
     active: bool
     steps: dict[str, str]
+    # The chosen voice, pinned above the search (``find``).
     chosen: VoiceChoice | None
-    cards: list[VoiceChoice]
+    find: Finding
     locked: list[LockedProvider]
-    # Each filter's choices, by value and as labeled.
-    genders: dict[str, str]
-    families: dict[str, str]
-    accents: dict[str, str]
-    filters: dict[str, str]
     styles: dict[str, StyleChoice]
     # Each dial's choices, by value and as labeled; accent only where the
     # model steers it (else it comes with the voice: ``steers_accent``).
@@ -217,7 +165,7 @@ async def _voices(chosen: str) -> tuple[list[VoiceChoice], list[LockedProvider]]
     providers = get_tts_providers()
     found = await read_keys(*(provider_key(p) for p in providers))
     if gemini := found.get(TTS_KEYS[TTSProvider.GEMINI]):
-        await gemini_library(gemini)
+        await library.gemini_library(gemini)
     voices: list[VoiceChoice] = []
     locked: list[LockedProvider] = []
     for provider in providers:
@@ -232,12 +180,15 @@ async def _voices(chosen: str) -> tuple[list[VoiceChoice], list[LockedProvider]]
             VoiceChoice(
                 id=v.id,
                 name=v.name,
+                provider=provider.id,
                 provider_name=provider.name,
                 gender=v.gender or "neutral",
                 tone=v.tone or "",
                 family=family_of(v.tone or ""),
                 accent=v.accent,
+                language=language_of(v.accent) if v.accent else None,
                 detail=detail(v.tone, v.gender, v.accent, provider.name),
+                description=v.description or "",
             )
             for v in theirs
         ]
@@ -248,28 +199,6 @@ def _fit(speed: float, model: str) -> float:
     """``speed`` within what ``model`` takes (as it would be spoken)."""
     span = speeds(model)
     return min(max(speed, span[0]), span[1]) if span else speed
-
-
-def _narrowed(
-    voices: list[VoiceChoice], chosen: VoiceChoice | None, asked: Mapping[str, str]
-) -> tuple[dict[str, str], list[VoiceChoice]]:
-    """The filters (each the query's where it has one, Any among them, else
-    the chosen voice's own) and the voices they keep, the chosen one always,
-    and first."""
-    filters = {
-        name: asked[name] if name in asked else (getattr(chosen, field) or "")
-        for name, field in FILTERS.items()
-    }
-    kept = [
-        v
-        for v in voices
-        if v.id == (chosen.id if chosen else None)
-        or all(
-            filters[name] in ("", getattr(v, field) or "")
-            for name, field in FILTERS.items()
-        )
-    ]
-    return filters, sorted(kept, key=lambda v: chosen is None or v.id != chosen.id)
 
 
 def _form(shown: Design, model: str, speed: float) -> dict[str, str]:
@@ -293,11 +222,11 @@ async def design_view(
     db: AsyncSession,
     profile_id: int | None,
     picked: Design | None,
-    filters: Mapping[str, str] | None = None,
+    query: Any = None,
 ) -> DesignView:
     """The designer on a profile, on ``picked`` (choices not yet saved)
-    where given, else on what the profile has; the Voice step narrowed by
-    the ``filters`` the query holds (``FILTERS``)."""
+    where given, else on what the profile has; the Voice step's search the
+    one ``query`` asks for (``finder``)."""
     profile = await _profile(db, profile_id)
     shown = picked or Design(
         voice=profile.tts_voice or DEFAULT_TTS_VOICE,
@@ -309,19 +238,14 @@ async def design_view(
     spoken, accent = get_voice(shown.voice), "accent" in steers(model)
     voices, locked = await _voices(shown.voice)
     chosen = next((v for v in voices if v.id == shown.voice), None)
-    narrowed, cards = _narrowed(voices, chosen, filters or {})
     speed = _fit(shown.speed, model)
     return DesignView(
         profile=ProfileRef(id=profile.id, name=profile.name),  # type: ignore[arg-type]
         active=profile.is_active,
         steps=STEPS,
         chosen=chosen,
-        cards=cards,
+        find=find(voices, chosen, query),
         locked=locked,
-        genders={g: g.title() for g in sorted({v.gender for v in voices})},
-        families={key: label for key, (label, _) in TONE_FAMILIES.items()},
-        accents={a: a for a in sorted({v.accent for v in voices if v.accent})},
-        filters=narrowed,
         styles={"": PLAIN}
         | {
             key: StyleChoice(

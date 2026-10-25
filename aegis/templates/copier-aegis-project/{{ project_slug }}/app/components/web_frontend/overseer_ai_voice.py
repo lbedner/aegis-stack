@@ -122,6 +122,10 @@ async def _editor(db: "AsyncSession", query: Mapping[str, str]) -> dict[str, Any
         "view": view,
         "step": step,
         "chosen_listen": _speak(view.voice, view.model),
+        # The accent checklist follows the other filters: a new id when its
+        # options change, so the page draws them (a checklist is preserved).
+        "accent_id": "ai-voice-accent-"
+        + str(abs(hash(tuple(o.value for o in view.find.options["accent"])))),
         "sample_url": PREVIEW,
         "back_url": section_url("voice"),
         "save_url": f"{PARTIALS}/voice/design",

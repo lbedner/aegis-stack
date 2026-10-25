@@ -17,6 +17,7 @@ from app.core.config import settings
 from app.core.discovery import optional
 from app.core.model_picker import format_price
 
+from . import library
 from .catalog import (
     get_current_voice_config,
     get_stt_models,
@@ -28,8 +29,7 @@ from .catalog import (
     get_voice,
     speaking_model,
 )
-from .library import gemini_library
-from .models import DEFAULT_TTS_VOICES, TTS_KEYS, TTSProvider
+from .models import DEFAULT_TTS_VOICES, TTSProvider
 
 if TYPE_CHECKING:
     # Only a stack with a database has it; a voice-only one does not.
@@ -272,9 +272,12 @@ def _models(
 
 def _voices(rows: _Rows, config: dict[str, Any]) -> None:
     """Every voice, heard on the model in use where it speaks it, else on
-    one that does."""
+    one that does; not Gemini's library (thousands, reached in the editor
+    by accent)."""
     tts, voice = config["tts_model"], config["tts_voice"]
     for v in get_tts_voices():
+        if v.id in library.KEPT:
+            continue
         on = speaking_model(v.id, tts) or tts
         rows.add(
             "voice",
@@ -312,8 +315,6 @@ async def voice_overview(db: "AsyncSession | None") -> VoiceOverview:
     missing = {p.id: missing_from(provider_key(p), found) for p in speech}
     for vendor in vendors:
         missing.setdefault(vendor, missing_from(_vendor_key(vendor), found))
-    if gemini := found.get(TTS_KEYS[TTSProvider.GEMINI]):
-        await gemini_library(gemini)  # its voices are rows too
     rows = _Rows(missing, prices, keeps)
     _in_use(rows, config, used, live, engine)
     _models(rows, config, engines, engine)

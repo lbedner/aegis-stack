@@ -51,6 +51,7 @@ async def check_worker_health() -> ComponentStatus:
         redis_client: aioredis.Redis = cast(aioredis.Redis, redis_connection)
 
         # Get queue metadata from registry
+        from app.components.worker import queue_discovery
         from app.components.worker.registry import get_all_queue_metadata
         functional_queues = get_all_queue_metadata()
 
@@ -315,14 +316,9 @@ async def check_worker_health() -> ComponentStatus:
                 "active_workers": active_workers,
                 "redis_url": settings.redis_url_effective,
                 "version": arq_version,
-                "queue_configuration": {
-                    queue_type: {
-                        "description": config["description"],
-                        "max_jobs": config["max_jobs"],
-                        "timeout_seconds": config["timeout"],
-                    }
-                    for queue_type, config in functional_queues.items()
-                },
+                "queue_configuration": queue_discovery.configuration(
+                    functional_queues
+                ),
             },
             sub_components={"queues": queues_component},
         )

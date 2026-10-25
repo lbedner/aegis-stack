@@ -220,13 +220,15 @@ def chat_router(mount: ChatSurface, guard: Callable[..., Any]) -> APIRouter:
             )
 
         @operator.get("/models", response_class=HTMLResponse)
-        async def models_dialog(request: Request, q: str = "") -> Response:
+        async def models_dialog(
+            request: Request, q: str = "", show: str = "all"
+        ) -> Response:
             """The picker, in the modal; the same route re-renders its list as
-            the search changes."""
+            the search or the filter changes."""
             from app.components.web_frontend import chat_models as models
 
             current = await models.running_model()
-            picker = await models.picker(q, current, models_path, calls)
+            picker = await models.picker(q, current, models_path, calls, show)
             return dialog(request, MODELS_TEMPLATE, picker=picker)
 
         @operator.post("/models", response_class=HTMLResponse)
@@ -235,6 +237,7 @@ def chat_router(mount: ChatSurface, guard: Callable[..., Any]) -> APIRouter:
             model_id: Annotated[str, Form()],
             q: Annotated[str, Form()] = "",
             kind: Annotated[str, Form()] = "chat",
+            show: Annotated[str, Form()] = "all",
         ) -> Response:
             """A pick sets its role - the chat model, or what a live call runs
             on - and updates the dialog in place (compare and switch twice
@@ -247,7 +250,7 @@ def chat_router(mount: ChatSurface, guard: Callable[..., Any]) -> APIRouter:
             else:
                 refused = await models.switch(model_id)
             current = await models.running_model()
-            picker = await models.picker(q, current, models_path, calls)
+            picker = await models.picker(q, current, models_path, calls, show)
             if refused:
                 return with_toast(
                     dialog(request, MODELS_TEMPLATE, picker=picker),

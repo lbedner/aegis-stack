@@ -21,6 +21,7 @@ def row(instance: Instance, stats: Stats | None) -> dict[str, Any]:
         "phase": instance.state,
         "health": instance.health or "",
         "restarts": "-" if instance.restarts is None else str(instance.restarts),
+        "restarts_value": instance.restarts,
         "uptime": format_span(instance.uptime_seconds) or "-",
         # What the next reading compares with (``container_events``).
         "uptime_seconds": instance.uptime_seconds,

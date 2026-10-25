@@ -159,6 +159,14 @@ class TestTheControls:
     ) -> None:
         one(client.get(PAGE).text, "template#chat-live-card")
 
+    def test_her_steps_show_in_the_thread_as_she_takes_them(
+        self, client: TestClient
+    ) -> None:
+        """A call's turn shows each step as it runs, under her name, as a
+        typed turn's do (2026-10-24: they showed only in the status line)."""
+        turn = one(client.get(PAGE).text, "template#chat-live-turn")
+        assert turn.xpath(".//*[@data-trail]")
+
 
 class TestTheCall:
     def test_it_carries_the_audio_both_ways(
@@ -298,3 +306,33 @@ async def test_your_speech_is_relayed_from_its_first_sound() -> None:
     await chat_live._tell(Page(), RealtimeInputSpeechStartEvent())  # type: ignore[arg-type]
     await chat_live._tell(Page(), RealtimeInputSpeechEndEvent())  # type: ignore[arg-type]
     assert told == [{"type": "onset"}, {"type": "turn_end"}]
+
+
+async def test_her_words_reach_the_page_as_she_says_them() -> None:
+    """Her transcript so far, each time it grows, so a card on screen can
+    follow what she names; your words are not hers to follow."""
+    from pydantic_ai.messages import PartDeltaEvent, SpeechPartDelta
+
+    from app.components.web_frontend.routes.partials import chat_live
+
+    told: list[dict[str, object]] = []
+
+    class Page:
+        async def send_json(self, message: dict[str, object]) -> None:
+            told.append(message)
+
+    def delta(speaker: str, transcript: str | None) -> PartDeltaEvent:
+        part = SpeechPartDelta(speaker=speaker, transcript=transcript)  # type: ignore[arg-type]
+        return PartDeltaEvent(index=0, delta=part)  # type: ignore[arg-type]
+
+    for event in (
+        delta("assistant", "First the"),
+        delta("assistant", "First the Server"),
+        delta("assistant", None),  # audio only
+        delta("user", "and you"),
+    ):
+        await chat_live._tell(Page(), event)  # type: ignore[arg-type]
+    assert told == [
+        {"type": "saying", "text": "First the"},
+        {"type": "saying", "text": "First the Server"},
+    ]

@@ -150,6 +150,17 @@ async def test_reading_a_page_marks_the_sampler_watched(
     assert await series.watched(ui_runtime.SAMPLER)
 
 
+async def test_an_agents_read_leaves_the_sampler_at_its_idle_pace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An agent asking about a part reads the last sample: no one is
+    watching the page, so Docker is not read at full pace for it."""
+    use_runtime(monkeypatch, FakeRuntime(REDIS))
+    await series.sample(ui_runtime.CONTAINERS)
+    view = await ui_runtime.sampled("redis")
+    assert view["rows"] and not await series.watched(ui_runtime.SAMPLER)
+
+
 async def test_without_a_deploy_target_the_sampler_reads_nothing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

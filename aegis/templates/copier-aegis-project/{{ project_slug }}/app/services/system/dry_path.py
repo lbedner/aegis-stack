@@ -35,6 +35,7 @@ __all__ = [
     "Entry",
     "Need",
     "anchor",
+    "edges_of",
     "entry_of",
     "find",
     "reaches_service",
@@ -50,6 +51,9 @@ class Step(Frozen):
     target: str
     kind: HopKind
     mode: Mode
+    # Made only by hops a loop over a registry reached (or what they did):
+    # what is registered when it runs decides it, not this route's code.
+    fanned: bool = False
 
 
 class DryPath(Frozen):
@@ -152,19 +156,31 @@ def trace(
     return DryPath(
         route=entry.route,
         hops=tuple(walker.hops),
-        edges=_edges(walker.hops),
+        edges=edges_of(walker.hops),
         stops=tuple(walker.stops),
     )
 
 
-def _edges(hops: list[Hop]) -> tuple[Step, ...]:
+def edges_of(hops: list[Hop]) -> tuple[Step, ...]:
+    """``hops`` collapsed to the nodes they join, each once; a step only
+    hops under a registry's loop make is ``fanned``."""
     by_id = {h.id: h for h in hops}
+    fanned: set[int] = set()
     found: dict[tuple[str, str, HopKind], Step] = {}
-    for hop in hops:
+    for hop in hops:  # a hop's parent comes before it
+        if hop.through or hop.parent in fanned:
+            fanned.add(hop.id)
         parent = by_id.get(hop.parent) if hop.parent else None
         source = parent.node if parent else None
         if source and hop.node and source != hop.node:
             key = (source, hop.node, hop.kind)
-            step = Step(source=source, target=hop.node, kind=hop.kind, mode=hop.mode)
-            found.setdefault(key, step)
+            step = Step(
+                source=source,
+                target=hop.node,
+                kind=hop.kind,
+                mode=hop.mode,
+                fanned=hop.id in fanned,
+            )
+            if key not in found or found[key].fanned and not step.fanned:
+                found[key] = step
     return tuple(found.values())

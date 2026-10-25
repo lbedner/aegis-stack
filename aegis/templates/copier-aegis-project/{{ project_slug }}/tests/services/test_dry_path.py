@@ -4,6 +4,7 @@ see further, a stop at that line saying why."""
 
 import importlib.util
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI
 from fastapi.routing import APIRoute
@@ -222,6 +223,54 @@ def test_a_loop_over_a_registry_fans_out_to_each_entry(
     called = [h.symbol.rpartition(".")[2] for h in found.hops if h.kind == "calls"]
     assert called == ["run_checks", "check_a", "check_b"]
     assert not found.stops
+    # Each entry says the registry it was reached through; the loop's own
+    # caller was reached directly.
+    through = {h.symbol.rpartition(".")[2]: h.through for h in found.hops}
+    assert through["run_checks"] is None
+    assert (
+        through["check_a"]
+        == through["check_b"]
+        == "app.services.blog.dry_checks.CHECKS"
+    )
+
+
+def test_a_step_only_a_registry_reaches_is_marked_fanned() -> None:
+    """What is registered when it runs decides it (every part's health
+    check): a step only such hops make is fanned; one a direct call also
+    makes is not."""
+    from app.services.system.dry_walk import Hop, HopKind
+
+    def hop(id_: int, parent: int | None, node: str, through: str | None = None) -> Hop:
+        return Hop(
+            id=id_,
+            parent=parent,
+            kind=HopKind.CALLS,
+            symbol=f"s{id_}",
+            node=node,
+            path="p.py",
+            line=id_,
+            text="",
+            through=through,
+        )
+
+    found = dry_path.edges_of(
+        [
+            hop(1, None, "service:ai"),
+            hop(2, 1, "shared:system"),
+            hop(3, 2, "service:blog", through="health.CHECKS"),
+            hop(4, 3, "component:database"),
+            hop(5, 2, "component:cache", through="health.CHECKS"),
+            hop(6, 1, "component:cache"),  # and directly from AI
+        ]
+    )
+    fanned = {(s.source, s.target): s.fanned for s in found}
+    assert fanned == {
+        ("service:ai", "shared:system"): False,
+        ("shared:system", "service:blog"): True,
+        ("service:blog", "component:database"): True,
+        ("shared:system", "component:cache"): True,
+        ("service:ai", "component:cache"): False,
+    }
 
 
 def test_a_call_cycle_ends(index: source_index.Index) -> None:
@@ -385,5 +434,47 @@ def test_a_shared_instance_is_walked_into_its_class(tmp_path: Path) -> None:
         },
     )
     entry = Entry("show", ("app.components.backend.api.blog.show", "show"))
+    hops = dry_path.trace(entry, source_index.at(tmp_path), set()).hops
+    assert "app.services.blog.service.BlogService.get_post" in {h.symbol for h in hops}
+
+
+def test_a_handler_written_inside_the_function_adding_it_is_walked(
+    tmp_path: Path,
+) -> None:
+    """Routes a function adds (``add_card_routes(router, mount)``, every
+    chat surface's): the handler is named inside it and walked from its
+    own source (2026-10-24: the chat stream had no handler to find)."""
+    from app.services.system.dry_names import symbol_of
+
+    def add_routes() -> Any:
+        async def stream() -> None:
+            return None
+
+        return stream
+
+    assert symbol_of(add_routes())[1] == (  # type: ignore[index]
+        "test_a_handler_written_inside_the_function_adding_it_is_walked"
+        ".<locals>.add_routes.<locals>.stream"
+    )
+    assert symbol_of(lambda: None) is None  # nothing to name it by
+
+    routes = "app/components/web_frontend/routes/blog.py"
+    write_tree(
+        tmp_path,
+        FILES
+        | {
+            routes: (
+                "from app.services.blog.service import BlogService\n"
+                "def add_routes(router, mount) -> None:\n"
+                "    @router.get('/posts')\n"
+                "    async def posts(slug: str) -> None:\n"
+                "        return await BlogService(None).get_post(slug)\n"
+            )
+        },
+    )
+    entry = Entry(
+        "posts",
+        ("app.components.web_frontend.routes.blog", "add_routes.<locals>.posts"),
+    )
     hops = dry_path.trace(entry, source_index.at(tmp_path), set()).hops
     assert "app.services.blog.service.BlogService.get_post" in {h.symbol for h in hops}

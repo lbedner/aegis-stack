@@ -7,8 +7,9 @@
 {# ``fit``: as wide as what it holds, up to the answer's width (a table),
    rather than the fixed width a chart draws into. #}
 {% macro card_frame(kind, title, subtitle, url, large=False, fit=False) %}
+{% from "components/macros/chat.html" import drawn_id %}
 <div data-card="{{ kind }}" {% if fit %}data-fit{% endif %}
-     {% if not large %}{{ hx_dialog(url ~ "?size=large", "hx-trigger=\"click, keyup[key=='Enter']\"") }}
+     {% if not large %}id="{{ drawn_id(url) }}" {{ hx_dialog(url ~ "?size=large", "hx-trigger=\"click, keyup[key=='Enter']\"") }}
      role="button" tabindex="0" title="Open larger" aria-label="Open {{ title }} larger"{% endif %}
      class="block {{ 'w-fit max-w-full' if fit else ('w-full' if large else 'w-full max-w-xl') }} {{ '' if large else 'cursor-zoom-in hover:border-aegis-muted transition-colors' }} raised overflow-hidden">
   <div class="px-4 py-2.5 border-b border-aegis-border">

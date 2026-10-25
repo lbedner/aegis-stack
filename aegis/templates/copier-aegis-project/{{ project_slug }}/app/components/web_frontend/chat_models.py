@@ -10,11 +10,14 @@ and a search this many, with a "more - search to narrow" line rather than
 silent truncation. Needs the catalog, so offered with a persistence
 backend only.
 
-With voice, the same list picks what a live call runs on: a "Live calls"
-group of the realtime models a call can reach, a pick making it the
-active voice profile's engine (made on the spot when it has none).
+With voice, the same list picks what a live call runs on: the realtime
+models a call can reach sit under their vendor, marked Voice, a pick of
+one making it the active voice profile's engine (made on the spot when
+it has none); the list narrows to Text or Voice, the model a call runs on
+leading beside the chat model's.
 """
 
+import asyncio
 from typing import Any
 
 from app.core.model_picker import (
@@ -29,6 +32,9 @@ from app.core.model_picker import (
     newest_first,
 )
 
+# The list's modalities, with voice: every model, the chat models, or what
+# a live call can run on.
+FILTERS = (("all", "All"), ("text", "Text"), ("voice", "Voice"))
 # How many recently used models lead the list; read from a few more, as
 # some may not be callable now.
 RECENT = 3
@@ -172,6 +178,7 @@ def _row(
     vendor in flat views that have no group around them."""
     lab = lab_for_model(model)
     vendor = str(model.get("vendor") or "")
+    voice = model.get("kind") == "realtime"
     if under_vendor:
         icon_for = lab if lab and lab.casefold() != under_vendor.casefold() else None
     else:
@@ -179,7 +186,8 @@ def _row(
     facts = " · ".join(
         part
         for part in (
-            format_context_window(model.get("context_window")),
+            # A voice model's window is not what picks it; its price is.
+            None if voice else format_context_window(model.get("context_window")),
             format_price(
                 model.get("input_price"),
                 model.get("output_price"),
@@ -191,6 +199,7 @@ def _row(
     return {
         "model_id": model["model_id"],
         "kind": model.get("kind", "chat"),
+        "voice": voice,
         "title": display_title(model, under_vendor=under_vendor),
         "facts": facts,
         "icon_name": icon_for,
@@ -251,40 +260,34 @@ def _recent(
     ]
 
 
-def _calls(live: list[dict[str, Any]], icons: dict[str, str]) -> dict[str, Any]:
-    """The live-call models, a group of their own: what a call runs on."""
-    return {
-        "name": "Live calls",
-        "icon_url": None,
-        "count": len(live),
-        "rows": [_row(m, under_vendor=None, icons=icons) for m in live],
-        "hidden": 0,
-    }
-
-
 async def picker(
-    query: str, current: str, path: str, calls: bool = False
+    query: str, current: str, path: str, calls: bool = False, show: str = "all"
 ) -> dict[str, Any]:
     """The dialog's contents: grouped by vendor, or flat when searching,
     with the recently used leading and the active model marked; with
     ``calls``, the live-call models too, the one calls run on marked.
-    ``path`` is the picker's own URL on the chat mount it opened from."""
-    models = await catalog()
-    live = [{**m, "kind": "realtime"} for m in await call_models()] if calls else []
-    calling = await calling_model() if calls else None
-    every = models + live
+    ``path`` is the picker's own URL on the chat mount it opened from;
+    ``show`` narrows it to one modality (``FILTERS``), offered with calls."""
+    show = show if calls and show in dict(FILTERS) else "all"
+    # Three reads of their own, at once: the picker redraws on each key.
+    models, live, calling = await asyncio.gather(
+        catalog() if show in ("all", "text") else asyncio.sleep(0, []),
+        call_models() if calls and show in ("all", "voice") else asyncio.sleep(0, []),
+        calling_model() if calls else asyncio.sleep(0, None),
+    )
+    every = models + [{**m, "kind": "realtime"} for m in live]
     icons = await vendor_icons(sorted({str(m.get("vendor") or "") for m in every}))
     query = query.strip()
     if query:
         sections = _flat(every, query, icons)
     else:
         # A pick leads at once: it has no usage until it answers.
-        leading = [current, *await recent_ids()]
-        sections = _recent(models, leading, icons) + _grouped(models, icons)
-        if live:
-            sections = [_calls(live, icons), *sections]
+        leading = [current, *([calling] if calling else []), *await recent_ids()]
+        sections = _recent(every, leading, icons) + _grouped(every, icons)
     return {
         "query": query,
+        "show": show,
+        "filters": FILTERS if calls else (),
         "active": {current, calling} - {None},
         "sections": sections,
         "empty": not any(section["rows"] for section in sections),

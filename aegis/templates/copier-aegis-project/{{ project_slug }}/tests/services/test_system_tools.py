@@ -32,6 +32,7 @@ from app.services.system import (
     tools,
     ui_errors,
     ui_logs,
+    ui_runtime,
 )
 from app.services.system.errors.models import ErrorIssue
 from app.services.system.models import (
@@ -39,7 +40,7 @@ from app.services.system.models import (
     ComponentStatusType,
     SystemStatus,
 )
-from app.services.system.node_now import NodeNow
+from app.services.system.node_now import ContainerNow, NodeNow
 from app.services.system.pattern_findings import Finding
 from tests._ontology import model_of
 
@@ -163,6 +164,41 @@ async def test_health_keeps_what_fits_a_prompt(
     assert "secret" not in json.dumps(told)
     assert told["url"] == "postgresql://app:***@db:5432/app"
     assert told["omitted"] == ["table_schemas"]
+
+
+async def test_a_few_short_rows_fit_where_a_schema_does_not(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The scheduler's jobs, each with when it runs next, are what she is
+    asked for (2026-10-24: "when they run next" was left out)."""
+    jobs = [
+        {
+            "job_id": f"job_{i}",
+            "name": f"Job number {i}",
+            "next_run": "2026-10-24T19:00:00",
+            "schedule": "Every 1h",
+            "function": "app.components.scheduler.main:scheduled_run",
+            "description": "One run of a scheduled job: its task enqueued",
+        }
+        for i in range(6)
+    ]
+    scheduler = ComponentStatus(
+        name="scheduler", message="ok", metadata={"upcoming_tasks": jobs}
+    )
+    current = SystemStatus(
+        components={"scheduler": scheduler},
+        overall_healthy=True,
+        timestamp=datetime.now(UTC),
+    )
+
+    async def fake() -> tuple[SystemStatus, str | None]:
+        return current, None
+
+    monkeypatch.setattr(live_status, "live_status", fake)
+    told = (await tools.health("scheduler"))["component"]["metadata"]
+    assert [job["next_run"] for job in told["upcoming_tasks"]] == [
+        "2026-10-24T19:00:00"
+    ] * 6
 
 
 @pytest.mark.usefixtures("status")
@@ -541,6 +577,8 @@ async def test_a_node_comes_with_its_edges_and_neighbours() -> None:
     assert {e["kind"] for e in result["edges"]} >= {"calls", "contains"}
     ids = [n["id"] for n in result["neighbors"]]
     assert ids == sorted(ids)  # the same answer every call
+    # A call that waits is every call: only a hand-off says its mode.
+    assert all("mode" not in e for e in result["edges"])
 
 
 @pytest.mark.usefixtures("model")
@@ -627,6 +665,60 @@ async def test_a_part_says_what_is_true_of_it_now(
     assert asked == {"app_component": "backend"}
     assert [i.fingerprint for i in now.errors] == [_issue().fingerprint]
     assert now.errors_total == 1
+
+
+@pytest.fixture
+def sampled(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """One container on any page, as the sampler last read it; the pages
+    asked for."""
+    asked: list[str] = []
+
+    async def sampled(page: str) -> dict[str, Any]:
+        asked.append(page)
+        row = {
+            "name": "worker-system-1",
+            "state": "running",
+            "restarts_value": 0,
+            "uptime_seconds": 3600,
+            "cpu_value": 1.5,
+            "memory_value": 200 * 1024**2,
+            "memory_capacity": 1024**3,
+            "memory_percent": 19.5,
+        }
+        return {"rows": [row], "note": None}
+
+    monkeypatch.setattr(ui_runtime, "sampled", sampled)
+    return asked
+
+
+@pytest.mark.usefixtures("model", "status", "errors_asked")
+async def test_a_part_says_what_each_of_its_containers_uses(
+    sampled: list[str],
+) -> None:
+    """Each container behind it, as its Overseer page reads them: asked
+    which worker was using the memory, she had only the warning's one
+    line (2026-10-24)."""
+    result = await tools.ontology(node="component:backend")
+
+    now = NodeNow.model_validate(result["now"])
+    assert sampled == [ui_runtime.page_of("backend")]
+    (box,) = now.containers
+    assert (box.name, box.state, box.restarts) == ("worker-system-1", "running", 0)
+    assert (box.memory_mb, box.memory_limit_mb, box.memory_percent) == (200, 1024, 19.5)
+    assert box.cpu_percent == 1.5
+
+
+@pytest.mark.usefixtures("status")
+async def test_health_of_a_part_says_what_its_containers_use(
+    sampled: list[str],
+) -> None:
+    """Asked what is happening on a worker, she reaches for health: it
+    carries the same containers as the part's ontology answer."""
+    result = await tools.health(component="component:worker")
+
+    assert sampled == [ui_runtime.page_of("worker")]
+    (box,) = [ContainerNow.model_validate(c) for c in result["containers"]]
+    assert (box.memory_mb, box.memory_limit_mb) == (200, 1024)
 
 
 @pytest.mark.usefixtures("model", "status")

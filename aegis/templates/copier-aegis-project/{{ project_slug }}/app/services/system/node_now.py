@@ -1,6 +1,7 @@
 """What is true of a part now (``now``), beside what its code says: the
 ``ontology`` tool's answer for one part carries it. Its health check, the
-errors it owns, and for the AI service what it has spent, each read when
+errors it owns, what each container behind it uses, and for the AI
+service what it has spent, each read when
 asked and stamped with when, so a figure from an earlier turn reads as
 old. And what is wrong across the app right now (``right_now``), the one
 line an assistant's current message carries while something is."""
@@ -18,7 +19,7 @@ from app.core.log import logger
 from app.core.ontology import Kind
 from app.core.ontology.model import Node, PartNode
 from app.core.time import utcnow
-from app.services.system import live_status, ui_errors
+from app.services.system import live_status, ui_errors, ui_runtime
 from app.services.system.errors.models import ErrorIssue
 from app.services.system.errors.read import search
 from app.services.system.errors.store import ErrorStore
@@ -57,9 +58,27 @@ class UsageWindow(BaseModel):
     by_mode: dict[str, Cents] = Field(default_factory=dict)
 
 
+class ContainerNow(BaseModel):
+    """One container behind a part, as its Overseer page last sampled it:
+    what it uses against what it may (no limit: None), and whether it is
+    up. A stopped one has no figures."""
+
+    model_config = FIGURES
+
+    name: str
+    state: str
+    restarts: int | None
+    uptime_seconds: float | None
+    cpu_percent: float | None
+    memory_mb: float | None
+    memory_limit_mb: float | None
+    memory_percent: float | None
+
+
 class NodeNow(BaseModel):
     """A part's live state: its health check (None where it has none), the
-    issues it owns, its spend, and when all of it was read."""
+    issues it owns, its containers, its spend, and when all of it was
+    read."""
 
     model_config = FIGURES
 
@@ -67,6 +86,8 @@ class NodeNow(BaseModel):
     errors: tuple[ErrorIssue, ...]
     errors_total: int
     errors_note: str | None  # why errors could not be read, when not
+    containers: tuple[ContainerNow, ...]
+    containers_note: str | None  # why there are none, when there are none
     spend: tuple[UsageWindow, ...]
     read_at: datetime
 
@@ -145,10 +166,12 @@ async def right_now() -> RightNow:
     return RightNow(attention=attention(status.components), read_at=utcnow(), note=note)
 
 
-# An agent's copy of a check's details: what fits a prompt. The page
-# shows the rest (every table's schema, every migration). Passwords are
-# already hidden in every check (``ComponentStatus``).
-DETAIL_CHARS = 500
+# An agent's copy of a check's details: what fits a prompt, a few dozen
+# short rows (the scheduler's jobs and when each runs next, a worker's
+# queues). The page shows the rest (every table's schema, every
+# migration). Passwords are already hidden in every check
+# (``ComponentStatus``).
+DETAIL_CHARS = 2_000
 
 
 def health_of(
@@ -191,9 +214,10 @@ async def now_of(node: Node) -> NodeNow | None:
     if not isinstance(node, PartNode) or node.owner is not None:
         return None
     owner = "app_component" if node.kind is Kind.COMPONENT else "app_service"
-    (status, _), found, spend = await asyncio.gather(
+    (status, _), found, (boxes, boxes_note), spend = await asyncio.gather(
         live_status.live_status(),
         ui_errors.load({owner: node.name}, _owned),
+        containers_now(node.name),
         _spend(node),
     )
     return NodeNow(
@@ -201,9 +225,38 @@ async def now_of(node: Node) -> NodeNow | None:
         errors=tuple(found["error_rows"]),
         errors_total=found["error_total"],
         errors_note=found["error_note"],
+        containers=boxes,
+        containers_note=boxes_note,
         spend=spend,
         read_at=utcnow(),
     )
+
+
+async def containers_now(part: str) -> tuple[tuple[ContainerNow, ...], str | None]:
+    """The containers on ``part``'s page (``worker``), as last sampled
+    (``ui_runtime.sampled``: no Docker call, none set off), and why there
+    are none."""
+    if (page := ui_runtime.page_of(part)) is None:
+        return (), None
+    view = await ui_runtime.sampled(page)
+    return tuple(_container(row) for row in view["rows"]), view["note"]
+
+
+def _container(row: dict[str, Any]) -> ContainerNow:
+    return ContainerNow(
+        name=row["name"],
+        state=row["state"],
+        restarts=row.get("restarts_value"),
+        uptime_seconds=row.get("uptime_seconds"),
+        cpu_percent=row.get("cpu_value"),
+        memory_mb=_mb(row.get("memory_value")),
+        memory_limit_mb=_mb(row.get("memory_capacity")),
+        memory_percent=row.get("memory_percent"),
+    )
+
+
+def _mb(size: float | None) -> float | None:
+    return None if size is None else round(size / 1024**2, 1)
 
 
 async def _owned(store: ErrorStore, query: Mapping[str, str]) -> dict[str, Any]:

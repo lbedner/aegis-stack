@@ -6,8 +6,10 @@ a hop and no timing of its own, in the shape a kept request has
 import pytest
 
 from app.core.edges import SERVER
-from app.core.ontology.model import EdgeKind
+from app.core.ontology.model import EdgeKind, Mode
 from app.services.system import staged_paths
+from app.services.system.dry_path import Step
+from app.services.system.dry_walk import HopKind
 from tests._ontology import dry_walk, edge_of, model_of, node_of
 
 AUTH, USERS, DB = "service:auth", "service:auth.users", "component:database"
@@ -80,6 +82,24 @@ def test_a_stop_the_model_does_not_have_is_refused_by_name() -> None:
     with pytest.raises(ValueError, match="service:auths") as refused:
         staged_paths.joined(MODEL, [SERVER, "service:auths"])
     assert "service:auth" in str(refused.value).split("closest", 1)[1]
+
+
+def test_a_code_path_leaves_out_what_only_a_registry_reaches() -> None:
+    """Every part's health check, looped over where System reads them: the
+    card goes into System and stops, the parts behind the loop undrawn."""
+    walked = dry_walk(
+        "GET /api/v1/ai/chat", "service:ai", ("service:ai", "shared:system")
+    )
+    fanned = Step(
+        source="shared:system",
+        target="service:blog",
+        kind=HopKind.CALLS,
+        mode=Mode.SYNC,
+        fanned=True,
+    )
+    walked = walked.model_copy(update={"edges": (*walked.edges, fanned)})
+    chains = [hop.chain for hop in staged_paths.dry(walked).hops]
+    assert chains == [(SERVER, "service:ai"), ("service:ai", "shared:system")]
 
 
 def test_a_dry_path_enters_through_the_server_and_reads_its_tables() -> None:

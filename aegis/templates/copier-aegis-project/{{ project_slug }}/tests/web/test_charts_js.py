@@ -249,3 +249,21 @@ def test_a_doughnut_legend_names_its_slices() -> None:
         "wide": "right",
         "bar": "top",
     }
+
+
+ZERO = """
+const c = require(CHARTS_JS);
+console.log(JSON.stringify({
+  bar: c.fromZero('bar', {}),
+  time: c.fromZero('line', { x: 'time' }),
+  line: c.fromZero('line', {}),
+}));
+"""
+
+
+def test_a_bar_measures_from_zero() -> None:
+    """A bar's height is its value: two workers at 190 and 199 MB drew one
+    bar as nothing beside the other when the axis started at 190
+    (2026-10-24). A time chart measures from zero too; a line by labels
+    keeps the range its values span."""
+    assert run(ZERO, CHARTS_JS=CHARTS_JS) == {"bar": True, "time": True, "line": False}

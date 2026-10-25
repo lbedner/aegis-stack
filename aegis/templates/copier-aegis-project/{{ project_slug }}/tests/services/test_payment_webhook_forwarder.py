@@ -173,6 +173,34 @@ class TestForwarderStartup:
         assert args[:4] == ["stripe", "listen", "--api-key", "sk_test_abc123"]
         assert "--forward-to" in args
 
+    @pytest.mark.parametrize(("platform", "tied"), [("linux", True), ("darwin", False)])
+    async def test_the_forwarder_dies_with_the_server_on_linux(
+        self, platform: str, tied: bool
+    ) -> None:
+        """A hot reload that times out shutting down never runs the
+        shutdown hook; on Linux the kernel stops ``stripe listen`` with
+        its server instead, so reloads leave none behind (2026-10-24:
+        four orphans, 35 MB each, turned the Server red)."""
+        fake_stdout = MagicMock()
+        fake_stdout.readline.side_effect = ["whsec_xyz\n", ""]
+        fake_proc = MagicMock(stdout=fake_stdout)
+
+        with (
+            _fake_settings(secret_key="sk_test_abc123"),
+            patch.object(
+                startup_mod.shutil, "which", return_value="/usr/local/bin/stripe"
+            ),
+            patch.object(startup_mod.sys, "platform", platform),
+            patch.object(
+                startup_mod.subprocess, "Popen", return_value=fake_proc
+            ) as popen,
+        ):
+            await startup_mod.startup_payment_webhook_forwarder()
+
+        hook = popen.call_args.kwargs.get("preexec_fn")
+        assert (hook is startup_mod._dies_with_server) is tied
+        assert tied or hook is None
+
 
 # ---------------------------------------------------------------------------
 # Shutdown

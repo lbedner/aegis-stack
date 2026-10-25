@@ -414,6 +414,12 @@
      lit (off the plan), told apart from a queue's dashes at a glance. */
   .map-link[data-observed] { stroke-dasharray: 0 5; stroke-linecap: round; stroke-width: 2; }
   .map-link[data-observed]:not([data-play-state]) { @apply text-aegis-muted; }
+  /* A part named in the answer (mentions.js): lit on its card, still,
+     the rest stepping back; the name itself marked as one to point at. */
+  [data-card] [data-node][data-lit] { @apply ring-4 ring-aegis-teal; }
+  [data-card] .map-link[data-lit] { @apply opacity-100; stroke-width: 2.5; }
+  [data-card]:has([data-lit]) :is([data-node], .map-link):not([data-lit]) { opacity: 0.3; }
+  [data-mention] { @apply cursor-pointer underline decoration-dotted decoration-aegis-teal/70 underline-offset-4 hover:text-aegis-teal focus:outline-none focus-visible:text-aegis-teal; }
   [data-play-chapter][aria-current] { @apply bg-aegis-teal/15 text-aegis-text; }  /* the scene showing */
   [data-play-scene]:not([hidden]) { animation: play-scene 0.5s ease-out; }  /* a scene fades in */
   [data-player]:not([data-playing]) [data-when-playing],

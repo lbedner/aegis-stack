@@ -9,6 +9,7 @@ import ast
 from app.core.source_index import Index, Symbol, resolve
 
 Def = ast.FunctionDef | ast.AsyncFunctionDef
+LOCALS = "<locals>"  # a qualname's step into the function defining it
 
 
 class Source:
@@ -30,7 +31,8 @@ class Source:
         if symbol not in self._found:
             module, member = symbol
             found: ast.AST | None = self.tree(module)
-            for name in (member or "").split("."):
+            # ``add_routes.<locals>.posts``: ``posts`` in ``add_routes``'s body.
+            for name in (member or "").replace(f".{LOCALS}", "").split("."):
                 found = next(
                     (
                         n

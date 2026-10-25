@@ -7,7 +7,7 @@ operations and task data transformations.
 """
 
 import pickle
-from datetime import datetime
+from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 from typing import Any
 
@@ -135,6 +135,9 @@ class TestScheduledTaskManager:
             assert task.job_id == "test_job_id"
             assert task.name == "Test Job"
             assert task.status == "active"  # Has next_run_time
+            # Says its zone: a reader (an agent, a page) never guesses it.
+            assert task.next_run_time is not None
+            assert task.next_run_time.utcoffset() == timedelta(0)
 
     @pytest.mark.asyncio
     async def test_list_tasks_empty_database(

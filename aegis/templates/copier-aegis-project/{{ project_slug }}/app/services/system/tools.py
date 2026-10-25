@@ -10,6 +10,7 @@ from collections import Counter
 import importlib.util
 from typing import Any
 
+from pydantic import BaseModel
 from starlette.datastructures import QueryParams
 
 from app.core import replays, runtime
@@ -32,7 +33,13 @@ from app.services.system import (
     ui_logs,
 )
 from app.services.system.models import ComponentStatus
-from app.services.system.node_now import attention, checks, health_of, now_of
+from app.services.system.node_now import (
+    attention,
+    checks,
+    containers_now,
+    health_of,
+    now_of,
+)
 
 # The most log lines one call returns, newest first.
 MAX_LINES = 500
@@ -70,12 +77,13 @@ async def health(component: str | None = None) -> dict[str, Any]:
     shows them. ``component`` narrows it to one, with the details it
     reports that fit here (a worker's queues, the scheduler's jobs, the
     database's size and counts); ``omitted`` names those only Overseer
-    shows. ``counts`` counts each check once, and ``attention`` names
+    shows; and ``containers``, what each container behind it uses
+    (memory in MB against its limit, CPU, restarts). ``counts`` counts each check once, and ``attention`` names
     every one not healthy, with its message. Start here, then read what
     broke with ``errors`` and what led up to it with ``logs``. A part's
     ontology id (``service:documents``) names its check too."""
-    status, note = await live_status.live_status()
     if component is None:
+        status, note = await live_status.live_status()
         found = list(checks(status.components))
         return {
             "healthy": status.overall_healthy,
@@ -90,11 +98,20 @@ async def health(component: str | None = None) -> dict[str, Any]:
             "note": note,
         }
     # An ontology id (``component:worker``) names the same check.
-    found = health_of(status.components, component.rpartition(":")[2])
+    name = component.rpartition(":")[2]
+    (status, note), (boxes, boxes_note) = await asyncio.gather(
+        live_status.live_status(), containers_now(name)
+    )
+    found = health_of(status.components, name)
     if found is None:
         known = ", ".join(_names(status.components))
         raise ValueError(f"No component {component!r}; known: {known}")
-    return {"component": found.model_dump(mode="json"), "note": note}
+    return {
+        "component": found.model_dump(mode="json"),
+        "containers": [box.model_dump(mode="json") for box in boxes],
+        "containers_note": boxes_note,
+        "note": note,
+    }
 
 
 async def errors(
@@ -210,9 +227,16 @@ async def _dry_path(route: str) -> dict[str, Any]:
     walked = await dry_path.of(route)
     return {
         "dry_path": walked.model_dump(mode="json", exclude={"hops"})
-        | {"hops": [h.model_dump(mode="json") for h in walked.hops[:MAX_NODES]]},
+        | {"hops": [_said(h) for h in walked.hops[:MAX_NODES]]},
         "total": {"hops": len(walked.hops)},
     }
+
+
+def _said(found: BaseModel) -> dict[str, Any]:
+    """An edge or a hop as she reads it: only what is not its default, so
+    a call that waits (every call) says nothing of its mode, a hand-off
+    does, and an unset field is not there to repeat."""
+    return found.model_dump(mode="json", exclude_defaults=True)
 
 
 def _findings(node: Node) -> list[pattern_findings.Finding]:
@@ -236,7 +260,7 @@ async def _node(
         "node": here.model_dump(mode="json"),
         "now": now.model_dump(mode="json") if now else None,
         "findings": [f.model_dump(mode="json") for f in findings],
-        "edges": [e.model_dump(mode="json") for e in edges[:MAX_NODES]],
+        "edges": [_said(e) for e in edges[:MAX_NODES]],
         "neighbors": [
             n.model_dump(mode="json", include=BRIEF) for n in near[:MAX_NODES]
         ],
@@ -264,7 +288,9 @@ async def ontology(
     ``category`` or ``text``: matching nodes. ``node`` (an id like
     ``object:user``): it, its edges and neighbours ``depth`` steps out,
     and for a part what is true of it now (its health check, the errors it
-    owns, the AI service's spend by window, and when they were read),
+    owns, what each of its containers uses: memory in MB against its
+    limit, CPU, restarts; the AI service's spend by window, and when they
+    were read),
     what its code breaks of the service standard (``findings``: each
     rule, how bad, why, the file:line that shows it, what to do), and on
     the node what else it could be (``options``: each one's choices, the
@@ -276,7 +302,8 @@ async def ontology(
     an admin's): every hop it can take, read from the code without sending
     it, each at its file and line, and where the walk stops. An edge's
     ``mode`` is whether the caller waits on it (``sync``) or hands it to
-    the queue (``async``), not how either is written."""
+    the queue (``async``), not how either is written: only a hand-off
+    carries one, every other call waits."""
     if route:
         return await _dry_path(route)
     model = await running()
@@ -290,7 +317,7 @@ async def ontology(
         return {"nodes": list(await asyncio.gather(*read))}
     if node and to:
         found = graph.paths(model, node, to)
-        dumped = [[e.model_dump(mode="json") for e in path] for path in found]
+        dumped = [[_said(e) for e in path] for path in found]
         return {"paths": dumped, "note": note}
     if node:
         return await _node(model, node, depth, note)

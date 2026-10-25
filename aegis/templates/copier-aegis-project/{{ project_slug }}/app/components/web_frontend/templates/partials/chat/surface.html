@@ -9,7 +9,7 @@
    database, for an operator), calls (live calls: the same, on a mount
    not bound per request). #}
 {% from "components/macros/icons.html" import icon %}
-{% from "components/macros/chat.html" import assistant_row, button_classes, conversation_field, voice_states %}
+{% from "components/macros/chat.html" import assistant_row, button_classes, conversation_field, turn_head, voice_states %}
 {# A call's states, as the phone and the call bar both draw them. #}
 {% macro phone_states() %}{% call voice_states(record=True, work=True) %}{{ icon("phone", "w-4 h-4") }}{% endcall %}{% endmacro %}
 <div id="chat" class="flex flex-col h-full"
@@ -52,6 +52,9 @@
   {# A card drawn mid-call, which the call announces: held at the foot of
      the thread until the saved turn redraws the thread. #}
   <template id="chat-live-card"><li {{ assistant_row() }} data-live-card></li></template>
+  {# Her turn on a call as it runs: each step she takes, under her name, as
+     a typed turn shows them, until the saved turn redraws the thread. #}
+  <template id="chat-live-turn"><li {{ assistant_row() }} data-live-turn>{{ turn_head(assistant) }}</li></template>
   {% endif %}
   {% if voice %}
   {# What the microphone is doing, read out as well as shown. The server's

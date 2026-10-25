@@ -589,6 +589,52 @@ class TestDrivingACall:
         assert trace[-1]["component"] == [{"kind": cards.MARKER, "id": "c1"}]
 
     @pytest.mark.asyncio
+    async def test_a_card_stays_with_its_turn_after_a_silent_one(
+        self, async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A turn that ended with nothing said lost track of the cards:
+        the next one drawn showed under the turn after it."""
+        import asyncio
+
+        from app.services.ai.domains.chat import cards
+        from app.services.ai.domains.voice.realtime_calls import drive
+        from tests._realtime import FakeRealtime
+
+        await _priced(async_db_session, monkeypatch)
+        conversation = await _conversation()
+        shown: list[list[str]] = []
+
+        async def on_event(event: object) -> None:
+            if isinstance(event, FunctionToolCallEvent):
+                staged = cards._staged.get()
+                assert staged is not None
+                staged.append({"kind": cards.MARKER, "id": "c1"})
+
+        async def on_drawn(ids: list[str]) -> None:
+            shown.append(ids)
+
+        async def alongside(session: object) -> None:
+            await asyncio.sleep(0)
+            await session.close()  # type: ignore[attr-defined]
+
+        await drive(
+            ai_service,
+            FakeRealtime([RealtimeTurnCompleteEvent(), *_turn()]),
+            conversation_id=conversation.id,
+            model="google:gemini-3.8-live",
+            agent_slug="voice",
+            user_id=USER,
+            alongside=alongside,
+            on_event=on_event,
+            on_drawn=on_drawn,
+        )
+
+        assert shown == [["c1"]]
+        stored = await ai_service.get_conversation(conversation.id)
+        trace = stored.messages[-1].metadata["tool_trace"]
+        assert trace[-1]["component"] == [{"kind": cards.MARKER, "id": "c1"}]
+
+    @pytest.mark.asyncio
     @pytest.mark.parametrize("ends", [False, True])
     async def test_a_call_says_who_ended_it(
         self,

@@ -130,6 +130,28 @@ class TestInTheThread:
         assert loader.get("hx-get") == f"{CARDS}/{drawn['trend']}"
         assert loader.get("hx-trigger") == "load"
 
+    # Three requests (the answer, its card, the card larger), each reading
+    # the conversation: three reads by construction, not a loop.
+    @pytest.mark.queryspy(allow_n_plus_one=True)
+    def test_a_reload_keeps_the_card_drawn_not_draws_it_again(
+        self, hx: TestClient, drawn: dict[str, str]
+    ) -> None:
+        """A call's thread reloads as each turn is saved, while she is
+        still talking about its card: the card already up is moved into
+        the reload (htmx keeps an ``hx-preserve`` element by its id), not
+        drawn again mid-sentence (2026-10-24)."""
+        html = hx.get(
+            f"{OVERSEER.path}/messages/{drawn['conversation']}/{drawn['message']}"
+        ).text
+        loader = one(html, "[data-card-load]")
+        card = one(hx.get(f"{CARDS}/{drawn['trend']}").text, "[data-card]")
+        assert loader.get("id") and loader.get("id") == card.get("id")
+        assert "hx-preserve" in loader.attrib
+        # A card kept too would keep its own loader when it loads.
+        assert "hx-preserve" not in card.attrib
+        large = hx.get(f"{CARDS}/{drawn['trend']}?size=large").text
+        assert not one(large, "[data-card]").get("id")  # the dialog's is a copy
+
 
 class TestTheCards:
     def test_a_trend_is_a_line_drawn_by_the_apps_chart_code(

@@ -53,8 +53,15 @@ btn btn-outline {{ {"sm": "btn-sm", "xs": "btn-xs"}[size] }} {{ tones.get(tone, 
 
 {# A card under a reply, loaded in place by its own route. #}
 {% macro card_loader(url, what) %}
-<div data-card-load hx-get="{{ url }}" hx-trigger="load" hx-swap="outerHTML" class="my-2 text-xs text-aegis-muted">Loading {{ what }}…</div>
+<div data-card-load id="{{ drawn_id(url) }}" hx-preserve hx-get="{{ url }}" hx-trigger="load" hx-swap="outerHTML" class="my-2 text-xs text-aegis-muted">Loading {{ what }}…</div>
 {% endmacro %}
+
+{# A drawn card's id, the same on the card and its loader: a thread
+   reloaded around a card already up (a call saves each turn while she
+   is still talking about it) has its loader keep that card
+   (``hx-preserve``), moved into place rather than drawn again. Only the
+   loader is kept: a card answering its own loader would keep the loader. #}
+{% macro drawn_id(url) %}drawn-{{ url.rsplit('/', 1)[-1] }}{% endmacro %}
 
 {# Hear an answer: the stored message, said aloud. Same place and weight
    as the copy button; voice.js plays it, and plays it unasked when the
@@ -162,10 +169,16 @@ btn btn-outline {{ {"sm": "btn-sm", "xs": "btn-xs"}[size] }} {{ tones.get(tone, 
    (what to send) and fills ``data-body`` and ``data-trail``; when the
    stream completes it swaps this whole element for ``assistant_bubble``
    rendered from the stored message. #}
+{# Her name over the steps of a turn still running: a typed one as it
+   streams, a call's as it talks. #}
+{% macro turn_head(assistant, hidden=False) %}
+<div class="flex items-center gap-2 mb-1">{{ assistant_name(assistant) }}</div>
+<ul class="{{ trail_classes }}" data-trail{% if hidden %} hidden{% endif %}></ul>
+{%- endmacro %}
+
 {% macro streaming_bubble(text, conversation_id, assistant) %}
 <li {{ assistant_row() }} data-stream data-text="{{ text }}" {% if conversation_id %}data-conversation-id="{{ conversation_id }}"{% endif %}>
-  <div class="flex items-center gap-2 mb-1">{{ assistant_name(assistant) }}</div>
-  <ul class="{{ trail_classes }}" data-trail hidden></ul>
+  {{ turn_head(assistant, hidden=True) }}
   <div class="{{ layout.prose }}" data-body></div>
   <div class="mt-2 flex items-center gap-2 py-1" data-busy aria-label="Thinking">
     <span class="flex gap-1">

@@ -192,4 +192,17 @@ class TestBackedUp:
             max_wait=300,
         )
         assert verdict.state == "failing"
+
+class TestWhatAQueueRuns:
+    """Asked which tasks a queue runs, an agent had its concurrency and
+    timeout but not one task name (2026-10-24)."""
+
+    def test_each_queue_names_its_tasks(self) -> None:
+        from app.components.worker import queue_discovery
+
+        queues = {"system": queue_discovery.build_metadata("system", ["cleanup"])}
+        (told,) = queue_discovery.configuration(queues).values()
+        assert told["tasks"] == ["cleanup"]
+        assert told["timeout_seconds"] == queues["system"]["timeout"]
+
 {%- endif %}

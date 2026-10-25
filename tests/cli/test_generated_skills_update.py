@@ -32,7 +32,12 @@ def test_regeneration_creates_missing_agent_files(
     # The pre-skills project gains the selection-aware CLAUDE.md and the
     # always-on skills.
     assert (project / "CLAUDE.md").exists(), "update did not create CLAUDE.md"
-    for skill in ("add-api-endpoint", "add-cli-command", "change-the-stack"):
+    for skill in (
+        "add-api-endpoint",
+        "add-cli-command",
+        "change-the-stack",
+        "plan-with-the-twin",
+    ):
         assert (project / ".claude/skills" / skill / "SKILL.md").exists(), (
             f"update did not create the {skill} skill"
         )

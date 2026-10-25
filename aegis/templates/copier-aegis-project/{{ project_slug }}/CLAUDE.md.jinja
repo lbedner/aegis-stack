@@ -124,4 +124,6 @@ hand. See the `protect-an-endpoint` skill.
 
 Task procedures live in `.claude/skills/<name>/SKILL.md` and load on demand when
 the task matches. Reach for one when adding an API endpoint, a model, a job, or
-a CLI command, or when changing the stack.
+a CLI command, or when changing the stack. Before planning any change to the
+code, run it past the twin (the app's model of itself): the
+`plan-with-the-twin` skill.

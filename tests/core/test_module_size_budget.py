@@ -54,15 +54,15 @@ BUDGET: dict[str, int] = {
     # 404 lines of Docker runtime reading; surfaced when the deploy component
     # gained deploy history (a third module). Debt recorded at size; the fix
     # is splitting the socket client from the readers.
-    "i18n/locales/en.py": 1347,
-    "i18n/locales/zh.py": 1324,
-    "i18n/locales/de.py": 1270,
-    "i18n/locales/es.py": 1270,
-    "i18n/locales/fr.py": 1270,
-    "i18n/locales/ja.py": 1270,
-    "i18n/locales/ru.py": 1270,
-    "i18n/locales/ko.py": 1269,
-    "i18n/locales/zh_hant.py": 1266,
+    "i18n/locales/en.py": 1345,
+    "i18n/locales/zh.py": 1322,
+    "i18n/locales/de.py": 1253,
+    "i18n/locales/es.py": 1253,
+    "i18n/locales/fr.py": 1253,
+    "i18n/locales/ja.py": 1253,
+    "i18n/locales/ru.py": 1253,
+    "i18n/locales/ko.py": 1252,
+    "i18n/locales/zh_hant.py": 1250,
     "components/frontend/controls/data_table/table.py": 750,
     # 809 not 796: BUILD_ID (3 lines), WEBSERVER_ENGINE (4) and
     # WEBSERVER_LOOP (6, its Literal wraps) had nowhere else to live,

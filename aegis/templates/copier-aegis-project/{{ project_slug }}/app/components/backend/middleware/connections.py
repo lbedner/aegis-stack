@@ -39,16 +39,9 @@ from uuid import uuid4
 from fastapi import FastAPI
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from app.core.cache import get_cache
+from app.core.cache import CACHE_ERRORS, get_cache
 from app.core.key_family import KeyFamily
 from app.core.log import logger
-
-try:  # Redis is optional; its errors are not OSErrors
-    from redis.exceptions import RedisError
-except ImportError:  # pragma: no cover - a project without redis
-    RedisError = ConnectionError  # type: ignore[assignment,misc]
-
-_CACHE_ERRORS = (ConnectionError, OSError, TimeoutError, RedisError)
 
 GRACE_SECONDS = 30
 RECORD_TTL = 24 * 3600
@@ -256,7 +249,7 @@ async def _safely(step: str, work: Any) -> None:
     the connection."""
     try:
         await work
-    except _CACHE_ERRORS as exc:
+    except CACHE_ERRORS as exc:
         logger.warning("connections.record_failed", step=step, error=str(exc))
 
 

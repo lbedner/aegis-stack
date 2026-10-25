@@ -19,7 +19,7 @@ from apscheduler.events import (
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.core import edges, run_log
-from app.core.boot import apply_saved_overrides
+from app.core.boot import apply_saved_overrides, release
 from app.core.constants import ComponentName{% if include_worker %}, QueueName{% endif %}
 {% if scheduler_backend != "memory" %}
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
@@ -329,3 +329,4 @@ async def run_scheduler() -> None:
         if scheduler.running:
             scheduler.shutdown()
             logger.info("Scheduler stopped gracefully")
+        await release()

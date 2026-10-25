@@ -265,3 +265,18 @@ def test_redaction_knows_the_secret_names_a_column_does() -> None:
         "salt": "[redacted]",
         "footprint": "ok",
     }
+
+
+STOPPED = """Traceback (most recent call last):
+  File "/opt/venv/lib/python3.14/site-packages/watchfiles/run.py", line 1, in run
+    loop.run_forever()
+KeyboardInterrupt"""
+
+
+def test_a_process_told_to_stop_is_not_an_error() -> None:
+    """A dev reload stops each process (watchfiles' "1 change detected"),
+    and a process told to stop prints ``KeyboardInterrupt``: a restart,
+    not one more issue each time a file is saved (2026-10-24)."""
+    assert normalized(event("1 change detected", STOPPED, level="info")) is None
+    failed = normalized(event("job failed", STOPPED, level="error"))
+    assert failed is not None and failed.exception_type == "KeyboardInterrupt"

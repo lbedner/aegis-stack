@@ -217,3 +217,33 @@ async def test_a_locked_write_back_does_not_stop_the_scheduler() -> None:
 
     assert await _runs_after_a_locked_write(AsyncIOScheduler) <= 1
     assert await _runs_after_a_locked_write(ResilientScheduler) > 2
+
+@pytest.mark.asyncio
+async def test_a_scheduler_that_stops_closes_what_it_opened(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Its Redis clients closed while its loop still runs: left to Python,
+    each was closed after the loop and logged "Event loop is closed" on
+    every restart (2026-10-24)."""
+    from app.components.scheduler import main
+
+    released: list[bool] = []
+
+    async def nothing() -> None:
+        return None
+
+    async def release() -> None:
+        released.append(True)
+
+    class _Broken:
+        running = False
+
+        def start(self) -> None:
+            raise RuntimeError("no start")
+
+    monkeypatch.setattr(main, "apply_saved_overrides", nothing)
+    monkeypatch.setattr(main, "create_scheduler", _Broken)
+    monkeypatch.setattr(main, "release", release)
+    with pytest.raises(RuntimeError, match="no start"):
+        await main.run_scheduler()
+    assert released == [True]

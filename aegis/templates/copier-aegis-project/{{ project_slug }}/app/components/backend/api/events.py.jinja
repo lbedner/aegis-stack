@@ -10,6 +10,7 @@ from fastapi import APIRouter, Request
 from starlette.responses import StreamingResponse
 
 from app.components.worker.events import WORKER_EVENT_STREAM, read_queue_totals
+from app.core.concurrency import until_closing
 from app.core.config import settings
 from app.core.log import logger
 
@@ -86,7 +87,7 @@ async def worker_event_stream(request: Request) -> StreamingResponse:
             await redis_client.aclose()
 
     return StreamingResponse(
-        event_generator(),
+        until_closing(event_generator()),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

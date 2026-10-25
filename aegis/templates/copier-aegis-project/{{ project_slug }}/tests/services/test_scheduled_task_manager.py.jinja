@@ -91,14 +91,16 @@ class TestScheduledTaskManager:
     async def test_has_persistence_database_error(
         self, manager: ScheduledTaskManager
     ) -> None:
-        """Test has_persistence handles database errors gracefully."""
+        """A database that cannot be read is an error, not a missing table:
+        read as "no persistence", the scheduler's health said its jobs
+        table was not found while it was there (2026-10-24)."""
         with patch(
             "app.services.scheduler.scheduled_task_manager.async_engine"
         ) as mock_engine:
-            mock_engine.begin.side_effect = Exception("Database error")
+            mock_engine.begin.side_effect = OSError("Database error")
 
-            result = await manager.has_persistence()
-            assert result is False
+            with pytest.raises(OSError, match="Database error"):
+                await manager.has_persistence()
 
     @pytest.mark.asyncio
     async def test_list_tasks_no_persistence(

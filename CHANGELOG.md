@@ -421,6 +421,20 @@
 
 ### Fixed
 
+- **A database the scheduler cannot read says so.** Its persistence check
+  turned any database error into "no persistence", so its health said the
+  jobs table was not found while it was there; the error now reads as
+  itself.
+
+- **The scheduler closes its Redis clients as it stops.** Left open, each
+  was closed after its event loop and logged "Event loop is closed" on
+  every restart. It closes them through `boot.release()`, the same call
+  the webserver makes before it serves.
+
+- **A restart is not an error.** A process told to stop (a dev reload, a
+  deploy) ends on `KeyboardInterrupt`; below error level that is no
+  longer filed as an issue on the Errors page.
+
 - **The card keeps lighting until she stops talking.** A call saves her
   answer when it is written, before it has all been heard; the card she
   drew moved into the saved answer and stopped following her. It is now

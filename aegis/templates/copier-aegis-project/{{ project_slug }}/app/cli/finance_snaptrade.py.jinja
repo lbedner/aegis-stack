@@ -9,8 +9,6 @@ the finance CLI was over its line budget with it inlined.
 rather than reaching back for it, so the import runs one way.
 """
 
-import asyncio
-
 import typer
 
 from app.cli import theme
@@ -22,9 +20,9 @@ snaptrade_app = typer.Typer(help="SnapTrade brokerage connections.")
 
 
 @snaptrade_app.command("connect")
-def snaptrade_connect(owner_user_id: int | None = OWNER_OPT) -> None:
+async def snaptrade_connect(owner_user_id: int | None = OWNER_OPT) -> None:
     """Start a SnapTrade connect and print the portal URL (expires in ~5 min)."""
-    asyncio.run(_snaptrade_connect(owner_user_id))
+    await _snaptrade_connect(owner_user_id)
 
 
 async def _snaptrade_connect(owner_user_id: int | None) -> None:
@@ -46,9 +44,9 @@ async def _snaptrade_connect(owner_user_id: int | None) -> None:
 
 
 @snaptrade_app.command("complete")
-def snaptrade_complete(owner_user_id: int | None = OWNER_OPT) -> None:
+async def snaptrade_complete(owner_user_id: int | None = OWNER_OPT) -> None:
     """Adopt authorizations finished in the portal and run the first sync."""
-    asyncio.run(_snaptrade_complete(owner_user_id))
+    await _snaptrade_complete(owner_user_id)
 
 
 async def _snaptrade_complete(owner_user_id: int | None) -> None:

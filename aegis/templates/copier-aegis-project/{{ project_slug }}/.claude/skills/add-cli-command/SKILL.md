@@ -1,6 +1,6 @@
 ---
 name: add-cli-command
-description: Use when adding a command to this project's own CLI (the app CLI under app/cli/, not the aegis tool). Covers the command module, Typer registration, the sync-plus-asyncio.run rule, and i18n strings.
+description: Use when adding a command to this project's own CLI (the app CLI under app/cli/, not the aegis tool). Covers the command module, Typer registration, the async-def rule, and i18n strings.
 ---
 
 # Add CLI command
@@ -25,16 +25,17 @@ or scheduled work.
 
 ## Procedure
 
-1. Write the failing test first under `tests/cli/`, invoking the command with a
-   Typer runner. Confirm it fails for the right reason.
+1. Write the failing test first under `tests/cli/`, invoking the command with
+   `invoke` from `tests/_cli.py` (the Typer runner's own `invoke` never
+   awaits an async command). Confirm it fails for the right reason.
 2. Create the command module in `app/cli/` with a Typer app and the command
    functions.
 3. Commands that need async are `async def` with plain `await`. NEVER call
    `asyncio.run(...)` inside a command: `app/cli/main.py` runs Typer with
    `standalone_mode=False`, checks `inspect.iscoroutine` on the result, and
-   owns the single `asyncio.run`. Exemplar: `app/cli/llm.py:reset`. Most
-   existing commands still use the old sync-plus-`asyncio.run` shape; that
-   is the majority, not the standard, and it should not be copied.
+   owns the single `asyncio.run`. Exemplar: `app/cli/llm.py:reset`. A
+   helper the command calls is `async def` too: an `asyncio.run` inside the
+   running loop fails.
 4. Register the module in `app/cli/main.py` (mount its Typer app under a name).
 5. Route user-facing text through i18n keys in `app/i18n/locales/en.py`.
 6. Run the gates and fix anything red.

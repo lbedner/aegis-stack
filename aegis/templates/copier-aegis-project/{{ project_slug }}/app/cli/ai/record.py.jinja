@@ -19,7 +19,7 @@ from ...core.log import suppress_logs
 
 
 @app.command(help=lazy_t("ai.help_record"))
-def record(
+async def record(
     send: bool = typer.Option(False, "--send", "-s", help=lazy_t("ai.opt_send")),
     voice_response: bool = typer.Option(
         False, "--voice", "-v", help=lazy_t("ai.opt_voice_response")
@@ -344,4 +344,4 @@ def record(
             console.print(f"[{theme.ERROR}]{t('shared.error')}[/{theme.ERROR}] {e}")
             raise typer.Exit(1)
 
-    asyncio.run(run_record())
+    await run_record()

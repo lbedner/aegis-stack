@@ -1,7 +1,5 @@
 """Talking to the model, and what was said before."""
 
-import asyncio
-
 import typer
 
 from app.cli.ai.session import _interactive_chat_session
@@ -81,7 +79,7 @@ async def chat(
 
 
 @app.command(help=lazy_t("ai.help_conversations"))
-def conversations(
+async def conversations(
     user_id: str = typer.Option(
         "cli-user", "--user-id", "-u", help=lazy_t("ai.opt_user_id")
     ),
@@ -91,7 +89,7 @@ def conversations(
 
     with suppress_logs():
         ai_service = AIService(settings)
-    convos = asyncio.run(ai_service.list_conversations(user_id))[:limit]
+    convos = await ai_service.list_conversations(user_id)[:limit]
 
     if not convos:
         typer.echo(t("ai.no_conversations", user_id=user_id))
@@ -111,7 +109,7 @@ def conversations(
 
 
 @app.command(help=lazy_t("ai.help_history"))
-def history(
+async def history(
     conversation_id: str = typer.Argument(..., help=lazy_t("ai.arg_conversation_id")),
     user_id: str = typer.Option(
         "cli-user", "--user-id", "-u", help=lazy_t("ai.opt_user_id")
@@ -121,7 +119,7 @@ def history(
 
     with suppress_logs():
         ai_service = AIService(settings)
-    conversation = asyncio.run(ai_service.get_conversation(conversation_id))
+    conversation = await ai_service.get_conversation(conversation_id)
 
     if not conversation:
         typer.echo(

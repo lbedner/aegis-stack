@@ -1,6 +1,5 @@
 """Getting documents in and out of the index."""
 
-import asyncio
 from pathlib import Path
 from typing import Annotated
 
@@ -24,7 +23,7 @@ from app.cli.rag.shared import _ensure_model_ready, app, console, format_duratio
 
 
 @app.command("index", help=lazy_t("rag.help_index"))
-def index_documents(
+async def index_documents(
     path: Annotated[
         str,
         typer.Argument(help=lazy_t("rag.arg_path")),
@@ -87,14 +86,12 @@ def index_documents(
                     ),
                 )
 
-            stats = asyncio.run(
-                rag_service.refresh_index(
+            stats = await rag_service.refresh_index(
                     path=Path(path),
                     collection_name=collection,
                     extensions=ext_list,
                     progress_callback=on_progress,
                 )
-            )
 
         # Calculate total duration and stats
         total_ms = stats.load_ms + stats.chunk_ms + stats.duration_ms
@@ -141,7 +138,7 @@ def index_documents(
 
 
 @app.command("add", help=lazy_t("rag.help_add"))
-def add_file(
+async def add_file(
     path: Annotated[
         str,
         typer.Argument(help=lazy_t("rag.arg_file_path")),
@@ -166,12 +163,10 @@ def add_file(
     console.print()
 
     try:
-        result = asyncio.run(
-            rag_service.add_file(
+        result = await rag_service.add_file(
                 path=Path(path),
                 collection_name=collection,
             )
-        )
 
         # Display result
         file_name = Path(result.file_path).name
@@ -203,7 +198,7 @@ def add_file(
 
 
 @app.command("remove", help=lazy_t("rag.help_remove"))
-def remove_file(
+async def remove_file(
     source_path: Annotated[
         str,
         typer.Argument(help=lazy_t("rag.arg_source_path")),
@@ -229,12 +224,10 @@ def remove_file(
             return
 
     try:
-        result = asyncio.run(
-            rag_service.remove_file(
+        result = await rag_service.remove_file(
                 source_path=source_path,
                 collection_name=collection,
             )
-        )
 
         if result.chunk_count > 0:
             console.print(
@@ -250,7 +243,7 @@ def remove_file(
 
 
 @app.command("files", help=lazy_t("rag.help_files"))
-def list_files(
+async def list_files(
     collection: Annotated[
         str,
         typer.Option("--collection", "-c", help=lazy_t("rag.opt_collection")),
@@ -259,7 +252,7 @@ def list_files(
     rag_service = get_rag_service()
 
     try:
-        files = asyncio.run(rag_service.list_files(collection_name=collection))
+        files = await rag_service.list_files(collection_name=collection)
 
         if not files:
             console.print(

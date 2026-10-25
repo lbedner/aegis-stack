@@ -6,8 +6,6 @@ archive, or delete a post by slug. Tag CRUD lets operators seed and curate
 taxonomy from scripts. Authoring (post body editing) stays in the dashboard.
 """
 
-import asyncio
-
 import typer
 
 from app.cli import theme
@@ -46,14 +44,14 @@ console = theme.console()
     help=lazy_t("blog.help_status"),
     epilog=_ex("{{ project_slug }} blog status"),
 )
-def status() -> None:
+async def status() -> None:
     """Show blog post counts and latest activity.
 
     Examples:
 
         {{ project_slug }} blog status
     """
-    asyncio.run(_status())
+    await _status()
 
 
 @app.command(
@@ -64,7 +62,7 @@ def status() -> None:
         "{{ project_slug }} blog posts --tag release-notes --limit 50",
     ),
 )
-def posts(
+async def posts(
     status_filter: str | None = typer.Option(
         None, "--status", "-s", help=lazy_t("blog.opt_status")
     ),
@@ -79,7 +77,7 @@ def posts(
         {{ project_slug }} blog posts --status draft
         {{ project_slug }} blog posts --tag release-notes --limit 50
     """
-    asyncio.run(_posts(status_filter, tag, limit))
+    await _posts(status_filter, tag, limit)
 
 
 @app.command(
@@ -87,7 +85,7 @@ def posts(
     help=lazy_t("blog.help_post"),
     epilog=_ex("{{ project_slug }} blog post my-first-post"),
 )
-def post_show(
+async def post_show(
     slug: str = typer.Argument(..., help=lazy_t("blog.arg_slug")),
 ) -> None:
     """Show a single post's metadata (not the full body, use the editor).
@@ -96,21 +94,21 @@ def post_show(
 
         {{ project_slug }} blog post my-first-post
     """
-    asyncio.run(_post_show(slug))
+    await _post_show(slug)
 
 
 @app.command(
     help=lazy_t("blog.help_tags"),
     epilog=_ex("{{ project_slug }} blog tags"),
 )
-def tags() -> None:
+async def tags() -> None:
     """List all blog tags.
 
     Examples:
 
         {{ project_slug }} blog tags
     """
-    asyncio.run(_tags())
+    await _tags()
 
 
 # State transitions
@@ -120,7 +118,7 @@ def tags() -> None:
     help=lazy_t("blog.help_publish"),
     epilog=_ex("{{ project_slug }} blog publish my-first-post"),
 )
-def publish(
+async def publish(
     slug: str = typer.Argument(..., help=lazy_t("blog.arg_slug")),
 ) -> None:
     """Publish a draft or archived post.
@@ -129,14 +127,14 @@ def publish(
 
         {{ project_slug }} blog publish my-first-post
     """
-    asyncio.run(_publish(slug))
+    await _publish(slug)
 
 
 @app.command(
     help=lazy_t("blog.help_archive"),
     epilog=_ex("{{ project_slug }} blog archive my-old-post"),
 )
-def archive(
+async def archive(
     slug: str = typer.Argument(..., help=lazy_t("blog.arg_slug")),
 ) -> None:
     """Archive a post (hides it from the public site).
@@ -145,7 +143,7 @@ def archive(
 
         {{ project_slug }} blog archive my-old-post
     """
-    asyncio.run(_archive(slug))
+    await _archive(slug)
 
 
 @app.command(
@@ -155,7 +153,7 @@ def archive(
         "{{ project_slug }} blog delete obsolete-post --yes",
     ),
 )
-def delete(
+async def delete(
     slug: str = typer.Argument(..., help=lazy_t("blog.arg_slug")),
     yes: bool = typer.Option(False, "--yes", "-y", help=lazy_t("blog.opt_yes")),
 ) -> None:
@@ -165,7 +163,7 @@ def delete(
 
         {{ project_slug }} blog delete obsolete-post --yes
     """
-    asyncio.run(_delete(slug, yes))
+    await _delete(slug, yes)
 
 
 # Tag CRUD
@@ -179,7 +177,7 @@ def delete(
         '{{ project_slug }} blog tag-create "Release Notes" --slug releases',
     ),
 )
-def tag_create(
+async def tag_create(
     name: str = typer.Argument(..., help=lazy_t("blog.arg_tag_name")),
     slug: str | None = typer.Option(None, "--slug", help=lazy_t("blog.opt_tag_slug")),
 ) -> None:
@@ -190,7 +188,7 @@ def tag_create(
         {{ project_slug }} blog tag-create "Release Notes"
         {{ project_slug }} blog tag-create "Release Notes" --slug releases
     """
-    asyncio.run(_tag_create(name, slug))
+    await _tag_create(name, slug)
 
 
 @app.command(
@@ -201,7 +199,7 @@ def tag_create(
         "{{ project_slug }} blog tag-update releases --new-slug release-notes",
     ),
 )
-def tag_update(
+async def tag_update(
     slug: str = typer.Argument(..., help=lazy_t("blog.arg_tag_slug")),
     name: str | None = typer.Option(
         None, "--name", help=lazy_t("blog.opt_tag_new_name")
@@ -222,7 +220,7 @@ def tag_update(
             f"[{theme.ERROR}]{t('blog.tag_update_no_changes')}[/{theme.ERROR}]"
         )
         raise typer.Exit(2)
-    asyncio.run(_tag_update(slug, name, new_slug))
+    await _tag_update(slug, name, new_slug)
 
 
 @app.command(
@@ -233,7 +231,7 @@ def tag_update(
         "{{ project_slug }} blog tag-delete obsolete --yes",
     ),
 )
-def tag_delete(
+async def tag_delete(
     slug: str = typer.Argument(..., help=lazy_t("blog.arg_tag_slug")),
     yes: bool = typer.Option(False, "--yes", "-y", help=lazy_t("blog.opt_yes")),
 ) -> None:
@@ -243,7 +241,7 @@ def tag_delete(
 
         {{ project_slug }} blog tag-delete obsolete --yes
     """
-    asyncio.run(_tag_delete(slug, yes))
+    await _tag_delete(slug, yes)
 
 
 # Export / Import
@@ -257,7 +255,7 @@ def tag_delete(
         "{{ project_slug }} blog export blog.json --format json",
     ),
 )
-def export(
+async def export(
     path: str = typer.Argument(..., help=lazy_t("blog.arg_export_path")),
     fmt: str = typer.Option(
         "markdown", "--format", "-f", help=lazy_t("blog.opt_format")
@@ -267,7 +265,7 @@ def export(
     ),
 ) -> None:
     """Export posts to markdown files or a JSON document."""
-    asyncio.run(_export(path, fmt, status_filter))
+    await _export(path, fmt, status_filter)
 
 
 @app.command(
@@ -279,7 +277,7 @@ def export(
         "{{ project_slug }} blog import blog.json --on-conflict overwrite",
     ),
 )
-def import_(
+async def import_(
     path: str = typer.Argument(..., help=lazy_t("blog.arg_import_path")),
     on_conflict: ImportConflictPolicy = typer.Option(
         ImportConflictPolicy.SKIP,
@@ -288,4 +286,4 @@ def import_(
     ),
 ) -> None:
     """Import posts from a markdown file/dir, a zip archive, or a JSON document."""
-    asyncio.run(_import(path, on_conflict))
+    await _import(path, on_conflict)

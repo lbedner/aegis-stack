@@ -1,6 +1,5 @@
 """Asking the index a question."""
 
-import asyncio
 from pathlib import Path
 from typing import Annotated
 
@@ -24,7 +23,7 @@ from app.cli.rag.shared import _ensure_model_ready, app, console, get_rag_servic
 
 
 @app.command("search", help=lazy_t("rag.help_search"))
-def search_documents(
+async def search_documents(
     query: Annotated[
         str,
         typer.Argument(help=lazy_t("rag.arg_query")),
@@ -53,13 +52,11 @@ def search_documents(
     console.print()
 
     try:
-        results = asyncio.run(
-            rag_service.search(
+        results = await rag_service.search(
                 query=query,
                 collection_name=collection,
                 top_k=top_k,
             )
-        )
 
         if not results:
             console.print(f"[dim]{t('rag.no_results')}[/dim]")

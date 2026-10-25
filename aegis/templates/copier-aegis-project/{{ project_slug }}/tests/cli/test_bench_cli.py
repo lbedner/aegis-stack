@@ -8,12 +8,9 @@ which is where the quiet wrong answers live.
 from typing import Any
 from unittest.mock import patch
 
-from typer.testing import CliRunner
 
 from app.cli import bench
-from app.cli.main import app
-
-runner = CliRunner()
+from tests._cli import invoke
 
 
 def _sample(throughput: float) -> bench.Sample:
@@ -47,7 +44,7 @@ def _run(args: list[str], samples: dict[str, float], loop: str = "uvloop") -> An
         patch.object(bench, "resolve_loop", lambda choice=None: loop),
         patch.object(bench, "choose_driver", lambda requested, method: ("ab", None)),
     ):
-        return runner.invoke(app, ["bench", "engines", *args])
+        return invoke(["bench", "engines", *args])
 
 
 def _run_matrix(args: list[str], samples: dict[tuple[str, str], float]) -> Any:
@@ -87,7 +84,7 @@ def _run_matrix(args: list[str], samples: dict[tuple[str, str], float]) -> Any:
         ),
         patch.object(bench, "choose_driver", lambda requested, method: ("ab", None)),
     ):
-        result = runner.invoke(app, ["bench", "engines", *args])
+        result = invoke(["bench", "engines", *args])
     result.ran = sorted(ran)  # type: ignore[attr-defined]
     return result
 

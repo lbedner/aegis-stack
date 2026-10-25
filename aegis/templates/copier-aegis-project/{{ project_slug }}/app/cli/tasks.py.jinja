@@ -6,7 +6,6 @@ Provides a command-line interface for listing scheduled jobs, triggering
 them on demand, and inspecting their execution history and statistics.
 """
 
-import asyncio
 from typing import Any
 
 from rich import print as rprint
@@ -33,11 +32,11 @@ console = theme.console()
 
 
 @app.command("list", help=lazy_t("tasks.help_list"))
-def list_jobs() -> None:
+async def list_jobs() -> None:
     rprint(f"[bold]{t('tasks.listing_jobs')}[/bold]")
 
     try:
-        tasks = asyncio.run(_get_scheduled_tasks())
+        tasks = await _get_scheduled_tasks()
 
         if not tasks:
             rprint(f"[{theme.WARNING}]{t('tasks.no_jobs_found')}[/]")
@@ -91,13 +90,13 @@ async def _get_scheduled_tasks() -> list[ScheduledTask]:
 
 
 @app.command("trigger", help=lazy_t("tasks.help_trigger"))
-def trigger_job(
+async def trigger_job(
     job_id: str = typer.Argument(..., help=lazy_t("tasks.arg_job_id")),
     force: bool = typer.Option(
         False, "--force", "-f", help=lazy_t("tasks.opt_force")
     ),
 ) -> None:
-    succeeded = asyncio.run(_trigger_job(job_id, force))
+    succeeded = await _trigger_job(job_id, force)
     raise typer.Exit(0 if succeeded else 1)
 
 
@@ -139,11 +138,11 @@ async def _trigger_job(job_id: str, force: bool) -> bool:
 
 
 @app.command("stats", help=lazy_t("tasks.help_stats"))
-def job_stats(
+async def job_stats(
     job_id: str = typer.Argument(..., help=lazy_t("tasks.arg_job_id")),
 ) -> None:
     try:
-        stats = asyncio.run(_get_job_stats(job_id))
+        stats = await _get_job_stats(job_id)
     except Exception as e:
         rprint(f"[{theme.ERROR}]{t('tasks.stats_failed')}[/] {e}")
         raise typer.Exit(1)
@@ -188,7 +187,7 @@ async def _get_job_stats(job_id: str) -> dict[str, Any]:
 
 
 @app.command("history", help=lazy_t("tasks.help_history"))
-def job_history(
+async def job_history(
     job: str | None = typer.Option(
         None, "--job", "-j", help=lazy_t("tasks.opt_job")
     ),
@@ -197,7 +196,7 @@ def job_history(
     ),
 ) -> None:
     try:
-        records, total = asyncio.run(_get_history(job, limit))
+        records, total = await _get_history(job, limit)
     except Exception as e:
         rprint(f"[{theme.ERROR}]{t('tasks.history_failed')}[/] {e}")
         raise typer.Exit(1)
@@ -251,9 +250,9 @@ async def _get_history(
 
 
 @app.command("statistics", help=lazy_t("tasks.help_statistics"))
-def scheduler_statistics() -> None:
+async def scheduler_statistics() -> None:
     try:
-        stats = asyncio.run(_get_statistics())
+        stats = await _get_statistics()
     except Exception as e:
         rprint(f"[{theme.ERROR}]{t('tasks.statistics_failed')}[/] {e}")
         raise typer.Exit(1)

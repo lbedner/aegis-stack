@@ -246,7 +246,9 @@ class VoiceEditor(ft.Column):
                                         icon_size=16,
                                         tooltip="Listen",
                                         on_click=lambda _, v=v: play(
-                                            self.page, self._held, preview(v["id"])
+                                            self.page,
+                                            self._held,
+                                            preview(v["id"], view["model"]),
                                         ),
                                     ),
                                 ],

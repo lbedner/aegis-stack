@@ -5,6 +5,7 @@ Provides a unified interface for Text-to-Speech synthesis.
 """
 
 from abc import ABC, abstractmethod
+import asyncio
 import base64
 from collections.abc import AsyncIterator
 import logging
@@ -26,6 +27,17 @@ from ..models import (
 from . import length, realtime
 
 logger = logging.getLogger(__name__)
+
+# A Gemini speech model out of its quota (the free tier's is ten requests a
+# day for each) answers 429 at once, and its SDK would retry that on the
+# answer's Retry-After: hours, a preview spinning on. Its client retries
+# only a server's own trouble, and a 429, or a try with no answer in time,
+# is said on the lite model, whose quota is its own; the caller is never
+# left waiting on hours.
+GEMINI_RETRIED = [408, 500, 502, 503, 504]
+GEMINI_TRY_SECONDS = 20.0
+GEMINI_SECONDS_PER_CHARACTER = 0.05
+GEMINI_FALLBACK = "gemini-3.8-flash-lite-tts"
 
 
 class BaseTTSProvider(ABC):
@@ -219,8 +231,16 @@ class GeminiTTSProvider(BaseTTSProvider):
     def _get_client(self) -> Any:
         if self._client is None:
             from google import genai
+            from google.genai import types
 
-            self._client = genai.Client(api_key=self.api_key)
+            self._client = genai.Client(
+                api_key=self.api_key,
+                http_options=types.HttpOptions(
+                    retry_options=types.HttpRetryOptions(
+                        attempts=1, http_status_codes=GEMINI_RETRIED
+                    )
+                ),
+            )
         return self._client
 
     async def synthesize(self, request: SpeechRequest) -> SpeechResult:
@@ -230,7 +250,8 @@ class GeminiTTSProvider(BaseTTSProvider):
                 {"type": "speech_metadata", "style": request.instructions}
             ]
         try:
-            said = await self._get_client().aio.interactions.create(
+            said = await self._answered(
+                len(request.text),
                 model=self.model,
                 input=[{"type": "user_input", "content": [text]}],
                 response_format={"type": "audio"},
@@ -248,6 +269,30 @@ class GeminiTTSProvider(BaseTTSProvider):
             duration_seconds=length.wav_seconds(audio),
             provider=self.provider_type,
         )
+
+    async def _answered(self, characters: int, **asked: Any) -> Any:
+        """Gemini's answer to ``asked``: on its model, else (out of quota, or
+        no answer in time) on the lite one, ``GEMINI_FALLBACK``. When neither
+        can, the last refusal is raised, saying why."""
+        wait = GEMINI_TRY_SECONDS + characters * GEMINI_SECONDS_PER_CHARACTER
+        model = asked.pop("model")
+        refused: Exception = TimeoutError("Gemini did not answer")
+        for trying in dict.fromkeys((model, GEMINI_FALLBACK)):
+            try:
+                async with asyncio.timeout(wait):
+                    return await self._get_client().aio.interactions.create(
+                        model=trying, **asked
+                    )
+            except TimeoutError:
+                refused = TimeoutError(
+                    f"Gemini did not answer on {trying} in {wait:.0f}s"
+                )
+            except Exception as exc:
+                if getattr(exc, "status_code", None) != 429:
+                    raise
+                refused = exc
+            logger.warning(f"Gemini speech on {trying} could not: {refused}")
+        raise refused
 
 
 def get_tts_provider(

@@ -19,6 +19,7 @@ from .catalog import (
     get_tts_providers,
     get_tts_voices,
     get_voice,
+    speaking_model,
 )
 
 # Shared models
@@ -34,12 +35,10 @@ from .models import (
     TranscriptionResult,
     TranscriptionSegment,
     TTSProvider,
-    VoiceCategory,
     VoiceChatResponse,
     VoiceInfo,
     VoicePreviewRequest,
     VoiceSettingsResponse,
-    VoiceSettingsUpdate,
 )
 
 # STT submodule imports
@@ -56,6 +55,7 @@ from .stt import (
 )
 from .tts import (
     BaseTTSProvider,
+    GeminiTTSProvider,
     OpenAITTSProvider,
     TTSConfig,
     TTSService,
@@ -82,12 +82,10 @@ __all__ = [
     "SpeechResult",
     "VoiceChatResponse",
     # Catalog Models
-    "VoiceCategory",
     "ProviderInfo",
     "ModelInfo",
     "VoiceInfo",
     "VoiceSettingsResponse",
-    "VoiceSettingsUpdate",
     "VoicePreviewRequest",
     # STT Providers
     "BaseSTTProvider",
@@ -98,6 +96,7 @@ __all__ = [
     "get_stt_provider",
     # TTS Providers
     "BaseTTSProvider",
+    "GeminiTTSProvider",
     "OpenAITTSProvider",
     "get_tts_provider",
     # Services
@@ -108,6 +107,7 @@ __all__ = [
     "get_tts_models",
     "get_tts_voices",
     "get_voice",
+    "speaking_model",
     "get_stt_providers",
     "get_stt_models",
     "get_current_voice_config",

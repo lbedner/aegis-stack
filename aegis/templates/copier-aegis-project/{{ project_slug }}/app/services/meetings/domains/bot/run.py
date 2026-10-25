@@ -9,17 +9,29 @@ at shutdown, it records itself as left. It writes the
 row only through the service's ``transition`` and ``heartbeat``. Each step
 opens its own short session, so an hour-long call holds no database
 connection. What it hears goes to whoever the captions say was talking
-(``audio.Hearing``).
+(``audio.Hearing``). Its camera shows its card, saying what it is doing,
+and it says who it is aloud where the stack has a voice (``card``,
+``voice``).
 """
 
 import asyncio
+import base64
 import math
 from pathlib import Path
+from typing import Any
+
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.config import settings
 from app.core.db import get_async_session
 from app.core.log import logger
-from app.services.meetings.domains.accounts.service import login_secret_of, pick
+from app.services.meetings.domains.accounts.service import (
+    image_named,
+    pick,
+    sent_as,
+)
+from app.services.meetings.domains.actions.queries import going_in
+from app.services.meetings.domains.bot import card
 from app.services.meetings.domains.bot.audio import Hearing
 from app.services.meetings.domains.bot.dispatch import start_meeting
 from app.services.meetings.domains.bot.meet import (
@@ -33,6 +45,7 @@ from app.services.meetings.domains.bot.row import (
     transition,
     write_captions,
 )
+from app.services.meetings.domains.bot.voice import spoken, voice_of
 from app.services.meetings.domains.moments.tidy import cleaner
 from app.services.meetings.domains.people.participants import keep_heard
 from app.services.meetings.domains.people.service import guides_writer
@@ -78,11 +91,13 @@ class _RunEnded(Exception):  # noqa: N818 - control flow, not an error
 class _Pulse:
     """The run's heartbeat, every ``BEAT_SECONDS``: False once the meeting
     is no longer one the run should be in (asked to leave, or failed by
-    another process)."""
+    another process). Each beat also reads the call's runs not yet done
+    (``going``), for its card."""
 
     def __init__(self, meeting_id: int) -> None:
         self.meeting_id = meeting_id
         self.last = float("-inf")
+        self.going: set[str] = set()
 
     async def still_wanted(self) -> bool:
         now = asyncio.get_running_loop().time()
@@ -90,7 +105,23 @@ class _Pulse:
             return True
         self.last = now
         async with get_async_session() as session:
+            self.going = await going_in(session, self.meeting_id)
             return await heartbeat(session, self.meeting_id) in STILL_WANTED
+
+
+class _Card:
+    """What the bot's card says it is doing, from what the pulse last read,
+    redrawn only when that changes."""
+
+    def __init__(self, call: MeetPage, pulse: _Pulse, captions: bool) -> None:
+        self.call, self.pulse, self.captions = call, pulse, captions
+        self.shown = card.LISTENING
+
+    async def update(self) -> None:
+        status = card.status_of(self.captions, self.pulse.going)
+        if status != self.shown:
+            self.shown = status
+            await self.call.show(status=status)
 
 
 class _Transcript:
@@ -177,7 +208,11 @@ async def _admitted(call: MeetPage, pulse: _Pulse) -> None:
 
 
 async def _stay(
-    call: MeetPage, pulse: _Pulse, transcript: _Transcript, hearing: Hearing
+    call: MeetPage,
+    pulse: _Pulse,
+    transcript: _Transcript,
+    hearing: Hearing,
+    shown: _Card,
 ) -> None:
     """Back when the bot should leave: asked to, alone too long once the
     others have gone (nobody counted by Meet, nobody talking), or nobody
@@ -207,6 +242,7 @@ async def _stay(
             hearing.settle(transcript.spoke, loop.time())
             if not await pulse.still_wanted():
                 return
+            await shown.update()
             # A caption that moved is someone here, whatever Meet's People
             # count says: it can read 1 with others in the call.
             talking = len(transcript.spoke) > spoke
@@ -254,25 +290,55 @@ def announcement(name: str) -> str:
     return f"{who}. {TRANSCRIBED}"
 
 
-async def _join(meeting: Meeting, login: str) -> None:
-    """Into the call signed in as the agent it was sent as (``login``)."""
+async def _start(
+    session: AsyncSession, meeting: Meeting, account: BotAccount
+) -> card.Start:
+    """The card the bot joins as: the name it joins as, and its agent's
+    (``account``) picture and camera setting."""
+    kept = await image_named(session, account.name)
+    image = None
+    if kept is not None:
+        encoded = base64.b64encode(kept.data).decode()
+        image = f"data:{kept.content_type};base64,{encoded}"
+    return card.Start(name=meeting.bot_name, image=image, camera=account.camera)
+
+
+async def _join(
+    meeting: Meeting, login: str, start: card.Start, voice: Any | None
+) -> None:
+    """Into the call signed in as the agent it was sent as (``login``),
+    showing its card (``start``), speaking in ``voice`` (``voice_of``)."""
     meeting_id: int = meeting.id  # type: ignore[assignment]
     pulse = _Pulse(meeting_id)
     keep_in = settings.MEETINGS_KEEP_AUDIO_DIR
     hearing = Hearing(Path(keep_in) / str(meeting_id) if keep_in else None)
-    async with open_meet(meeting.url, hearing.heard, login=login) as call:
-        if not await pulse.still_wanted():
-            raise _RunEnded(MeetingStatus.LEFT)
-        await call.ask_to_join(meeting.bot_name)
-        await _step(meeting_id, MeetingStatus.WAITING, MeetingStatus.JOINING)
-        await _admitted(call, pulse)
-        await _step(meeting_id, MeetingStatus.IN_CALL, MeetingStatus.WAITING)
-        transcript = _Transcript(meeting_id)
-        await call.say(announcement(meeting.bot_name))
-        if not await call.turn_on_captions():
-            logger.warning("No captions in this call", meeting_id=meeting_id)
-        await _stay(call, pulse, transcript, hearing)
-        await call.leave()
+    said = announcement(meeting.bot_name)
+    # Made while the bot waits to be let in, so it is said on arrival.
+    speech = asyncio.create_task(spoken(said, voice))
+    try:
+        async with open_meet(
+            meeting.url, hearing.heard, login=login, start=start
+        ) as call:
+            if not await pulse.still_wanted():
+                raise _RunEnded(MeetingStatus.LEFT)
+            await call.ask_to_join(meeting.bot_name)
+            await _step(meeting_id, MeetingStatus.WAITING, MeetingStatus.JOINING)
+            await _admitted(call, pulse)
+            await _step(meeting_id, MeetingStatus.IN_CALL, MeetingStatus.WAITING)
+            transcript = _Transcript(meeting_id)
+            await call.say(said)
+            if (aloud := await speech) is not None:
+                await call.speak(aloud)
+            captions = await call.turn_on_captions()
+            if not captions:
+                logger.warning("No captions in this call", meeting_id=meeting_id)
+            shown = _Card(call, pulse, captions)
+            await shown.update()
+            await _stay(call, pulse, transcript, hearing, shown)
+            await call.show(status=card.LEAVING)
+            await call.leave()
+    finally:
+        speech.cancel()
 
 
 async def _after(meeting_id: int) -> None:
@@ -298,14 +364,16 @@ async def run_meeting(meeting_id: int) -> None:
         return
     async with get_async_session() as session:
         meeting = await MeetingsService(session, None).get(meeting_id)
-        login = await login_secret_of(session, meeting.account_id)
+        account = await sent_as(session, meeting.account_id)
+        start = await _start(session, meeting, account)
+        voice = await voice_of(session)
     try:
         if meeting.platform not in JOINS:
             raise _RunEnded(
                 MeetingStatus.FAILED,
                 f"The bot joins Google Meet so far, not {meeting.platform.title()}",
             )
-        await _join(meeting, login)
+        await _join(meeting, account.login_secret, start, voice)
         await _move(meeting_id, MeetingStatus.LEFT, NOT_DONE)
     except _RunEnded as ended:
         await _move(meeting_id, ended.status, NOT_DONE, ended.reason)

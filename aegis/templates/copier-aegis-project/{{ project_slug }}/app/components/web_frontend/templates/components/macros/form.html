@@ -77,6 +77,13 @@ bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-
 {% if label %}</label>{% endif %}
 {% endmacro %}
 
+{# A file input behind a button-styled label: picking a file submits its
+   form (``name="file"``). #}
+{% macro file_button(id, label, accept=None) %}
+<input id="{{ id }}" type="file" name="file" required {% if accept %}accept="{{ accept }}"{% endif %} class="sr-only" @change="$el.form.requestSubmit()">
+<label for="{{ id }}" class="inline-flex items-center cursor-pointer {{ _button_size }} leading-normal rounded border border-aegis-teal text-aegis-text hover:bg-aegis-teal/10 transition-colors">{{ label }}</label>
+{% endmacro %}
+
 {% macro checkbox(name, checked=False, label=None, value=None) %}
 <label class="inline-flex items-center gap-2 text-xs text-aegis-muted cursor-pointer">
   <input type="checkbox" name="{{ name }}" {% if value is not none %}value="{{ value }}"{% endif %} {% if checked %}checked{% endif %} class="accent-aegis-teal">

@@ -1,0 +1,30 @@
+{# Voice > Profiles (overseer_ai_voice): every voice profile at a glance,
+   each to hear, edit or put in use, and a new one made from the active
+   one; or, opened, one profile's editor (``_voice_editor.html``). #}
+{% if editing %}{% include "pages/overseer/ai/_voice_editor.html" %}{% else %}
+{% from "components/macros/chat.html" import speak_button %}
+{% from "components/macros/form.html" import primary_button %}
+{% from "components/macros/table.html" import data_table %}
+{% macro in_use(p) -%}
+{% if p.active %}<span class="text-xs text-aegis-teal">In use</span>{% else %}<button type="button" data-write hx-post="{{ profile_url }}" hx-vals='{{ {"profile_id": p.id}|tojson }}' class="text-xs text-aegis-muted hover:text-aegis-teal">Use this one</button>{% endif %}
+{%- endmacro %}
+{% macro hear_or_edit(p) -%}
+{{ speak_button(p.listen, "align-middle text-aegis-muted hover:text-aegis-text") }}
+<a data-voice-edit href="{{ p.edit }}" {{ hx_replace(p.edit, "#overseer-main") }} class="ml-3 text-xs text-aegis-teal hover:underline">Edit</a>
+{%- endmacro %}
+{% set columns = [
+  {"key": "name", "label": "Profile"},
+  {"key": "voice", "label": "Voice"},
+  {"key": "style", "label": "Style"},
+  {"key": "speed", "label": "Speed", "align": "right"},
+  {"key": "active", "label": "", "render": in_use, "row": True},
+] %}
+<div id="ai-voice-profiles" class="space-y-4 max-w-4xl">
+  {{ data_table(columns, summaries, empty="No voice profiles yet", row_id="voice-profile", actions=hear_or_edit, flush=False) }}
+  <form data-write hx-post="{{ new_url }}" class="flex items-center gap-2">
+    <input type="text" name="name" required placeholder="New profile's name" aria-label="New profile's name" class="input input-sm input-bordered w-64">
+    {{ primary_button("New profile", "submit") }}
+    <span class="text-xs text-aegis-muted">starts from the one in use</span>
+  </form>
+</div>
+{% endif %}

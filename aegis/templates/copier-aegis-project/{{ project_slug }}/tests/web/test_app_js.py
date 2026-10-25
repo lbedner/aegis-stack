@@ -393,7 +393,8 @@ FACETS_HARNESS = (
     STUBS
     + """
 const { kept, volumeOf } = require(APP_JS);
-const row = { level: 'error', service: 'worker', container: 'w-1', app_service: 'ai' };
+const row = { level: 'error', service: 'worker', container: 'w-1', app_service: 'ai',
+              model: 'tts-1 gpt-4o-mini-tts' };
 const of = (name) => row[name];
 const bars = [{ from: 0, to: 10 }, { from: 10, to: 20 }];
 const rows = [
@@ -406,6 +407,8 @@ console.log(JSON.stringify({
   missed: kept([[['level', 'info']]], of),
   anySource: kept([[['service', 'redis'], ['app_service', 'ai']]], of),
   everyList: kept([[['level', 'error']], [['service', 'redis']]], of),
+  anyOfItsOwn: kept([[['model', 'gpt-4o-mini-tts']]], of),
+  partOfOne: kept([[['model', 'tts']]], of),
   volume: volumeOf(bars, rows),
 }));
 """
@@ -416,17 +419,21 @@ def test_each_list_narrows_and_any_tick_in_it_keeps() -> None:
     """The Logs filters on the page (``data-facets``): a list with nothing
     ticked keeps every row; one with ticks keeps a row any of them matches
     (a service, a container or an application service); every list must
-    keep it."""
+    keep it. A row holding several values for one (a voice's models,
+    space-separated) is kept by a tick on any of them, whole."""
     out = run(FACETS_HARNESS, APP_JS=APP_JS)
     assert [
-        out[k] for k in ("nothing", "oneOf", "missed", "anySource", "everyList")
-    ] == [
-        True,
-        True,
-        False,
-        True,
-        False,
-    ]
+        out[k]
+        for k in (
+            "nothing",
+            "oneOf",
+            "missed",
+            "anySource",
+            "everyList",
+            "anyOfItsOwn",
+            "partOfOne",
+        )
+    ] == [True, True, False, True, False, True, False]
 
 
 def test_the_volume_recounts_the_rows_the_filters_keep() -> None:
@@ -593,3 +600,29 @@ def test_no_third_party_script_runs_unverified() -> None:
         if REMOTE_URL.search(source) and ".integrity = " not in source:
             unverified.append(f"{path.name}: loads a remote script unhashed")
     assert unverified == []
+
+
+REFUSED_HARNESS = (
+    STUBS
+    + """
+const toasts = [];
+window.dispatchEvent = (e) => toasts.push(e.detail && e.detail.text);
+require(APP_JS);
+const reply = (type, body) => ({ status: 422, responseText: body,
+  getResponseHeader: (h) => (h.toLowerCase() === 'content-type' ? type : null) });
+const json = { xhr: reply('application/json', '{"detail": "No agent called x"}'),
+               elt: { dataset: {} }, shouldSwap: true };
+const form = { xhr: reply('text/html; charset=utf-8', '<form></form>'),
+               elt: { dataset: {} }, shouldSwap: true };
+fire('htmx:beforeSwap', { detail: json });
+fire('htmx:beforeSwap', { detail: form });
+console.log(JSON.stringify({ json: json.shouldSwap, form: form.shouldSwap, toasts }));
+"""
+)
+
+
+def test_a_refusal_that_is_not_a_form_is_said_never_swapped_in() -> None:
+    """A 422 swaps for its re-rendered form; one in JSON (a service's
+    refusal) would blank the part of the page it targets."""
+    out = run(REFUSED_HARNESS, APP_JS=APP_JS)
+    assert out == {"json": False, "form": True, "toasts": ["No agent called x"]}

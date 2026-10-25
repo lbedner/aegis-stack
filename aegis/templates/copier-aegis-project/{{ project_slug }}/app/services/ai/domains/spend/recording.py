@@ -262,13 +262,17 @@ async def speech_cost(
     input_seconds: float | None = None,
     output_seconds: float | None = None,
     characters: int | None = None,
+    tokens: Any = None,
 ) -> float:
     """What a transcription or a spoken reply cost: each measure times the
     rate the model lists for it (a model lists only the measures it bills
-    by); 0 for a model the catalog does not price."""
+    by), or a realtime model's ``tokens`` priced as a call's are; 0 for a
+    model the catalog does not price."""
     rates = await _rates(model)
     if not rates:
         return 0.0
+    if tokens is not None:
+        return realtime_cost(rates, tokens)
     return (
         (input_seconds or 0) * _rate(rates, "input_cost_per_second")
         + (output_seconds or 0) * _rate(rates, "output_cost_per_second")
@@ -286,16 +290,18 @@ async def record_speech(
     user_id: str | None = None,
     success: bool = True,
     error_message: str | None = None,
+    tokens: Any = None,
 ) -> None:
     """One ledger row for a transcription (``stt``) or spoken reply
-    (``tts``), beside the model calls. Tokens are 0: speech reports none."""
+    (``tts``), beside the model calls. Its tokens are a realtime model's
+    (``tokens``); a model billed by the second or character reports none."""
     await _write(
         LLMUsage(
             action=action,
             model_id=model,
             user_id=user_id,
-            input_tokens=0,
-            output_tokens=0,
+            input_tokens=_token_count(tokens, "input_tokens"),
+            output_tokens=_token_count(tokens, "output_tokens"),
             total_cost=cost,
             audio_seconds=seconds,
             duration_ms=duration_ms,

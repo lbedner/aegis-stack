@@ -7,6 +7,7 @@ Provides speech synthesis capabilities with provider abstraction.
 from .config import TTSConfig, get_tts_config
 from .providers import (
     BaseTTSProvider,
+    GeminiTTSProvider,
     OpenAITTSProvider,
     get_tts_provider,
 )
@@ -18,6 +19,7 @@ __all__ = [
     "get_tts_config",
     # Providers
     "BaseTTSProvider",
+    "GeminiTTSProvider",
     "OpenAITTSProvider",
     "get_tts_provider",
     # Service

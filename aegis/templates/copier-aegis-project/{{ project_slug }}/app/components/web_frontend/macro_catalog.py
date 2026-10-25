@@ -261,6 +261,7 @@ EXAMPLES: dict[str, dict[str, str]] = {
         "checkbox": """{{ checkbox("failed_only", True, "Failed only") }}""",
         "search_input": """{{ search_input("catalog", placeholder="Search keys") }}""",
         "filter_input": """{{ filter_input("#catalog-demo-rows", placeholder="Filter rows") }}""",
+        "file_button": """{{ file_button("catalog-demo-file", "Add picture", "image/png,image/jpeg") }}""",
         "field": """
             {% call field("Email", error="Enter a valid address") %}
               {{ text_input("email", "ops@") }}

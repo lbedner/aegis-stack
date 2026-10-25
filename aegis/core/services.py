@@ -576,7 +576,7 @@ SERVICES: dict[str, ServiceSpec] = {
                     # RAG-gated, so it belongs here rather than ``primary`` —
                     # otherwise the retrofit copies it even with ``ai_rag``
                     # off, rendering a dead RAG tab (issue #814). The modal's
-                    # ``_HAS_RAG`` import guard handles its absence.
+                    # ``optional`` import of RAGTab handles its absence.
                     "app/components/frontend/dashboard/modals/rag_tab",
                     # RAG modules inside the always-copied ai tree.
                     "app/services/ai/domains/chat/rag_context.py",
@@ -641,6 +641,8 @@ SERVICES: dict[str, ServiceSpec] = {
                     "tests/services/ai/voice",
                     "tests/api/test_voice_endpoints.py",
                     "app/components/frontend/dashboard/modals/voice_settings",
+                    "tests/components/frontend/test_voice_tab.py",
+                    "tests/components/frontend/test_voice_designer.py",
                 ],
             },
         ),
@@ -1605,6 +1607,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 "tests/services/test_meetings_kept.py",
                 "tests/services/test_meetings_bot.py",
                 "tests/services/test_meet_page.py",
+                "tests/services/test_meetings_card.py",
                 "tests/services/test_meetings_login.py",
                 "tests/services/test_meetings_notes.py",
                 "tests/services/test_meetings_audio.py",
@@ -1629,6 +1632,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 "tests/components/frontend/test_meetings_calendar_ui.py",
                 "app/components/frontend/dashboard/modals/meetings_agents_tab.py",
                 "app/components/frontend/dashboard/modals/meetings_owners.py",
+                "app/components/frontend/dashboard/modals/meetings_agent_card.py",
                 "app/components/frontend/dashboard/modals/meetings_calendar_tab.py",
                 "tests/api/test_meetings_people_endpoints.py",
                 "tests/components/frontend/test_meetings_ui.py",

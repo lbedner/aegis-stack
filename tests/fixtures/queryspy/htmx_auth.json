@@ -172,6 +172,18 @@
     },
     {
       "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_agent_image JOIN meeting_bot_account ON meeting_bot_account.id = meeting_agent_image.account_id WHERE meeting_bot_account.name = :name_1",
+      "file": "app/services/meetings/domains/accounts/queries.py",
+      "function": "image_named"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_agent_image WHERE meeting_agent_image.account_id IN (__[POSTCOMPILE_account_id_1])",
+      "file": "app/services/meetings/domains/accounts/queries.py",
+      "function": "with_images"
+    },
+    {
+      "kind": "repeated_statement",
       "label": "SELECT ... FROM meeting_bot_account ORDER BY meeting_bot_account.id",
       "file": "app/services/meetings/domains/accounts/queries.py",
       "function": "every_account"
@@ -565,6 +577,12 @@
       "label": "SELECT ... FROM secret WHERE secret.name IN (__[POSTCOMPILE_name_1])",
       "file": "app/components/secrets/store.py",
       "function": "get_many"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT DISTINCT ... FROM meeting_action_run JOIN meeting_moment ON meeting_moment.id = meeting_action_run.moment_id WHERE meeting_moment.meeting_id = :meeting_id_1 AND meeting_action_run.status IN (__[POSTCOMPILE_status_1])",
+      "file": "app/services/meetings/domains/actions/queries.py",
+      "function": "going_in"
     },
     {
       "kind": "repeated_statement",

@@ -895,9 +895,17 @@ All voice endpoints are prefixed with `/voice`. See [Voice](voice.md) for full d
 | Endpoint | Description |
 |----------|-------------|
 | `GET /voice/settings` | Get current voice settings |
-| `POST /voice/settings` | Update voice settings |
-| `POST /voice/preview` | Generate voice preview (returns audio/mpeg) |
-| `GET /voice/preview/{voice_id}` | Browser-friendly voice preview |
+| `GET /voice/overview` | What the active profile uses, every model and voice |
+| `POST /voice/use` | Put a voice, model or engine on the active profile (admin) |
+| `POST /voice/profiles/{id}/active` | Make another voice profile the active one (admin) |
+| `GET /voice/design` | A profile's voice design as an editor draws it: the voices narrowed by `gender`, `family` and `accent_of`, styles, dials, what it sends |
+| `POST /voice/design` | Save a voice design onto a profile (admin) |
+| `GET /voice/design/preview` | Hear a voice design unsaved |
+| `GET /voice/design/profiles` | Every voice profile at a glance |
+| `GET /voice/design/profiles/{id}/preview` | Hear a saved voice profile |
+| `POST /voice/design/profiles` | A new voice profile from the one in use (admin) |
+| `POST /voice/preview` | Generate voice preview (MP3 or WAV, as the provider makes it) |
+| `GET /voice/preview/{voice_id}` | Browser-friendly voice preview (`model` optional) |
 | `GET /voice/catalog/summary` | Full catalog summary |
 
 ---

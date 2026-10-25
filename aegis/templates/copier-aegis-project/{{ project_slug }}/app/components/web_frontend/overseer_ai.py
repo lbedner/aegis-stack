@@ -302,7 +302,7 @@ async def section_context(
     if section == "voice":
         from . import overseer_ai_voice
 
-        return await overseer_ai_voice.voice_context()
+        return await overseer_ai_voice.voice_context(req.db, req.query)
     if section == "catalog":
         from . import overseer_ai_catalog
 

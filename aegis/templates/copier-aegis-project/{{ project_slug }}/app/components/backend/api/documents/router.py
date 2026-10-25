@@ -22,6 +22,7 @@ from fastapi import (
 from pydantic import BaseModel, Field
 
 from app.core.formatting import safe_filename
+from app.core.untrusted import untrusted_response
 from app.components.backend.api.documents.pages import router as pages_router
 from app.services.documents.deps import get_document_service
 from app.services.documents.models import Document
@@ -232,14 +233,10 @@ async def download_document(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Document content is not retrievable from storage",
         )
-    return Response(
-        content=data,
-        media_type=document.media_type or "application/octet-stream",
-        headers={
-            "Content-Disposition": (
-                f'inline; filename="{safe_filename(document.title)}"'
-            ),
-        },
+    return untrusted_response(
+        data,
+        document.media_type or "application/octet-stream",
+        {"Content-Disposition": f'inline; filename="{safe_filename(document.title)}"'},
     )
 
 

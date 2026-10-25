@@ -13,9 +13,9 @@ from app.core import secrets
 from app.core.voice_settings import TTS_SPEED_MAX, TTS_SPEED_MIN, setting_default
 
 from ..models import (
-    DEFAULT_TTS_MODEL,
+    DEFAULT_TTS_MODELS,
     DEFAULT_TTS_PROVIDER,
-    DEFAULT_TTS_VOICE,
+    DEFAULT_TTS_VOICES,
     TTS_KEYS,
     TTSProvider,
 )
@@ -57,15 +57,11 @@ class TTSConfig(BaseModel):
 
     def get_model(self) -> str:
         """Get the model to use, falling back to provider default."""
-        if self.model:
-            return self.model
-        return DEFAULT_TTS_MODEL
+        return self.model or DEFAULT_TTS_MODELS[self.provider]
 
     def get_voice(self) -> str:
         """Get the voice to use, falling back to provider default."""
-        if self.voice:
-            return self.voice
-        return DEFAULT_TTS_VOICE
+        return self.voice or DEFAULT_TTS_VOICES[self.provider]
 
     async def get_api_key(self, settings: Any) -> str | None:
         """Get API key for the current provider, read now (``.env``, then the

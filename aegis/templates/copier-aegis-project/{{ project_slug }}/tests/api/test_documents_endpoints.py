@@ -75,6 +75,21 @@ class TestDocumentEndpoints:
         assert response.status_code == 200
         assert response.content == b"the bytes"
 
+    def test_an_uploaded_page_never_runs_as_this_app(self, authenticated_app_client: TestClient) -> None:
+        """Served inline as the type it was uploaded with: an SVG's or an
+        HTML file's script would run on this app's origin, signed in."""
+        svg = b'<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'
+        created = authenticated_app_client.post(
+            "/api/v1/documents",
+            files={"file": ("a.svg", svg, "image/svg+xml")},
+            data={"title": "A"},
+        ).json()
+
+        response = authenticated_app_client.get(f"/api/v1/documents/{created['id']}/content")
+
+        assert "sandbox" in response.headers["content-security-policy"]
+        assert response.headers["x-content-type-options"] == "nosniff"
+
     def test_an_unknown_kind_is_a_client_error(self, authenticated_app_client: TestClient) -> None:
         response = authenticated_app_client.post(
             "/api/v1/documents",

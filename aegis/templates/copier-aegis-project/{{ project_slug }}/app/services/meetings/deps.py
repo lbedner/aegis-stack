@@ -4,11 +4,17 @@ caller (``get_owner_user_id``): one owner never reads another's meetings."""
 from collections.abc import Iterator
 from contextlib import contextmanager
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Response, UploadFile, status
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.db import get_async_db
-from app.services.meetings.domains.accounts.service import AgentNotFoundError
+from app.core.untrusted import untrusted_response
+from app.services.meetings.domains.accounts.service import (
+    AgentImageError,
+    AgentNotFoundError,
+    image_named,
+    set_image,
+)
 from app.services.meetings.domains.actions import tokens
 from app.services.meetings.domains.actions.runs import (
     ActionNotFoundError,
@@ -26,7 +32,7 @@ from app.services.meetings.domains.series.service import (
     SeriesNotFoundError,
     SeriesService,
 )
-from app.services.meetings.models import MeetingRunnerToken
+from app.services.meetings.models import BotAccount, MeetingRunnerToken
 from app.services.meetings.service import (
     MeetingInProgressError,
     MeetingNotFoundError,
@@ -85,7 +91,8 @@ def as_http() -> Iterator[None]:
     API's, the Meetings page's and Overseer's): a meeting, guide or series
     the caller cannot see is a 404, one the bot is still in or someone owns
     already (or notes, a guide or a series that cannot be written now) a 409, a link it cannot join, a speaker who was not
-    there, an agent there is not or an owner nobody here is a 422. A moment, action, claimed run or
+    there, an agent there is not, a picture a card cannot carry or an owner
+    nobody here is a 422. A moment, action, claimed run or
     runner token the caller cannot reach is a 404 too, as is a meeting on no
     calendar."""
     try:
@@ -107,6 +114,7 @@ def as_http() -> Iterator[None]:
         UnsupportedMeetingLinkError,
         NotASpeakerError,
         AgentNotFoundError,
+        AgentImageError,
         NoSuchOwnerError,
     ) as exc:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
@@ -128,3 +136,22 @@ async def get_runner_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
     return token
+
+
+# A picture's address carries its version (``AgentRow.image``): kept for
+# good, as one that changes is read at its new address.
+KEPT_FOR_GOOD = {"Cache-Control": "private, max-age=31536000, immutable"}
+
+
+async def picture_response(db: AsyncSession, name: str) -> Response:
+    """The picture of the agent called ``name``, inert whatever is in it (an
+    SVG's script); a 404 when it has none."""
+    kept = await image_named(db, name)
+    if kept is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"{name} has no picture")
+    return untrusted_response(kept.data, kept.content_type, KEPT_FOR_GOOD)
+
+
+async def take_picture(db: AsyncSession, name: str, file: UploadFile) -> BotAccount:
+    """The uploaded ``file`` as the picture of the agent called ``name``."""
+    return await set_image(db, name, await file.read(), file.content_type or "")

@@ -1,6 +1,6 @@
 """The meeting agents over HTTP: the bot sent as one by name, every agent
-listed for Overseer with whether its sign-in works and where it is, and a
-their calendars."""
+listed for Overseer with whether its sign-in works and where it is, their
+calendars, and each one's card (its picture, its camera)."""
 
 from fastapi.testclient import TestClient
 import pytest
@@ -12,8 +12,8 @@ from app.services.meetings.domains.accounts.service import (
     keep_agent,
 )
 from app.services.meetings.domains.calendar.service import read_calendars
-from tests._audit import let_into_overseer
-from tests._meetings import MEET, STANDUP, Calendar, at, hold_the_bot
+from tests._audit import as_admin, let_into_overseer
+from tests._meetings import MEET, PIXEL_PNG, STANDUP, Calendar, at, hold_the_bot
 from tests._secret_settings import use_store
 
 AGENTS = "/api/v1/meetings/admin/agents"
@@ -112,3 +112,26 @@ async def test_overseer_opens_one_meeting_on_a_calendar(
         "leo@example.com",
     ]
     assert missing.status_code == 404
+
+
+async def test_overseer_sets_an_agents_picture_and_camera(
+    authenticated_client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client = as_admin(let_into_overseer(authenticated_client, monkeypatch))
+    use_store(monkeypatch)
+    image = f"{AGENTS}/{DEFAULT_AGENT}/image"
+
+    put = client.post(image, files={"file": ("me.png", PIXEL_PNG, "image/png")})
+    shown = client.get(image)
+    listed = client.get(AGENTS).json()
+    camera = client.put(f"{AGENTS}/{DEFAULT_AGENT}/camera", json={"on": False})
+    refused = client.post(image, files={"file": ("a.pdf", b"%PDF", "application/pdf")})
+    gone = client.delete(image)
+
+    assert put.status_code == 200, put.text
+    assert shown.content == PIXEL_PNG and shown.headers["content-type"] == "image/png"
+    assert listed[0]["image"] is not None
+    assert camera.json()["camera"] is False
+    assert refused.status_code == 422
+    assert gone.status_code == 204
+    assert client.get(image).status_code == 404

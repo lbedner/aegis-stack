@@ -11,10 +11,10 @@ from app.cli.ai.shared import (
     app,
     console,
 )
+from app.cli.ai.speech import speaking_settings
 from app.core.formatting import format_clock
 from app.i18n import lazy_t, t
 
-from ...core.config import settings
 from ...core.log import suppress_logs
 
 
@@ -202,7 +202,7 @@ def record(
             )
 
             with suppress_logs():
-                ai_service = AIService(settings)
+                ai_service = AIService(await speaking_settings())
 
             # Transcribe
             from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -304,7 +304,7 @@ def record(
                     # Created, not just named: mktemp leaves a window for
                     # another process to take the path first.
                     with tempfile.NamedTemporaryFile(
-                        suffix=".mp3", delete=False
+                        suffix=f".{speech_result.format.value}", delete=False
                     ) as f:
                         f.write(speech_result.audio)
                     speech_path = Path(f.name)

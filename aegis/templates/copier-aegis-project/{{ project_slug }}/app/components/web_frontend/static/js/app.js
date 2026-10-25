@@ -254,6 +254,17 @@ document.body.addEventListener('htmx:responseError', (event) => {
   toast(`Request failed (${event.detail.xhr.status})`, 'error');
 });
 
+// A 422 swaps for the form it re-renders (base.html). One that is not HTML
+// (a service's refusal, FastAPI's own validation) would swap its JSON in
+// and blank its target: it is the error toast instead.
+document.body.addEventListener('htmx:beforeSwap', (event) => {
+  const { xhr, elt } = event.detail;
+  const type = xhr.getResponseHeader('Content-Type') || '';
+  if (xhr.status !== 422 || type.startsWith('text/html')) return;
+  event.detail.shouldSwap = false;
+  if (elt.dataset.apiDone === undefined) toast(apiDetail(xhr), 'error'); // told below
+});
+
 // A button that calls the JSON API directly (the Overseer's Authentication
 // actions) says what it did in `data-api-done`. The API answers with JSON,
 // not HTML, so nothing swaps: on success the dialog closes, the toast
@@ -758,11 +769,12 @@ document.addEventListener('input', (event) => {
 // page's): only the window asks the server; everything else narrows the
 // rows already here, new ones included (``showRows``), with no request.
 // Each checklist (``data-checklist``) keeps a row any of its ticks match
-// (``data-facet-<name>`` on the row: a level, a service, a container); an
+// (``data-facet-<name>`` on the row: a level, a service, a container; a
+// row with several, a voice's models, holds them space-separated); an
 // empty one keeps every row; every one must keep it. ``kept`` is that rule
 // on a row's values (``of(name)``).
 function kept(groups, of) {
-  return groups.every((ticks) => ticks.some(([name, value]) => of(name) === value));
+  return groups.every((ticks) => ticks.some(([name, value]) => (of(name) || '').split(' ').includes(value)));
 }
 function facetsOf(list) {
   return [...document.querySelectorAll('form[data-facets]')].find((form) => list.matches(form.dataset.facets));

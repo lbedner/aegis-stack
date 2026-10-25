@@ -95,7 +95,7 @@ async def voice_chat(
 
     Returns:
         If return_audio=False: VoiceChatApiResponse with transcription and text
-        If return_audio=True: Audio file (MP3) of the response
+        If return_audio=True: Audio file (its model's format: MP3 or WAV) of the response
 
     Raises:
         HTTPException: 400 if audio format not supported
@@ -146,9 +146,9 @@ async def voice_chat(
         if return_audio and result.audio_response:
             return Response(
                 content=result.audio_response,
-                media_type="audio/mpeg",
+                media_type=ai_service.tts.media_type,
                 headers={
-                    "Content-Disposition": 'attachment; filename="response.mp3"',
+                    "Content-Disposition": "attachment; filename=response",
                     "X-Transcription": result.transcription.text[:100],  # First 100 chars
                     "X-Conversation-Id": result.conversation_id or "",
                 },
@@ -319,7 +319,7 @@ async def synthesize_speech(
         speed: Speech speed multiplier (0.25 to 4.0, default 1.0)
 
     Returns:
-        Audio file response (MP3 format)
+        Audio file response (its model's format: MP3 or WAV)
 
     Raises:
         HTTPException: 503 if TTS service error
@@ -330,9 +330,11 @@ async def synthesize_speech(
 
         return Response(
             content=result.audio,
-            media_type="audio/mpeg",
+            media_type=result.media_type,
             headers={
-                "Content-Disposition": 'attachment; filename="speech.mp3"',
+                "Content-Disposition": (
+                    f'attachment; filename="speech.{result.format.value}"'
+                ),
             },
         )
 
@@ -358,7 +360,7 @@ async def synthesize_speech_stream(
         speed: Speech speed multiplier (0.25 to 4.0, default 1.0)
 
     Returns:
-        Streaming audio response (MP3 format)
+        Streaming audio response (its model's format: MP3 or WAV)
 
     Raises:
         HTTPException: 503 if TTS service error
@@ -384,10 +386,8 @@ async def synthesize_speech_stream(
 
     return StreamingResponse(
         generate(),
-        media_type="audio/mpeg",
-        headers={
-            "Content-Disposition": 'attachment; filename="speech.mp3"',
-        },
+        media_type=ai_service.tts.media_type,
+        headers={"Content-Disposition": "attachment; filename=speech"},
     )
 
 

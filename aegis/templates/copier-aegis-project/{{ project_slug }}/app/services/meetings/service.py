@@ -49,9 +49,8 @@ if TYPE_CHECKING:
     # What callers outside reach through here, each loaded when used
     # (``app.services.shared.facade``); the agents' seeds render only
     # with an AI that runs them.
-    from app.services.meetings.domains.actions.runs import (  # noqa: F401
-        fail_abandoned,
-    )
+    from app.services.meetings.domains.accounts.service import IMAGE_TYPES  # noqa: F401
+    from app.services.meetings.domains.actions.runs import fail_abandoned  # noqa: F401
     from app.services.meetings.domains.agents import (  # noqa: F401
         load_meetings_agent_fixtures,
     )
@@ -65,9 +64,7 @@ if TYPE_CHECKING:
         run_meeting,
         send_bot,
     )
-    from app.services.meetings.domains.moments.service import (  # noqa: F401
-        by_kind,
-    )
+    from app.services.meetings.domains.moments.service import by_kind  # noqa: F401
 
 DEFAULT_BOT_NAME = "Notetaker"
 

@@ -39,7 +39,8 @@
      restore a cache miss; refreshOnHistoryMiss turns a miss into a clean
      full-page load instead of an AJAX restore. #}
   {# responseHandling (first matching rule wins, RegExp.test semantics):
-     a 422 carries a re-rendered form and must swap; other 4xx/5xx never
+     a 422 carries a re-rendered form and must swap (app.js toasts one that
+     is JSON instead); other 4xx/5xx never
      swap and raise htmx:responseError, which app.js turns into a toast. #}
   <meta name="htmx-config" content='{"historyCacheSize": 0, "refreshOnHistoryMiss": true, "attributesToSettle": [], "responseHandling": [{"code": "204", "swap": false}, {"code": "[23]..", "swap": true}, {"code": "422", "swap": true}, {"code": "[45]..", "swap": false, "error": true}, {"code": "...", "swap": true}]}'>
   <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous"></script>

@@ -120,6 +120,15 @@ async def going(
     return (await db.exec(query)).first()
 
 
+async def going_in(db: AsyncSession, meeting_id: int) -> set[str]:
+    """The statuses of the meeting's runs not yet done (asked, claimed)."""
+    query = _with_moment(select(MeetingActionRun.status)).where(
+        MeetingMoment.meeting_id == meeting_id,
+        col(MeetingActionRun.status).in_(GOING),
+    )
+    return set((await db.exec(query.distinct())).all())
+
+
 async def drop_runs(db: AsyncSession, moment_ids: list[int], action: str) -> None:
     """Delete these moments' (a card's) runs of ``action``: a new one
     replaces them. The caller commits."""

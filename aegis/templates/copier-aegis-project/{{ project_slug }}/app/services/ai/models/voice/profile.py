@@ -6,7 +6,9 @@ switching or editing it takes effect on the next thing said, with no
 """
 
 from datetime import datetime
+from typing import Any
 
+from sqlalchemy import JSON, Column
 from sqlmodel import Field, SQLModel
 
 from app.core.time import utcnow
@@ -40,6 +42,10 @@ class VoiceProfile(SQLModel, table=True):
         default=setting_default("TTS_SPEED"), ge=TTS_SPEED_MIN, le=TTS_SPEED_MAX
     )
     tts_instructions: str | None = None
+    # The voice designer's choices those instructions were made from
+    # (``domains/voice/delivery.Delivery``), so it opens on them again;
+    # None for instructions written by hand.
+    tts_delivery: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
     # How a spoken turn's reply is heard, and what plays while it works.
     reply: str = Field(default=setting_default("VOICE_REPLY"))
     working_sound: str = Field(default=setting_default("VOICE_WORKING_SOUND"))

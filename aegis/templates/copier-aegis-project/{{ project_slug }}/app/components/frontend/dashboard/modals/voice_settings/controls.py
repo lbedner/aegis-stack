@@ -3,12 +3,9 @@ a level meter, and a preview player."""
 
 import asyncio
 import random
-from collections.abc import Callable
 
 import flet as ft
-from app.components.frontend.controls import (
-    SecondaryText,
-)
+
 from app.components.frontend.controls.expand_arrow import ExpandArrow
 from app.components.frontend.theme import AegisTheme as Theme
 
@@ -142,113 +139,3 @@ class AudioWaveVisualizer(ft.Container):
             if self.page:
                 self.update()
             await asyncio.sleep(interval)
-
-
-class VoicePreviewPlayer(ft.Container):
-    """Preview player with play button, wave visualizer, and voice info."""
-
-    DEFAULT_PREVIEW_TEXT = "Hello! This is a preview of my voice."
-
-    def __init__(
-        self,
-        on_play: Callable[[str], None],
-        voice_name: str = "",
-        voice_description: str = "",
-    ) -> None:
-        super().__init__()
-
-        self._on_play = on_play
-        self._is_playing = False
-        self._visualizer = AudioWaveVisualizer()
-
-        self._play_button = ft.IconButton(
-            icon=ft.Icons.PLAY_CIRCLE_FILLED,
-            icon_size=48,
-            icon_color=Theme.Colors.PRIMARY,
-            on_click=self._on_play_click,
-            tooltip="Preview voice",
-        )
-
-        self._voice_label = ft.Text(
-            voice_name,
-            size=14,
-            weight=ft.FontWeight.W_600,
-            text_align=ft.TextAlign.CENTER,
-        )
-
-        self._voice_description = SecondaryText(
-            voice_description,
-            size=12,
-            text_align=ft.TextAlign.CENTER,
-        )
-
-        # Text input for custom preview text
-        self._text_field = ft.TextField(
-            value=self.DEFAULT_PREVIEW_TEXT,
-            label="Preview text",
-            hint_text="Enter text to speak...",
-            multiline=True,
-            min_lines=2,
-            max_lines=3,
-            border_radius=Theme.Components.INPUT_RADIUS,
-            bgcolor=ft.Colors.SURFACE,
-            border_color=ft.Colors.OUTLINE,
-            focused_border_color=Theme.Colors.PRIMARY,
-            text_size=13,
-        )
-
-        # Layout: centered column with text field, button, visualizer, voice info
-        self.content = ft.Container(
-            content=ft.Column(
-                [
-                    ft.Text(
-                        "VOICE PREVIEW",
-                        size=10,
-                        weight=ft.FontWeight.W_500,
-                        color=ft.Colors.ON_SURFACE_VARIANT,
-                        text_align=ft.TextAlign.CENTER,
-                    ),
-                    ft.Container(height=Theme.Spacing.SM),
-                    self._text_field,
-                    ft.Container(height=Theme.Spacing.SM),
-                    ft.Row(
-                        [self._play_button, self._visualizer],
-                        alignment=ft.MainAxisAlignment.CENTER,
-                        vertical_alignment=ft.CrossAxisAlignment.CENTER,
-                        spacing=Theme.Spacing.MD,
-                    ),
-                    ft.Container(height=Theme.Spacing.SM),
-                    self._voice_label,
-                    self._voice_description,
-                ],
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=2,
-            ),
-            padding=Theme.Spacing.MD,
-            bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
-            border_radius=Theme.Components.CARD_RADIUS,
-            border=ft.border.all(1, ft.Colors.OUTLINE_VARIANT),
-        )
-
-    def _on_play_click(self, e: ft.ControlEvent) -> None:
-        """Handle play button click."""
-        if self._on_play:
-            text = self._text_field.value or self.DEFAULT_PREVIEW_TEXT
-            self._on_play(text)
-
-    def set_playing(self, playing: bool, speed: float = 1.0) -> None:
-        """Update play state and animation."""
-        self._is_playing = playing
-        if playing:
-            self._play_button.icon = ft.Icons.STOP_CIRCLE
-            self._visualizer.start_animation(speed)
-        else:
-            self._play_button.icon = ft.Icons.PLAY_CIRCLE_FILLED
-            self._visualizer.stop_animation()
-        self.update()
-
-    def set_voice(self, name: str, description: str) -> None:
-        """Update displayed voice info."""
-        self._voice_label.value = name
-        self._voice_description.value = description
-        self.update()

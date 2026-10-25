@@ -12,9 +12,10 @@ from app.services.system.models import ComponentStatusType
 
 
 @asynccontextmanager
-async def live_browser() -> AsyncIterator[Browser]:
-    """A browser in the browser container; skips the test when none is up."""
+async def live_browser(args: list[str] | None = None) -> AsyncIterator[Browser]:
+    """A browser in the browser container, launched with ``args``; skips the
+    test when none is up."""
     if (await health.check_browser_health()).status != ComponentStatusType.HEALTHY:
         pytest.skip("browser server not running (start it with `make serve`)")
-    async with connect() as browser:
+    async with connect(args) as browser:
         yield browser

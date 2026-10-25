@@ -6,6 +6,7 @@ Meet page itself is tested against a fake page (``test_meet_page``)."""
 
 from collections.abc import Callable
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -13,16 +14,20 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.config import settings
+from app.services.meetings.domains.accounts import service as accounts
+from app.services.meetings.domains.bot import card, voice
 from app.services.meetings.domains.bot import run as bot
 from app.services.meetings.domains.bot.meet import CallState
 from app.services.meetings.models import (
+    CLAIMED,
     Caption,
     Meeting,
+    MeetingActionRun,
     MeetingParticipant,
     MeetingStatus,
 )
 from app.services.meetings.service import MeetingsService, transition
-from tests._meetings import MEET, SAID, SECOND, SHOWN, bot_on
+from tests._meetings import MEET, SAID, SECOND, SHOWN, asked_a_question, bot_on
 
 # The run beats on every look here (BEAT_SECONDS is 0), by design.
 pytestmark = pytest.mark.queryspy(allow_n_plus_one=True)
@@ -51,6 +56,10 @@ class FakeCall:
         # A second of the call reaches the bot on every look, while ``sound``.
         self.sound = sound
         self.on_audio: Callable[[str], None] | None = None
+        # What its camera showed (each change) and what it said aloud.
+        self.cards: list[dict[str, Any]] = []
+        self.spoken: list[bytes] = []
+        self.captions_offered = True
 
     async def _at(self, moment: str) -> None:
         if moment in self.during:
@@ -77,8 +86,14 @@ class FakeCall:
         self.left = True
 
     async def turn_on_captions(self) -> bool:
-        self.captions_on = True
-        return True
+        self.captions_on = self.captions_offered
+        return self.captions_offered
+
+    async def show(self, **update: Any) -> None:
+        self.cards.append(update)
+
+    async def speak(self, audio: bytes) -> None:
+        self.spoken.append(audio)
 
     async def captions(self) -> list[Caption]:
         if self.sound and self.on_audio is not None:
@@ -97,12 +112,13 @@ def run(
         call: FakeCall,
         meeting: Meeting | None = None,
         notes: Callable[[int], Any] | None = None,
+        speech: bytes | None = None,
     ) -> Meeting:
         if meeting is None:
             meeting = await MeetingsService(async_db_session, None).request(
                 MEET, "Notes"
             )
-        bot_on(monkeypatch, async_db_session, call, notes=notes)
+        bot_on(monkeypatch, async_db_session, call, notes=notes, speech=speech)
         await bot.run_meeting(meeting.id)  # type: ignore[arg-type]
         await async_db_session.refresh(meeting)
         return meeting
@@ -541,3 +557,100 @@ async def _status(session: AsyncSession, row: Meeting) -> MeetingStatus:
     return (
         await session.exec(select(Meeting.status).where(Meeting.id == row.id))
     ).one()
+
+
+async def test_it_joins_as_its_card_and_says_its_announcement_aloud(
+    run: Callable[..., Any],
+) -> None:
+    call = FakeCall([CallState.IN_CALL, CallState.ENDED])
+
+    await run(call, speech=b"mp3")
+
+    assert call.start.name == "Notes" and call.start.camera
+    assert call.start.image is None
+    assert call.spoken == [b"mp3"]
+    assert call.said[0].startswith("Notes")  # written in the chat as well
+
+
+async def test_with_no_voice_it_only_writes(run: Callable[..., Any]) -> None:
+    call = FakeCall([CallState.IN_CALL, CallState.ENDED])
+
+    await run(call)
+
+    assert call.spoken == []
+    assert call.said
+
+
+async def test_its_card_says_it_cannot_see_captions_and_that_it_leaves(
+    run: Callable[..., Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(bot, "ALONE_SECONDS", 0)
+    call = FakeCall([CallState.IN_CALL], people=[3, 1])
+    call.captions_offered = False
+
+    await run(call)
+
+    statuses = [c["status"] for c in call.cards if "status" in c]
+    assert statuses[0] == card.NO_CAPTIONS
+    assert statuses[-1] == card.LEAVING
+
+
+async def test_its_card_says_when_a_runner_is_answering(
+    run: Callable[..., Any], async_db_session: AsyncSession
+) -> None:
+    meeting_id, moment_id = await asked_a_question(async_db_session)
+
+    async def answering() -> None:
+        async_db_session.add(
+            MeetingActionRun(
+                moment_id=moment_id, action="ask", prompt="-", status=CLAIMED
+            )
+        )
+        await async_db_session.commit()
+
+    call = FakeCall(
+        [CallState.IN_CALL, CallState.IN_CALL, CallState.ENDED],
+        during={"say": answering},
+    )
+
+    await run(call, meeting=await async_db_session.get(Meeting, meeting_id))
+
+    assert {"status": card.ANSWERING} in call.cards
+
+
+async def test_an_agents_picture_and_camera_setting_come_with_it(
+    run: Callable[..., Any], async_db_session: AsyncSession
+) -> None:
+    await accounts.set_image(
+        async_db_session, accounts.DEFAULT_AGENT, b"png", "image/png"
+    )
+    await accounts.set_camera(async_db_session, accounts.DEFAULT_AGENT, False)
+    call = FakeCall([CallState.IN_CALL, CallState.ENDED])
+
+    await run(call)
+
+    assert call.start.image == "data:image/png;base64,cG5n"
+    assert not call.start.camera
+
+
+async def test_it_speaks_in_the_stacks_active_voice(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The voice profile Overseer speaks in, read where the bot runs: a
+    worker never loads it at startup as the webserver does."""
+    tts = pytest.importorskip("app.services.ai.domains.voice.tts")
+    ai = pytest.importorskip("app.services.ai.service")
+    async_db_session.add(ai.VoiceProfile(name="Hers", is_active=True, tts_voice="nova"))
+    await async_db_session.commit()
+    asked: list[tuple[str, str]] = []
+
+    async def synthesize(self: Any, request: Any) -> Any:
+        asked.append((self.voice, request.text))
+        return SimpleNamespace(audio=b"mp3")
+
+    monkeypatch.setattr(tts.TTSService, "synthesize", synthesize)
+
+    speaking = await voice.voice_of(async_db_session)
+
+    assert await voice.spoken("I'm here", speaking) == b"mp3"
+    assert asked == [("nova", "I'm here")]

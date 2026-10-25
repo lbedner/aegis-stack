@@ -31,7 +31,9 @@ from app.services.ai.domains.chat.cards import attach_cards, card_stage
 from app.services.ai.domains.chat.readings import reading_stage
 from app.services.ai.domains.chat.user_memory import memory_user
 from app.services.ai.domains.spend import recording as usage_recording
+from app.services.ai.domains.voice.catalog import GEMINI_PREBUILT, get_voice
 from app.services.ai.domains.voice.live_engines import is_gpt_live
+from app.services.ai.domains.voice.models import TTSProvider
 from app.services.ai.models import MessageRole
 from app.services.ai.service.trace import record_tool_call, record_tool_result
 
@@ -152,20 +154,34 @@ async def save_turn(
     await ai.conversation_manager.save_conversation(conversation)
 
 
+def call_voice(model: str, voice: str | None) -> str | None:
+    """The voice a call on ``model`` speaks: the profile's ``voice`` where
+    the engine's provider has it (one voice for the agent's calls and
+    spoken lines), else OpenAI's recommended one, else (Gemini) its own,
+    None."""
+    spoken = get_voice(voice) if voice else None
+    by = spoken.provider_id if spoken else None
+    if model.startswith("openai:"):
+        return voice if by == TTSProvider.OPENAI else OPENAI_VOICE
+    # Gemini Live speaks its 30 prebuilt voices, not its library's others.
+    prebuilt = by == TTSProvider.GEMINI and voice in GEMINI_PREBUILT
+    return voice if model.startswith("google:") and prebuilt else None
+
+
 def _model_settings(
     model: str,
     voice: str | None,
     max_output_tokens: int | None,
     instructions: str | None = None,
 ) -> dict[str, Any]:
-    """The session's settings for its provider. OpenAI transcribes the
-    caller only when asked and speaks the profile's voice; Gemini
-    transcribes by default and speaks its own."""
-    # ponytail: Gemini's default voice; the engine row carries a voice
-    # (Kore, Puck, ...) once voices are picked per engine.
+    """The session's settings for its provider. Each speaks the profile's
+    voice where it has it (one voice for the agent's calls and spoken
+    lines), else its own; OpenAI transcribes the caller only when asked,
+    Gemini by default."""
     settings: dict[str, Any] = {}
+    speaks = call_voice(model, voice)
     if model.startswith("openai:"):
-        settings["openai_voice"] = voice or OPENAI_VOICE
+        settings["openai_voice"] = speaks
         if is_gpt_live(model):
             # GPT-Live takes the call manners as its own instructions; the
             # agent's prompt is the backend's. It has no token limit and
@@ -181,6 +197,8 @@ def _model_settings(
         settings["openai_input_noise_reduction"] = "far_field"
         settings["openai_turn_detection"] = {"type": "semantic_vad", "eagerness": "low"}
     if model.startswith("google:"):
+        if speaks:
+            settings["google_voice"] = speaks
         # Background talk (a TV in the room) held Gemini's turn open with
         # its default detector: stricter about what STARTS a turn, quicker
         # to END one - but not on a breath mid-thought (Google's advice

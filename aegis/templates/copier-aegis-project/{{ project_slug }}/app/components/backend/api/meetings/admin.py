@@ -4,21 +4,29 @@ each speaker was heard) and its threads, which speaker its owner is, its
 notes written again, the bot asked to leave, and a meeting deleted; and
 who owns what nobody pressed send for: a meeting nobody owns given to
 someone, and who an agent's calendar meetings go to when nobody on the
-invite has an account here. Reading is the admin's (``get_admin_reader``), a
+invite has an account here; and each agent's card in a call, its picture
+and whether its camera is on. Reading is the admin's (``get_admin_reader``), a
 change an operator's (``get_admin_actor``); an owner's own meetings are
 ``router``'s."""
 
 from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile, status
 from pydantic import BaseModel
 
 from app.core.time import zone_named
-from app.services.meetings.deps import as_http, get_every_owners_meetings
+from app.services.meetings.deps import (
+    as_http,
+    get_every_owners_meetings,
+    picture_response,
+    take_picture,
+)
 from app.services.meetings.domains.accounts.service import (
     AgentRow,
+    clear_image,
     overview,
+    set_camera,
     set_default_owner,
 )
 from app.services.meetings.domains.accounts.service import agents as every_agent
@@ -77,6 +85,41 @@ async def agent_owner(name: str, body: Owned, svc: Every) -> BotAccount:
     the invite has an account here (none: nobody)."""
     with as_http():
         return await set_default_owner(svc.db, name, body.user_id)
+
+
+class Camera(BaseModel):
+    on: bool
+
+
+@router.put("/agents/{name}/camera", response_model=BotAccount, dependencies=CHANGE)
+async def agent_camera(name: str, body: Camera, svc: Every) -> BotAccount:
+    """Whether the agent shows its card in a call."""
+    with as_http():
+        return await set_camera(svc.db, name, body.on)
+
+
+@router.post("/agents/{name}/image", response_model=BotAccount, dependencies=CHANGE)
+async def agent_image(name: str, file: UploadFile, svc: Every) -> BotAccount:
+    """The picture on the agent's card: PNG, JPEG, WebP, GIF or SVG, up to
+    5 MB."""
+    with as_http():
+        return await take_picture(svc.db, name, file)
+
+
+@router.get("/agents/{name}/image", dependencies=READ)
+async def agent_image_file(name: str, svc: Every) -> Response:
+    """The agent's picture as it was uploaded."""
+    return await picture_response(svc.db, name)
+
+
+@router.delete(
+    "/agents/{name}/image", status_code=status.HTTP_204_NO_CONTENT, dependencies=CHANGE
+)
+async def agent_image_gone(name: str, svc: Every) -> Response:
+    """The agent back to its initials."""
+    with as_http():
+        await clear_image(svc.db, name)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/owners", response_model=list[Owner], dependencies=READ)

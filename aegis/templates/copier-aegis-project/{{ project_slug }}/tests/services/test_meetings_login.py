@@ -31,10 +31,14 @@ class FakeBrowser:
 
     def __init__(self) -> None:
         self.storage_state: Any = "never asked"
+        self.permissions: list[str] = []
         self.visited: list[str] = []
 
-    async def new_context(self, storage_state: Any = None) -> "FakeBrowser":
+    async def new_context(
+        self, storage_state: Any = None, permissions: list[str] | None = None
+    ) -> "FakeBrowser":
         self.storage_state = storage_state
+        self.permissions = permissions or []
         return self
 
     async def new_page(self) -> "FakeBrowser":
@@ -71,6 +75,9 @@ async def test_the_bot_joins_with_the_stored_login_if_any(
 
     assert browser.storage_state == state
     assert browser.visited == [MEET]
+    # Its card and voice are its camera and mic, granted before Meet asks:
+    # without them it joined with both off.
+    assert browser.permissions == ["camera", "microphone"]
 
 
 def test_only_a_google_session_counts_as_signed_in() -> None:

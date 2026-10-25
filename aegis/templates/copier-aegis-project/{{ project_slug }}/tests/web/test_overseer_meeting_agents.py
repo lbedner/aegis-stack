@@ -1,6 +1,7 @@
 """Overseer > Meetings > Agents: each Google account the bot joins as, who
-it is, whether its sign-in still works and which meeting it is in now; and
-the bot sent as one of them from the Meetings page."""
+it is, whether its sign-in still works, which meeting it is in now and its
+card in a call (its picture, its camera); and the bot sent as one of them
+from the Meetings page."""
 
 import json
 
@@ -14,7 +15,7 @@ from app.services.meetings.domains.accounts.service import keep_agent
 from app.services.meetings.models import MeetingStatus
 from app.services.meetings.service import MeetingsService, transition
 from app.services.system.models import ComponentStatus
-from tests._meetings import MEET, hold_the_bot, signed_in_state
+from tests._meetings import MEET, PIXEL_PNG, hold_the_bot, signed_in_state
 from tests._secret_settings import use_store
 from tests.web.dom import location, none, one, select, text
 from tests.web.overseer import page_html, sign_in, status_with
@@ -94,3 +95,64 @@ async def test_with_one_agent_there_is_nothing_to_pick(
     use_store(monkeypatch)
 
     none(page_html(overseer, PAGE), "form[data-send] select")
+
+
+async def test_an_agents_card_is_set_from_its_row(
+    overseer: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    use_store(monkeypatch)
+    row = one(page_html(overseer, AGENTS), "#overseer-meeting-agents tbody tr")
+    one(row, "form[data-agent-image] input[type=file]")
+    assert one(row, "form[data-camera] input").get("checked") is not None
+
+    pictured = overseer.post(
+        f"{PARTIALS}/agents/notetaker/image",
+        files={"file": ("me.png", PIXEL_PNG, "image/png")},
+        headers=HX,
+    )
+    off = overseer.post(f"{PARTIALS}/agents/notetaker/camera", headers=HX)
+
+    assert pictured.status_code == 200, pictured.text
+    image = one(pictured.text, "img[data-agent-image]")
+    shown = overseer.get(image.get("src"))
+    assert shown.content == PIXEL_PNG
+    # Its address carries its version: a redraw never fetches it again.
+    assert "?v=" in image.get("src")
+    assert "immutable" in shown.headers["cache-control"]
+    assert one(off.text, "form[data-camera] input").get("checked") is None
+
+
+SVG = b'<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"/>'
+
+
+async def test_an_svg_is_a_picture_and_cannot_run_a_script(
+    overseer: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    use_store(monkeypatch)
+
+    overseer.post(
+        f"{PARTIALS}/agents/notetaker/image",
+        files={"file": ("me.svg", SVG, "image/svg+xml")},
+        headers=HX,
+    )
+    shown = overseer.get(f"{PARTIALS}/agents/notetaker/image")
+
+    assert shown.content == SVG
+    assert "sandbox" in shown.headers["content-security-policy"]
+    assert shown.headers["x-content-type-options"] == "nosniff"
+
+
+async def test_a_picture_the_card_cannot_take_says_why_and_keeps_the_tab(
+    overseer: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    use_store(monkeypatch)
+
+    refused = overseer.post(
+        f"{PARTIALS}/agents/notetaker/image",
+        files={"file": ("notes.pdf", b"%PDF", "application/pdf")},
+        headers=HX,
+    )
+
+    assert refused.status_code == 422
+    one(refused.text, "#overseer-meeting-agents tbody tr")
+    assert "application/pdf" in text(one(refused.text, "[role=alert]"))

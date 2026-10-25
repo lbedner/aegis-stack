@@ -85,6 +85,22 @@ Every status change moves only from the status the bot expects, so a leave reque
 
 Everything the bot knows about Meet's page (its buttons, its chat, its captions, how it says you were turned away) lives in `app/services/meetings/domains/bot/meet.py`. When Meet changes its page, that module is the fix.
 
+## Its card and its voice
+
+In the call, the bot's camera tile is its card, not a blank square: its agent's picture (or its initials on a teal disc), its name, and what it is doing now:
+
+| Status | When |
+|---|---|
+| Listening | the default |
+| Can't see captions | Meet offered no captions, so nothing is being written |
+| Question heard | a question was heard and an action on it is waiting |
+| Answering | a runner has taken that action |
+| Leaving | on its way out |
+
+The card is drawn in the bot's own browser and only redrawn when it changes; the camera sends a frame every half second, so a browser with no GPU is not kept busy. Each agent's picture (PNG, JPEG, WebP, GIF or SVG, up to 5 MB) and whether its camera is on are set on Overseer's Agents tab, in either Overseer, or through the API. With the camera off, Meet gets no picture at all. The agent's Google profile photo still shows in the people list, the chat and the lobby.
+
+The bot joins with its microphone muted and unmutes only while it speaks. Where the stack has a voice (the AI service with `voice`), it says its join announcement aloud as well as in the chat, through the AI service's text to speech. Without one, or when the speech cannot be made, it writes the announcement only.
+
 ## What the bot hears
 
 The bot's browser reads every audio stream the call sends it, as 16 kHz mono, and hands it to the bot a second at a time over the connection the bot already drives the browser with. No socket is opened for it, so nothing outside the bot's process can send audio in. A silent second is dropped in the browser.
@@ -295,6 +311,10 @@ Overseer's routes, across every owner. Reading them takes an admin where the sta
 | `GET /api/v1/meetings/admin` | Every owner's meetings, newest first |
 | `GET /api/v1/meetings/admin/agents` | Every agent, the first first: who it is, its sign-in (`Signed in`, `Signed out`, `Not signed in`), and the ids of the meetings it is in now |
 | `PUT /api/v1/meetings/admin/agents/{name}/owner` | Who owns a meeting the agent joins from its calendar when nobody on the invite has an account here (`{"user_id": 3}`, or `null` for nobody); 422 for an id nobody here has |
+| `PUT /api/v1/meetings/admin/agents/{name}/camera` | Whether the agent's camera shows its card in a call (`{"on": false}` for none) |
+| `POST /api/v1/meetings/admin/agents/{name}/image` | The picture on the agent's card (multipart `file`: PNG, JPEG, WebP, GIF or SVG, up to 5 MB); 422 for anything else |
+| `GET /api/v1/meetings/admin/agents/{name}/image` | The agent's picture as uploaded; 404 when it has none |
+| `DELETE /api/v1/meetings/admin/agents/{name}/image` | The agent back to its initials |
 | `GET /api/v1/meetings/admin/owners` | Everyone a meeting can be given to, by email (`id`, `email`); empty without auth |
 | `GET /api/v1/meetings/admin/calendar?first=&last=&tz=&agent=` | Every agent's meetings (`agent`'s only, when named) from `first` to `last`, whole days in time zone `tz` (default UTC), up to six weeks: each with its agent and color, title, start and end, link, organizer, everyone invited (`emails`), where it stands (`state`: the call's status once the agent was sent in, else `upcoming`, `missed`, `cancelled`, `no_link`, `cannot_join` or `sent`) and the meeting it became |
 | `GET /api/v1/meetings/admin/calendar/{event_id}?tz=` | One meeting on a calendar: all of the above, what its organizer wrote (`description`, Google's join and dial-in lines left out), and who is invited (`invited`: each email, with the name and color of whoever spoke on its link and plainly is them) |

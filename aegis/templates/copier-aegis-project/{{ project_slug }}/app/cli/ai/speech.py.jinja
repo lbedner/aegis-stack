@@ -1,6 +1,7 @@
 """Speech either way: transcribe a file, speak a line."""
 
 import asyncio
+from typing import Any
 
 import typer
 
@@ -13,6 +14,20 @@ from app.i18n import lazy_t, t
 
 from ...core.config import settings
 from ...core.log import suppress_logs
+
+
+async def speaking_settings() -> Any:
+    """The settings in the active voice profile, which the app speaks and
+    hears with; ``.env``'s where the stack keeps no profiles."""
+    import app.services.ai.service as ai
+
+    profiles = getattr(ai, "profiles", None)
+    if profiles is None:
+        return settings
+    from app.core.db import get_async_session
+
+    async with get_async_session() as session:
+        return await profiles.active_settings(session, settings)
 
 
 @app.command(help=lazy_t("ai.help_transcribe"))
@@ -64,7 +79,7 @@ def transcribe(
             )
 
             with suppress_logs():
-                ai_service = AIService(settings)
+                ai_service = AIService(await speaking_settings())
 
             # Show transcription progress
             from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -136,7 +151,7 @@ async def stt_status() -> None:
     from app.services.ai.service import AIService
 
     with suppress_logs():
-        ai_service = AIService(settings)
+        ai_service = AIService(await speaking_settings())
 
     status = await ai_service.stt.get_status()
 
@@ -165,8 +180,9 @@ async def stt_status() -> None:
 @app.command(help=lazy_t("ai.help_speak"))
 def speak(
     text: str = typer.Argument(..., help=lazy_t("ai.arg_text")),
-    output: str = typer.Option(
-        "speech.mp3", "--output", "-o", help=lazy_t("ai.opt_output_file")
+    # None: speech.<format>, named by what the model answers in.
+    output: str | None = typer.Option(
+        None, "--output", "-o", help=lazy_t("ai.opt_output_file")
     ),
     voice: str | None = typer.Option(
         None, "--voice", "-v", help=lazy_t("ai.opt_voice")
@@ -183,7 +199,7 @@ def speak(
     async def run_speak() -> None:
         try:
             with suppress_logs():
-                ai_service = AIService(settings)
+                ai_service = AIService(await speaking_settings())
 
             # Show synthesis progress
             from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -200,7 +216,7 @@ def speak(
                 result = await ai_service.tts.synthesize(request)
 
             # Save audio to file
-            output_path = Path(output)
+            output_path = Path(output or f"speech.{result.format.value}")
             with open(output_path, "wb") as f:
                 f.write(result.audio)
 
@@ -235,7 +251,7 @@ async def tts_status() -> None:
     from app.services.ai.service import AIService
 
     with suppress_logs():
-        ai_service = AIService(settings)
+        ai_service = AIService(await speaking_settings())
 
     status = await ai_service.tts.get_status()
 

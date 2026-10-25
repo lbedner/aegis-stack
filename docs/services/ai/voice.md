@@ -21,7 +21,7 @@ Voice capabilities add Text-to-Speech (TTS) and Speech-to-Text (STT) to the AI s
 
 - **Text-to-Speech** - Convert text to audio with multiple voices and speed control
 - **Speech-to-Text** - Transcribe audio with timestamps and segment detection
-- **Multiple providers** - Cloud (OpenAI, Groq) and local (Whisper, faster-whisper)
+- **Multiple providers** - Cloud (OpenAI, Gemini, Groq) and local (Whisper, faster-whisper)
 - **Voice catalog** - Browse providers, models, and voices via API
 - **Voice previews** - Generate audio samples to compare voices
 - **Usage tracking** - TTS and STT operations tracked alongside LLM usage
@@ -32,23 +32,71 @@ Voice capabilities add Text-to-Speech (TTS) and Speech-to-Text (STT) to the AI s
 
 | Provider | Type | Models | Voices | Streaming | API Key |
 |----------|------|--------|--------|-----------|---------|
-| **OpenAI** | Cloud | tts-1, tts-1-hd | alloy, echo, fable, onyx, nova, shimmer | Yes | `OPENAI_API_KEY` |
+| **OpenAI** | Cloud | gpt-realtime-2.1-mini (gpt-4o-mini-tts, tts-1, tts-1-hd shut down Jan 6, 2027) | 13 (marin, cedar, alloy, ...); 10 on gpt-realtime-2.1-mini | The /v1/audio/speech models only | `OPENAI_API_KEY` |
+| **Gemini** | Cloud | gemini-3.8-flash-tts, gemini-3.8-flash-lite-tts | 30 prebuilt (Kore, Puck, Charon, ...) and its voice library | No | `GOOGLE_API_KEY` |
+
+Each speech model records what its delivery instructions steer, as its
+provider documents it: OpenAI's gpt-realtime and gpt-4o voices take the
+accent, emotion, intonation, impressions, speed, tone and whispering; Gemini's take style,
+tone, emotion and pace, and leave the accent to the voice; tts-1 and
+tts-1-hd take none.
+
+Each speech model also records the speeds it takes: 0.25 to 1.5 on
+gpt-realtime-2.1-mini, 0.25 to 4.0 on the /v1/audio/speech models, and
+none on Gemini's. The voice editor's speed slider spans that range, and is
+not shown for a model with no speed.
+
+The voice catalog records which models speak each voice. A voice is only
+ever said on a model that speaks it: a preview picks one, and a voice
+profile refuses a voice its model does not speak.
 
 ### OpenAI TTS
 
-Two models available:
+- **gpt-realtime-2.1-mini** (the default) - takes delivery instructions; ten of the voices (not fable, nova or onyx)
+- **gpt-4o-mini-tts** and its two pinned builds - shut down Jan 6, 2027; every voice, and takes delivery instructions
+- **tts-1** - shut down Jan 6, 2027; optimized for speed; nine of the voices (not marin, cedar, ballad or verse), no instructions
+- **tts-1-hd** - shut down Jan 6, 2027; higher quality; the same nine voices
 
-- **tts-1** - Optimized for speed, lower latency
-- **tts-1-hd** - Higher quality audio, slightly slower
+OpenAI shuts every /v1/audio/speech model down on Jan 6, 2027 and names
+gpt-realtime-2.1-mini, which speaks only over the Realtime API, as their
+replacement. A line is said there one way: a session that never listens
+(no turn detection, no audio sent), the line as the response's only
+message, and instructions to read it aloud word for word, after the
+delivery. The line is a message, not part of the instructions, so a line
+that reads as a command ("ignore all previous instructions...") is read,
+not obeyed. It comes back as a 24kHz WAV, whole rather than streamed, and
+is priced by its tokens like a live call.
 
-Six voices: alloy, echo, fable, onyx, nova, shimmer
+OpenAI recommends marin or cedar for the best quality. An accent asked for
+in the instructions is a hint: an American voice asked for British comes
+out partly British at best.
 
 ```bash
 # .env configuration
 TTS_PROVIDER=openai
-TTS_MODEL=tts-1
+TTS_MODEL=gpt-realtime-2.1-mini
 TTS_VOICE=alloy
-TTS_SPEED=1.0   # 0.25 to 4.0
+TTS_SPEED=1.0   # 0.25 to 4.0; gpt-realtime-2.1-mini holds it at 1.5
+```
+
+### Gemini TTS
+
+Gemini's 3.8 speech models (``gemini-3.8-flash-tts``, the flagship, and
+``gemini-3.8-flash-lite-tts``, fast and low cost) speak its 30 prebuilt
+voices, the same ones Gemini Live speaks, so a live call and a spoken line
+can share one voice, and the voices of its voice library, regional accents
+among them (listed with the key once per process; Gemini Live keeps to the
+prebuilt 30). Speech goes through the Interactions API: the line is the
+transcript and the delivery its ``speech_metadata`` style. Audio comes
+back as WAV; there is no speed to set. Gemini takes the accent from the
+voice, not the instructions: pick a voice with the accent. The 2.5 preview
+models are open only to past users.
+
+```bash
+TTS_PROVIDER=gemini
+TTS_MODEL=gemini-3.8-flash-tts
+TTS_VOICE=Kore
+GOOGLE_API_KEY=...
 ```
 
 ---
@@ -144,8 +192,8 @@ curl http://localhost:8000/voice/catalog/tts/openai/voices | jq
   "id": "alloy",
   "name": "Alloy",
   "provider_id": "openai",
-  "model_ids": ["tts-1", "tts-1-hd"],
-  "description": "A balanced, versatile voice",
+  "model_ids": ["gpt-realtime-2.1-mini", "gpt-4o-mini-tts", "tts-1", "tts-1-hd"],
+  "description": "Neutral, balanced voice",
   "category": "neutral",
   "gender": "neutral",
   "preview_text": "Hello, I'm Alloy..."
@@ -167,17 +215,55 @@ curl http://localhost:8000/voice/catalog/stt/openai_whisper/models | jq
 ```bash
 # Get current settings
 curl http://localhost:8000/voice/settings | jq
-
-# Preview settings (returns merged config without persisting)
-curl -X POST http://localhost:8000/voice/settings \
-  -H "Content-Type: application/json" \
-  -d '{"tts_voice": "nova", "tts_speed": 1.2}'
 ```
 
-!!! note
-    This endpoint returns what the settings would look like if applied. To actually persist changes, update the corresponding environment variables in your `.env` file.
-
 **Settings fields:** `tts_provider`, `tts_model`, `tts_voice`, `tts_speed`, `stt_provider`, `stt_model`, `stt_language`
+
+### Voice Overview
+
+What the active voice profile uses, then every speech, hearing and live
+model and every voice, each with the voice and model to hear it on and the
+change a Use would make. Both Overseers show it.
+
+```bash
+curl http://localhost:8000/voice/overview | jq
+
+# Put a row on the active profile (an admin's); the rest is made to fit:
+# a voice brings its provider and a model that speaks it
+curl -X POST http://localhost:8000/voice/use \
+  -H "Content-Type: application/json" -d '{"tts_voice": "Kore"}'
+
+# Make another profile the active one
+curl -X POST http://localhost:8000/voice/profiles/2/active
+```
+
+Each answers with the overview as it now is.
+
+### Voice Design
+
+```bash
+# A profile's design (the active one's without ?profile=): every voice with
+# its gender and tone, the styles and dials, what is picked, what it sends
+curl "http://localhost:8000/voice/design?profile=1" | jq
+
+# Choices in the query are composed, not saved
+curl "http://localhost:8000/voice/design?voice=marin&style=calm" | jq .instructions
+
+# Hear them unsaved
+curl "http://localhost:8000/voice/design/preview?voice=marin&style=calm&accent=british" --output design.wav
+
+# Hear a saved profile
+curl http://localhost:8000/voice/design/profiles/1/preview --output profile.wav
+
+# Every profile at a glance; a new one from the one in use (an admin's)
+curl http://localhost:8000/voice/design/profiles | jq
+curl -X POST http://localhost:8000/voice/design/profiles -H "Content-Type: application/json" -d '{"name": "Calls"}'
+
+# Save them onto a profile (an admin's)
+curl -X POST "http://localhost:8000/voice/design?profile=1" -H "Content-Type: application/json" \
+  -d '{"voice": "marin", "delivery": {"style": "calm", "accent": "british"}, "speed": 1.0}'
+``` A stack keeping no voice
+profiles (no database) shows what its settings use, and a change is a 409.
 
 ### Voice Preview
 
@@ -190,12 +276,14 @@ curl -X POST http://localhost:8000/voice/preview \
   -d '{"voice_id": "alloy", "text": "Hello world"}' \
   --output preview.mp3
 
-# GET (browser-friendly)
-curl "http://localhost:8000/voice/preview/alloy?text=Hello+world&speed=1.0" \
-  --output preview.mp3
+# GET (browser-friendly), optionally on a model that speaks the voice
+curl "http://localhost:8000/voice/preview/marin?text=Hello+world&model=gpt-realtime-2.1-mini" \
+  --output preview.wav
 ```
 
-Returns `audio/mpeg` content.
+Said on the model named, or the one in use, where it speaks the voice;
+otherwise on one that does. Returns the provider's audio: `audio/mpeg`
+from OpenAI, `audio/wav` from Gemini.
 
 ### Voice Chat
 
@@ -232,10 +320,10 @@ curl http://localhost:8000/voice/catalog/summary | jq
 ```json
 {
   "tts": {
-    "provider_count": 1,
-    "model_count": 2,
-    "voice_count": 6,
-    "providers": ["openai"]
+    "provider_count": 2,
+    "model_count": 7,
+    "voice_count": 43,
+    "providers": ["openai", "gemini"]
   },
   "stt": {
     "provider_count": 4,
@@ -244,7 +332,7 @@ curl http://localhost:8000/voice/catalog/summary | jq
   },
   "current_config": {
     "tts_provider": "openai",
-    "tts_model": "tts-1",
+    "tts_model": "gpt-realtime-2.1-mini",
     "tts_voice": "alloy",
     "stt_provider": "openai_whisper",
     "stt_model": "whisper-1"
@@ -282,6 +370,49 @@ call and a tool to end it.
   before ending it.
 - **Mute** stops your voice going out (after a moment of silence, so the
   engine hears you stop) and pauses the quiet count.
+- **Her voice.** A call speaks the profile's voice where the engine's
+  provider has it: Gemini Live speaks a Gemini voice, an OpenAI engine an
+  OpenAI one. With a voice the engine does not have, it speaks its own.
+
+---
+
+## In Overseer
+
+Overseer > AI > Voice has two tabs.
+
+**Profiles** lists every voice profile at a glance: its voice, style and
+speed, which one is in use, a Listen button, and Edit. A new profile starts
+from the one in use. Edit opens the profile in three steps:
+
+1. **Voice**: who it is, and the model it is spoken on. Gender, a tone
+   family (Warm and soft, Bright and upbeat, Calm and even, Firm and
+   authoritative, Expressive) and an accent narrow the voices; each plays a
+   sample. Each model the voice is spoken on says whether it follows
+   delivery instructions. Only voices that can be heard are
+   listed: a provider without its key is one line saying which key it
+   needs.
+2. **Delivery**: how it talks. A premade style (Calm and warm, Brisk and
+   professional, Cheerful, Storyteller, Empathetic support, Newsreader),
+   each playable with the fine-tuning kept, and the speed; pace, energy,
+   emotion and anything extra under Fine-tune, and an accent where the
+   model steers one (on Gemini the accent comes with the voice). A model
+   that ignores delivery instructions is said up front.
+3. **Review**: the voice, style and speed, the delivery instructions they
+   make (the "Voice Affect / Tone / Pacing" form OpenAI's voices read;
+   Gemini takes the same words as the line's style), Listen to hear them
+   unsaved, and Save.
+
+The profile keeps the choices, so the editor opens on them again. The
+chat's voice dialog keeps a profile's name, hearing model, reply and
+check-in, and opens the editor for the voice itself.
+
+**Models** is one tight table: what the active profile uses, every speech,
+hearing and live model (with its price where the model catalog has one)
+and every voice, in columns, narrowed by kind, provider, model and text
+with no request. Each voice plays on a model that speaks it; Use puts a row
+on the active profile.
+
+The Flet Overseer's voice tab has the same two views, over the API.
 
 ---
 
@@ -290,7 +421,7 @@ call and a tool to end it.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `TTS_PROVIDER` | `openai` | TTS provider |
-| `TTS_MODEL` | `tts-1` | TTS model |
+| `TTS_MODEL` | `gpt-realtime-2.1-mini` | TTS model (Gemini: `gemini-3.8-flash-tts`) |
 | `TTS_VOICE` | `alloy` | Default voice |
 | `TTS_SPEED` | `1.0` | Speed multiplier (0.25-4.0) |
 | `STT_PROVIDER` | `openai_whisper` | STT provider |
@@ -304,7 +435,7 @@ call and a tool to end it.
 ### TTS
 
 - **SpeechRequest** - `text`, `voice`, `speed`
-- **SpeechResult** - `audio` (bytes), `format` (MP3), `provider`
+- **SpeechResult** - `audio` (bytes), `format` (MP3 from OpenAI, WAV from Gemini), `media_type`, `provider`
 
 ### STT
 

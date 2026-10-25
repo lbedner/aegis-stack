@@ -10,7 +10,15 @@ import logging
 import time
 from typing import Any
 
-from ..models import SpeechRequest, SpeechResult, TTSProvider
+from ..models import (
+    MEDIA_TYPES,
+    SpeechRequest,
+    SpeechResult,
+    SpeechTokens,
+    TTSProvider,
+    speech_format,
+)
+from . import length
 from .config import TTSConfig, get_tts_config
 from .providers import BaseTTSProvider, get_tts_provider
 
@@ -96,6 +104,12 @@ class TTSService:
     def model(self) -> str:
         """Get the configured model name (with provider default fallback)."""
         return self._config.get_model()
+
+    @property
+    def media_type(self) -> str:
+        """What its audio is served as, known before any is made (a stream's
+        response starts before its first byte)."""
+        return MEDIA_TYPES[speech_format(self.provider_type, self.model)]
 
     @property
     def voice(self) -> str:
@@ -193,6 +207,7 @@ class TTSService:
             await self._record_usage(
                 input_characters=len(request.text),
                 output_duration_seconds=result.duration_seconds if result else None,
+                tokens=result.tokens if result else None,
                 latency_ms=latency_ms,
                 user_id=user_id,
                 success=success,
@@ -215,6 +230,13 @@ class TTSService:
         Raises:
             RuntimeError: If synthesis fails.
         """
+        from ..catalog import streams  # the catalog imports this package
+
+        if not streams(self.model):
+            # Whole (its tokens and length recorded as ``synthesize`` records
+            # them): a realtime model's WAV, Gemini's.
+            yield (await self.synthesize(request, user_id)).audio
+            return
         provider = await self._get_provider()
 
         logger.debug(
@@ -224,8 +246,10 @@ class TTSService:
 
         start_time = time.perf_counter()
         error_message: str | None = None
+        said = bytearray()
         try:
             async for chunk in provider.synthesize_stream(self._configured(request)):
+                said += chunk
                 yield chunk
         except Exception as e:
             error_message = str(e)
@@ -233,7 +257,9 @@ class TTSService:
         finally:
             await self._record_usage(
                 input_characters=len(request.text),
-                output_duration_seconds=None,
+                output_duration_seconds=length.seconds(
+                    bytes(said), speech_format(self.provider_type, self.model)
+                ),
                 latency_ms=int((time.perf_counter() - start_time) * 1000),
                 user_id=user_id,
                 success=error_message is None,
@@ -293,9 +319,11 @@ class TTSService:
         user_id: str | None,
         success: bool,
         error_message: str | None,
+        tokens: SpeechTokens | None = None,
     ) -> None:
         """The spoken reply's row in the usage ledger, priced at the
-        catalog's rates (by the character, or by the second of speech).
+        catalog's rates (by the character, the second of speech, or a
+        realtime model's tokens).
         Never fails the request."""
         try:
             from app.services.ai.domains.spend import recording as usage_recording
@@ -312,9 +340,11 @@ class TTSService:
                 self.model,
                 characters=input_characters,
                 output_seconds=output_duration_seconds,
+                tokens=tokens,
             ),
             seconds=output_duration_seconds,
             duration_ms=latency_ms,
+            tokens=tokens,
             user_id=user_id,
             success=success,
             error_message=error_message,

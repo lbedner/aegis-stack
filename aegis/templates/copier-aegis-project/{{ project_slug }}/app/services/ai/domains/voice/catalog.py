@@ -9,7 +9,9 @@ doesn't require database storage.
 from typing import Any
 
 from .models import (
+    DEFAULT_TTS_MODELS,
     INSTRUCTED_TTS_MODELS,
+    REALTIME_TTS_MODELS,
     STT_KEYS,
     TTS_KEYS,
     ModelInfo,
@@ -17,10 +19,10 @@ from .models import (
     ProviderInfo,
     STTProvider,
     TTSProvider,
-    VoiceCategory,
     VoiceInfo,
 )
 from .stt.config import STTConfig
+from .tts import realtime
 from .tts.config import TTSConfig
 
 # =============================================================================
@@ -37,12 +39,38 @@ _TTS_PROVIDERS: list[ProviderInfo] = [
         is_local=False,
         description="OpenAI Text-to-Speech API with natural-sounding voices",
     ),
+    ProviderInfo(
+        id=TTSProvider.GEMINI.value,
+        name="Gemini",
+        type="tts",
+        requires_api_key=True,
+        api_key_env_var=TTS_KEYS[TTSProvider.GEMINI],
+        is_local=False,
+        description="Gemini's speech models, in the voices Gemini Live speaks",
+    ),
 ]
 
-# OpenAI's speech models: gpt-4o-mini-tts (INSTRUCTED_TTS_MODELS) takes
-# delivery instructions and every voice; tts-1 and tts-1-hd take neither
-# and know only nine of the voices.
+# OpenAI's speech models: gpt-realtime-2.1-mini (REALTIME_TTS_MODELS) is
+# the one going forward. Every /v1/audio/speech model shuts down on Jan 6,
+# 2027: gpt-4o-mini-tts (INSTRUCTED_TTS_MODELS) takes delivery
+# instructions and every voice; tts-1 and tts-1-hd take neither and know
+# only nine of the voices.
 _TTS_1 = ["tts-1", "tts-1-hd"]
+_SHUTS_DOWN = "Jan 6, 2027"
+# The voices the Realtime API does not speak (its SDK lists the rest).
+_NOT_REALTIME = frozenset({OpenAIVoice.FABLE, OpenAIVoice.NOVA, OpenAIVoice.ONYX})
+# What each provider's delivery instructions steer, as its docs list them.
+# Gemini's 3.8 models take style but leave the accent to the voice.
+OPENAI_STEERS = [
+    "accent",
+    "emotion",
+    "intonation",
+    "impressions",
+    "speed",
+    "tone",
+    "whispering",
+]
+GEMINI_STEERS = ["style", "tone", "emotion", "pace"]
 
 _TTS_MODELS: list[ModelInfo] = [
     # OpenAI Models
@@ -51,18 +79,41 @@ _TTS_MODELS: list[ModelInfo] = [
             id=model,
             name=model,
             provider_id=TTSProvider.OPENAI.value,
-            description="Takes delivery instructions and every voice",
+            description="Reads the line over the Realtime API; follows "
+            "delivery instructions; ten of the voices",
+            steers=OPENAI_STEERS,
+            speeds=(realtime.SPEED_MIN, realtime.SPEED_MAX),
+        )
+        for model in REALTIME_TTS_MODELS
+    ),
+    *(
+        ModelInfo(
+            id=model,
+            name=model,
+            provider_id=TTSProvider.OPENAI.value,
+            description=note,
+            retires=_SHUTS_DOWN,
             supports_streaming=True,
             max_input_chars=4096,
+            steers=OPENAI_STEERS,
         )
-        for model in INSTRUCTED_TTS_MODELS
+        for model, note in zip(
+            INSTRUCTED_TTS_MODELS,
+            (
+                "latest build; every voice; follows delivery instructions",
+                "pinned March 2025 build; the more expressive one",
+                "pinned December 2025 build",
+            ),
+            strict=True,
+        )
     ),
     ModelInfo(
         id="tts-1",
         name="TTS-1",
         provider_id=TTSProvider.OPENAI.value,
         quality="standard",
-        description="Standard quality, lower latency",
+        description="Fast; nine voices; ignores delivery instructions",
+        retires=_SHUTS_DOWN,
         supports_streaming=True,
         max_input_chars=4096,  # OpenAI TTS limit
     ),
@@ -71,67 +122,111 @@ _TTS_MODELS: list[ModelInfo] = [
         name="TTS-1 HD",
         provider_id=TTSProvider.OPENAI.value,
         quality="hd",
-        description="High definition quality",
+        description="Higher quality; nine voices; ignores delivery instructions",
+        retires=_SHUTS_DOWN,
         supports_streaming=True,
         max_input_chars=4096,  # OpenAI TTS limit
     ),
+    # Gemini: every voice on both; delivery is the line's speech_metadata style.
+    *(
+        ModelInfo(
+            id=model,
+            name=model,
+            provider_id=TTSProvider.GEMINI.value,
+            quality=quality,
+            description=f"{note}; style through instructions, accent from the voice",
+            steers=GEMINI_STEERS,
+            speeds=None,  # no speed to set
+        )
+        for model, quality, note in (
+            ("gemini-3.8-flash-tts", "hd", "Flagship, studio-grade fidelity"),
+            ("gemini-3.8-flash-lite-tts", "standard", "Fast and low cost"),
+        )
+    ),
 ]
 
 
-def _openai_voice(
-    voice: OpenAIVoice,
-    description: str,
-    category: VoiceCategory | None = None,
-    gender: str | None = None,
-    tts_1: bool = True,
-) -> VoiceInfo:
-    return VoiceInfo(
+# OpenAI's voices: who each sounds like (gender, tone, a line about it)
+# and whether tts-1 knows it. Marin and cedar, the recommended two, lead.
+_OPENAI_VOICES = [
+    (OpenAIVoice.MARIN, "female", "Warm", "OpenAI's recommended voice, natural", False),
+    (OpenAIVoice.CEDAR, "male", "Calm", "OpenAI's recommended voice, grounded", False),
+    (OpenAIVoice.ALLOY, "neutral", "Even", "Neutral, balanced voice", True),
+    (OpenAIVoice.ASH, "male", "Clear", "Clear, confident voice", True),
+    (OpenAIVoice.BALLAD, "male", "Soft", "Soft, melodic voice", False),
+    (OpenAIVoice.CORAL, "female", "Bright", "Bright, friendly voice", True),
+    (OpenAIVoice.ECHO, "male", "Warm", "Warm, friendly voice", True),
+    (OpenAIVoice.FABLE, "male", "Expressive", "British-accented, narrative voice", True),
+    (OpenAIVoice.NOVA, "female", "Upbeat", "Energetic, youthful voice", True),
+    (OpenAIVoice.ONYX, "male", "Firm", "Deep, authoritative voice", True),
+    (OpenAIVoice.SAGE, "female", "Calm", "Calm, thoughtful voice", True),
+    (OpenAIVoice.SHIMMER, "female", "Clear", "Clear, expressive voice", True),
+    (OpenAIVoice.VERSE, "male", "Expressive", "Expressive, dynamic voice", False),
+]  # fmt: skip
+
+# The one list of voices: the voice API lists it, and a voice profile and
+# the voice designer pick from it.
+_TTS_VOICES: list[VoiceInfo] = [
+    VoiceInfo(
         id=voice.value,
         name=voice.value.title(),
         provider_id=TTSProvider.OPENAI.value,
-        model_ids=INSTRUCTED_TTS_MODELS + (_TTS_1 if tts_1 else []),
+        model_ids=(REALTIME_TTS_MODELS if voice not in _NOT_REALTIME else [])
+        + INSTRUCTED_TTS_MODELS
+        + (_TTS_1 if tts_1 else []),
         description=description,
-        category=category,
         gender=gender,
+        tone=tone,
+        accent="British" if voice == OpenAIVoice.FABLE else "American",
     )
-
-
-# The one list of OpenAI's voices: the voice API lists it, and a voice
-# profile picks from it. Marin and cedar, the recommended two, lead.
-_TTS_VOICES: list[VoiceInfo] = [
-    _openai_voice(OpenAIVoice.MARIN, "OpenAI's recommended voice", tts_1=False),
-    _openai_voice(OpenAIVoice.CEDAR, "OpenAI's recommended voice", tts_1=False),
-    _openai_voice(
-        OpenAIVoice.ALLOY, "Neutral, balanced voice", VoiceCategory.NEUTRAL, "neutral"
-    ),
-    _openai_voice(OpenAIVoice.ASH, "OpenAI voice"),
-    _openai_voice(OpenAIVoice.BALLAD, "OpenAI voice", tts_1=False),
-    _openai_voice(OpenAIVoice.CORAL, "OpenAI voice"),
-    _openai_voice(OpenAIVoice.ECHO, "Warm, friendly voice", VoiceCategory.WARM, "male"),
-    _openai_voice(
-        OpenAIVoice.FABLE,
-        "British-accented, narrative voice",
-        VoiceCategory.EXPRESSIVE,
-        "male",
-    ),
-    _openai_voice(
-        OpenAIVoice.NOVA, "Energetic, youthful voice", VoiceCategory.ENERGETIC, "female"
-    ),
-    _openai_voice(
-        OpenAIVoice.ONYX,
-        "Deep, authoritative voice",
-        VoiceCategory.AUTHORITATIVE,
-        "male",
-    ),
-    _openai_voice(OpenAIVoice.SAGE, "OpenAI voice"),
-    _openai_voice(
-        OpenAIVoice.SHIMMER,
-        "Clear, expressive voice",
-        VoiceCategory.EXPRESSIVE,
-        "female",
-    ),
-    _openai_voice(OpenAIVoice.VERSE, "OpenAI voice", tts_1=False),
+    for voice, gender, tone, description, tts_1 in _OPENAI_VOICES
 ]
+
+# Gemini's prebuilt voices, who each sounds like and the tone Google gives
+# it; the same names Gemini Live speaks in.
+_GEMINI_VOICES = {
+    "Zephyr": ("female", "Bright"), "Puck": ("male", "Upbeat"),
+    "Charon": ("male", "Informative"), "Kore": ("female", "Firm"),
+    "Fenrir": ("male", "Excitable"), "Leda": ("female", "Youthful"),
+    "Orus": ("male", "Firm"), "Aoede": ("female", "Breezy"),
+    "Callirrhoe": ("female", "Easy-going"), "Autonoe": ("female", "Bright"),
+    "Enceladus": ("male", "Breathy"), "Iapetus": ("male", "Clear"),
+    "Umbriel": ("male", "Easy-going"), "Algieba": ("male", "Smooth"),
+    "Despina": ("female", "Smooth"), "Erinome": ("female", "Clear"),
+    "Algenib": ("male", "Gravelly"), "Rasalgethi": ("male", "Informative"),
+    "Laomedeia": ("female", "Upbeat"), "Achernar": ("female", "Soft"),
+    "Alnilam": ("male", "Firm"), "Schedar": ("male", "Even"),
+    "Gacrux": ("female", "Mature"), "Pulcherrima": ("female", "Forward"),
+    "Achird": ("male", "Friendly"), "Zubenelgenubi": ("male", "Casual"),
+    "Vindemiatrix": ("female", "Gentle"), "Sadachbia": ("male", "Lively"),
+    "Sadaltager": ("male", "Knowledgeable"), "Sulafat": ("female", "Warm"),
+}  # fmt: skip
+# The 30 Gemini Live speaks too; its library's others only its speech
+# models do (``library``).
+GEMINI_PREBUILT = frozenset(_GEMINI_VOICES)
+
+
+def gemini_models() -> list[str]:
+    """Gemini's speech models: every one speaks every Gemini voice."""
+    return [m.id for m in _TTS_MODELS if m.provider_id == TTSProvider.GEMINI]
+
+
+_TTS_VOICES += [
+    VoiceInfo(
+        id=name,
+        name=name,
+        provider_id=TTSProvider.GEMINI.value,
+        model_ids=gemini_models(),
+        description=tone,
+        gender=gender,
+        tone=tone,
+    )
+    for name, (gender, tone) in _GEMINI_VOICES.items()
+]
+
+# Each voice and speech model by id, for the lookups a page makes per row.
+_VOICES_BY_ID = {v.id: v for v in _TTS_VOICES}
+_MODELS_BY_ID = {m.id: m for m in _TTS_MODELS}
 
 # =============================================================================
 # STT Catalog Data
@@ -277,8 +372,11 @@ def get_tts_models(provider_id: str | None = None) -> list[ModelInfo]:
 def get_tts_voices(
     provider_id: str | None = None, model_id: str | None = None
 ) -> list[VoiceInfo]:
-    """Get TTS voices, optionally filtered by provider and/or model."""
-    voices = _TTS_VOICES.copy()
+    """Get TTS voices (with any of Gemini's library listed so far),
+    optionally filtered by provider and/or model."""
+    from .library import KEPT
+
+    voices = [*_TTS_VOICES, *KEPT.values()]
 
     if provider_id is not None:
         voices = [v for v in voices if v.provider_id == provider_id]
@@ -290,11 +388,50 @@ def get_tts_voices(
 
 
 def get_voice(voice_id: str) -> VoiceInfo | None:
-    """Get a specific voice by ID."""
-    for voice in _TTS_VOICES:
-        if voice.id == voice_id:
-            return voice
-    return None
+    """Get a specific voice by ID (one of Gemini's library listed so far
+    among them)."""
+    from .library import KEPT
+
+    return _VOICES_BY_ID.get(voice_id) or KEPT.get(voice_id)
+
+
+def get_tts_model(model_id: str) -> ModelInfo | None:
+    """A speech model by id; None for one the catalog does not know."""
+    return _MODELS_BY_ID.get(model_id)
+
+
+def steers(model_id: str) -> list[str]:
+    """What a speech model's delivery instructions steer (``ModelInfo``);
+    nothing for one it does not know or that ignores them."""
+    found = get_tts_model(model_id)
+    return list(found.steers) if found else []
+
+
+def speeds(model_id: str) -> tuple[float, float] | None:
+    """The speeds a speech model can be set to (``ModelInfo``); None for one
+    with no speed (Gemini's)."""
+    found = get_tts_model(model_id)
+    return found.speeds if found else ModelInfo.model_fields["speeds"].default
+
+
+def streams(model_id: str) -> bool:
+    """Whether a speech model's audio can be passed on as it is made; one
+    the catalog does not know is taken to be the speech endpoint's."""
+    found = get_tts_model(model_id)
+    return found.supports_streaming if found else True
+
+
+def speaking_model(voice_id: str, model: str | None) -> str | None:
+    """The model ``voice_id`` is spoken on: ``model`` when it speaks it,
+    else the voice's provider's default (or its first model); None for a
+    voice not in the catalog."""
+    voice = get_voice(voice_id)
+    if voice is None:
+        return None
+    if model in voice.model_ids:
+        return model
+    default = DEFAULT_TTS_MODELS.get(TTSProvider(voice.provider_id))
+    return default if default in voice.model_ids else voice.model_ids[0]
 
 
 def get_stt_providers() -> list[ProviderInfo]:

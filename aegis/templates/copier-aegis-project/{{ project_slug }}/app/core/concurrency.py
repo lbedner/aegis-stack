@@ -1,6 +1,7 @@
 """Running independent work concurrently, with a ceiling (``fanout``),
-CPU work off the event loop (``cpu_bound``), and work not waited for
-(``background``).
+CPU work off the event loop (``cpu_bound``), work not waited for
+(``background``), and a stream that ends as the server starts shutting
+down (``until_closing``).
 
 The slow thing in this stack is rarely the server and rarely the event
 loop. It is a ``for`` loop over items that do not depend on each other,
@@ -24,9 +25,21 @@ thing each call site reinvents.
 from __future__ import annotations
 
 import asyncio
-import weakref
-from collections.abc import Awaitable, Callable, Coroutine, Iterable, Sequence
+from collections.abc import (
+    AsyncGenerator,
+    AsyncIterator,
+    Awaitable,
+    Callable,
+    Coroutine,
+    Iterable,
+    Sequence,
+)
+import contextlib
+import signal
+import threading
+from types import FrameType
 from typing import NamedTuple, TypeVar
+import weakref
 
 from app.core.log import logger
 
@@ -148,3 +161,75 @@ def _ended(task: asyncio.Task[None]) -> None:
     _background.discard(task)
     if not task.cancelled() and (error := task.exception()) is not None:
         logger.error("Background task failed", task=task.get_name(), exc_info=error)
+
+
+# Set on each loop as the server starts shutting down (``watch_shutdown``):
+# a stream that would stay open ends then, rather than be cut at the
+# server's grace timeout (and logged as an error) on every reload.
+_closing: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Event] = (
+    weakref.WeakKeyDictionary()
+)
+_watched: asyncio.AbstractEventLoop | None = None
+_watching = False
+
+
+def closing() -> asyncio.Event:
+    """This loop's "the server is shutting down"."""
+    return _closing.setdefault(asyncio.get_running_loop(), asyncio.Event())
+
+
+def watch_shutdown() -> None:
+    """Set ``closing`` on the signals that stop the server, then pass each
+    to the handler it had: uvicorn's, which starts the shutdown. Called as
+    the app starts, after the server has put its own in place; a server
+    that takes its signals outside Python (granian) never reaches it."""
+    global _watched, _watching
+    if threading.current_thread() is not threading.main_thread():
+        return
+    _watched = asyncio.get_running_loop()
+    if _watching:
+        return
+    _watching = True
+    for number in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(number, _stopping(signal.getsignal(number)))
+
+
+def _stopping(before: object) -> Callable[[int, FrameType | None], None]:
+    def handler(number: int, frame: FrameType | None) -> None:
+        if _watched is not None and not _watched.is_closed():
+            _watched.call_soon_threadsafe(lambda: closing().set())
+        if callable(before):
+            before(number, frame)
+        elif before == signal.SIG_DFL:
+            signal.signal(number, signal.SIG_DFL)
+            signal.raise_signal(number)
+
+    return handler
+
+
+async def until_closing(events: AsyncIterator[T]) -> AsyncIterator[T]:
+    """``events`` until the server starts shutting down (``closing``): the
+    stream then ends cleanly, and its client reconnects to the next one."""
+    stop = asyncio.ensure_future(closing().wait())
+    step: asyncio.Future[T] | None = None
+    try:
+        while True:
+            step = asyncio.ensure_future(anext(events))
+            await asyncio.wait({step, stop}, return_when=asyncio.FIRST_COMPLETED)
+            if not step.done():
+                return
+            try:
+                item = step.result()
+            except StopAsyncIteration:
+                return
+            yield item
+    finally:
+        stop.cancel()
+        # The read still waiting (closing, or the client gone) ends first:
+        # a stream cannot be closed while it is being read.
+        if step is not None and not step.done():
+            step.cancel()
+            with contextlib.suppress(asyncio.CancelledError, StopAsyncIteration):
+                await step
+        if isinstance(events, AsyncGenerator):
+            await events.aclose()

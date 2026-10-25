@@ -22,6 +22,7 @@ from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from app.core.concurrency import until_closing
 from app.services.system.jobs import get_job_runner
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
@@ -72,7 +73,7 @@ async def all_job_events() -> StreamingResponse:
         finally:
             runner.unsubscribe_all(queue)
 
-    return StreamingResponse(stream(), media_type="text/event-stream")
+    return StreamingResponse(until_closing(stream()), media_type="text/event-stream")
 
 
 @router.get("/{job_id}", response_model=JobStatusResponse)

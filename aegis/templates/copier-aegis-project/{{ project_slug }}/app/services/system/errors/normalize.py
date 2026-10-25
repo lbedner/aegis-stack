@@ -9,6 +9,10 @@ from . import redact
 from .fingerprint import digest, fingerprint
 from .models import ErrorOccurrence
 
+# A process told to stop (a dev reload, a deploy) ends on this: a restart,
+# not an error, unless the line itself says error.
+STOPPED = "KeyboardInterrupt"
+
 
 def normalize(
     record: LogRecord,
@@ -41,6 +45,8 @@ def normalize(
         if (match := TERMINAL.match(part))
     ]
     exception = types[-1] if types else None
+    if exception == STOPPED and line.level not in {"error", "critical"}:
+        return None
     logger = fields.get("logger")
     timestamp = line.timestamp or observed_at
     timestamp = (

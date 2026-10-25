@@ -14,6 +14,7 @@ from typing import Any
 from fastapi.responses import StreamingResponse
 
 from app.core import series
+from app.core.concurrency import until_closing
 from app.core.log import logger
 
 from .rendering import templates, with_query
@@ -26,10 +27,11 @@ HEARTBEAT_SECONDS = 15.0
 
 
 def event_stream(events: AsyncIterator[str]) -> StreamingResponse:
-    """An SSE response. Who may open one is the Overseer gate's call
+    """An SSE response, ended as the server starts shutting down
+    (``until_closing``). Who may open one is the Overseer gate's call
     (``overseer_access``), as for every Overseer route."""
     return StreamingResponse(
-        events,
+        until_closing(events),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

@@ -24,17 +24,13 @@ class ScheduledTaskManager:
     apscheduler_jobs table.
     """
     async def has_persistence(self) -> bool:
-        """Check if apscheduler_jobs table exists."""
-        try:
-            async with async_engine.begin() as conn:
-                # Use inspector to check tables
-                tables = await conn.run_sync(
-                    lambda sync_conn: inspect(sync_conn).get_table_names()
-                )
-                return "apscheduler_jobs" in tables
-        except Exception as e:
-            logger.error(f"Error checking persistence: {e}")
-            return False
+        """Whether the apscheduler_jobs table exists. A database that cannot
+        be read raises: it is an error, not a missing table."""
+        async with async_engine.begin() as conn:
+            tables = await conn.run_sync(
+                lambda sync_conn: inspect(sync_conn).get_table_names()
+            )
+            return "apscheduler_jobs" in tables
     async def list_tasks(self) -> list[ScheduledTask]:
         """
         List all scheduled tasks from the database.

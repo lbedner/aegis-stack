@@ -16,8 +16,10 @@ from app.core.ontology.model import (
     ObjectNode,
     PartNode,
     PartOption,
+    QueueNode,
     Stack,
     SystemModel,
+    TaskNode,
     parse_node_id,
 )
 
@@ -60,6 +62,7 @@ class Summary(BaseModel):
     counts: dict[str, int]  # nodes by kind: an ``object`` is a table
     parts: tuple[PartNode, ...] = ()
     jobs: tuple[JobNode, ...] = ()  # an admin's, as parts are
+    queues: dict[str, list[str]] = {}  # the worker's: queue id -> its tasks
     tables: dict[str, dict[str, list[str]]]  # owner -> table -> tables it links to
     changes: dict[str, ChangeBrief]
 
@@ -88,6 +91,15 @@ def summary(model: SystemModel) -> Summary:
         counts=Counter(n.kind.value for n in model.nodes),
         parts=tuple(n for n in model.nodes if isinstance(n, PartNode)),
         jobs=tuple(n for n in model.nodes if isinstance(n, JobNode)),
+        queues={
+            q.id: [
+                t.name
+                for t in model.nodes
+                if isinstance(t, TaskNode) and t.queue == q.name
+            ]
+            for q in model.nodes
+            if isinstance(q, QueueNode)
+        },
         tables=tables(model),
         changes={
             n.name: ChangeBrief(
@@ -102,8 +114,8 @@ def summary(model: SystemModel) -> Summary:
 def text(found: Summary) -> str:
     """``found`` as a short map for a prompt: each part with what it is
     for and how it is built (its sub-parts left to the tool, as its routes
-    are), the scheduled jobs, the tables by owner with what each links to,
-    and the changes.
+    are), the scheduled jobs, the worker's queues with their tasks, the
+    tables by owner with what each links to, and the changes.
     Nothing live (no traffic, health or rows), so its bytes stay the same
     turn to turn and a provider's prompt cache serves them."""
     lines = [EDGE if found.parts else DATA_EDGE]
@@ -114,6 +126,10 @@ def text(found: Summary) -> str:
     if found.jobs:
         lines += ["", "Scheduled jobs (whose, and when):"] + [
             f"- {job.name} ({job.owner}): {job.schedule}" for job in found.jobs
+        ]
+    if found.queues:
+        lines += ["", "Worker queues (the tasks each runs):"] + [
+            f"- {queue}: {', '.join(tasks)}" for queue, tasks in found.queues.items()
         ]
     if found.tables:
         lines += ["", "Tables, by owner (a table's links in brackets):"] + [

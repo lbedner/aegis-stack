@@ -11,6 +11,8 @@ from app.core.ontology.model import (
     ObjectNode,
     PartNode,
     PartOption,
+    QueueNode,
+    TaskNode,
 )
 from app.core.ontology.summary import summary, text
 from app.core.parts import Category
@@ -79,6 +81,18 @@ def test_the_map_lists_the_scheduled_jobs_with_when_and_whose() -> None:
     )
     found = text(summary(model_of([BACKEND, backup], [])))
     assert "- database_backup (shared:system): trigger=cron hour=2 minute=0" in found
+
+
+def test_the_map_lists_each_queue_with_its_tasks() -> None:
+    """Asked what the load test queue runs, she drew the load test service:
+    the map named it and no queue (2026-10-25)."""
+    queue = QueueNode(name="load_test", owner="component:queue")
+    tasks = [
+        TaskNode(name=name, queue="load_test", owner="component:worker")
+        for name in ("cpu_task", "io_task")
+    ]
+    found = text(summary(model_of([BACKEND, queue, *tasks], [])))
+    assert "- queue:load_test: cpu_task, io_task" in found
 
 
 def test_the_map_leaves_a_parts_pieces_to_the_tool() -> None:

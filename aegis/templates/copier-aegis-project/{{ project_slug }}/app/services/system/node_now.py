@@ -17,7 +17,7 @@ from pydantic import AfterValidator, BaseModel, ConfigDict, Field
 from app.core.edges_http import AI
 from app.core.log import logger
 from app.core.ontology import Kind
-from app.core.ontology.model import Node, PartNode
+from app.core.ontology.model import Node, PartNode, QueueNode
 from app.core.time import utcnow
 from app.services.system import live_status, ui_errors, ui_runtime
 from app.services.system.errors.models import ErrorIssue
@@ -76,19 +76,19 @@ class ContainerNow(BaseModel):
 
 
 class NodeNow(BaseModel):
-    """A part's live state: its health check (None where it has none), the
-    issues it owns, its containers, its spend, and when all of it was
-    read."""
+    """A part's or a queue's live state: its health check (None where it
+    has none), the issues it owns, its containers, its spend, and when all
+    of it was read."""
 
     model_config = FIGURES
 
     health: ComponentStatus | None
-    errors: tuple[ErrorIssue, ...]
-    errors_total: int
-    errors_note: str | None  # why errors could not be read, when not
-    containers: tuple[ContainerNow, ...]
-    containers_note: str | None  # why there are none, when there are none
-    spend: tuple[UsageWindow, ...]
+    errors: tuple[ErrorIssue, ...] = ()
+    errors_total: int = 0
+    errors_note: str | None = None  # why errors could not be read, when not
+    containers: tuple[ContainerNow, ...] = ()
+    containers_note: str | None = None  # why there are none, when there are none
+    spend: tuple[UsageWindow, ...] = ()
     read_at: datetime
 
 
@@ -174,17 +174,40 @@ async def right_now() -> RightNow:
 DETAIL_CHARS = 2_000
 
 
+# Where a node's check sits in the tree, under its group: the load test
+# queue's (``queues``) is not the load test service's.
+GROUPS: dict[str, tuple[str, ...]] = {
+    Kind.COMPONENT: ("components",),
+    Kind.SERVICE: ("services",),
+    Kind.SHARED: ("components", "services"),
+    Kind.QUEUE: ("queues",),
+}
+
+
 def health_of(
-    components: dict[str, ComponentStatus], name: str
+    components: dict[str, ComponentStatus], name: str, within: tuple[str, ...] = ()
 ) -> ComponentStatus | None:
-    """The check named ``name``, wherever it sits in the tree, as an agent
-    reads it (``trimmed``)."""
+    """The check named ``name``, wherever it sits in the tree (only right
+    under a group in ``within``, given any), as an agent reads it
+    (``trimmed``)."""
     for key, component in components.items():
-        if key == name:
+        if key == name and not within:
             return trimmed(component)
-        if found := health_of(component.sub_components, name):
+        if key in within and name in component.sub_components:
+            return trimmed(component.sub_components[name])
+        if found := health_of(component.sub_components, name, within):
             return found
     return None
+
+
+def check_of(
+    components: dict[str, ComponentStatus], node_id: str
+) -> ComponentStatus | None:
+    """The check an ontology id names, under its kind's group
+    (``GROUPS``: ``queue:system`` the system queue's, not the system
+    service's); a bare name, wherever it sits."""
+    kind, _, name = node_id.rpartition(":")
+    return health_of(components, name, GROUPS.get(kind, ()))
 
 
 def trimmed(component: ComponentStatus) -> ComponentStatus:
@@ -208,9 +231,13 @@ def trimmed(component: ComponentStatus) -> ComponentStatus:
 
 
 async def now_of(node: Node) -> NodeNow | None:
-    """``node``'s live state, or None: only a top-level part has one (a
-    sub-part's errors and health are its part's). Its three reads run at
+    """``node``'s live state, or None: only a top-level part and a queue
+    have one (a sub-part's errors and health are its part's; a queue's
+    errors and containers, the worker's). A part's three reads run at
     once."""
+    if isinstance(node, QueueNode):
+        status, _ = await live_status.live_status()
+        return NodeNow(health=check_of(status.components, node.id), read_at=utcnow())
     if not isinstance(node, PartNode) or node.owner is not None:
         return None
     owner = "app_component" if node.kind is Kind.COMPONENT else "app_service"
@@ -221,7 +248,7 @@ async def now_of(node: Node) -> NodeNow | None:
         _spend(node),
     )
     return NodeNow(
-        health=health_of(status.components, node.name),
+        health=check_of(status.components, node.id),
         errors=tuple(found["error_rows"]),
         errors_total=found["error_total"],
         errors_note=found["error_note"],

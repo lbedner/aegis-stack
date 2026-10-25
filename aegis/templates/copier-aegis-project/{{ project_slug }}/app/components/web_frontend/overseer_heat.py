@@ -12,9 +12,9 @@ from typing import Any
 from app.core import edges
 from app.core.formatting import counted
 from app.core.ontology.model import Kind
+from app.services.system.staged_paths import registry_of
 
 from .overseer_map import overlaid
-from .overseer_zoom import registry_of
 
 TRAFFIC = "traffic"
 # What the overlay shows, said under its chip while it is on.

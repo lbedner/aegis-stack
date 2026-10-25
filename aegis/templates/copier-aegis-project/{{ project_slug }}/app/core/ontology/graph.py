@@ -1,12 +1,23 @@
 """Walking the system model: a node's neighbours and the shortest paths
 between two nodes, over its edges either way. Pure functions of the model,
 so the MCP tool, Overseer's map (ON-03) and the dry path (ON-10) share
-them."""
+them, and a node's wiring (``wiring``), which a path card both checks
+when drawn and draws."""
 
 from collections import deque
 import difflib
 
-from app.core.ontology.model import Edge, Node, SystemModel
+from app.core.ontology.model import (
+    Edge,
+    EdgeKind,
+    Kind,
+    Node,
+    PartNode,
+    QueueNode,
+    SystemModel,
+    TaskNode,
+    parse_node_id,
+)
 
 MAX_DEPTH = 2
 MAX_PATHS = 5
@@ -100,3 +111,19 @@ def paths(
         ][:MAX_PATHS]
 
     return back(end) if end in depth else []
+
+
+def wiring(model: SystemModel, node_id: str) -> list[Edge]:
+    """``node_id``'s wiring: its edges; its part's, where it is code the
+    map has no box for (a job), which runs as its part does; those of what
+    it holds; and each queue among them with its tasks."""
+    here, touching = node(model, node_id), _touching(model)
+    edges = list(touching.get(node_id, []))
+    if here.owner and not isinstance(here, PartNode | QueueNode | TaskNode):
+        edges += touching.get(here.owner, [])
+    held = dict.fromkeys(e.target for e in edges if e.kind is EdgeKind.CONTAINS)
+    edges += [e for part in held if part != node_id for e in touching.get(part, [])]
+    ends = {end for e in edges for end in (e.source, e.target)} - {node_id}
+    queues = [end for end in ends if parse_node_id(end)[0] is Kind.QUEUE]
+    edges += [e for queue in queues for e in touching.get(queue, [])]
+    return list(dict.fromkeys(edges))

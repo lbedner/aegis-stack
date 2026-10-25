@@ -2,6 +2,7 @@
 signed in with an MCP token. No token, no tools; the token's owner is who
 its calls act for, and its scope which tools it sees."""
 
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -273,6 +274,37 @@ async def test_the_backend_hooks_run_the_mounted_apps_lifespan(
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
             assert (await Rpc(c, value).open()).status_code == 200
+    finally:
+        await stop.shutdown_hook()
+
+
+async def test_its_sessions_end_as_the_server_starts_closing(
+    granted: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A client's open stream ends when the server starts shutting down
+    (``concurrency.closing``), not after: the server waits for every
+    connection to close before the shutdown hooks run, so a session still
+    open was cancelled on each reload (2026-10-25)."""
+    from app.components.backend import background
+    from app.components.backend.shutdown import mcp_lifespan as stop
+    from app.components.backend.startup import mcp_lifespan as start
+    from app.core import concurrency
+
+    started: list[asyncio.Task[None]] = []
+    begin = background.start
+
+    def kept(name: str, work: Any) -> asyncio.Task[None]:
+        started.append(begin(name, work))
+        return started[-1]
+
+    monkeypatch.setattr(background, "start", kept)
+    monkeypatch.setattr(http, "mounted", http.mounted)
+    http.mount_app()
+    await start.startup_hook()
+    try:
+        assert not started[0].done()
+        concurrency.closing().set()
+        await asyncio.wait_for(asyncio.shield(started[0]), 5)
     finally:
         await stop.shutdown_hook()
 

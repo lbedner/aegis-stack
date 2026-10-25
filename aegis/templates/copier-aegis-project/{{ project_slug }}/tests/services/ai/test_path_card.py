@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.core.ontology.model import SystemModel
+from app.core.ontology.model import ContainerNode, EdgeKind, SystemModel
 from app.core.tools import acting_as
 from app.services.ai.domains.chat import cards, path_card
 from app.services.ai.domains.chat.cards import card_stage, draw_card
@@ -74,16 +74,36 @@ async def test_a_nodes_wiring_names_a_node_the_running_model_has(
 ) -> None:
     """Drawn from the map when opened, so kept as the node alone; a node
     the model does not have is refused by name."""
-    auth = "service:auth"
+    auth, db = "service:auth", "component:database"
 
     async def running() -> SystemModel:
-        return model_of([node_of(auth)], [])
+        return model_of([node_of(auth), node_of(db)], [edge_of(auth, db)])
 
     monkeypatch.setattr(path_card, "running", running)
     card = await path_card.prepare(PathAsk(title="Auth", node=auth))
     assert card == PathCard(title="Auth", node=auth)
     with pytest.raises(ValueError, match="service:auths"):
         await path_card.prepare(PathAsk(title="x", node="service:auths"))
+
+
+async def test_a_wiring_with_nothing_on_the_map_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Drawn on the parts it is joined to: the load test service runs in a
+    container, no box on the map, and its card was drawn empty
+    (2026-10-25)."""
+    shared, box = "shared:load_test", "container:webserver"
+    model = model_of(
+        [node_of(shared), ContainerNode(name="webserver")],
+        [edge_of(shared, box, EdgeKind.RUNS_ON)],
+    )
+
+    async def running() -> SystemModel:
+        return model
+
+    monkeypatch.setattr(path_card, "running", running)
+    with pytest.raises(ValueError, match="Nothing on the map"):
+        await path_card.prepare(PathAsk(title="Load test", node=shared))
 
 
 async def test_a_route_is_its_dry_path(monkeypatch: pytest.MonkeyPatch) -> None:

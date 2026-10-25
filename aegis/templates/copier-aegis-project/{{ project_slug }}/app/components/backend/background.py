@@ -9,9 +9,10 @@ from typing import Any
 _tasks: dict[str, asyncio.Task[None]] = {}
 
 
-def start(name: str, work: Coroutine[Any, Any, None]) -> None:
-    """Run ``work`` in the background under ``name``."""
+def start(name: str, work: Coroutine[Any, Any, None]) -> asyncio.Task[None]:
+    """Run ``work`` in the background under ``name``; its task, to wait on."""
     _tasks[name] = asyncio.create_task(work, name=name)
+    return _tasks[name]
 
 
 async def stop(name: str) -> None:

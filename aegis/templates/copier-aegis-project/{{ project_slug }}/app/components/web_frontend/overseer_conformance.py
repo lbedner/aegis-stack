@@ -12,8 +12,7 @@ from app.core import source_index
 from app.services.system import pattern_findings, service_parts
 from app.services.system.pattern_findings import Finding
 from app.services.system.service_pieces import Piece
-
-from .overseer_zoom import registry_of
+from app.services.system.staged_paths import registry_of
 
 
 class Conformance(NamedTuple):

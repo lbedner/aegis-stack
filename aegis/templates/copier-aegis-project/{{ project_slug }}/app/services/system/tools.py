@@ -35,9 +35,9 @@ from app.services.system import (
 from app.services.system.models import ComponentStatus
 from app.services.system.node_now import (
     attention,
+    check_of,
     checks,
     containers_now,
-    health_of,
     now_of,
 )
 
@@ -47,7 +47,7 @@ MAX_LINES = 500
 # requests, plugins, a bucket's files); each says when there were more.
 MAX_NODES = 100
 # What a node is, in a list.
-BRIEF = {"id", "kind", "name", "owner"}
+BRIEF = {"id", "kind", "name", "owner", "queue"}  # a task's queue
 
 
 def _tree(component: ComponentStatus) -> dict[str, Any]:
@@ -98,11 +98,10 @@ async def health(component: str | None = None) -> dict[str, Any]:
             "note": note,
         }
     # An ontology id (``component:worker``) names the same check.
-    name = component.rpartition(":")[2]
     (status, note), (boxes, boxes_note) = await asyncio.gather(
-        live_status.live_status(), containers_now(name)
+        live_status.live_status(), containers_now(component.rpartition(":")[2])
     )
-    found = health_of(status.components, name)
+    found = check_of(status.components, component)
     if found is None:
         known = ", ".join(_names(status.components))
         raise ValueError(f"No component {component!r}; known: {known}")
@@ -279,7 +278,9 @@ async def ontology(
     route: str | None = None,
 ) -> dict[str, Any]:
     """What this app is, read from its code: its tables and the changes to
-    them (an admin also sees parts, routes, jobs, tools and Redis keys:
+    them (an admin also sees parts, routes, jobs, the worker's queues
+    (``node="queue:<name>"``: its tasks, its container and its live
+    state, in one call) and tasks, tools and Redis keys:
     ``kind="keys"``, every key family the app keeps there, what each holds
     and its type). No
     arguments: a summary (the app, counts by kind, its tables by owner with

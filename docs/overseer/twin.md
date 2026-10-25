@@ -6,7 +6,7 @@ It has five layers, each saying something more certain than the one above it:
 
 | Layer | Says | Read from | Where you see it |
 |---|---|---|---|
-| **Ontology** | What exists: every part, route, table, job and tool, and how they connect | The source code | The map, `GET /api/v1/ontology`, the `ontology` tool, `<app> ontology find`, `node`, `paths`, `export` |
+| **Ontology** | What exists: every part, route, table, job, worker queue and task, and tool, and how they connect | The source code | The map, `GET /api/v1/ontology`, the `ontology` tool, `<app> ontology find`, `node`, `paths`, `export` |
 | **Dry paths** | What could happen: every way a route can go, before it ever runs | The source code | A route's dry path on Overseer's Server page, the `ontology` tool, `<app> ontology route` |
 | **Live state** | What is: each part's health, errors, spend and memory, when asked | The running stack | The map's status, the `health` and `errors` tools, a node's `now` |
 | **Observed calls** | What does happen: the calls actually made between parts, how often and how long | Requests as they run | The map's edges and heat |

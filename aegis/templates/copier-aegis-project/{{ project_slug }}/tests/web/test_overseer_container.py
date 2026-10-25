@@ -16,7 +16,6 @@ from app.components.web_frontend import (
     overseer_heat,
     overseer_map,
 )
-from app.components.web_frontend.overseer_zoom import registry_of
 from app.core import edges, runtime, secrets, series
 from app.core.config import settings
 from app.core.ontology import calls
@@ -28,6 +27,7 @@ from app.services.system.models import (
     ComponentStatusType,
     LoadCosts,
 )
+from app.services.system.staged_paths import registry_of
 from tests._fake_runtime import (
     REDIS,
     WORKER,

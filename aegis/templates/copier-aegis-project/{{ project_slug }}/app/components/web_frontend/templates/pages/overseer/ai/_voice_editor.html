@@ -1,0 +1,115 @@
+{# One voice profile's editor, in three steps (``v.steps``): Voice, who
+   it is; Delivery, how it talks; Review, a last look, heard and saved.
+   Drawn from the designer's view as it comes. The whole design rides the
+   one form from step to step (``v.form``: what a step does not show it
+   carries hidden), and the form is drawn again as it changes. #}
+{% from "components/macros/chat.html" import speak_button %}
+{% from "components/macros/form.html" import field, primary_button, range_chips, textarea %}
+{% set v = view %}
+{% set d = v.delivery %}
+{% macro carry(shown) %}{% for name, value in v.form.items() if name not in shown %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}{% endmacro %}
+{% macro chips(label, choices, value, name) %}
+<div class="flex flex-wrap items-center gap-3"><span class="w-16 text-xs text-aegis-muted">{{ label }}</span>{{ range_chips(choices, value, field=name, aria=label) }}</div>
+{% endmacro %}
+<form id="ai-voice-editor" data-voice-design hx-get="{{ back_url }}" hx-trigger="submit, change, keyup changed delay:600ms from:textarea" {{ hx_replace(back_url, "#overseer-main") }} class="space-y-5 max-w-3xl">
+  <input type="hidden" name="profile" value="{{ v.profile.id }}">
+  <input type="hidden" name="step" value="{{ step }}">
+  <div class="flex items-center gap-3 text-sm">
+    <a href="{{ back_url }}" {{ hx_replace(back_url, "#overseer-main") }} class="text-aegis-muted hover:text-aegis-text">← Profiles</a>
+    <span class="text-aegis-text font-semibold">{{ v.profile.name }}</span>
+    {% if v.active %}<span class="text-xs text-aegis-teal">In use</span>{% endif %}
+  </div>
+  <nav class="flex items-center gap-1 border-b border-aegis-border" aria-label="Steps">
+    {% for key, label in v.steps.items() %}
+    <button type="submit" name="go" value="{{ key }}" {% if key == step %}aria-current="step"{% endif %} class="px-3 py-2 text-sm border-b-2 -mb-px {{ 'border-aegis-teal text-aegis-text' if key == step else 'border-transparent text-aegis-muted hover:text-aegis-text' }}">{{ loop.index }}. {{ label }}</button>
+    {% endfor %}
+  </nav>
+
+  {% if step == "voice" %}
+  {{ carry(["voice", "model"]) }}
+  {{ chips("Gender", [("", "Any")] + v.genders.items()|list, v.filters.gender, "gender") }}
+  {{ chips("Tone", [("", "Any")] + v.families.items()|list, v.filters.family, "family") }}
+  {{ chips("Accent", [("", "Any")] + v.accents.items()|list, v.filters.accent_of, "accent_of") }}
+  {% for l in v.locked %}<p data-voice-locked class="text-xs text-aegis-muted">{{ l.voices }} {{ l.provider_name }} voices need <span class="text-warning">{{ l.key }}</span>: add it in Secrets to use them.</p>{% endfor %}
+  <div class="divide-y divide-aegis-border/40 border-y border-aegis-border/40" role="radiogroup" aria-label="Voice">
+    {% for c in v.cards %}
+    <label data-voice-card="{{ c.id }}" class="flex items-center gap-3 px-2 py-1.5 cursor-pointer hover:bg-aegis-border/20">
+      <input type="radio" name="voice" value="{{ c.id }}" class="radio radio-xs radio-primary" {% if c.id == v.voice %}checked{% endif %}>
+      <span class="w-28 text-sm text-aegis-text">{{ c.name }}</span>
+      <span class="flex-1 text-xs text-aegis-muted">{{ c.detail }}</span>
+      {{ speak_button(sample_url ~ c.id, "text-aegis-muted hover:text-aegis-text") }}
+    </label>
+    {% else %}<p class="px-2 py-2 text-sm text-aegis-muted">No voice is both of those.</p>{% endfor %}
+  </div>
+  <div class="space-y-1" role="radiogroup" aria-label="Model">
+    <p class="text-xs text-aegis-muted">{{ v.chosen.name if v.chosen else v.voice }} is spoken on</p>
+    {% for m in v.models %}
+    <label data-voice-model="{{ m.id }}" class="flex items-center gap-3 px-2 py-1 cursor-pointer hover:bg-aegis-border/20">
+      <input type="radio" name="model" value="{{ m.id }}" class="radio radio-xs radio-primary" {% if m.id == v.model %}checked{% endif %}>
+      <span class="w-64 font-mono text-xs text-aegis-text">{{ m.id }}</span>
+      <span class="flex-1 text-xs text-aegis-muted">{{ m.note }}</span>
+    </label>
+    {% endfor %}
+  </div>
+
+  {% elif step == "delivery" %}
+  {{ carry(["style", "extra"] + v.dials.keys()|list + (["speed"] if v.speed_range else [])) }}
+  {% if v.chosen %}
+  <div data-voice-chosen class="flex items-center gap-3 rounded border border-aegis-border px-3 py-2">
+    <span class="text-xs text-aegis-muted">Voice</span>
+    <span class="text-sm text-aegis-text">{{ v.chosen.name }}</span>
+    <span class="flex-1 text-xs text-aegis-muted">{{ v.chosen.detail }} · on <span class="font-mono">{{ v.model }}</span></span>
+    {{ speak_button(chosen_listen, "text-aegis-muted hover:text-aegis-text") }}
+  </div>
+  {% endif %}
+  {% if not v.follows %}<p data-voice-ignores class="text-xs text-warning">{{ v.model }} ignores delivery instructions: a style and fine-tuning change nothing. Pick a model that follows them on the Voice step.</p>{% endif %}
+  <div class="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Style">
+    {% for key, s in v.styles.items() %}
+    <label data-voice-style="{{ key }}" class="cursor-pointer">
+      <input type="radio" name="style" value="{{ key }}" class="sr-only peer" {% if (d.style or "") == key %}checked{% endif %}>
+      <span class="flex items-start gap-2 rounded border border-aegis-border px-3 py-2 peer-checked:border-aegis-teal peer-checked:bg-aegis-teal/10 hover:border-aegis-muted">
+        <span class="flex-1"><span class="block text-sm text-aegis-text">{{ s.label }}</span><span class="block text-xxs text-aegis-muted">{{ s.sounds }}</span></span>
+        {% if key %}{{ speak_button(style_listen[key], "mt-0.5 text-aegis-muted hover:text-aegis-text") }}{% endif %}
+      </span>
+    </label>
+    {% endfor %}
+  </div>
+  {% if v.speed_range %}
+  <div class="flex flex-wrap items-center gap-3"><span class="w-16 text-xs text-aegis-muted">Speed</span>
+    <input type="range" name="speed" min="{{ v.speed_range[0] }}" max="{{ v.speed_range[1] }}" step="0.05" value="{{ v.speed }}" class="range range-xs w-64" aria-label="Speed">
+    <span class="text-xs font-mono text-aegis-muted">{{ v.speed }}</span>
+  </div>
+  {% endif %}
+  <details data-fold="voice-fine-tune" class="space-y-3"{% if v.tuned %} open{% endif %}>
+    <summary class="cursor-pointer text-sm text-aegis-muted hover:text-aegis-text">Fine-tune <span class="text-xs">(hints the model follows loosely; accents most of all)</span></summary>
+    <div class="space-y-3 pt-3">
+      {% for name, choices in v.dials.items() %}{{ chips(name|title, choices.items()|list, d[name], name) }}{% endfor %}
+      {% if not v.steers_accent %}<p data-voice-accent-note class="text-xs text-aegis-muted">On {{ v.model }} the accent comes with the voice{% if v.chosen and v.chosen.accent %} ({{ v.chosen.name }}: {{ v.chosen.accent }}){% endif %}: pick a voice by accent on the Voice step.</p>{% endif %}
+      {% call field("Anything else (pronunciation, words to avoid, how to open)") %}{{ textarea("extra", d.extra or "", rows=3) }}{% endcall %}
+    </div>
+  </details>
+
+  {% else %}
+  {{ carry([]) }}
+  <dl class="grid grid-cols-[8rem_1fr] gap-y-1 text-sm">
+    <dt class="text-aegis-muted">Voice</dt><dd class="text-aegis-text">{{ v.chosen.name if v.chosen else v.voice }}{% if v.chosen %} <span class="text-xs text-aegis-muted">{{ v.chosen.detail }}</span>{% endif %}</dd>
+    <dt class="text-aegis-muted">Model</dt><dd class="text-aegis-text font-mono text-xs">{{ v.model }}{% if not v.follows %} <span class="font-sans text-warning">(ignores delivery instructions)</span>{% endif %}</dd>
+    <dt class="text-aegis-muted">Style</dt><dd class="text-aegis-text">{{ v.styles[d.style or ""].label }}</dd>
+    {% if v.speed_range %}<dt class="text-aegis-muted">Speed</dt><dd class="text-aegis-text font-mono">{{ v.speed }}</dd>{% endif %}
+  </dl>
+  <div class="space-y-1">
+    <p class="text-xs text-aegis-muted">What gets sent</p>
+    <pre data-voice-instructions class="whitespace-pre-wrap rounded border border-aegis-border bg-aegis-bg px-3 py-2 text-xs font-mono text-aegis-muted">{{ v.instructions }}</pre>
+  </div>
+  <div class="flex items-center gap-3">
+    <span class="inline-flex items-center gap-1 text-sm text-aegis-muted">{{ speak_button(listen_url, "text-aegis-muted hover:text-aegis-text", form=True) }} Listen</span>
+    {{ primary_button("Save", attrs='data-write data-voice-save hx-post="' ~ save_url ~ '" hx-include="closest form"') }}
+  </div>
+  {% endif %}
+
+  <div class="flex items-center justify-between border-t border-aegis-border pt-3">
+    {% set keys = v.steps.keys()|list %}{% set at = keys.index(step) %}
+    {% if at > 0 %}<button type="submit" name="go" value="{{ keys[at - 1] }}" class="text-sm text-aegis-muted hover:text-aegis-text">← {{ v.steps[keys[at - 1]] }}</button>{% endif %}
+    {% if at < keys|length - 1 %}<button type="submit" name="go" value="{{ keys[at + 1] }}" class="btn btn-sm ml-auto">{{ v.steps[keys[at + 1]] }} →</button>{% endif %}
+  </div>
+</form>

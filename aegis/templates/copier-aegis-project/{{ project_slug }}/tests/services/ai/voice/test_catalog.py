@@ -11,8 +11,14 @@ from app.services.ai.domains.voice import (
     get_tts_providers,
     get_tts_voices,
     get_voice,
+    speaking_model,
 )
-from app.services.ai.domains.voice.models import ModelInfo, ProviderInfo, VoiceInfo
+from app.services.ai.domains.voice.models import (
+    DEFAULT_TTS_MODEL,
+    ModelInfo,
+    ProviderInfo,
+    VoiceInfo,
+)
 
 
 class TestGetTtsProviders:
@@ -350,7 +356,7 @@ class TestGetCurrentVoiceConfig:
         config = get_current_voice_config(settings)
         # Should use defaults when attributes don't exist
         assert config["tts_provider"] == TTSProvider.OPENAI.value
-        assert config["tts_model"] == "tts-1"
+        assert config["tts_model"] == DEFAULT_TTS_MODEL
         assert config["tts_voice"] == OpenAIVoice.ALLOY.value
         assert config["tts_speed"] == 1.0
         assert config["stt_provider"] == STTProvider.OPENAI_WHISPER.value
@@ -374,7 +380,7 @@ class TestGetCurrentVoiceConfig:
         config = get_current_voice_config(settings)
         # Should use defaults for None values
         assert config["tts_provider"] == TTSProvider.OPENAI.value
-        assert config["tts_model"] == "tts-1"
+        assert config["tts_model"] == DEFAULT_TTS_MODEL
         assert config["tts_voice"] == OpenAIVoice.ALLOY.value
         assert config["tts_speed"] == 1.0
         assert config["stt_provider"] == STTProvider.OPENAI_WHISPER.value
@@ -403,3 +409,95 @@ class TestGetCurrentVoiceConfig:
         assert config["stt_provider"] == STTProvider.GROQ_WHISPER.value
         assert config["stt_model"] == "whisper-large-v3"
         assert config["stt_language"] == "en"
+
+
+class TestEveryVoiceSpeaks:
+    """A voice is offered only with a model of its own provider that
+    speaks it: one with none would be a play button that fails."""
+
+    def test_every_voice_names_models_of_its_provider(self) -> None:
+        for voice in get_tts_voices():
+            models = {m.id for m in get_tts_models(voice.provider_id)}
+            assert voice.model_ids and set(voice.model_ids) <= models, voice.id
+
+    def test_gemini_speaks_its_own_voices(self) -> None:
+        voices = get_tts_voices(TTSProvider.GEMINI.value)
+
+        assert len(voices) == 30
+        assert get_voice("Kore") in voices
+        # The current pair: the 2.5 previews are open only to past users.
+        assert {m.id for m in get_tts_models(TTSProvider.GEMINI.value)} == {
+            "gemini-3.8-flash-tts",
+            "gemini-3.8-flash-lite-tts",
+        }
+
+    def test_a_voice_is_spoken_on_a_model_that_speaks_it(self) -> None:
+        assert speaking_model("alloy", "tts-1") == "tts-1"
+        assert speaking_model("marin", "tts-1") == "gpt-realtime-2.1-mini"
+        # Realtime does not speak fable, nova or onyx: theirs is the old model.
+        assert speaking_model("fable", None) == "gpt-4o-mini-tts"
+        assert speaking_model("Kore", "tts-1") == "gemini-3.8-flash-tts"
+
+
+class TestEveryVoiceIsDescribed:
+    """The voice designer filters by gender and tone: a voice without
+    either could never be picked."""
+
+    def test_every_voice_has_a_gender_and_a_tone(self) -> None:
+        for voice in get_tts_voices():
+            assert voice.gender in ("female", "male", "neutral"), voice.id
+            assert voice.tone, voice.id
+
+
+class TestWhatEachModelSteers:
+    """A model's delivery instructions steer what its provider says they
+    do: OpenAI's gpt-4o voices take the accent among them; Gemini's take
+    style but leave the accent to the voice; tts-1 takes none."""
+
+    def test_openai_steers_the_accent_gemini_leaves_it_to_the_voice(self) -> None:
+        from app.services.ai.domains.voice.catalog import steers
+
+        assert "accent" in steers("gpt-4o-mini-tts")
+        assert steers("gemini-3.8-flash-tts") and "accent" not in steers(
+            "gemini-3.8-flash-tts"
+        )
+        assert steers("tts-1") == []
+
+    def test_every_audio_speech_model_is_marked_deprecated(self) -> None:
+        deprecated = {m.id for m in get_tts_models() if m.retires}
+
+        # OpenAI shuts every /v1/audio/speech model down on Jan 6, 2027.
+        assert deprecated == {
+            "tts-1",
+            "tts-1-hd",
+            "gpt-4o-mini-tts",
+            "gpt-4o-mini-tts-2025-03-20",
+            "gpt-4o-mini-tts-2025-12-15",
+        }
+
+    def test_realtime_is_openais_speech_model_now(self) -> None:
+        from app.services.ai.domains.voice.catalog import steers
+
+        assert DEFAULT_TTS_MODEL == "gpt-realtime-2.1-mini"
+        assert "accent" in steers(DEFAULT_TTS_MODEL)
+        spoken = {v.id for v in get_tts_voices(model_id=DEFAULT_TTS_MODEL)}
+        assert {"marin", "cedar", "alloy"} <= spoken
+        assert not {"fable", "nova", "onyx"} & spoken
+
+    def test_every_openai_voice_says_its_accent(self) -> None:
+        voices = get_tts_voices(TTSProvider.OPENAI.value)
+
+        assert all(v.accent for v in voices)
+        assert get_voice("fable").accent == "British"
+
+
+class TestWhatSpeedEachModelTakes:
+    """The speed slider offers what the model takes: the Realtime API up to
+    1.5, the speech endpoint up to 4, Gemini none at all."""
+
+    def test_each_model_says_its_speeds(self) -> None:
+        from app.services.ai.domains.voice.catalog import speeds
+
+        assert speeds("gpt-realtime-2.1-mini") == (0.25, 1.5)
+        assert speeds("gpt-4o-mini-tts") == (0.25, 4.0)
+        assert speeds("gemini-3.8-flash-tts") is None

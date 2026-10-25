@@ -9,6 +9,7 @@ Agents are the app's, not an owner's: any owner may send any of them.
 """
 
 from collections.abc import Iterable
+from datetime import datetime
 import json
 import re
 import time
@@ -19,12 +20,20 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core import secrets
 from app.core.log import logger
+from app.services.meetings.domains.bot.card import initials
 from app.services.meetings.domains.bot.login import LOGIN, signed_in
 from app.services.meetings.domains.calendar.owners import check_owner
-from app.services.meetings.models import IN_PROGRESS, BotAccount
+from app.services.meetings.models import IN_PROGRESS, AgentImage, BotAccount
 from app.services.meetings.service import DEFAULT_BOT_NAME
 
-from .queries import every_account, give_unsent_meetings, meetings_in
+from .queries import (
+    drop_image,
+    every_account,
+    give_unsent_meetings,
+    meetings_in,
+    with_images,
+)
+from .queries import image_named as image_named
 
 DEFAULT_AGENT = "notetaker"
 # Typed on a command line and kept in a secret's name.
@@ -42,13 +51,33 @@ class AgentNameError(ValueError):
     """A name an agent cannot have."""
 
 
+# What a browser draws on the card, and the most a picture may weigh.
+IMAGE_TYPES = frozenset(
+    {"image/png", "image/jpeg", "image/webp", "image/gif", "image/svg+xml"}
+)
+IMAGE_NAMES = ", ".join(
+    sorted(t.split("/")[1].split("+")[0].upper() for t in IMAGE_TYPES)
+)
+MOST_IMAGE_MB = 5
+MOST_IMAGE_BYTES = MOST_IMAGE_MB * 1_000_000
+
+
+class AgentImageError(ValueError):
+    """A picture the card cannot carry: not one a browser draws, or too big."""
+
+
 class AgentRow(BaseModel):
-    """One agent as Overseer shows it: whether its sign-in still works, and
-    the meetings it is in (or on its way into or out of) now."""
+    """One agent as Overseer shows it: whether its sign-in still works, the
+    meetings it is in (or on its way into or out of) now, and when its
+    picture last changed (None without one: its card shows its
+    ``initials``), which the picture's address carries so a browser keeps
+    one until it changes."""
 
     account: BotAccount
     sign_in: str
     in_now: list[int]
+    image: datetime | None
+    initials: str
 
 
 def secret_for(secret: str, name: str) -> str:
@@ -152,12 +181,44 @@ async def set_default_owner(
     return account
 
 
-async def login_secret_of(db: AsyncSession, account_id: int | None) -> str:
-    """Where the sign-in of the agent a meeting was sent as is kept."""
-    if account_id is None:
-        return LOGIN
-    account = await db.get(BotAccount, account_id)
-    return account.login_secret if account is not None else LOGIN
+async def set_camera(db: AsyncSession, name: str, on: bool) -> BotAccount:
+    """Whether the agent called ``name`` shows its card in a call."""
+    account = await pick(db, name)
+    account.camera = on
+    db.add(account)
+    await db.commit()
+    return account
+
+
+async def set_image(
+    db: AsyncSession, name: str, data: bytes, content_type: str
+) -> BotAccount:
+    """The picture on the card of the agent called ``name``, over any it
+    had; ``AgentImageError`` for one a browser does not draw or past
+    ``MOST_IMAGE_BYTES``."""
+    if content_type not in IMAGE_TYPES:
+        raise AgentImageError(f"A card takes {IMAGE_NAMES}, not {content_type}")
+    if len(data) > MOST_IMAGE_BYTES:
+        raise AgentImageError(f"A card's picture is at most {MOST_IMAGE_MB} MB")
+    account = await pick(db, name)
+    await drop_image(db, account.id)  # type: ignore[arg-type]
+    db.add(AgentImage(account_id=account.id, content_type=content_type, data=data))  # type: ignore[arg-type]
+    await db.commit()
+    return account
+
+
+async def clear_image(db: AsyncSession, name: str) -> None:
+    """The agent called ``name`` back to its initials."""
+    account = await pick(db, name)
+    await drop_image(db, account.id)  # type: ignore[arg-type]
+    await db.commit()
+
+
+async def sent_as(db: AsyncSession, account_id: int | None) -> BotAccount:
+    """The agent a meeting was sent as; the default for one sent before
+    agents."""
+    account = await db.get(BotAccount, account_id) if account_id is not None else None
+    return account or (await agents(db))[0]
 
 
 async def overview(db: AsyncSession) -> list[AgentRow]:
@@ -167,12 +228,15 @@ async def overview(db: AsyncSession) -> list[AgentRow]:
     now = time.time()
     states = await _sign_ins([a.login_secret for a in every], now)
     busy = await meetings_in(db, IN_PROGRESS)
+    pictured = await with_images(db, [a.id for a in every])  # type: ignore[misc]
     return [
         AgentRow(
             account=a,
             sign_in=states[a.login_secret],
             # A meeting sent without one is the default's.
             in_now=[m for owner, m in busy if (owner or every[0].id) == a.id],
+            image=pictured.get(a.id),  # type: ignore[arg-type]
+            initials=initials(a.display_name),
         )
         for a in every
     ]

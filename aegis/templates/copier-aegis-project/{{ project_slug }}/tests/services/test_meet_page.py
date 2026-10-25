@@ -6,9 +6,11 @@ up. The fake is shaped like the real Meet page as last checked (October
 
 from collections.abc import AsyncIterator
 
+from playwright.async_api import Page
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.services.meetings.domains.bot import card
 from app.services.meetings.domains.bot import run as bot
 from app.services.meetings.domains.bot.meet import CallState, MeetPage, merge_caption
 from app.services.meetings.models import MeetingStatus
@@ -24,8 +26,12 @@ pytestmark = pytest.mark.queryspy(allow_n_plus_one=True)
 # (a new block) and ``more()`` (the last block grows).
 FAKE_MEET = """
 <html><body>
-<div><button onclick="this.parentNode.remove()">
-  Continue without microphone and camera</button></div>
+<div id="media">
+  <button onclick="window.media = 'on'; media.remove()">Use microphone and camera</button>
+  <button onclick="window.media = 'off'; media.remove()">
+    Continue without microphone and camera</button>
+</div>
+<button id="mic" aria-label="Turn off microphone (ctrl + d)" onclick="toggleMic()">mic</button>
 <div id="lobby">
   <input type="text" aria-label="Your name">
   <button onclick="lobby.hidden = true; note.textContent = 'Asking to be let in...'">
@@ -56,6 +62,10 @@ FAKE_MEET = """
     blocks[blocks.length - 2].lastElementChild.textContent += ' ' + text;
   }
   function admit() { note.textContent = ''; call.hidden = false; }
+  function toggleMic() {
+    const on = mic.getAttribute('aria-label').startsWith('Turn off');
+    mic.setAttribute('aria-label', (on ? 'Turn on' : 'Turn off') + ' microphone (ctrl + d)');
+  }
   function deny() { note.textContent = 'Someone in the call denied your request to join'; }
   function end(text) { call.remove(); note.textContent = text; }
   // What Meet puts over the call once someone is in: that a notetaker is
@@ -102,6 +112,39 @@ async def test_it_asks_to_join_by_name_and_waits(meet: MeetPage) -> None:
 
     assert await meet.state() == CallState.WAITING
     assert await meet.page.input_value("[aria-label='Your name']") == "Notes"
+
+
+async def test_it_joins_with_its_camera_and_mic_and_the_mic_off(
+    meet: MeetPage,
+) -> None:
+    """The card's script answers for both (``card``); muted until it
+    speaks."""
+    await meet.ask_to_join("Notes")
+
+    assert await meet.page.evaluate("window.media") == "on"
+    assert await meet.page.get_attribute("#mic", "aria-label") == (
+        "Turn on microphone (ctrl + d)"
+    )
+
+
+async def test_it_unmutes_only_while_it_speaks(
+    meet: MeetPage, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    await meet.ask_to_join("Notes")
+    await meet.page.evaluate("admit()")
+    heard: list[str | None] = []
+
+    async def speak(page: Page, audio: bytes) -> float:
+        heard.append(await page.get_attribute("#mic", "aria-label"))
+        return 0.0
+
+    monkeypatch.setattr(card, "speak", speak)
+    await meet.speak(b"audio")
+
+    assert heard == ["Turn off microphone (ctrl + d)"]
+    assert await meet.page.get_attribute("#mic", "aria-label") == (
+        "Turn on microphone (ctrl + d)"
+    )
 
 
 async def test_it_waits_for_meet_to_draw_its_lobby(meet: MeetPage) -> None:

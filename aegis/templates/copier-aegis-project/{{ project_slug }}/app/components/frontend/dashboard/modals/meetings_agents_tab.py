@@ -1,8 +1,9 @@
 """Meetings > Agents in the Flet Overseer: each Google account the bot joins
 calls as, who it is, whether its sign-in still works, which meeting it is
-in now and, with accounts here, who owns a meeting it joins from its
-calendar that nobody on the invite owns (``meetings_owners``); and the
-picker the Meetings tab sends the bot with. The same as
+in now, its card in a call (``meetings_agent_card``) and, with accounts
+here, who owns a meeting it joins from its calendar that nobody on the
+invite owns (``meetings_owners``); and the picker the Meetings tab sends
+the bot with. The same as
 the htmx Overseer's Agents page, over the admin API
 (``api/meetings/admin.py``). An agent is made by signing it in:
 ``meetings login --agent``.
@@ -10,6 +11,7 @@ the htmx Overseer's Agents page, over the admin API
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import flet as ft
@@ -23,10 +25,9 @@ from app.components.frontend.controls import (
 from app.components.frontend.state.session_state import get_session_state
 from app.components.frontend.theme import AegisTheme as Theme
 
+from .meetings_agent_card import AGENTS, AgentCard
 from .meetings_owners import OwnerPicker, owners_of
 from .modal_sections import EmptyStatePlaceholder
-
-AGENTS = "/api/v1/meetings/admin/agents"
 
 
 def agent_cells(row: dict[str, Any]) -> list[str]:
@@ -75,6 +76,8 @@ class AgentsTab(ft.Container):
     """Every agent, the default first."""
 
     def __init__(self, page: ft.Page) -> None:
+        # Each agent's picture by its version: read again only once changed.
+        self._pictures: dict[tuple[str, str], bytes] = {}
         super().__init__()
         self.page = page
         self._table = ft.Container(
@@ -105,8 +108,13 @@ class AgentsTab(ft.Container):
             DataTableColumn("Google account", width=240, style="secondary"),
             DataTableColumn("Sign-in", width=120),
             DataTableColumn("In now", width=220, style="secondary"),
+            DataTableColumn("In a call", width=400),
         ]
-        cells = [agent_cells(r) for r in rows]
+        pictures = await asyncio.gather(*(self._picture(r) for r in rows))
+        cells: list[list[Any]] = [
+            [*agent_cells(row), AgentCard(self.page, row, picture, self._load)]
+            for row, picture in zip(rows, pictures, strict=True)
+        ]
         if owners:
             columns.append(DataTableColumn("Default owner", width=280))
             for row, line in zip(rows, cells, strict=True):
@@ -120,6 +128,17 @@ class AgentsTab(ft.Container):
         # ``_load`` starts before the tab is mounted: update only once it is.
         if self._table.page:
             self._table.update()
+
+    async def _picture(self, row: dict[str, Any]) -> bytes | None:
+        """The agent's picture, if it has one: read once per version."""
+        if not row["image"]:
+            return None
+        name = row["account"]["name"]
+        key = (name, row["image"])
+        if key not in self._pictures:
+            client = get_session_state(self.page).api_client
+            self._pictures[key] = await client.get_bytes(f"{AGENTS}/{name}/image")
+        return self._pictures[key]
 
     def _owner_picker(
         self, account: dict[str, Any], owners: list[dict[str, Any]]

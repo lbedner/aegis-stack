@@ -48,6 +48,10 @@ MEET = "https://meet.google.com/abc-defg-hij"
 # Another owner than the one signed in. With auth, a meeting's owner is a
 # user: 999 is one conftest seeds (``KNOWN_OWNER_IDS``).
 THEIRS = 999
+# The smallest PNG there is, one transparent pixel: an agent's picture.
+PIXEL_PNG = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+)
 # A second of someone talking, as the Meet page hands it to the bot.
 SECOND = base64.b64encode(b"\x00\x40" * RATE).decode()
 # William at 20:52 in a real call (SAID), then the same turn as Meet shows
@@ -68,9 +72,11 @@ def bot_on(
     notes: Callable[[int], Awaitable[None]] | None = None,
     guides: Callable[[int], Awaitable[None]] | None = None,
     themes: Callable[[int], Awaitable[None]] | None = None,
+    speech: bytes | None = None,
 ) -> None:
     """The bot runs on ``session`` and joins ``call`` instead of a browser,
-    beating on every look."""
+    beating on every look; what it says aloud is ``speech`` (no voice when
+    None)."""
     monkeypatch.setattr(bot, "get_async_session", opens(session))
     monkeypatch.setattr(bot, "POLL_SECONDS", poll_seconds)
     monkeypatch.setattr(bot, "BEAT_SECONDS", 0)
@@ -79,11 +85,19 @@ def bot_on(
     monkeypatch.setattr(bot, "guides_writer", lambda: guides)
     monkeypatch.setattr(bot, "themes_writer", lambda: themes)
 
+    async def spoken(text: str, voice: Any) -> bytes | None:
+        return speech
+
+    monkeypatch.setattr(bot, "spoken", spoken)
+
     @asynccontextmanager
     async def open_meet(
-        url: str, on_audio: Callable[[str], None] | None = None, login: str = LOGIN
+        url: str,
+        on_audio: Callable[[str], None] | None = None,
+        login: str = LOGIN,
+        start: Any = None,
     ) -> AsyncIterator[Any]:
-        call.on_audio, call.login = on_audio, login
+        call.on_audio, call.login, call.start = on_audio, login, start
         yield call
 
     monkeypatch.setattr(bot, "open_meet", open_meet)

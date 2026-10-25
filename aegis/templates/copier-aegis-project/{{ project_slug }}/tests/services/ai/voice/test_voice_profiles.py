@@ -174,3 +174,19 @@ class TestAtStartup:
 
         assert settings.TTS_VOICE == "nova"
         assert service._tts_service is None
+
+
+async def test_anything_headless_speaks_in_the_active_voice(
+    async_db_session: AsyncSession,
+) -> None:
+    """A worker or the CLI never runs the webserver's startup, which puts
+    the active profile on the settings: they read it here."""
+    from app.core.config import settings
+
+    assert await profiles.active_settings(async_db_session, settings) is settings
+    async_db_session.add(VoiceProfile(name="Hers", is_active=True, tts_voice="nova"))
+    await async_db_session.commit()
+
+    spoken = await profiles.active_settings(async_db_session, settings)
+
+    assert spoken.TTS_VOICE == "nova" and settings.TTS_VOICE != "nova"

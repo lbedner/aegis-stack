@@ -18,7 +18,7 @@ from app.services.meetings.domains.bot.login import LOGIN
 from app.services.meetings.domains.bot.meet import CallState
 from app.services.meetings.models import MeetingStatus
 from app.services.meetings.service import DEFAULT_BOT_NAME, MeetingsService, transition
-from tests._meetings import MEET, bot_on, hold_the_bot, signed_in_state
+from tests._meetings import MEET, PIXEL_PNG, bot_on, hold_the_bot, signed_in_state
 from tests._secret_settings import FakeStore, use_store
 
 
@@ -198,3 +198,59 @@ class _Call:
 
     async def leave(self) -> None:
         return None
+
+
+async def test_an_agent_keeps_its_image_and_whether_its_camera_is_on(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    use_store(monkeypatch)
+    await accounts.set_image(
+        async_db_session, accounts.DEFAULT_AGENT, PIXEL_PNG, "image/png"
+    )
+    await accounts.set_camera(async_db_session, accounts.DEFAULT_AGENT, False)
+
+    [row] = await accounts.overview(async_db_session)
+    kept = await accounts.image_named(async_db_session, accounts.DEFAULT_AGENT)
+
+    assert row.image is not None and not row.account.camera
+    assert kept is not None and (kept.data, kept.content_type) == (
+        PIXEL_PNG,
+        "image/png",
+    )
+    await accounts.clear_image(async_db_session, accounts.DEFAULT_AGENT)
+    assert await accounts.image_named(async_db_session, accounts.DEFAULT_AGENT) is None
+
+
+async def test_a_new_picture_is_a_new_version(async_db_session: AsyncSession) -> None:
+    """What the picture's address carries, so a browser keeps one until
+    it changes."""
+
+    async def version() -> object:
+        [row] = await accounts.overview(async_db_session)
+        return row.image
+
+    await accounts.set_image(
+        async_db_session, accounts.DEFAULT_AGENT, PIXEL_PNG, "image/png"
+    )
+    first = await version()
+    await accounts.set_image(
+        async_db_session, accounts.DEFAULT_AGENT, PIXEL_PNG, "image/gif"
+    )
+
+    assert await version() not in (None, first)
+    kept = await accounts.image_named(async_db_session, accounts.DEFAULT_AGENT)
+    assert kept is not None and kept.content_type == "image/gif"
+
+
+async def test_an_image_is_one_a_browser_draws_and_small(
+    async_db_session: AsyncSession,
+) -> None:
+    with pytest.raises(accounts.AgentImageError):
+        await accounts.set_image(
+            async_db_session, accounts.DEFAULT_AGENT, PIXEL_PNG, "application/pdf"
+        )
+    with pytest.raises(accounts.AgentImageError):
+        too_big = b"x" * (accounts.MOST_IMAGE_BYTES + 1)
+        await accounts.set_image(
+            async_db_session, accounts.DEFAULT_AGENT, too_big, "image/png"
+        )

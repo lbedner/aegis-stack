@@ -5,19 +5,25 @@ Provides a unified interface for Text-to-Speech synthesis.
 """
 
 from abc import ABC, abstractmethod
+import base64
 from collections.abc import AsyncIterator
 import logging
 from typing import Any
 
 from ..models import (
     DEFAULT_TTS_MODEL,
+    DEFAULT_TTS_MODELS,
     DEFAULT_TTS_VOICE,
+    DEFAULT_TTS_VOICES,
     INSTRUCTED_TTS_MODELS,
+    REALTIME_TTS_MODELS,
+    TTS_FORMATS,
     AudioFormat,
     SpeechRequest,
     SpeechResult,
     TTSProvider,
 )
+from . import length, realtime
 
 logger = logging.getLogger(__name__)
 
@@ -59,14 +65,10 @@ class BaseTTSProvider(ABC):
 
 
 class OpenAITTSProvider(BaseTTSProvider):
-    """OpenAI TTS API provider.
-
-    Uses the OpenAI API for high-quality cloud-based speech synthesis.
-    Requires OPENAI_API_KEY environment variable.
-
-    Supports two models:
-    - tts-1: Optimized for speed
-    - tts-1-hd: Higher quality, slightly slower
+    """OpenAI's speech: gpt-realtime-2.1-mini over the Realtime API
+    (``realtime``), or, until they shut down on Jan 6, 2027, the
+    /v1/audio/speech models (gpt-4o-mini-tts, tts-1, tts-1-hd).
+    Requires OPENAI_API_KEY.
     """
 
     provider_type = TTSProvider.OPENAI
@@ -82,8 +84,8 @@ class OpenAITTSProvider(BaseTTSProvider):
 
         Args:
             api_key: OpenAI API key. If None, uses OPENAI_API_KEY env var.
-            model: TTS model to use (tts-1 or tts-1-hd).
-            voice: Default voice (alloy, echo, fable, onyx, nova, shimmer).
+            model: Speech model (the catalog's OpenAI ones).
+            voice: Default voice (one the model speaks).
             base_url: Optional base URL for OpenAI-compatible APIs.
         """
         self.api_key = api_key
@@ -129,19 +131,44 @@ class OpenAITTSProvider(BaseTTSProvider):
             kwargs["instructions"] = request.instructions
         return kwargs
 
+    async def _realtime(self, request: SpeechRequest) -> SpeechResult:
+        """The line read by a realtime model, as a WAV, with its tokens."""
+        try:
+            pcm, tokens = await realtime.say(
+                self._get_client(),
+                self.model,
+                request.text,
+                voice=request.voice or self.default_voice,
+                delivery=request.instructions,
+                speed=request.speed,
+            )
+        except Exception as e:
+            logger.error(f"OpenAI realtime speech failed: {e}")
+            raise RuntimeError(f"Speech synthesis failed: {e}") from e
+        wav = realtime.wav(pcm)
+        return SpeechResult(
+            audio=wav,
+            format=AudioFormat.WAV,
+            duration_seconds=length.wav_seconds(wav),
+            provider=self.provider_type,
+            tokens=tokens,
+        )
+
     async def synthesize(self, request: SpeechRequest) -> SpeechResult:
         """Synthesize speech using OpenAI TTS API."""
+        if self.model in REALTIME_TTS_MODELS:
+            return await self._realtime(request)
         client = self._get_client()
 
         try:
             response = await client.audio.speech.create(**self._speech_kwargs(request))
 
-            # Read the audio content
-            audio_data = response.content
-
+            audio = response.content
+            spoken_as = TTS_FORMATS[self.provider_type]
             return SpeechResult(
-                audio=audio_data,
-                format=AudioFormat.MP3,
+                audio=audio,
+                format=spoken_as,
+                duration_seconds=length.seconds(audio, spoken_as),
                 provider=self.provider_type,
             )
 
@@ -150,7 +177,8 @@ class OpenAITTSProvider(BaseTTSProvider):
             raise RuntimeError(f"Speech synthesis failed: {e}") from e
 
     async def synthesize_stream(self, request: SpeechRequest) -> AsyncIterator[bytes]:
-        """Stream audio from OpenAI TTS."""
+        """Stream audio from OpenAI's speech endpoint (``TTSService`` sends a
+        model that cannot stream, a realtime one, to ``synthesize``)."""
         client = self._get_client()
 
         # Passed on as OpenAI generates it: awaiting the whole response and
@@ -166,6 +194,60 @@ class OpenAITTSProvider(BaseTTSProvider):
         except Exception as e:
             logger.error(f"OpenAI TTS streaming failed: {e}")
             raise RuntimeError(f"Speech synthesis failed: {e}") from e
+
+
+class GeminiTTSProvider(BaseTTSProvider):
+    """Gemini's speech models (``google-genai``'s Interactions API), in its
+    voices: the 30 prebuilt ones Gemini Live speaks, or one from its voice
+    library by id. The line is the transcript; the delivery
+    (``instructions``) is its ``speech_metadata`` style. It answers with a
+    WAV; it has no speed to set."""
+
+    provider_type = TTSProvider.GEMINI
+
+    def __init__(
+        self,
+        api_key: str | None = None,
+        model: str = DEFAULT_TTS_MODELS[TTSProvider.GEMINI],
+        voice: str = DEFAULT_TTS_VOICES[TTSProvider.GEMINI],
+    ) -> None:
+        self.api_key = api_key
+        self.model = model
+        self.default_voice = voice
+        self._client: Any = None
+
+    def _get_client(self) -> Any:
+        if self._client is None:
+            from google import genai
+
+            self._client = genai.Client(api_key=self.api_key)
+        return self._client
+
+    async def synthesize(self, request: SpeechRequest) -> SpeechResult:
+        text: dict[str, Any] = {"type": "text", "text": request.text}
+        if request.instructions:
+            text["annotations"] = [
+                {"type": "speech_metadata", "style": request.instructions}
+            ]
+        try:
+            said = await self._get_client().aio.interactions.create(
+                model=self.model,
+                input=[{"type": "user_input", "content": [text]}],
+                response_format={"type": "audio"},
+                generation_config={
+                    "speech_config": [{"voice": request.voice or self.default_voice}]
+                },
+            )
+            audio = base64.b64decode(said.output_audio.data)
+        except Exception as e:
+            logger.error(f"Gemini TTS synthesis failed: {e}")
+            raise RuntimeError(f"Speech synthesis failed: {e}") from e
+        return SpeechResult(
+            audio=audio,
+            format=TTS_FORMATS[self.provider_type],
+            duration_seconds=length.wav_seconds(audio),
+            provider=self.provider_type,
+        )
 
 
 def get_tts_provider(
@@ -196,6 +278,12 @@ def get_tts_provider(
             model=model or DEFAULT_TTS_MODEL,
             voice=voice or DEFAULT_TTS_VOICE,
             **kwargs,
+        )
+    elif provider == TTSProvider.GEMINI:
+        return GeminiTTSProvider(
+            api_key=api_key,
+            model=model or DEFAULT_TTS_MODELS[provider],
+            voice=voice or DEFAULT_TTS_VOICES[provider],
         )
     else:
         raise ValueError(f"Unsupported TTS provider: {provider}")

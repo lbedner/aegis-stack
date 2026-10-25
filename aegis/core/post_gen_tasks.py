@@ -508,6 +508,7 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         # sqlalchemy.
         remove_dir(project_path, "app/services/ai/models/voice")
         remove_file(project_path, "app/services/ai/domains/voice/profiles.py")
+        remove_file(project_path, "app/services/ai/domains/voice/design.py")
         remove_file(project_path, "app/services/ai/domains/voice/queries.py")
         remove_file(project_path, "app/services/ai/domains/voice/live_engines.py")
         remove_file(project_path, "app/services/ai/domains/voice/realtime_calls.py")
@@ -522,6 +523,7 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         # Voice prices and the usage ledger they land in are tables too.
         remove_file(project_path, "tests/services/ai/voice/test_speech_costs.py")
         remove_file(project_path, "tests/services/ai/voice/test_voice_profiles.py")
+        remove_file(project_path, "tests/services/ai/voice/test_voice_design.py")
         remove_file(project_path, "tests/web/test_chat_voices.py")
         remove_file(project_path, "tests/web/test_chat_live.py")
         remove_file(project_path, "tests/_voice_catalog.py")

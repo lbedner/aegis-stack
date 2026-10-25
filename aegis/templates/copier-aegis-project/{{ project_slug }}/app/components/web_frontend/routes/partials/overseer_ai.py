@@ -7,6 +7,9 @@ audio file transcribed. Mounted by ``routes/pages.py``."""
 
 from typing import Annotated, Any
 
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile
+from fastapi.responses import HTMLResponse, Response
+
 from app.components.web_frontend import (
     overseer_ai_agents,
     overseer_ai_catalog,
@@ -15,7 +18,11 @@ from app.components.web_frontend import (
 )
 from app.components.web_frontend.chat_surface import HAS_VOICE, PERSISTED
 from app.components.web_frontend.overseer_access import Db, overseer_db
-from app.components.web_frontend.overseer_ai_common import HAS_RAG, PARTIALS
+from app.components.web_frontend.overseer_ai_common import (
+    HAS_RAG,
+    PARTIALS,
+    section_url,
+)
 from app.components.web_frontend.rendering import (
     dialog,
     form_fields,
@@ -23,8 +30,6 @@ from app.components.web_frontend.rendering import (
     image_response,
     toast_response,
 )
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, Response
 
 router = APIRouter(prefix=PARTIALS)
 # What the stack has decides what is mounted (at the end): a database for
@@ -306,6 +311,44 @@ async def rag_search(
         "pages/overseer/ai/_search_results.html",
         query=query.strip(),
         rows=overseer_ai_rag.result_rows(results),
+    )
+
+
+@with_voice.post("/voice/use")
+async def use_voice(request: Request, db: Db = Depends(overseer_db)) -> Response:
+    """A row's model, voice or engine on the active voice profile."""
+    said = await overseer_ai_voice.use(db, await form_fields(request))
+    return go_to(section_url("voice"), f"Now using {said}.", target="#overseer-main")
+
+
+@with_voice.post("/voice/design")
+async def save_design(request: Request, db: Db = Depends(overseer_db)) -> Response:
+    """The voice designer's choices saved onto its profile."""
+    said, saved = await overseer_ai_voice.save(db, await form_fields(request))
+    if saved is None:
+        return toast_response(said, "error")
+    return go_to(section_url("voice"), said, target="#overseer-main")
+
+
+@with_voice.post("/voice/profiles")
+async def make_profile(
+    name: Annotated[str, Form()] = "", db: Db = Depends(overseer_db)
+) -> Response:
+    """A new voice profile, opened in its editor."""
+    said, made = await overseer_ai_voice.make(db, name)
+    if made is None:
+        return toast_response(said, "error")
+    return go_to(section_url("voice", profile=str(made)), said, target="#overseer-main")
+
+
+@with_voice.post("/voice/profile")
+async def switch_voice(
+    profile_id: Annotated[int, Form()], db: Db = Depends(overseer_db)
+) -> Response:
+    """Another voice profile made the active one."""
+    name = await overseer_ai_voice.switch(db, profile_id)
+    return go_to(
+        section_url("voice"), f"Now speaking as {name}.", target="#overseer-main"
     )
 
 

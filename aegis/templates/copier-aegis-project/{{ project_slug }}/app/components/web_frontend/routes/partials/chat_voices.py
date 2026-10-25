@@ -22,25 +22,9 @@ from app.components.web_frontend.chat_surface import ChatSurface
 from app.components.web_frontend.rendering import dialog, templates, with_toast
 from app.core.config import settings
 from app.core.db import get_async_db
-from app.services.ai.service import TTSService, VoiceProfile, profiles
+from app.services.ai.service import TTSService, VoiceProfile, design, profiles
 
 TEMPLATE = "partials/chat/voices.html"
-
-# One passage for every preview, so voices are compared on the same words:
-# a figure, some bad news, and a question.
-PREVIEW_TEXT = (
-    "Here's where things stand. Three items came in since yesterday, and "
-    "two of them are done. Heads up, though: one is already four days "
-    "overdue. Want me to walk you through it?"
-)
-
-
-def _choices() -> dict[str, list[dict[str, str]]]:
-    """The edit form's options, from the one list each (``profiles``)."""
-    return {
-        column: [{"id": v, "name": v} for v in allowed]
-        for column, allowed in profiles.CHOICES.items()
-    }
 
 
 def add_voice_routes(router: APIRouter, mount: ChatSurface) -> None:
@@ -88,8 +72,7 @@ def add_voice_routes(router: APIRouter, mount: ChatSurface) -> None:
             voice=profile,
             values=values or profile.model_dump(),
             errors=errors or [],
-            choices=_choices(),
-            speed=profiles.SPEED_RANGE,
+            choices=profiles.form_choices(),
             idle=profiles.IDLE_RANGE,
             path=voices_path,
         )
@@ -181,17 +164,10 @@ def add_voice_routes(router: APIRouter, mount: ChatSurface) -> None:
 
     @router.get("/voices/{profile_id}/preview")
     async def preview_voice(
-        request: Request, profile_id: int, db: AsyncSession = Depends(get_async_db)
+        profile_id: int, db: AsyncSession = Depends(get_async_db)
     ) -> Response:
         """The preview passage in THIS profile's voice, whichever one is
-        active - or, from the edit form, in the values the form holds,
-        unsaved (the query carries them, checked as a save would be)."""
-        profile = await owned(db, profile_id)
-        if "tts_voice" in request.query_params:
-            values, errors = profiles.parse_form(request.query_params)
-            if errors:
-                return Response(status_code=422)
-            profile = VoiceProfile(**values)
-        tts = TTSService(profiles.settings_for(profile, settings))
-        audio = await chat.synthesize(PREVIEW_TEXT, tts=tts)
-        return Response(content=audio, media_type="audio/mpeg")
+        active."""
+        tts = TTSService(profiles.settings_for(await owned(db, profile_id), settings))
+        said = await chat.synthesize(design.PREVIEW_TEXT, tts=tts)
+        return Response(content=said.audio, media_type=said.media_type)

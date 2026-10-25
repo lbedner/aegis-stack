@@ -23,6 +23,7 @@ from app.core.config import settings
 from app.services.ai.domains.voice import profiles
 from app.services.ai.models.voice import VoiceProfile
 from app.services.system.models import ComponentStatus
+from tests._voice_catalog import keep_voice_settings
 from tests.web.dom import none, one, oob, select, text
 from tests.web.overseer import sign_in, status_with
 
@@ -56,8 +57,7 @@ def hx(client: TestClient) -> TestClient:
 def _restore_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     """Switching a profile writes the running settings; each test puts
     them back."""
-    for key in profiles.SETTINGS.values():
-        monkeypatch.setattr(settings, key, getattr(settings, key))
+    keep_voice_settings(monkeypatch)
 
 
 @pytest.fixture
@@ -206,20 +206,24 @@ class TestMaking:
 
 
 class TestEditing:
-    def test_the_form_offers_the_documented_choices(
+    def test_the_form_holds_what_the_designer_does_not_and_opens_it(
         self, hx: TestClient, voices: dict[str, VoiceProfile]
     ) -> None:
+        """The voice itself (which one, its model, speed and delivery) is
+        put together in the voice designer, one place; the form keeps the
+        rest and opens the designer on this profile."""
         form = one(
             hx.get(f"{VOICES}/{voices['marin'].id}/edit").text, "form[data-voice-form]"
         )
-        voice_options = [
-            o.get("value") for o in form.cssselect("select[name=tts_voice] option")
-        ]
-        assert voice_options == list(profiles.TTS_VOICES)
-        chosen = form.cssselect("select[name=tts_voice] option[selected]")
-        assert [o.get("value") for o in chosen] == ["marin"]
-        instructions = form.cssselect("textarea[name=tts_instructions]")
-        assert [text(t) for t in instructions] == ["Voice Affect: Warm."]
+        for column in ("stt_model", "reply", "working_sound"):
+            one(form, f"select[name={column}]")
+        for column in ("tts_voice", "tts_model", "tts_speed", "tts_instructions"):
+            assert not form.cssselect(f"[name={column}]"), column
+        design = one(form, "a[data-voice-design]")
+        assert (
+            design.get("href")
+            == f"/overseer/services/ai/voice?profile={voices['marin'].id}"
+        )
 
     async def test_saving_the_active_voice_applies_it(
         self,
@@ -229,13 +233,13 @@ class TestEditing:
     ) -> None:
         response = hx.post(
             f"{VOICES}/{voices['marin'].id}",
-            data=_form(voices["marin"], tts_speed="1.35"),
+            data=_form(voices["marin"], stt_model="whisper-1"),
         )
 
         assert response.status_code == 200
-        assert settings.TTS_SPEED == 1.35
+        assert settings.STT_MODEL == "whisper-1"
         await async_db_session.refresh(voices["marin"])
-        assert voices["marin"].tts_speed == 1.35
+        assert voices["marin"].stt_model == "whisper-1"
 
     def test_the_form_holds_the_live_dead_air_limit(
         self, hx: TestClient, voices: dict[str, VoiceProfile]
@@ -260,12 +264,12 @@ class TestEditing:
     async def test_saving_another_voice_leaves_the_active_one_alone(
         self, hx: TestClient, voices: dict[str, VoiceProfile]
     ) -> None:
-        before = settings.TTS_VOICE
+        before = settings.STT_MODEL
         hx.post(
             f"{VOICES}/{voices['nova'].id}",
-            data=_form(voices["nova"], tts_voice="coral"),
+            data=_form(voices["nova"], stt_model="whisper-1"),
         )
-        assert settings.TTS_VOICE == before
+        assert settings.STT_MODEL == before
 
     async def test_the_live_engine_is_picked_with_the_models_not_here(
         self,
@@ -290,9 +294,7 @@ class TestEditing:
     @pytest.mark.parametrize(
         "change",
         [
-            {"tts_speed": "9"},
-            {"tts_speed": "fast"},
-            {"tts_voice": "ghost"},
+            {"stt_model": "ghost"},
             {"name": ""},
             {"live_idle_seconds": "-1"},
             {"live_idle_seconds": "601"},
@@ -344,7 +346,7 @@ class TestPreviewing:
 
             async def synthesize(self, request: Any) -> Any:
                 heard.append(request)
-                return SimpleNamespace(audio=b"ID3")
+                return SimpleNamespace(audio=b"ID3", media_type="audio/mpeg")
 
         monkeypatch.setattr(chat_voices, "TTSService", _TTS)
         active = settings.TTS_VOICE
@@ -357,67 +359,14 @@ class TestPreviewing:
             "nova",
             "gpt-4o-mini-tts",
         )
-        assert request.text == chat_voices.PREVIEW_TEXT
+        assert request.text == chat_voices.design.PREVIEW_TEXT
         assert settings.TTS_VOICE == active  # previewing does not switch
-
-
-class TestPreviewingUnsavedChanges:
-    """The form's preview speaks what is in the form, not what was saved:
-    changing the voice and pressing preview kept playing the old one."""
-
-    def test_the_form_preview_reads_the_form(
-        self, hx: TestClient, voices: dict[str, VoiceProfile]
-    ) -> None:
-        form = one(
-            hx.get(f"{VOICES}/{voices['marin'].id}/edit").text, "form[data-voice-form]"
-        )
-        button = form.cssselect("button[data-speak]")[0]
-        assert button.get("data-speak") == f"{VOICES}/{voices['marin'].id}/preview"
-        assert button.get("data-speak-form") is not None
-
-    def test_values_in_the_query_are_spoken_unsaved(
-        self,
-        client: TestClient,
-        voices: dict[str, VoiceProfile],
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        heard: list[Any] = []
-
-        class _TTS:
-            def __init__(self, voice_settings: Any) -> None:
-                heard.append(voice_settings)
-
-            async def synthesize(self, request: Any) -> Any:
-                return SimpleNamespace(audio=b"ID3")
-
-        monkeypatch.setattr(chat_voices, "TTSService", _TTS)
-        response = client.get(
-            f"{VOICES}/{voices['marin'].id}/preview",
-            params=_form(voices["marin"], tts_voice="coral", tts_speed="1.5"),
-        )
-
-        assert response.status_code == 200
-        assert (heard[0].TTS_VOICE, heard[0].TTS_SPEED) == ("coral", 1.5)
-        assert voices["marin"].tts_voice == "marin"  # nothing saved
-
-    def test_nonsense_in_the_query_is_a_422(
-        self, client: TestClient, voices: dict[str, VoiceProfile]
-    ) -> None:
-        response = client.get(
-            f"{VOICES}/{voices['marin'].id}/preview",
-            params=_form(voices["marin"], tts_voice="ghost"),
-        )
-        assert response.status_code == 422
 
 
 def _form(profile: VoiceProfile, **changes: str) -> dict[str, str]:
     values = {
         "name": profile.name,
         "stt_model": profile.stt_model or "",
-        "tts_model": profile.tts_model or "",
-        "tts_voice": profile.tts_voice or "",
-        "tts_speed": str(profile.tts_speed),
-        "tts_instructions": profile.tts_instructions or "",
         "reply": profile.reply,
         "working_sound": profile.working_sound,
         "live_idle_seconds": str(profile.live_idle_seconds),

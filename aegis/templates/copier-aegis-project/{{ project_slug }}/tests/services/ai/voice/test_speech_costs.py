@@ -16,6 +16,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 import app.core.db as db_module
 from app.services.ai.domains.spend import recording as usage_recording
+from app.services.ai.domains.voice.models import SpeechTokens
 from app.services.ai.domains.voice.stt import STTService
 from app.services.ai.domains.voice.tts import TTSService
 from app.services.ai.models.llm import LLMUsage
@@ -99,6 +100,23 @@ class TestHearing:
 
 class TestSpeaking:
     @pytest.mark.asyncio
+    async def test_a_realtime_line_is_priced_by_its_tokens(
+        self, ledger: AsyncSession
+    ) -> None:
+        priced = await usage_recording.speech_cost(
+            "gpt-realtime-2.1-mini",
+            characters=900,
+            tokens=SpeechTokens(
+                input_tokens=1_000,
+                output_tokens=1_000_000,
+                output_audio_tokens=1_000_000,
+            ),
+        )
+
+        # 1k text in at $0.60/M, 1M audio out at $20/M; never by the character.
+        assert priced == pytest.approx(0.0006 + 20.0)
+
+    @pytest.mark.asyncio
     async def test_a_spoken_reply_is_priced_by_its_characters(
         self, ledger: AsyncSession
     ) -> None:
@@ -123,3 +141,32 @@ class TestSpeaking:
         (row,) = (await ledger.exec(select(LLMUsage))).all()
         assert (row.action, row.model_id) == ("tts", "tts-1")
         assert row.total_cost == pytest.approx(0.03)
+
+
+class TestRealtimeSpeechInTheLedger:
+    @pytest.mark.asyncio
+    async def test_a_realtime_line_keeps_its_tokens(self, ledger: AsyncSession) -> None:
+        tts = TTSService(
+            _settings(
+                TTS_PROVIDER="openai",
+                TTS_MODEL="gpt-realtime-2.1-mini",
+                TTS_VOICE="marin",
+                TTS_SPEED=1.0,
+                TTS_INSTRUCTIONS=None,
+            )
+        )
+        await tts._record_usage(
+            input_characters=12,
+            output_duration_seconds=1.5,
+            latency_ms=900,
+            user_id="0",
+            success=True,
+            error_message=None,
+            tokens=SpeechTokens(
+                input_tokens=40, output_tokens=120, output_audio_tokens=100
+            ),
+        )
+
+        (row,) = (await ledger.exec(select(LLMUsage))).all()
+        assert (row.input_tokens, row.output_tokens) == (40, 120)
+        assert row.total_cost > 0

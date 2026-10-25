@@ -31,6 +31,7 @@ from app.services.ai.domains.voice.realtime_calls import (
     END_CALL,
     RESUME_WINDOW,
     TurnLog,
+    call_voice,
     resumed,
     save_turn,
 )
@@ -442,6 +443,24 @@ class TestTheSettings:
             },
         }
 
+    def test_a_call_speaks_the_profiles_voice_where_its_engine_has_it(self) -> None:
+        """One voice for the agent: Gemini Live speaks a Gemini voice the
+        profile names (the one its spoken lines use); an engine without
+        that voice speaks its own."""
+        from app.services.ai.domains.voice.realtime_calls import (
+            OPENAI_VOICE,
+            _model_settings,
+        )
+
+        assert (
+            _model_settings("google:gemini-3.8-live", "Kore", None)["google_voice"]
+            == "Kore"
+        )
+        assert (
+            _model_settings("openai:gpt-realtime-2.1", "Kore", None)["openai_voice"]
+            == OPENAI_VOICE
+        )
+
     def test_gemini_waits_out_a_breath_mid_thought(self) -> None:
         """Quick to end a turn, but not on a pause mid-sentence: Google's
         advice against cutting in is 500-800ms of silence."""
@@ -670,3 +689,25 @@ class TestDrivingACall:
         )
 
         assert ended == ("provider" if ends else "page")
+
+
+def test_a_call_speaks_only_a_prebuilt_gemini_voice(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Gemini Live has the 30 prebuilt voices, not its library's."""
+    from app.services.ai.domains.voice import library
+    from app.services.ai.domains.voice.models import VoiceInfo
+
+    amelia = VoiceInfo(
+        id="voice_en_gb_amelia",
+        name="Amelia",
+        provider_id="gemini",
+        model_ids=["gemini-3.8-flash-tts"],
+        description="Bright, clear",
+        gender="female",
+        accent="British",
+    )
+    monkeypatch.setattr(library, "KEPT", {amelia.id: amelia})
+
+    assert call_voice("google:gemini-3.8-live", "Kore") == "Kore"
+    assert call_voice("google:gemini-3.8-live", "voice_en_gb_amelia") is None

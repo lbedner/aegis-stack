@@ -2,7 +2,9 @@
 
 from unittest.mock import AsyncMock, MagicMock
 
-from app.services.ai.domains.voice.models import TTSProvider
+import pytest
+
+from app.services.ai.domains.voice.models import DEFAULT_TTS_MODEL, TTSProvider
 from app.services.ai.domains.voice.tts import TTSService
 
 
@@ -56,7 +58,7 @@ class TestTTSServiceInit:
         service = TTSService()
 
         assert service.provider_type == TTSProvider.OPENAI
-        assert service.model == "tts-1"
+        assert service.model == DEFAULT_TTS_MODEL
         assert service.voice == "alloy"
 
 
@@ -81,7 +83,7 @@ class TestTTSServiceProperties:
         """Test model property returns provider default when not set."""
         service = TTSService()
 
-        assert service.model == "tts-1"
+        assert service.model == DEFAULT_TTS_MODEL
 
     def test_model_property_returns_explicit(self) -> None:
         """Test model property returns explicit model when set."""
@@ -191,7 +193,7 @@ class TestTTSServiceStatus:
 
         assert isinstance(status, dict)
         assert status["provider"] == "openai"
-        assert status["model"] == "tts-1"
+        assert status["model"] == DEFAULT_TTS_MODEL
         assert status["voice"] == "alloy"
         assert status["speed"] == 1.0
         assert status["initialized"] is False
@@ -245,7 +247,7 @@ class TestStreamingRecordsUsage:
         service = TTSService(
             MagicMock(
                 TTS_PROVIDER="openai",
-                TTS_MODEL=None,
+                TTS_MODEL="gpt-4o-mini-tts",
                 TTS_VOICE=None,
                 TTS_SPEED=1.0,
                 TTS_INSTRUCTIONS=None,
@@ -290,7 +292,7 @@ class TestTheConfiguredVoiceIsUsed:
         provider.synthesize_stream = _chunks
         settings = MagicMock(
             TTS_PROVIDER="openai",
-            TTS_MODEL=None,
+            TTS_MODEL="gpt-4o-mini-tts",  # the streamed speech endpoint
             TTS_VOICE=None,
             TTS_SPEED=speed,
             TTS_INSTRUCTIONS=instructions,
@@ -318,3 +320,58 @@ class TestTheConfiguredVoiceIsUsed:
         request = SpeechRequest(text="Hi", speed=0.9, instructions="Whisper.")
         [c async for c in service.synthesize_stream(request)]
         assert (seen[0].speed, seen[0].instructions) == (0.9, "Whisper.")
+
+
+class TestWhatEachSpeaksIn:
+    """A stream's response is typed before its first byte: OpenAI's
+    realtime model and Gemini answer in WAV, OpenAI's speech endpoint in
+    MP3."""
+
+    def test_the_media_type_follows_the_provider_and_its_model(self) -> None:
+        for provider, model, media in (
+            ("openai", None, "audio/wav"),  # gpt-realtime-2.1-mini
+            ("openai", "gpt-4o-mini-tts", "audio/mpeg"),
+            ("gemini", None, "audio/wav"),
+            ("gemini", "gemini-3.8-flash-lite-tts", "audio/wav"),
+        ):
+            settings = MagicMock(
+                TTS_PROVIDER=provider,
+                TTS_MODEL=model,
+                TTS_VOICE=None,
+                TTS_SPEED=1.0,
+                TTS_INSTRUCTIONS=None,
+            )
+            assert TTSService(settings).media_type == media, (provider, model)
+
+
+class TestStreamingMeasuresTheSpeech:
+    """A streamed reply is billed like a whole one: by the second of speech
+    for gpt-4o-mini-tts, measured from what was streamed."""
+
+    async def test_the_streamed_audio_is_measured(self, monkeypatch) -> None:  # noqa: ANN001
+        from app.services.ai.domains.voice.models import SpeechRequest
+
+        frame = b"\xff\xf3\xc4\xc4" + b"\x00" * 380  # 0.024s of MP3
+
+        async def _chunks(request):  # noqa: ANN001, ANN202
+            yield frame * 20
+            yield frame * 30
+
+        provider = MagicMock()
+        provider.synthesize_stream = _chunks
+        service = TTSService(
+            MagicMock(
+                TTS_PROVIDER="openai",
+                TTS_MODEL="gpt-4o-mini-tts",
+                TTS_VOICE=None,
+                TTS_SPEED=1.0,
+                TTS_INSTRUCTIONS=None,
+            )
+        )
+        monkeypatch.setattr(service, "_get_provider", AsyncMock(return_value=provider))
+        record = AsyncMock()
+        monkeypatch.setattr(service, "_record_usage", record)
+
+        [c async for c in service.synthesize_stream(SpeechRequest(text="Hello"))]
+
+        assert record.call_args.kwargs["output_duration_seconds"] == pytest.approx(1.2)

@@ -87,10 +87,21 @@ if TYPE_CHECKING:
     from app.services.ai.domains.spend.windows import spend_windows
 {%- endif %}
 {%- if ai_voice and ai_backend != "memory" %}
-    from app.services.ai.domains.voice import live_engines, profiles, realtime_calls
+    from app.services.ai.domains.voice import (
+        design,
+        live_engines,
+        profiles,
+        realtime_calls,
+    )
 {%- endif %}
 {%- if ai_voice %}
     from app.services.ai.domains.voice.models import SpeechRequest
+    from app.services.ai.domains.voice.overview import (
+        VoiceOverview,
+        switch_voice,
+        use_voice,
+        voice_overview,
+    )
     from app.services.ai.domains.voice.spoken import to_spoken
     from app.services.ai.domains.voice.tts import TTSService
 {%- endif %}

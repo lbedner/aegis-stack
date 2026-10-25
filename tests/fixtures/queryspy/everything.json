@@ -1816,6 +1816,12 @@
     },
     {
       "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting WHERE meeting.status IN (__[POSTCOMPILE_status_1]) ORDER BY meeting.id",
+      "file": "app/services/meetings/domains/accounts/queries.py",
+      "function": "meetings_in"
+    },
+    {
+      "kind": "repeated_statement",
       "label": "SELECT ... FROM meeting_action_run JOIN meeting_moment ON meeting_moment.id = meeting_action_run.moment_id JOIN meeting ON meeting.id = meeting_moment.meeting_id WHERE meeting.owner_user_id = :owner_user_id_1 AND meeting_action_run.status = :status_1 AND meeting_action_run.action IN (__[POSTCOMPILE_action_1]) ORDER BY meeting_action_run.asked_at, meeting_action_run.id LIMIT :param_1",
       "file": "app/services/meetings/domains/actions/queries.py",
       "function": "waiting"
@@ -1843,6 +1849,18 @@
       "label": "SELECT ... FROM meeting_action_run WHERE meeting_action_run.moment_id IN (__[POSTCOMPILE_moment_id_1]) ORDER BY meeting_action_run.asked_at, meeting_action_run.id",
       "file": "app/services/meetings/domains/moments/queries.py",
       "function": "runs_of"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_agent_image JOIN meeting_bot_account ON meeting_bot_account.id = meeting_agent_image.account_id WHERE meeting_bot_account.name = :name_1",
+      "file": "app/services/meetings/domains/accounts/queries.py",
+      "function": "image_named"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_agent_image WHERE meeting_agent_image.account_id IN (__[POSTCOMPILE_account_id_1])",
+      "file": "app/services/meetings/domains/accounts/queries.py",
+      "function": "with_images"
     },
     {
       "kind": "repeated_statement",
@@ -2503,6 +2521,12 @@
       "label": "SELECT DISTINCT ... FROM finance_transaction WHERE finance_transaction.recurring_stream_id IN (__[POSTCOMPILE_recurring_stream_id_1]) AND finance_transaction.is_transfer IS true",
       "file": "app/services/finance/domains/planning/recurring/queries.py",
       "function": "transfer_flagged_stream_ids"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT DISTINCT ... FROM meeting_action_run JOIN meeting_moment ON meeting_moment.id = meeting_action_run.moment_id WHERE meeting_moment.meeting_id = :meeting_id_1 AND meeting_action_run.status IN (__[POSTCOMPILE_status_1])",
+      "file": "app/services/meetings/domains/actions/queries.py",
+      "function": "going_in"
     },
     {
       "kind": "repeated_statement",

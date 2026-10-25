@@ -104,7 +104,14 @@ class TestTTSConfigGetModel:
         """Test get_model returns OpenAI default when model not set."""
         config = TTSConfig(provider=TTSProvider.OPENAI)
 
-        assert config.get_model() == "tts-1"
+        # OpenAI's replacement for its retiring speech models.
+        assert config.get_model() == "gpt-realtime-2.1-mini"
+
+    def test_each_provider_speaks_on_its_own_model_and_voice(self) -> None:
+        config = TTSConfig(provider=TTSProvider.GEMINI)
+
+        assert config.get_model() == "gemini-3.8-flash-tts"
+        assert config.get_voice() == "Kore"
 
 
 class TestTTSConfigGetVoice:

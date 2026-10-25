@@ -24,7 +24,7 @@ reads that metadata.
 
 # Search's SQLite tables, made beside these by every ``create_all``.
 from app.services.meetings.domains.search import fts  # noqa: F401
-from app.services.meetings.models.accounts import BotAccount
+from app.services.meetings.models.accounts import AgentImage, BotAccount
 from app.services.meetings.models.actions import (
     ASKED,
     CLAIMED,
@@ -100,6 +100,7 @@ __all__ = [
     "ASKED",
     "ActionChoice",
     "ActionItem",
+    "AgentImage",
     "BotAccount",
     "CLAIMED",
     "CalendarEvent",

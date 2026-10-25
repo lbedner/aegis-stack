@@ -15,13 +15,15 @@ mount it serves. Who a turn is for and what it is about come from the
 mount (``bind``, per request), never from the browser.
 """
 
-import importlib
-import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+import importlib
 from importlib.util import find_spec
+import json
 from typing import Any
 from urllib.parse import urlencode
+
+from fastapi import HTTPException
 
 from app.components.backend.api.ai.service import ai_service
 from app.core.chat_transcript import (
@@ -33,7 +35,6 @@ from app.core.chat_transcript import (
     trace_output,
 )
 from app.core.log import logger
-from fastapi import HTTPException
 
 from .main import CHANGES
 
@@ -195,14 +196,14 @@ def spoken(text: str) -> str:
     return to_spoken(strip_attachment_marker(text))
 
 
-async def synthesize(text: str, tts: Any = None) -> bytes:
-    """``text`` said aloud by the configured text-to-speech, or by ``tts``
-    (a voice being previewed)."""
+async def synthesize(text: str, tts: Any = None) -> Any:
+    """``text`` said aloud (a ``SpeechResult``: the audio and what it is) by
+    the configured text-to-speech, or by ``tts`` (a voice being previewed)."""
     from app.services.ai.service import SpeechRequest
 
     speaker = tts or ai_service.tts
     try:
-        return (await speaker.synthesize(SpeechRequest(text=text))).audio
+        return await speaker.synthesize(SpeechRequest(text=text))
     except Exception:  # the provider's own: a key, the network, a format
         logger.exception("Speech synthesis failed")
         raise HTTPException(status_code=503, detail="Speech synthesis failed") from None

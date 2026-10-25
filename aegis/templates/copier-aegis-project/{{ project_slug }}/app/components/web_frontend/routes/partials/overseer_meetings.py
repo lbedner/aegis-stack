@@ -12,7 +12,7 @@ a meeting the admin sends is the admin's own (``Mine``).
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, Request, UploadFile
 from fastapi.responses import HTMLResponse, Response
 
 from app.components.web_frontend import overseer_meetings
@@ -29,8 +29,15 @@ from app.services.meetings.deps import (
     get_every_owners_people,
     get_every_owners_series,
     get_meetings_service,
+    picture_response,
+    take_picture,
 )
-from app.services.meetings.domains.accounts.service import set_default_owner
+from app.services.meetings.domains.accounts.service import (
+    AgentImageError,
+    clear_image,
+    set_camera,
+    set_default_owner,
+)
 from app.services.meetings.domains.calendar.entries import entry_of
 from app.services.meetings.domains.people.participants import give as give_away
 from app.services.meetings.domains.people.service import PeopleService
@@ -114,8 +121,50 @@ async def agent_owner(
     the invite has an account here (blank: nobody)."""
     with as_http():
         await set_default_owner(svc.db, name, int(user_id) if user_id else None)
+    return await _agents(svc)
+
+
+@router.get("/agents/{name}/image")
+async def agent_image(name: str, svc: Every) -> Response:
+    """The agent's picture, for its row."""
+    return await picture_response(svc.db, name)
+
+
+@router.post("/agents/{name}/image", response_class=HTMLResponse)
+async def agent_image_set(name: str, svc: Every, file: UploadFile) -> HTMLResponse:
+    """The picture on the agent's card; one it cannot take is said in the
+    tab, which stays as it was."""
+    try:
+        await take_picture(svc.db, name, file)
+    except AgentImageError as exc:
+        return await _agents(svc, error=str(exc))
+    return await _agents(svc)
+
+
+@router.delete("/agents/{name}/image", response_class=HTMLResponse)
+async def agent_image_clear(name: str, svc: Every) -> HTMLResponse:
+    """The agent back to its initials."""
+    with as_http():
+        await clear_image(svc.db, name)
+    return await _agents(svc)
+
+
+@router.post("/agents/{name}/camera", response_class=HTMLResponse)
+async def agent_camera(
+    name: str, svc: Every, on: Annotated[str, Form()] = ""
+) -> HTMLResponse:
+    """Whether the agent shows its card in a call (unticked: off)."""
+    with as_http():
+        await set_camera(svc.db, name, bool(on))
+    return await _agents(svc)
+
+
+async def _agents(svc: MeetingsService, error: str | None = None) -> HTMLResponse:
+    """The Agents tab redrawn, after a change to one of them; with why a
+    change was refused (a 422, which the page swaps in), when it was."""
     context = await agents_context(svc.db, overseer_meetings.meeting_url)
-    return HTMLResponse(fragment(AGENTS, **context, partials=PREFIX))
+    body = fragment(AGENTS, **context, partials=PREFIX, error=error)
+    return HTMLResponse(body, status_code=422 if error else 200)
 
 
 @router.get("/{meeting_id}/threads", response_class=HTMLResponse)

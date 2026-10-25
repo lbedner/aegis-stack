@@ -2,8 +2,9 @@
 sent as (the Meetings page's send form and Overseer's), which agent each
 meeting was, and Overseer > Meetings > Agents, where each says who it is,
 whether its sign-in still works, which meeting it is in now and who owns
-a meeting it joins from its calendar that nobody on the invite owns. An
-agent is made by signing it in: ``meetings login --agent``.
+a meeting it joins from its calendar that nobody on the invite owns, and
+its card in a call (its picture, its camera). An agent is made by signing
+it in: ``meetings login --agent``.
 """
 
 from collections.abc import Callable
@@ -12,6 +13,7 @@ from typing import Any
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.meetings.domains.accounts.service import (
+    IMAGE_TYPES,
     NOT_SIGNED_IN,
     SIGNED_IN,
     AgentRow,
@@ -21,6 +23,9 @@ from app.services.meetings.domains.calendar.owners import Owner, owners
 from app.services.meetings.models import BotAccount
 
 from .rendering import status_cell
+
+# What the picture button offers: what the card takes.
+ACCEPT = ",".join(sorted(IMAGE_TYPES))
 
 # A sign-in that has run out, or one that cannot be read: error.
 TONES = {SIGNED_IN: "ok", NOT_SIGNED_IN: "warn"}
@@ -60,4 +65,12 @@ def _row(row: AgentRow, opened: Callable[[int], str]) -> dict[str, Any]:
         "sign_in": status_cell(row.sign_in, TONES.get(row.sign_in, "error")),
         "in_now": [{"label": f"Meeting {m}", "url": opened(m)} for m in row.in_now],
         "default_owner": {"agent": account.name, "id": account.default_owner_id},
+        "card": {
+            "agent": account.name,
+            # Its version, which its address carries (cached for good).
+            "image": int(row.image.timestamp() * 1000) if row.image else None,
+            "camera": account.camera,
+            "initials": row.initials,
+            "accept": ACCEPT,
+        },
     }

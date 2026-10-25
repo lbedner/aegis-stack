@@ -362,6 +362,7 @@ class TestWebFrontendScaffolding:
             "form.html": {
                 "action",
                 "checkbox",
+                "file_button",
                 "checklist",
                 "date_input",
                 "field",

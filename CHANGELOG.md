@@ -19,6 +19,65 @@
   tasks beside its concurrency and timeout, the same for every worker
   backend.
 
+- **Voice profiles, and a voice designed in three steps.** Overseer > AI >
+  Voice > Profiles lists every voice profile (its voice, style and speed,
+  which is in use, Listen, Edit; a new one from the one in use). Edit
+  opens it in three steps: Voice (gender and a tone family narrow the
+  voices that can be heard; a provider without its key is one line),
+  Delivery (a premade style: Calm and warm, Brisk and professional,
+  Cheerful, Storyteller, Empathetic support, Newsreader; the speed; pace,
+  energy, emotion, accent and anything extra under Fine-tune) and Review
+  (the delivery instructions they make, heard unsaved, saved). The profile
+  keeps the choices (`voice_profile.tts_delivery`). Every voice in the
+  catalog now has a gender and a tone. The Flet Overseer's voice tab has
+  it too, over `/voice/design` and `/voice/design/profiles`.
+
+- **Voice > Models, as one technical page.** One tight table: what the
+  active voice profile uses (speaking, listening, calls), every speech,
+  hearing and live model (with its price where the catalog has one) and
+  every voice, a row each in columns, narrowed by kind, provider, model
+  and text. Each voice plays on a model that speaks
+  it; Use puts a row on the active profile, saved and in use at once;
+  Profile switches profiles and Edit opens the profile's editor. The Flet
+  Overseer's voice tab shows the same rows, over `GET /voice/overview`,
+  `POST /voice/use` and `POST /voice/profiles/{id}/active`.
+
+- **Gemini speaks.** A second speech provider: Gemini's 3.8 speech models
+  (`gemini-3.8-flash-tts`, `gemini-3.8-flash-lite-tts`, through the
+  Interactions API, the delivery as `speech_metadata` style) in its 30
+  prebuilt voices, the ones Gemini Live speaks, and the voices of its voice
+  library, regional accents among them (`GOOGLE_API_KEY`). A call speaks
+  the profile's voice where its engine has it, so the agent's calls and its
+  spoken lines can be one voice. Each speech model records what its
+  delivery instructions steer: the voice editor offers an accent only where
+  the model steers one (OpenAI's), and on Gemini picks it with the voice.
+
+- **Hear a saved voice profile over the API.** `GET
+  /voice/design/profiles/{id}/preview` says the preview passage in that
+  profile's voice; both Overseers' profile lists play from it.
+
+- **OpenAI speaks on gpt-realtime-2.1-mini.** OpenAI shuts every
+  /v1/audio/speech model (`gpt-4o-mini-tts` and its builds, `tts-1`,
+  `tts-1-hd`) down on Jan 6, 2027, and names `gpt-realtime-2.1-mini` as
+  their replacement; it is now the default OpenAI speech model, and the
+  others are marked deprecated with that date. It speaks only over the
+  Realtime API: a line is said in a session that never listens, as the
+  response's only message with instructions to read it word for word, so
+  a line that reads as a command is read, not obeyed. It speaks ten of
+  the voices (not fable, nova or onyx), comes back as WAV, and is priced
+  by its tokens like a live call. LangChain stacks with voice gain the
+  `websockets` dependency it needs.
+
+- **The meeting bot shows its card and speaks.** Its camera tile is its
+  agent's picture (or initials), its name and what it is doing
+  (Listening, Can't see captions, Question heard, Answering, Leaving),
+  drawn in its own browser. It joins muted and unmutes only to speak:
+  with the AI service's voice it says its announcement aloud as well as
+  in the chat. Each agent's picture and camera setting are set on the
+  Agents tab in both Overseers, or through the admin API. It speaks in
+  the active voice profile, as does `ai speak`, `ai transcribe` and
+  `ai record`, which used to ignore it for `.env`'s voice.
+
 - **Who owns a meeting nobody pressed send for.** With auth, an agent
   has an optional default owner: a meeting it joins from its calendar
   that nobody on the invite owns goes to them. A meeting nobody owns is
@@ -439,6 +498,47 @@
   drops the thread's hold on the newest message: its card reloading made
   the page shorter for a moment, which read as the reader scrolling up.
 
+- **Speech files carry their own format.** `ai speak` names its file by
+  what the model answered in (`speech.wav` from `gpt-realtime-2.1-mini`,
+  not WAV bytes in a `.mp3`), and `ai record` plays its reply the same
+  way.
+
+- **A voice design saved over the API is checked.** `POST
+  /voice/design` (the Flet editor's save) refuses a voice the catalog
+  lacks or a speed out of range, as the form does; a speed past what the
+  model takes is shown and saved as its most, not shown as one thing and
+  spoken as another. Realtime speech keeps its tokens in the usage
+  ledger, not only its cost.
+
+- **Speech billed by the second is priced.** `gpt-4o-mini-tts` replies
+  never said how long they were, so the usage ledger priced them at
+  nothing. Their length is now read from the MP3 itself, for a whole reply
+  and a streamed one alike.
+
+- **The voice editor offers only the speed a model takes.** The speed
+  slider spans the model's own range (up to 1.5 on
+  `gpt-realtime-2.1-mini`, 4 on the speech endpoint) and is gone on
+  Gemini, which has no speed to set. Fine-tune stays open while its
+  choices are picked, in both Overseers, instead of shutting on every
+  pick.
+
+- **Every voice listed plays.** On `tts-1`, marin, cedar, ballad and verse
+  failed with a 503 (the model knows nine of OpenAI's thirteen voices),
+  and marin and cedar were listed first. A preview now plays on a model
+  that speaks the voice, a voice profile refuses a voice its model does
+  not speak, and `gpt-4o-mini-tts`, which speaks all thirteen and takes
+  delivery instructions, is the default speech model.
+
+- **An uploaded document never runs as the app.** A document's content
+  was served inline as the type it was uploaded with, so an SVG or HTML
+  file's script ran on the app's origin with the viewer's session. Now
+  it is sandboxed and never sniffed as another type (PDFs, viewed in the
+  browser's own sandbox, keep opening inline).
+
+- **A refusal never blanks the page.** An htmx action the server refused
+  with a JSON 422 (a service's error, FastAPI's validation) swapped that
+  JSON into the page; it is an error toast now.
+
 - **A tool's result lands on its own call.** Calls to one tool made at
   once finish in any order, and each result was attached to the latest
   unanswered call of that name: the trail (Overseer's, and the chat's)
@@ -504,6 +604,12 @@
   hook's `schema_gaps` annotated with `Any`, imported only on SQLite; 3.14
   defers annotations, so only 3.13 raised `NameError` at import and the
   backend did not start.
+
+### Removed
+
+- **`POST /voice/settings`**, which answered with merged settings and
+  saved nothing. `POST /voice/use` changes the voice, on the active
+  profile.
 
 ## [0.16.1] - 2026-10-20
 

@@ -1,0 +1,64 @@
+{# Voice > Models (overseer_ai_voice): one tight table on the canvas,
+   narrowed by the filters with no request (``data-facets``): what the
+   active profile uses, every speech, hearing and live model, every voice.
+   A row plays on a model that speaks it (``speak_button``, one player at
+   a time) and Use puts it on the profile. Below, a line said in a chosen
+   voice and a file transcribed. #}
+{% from "components/macros/chat.html" import speak_button %}
+{% from "components/macros/form.html" import action, checklist, filter_input, primary_button %}
+{% from "components/macros/layout.html" import chart_dot %}
+{% from "pages/overseer/_macros.html" import rows_scroller %}
+{% set head = "px-3 py-1.5 text-left font-medium" %}
+{% set cell = "px-3 py-1 whitespace-nowrap truncate" %}
+<div id="ai-voice" class="space-y-3">
+  <div class="flex flex-wrap items-center gap-3">
+    <form class="flex flex-1 flex-wrap items-center gap-3" data-facets="#ai-voice-rows" x-on:submit.prevent>
+      {{ checklist("ai-voice-kinds", "kind", "Kinds", kinds) }}
+      {{ checklist("ai-voice-providers", "provider", "Providers", providers) }}
+      {{ checklist("ai-voice-models", "model", "Models", models) }}
+      {{ filter_input("#ai-voice-rows", "q", none, placeholder="Search voices and models") }}
+    </form>
+  </div>
+  {% call rows_scroller("overflow-y-auto") %}
+    <table class="w-full text-xs table-fixed">
+      <colgroup><col class="w-24"><col class="w-36"><col class="w-64"><col><col class="w-56"><col class="w-28"><col class="w-44"></colgroup>
+      <thead class="sticky top-0 bg-aegis-bg text-xxs text-aegis-muted caps border-b border-aegis-border">
+        <tr><th class="{{ head }}">Kind</th><th class="{{ head }}">Provider</th><th class="{{ head }}">Name</th><th class="{{ head }}">Details</th><th class="{{ head }}">Plays on</th><th class="{{ head }} text-right">Price / 1M</th><th><span class="sr-only">Actions</span></th></tr>
+      </thead>
+      <tbody id="ai-voice-rows" class="divide-y divide-aegis-border/40">
+        {% for row in rows %}
+        <tr data-facet-kind="{{ row.kind }}" data-facet-provider="{{ row.provider }}" data-facet-model="{{ row.models }}"{% if row.used %} data-used{% endif %} class="hover:bg-aegis-border/20{% if row.used %} bg-aegis-teal/5{% endif %}">
+          <td class="{{ cell }} text-aegis-muted">{{ row.label }}</td>
+          <td class="{{ cell }}">{{ chart_dot(row.color) }}<span class="text-aegis-text">{{ row.provider_name }}</span></td>
+          <td class="{{ cell }} font-mono text-aegis-text" title="{{ row.name }}">{{ row.name }}</td>
+          <td class="{{ cell }} text-aegis-muted" title="{{ row.detail }}">{{ row.detail }}</td>
+          <td class="{{ cell }} font-mono text-aegis-muted">{{ row.plays_on or "" }}</td>
+          <td class="{{ cell }} font-mono text-right text-aegis-muted">{{ row.price or "" }}</td>
+          <td class="px-3 py-1 whitespace-nowrap text-right">
+            {%- if row.blocked %}<span data-blocked class="text-xs text-warning" title="Set it in Secrets to use this">{{ row.blocked }}</span>{% endif -%}
+            {%- if row.speak %}{{ speak_button(row.speak, "align-middle text-aegis-muted hover:text-aegis-text") }}{% endif -%}
+            {%- if row.use %}<button type="button" data-write data-voice-use hx-post="{{ use_url }}" hx-vals='{{ row.use|tojson }}' class="ml-2 text-xs text-aegis-muted hover:text-aegis-teal">Use</button>
+            {%- elif row.used and row.kind != "use" %}<span class="ml-2 text-xs text-aegis-teal">in use</span>{% endif -%}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endcall %}
+  <div class="flex flex-wrap items-center gap-6">
+    {# The voice API's preview route speaks any line; the player just points at it. #}
+    <div id="ai-voice-try" x-data="{ voice: '{{ current_voice }}', text: '', src: '' }" data-preview-base="{{ preview_base }}" class="flex flex-wrap items-center gap-2">
+      <select name="voice" x-model="voice" aria-label="Voice" class="select select-sm select-bordered">
+        {% for v in voice_options %}<option value="{{ v.id }}" {% if v.id == current_voice %}selected{% endif %}>{{ v.name }}</option>{% endfor %}
+      </select>
+      <input type="text" x-model="text" placeholder="Hello from the Overseer" aria-label="Line to say" class="input input-sm input-bordered w-72">
+      {{ action("Speak", "@click=\"src = $el.closest('[data-preview-base]').dataset.previewBase + voice + '?text=' + encodeURIComponent(text || 'Hello from the Overseer')\"") }}
+      <audio x-show="src" :src="src" controls autoplay class="h-8"></audio>
+    </div>
+    <form id="ai-voice-transcribe" data-write hx-post="{{ transcribe_url }}" hx-encoding="multipart/form-data" hx-target="#ai-voice-result" hx-swap="innerHTML" class="flex items-center gap-2">
+      <input type="file" name="audio" accept="audio/*" required aria-label="Audio file" class="file-input file-input-sm">
+      {{ primary_button("Transcribe", "submit") }}
+    </form>
+  </div>
+  <div id="ai-voice-result"></div>
+</div>

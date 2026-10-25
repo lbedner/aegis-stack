@@ -5,9 +5,13 @@ Provides endpoints for querying TTS/STT providers, models, and voices,
 as well as managing voice settings and generating voice previews.
 """
 
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import Response
+from pydantic import BaseModel
+
+from app.components.backend.api.voice.overview import router as overview_router
 from app.core.config import settings
 from app.core.log import logger
-from app.services.ai.service import AIService
 from app.services.ai.domains.voice import (
     ModelInfo,
     ProviderInfo,
@@ -15,7 +19,6 @@ from app.services.ai.domains.voice import (
     VoiceInfo,
     VoicePreviewRequest,
     VoiceSettingsResponse,
-    VoiceSettingsUpdate,
     get_current_voice_config,
     get_stt_models,
     get_stt_providers,
@@ -23,10 +26,9 @@ from app.services.ai.domains.voice import (
     get_tts_providers,
     get_tts_voices,
     get_voice,
+    speaking_model,
 )
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import Response
-from pydantic import BaseModel
+from app.services.ai.service import TTSService
 
 router = APIRouter(prefix="/voice", tags=["voice"])
 
@@ -79,7 +81,7 @@ class ModelResponse(BaseModel):
             name=m.name,
             provider_id=m.provider_id,
             quality=m.quality,
-            description=m.description,
+            description=m.note,
             supports_streaming=m.supports_streaming,
         )
 
@@ -92,7 +94,7 @@ class VoiceResponse(BaseModel):
     provider_id: str
     model_ids: list[str]
     description: str
-    category: str | None = None
+    tone: str | None = None
     gender: str | None = None
     preview_text: str
 
@@ -105,7 +107,7 @@ class VoiceResponse(BaseModel):
             provider_id=v.provider_id,
             model_ids=v.model_ids,
             description=v.description,
-            category=v.category.value if v.category else None,
+            tone=v.tone,
             gender=v.gender,
             preview_text=v.preview_text,
         )
@@ -255,50 +257,6 @@ async def get_voice_settings() -> VoiceSettingsResponse:
     return VoiceSettingsResponse(**config)
 
 
-@router.post("/settings", response_model=VoiceSettingsResponse)
-async def update_voice_settings(
-    update: VoiceSettingsUpdate,
-) -> VoiceSettingsResponse:
-    """
-    Update voice settings.
-
-    Note: This is a read-only endpoint that returns what the settings
-    would look like if applied. Actual settings changes require
-    environment variable updates.
-
-    Args:
-        update: Partial settings update
-
-    Returns:
-        The merged settings (current + updates)
-    """
-    # Get current config
-    current = get_current_voice_config(settings)
-
-    # Apply updates
-    if update.tts_provider is not None:
-        current["tts_provider"] = update.tts_provider
-    if update.tts_model is not None:
-        current["tts_model"] = update.tts_model
-    if update.tts_voice is not None:
-        current["tts_voice"] = update.tts_voice
-    if update.tts_speed is not None:
-        current["tts_speed"] = update.tts_speed
-    if update.stt_provider is not None:
-        current["stt_provider"] = update.stt_provider
-    if update.stt_model is not None:
-        current["stt_model"] = update.stt_model
-    if update.stt_language is not None:
-        current["stt_language"] = update.stt_language
-
-    # Log the settings update (actual persistence would require env update)
-    logger.info(
-        f"Voice settings update requested: {update.model_dump(exclude_none=True)}"
-    )
-
-    return VoiceSettingsResponse(**current)
-
-
 # =============================================================================
 # Preview Endpoint
 # =============================================================================
@@ -329,6 +287,7 @@ async def get_voice_preview(
     voice_id: str,
     text: str | None = None,
     speed: float | None = None,
+    model: str | None = None,
 ) -> Response:
     """
     Generate a voice preview audio clip (GET).
@@ -339,45 +298,51 @@ async def get_voice_preview(
         voice_id: Voice ID to preview
         text: Optional custom text
         speed: Optional speed multiplier (0.25 to 4.0, default 1.0)
+        model: The model to say it on, when it speaks the voice
 
     Returns:
-        Audio file (audio/mpeg) with the synthesized preview
+        The synthesized preview, as its provider makes it (MP3 or WAV)
     """
-    return await _generate_preview(voice_id, text, speed)
+    return await _generate_preview(voice_id, text, speed, model)
 
 
 async def _generate_preview(
     voice_id: str,
     text: str | None = None,
     speed: float | None = None,
+    model: str | None = None,
 ) -> Response:
-    """Internal helper to generate voice preview."""
-    # Look up voice
+    """The voice saying ``text`` (else its preview line), in the delivery in
+    use, on ``model`` or the model in use where either speaks it, else on
+    one that does (``speaking_model``): a voice listed always plays."""
     voice = get_voice(voice_id)
     if not voice:
         raise HTTPException(status_code=404, detail=f"Voice not found: {voice_id}")
 
-    # Determine preview text
     preview_text = text or voice.preview_text.format(voice_name=voice.name)
+    spoken = settings.model_copy(
+        update={
+            "TTS_PROVIDER": voice.provider_id,
+            "TTS_MODEL": speaking_model(voice_id, model or settings.TTS_MODEL),
+            "TTS_VOICE": voice_id,
+        }
+    )
 
     try:
-        # Initialize AI service to get TTS
-        ai_service = AIService(settings)
-
-        # Generate speech with optional speed
         speech_request = SpeechRequest(
             text=preview_text,
             voice=voice_id,
             speed=speed or 1.0,
         )
-        result = await ai_service.tts.synthesize(speech_request)
+        result = await TTSService(spoken).synthesize(speech_request)
 
-        # Return audio response
         return Response(
             content=result.audio,
-            media_type="audio/mpeg",
+            media_type=result.media_type,
             headers={
-                "Content-Disposition": f'inline; filename="{voice_id}_preview.mp3"',
+                "Content-Disposition": (
+                    f'inline; filename="{voice_id}_preview.{result.format.value}"'
+                ),
                 "Cache-Control": "no-cache",
             },
         )
@@ -423,3 +388,7 @@ async def get_catalog_summary() -> CatalogSummaryResponse:
         ),
         current_config=VoiceSettingsResponse(**current_config),
     )
+
+
+# What the voice uses and every model and voice, and the changes to it.
+router.include_router(overview_router)

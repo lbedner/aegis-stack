@@ -10,6 +10,7 @@ import flet as ft
 from app.components.frontend.controls import SecondaryText, Tag
 from app.components.frontend.controls.tabs import PulseTabs
 from app.components.frontend.theme import AegisTheme as Theme
+from app.core.discovery import optional
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_title
 
@@ -17,59 +18,17 @@ from ..cards.card_utils import PROVIDER_COLORS, get_status_detail
 from .base_detail_popup import BaseDetailPopup
 from .modal_sections import MetricCard
 
-# Analytics tab is optional - only present when using database backend (not memory)
-try:
-    from .ai_analytics_tab import AIAnalyticsTab
-
-    _HAS_ANALYTICS = True
-except ImportError:
-    AIAnalyticsTab = None  # type: ignore[misc, assignment]
-    _HAS_ANALYTICS = False
-
-# RAG tab is optional - only present when RAG service is enabled
-try:
-    from .rag_tab import RAGTab
-
-    _HAS_RAG = True
-except ImportError:
-    RAGTab = None  # type: ignore[misc, assignment]
-    _HAS_RAG = False
-
-# Cloud Catalog tab - only present when using database backend (not memory)
-try:
-    from .llm_catalog_tab import LLMCatalogTab
-
-    _HAS_LLM_CATALOG = True
-except ImportError:
-    LLMCatalogTab = None  # type: ignore[misc, assignment]
-    _HAS_LLM_CATALOG = False
-
-# Memory Modules tab - context blocks agents opt into (requires DB backend)
-try:
-    from .memory_modules_tab import MemoryModulesTab
-
-    _HAS_MEMORY_MODULES = True
-except ImportError:
-    MemoryModulesTab = None  # type: ignore[misc, assignment]
-    _HAS_MEMORY_MODULES = False
-
-# Agents tab - agent registry management (requires database backend)
-try:
-    from .agents_tab import AgentsTab
-
-    _HAS_AGENTS = True
-except ImportError:
-    _HAS_AGENTS = False
-    AgentsTab = None  # type: ignore[misc, assignment]
-
-# Voice Settings tab - for TTS/STT configuration
-try:
-    from .voice_settings_tab import VoiceSettingsTab
-
-    _HAS_VOICE_SETTINGS = True
-except ImportError:
-    VoiceSettingsTab = None  # type: ignore[misc, assignment]
-    _HAS_VOICE_SETTINGS = False
+# The optional tabs, where the stack ships them (``optional``: a missing
+# module is "not here"; one that fails to import still raises). Analytics,
+# the Cloud Catalog, Memory and Agents need the database backend; RAG and
+# Voice their service options.
+_MODALS = "app.components.frontend.dashboard.modals"
+AIAnalyticsTab = optional(f"{_MODALS}.ai_analytics_tab", "AIAnalyticsTab")
+RAGTab = optional(f"{_MODALS}.rag_tab", "RAGTab")
+LLMCatalogTab = optional(f"{_MODALS}.llm_catalog_tab", "LLMCatalogTab")
+MemoryModulesTab = optional(f"{_MODALS}.memory_modules_tab", "MemoryModulesTab")
+AgentsTab = optional(f"{_MODALS}.agents_tab", "AgentsTab")
+VoiceSettingsTab = optional(f"{_MODALS}.voice_settings", "VoiceSettingsTab")
 
 
 class OverviewSection(ft.Container):
@@ -241,30 +200,30 @@ class AIDetailDialog(BaseDetailPopup):
         ]
 
         # Add Token Usage tab only if analytics is available (requires database backend)
-        if _HAS_ANALYTICS and AIAnalyticsTab is not None:
+        if AIAnalyticsTab is not None:
             tabs_list.append(
                 ft.Tab(text="Token Usage", content=AIAnalyticsTab(metadata=metadata))
             )
 
         # Add Cloud Catalog tab
-        if _HAS_LLM_CATALOG and LLMCatalogTab is not None:
+        if LLMCatalogTab is not None:
             tabs_list.append(ft.Tab(text="Cloud Catalog", content=LLMCatalogTab()))
 
         # Add Agents tab (agent registry requires database backend)
-        if _HAS_AGENTS and AgentsTab is not None:
+        if AgentsTab is not None:
             tabs_list.append(ft.Tab(text="Agents", content=AgentsTab()))
 
         # Add Memory Modules tab, right after Agents: an agent's definition
         # names the modules it uses, so the two are read together.
-        if _HAS_MEMORY_MODULES and MemoryModulesTab is not None:
+        if MemoryModulesTab is not None:
             tabs_list.append(ft.Tab(text="Memory", content=MemoryModulesTab()))
 
         # Add RAG tab only if RAG service is enabled
-        if _HAS_RAG and RAGTab is not None:
+        if RAGTab is not None:
             tabs_list.append(ft.Tab(text="RAG", content=RAGTab()))
 
         # Add Voice tab
-        if _HAS_VOICE_SETTINGS and VoiceSettingsTab is not None:
+        if VoiceSettingsTab is not None:
             tabs_list.append(ft.Tab(text="Voice", content=VoiceSettingsTab()))
 
         # Create tabbed interface

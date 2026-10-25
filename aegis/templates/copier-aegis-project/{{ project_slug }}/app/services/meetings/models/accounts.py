@@ -1,9 +1,11 @@
-"""The Google accounts the bot joins as (``domains.accounts``)."""
+"""The Google accounts the bot joins as, and each one's picture
+(``domains.accounts``)."""
 
 from __future__ import annotations
 
 from datetime import datetime
 
+from sqlalchemy import LargeBinary
 from sqlmodel import Field, SQLModel
 
 from app.core.time import utcnow
@@ -40,3 +42,20 @@ class BotAccount(SQLModel, table=True):
         ),
     )
     created_at: datetime = Field(default_factory=utcnow)
+    camera: bool = Field(
+        default=True, description="Its camera on in a call, showing its card"
+    )
+
+
+class AgentImage(SQLModel, table=True):
+    """An agent's picture, drawn on its card in a call (``bot.card``):
+    kept apart from the agent, so a list of agents never carries it."""
+
+    __tablename__ = "meeting_agent_image"
+
+    account_id: int = Field(
+        foreign_key="meeting_bot_account.id", primary_key=True, ondelete="CASCADE"
+    )
+    content_type: str = Field(max_length=32)
+    data: bytes = Field(sa_type=LargeBinary)
+    updated_at: datetime = Field(default_factory=utcnow)

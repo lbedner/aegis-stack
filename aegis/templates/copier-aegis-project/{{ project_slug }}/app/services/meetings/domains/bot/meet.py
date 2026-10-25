@@ -2,11 +2,13 @@
 is the fix.
 
 The recipe is the MT-02 spike's: headless Chromium with fake media
-devices, dismiss the "see and hear you?" dialog, give the bot's name, and
+devices, answer the "see and hear you?" dialog, give the bot's name, and
 click whichever join button Meet shows. A signed-in Google account is
 what gets the bot past Meet's guest check: ``open_meet`` joins with the
 bot's stored sign-in (``login``), as a guest until there is one, and
-hands the call's audio to whoever asks (``audio.listen``).
+hands the call's audio to whoever asks (``audio.listen``). Its camera is
+its card and its microphone its voice (``card``): it joins with both,
+muted, and unmutes only while it speaks.
 """
 
 import asyncio
@@ -19,18 +21,26 @@ from playwright.async_api import Page
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from app.components.browser.client import connect
+from app.services.meetings.domains.bot import card
 from app.services.meetings.domains.bot.audio import listen
 from app.services.meetings.domains.bot.login import LOGIN, stored_login
 from app.services.meetings.models import Caption
 
-# A fake camera and microphone granted without a prompt: the bot joins with
-# both off.
+# A camera and microphone granted without a prompt, the card's script
+# answering for both (``card``), and sound that plays with nobody at the
+# page to click: the bot's voice.
 BROWSER_ARGS = [
     "--use-fake-ui-for-media-stream",
     "--use-fake-device-for-media-stream",
+    "--autoplay-policy=no-user-gesture-required",
 ]
 
+USE_MEDIA = 'button:has-text("Use microphone and camera")'
 CONTINUE_WITHOUT_MEDIA = 'button:has-text("Continue without microphone and camera")'
+MIC_ON = 'button[aria-label^="Turn on microphone"]'
+MIC_OFF = 'button[aria-label^="Turn off microphone"]'
+# After its words, a moment before it mutes: the end is not cut off.
+SPOKEN_TAIL = 0.3
 NAME_INPUT = 'input[type="text"]'
 JOIN_BUTTON = (
     'button:has-text("Join now"), button:has-text("Ask to join"), '
@@ -141,14 +151,17 @@ class MeetPage:
         return True
 
     async def ask_to_join(self, bot_name: str) -> None:
-        """Once Meet has drawn its lobby: past the media dialog, named, and
-        the join button clicked."""
+        """Once Meet has drawn its lobby: its camera and microphone taken
+        (the card's), the microphone muted, named, and the join button
+        clicked."""
         join = self.page.locator(JOIN_BUTTON).first
         try:
             await join.wait_for(timeout=LOBBY_TIMEOUT_MS)
         except PlaywrightTimeoutError:
             raise MeetPageError("No join button on the meeting page") from None
-        await self._click_if_visible(CONTINUE_WITHOUT_MEDIA)
+        if not await self._click_if_visible(USE_MEDIA):
+            await self._click_if_visible(CONTINUE_WITHOUT_MEDIA)
+        await self._click_if_visible(MIC_OFF)
         if await self._shown(NAME_INPUT):
             await self.page.locator(NAME_INPUT).first.fill(bot_name)
         await join.click(timeout=5000)
@@ -193,6 +206,20 @@ class MeetPage:
             await asyncio.sleep(1)
         raise MeetPageError("The meeting chat never opened")
 
+    async def show(self, **update: str | bool | None) -> None:
+        """Redraw the card its camera shows (``card.show``)."""
+        await card.show(self.page, **update)
+
+    async def speak(self, audio: bytes) -> None:
+        """Say ``audio`` into the call: unmuted only while it plays."""
+        await self._answer_prompts()
+        await self._click_if_visible(MIC_ON)
+        try:
+            seconds = await card.speak(self.page, audio)
+            await asyncio.sleep(seconds + SPOKEN_TAIL)
+        finally:
+            await self._click_if_visible(MIC_OFF)
+
     async def leave(self) -> None:
         await self._answer_prompts()
         await self._click_if_visible(LEAVE_BUTTON)
@@ -214,16 +241,27 @@ class MeetPage:
 
 @asynccontextmanager
 async def open_meet(
-    url: str, on_audio: Callable[[str], None] | None = None, login: str = LOGIN
+    url: str,
+    on_audio: Callable[[str], None] | None = None,
+    login: str = LOGIN,
+    start: card.Start | None = None,
 ) -> AsyncIterator[MeetPage]:
     """A Meet page at ``url`` in the browser container, signed in with the
     sign-in kept as ``login`` (an agent's), its audio handed to
-    ``on_audio``; the browser closes on exit, whatever happened, so no
-    Chrome outlives its meeting."""
+    ``on_audio`` and its camera and microphone the card ``start`` begins
+    as; the browser closes on exit, whatever happened, so no Chrome
+    outlives its meeting."""
     async with connect(BROWSER_ARGS) as browser:
-        context = await browser.new_context(storage_state=await stored_login(login))
+        context = await browser.new_context(
+            storage_state=await stored_login(login),
+            permissions=["camera", "microphone"],
+        )
         page = await context.new_page()
         if on_audio is not None:
             await listen(page, on_audio)
+        if start is not None:
+            await page.add_init_script(card.script(start))
         await page.goto(url, wait_until="domcontentloaded")
+        if start is not None and start.image:
+            await card.show(page, image=start.image)
         yield MeetPage(page)

@@ -12,7 +12,6 @@ from app.services.ai.domains.voice import (
     SpeechResult,
     STTProvider,
     TTSProvider,
-    VoiceCategory,
     VoiceInfo,
     VoiceSettingsResponse,
 )
@@ -97,7 +96,7 @@ def sample_voice() -> VoiceInfo:
         provider_id=TTSProvider.OPENAI.value,
         model_ids=["tts-1", "tts-1-hd"],
         description="Neutral, balanced voice",
-        category=VoiceCategory.NEUTRAL,
+        tone="Even",
         gender="neutral",
         preview_text="Hello, I'm {voice_name}. How can I help?",
     )

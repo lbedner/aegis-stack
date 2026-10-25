@@ -17,6 +17,9 @@ chat page mounts them again with its own agent and user.
 from collections.abc import Callable
 from typing import Annotated, Any
 
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile
+from fastapi.responses import HTMLResponse, JSONResponse, Response
+
 from app.components.backend.api.ai.chat import ChatTurn
 from app.components.backend.api.ai.service import ai_service
 from app.components.backend.api.ai.sse import refused, turn_stream
@@ -29,8 +32,6 @@ from app.components.web_frontend.rendering import (
     with_toast,
 )
 from app.services.shared.deps import get_optional_owner_user_id
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, Response
 
 NOTHING_HEARD = "Didn't catch anything. Try again, a little closer."
 MODELS_TEMPLATE = "partials/chat/models.html"
@@ -40,8 +41,8 @@ def _fragment(request: Request, name: str, **context: Any) -> HTMLResponse:
     return templates.TemplateResponse(request=request, name=name, context=context)
 
 
-def _audio(data: bytes) -> Response:
-    return Response(content=data, media_type="audio/mpeg")
+def _audio(said: Any) -> Response:
+    return Response(content=said.audio, media_type=said.media_type)
 
 
 def chat_router(mount: ChatSurface, guard: Callable[..., Any]) -> APIRouter:

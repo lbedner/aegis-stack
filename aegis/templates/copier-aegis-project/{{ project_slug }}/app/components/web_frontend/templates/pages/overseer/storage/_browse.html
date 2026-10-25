@@ -4,7 +4,7 @@
    app's own) take uploads into the open folder, and delete one file from
    its row menu or the checked ones at once. #}
 {% from "components/macros/layout.html" import card, menu_item %}
-{% from "components/macros/form.html" import action %}
+{% from "components/macros/form.html" import action, file_button %}
 {% from "components/macros/table.html" import data_table %}
 {% macro entry(value) -%}
 {%- set glyphs = {
@@ -61,8 +61,7 @@
     <form id="storage-upload" data-write hx-post="{{ browse.upload_url }}" hx-encoding="multipart/form-data" hx-swap="none" class="flex items-center">
       <input type="hidden" name="bucket" value="{{ browse.bucket }}">
       <input type="hidden" name="prefix" value="{{ browse.prefix }}">
-      <input id="storage-upload-file" type="file" name="file" required class="sr-only" @change="$el.form.requestSubmit()">
-      <label for="storage-upload-file" class="inline-flex items-center cursor-pointer px-2.5 py-1 text-xs leading-normal rounded border border-aegis-teal text-aegis-text hover:bg-aegis-teal/10 transition-colors">Upload</label>
+      {{ file_button("storage-upload-file", "Upload") }}
     </form>
   </div>
   {% endif %}

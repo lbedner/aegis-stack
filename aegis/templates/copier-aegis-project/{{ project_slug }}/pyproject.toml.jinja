@@ -167,6 +167,11 @@ dependencies = [
 {%- if "cohere" in ai_providers %}
     "langchain-cohere>=0.5.0,<0.7",
 {%- endif %}
+{%- if ai_voice %}
+    # OpenAI's speech model speaks over the Realtime API, a websocket;
+    # Pydantic AI's openai-realtime extra brings it on that framework.
+    "websockets>=14,<18",
+{%- endif %}
 {%- endif %}
     "marko==2.1.3",
 {%- endif %}

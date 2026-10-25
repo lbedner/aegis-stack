@@ -544,9 +544,9 @@ class TestVoice:
     ) -> None:
         said: list[str] = []
 
-        async def speak(text: str) -> bytes:
+        async def speak(text: str) -> Any:
             said.append(text)
-            return b"MP3"
+            return SimpleNamespace(audio=b"MP3", media_type="audio/mpeg")
 
         monkeypatch.setattr(chat_surface, "synthesize", speak)
         mic = one(_chat_page(client), "#chat-mic")

@@ -60,7 +60,7 @@
         {{ avatar(c.provider_name, marks.get(c.provider)) }}
         <span class="w-44 truncate text-sm text-aegis-text">{{ c.name }}</span>
         <span class="flex-1 text-xs text-aegis-muted">{{ c.detail }}</span>
-        {{ speak_button(sample_url ~ c.id, "text-aegis-muted hover:text-aegis-text") }}
+        {{ speak_button(sample_url ~ c.id ~ "?" ~ {"model": v.model}|urlencode, "text-aegis-muted hover:text-aegis-text") }}
       </label>
       {% else %}<p data-voice-none class="px-2 py-2 text-sm text-aegis-muted">No other voice matches all of those: clear a filter or the search.</p>{% endfor %}
     </div>

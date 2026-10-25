@@ -22,8 +22,9 @@
 - **Voice profiles, and a voice designed in three steps.** Overseer > AI >
   Voice > Profiles lists every voice profile (its voice, style and speed,
   which is in use, Listen, Edit; a new one from the one in use). Edit
-  opens it in three steps: Voice (gender and a tone family narrow the
-  voices that can be heard; a provider without its key is one line),
+  opens it in three steps: Voice (the chosen voice pinned, a search for
+  others by text, provider, gender, tone and accent; a provider without
+  its key is one line),
   Delivery (a premade style: Calm and warm, Brisk and professional,
   Cheerful, Storyteller, Empathetic support, Newsreader; the speed; pace,
   energy, emotion, accent and anything extra under Fine-tune) and Review
@@ -440,6 +441,18 @@
   the hooks started was still running as each test's loop closed, and
   Python waited 300 seconds for it; they now shut down as their siblings
   do.
+
+- **Gemini's voice library loads.** Its first answer takes about five
+  seconds and the app gave up at five, so it never loaded; it also read
+  only the first of eleven pages. It now reads every page (about two
+  thousand voices in some fifty accents) in the background, so no page
+  waits on it. Its voices take the tone their descriptions say, and the
+  prebuilt 30 it lists again are left out. The editor's Voice step is
+  rebuilt to hold them, as the model catalog holds its models: a search
+  and checklists (accents grouped by language, only those of the voices
+  in view), the first 50 matches with how many more, the chosen voice
+  pinned above; the Models table leaves the library out. "American" and
+  Gemini's "General American" are one accent.
 
 - **The card keeps lighting until she stops talking.** A call saves her
   answer when it is written, before it has all been heard; the card she

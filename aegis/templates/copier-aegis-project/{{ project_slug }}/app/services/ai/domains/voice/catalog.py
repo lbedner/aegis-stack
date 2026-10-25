@@ -29,6 +29,7 @@ from .tts.config import TTSConfig
 # TTS Catalog Data
 # =============================================================================
 
+
 _TTS_PROVIDERS: list[ProviderInfo] = [
     ProviderInfo(
         id=TTSProvider.OPENAI.value,
@@ -177,7 +178,7 @@ _TTS_VOICES: list[VoiceInfo] = [
         description=description,
         gender=gender,
         tone=tone,
-        accent="British" if voice == OpenAIVoice.FABLE else "American",
+        accent="British" if voice == OpenAIVoice.FABLE else "General American",
     )
     for voice, gender, tone, description, tts_1 in _OPENAI_VOICES
 ]
@@ -220,6 +221,8 @@ _TTS_VOICES += [
         description=tone,
         gender=gender,
         tone=tone,
+        # As Gemini's voice library lists them.
+        accent="General American",
     )
     for name, (gender, tone) in _GEMINI_VOICES.items()
 ]

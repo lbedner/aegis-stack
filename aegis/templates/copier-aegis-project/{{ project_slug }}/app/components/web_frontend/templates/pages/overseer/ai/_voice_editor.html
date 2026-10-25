@@ -4,14 +4,26 @@
    one form from step to step (``v.form``: what a step does not show it
    carries hidden), and the form is drawn again as it changes. #}
 {% from "components/macros/chat.html" import speak_button %}
-{% from "components/macros/form.html" import field, primary_button, range_chips, textarea %}
+{% from "components/macros/form.html" import checklist, field, primary_button, range_chips, search_input, textarea %}
 {% set v = view %}
 {% set d = v.delivery %}
 {% macro carry(shown) %}{% for name, value in v.form.items() if name not in shown %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}{% endmacro %}
+{# The chosen voice, pinned: above the Voice step's search (as its picked
+   radio), and atop Delivery (with the model it is spoken on). #}
+{% macro chosen_bar(pick=False) %}
+{% if v.chosen %}
+<div data-voice-chosen class="flex items-center gap-3 rounded border border-aegis-border px-3 py-2">
+  {% if pick %}<input type="radio" name="voice" value="{{ v.chosen.id }}" checked class="radio radio-xs radio-primary" aria-label="{{ v.chosen.name }}">{% else %}<span class="text-xs text-aegis-muted">Voice</span>{% endif %}
+  <span class="text-sm text-aegis-text">{{ v.chosen.name }}</span>
+  <span class="flex-1 text-xs text-aegis-muted">{{ v.chosen.detail }}{% if not pick %} · on <span class="font-mono">{{ v.model }}</span>{% endif %}</span>
+  {{ speak_button(chosen_listen, "text-aegis-muted hover:text-aegis-text") }}
+</div>
+{% endif %}
+{% endmacro %}
 {% macro chips(label, choices, value, name) %}
 <div class="flex flex-wrap items-center gap-3"><span class="w-16 text-xs text-aegis-muted">{{ label }}</span>{{ range_chips(choices, value, field=name, aria=label) }}</div>
 {% endmacro %}
-<form id="ai-voice-editor" data-voice-design hx-get="{{ back_url }}" hx-trigger="submit, change, keyup changed delay:600ms from:textarea" {{ hx_replace(back_url, "#overseer-main") }} class="space-y-5 max-w-3xl">
+<form id="ai-voice-editor" data-voice-design hx-get="{{ back_url }}" hx-trigger="submit, change, keyup changed delay:600ms from:textarea, keyup changed delay:300ms from:input[name=q], search" {{ hx_replace(back_url, "#overseer-main") }} class="space-y-5 max-w-3xl">
   <input type="hidden" name="profile" value="{{ v.profile.id }}">
   <input type="hidden" name="step" value="{{ step }}">
   <div class="flex items-center gap-3 text-sm">
@@ -26,20 +38,30 @@
   </nav>
 
   {% if step == "voice" %}
-  {{ carry(["voice", "model"]) }}
-  {{ chips("Gender", [("", "Any")] + v.genders.items()|list, v.filters.gender, "gender") }}
-  {{ chips("Tone", [("", "Any")] + v.families.items()|list, v.filters.family, "family") }}
-  {{ chips("Accent", [("", "Any")] + v.accents.items()|list, v.filters.accent_of, "accent_of") }}
-  {% for l in v.locked %}<p data-voice-locked class="text-xs text-aegis-muted">{{ l.voices }} {{ l.provider_name }} voices need <span class="text-warning">{{ l.key }}</span>: add it in Secrets to use them.</p>{% endfor %}
-  <div class="divide-y divide-aegis-border/40 border-y border-aegis-border/40" role="radiogroup" aria-label="Voice">
-    {% for c in v.cards %}
-    <label data-voice-card="{{ c.id }}" class="flex items-center gap-3 px-2 py-1.5 cursor-pointer hover:bg-aegis-border/20">
-      <input type="radio" name="voice" value="{{ c.id }}" class="radio radio-xs radio-primary" {% if c.id == v.voice %}checked{% endif %}>
-      <span class="w-28 text-sm text-aegis-text">{{ c.name }}</span>
-      <span class="flex-1 text-xs text-aegis-muted">{{ c.detail }}</span>
-      {{ speak_button(sample_url ~ c.id, "text-aegis-muted hover:text-aegis-text") }}
-    </label>
-    {% else %}<p class="px-2 py-2 text-sm text-aegis-muted">No voice is both of those.</p>{% endfor %}
+  {% set f = v.find %}
+  {{ carry(["model"] + (["voice"] if v.chosen else [])) }}
+  <input type="hidden" name="filtered" value="1">
+  <div role="radiogroup" aria-label="Voice" class="space-y-3">
+    {{ chosen_bar(pick=True) }}
+    <div class="flex flex-wrap items-center gap-3">
+      {{ search_input("q", f.q, placeholder="Search voices") }}
+      {{ checklist("ai-voice-provider", "provider", "Provider", f.options.provider) }}
+      {{ checklist("ai-voice-gender", "gender", "Gender", f.options.gender) }}
+      {{ checklist("ai-voice-tone", "family", "Tone", f.options.family) }}
+      {{ checklist(accent_id, "accent_of", "Accent", f.options.accent) }}
+    </div>
+    {% for l in v.locked %}<p data-voice-locked class="text-xs text-aegis-muted">{{ l.voices }} {{ l.provider_name }} voices need <span class="text-warning">{{ l.key }}</span>: add it in Secrets to use them.</p>{% endfor %}
+    <div class="divide-y divide-aegis-border/40 border-y border-aegis-border/40">
+      {% for c in f.cards %}
+      <label data-voice-card="{{ c.id }}" class="flex items-center gap-3 px-2 py-1.5 cursor-pointer hover:bg-aegis-border/20">
+        <input type="radio" name="voice" value="{{ c.id }}" class="radio radio-xs radio-primary">
+        <span class="w-44 truncate text-sm text-aegis-text">{{ c.name }}</span>
+        <span class="flex-1 text-xs text-aegis-muted">{{ c.detail }}</span>
+        {{ speak_button(sample_url ~ c.id, "text-aegis-muted hover:text-aegis-text") }}
+      </label>
+      {% else %}<p data-voice-none class="px-2 py-2 text-sm text-aegis-muted">No other voice matches all of those: clear a filter or the search.</p>{% endfor %}
+    </div>
+    {% if f.matched > f.cards|length %}<p data-voice-more class="text-xxs text-aegis-muted px-1">The first {{ f.cards|length }} of {{ "{:,}".format(f.matched) }}; search or narrow to see the rest.</p>{% endif %}
   </div>
   <div class="space-y-1" role="radiogroup" aria-label="Model">
     <p class="text-xs text-aegis-muted">{{ v.chosen.name if v.chosen else v.voice }} is spoken on</p>
@@ -54,14 +76,7 @@
 
   {% elif step == "delivery" %}
   {{ carry(["style", "extra"] + v.dials.keys()|list + (["speed"] if v.speed_range else [])) }}
-  {% if v.chosen %}
-  <div data-voice-chosen class="flex items-center gap-3 rounded border border-aegis-border px-3 py-2">
-    <span class="text-xs text-aegis-muted">Voice</span>
-    <span class="text-sm text-aegis-text">{{ v.chosen.name }}</span>
-    <span class="flex-1 text-xs text-aegis-muted">{{ v.chosen.detail }} · on <span class="font-mono">{{ v.model }}</span></span>
-    {{ speak_button(chosen_listen, "text-aegis-muted hover:text-aegis-text") }}
-  </div>
-  {% endif %}
+  {{ chosen_bar() }}
   {% if not v.follows %}<p data-voice-ignores class="text-xs text-warning">{{ v.model }} ignores delivery instructions: a style and fine-tuning change nothing. Pick a model that follows them on the Voice step.</p>{% endif %}
   <div class="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Style">
     {% for key, s in v.styles.items() %}

@@ -84,9 +84,12 @@ TTS_SPEED=1.0   # 0.25 to 4.0; gpt-realtime-2.1-mini holds it at 1.5
 Gemini's 3.8 speech models (``gemini-3.8-flash-tts``, the flagship, and
 ``gemini-3.8-flash-lite-tts``, fast and low cost) speak its 30 prebuilt
 voices, the same ones Gemini Live speaks, so a live call and a spoken line
-can share one voice, and the voices of its voice library, regional accents
-among them (listed with the key once per process; Gemini Live keeps to the
-prebuilt 30). Speech goes through the Interactions API: the line is the
+can share one voice, and the voices of its voice library: about two
+thousand, in some fifty accents (Dublin, Glasgow, Sydney, Montreal, Osaka,
+Tamil...). The library is read with the key once per process, every page,
+in the background: nothing waits on it, and its voices appear as they come
+in. Each takes the tone its description says. The voice editor searches
+them with every other voice; the Models table leaves them out. Gemini Live keeps to the prebuilt 30. Speech goes through the Interactions API: the line is the
 transcript and the delivery its ``speech_metadata`` style. Audio comes
 back as WAV; there is no speed to set. Gemini takes the accent from the
 voice, not the instructions: pick a voice with the accent. The 2.5 preview
@@ -384,10 +387,15 @@ Overseer > AI > Voice has two tabs.
 speed, which one is in use, a Listen button, and Edit. A new profile starts
 from the one in use. Edit opens the profile in three steps:
 
-1. **Voice**: who it is, and the model it is spoken on. Gender, a tone
-   family (Warm and soft, Bright and upbeat, Calm and even, Firm and
-   authoritative, Expressive) and an accent narrow the voices; each plays a
-   sample. Each model the voice is spoken on says whether it follows
+1. **Voice**: who it is, and the model it is spoken on. The chosen voice
+   is pinned on top; below it a search finds others, as the model catalog
+   does: text over name, tone, accent and description, and checklists for
+   provider, gender, tone family (Warm and soft, Bright and upbeat, Calm
+   and even, Firm and authoritative, Expressive) and accent, the accents
+   grouped by language (a language ticked takes all of its accents, and
+   only the accents of the voices in view are offered). It opens on voices
+   like the chosen one (its provider and accent) and lists the first 50
+   matches, saying how many more there are; each plays a sample. Each model the voice is spoken on says whether it follows
    delivery instructions. Only voices that can be heard are
    listed: a provider without its key is one line saying which key it
    needs.

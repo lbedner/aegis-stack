@@ -501,3 +501,22 @@ class TestWhatSpeedEachModelTakes:
         assert speeds("gpt-realtime-2.1-mini") == (0.25, 1.5)
         assert speeds("gpt-4o-mini-tts") == (0.25, 4.0)
         assert speeds("gemini-3.8-flash-tts") is None
+
+
+class TestAccentsByLanguage:
+    """Accents are offered grouped by language: Gemini's library brings
+    some fifty, most of them English."""
+
+    def test_an_accent_falls_in_its_language(self) -> None:
+        from app.services.ai.domains.voice.traits import language_of
+
+        assert language_of("Glasgow English") == "English"
+        assert language_of("Midwest") == "English"  # a US region
+        assert language_of("General American") == "English"
+        assert language_of("Modern Standard Arabic") == "Arabic"
+        assert language_of("German") == "German"
+
+    def test_openai_and_gemini_name_american_alike(self) -> None:
+        assert get_voice("marin").accent == "General American"
+        assert get_voice("Kore").accent == "General American"
+        assert get_voice("fable").accent == "British"

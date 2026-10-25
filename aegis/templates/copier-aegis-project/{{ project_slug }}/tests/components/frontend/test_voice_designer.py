@@ -20,24 +20,57 @@ from app.components.frontend.dashboard.modals.voice_settings import (  # noqa: E
 MARIN = {
     "id": "marin",
     "name": "Marin",
+    "provider": "openai",
     "provider_name": "OpenAI",
     "gender": "female",
     "tone": "Warm",
     "family": "warm",
-    "accent": "American",
-    "detail": "Warm · female · American · OpenAI",
+    "accent": "General American",
+    "language": "English",
+    "detail": "Warm · female · General American · OpenAI",
+    "description": "",
 }
+CEDAR = MARIN | {"id": "cedar", "name": "Cedar", "gender": "male"}
+
+
+def _option(name: str, value: str, checked: bool = False, indent: bool = False) -> dict:
+    return {
+        "name": name,
+        "value": value,
+        "label": value,
+        "checked": checked,
+        "indent": indent,
+    }
+
+
 VIEW: dict[str, Any] = {
     "profile": {"id": 3, "name": "Hers"},
     "active": True,
     "steps": {"voice": "Voice", "delivery": "Delivery", "review": "Review"},
     "chosen": MARIN,
-    "cards": [MARIN],
+    "find": {
+        "q": "",
+        "filters": {
+            "provider": ["openai"],
+            "gender": [],
+            "family": [],
+            "language": [],
+            "accent_of": ["General American"],
+        },
+        "options": {
+            "provider": [_option("provider", "openai", True)],
+            "gender": [_option("gender", "female"), _option("gender", "male")],
+            "family": [_option("family", "warm")],
+            "accent": [
+                _option("language", "English"),
+                _option("accent_of", "General American", True, indent=True),
+            ],
+        },
+        "cards": [CEDAR],
+        "matched": 40,
+        "limit": 50,
+    },
     "locked": [{"provider_name": "Gemini", "voices": 30, "key": "GOOGLE_API_KEY"}],
-    "genders": {"female": "Female", "male": "Male"},
-    "families": {"warm": "Warm and soft"},
-    "accents": {"American": "American"},
-    "filters": {"gender": "female", "family": "warm", "accent_of": "American"},
     "styles": {
         "": {"label": "Plain", "sounds": "No style; just the dials", "dials": {}},
         "calm": {
@@ -85,11 +118,23 @@ def _found(control: Any, kind: type) -> list[Any]:
 
 
 def test_a_pick_or_a_filter_is_the_query_the_server_reads() -> None:
-    query = _editor()._query(pace="natural", gender="")
+    query = _editor()._query(pace="natural", gender=["male"])
 
     assert query["voice"] == "marin" and query["pace"] == "natural"
     assert query["was_style"] == "calm"  # a style kept, so the dials stay as picked
-    assert query["gender"] == "" and query["family"] == "warm"  # Any, the rest kept
+    assert query["gender"] == ["male"] and query["provider"] == ["openai"]
+    assert query["filtered"] == "1"  # so a cleared filter stays cleared
+
+
+def test_the_accent_dropdown_is_grouped_by_language() -> None:
+    choices = designer.accent_choices(VIEW["find"]["options"]["accent"])
+
+    assert list(choices.values()) == ["Any", "English (all)", "    General American"]
+    assert designer.accent_picked("language:English") == {
+        "language": ["English"],
+        "accent_of": [],
+    }
+    assert designer.accent_picked("") == {"language": [], "accent_of": []}
 
 
 async def test_save_posts_the_design_to_its_profile(
@@ -141,15 +186,18 @@ def test_a_profile_row_says_its_voice_style_speed_and_whether_in_use() -> None:
     assert cells[:4] == ["Hers", "Marin", "Plain", "1.1"]
 
 
-def test_the_voice_step_draws_the_voices_and_filters_it_is_sent() -> None:
+def test_the_voice_step_pins_the_chosen_and_draws_the_search() -> None:
     who = _editor()._who()
 
-    assert [r.value for r in _found(who, ft.Radio)] == ["marin"]
-    assert [d.value for d in _found(who, ft.Dropdown)][:3] == [
-        "female",
-        "warm",
-        "American",
+    assert [r.value for r in _found(who, ft.Radio)] == ["marin", "cedar"]
+    assert [d.value for d in _found(who, ft.Dropdown)][:4] == [
+        "openai",
+        "",
+        "",
+        "accent_of:General American",
     ]
+    said = [t.value for t in _found(who, ft.Text) if t.visible]
+    assert any("The first 1 of 40" in (v or "") for v in said)
 
 
 def test_the_delivery_step_says_who_was_picked() -> None:

@@ -33,7 +33,7 @@ import statistics
 import time
 from typing import Any
 
-from app.core.cache import get_cache
+from app.core.cache import CACHE_ERRORS, get_cache
 from app.core.log import logger
 from app.core.series_store import get_store
 
@@ -190,8 +190,17 @@ async def watched(name: str) -> bool:
 
 
 async def latest(name: str) -> Any:
-    """The sampler's last reading as a whole, or None before its first."""
-    return await get_cache().get(LATEST + name)
+    """The sampler's last reading as a whole, or None before its first, or
+    with no cache to read it from (Redis down, or none: a shell, CI): every
+    reader already takes None as "no reading", so none fails for want of a
+    cache, and the log says so."""
+    try:
+        return await get_cache().get(LATEST + name)
+    except CACHE_ERRORS as exc:
+        logger.warning(
+            "No reading: the cache did not answer", sampler=name, error=str(exc)
+        )
+        return None
 
 
 async def current(sampler: Sampler, *, fill: bool = True) -> Any:

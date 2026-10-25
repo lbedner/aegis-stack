@@ -110,6 +110,22 @@ async def test_before_the_containers_are_read_nothing_changes(
     assert fake.listed == 0
 
 
+async def test_with_no_cache_the_checks_stand_as_they_are(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Redis down, or none (a shell, CI): the containers' last reading is
+    unreadable, so each check keeps its own word, rather than the whole
+    status failing for want of a cache."""
+
+    class _Down:
+        async def get(self, key: str) -> None:
+            raise ConnectionError("no redis")
+
+    monkeypatch.setattr(series, "get_cache", lambda: _Down())
+    checks = _checks()
+    assert await container_health.overlay(checks) == checks
+
+
 async def test_the_system_status_carries_it(monkeypatch: pytest.MonkeyPatch) -> None:
     async def ingress() -> ComponentStatus:
         return _checks()["ingress"]

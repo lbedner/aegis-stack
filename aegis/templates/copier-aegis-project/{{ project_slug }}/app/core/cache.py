@@ -48,6 +48,16 @@ from typing import Any, NamedTuple
 from app.core.constants import ComponentName
 from app.core.log import logger
 
+try:  # Redis is optional; its errors are not OSErrors
+    from redis.exceptions import RedisError
+except ImportError:  # pragma: no cover - a project without redis
+    RedisError = ConnectionError  # type: ignore[assignment,misc]
+
+# What a cache that cannot be reached raises: Redis down, or not there (a
+# shell, CI). A reader that can do without it catches these, says so in
+# the log, and answers with what it has.
+CACHE_ERRORS = (ConnectionError, OSError, TimeoutError, RedisError)
+
 # The component this client fronts (``ownership``, ``ontology.calls``).
 FRONTS = ComponentName.CACHE
 

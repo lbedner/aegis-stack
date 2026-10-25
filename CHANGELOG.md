@@ -14,6 +14,13 @@
   catalog's, as the Providers page shows it: Gemini's is Google's), or its
   initial where the catalog holds none.
 
+- **Coding agents plan with the twin.** Every generated app ships the
+  `plan-with-the-twin` skill: before planning a change, an agent looks
+  up the parts it involves, runs its plan's files past `patterns touches`
+  and checks the service standard after. The lookups are on the app's
+  CLI, the `ontology` tool's answers from a shell, built with the app:
+  `ontology find`, `node`, `paths` and `route`.
+
 - **What each of a part's containers uses.** The ontology's answer for a
   part says, per container, its memory against its limit, CPU, state and
   restarts, as its Overseer page last sampled them, so Illiana can say
@@ -426,6 +433,12 @@
   parts already show, and what the change touches is folded away.
 
 ### Fixed
+
+- **The twin, and the app's health, answer without Redis.** Observed
+  calls and the containers' last reading are read from Redis; with none
+  to reach (Redis down, or a shell, or CI) every twin answer failed, and
+  so did the whole health status, though neither needs it. A reader now
+  goes on without them, and the log says the cache did not answer.
 
 - **A database the scheduler cannot read says so.** Its persistence check
   turned any database error into "no persistence", so its health said the

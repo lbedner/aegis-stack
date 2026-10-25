@@ -17,7 +17,12 @@ from pathlib import Path
 _ROOTED_PATH = re.compile(r"`((?:app|tests|alembic)/[A-Za-z0-9_./-]+)`")
 
 # Skills every stack ships (backend is core).
-_ALWAYS = {"add-api-endpoint", "add-cli-command", "change-the-stack"}
+_ALWAYS = {
+    "add-api-endpoint",
+    "add-cli-command",
+    "change-the-stack",
+    "plan-with-the-twin",
+}
 
 # Extra skills expected per stack, on top of the always-on set. auth pulls in
 # migrations, so it also gets add-model-and-migration.

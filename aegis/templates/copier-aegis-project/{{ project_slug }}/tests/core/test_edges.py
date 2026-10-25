@@ -145,6 +145,24 @@ async def test_every_process_reads_every_processs_hops(
     assert (seen.count, seen.errors, seen.max_ms, seen.total_ms) == (2, 1, 30, 40)
 
 
+async def test_with_no_cache_a_reader_has_this_processs_hops(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Redis down, or none (a shell, CI): the others' counts cannot be read,
+    so a reader has this process's alone, rather than no answer at all."""
+    class _Down:
+        async def values_with_prefix(self, prefix: str) -> dict[str, object]:
+            raise ConnectionError("no redis")
+
+    edges.reset()
+    monkeypatch.setattr(edges, "_remote", (0.0, {}))
+    monkeypatch.setattr(edges, "get_cache", lambda: _Down())
+    edges.hop("component:database", via=["service:ai"], ms=10)
+
+    seen = await edges.observed()
+    assert seen[("service:ai", "component:database")].count == 1
+
+
 # Calls out over HTTP ---------------------------------------------------------
 
 

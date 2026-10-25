@@ -27,10 +27,11 @@ import time
 from typing import Any, Self
 
 from app.core import frames, ownership, replays
-from app.core.cache import get_cache
+from app.core.cache import CACHE_ERRORS, get_cache
 from app.core.concurrency import background
 from app.core.config import settings
 from app.core.key_family import KeyFamily
+from app.core.log import logger
 from app.core.parts import PARTS
 
 PREFIX = "edges:"
@@ -253,10 +254,16 @@ async def observed() -> dict[Key, Seen]:
     global _remote
     at, remote = _remote
     if time.time() - at > FLUSH_SECONDS:
-        kept = await get_cache().values_with_prefix(_key(""))
-        kept.pop(_key(frames.process()), None)
-        remote = _merged(kept.values())
-        _remote = (time.time(), remote)
+        try:
+            kept = await get_cache().values_with_prefix(_key(""))
+        except CACHE_ERRORS as exc:
+            # No cache (a shell, CI): the other processes' counts are
+            # unreadable, this one's are still its own.
+            logger.warning("Observed calls: the cache did not answer", error=str(exc))
+        else:
+            kept.pop(_key(frames.process()), None)
+            remote = _merged(kept.values())
+            _remote = (time.time(), remote)
     found = {pair: Seen(**vars(seen)) for pair, seen in remote.items()}
     for pair, seen in _seen.items():
         found.setdefault(pair, Seen()).add(seen)

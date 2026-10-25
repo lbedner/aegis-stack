@@ -73,10 +73,15 @@ def _registered() -> bool:
 
 def with_app() -> SystemModel:
     """The model built with the whole app, its routes in it: what a process
-    with no running backend (the CLI, a docs build) reads."""
+    with no running backend (the CLI, a docs build) reads. Kept as
+    ``current``'s, so the readers it serves (the ``ontology`` tool, asked
+    from a shell) read it too."""
+    global _kept
     from app.integrations.main import create_integrated_app
 
-    return system_model(create_integrated_app())
+    with _building:
+        _kept = system_model(create_integrated_app())
+    return _kept
 
 
 def system_model(app: Starlette | None = None) -> SystemModel:

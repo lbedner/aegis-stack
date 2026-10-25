@@ -591,3 +591,17 @@ async def test_each_voice_shows_its_providers_mark(
     assert not select(html, '[data-voice-card="Kore"] img')
     chosen = one(html, "[data-voice-chosen] img")  # Alloy's, OpenAI
     assert chosen.get("src").endswith("/icons/openai")
+
+
+async def test_each_voice_plays_on_the_model_picked(
+    client: TestClient, hers: VoiceProfile, heard: None
+) -> None:
+    """Listen beside a voice plays it on the model picked below (where that
+    model speaks it), not on the voice's own default."""
+    html = _editor(
+        client, hers, filtered="1", provider="gemini", voice="Kore",
+        model="gemini-3.8-flash-lite-tts",
+    )  # fmt: skip
+
+    puck = one(html, '[data-voice-card="Puck"] [data-speak]').get("data-speak")
+    assert puck.endswith("/Puck?model=gemini-3.8-flash-lite-tts")

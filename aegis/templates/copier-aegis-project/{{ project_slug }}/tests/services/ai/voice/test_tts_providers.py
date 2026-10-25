@@ -373,3 +373,99 @@ class TestOpenAISpeechLength:
 
         assert result.format == AudioFormat.MP3
         assert result.duration_seconds == pytest.approx(1.2)
+
+
+class TestGeminiThatDoesNotAnswer:
+    """A Gemini speech model out of its quota (the free tier's is ten a day
+    for each) answers 429 at once; the SDK used to retry it on the answer's
+    Retry-After, hours, and a preview spun on. A 429, or a try that does not
+    answer in time, is said on the lite model instead, and fails fast when
+    that cannot either."""
+
+    def _provider(self, monkeypatch: pytest.MonkeyPatch, answers: list[Any]) -> Any:
+        import asyncio
+        import base64
+
+        from app.services.ai.domains.voice.tts import providers
+
+        monkeypatch.setattr(providers, "GEMINI_TRY_SECONDS", 0.05)
+        tries: list[str] = []
+
+        async def create(**kwargs: Any) -> Any:
+            tries.append(kwargs["model"])
+            answer = answers[len(tries) - 1]
+            if answer == "quota":
+                raise RateLimitedError(
+                    "Rate limit exceeded (limit: 10 requests per day)"
+                )
+            if not answer:
+                await asyncio.Event().wait()  # never answers
+            return SimpleNamespace(
+                output_audio=SimpleNamespace(data=base64.b64encode(b"RIFF"))
+            )
+
+        provider = get_tts_provider(TTSProvider.GEMINI, api_key="k")
+        provider._client = SimpleNamespace(
+            aio=SimpleNamespace(interactions=SimpleNamespace(create=create))
+        )
+        provider.tries = tries
+        return provider
+
+    async def test_one_that_hangs_is_said_on_lite(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The flagship is the one that hangs: the second try is the lite
+        model, which speaks the same voices."""
+        provider = self._provider(monkeypatch, [False, True])
+
+        result = await provider.synthesize(SpeechRequest(text="Hi.", voice="Kore"))
+
+        assert result.audio == b"RIFF"
+        assert provider.tries == ["gemini-3.8-flash-tts", "gemini-3.8-flash-lite-tts"]
+
+    async def test_one_that_never_answers_fails(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        provider = self._provider(monkeypatch, [False, False])
+
+        with pytest.raises(RuntimeError, match="Speech synthesis failed"):
+            await provider.synthesize(SpeechRequest(text="Hi.", voice="Kore"))
+        assert len(provider.tries) == 2
+
+    async def test_one_out_of_quota_is_said_on_lite(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        provider = self._provider(monkeypatch, ["quota", True])
+
+        result = await provider.synthesize(SpeechRequest(text="Hi.", voice="Kore"))
+
+        assert result.audio == b"RIFF"
+        assert provider.tries == ["gemini-3.8-flash-tts", "gemini-3.8-flash-lite-tts"]
+
+    async def test_both_out_of_quota_fail_saying_so(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        provider = self._provider(monkeypatch, ["quota", "quota"])
+
+        with pytest.raises(RuntimeError, match="10 requests per day"):
+            await provider.synthesize(SpeechRequest(text="Hi.", voice="Kore"))
+
+    def test_the_client_never_retries_a_quota_answer(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        pytest.importorskip("google.genai")
+        from google import genai
+
+        built: dict[str, Any] = {}
+        monkeypatch.setattr(genai, "Client", lambda **kwargs: built.update(kwargs))
+
+        get_tts_provider(TTSProvider.GEMINI, api_key="k")._get_client()
+
+        codes = built["http_options"].retry_options.http_status_codes
+        assert 429 not in codes and 503 in codes
+
+
+class RateLimitedError(Exception):
+    """The SDK's answer to a 429: its status on ``status_code``."""
+
+    status_code = 429

@@ -257,3 +257,14 @@ def test_each_voice_wears_its_providers_mark() -> None:
 
     marks = _found(editor._who(), ProviderIcon)
     assert len(marks) == 2  # the chosen one and the one listed
+
+
+def test_each_voice_plays_on_the_model_picked(monkeypatch: pytest.MonkeyPatch) -> None:
+    played: list[str] = []
+    monkeypatch.setattr(designer, "play", lambda page, held, path: played.append(path))
+    editor = _editor()
+
+    buttons = _found(editor._who(), ft.IconButton)
+    buttons[-1].on_click(None)  # Cedar's Listen
+
+    assert played == ["/api/v1/voice/preview/cedar?model=gpt-realtime-2.1-mini"]

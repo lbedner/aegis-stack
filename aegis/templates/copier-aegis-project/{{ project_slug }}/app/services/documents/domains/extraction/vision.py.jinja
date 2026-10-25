@@ -1,4 +1,4 @@
-{%- if include_ai and ai_framework == "pydantic-ai" %}
+{%- if include_ai and ai_framework == "pydantic-ai" and ai_backend != "memory" %}
 """The vision reader extraction hands a rendered page to.
 
 The same model the chat surface reads a pasted screenshot with, called
@@ -66,8 +66,10 @@ async def vision_reader() -> VisionReader | None:
 {%- else %}
 """No vision reader in this stack: scans stay unread with a reason.
 
-The AI service with the pydantic-ai framework supplies one; without it,
-extraction still reads every text layer and records the rest as unread.
+The AI service with the pydantic-ai framework and a database backend
+supplies one (the model in force and the usage it records are rows);
+without it, extraction still reads every text layer and records the rest
+as unread.
 """
 
 from __future__ import annotations

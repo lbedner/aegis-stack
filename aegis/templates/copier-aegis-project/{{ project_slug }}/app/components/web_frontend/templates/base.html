@@ -16,11 +16,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{% block title %}{{ project_name }}{% endblock %}</title>
 
-  {# Favicon: SVG only. Modern browsers handle it natively (auto-scales,
-     respects prefers-color-scheme inside the SVG, and the bytes are
-     smaller than maintaining a multi-resolution ICO). Older browsers and
-     bots that auto-request /favicon.ico will 404 — harmless. #}
-  {% block favicon %}<link rel="icon" type="image/svg+xml" href="{{ static('favicon.svg') }}">{% endblock %}
+  {# Favicon: the Aegis shield, a PNG with its own transparency (it reads
+     on a light tab or a dark one), and the larger one iOS asks for when
+     the page is added to a home screen. Bots that auto-request
+     /favicon.ico will 404, which is harmless. #}
+  {% block favicon %}<link rel="icon" type="image/png" href="{{ static('favicon.png') }}">
+  <link rel="apple-touch-icon" href="{{ static('apple-touch-icon.png') }}">{% endblock %}
 
   {# Tailwind + DaisyUI, precompiled — no runtime JIT, no CDN. Built into
      static/dist by the asset pipeline; static() returns the fingerprinted

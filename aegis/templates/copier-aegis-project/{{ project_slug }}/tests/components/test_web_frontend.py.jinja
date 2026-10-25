@@ -549,7 +549,7 @@ class TestBaseLayout:
         from app.integrations.main import create_integrated_app
 
         with TestClient(create_integrated_app()) as client:
-            assert client.get("/static/favicon.svg").status_code == 200
+            assert client.get("/static/favicon.png").status_code == 200
 
     def test_no_pulse_only_assets(self, page: str) -> None:
         """The port dropped Pulse's chart/date-picker stack; nothing should

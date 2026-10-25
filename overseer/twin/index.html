@@ -5931,6 +5931,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#from-a-shell" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        From a shell
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -6396,6 +6407,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#from-a-shell" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        From a shell
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -6434,13 +6456,13 @@
 <td><strong>Ontology</strong></td>
 <td>What exists: every part, route, table, job and tool, and how they connect</td>
 <td>The source code</td>
-<td>The map, <code>GET /api/v1/ontology</code>, the <code>ontology</code> tool, <code>&lt;app&gt; ontology export</code></td>
+<td>The map, <code>GET /api/v1/ontology</code>, the <code>ontology</code> tool, <code>&lt;app&gt; ontology find</code>, <code>node</code>, <code>paths</code>, <code>export</code></td>
 </tr>
 <tr>
 <td><strong>Dry paths</strong></td>
 <td>What could happen: every way a route can go, before it ever runs</td>
 <td>The source code</td>
-<td>A route's dry path on Overseer's Server page, the <code>ontology</code> tool</td>
+<td>A route's dry path on Overseer's Server page, the <code>ontology</code> tool, <code>&lt;app&gt; ontology route</code></td>
 </tr>
 <tr>
 <td><strong>Live state</strong></td>
@@ -6482,6 +6504,15 @@
 <p>Overseer's map starts at the Server (containers), opens a service into its pieces (components), and links each hop to the lines of code it ran through.</p>
 <h2 id="one-read-for-every-reader">One read for every reader</h2>
 <p>Overseer, Illiana and the API read the same models (<code>frozen</code>, <code>extra="forbid"</code>), so a request is described the same way on the replay page, in Illiana's answer and in the JSON: a part by its ontology id, a line of code by its path, line, service and piece.</p>
+<h2 id="from-a-shell">From a shell</h2>
+<p>A coding agent (or you) asks the Twin from the app's CLI, with no server up: the same answers the <code>ontology</code> tool gives Illiana and MCP clients, as JSON, built with the app so its routes are in them.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>uv<span class="w"> </span>run<span class="w"> </span>&lt;app&gt;<span class="w"> </span>ontology<span class="w"> </span>find<span class="w"> </span>--kind<span class="w"> </span>service<span class="w">           </span><span class="c1"># the parts of a kind, or --text to search ids</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>uv<span class="w"> </span>run<span class="w"> </span>&lt;app&gt;<span class="w"> </span>ontology<span class="w"> </span>node<span class="w"> </span>component:backend<span class="w">        </span><span class="c1"># a part, its edges and neighbours, its live state</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>uv<span class="w"> </span>run<span class="w"> </span>&lt;app&gt;<span class="w"> </span>ontology<span class="w"> </span>paths<span class="w"> </span>component:backend<span class="w"> </span>shared:system
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>uv<span class="w"> </span>run<span class="w"> </span>&lt;app&gt;<span class="w"> </span>ontology<span class="w"> </span>route<span class="w"> </span><span class="s2">&quot;GET /health/detailed&quot;</span><span class="w">  </span><span class="c1"># every hop a route can take, at its file and line</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>uv<span class="w"> </span>run<span class="w"> </span>&lt;app&gt;<span class="w"> </span>patterns<span class="w"> </span>touches<span class="w"> </span>app/services/system/health.py<span class="w">   </span><span class="c1"># what a change&#39;s files reach</span>
+</span></code></pre></div>
+<p>Every generated app ships the <code>plan-with-the-twin</code> skill (<code>.claude/skills/</code>): before planning a change, a coding agent looks up the parts involved, runs its plan's files past <code>patterns touches</code>, and checks the service standard with <code>patterns check</code> after.</p>
 
 
 

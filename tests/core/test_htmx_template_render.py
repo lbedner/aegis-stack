@@ -346,7 +346,7 @@ class TestWebFrontendScaffolding:
             "templates/components/landing/footer.html",
             "static/css/app.css",
             "static/js/app.js",
-            "static/favicon.svg",
+            "static/favicon.png",
         ):
             assert (root / rel).is_file(), rel
 
@@ -466,7 +466,7 @@ class TestWebFrontendScaffolding:
         """Assets go through static() so they pick up fingerprinted URLs once
         an asset build exists, rather than being hardcoded."""
         html = (_web_frontend_tree() / "templates/base.html").read_text()
-        for asset in ("css/app.css", "js/app.js", "favicon.svg"):
+        for asset in ("css/app.css", "js/app.js", "favicon.png"):
             assert f"static('{asset}')" in html, asset
         # The theme script and the stylesheet come through the head macro
         # every layout shares.

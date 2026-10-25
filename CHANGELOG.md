@@ -299,6 +299,11 @@
 
 ### Changed
 
+- **A new shield, and Illiana's own.** The Aegis shield is now the docs'
+  logo and favicon, and the favicon of every generated app (the htmx
+  pages and the Flet dashboard); the chat button wears Illiana's rose
+  shield.
+
 - **Illiana signs off on a clean change.** A pull request with nothing
   new against her rules gets her review too, her seal of approval in
   place of silence: "Nothing new against any rule I hold. This has my

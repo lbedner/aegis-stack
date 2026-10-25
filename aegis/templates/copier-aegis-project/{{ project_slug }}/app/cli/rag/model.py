@@ -1,6 +1,5 @@
 """The embedding model: is it here, and can we fetch it."""
 
-import asyncio
 from pathlib import Path
 from typing import Annotated
 
@@ -24,12 +23,12 @@ from app.cli.rag.shared import _is_model_cached, app, console, get_rag_service
 
 
 @app.command("status", help=lazy_t("rag.help_status"))
-def show_status() -> None:
+async def show_status() -> None:
     rag_service = get_rag_service()
 
     try:
         status = rag_service.get_service_status()
-        collections = asyncio.run(rag_service.list_collections())
+        collections = await rag_service.list_collections()
 
         # Check if embedding model is installed
         model_cached = _is_model_cached()

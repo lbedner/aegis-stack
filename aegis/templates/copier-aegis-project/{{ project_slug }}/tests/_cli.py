@@ -2,6 +2,7 @@
 
 import asyncio
 import inspect
+import sys
 from types import SimpleNamespace
 
 import click
@@ -28,5 +29,11 @@ def invoke(args: list[str], input: str | None = None) -> SimpleNamespace:
         except click.exceptions.ClickException as exc:
             exc.show()
             code = exc.exit_code
+        except SystemExit as exc:
+            # main() lets a command's sys.exit end the process with its code.
+            code = exc.code if isinstance(exc.code, int) else int(exc.code is not None)
+        # print() is buffered in the runner's wrapper; the runner's own
+        # invoke flushes it before reading, so this does too.
+        sys.stdout.flush()
         output = stdout.getvalue().decode()
     return SimpleNamespace(exit_code=code, output=output)

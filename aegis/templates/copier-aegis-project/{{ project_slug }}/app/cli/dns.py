@@ -22,7 +22,6 @@ The default record type is ``A`` and the default IP is read from
 
 from __future__ import annotations
 
-import asyncio
 import re
 from pathlib import Path
 
@@ -122,7 +121,7 @@ def _print_records(domain: str, records: list[RetrievedRecord]) -> None:
 
 
 @app.command("set")
-def dns_set(
+async def dns_set(
     subdomain: str = typer.Argument(
         ...,
         help=(
@@ -217,11 +216,11 @@ def dns_set(
                 f"on {apex} (id={result.provider_id})"
             )
 
-    asyncio.run(_run())
+    await _run()
 
 
 @app.command("list")
-def dns_list(
+async def dns_list(
     domain: str | None = typer.Option(
         None,
         "--domain",
@@ -249,11 +248,11 @@ def dns_list(
             return
         _print_records(apex, records)
 
-    asyncio.run(_run())
+    await _run()
 
 
 @app.command("delete")
-def dns_delete(
+async def dns_delete(
     subdomain: str = typer.Argument(
         ...,
         help="Subdomain to remove. Use '@' for apex.",
@@ -324,4 +323,4 @@ def dns_delete(
                 f"[{theme.ACCENT}]deleted[/{theme.ACCENT}] {r.type} {r.host or '@'} (id={r.provider_id})"
             )
 
-    asyncio.run(_run())
+    await _run()

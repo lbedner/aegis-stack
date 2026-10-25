@@ -553,6 +553,21 @@
   with a JSON 422 (a service's error, FastAPI's validation) swapped that
   JSON into the page; it is an error toast now.
 
+- **A generated CLI command no longer ends in "Event loop is closed".**
+  Commands ran their own `asyncio.run`, so the shared cache's Redis pool
+  was torn down after its loop was gone and printed a traceback after a
+  command that succeeded. Every command in `app/cli` is now `async def`
+  and runs on `main()`'s one loop, which closes the cache on it; Ctrl+C
+  in an async command exits 1 like a sync one instead of printing a
+  traceback. `tests/_cli.invoke` catches a command's `sys.exit` and keeps
+  its `print()` output, and the CLI tests of async commands use it.
+
+- **A cancelled query ends as a cancel.** A statement cancelled
+  mid-flight (Ctrl+C, a client gone) leaves its connection invalid, and
+  the database activity listeners read its `info` inside the rollback
+  that cleans it up: that raised "Can't reconnect until invalid
+  transaction is rolled back" in place of the cancel.
+
 - **A tool's result lands on its own call.** Calls to one tool made at
   once finish in any order, and each result was attached to the latest
   unanswered call of that name: the trail (Overseer's, and the chat's)

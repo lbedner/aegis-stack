@@ -23,24 +23,24 @@ console = theme.console()
 
 
 @app.command(help=lazy_t("payment.help_status"))
-def status() -> None:
+async def status() -> None:
     """Display payment service status."""
-    asyncio.run(_status())
+    await _status()
 
 
 @app.command(help=lazy_t("payment.help_transactions"))
-def transactions(
+async def transactions(
     limit: int = typer.Option(20, "--limit", "-n", help=lazy_t("payment.opt_limit")),
     status_filter: str | None = typer.Option(
         None, "--status", "-s", help=lazy_t("payment.opt_status")
     ),
 ) -> None:
     """Display recent transactions."""
-    asyncio.run(_transactions(limit, status_filter))
+    await _transactions(limit, status_filter)
 
 
 @app.command(help=lazy_t("payment.help_disputes"))
-def disputes(
+async def disputes(
     status_filter: str | None = typer.Option(
         None,
         "--status",
@@ -49,11 +49,11 @@ def disputes(
     ),
 ) -> None:
     """Display disputes (chargebacks + early fraud warnings)."""
-    asyncio.run(_disputes(status_filter))
+    await _disputes(status_filter)
 
 
 @app.command(help=lazy_t("payment.help_seed"))
-def seed(
+async def seed(
     reset: bool = typer.Option(
         False,
         "--reset",
@@ -66,7 +66,7 @@ def seed(
     ),
 ) -> None:
     """Seed fake payment data for dashboard testing."""
-    asyncio.run(_seed(reset=reset, clear=clear))
+    await _seed(reset=reset, clear=clear)
 
 
 @app.command(help=lazy_t("payment.help_webhook"))
@@ -253,7 +253,7 @@ def _archive_fixtures(api_key: str) -> dict[str, int]:
 
 
 @app.command(name="e2e")
-def e2e(
+async def e2e(
     user_email: str = typer.Option(
         ...,
         "--user",
@@ -322,12 +322,10 @@ def e2e(
       1 - at least one leg failed (check the console output for the
           ``[red]FAIL[/red]`` markers + the per-step error detail)
     """
-    asyncio.run(
-        _e2e(
+    await _e2e(
             user_email=user_email,
             primary_price=primary_price,
             secondary_price=secondary_price,
             cleanup=cleanup,
             skip_existing=skip_existing,
         )
-    )

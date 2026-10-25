@@ -5,11 +5,10 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from typer.testing import CliRunner
 
 from app.cli.ai import speech
-from app.cli.ai.shared import app
 from app.services.ai.domains.voice.models import AudioFormat, SpeechResult, TTSProvider
+from tests._cli import invoke
 
 
 def test_speak_names_the_file_by_what_came_back(
@@ -25,7 +24,7 @@ def test_speak_names_the_file_by_what_came_back(
     monkeypatch.setattr("app.services.ai.service.AIService", lambda _: service)
     monkeypatch.setattr(speech, "speaking_settings", AsyncMock(return_value=None))
 
-    result = CliRunner().invoke(app, ["speak", "Hello"])
+    result = invoke(["ai", "speak", "Hello"])
 
     assert result.exit_code == 0, result.output
     assert (tmp_path / "speech.wav").read_bytes() == b"RIFF"

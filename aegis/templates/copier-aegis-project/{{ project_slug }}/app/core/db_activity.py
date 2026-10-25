@@ -88,8 +88,15 @@ def _began(conn: Any) -> None:
     conn.info["began_at"] = time.monotonic()
 
 
+def _info(conn: Any) -> dict[Any, Any]:
+    """``conn.info``, or nothing on a connection a cancelled statement left
+    invalid: reading it there raises, and these listeners run inside the
+    rollback that cleans it up, so the cancel became that error."""
+    return {} if conn is None or conn.invalidated else conn.info
+
+
 def _ended(conn: Any) -> None:
-    began = conn.info.pop("began_at", None)
+    began = _info(conn).pop("began_at", None)
     if began is not None and is_slow(held := time.monotonic() - began):
         _record("slow", round(held, 2))
 
@@ -111,7 +118,7 @@ def _statement_ran(
 
 
 def _hop(conn: Any, context: Any, *, error: bool) -> None:
-    started = conn.info.pop("statement_at", None) if conn is not None else None
+    started = _info(conn).pop("statement_at", None)
     ms = (time.perf_counter() - started) * 1000 if started else 0.0
     tables = _tables(context)
     chain = edges.hop(edges.DATABASE, ms=ms, error=error, tables=tables)

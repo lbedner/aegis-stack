@@ -7,7 +7,6 @@ prompt (``agents prompt``), which records why. The memory-modules commands
 inspect the reusable context blocks agents opt into.
 """
 
-import asyncio
 from pathlib import Path
 
 import typer
@@ -89,8 +88,8 @@ def _active_text(is_active: bool) -> str:
 
 
 @app.command("list", help=lazy_t("agents.help_list"))
-def list_agents() -> None:
-    agents = asyncio.run(_load_agents())
+async def list_agents() -> None:
+    agents = await _load_agents()
     if not agents:
         console.print(f"[dim]{t('agents.empty')}[/dim]")
         return
@@ -115,10 +114,10 @@ def list_agents() -> None:
 
 
 @app.command("show", help=lazy_t("agents.help_show"))
-def show_agent(slug: str = typer.Argument(...)) -> None:
+async def show_agent(slug: str = typer.Argument(...)) -> None:
     import sys
 
-    agent = asyncio.run(_load_agent(slug))
+    agent = await _load_agent(slug)
     if agent is None:
         console.print(
             f"[{theme.ERROR}]{t('agents.not_found', slug=slug)}[/{theme.ERROR}]"
@@ -154,7 +153,7 @@ def show_agent(slug: str = typer.Argument(...)) -> None:
 
 
 @app.command("test", help=lazy_t("agents.help_test"))
-def test_agent(
+async def test_agent(
     slug: str = typer.Argument("assistant"),
     message: str = typer.Option(
         "Reply with one short sentence confirming you are online.",
@@ -167,7 +166,7 @@ def test_agent(
 
     console.print(f"[dim]{t('agents.test_running', slug=slug)}[/dim]")
     try:
-        config, reply = asyncio.run(_run_test_turn(slug, message))
+        config, reply = await _run_test_turn(slug, message)
     except Exception as e:
         console.print(f"[{theme.ERROR}]{t('shared.error')}[/{theme.ERROR}] {e}")
         sys.exit(1)
@@ -187,7 +186,7 @@ def _error(message: str) -> None:
 
 
 @prompt_app.command("set", help=lazy_t("agents.prompt_help_set"))
-def set_prompt(
+async def set_prompt(
     slug: str = typer.Argument(...),
     note: str = typer.Option(..., "--note", help=lazy_t("agents.opt_note")),
     file: Path | None = typer.Option(
@@ -211,13 +210,13 @@ def set_prompt(
         if file is not None:
             prompt = file.read_text()
         else:
-            history = asyncio.run(_load_history(slug))
+            history = await _load_history(slug)
             earlier = next((c for c in history if c.id == version), None)
             if earlier is None:
                 _error(t("agents.prompt_no_version", slug=slug, version=version))
                 sys.exit(1)
             prompt = earlier.system_prompt
-        asyncio.run(_set_prompt(slug, prompt, note))
+        await _set_prompt(slug, prompt, note)
     except (AgentNotFoundError, InvalidAgentUpdateError) as e:
         _error(str(e))
         sys.exit(1)
@@ -225,13 +224,13 @@ def set_prompt(
 
 
 @prompt_app.command("history", help=lazy_t("agents.prompt_help_history"))
-def show_prompt_history(slug: str = typer.Argument(...)) -> None:
+async def show_prompt_history(slug: str = typer.Argument(...)) -> None:
     import sys
 
     from app.services.ai.service import AgentNotFoundError
 
     try:
-        changes = asyncio.run(_load_history(slug))
+        changes = await _load_history(slug)
     except AgentNotFoundError:
         _error(t("agents.not_found", slug=slug))
         sys.exit(1)
@@ -267,8 +266,8 @@ def _module_kind(module: MemoryModule) -> str:
 
 
 @modules_app.command("list", help=lazy_t("agents.modules_help_list"))
-def list_modules() -> None:
-    modules = asyncio.run(_load_modules())
+async def list_modules() -> None:
+    modules = await _load_modules()
     if not modules:
         console.print(f"[dim]{t('agents.modules_empty')}[/dim]")
         return
@@ -291,10 +290,10 @@ def list_modules() -> None:
 
 
 @modules_app.command("show", help=lazy_t("agents.modules_help_show"))
-def show_module(slug: str = typer.Argument(...)) -> None:
+async def show_module(slug: str = typer.Argument(...)) -> None:
     import sys
 
-    modules = asyncio.run(_load_modules())
+    modules = await _load_modules()
     module = next((m for m in modules if m.slug == slug), None)
     if module is None:
         console.print(

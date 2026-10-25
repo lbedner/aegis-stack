@@ -58,3 +58,21 @@ def test_logs_go_to_stderr_so_stdout_is_the_output(
     monkeypatch.setattr(sys, "argv", ["app", "--help"])
     cli_main.main()
     assert streams == [sys.stderr]
+
+
+def test_ctrl_c_in_an_async_command_exits_without_a_traceback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A sync command's Ctrl+C is Click's Abort. An async command runs on
+    the loop ``main()`` owns, outside Click, so its interrupt reaches
+    ``main()`` itself and has to end the same way."""
+    _closing(monkeypatch)
+
+    async def command() -> None:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(cli_main, "setup_logging", lambda _stream: None)
+    monkeypatch.setattr(cli_main, "app", lambda **_kwargs: command())
+    with pytest.raises(SystemExit) as exited:
+        cli_main.main()
+    assert exited.value.code == 1

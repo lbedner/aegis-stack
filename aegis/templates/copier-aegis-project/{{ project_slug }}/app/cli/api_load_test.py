@@ -14,7 +14,6 @@ that's what users are testing.
 
 from __future__ import annotations
 
-import asyncio
 import json as json_lib
 import sys
 from typing import TYPE_CHECKING
@@ -141,7 +140,7 @@ def list_command(
 
 
 @app.command()
-def run(
+async def run(
     path: str = typer.Argument(..., help="Path to load test (e.g. /health)"),
     method: str = typer.Option("GET", "--method", "-m", help="HTTP method"),
     requests: int = typer.Option(100, "--requests", "-n", help="Total requests"),
@@ -196,7 +195,7 @@ def run(
 ) -> None:
     """Run a load test against an endpoint."""
     headers = parse_headers(header)
-    auth_as = apply_auto_auth(
+    auth_as = await apply_auto_auth(
         headers, as_admin=as_admin, as_user=as_user, anon=anon, quiet=json
     )
     path_params = parse_kv_flag(path_param, "--path-param")
@@ -259,7 +258,7 @@ def run(
 
     try:
         try:
-            result = asyncio.run(with_store(_do_run))
+            result = await with_store(_do_run)
         finally:
             if progress is not None:
                 progress.stop()
@@ -284,7 +283,7 @@ def run(
 
 
 @app.command()
-def results(
+async def results(
     test_id: str = typer.Argument(..., help="Test ID returned by `run`"),
     json: bool = typer.Option(False, "--json"),
 ) -> None:
@@ -294,7 +293,7 @@ def results(
         service = APILoadTestService(store=store)
         return await service.get_result(test_id)
 
-    result = asyncio.run(with_store(_do_get))
+    result = await with_store(_do_get)
     if result is None:
         console.print(f"No result found for test_id={test_id!r}", style=theme.ERROR)
         sys.exit(1)
@@ -306,7 +305,7 @@ def results(
 
 
 @app.command()
-def recent(
+async def recent(
     limit: int = typer.Option(10, "--limit", "-n", help="Max runs to show"),
     json: bool = typer.Option(False, "--json"),
 ) -> None:
@@ -316,7 +315,7 @@ def recent(
         service = APILoadTestService(store=store)
         return await service.list_recent(limit)
 
-    items = asyncio.run(with_store(_do_list))
+    items = await with_store(_do_list)
 
     if json:
         print(json_lib.dumps([r.model_dump() for r in items]))

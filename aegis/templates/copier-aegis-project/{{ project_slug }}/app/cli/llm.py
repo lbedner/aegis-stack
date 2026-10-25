@@ -4,7 +4,6 @@ Commands for syncing LLM model data, listing available models,
 viewing current configuration, and switching active models.
 """
 
-import asyncio
 import time
 from typing import Annotated
 
@@ -209,7 +208,7 @@ async def modalities() -> None:
 
 
 @app.command("list", help=lazy_t("llm.help_list"))
-def list_cmd(
+async def list_cmd(
     ctx: typer.Context,
     pattern: Annotated[
         str | None,
@@ -258,15 +257,13 @@ def list_cmd(
         )
         raise typer.Exit(2)
 
-    results = asyncio.run(
-        list_models(
+    results = await list_models(
             pattern=pattern,
             vendor=vendor,
             modality=modality,
             limit=limit,
             include_disabled=include_all,
         )
-    )
 
     if not results:
         console.print(f"[dim]{t('llm.no_models_found')}[/dim]")
@@ -294,8 +291,8 @@ def list_cmd(
 
 
 @app.command(help=lazy_t("llm.help_current"))
-def current() -> None:
-    config = asyncio.run(get_current_config())
+async def current() -> None:
+    config = await get_current_config()
 
     # Build tree for configuration
     tree = Tree(f"[bold]{t('llm.current_config')}[/bold]")
@@ -345,7 +342,7 @@ def current() -> None:
 
 
 @app.command(help=lazy_t("llm.help_use"))
-def use(
+async def use(
     model_id: Annotated[
         str,
         typer.Argument(
@@ -364,7 +361,7 @@ def use(
     with console.status(
         f"[bold {theme.ACCENT}]{t('llm.switching_model', model_id=model_id)}..."
     ):
-        result = asyncio.run(set_active_model(model_id, force=force))
+        result = await set_active_model(model_id, force=force)
 
     if result.success:
         console.print(f"[{theme.ACCENT}]\u2713[/] {result.message}")
@@ -384,7 +381,7 @@ async def reset() -> None:
 
 
 @app.command(help=lazy_t("llm.help_info"))
-def info(
+async def info(
     model_id: Annotated[
         str,
         typer.Argument(
@@ -392,7 +389,7 @@ def info(
         ),
     ],
 ) -> None:
-    details = asyncio.run(get_model_info(model_id))
+    details = await get_model_info(model_id)
 
     if not details:
         console.print(

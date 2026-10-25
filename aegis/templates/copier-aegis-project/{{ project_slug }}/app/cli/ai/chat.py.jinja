@@ -89,7 +89,7 @@ async def conversations(
 
     with suppress_logs():
         ai_service = AIService(settings)
-    convos = await ai_service.list_conversations(user_id)[:limit]
+    convos = (await ai_service.list_conversations(user_id))[:limit]
 
     if not convos:
         typer.echo(t("ai.no_conversations", user_id=user_id))

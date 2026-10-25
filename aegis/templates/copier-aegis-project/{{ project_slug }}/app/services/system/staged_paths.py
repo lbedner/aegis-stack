@@ -8,19 +8,61 @@ same way."""
 from collections.abc import Iterable, Sequence
 from itertools import pairwise
 
+from app.core.constants import ComponentName
 from app.core.edges import DATABASE, SERVER
 from app.core.ontology import Kind, graph
 from app.core.ontology.model import Edge, EdgeKind, SystemModel, parse_node_id
 from app.services.system import dry_path
 from app.services.system.dry_path import DryPath
 from app.services.system.kept_requests import RequestHop, RequestHops
+from app.services.system.ui import registry_key
 
 BEAT_MS = 100.0  # a staged hop's length, and the gap to the next
 # What a flow's line can be: a call or a need, the way it points; a part
-# holding a sub-part or a table, either way. And what the map places.
+# holding a sub-part or a table, either way.
 FOLLOWED = frozenset({EdgeKind.CALLS, EdgeKind.DEPENDS_ON})
-PLACED = frozenset({Kind.COMPONENT, Kind.SERVICE, Kind.EXTERNAL, Kind.OBJECT})
+OUTSIDE = "outside:"  # an outside provider's map key, before its name
+# Code the map draws as a box of its own, keyed by its node id
+# (``queue:system``): what each is, under its name.
+CODE = {Kind.QUEUE: "Worker queue", Kind.TASK: "Worker task"}
+# What the map places: a part, an outside provider, a table (as the
+# database holding it), and ``CODE``.
+PLACED = frozenset({Kind.COMPONENT, Kind.SERVICE, Kind.EXTERNAL, Kind.OBJECT, *CODE})
 SAID = 12  # the most a refusal names of what a stop does reach
+
+
+def registry_of(node_id: str) -> str:
+    """A model node's id as the map keys it: a service by its registry key
+    (a service and a component may share a name), an outside provider as
+    ``outside:<name>``, a component by its name; a sub-part as its part,
+    on whose card it is drawn (RAG's, AI's), a table as the database
+    holding it, and a worker's queue or task as itself (``CODE``)."""
+    kind, name = parse_node_id(node_id)
+    if kind is Kind.EXTERNAL:
+        return OUTSIDE + name
+    if kind is Kind.OBJECT:
+        return ComponentName.DATABASE.value
+    if kind in CODE:
+        return node_id
+    name = name.partition(".")[0]
+    if kind is Kind.SERVICE:
+        return registry_key("services", name)
+    return name
+
+
+def wired(model: SystemModel, node_id: str) -> dict[tuple[str, str], list[Edge]]:
+    """``node_id``'s wiring (``graph.wiring``) as the map draws it: each
+    pair of map keys a line joins, with its edges; a line within one box,
+    or to what the map places nothing for, left out. Empty, a wiring card
+    has nothing to draw."""
+    pairs: dict[tuple[str, str], list[Edge]] = {}
+    for edge in graph.wiring(model, node_id):
+        ends = edge.source, edge.target
+        if all(parse_node_id(end)[0] in PLACED for end in ends):
+            a, b = map(registry_of, ends)
+            if a != b:
+                pairs.setdefault((a, b), []).append(edge)
+    return pairs
 
 
 def joined(model: SystemModel, stops: Sequence[str]) -> RequestHops:

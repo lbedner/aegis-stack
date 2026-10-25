@@ -17,7 +17,6 @@ from __future__ import annotations
 
 from pydantic import BaseModel, model_validator
 
-from app.core.ontology import graph
 from app.core.ontology.observed import running
 from app.services.shared.deps import caller_is_admin
 from app.services.system import kept_requests, staged_paths
@@ -74,7 +73,12 @@ async def prepare(ask: PathAsk) -> PathCard:
             )
         return PathCard(title=ask.title, path=found)
     if ask.node is not None:
-        graph.node(await running(), ask.node)  # one the map has
+        if not staged_paths.wired(await running(), ask.node):
+            raise ValueError(
+                f"Nothing on the map: no line joins {ask.node} to anything the "
+                "map draws. Draw a part it is wired to (its owner, a queue, a "
+                "service), or say it in words."
+            )
         return PathCard(title=ask.title, node=ask.node)
     if ask.route is not None:
         staged = await staged_paths.route(ask.route)

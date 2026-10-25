@@ -1,7 +1,8 @@
 """What a change touches, read from the system model (``touched``): each
 changed file to the part owning it, the parts that depend on those, and
-the tables, routes and jobs its files define. A path may be a project's
-(``app/...``) or its template's (``.../{{ project_slug }}/app/...py.jinja``).
+the tables, routes, jobs and worker tasks its files define. A path may be
+a project's (``app/...``) or its template's
+(``.../{{ project_slug }}/app/...py.jinja``).
 
 Static structure only: a CI checkout has no traffic, so what the running
 app was seen doing is not in it."""
@@ -30,6 +31,7 @@ class Touched(BaseModel):
     tables: tuple[str, ...]
     routes: tuple[str, ...]
     jobs: tuple[str, ...]
+    tasks: tuple[str, ...]
     elsewhere: tuple[str, ...]  # changed files no part owns
 
 
@@ -79,6 +81,7 @@ def touched(
         tables=defined(Kind.OBJECT),
         routes=defined(Kind.ROUTE),
         jobs=defined(Kind.JOB),
+        tasks=defined(Kind.TASK),
         elsewhere=tuple(path for path, part in owned.items() if part is None),
     )
 
@@ -96,6 +99,7 @@ def summary(found: Touched) -> str:
         ("Tables", found.tables),
         ("Routes", found.routes),
         ("Jobs", found.jobs),
+        ("Tasks", found.tasks),
     )
     lines = [
         f"- **{label}:** {', '.join(f'`{i}`' for i in ids)}"

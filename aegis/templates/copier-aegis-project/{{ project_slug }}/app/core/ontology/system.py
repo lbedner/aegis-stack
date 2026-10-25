@@ -1,9 +1,10 @@
 """``system_model``: what this app is, built from what is already there:
 the health registry (what is installed), ``app.routes``, the scheduled
-jobs, the tool and change-type registries, docker-compose's services, the
-map's component links (``topology``), what each service's code and
-needed keys reach (``calls``) and the tables (``domain``). Who owns each
-is ``ownership``'s one rule.
+jobs, the worker's queues and tasks, the tool and change-type
+registries, docker-compose's services, the map's component links
+(``topology``), what each service's code and needed keys reach
+(``calls``) and the tables (``domain``). Who owns each is
+``ownership``'s one rule.
 
 Whole only in the webserver, where startup registers every health check
 and the routes are; anywhere else the model is what is on disk, marked
@@ -34,17 +35,22 @@ from app.core.ontology.model import (
     Mode,
     Node,
     PartNode,
+    QueueNode,
     RouteNode,
     SystemModel,
+    TaskNode,
     ToolNode,
     node_id,
     parse_node_id,
     stack,
 )
-from app.core.ontology.parts import node_of, on_disk, parts, service_folders
+from app.core.ontology.parts import QUEUE, node_of, on_disk, parts, service_folders
 from app.core.parts import PARTS
 
 COMPOSE = source_index.ROOT / "docker-compose.yml"
+QUEUE_TYPE = "WORKER_QUEUE_TYPE"  # the queue a worker's container takes
+QUEUE_ID = node_id(Kind.COMPONENT, QUEUE)
+WORKER = ComponentName.WORKER
 # Where code is: the part it belongs to and the module defining it.
 Placed = Callable[[Callable[..., Any]], dict[str, str | None]]
 
@@ -111,7 +117,10 @@ def system_model(app: Starlette | None = None) -> SystemModel:
         return {"owner": by_module(module), "module": module}
 
     containers = _containers()
+    boxes = [c.name for c in containers]
+    taking = {c.queue: c.name for c in containers if c.queue}
     jobs, own_jobs = _jobs(placed), _scheduler_jobs(placed)
+    queues, tasks = _worker(placed, ids)
     changes = _changes(placed)
     tables, links = _tables(by_module)
     nodes: list[Node] = [
@@ -123,15 +132,23 @@ def system_model(app: Starlette | None = None) -> SystemModel:
         *changes,
         *jobs,
         *own_jobs,
+        *queues,
+        *tasks,
         *tables,
         *_keys(by_module, ids),
     ]
+    every = {n.id for n in nodes}
+    # A task is taken from the queue: its queue module's broker is not a
+    # call it makes.
+    taken = every - {QUEUE_ID}
     edges = [
         *_component_edges(found),
         *_contains(nodes),
-        *_calls({n.id for n in nodes}, index),
-        *_job_calls([*jobs, *own_jobs], {n.id for n in nodes}, index),
-        *_runs_on(found, jobs, own_jobs, [c.name for c in containers]),
+        *_calls(every, index),
+        *_code_calls([*jobs, *own_jobs], every, index),
+        *_code_calls(tasks, taken, index),
+        *_runs_on(found, jobs, own_jobs, boxes, taking),
+        *_queued(queues, tasks, taking),
         *links,
         *domain.changing(changes),
     ]
@@ -150,12 +167,12 @@ def where(func: Callable[..., Any]) -> str:
 
 def _moded(edge: Edge) -> Edge:
     """``edge`` asynchronous when it hands work to the queue or takes it
-    from it (``topology.queued``): never waited on. Containing it is not."""
+    from it (``topology.queued``), or hands it to a worker's task: never
+    waited on. Containing it is not."""
     from app.services.system import topology
 
-    queued = topology.queued(
-        parse_node_id(edge.source)[1], parse_node_id(edge.target)[1]
-    )
+    (_, source), (kind, target) = map(parse_node_id, (edge.source, edge.target))
+    queued = topology.queued(source, target) or kind is Kind.TASK
     if edge.kind is EdgeKind.CONTAINS or not queued:
         return edge
     return edge.model_copy(update={"mode": Mode.ASYNC})
@@ -205,6 +222,28 @@ def _scheduler_jobs(placed: Placed) -> list[JobNode]:
             **placed(heartbeat.touch_scheduler_heartbeat),
         )
     ]
+
+
+def _worker(placed: Placed, ids: set[str]) -> tuple[list[QueueNode], list[TaskNode]]:
+    """Each of the worker's queues, in the cache's queue (the worker's own
+    where there is none), and every task each registers
+    (``patterns.tasks``: each engine's task object unwrapped to its
+    function), on its queue."""
+    try:
+        from app.components.worker import patterns, registry
+        from app.components.worker.queue_discovery import QUEUES_PACKAGE
+    except ImportError:  # no worker in this stack
+        return [], []
+    owner = QUEUE_ID if QUEUE_ID in ids else node_id(Kind.COMPONENT, WORKER)
+    queues = [
+        QueueNode(name=name, owner=owner, module=f"{QUEUES_PACKAGE}.{name}")
+        for name in registry.discover_worker_queues()
+    ]
+    tasks = [
+        TaskNode(name=task.name, queue=task.queue, **placed(task.func))
+        for _, task in patterns.tasks()
+    ]
+    return queues, tasks
 
 
 def _keys(owned: Callable[[str], str | None], ids: set[str]) -> list[KeysNode]:
@@ -274,16 +313,26 @@ def _tables(owned: Callable[[str], str | None]) -> tuple[list[Node], list[Edge]]
 
 def _containers() -> list[ContainerNode]:
     """docker-compose's services, as it declares them (what runs now is
-    the runtime's, ON-07). None without a compose file."""
+    the runtime's, ON-07): a worker's with the queue it takes. None
+    without a compose file."""
     if not COMPOSE.is_file():
         return []
     services = (yaml.safe_load(COMPOSE.read_text()) or {}).get("services") or {}
     return [
-        ContainerNode(
-            name=name, image=spec.get("image") if isinstance(spec, dict) else None
-        )
+        ContainerNode(name=name, image=spec.get("image"), queue=_takes(spec))
+        if isinstance(spec, dict)
+        else ContainerNode(name=name)
         for name, spec in services.items()
     ]
+
+
+def _takes(spec: dict[str, Any]) -> str | None:
+    """The queue a compose service's worker takes (``WORKER_QUEUE_TYPE``),
+    its environment a list or a mapping; None for any other service."""
+    env = spec.get("environment") or {}
+    if isinstance(env, list):
+        env = dict(item.partition("=")[::2] for item in env)
+    return env.get(QUEUE_TYPE)
 
 
 def _externals() -> list[ExternalNode]:
@@ -311,7 +360,8 @@ def _component_edges(found: Iterable[PartNode]) -> list[Edge]:
 
 def _contains(nodes: Iterable[Node]) -> list[Edge]:
     """Each node in the part it belongs to: a sub-service in its service,
-    the queue in the cache, a route, job or tool in its owner."""
+    the queue in the cache, a route, job, queue, task or tool in its
+    owner."""
     return [
         Edge(source=p.owner, target=p.id, kind=EdgeKind.CONTAINS)
         for p in nodes
@@ -337,17 +387,43 @@ def _calls(ids: set[str], index: source_index.Index) -> list[Edge]:
     return edges
 
 
-def _job_calls(
-    jobs: Iterable[JobNode], ids: set[str], index: source_index.Index
+def _code_calls(
+    code: Iterable[JobNode | TaskNode], ids: set[str], index: source_index.Index
 ) -> list[Edge]:
-    """What each job's code reaches (``calls``): the backup job, the
-    database."""
+    """What each job's or task's code reaches (``calls``): the backup job,
+    the database."""
     return [
-        Edge(source=job.id, target=target, kind=EdgeKind.CALLS)
-        for job in jobs
-        if job.module
-        for target in calls.reaches(job.module, index)
-        if target in ids and target != job.owner
+        Edge(source=node.id, target=target, kind=EdgeKind.CALLS)
+        for node in code
+        if node.module
+        for target in calls.reaches(node.module, index)
+        if target in ids and target != node.owner
+    ]
+
+
+def _queued(
+    queues: list[QueueNode], tasks: list[TaskNode], taking: dict[str, str]
+) -> list[Edge]:
+    """Each queue handing its work to its tasks, both in the container
+    taking that queue (``taking``); and a scheduled job, which the
+    scheduler hands to the worker as the task named after its function,
+    to that task."""
+    from app.core.schedule import service_jobs
+
+    by_name = {task.name: task.id for task in tasks}
+    handed = [
+        (node_id(Kind.JOB, job.id), by_name[job.task_name])
+        for job in service_jobs()
+        if job.task_name in by_name
+    ] + [(node_id(Kind.QUEUE, task.queue), task.id) for task in tasks]
+    placed = [(q.id, q.name) for q in queues] + [(t.id, t.queue) for t in tasks]
+    run = [
+        (code, node_id(Kind.CONTAINER, taking[queue]))
+        for code, queue in placed
+        if queue in taking
+    ]
+    return [Edge(source=a, target=b, kind=EdgeKind.CALLS) for a, b in handed] + [
+        Edge(source=a, target=b, kind=EdgeKind.RUNS_ON, mode=Mode.ASYNC) for a, b in run
     ]
 
 
@@ -370,6 +446,7 @@ def _runs_on(
     jobs: Iterable[JobNode],
     own_jobs: Iterable[JobNode],
     containers: list[str],
+    taking: dict[str, str],
 ) -> list[Edge]:
     """Where each part runs: a component in its containers; a service, the
     app's shared code or a component with none of its own in the host's
@@ -386,9 +463,9 @@ def _runs_on(
         or hosted
         for p in top
     }
-    worker = places.get(node_id(Kind.COMPONENT, "worker"), [])
+    worker = places.get(node_id(Kind.COMPONENT, WORKER), [])
     scheduler = places.get(node_id(Kind.COMPONENT, ComponentName.SCHEDULER), [])
-    runner = [c for c in worker if c.endswith(QueueName.SYSTEM)] or scheduler
+    runner = [c for c in worker if c == taking.get(QueueName.SYSTEM)] or scheduler
     return [
         Edge(source=source, target=node_id(Kind.CONTAINER, c), kind=EdgeKind.RUNS_ON)
         for source, targets in places.items()

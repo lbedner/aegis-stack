@@ -2,6 +2,8 @@
 parts, routes, jobs, tools, change types, containers and outside providers,
 and the edges between them, derived from the code and the registries."""
 
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
@@ -16,10 +18,14 @@ from app.core.ontology import (
     Mode,
     ObjectNode,
     PartNode,
+    QueueNode,
     SystemModel,
+    TaskNode,
     calls,
     system_model,
 )
+from app.core.ontology import system as ontology_system
+from app.core.ontology.model import ContainerNode
 from app.core.ontology.parts import service_folders
 from app.core.parts import Category
 from app.services.system import health, redis_keys, topology
@@ -98,9 +104,9 @@ def test_the_queue_says_what_it_is(model: SystemModel) -> None:
     assert all(n.description for n in model.nodes if n.id == queue)
 
 
-def test_every_route_job_tool_and_change_type_has_an_owner(model: SystemModel) -> None:
+def test_every_code_node_has_an_owner(model: SystemModel) -> None:
     ids = {n.id for n in model.nodes}
-    owned = (Kind.ROUTE, Kind.JOB, Kind.TOOL, Kind.CHANGE)
+    owned = (Kind.ROUTE, Kind.JOB, Kind.TASK, Kind.TOOL, Kind.CHANGE)
     unowned = [
         n.id
         for n in model.nodes
@@ -149,7 +155,8 @@ def test_each_services_calls_are_what_it_imports(model: SystemModel) -> None:
     # Work handed to the queue is never waited on.
     queue = f"component:{topology.QUEUE}"
     edges = [e for e in model.edges if e.kind is EdgeKind.CALLS]
-    assert all((e.mode is Mode.ASYNC) == (e.target == queue) for e in edges)
+    queued = (queue, f"{Kind.TASK}:")  # the queue, or a task taken from it
+    assert all((e.mode is Mode.ASYNC) == e.target.startswith(queued) for e in edges)
 
 
 def test_a_job_calls_what_its_module_imports(model: SystemModel) -> None:
@@ -186,6 +193,74 @@ def test_the_schedulers_heartbeat_is_its_job(model: SystemModel) -> None:
     assert beat.owner == "component:scheduler" and beat.module
     runs_on = {e.target for e in model.edges if e.source == beat.id}
     assert runs_on == {"container:scheduler"}
+
+
+def test_each_queue_is_a_node_in_redis_handing_work_to_its_tasks(
+    model: SystemModel,
+) -> None:
+    """Asked which tasks a queue runs she read a health check, her path
+    ending at the queue (2026-10-24), then had no queue to land on
+    (2026-10-25): each queue is a node in the cache's queue, handing work
+    to its tasks, both in the container compose runs that queue in; a
+    task does not call the queue it is taken from."""
+    if "component:worker" not in _parts(model):
+        pytest.skip("no worker in this stack")
+    from app.components.worker.patterns import tasks
+
+    queues = {n.name: n for n in model.nodes if isinstance(n, QueueNode)}
+    found = {n.name: n for n in model.nodes if isinstance(n, TaskNode)}
+    boxes = {n.queue: n.id for n in model.nodes if isinstance(n, ContainerNode)}
+    edges = {(e.source, e.target, e.kind): e.mode for e in model.edges}
+    for _, task in tasks():
+        node, queue = found[task.name], queues[task.queue]
+        assert (node.queue, node.module) == (task.queue, task.func.__module__)
+        assert queue.owner == f"component:{topology.QUEUE}"
+        assert edges[(queue.id, node.id, EdgeKind.CALLS)] is Mode.ASYNC
+        for code in (queue.id, node.id):
+            assert (code, boxes[task.queue], EdgeKind.RUNS_ON) in edges
+        assert (node.id, f"component:{topology.QUEUE}", EdgeKind.CALLS) not in edges
+
+
+def test_a_worker_container_names_the_queue_it_takes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Read from compose (``WORKER_QUEUE_TYPE``), never from its name: a
+    plugin's queue keeps its underscores in its container's name."""
+    compose = tmp_path / "docker-compose.yml"
+    compose.write_text(
+        "services:\n"
+        "  worker-media_ingest:\n"
+        "    environment:\n"
+        "      - WORKER_QUEUE_TYPE=media_ingest\n"
+        "  worker-system:\n"
+        "    environment:\n"
+        "      WORKER_QUEUE_TYPE: system\n"
+        "  redis:\n"
+        "    image: redis\n"
+    )
+    monkeypatch.setattr(ontology_system, "COMPOSE", compose)
+
+    found = {c.name: c.queue for c in ontology_system._containers()}
+
+    assert found == {
+        "worker-media_ingest": "media_ingest",
+        "worker-system": "system",
+        "redis": None,
+    }
+
+
+def test_a_scheduled_job_hands_its_task_to_the_queue(model: SystemModel) -> None:
+    """With a worker the scheduler enqueues a job's task, so the path runs
+    job, task, what the task touches; never waited on."""
+    if "component:worker" not in _parts(model):
+        pytest.skip("no worker in this stack")
+    from app.core.schedule import service_jobs
+
+    handed = {
+        (e.source, e.target): e.mode for e in model.edges if e.source.startswith("job:")
+    }
+    for job in service_jobs():
+        assert handed[(f"job:{job.id}", f"task:{job.task_name}")] is Mode.ASYNC
 
 
 def test_each_redis_key_family_is_a_node(model: SystemModel) -> None:

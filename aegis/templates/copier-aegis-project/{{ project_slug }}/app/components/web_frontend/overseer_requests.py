@@ -22,11 +22,11 @@ from app.core.ownership import HOST
 from app.services.load_test.api import auth, request_form
 from app.services.load_test.api.request_form import Answer, Operation
 from app.services.system import dry_path
+from app.services.system.staged_paths import registry_of
 
 from . import overseer_code
 from .overseer_container import zoom_url
 from .overseer_nav import page_url
-from .overseer_zoom import registry_of
 from .rendering import hx_into, hx_replace, with_query
 
 PARTIALS = "/partials/overseer/server/routes"

@@ -18,8 +18,10 @@ from app.core.ontology.model import (
     Kind,
     ObjectNode,
     PartNode,
+    QueueNode,
     RouteNode,
     SystemModel,
+    TaskNode,
 )
 from app.core.parts import Category
 from app.core.tools import acting_as, get_tool
@@ -563,6 +565,65 @@ async def test_a_filter_lists_the_first_hundred_and_says_how_many() -> None:
 
     assert len(result["nodes"]) == 100
     assert result["total"] == 151
+
+
+async def test_a_queue_has_its_own_health_and_a_part_named_like_it_does_not(
+    model: SystemModel, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The load test queue's check sits under the worker's queues; read by
+    name anywhere in the tree it was the load test service's (2026-10-25),
+    from the node and from the health tool alike."""
+    queue = QueueNode(name="load_test", owner="component:backend")
+    shared = PartNode(kind=Kind.SHARED, name="load_test", category=Category.STACK)
+    found = model_of([*model.nodes, queue, shared], model.edges)
+    monkeypatch.setattr("app.core.ontology.system.current", lambda: found)
+    checked = ComponentStatus(name="load_test", message="idle")
+    tree = checked
+    for name in ("queues", "worker", "components"):
+        tree = ComponentStatus(
+            name=name, message="ok", sub_components={tree.name: tree}
+        )
+    # A check of the same name met first, by a search of the whole tree.
+    other = ComponentStatus(name="load_test", message="a service's")
+    services = ComponentStatus(
+        name="services", message="ok", sub_components={"load_test": other}
+    )
+    aegis = ComponentStatus(
+        name="aegis",
+        message="ok",
+        sub_components={"services": services, "components": tree},
+    )
+    status = SystemStatus(
+        components={"aegis": aegis}, overall_healthy=True, timestamp=datetime.now(UTC)
+    )
+
+    async def fake() -> tuple[SystemStatus, str | None]:
+        return status, None
+
+    monkeypatch.setattr(live_status, "live_status", fake)
+
+    of_queue = await tools.ontology(node=queue.id)
+    of_shared = await tools.ontology(node=shared.id)
+
+    assert NodeNow.model_validate(of_queue["now"]).health == checked
+    assert of_shared["now"]["health"]["message"] == "a service's"  # its own
+    told = await tools.health(queue.id)
+    assert told["component"]["message"] == "idle"
+
+
+async def test_a_task_is_listed_on_its_queue(
+    model: SystemModel, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Asked what a queue runs, she reads it off the listing."""
+    task = TaskNode(name="sync_catalog", queue="system", owner="component:backend")
+    found = model_of([*model.nodes, task], model.edges)
+    monkeypatch.setattr("app.core.ontology.system.current", lambda: found)
+
+    result = await tools.ontology(kind="task")
+
+    assert [(n["id"], n["queue"]) for n in result["nodes"]] == [
+        ("task:sync_catalog", "system")
+    ]
 
 
 @pytest.mark.usefixtures("model")

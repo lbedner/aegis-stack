@@ -38,8 +38,10 @@ for that kind of work (`add-api-endpoint`, `add-model-and-migration`, ...).
    uv run python -m app.cli.main ontology find --text health
    ```
 
-   Kinds: `component`, `service`, `route`, `job`, `tool`, `object` (a
-   table), `keys`, `container`, `external`.
+   Kinds: `component`, `service`, `route`, `job`, `queue` (one of the
+   worker's queues: its tasks, its container, its live state), `task`,
+   `tool`, `object` (a table), `keys`, `container`,
+   `external`.
 
 2. **Look each one up.** What it is, what it is wired to (its edges and
    neighbours), what is true of it now (health, errors) and its findings
@@ -75,7 +77,7 @@ for that kind of work (`add-api-endpoint`, `add-model-and-migration`, ...).
    ```
 
    It names the parts those files reach, what depends on them, and the
-   tables, routes and jobs in them. Compare with the plan: a part or a
+   tables, routes, jobs and tasks in them. Compare with the plan: a part or a
    dependent the plan did not expect is a stop. Rethink the plan, and say in
    it why that part is touched, before editing anything.
 

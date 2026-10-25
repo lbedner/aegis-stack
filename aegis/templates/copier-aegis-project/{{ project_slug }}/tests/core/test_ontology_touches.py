@@ -1,6 +1,6 @@
 """What a change touches, read from the system model: the parts owning its
-files, the parts that depend on those, and the tables, routes and jobs its
-files define."""
+files, the parts that depend on those, and the tables, routes, jobs and
+worker tasks its files define."""
 
 from app.core.ontology import touches
 from app.core.ontology.model import (
@@ -12,6 +12,7 @@ from app.core.ontology.model import (
     ObjectNode,
     PartNode,
     RouteNode,
+    TaskNode,
 )
 from tests._ontology import model_of
 
@@ -38,8 +39,14 @@ SETTLE = JobNode(
     module="app.services.payment.jobs",
     owner=PAYMENT.id,
 )
+SETTLING = TaskNode(
+    name="settle_job",
+    queue="system",
+    module="app.services.payment.jobs",
+    owner=PAYMENT.id,
+)
 MODEL = model_of(
-    [BACKEND, DATABASE, PAYMENT, CHARGES, BLOG, CHARGE, REFUND, SETTLE],
+    [BACKEND, DATABASE, PAYMENT, CHARGES, BLOG, CHARGE, REFUND, SETTLE, SETTLING],
     [
         Edge(source=BACKEND.id, target=DATABASE.id, kind=EdgeKind.DEPENDS_ON),
         Edge(source=BLOG.id, target=PAYMENT.id, kind=EdgeKind.CALLS),
@@ -86,3 +93,8 @@ def test_the_summary_says_each_part_and_what_depends_on_it() -> None:
     assert "`service:payment`" in summary
     assert "`service:blog`" in summary
     assert "`object:payment_charge`" in summary
+
+
+def test_a_jobs_module_names_its_job_and_the_task_running_it() -> None:
+    found = _touched("app/services/payment/jobs.py")
+    assert (found.jobs, found.tasks) == ((SETTLE.id,), (SETTLING.id,))

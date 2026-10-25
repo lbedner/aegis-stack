@@ -14,18 +14,27 @@ from app.components.backend.api.ai.service import ai_service
 from app.components.web_frontend import overseer_replay
 from app.components.web_frontend.overseer_ai_chat import OVERSEER
 from app.core import edges, replays
-from app.core.ontology.model import EdgeKind, JobNode, SystemModel
+from app.core.ontology.model import (
+    EdgeKind,
+    JobNode,
+    Kind,
+    PartNode,
+    QueueNode,
+    SystemModel,
+    TaskNode,
+)
+from app.core.parts import Category
 from app.core.replays import Hop
 from app.services.ai.domains.chat.path_card import PathCard
 from app.services.ai.models import AIProvider
 from app.services.ai.models.chat_card import ChatCard
-from app.services.system import kept_requests, staged_paths
+from app.services.system import kept_requests, staged_paths, topology
 from app.services.system.kept_requests import RequestHops
 from app.services.system.models import ComponentStatus
 from tests._ontology import dry_walk, edge_of, model_of, node_of
 from tests._replays import kept
 from tests.web.dom import none, one, select, text
-from tests.web.overseer import page_html
+from tests.web.overseer import CACHE, page_html
 from tests.web.zoomed import DB, auth_opens, zoomable
 
 CARDS = f"{OVERSEER.path}/cards"
@@ -223,11 +232,26 @@ def _wired(monkeypatch: pytest.MonkeyPatch) -> None:
             edge_of("service:auth", edges.SERVER),
         ],
     )
+    _serve(monkeypatch, model)
+
+
+def _serve(monkeypatch: pytest.MonkeyPatch, model: SystemModel) -> None:
+    """``model`` as the running one the cards read."""
 
     async def running() -> SystemModel:
         return model
 
     monkeypatch.setattr(overseer_replay, "running", running)
+
+
+def test_a_queue_is_its_own_box_not_a_part_named_like_it() -> None:
+    """The load test queue is drawn as itself, not on the load test
+    service's box."""
+    from app.services.system.staged_paths import registry_of
+
+    assert registry_of("queue:load_test") == "queue:load_test"
+    assert registry_of("task:cpu_task") == "task:cpu_task"
+    assert registry_of("shared:load_test") == "load_test"
 
 
 async def test_a_parts_wiring_draws_the_edges_she_read_and_nothing_else(
@@ -262,6 +286,76 @@ async def test_a_job_is_drawn_where_its_part_runs_it(
     inline = client.get(f"{CARDS}/{card_id}").text
 
     assert {"service_auth", "database"} <= _drawn(inline)
+
+
+def _queues(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Redis holds the queue, and in it the worker's two queues, each
+    handing work to its tasks."""
+    cache, queue = "component:cache", f"component:{topology.QUEUE}"
+    queues = [QueueNode(name=q, owner=queue) for q in ("load_test", "system")]
+    tasks = [
+        TaskNode(name=name, queue=q, owner="component:worker")
+        for q, name in (("load_test", "cpu_task"), ("load_test", "io_task"))
+        + (("system", "health_task"),)
+    ]
+    model = model_of(
+        [
+            *(node_of(k) for k in (cache, "component:worker")),
+            PartNode(
+                kind=Kind.COMPONENT,
+                name=topology.QUEUE,
+                category=Category.DATA,
+                owner=cache,
+            ),
+            *queues,
+            *tasks,
+        ],
+        [
+            edge_of(cache, queue, EdgeKind.CONTAINS),
+            edge_of("component:worker", queue, EdgeKind.DEPENDS_ON),
+            *(edge_of(queue, q.id, EdgeKind.CONTAINS) for q in queues),
+            *(edge_of(f"queue:{t.queue}", t.id) for t in tasks),
+        ],
+    )
+    _serve(monkeypatch, model)
+
+
+WORKER = ComponentStatus(name="worker", message="Running", metadata={})
+
+
+async def test_redis_wiring_draws_each_queue_and_its_tasks(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Asked to draw Redis, then the workers and their tasks, she had boxes
+    for the cache, the queue and the worker, and no task (2026-10-25):
+    each queue it holds is a box under the queue, its tasks under it."""
+    client = zoomable(app, monkeypatch, INGRESS, CACHE, WORKER)
+    _queues(monkeypatch)
+    card_id = await _card(PathCard(title="Redis", node="component:cache"))
+    client.headers["HX-Request"] = "true"
+    inline = client.get(f"{CARDS}/{card_id}").text
+
+    assert {
+        "queue:load_test",
+        "queue:system",
+        "task:cpu_task",
+        "task:io_task",
+        "task:health_task",
+    } <= _drawn(inline)
+    one(inline, '[data-link][data-from="queue"][data-to="queue:load_test"]')
+    one(inline, '[data-link][data-from="queue:load_test"][data-to="task:cpu_task"]')
+
+
+async def test_a_queues_wiring_draws_its_own_tasks(
+    app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client = zoomable(app, monkeypatch, INGRESS, CACHE, WORKER)
+    _queues(monkeypatch)
+    card_id = await _card(PathCard(title="Load test", node="queue:load_test"))
+    drawn = _drawn(_opened(client, card_id))
+
+    assert {"queue", "queue:load_test", "task:cpu_task", "task:io_task"} <= drawn
+    assert "task:health_task" not in drawn
 
 
 async def test_opened_larger_a_wiring_is_still_a_map(

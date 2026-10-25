@@ -117,4 +117,4 @@ async def job_events(job_id: str) -> StreamingResponse:
         finally:
             runner.unsubscribe(job_id, queue)
 
-    return StreamingResponse(stream(), media_type="text/event-stream")
+    return StreamingResponse(until_closing(stream()), media_type="text/event-stream")

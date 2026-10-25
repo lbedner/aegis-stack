@@ -18,18 +18,18 @@ from typing import Any
 from markupsafe import Markup
 
 from app.core.edges import SERVER
-from app.core.ontology import PartNode, graph
-from app.core.ontology.model import Edge, EdgeKind, State
+from app.core.ontology.model import State
 from app.core.ontology.observed import running
 from app.core.ownership import HOST
 from app.services.system import kept_requests, staged_paths, topology
 from app.services.system.kept_requests import RequestHop, RequestHops, RequestSummary
+from app.services.system.staged_paths import registry_of
 from app.services.system.ui import is_service
 
 from . import overseer_container
 from .filters import answer_tone, worst_tone
 from .overseer_nav import NavItem, current_navigation
-from .overseer_zoom import Path, registry_of, subject_of, title_of
+from .overseer_zoom import Path, subject_of, title_of
 from .rendering import fragment, templates, with_query
 
 HOME = "/overseer/replay"
@@ -141,27 +141,14 @@ async def card(path: RequestHops, large: bool) -> dict[str, Any]:
 
 
 async def wiring(node_id: str) -> dict[str, Any]:
-    """A path card's wiring (its ``node``): the edges the ontology tool
-    answers for it and for what it holds (``graph.neighbors``: calls,
-    hand-offs, what holds it, traffic seen; the cache's queue's users
-    reach the cache), drawn on the Server's map as a replay draws a path,
-    so the card shows what she read; still, nothing to play."""
-    model = await running()
-    here, _, edges = graph.neighbors(model, node_id)
-    # Code the map has no box for (a job) runs as its part does: the
-    # part's lines are its own.
-    if here.owner and not isinstance(here, PartNode):
-        edges += graph.neighbors(model, here.owner)[2]
-    held = [e.target for e in edges if e.kind is EdgeKind.CONTAINS]
-    edges += [e for part in held for e in graph.neighbors(model, part)[2]]
-    pairs: dict[tuple[str, str], list[Edge]] = {}
-    for edge in edges:
-        pair = registry_of(edge.source), registry_of(edge.target)
-        pairs.setdefault(pair, []).append(edge)
+    """A path card's wiring (its ``node``): its lines as the map draws
+    them (``staged_paths.wired``), on the Server's map as a replay draws a
+    path, so the card shows what she read; still, nothing to play."""
+    pairs = staged_paths.wired(await running(), node_id)
     # A part joined to it both ways (seen calling it, and called) is drawn
     # once, as its caller: above it, not tangled through what it calls.
     key = registry_of(node_id)
-    ways = [[a, b] for a, b in pairs if a != b and not (a == key and (b, a) in pairs)]
+    ways = [[a, b] for a, b in pairs if not (a == key and (b, a) in pairs)]
     # Seen only where no edge of it is declared: a line its code draws is not.
     seen = frozenset(
         p for p, found in pairs.items() if all(e.state in UNDECLARED for e in found)

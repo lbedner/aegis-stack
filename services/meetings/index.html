@@ -4036,6 +4036,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#its-card-and-its-voice" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Its card and its voice
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#what-the-bot-hears" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -6570,6 +6581,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#its-card-and-its-voice" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Its card and its voice
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#what-the-bot-hears" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -6815,6 +6837,40 @@
 <p>A meeting the bot has not started yet is over as soon as it is asked to leave. While it runs it writes a heartbeat on the meeting every ten seconds, and reads back whether it has been asked to leave. A process that dies mid-call stops the heartbeat, and the webserver checks for that every minute: a meeting whose heartbeat is over a minute old is marked <code>failed</code> ("The app stopped during the meeting"). A call another process is still in keeps beating, so the check never touches it.</p>
 <p>Every status change moves only from the status the bot expects, so a leave request (or a failure recorded elsewhere) is never overwritten by the bot's next step: it stops instead.</p>
 <p>Everything the bot knows about Meet's page (its buttons, its chat, its captions, how it says you were turned away) lives in <code>app/services/meetings/domains/bot/meet.py</code>. When Meet changes its page, that module is the fix.</p>
+<h2 id="its-card-and-its-voice">Its card and its voice</h2>
+<p>In the call, the bot's camera tile is its card, not a blank square: its agent's picture (or its initials on a teal disc), its name, and what it is doing now:</p>
+<table>
+<thead>
+<tr>
+<th>Status</th>
+<th>When</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Listening</td>
+<td>the default</td>
+</tr>
+<tr>
+<td>Can't see captions</td>
+<td>Meet offered no captions, so nothing is being written</td>
+</tr>
+<tr>
+<td>Question heard</td>
+<td>a question was heard and an action on it is waiting</td>
+</tr>
+<tr>
+<td>Answering</td>
+<td>a runner has taken that action</td>
+</tr>
+<tr>
+<td>Leaving</td>
+<td>on its way out</td>
+</tr>
+</tbody>
+</table>
+<p>The card is drawn in the bot's own browser and only redrawn when it changes; the camera sends a frame every half second, so a browser with no GPU is not kept busy. Each agent's picture (PNG, JPEG, WebP, GIF or SVG, up to 5 MB) and whether its camera is on are set on Overseer's Agents tab, in either Overseer, or through the API. With the camera off, Meet gets no picture at all. The agent's Google profile photo still shows in the people list, the chat and the lobby.</p>
+<p>The bot joins with its microphone muted and unmutes only while it speaks. Where the stack has a voice (the AI service with <code>voice</code>), it says its join announcement aloud as well as in the chat, through the AI service's text to speech. Without one, or when the speech cannot be made, it writes the announcement only.</p>
 <h2 id="what-the-bot-hears">What the bot hears</h2>
 <p>The bot's browser reads every audio stream the call sends it, as 16 kHz mono, and hands it to the bot a second at a time over the connection the bot already drives the browser with. No socket is opened for it, so nothing outside the bot's process can send audio in. A silent second is dropped in the browser.</p>
 <p>Meet does not send one stream per person: it mixes the call into a few streams that follow the loudest speakers, so a stream never says who is talking. The captions do. Each second goes to the speaker whose caption changed nearest to when it was heard, allowing for captions showing up a moment after the words, once they have had time to catch up. A second no caption explains is <code>Unknown</code>.</p>
@@ -7058,6 +7114,22 @@
 <tr>
 <td><code>PUT /api/v1/meetings/admin/agents/{name}/owner</code></td>
 <td>Who owns a meeting the agent joins from its calendar when nobody on the invite has an account here (<code>{"user_id": 3}</code>, or <code>null</code> for nobody); 422 for an id nobody here has</td>
+</tr>
+<tr>
+<td><code>PUT /api/v1/meetings/admin/agents/{name}/camera</code></td>
+<td>Whether the agent's camera shows its card in a call (<code>{"on": false}</code> for none)</td>
+</tr>
+<tr>
+<td><code>POST /api/v1/meetings/admin/agents/{name}/image</code></td>
+<td>The picture on the agent's card (multipart <code>file</code>: PNG, JPEG, WebP, GIF or SVG, up to 5 MB); 422 for anything else</td>
+</tr>
+<tr>
+<td><code>GET /api/v1/meetings/admin/agents/{name}/image</code></td>
+<td>The agent's picture as uploaded; 404 when it has none</td>
+</tr>
+<tr>
+<td><code>DELETE /api/v1/meetings/admin/agents/{name}/image</code></td>
+<td>The agent back to its initials</td>
 </tr>
 <tr>
 <td><code>GET /api/v1/meetings/admin/owners</code></td>

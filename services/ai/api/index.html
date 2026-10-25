@@ -8414,16 +8414,48 @@
 <td>Get current voice settings</td>
 </tr>
 <tr>
-<td><code>POST /voice/settings</code></td>
-<td>Update voice settings</td>
+<td><code>GET /voice/overview</code></td>
+<td>What the active profile uses, every model and voice</td>
+</tr>
+<tr>
+<td><code>POST /voice/use</code></td>
+<td>Put a voice, model or engine on the active profile (admin)</td>
+</tr>
+<tr>
+<td><code>POST /voice/profiles/{id}/active</code></td>
+<td>Make another voice profile the active one (admin)</td>
+</tr>
+<tr>
+<td><code>GET /voice/design</code></td>
+<td>A profile's voice design as an editor draws it: the voices narrowed by <code>gender</code>, <code>family</code> and <code>accent_of</code>, styles, dials, what it sends</td>
+</tr>
+<tr>
+<td><code>POST /voice/design</code></td>
+<td>Save a voice design onto a profile (admin)</td>
+</tr>
+<tr>
+<td><code>GET /voice/design/preview</code></td>
+<td>Hear a voice design unsaved</td>
+</tr>
+<tr>
+<td><code>GET /voice/design/profiles</code></td>
+<td>Every voice profile at a glance</td>
+</tr>
+<tr>
+<td><code>GET /voice/design/profiles/{id}/preview</code></td>
+<td>Hear a saved voice profile</td>
+</tr>
+<tr>
+<td><code>POST /voice/design/profiles</code></td>
+<td>A new voice profile from the one in use (admin)</td>
 </tr>
 <tr>
 <td><code>POST /voice/preview</code></td>
-<td>Generate voice preview (returns audio/mpeg)</td>
+<td>Generate voice preview (MP3 or WAV, as the provider makes it)</td>
 </tr>
 <tr>
 <td><code>GET /voice/preview/{voice_id}</code></td>
-<td>Browser-friendly voice preview</td>
+<td>Browser-friendly voice preview (<code>model</code> optional)</td>
 </tr>
 <tr>
 <td><code>GET /voice/catalog/summary</code></td>

@@ -3703,6 +3703,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#gemini-tts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gemini TTS
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -3815,10 +3826,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#voice-preview" class="md-nav__link">
+  <a href="#voice-overview" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Voice Preview
+        Voice Overview
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#voice-design" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Voice Design
       
     </span>
   </a>
@@ -3857,6 +3879,17 @@
     <span class="md-ellipsis">
       
         Live Calls
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#in-overseer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        In Overseer
       
     </span>
   </a>
@@ -6654,6 +6687,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#gemini-tts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Gemini TTS
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -6766,10 +6810,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#voice-preview" class="md-nav__link">
+  <a href="#voice-overview" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Voice Preview
+        Voice Overview
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#voice-design" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Voice Design
       
     </span>
   </a>
@@ -6808,6 +6863,17 @@
     <span class="md-ellipsis">
       
         Live Calls
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#in-overseer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        In Overseer
       
     </span>
   </a>
@@ -6916,7 +6982,7 @@
 <ul>
 <li><strong>Text-to-Speech</strong> - Convert text to audio with multiple voices and speed control</li>
 <li><strong>Speech-to-Text</strong> - Transcribe audio with timestamps and segment detection</li>
-<li><strong>Multiple providers</strong> - Cloud (OpenAI, Groq) and local (Whisper, faster-whisper)</li>
+<li><strong>Multiple providers</strong> - Cloud (OpenAI, Gemini, Groq) and local (Whisper, faster-whisper)</li>
 <li><strong>Voice catalog</strong> - Browse providers, models, and voices via API</li>
 <li><strong>Voice previews</strong> - Generate audio samples to compare voices</li>
 <li><strong>Usage tracking</strong> - TTS and STT operations tracked alongside LLM usage</li>
@@ -6938,25 +7004,73 @@
 <tr>
 <td><strong>OpenAI</strong></td>
 <td>Cloud</td>
-<td>tts-1, tts-1-hd</td>
-<td>alloy, echo, fable, onyx, nova, shimmer</td>
-<td>Yes</td>
+<td>gpt-realtime-2.1-mini (gpt-4o-mini-tts, tts-1, tts-1-hd shut down Jan 6, 2027)</td>
+<td>13 (marin, cedar, alloy, ...); 10 on gpt-realtime-2.1-mini</td>
+<td>The /v1/audio/speech models only</td>
 <td><code>OPENAI_API_KEY</code></td>
+</tr>
+<tr>
+<td><strong>Gemini</strong></td>
+<td>Cloud</td>
+<td>gemini-3.8-flash-tts, gemini-3.8-flash-lite-tts</td>
+<td>30 prebuilt (Kore, Puck, Charon, ...) and its voice library</td>
+<td>No</td>
+<td><code>GOOGLE_API_KEY</code></td>
 </tr>
 </tbody>
 </table>
+<p>Each speech model records what its delivery instructions steer, as its
+provider documents it: OpenAI's gpt-realtime and gpt-4o voices take the
+accent, emotion, intonation, impressions, speed, tone and whispering; Gemini's take style,
+tone, emotion and pace, and leave the accent to the voice; tts-1 and
+tts-1-hd take none.</p>
+<p>Each speech model also records the speeds it takes: 0.25 to 1.5 on
+gpt-realtime-2.1-mini, 0.25 to 4.0 on the /v1/audio/speech models, and
+none on Gemini's. The voice editor's speed slider spans that range, and is
+not shown for a model with no speed.</p>
+<p>The voice catalog records which models speak each voice. A voice is only
+ever said on a model that speaks it: a preview picks one, and a voice
+profile refuses a voice its model does not speak.</p>
 <h3 id="openai-tts">OpenAI TTS</h3>
-<p>Two models available:</p>
 <ul>
-<li><strong>tts-1</strong> - Optimized for speed, lower latency</li>
-<li><strong>tts-1-hd</strong> - Higher quality audio, slightly slower</li>
+<li><strong>gpt-realtime-2.1-mini</strong> (the default) - takes delivery instructions; ten of the voices (not fable, nova or onyx)</li>
+<li><strong>gpt-4o-mini-tts</strong> and its two pinned builds - shut down Jan 6, 2027; every voice, and takes delivery instructions</li>
+<li><strong>tts-1</strong> - shut down Jan 6, 2027; optimized for speed; nine of the voices (not marin, cedar, ballad or verse), no instructions</li>
+<li><strong>tts-1-hd</strong> - shut down Jan 6, 2027; higher quality; the same nine voices</li>
 </ul>
-<p>Six voices: alloy, echo, fable, onyx, nova, shimmer</p>
+<p>OpenAI shuts every /v1/audio/speech model down on Jan 6, 2027 and names
+gpt-realtime-2.1-mini, which speaks only over the Realtime API, as their
+replacement. A line is said there one way: a session that never listens
+(no turn detection, no audio sent), the line as the response's only
+message, and instructions to read it aloud word for word, after the
+delivery. The line is a message, not part of the instructions, so a line
+that reads as a command ("ignore all previous instructions...") is read,
+not obeyed. It comes back as a 24kHz WAV, whole rather than streamed, and
+is priced by its tokens like a live call.</p>
+<p>OpenAI recommends marin or cedar for the best quality. An accent asked for
+in the instructions is a hint: an American voice asked for British comes
+out partly British at best.</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># .env configuration</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nv">TTS_PROVIDER</span><span class="o">=</span>openai
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="nv">TTS_MODEL</span><span class="o">=</span>tts-1
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="nv">TTS_MODEL</span><span class="o">=</span>gpt-realtime-2.1-mini
 </span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="nv">TTS_VOICE</span><span class="o">=</span>alloy
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="nv">TTS_SPEED</span><span class="o">=</span><span class="m">1</span>.0<span class="w">   </span><span class="c1"># 0.25 to 4.0</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="nv">TTS_SPEED</span><span class="o">=</span><span class="m">1</span>.0<span class="w">   </span><span class="c1"># 0.25 to 4.0; gpt-realtime-2.1-mini holds it at 1.5</span>
+</span></code></pre></div>
+<h3 id="gemini-tts">Gemini TTS</h3>
+<p>Gemini's 3.8 speech models (<code>gemini-3.8-flash-tts</code>, the flagship, and
+<code>gemini-3.8-flash-lite-tts</code>, fast and low cost) speak its 30 prebuilt
+voices, the same ones Gemini Live speaks, so a live call and a spoken line
+can share one voice, and the voices of its voice library, regional accents
+among them (listed with the key once per process; Gemini Live keeps to the
+prebuilt 30). Speech goes through the Interactions API: the line is the
+transcript and the delivery its <code>speech_metadata</code> style. Audio comes
+back as WAV; there is no speed to set. Gemini takes the accent from the
+voice, not the instructions: pick a voice with the accent. The 2.5 preview
+models are open only to past users.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nv">TTS_PROVIDER</span><span class="o">=</span>gemini
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nv">TTS_MODEL</span><span class="o">=</span>gemini-3.8-flash-tts
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="nv">TTS_VOICE</span><span class="o">=</span>Kore
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="nv">GOOGLE_API_KEY</span><span class="o">=</span>...
 </span></code></pre></div>
 <hr />
 <h2 id="stt-providers">STT Providers</h2>
@@ -7008,24 +7122,24 @@
 </table>
 <h3 id="openai-whisper">OpenAI Whisper</h3>
 <p>Cloud-based transcription with segment timestamps:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nv">STT_PROVIDER</span><span class="o">=</span>openai_whisper
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nv">STT_MODEL</span><span class="o">=</span>whisper-1
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nv">STT_PROVIDER</span><span class="o">=</span>openai_whisper
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="nv">STT_MODEL</span><span class="o">=</span>whisper-1
 </span></code></pre></div>
 <h3 id="groq-whisper">Groq Whisper</h3>
 <p>Ultra-fast cloud transcription:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nv">STT_PROVIDER</span><span class="o">=</span>groq_whisper
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="nv">STT_MODEL</span><span class="o">=</span>whisper-large-v3-turbo
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nv">STT_PROVIDER</span><span class="o">=</span>groq_whisper
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="nv">STT_MODEL</span><span class="o">=</span>whisper-large-v3-turbo
 </span></code></pre></div>
 <h3 id="local-whisper">Local Whisper</h3>
 <p>Runs on your machine via HuggingFace transformers. Auto-detects GPU (CUDA, MPS) or falls back to CPU:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nv">STT_PROVIDER</span><span class="o">=</span>whisper_local
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="nv">STT_MODEL</span><span class="o">=</span>openai/whisper-base<span class="w">   </span><span class="c1"># tiny, base, small, medium, large-v3</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nv">STT_PROVIDER</span><span class="o">=</span>whisper_local
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="nv">STT_MODEL</span><span class="o">=</span>openai/whisper-base<span class="w">   </span><span class="c1"># tiny, base, small, medium, large-v3</span>
 </span></code></pre></div>
 <p>Requires: <code>uv add transformers torch</code></p>
 <h3 id="faster-whisper">faster-whisper</h3>
 <p>SYSTRAN's optimized implementation - 4x faster than standard Whisper with similar accuracy:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nv">STT_PROVIDER</span><span class="o">=</span>faster_whisper
-</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="nv">STT_MODEL</span><span class="o">=</span>base<span class="w">   </span><span class="c1"># tiny, base, small, medium, large-v3</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="nv">STT_PROVIDER</span><span class="o">=</span>faster_whisper
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="nv">STT_MODEL</span><span class="o">=</span>base<span class="w">   </span><span class="c1"># tiny, base, small, medium, large-v3</span>
 </span></code></pre></div>
 <p>Requires: <code>uv add faster-whisper</code></p>
 <p>Supports compute types: <code>default</code>, <code>float16</code>, <code>int8</code></p>
@@ -7033,78 +7147,113 @@
 <h2 id="api-endpoints">API Endpoints</h2>
 <p>All endpoints are prefixed with <code>/voice</code>.</p>
 <h3 id="tts-catalog">TTS Catalog</h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="c1"># List TTS providers</span>
-</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>curl<span class="w"> </span>http://localhost:8000/voice/catalog/tts/providers<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq
-</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>
-</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a><span class="c1"># List models for a provider</span>
-</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>curl<span class="w"> </span>http://localhost:8000/voice/catalog/tts/openai/models<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq
-</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>
-</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="c1"># List voices for a provider</span>
-</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>curl<span class="w"> </span>http://localhost:8000/voice/catalog/tts/openai/voices<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="c1"># List TTS providers</span>
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>curl<span class="w"> </span>http://localhost:8000/voice/catalog/tts/providers<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="c1"># List models for a provider</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>curl<span class="w"> </span>http://localhost:8000/voice/catalog/tts/openai/models<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="c1"># List voices for a provider</span>
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>curl<span class="w"> </span>http://localhost:8000/voice/catalog/tts/openai/voices<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq
 </span></code></pre></div>
 <p><strong>Provider Response:</strong></p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="p">{</span>
-</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;openai&quot;</span><span class="p">,</span>
-</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">  </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;OpenAI&quot;</span><span class="p">,</span>
-</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">  </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;tts&quot;</span><span class="p">,</span>
-</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">  </span><span class="nt">&quot;requires_api_key&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
-</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="w">  </span><span class="nt">&quot;api_key_env_var&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;OPENAI_API_KEY&quot;</span><span class="p">,</span>
-</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="w">  </span><span class="nt">&quot;is_local&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
-</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="w">  </span><span class="nt">&quot;description&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;OpenAI TTS API&quot;</span>
-</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="p">}</span>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="p">{</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">  </span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;openai&quot;</span><span class="p">,</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">  </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;OpenAI&quot;</span><span class="p">,</span>
+</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">  </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;tts&quot;</span><span class="p">,</span>
+</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">  </span><span class="nt">&quot;requires_api_key&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="w">  </span><span class="nt">&quot;api_key_env_var&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;OPENAI_API_KEY&quot;</span><span class="p">,</span>
+</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="w">  </span><span class="nt">&quot;is_local&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="w">  </span><span class="nt">&quot;description&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;OpenAI TTS API&quot;</span>
+</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="p">}</span>
 </span></code></pre></div>
 <p><strong>Voice Response:</strong></p>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="p">{</span>
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">  </span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;alloy&quot;</span><span class="p">,</span>
-</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">  </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Alloy&quot;</span><span class="p">,</span>
-</span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">  </span><span class="nt">&quot;provider_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;openai&quot;</span><span class="p">,</span>
-</span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">  </span><span class="nt">&quot;model_ids&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;tts-1&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;tts-1-hd&quot;</span><span class="p">],</span>
-</span><span id="__span-8-6"><a id="__codelineno-8-6" name="__codelineno-8-6" href="#__codelineno-8-6"></a><span class="w">  </span><span class="nt">&quot;description&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;A balanced, versatile voice&quot;</span><span class="p">,</span>
-</span><span id="__span-8-7"><a id="__codelineno-8-7" name="__codelineno-8-7" href="#__codelineno-8-7"></a><span class="w">  </span><span class="nt">&quot;category&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;neutral&quot;</span><span class="p">,</span>
-</span><span id="__span-8-8"><a id="__codelineno-8-8" name="__codelineno-8-8" href="#__codelineno-8-8"></a><span class="w">  </span><span class="nt">&quot;gender&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;neutral&quot;</span><span class="p">,</span>
-</span><span id="__span-8-9"><a id="__codelineno-8-9" name="__codelineno-8-9" href="#__codelineno-8-9"></a><span class="w">  </span><span class="nt">&quot;preview_text&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Hello, I&#39;m Alloy...&quot;</span>
-</span><span id="__span-8-10"><a id="__codelineno-8-10" name="__codelineno-8-10" href="#__codelineno-8-10"></a><span class="p">}</span>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="p">{</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="w">  </span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;alloy&quot;</span><span class="p">,</span>
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">  </span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Alloy&quot;</span><span class="p">,</span>
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="w">  </span><span class="nt">&quot;provider_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;openai&quot;</span><span class="p">,</span>
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="w">  </span><span class="nt">&quot;model_ids&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;gpt-realtime-2.1-mini&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;gpt-4o-mini-tts&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;tts-1&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;tts-1-hd&quot;</span><span class="p">],</span>
+</span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="w">  </span><span class="nt">&quot;description&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Neutral, balanced voice&quot;</span><span class="p">,</span>
+</span><span id="__span-9-7"><a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="w">  </span><span class="nt">&quot;category&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;neutral&quot;</span><span class="p">,</span>
+</span><span id="__span-9-8"><a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a><span class="w">  </span><span class="nt">&quot;gender&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;neutral&quot;</span><span class="p">,</span>
+</span><span id="__span-9-9"><a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a><span class="w">  </span><span class="nt">&quot;preview_text&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Hello, I&#39;m Alloy...&quot;</span>
+</span><span id="__span-9-10"><a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a><span class="p">}</span>
 </span></code></pre></div>
 <h3 id="stt-catalog">STT Catalog</h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="c1"># List STT providers</span>
-</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a>curl<span class="w"> </span>http://localhost:8000/voice/catalog/stt/providers<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq
-</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>
-</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="c1"># List models for a provider</span>
-</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>curl<span class="w"> </span>http://localhost:8000/voice/catalog/stt/openai_whisper/models<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="c1"># List STT providers</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>curl<span class="w"> </span>http://localhost:8000/voice/catalog/stt/providers<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="c1"># List models for a provider</span>
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>curl<span class="w"> </span>http://localhost:8000/voice/catalog/stt/openai_whisper/models<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq
 </span></code></pre></div>
 <h3 id="voice-settings">Voice Settings</h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="c1"># Get current settings</span>
-</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>curl<span class="w"> </span>http://localhost:8000/voice/settings<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq
-</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>
-</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="c1"># Preview settings (returns merged config without persisting)</span>
-</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/voice/settings<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{&quot;tts_voice&quot;: &quot;nova&quot;, &quot;tts_speed&quot;: 1.2}&#39;</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="c1"># Get current settings</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>curl<span class="w"> </span>http://localhost:8000/voice/settings<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq
 </span></code></pre></div>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>This endpoint returns what the settings would look like if applied. To actually persist changes, update the corresponding environment variables in your <code>.env</code> file.</p>
-</div>
 <p><strong>Settings fields:</strong> <code>tts_provider</code>, <code>tts_model</code>, <code>tts_voice</code>, <code>tts_speed</code>, <code>stt_provider</code>, <code>stt_model</code>, <code>stt_language</code></p>
-<h3 id="voice-preview">Voice Preview</h3>
-<p>Generate audio samples to compare voices:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="c1"># POST with body</span>
-</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/voice/preview<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{&quot;voice_id&quot;: &quot;alloy&quot;, &quot;text&quot;: &quot;Hello world&quot;}&#39;</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="w">  </span>--output<span class="w"> </span>preview.mp3
-</span><span id="__span-11-6"><a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a>
-</span><span id="__span-11-7"><a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="c1"># GET (browser-friendly)</span>
-</span><span id="__span-11-8"><a id="__codelineno-11-8" name="__codelineno-11-8" href="#__codelineno-11-8"></a>curl<span class="w"> </span><span class="s2">&quot;http://localhost:8000/voice/preview/alloy?text=Hello+world&amp;speed=1.0&quot;</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-11-9"><a id="__codelineno-11-9" name="__codelineno-11-9" href="#__codelineno-11-9"></a><span class="w">  </span>--output<span class="w"> </span>preview.mp3
+<h3 id="voice-overview">Voice Overview</h3>
+<p>What the active voice profile uses, then every speech, hearing and live
+model and every voice, each with the voice and model to hear it on and the
+change a Use would make. Both Overseers show it.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>curl<span class="w"> </span>http://localhost:8000/voice/overview<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a>
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="c1"># Put a row on the active profile (an admin&#39;s); the rest is made to fit:</span>
+</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="c1"># a voice brings its provider and a model that speaks it</span>
+</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/voice/use<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-12-6"><a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span>-d<span class="w"> </span><span class="s1">&#39;{&quot;tts_voice&quot;: &quot;Kore&quot;}&#39;</span>
+</span><span id="__span-12-7"><a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a>
+</span><span id="__span-12-8"><a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a><span class="c1"># Make another profile the active one</span>
+</span><span id="__span-12-9"><a id="__codelineno-12-9" name="__codelineno-12-9" href="#__codelineno-12-9"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/voice/profiles/2/active
 </span></code></pre></div>
-<p>Returns <code>audio/mpeg</code> content.</p>
+<p>Each answers with the overview as it now is.</p>
+<h3 id="voice-design">Voice Design</h3>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="c1"># A profile&#39;s design (the active one&#39;s without ?profile=): every voice with</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="c1"># its gender and tone, the styles and dials, what is picked, what it sends</span>
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a>curl<span class="w"> </span><span class="s2">&quot;http://localhost:8000/voice/design?profile=1&quot;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>jq
+</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>
+</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="c1"># Choices in the query are composed, not saved</span>
+</span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a>curl<span class="w"> </span><span class="s2">&quot;http://localhost:8000/voice/design?voice=marin&amp;style=calm&quot;</span><span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>.instructions
+</span><span id="__span-13-7"><a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a>
+</span><span id="__span-13-8"><a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a><span class="c1"># Hear them unsaved</span>
+</span><span id="__span-13-9"><a id="__codelineno-13-9" name="__codelineno-13-9" href="#__codelineno-13-9"></a>curl<span class="w"> </span><span class="s2">&quot;http://localhost:8000/voice/design/preview?voice=marin&amp;style=calm&amp;accent=british&quot;</span><span class="w"> </span>--output<span class="w"> </span>design.wav
+</span><span id="__span-13-10"><a id="__codelineno-13-10" name="__codelineno-13-10" href="#__codelineno-13-10"></a>
+</span><span id="__span-13-11"><a id="__codelineno-13-11" name="__codelineno-13-11" href="#__codelineno-13-11"></a><span class="c1"># Hear a saved profile</span>
+</span><span id="__span-13-12"><a id="__codelineno-13-12" name="__codelineno-13-12" href="#__codelineno-13-12"></a>curl<span class="w"> </span>http://localhost:8000/voice/design/profiles/1/preview<span class="w"> </span>--output<span class="w"> </span>profile.wav
+</span><span id="__span-13-13"><a id="__codelineno-13-13" name="__codelineno-13-13" href="#__codelineno-13-13"></a>
+</span><span id="__span-13-14"><a id="__codelineno-13-14" name="__codelineno-13-14" href="#__codelineno-13-14"></a><span class="c1"># Every profile at a glance; a new one from the one in use (an admin&#39;s)</span>
+</span><span id="__span-13-15"><a id="__codelineno-13-15" name="__codelineno-13-15" href="#__codelineno-13-15"></a>curl<span class="w"> </span>http://localhost:8000/voice/design/profiles<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq
+</span><span id="__span-13-16"><a id="__codelineno-13-16" name="__codelineno-13-16" href="#__codelineno-13-16"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/voice/design/profiles<span class="w"> </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span>-d<span class="w"> </span><span class="s1">&#39;{&quot;name&quot;: &quot;Calls&quot;}&#39;</span>
+</span><span id="__span-13-17"><a id="__codelineno-13-17" name="__codelineno-13-17" href="#__codelineno-13-17"></a>
+</span><span id="__span-13-18"><a id="__codelineno-13-18" name="__codelineno-13-18" href="#__codelineno-13-18"></a><span class="c1"># Save them onto a profile (an admin&#39;s)</span>
+</span><span id="__span-13-19"><a id="__codelineno-13-19" name="__codelineno-13-19" href="#__codelineno-13-19"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="s2">&quot;http://localhost:8000/voice/design?profile=1&quot;</span><span class="w"> </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-13-20"><a id="__codelineno-13-20" name="__codelineno-13-20" href="#__codelineno-13-20"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{&quot;voice&quot;: &quot;marin&quot;, &quot;delivery&quot;: {&quot;style&quot;: &quot;calm&quot;, &quot;accent&quot;: &quot;british&quot;}, &quot;speed&quot;: 1.0}&#39;</span>
+</span><span id="__span-13-21"><a id="__codelineno-13-21" name="__codelineno-13-21" href="#__codelineno-13-21"></a><span class="sb">```</span><span class="w"> </span>A<span class="w"> </span>stack<span class="w"> </span>keeping<span class="w"> </span>no<span class="w"> </span>voice
+</span><span id="__span-13-22"><a id="__codelineno-13-22" name="__codelineno-13-22" href="#__codelineno-13-22"></a>profiles<span class="w"> </span><span class="o">(</span>no<span class="w"> </span>database<span class="o">)</span><span class="w"> </span>shows<span class="w"> </span>what<span class="w"> </span>its<span class="w"> </span>settings<span class="w"> </span>use,<span class="w"> </span>and<span class="w"> </span>a<span class="w"> </span>change<span class="w"> </span>is<span class="w"> </span>a<span class="w"> </span><span class="m">409</span>.
+</span><span id="__span-13-23"><a id="__codelineno-13-23" name="__codelineno-13-23" href="#__codelineno-13-23"></a>
+</span><span id="__span-13-24"><a id="__codelineno-13-24" name="__codelineno-13-24" href="#__codelineno-13-24"></a><span class="c1">### Voice Preview</span>
+</span><span id="__span-13-25"><a id="__codelineno-13-25" name="__codelineno-13-25" href="#__codelineno-13-25"></a>
+</span><span id="__span-13-26"><a id="__codelineno-13-26" name="__codelineno-13-26" href="#__codelineno-13-26"></a>Generate<span class="w"> </span>audio<span class="w"> </span>samples<span class="w"> </span>to<span class="w"> </span>compare<span class="w"> </span>voices:
+</span><span id="__span-13-27"><a id="__codelineno-13-27" name="__codelineno-13-27" href="#__codelineno-13-27"></a>
+</span><span id="__span-13-28"><a id="__codelineno-13-28" name="__codelineno-13-28" href="#__codelineno-13-28"></a><span class="sb">```</span>bash
+</span><span id="__span-13-29"><a id="__codelineno-13-29" name="__codelineno-13-29" href="#__codelineno-13-29"></a><span class="c1"># POST with body</span>
+</span><span id="__span-13-30"><a id="__codelineno-13-30" name="__codelineno-13-30" href="#__codelineno-13-30"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/voice/preview<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-13-31"><a id="__codelineno-13-31" name="__codelineno-13-31" href="#__codelineno-13-31"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-13-32"><a id="__codelineno-13-32" name="__codelineno-13-32" href="#__codelineno-13-32"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{&quot;voice_id&quot;: &quot;alloy&quot;, &quot;text&quot;: &quot;Hello world&quot;}&#39;</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-13-33"><a id="__codelineno-13-33" name="__codelineno-13-33" href="#__codelineno-13-33"></a><span class="w">  </span>--output<span class="w"> </span>preview.mp3
+</span><span id="__span-13-34"><a id="__codelineno-13-34" name="__codelineno-13-34" href="#__codelineno-13-34"></a>
+</span><span id="__span-13-35"><a id="__codelineno-13-35" name="__codelineno-13-35" href="#__codelineno-13-35"></a><span class="c1"># GET (browser-friendly), optionally on a model that speaks the voice</span>
+</span><span id="__span-13-36"><a id="__codelineno-13-36" name="__codelineno-13-36" href="#__codelineno-13-36"></a>curl<span class="w"> </span><span class="s2">&quot;http://localhost:8000/voice/preview/marin?text=Hello+world&amp;model=gpt-realtime-2.1-mini&quot;</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-13-37"><a id="__codelineno-13-37" name="__codelineno-13-37" href="#__codelineno-13-37"></a><span class="w">  </span>--output<span class="w"> </span>preview.wav
+</span></code></pre></div>
+<p>Said on the model named, or the one in use, where it speaks the voice;
+otherwise on one that does. Returns the provider's audio: <code>audio/mpeg</code>
+from OpenAI, <code>audio/wav</code> from Gemini.</p>
 <h3 id="voice-chat">Voice Chat</h3>
 <p>A spoken turn is a typed turn with a microphone in front of it: the
 transcript becomes the user's message in the same conversation, answered
 by the same agent, as if it had been typed.</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="s2">&quot;http://localhost:8000/api/v1/ai/voice-chat?conversation_id=c-1&amp;user_id=u-1&amp;agent_slug=helper&amp;surface=support&amp;transcription_hint=Aegis&quot;</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="w">  </span>-F<span class="w"> </span><span class="s2">&quot;audio=@question.webm&quot;</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="s2">&quot;http://localhost:8000/api/v1/ai/voice-chat?conversation_id=c-1&amp;user_id=u-1&amp;agent_slug=helper&amp;surface=support&amp;transcription_hint=Aegis&quot;</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="w">  </span>-F<span class="w"> </span><span class="s2">&quot;audio=@question.webm&quot;</span>
 </span></code></pre></div>
 <table>
 <thead>
@@ -7149,28 +7298,28 @@ records hold the cost. The spoken version of an answer is the agent's own
 words with the markdown stripped (<code>voice/spoken.py</code>), not a second model
 call. <code>/api/v1/ai/synthesize</code> takes form fields (<code>text</code>, <code>voice</code>, <code>speed</code>).</p>
 <h3 id="catalog-summary">Catalog Summary</h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>curl<span class="w"> </span>http://localhost:8000/voice/catalog/summary<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>curl<span class="w"> </span>http://localhost:8000/voice/catalog/summary<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq
 </span></code></pre></div>
-<div class="language-json highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="p">{</span>
-</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="w">  </span><span class="nt">&quot;tts&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="w">    </span><span class="nt">&quot;provider_count&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">1</span><span class="p">,</span>
-</span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="w">    </span><span class="nt">&quot;model_count&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span>
-</span><span id="__span-14-5"><a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="w">    </span><span class="nt">&quot;voice_count&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">6</span><span class="p">,</span>
-</span><span id="__span-14-6"><a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a><span class="w">    </span><span class="nt">&quot;providers&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;openai&quot;</span><span class="p">]</span>
-</span><span id="__span-14-7"><a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="w">  </span><span class="p">},</span>
-</span><span id="__span-14-8"><a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a><span class="w">  </span><span class="nt">&quot;stt&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-</span><span id="__span-14-9"><a id="__codelineno-14-9" name="__codelineno-14-9" href="#__codelineno-14-9"></a><span class="w">    </span><span class="nt">&quot;provider_count&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span>
-</span><span id="__span-14-10"><a id="__codelineno-14-10" name="__codelineno-14-10" href="#__codelineno-14-10"></a><span class="w">    </span><span class="nt">&quot;model_count&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span>
-</span><span id="__span-14-11"><a id="__codelineno-14-11" name="__codelineno-14-11" href="#__codelineno-14-11"></a><span class="w">    </span><span class="nt">&quot;providers&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;openai_whisper&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;whisper_local&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;faster_whisper&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;groq_whisper&quot;</span><span class="p">]</span>
-</span><span id="__span-14-12"><a id="__codelineno-14-12" name="__codelineno-14-12" href="#__codelineno-14-12"></a><span class="w">  </span><span class="p">},</span>
-</span><span id="__span-14-13"><a id="__codelineno-14-13" name="__codelineno-14-13" href="#__codelineno-14-13"></a><span class="w">  </span><span class="nt">&quot;current_config&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-</span><span id="__span-14-14"><a id="__codelineno-14-14" name="__codelineno-14-14" href="#__codelineno-14-14"></a><span class="w">    </span><span class="nt">&quot;tts_provider&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;openai&quot;</span><span class="p">,</span>
-</span><span id="__span-14-15"><a id="__codelineno-14-15" name="__codelineno-14-15" href="#__codelineno-14-15"></a><span class="w">    </span><span class="nt">&quot;tts_model&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;tts-1&quot;</span><span class="p">,</span>
-</span><span id="__span-14-16"><a id="__codelineno-14-16" name="__codelineno-14-16" href="#__codelineno-14-16"></a><span class="w">    </span><span class="nt">&quot;tts_voice&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;alloy&quot;</span><span class="p">,</span>
-</span><span id="__span-14-17"><a id="__codelineno-14-17" name="__codelineno-14-17" href="#__codelineno-14-17"></a><span class="w">    </span><span class="nt">&quot;stt_provider&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;openai_whisper&quot;</span><span class="p">,</span>
-</span><span id="__span-14-18"><a id="__codelineno-14-18" name="__codelineno-14-18" href="#__codelineno-14-18"></a><span class="w">    </span><span class="nt">&quot;stt_model&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;whisper-1&quot;</span>
-</span><span id="__span-14-19"><a id="__codelineno-14-19" name="__codelineno-14-19" href="#__codelineno-14-19"></a><span class="w">  </span><span class="p">}</span>
-</span><span id="__span-14-20"><a id="__codelineno-14-20" name="__codelineno-14-20" href="#__codelineno-14-20"></a><span class="p">}</span>
+<div class="language-json highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a><span class="p">{</span>
+</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="w">  </span><span class="nt">&quot;tts&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a><span class="w">    </span><span class="nt">&quot;provider_count&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span>
+</span><span id="__span-16-4"><a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="w">    </span><span class="nt">&quot;model_count&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">7</span><span class="p">,</span>
+</span><span id="__span-16-5"><a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a><span class="w">    </span><span class="nt">&quot;voice_count&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">43</span><span class="p">,</span>
+</span><span id="__span-16-6"><a id="__codelineno-16-6" name="__codelineno-16-6" href="#__codelineno-16-6"></a><span class="w">    </span><span class="nt">&quot;providers&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;openai&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;gemini&quot;</span><span class="p">]</span>
+</span><span id="__span-16-7"><a id="__codelineno-16-7" name="__codelineno-16-7" href="#__codelineno-16-7"></a><span class="w">  </span><span class="p">},</span>
+</span><span id="__span-16-8"><a id="__codelineno-16-8" name="__codelineno-16-8" href="#__codelineno-16-8"></a><span class="w">  </span><span class="nt">&quot;stt&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-16-9"><a id="__codelineno-16-9" name="__codelineno-16-9" href="#__codelineno-16-9"></a><span class="w">    </span><span class="nt">&quot;provider_count&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span>
+</span><span id="__span-16-10"><a id="__codelineno-16-10" name="__codelineno-16-10" href="#__codelineno-16-10"></a><span class="w">    </span><span class="nt">&quot;model_count&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">4</span><span class="p">,</span>
+</span><span id="__span-16-11"><a id="__codelineno-16-11" name="__codelineno-16-11" href="#__codelineno-16-11"></a><span class="w">    </span><span class="nt">&quot;providers&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;openai_whisper&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;whisper_local&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;faster_whisper&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;groq_whisper&quot;</span><span class="p">]</span>
+</span><span id="__span-16-12"><a id="__codelineno-16-12" name="__codelineno-16-12" href="#__codelineno-16-12"></a><span class="w">  </span><span class="p">},</span>
+</span><span id="__span-16-13"><a id="__codelineno-16-13" name="__codelineno-16-13" href="#__codelineno-16-13"></a><span class="w">  </span><span class="nt">&quot;current_config&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+</span><span id="__span-16-14"><a id="__codelineno-16-14" name="__codelineno-16-14" href="#__codelineno-16-14"></a><span class="w">    </span><span class="nt">&quot;tts_provider&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;openai&quot;</span><span class="p">,</span>
+</span><span id="__span-16-15"><a id="__codelineno-16-15" name="__codelineno-16-15" href="#__codelineno-16-15"></a><span class="w">    </span><span class="nt">&quot;tts_model&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;gpt-realtime-2.1-mini&quot;</span><span class="p">,</span>
+</span><span id="__span-16-16"><a id="__codelineno-16-16" name="__codelineno-16-16" href="#__codelineno-16-16"></a><span class="w">    </span><span class="nt">&quot;tts_voice&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;alloy&quot;</span><span class="p">,</span>
+</span><span id="__span-16-17"><a id="__codelineno-16-17" name="__codelineno-16-17" href="#__codelineno-16-17"></a><span class="w">    </span><span class="nt">&quot;stt_provider&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;openai_whisper&quot;</span><span class="p">,</span>
+</span><span id="__span-16-18"><a id="__codelineno-16-18" name="__codelineno-16-18" href="#__codelineno-16-18"></a><span class="w">    </span><span class="nt">&quot;stt_model&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;whisper-1&quot;</span>
+</span><span id="__span-16-19"><a id="__codelineno-16-19" name="__codelineno-16-19" href="#__codelineno-16-19"></a><span class="w">  </span><span class="p">}</span>
+</span><span id="__span-16-20"><a id="__codelineno-16-20" name="__codelineno-16-20" href="#__codelineno-16-20"></a><span class="p">}</span>
 </span></code></pre></div>
 <hr />
 <h2 id="live-calls">Live Calls</h2>
@@ -7200,7 +7349,44 @@ call and a tool to end it.</p>
   before ending it.</li>
 <li><strong>Mute</strong> stops your voice going out (after a moment of silence, so the
   engine hears you stop) and pauses the quiet count.</li>
+<li><strong>Her voice.</strong> A call speaks the profile's voice where the engine's
+  provider has it: Gemini Live speaks a Gemini voice, an OpenAI engine an
+  OpenAI one. With a voice the engine does not have, it speaks its own.</li>
 </ul>
+<hr />
+<h2 id="in-overseer">In Overseer</h2>
+<p>Overseer &gt; AI &gt; Voice has two tabs.</p>
+<p><strong>Profiles</strong> lists every voice profile at a glance: its voice, style and
+speed, which one is in use, a Listen button, and Edit. A new profile starts
+from the one in use. Edit opens the profile in three steps:</p>
+<ol>
+<li><strong>Voice</strong>: who it is, and the model it is spoken on. Gender, a tone
+   family (Warm and soft, Bright and upbeat, Calm and even, Firm and
+   authoritative, Expressive) and an accent narrow the voices; each plays a
+   sample. Each model the voice is spoken on says whether it follows
+   delivery instructions. Only voices that can be heard are
+   listed: a provider without its key is one line saying which key it
+   needs.</li>
+<li><strong>Delivery</strong>: how it talks. A premade style (Calm and warm, Brisk and
+   professional, Cheerful, Storyteller, Empathetic support, Newsreader),
+   each playable with the fine-tuning kept, and the speed; pace, energy,
+   emotion and anything extra under Fine-tune, and an accent where the
+   model steers one (on Gemini the accent comes with the voice). A model
+   that ignores delivery instructions is said up front.</li>
+<li><strong>Review</strong>: the voice, style and speed, the delivery instructions they
+   make (the "Voice Affect / Tone / Pacing" form OpenAI's voices read;
+   Gemini takes the same words as the line's style), Listen to hear them
+   unsaved, and Save.</li>
+</ol>
+<p>The profile keeps the choices, so the editor opens on them again. The
+chat's voice dialog keeps a profile's name, hearing model, reply and
+check-in, and opens the editor for the voice itself.</p>
+<p><strong>Models</strong> is one tight table: what the active profile uses, every speech,
+hearing and live model (with its price where the model catalog has one)
+and every voice, in columns, narrowed by kind, provider, model and text
+with no request. Each voice plays on a model that speaks it; Use puts a row
+on the active profile.</p>
+<p>The Flet Overseer's voice tab has the same two views, over the API.</p>
 <hr />
 <h2 id="configuration">Configuration</h2>
 <table>
@@ -7219,8 +7405,8 @@ call and a tool to end it.</p>
 </tr>
 <tr>
 <td><code>TTS_MODEL</code></td>
-<td><code>tts-1</code></td>
-<td>TTS model</td>
+<td><code>gpt-realtime-2.1-mini</code></td>
+<td>TTS model (Gemini: <code>gemini-3.8-flash-tts</code>)</td>
 </tr>
 <tr>
 <td><code>TTS_VOICE</code></td>
@@ -7254,7 +7440,7 @@ call and a tool to end it.</p>
 <h3 id="tts">TTS</h3>
 <ul>
 <li><strong>SpeechRequest</strong> - <code>text</code>, <code>voice</code>, <code>speed</code></li>
-<li><strong>SpeechResult</strong> - <code>audio</code> (bytes), <code>format</code> (MP3), <code>provider</code></li>
+<li><strong>SpeechResult</strong> - <code>audio</code> (bytes), <code>format</code> (MP3 from OpenAI, WAV from Gemini), <code>media_type</code>, <code>provider</code></li>
 </ul>
 <h3 id="stt">STT</h3>
 <ul>

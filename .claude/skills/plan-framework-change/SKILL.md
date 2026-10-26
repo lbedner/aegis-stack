@@ -127,6 +127,10 @@ unless they start with `docs/`.
   before push.
 - `make test-stacks-quick` for a cross-cutting template change; CI runs the
   full matrix and the Illiana check.
+- Once the change is built, before offering a commit or pull request: the
+  `dry` skill on the branch's diff (reuse, simplification, efficiency,
+  altitude), its fixes applied and the gates above run again. Never offer
+  the commit first.
 
 ## Pitfalls
 

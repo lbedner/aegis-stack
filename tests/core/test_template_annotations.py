@@ -46,3 +46,44 @@ def test_a_line_lands_where_its_template_has_the_same_text(tmp_path: Path) -> No
         f"{template}/app/plain.py:1 t: why",
         "2 new; 0 known",
     ]
+
+
+def test_the_found_places_land_on_their_template_lines_or_on_none(
+    tmp_path: Path,
+) -> None:
+    """For her review threads (``--found``): a place whose text no template
+    line has gets no line, never a guess, so a thread never lands beside
+    the finding it is about."""
+    import json
+
+    project, template = tmp_path / "app", tmp_path / "template"
+    _write(project / STORE, "x = 1\nread()\nwrite(1)\n")
+    _write(template / f"{STORE}.jinja", "x = 1\n{% if a %}\nread()\nwrite({{ n }})\n")
+    found = tmp_path / "found.json"
+    places = [
+        {"path": STORE, "line": 2, "key": "k1"},
+        {"path": STORE, "line": 3, "key": "k2"},
+    ]
+    found.write_text(json.dumps({"found": places}))
+
+    subprocess.run(
+        [sys.executable, SCRIPT, project, template, "--found", found], check=True
+    )
+
+    read, write = json.loads(found.read_text())["found"]
+    assert (read["path"], read["line"], read["key"]) == (
+        f"{template}/{STORE}.jinja",
+        3,
+        "k1",
+    )
+    assert write["line"] is None
+
+
+def test_no_found_places_is_no_file(tmp_path: Path) -> None:
+    """A check that crashed wrote nothing: the mapper writes nothing either,
+    so no reviewer reads an empty list as everything fixed."""
+    missing = tmp_path / "found.json"
+    subprocess.run(
+        [sys.executable, SCRIPT, tmp_path, tmp_path, "--found", missing], check=True
+    )
+    assert not missing.exists()

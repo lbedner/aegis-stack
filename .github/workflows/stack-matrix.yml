@@ -188,8 +188,9 @@ jobs:
   # (scripts/template_annotations.py). Illiana gives the verdict: a new place
   # breaking a rule that holds a change (enforced, or gated) blocks it
   # (``--strict``), known debt aside; her comment explains it, and posts
-  # whether or not the model answers. What the change touches goes in the
-  # job summary. Make "Illiana" a required check to hold the merge on it.
+  # whether or not the model answers; each new finding on a changed line gets
+  # her own thread (scripts/illiana_threads.py). What the change touches goes
+  # in the job summary. Make "Illiana" a required check to hold the merge on it.
   conformance:
     name: Illiana
     if: github.event_name == 'pull_request'
@@ -197,7 +198,7 @@ jobs:
     timeout-minutes: 25
     permissions:
       contents: read
-      pull-requests: write  # Illiana's one comment, edited on each push
+      pull-requests: write  # her comment, and her threads on the lines
       issues: write
     steps:
       - uses: actions/checkout@v7
@@ -234,10 +235,13 @@ jobs:
           set +e
           stack="$RUNNER_TEMP/head/everything"
           changed=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")
-          (cd "$stack" && uv run python -m app.cli.main patterns check --strict $changed) \
-            | python3 scripts/template_annotations.py "$stack" \
-              "aegis/templates/copier-aegis-project/{{ project_slug }}"
+          template="aegis/templates/copier-aegis-project/{{ project_slug }}"
+          (cd "$stack" && PATTERNS_FOUND="$RUNNER_TEMP/found.json" \
+            uv run python -m app.cli.main patterns check --strict $changed) \
+            | python3 scripts/template_annotations.py "$stack" "$template"
           echo "code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+          python3 scripts/template_annotations.py "$stack" "$template" \
+            --found "$RUNNER_TEMP/found.json"
 
       # Illiana's write-up of the new findings (``patterns review``): one
       # comment, edited on each push; never fails the job.
@@ -289,6 +293,16 @@ jobs:
           else
             gh api "repos/$REPO/issues/$PR/comments" -F body=@"$review" > /dev/null
           fi
+
+      # Her threads on the lines (scripts/illiana_threads.py); never the gate.
+      - name: Illiana's threads, on the lines
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token || github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: python3 scripts/illiana_threads.py "$RUNNER_TEMP/found.json"
 
       - name: Illiana's verdict
         run: exit "${{ steps.findings.outputs.code }}"

@@ -100,3 +100,34 @@ def test_under_github_actions_each_is_annotated_and_summarised(
     assert "### Illiana: blocked" in written
     assert f"- **Blocks** `{STORE}:1`" in written
     assert f"- Advisory `{STORE}:1`" in written
+
+
+def test_the_new_places_are_written_for_a_reviewer_keyed_as_the_baseline_knows_them(
+    tmp_path: Path,
+) -> None:
+    """``PATTERNS_FOUND`` names a file the new places are written to, each
+    with the key the baseline knows it by: what her review threads are
+    keyed on (aegis-stack's ``scripts/illiana_threads.py``)."""
+    import json
+
+    write_tree(tmp_path, {STORE: READ})
+    written = tmp_path / "found.json"
+    found = [_finding(f"{STORE}:1"), _finding(f"{STORE}:1", severity="warn")]
+
+    check(found, _at(tmp_path), env={"PATTERNS_FOUND": str(written)})
+    check(found[:1], _at(tmp_path), update=True)
+    known = json.loads((tmp_path / ".patterns-baseline.json").read_text())["known"]
+
+    blocking, advisory = json.loads(written.read_text())["found"]
+    assert blocking == {
+        "path": STORE,
+        "line": 1,
+        "check": "parts.reads-in-queries",
+        "subject": "service:notes",
+        "title": "Reads live in queries",
+        "why": "One place, batched.",
+        "action": "Move the read into queries.py.",
+        "blocking": True,
+        "key": known[0],
+    }
+    assert advisory["blocking"] is False

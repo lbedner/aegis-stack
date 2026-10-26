@@ -8,6 +8,7 @@ from app.cli import theme
 from app.core.config import settings
 from app.core.log import suppress_logs
 from app.i18n import lazy_t, t
+from app.services.rag.collections import collection_stats
 from app.services.rag.config import get_rag_config
 from app.services.rag.service import RAGService
 from rich.panel import Panel
@@ -24,10 +25,8 @@ from app.cli.rag.shared import app, console, get_rag_service
 
 @app.command("list", help=lazy_t("rag.help_list"))
 async def list_collections() -> None:
-    rag_service = get_rag_service()
-
     try:
-        collections = await rag_service.list_collections()
+        collections = await collection_stats()
 
         if not collections:
             console.print(f"[dim]{t('rag.no_collections')}[/dim]")
@@ -39,10 +38,8 @@ async def list_collections() -> None:
         table.add_column(t("rag.collection_column"), style=theme.ACCENT)
         table.add_column(t("rag.documents_column"), justify="right")
 
-        for name in collections:
-            stats = await rag_service.get_collection_stats(name)
-            count = stats.get("count", 0) if stats else 0
-            table.add_row(name, str(count))
+        for info in collections:
+            table.add_row(info.name, str(info.count))
 
         console.print()
         console.print(table)

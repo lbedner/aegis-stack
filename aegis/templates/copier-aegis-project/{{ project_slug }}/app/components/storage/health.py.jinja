@@ -37,8 +37,8 @@ async def check_storage_health() -> ComponentStatus:
 
         async with get_async_session() as session:
             summary = await DocumentService(session).summary()
-        metadata["objects"] = summary["total"]
-        metadata["bytes"] = summary["bytes"]
+        metadata["objects"] = summary.total
+        metadata["bytes"] = summary.bytes
     except Exception as e:  # noqa: BLE001 - counts are decoration, reachability is the check
         logger.warning("storage.health.count_failed", error=str(e))
 {%- endif %}

@@ -160,9 +160,9 @@ class TestFactMaintenance:
 
         facts = await list_user_facts("u1", session=session)
 
-        assert [f["index"] for f in facts] == [0, 1]
-        assert facts[0]["category"] == "finance"
-        assert facts[1]["fact"] == "allergic to peanuts"
+        assert [f.index for f in facts] == [0, 1]
+        assert facts[0].category == "finance"
+        assert facts[1].fact == "allergic to peanuts"
 
     async def test_list_for_unknown_user_is_empty(self, session: AsyncSession) -> None:
         assert await list_user_facts("ghost", session=session) == []
@@ -180,8 +180,8 @@ class TestFactMaintenance:
         )
 
         facts = await list_user_facts("u1", session=session)
-        assert facts[0]["fact"] == "house is worth $711,200"
-        assert facts[1]["fact"] == "allergic to peanuts"  # untouched
+        assert facts[0].fact == "house is worth $711,200"
+        assert facts[1].fact == "allergic to peanuts"  # untouched
 
     async def test_delete_removes_only_that_fact(self, session: AsyncSession) -> None:
         await save_user_fact(
@@ -192,7 +192,7 @@ class TestFactMaintenance:
         await delete_user_fact("u1", 0, session=session)
 
         facts = await list_user_facts("u1", session=session)
-        assert [f["fact"] for f in facts] == ["allergic to peanuts"]
+        assert [f.fact for f in facts] == ["allergic to peanuts"]
 
     async def test_out_of_range_index_is_rejected(self, session: AsyncSession) -> None:
         await save_user_fact("u1", "allergic to peanuts", "food", session=session)
@@ -231,13 +231,15 @@ class TestGuardedFormatting:
 
     async def test_no_memory_formats_to_none(self, session: AsyncSession) -> None:
         assert format_user_memory(None) is None
-        assert await build_user_memory_context("ghost", session=session) is None
+        known = await build_user_memory_context("ghost", session=session)
+        assert known.memory is None
+        assert known.readings == []
 
     async def test_saved_fact_reaches_next_context(self, session: AsyncSession) -> None:
         """The acceptance loop: save in one conversation, see it in the next."""
         await save_user_fact("u1", "allergic to peanuts", "food", session=session)
 
-        block = await build_user_memory_context("u1", session=session)
+        block = (await build_user_memory_context("u1", session=session)).memory
 
         assert block is not None
         assert "allergic to peanuts" in block

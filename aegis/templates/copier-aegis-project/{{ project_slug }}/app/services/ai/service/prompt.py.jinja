@@ -24,7 +24,7 @@ from app.services.ai.domains.chat.prompts import (
     build_system_prompt,
 )
 {% if ai_framework == "pydantic-ai" %}
-from app.services.ai.domains.chat.readings import format_readings
+from app.services.ai.domains.chat.readings import Reading, format_readings
 from app.services.ai.domains.llm.providers import get_agent
 {% else %}
 from app.services.ai.domains.llm.providers import get_llm
@@ -156,7 +156,7 @@ class PromptMixin(ContextsMixin):
         agent_modules_context: str | None = None,
         history_budget: int | None = None,
         context_window: int | None = None,
-        readings: list[dict[str, Any]] | None = None,
+        readings: list[Reading] | None = None,
         right_now: str | None = None,
     ) -> tuple[Any, str]:
         """
@@ -237,7 +237,7 @@ class PromptMixin(ContextsMixin):
         self,
         conversation: Conversation,
         history_budget: int | None = None,
-        readings: list[dict[str, Any]] | None = None,
+        readings: list[Reading] | None = None,
         right_now: str | None = None,
     ) -> str:
         """

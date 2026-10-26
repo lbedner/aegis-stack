@@ -49,8 +49,10 @@ def _no_user_memory_db(monkeypatch: pytest.MonkeyPatch) -> None:
     persistence, not memory.
     """
 
-    async def no_memory(user_id: str, **kwargs: object) -> None:
-        return None
+    async def no_memory(user_id: str, **kwargs: object) -> object:
+        from app.services.ai.domains.chat.user_memory import UserContext
+
+        return UserContext(memory=None, readings=[])
 
     # raising=False: the memory backend ships without the user-memory block.
     monkeypatch.setattr(

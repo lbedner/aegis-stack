@@ -19,24 +19,25 @@ TOP_K_CHOICES = (3, 5, 10, 20)
 
 
 def _service() -> Any:
+    """The RAG service, imported when used: this module ships wherever the
+    Overseer does, RAG or not."""
     from app.services.rag.config import get_rag_service
 
     return get_rag_service()
+
+
+async def collection_stats() -> list[Any]:
+    """Every collection's counts (``rag.collections``), each a
+    ``CollectionInfo``."""
+    from app.services.rag.collections import collection_stats as every
+
+    return await every()
 
 
 def service_status() -> tuple[dict[str, Any], list[str]]:
     """The index's configuration, and what is wrong with it."""
     service = _service()
     return service.get_service_status(), service.validate_service()
-
-
-async def collection_stats() -> list[dict[str, Any]]:
-    """Every collection with its chunk and document counts."""
-    service = _service()
-    stats = [
-        await service.get_collection_stats(n) for n in await service.list_collections()
-    ]
-    return [s for s in stats if s]
 
 
 async def collection_files(name: str) -> list[Any]:
@@ -60,10 +61,10 @@ async def knowledge_context(query: Any) -> dict[str, Any]:
     ) | {
         "figures": [
             {"label": "Collections", "value": len(collections)},
-            {"label": "Chunks", "value": f"{sum(c['count'] for c in collections):,}"},
+            {"label": "Chunks", "value": f"{sum(c.count for c in collections):,}"},
             {
                 "label": "Documents",
-                "value": f"{sum(c.get('doc_count', 0) for c in collections):,}",
+                "value": f"{sum(c.doc_count for c in collections):,}",
             },
         ],
         "setup": [
@@ -79,11 +80,11 @@ async def knowledge_context(query: Any) -> dict[str, Any]:
         "rows": [
             {
                 "name": {
-                    "label": c["name"],
-                    "url": section_url("knowledge", **{COLLECTION_PARAM: c["name"]}),
+                    "label": c.name,
+                    "url": section_url("knowledge", **{COLLECTION_PARAM: c.name}),
                 },
-                "chunks": c["count"],
-                "documents": c.get("doc_count", 0),
+                "chunks": c.count,
+                "documents": c.doc_count,
             }
             for c in collections
         ],
@@ -92,7 +93,7 @@ async def knowledge_context(query: Any) -> dict[str, Any]:
 
 async def collection_context(name: str) -> dict[str, Any] | None:
     """A collection's drawer, or None when the index has no such one."""
-    if name not in {c["name"] for c in await collection_stats()}:
+    if name not in {c.name for c in await collection_stats()}:
         return None
     files = await collection_files(name)
     return {
@@ -107,7 +108,7 @@ async def collection_context(name: str) -> dict[str, Any] | None:
 async def search_context() -> dict[str, Any]:
     return {
         "collections": [
-            {"id": c["name"], "name": c["name"]} for c in await collection_stats()
+            {"id": c.name, "name": c.name} for c in await collection_stats()
         ],
         "top_k": [{"id": str(k), "name": f"{k} results"} for k in TOP_K_CHOICES],
         "search_url": f"{PARTIALS}/rag/search",

@@ -424,8 +424,15 @@ class TestUserMemoryEndpoints:
     """The dashboard's window on what the assistant saved about you."""
 
     def test_list_returns_saved_facts(self, client: TestClient) -> None:
+        from app.services.ai.domains.chat.user_memory import UserFact
+
         facts = [
-            {"index": 0, "category": "finance", "fact": "house is worth $711,200"},
+            UserFact(
+                index=0,
+                category="finance",
+                fact="house is worth $711,200",
+                saved_at=None,
+            )
         ]
         with patch(
             "app.services.ai.domains.chat.user_memory.list_user_facts",
@@ -435,11 +442,15 @@ class TestUserMemoryEndpoints:
 
         assert response.status_code == 200
         body = response.json()
-        assert body["facts"] == facts
+        assert body["facts"] == [f.model_dump(mode="json") for f in facts]
         assert body["user_id"] == "0"  # the standalone default, as elsewhere
 
     def test_update_rewrites_a_fact(self, client: TestClient) -> None:
-        updated = {"index": 0, "category": "finance", "fact": "corrected"}
+        from app.services.ai.domains.chat.user_memory import UserFact
+
+        updated = UserFact(
+            index=0, category="finance", fact="corrected", saved_at=None
+        )
         with patch(
             "app.services.ai.domains.chat.user_memory.update_user_fact",
             AsyncMock(return_value=updated),
@@ -450,7 +461,7 @@ class TestUserMemoryEndpoints:
             )
 
         assert response.status_code == 200
-        assert response.json() == updated
+        assert response.json() == updated.model_dump(mode="json")
         assert mock_update.await_count == 1
 
     def test_delete_removes_a_fact(self, client: TestClient) -> None:

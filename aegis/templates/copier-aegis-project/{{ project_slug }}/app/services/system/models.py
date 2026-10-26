@@ -46,6 +46,14 @@ class ComponentStatus(BaseModel):
         description="Sub-components (e.g., system metrics under backend)",
     )
 
+    @field_validator("metadata", mode="before")
+    @classmethod
+    def _figures(cls, value: Any) -> Any:
+        """A check's figures model, as the JSON it goes out as."""
+        if isinstance(value, BaseModel):
+            return value.model_dump(mode="json")
+        return value
+
     @field_validator("message", "metadata")
     @classmethod
     def _without_passwords(cls, value: Any) -> Any:

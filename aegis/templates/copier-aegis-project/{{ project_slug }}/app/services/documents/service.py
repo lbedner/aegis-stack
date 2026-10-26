@@ -18,7 +18,12 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.core.storage import content_key, get_storage
 from app.core.time import utcnow
 from app.services.documents import queries
-from app.services.documents.models import DOCUMENT_KINDS, Document, DocumentTag
+from app.services.documents.models import (
+    DOCUMENT_KINDS,
+    Document,
+    DocumentSummary,
+    DocumentTag,
+)
 
 # The columns a client may change after the fact. Storage, hash, size and
 # provenance describe the bytes and are fixed by them.
@@ -231,8 +236,8 @@ class DocumentService:
             seen.add(target.id or 0)
             target = await self.get(target.supersedes_id, owner_user_id=owner_user_id)
 
-    async def summary(self, *, owner_user_id: int | None = None) -> dict[str, Any]:
-        """What the card shows: how much paper, how recent, how heavy."""
+    async def summary(self, *, owner_user_id: int | None = None) -> DocumentSummary:
+        """The store's ``DocumentSummary``, one owner's or everyone's."""
         return await queries.store_summary(self.db, owner_user_id=owner_user_id)
 
     async def tag_counts(

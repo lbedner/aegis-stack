@@ -12,7 +12,6 @@ from typing import Any
 from app.services.ai.domains.chat.agent_loader import AgentConfig
 {%- if ai_backend != "memory" and ai_framework == "pydantic-ai" %}
 from app.services.ai.domains.chat.module_context import render_memory_modules
-from app.services.ai.domains.chat.readings import user_readings
 from app.services.ai.domains.chat.user_memory import (
     build_user_memory_context,
     memory_user,
@@ -77,7 +76,8 @@ class TurnMixin(PromptMixin):
         wrong = asyncio.create_task(right_now()) if reads_health else None
 
 {% if ai_backend != "memory" %}        # Guarded per-user memory block (saved via the save_memory tool)
-        memory_context = await build_user_memory_context(user_id)
+        known = await build_user_memory_context(user_id)
+        memory_context = known.memory
 {%- if ai_framework == "pydantic-ai" %}
 
         # History budget scales with the EFFECTIVE model for this
@@ -92,10 +92,10 @@ class TurnMixin(PromptMixin):
         context_window = await context_window_for(effective_model)
         history_budget = history_char_budget(context_window)
 
-        # Recorded readings, from the same per-user store as the facts:
+        # Recorded readings, read with the facts from the user's one row:
         # an extraction belongs to the user, not to the thread it was
         # read in, so a new conversation opens still holding it.
-        readings = await user_readings(user_id)
+        readings = known.readings
 
         # The agent row's memory modules (e.g. the finance snapshot).
         # LangChain's runtime takes neither: its prompt is the persona,

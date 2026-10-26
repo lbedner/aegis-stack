@@ -127,7 +127,7 @@ async def list_saved_user_facts(user_id: str = DEFAULT_MEMORY_USER_ID) -> dict[s
     except Exception as e:
         logger.exception("Failed to list saved facts")
         raise HTTPException(status_code=500, detail="Failed to list saved facts") from e
-    return {"user_id": user_id, "facts": facts}
+    return {"user_id": user_id, "facts": [f.model_dump(mode="json") for f in facts]}
 
 
 @router.patch("/user-memory/{index}")
@@ -142,13 +142,14 @@ async def update_saved_user_fact(
 
     try:
         async with get_async_session() as session:
-            return await user_memory.update_user_fact(
+            updated = await user_memory.update_user_fact(
                 user_id,
                 index,
                 fact=request.fact,
                 category=request.category,
                 session=session,
             )
+        return updated.model_dump(mode="json")
     except IndexError as e:
         raise HTTPException(status_code=404, detail=str(e)) from None
     except Exception as e:

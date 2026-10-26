@@ -220,7 +220,10 @@ belongs - so it names each domain and what it owns.
     not make it new. Illiana gives the verdict, last: blocked when a new
     place breaks a rule that holds a change (an enforced rule, or a gated
     one, whose known debt stands while new breaches block: the service
-    standard's `takes-session` is gated, as is the async pattern's
+    standard's `takes-session` is gated, and its `returns-model`: a
+    function taking a session hands back a typed model, never a
+    `dict[str, Any]` whose keys no type checker holds (a label's counts,
+    `dict[str, int]`, are figures, not a record); so is the async pattern's
     `off-the-loop`: an async function hands blocking work, such as the
     system model's build, `time.sleep` or a subprocess, to a thread with
     `await asyncio.to_thread(...)` rather than calling it on the event

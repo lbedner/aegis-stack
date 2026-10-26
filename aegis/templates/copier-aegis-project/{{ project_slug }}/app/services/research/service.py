@@ -271,20 +271,3 @@ class ResearchService:
             col(ResearchItem.id).in_(found(threads_only=False)),
             col(ResearchItem.root_id).in_(found(threads_only=True)),
         )
-
-
-async def research_counts(db: AsyncSession) -> dict[str, Any]:
-    """Across every owner, for the health check: watches, items, last run."""
-    watches, last = (
-        await db.exec(
-            select(func.count(), func.max(ResearchWatch.refreshed_at)).select_from(
-                ResearchWatch
-            )
-        )
-    ).one()
-    items = (await db.exec(select(func.count()).select_from(ResearchItem))).one()
-    return {
-        "watches": watches,
-        "items": items,
-        "last_refresh": last.isoformat() if last else None,
-    }

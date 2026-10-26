@@ -43,11 +43,15 @@ class Aggregate:
     """What one part's data says about itself: ``name`` within its part,
     ``about`` the question it answers, ``read`` its figures (a frozen
     ``FIGURES`` model) from a session, over the last ``days`` (None: all of
-    it)."""
+    it). ``database`` False: its data lives elsewhere (a vector store), so
+    it reads with no session, on a stack with no database too. ``dated``
+    False: its data carries no date, so every window is all of it."""
 
     name: str
     about: str
     read: Callable[[Any, int | None], Awaitable[BaseModel]]
+    database: bool = True
+    dated: bool = True
 
 
 def declared() -> dict[str, Aggregate]:
@@ -94,7 +98,8 @@ async def read(name: str, days: int | None = None) -> BaseModel:
     found = declared()
     if name not in found:
         raise ValueError(f"No aggregate {name!r}; known: {', '.join(sorted(found))}")
-    days = window(days)
+    days = window(days)  # a window not the app's is refused either way
+    days = days if found[name].dated else None
     key = KEY.format(name=name, days=days or "all")
     try:
         kept = await get_cache().get(key)
@@ -112,6 +117,8 @@ async def read(name: str, days: int | None = None) -> BaseModel:
 
 
 async def _figures(one: Aggregate, days: int | None) -> BaseModel:
+    if not one.database:
+        return await one.read(None, days)
     async with _session() as session:
         return await one.read(session, days)
 

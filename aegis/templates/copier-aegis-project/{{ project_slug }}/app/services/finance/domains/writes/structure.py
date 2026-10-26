@@ -4,11 +4,12 @@ The hub module ``executors`` registers these."""
 
 from __future__ import annotations
 
-from typing import Any
+from datetime import date
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.figures import FIGURES
 from app.services.change_queue.schemas import ChangeDisplayRow
 from app.services.finance.domains.detection.insights.formatting import format_usd
 from app.services.finance.domains.ledger import categories, splits
@@ -33,9 +34,17 @@ class MatchPayload(BaseModel):
     stream_id: int = Field(description="The bill, from bills().")
 
 
+class Matched(BaseModel):
+    model_config = FIGURES
+
+    transaction_id: int
+    stream_id: int | None
+    next_expected_date: date | None
+
+
 async def match_execute(
     db: AsyncSession, payload: MatchPayload, owner_user_id: int | None
-) -> dict[str, Any]:
+) -> Matched:
     from app.services.finance.domains.planning.recurring import streams
 
     stream = await streams.attach_transaction_to_stream(
@@ -49,13 +58,11 @@ async def match_execute(
             f"Transaction {payload.transaction_id} or bill "
             f"{payload.stream_id} not found."
         )
-    return {
-        "transaction_id": payload.transaction_id,
-        "stream_id": stream.id,
-        "next_expected_date": (
-            stream.next_expected_date.isoformat() if stream.next_expected_date else None
-        ),
-    }
+    return Matched(
+        transaction_id=payload.transaction_id,
+        stream_id=stream.id,
+        next_expected_date=stream.next_expected_date,
+    )
 
 
 async def match_describe(
@@ -128,17 +135,27 @@ class SplitChangePayload(BaseModel):
         return parts
 
 
+class SplitDone(BaseModel):
+    """The lines a transaction became, their amounts in cents."""
+
+    model_config = FIGURES
+
+    transaction_id: int
+    line_count: int
+    amounts: list[int]
+
+
 async def split_execute(
     db: AsyncSession, payload: SplitChangePayload, owner_user_id: int | None
-) -> dict[str, Any]:
+) -> SplitDone:
     lines = await splits.split_transaction(
         db, payload.transaction_id, payload.parts, owner_user_id=owner_user_id
     )
-    return {
-        "transaction_id": payload.transaction_id,
-        "line_count": len(lines),
-        "amounts": [line.amount for line in lines],
-    }
+    return SplitDone(
+        transaction_id=payload.transaction_id,
+        line_count=len(lines),
+        amounts=[line.amount for line in lines],
+    )
 
 
 async def split_describe(

@@ -13,8 +13,10 @@ from datetime import date, datetime
 from typing import Any
 
 from sqlalchemy import JSON, Column, Index, UniqueConstraint
+from pydantic import BaseModel
 from sqlmodel import Field, SQLModel
 
+from app.core.figures import FIGURES
 from app.core.time import utcnow
 
 
@@ -98,3 +100,14 @@ class ResearchItemSnapshot(ResearchNumbers, table=True):
 
     item_id: int = Field(foreign_key="research_item.id", primary_key=True)
     as_of: date = Field(primary_key=True)
+
+
+class ResearchCounts(BaseModel):
+    """Across every owner, for the health check: watches, items, and when a
+    watch last ran (None: never)."""
+
+    model_config = FIGURES
+
+    watches: int
+    items: int
+    last_refresh: datetime | None

@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.figures import FIGURES
 from app.services import change_queue
 from app.services.change_queue import ChangeDisplayRow, ChangeExecutor, registry
 
@@ -23,11 +24,17 @@ class NotePayload(BaseModel):
     text: str
 
 
+class Noted(BaseModel):
+    model_config = FIGURES
+
+    noted: str
+
+
 async def _execute(
     db: AsyncSession, payload: NotePayload, owner_user_id: int | None
-) -> dict[str, Any]:
+) -> Noted:
     executed.append(payload.text)
-    return {"noted": payload.text}
+    return Noted(noted=payload.text)
 
 
 async def _describe(

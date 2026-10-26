@@ -173,9 +173,9 @@ async def save_module(
     )
 
 
-async def _fact(db: Db, index: int) -> dict[str, Any]:
+async def _fact(db: Db, index: int) -> Any:
     facts = await overseer_ai_agents.fact_rows(db)
-    fact = next((f for f in facts if f["index"] == index), None)
+    fact = next((f for f in facts if f.index == index), None)
     if fact is None:
         raise HTTPException(status_code=404, detail="That fact is gone.")
     return fact
@@ -235,7 +235,7 @@ async def confirm_forget(
         request,
         "pages/overseer/_confirm.html",
         title="Forget this fact?",
-        body=fact["fact"],
+        body=fact.fact,
         url=f"{PARTIALS}/facts/{index}",
         label="Forget",
         method="delete",

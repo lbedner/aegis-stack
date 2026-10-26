@@ -116,6 +116,48 @@ async def test_without_the_cache_it_reads_each_time(
     assert await aggregates.read("scheduler.runs", 7) == Runs(total=3)
 
 
+async def test_one_kept_outside_the_database_opens_no_session(
+    asked: list[int | None], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A part whose data lives elsewhere (RAG's vector store) reads on a
+    stack with no database."""
+
+    async def collections(session: object, days: int | None) -> Runs:
+        assert session is None
+        return Runs(total=2)
+
+    def no_database() -> None:
+        raise AssertionError("a session was opened")
+
+    parts = [_part("rag", Aggregate("collections", "", collections, database=False))]
+    monkeypatch.setattr(discovery, "import_modules_named", lambda *_: parts)
+    monkeypatch.setattr(aggregates, "_session", no_database)
+
+    assert await aggregates.read("rag.collections") == Runs(total=2)
+
+
+async def test_one_with_no_dates_reads_once_for_every_window(
+    asked: list[int | None], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Its figures are all of it whatever window is asked: one query, one
+    cached answer."""
+    seen: list[int | None] = []
+
+    async def collections(session: object, days: int | None) -> Runs:
+        seen.append(days)
+        return Runs(total=2)
+
+    undated = Aggregate("collections", "", collections, database=False, dated=False)
+    monkeypatch.setattr(
+        discovery, "import_modules_named", lambda *_: [_part("rag", undated)]
+    )
+
+    await aggregates.read("rag.collections", 7)
+    await aggregates.read("rag.collections", 30)
+
+    assert seen == [None]
+
+
 def test_grouped_rows_tally_by_each_label() -> None:
     """One grouped read, ``(status, kind, n)``, gives each label's counts,
     summed over the others; none read is every label empty."""

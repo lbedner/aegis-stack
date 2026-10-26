@@ -77,7 +77,9 @@ None. This skill reads; the plan names the files. Where it looks:
 | Aggregates | `app/core/aggregates.py` | What a service holds, for an agent: `AGGREGATES` in its `aggregates.py`, figures only (tested over every declared one), app-wide |
 | Redis keys | `app/core/key_family.py`, `app/services/system/redis_keys.py` | `REDIS_KEYS` beside the writer, its module in `OWNERS` |
 | Cached reads | `app/core/cache.py` `get_cache` | get, compute, `set(ttl=)`; `CACHE_ERRORS` degrade with a warning, never fail the read |
-| Service layout | `app/services/system/service_patterns.py` | `service.py` facade, `queries.py` reads, `domains/`, `adapters/`; checked by `patterns check` |
+| Service layout | `app/services/system/service_parts.py` | `service.py` facade, `queries.py` reads (`reads-in-queries`), `domains/`, `adapters/`, a health check; callers import a service's `__all__`, never its `domains`; checked by `patterns check` |
+| Reads hand back models | `app/services/system/service_patterns.py` (`returns-model`, gated) | A function taking a session returns a typed model (`FIGURES` where an agent, the API or Overseer reads it, a health check's metadata included), never `dict[str, Any]`, a bare `dict`, `list[dict[str, Any]]` or `Any`; a label's counts may stay `dict[str, int]`. A read with no session (a vector store, a file) follows the same rule though the check cannot see it |
+| Service functions | `app/services/system/service_patterns.py`, `async_patterns.py` | Takes its session as a required parameter and opens none (`takes-session`, gated; `jobs.py`/`health.py` open the one); blocking work off the loop (gated) |
 | Charts | `app/services/ai/domains/chat/cards.py` | Bar and pie rows are `{label, value}`; money is integer cents |
 | Twin nodes | `app/core/ontology/model.py`, `app/services/system/staged_paths.py` | A new kind joins `Kind` and the `Node` union; what the map draws is `PLACED` and `registry_of` |
 | Map and chip styling | `app/components/web_frontend/templates/components/macros/` | Reuse a macro (`facts`, `stat_row`); every public macro has a catalog example |
@@ -117,6 +119,10 @@ unless they start with `docs/`.
   tests/core/test_render_diff_transition_coverage.py
   tests/core/test_module_size_budget.py`, and the template's own tests for
   what changed (its `tests/core/test_tools.py` for a tool) run in `my-app/`.
+- `patterns check --strict <changed app paths>` in `my-app/` (or the scratch
+  stack that has them) once the code is written: the same rules Illiana
+  gates in CI, so a dict-returning read or a self-opened session is caught
+  here, not on the PR.
 - `uv run pytest tests/core` and the generated app's `tests/test_saved_settings.py`
   before push.
 - `make test-stacks-quick` for a cross-cutting template change; CI runs the

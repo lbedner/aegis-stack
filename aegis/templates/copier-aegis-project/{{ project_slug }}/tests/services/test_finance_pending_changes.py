@@ -332,8 +332,8 @@ class TestBatches:
             svc.db, rows, exclude_ids=[vetoed.id]
         )
 
-        assert summary["approved"] == 2
-        assert summary["rejected"] == 1
+        assert summary.approved == 2
+        assert summary.rejected == 1
         await async_db_session.refresh(txns[0])
         await async_db_session.refresh(txns[1])
         assert txns[0].category_id == groceries.id
@@ -349,7 +349,7 @@ class TestBatches:
 
         summary = await change_queue.reject_rows(svc.db, rows)
 
-        assert summary["rejected"] == 3
+        assert summary.rejected == 3
         for txn in txns:
             await async_db_session.refresh(txn)
             assert txn.category_id is None
@@ -370,8 +370,8 @@ class TestBatches:
 
         summary = await change_queue.approve_rows(svc.db, rows)
 
-        assert summary["approved"] == 2
-        assert summary["failed"] == 1
+        assert summary.approved == 2
+        assert summary.failed == 1
         await async_db_session.refresh(doomed)
         assert doomed.status == "pending"
         assert doomed.result.get("error")

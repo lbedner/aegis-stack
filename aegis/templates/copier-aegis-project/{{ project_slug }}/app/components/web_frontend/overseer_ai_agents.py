@@ -166,7 +166,7 @@ async def render_preview(db: Any, slug: str) -> str | None:
     )
 
 
-async def fact_rows(db: Any) -> list[dict[str, Any]]:
+async def fact_rows(db: Any) -> list[Any]:
     """The facts saved about the user, each with the index that addresses it."""
     from app.services.ai.domains.chat.user_memory import (
         DEFAULT_MEMORY_USER_ID,
@@ -201,12 +201,12 @@ async def memory_context(db: Any, query: Any) -> dict[str, Any]:
         ],
         "facts": [
             {
-                "fact": f["fact"],
-                "category": f.get("category"),
-                "saved": format_relative_time(f.get("saved_at")),
-                "edit": hx_dialog(f"{PARTIALS}/facts/{f['index']}/edit", "data-write"),
+                "fact": f.fact,
+                "category": f.category,
+                "saved": format_relative_time(f.saved_at),
+                "edit": hx_dialog(f"{PARTIALS}/facts/{f.index}/edit", "data-write"),
                 "forget": hx_dialog(
-                    f"{PARTIALS}/facts/{f['index']}/confirm-forget", "data-write"
+                    f"{PARTIALS}/facts/{f.index}/confirm-forget", "data-write"
                 ),
             }
             for f in await fact_rows(db)

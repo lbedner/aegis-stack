@@ -10,6 +10,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from app.services.rag.collections import collection_info
 from app.services.rag.config import get_rag_service
 from app.services.rag.service import (
     IndexingError,
@@ -212,18 +213,13 @@ async def get_collection_info(collection_name: str) -> CollectionInfoResponse:
         HTTPException: If collection not found
     """
     try:
-        stats = await get_rag_service().get_collection_stats(collection_name)
+        stats = await collection_info(collection_name)
         if not stats:
             raise HTTPException(
                 status_code=404, detail=f"Collection '{collection_name}' not found"
             )
 
-        return CollectionInfoResponse(
-            name=stats["name"],
-            count=stats["count"],
-            doc_count=stats.get("doc_count", 0),
-            metadata=stats.get("metadata", {}),
-        )
+        return CollectionInfoResponse(**stats.model_dump())
     except HTTPException:
         raise
     except Exception as e:
@@ -250,7 +246,7 @@ async def get_collection_files(collection_name: str) -> CollectionFilesResponse:
     """
     try:
         # Check collection exists first
-        stats = await get_rag_service().get_collection_stats(collection_name)
+        stats = await collection_info(collection_name)
         if not stats:
             raise HTTPException(
                 status_code=404, detail=f"Collection '{collection_name}' not found"

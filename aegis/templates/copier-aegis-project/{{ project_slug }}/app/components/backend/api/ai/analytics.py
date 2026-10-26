@@ -60,10 +60,13 @@ async def get_sentiment_stats() -> dict[str, Any]:
     the most recent negative conversations, plus whether the scoring job
     is enabled. Zero-filled when nothing has been scored yet.
     """
+    from app.core.db import get_async_session
     from app.services.ai.domains.chat.sentiment import sentiment_stats
 
     try:
-        return await sentiment_stats()
+        async with get_async_session() as session:
+            stats = await sentiment_stats(session=session)
+        return stats.model_dump(mode="json")
     except Exception as e:
         logger.exception("Failed to get sentiment stats")
         raise HTTPException(

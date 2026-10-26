@@ -151,6 +151,25 @@ async def test_the_items_aggregate_counts_live_finds_by_source_and_kind(
     assert ever.by_kind == {"story": 1, "comment": 1}
     assert "Private" not in ever.model_dump_json()
 
+async def test_the_health_checks_counts_are_a_model(
+    async_db_session: AsyncSession, site: FakeSite
+) -> None:
+    """Every owner's watches and items, and the last run, typed."""
+    from app.services.research.models import ResearchCounts
+    from app.services.research.queries import research_counts
+
+    svc = ResearchService(async_db_session, owner_user_id=None)
+    watch = await svc.add_watch("fake", "Mine", {"q": "t"})
+    site.results["t"] = [story("1", "Launch")]
+    await svc.refresh_watch(watch.id)  # type: ignore[arg-type]
+
+    counts = await research_counts(async_db_session)
+
+    assert isinstance(counts, ResearchCounts)
+    assert (counts.watches, counts.items) == (1, 1)
+    assert counts.last_refresh is not None
+
+
 async def test_search_finds_text_across_what_the_watches_found(
     async_db_session: AsyncSession, site: FakeSite
 ) -> None:

@@ -4,7 +4,8 @@ failure here is reported by the health walk itself."""
 
 from app.core.db import get_async_session
 from app.core.formatting import counted
-from app.services.research.service import installed_sources, research_counts
+from app.services.research.queries import research_counts
+from app.services.research.service import installed_sources
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
 RESEARCH_COMPONENT_NAME = "research"
@@ -13,7 +14,9 @@ RESEARCH_COMPONENT_NAME = "research"
 async def check_research_service_health() -> ComponentStatus:
     async with get_async_session() as session:
         counts = await research_counts(session)
-    metadata = {**counts, "sources": [s.name for s in installed_sources()]}
+    metadata = counts.model_dump(mode="json") | {
+        "sources": [s.name for s in installed_sources()]
+    }
     if not metadata["sources"]:
         return ComponentStatus(
             name=RESEARCH_COMPONENT_NAME,
@@ -24,7 +27,7 @@ async def check_research_service_health() -> ComponentStatus:
     return ComponentStatus(
         name=RESEARCH_COMPONENT_NAME,
         status=ComponentStatusType.HEALTHY,
-        message=f"{counted(counts['watches'], 'watch', 'watches')}, "
-        f"{counted(counts['items'], 'item')}",
+        message=f"{counted(counts.watches, 'watch', 'watches')}, "
+        f"{counted(counts.items, 'item')}",
         metadata=metadata,
     )

@@ -22,6 +22,7 @@ import pytest
 
 from app.services.ai.domains.chat.agent_loader import AgentConfig, default_agent_config
 from app.services.ai.domains.chat.prompts import LEGACY_SYSTEM_PROMPT
+from app.services.ai.domains.chat.user_memory import UserContext
 from app.services.ai.service import AIService
 import app.services.ai.service.chat as chat_module
 import app.services.ai.service.prompt as prompt_module
@@ -116,8 +117,8 @@ def harness(
     # The user-memory block opens the app's REAL async engine. Left unstubbed
     # it binds that engine's pool to whichever test loop touches it first,
     # after which any later test on a fresh loop dies inside asyncpg.
-    async def no_memory(user_id: str, **kwargs: object) -> None:
-        return None
+    async def no_memory(user_id: str, **kwargs: object) -> UserContext:
+        return UserContext(memory=None, readings=[])
 
     monkeypatch.setattr(turn_module, "build_user_memory_context", no_memory)
 
@@ -675,9 +676,12 @@ class TestUserMemoryInjection:
         service, _, captured, monkeypatch = harness
         _stub_resolve(monkeypatch, default_agent_config())
 
-        async def fake_memory(user_id: str) -> str:
+        async def fake_memory(user_id: str) -> UserContext:
             assert user_id == "u9"
-            return "<user_memory>\n- [food] allergic to peanuts\n</user_memory>"
+            return UserContext(
+                memory="<user_memory>\n- [food] allergic to peanuts\n</user_memory>",
+                readings=[],
+            )
 
         monkeypatch.setattr(turn_module, "build_user_memory_context", fake_memory)
 

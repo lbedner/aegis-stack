@@ -5,11 +5,10 @@ sense. The hub module ``executors`` registers these."""
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
-
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.figures import FIGURES
 from app.services.change_queue.schemas import ChangeDisplayRow
 from app.services.finance.domains.ledger import categories, merchants, transactions
 from app.services.finance.domains.writes.display import (
@@ -31,9 +30,16 @@ class CategorizePayload(BaseModel):
     category_id: int = Field(description="The category, from categories().")
 
 
+class Categorized(BaseModel):
+    model_config = FIGURES
+
+    transaction_id: int
+    category_id: int
+
+
 async def categorize_execute(
     db: AsyncSession, payload: CategorizePayload, owner_user_id: int | None
-) -> dict[str, Any]:
+) -> Categorized:
     txn = await categories.categorize_transaction(
         db,
         payload.transaction_id,
@@ -43,7 +49,9 @@ async def categorize_execute(
     )
     if txn is None:
         raise ValueError(f"Transaction {payload.transaction_id} not found.")
-    return {"transaction_id": txn.id, "category_id": payload.category_id}
+    return Categorized(
+        transaction_id=payload.transaction_id, category_id=payload.category_id
+    )
 
 
 async def categorize_describe(
@@ -101,9 +109,17 @@ class AssignPayeePayload(BaseModel):
         return value.strip()
 
 
+class PayeeAssigned(BaseModel):
+    model_config = FIGURES
+
+    transaction_id: int
+    merchant_id: int | None
+    merchant: str
+
+
 async def assign_payee_execute(
     db: AsyncSession, payload: AssignPayeePayload, owner_user_id: int | None
-) -> dict[str, Any]:
+) -> PayeeAssigned:
     merchant = await merchants.create_merchant(
         db, payload.payee, owner_user_id=owner_user_id
     )
@@ -112,11 +128,11 @@ async def assign_payee_execute(
     )
     if updated == 0:
         raise ValueError(f"Transaction {payload.transaction_id} not found.")
-    return {
-        "transaction_id": payload.transaction_id,
-        "merchant_id": merchant.id,
-        "merchant": merchant.name,
-    }
+    return PayeeAssigned(
+        transaction_id=payload.transaction_id,
+        merchant_id=merchant.id,
+        merchant=merchant.name,
+    )
 
 
 async def assign_payee_describe(
@@ -195,9 +211,19 @@ def _tag_rows(
     ]
 
 
+class Tagged(BaseModel):
+    """A tag put on, or taken off (``removed``: rows it left)."""
+
+    model_config = FIGURES
+
+    transaction_id: int
+    tag_id: int | None
+    removed: int | None = None
+
+
 async def tag_execute(
     db: AsyncSession, payload: TagPayload, owner_user_id: int | None
-) -> dict[str, Any]:
+) -> Tagged:
     txn = await transactions.get_transaction(
         db, payload.transaction_id, owner_user_id=owner_user_id
     )
@@ -206,7 +232,7 @@ async def tag_execute(
     tag = await transactions.tag_transactions(
         db, [payload.transaction_id], payload.tag, owner_user_id=owner_user_id
     )
-    return {"transaction_id": payload.transaction_id, "tag_id": tag.id}
+    return Tagged(transaction_id=payload.transaction_id, tag_id=tag.id)
 
 
 def _tagged(before: list[str], tag: str) -> list[str]:
@@ -237,7 +263,7 @@ async def tag_describe(
 
 async def untag_execute(
     db: AsyncSession, payload: TagPayload, owner_user_id: int | None
-) -> dict[str, Any]:
+) -> Tagged:
     from app.services.finance.domains.ledger.queries import transactions as queries
     from app.services.finance.utils import normalize_payee
 
@@ -250,11 +276,7 @@ async def untag_execute(
     removed = await transactions.untag_transactions(
         db, [payload.transaction_id], tag.id, owner_user_id=owner_user_id
     )
-    return {
-        "transaction_id": payload.transaction_id,
-        "tag_id": tag.id,
-        "removed": removed,
-    }
+    return Tagged(transaction_id=payload.transaction_id, tag_id=tag.id, removed=removed)
 
 
 async def untag_describe(

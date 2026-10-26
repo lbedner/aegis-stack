@@ -464,13 +464,6 @@ class RAGService:
         """List all ChromaDB collections."""
         return await self.vectorstore.list_collections()
 
-    async def get_collection_stats(self, collection_name: str) -> dict[str, Any] | None:
-        """Get statistics for a collection."""
-        info = await self.vectorstore.get_collection_info(collection_name)
-        if info:
-            return info.model_dump()
-        return None
-
     async def delete_collection(self, collection_name: str) -> bool:
         """Delete a ChromaDB collection."""
         return await self.vectorstore.delete_collection(collection_name)

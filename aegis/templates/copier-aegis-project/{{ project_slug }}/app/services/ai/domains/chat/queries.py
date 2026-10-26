@@ -12,6 +12,7 @@ from collections.abc import Iterable, Sequence
 from datetime import datetime
 
 from app.models.conversation import Conversation, ConversationMessage
+from app.services.ai.models.conversation import ConversationStats
 from app.services.ai.models.agents import (
     Agent,
     AgentPromptChange,
@@ -62,6 +63,20 @@ async def message_count(session: AsyncSession) -> int:
     return (
         await session.exec(select(func.count()).select_from(ConversationMessage))
     ).one()
+
+
+async def conversation_stats(session: AsyncSession) -> ConversationStats:
+    """How much has been said, across every user."""
+    conversations = await conversation_count(session)
+    messages = await message_count(session)
+    return ConversationStats(
+        total_conversations=conversations,
+        total_messages=messages,
+        unique_users=await distinct_user_count(session),
+        average_messages_per_conversation=(
+            messages / conversations if conversations else 0
+        ),
+    )
 
 
 async def distinct_user_count(session: AsyncSession) -> int:

@@ -26,16 +26,13 @@ class StatusMixin(AIServiceBase):
         )
 
     async def get_service_status(self) -> dict[str, Any]:
-        """Get current service status and metrics."""
-        stats = await self.conversation_manager.get_stats()
-        total_conversations = stats["total_conversations"]
-
+        """How the service is set up (the conversations it holds are the
+        caller's read: ``conversation_stats``)."""
         return {
             "enabled": self.config.enabled,
             "provider": self.config.provider,
             "model": self.config.model,
             "agent_initialized": True,  # Agents created per request, always available
-            "total_conversations": total_conversations,
             "configuration_valid": not await self.config.validate_configuration(
                 self.settings
             ),

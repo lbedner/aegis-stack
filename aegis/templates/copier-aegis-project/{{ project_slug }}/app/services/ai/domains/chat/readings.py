@@ -41,7 +41,7 @@ from app.core.tools import register_tool
 _MAX_READINGS_PER_USER = 8
 
 # The turn's staging area; None outside a chat turn.
-_staged: ContextVar[list[dict[str, Any]] | None] = ContextVar(
+_staged: ContextVar[list[Reading] | None] = ContextVar(
     "staged_readings", default=None
 )
 
@@ -67,11 +67,16 @@ class Reading(BaseModel):
     items: list[ReadingItem] = Field(min_length=1)
 
 
+def kept_readings(raw: list[dict[str, Any]]) -> list[Reading]:
+    """Readings as stored (the user's row, or a thread's legacy list)."""
+    return [Reading.model_validate(r) for r in raw]
+
+
 @contextmanager
-def reading_stage() -> Iterator[list[dict[str, Any]]]:
+def reading_stage() -> Iterator[list[Reading]]:
     """The turn wrapper: opens a staging list ``record_reading`` writes
     into; the caller merges it into the user's store after the run."""
-    staged: list[dict[str, Any]] = []
+    staged: list[Reading] = []
     token = _staged.set(staged)
     try:
         yield staged
@@ -100,13 +105,13 @@ async def record_reading(
         reading = Reading(kind=kind, title=title, items=items)
     except ValidationError as e:
         return {"error": f"invalid reading: {e}"}
-    staged.append(reading.model_dump())
+    staged.append(reading)
     return {"recorded": len(reading.items), "title": reading.title}
 
 
 async def merge_staged_readings(
     user_id: str,
-    staged: list[dict[str, Any]],
+    staged: list[Reading],
     legacy: list[dict[str, Any]] | None = None,
 ) -> None:
     """Fold the turn's staged readings into the user's store, newest
@@ -137,24 +142,12 @@ async def merge_staged_readings(
     async with get_async_session() as session:
         readings = await load_user_readings(session, user_id)
         if not readings and legacy:
-            readings = list(legacy)
+            readings = kept_readings(legacy)
         readings.extend(staged)
         await store_user_readings(session, user_id, readings[-_MAX_READINGS_PER_USER:])
 
 
-async def user_readings(user_id: str) -> list[dict[str, Any]]:
-    """Everything this user has recorded, for the turn about to run."""
-    try:
-        from app.core.db import get_async_session
-        from app.services.ai.domains.chat.user_memory import load_user_readings
-    except ImportError:
-        return []  # no store on a memory backend; see merge_staged_readings
-
-    async with get_async_session() as session:
-        return await load_user_readings(session, user_id)
-
-
-def format_readings(readings: list[dict[str, Any]] | None) -> str | None:
+def format_readings(readings: list[Reading] | None) -> str | None:
     """The context block for stored readings, or None when there are
     none - rendered fresh into every turn so the extraction outlives
     the image it came from."""
@@ -166,24 +159,22 @@ def format_readings(readings: list[dict[str, Any]] | None) -> str | None:
         "images are gone, these records are authoritative:",
     ]
     for reading in readings:
-        lines.append(f"\n### {reading.get('title')} ({reading.get('kind')})")
+        lines.append(f"\n### {reading.title} ({reading.kind})")
         current_group: str | None = None
-        for item in reading.get("items") or []:
-            group = item.get("group")
+        for item in reading.items:
+            group = item.group
             if group and group != current_group:
                 lines.append(f"[{group}]")
                 current_group = group
-            piece = f"- {item.get('label')}"
-            quantity = item.get("quantity") or 1
-            if quantity > 1:
-                piece += f" x{quantity}"
-            amount = item.get("amount_cents")
-            if amount is not None:
-                piece += f" - ${amount / 100:.2f}"
-                if quantity > 1:
+            piece = f"- {item.label}"
+            if item.quantity > 1:
+                piece += f" x{item.quantity}"
+            if item.amount_cents is not None:
+                piece += f" - ${item.amount_cents / 100:.2f}"
+                if item.quantity > 1:
                     piece += " each"
-            if item.get("note"):
-                piece += f" ({item['note']})"
+            if item.note:
+                piece += f" ({item.note})"
             lines.append(piece)
     return "\n".join(lines)
 

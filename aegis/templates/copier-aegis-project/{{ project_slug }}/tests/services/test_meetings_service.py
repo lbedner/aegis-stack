@@ -23,12 +23,14 @@ from app.services.meetings.models import (
     Meeting,
     MeetingParticipant,
     MeetingPerson,
+    MeetingsCounts,
     MeetingStatus,
     Notes,
     Platform,
     TranscriptLine,
     TranscriptRow,
 )
+from app.services.meetings.queries import meetings_counts
 from app.services.meetings.service import (
     STALE_SECONDS,
     MeetingInProgressError,
@@ -40,7 +42,6 @@ from app.services.meetings.service import (
     detect_platform,
     fail_interrupted,
     heard_line,
-    meetings_counts,
     transition,
     voice,
     voices,
@@ -190,7 +191,9 @@ async def test_the_counts_cover_every_owner(async_db_session: AsyncSession) -> N
         "https://zoom.us/j/81234567890"
     )
 
-    assert await meetings_counts(async_db_session) == {"meetings": 2, "in_call": 0}
+    assert await meetings_counts(async_db_session) == MeetingsCounts(
+        meetings=2, in_call=0
+    )
 
 
 async def test_the_meetings_aggregate_counts_each_status_and_platform(

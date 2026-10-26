@@ -33,7 +33,7 @@ from app.services.ai.domains.chat.readings import (
 )
 {%- else %}
 from app.services.ai.domains.chat.attachments import ChatAttachment
-from app.services.ai.domains.chat.readings import merge_staged_readings
+from app.services.ai.domains.chat.readings import Reading, merge_staged_readings
 {%- endif %}
 {%- if ai_backend != "memory" and ai_framework == "pydantic-ai" %}
 from app.services.ai.domains.chat.cards import attach_cards, card_stage
@@ -320,7 +320,7 @@ class StreamingMixin(ChatMixin):
 {%- else %}
             # LangChain: what the model calls runs between its rounds, as
             # the caller, each chunk read as a ``Piece`` (``langchain_turn``).
-            staged_readings: list[dict[str, Any]] = []
+            staged_readings: list[Reading] = []
             async for piece in langchain_turn.run(
                 llm,
                 messages,

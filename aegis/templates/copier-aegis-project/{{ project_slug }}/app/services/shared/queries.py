@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
+
+
+def day_of(value: date | str) -> str:
+    """A ``func.date(...)`` column's value as ``YYYY-MM-DD``: a ``date`` on
+    PostgreSQL, already a string on SQLite."""
+    return value if isinstance(value, str) else value.isoformat()
 
 
 def within(column: Any, start: Any | None, end: Any | None) -> list[Any]:

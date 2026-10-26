@@ -17,10 +17,10 @@ from pydantic import BaseModel
 
 from app.core import replays
 from app.core.edges import part_of
+from app.core.figures import FIGURES
 from app.core.ontology import Kind, current
 from app.core.ontology.model import parse_node_id
 from app.services.system import service_pieces
-from app.services.system.node_now import FIGURES
 
 
 class _Read(BaseModel):

@@ -119,7 +119,7 @@ def test_a_chart_spans_its_window_even_with_nothing_in_it(
 
 
 def test_the_windows_read_like_every_other_range_row() -> None:
-    """The chips' compact labels (as ``web_frontend/ranges.py`` has them),
+    """The chips' compact labels (as ``app/core/ranges.py`` has them),
     never longer than what is kept."""
     assert [label for _, label in series.WINDOWS] == ["15m", "30m", "1h"]
     assert max(seconds for seconds, _ in series.WINDOWS) <= series.KEEP_SECONDS

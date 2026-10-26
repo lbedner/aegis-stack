@@ -5,6 +5,8 @@ from collections import defaultdict
 from collections.abc import Callable
 from datetime import datetime, time, timedelta
 
+from sqlmodel.ext.asyncio.session import AsyncSession
+
 from app.core.db import get_async_session
 from app.core.time import today, utcnow
 from app.services.ai.domains.spend import queries
@@ -15,15 +17,23 @@ Usage = dict[tuple[str, str], tuple[int, int, float]]  # by vendor and action
 
 
 async def spend_windows() -> tuple[UsageWindow, ...]:
-    """Each window with what it covers, and what it cost by vendor, by
-    action (a voice kind by its name) and by voice or text, in one read."""
+    """Today, the last 7 days and all time (what the AI node carries)."""
     starts: dict[str, datetime | None] = {
         "today": datetime.combine(today(), time.min),
         "last 7 days": utcnow() - timedelta(days=7),
         "all time": None,
     }
     async with get_async_session() as session:
-        usage = await queries.usage_windows(session, list(starts.values()))
+        return await spend_since(starts, session)
+
+
+async def spend_since(
+    starts: dict[str, datetime | None], session: AsyncSession
+) -> tuple[UsageWindow, ...]:
+    """Each window (its label, and when it starts) with what it cost by
+    vendor, by action (a voice kind by its name) and by voice or text, in
+    one read."""
+    usage = await queries.usage_windows(session, list(starts.values()))
     return tuple(
         _window(label, since, {key: figures[i] for key, figures in usage.items()})
         for i, (label, since) in enumerate(starts.items())

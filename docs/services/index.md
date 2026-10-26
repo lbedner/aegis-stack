@@ -141,6 +141,7 @@ not what it is called:
 | `tools.py` | what it hands the AI: its chat tools | optional |
 | `change_types.py` | what it hands the change queue: its executors | optional |
 | `sources.py` | what it hands research: the sources a plugin registers | optional |
+| `aggregates.py` | what it holds, as figures an agent reads: `AGGREGATES`, each a count or sum by label, never rows | optional |
 | `adapters/` | what it talks to: providers, file formats, collectors, kept apart from what it knows (`domains/`) | optional |
 | `constants.py`, `utils.py` | shared values and helpers | optional |
 | `settings.py` | the settings mixin `app.core.config`'s `Settings` inherits (meetings', or a plugin's through `settings_mixins`) | optional |

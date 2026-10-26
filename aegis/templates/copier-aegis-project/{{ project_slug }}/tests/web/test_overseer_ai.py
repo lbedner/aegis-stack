@@ -15,8 +15,8 @@ pytest.importorskip("app.services.ai", reason="no AI service in this stack")
 from app.components.web_frontend import (  # noqa: E402
     overseer_ai_catalog,
     overseer_settings,
-    ranges,
 )
+from app.core import ranges  # noqa: E402
 from app.core.config import settings  # noqa: E402
 from app.services.ai.models import PROVIDERS  # noqa: E402
 from app.services.ai.schemas import UsageStatsResponse  # noqa: E402

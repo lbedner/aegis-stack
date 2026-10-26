@@ -36,6 +36,19 @@ def import_modules_named(package: ModuleType, name: str) -> list[ModuleType]:
     return [importlib.import_module(found) for found in modules_named(package, name)]
 
 
+def declared_by(package: ModuleType, name: str, attr: str) -> list[tuple[str, Any]]:
+    """Each child package's ``attr`` from its ``name`` module, with the
+    child's own name (``app.services.<part>``: its part, a plugin's too), in
+    name order. A ``name`` module declaring no ``attr`` is an error."""
+    found = []
+    for module in import_modules_named(package, name):
+        declared = getattr(module, attr, None)
+        if declared is None:
+            raise ValueError(f"{module.__name__} declares no {attr}")
+        found.append((module.__name__.split(".")[2], declared))
+    return found
+
+
 def optional(module: str, name: str | None = None) -> Any:
     """``module`` (or its ``name``) where the stack has it, else None: a
     part rendered only with what it needs (a writer that asks a model). A

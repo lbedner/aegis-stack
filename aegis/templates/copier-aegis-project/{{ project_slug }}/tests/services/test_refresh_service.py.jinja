@@ -493,5 +493,25 @@ class TestRefreshServiceLazySweep:
         # Planted by its key as stored, so look it up the same way.
         gone = await async_db_session.get(RefreshToken, "expired-stub-token")
         assert gone is None
+
+
+@pytest.mark.asyncio
+async def test_the_sign_ins_aggregate_counts_each_day(
+    async_db_session: AsyncSession, user_factory
+) -> None:
+    """``auth.sign_ins``: each sign-in once, and each user active that
+    day once; figures, never who."""
+    from app.services.auth import aggregates
+
+    ada, bob = await user_factory(), await user_factory()
+    service = RefreshService(async_db_session)
+    for user in (ada, ada, bob):
+        await service.mint(user.id)
+    (counted,) = aggregates.AGGREGATES
+
+    week = await counted.read(async_db_session, 7)
+
+    today = _now().date().isoformat()
+    assert (week.sign_ins, week.active_users) == ({today: 3}, {today: 2})
 {% endif %}
 {%- endif %}

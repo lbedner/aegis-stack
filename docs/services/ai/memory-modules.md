@@ -35,7 +35,7 @@ A module must have `prompt_content`, `fetch_function`, or both; creating or edit
 
 ## The App Map
 
-The default `assistant` always has one module, `app_map`, seeded with the agent: what the app is, read from its code. It lists each top-level part with what it is for, the tables by owner with the tables each links to, and the changes an agent may propose. An admin's map includes the parts; anyone else's is the tables and changes alone, as the `ontology` tool answers each. It carries nothing live (no traffic, health or row counts), so its text stays the same turn to turn and a provider's prompt cache serves it. The `ontology` tool stays for depth: one node, its neighbours, the paths between two. Another agent opts in by adding `app_map` to its `memory_modules`.
+The default `assistant` always has one module, `app_map`, seeded with the agent: what the app is, read from its code. It lists each top-level part with what it is for, the tables by owner with the tables each links to, and the changes an agent may propose. An admin's map includes the parts and the aggregates the `aggregate` tool reads; anyone else's is the tables and changes alone, as the `ontology` tool answers each. It carries nothing live (no traffic, health or row counts), so its text stays the same turn to turn and a provider's prompt cache serves it. The `ontology` tool stays for depth: one node, its neighbours, the paths between two. Another agent opts in by adding `app_map` to its `memory_modules`.
 
 ## Writing a Fetcher
 

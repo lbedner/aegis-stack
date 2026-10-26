@@ -12,11 +12,11 @@ from typing import Any
 from pydantic import BaseModel
 
 from app.core.db import get_async_session
+from app.core.figures import FIGURES
 from app.core.time import utcnow
 from app.core.tools import register_tool
 from app.services.ai.domains.llm import queries
 from app.services.ai.models.llm import LargeLanguageModel, LLMPrice
-from app.services.ai.schemas import FIGURES
 
 
 async def context_window_for(model_id: str) -> int | None:

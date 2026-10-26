@@ -241,4 +241,44 @@ async def test_stats_for_many_jobs_come_from_one_query(
     assert stats["a"]["last_run"]["status"] == "failed"
     assert stats["b"]["total_runs"] == 1
     assert stats["never"]["total_runs"] == 0
+
+
+async def test_the_runs_aggregate_counts_by_job_status_and_day(
+    async_db_session: AsyncSession,
+) -> None:
+    """``scheduler.runs``: figures only, over one of the app's windows."""
+    from app.core.time import utcnow
+    from app.services.scheduler import aggregates
+
+    now = utcnow()
+    runs = [
+        ("backup", "success", 0),
+        ("backup", "failed", 0),
+        ("backup", "success", 1),
+        ("sync", "success", 0),
+        ("sync", "success", 30),
+    ]
+    await _seed(
+        async_db_session,
+        [
+            {
+                "job_id": job,
+                "job_name": job,
+                "started_at": now - timedelta(days=ago),
+                "status": status,
+            }
+            for job, status, ago in runs
+        ],
+    )
+    (counted,) = aggregates.AGGREGATES
+
+    week = await counted.read(async_db_session, 7)
+
+    assert week.total == 4
+    assert week.by_job == {
+        "backup": {"failed": 1, "success": 2},
+        "sync": {"success": 1},
+    }
+    assert sum(week.by_day.values()) == 4 and len(week.by_day) == 2
+    assert (await counted.read(async_db_session, None)).total == 5
 {% endif %}

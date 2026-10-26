@@ -1,0 +1,31 @@
+{%- if scheduler_backend != "memory" %}
+"""Reads over the scheduler's run history that count rather than list:
+what its aggregates are made of."""
+
+from datetime import datetime
+
+from sqlalchemy import func
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.services.shared.queries import day_of, within
+
+from .models import JobExecution
+
+
+async def runs_by_day(
+    session: AsyncSession, since: datetime | None
+) -> list[tuple[str, str, str, int]]:
+    """``(job_id, status, day, runs)`` for every run since ``since`` (all
+    retained ones when None), in one GROUP BY."""
+    day = func.date(JobExecution.started_at)
+    stmt = (
+        select(JobExecution.job_id, JobExecution.status, day, func.count())
+        .where(*within(JobExecution.started_at, since, None))
+        .group_by(JobExecution.job_id, JobExecution.status, day)
+    )
+    return [
+        (job_id, status, day_of(on), int(n))
+        for job_id, status, on, n in (await session.exec(stmt)).all()
+    ]
+{% endif %}

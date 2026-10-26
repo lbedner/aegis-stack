@@ -2,7 +2,8 @@
 
 - ``router`` / ``admin_router``: a meeting's moments with what each offers
   (a browser action with the prompt it copies) and what was asked of it,
-  an action asked of one, and its call read over again for them. The caller's own
+  an action asked of one, its call read over again for them, and what one
+  of its lines is about, as Illiana says it (``actions.about``). The caller's own
   (``get_meetings_service``), or every owner's for Overseer: reading the
   admin's (``get_admin_reader``), asking an operator's (``get_admin_actor``).
 - ``runs_router``: a runner on another machine claims a run of the actions
@@ -18,7 +19,7 @@ All go in before the meeting routes: ``runs``, ``runner-tokens`` and
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -31,8 +32,8 @@ from app.services.meetings.deps import (
 )
 from app.services.meetings.domains.actions import runs, tokens
 from app.services.meetings.domains.moments.service import moments_of
-from app.services.meetings.models import MeetingRunnerToken, MomentRecord
-from app.services.meetings.service import MeetingsService
+from app.services.meetings.models import LineAbout, MeetingRunnerToken, MomentRecord
+from app.services.meetings.service import MeetingsService, line_about
 from app.services.shared.deps import get_admin_actor, get_admin_reader
 
 
@@ -128,6 +129,23 @@ def _routes(
         background."""
         with as_http():
             return (await svc.look_over(meeting_id)).moments
+
+    @router.post(
+        "/{meeting_id}/lines/{line_id}/about",
+        response_model=LineAbout,
+        dependencies=change,
+    )
+    async def about(
+        meeting_id: int, line_id: int, svc: MeetingsService = scoped
+    ) -> LineAbout:
+        """What a line of the call is about, as Illiana says it: her words,
+        and the id of the card she drew of the part it names. 404 for a line
+        the meeting does not hold, or a stack without her."""
+        with as_http():
+            said = await line_about(svc, meeting_id, line_id)
+        if said is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "No such line to ask about")
+        return said
 
 
 router = APIRouter(prefix="/meetings", tags=["meetings"])

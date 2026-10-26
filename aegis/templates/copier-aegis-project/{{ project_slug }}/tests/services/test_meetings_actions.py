@@ -13,7 +13,11 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.config import settings
 from app.services.meetings.domains.actions import registry, runs
-from app.services.meetings.domains.actions.registry import Action, register_action
+from app.services.meetings.domains.actions.registry import (
+    ASK_ILLIANA,
+    Action,
+    register_action,
+)
 from app.services.meetings.domains.actions.runs import (
     ActionNotFoundError,
     ask,
@@ -31,11 +35,11 @@ from tests._meetings import (
     topic,
 )
 
-# Ask AI (``ask_ai``) renders only with the AI service on pydantic-ai and a
+# Ask Illiana (``ask_ai``) renders only with the AI service on pydantic-ai and a
 # database.
 needs_her = pytest.mark.skipif(
-    find_spec("app.services.meetings.domains.actions.ask_ai") is None,
-    reason="this stack has no Ask AI",
+    find_spec(ASK_ILLIANA) is None,
+    reason="this stack has no Ask Illiana",
 )
 
 
@@ -572,7 +576,7 @@ async def test_only_a_line_put_to_her_by_name_is_answered_aloud(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """In a call with her live voice, a question asked of an action in the
-    app (a setting asking Ask AI of every question, say) is not said aloud
+    app (a setting asking Ask Illiana of every question, say) is not said aloud
     in the call: only a line put to her by name is."""
     from app.services.meetings.domains.actions.live import LIVE
     from app.services.meetings.domains.moments import service as moments_service
@@ -612,3 +616,66 @@ async def test_only_a_line_put_to_her_by_name_is_answered_aloud(
 
     assert (asked.kind, put_to_her.kind) == ("question", "addressed")
     assert heard[0] is None and heard[1] is not None
+
+
+def test_a_line_is_asked_about_with_the_lines_either_side_of_it() -> None:
+    from app.services.meetings.domains.actions.prompt import around
+
+    said = [("Sam", n, f"line {n}") for n in range(1, 30)]
+
+    found = around(said, 15, either_side=3)
+
+    assert found is not None
+    before, line, after = found
+
+    assert [n for _, n, _ in before] == [12, 13, 14]
+    assert line == ("Sam", 15, "line 15")
+    assert [n for _, n, _ in after] == [16, 17, 18]
+    assert around(said, 99) is None  # not a line of this meeting
+
+
+@needs_her
+async def test_asked_what_a_line_is_about_she_says_and_draws_the_part(
+    async_db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+    acting_owner_user_id: int | None,
+) -> None:
+    """Asked from Overseer, "what is this about?" goes to her with the line
+    and what was said either side, as the meeting's owner and as an admin;
+    she says, and draws the part's wiring where it is one. Nothing is
+    kept."""
+    from types import SimpleNamespace
+
+    from app.services.meetings.domains.actions import ask_ai
+    from app.services.meetings.models import LineAbout
+    from app.services.meetings.service import MeetingsService, line_about
+
+    asked: list[tuple[str, dict[str, Any]]] = []
+    drew = {"tool_trace": [{"component": [{"kind": "chat_card", "id": "card-1"}]}]}
+
+    class Her:
+        async def chat(self, message: str, **kwargs: Any) -> Any:
+            asked.append((message, kwargs))
+            return SimpleNamespace(content="The job runner.", metadata=drew)
+
+    monkeypatch.setattr(ask_ai, "her", Her)
+    meeting_id = await a_meeting(async_db_session, acting_owner_user_id)
+    lines = await said(
+        async_db_session,
+        meeting_id,
+        ("Sam", "The invoices are late."),
+        ("Dana", "We should move the scheduler onto Redis."),
+        ("Sam", "Agreed."),
+    )
+
+    svc = MeetingsService(async_db_session, None)
+    about = await line_about(svc, meeting_id, lines[1])
+
+    assert about == LineAbout(summary="The job runner.", card_id="card-1")
+    message, how = asked[0]
+    assert "The invoices are late." in message and "Agreed." in message
+    assert "Dana: We should move the scheduler onto Redis." in message
+    assert (how["admin"], how["surface"], how["agent_slug"]) == (True, "meetings", None)
+    assert how["owner_user_id"] == acting_owner_user_id
+    runs_kept = (await async_db_session.exec(select(MeetingActionRun))).all()
+    assert runs_kept == []

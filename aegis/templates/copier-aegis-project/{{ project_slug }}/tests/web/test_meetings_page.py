@@ -6,6 +6,7 @@ and without the auth service."""
 
 from collections.abc import Awaitable, Callable
 from typing import Any
+from unittest.mock import AsyncMock
 
 from fastapi.testclient import TestClient
 import pytest
@@ -341,3 +342,60 @@ async def test_the_page_has_the_calendar_of_the_meetings_i_am_invited_to(
         assert "09:00" in text(entries[0])
     [later] = select(html, "#meetings-calendar a[data-month-later]")
     assert "month=2026-11" in (later.get("href") or "")
+
+
+async def test_a_line_asks_her_what_it_is_about(
+    authenticated_client: TestClient,
+    finished: Callable[..., Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every line can be asked "what is this about?": her answer opens under
+    it on the asker's page alone, in a place the live re-read keeps."""
+    from app.components.web_frontend.routes import meetings as page
+    from app.services.meetings.models import LineAbout
+
+    said = LineAbout(summary="Booking the **room**.")
+    monkeypatch.setattr(page, "asks_about", lambda: True)
+    monkeypatch.setattr(page, "line_about", AsyncMock(return_value=said))
+    meeting_id, lines = await finished()
+    asked = f"/meetings/{meeting_id}/lines/{lines[0]}/about"
+
+    html = page_html(authenticated_client, f"/meetings/{meeting_id}")
+    answer = _ok(authenticated_client.post(asked, headers=HX))
+
+    assert one(html, f"#about-line-{lines[0]}").get("hx-preserve") is not None
+    assert one(html, f'[data-about="{lines[0]}"]').get("hx-post") == asked
+    assert text(one(answer, "[data-about-answer] strong")) == "room"
+
+
+async def test_the_card_she_draws_shows_in_her_answer(
+    authenticated_client: TestClient,
+    finished: Callable[..., Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The card her answer drew (a part's wiring, where a line names one)
+    is drawn full size under the line, as the chat draws it."""
+    chat_card = pytest.importorskip("app.services.ai.models.chat_card")
+    from app.components.web_frontend.routes import meetings as page
+    from app.core.db import get_async_session
+    from app.services.meetings.models import LineAbout
+    from tests.web.test_chat_cards import PAYLOADS
+
+    async with get_async_session() as session:
+        card = chat_card.ChatCard(
+            conversation_id="c1", kind="table", payload=PAYLOADS["table"]
+        )
+        session.add(card)
+        card_id = card.id
+
+    said = LineAbout(summary="The workers.", card_id=card_id)
+    monkeypatch.setattr(page, "line_about", AsyncMock(return_value=said))
+    meeting_id, lines = await finished()
+
+    answer = _ok(
+        authenticated_client.post(
+            f"/meetings/{meeting_id}/lines/{lines[0]}/about", headers=HX
+        )
+    )
+
+    assert one(answer, '[data-about-answer] [data-card="table"]') is not None

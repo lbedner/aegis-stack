@@ -278,6 +278,13 @@ def kinds_help() -> str:
     return "\n".join(lines)
 
 
+def last_drawn(trace: list[dict[str, Any]]) -> str | None:
+    """The card a reply drew (its id, from the markers on its steps): one
+    per answer, so a redraw replaces the card before it."""
+    drawn = [m for e in trace for m in card_markers(e) if m["kind"] == MARKER]
+    return drawn[-1]["id"] if drawn else None
+
+
 async def stored_card(card_id: str) -> ChatCard | None:
     """A drawn card by id, read in a session of its own that is closed on
     return: SQLite sessions here BEGIN IMMEDIATE, so a caller holding one

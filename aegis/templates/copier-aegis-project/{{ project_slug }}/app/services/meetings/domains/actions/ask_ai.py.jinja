@@ -1,11 +1,13 @@
 {% if include_ai and ai_backend != "memory" and ai_framework == "pydantic-ai" %}
-"""Ask AI: Illiana answers a moment herself (Overseer's own agent: her
+"""Ask Illiana: she answers a moment herself (Overseer's own agent: her
 prompt, model and tools, the system's ontology among them), from the
 meeting so far, in a conversation of the meetings' own (``SURFACE``, kept
 out of her chat's list). Runs in the app; metered as her turns are. A
 question put to her by name (``addressed``) is answered unasked. In a
 call with her live voice (``actions.live``), the answer to a line put to
-her by name is made through it, heard in the call as she makes it."""
+her by name is made through it, heard in the call as she makes it. Asked
+of any line (``about``), she says what its speaker is talking about
+(``actions.about``)."""
 
 from typing import Any
 from weakref import WeakKeyDictionary
@@ -14,8 +16,10 @@ from app.core.log import logger
 from app.services.meetings.domains.actions.live import LIVE
 from app.services.meetings.domains.actions.prompt import (
     Excerpt,
+    Said,
     said_before,
     the_question,
+    turns,
 )
 from app.services.meetings.domains.actions.registry import (
     ANSWERS,
@@ -24,6 +28,7 @@ from app.services.meetings.domains.actions.registry import (
     Action,
     register_action,
 )
+from app.services.meetings.models import LineAbout
 
 # How she answers in a call: what she says is heard, not read.
 SAY_IT = (
@@ -83,21 +88,61 @@ async def answer(prompt: str, owner_user_id: int | None) -> str:
             return await live.ask(_since(prompt, TOLD.setdefault(live, set())))
         except (RuntimeError, TimeoutError) as exc:
             logger.warning(f"Her live answer failed ({exc}); she answers in chat")
+    return (await _her_turn(prompt, owner_user_id)).content
+
+
+# What she is asked of a line: what its speaker is talking about.
+ABOUT_IT = (
+    "Say what the speaker of the line marked >>> is talking about, for "
+    "someone in the meeting who asked: briefly, in a sentence or three. When "
+    "it is a part of this system (a service, component, job, table, page), "
+    "look it up with your tools, say what it is and does here, and draw its "
+    "wiring (draw_card, kind path, with that part's node). When it is not, "
+    "say what it means in the meeting. Never invent a part."
+)
+
+
+async def about(
+    before: Said,
+    line: tuple[str, int, str],
+    after: Said,
+    *,
+    owner_user_id: int | None,
+    admin: bool | None = None,
+) -> LineAbout:
+    """What ``line`` is about (``ABOUT_IT``), from what was said ``before``
+    and ``after`` it: her words, and the card she drew of the part it names."""
+    from app.services.ai.service import cards  # with her, loaded when asked
+
+    prompt = (
+        f"The meeting around it:\n{turns(before)}\n>>> {turns([line])}\n"
+        f"{turns(after)}\n\n{ABOUT_IT}"
+    )
+    said = await _her_turn(prompt, owner_user_id, admin=admin)
+    trace = (said.metadata or {}).get("tool_trace", [])
+    return LineAbout(summary=said.content, card_id=cards.last_drawn(trace))
+
+
+async def _her_turn(
+    prompt: str, owner_user_id: int | None, admin: bool | None = None
+) -> Any:
+    """A turn of her own agent, as the meeting's owner (its chat ``user_id``
+    theirs, else the default), in the meetings' conversations."""
     owner = {} if owner_user_id is None else {"user_id": str(owner_user_id)}
-    said = await her().chat(
+    return await her().chat(
         prompt,
         owner_user_id=owner_user_id,
+        admin=admin,
         agent_slug=None,
         surface=SURFACE,
         **owner,
     )
-    return said.content
 
 
 register_action(
     Action(
         ANSWERS,
-        "Ask AI",
+        "Ask Illiana",
         QUESTIONS,
         "app",
         run=answer,

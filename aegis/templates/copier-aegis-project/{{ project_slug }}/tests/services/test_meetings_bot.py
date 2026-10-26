@@ -51,13 +51,12 @@ def run(
         call: FakeCall,
         meeting: Meeting | None = None,
         notes: Callable[[int], Any] | None = None,
-        speech: bytes | None = None,
     ) -> Meeting:
         if meeting is None:
             meeting = await MeetingsService(async_db_session, None).request(
                 MEET, "Notes"
             )
-        bot_on(monkeypatch, async_db_session, call, notes=notes, speech=speech)
+        bot_on(monkeypatch, async_db_session, call, notes=notes)
         await bot.run_meeting(meeting.id)  # type: ignore[arg-type]
         await async_db_session.refresh(meeting)
         return meeting
@@ -516,26 +515,19 @@ async def _status(session: AsyncSession, row: Meeting) -> MeetingStatus:
     ).one()
 
 
-async def test_it_joins_as_its_card_and_says_its_announcement_aloud(
+async def test_it_joins_as_its_card_and_announces_itself_in_the_chat_only(
     run: Callable[..., Any],
 ) -> None:
-    call = FakeCall([CallState.IN_CALL, CallState.ENDED])
-
-    await run(call, speech=b"mp3")
-
-    assert call.start.name == "Notes" and call.start.camera
-    assert call.start.image is None
-    assert call.spoken == [b"mp3"]
-    assert call.said[0].startswith("Notes")  # written in the chat as well
-
-
-async def test_with_no_voice_it_only_writes(run: Callable[..., Any]) -> None:
+    """Said aloud, its announcement cut into the call as it joined: it is
+    written in the chat (the notice that what is said is transcribed)."""
     call = FakeCall([CallState.IN_CALL, CallState.ENDED])
 
     await run(call)
 
+    assert call.start.name == "Notes" and call.start.camera
+    assert call.start.image is None
     assert call.spoken == []
-    assert call.said
+    assert call.said[0].startswith("Notes")
 
 
 async def test_its_card_says_it_cannot_see_captions_and_that_it_leaves(

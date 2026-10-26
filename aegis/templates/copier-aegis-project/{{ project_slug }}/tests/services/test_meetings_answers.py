@@ -35,7 +35,7 @@ def voiced(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(answers, "spoken", spoken)
     hold_the_answers(monkeypatch)
     if registry.action_named(registry.ANSWERS) is None:  # a stack without her
-        her = Action(registry.ANSWERS, "Ask AI", registry.QUESTIONS, "app", run=_unused)
+        her = Action(registry.ANSWERS, "Ask Illiana", registry.QUESTIONS, "app", run=_unused)
         monkeypatch.setitem(registry._actions, registry.ANSWERS, her)
 
 

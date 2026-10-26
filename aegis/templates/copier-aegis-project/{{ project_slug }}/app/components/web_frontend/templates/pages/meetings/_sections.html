@@ -70,7 +70,7 @@
   {{ action("Latest line", 'data-scroll-to="#meeting-transcript [data-turn]:last-child"', glyph="arrow-down") }}
 </div>
 {% endif %}
-{{ transcript(turns, clock, voices, hit_line) }}
+{{ transcript(turns, clock, voices, hit_line, base, asks_about) }}
 {% endcall %}
 {% endcall %}
 {% if talk %}

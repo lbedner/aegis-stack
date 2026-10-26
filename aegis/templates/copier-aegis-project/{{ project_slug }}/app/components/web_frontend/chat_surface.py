@@ -290,8 +290,8 @@ def drawn_card_urls(chat: ChatSurface, trace: list[dict[str, Any]]) -> list[str]
         return []
     from app.services.ai.service import cards
 
-    drawn = [m for e in trace for m in card_markers(e) if m["kind"] == cards.MARKER]
-    return [f"{chat.path}/cards/{drawn[-1]['id']}"] if drawn else []
+    drawn = cards.last_drawn(trace)
+    return [f"{chat.path}/cards/{drawn}"] if drawn else []
 
 
 def settled(

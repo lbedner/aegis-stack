@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy import Text
 from sqlmodel import Field, SQLModel
 
+from app.core.figures import FIGURES
 from app.core.time import utcnow
 from app.services.meetings.models.base import _OWNER_FK
 
@@ -93,3 +94,14 @@ class RunRecord(BaseModel):
     runner: str | None = None
     asked_at: datetime
     finished_at: datetime | None = None
+
+
+class LineAbout(BaseModel):
+    """What a line of a call is about, as Illiana says it to the one who
+    asked: her few words, and the card she drew of the part it names (its
+    wiring), where it names one."""
+
+    model_config = FIGURES
+
+    summary: str
+    card_id: str | None = None

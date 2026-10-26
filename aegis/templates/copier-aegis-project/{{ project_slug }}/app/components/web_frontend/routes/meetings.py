@@ -34,9 +34,11 @@ from app.services.meetings.models import Meeting, MeetingRecord
 from app.services.meetings.service import (
     MeetingsService,
     UnsupportedMeetingLinkError,
+    asks_about,
     by_kind,
     call_length,
     heard_rows,
+    line_about,
     send_bot,
     voices,
 )
@@ -49,6 +51,7 @@ Service = Annotated[MeetingsService, Depends(get_meetings_service)]
 LIST = "pages/meetings/index.html"
 PAGE = "pages/meetings/meeting.html"
 BODY = "pages/meetings/_body.html"
+ABOUT = "pages/meetings/_about.html"
 SEND = "pages/meetings/_send.html"
 
 
@@ -178,6 +181,7 @@ def body_context(record: MeetingRecord) -> dict[str, Any]:
             for speaker, rows in groupby(record.transcript, key=lambda r: r.speaker)
         ],
         "clock": {row.id: format_clock(row.at) for row in record.transcript},
+        "asks_about": asks_about(),
         "people": [{"id": name, "name": name} for name in record.people],
         # What the call threw up, a tab per kind, in the order first heard.
         "heard": [
@@ -231,9 +235,10 @@ def meeting_routes(
 ) -> None:
     """The routes one meeting's live body answers: it re-reads itself, asks
     the bot to leave, says which speaker the owner is, writes the notes
-    again, reads the call over again for moments. The Meetings page and Overseer's drawer register the same ones,
-    each with its own service scope, body template and URL ``prefix`` (the
-    router's own), and what else its body shows (``more``)."""
+    again, reads the call over again for moments, asks Illiana what a line
+    is about. The Meetings page and Overseer's drawer register the same
+    ones, each with its own service scope, body template and URL ``prefix``
+    (the router's own), and what else its body shows (``more``)."""
     scoped = Annotated[MeetingsService, Depends(service)]
 
     async def drawn(svc: MeetingsService, record: MeetingRecord) -> HTMLResponse:
@@ -292,6 +297,23 @@ def meeting_routes(
         with as_http():
             await svc.ask(meeting_id, moment_id, action)
         return await read(svc, meeting_id)
+
+    @router.post("/{meeting_id}/lines/{line_id}/about", response_class=HTMLResponse)
+    async def about(
+        svc: scoped,  # type: ignore[valid-type]
+        meeting_id: int,
+        line_id: int,
+    ) -> HTMLResponse:
+        """What a line is about (``actions.about``), drawn under the line."""
+        with as_http():
+            said = await line_about(svc, meeting_id, line_id)
+        if said is None or said.card_id is None:
+            return HTMLResponse(fragment(ABOUT, about=said))
+        # Here: only a stack with Illiana draws a card.
+        from app.components.web_frontend.routes.partials.chat_cards import drawn_full
+
+        card = await drawn_full(said.card_id)
+        return HTMLResponse(fragment(ABOUT, about=said, **card))
 
 
 meeting_routes(router, get_meetings_service, BODY, "/meetings")

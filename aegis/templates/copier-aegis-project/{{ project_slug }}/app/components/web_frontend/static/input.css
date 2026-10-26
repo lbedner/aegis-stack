@@ -24,6 +24,17 @@
     background-color: rgb(255 255 255 / 0.95);
   }
 
+  /* A meeting's transcript line asked what it is about (the meetings
+     page's ask_about): shown on the line's hover or focus; while Illiana
+     answers, the slot her answer opens in says so. */
+  .ask-about {
+    @apply shrink-0 self-start pt-0.5 text-xs text-aegis-muted opacity-0 transition-opacity hover:text-aegis-teal focus:opacity-100 group-hover/line:opacity-100;
+  }
+  .about-slot.htmx-request::before {
+    @apply ml-12 block animate-pulse py-1 text-xs text-aegis-muted;
+    content: "Asking Illiana...";
+  }
+
   /* The desktop Overseer rail keeps its icons and accessible link names.
      Theme.js sets this before the stylesheet paints, so reloads do not flash
      the expanded sidebar. Mobile keeps the full-width navigation. */

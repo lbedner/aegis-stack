@@ -1,0 +1,12 @@
+{# What a line is about, as Illiana says it to the one who asked
+   (``POST <meeting>/lines/<id>/about``): her words, the wiring of the part
+   it names (her path card, full size), and where that part lives in
+   Overseer (``actions.about``). #}
+{% import "components/macros/layout.html" as layout %}
+<div data-about-answer class="mb-2 ml-12 mt-1 space-y-2 raised px-3 py-2">
+  {% if about %}
+  <div class="{{ layout.prose }}">{{ about.summary|markdown }}</div>
+  {% if card %}{{ card|safe }}{% endif %}
+  {% if part and part.url %}<a href="{{ part.url }}" class="text-xs text-aegis-teal hover:underline">Open {{ part.name }} in Overseer</a>{% endif %}
+  {% else %}<p class="text-sm text-aegis-muted">Illiana could not say what this is about.</p>{% endif %}
+</div>

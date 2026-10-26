@@ -98,7 +98,11 @@ async def drawer(
 # written; the bot asked to leave, which speaker the owner is, the notes
 # written again, the same routes as the Meetings page's.
 meeting_routes(
-    router, get_every_owners_meetings, BODY, PREFIX, overseer_meetings.owner_context
+    router,
+    get_every_owners_meetings,
+    BODY,
+    PREFIX,
+    overseer_meetings.owner_context,
 )
 
 

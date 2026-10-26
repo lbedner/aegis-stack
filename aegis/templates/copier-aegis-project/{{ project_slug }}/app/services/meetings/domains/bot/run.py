@@ -10,8 +10,7 @@ row only through the service's ``transition`` and ``heartbeat``. Each step
 opens its own short session, so an hour-long call holds no database
 connection. What it hears goes to whoever the captions say was talking
 (``audio.Hearing``). Its camera shows its card, saying what it is doing,
-and it says who it is aloud where the stack has a voice (``card``,
-``voice``).
+and it says who it is in the chat; it speaks (``voice``) only to answer.
 """
 
 import asyncio
@@ -42,7 +41,6 @@ from app.services.meetings.domains.bot.transcript import BEAT_SECONDS, Transcrip
 from app.services.meetings.domains.bot.voice import (
     live,
     live_engine_of,
-    spoken,
     voice_of,
 )
 from app.services.meetings.domains.moments.tidy import cleaner
@@ -279,38 +277,29 @@ async def _join(
     pulse = _Pulse(meeting_id)
     keep_in = settings.MEETINGS_KEEP_AUDIO_DIR
     hearing = Hearing(Path(keep_in) / str(meeting_id) if keep_in else None)
-    said = announcement(meeting.bot_name)
-    # Made while the bot waits to be let in, so it is said on arrival.
-    speech = asyncio.create_task(spoken(said, voice))
-    try:
-        async with open_meet(
-            meeting.url, hearing.heard, login=login, start=start
-        ) as call:
-            if not await pulse.still_wanted():
-                raise _RunEnded(MeetingStatus.LEFT)
-            await call.ask_to_join(meeting.bot_name)
-            await _step(meeting_id, MeetingStatus.WAITING, MeetingStatus.JOINING)
-            await _admitted(call, pulse)
-            await _step(meeting_id, MeetingStatus.IN_CALL, MeetingStatus.WAITING)
-            transcript = Transcript(meeting_id, meeting.bot_name)
-            await call.say(said)
-            if (aloud := await speech) is not None:
-                await call.speak(aloud)
-            captions = await call.turn_on_captions()
-            if not captions:
-                logger.warning("No captions in this call", meeting_id=meeting_id)
-            shown = _Card(call, pulse, captions)
-            await shown.update()
-            async with live(call, voice, engine, meeting.owner_user_id) as her_voice:
-                answering = Answers(call, voice, her_voice)
-                try:
-                    await _stay(call, pulse, transcript, hearing, shown, answering)
-                finally:
-                    answering.close()
-            await call.show(status=card.LEAVING)
-            await call.leave()
-    finally:
-        speech.cancel()
+    async with open_meet(meeting.url, hearing.heard, login=login, start=start) as call:
+        if not await pulse.still_wanted():
+            raise _RunEnded(MeetingStatus.LEFT)
+        await call.ask_to_join(meeting.bot_name)
+        await _step(meeting_id, MeetingStatus.WAITING, MeetingStatus.JOINING)
+        await _admitted(call, pulse)
+        await _step(meeting_id, MeetingStatus.IN_CALL, MeetingStatus.WAITING)
+        transcript = Transcript(meeting_id, meeting.bot_name)
+        # In the chat only: said aloud, it cut into the call as it joined.
+        await call.say(announcement(meeting.bot_name))
+        captions = await call.turn_on_captions()
+        if not captions:
+            logger.warning("No captions in this call", meeting_id=meeting_id)
+        shown = _Card(call, pulse, captions)
+        await shown.update()
+        async with live(call, voice, engine, meeting.owner_user_id) as her_voice:
+            answering = Answers(call, voice, her_voice)
+            try:
+                await _stay(call, pulse, transcript, hearing, shown, answering)
+            finally:
+                answering.close()
+        await call.show(status=card.LEAVING)
+        await call.leave()
 
 
 async def _after(meeting_id: int) -> None:

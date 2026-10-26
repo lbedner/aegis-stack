@@ -75,11 +75,9 @@ def bot_on(
     notes: Callable[[int], Awaitable[None]] | None = None,
     guides: Callable[[int], Awaitable[None]] | None = None,
     themes: Callable[[int], Awaitable[None]] | None = None,
-    speech: bytes | None = None,
 ) -> None:
     """The bot runs on ``session`` and joins ``call`` instead of a browser,
-    beating on every look; what it says aloud is ``speech`` (no voice when
-    None), and she has no live voice in the call."""
+    beating on every look, and she has no live voice in the call."""
 
     @asynccontextmanager
     async def her_live(
@@ -96,11 +94,6 @@ def bot_on(
     monkeypatch.setattr(bot, "notes_writer", lambda: notes)
     monkeypatch.setattr(bot, "guides_writer", lambda: guides)
     monkeypatch.setattr(bot, "themes_writer", lambda: themes)
-
-    async def spoken(text: str, voice: Any) -> bytes | None:
-        return speech
-
-    monkeypatch.setattr(bot, "spoken", spoken)
 
     @asynccontextmanager
     async def open_meet(

@@ -1,18 +1,16 @@
 """Meetings, read and requested for one owner (``owner_user_id``; ``None``
 on a project without auth reads every meeting)."""
 
-from collections.abc import Awaitable, Callable, Iterable
+from collections.abc import Awaitable, Callable
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlsplit
-import zlib
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.concurrency import background
-from app.core.constants import CHART_RAMP
 from app.core.discovery import optional
-from app.core.formatting import format_clock, format_span
+from app.core.formatting import format_clock
 from app.services.meetings import queries
 from app.services.meetings.domains.bot.row import transition
 from app.services.meetings.domains.moments import service as moments
@@ -21,6 +19,7 @@ from app.services.meetings.domains.notes import queries as notes_queries
 from app.services.meetings.domains.notes.service import notes_of
 from app.services.meetings.domains.people import participants
 from app.services.meetings.domains.people import queries as people_queries
+from app.services.meetings.domains.people.heard import heard_line
 from app.services.meetings.domains.series import queries as series_queries
 from app.services.meetings.models import (
     IN_PROGRESS,
@@ -53,6 +52,10 @@ if TYPE_CHECKING:
         IMAGE_TYPES,
         SWITCHES,
     )
+    from app.services.meetings.domains.actions.about import (  # noqa: F401
+        asks_about,
+        line_about,
+    )
     from app.services.meetings.domains.actions.runs import fail_abandoned  # noqa: F401
     from app.services.meetings.domains.agents import (  # noqa: F401
         load_meetings_agent_fixtures,
@@ -68,6 +71,11 @@ if TYPE_CHECKING:
         send_bot,
     )
     from app.services.meetings.domains.moments.service import by_kind  # noqa: F401
+    from app.services.meetings.domains.people.heard import (  # noqa: F401
+        heard_rows,
+        voice,
+        voices,
+    )
 
 DEFAULT_BOT_NAME = "Notetaker"
 
@@ -341,26 +349,6 @@ def notes_writer() -> Callable[[int], Awaitable[None]] | None:
     return optional(NOTES, "write_notes")
 
 
-def voice(name: str) -> int:
-    """The theme's color a speaker's name points at, 1 to ``CHART_RAMP``: the
-    same in every meeting, unless someone in it already has it
-    (``voices``)."""
-    return zlib.crc32(name.encode()) % CHART_RAMP + 1
-
-
-def voices(names: Iterable[str]) -> dict[str, int]:
-    """A color for each speaker in one meeting, none shared while the
-    colors last: each keeps their name's (``voice``) unless someone already
-    has it, then takes the next free one."""
-    taken: dict[str, int] = {}
-    for name in sorted(set(names)):
-        color = voice(name)
-        while color in taken.values() and len(taken) < CHART_RAMP:
-            color = color % CHART_RAMP + 1
-        taken[name] = color
-    return taken
-
-
 def status_label(status: str) -> str:
     """A meeting's status as the pages say it: "in_call" -> "In call"."""
     return status.replace("_", " ").capitalize()
@@ -372,23 +360,6 @@ def call_length(joined: datetime | None, left: datetime | None) -> str | None:
     if joined is None or left is None:
         return None
     return format_clock((left - joined).total_seconds())
-
-
-def heard_rows(heard: dict[str, float]) -> list[tuple[str, str, float]]:
-    """How long each speaker was heard, most heard first: their name, the
-    time ("4m 10s") and how it compares with the most heard (1.0)."""
-    most = max(heard.values(), default=0) or 1
-    ranked = sorted(heard.items(), key=lambda item: -item[1])
-    return [
-        (name, format_span(seconds) or "0s", seconds / most) for name, seconds in ranked
-    ]
-
-
-def heard_line(heard: dict[str, float]) -> str | None:
-    """``heard_rows`` on one line: "Ada 4m 10s · Leonard 2m 30s"; None when
-    nobody was heard."""
-    rows = heard_rows(heard)
-    return " · ".join(f"{name} {span}" for name, span, _ in rows) or None
 
 
 async def meetings_counts(db: AsyncSession) -> dict[str, Any]:

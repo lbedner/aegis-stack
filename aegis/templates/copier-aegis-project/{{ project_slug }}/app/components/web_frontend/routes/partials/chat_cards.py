@@ -10,7 +10,7 @@ quietly: 200, never 404, because a transcript is a record.
 router does, where there is a database to keep cards in.
 """
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, Response
@@ -19,7 +19,7 @@ from pydantic import ValidationError
 from app.components.web_frontend import chat_surface as chat
 from app.components.web_frontend import overseer_replay
 from app.components.web_frontend.chat_surface import ChatSurface
-from app.components.web_frontend.rendering import dialog, templates
+from app.components.web_frontend.rendering import dialog, fragment, templates
 from app.services.ai.service import PathCard, cards
 
 MISSING = "partials/chat/card_missing.html"
@@ -36,35 +36,62 @@ def add_card_routes(router: APIRouter, mount: ChatSurface) -> None:
         request: Request, bound: Mount, card_id: str, size: str = ""
     ) -> Response:
         row = await cards.stored_card(card_id)
-        kind = cards.lookup(row.kind) if row else None
         if (
             row is None
-            or kind is None
             or await chat.find_conversation(bound, row.conversation_id) is None
         ):
             return templates.TemplateResponse(request=request, name=MISSING)
-        try:
-            # Read through the shape the kind keeps: its defaults fill in,
-            # and a payload an old version stored in another shape is
-            # missing, not a template error.
-            kept = kind.stored.model_validate(row.payload)
-        except ValidationError:
-            return templates.TemplateResponse(request=request, name=MISSING)
         large = size == "large"
-        context = {
-            "card": kept.model_dump(),
-            "card_id": row.id,
-            "card_url": f"{mount.path}/cards/{row.id}",
-            "large": large,
-        }
-        # A path card's map and steps, played as the Replay page plays
-        # them: drawn from its hops, not kept with them.
-        if isinstance(kept, PathCard) and kept.node:
-            context |= await overseer_replay.wiring(kept.node)
-        elif isinstance(kept, PathCard) and kept.path:
-            context |= await overseer_replay.card(kept.path, large)
+        found = await drawn(row, f"{mount.path}/cards/{row.id}", large)
+        if found is None:
+            return templates.TemplateResponse(request=request, name=MISSING)
+        template, context = found
         if large:
-            return dialog(request, kind.template, **context)
+            return dialog(request, template, **context)
         return templates.TemplateResponse(
-            request=request, name=kind.template, context=context
+            request=request, name=template, context=context
         )
+
+
+async def drawn(
+    row: Any, url: str, large: bool = False
+) -> tuple[str, dict[str, Any]] | None:
+    """A kept card (``cards.stored_card``) as its kind draws it: the template
+    and what it is drawn with, at ``url`` (where it opens larger, unless
+    drawn ``large`` already); None for a card whose kind is gone, or whose
+    payload an old version kept in another shape."""
+    kind = cards.lookup(row.kind)
+    if kind is None:
+        return None
+    try:
+        # Read through the shape the kind keeps: its defaults fill in.
+        kept = kind.stored.model_validate(row.payload)
+    except ValidationError:
+        return None
+    context = {
+        "card": kept.model_dump(),
+        "card_id": row.id,
+        "card_url": url,
+        "large": large,
+    }
+    # A path card's map and steps, played as the Replay page plays them:
+    # drawn from its hops, not kept with them.
+    if isinstance(kept, PathCard) and kept.node:
+        context |= await overseer_replay.wiring(kept.node)
+    elif isinstance(kept, PathCard) and kept.path:
+        context |= await overseer_replay.card(kept.path, large)
+    return kind.template, context
+
+
+async def drawn_full(card_id: str) -> dict[str, Any]:
+    """The card ``card_id``, drawn full size (``card``), and where the part
+    it draws lives in Overseer (``part``); nothing for a card that is gone."""
+    from app.components.web_frontend.overseer_database_browser import owner_link
+
+    row = await cards.stored_card(card_id)
+    found = await drawn(row, "", large=True) if row else None
+    if found is None:
+        return {}
+    template, context = found
+    node = context["card"].get("node")
+    return {"card": fragment(template, **context), "part": owner_link(node)}

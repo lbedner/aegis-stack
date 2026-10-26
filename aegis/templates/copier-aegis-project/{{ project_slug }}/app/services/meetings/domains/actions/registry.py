@@ -3,7 +3,7 @@
 An action takes some kinds of moment and runs in one place:
 
 - ``browser`` - nothing to run: the page copies its prompt (Copy for agent)
-- ``app`` - its ``run`` is called in the app, at once (Ask AI)
+- ``app`` - its ``run`` is called in the app, at once (Ask Illiana)
 - ``runner`` - it waits for a runner on another machine to claim it (Ask
   agent: a coding agent in a fresh worktree, ``meetings runner``)
 
@@ -68,6 +68,8 @@ def actions_for(kind: str) -> list[Action]:
 # conversation of the meetings' own (``SURFACE``, kept out of her chat's list).
 ANSWERS = "ai"
 SURFACE = "meetings"
+# Ask Illiana: rendered only with an AI that runs her.
+ASK_ILLIANA = "app.services.meetings.domains.actions.ask_ai"
 # What a coding agent can take: a question, asked of the bot by name or not.
 QUESTIONS = frozenset({QUESTION, ADDRESSED})
 
@@ -75,4 +77,4 @@ register_action(Action("copy", "Copy for agent", QUESTIONS, "browser"))
 register_action(Action("agent", "Ask agent", QUESTIONS, "runner"))
 
 # The stack's model answers too, where it has one.
-optional("app.services.meetings.domains.actions.ask_ai")
+optional(ASK_ILLIANA)

@@ -9,6 +9,13 @@
 
 ### Added
 
+- **A line naming a part of the system offers what it is.** On a
+  meeting's transcript, a line that names a part the stack has (the
+  "finance service", "Redis", "the scheduler", "Plaid") gets a chip:
+  asked, Illiana says what that part is and draws its wiring, as "What's
+  this about?" does. Matched by name, strict, with no model reading the
+  talk (`app/services/meetings/domains/actions/heard.py`).
+
 - **"What's this about?" on any line of a meeting.** On the meeting
   page and in Overseer's drawer, live or after the call, any line can be
   asked what its speaker is talking about: Illiana answers under it, on

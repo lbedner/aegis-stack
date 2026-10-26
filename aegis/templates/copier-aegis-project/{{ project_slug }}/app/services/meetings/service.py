@@ -55,6 +55,7 @@ if TYPE_CHECKING:
     from app.services.meetings.domains.actions.about import (  # noqa: F401
         asks_about,
         line_about,
+        parts_named,
     )
     from app.services.meetings.domains.actions.runs import fail_abandoned  # noqa: F401
     from app.services.meetings.domains.agents import (  # noqa: F401

@@ -21,6 +21,7 @@ import re
 from pydantic import BaseModel
 
 from app.core.figures import FIGURES
+from app.core.terms import term_key, terms_pattern
 
 _FENCED = re.compile(r"```.*?```", re.DOTALL)
 # Link text holds no "[" and a target no "(": each attempt then stops at the
@@ -73,11 +74,6 @@ class Pronunciation(BaseModel):
     @property
     def key(self) -> str:
         return term_key(self.term)
-
-
-def term_key(term: str) -> str:
-    """The one spelling a term is known by, whatever its case."""
-    return term.strip().lower()
 
 
 DEFAULTS = tuple(
@@ -139,14 +135,12 @@ def pronounced(text: str) -> str:
     the list's way. A match whose case does not fold back to its term (a
     dotted capital I) is left as written."""
     found = _by_key()
-    terms = sorted(found, key=len, reverse=True)
-    pattern = r"(?<!\w)(?:" + "|".join(map(re.escape, terms)) + r")(?!\w)"
 
     def said(match: re.Match[str]) -> str:
         known = found.get(term_key(match.group()))
         return known.say if known else match.group()
 
-    return re.sub(pattern, said, text, flags=re.I)
+    return terms_pattern(found).sub(said, text)
 
 
 def pronunciation_instructions() -> str:

@@ -136,13 +136,17 @@ def _routes(
         dependencies=change,
     )
     async def about(
-        meeting_id: int, line_id: int, svc: MeetingsService = scoped
+        meeting_id: int,
+        line_id: int,
+        part: str | None = None,
+        svc: MeetingsService = scoped,
     ) -> LineAbout:
-        """What a line of the call is about, as Illiana says it: her words,
-        and the id of the card she drew of the part it names. 404 for a line
-        the meeting does not hold, or a stack without her."""
+        """What a line of the call is about, as Illiana says it, or the part
+        it names (``part``, a node id: ``component:scheduler``): her words,
+        and the id of the card she drew of the part. 404 for a line the
+        meeting does not hold, or a stack without her."""
         with as_http():
-            said = await line_about(svc, meeting_id, line_id)
+            said = await line_about(svc, meeting_id, line_id, part=part)
         if said is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "No such line to ask about")
         return said

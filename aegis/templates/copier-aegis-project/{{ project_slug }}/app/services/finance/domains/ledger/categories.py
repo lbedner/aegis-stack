@@ -222,11 +222,11 @@ async def spending_by_category(
     db: AsyncSession,
     *,
     owner_user_id: int | None = None,
-    days: int = 30,
+    days: int | None = 30,
     account_ids: list[int] | None = None,
 ) -> list[tuple[str, int]]:
-    """Total outflow per PARENT category over the recent window — the
-    spending breakdown. Expense outflows only (amount < 0), on live
+    """Total outflow per PARENT category over the last ``days`` (all of
+    it, when None) — the spending breakdown. Expense outflows only (amount < 0), on live
     accounts, returned largest-first as positive cents.
 
     Rolled up to the parent segment of a "Parent:Child" category name
@@ -247,7 +247,7 @@ async def spending_by_category(
     ``account_ids`` narrows the breakdown to those accounts (still
     intersected with live accounts and the owner scope, so a stray id can
     never widen the view)."""
-    cutoff = current_date() - timedelta(days=days)
+    cutoff = None if days is None else current_date() - timedelta(days=days)
     rows = await queries.category_spend_totals(
         db, owner_user_id=owner_user_id, start=cutoff, account_ids=account_ids
     )

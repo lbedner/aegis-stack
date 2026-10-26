@@ -270,9 +270,7 @@ async def test_the_runs_aggregate_counts_by_job_status_and_day(
             for job, status, ago in runs
         ],
     )
-    (counted,) = aggregates.AGGREGATES
-
-    week = await counted.read(async_db_session, 7)
+    week = await aggregates.runs(async_db_session, 7)
 
     assert week.total == 4
     assert week.by_job == {
@@ -280,5 +278,5 @@ async def test_the_runs_aggregate_counts_by_job_status_and_day(
         "sync": {"success": 1},
     }
     assert sum(week.by_day.values()) == 4 and len(week.by_day) == 2
-    assert (await counted.read(async_db_session, None)).total == 5
+    assert (await aggregates.runs(async_db_session, None)).total == 5
 {% endif %}

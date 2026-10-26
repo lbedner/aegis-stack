@@ -70,7 +70,7 @@ None. This skill reads; the plan names the files. Where it looks:
 
 | Standard | One home | Rule |
 |---|---|---|
-| Time windows | `app/core/ranges.py` (`WINDOWS`, `ALL`, `since`) | A window is a day count from `WINDOWS`; no new window vocabulary |
+| Time windows | `app/core/ranges.py` (`WINDOWS`, `DAYS`, `ALL`, `since`, `start`) | A window is a day count from `WINDOWS` (`DAYS` without the `ALL` stand-in, for agents); no new window vocabulary |
 | Agent-facing data | `app/core/figures.py` `FIGURES` | Frozen, `extra="forbid"` Pydantic models, sent as `model_dump(mode="json")`, never dicts or preformatted text |
 | Convention modules | `app/core/discovery.py` | Found by module name one level under `app/services/*` (`JOBS`, `tools`, `change_types`); a new name needs a `PIECES` entry in `app/services/system/service_parts.py` and rows in `docs/services/index.md`, `docs/plugins/creating.md` |
 | Tools | `app/core/tools.py` `register_tool` | Every tool declares its effect; add it to `EXPECTED_EFFECTS` in the template's `tests/core/test_tools.py`; Illiana's grant is `default_agent_config()` in `app/services/ai/domains/chat/agent_loader.py.jinja`, MCP's `MCP_TOOLS` in `app/core/config.py.jinja` |
@@ -97,6 +97,11 @@ unless they start with `docs/`.
 - **New part or answer**: prompt scripts shift (`tests/cli/test_guided.py` and
   siblings), the stack goes in `.github/workflows/stack-matrix.yml`, and
   `make parts` and `make readme` regenerate.
+- **New file in a part**: no touched-file run selects that part's
+  `tests/services/test_<part>_module_layout.py` or `test_service_parts.py`;
+  name them in the plan, and run `patterns check --strict <app paths>` in
+  `my-app/` (a read beside an existing one still belongs in `queries.py`;
+  my-app has no baseline, so read the changed files' own findings).
 - **Agent reach**: a new read an agent should use is granted (agent tools,
   `MCP_TOOLS`) and named where the agent looks (the prompt's map,
   `app/core/ontology/summary.py`); an agent does not use what it is not told.

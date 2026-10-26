@@ -116,6 +116,18 @@ async def test_without_the_cache_it_reads_each_time(
     assert await aggregates.read("scheduler.runs", 7) == Runs(total=3)
 
 
+def test_grouped_rows_tally_by_each_label() -> None:
+    """One grouped read, ``(status, kind, n)``, gives each label's counts,
+    summed over the others; none read is every label empty."""
+    rows = [("pending", "note", 2), ("rejected", "note", 1), ("pending", "tag", 4)]
+
+    assert aggregates.tally(rows, 2) == [
+        {"pending": 6, "rejected": 1},
+        {"note": 3, "tag": 4},
+    ]
+    assert aggregates.tally([], 2) == [{}, {}]
+
+
 def test_every_aggregate_this_app_declares_is_figures() -> None:
     """Never a row: each read returns a frozen model refusing what it does
     not declare, whose fields are figures and the labels they are grouped

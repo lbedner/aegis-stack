@@ -11,13 +11,16 @@ Present but OFF by default: the scheduled job checks
 because every scored conversation costs model tokens.
 """
 
+from datetime import datetime
 import json
 from typing import Any
 
+from pydantic import BaseModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.config import settings
 from app.core.db import get_async_session, release_lock
+from app.core.figures import FIGURES
 from app.core.log import logger
 from app.models.conversation import Conversation
 from app.services.ai.domains.llm.config import AIServiceConfig
@@ -211,6 +214,35 @@ async def score_unscored_conversations(
 RECENT_NEGATIVE_LIMIT = 5
 
 
+class SentimentMix(BaseModel):
+    """Verdicts by the user's sentiment and the assistant's performance
+    (every value, zero-filled), and their average score."""
+
+    model_config = FIGURES
+
+    by_sentiment: dict[str, int]
+    by_performance: dict[str, int]
+    average_score: float
+
+
+async def sentiment_mix(
+    session: AsyncSession, since: datetime | None = None
+) -> SentimentMix:
+    """The verdicts scored since ``since`` (all of them when None), as
+    figures: zero-filled, so a reader gets the same shape before any is
+    scored."""
+    by_sentiment = dict.fromkeys(SENTIMENT_VALUES, 0)
+    by_sentiment.update(await queries.sentiment_counts(session, since))
+    by_performance = dict.fromkeys(PERFORMANCE_VALUES, 0)
+    by_performance.update(await queries.performance_counts(session, since))
+    average = await queries.average_sentiment_score(session, since)
+    return SentimentMix(
+        by_sentiment=by_sentiment,
+        by_performance=by_performance,
+        average_score=round(float(average or 0.0), 3),
+    )
+
+
 async def sentiment_stats(
     *, session: AsyncSession | None = None
 ) -> dict[str, Any]:
@@ -223,16 +255,7 @@ async def sentiment_stats(
         async with get_async_session() as owned_session:
             return await sentiment_stats(session=owned_session)
 
-    distribution = dict.fromkeys(SENTIMENT_VALUES, 0)
-    for sentiment, count in await queries.sentiment_counts(session):
-        distribution[sentiment] = count
-
-    performance = dict.fromkeys(PERFORMANCE_VALUES, 0)
-    for performance_value, count in await queries.performance_counts(session):
-        performance[performance_value] = count
-
-    average_score = await queries.average_sentiment_score(session) or 0.0
-
+    mix = await sentiment_mix(session)
     recent_negatives = [
         {
             "conversation_id": row.conversation_id,
@@ -247,9 +270,9 @@ async def sentiment_stats(
 
     return {
         "enabled": settings.AI_SENTIMENT_ENABLED,
-        "total": sum(distribution.values()),
-        "distribution": distribution,
-        "performance": performance,
-        "average_score": round(float(average_score or 0.0), 3),
+        "total": sum(mix.by_sentiment.values()),
+        "distribution": mix.by_sentiment,
+        "performance": mix.by_performance,
+        "average_score": mix.average_score,
         "recent_negatives": recent_negatives,
     }

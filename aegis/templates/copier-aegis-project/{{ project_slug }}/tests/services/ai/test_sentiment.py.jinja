@@ -281,6 +281,48 @@ class TestSentimentStats:
         assert negatives[0]["conversation_id"] == "c3"
         assert negatives[0]["summary"] == "summary of c3"
 
+    async def test_the_sentiment_aggregate_counts_the_window(
+        self, session: AsyncSession
+    ) -> None:
+        """``ai.sentiment``: verdicts by sentiment and by performance, and
+        their average, scored in the window; never a summary."""
+        from datetime import UTC, datetime, timedelta
+
+        from app.services.ai import aggregates
+
+        old = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=60)
+        for conv_id, sentiment_value, score, performance, at in [
+            ("c1", "positive", 0.9, "good", None),
+            ("c2", "frustrated", -0.5, "poor", None),
+            ("c3", "positive", 0.1, "acceptable", old),
+        ]:
+            await _add_conversation(session, conv_id)
+            verdict = SentimentAnalysis(
+                conversation_id=conv_id,
+                overall_sentiment=sentiment_value,
+                overall_score=score,
+                assistant_performance=performance,
+                summary="private",
+            )
+            if at is not None:
+                verdict.created_at = at
+            session.add(verdict)
+        await session.commit()
+
+        week = await aggregates.sentiment(session, 7)
+        ever = await aggregates.sentiment(session, None)
+
+        assert week.by_sentiment == {
+            "positive": 1,
+            "neutral": 0,
+            "negative": 0,
+            "frustrated": 1,
+        }
+        assert week.by_performance == {"good": 1, "acceptable": 0, "poor": 1}
+        assert week.average_score == 0.2
+        assert ever.by_sentiment["positive"] == 2
+        assert "private" not in week.model_dump_json()
+
 
 class TestJobGate:
     async def test_job_is_off_by_default(

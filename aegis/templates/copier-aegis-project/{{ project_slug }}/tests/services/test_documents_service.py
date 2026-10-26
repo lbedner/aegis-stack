@@ -344,8 +344,6 @@ async def test_the_tags_aggregate_counts_each_label(
         doc = await svc.ingest(title.encode(), title=title, owner_user_id=1)
         for tag in tags:
             await svc.tag(doc.id, tag)
-    (counted,) = aggregates.AGGREGATES
-
-    found = await counted.read(async_db_session, 30)
+    found = await aggregates.tags(async_db_session, 30)
 
     assert found.by_tag == {"tax": 2, "2026": 1}

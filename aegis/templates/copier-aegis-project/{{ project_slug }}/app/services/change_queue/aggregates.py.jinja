@@ -1,0 +1,33 @@
+{% if include_finance or (include_ai and ai_backend != "memory") %}"""What the propose/approve queue holds, as figures
+(``app.core.aggregates``): how many cards are in each status and of each
+type, never what one proposes."""
+
+from pydantic import BaseModel
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.core import ranges
+from app.core.aggregates import Aggregate, tally
+from app.core.figures import FIGURES
+from app.services.change_queue.queries import change_counts
+
+
+class Changes(BaseModel):
+    """Cards proposed in the window, by status and by change type."""
+
+    model_config = FIGURES
+
+    by_status: dict[str, int]
+    by_type: dict[str, int]
+
+
+async def changes(session: AsyncSession, days: int | None) -> Changes:
+    rows = await change_counts(session, ranges.start(days))
+    by_status, by_type = tally(rows, 2)
+    return Changes(by_status=by_status, by_type=by_type)
+
+
+AGGREGATES = (Aggregate("changes", "Proposed changes by status and by type", changes),)
+{%- else %}"""No queue in this stack: nothing to count."""
+
+AGGREGATES = ()
+{% endif %}

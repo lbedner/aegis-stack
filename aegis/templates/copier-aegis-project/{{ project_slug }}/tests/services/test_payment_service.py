@@ -1895,9 +1895,7 @@ async def test_the_status_aggregate_counts_and_sums_each_status(
             )
         )
     await async_db_session.flush()
-    (counted,) = aggregates.AGGREGATES
-
-    week = await counted.read(async_db_session, 7)
+    week = await aggregates.status(async_db_session, 7)
 
     assert week.count_by_status == {"succeeded": 2, "failed": 1}
     assert week.cents_by_status == {"succeeded": 7500, "failed": 2000}

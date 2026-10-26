@@ -507,9 +507,7 @@ async def test_the_sign_ins_aggregate_counts_each_day(
     service = RefreshService(async_db_session)
     for user in (ada, ada, bob):
         await service.mint(user.id)
-    (counted,) = aggregates.AGGREGATES
-
-    week = await counted.read(async_db_session, 7)
+    week = await aggregates.sign_ins(async_db_session, 7)
 
     today = _now().date().isoformat()
     assert (week.sign_ins, week.active_users) == ({today: 3}, {today: 2})

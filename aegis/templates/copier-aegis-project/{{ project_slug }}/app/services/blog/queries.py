@@ -8,11 +8,14 @@ per status. A 20-post page cost 22 queries and ``page_size`` allows 100.
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from sqlalchemy import func
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.blog.models import BlogPost, BlogPostTag, BlogTag
+from app.services.shared.queries import within
 
 
 async def tags_for_posts(
@@ -38,9 +41,14 @@ async def tags_for_posts(
     return grouped
 
 
-async def count_posts_by_status(db: AsyncSession) -> dict[str, int]:
-    """One row per status, rather than one COUNT per status."""
+async def count_posts_by_status(
+    db: AsyncSession, since: datetime | None = None
+) -> dict[str, int]:
+    """One row per status, rather than one COUNT per status: posts written
+    since ``since``, when given."""
     result = await db.exec(
-        select(BlogPost.status, func.count()).group_by(BlogPost.status)  # type: ignore[arg-type]
+        select(BlogPost.status, func.count())  # type: ignore[arg-type]
+        .where(*within(BlogPost.created_at, since, None))
+        .group_by(BlogPost.status)  # type: ignore[arg-type]
     )
     return {str(status): int(count) for status, count in result.all()}

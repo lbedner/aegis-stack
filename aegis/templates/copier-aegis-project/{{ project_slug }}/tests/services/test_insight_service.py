@@ -375,3 +375,28 @@ class TestStatusSummary:
         assert summary["total_metrics"] == 0
         assert summary["sources"] == []
         assert summary["records"] == []
+
+
+@pytest.mark.asyncio
+async def test_the_daily_aggregate_sums_each_sources_daily_metrics(
+    async_db_session: AsyncSession,
+) -> None:
+    """``insights.daily``: each source's daily metrics summed over the
+    window; a cumulative or snapshot row is a level, never added up."""
+    from app.services.insights import aggregates
+
+    source = await _seed_source(async_db_session)
+    clones = await _seed_metric_type(async_db_session, source, MetricKeys.CLONES)
+    views = await _seed_metric_type(async_db_session, source, MetricKeys.VIEWS)
+    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    await _seed_metric(async_db_session, clones, today, 4)
+    await _seed_metric(async_db_session, clones, today - timedelta(days=1), 6)
+    await _seed_metric(async_db_session, clones, today - timedelta(days=60), 100)
+    await _seed_metric(async_db_session, views, today, 9)
+    await _seed_metric(async_db_session, views, today, 500, Periods.CUMULATIVE)
+
+    week = await aggregates.daily(async_db_session, 7)
+    ever = await aggregates.daily(async_db_session, None)
+
+    assert week.by_source == {SourceKeys.GITHUB_TRAFFIC: {"clones": 10, "views": 9}}
+    assert ever.by_source[SourceKeys.GITHUB_TRAFFIC]["clones"] == 110

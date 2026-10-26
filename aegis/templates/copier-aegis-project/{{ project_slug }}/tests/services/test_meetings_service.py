@@ -193,6 +193,30 @@ async def test_the_counts_cover_every_owner(async_db_session: AsyncSession) -> N
     assert await meetings_counts(async_db_session) == {"meetings": 2, "in_call": 0}
 
 
+async def test_the_meetings_aggregate_counts_each_status_and_platform(
+    async_db_session: AsyncSession,
+) -> None:
+    """``meetings.meetings``: every owner's meetings asked for in the window,
+    by status and by platform; never a link or a title."""
+    from app.services.meetings import aggregates
+
+    await MeetingsService(async_db_session, owner_user_id=1).request(MEET, "Private")
+    await MeetingsService(async_db_session, owner_user_id=2).request(
+        "https://zoom.us/j/81234567890"
+    )
+    old = await MeetingsService(async_db_session, owner_user_id=2).request(MEET)
+    old.created_at = utcnow() - timedelta(days=60)
+    await async_db_session.commit()
+
+    week = await aggregates.meetings(async_db_session, 7)
+    ever = await aggregates.meetings(async_db_session, None)
+
+    assert week.by_status == {"requested": 2}
+    assert week.by_platform == {"meet": 1, "zoom": 1}
+    assert ever.by_platform == {"meet": 2, "zoom": 1}
+    assert "Private" not in week.model_dump_json()
+
+
 async def test_a_status_moves_only_from_where_it_is_expected(
     async_db_session: AsyncSession,
 ) -> None:

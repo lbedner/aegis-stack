@@ -119,6 +119,38 @@ async def test_a_thread_comes_back_whole_and_a_vanished_comment_is_marked(
     assert thread["2"].deleted_at is None
 
 
+async def test_the_items_aggregate_counts_live_finds_by_source_and_kind(
+    async_db_session: AsyncSession, site: FakeSite
+) -> None:
+    """``research.items``: every owner's live finds, fetched in the window,
+    by source and by kind; never a title or a query."""
+    from datetime import timedelta
+
+    from app.core.time import utcnow
+    from app.services.research import aggregates
+
+    svc = ResearchService(async_db_session, owner_user_id=None)
+    watch = await svc.add_watch("fake", "Private", {"q": "t"}, with_threads=True)
+    site.results["t"] = [story("1", "Launch")]
+    site.threads["1"] = [
+        story("1", "Launch"),
+        comment("2", "1", "Nice."),
+        comment("3", "2", "Agreed."),
+    ]
+    await svc.refresh_watch(watch.id)  # type: ignore[arg-type]
+    site.threads["1"] = [story("1", "Launch"), comment("2", "1", "Nice.")]
+    await svc.refresh_watch(watch.id)  # type: ignore[arg-type]
+    (await _items(async_db_session))["2"].fetched_at = utcnow() - timedelta(days=60)
+    await async_db_session.commit()
+
+    week = await aggregates.items(async_db_session, 7)
+    ever = await aggregates.items(async_db_session, None)
+
+    assert week.by_source == {"fake": 1}
+    assert week.by_kind == {"story": 1}
+    assert ever.by_kind == {"story": 1, "comment": 1}
+    assert "Private" not in ever.model_dump_json()
+
 async def test_search_finds_text_across_what_the_watches_found(
     async_db_session: AsyncSession, site: FakeSite
 ) -> None:

@@ -751,6 +751,40 @@ class TestCategorization:
         ]
 
     @pytest.mark.asyncio
+    async def test_the_spend_aggregate_rolls_every_owners_spend_up(
+        self, svc: FinanceService
+    ) -> None:
+        """``finance.spend``: every owner's outflows in the window, by parent
+        category, as the Overview pie has them; never a payee or account."""
+        from datetime import timedelta
+
+        from app.services.finance import aggregates
+
+        food = await svc.get_or_create_pfc_category("FOOD_AND_DRINK")
+        for owner, amount, ago in [(1, -1200, 0), (2, -800, 1), (2, -5000, 60)]:
+            account = await svc.create_manual_account(
+                owner_user_id=owner,
+                name=f"Private {owner}",
+                account_type="checking",
+                classification="asset",
+            )
+            await svc.create_transaction(
+                owner_user_id=owner,
+                account_id=account.id,
+                amount=amount,
+                txn_date=current_date() - timedelta(days=ago),
+                name="Private payee",
+                category_id=food.id,
+            )
+
+        week = await aggregates.spend(svc.db, 7)
+        ever = await aggregates.spend(svc.db, None)
+
+        assert week.cents_by_category == {"Food And Drink": 2000}
+        assert ever.cents_by_category == {"Food And Drink": 7000}
+        assert "Private" not in ever.model_dump_json()
+
+    @pytest.mark.asyncio
     async def test_spending_transactions_matches_the_parent_categorys_leaves(
         self, svc: FinanceService
     ) -> None:

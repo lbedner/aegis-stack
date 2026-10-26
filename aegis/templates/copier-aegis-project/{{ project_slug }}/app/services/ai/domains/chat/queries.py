@@ -19,6 +19,7 @@ from app.services.ai.models.agents import (
     MemoryModule,
 )
 from app.services.ai.models.sentiment import SentimentAnalysis
+from app.services.shared.queries import within
 from sqlalchemy import func
 from sqlalchemy.orm import selectinload
 from sqlmodel import col, select
@@ -167,32 +168,44 @@ async def unscored_conversations(
     ).all()
 
 
-async def sentiment_counts(session: AsyncSession) -> Sequence[tuple[str, int]]:
+async def sentiment_counts(
+    session: AsyncSession, since: datetime | None = None
+) -> Sequence[tuple[str, int]]:
     return (
         await session.exec(
             select(
                 SentimentAnalysis.overall_sentiment,
                 func.count(),  # type: ignore[arg-type]
-            ).group_by(SentimentAnalysis.overall_sentiment)  # type: ignore[arg-type]
+            )
+            .where(*within(SentimentAnalysis.created_at, since, None))
+            .group_by(SentimentAnalysis.overall_sentiment)  # type: ignore[arg-type]
         )
     ).all()
 
 
-async def performance_counts(session: AsyncSession) -> Sequence[tuple[str, int]]:
+async def performance_counts(
+    session: AsyncSession, since: datetime | None = None
+) -> Sequence[tuple[str, int]]:
     return (
         await session.exec(
             select(
                 SentimentAnalysis.assistant_performance,
                 func.count(),  # type: ignore[arg-type]
-            ).group_by(SentimentAnalysis.assistant_performance)  # type: ignore[arg-type]
+            )
+            .where(*within(SentimentAnalysis.created_at, since, None))
+            .group_by(SentimentAnalysis.assistant_performance)  # type: ignore[arg-type]
         )
     ).all()
 
 
-async def average_sentiment_score(session: AsyncSession) -> float | None:
+async def average_sentiment_score(
+    session: AsyncSession, since: datetime | None = None
+) -> float | None:
     return (
         await session.exec(
-            select(func.avg(SentimentAnalysis.overall_score))  # type: ignore[arg-type]
+            select(func.avg(SentimentAnalysis.overall_score)).where(  # type: ignore[arg-type]
+                *within(SentimentAnalysis.created_at, since, None)
+            )
         )
     ).one_or_none()
 

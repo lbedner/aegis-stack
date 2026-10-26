@@ -10,7 +10,8 @@ cache serves the same answer for ``KEEP`` seconds, so a burst of questions
 costs one query. A window is one of the app's (``app.core.ranges``).
 """
 
-from collections.abc import Awaitable, Callable
+from collections import Counter
+from collections.abc import Awaitable, Callable, Iterable, Sequence
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from typing import Any
@@ -62,6 +63,17 @@ def declared() -> dict[str, Aggregate]:
                 raise ValueError(f"two aggregates claim {name!r}")
             found[name] = one
     return found
+
+
+def tally(rows: Iterable[Sequence[Any]], labels: int) -> list[dict[str, int]]:
+    """Each of ``labels`` label columns' counts, from one grouped read's
+    ``(*labels, n)`` rows, summed over the other labels: ``(status, kind,
+    n)`` rows give ``[by_status, by_kind]``."""
+    found: list[Counter[str]] = [Counter() for _ in range(labels)]
+    for *names, n in rows:
+        for counts, name in zip(found, names, strict=True):
+            counts[str(name)] += int(n)
+    return [dict(counts) for counts in found]
 
 
 def window(days: int | None) -> int | None:

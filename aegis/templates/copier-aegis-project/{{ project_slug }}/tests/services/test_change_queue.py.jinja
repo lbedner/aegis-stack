@@ -46,6 +46,35 @@ async def test_a_registered_type_proposes_without_executing(
     assert NOTE in change_queue.registered_change_types()
 
 
+@pytest.mark.asyncio
+async def test_the_changes_aggregate_counts_each_status_and_type(
+    async_db_session: AsyncSession,
+) -> None:
+    """``change_queue.changes``: cards by status and by type, proposed in
+    the window; never a payload."""
+    from datetime import UTC, datetime, timedelta
+
+    from app.services.change_queue import aggregates
+
+    rows = [
+        await change_queue.propose(
+            async_db_session, NOTE, {"text": "private"}, owner_user_id=None
+        )
+        for _ in range(3)
+    ]
+    await change_queue.reject_rows(async_db_session, rows[:1])
+    rows[2].created_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=60)
+    await async_db_session.commit()
+
+    week = await aggregates.changes(async_db_session, 7)
+    ever = await aggregates.changes(async_db_session, None)
+
+    assert week.by_status == {"pending": 1, "rejected": 1}
+    assert week.by_type == {NOTE: 2}
+    assert ever.by_type == {NOTE: 3}
+    assert "private" not in week.model_dump_json()
+
+
 def test_each_type_carries_its_contract() -> None:
     """What an agent reads to propose one (#1414): the title, when to use
     it, and the payload's JSON schema, from the model itself."""

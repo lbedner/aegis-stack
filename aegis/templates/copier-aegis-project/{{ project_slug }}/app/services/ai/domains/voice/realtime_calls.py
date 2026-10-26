@@ -35,6 +35,7 @@ from app.services.ai.domains.voice.catalog import GEMINI_PREBUILT, get_voice
 from app.services.ai.domains.voice import live_engines
 from app.services.ai.domains.voice.live_engines import is_gpt_live
 from app.services.ai.domains.voice.models import TTSProvider
+from app.services.ai.domains.voice.spoken import pronunciation_instructions
 from app.services.ai.models import AIProvider, MessageRole
 from app.services.ai.service.trace import record_tool_call, record_tool_result
 
@@ -258,9 +259,13 @@ async def realtime_for(
     builds her with (``_build_turn``). The engine's ``instructions`` (how
     to talk on a call) lead its prompt, and ``max_output_tokens`` caps one
     reply. Without ``hang_up`` she has no ``end_call``: a call that answers
-    one question after another ends when its caller ends it."""
+    one question after another ends when its caller ends it. The
+    pronunciation list rides with the call manners, which reach whichever
+    model speaks on each engine."""
     from app.services.ai.domains.chat.agent_loader import resolve_agent
 
+    manners = (instructions, pronunciation_instructions())
+    instructions = "\n\n".join(filter(None, manners))
     config = await (resolve_agent(agent_slug) if agent_slug else resolve_agent())
     # GPT-Live takes the call manners as its own (``_model_settings``).
     if instructions and not is_gpt_live(model):

@@ -91,6 +91,7 @@ if TYPE_CHECKING:
         design,
         live_engines,
         profiles,
+        pronunciations,
         realtime_calls,
     )
     from app.services.ai.domains.voice.live_voice import live_voice
@@ -103,7 +104,13 @@ if TYPE_CHECKING:
         use_voice,
         voice_overview,
     )
-    from app.services.ai.domains.voice.spoken import to_spoken
+    from app.services.ai.domains.voice.spoken import (
+        Pronunciation,
+        pronunciation_list,
+        register_pronunciation,
+        saved_keys,
+        to_spoken,
+    )
     from app.services.ai.domains.voice.tts import TTSService
 {%- endif %}
     from app.services.ai.models import AIProvider
@@ -118,7 +125,11 @@ if TYPE_CHECKING:
     )
 {%- endif %}
 {%- if ai_voice and ai_backend != "memory" %}
-    from app.services.ai.models.voice import LiveEngine, VoiceProfile
+    from app.services.ai.models.voice import (
+        LiveEngine,
+        VoiceProfile,
+        VoicePronunciation,
+    )
 {%- endif %}
     from app.services.ai.service.ai_service import AIService
     from app.services.ai.service.base import (

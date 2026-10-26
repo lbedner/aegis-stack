@@ -1,12 +1,14 @@
 {# The assistant's voice, in the one modal: the voice profiles, each with a
-   preview; switch, make one from the active, or edit one. ``view`` picks
-   the piece: the composer's chip, the list, or one voice's form.
+   preview; switch, make one from the active, or edit one; and how terms are
+   said. ``view`` picks the piece: the composer's chip, the list, one voice's
+   form, or the pronunciation list.
    Previews play through voice.js's Listen handler ([data-speak]). #}
 {% from "components/macros/icons.html" import icon %}
 {% from "components/macros/chat.html" import voice_chip, speak_button %}
 {% from "components/macros/form.html" import action, field, text_input, number_input, select, primary_button %}
 {% from "components/macros/feedback.html" import error_banner, empty_state %}
 {% from "components/macros/layout.html" import dialog_title %}
+{% from "components/macros/table.html" import data_table %}
 
 {% if view == "chip" %}
 {{ voice_chip(active, path) }}
@@ -37,6 +39,8 @@
   {% else %}
   {{ empty_state("No voices yet", "The first one is made from .env when the app starts.") }}
   {% endif %}
+  <p class="flex items-center justify-between gap-2 text-xs text-aegis-muted">How every voice says terms like Traefik.
+    {{ action("Pronunciation", hx_dialog(path ~ "/pronunciation", "data-pronunciations")) }}</p>
   {# A new voice starts as a copy of the one in use, then opens to edit. #}
   <form {{ hx_dialog_post(path) }} class="flex items-end gap-2">
     {{ error_banner(errors) }}
@@ -68,4 +72,31 @@
     </span>
   </div>
 </form>
+
+{% elif view == "said" %}
+<div id="voice-pronunciation" class="space-y-4">
+  {{ dialog_title("Pronunciation", "How every voice says these terms, read aloud and on a live call. A change takes effect on the next thing said.") }}
+  <div class="max-h-72 overflow-y-auto">
+    {% call(row) data_table([{"key": "term", "label": "Term"}, {"key": "say", "label": "Said as"}], said, flush=False) %}
+    {% if row.key in saved %}
+    {{ action("Remove", hx_dialog_post(path ~ "/pronunciation/delete"), tone="danger", vals={"term": row.term}) }}
+    {% else %}
+    <span class="text-xs text-aegis-muted">default</span>
+    {% endif %}
+    {% endcall %}
+  </div>
+  {# Saving a listed term changes how it is said; a new one joins the list. #}
+  <form {{ hx_dialog_post(path ~ "/pronunciation") }} class="space-y-2">
+    {{ error_banner(errors) }}
+    <div class="grid grid-cols-3 gap-2">
+      {% call field("Term") %}{{ text_input("term", values.term, placeholder="e.g. Traefik", required=True) }}{% endcall %}
+      {% call field("Said as") %}{{ text_input("say", values.say, placeholder="e.g. traffic", required=True) }}{% endcall %}
+      {% call field("IPA (optional)") %}{{ text_input("ipa", values.ipa, placeholder="e.g. ˈtræfɪk") }}{% endcall %}
+    </div>
+    <div class="flex items-center justify-between gap-2">
+      {{ action("Back", hx_dialog(path)) }}
+      {{ primary_button("Save", type="submit") }}
+    </div>
+  </form>
+</div>
 {% endif %}

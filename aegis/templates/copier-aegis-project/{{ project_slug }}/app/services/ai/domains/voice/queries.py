@@ -1,11 +1,16 @@
-"""Reads for the voice domain: which profiles exist, and which is active."""
+"""Reads for the voice domain: which profiles exist, which is active, and
+how terms are said."""
 
 from sqlalchemy.orm import selectinload
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.ai.models.llm import LargeLanguageModel, LLMOrg
-from app.services.ai.models.voice import LiveEngine, VoiceProfile
+from app.services.ai.models.voice import (
+    LiveEngine,
+    VoiceProfile,
+    VoicePronunciation,
+)
 
 
 async def all_profiles(session: AsyncSession) -> list[VoiceProfile]:
@@ -31,6 +36,27 @@ async def profile_named(session: AsyncSession, name: str) -> VoiceProfile | None
 
 async def any_profile(session: AsyncSession) -> bool:
     return (await session.exec(select(VoiceProfile.id))).first() is not None
+
+
+async def pronunciations(session: AsyncSession) -> list[VoicePronunciation]:
+    """Every saved pronunciation, by term."""
+    return list(
+        (
+            await session.exec(
+                select(VoicePronunciation).order_by(col(VoicePronunciation.key))
+            )
+        ).all()
+    )
+
+
+async def pronunciation_of(
+    session: AsyncSession, key: str
+) -> VoicePronunciation | None:
+    return (
+        await session.exec(
+            select(VoicePronunciation).where(VoicePronunciation.key == key)
+        )
+    ).first()
 
 
 async def engine_keys(session: AsyncSession) -> set[str]:

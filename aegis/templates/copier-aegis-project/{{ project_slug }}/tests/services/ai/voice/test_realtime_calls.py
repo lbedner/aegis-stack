@@ -217,20 +217,44 @@ class TestACallKnowsWhoSheIs:
 
         assert realtime["toolsets"] == []
 
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("model", ["openai:gpt-live-1", "google:gemini-3.8-live"])
+    async def test_the_model_that_speaks_is_told_how_to_say_the_list(
+        self, monkeypatch: pytest.MonkeyPatch, model: str
+    ) -> None:
+        """It speaks for itself, so it is told the pronunciation list with
+        the call manners: GPT-Live's voice model takes them as its own (her
+        prompt goes to the backend that does the work), every other engine
+        ahead of her prompt."""
+        _, realtime = await _built(
+            monkeypatch, model=model, instructions="Keep it short."
+        )
+
+        told = (
+            realtime["model_settings"].get("openai_live_instructions")
+            or realtime["system_prompt"]
+        )
+        assert told.startswith("Keep it short.")
+        assert 'Say "Traefik" as "traffic".' in told
+
 
 async def _built(
     monkeypatch: pytest.MonkeyPatch, **asked: Any
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """What ``realtime_for`` built her with (``_build_turn``'s keywords) and
-    what it asked her realtime agent for, the agent row the default."""
+    what it asked her realtime agent for, with the prompt she was built on
+    (``system_prompt``); the agent row the default, on Gemini Live unless
+    ``model`` says."""
     from app.services.ai.domains.chat import agent_loader
     from app.services.ai.domains.voice import realtime_calls
 
     config = agent_loader.default_agent_config()
     built: dict[str, Any] = {}
+    prompts: list[str] = []
 
     async def build_turn(conversation: Any, agent_config: Any, **kwargs: Any) -> Any:
         built.update(kwargs, slug=agent_config.slug)
+        prompts.append(agent_config.system_prompt)
         agent = SimpleNamespace(
             system_prompt_parts=_no_parts, realtime=lambda model, **kw: kw
         )
@@ -246,13 +270,12 @@ async def _built(
     realtime = await realtime_calls.realtime_for(
         SimpleNamespace(_build_turn=build_turn),
         conversation=None,
-        model="google:gemini-3.8-live",
         agent_slug=None,
         voice=None,
         user_id=USER,
-        **asked,
+        **{"model": "google:gemini-3.8-live", **asked},
     )
-    return built, realtime
+    return built, realtime | {"system_prompt": prompts[0]}
 
 
 class TestACallRemembers:

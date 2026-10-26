@@ -18,6 +18,7 @@ from ..models import (
     TTSProvider,
     speech_format,
 )
+from ..spoken import pronounced
 from . import length
 from .config import TTSConfig, get_tts_config
 from .providers import BaseTTSProvider, get_tts_provider
@@ -150,9 +151,11 @@ class TTSService:
     def _configured(self, request: SpeechRequest) -> SpeechRequest:
         """The request with what it leaves unset taken from the settings.
         The settings' speed and delivery instructions are sent unless the
-        request names its own."""
+        request names its own; the text is said the pronunciation list's way
+        (``spoken.pronounced``), whoever asked for it."""
         return request.model_copy(
             update={
+                "text": pronounced(request.text),
                 "speed": request.speed or self._config.speed,
                 "instructions": request.instructions or self._config.instructions,
             }

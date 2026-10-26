@@ -1,4 +1,4 @@
-"""Put the active voice profile to work at startup.
+"""Put the active voice profile, and how it says terms, to work at startup.
 
 The voice is table data, like the active model (``llm_active_model``): the
 first boot seeds a profile from ``.env``, and from then on the active row is

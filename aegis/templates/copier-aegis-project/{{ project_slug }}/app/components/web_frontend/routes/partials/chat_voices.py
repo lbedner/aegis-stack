@@ -2,7 +2,8 @@
 
 A voice chip sits in the composer beside the model chip. It opens the one
 dialog, which lists the voice profiles (each with a preview), switches the
-active one, makes a new one from the active, and edits one. The active
+active one, makes a new one from the active, and edits one; and keeps the
+one list of how terms are said (``spoken``), for every voice. The active
 profile is applied onto the running settings (``profiles.apply``), so the
 next thing said uses it - no ``.env`` edit, no restart.
 
@@ -22,7 +23,15 @@ from app.components.web_frontend.chat_surface import ChatSurface
 from app.components.web_frontend.rendering import dialog, templates, with_toast
 from app.core.config import settings
 from app.core.db import get_async_db
-from app.services.ai.service import TTSService, VoiceProfile, design, profiles
+from app.services.ai.service import (
+    TTSService,
+    VoiceProfile,
+    design,
+    profiles,
+    pronunciation_list,
+    pronunciations,
+    saved_keys,
+)
 
 TEMPLATE = "partials/chat/voices.html"
 
@@ -104,6 +113,51 @@ def add_voice_routes(router: APIRouter, mount: ChatSurface) -> None:
         request: Request, db: AsyncSession = Depends(get_async_db)
     ) -> Response:
         return await listing_response(request, db)
+
+    # Before the per-voice routes: "pronunciation" is no voice id.
+    def said_response(
+        request: Request,
+        *,
+        values: dict[str, str] | None = None,
+        errors: list[str] | None = None,
+    ) -> Response:
+        """The whole list as every voice says it; a saved row can go."""
+        return dialog(
+            request,
+            TEMPLATE,
+            status_code=422 if errors else 200,
+            view="said",
+            said=pronunciation_list(),
+            saved=saved_keys(),
+            values=values or {},
+            errors=errors or [],
+            path=voices_path,
+        )
+
+    @router.get("/voices/pronunciation", response_class=HTMLResponse)
+    async def pronunciation(request: Request) -> Response:
+        return said_response(request)
+
+    @router.post("/voices/pronunciation", response_class=HTMLResponse)
+    async def save_pronunciation(
+        request: Request, db: AsyncSession = Depends(get_async_db)
+    ) -> Response:
+        form = await request.form()
+        values = {key: str(form.get(key) or "") for key in ("term", "say", "ipa")}
+        try:
+            await pronunciations.save(db, **values)
+        except pronunciations.PronunciationError as error:
+            return said_response(request, values=values, errors=[str(error)])
+        return with_toast(
+            said_response(request), f"Saved how {values['term'].strip()} is said."
+        )
+
+    @router.post("/voices/pronunciation/delete", response_class=HTMLResponse)
+    async def remove_pronunciation(
+        request: Request, db: AsyncSession = Depends(get_async_db)
+    ) -> Response:
+        await pronunciations.remove(db, str((await request.form()).get("term") or ""))
+        return said_response(request)
 
     @router.post("/voices/{profile_id}/active", response_class=HTMLResponse)
     async def use_voice(

@@ -3886,6 +3886,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#pronunciation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pronunciation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#in-overseer" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -6870,6 +6881,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#pronunciation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pronunciation
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#in-overseer" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -7356,6 +7378,39 @@ call and a tool to end it.</p>
   provider has it: Gemini Live speaks a Gemini voice, an OpenAI engine an
   OpenAI one. With a voice the engine does not have, it speaks its own.</li>
 </ul>
+<hr />
+<h2 id="pronunciation">Pronunciation</h2>
+<p>One list says how every voice says a term: answers read aloud, the meeting
+bot, previews, and live calls. It starts with the stack's own names
+(Traefik as "traffic", Redis as "red-iss", PostgreSQL, SQLite, htmx,
+Pydantic, Ollama, uvicorn, Aegis, MCP, OTel), kept in code in
+<code>app/services/ai/domains/voice/spoken.py</code>, so a stack without a database
+still has it.</p>
+<ul>
+<li><strong>Read aloud</strong>, the speech service swaps each term as a whole word, in
+  any case, before the text is sent (<code>Traefiker</code> is left alone).</li>
+<li><strong>On a live call</strong> the model speaks for itself, so it is told the list
+  as a "Say X as Y" section with the engine's call manners, which reach
+  whichever model speaks (GPT-Live's voice model takes them as its own).</li>
+<li><strong>An app's own terms</strong> join it with one call, at import:</li>
+</ul>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.ai.service</span><span class="w"> </span><span class="kn">import</span> <span class="n">register_pronunciation</span>
+</span><span id="__span-17-2"><a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a>
+</span><span id="__span-17-3"><a id="__codelineno-17-3" name="__codelineno-17-3" href="#__codelineno-17-3"></a><span class="n">register_pronunciation</span><span class="p">(</span><span class="s2">&quot;Steward&quot;</span><span class="p">,</span> <span class="s2">&quot;stew-ard&quot;</span><span class="p">)</span>
+</span></code></pre></div>
+<ul>
+<li><strong>Edits</strong> are rows (<code>voice_pronunciation</code>), made in the chat's voice
+  dialog (Pronunciation) or over the API. A row wins over a default or an
+  app's own term and takes effect on the next thing said, with no restart;
+  removing it brings the default back. An entry may also keep an IPA
+  spelling, for a provider's own dictionary; none reads it yet.</li>
+</ul>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>curl<span class="w"> </span>http://localhost:8000/api/v1/voice/pronunciation<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq
+</span><span id="__span-18-2"><a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a><span class="c1"># An admin&#39;s: save one, or drop the saved row for a term</span>
+</span><span id="__span-18-3"><a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a>curl<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://localhost:8000/api/v1/voice/pronunciation<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-18-4"><a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a><span class="w">  </span>-H<span class="w"> </span><span class="s2">&quot;Content-Type: application/json&quot;</span><span class="w"> </span>-d<span class="w"> </span><span class="s1">&#39;{&quot;term&quot;: &quot;Illiana&quot;, &quot;say&quot;: &quot;ill-ee-ah-na&quot;}&#39;</span>
+</span><span id="__span-18-5"><a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a>curl<span class="w"> </span>-X<span class="w"> </span>DELETE<span class="w"> </span>http://localhost:8000/api/v1/voice/pronunciation/Illiana
+</span></code></pre></div>
 <hr />
 <h2 id="in-overseer">In Overseer</h2>
 <p>Overseer &gt; AI &gt; Voice has two tabs.</p>

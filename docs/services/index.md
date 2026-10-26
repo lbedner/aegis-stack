@@ -248,6 +248,17 @@ belongs - so it names each domain and what it owns.
     CI posts it as one comment on each pull request, edited on each push:
     the latest review on top, each earlier one kept below it, collapsed,
     by the commit it reviewed.
+    Each new finding on a line the pull request changed also gets her own
+    review thread there: the rule, whether it blocks, why and the fix
+    (`scripts/illiana_threads.py`). `patterns check` writes its new places
+    as JSON to the file `PATTERNS_FOUND` names, each with the key the
+    baseline knows it by, and a thread carries that key: on each push she
+    replies "Fixed in" and resolves a thread whose finding is gone, never
+    posts a standing one twice, and reopens a blocking one resolved while it
+    still stands; an advisory thread a person resolved stays resolved. A
+    place no template line has the text of gets no thread, and a check that
+    did not finish touches none. Threads are the conversation, never the
+    verdict: the check still gives that.
     Finance and documents also carry a `test_*_module_layout.py` stating which
     module defines what, so folding a domain back together, or dropping a
     function into whichever file was open, fails a test rather than passing

@@ -6980,6 +6980,7 @@
 <li><strong>Meetings</strong> - every meeting the bot was sent to, newest first, with its status, how long the bot was in it, and how many action items are yours. Paste a link, name the bot, and send it.</li>
 <li><strong>One meeting</strong> - its status while the bot joins, waits and listens (the page keeps itself current, and stops once nothing is happening), a button to ask it to leave, then the notes: the summary, your action items, everyone's, the decisions and open questions. Each item links to the line it came from, in the transcript below.</li>
 <li><strong>What's this about?</strong> - on any line of the transcript (on its hover), live or after the call: Illiana says what the speaker is talking about, from the lines either side of it, under the line and on your page alone (nothing is kept or said in the call). Where it is a part of the system, she draws its wiring and links to it in Overseer (that needs an admin: the part's map is Overseer's). The same is in Overseer's meeting drawer. Only with Illiana (the AI service on pydantic-ai with a database).</li>
+<li><strong>A part of the system, named.</strong> A line that names a part this stack has gets a chip beside it ("Scheduler: what it is"), once a turn: ask it and Illiana says what that part is and draws its wiring, the same way. A part is heard by its full name (the "finance service", the "cache component"), an outside provider by its own ("Plaid"), and some parts by what people call them ("Redis", "the scheduler", "the deploy agent"); talk that only uses a part's ordinary word ("worker", "finance") stays plain. The names are <code>ALSO_HEARD</code> in <code>app/services/meetings/domains/actions/heard.py</code>; nothing reads the talk but that list.</li>
 <li><strong>Which speaker is you</strong> - picked from the people who spoke. Your action items follow at once, with nothing written again.</li>
 <li><strong>Calendar</strong> - a month of the agents' calendars, in your browser's time zone: every meeting on them, or with the auth service the invites you are on. See <a href="#in-overseer">In Overseer</a> for how it reads.</li>
 </ul>
@@ -7090,7 +7091,7 @@
 </tr>
 <tr>
 <td><code>POST /api/v1/meetings/{id}/lines/{line_id}/about</code></td>
-<td>What a line is about, as Illiana says it to the meeting's owner: <code>{"summary": ..., "card_id": ...}</code> (the card she drew of the part it names, or <code>null</code>); <code>404</code> for a line the meeting does not hold, or a stack without her</td>
+<td>What a line is about (or, with <code>?part=component:scheduler</code>, the part it names), as Illiana says it to the meeting's owner: <code>{"summary": ..., "card_id": ...}</code> (the card she drew of the part it names, or <code>null</code>); <code>404</code> for a line the meeting does not hold, or a stack without her</td>
 </tr>
 <tr>
 <td><code>GET /api/v1/meetings/runner-tokens</code></td>

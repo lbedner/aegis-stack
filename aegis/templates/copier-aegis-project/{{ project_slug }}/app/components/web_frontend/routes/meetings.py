@@ -39,6 +39,7 @@ from app.services.meetings.service import (
     call_length,
     heard_rows,
     line_about,
+    parts_named,
     send_bot,
     voices,
 )
@@ -152,12 +153,13 @@ async def _list(request: Request, svc: MeetingsService) -> Response:
     return render(request, LIST, {"rows": rows, "calendar": calendar} | form)
 
 
-def body_context(record: MeetingRecord) -> dict[str, Any]:
+async def body_context(record: MeetingRecord) -> dict[str, Any]:
     """What one meeting's body shows (and Overseer's drawer): the service's
     read of it, as it is, and how these pages draw it."""
     tone = TONES.get(record.meeting.status, "muted")
     owners = [i.owner for i in (record.notes.action_items if record.notes else [])]
     colors = voices([*record.people, *(owner for owner in owners if owner)])
+    asks = asks_about()
     return dict(record) | {
         "status": status_cell(record.status, tone),
         # Each speaker's color (--aegis-chart-N), in the transcript, on the
@@ -181,7 +183,9 @@ def body_context(record: MeetingRecord) -> dict[str, Any]:
             for speaker, rows in groupby(record.transcript, key=lambda r: r.speaker)
         ],
         "clock": {row.id: format_clock(row.at) for row in record.transcript},
-        "asks_about": asks_about(),
+        "asks_about": asks,
+        # The parts each line names, offered as what each is (with her).
+        "parts": await parts_named(record.transcript) if asks else {},
         "people": [{"id": name, "name": name} for name in record.people],
         # What the call threw up, a tab per kind, in the order first heard.
         "heard": [
@@ -193,7 +197,7 @@ def body_context(record: MeetingRecord) -> dict[str, Any]:
 
 async def meeting_context(svc: MeetingsService, meeting_id: int) -> dict[str, Any]:
     with as_http():
-        return body_context(await svc.read(meeting_id))
+        return await body_context(await svc.read(meeting_id))
 
 
 @router.get("", response_class=HTMLResponse)
@@ -243,7 +247,7 @@ def meeting_routes(
 
     async def drawn(svc: MeetingsService, record: MeetingRecord) -> HTMLResponse:
         extra = await more(svc) if more else {}
-        context = body_context(record) | extra
+        context = await body_context(record) | extra
         return HTMLResponse(fragment(body, **context, prefix=prefix))
 
     async def read(svc: MeetingsService, meeting_id: int) -> HTMLResponse:
@@ -303,10 +307,12 @@ def meeting_routes(
         svc: scoped,  # type: ignore[valid-type]
         meeting_id: int,
         line_id: int,
+        part: str | None = None,
     ) -> HTMLResponse:
-        """What a line is about (``actions.about``), drawn under the line."""
+        """What a line is about, or the part it names (``actions.about``),
+        drawn under the line."""
         with as_http():
-            said = await line_about(svc, meeting_id, line_id)
+            said = await line_about(svc, meeting_id, line_id, part=part)
         if said is None or said.card_id is None:
             return HTMLResponse(fragment(ABOUT, about=said))
         # Here: only a stack with Illiana draws a card.

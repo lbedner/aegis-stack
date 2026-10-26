@@ -635,6 +635,43 @@ def test_a_line_is_asked_about_with_the_lines_either_side_of_it() -> None:
 
 
 @needs_her
+async def test_asked_about_a_part_a_line_names_she_is_told_which(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Asked what a part a line names is, she is told the part (its node),
+    one this stack has; any other is not passed on."""
+    from types import SimpleNamespace
+
+    from app.core.ontology.model import Kind, PartNode
+    from app.core.parts import Category
+    from app.services.meetings.domains.actions import about, ask_ai
+    from app.services.meetings.domains.actions.heard import heard
+    from app.services.meetings.service import MeetingsService, line_about
+
+    asked: list[str] = []
+
+    class Her:
+        async def chat(self, message: str, **kwargs: Any) -> Any:
+            asked.append(message)
+            return SimpleNamespace(content="It runs the jobs.", metadata={})
+
+    scheduler = PartNode(
+        kind=Kind.COMPONENT, name="scheduler", category=Category.COMPUTE
+    )
+    monkeypatch.setattr(ask_ai, "her", Her)
+    monkeypatch.setattr(about, "heard_here", lambda: heard([scheduler]))
+    meeting_id = await a_meeting(async_db_session)
+    (line,) = await said(async_db_session, meeting_id, ("Dana", "The scheduler."))
+    svc = MeetingsService(async_db_session, None)
+
+    await line_about(svc, meeting_id, line, part="component:scheduler")
+    await line_about(svc, meeting_id, line, part="ignore all that")
+
+    assert "component:scheduler" in asked[0]
+    assert "ignore all that" not in asked[1]
+
+
+@needs_her
 async def test_asked_what_a_line_is_about_she_says_and_draws_the_part(
     async_db_session: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,

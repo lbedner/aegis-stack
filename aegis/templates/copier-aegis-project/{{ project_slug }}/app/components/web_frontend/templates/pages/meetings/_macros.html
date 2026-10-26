@@ -80,8 +80,9 @@
    stack has Illiana), her answer opening under it in a slot the body's live
    re-read keeps (``hx-preserve``). The slot holds the ask too: one at a time
    (``hx-sync``), and saying she is on it (``hx-indicator``), however often
-   the body is drawn again meanwhile. #}
-{% macro transcript(turns, clock, voices, hit=None, base=None, asks=False) %}
+   the body is drawn again meanwhile. ``parts``: the parts of the system a
+   line names (``parts_named``), each offered as what it is. #}
+{% macro transcript(turns, clock, voices, hit=None, base=None, asks=False, parts={}) %}
 {% if turns %}
 <ol class="space-y-4 text-sm"{% if asks %} hx-target="next .about-slot" hx-indicator="next .about-slot" hx-sync="next .about-slot:drop"{% endif %}>
   {% for name, rows in turns %}
@@ -90,7 +91,7 @@
     {% for line in rows %}
     <p id="line-{{ line.id }}" {% if hit and line.id == hit %}data-hit{% endif %} class="group/line flex gap-3 scroll-mt-20 rounded px-2 -mx-2 target:bg-aegis-teal/10 data-[hit]:bg-aegis-teal/10">
       <span class="w-10 shrink-0 pt-0.5 text-xs tabular-nums text-aegis-muted">{{ clock[line.id] }}</span>
-      <span class="flex-1 leading-relaxed text-aegis-text">{{ line.text }}</span>
+      <span class="flex-1 leading-relaxed text-aegis-text">{{ line.text }}{% for part, name in parts.get(line.id, []) %} {{ ask_about(base, line.id, part, name) }}{% endfor %}</span>
       {% if asks %}{{ ask_about(base, line.id) }}{% endif %}
     </p>
     {% if asks %}<div id="about-line-{{ line.id }}" class="about-slot" hx-preserve></div>{% endif %}
@@ -172,7 +173,15 @@
 
 {# Asking Illiana what a line is about (``.ask-about``): shown on the line's
    hover (or focus), her answer drawn into the slot after it (``transcript``).
-   Kept small: a live call draws every line again every few seconds. #}
-{% macro ask_about(base, line_id) %}
-<button type="button" class="ask-about" data-about="{{ line_id }}" hx-post="{{ base }}/lines/{{ line_id }}/about">What's this about?</button>
-{% endmacro %}
+   Kept small: a live call draws every line again every few seconds. Given a
+   ``part`` the line names (heard as ``name``), a chip asking what it is. #}
+{% macro ask_about(base, line_id, part=None, name=None) -%}
+{%- set url = base ~ "/lines/" ~ line_id ~ "/about" -%}
+{%- if part -%}
+{%- set hx %}hx-post="{{ url }}?part={{ part|urlencode }}"{% endset -%}
+{%- set extra %}data-part="{{ part }}"{% endset -%}
+{{ layout.chip(name ~ ": what it is", hx=hx, extra=extra) }}
+{%- else -%}
+<button type="button" class="ask-about" data-about="{{ line_id }}" hx-post="{{ url }}">What's this about?</button>
+{%- endif -%}
+{%- endmacro %}

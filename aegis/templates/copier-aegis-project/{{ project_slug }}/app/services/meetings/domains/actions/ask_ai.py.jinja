@@ -100,6 +100,12 @@ ABOUT_IT = (
     "wiring (draw_card, kind path, with that part's node). When it is not, "
     "say what it means in the meeting. Never invent a part."
 )
+# Asked of a part the line names (the chip beside it): which one, by node.
+ABOUT_PART = (
+    "They asked what {part} is (that node, in your tools): say what it is "
+    "and does here, as it bears on the line, and draw its wiring "
+    "(draw_card, kind path, node {part})."
+)
 
 
 async def about(
@@ -109,14 +115,17 @@ async def about(
     *,
     owner_user_id: int | None,
     admin: bool | None = None,
+    part: str | None = None,
 ) -> LineAbout:
-    """What ``line`` is about (``ABOUT_IT``), from what was said ``before``
-    and ``after`` it: her words, and the card she drew of the part it names."""
+    """What ``line`` is about (``ABOUT_IT``), or the ``part`` it names (a
+    node id: ``ABOUT_PART``), from what was said ``before`` and ``after``
+    it: her words, and the card she drew of the part it names."""
     from app.services.ai.service import cards  # with her, loaded when asked
 
+    asked = ABOUT_PART.format(part=part) if part else ABOUT_IT
     prompt = (
         f"The meeting around it:\n{turns(before)}\n>>> {turns([line])}\n"
-        f"{turns(after)}\n\n{ABOUT_IT}"
+        f"{turns(after)}\n\n{asked}"
     )
     said = await _her_turn(prompt, owner_user_id, admin=admin)
     trace = (said.metadata or {}).get("tool_trace", [])

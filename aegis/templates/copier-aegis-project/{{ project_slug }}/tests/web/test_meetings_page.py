@@ -368,6 +368,46 @@ async def test_a_line_asks_her_what_it_is_about(
     assert text(one(answer, "[data-about-answer] strong")) == "room"
 
 
+async def test_a_line_naming_a_part_offers_what_it_is(
+    authenticated_client: TestClient,
+    async_db_session: AsyncSession,
+    acting_owner_user_id: int | None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A line that names a part of the system gets a chip asking her what it
+    is, once a turn: the part rides the ask, so she answers about it."""
+    from app.components.web_frontend.routes import meetings as page
+    from app.core.ontology.model import Kind, PartNode
+    from app.core.parts import Category
+    from app.services.meetings.domains.actions import about
+    from app.services.meetings.domains.actions.heard import heard
+
+    parts = (
+        PartNode(kind=Kind.COMPONENT, name="scheduler", category=Category.COMPUTE),
+        PartNode(kind=Kind.COMPONENT, name="cache", category=Category.DATA),
+    )
+    monkeypatch.setattr(page, "asks_about", lambda: True)
+    monkeypatch.setattr(about, "heard_here", lambda: heard(parts))
+    meeting_id, lines = await ended(
+        async_db_session,
+        acting_owner_user_id,
+        ("Leonard", "The scheduler stalled again."),
+        ("Leonard", "Yes, the scheduler."),
+        ("Ada", "Redis too."),
+        notes=lambda lines: Notes(summary="Stalls."),
+    )
+
+    html = page_html(authenticated_client, f"/meetings/{meeting_id}")
+
+    asked = f"/meetings/{meeting_id}/lines/{lines[0]}/about?part=component%3Ascheduler"
+    chip = one(html, f'#line-{lines[0]} [data-part="component:scheduler"]')
+    assert (chip.get("hx-post"), text(chip)) == (asked, "Scheduler: what it is")
+    none(html, f"#line-{lines[1]} [data-part]")
+    assert text(one(html, f'#line-{lines[2]} [data-part="component:cache"]')) == (
+        "Redis: what it is"
+    )
+
+
 async def test_the_card_she_draws_shows_in_her_answer(
     authenticated_client: TestClient,
     finished: Callable[..., Any],

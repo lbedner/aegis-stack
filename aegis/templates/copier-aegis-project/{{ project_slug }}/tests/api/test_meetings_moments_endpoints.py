@@ -50,13 +50,15 @@ async def test_an_owner_asks_illiana_what_a_line_is_about(
     (line,) = await said(async_db_session, meeting_id, ("Dana", "Move it to Redis."))
     here = f"{MEETINGS}/{meeting_id}/lines/{line}/about"
 
-    answered = authenticated_client.post(here)
+    answered = authenticated_client.post(f"{here}?part=component:scheduler")
     unanswered = authenticated_client.post(here)
 
     assert answered.status_code == 200, answered.text
     assert answered.json() == {"summary": "The job runner.", "card_id": None}
     assert unanswered.status_code == 404
-    assert asked.await_args.args[1:] == (meeting_id, line)
+    assert asked.await_args_list[0].args[1:] == (meeting_id, line)
+    assert asked.await_args_list[0].kwargs == {"part": "component:scheduler"}
+    assert asked.await_args_list[1].kwargs == {"part": None}
 
 
 async def test_an_owner_asks_an_action_and_reads_the_prompt_to_copy(

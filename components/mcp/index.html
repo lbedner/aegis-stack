@@ -6611,7 +6611,7 @@
 <p>The server is <a href="https://gofastmcp.com">FastMCP</a>. It runs over stdio as a CLI command, so it adds no container and needs no token: whoever can run the CLI already owns the database. With the auth service it is also served over HTTP at <code>/mcp</code>, for a client elsewhere, signed in with a <a href="#tokens">token</a>.</p>
 <h2 id="what-a-client-sees">What a client sees</h2>
 <p>A client sees the tools listed in <code>MCP_TOOLS</code>, by registered name, and nothing else. A tool that writes is never served, whatever the list says (see <a href="../../services/ai/agents/#proposals-writes-the-user-approves">tool effects</a>), and a name with no registered tool is dropped.</p>
-<p>Every stack's default grant is Overseer's reads, the same ones its pages make:</p>
+<p>Every stack's default grant is Overseer's reads, the same ones its pages make, and what each part holds:</p>
 <table>
 <thead>
 <tr>
@@ -6635,6 +6635,10 @@
 <tr>
 <td><code>requests</code></td>
 <td>What a request did: the last ones the server answered (route, status, time, hop count), or one hop by hop: what each hop went through, named as the dry path names it, its real start and length, the tables a query touched and each line of code it was made through with the service piece it is in. The server's last 200, kept a day in the shared cache, so with Redis they outlive a restart and stdio reads them too</td>
+</tr>
+<tr>
+<td><code>aggregate</code></td>
+<td>What each part holds, as figures: no name lists the aggregates its services declare (<code>scheduler.runs</code>, <code>ai.spend</code>, ...) with the question each answers; a name reads one over a window of days (1, 7, 14, 30, 90, 365, or none for all). Counts and sums by label, never rows; app-wide, an admin's; the same window read again within a minute comes from the cache</td>
 </tr>
 <tr>
 <td><code>ontology</code></td>

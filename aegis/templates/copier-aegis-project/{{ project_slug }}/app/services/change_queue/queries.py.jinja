@@ -8,7 +8,7 @@ from sqlmodel import col, func, or_, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.change_queue.models import PendingChange
-from app.services.shared.queries import owner_filters
+from app.services.shared.queries import owner_filters, within
 
 
 async def batch_rows(
@@ -40,6 +40,19 @@ async def count_changes(
         *owner_filters(PendingChange.owner_user_id, owner_user_id),
     )
     return (await db.exec(query)).one()
+
+
+async def change_counts(
+    db: AsyncSession, since: datetime | None = None
+) -> list[tuple[str, str, int]]:
+    """Every owner's cards proposed since ``since`` (all, when None), as
+    ``(status, change_type, count)``: one grouped read, never a card."""
+    query = (
+        select(PendingChange.status, PendingChange.change_type, func.count())
+        .where(*within(PendingChange.created_at, since, None))
+        .group_by(PendingChange.status, PendingChange.change_type)
+    )
+    return [(status, kind, int(n)) for status, kind, n in (await db.exec(query)).all()]
 
 
 async def list_changes(

@@ -10,12 +10,14 @@ from sqlalchemy import func
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.services.insights.constants import Periods
 from app.services.insights.models import (
     InsightMetric,
     InsightMetricType,
     InsightRecord,
     InsightSource,
 )
+from app.services.shared.queries import within
 
 MetricOrder = Literal["date_asc", "date_desc", "value_desc"]
 
@@ -169,6 +171,22 @@ async def sum_metric_values(
     )
     return float((await db.exec(stmt)).one())
 
+
+async def daily_totals(
+    db: AsyncSession, since: datetime | None = None
+) -> list[tuple[str, str, float]]:
+    """Every daily metric summed since ``since`` (all, when None), as
+    ``(source key, metric key, total)``, in one grouped read. Only daily
+    rows: a cumulative or snapshot row is a level, and levels do not add."""
+    stmt = (
+        select(InsightSource.key, InsightMetricType.key, func.sum(InsightMetric.value))
+        .join(InsightMetricType, InsightMetric.metric_type_id == InsightMetricType.id)
+        .join(InsightSource, InsightMetricType.source_id == InsightSource.id)
+        .where(InsightMetric.period == Periods.DAILY)
+        .where(*within(InsightMetric.date, since, None))
+        .group_by(InsightSource.key, InsightMetricType.key)
+    )
+    return [(source, metric, float(total)) for source, metric, total in (await db.exec(stmt)).all()]
 
 async def latest_created_at(
     db: AsyncSession, type_ids: Iterable[int | None]

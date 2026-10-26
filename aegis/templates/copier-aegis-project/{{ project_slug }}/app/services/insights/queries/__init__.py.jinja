@@ -14,6 +14,7 @@ builds. Statement builders only - no business logic, no writes.
 from app.services.insights.queries import events, metrics
 from app.services.insights.queries.events import events_where
 from app.services.insights.queries.metrics import (
+    daily_totals,
     latest_created_at,
     metric_count,
     metric_on,
@@ -43,6 +44,7 @@ from app.services.insights.queries.projects import (
 {%- endif %}
 
 __all__ = [
+    "daily_totals",
     "events",
     "events_where",
     "latest_created_at",

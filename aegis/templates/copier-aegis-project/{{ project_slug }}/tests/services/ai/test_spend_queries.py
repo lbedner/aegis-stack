@@ -233,10 +233,8 @@ async def test_the_spend_aggregate_is_one_of_the_apps_windows(
     async_db_session.add(_call(utcnow(), "chat:assistant", 0.25))
     async_db_session.add(_call(utcnow() - timedelta(days=30), "chat:assistant", 4.0))
     await async_db_session.commit()
-    (counted,) = aggregates.AGGREGATES
-
-    week = await counted.read(async_db_session, 7)
+    week = await aggregates.spend(async_db_session, 7)
 
     assert (week.label, week.total_requests, week.total_cost) == ("7d", 1, 0.25)
-    every = await counted.read(async_db_session, None)
+    every = await aggregates.spend(async_db_session, None)
     assert (every.label, every.total_requests) == ("All", 2)

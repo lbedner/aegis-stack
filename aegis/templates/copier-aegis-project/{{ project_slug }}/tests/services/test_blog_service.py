@@ -327,3 +327,30 @@ async def test_import_posts_per_post_error_handling(
     assert result.failed >= 0
     posts, _ = await service.list_posts(page=1, page_size=100)
     assert any(p.slug == "good" for p in posts)
+
+
+@pytest.mark.asyncio
+async def test_the_posts_aggregate_counts_each_status_in_the_window(
+    async_db_session: AsyncSession,
+) -> None:
+    """``blog.posts``: posts by status, written in the window; never a post."""
+    from datetime import UTC, datetime, timedelta
+
+    from app.services.blog import aggregates
+    from app.services.blog.models import BlogPost
+
+    service = BlogService(async_db_session)
+    published = await service.create_post(BlogPostCreate(title="One", content="x"))
+    await service.publish_post(published.id)
+    await service.create_post(BlogPostCreate(title="Two", content="x"))
+    old = await service.create_post(BlogPostCreate(title="Old", content="x"))
+    row = await async_db_session.get(BlogPost, old.id)
+    assert row is not None
+    row.created_at = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=60)
+    await async_db_session.commit()
+
+    week = await aggregates.posts(async_db_session, 7)
+    ever = await aggregates.posts(async_db_session, None)
+
+    assert week.by_status == {"published": 1, "draft": 1}
+    assert ever.by_status == {"published": 1, "draft": 2}

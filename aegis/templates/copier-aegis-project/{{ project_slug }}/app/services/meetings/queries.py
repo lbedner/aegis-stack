@@ -19,7 +19,7 @@ from app.services.meetings.models import (
     MeetingStatus,
     TranscriptLine,
 )
-from app.services.shared.queries import owner_filters
+from app.services.shared.queries import owner_filters, within
 
 
 async def meetings_of(
@@ -82,6 +82,19 @@ async def counts(db: AsyncSession) -> tuple[int, int]:
         ).select_from(Meeting)
     )
     return found.one()
+
+
+async def status_platform_counts(
+    db: AsyncSession, since: datetime | None = None
+) -> list[tuple[str, str, int]]:
+    """Every owner's meetings asked for since ``since`` (all, when None), as
+    ``(status, platform, count)``: one grouped read."""
+    found = await db.exec(
+        select(Meeting.status, Meeting.platform, func.count())
+        .where(*within(Meeting.created_at, since, None))
+        .group_by(Meeting.status, Meeting.platform)
+    )
+    return [(str(status), platform, int(n)) for status, platform, n in found.all()]
 
 
 async def move(

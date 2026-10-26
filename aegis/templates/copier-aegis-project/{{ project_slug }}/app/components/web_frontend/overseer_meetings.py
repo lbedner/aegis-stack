@@ -31,7 +31,8 @@ from app.services.meetings.models import (
     SeriesRow,
     ThreadSection,
 )
-from app.services.meetings.service import MeetingsService, meetings_counts
+from app.services.meetings.queries import meetings_counts
+from app.services.meetings.service import MeetingsService
 from app.services.system.models import ComponentStatus
 
 from .meeting_agents import agent_options, agents_context, owner_options
@@ -102,8 +103,8 @@ async def section_context(
         | await search_context(req, PAGE)
         | {
             "figures": [
-                {"label": "Meetings", "value": counts["meetings"]},
-                {"label": "In a call now", "value": counts["in_call"]},
+                {"label": "Meetings", "value": counts.meetings},
+                {"label": "In a call now", "value": counts.in_call},
             ],
             "rows": rows,
         }

@@ -229,22 +229,23 @@ async def _usage(db: Any, query: dict[str, str]) -> dict[str, Any]:
     }
 
 
-async def sentiment_stats() -> dict[str, Any]:
-    """The sentiment job's tallies (a persistence backend's module)."""
+async def sentiment_stats(db: Any) -> Any:
+    """The sentiment job's tallies, a ``SentimentStats`` (a persistence
+    backend's module)."""
     from app.services.ai.domains.chat.sentiment import sentiment_stats as stats
 
-    return await stats()
+    return await stats(session=db)
 
 
-async def _sentiment() -> dict[str, Any]:
-    stats = await sentiment_stats()
-    spread = stats.get("distribution") or {}
+async def _sentiment(db: Any) -> dict[str, Any]:
+    stats = await sentiment_stats(db)
+    spread = stats.distribution
     return {
-        "enabled": stats.get("enabled", False),
-        "total": stats.get("total", 0),
+        "enabled": stats.enabled,
+        "total": stats.total,
         "figures": [
-            {"label": "Scored", "value": f"{stats.get('total', 0):,}"},
-            {"label": "Average score", "value": stats.get("average_score", 0.0)},
+            {"label": "Scored", "value": f"{stats.total:,}"},
+            {"label": "Average score", "value": stats.average_score},
             {
                 "label": "Negative",
                 "value": spread.get("negative", 0),
@@ -257,11 +258,8 @@ async def _sentiment() -> dict[str, Any]:
             [spread.get(s, 0) for s in SENTIMENTS],
         ),
         "negatives": [
-            {
-                "summary": n.get("summary"),
-                "when": format_relative_time(n.get("created_at")),
-            }
-            for n in stats.get("recent_negatives", [])
+            {"summary": n.summary, "when": format_relative_time(n.created_at)}
+            for n in stats.recent_negatives
         ],
     }
 
@@ -274,7 +272,7 @@ async def section_context(
     if section == "usage":
         return await _usage(req.db, dict(req.query))
     if section == "sentiment":
-        return await _sentiment()
+        return await _sentiment(req.db)
     if section == "costs":
         from . import overseer_ai_costs
 

@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy import Index, Text
 from sqlmodel import Field, SQLModel
 
+from app.core.figures import FIGURES
 from app.core.time import utcnow
 from app.services.meetings.models.base import (
     _OWNER_FK,
@@ -121,6 +122,16 @@ class TranscriptRow(BaseModel):
     speaker: str
     at: float
     text: str
+
+
+class MeetingsCounts(BaseModel):
+    """Across every owner, for the health check and the Overseer page:
+    every meeting, and how many the bot is in now."""
+
+    model_config = FIGURES
+
+    meetings: int
+    in_call: int
 
 
 class MeetingRecord(BaseModel):

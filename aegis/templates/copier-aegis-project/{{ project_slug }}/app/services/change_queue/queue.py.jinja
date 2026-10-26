@@ -24,7 +24,11 @@ from app.core.time import utcnow
 from app.services.change_queue.models import PendingChange
 from app.services.change_queue.queries import batch_rows, get_change
 from app.services.change_queue.registry import executor_for
-from app.services.change_queue.schemas import ChangeDisplayRow, PendingChangeResponse
+from app.services.change_queue.schemas import (
+    BatchResolveResponse,
+    ChangeDisplayRow,
+    PendingChangeResponse,
+)
 from pydantic import ValidationError
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -131,7 +135,7 @@ async def approve_rows(
     rows: list[PendingChange],
     *,
     exclude_ids: list[int] | None = None,
-) -> dict[str, Any]:
+) -> BatchResolveResponse:
     """Approve the still-pending rows the caller already read, except the
     vetoed ones, which are rejected (a veto is a decision, not a
     deferral). One failing row stays pending with its error; the rest
@@ -151,15 +155,17 @@ async def approve_rows(
             approved += 1
         except Exception:
             failed += 1
-    return {"approved": approved, "rejected": rejected, "failed": failed}
+    return BatchResolveResponse(approved=approved, rejected=rejected, failed=failed)
 
 
-async def reject_rows(db: AsyncSession, rows: list[PendingChange]) -> dict[str, Any]:
+async def reject_rows(
+    db: AsyncSession, rows: list[PendingChange]
+) -> BatchResolveResponse:
     """Reject the still-pending rows the caller already read."""
     pending = _pending(rows)
     for row, display in zip(pending, await _describe_rows(db, pending)):
         await _reject(db, row, display)
-    return {"approved": 0, "rejected": len(pending), "failed": 0}
+    return BatchResolveResponse(approved=0, rejected=len(pending), failed=0)
 
 
 def _found(row: PendingChange | None) -> PendingChange:
@@ -247,7 +253,7 @@ async def _approve(
         await db.flush()
         raise
     row.status = "approved"
-    row.result = {**result, "display": _freeze(display)}
+    row.result = {**result.model_dump(mode="json"), "display": _freeze(display)}
     row.resolved_at = utcnow()
     row.updated_at = row.resolved_at
     db.add(row)

@@ -337,22 +337,26 @@ def test_sentiment_is_a_chart_and_the_negatives(
 
     from app.components.web_frontend import overseer_ai
 
-    async def sentiment_stats() -> dict[str, Any]:
-        return {
-            "enabled": True,
-            "total": 5,
-            "distribution": {"positive": 3, "neutral": 1, "negative": 1},
-            "performance": {},
-            "average_score": 0.42,
-            "recent_negatives": [
-                {
-                    "conversation_id": "c1",
-                    "overall_sentiment": "negative",
-                    "summary": "Could not find the invoice",
-                    "created_at": "2026-09-29T19:00:00",
-                }
+    from datetime import datetime
+
+    from app.services.ai.domains.chat.sentiment import RecentNegative, SentimentStats
+
+    async def sentiment_stats(db: Any) -> SentimentStats:
+        return SentimentStats(
+            enabled=True,
+            total=5,
+            distribution={"positive": 3, "neutral": 1, "negative": 1},
+            performance={},
+            average_score=0.42,
+            recent_negatives=[
+                RecentNegative(
+                    conversation_id="c1",
+                    overall_sentiment="negative",
+                    summary="Could not find the invoice",
+                    created_at=datetime(2026, 9, 29, 19),
+                )
             ],
-        }
+        )
 
     client = _client(app, monkeypatch)
     monkeypatch.setattr(overseer_ai, "sentiment_stats", sentiment_stats)
@@ -368,15 +372,17 @@ def test_sentiment_says_when_scoring_is_off(
 ) -> None:
     from app.components.web_frontend import overseer_ai
 
-    async def sentiment_stats() -> dict[str, Any]:
-        return {
-            "enabled": False,
-            "total": 0,
-            "distribution": {},
-            "performance": {},
-            "average_score": 0.0,
-            "recent_negatives": [],
-        }
+    from app.services.ai.domains.chat.sentiment import SentimentStats
+
+    async def sentiment_stats(db: Any) -> SentimentStats:
+        return SentimentStats(
+            enabled=False,
+            total=0,
+            distribution={},
+            performance={},
+            average_score=0.0,
+            recent_negatives=[],
+        )
 
     client = _client(app, monkeypatch)
     monkeypatch.setattr(overseer_ai, "sentiment_stats", sentiment_stats)

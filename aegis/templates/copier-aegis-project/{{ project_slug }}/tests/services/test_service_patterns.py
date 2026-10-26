@@ -68,6 +68,49 @@ def test_an_optional_session_is_flagged(tmp_path: Path) -> None:
     assert _findings(tmp_path)["required-session"] == ["notes/store.py: Store.count"]
 
 
+def test_a_record_handed_back_as_a_dict_is_flagged(tmp_path: Path) -> None:
+    """A model, not keys no type checker holds; a label's counts (``dict[str,
+    int]``) are figures, not a record, and a tool's answer is JSON for the
+    model."""
+    _write(
+        tmp_path,
+        "notes/queries.py",
+        """
+        async def counts(session: AsyncSession) -> dict[str, Any]:
+            return {"notes": 1}
+
+        async def summary(session: AsyncSession) -> NoteCounts:
+            return NoteCounts(notes=1)
+
+        async def by_tag(session: AsyncSession) -> dict[str, int]:
+            return {"work": 1}
+
+        async def maybe(session: AsyncSession) -> dict[str, Any] | None:
+            return None
+        """,
+    )
+    _write(
+        tmp_path,
+        "notes/lookups.py",
+        """
+        async def note_counts(session: AsyncSession) -> dict[str, Any]:
+            return (await summary(session)).model_dump(mode="json")
+
+        async def note_tags(session: AsyncSession) -> dict[str, Any]:
+            return {}
+
+        register_tool(
+            "note_counts", note_counts, description="Notes", effect="read"
+        )
+        register_tool("note_tags", func=note_tags, effect="read")
+        """,
+    )
+    assert _findings(tmp_path)["returns-model"] == [
+        "notes/queries.py: counts",
+        "notes/queries.py: maybe",
+    ]
+
+
 def test_a_required_session_follows_and_becomes_the_example(tmp_path: Path) -> None:
     _write(
         tmp_path,

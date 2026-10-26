@@ -287,8 +287,10 @@ def memory(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> TestClient:
             },
         ]
 
-    async def facts(db: Any) -> list[dict[str, Any]]:
-        return FACTS
+    from app.services.ai.domains.chat.user_memory import UserFact
+
+    async def facts(db: Any) -> list[UserFact]:
+        return [UserFact(**f) for f in FACTS]
 
     monkeypatch.setattr(overseer_ai_agents, "module_rows", modules)
     monkeypatch.setattr(overseer_ai_agents, "fact_rows", facts)

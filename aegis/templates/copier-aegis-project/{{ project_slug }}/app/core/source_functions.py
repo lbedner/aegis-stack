@@ -29,6 +29,7 @@ class Function:
     statements: int  # in its body, a docstring not counted
     # The calls made without ``await``, as written: ``f``, ``x.f``.
     unawaited: frozenset[str] = frozenset()
+    returns: str | None = None  # its return annotation, as written
 
 
 def _written(lines: tuple[str, ...], node: ast.expr | None) -> str | None:
@@ -113,6 +114,7 @@ def _function(
         frozenset(calls),
         len(body) - int(docstring),
         frozenset(unawaited),
+        _written(lines, node.returns),
     )
 
 
@@ -125,3 +127,15 @@ def functions(
             yield from functions(child, lines, f"{prefix}{child.name}.")
         elif isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
             yield _function(child, prefix + child.name, lines)
+
+
+def registered_tools(tree: ast.AST) -> frozenset[str]:
+    """The functions a module registers as an agent's tools:
+    ``register_tool("name", func)``, or ``func=func``."""
+    found = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call) or called(node.func) != "register_tool":
+            continue
+        given = node.args[1:2] + [k.value for k in node.keywords if k.arg == "func"]
+        found.update(g.id for g in given if isinstance(g, ast.Name))
+    return frozenset(found)

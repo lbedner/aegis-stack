@@ -51,7 +51,6 @@ class TestAIServiceStatus:
         assert "provider" in status
         assert "model" in status
         assert "agent_initialized" in status
-        assert "total_conversations" in status
         assert "configuration_valid" in status
 
     async def test_get_service_status_provider_type(self) -> None:
@@ -87,16 +86,6 @@ class TestAIServiceStatus:
         status = await service.get_service_status()
 
         assert isinstance(status["configuration_valid"], bool)
-
-    async def test_get_service_status_conversation_count(self) -> None:
-        """Test that total_conversations is a non-negative integer."""
-        service = AIService(settings)
-        status = await service.get_service_status()
-
-        # In SQLite mode, database may contain data from previous runs
-        # Just verify it's a valid non-negative count
-        assert isinstance(status["total_conversations"], int)
-        assert status["total_conversations"] >= 0
 
 
 class TestAIServiceValidation:
@@ -152,10 +141,6 @@ class TestAIServiceConversationManagement:
 
         # ConversationManager should be accessible
         assert hasattr(service, "conversation_manager")
-        # Manager should have get_stats method
-        stats = await service.conversation_manager.get_stats()
-        assert isinstance(stats, dict)
-        assert "total_conversations" in stats
 
 
 class TestAIServiceConfigIntegration:

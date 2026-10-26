@@ -48,9 +48,18 @@ async def check_ai_service_health() -> ComponentStatus:
 
         current_config = get_ai_config(settings)
 
-        # Get conversation statistics once (get_service_status() also calls
-        # get_stats() internally, so we skip it and use conversation_stats directly)
+        # How much has been said, on the one session this check opens.
+{%- if ai_backend != "memory" %}
+        from app.core.db import get_async_session
+        from app.services.ai.domains.chat.queries import (
+            conversation_stats as stats_of,
+        )
+
+        async with get_async_session() as session:
+            conversation_stats = await stats_of(session)
+{%- else %}
         conversation_stats = await ai_service.conversation_manager.get_stats()
+{%- endif %}
         validation_errors = await current_config.validate_configuration(settings)
 
         # Determine overall health using fresh config
@@ -79,12 +88,12 @@ async def check_ai_service_health() -> ComponentStatus:
             "provider": current_config.provider.value,
             "model": current_config.model,
             "agent_ready": True,  # Agents created per request, always available
-            "total_conversations": conversation_stats["total_conversations"],
-            "total_messages": conversation_stats["total_messages"],
-            "unique_users": conversation_stats["unique_users"],
-            "avg_messages_per_conversation": conversation_stats[
-                "average_messages_per_conversation"
-            ],
+            "total_conversations": conversation_stats.total_conversations,
+            "total_messages": conversation_stats.total_messages,
+            "unique_users": conversation_stats.unique_users,
+            "avg_messages_per_conversation": (
+                conversation_stats.average_messages_per_conversation
+            ),
             "configuration_valid": len(validation_errors) == 0,
             "validation_errors": validation_errors,
             "validation_errors_count": len(validation_errors),

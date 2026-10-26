@@ -1,16 +1,27 @@
 """Is the AI service up, and what is it running."""
 
 from typing import Any
-from fastapi import APIRouter
+from fastapi import APIRouter{% if ai_backend != "memory" %}, Depends{% endif %}
+{%- if ai_backend != "memory" %}
+from sqlmodel.ext.asyncio.session import AsyncSession
+{%- endif %}
 
 from app.components.backend.api.ai.service import ai_service
+{%- if ai_backend != "memory" %}
+from app.core.db import get_async_db
+{%- endif %}
 from app.core.log import logger
+{%- if ai_backend != "memory" %}
+from app.services.ai.domains.chat.queries import conversation_stats
+{%- endif %}
 
 router = APIRouter()
 
 
 @router.get("/health")
-async def ai_health() -> dict[str, Any]:
+async def ai_health(
+{%- if ai_backend != "memory" %}db: AsyncSession = Depends(get_async_db){% endif -%}
+) -> dict[str, Any]:
     """
     AI service health endpoint.
 
@@ -19,6 +30,11 @@ async def ai_health() -> dict[str, Any]:
     """
     try:
         status = await ai_service.get_service_status()
+{%- if ai_backend != "memory" %}
+        said = await conversation_stats(db)
+{%- else %}
+        said = await ai_service.conversation_manager.get_stats()
+{%- endif %}
         validation_errors = await ai_service.validate_service()
 
         return {
@@ -28,7 +44,7 @@ async def ai_health() -> dict[str, Any]:
             "provider": status["provider"],
             "model": status["model"],
             "agent_ready": status["agent_initialized"],
-            "total_conversations": status["total_conversations"],
+            "total_conversations": said.total_conversations,
             "configuration_valid": status["configuration_valid"],
             "validation_errors": validation_errors,
         }

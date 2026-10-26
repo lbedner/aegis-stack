@@ -30,7 +30,15 @@ from app.models.conversation import ConversationMessage as MessageModel
 from app.services.ai.domains.chat import queries
 {% endif %}
 
-from app.services.ai.models import AIProvider, Conversation, ConversationMessage, MessageRole
+from app.services.ai.models import (
+    AIProvider,
+    Conversation,
+    ConversationMessage,
+{%- if ai_backend == "memory" %}
+    ConversationStats,
+{%- endif %}
+    MessageRole,
+)
 
 
 {% if ai_backend != "memory" %}
@@ -366,15 +374,11 @@ class ConversationManager:
 
         return deleted_count
 {% endif %}
-
-    async def get_stats(self) -> dict[str, Any]:
-        """
-        Get conversation manager statistics.
-
-        Returns:
-            dict: Statistics about conversations
-        """
 {% if ai_backend == "memory" %}
+
+    async def get_stats(self) -> ConversationStats:
+        """This store's ``ConversationStats`` (a database's is the chat
+        queries' ``conversation_stats``, on the caller's session)."""
         total_conversations = len(self.conversations)
         total_messages = sum(
             conv.get_message_count() for conv in self.conversations.values()
@@ -387,28 +391,14 @@ class ConversationManager:
             if user_id:
                 users.add(user_id)
 
-        return {
-            "total_conversations": total_conversations,
-            "total_messages": total_messages,
-            "unique_users": len(users),
-            "average_messages_per_conversation": (
+        return ConversationStats(
+            total_conversations=total_conversations,
+            total_messages=total_messages,
+            unique_users=len(users),
+            average_messages_per_conversation=(
                 total_messages / total_conversations if total_conversations > 0 else 0
             ),
-        }
-{% else %}
-        async with get_async_session() as session:
-            total_conversations = await queries.conversation_count(session)
-            total_messages = await queries.message_count(session)
-            unique_users = await queries.distinct_user_count(session)
-
-            return {
-                "total_conversations": total_conversations,
-                "total_messages": total_messages,
-                "unique_users": unique_users,
-                "average_messages_per_conversation": (
-                    total_messages / total_conversations if total_conversations > 0 else 0
-                ),
-            }
+        )
 {% endif %}
 
 {% if ai_backend != "memory" %}

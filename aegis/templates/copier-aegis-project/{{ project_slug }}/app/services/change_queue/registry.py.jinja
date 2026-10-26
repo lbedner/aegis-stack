@@ -33,9 +33,9 @@ class ChangeExecutor:
     """One kind of proposable mutation.
 
     ``execute`` runs the REAL service mutation and returns an audit
-    summary; ``describe`` resolves a LIST of payloads into one card
-    body each, in order - system truth from the database, never
-    model-authored copy. It takes the list so a queue of cards costs a
+    summary, a model of what changed (kept as JSON on the row);
+    ``describe`` resolves a LIST of payloads into one card body each, in
+    order - system truth from the database, never model-authored copy. It takes the list so a queue of cards costs a
     fixed number of queries, not a lookup per card. Rows are ``ChangeDisplayRow``
     end to end; they become plain dicts only at the freeze into the
     audit column and at the tool-result boundary.
@@ -44,7 +44,7 @@ class ChangeExecutor:
     change_type: str
     title: str
     payload_model: type[BaseModel]
-    execute: Callable[[AsyncSession, Any, int | None], Awaitable[dict[str, Any]]]
+    execute: Callable[[AsyncSession, Any, int | None], Awaitable[BaseModel]]
     describe: Callable[
         [AsyncSession, list[Any], int | None],
         Awaitable[list[list[ChangeDisplayRow]]],

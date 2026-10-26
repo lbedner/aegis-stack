@@ -225,6 +225,31 @@ class SentimentMix(BaseModel):
     average_score: float
 
 
+class RecentNegative(BaseModel):
+    """A conversation scored negative or frustrated, newest first."""
+
+    model_config = FIGURES
+
+    conversation_id: str
+    overall_sentiment: str
+    summary: str | None
+    created_at: datetime
+
+
+class SentimentStats(BaseModel):
+    """Every verdict, zero-filled, for the CLI, the API and Overseer: the
+    mix, whether the job scores, and the latest negatives."""
+
+    model_config = FIGURES
+
+    enabled: bool
+    total: int
+    distribution: dict[str, int]
+    performance: dict[str, int]
+    average_score: float
+    recent_negatives: list[RecentNegative]
+
+
 async def sentiment_mix(
     session: AsyncSession, since: datetime | None = None
 ) -> SentimentMix:
@@ -243,36 +268,24 @@ async def sentiment_mix(
     )
 
 
-async def sentiment_stats(
-    *, session: AsyncSession | None = None
-) -> dict[str, Any]:
+async def sentiment_stats(*, session: AsyncSession) -> SentimentStats:
     """Aggregate sentiment results for CLI and dashboard surfaces.
 
     Returns zero-filled distributions so consumers can render a stable
     shape whether or not anything has been scored yet.
     """
-    if session is None:
-        async with get_async_session() as owned_session:
-            return await sentiment_stats(session=owned_session)
-
     mix = await sentiment_mix(session)
     recent_negatives = [
-        {
-            "conversation_id": row.conversation_id,
-            "overall_sentiment": row.overall_sentiment,
-            "summary": row.summary,
-            "created_at": row.created_at.isoformat(),
-        }
+        RecentNegative.model_validate(row, from_attributes=True)
         for row in await queries.recent_negative_sentiments(
             session, RECENT_NEGATIVE_LIMIT
         )
     ]
-
-    return {
-        "enabled": settings.AI_SENTIMENT_ENABLED,
-        "total": sum(mix.by_sentiment.values()),
-        "distribution": mix.by_sentiment,
-        "performance": mix.by_performance,
-        "average_score": mix.average_score,
-        "recent_negatives": recent_negatives,
-    }
+    return SentimentStats(
+        enabled=settings.AI_SENTIMENT_ENABLED,
+        total=sum(mix.by_sentiment.values()),
+        distribution=mix.by_sentiment,
+        performance=mix.by_performance,
+        average_score=mix.average_score,
+        recent_negatives=recent_negatives,
+    )

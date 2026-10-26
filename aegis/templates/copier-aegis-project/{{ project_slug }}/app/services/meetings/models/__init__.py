@@ -56,6 +56,7 @@ from app.services.meetings.models.meeting import (
     Meeting,
     MeetingParticipant,
     MeetingRecord,
+    MeetingsCounts,
     TranscriptLine,
     TranscriptRow,
 )
@@ -137,6 +138,7 @@ __all__ = [
     "MeetingParticipant",
     "MeetingPerson",
     "MeetingRecord",
+    "MeetingsCounts",
     "MeetingRunnerToken",
     "MeetingSeries",
     "MeetingStatus",

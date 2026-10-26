@@ -79,8 +79,10 @@ def harness(
     recorder = AsyncMock(return_value=0.0)  # the cost it priced
 {%- if ai_backend != "memory" %}
 
-    async def no_memory(user_id: str, **kwargs: object) -> None:
-        return None
+    from app.services.ai.domains.chat.user_memory import UserContext
+
+    async def no_memory(user_id: str, **kwargs: object) -> UserContext:
+        return UserContext(memory=None, readings=[])
 
     monkeypatch.setattr(turn_module, "build_user_memory_context", no_memory)
     monkeypatch.setattr(service, "_record_usage", recorder)

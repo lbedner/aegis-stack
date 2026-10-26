@@ -384,6 +384,25 @@ class TestWorkerHealthLogic:
 class TestComponentMetadata:
     """Test component metadata handling and serialization."""
 
+    def test_a_checks_model_is_its_metadata_as_json(self) -> None:
+        """A health check hands over its figures model; a timestamp goes out
+        as text, however the check forgot to dump it."""
+        from datetime import datetime
+
+        from pydantic import BaseModel
+
+        class Counts(BaseModel):
+            items: int
+            last: datetime
+
+        status = ComponentStatus(
+            name="research",
+            message="1 item",
+            metadata=Counts(items=1, last=datetime(2026, 10, 26, 9)),
+        )
+
+        assert status.metadata == {"items": 1, "last": "2026-10-26T09:00:00"}
+
     def test_a_status_never_carries_a_password(self) -> None:
         """Health goes out unauthenticated (``/health/detailed``, the MCP
         health tool): a connection URL's password is hidden however deep a

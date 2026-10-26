@@ -102,9 +102,14 @@ class ReschedulePayload(BaseModel):
     post_id: int
     publish_at: str
 
-async def execute(db, payload, owner_user_id) -> dict:
+class Rescheduled(BaseModel):
+    model_config = FIGURES  # app.core.figures
+
+    post_id: int
+
+async def execute(db, payload, owner_user_id) -> Rescheduled:
     ...  # the real mutation; runs only on approval
-    return {"post_id": payload.post_id}
+    return Rescheduled(post_id=payload.post_id)
 
 async def describe(db, payloads, owner_user_id) -> list[list[ChangeDisplayRow]]:
     return [[ChangeDisplayRow(label="Publish at", value=p.publish_at)] for p in payloads]

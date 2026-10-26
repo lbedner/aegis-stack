@@ -148,7 +148,7 @@ async def approve_batch(
     """Approve the batch's pending rows, rejecting any vetoed ids."""
     summary = await change_queue.approve_rows(db, rows, exclude_ids=body.exclude_ids)
     await db.commit()
-    return BatchResolveResponse(**summary)
+    return summary
 
 
 @router.post("/batch/{batch_id}/reject", response_model=BatchResolveResponse)
@@ -158,5 +158,5 @@ async def reject_batch(
 ) -> BatchResolveResponse:
     summary = await change_queue.reject_rows(db, rows)
     await db.commit()
-    return BatchResolveResponse(**summary)
+    return summary
 {% endif %}

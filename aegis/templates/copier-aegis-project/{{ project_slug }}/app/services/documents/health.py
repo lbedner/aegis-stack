@@ -26,8 +26,10 @@ async def check_documents_service_health() -> ComponentStatus:
     try:
         async with get_async_session() as session:
             summary = await DocumentService(session).summary()
-        metadata = {**summary, "backend": get_storage().backend_name}
-        if summary["total"] == 0:
+        metadata = summary.model_dump(mode="json") | {
+            "backend": get_storage().backend_name
+        }
+        if summary.total == 0:
             return ComponentStatus(
                 name=DOCUMENTS_COMPONENT_NAME,
                 status=ComponentStatusType.INFO,
@@ -37,8 +39,8 @@ async def check_documents_service_health() -> ComponentStatus:
         return ComponentStatus(
             name=DOCUMENTS_COMPONENT_NAME,
             status=ComponentStatusType.HEALTHY,
-            message=f"{counted(summary['total'], 'document')}, "
-            f"{summary['this_month']} this month",
+            message=f"{counted(summary.total, 'document')}, "
+            f"{summary.this_month} this month",
             metadata=metadata,
         )
     except Exception as e:

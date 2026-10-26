@@ -76,12 +76,12 @@ def _row(
 
 async def _overview(service: DocumentService) -> dict[str, Any]:
     summary = await service.summary()
-    by_kind = summary.get("by_kind", {})
+    by_kind = summary.by_kind
     return {
         "figures": [
-            {"label": "Documents", "value": summary.get("total", 0)},
-            {"label": "This month", "value": summary.get("this_month", 0)},
-            {"label": "Stored", "value": format_bytes(summary.get("bytes", 0))},
+            {"label": "Documents", "value": summary.total},
+            {"label": "This month", "value": summary.this_month},
+            {"label": "Stored", "value": format_bytes(summary.bytes)},
             {"label": "Kinds", "value": len(by_kind)},
         ],
         "kinds": ranked(

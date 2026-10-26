@@ -13,6 +13,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.storage import FilesystemStorage, set_storage
 from app.services.documents import DocumentService
+from app.services.documents.models import DocumentSummary
 
 
 @pytest.fixture
@@ -263,16 +264,15 @@ class TestSummary:
 
         summary = await svc.summary(owner_user_id=1)
 
-        assert summary["total"] == 3
-        assert summary["this_month"] == 3
-        assert summary["bytes"] == 13
-        assert summary["by_kind"] == {"letter": 2, "statement": 1}
+        assert summary == DocumentSummary(
+            total=3, this_month=3, bytes=13, by_kind={"letter": 2, "statement": 1}
+        )
 
     @pytest.mark.asyncio
     async def test_an_empty_store_is_zeros_not_nulls(self, svc) -> None:
         summary = await svc.summary(owner_user_id=99)
 
-        assert summary == {"total": 0, "this_month": 0, "bytes": 0, "by_kind": {}}
+        assert summary == DocumentSummary(total=0, this_month=0, bytes=0, by_kind={})
 
 
 class TestLifecycle:

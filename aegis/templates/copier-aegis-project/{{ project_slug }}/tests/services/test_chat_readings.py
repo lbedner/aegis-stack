@@ -45,8 +45,8 @@ class TestRecordReading:
 
         assert result["recorded"] == 3
         assert len(staged) == 1
-        assert staged[0]["title"] == "Target order 8/27"
-        assert staged[0]["items"][0]["quantity"] == 4
+        assert staged[0].title == "Target order 8/27"
+        assert staged[0].items[0].quantity == 4
 
     @pytest.mark.asyncio
     async def test_recording_outside_a_turn_reports_not_saves(self) -> None:
@@ -77,25 +77,23 @@ class TestMergeAndFormat:
     @pytest.mark.skipif(not _HAS_STORE, reason="no per-user store without a database")
     @pytest.mark.asyncio
     async def test_staged_readings_merge_into_the_user_store(self) -> None:
-        from app.services.ai.domains.chat.readings import user_readings
+        from app.services.ai.domains.chat.user_memory import (
+            build_user_memory_context,
+        )
 
-        reading = Reading(
-            title="Target order", items=[ReadingItem(**i) for i in _ITEMS]
-        ).model_dump()
+        reading = Reading(title="Target order", items=[ReadingItem(**i) for i in _ITEMS])
 
         await merge_staged_readings("merge-u1", [reading])
         await merge_staged_readings(
             "merge-u1", []
         )  # a readingless turn changes nothing
 
-        stored = await user_readings("merge-u1")
+        stored = (await build_user_memory_context("merge-u1")).readings
         assert len(stored) == 1
-        assert stored[0]["title"] == "Target order"
+        assert stored[0].title == "Target order"
 
     def test_format_renders_every_item_with_money_and_counts(self) -> None:
-        reading = Reading(
-            title="Target order", items=[ReadingItem(**i) for i in _ITEMS]
-        ).model_dump()
+        reading = Reading(title="Target order", items=[ReadingItem(**i) for i in _ITEMS])
 
         block = format_readings([reading])
 
@@ -121,7 +119,7 @@ class TestMergeAndFormat:
                     label="Tide", amount_cents=1599, group="Arriving Fri, Aug 28"
                 ),
             ],
-        ).model_dump()
+        )
 
         block = format_readings([reading])
 

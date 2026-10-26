@@ -1962,7 +1962,7 @@
       "kind": "repeated_statement",
       "label": "SELECT ... FROM meeting",
       "file": "app/services/meetings/queries.py",
-      "function": "counts"
+      "function": "meetings_counts"
     },
     {
       "kind": "repeated_statement",

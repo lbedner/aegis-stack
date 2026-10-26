@@ -13,6 +13,7 @@ import pytest
 pytest.importorskip("app.services.rag", reason="no RAG in this stack")
 
 from app.components.web_frontend import overseer_ai_rag  # noqa: E402
+from app.services.rag.models import CollectionInfo  # noqa: E402
 from app.services.system.models import ComponentStatus  # noqa: E402
 from tests.web.dom import one, select, text, triggers  # noqa: E402
 from tests.web.overseer import sign_in, status_with  # noqa: E402
@@ -33,10 +34,10 @@ STATUS: dict[str, Any] = {
 
 @pytest.fixture
 def client(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> TestClient:
-    async def collections() -> list[dict[str, Any]]:
+    async def collections() -> list[CollectionInfo]:
         return [
-            {"name": "docs", "count": 120, "doc_count": 8},
-            {"name": "code", "count": 900, "doc_count": 40},
+            CollectionInfo(name="docs", count=120, doc_count=8),
+            CollectionInfo(name="code", count=900, doc_count=40),
         ]
 
     monkeypatch.setattr(overseer_ai_rag, "collection_stats", collections)

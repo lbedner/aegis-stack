@@ -25,7 +25,7 @@ from typing import TypeVar
 
 from app.core.constants import ComponentName, ServiceName
 from app.core.parts import Category
-from app.core.source_functions import Function, functions
+from app.core.source_functions import Function, functions, registered_tools
 
 ROOT = Path(__file__).resolve().parents[2]  # the project's: where ``app`` is
 # The enums a ``Declared`` constant may name a member of.
@@ -93,6 +93,7 @@ class Module:
     functions: tuple[Function, ...]
     summary: str  # its docstring's first paragraph, on one line
     classes: frozenset[str]  # its top-level classes
+    tools: frozenset[str] = frozenset()  # the functions it registers as tools
 
     @property
     def public(self) -> list[str]:
@@ -189,6 +190,7 @@ def _parse(path: str, source: str) -> Module:
         tuple(functions(tree, lines)),
         " ".join((ast.get_docstring(tree) or "").partition("\n\n")[0].split()),
         frozenset(n.name for n in tree.body if isinstance(n, ast.ClassDef)),
+        registered_tools(tree),
     )
 
 

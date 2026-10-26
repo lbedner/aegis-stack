@@ -16,6 +16,7 @@ from app.services.meetings.models import (
     CalendarEvent,
     Meeting,
     MeetingParticipant,
+    MeetingsCounts,
     MeetingStatus,
     TranscriptLine,
 )
@@ -73,15 +74,16 @@ async def transcript(
     return list(await db.exec(query))
 
 
-async def counts(db: AsyncSession) -> tuple[int, int]:
-    """``(meetings, in a call now)`` across every owner."""
+async def meetings_counts(db: AsyncSession) -> MeetingsCounts:
+    """The ``MeetingsCounts``, in one read."""
     found = await db.exec(
         select(
             func.count(),
             func.count().filter(col(Meeting.status) == MeetingStatus.IN_CALL),
         ).select_from(Meeting)
     )
-    return found.one()
+    meetings, in_call = found.one()
+    return MeetingsCounts(meetings=meetings, in_call=in_call)
 
 
 async def status_platform_counts(

@@ -19,13 +19,16 @@ from contextvars import ContextVar
 from datetime import UTC, datetime
 from typing import Any
 
+from pydantic import BaseModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.db import get_async_session
+from app.core.figures import FIGURES
 from app.core.log import logger
 from app.core.time import utcnow
 from app.core.tools import acting_as, current_subject, register_tool
 from app.services.ai.domains.chat import queries
+from app.services.ai.domains.chat.readings import Reading, kept_readings
 from app.services.ai.domains.chat.tool_telemetry import tool_turn
 from app.services.ai.models.agents import AgentUserMemory
 
@@ -102,8 +105,29 @@ async def get_user_memory(
     return await queries.user_memory_for(session, user_id)
 
 
+class UserFact(BaseModel):
+    """A fact saved about the user, by the ``index`` that addresses it: the
+    facts are one JSON list, so position is the identity."""
+
+    model_config = FIGURES
+
+    index: int
+    category: str
+    fact: str
+    saved_at: datetime | None
+
+
 def _facts(row: AgentUserMemory) -> list[dict[str, Any]]:
     return list(row.memory.get("structured_facts", []))
+
+
+def _kept(fact: UserFact) -> dict[str, Any]:
+    """A fact as the row keeps it: no index, its position is one."""
+    return fact.model_dump(mode="json", exclude={"index"})
+
+
+def _stored(facts: list[UserFact]) -> list[dict[str, Any]]:
+    return [_kept(f) for f in facts]
 
 
 def _is_duplicate(existing: str, candidate: str) -> bool:
@@ -137,13 +161,13 @@ async def save_user_fact(
         ):
             return f"Already known ({category}): {entry['fact']}"
 
-    facts.append(
-        {
-            "category": category,
-            "fact": fact.strip(),
-            "saved_at": datetime.now(UTC).isoformat(),
-        }
+    saved = UserFact(
+        index=len(facts),
+        category=category,
+        fact=fact.strip(),
+        saved_at=datetime.now(UTC),
     )
+    facts.append(_kept(saved))
     row.memory = {**row.memory, "structured_facts": facts}
     row.updated_at = utcnow()
     session.add(row)
@@ -152,18 +176,17 @@ async def save_user_fact(
     return f"Saved ({category}): {fact.strip()}"
 
 
-async def load_user_readings(
-    session: AsyncSession, user_id: str
-) -> list[dict[str, Any]]:
+def _readings(row: AgentUserMemory | None) -> list[Reading]:
+    return kept_readings(row.memory.get("readings", [])) if row else []
+
+
+async def load_user_readings(session: AsyncSession, user_id: str) -> list[Reading]:
     """The readings this user has recorded, oldest first."""
-    row = await get_user_memory(session, user_id)
-    if row is None:
-        return []
-    return list(row.memory.get("readings", []))
+    return _readings(await get_user_memory(session, user_id))
 
 
 async def store_user_readings(
-    session: AsyncSession, user_id: str, readings: list[dict[str, Any]]
+    session: AsyncSession, user_id: str, readings: list[Reading]
 ) -> None:
     """Replace the user's recorded readings.
 
@@ -174,7 +197,7 @@ async def store_user_readings(
     row = await get_user_memory(session, user_id)
     if row is None:
         row = AgentUserMemory(user_id=user_id)
-    row.memory = {**row.memory, "readings": readings}
+    row.memory = {**row.memory, "readings": [r.model_dump() for r in readings]}
     row.updated_at = utcnow()
     session.add(row)
     await session.commit()
@@ -187,12 +210,14 @@ async def replace_user_memory(
     session: AsyncSession,
 ) -> str:
     """Replace the user's facts wholesale, one fact per non-empty line."""
-    now = datetime.now(UTC).isoformat()
-    facts = [
-        {"category": "general", "fact": line.strip(), "saved_at": now}
-        for line in memory_text.splitlines()
-        if line.strip()
-    ]
+    now = datetime.now(UTC)
+    lines = [line.strip() for line in memory_text.splitlines() if line.strip()]
+    facts = _stored(
+        [
+            UserFact(index=i, category="general", fact=line, saved_at=now)
+            for i, line in enumerate(lines)
+        ]
+    )
     row = await get_user_memory(session, user_id)
     if row is None:
         row = AgentUserMemory(user_id=user_id)
@@ -208,7 +233,7 @@ async def list_user_facts(
     user_id: str,
     *,
     session: AsyncSession,
-) -> list[dict[str, Any]]:
+) -> list[UserFact]:
     """Saved facts for a user, each carrying the ``index`` that addresses it.
 
     Facts live in one JSON list, so position IS the identity: the dashboard
@@ -217,7 +242,15 @@ async def list_user_facts(
     row = await get_user_memory(session, user_id)
     if row is None:
         return []
-    return [{**entry, "index": i} for i, entry in enumerate(_facts(row))]
+    return [
+        UserFact(
+            index=i,
+            category=entry.get("category") or "general",
+            fact=entry["fact"],
+            saved_at=entry.get("saved_at"),
+        )
+        for i, entry in enumerate(_facts(row))
+    ]
 
 
 async def _rewrite_facts(
@@ -242,21 +275,20 @@ async def update_user_fact(
     fact: str | None = None,
     category: str | None = None,
     session: AsyncSession,
-) -> dict[str, Any]:
+) -> UserFact:
     """Rewrite one saved fact in place; returns the updated entry."""
-    facts = [
-        {k: v for k, v in entry.items() if k != "index"}
-        for entry in await list_user_facts(user_id, session=session)
-    ]
+    facts = await list_user_facts(user_id, session=session)
     if not 0 <= index < len(facts):
         raise IndexError(f"No fact at index {index} for user {user_id}")
+    changes: dict[str, str] = {}
     if fact is not None and fact.strip():
-        facts[index]["fact"] = fact.strip()
+        changes["fact"] = fact.strip()
     if category is not None:
-        facts[index]["category"] = _normalize_category(category)
-    await _rewrite_facts(user_id, facts, session=session)
+        changes["category"] = _normalize_category(category)
+    facts[index] = facts[index].model_copy(update=changes)
+    await _rewrite_facts(user_id, _stored(facts), session=session)
     logger.info("Updated user fact", user_id=user_id, index=index)
-    return {**facts[index], "index": index}
+    return facts[index]
 
 
 async def delete_user_fact(
@@ -266,14 +298,11 @@ async def delete_user_fact(
     session: AsyncSession,
 ) -> None:
     """Forget one saved fact."""
-    facts = [
-        {k: v for k, v in entry.items() if k != "index"}
-        for entry in await list_user_facts(user_id, session=session)
-    ]
+    facts = await list_user_facts(user_id, session=session)
     if not 0 <= index < len(facts):
         raise IndexError(f"No fact at index {index} for user {user_id}")
     facts.pop(index)
-    await _rewrite_facts(user_id, facts, session=session)
+    await _rewrite_facts(user_id, _stored(facts), session=session)
     logger.info("Deleted user fact", user_id=user_id, index=index)
 
 
@@ -302,16 +331,31 @@ def format_user_memory(row: AgentUserMemory | None) -> str | None:
     )
 
 
+class UserContext(BaseModel):
+    """What a turn knows of its user, from the one row that keeps it: the
+    guarded block of saved facts (None when nothing is saved), and the
+    readings recorded from images, oldest first."""
+
+    model_config = FIGURES
+
+    memory: str | None
+    readings: list[Reading]
+
+
+def _known(row: AgentUserMemory | None) -> UserContext:
+    return UserContext(memory=format_user_memory(row), readings=_readings(row))
+
+
 async def build_user_memory_context(
     user_id: str,
     *,
     session: AsyncSession | None = None,
-) -> str | None:
-    """The guarded memory block for a user, or None when nothing saved."""
+) -> UserContext:
+    """The user's ``UserContext``, read once for the turn."""
     if session is not None:
-        return format_user_memory(await get_user_memory(session, user_id))
+        return _known(await get_user_memory(session, user_id))
     async with get_async_session() as owned_session:
-        return format_user_memory(await get_user_memory(owned_session, user_id))
+        return _known(await get_user_memory(owned_session, user_id))
 
 
 async def save_memory(new_fact: str, category: str = "general") -> str:

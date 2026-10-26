@@ -14,9 +14,11 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
+from pydantic import BaseModel
 from sqlalchemy import JSON, CheckConstraint, Column, Index
 from sqlmodel import Field, SQLModel
 
+from app.core.figures import FIGURES
 from app.core.time import utcnow
 
 # What kind of paper this is. Coarse on purpose: a fixed taxonomy would
@@ -146,3 +148,15 @@ class DocumentPage(SQLModel, table=True):
     detail: str | None = None
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime | None = None
+
+
+class DocumentSummary(BaseModel):
+    """What the card shows: how much paper, how recent, how heavy; live
+    documents only, by kind."""
+
+    model_config = FIGURES
+
+    total: int
+    this_month: int
+    bytes: int
+    by_kind: dict[str, int]

@@ -8,6 +8,7 @@ from typing import Any
 
 from app.core.log import logger
 
+from .collections import collection_stats
 from .config import get_rag_service
 
 
@@ -31,23 +32,15 @@ async def check_rag_service_health() -> dict[str, Any]:
         # Validate configuration
         issues = service.validate_service()
 
-        # List collections
-        collections = await service.list_collections()
-
-        # Get collection details
-        collection_info = []
-        for name in collections:
-            info = await service.get_collection_stats(name)
-            if info:
-                collection_info.append(info)
+        collection_info = await collection_stats()
 
         healthy = len(issues) == 0 and status.get("enabled", False)
 
         return {
             "healthy": healthy,
             "status": status,
-            "collections": collection_info,
-            "collection_count": len(collections),
+            "collections": [c.model_dump() for c in collection_info],
+            "collection_count": len(collection_info),
             "issues": issues,
         }
 

@@ -3,7 +3,7 @@ on a project without auth reads every meeting)."""
 
 from collections.abc import Awaitable, Callable
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -361,12 +361,6 @@ def call_length(joined: datetime | None, left: datetime | None) -> str | None:
     if joined is None or left is None:
         return None
     return format_clock((left - joined).total_seconds())
-
-
-async def meetings_counts(db: AsyncSession) -> dict[str, Any]:
-    """Across every owner, for the health check."""
-    meetings, in_call = await queries.counts(db)
-    return {"meetings": meetings, "in_call": in_call}
 
 
 __getattr__ = facade.lazy(__name__, __file__)[0]

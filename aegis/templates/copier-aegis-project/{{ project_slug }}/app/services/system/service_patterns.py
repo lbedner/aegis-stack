@@ -35,6 +35,11 @@ OPENERS = frozenset(
     {"get_async_session", "db_session", "AsyncSessionLocal", "SessionLocal"}
 )
 SESSION_NAMES = frozenset({"session", "db"})
+# A record handed back by its keys, which no type checker holds: a label's
+# counts (``dict[str, int]``) are figures, not a record. A tool's answer is
+# JSON for the model: a registered tool, or a tools module's plumbing.
+RECORDS = frozenset({"dict", "dict[str,Any]", "list[dict[str,Any]]"})
+TOOLS = "tools"
 
 
 @dataclass(frozen=True)
@@ -48,6 +53,8 @@ class ServiceFunction:
     typed: bool
     statements: int
     source: SourceText
+    returns: str | None
+    tool: bool  # an agent's tool, or its tools module's plumbing
 
     @property
     def service(self) -> str:
@@ -85,7 +92,20 @@ def _function(function: Function, module: Module, path: str) -> ServiceFunction 
         typed=any("Session" in (p.annotation or "") for p in params),
         statements=function.statements,
         source=SourceText.of(function, module.lines, f"{SERVICES}/{path}"),
+        returns=function.returns,
+        tool=Path(path).stem == TOOLS or function.qualname in module.tools,
     )
+
+
+def _record(returns: str | None) -> bool:
+    """A record handed back by its keys, optional or not: ``dict[str, Any]
+    | None`` is one too."""
+    spelled = (returns or "").replace(" ", "")
+    for none in ("|None", "None|"):
+        spelled = spelled.replace(none, "")
+    if spelled.startswith("Optional[") and spelled.endswith("]"):
+        spelled = spelled[len("Optional[") : -1]
+    return spelled in RECORDS
 
 
 def services(source: Any = None) -> list[tuple[str, ServiceFunction]]:
@@ -138,6 +158,18 @@ SERVICE = Pattern(
             lambda f: not f.opens,
             exempt=lambda f: f.entry_point,
             gate=True,
+        ),
+        Rule(
+            "returns-model",
+            "Hands back a model",
+            "A dict's keys are a contract no type checker holds: a renamed key "
+            "breaks the health check, the API or an agent at run time. A read "
+            "returns a typed model (FIGURES where an agent, the API or Overseer "
+            "reads it); a label's counts may stay a dict[str, int].",
+            lambda f: not _record(f.returns),
+            exempt=lambda f: f.tool,
+            gate=True,
+            action="Return a model with model_config = FIGURES.",
         ),
         Rule(
             "required-session",

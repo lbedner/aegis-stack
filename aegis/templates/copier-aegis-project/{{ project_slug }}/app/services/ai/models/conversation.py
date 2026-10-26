@@ -7,6 +7,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from app.core.figures import FIGURES
 from app.services.ai.models.providers import AIProvider
 
 
@@ -113,6 +114,18 @@ class StreamingConversation(BaseModel):
         else:
             self.accumulated_content = content
         return self.accumulated_content
+
+
+class ConversationStats(BaseModel):
+    """How much has been said, across every user: the health check's and
+    the service status's counts."""
+
+    model_config = FIGURES
+
+    total_conversations: int
+    total_messages: int
+    unique_users: int
+    average_messages_per_conversation: float
 
 
 class AIServiceStatus(BaseModel):

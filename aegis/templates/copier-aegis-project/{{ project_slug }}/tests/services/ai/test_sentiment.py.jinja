@@ -239,15 +239,15 @@ class TestSentimentStats:
     async def test_empty_state_is_zero_filled(self, session: AsyncSession) -> None:
         stats = await sentiment_stats(session=session)
 
-        assert stats["total"] == 0
-        assert stats["distribution"] == {
+        assert stats.total == 0
+        assert stats.distribution == {
             "positive": 0,
             "neutral": 0,
             "negative": 0,
             "frustrated": 0,
         }
-        assert stats["recent_negatives"] == []
-        assert stats["enabled"] is False
+        assert stats.recent_negatives == []
+        assert stats.enabled is False
 
     async def test_distribution_average_and_negatives(
         self, session: AsyncSession
@@ -271,15 +271,14 @@ class TestSentimentStats:
 
         stats = await sentiment_stats(session=session)
 
-        assert stats["total"] == 3
-        assert stats["distribution"]["positive"] == 2
-        assert stats["distribution"]["frustrated"] == 1
-        assert stats["performance"] == {"good": 2, "acceptable": 0, "poor": 1}
-        assert stats["average_score"] == round((0.9 + 0.7 - 0.8) / 3, 3)
-        negatives = stats["recent_negatives"]
-        assert len(negatives) == 1
-        assert negatives[0]["conversation_id"] == "c3"
-        assert negatives[0]["summary"] == "summary of c3"
+        assert stats.total == 3
+        assert stats.distribution["positive"] == 2
+        assert stats.distribution["frustrated"] == 1
+        assert stats.performance == {"good": 2, "acceptable": 0, "poor": 1}
+        assert stats.average_score == round((0.9 + 0.7 - 0.8) / 3, 3)
+        (negative,) = stats.recent_negatives
+        assert negative.conversation_id == "c3"
+        assert negative.summary == "summary of c3"
 
     async def test_the_sentiment_aggregate_counts_the_window(
         self, session: AsyncSession

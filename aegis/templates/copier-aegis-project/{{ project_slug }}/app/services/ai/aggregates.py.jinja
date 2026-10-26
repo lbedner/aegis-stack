@@ -1,0 +1,29 @@
+{%- if ai_backend != "memory" %}
+"""What the AI service holds, as figures (``app.core.aggregates``): its
+spend by vendor, by action and by voice or text, from the same query as
+the spend its node in the ontology carries (that one over its own
+windows: today, the last 7 days, all time)."""
+
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.core import ranges
+from app.core.aggregates import Aggregate
+from app.services.ai.domains.spend.windows import spend_since
+from app.services.system.node_now import UsageWindow
+
+
+async def spend(session: AsyncSession, days: int | None) -> UsageWindow:
+    (window,) = await spend_since({ranges.label(days): ranges.start(days)}, session)
+    return window
+
+
+AGGREGATES = (
+    Aggregate(
+        "spend", "Model spend, requests and tokens by vendor, action and mode", spend
+    ),
+)
+{%- else %}
+"""No usage ledger in memory: nothing to count."""
+
+AGGREGATES = ()
+{%- endif %}

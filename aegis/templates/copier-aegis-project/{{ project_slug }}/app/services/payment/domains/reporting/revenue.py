@@ -23,6 +23,7 @@ from app.services.payment.models import (
     PaymentSubscription,
     PaymentTransaction,
 )
+from app.services.shared.queries import day_of
 
 
 class ReportingMixin(PaymentServiceBase):
@@ -59,16 +60,7 @@ class ReportingMixin(PaymentServiceBase):
             )
             .group_by(func.date(PaymentTransaction.created_at))
         )
-        # ``func.date`` returns a ``date`` on PostgreSQL and a ``str`` on
-        # SQLite — normalize to ISO-date strings for a stable API shape.
-        totals: dict[str, int] = {}
-        for row in result.all():
-            day_val, amount = row
-            if isinstance(day_val, str):
-                key = day_val
-            else:
-                key = day_val.isoformat()
-            totals[key] = int(amount or 0)
+        totals = {day_of(day): int(amount or 0) for day, amount in result.all()}
 
         series: list[dict[str, Any]] = []
         for offset in range(days):

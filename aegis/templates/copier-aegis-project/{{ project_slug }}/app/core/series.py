@@ -72,7 +72,7 @@ RAW_LENGTH = int(KEEP_SECONDS / TICK_SECONDS)
 # between two looks.
 WATCH_SECONDS = 15
 # The windows a live chart offers, in seconds, labelled as every range chip
-# row labels them (``web_frontend/ranges.py``); none longer than is kept.
+# row labels them (``app/core/ranges.py``); none longer than is kept.
 WINDOWS: tuple[tuple[int, str], ...] = ((900, "15m"), (1800, "30m"), (3600, "1h"))
 DEFAULT_WINDOW = 900
 # A history sampler's tiers: (seconds a point, seconds kept), and the

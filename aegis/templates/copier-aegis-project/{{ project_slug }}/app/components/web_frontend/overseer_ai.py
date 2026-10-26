@@ -13,7 +13,7 @@ from datetime import UTC, datetime, time
 from typing import Any
 
 from app.components.backend.api.ai.service import ai_service
-from app.core import series
+from app.core import ranges, series
 from app.core.config import settings
 from app.core.formatting import format_relative_time
 from app.services.ai.domains.llm.provider_management import (
@@ -23,7 +23,6 @@ from app.services.ai.domains.llm.provider_management import (
 from app.services.ai.schemas import RecentActivity, UsageStatsResponse
 from app.services.system.models import ComponentStatus
 
-from . import ranges
 from .chat_surface import HAS_VOICE, PERSISTED
 from .overseer_ai_common import (
     HAS_RAG,

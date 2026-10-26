@@ -32,6 +32,7 @@ from app.services.system import (
     ui_errors,
     ui_logs,
 )
+from app.services.system.aggregate_reads import aggregate
 from app.services.system.models import ComponentStatus
 from app.services.system.node_now import (
     attention,
@@ -450,6 +451,13 @@ register_tool(
         "also its parts, routes, jobs and tools, and how they connect"
     ),
     effect="read",
+)
+register_tool(
+    "aggregate",
+    aggregate,
+    description="What each part holds: counts and sums by label, never rows",
+    effect="read",
+    admin=True,
 )
 if importlib.util.find_spec("app.services.system.db_query"):
     register_tool(

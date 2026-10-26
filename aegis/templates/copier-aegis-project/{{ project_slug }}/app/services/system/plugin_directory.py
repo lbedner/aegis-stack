@@ -11,9 +11,9 @@ from typing import Any
 import httpx
 from pydantic import BaseModel
 
+from app.core.figures import FIGURES
 from app.core.ontology.parts import answers
 from app.core.time import utcnow
-from app.services.system.node_now import FIGURES
 
 # The directory's published contract (aegis's ``plugins.registry``).
 SITE_URL = "https://aegis-stack.io"

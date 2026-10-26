@@ -76,6 +76,20 @@ register_tool("lookup_order", lookup_order, effect="read")
 
 Then grant it to an agent by inserting a `tool` row named `lookup_order` and linking it via `agent_tool`. A row naming a tool with no registered callable is skipped with a warning, never an error: a stale grant degrades that one tool, not the agent.
 
+### What each part holds: `aggregate`
+
+An agent asks the app's data what it holds through one tool, not SQL. Each service declares its own aggregates beside its data, in `app/services/<service>/aggregates.py`, as `AGGREGATES`: each an `Aggregate` from `app.core.aggregates` with a name, what it counts, and a read returning a typed model of figures (counts and sums by label, never a row). `aggregate()` lists them and the windows they take (the app's range chips, in days); `aggregate("scheduler.runs", days=7)` reads one. The same window read again within a minute is served from the shared cache, so a burst of questions costs one query. The figures are app-wide (never one owner's) and an operator's: the tool is an admin's. Each read takes the session it is given and the window's days:
+
+```python
+# app/services/orders/aggregates.py
+from app.core.aggregates import Aggregate
+
+async def orders_by_status(session: AsyncSession, days: int | None) -> OrderCounts:
+    ...  # one GROUP BY since ranges.start(days); an OrderCounts of FIGURES
+
+AGGREGATES = (Aggregate("by_status", "Orders by status", orders_by_status),)
+```
+
 ## Proposals: Writes the User Approves
 
 A tool that changes something should not change it. It files a **pending change** instead: a card in the chat with **Approve** and **Reject**, and nothing runs until the user decides. The queue ships with every persistence-backed project (and with finance), and it knows nothing about any one service. A service makes a change proposable by registering a change type at import:

@@ -1864,3 +1864,40 @@ async def test_the_demo_seed_loads(async_db_session: AsyncSession) -> None:
     provider = await PaymentService(async_db_session).get_or_create_provider()
     made = await seed_fake_data(async_db_session, provider)
     assert made["subscriptions"] and made["transactions"] and made["disputes"]
+
+
+@pytest.mark.asyncio
+async def test_the_status_aggregate_counts_and_sums_each_status(
+    async_db_session: AsyncSession,
+) -> None:
+    """``payment.status``: transactions and their cents by status, over a
+    window; never a transaction."""
+    from app.services.payment import aggregates
+
+    provider = await PaymentService(async_db_session).get_or_create_provider()
+    now = datetime.now(UTC).replace(tzinfo=None)
+    made = [
+        ("pi_1", TransactionStatus.SUCCEEDED, 5000, 0),
+        ("pi_2", TransactionStatus.SUCCEEDED, 2500, 1),
+        ("pi_3", TransactionStatus.FAILED, 2000, 0),
+        ("pi_4", TransactionStatus.SUCCEEDED, 9999, 60),
+    ]
+    for ref, status, cents, ago in made:
+        async_db_session.add(
+            PaymentTransaction(
+                provider_id=provider.id,  # type: ignore[arg-type]
+                provider_transaction_id=ref,
+                type=TransactionType.CHARGE,
+                status=status,
+                amount=cents,
+                currency="usd",
+                created_at=now - timedelta(days=ago),
+            )
+        )
+    await async_db_session.flush()
+    (counted,) = aggregates.AGGREGATES
+
+    week = await counted.read(async_db_session, 7)
+
+    assert week.count_by_status == {"succeeded": 2, "failed": 1}
+    assert week.cents_by_status == {"succeeded": 7500, "failed": 2000}

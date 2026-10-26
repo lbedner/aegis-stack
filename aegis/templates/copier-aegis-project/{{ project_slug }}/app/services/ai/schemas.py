@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
-# What an agent, the API and Overseer read: a field that is not one, or a
-# figure changed after it was read, is refused.
-FIGURES = ConfigDict(frozen=True, extra="forbid")
+from app.core.figures import FIGURES
 
 
 class ModelUsageStats(BaseModel):

@@ -900,3 +900,77 @@ async def test_a_routes_dry_path_is_hidden_with_the_code(
         monkeypatch.setattr(settings, "OVERSEER_CODE_ENABLED", False)
     with acting_as(None, "assistant", admin=True), pytest.raises(ValueError):
         await tools.ontology(route="GET /health/detailed")
+
+
+@pytest.fixture
+def declared(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Two parts' aggregates."""
+    from contextlib import nullcontext
+
+    from pydantic import BaseModel
+
+    from app.core import aggregates
+    from app.core.aggregates import Aggregate
+    from app.core.cache import CacheService
+    from app.core.figures import FIGURES
+
+    class Counted(BaseModel):
+        model_config = FIGURES
+
+        by: dict[str, int]
+
+    async def runs(session: object, days: int | None) -> Counted:
+        return Counted(by={"backup": 3 if days == 7 else 9})
+
+    async def tags(session: object, days: int | None) -> Counted:
+        return Counted(by={"tax": 2})
+
+    found = {
+        "scheduler.runs": Aggregate("runs", "Job runs by job", runs),
+        "documents.tags": Aggregate("tags", "Documents by tag", tags),
+    }
+    monkeypatch.setattr(aggregates, "declared", lambda: found)
+    cache = CacheService()
+    monkeypatch.setattr(aggregates, "get_cache", lambda: cache)
+    monkeypatch.setattr(aggregates, "_session", nullcontext)
+
+
+@pytest.mark.usefixtures("declared")
+async def test_the_aggregates_say_what_each_counts_and_the_windows() -> None:
+    from app.core import ranges
+    from app.services.system.aggregate_reads import aggregate
+
+    listed = await aggregate()
+
+    assert listed["aggregates"] == [
+        {"name": "documents.tags", "about": "Documents by tag"},
+        {"name": "scheduler.runs", "about": "Job runs by job"},
+    ]
+    assert listed["windows"] == list(ranges.DAYS)  # never "everything"'s 9999
+
+
+@pytest.mark.usefixtures("declared")
+async def test_an_aggregate_reads_as_figures() -> None:
+    from app.services.system.aggregate_reads import aggregate
+
+    assert await aggregate("scheduler.runs", 7) == {"by": {"backup": 3}}
+    assert await aggregate("scheduler.runs") == {"by": {"backup": 9}}
+
+
+def test_the_aggregates_are_an_admins() -> None:
+    """An operator's figures: the whole tool is an admin's, refused to
+    anyone else before it runs, and hidden from a non-admin MCP token."""
+    found = get_tool("aggregate")
+    assert found is not None and found.admin and found.effect == "read"
+
+
+@pytest.mark.usefixtures("declared")
+def test_the_app_map_names_each_aggregate() -> None:
+    """She uses what her map names (the worker queues, 2026-10-25)."""
+    from app.services.system.aggregate_reads import listed
+
+    assert listed() == (
+        "Aggregates (the aggregate tool reads each; days 1, 7, 14, 30, 90, "
+        "365 or all):\n- documents.tags: Documents by tag\n"
+        "- scheduler.runs: Job runs by job"
+    )

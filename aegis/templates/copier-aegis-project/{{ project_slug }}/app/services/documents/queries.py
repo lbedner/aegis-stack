@@ -4,6 +4,7 @@ labels and totals over them. Writes stay in ``service.py``.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import func
@@ -12,7 +13,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.time import utcnow
 from app.services.documents.models import Document, DocumentPage, DocumentTag
-from app.services.shared.queries import owner_filters
+from app.services.shared.queries import owner_filters, within
 
 
 async def document_by_content(
@@ -123,13 +124,18 @@ async def store_summary(
 
 
 async def tag_counts(
-    db: AsyncSession, *, owner_user_id: int | None = None
+    db: AsyncSession,
+    *,
+    owner_user_id: int | None = None,
+    since: datetime | None = None,
 ) -> list[tuple[str, int]]:
-    """Every label in use on live documents, most used first."""
+    """Every label in use on live documents (stored since ``since``, when
+    given), most used first."""
     query = (
         select(DocumentTag.label, func.count())
         .join(Document, Document.id == DocumentTag.document_id)
         .where(Document.deleted_at.is_(None))
+        .where(*within(Document.created_at, since, None))
     )
     query = query.where(*owner_filters(Document.owner_user_id, owner_user_id))
     rows = (

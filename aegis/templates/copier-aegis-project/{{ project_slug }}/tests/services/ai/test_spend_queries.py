@@ -2,7 +2,7 @@
 spent per day and per action, how many users it spent on, the span of the
 ledger, and what voice calls cost beside the model calls."""
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -221,3 +221,22 @@ async def test_each_window_says_what_it_cost_by_vendor_by_action_and_by_mode(
         ("chat:assistant", 0.25),
     ]
     assert list(week.by_mode.items()) == [("voice", 1.0), ("text", 0.25)]
+
+
+async def test_the_spend_aggregate_is_one_of_the_apps_windows(
+    async_db_session: AsyncSession,
+) -> None:
+    """``ai.spend``: the node's query, for the window asked, named as its
+    range chip is; a call before the window is not in it."""
+    from app.services.ai import aggregates
+
+    async_db_session.add(_call(utcnow(), "chat:assistant", 0.25))
+    async_db_session.add(_call(utcnow() - timedelta(days=30), "chat:assistant", 4.0))
+    await async_db_session.commit()
+    (counted,) = aggregates.AGGREGATES
+
+    week = await counted.read(async_db_session, 7)
+
+    assert (week.label, week.total_requests, week.total_cost) == ("7d", 1, 0.25)
+    every = await counted.read(async_db_session, None)
+    assert (every.label, every.total_requests) == ("All", 2)

@@ -112,6 +112,8 @@ EXPECTED_EFFECTS = {
     "logs": "read",
     "requests": "read",
     "ontology": "read",
+    # What each part holds, as figures: counts and sums, never rows.
+    "aggregate": "read",
     # What the app holds: its database (with that component) and buckets.
     "query": "read",
     "storage": "read",

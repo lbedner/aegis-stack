@@ -16,7 +16,7 @@ from typing import Any
 
 from structlog.contextvars import bound_contextvars
 
-from app.core.discovery import import_modules_named
+from app.core.discovery import declared_by
 from app.core.log_attribution import remember_exception_origin
 
 # Seconds a worker lets a long job run, where the queue's own limit (five
@@ -63,14 +63,12 @@ def service_jobs() -> tuple[ServiceJob, ...]:
     """
     import app.services as services
 
-    jobs: list[ServiceJob] = []
-    for module in import_modules_named(services, "scheduled_jobs"):
-        declared = getattr(module, "JOBS", None)
-        if declared is None:
-            raise ValueError(f"{module.__name__} declares no JOBS")
-        # The folder owns the job, a plugin's too, registered or not yet.
-        owner = module.__name__.split(".")[2]
-        jobs.extend(replace(job, app_service=owner) for job in declared)
+    # The folder owns the job, a plugin's too, registered or not yet.
+    jobs = [
+        replace(job, app_service=owner)
+        for owner, declared in declared_by(services, "scheduled_jobs", "JOBS")
+        for job in declared
+    ]
     for label, keys in (
         ("id", Counter(job.id for job in jobs)),
         ("task", Counter(job.task_name for job in jobs)),

@@ -101,6 +101,7 @@ def default_agent_config() -> AgentConfig:
         code_mode={{ "True" if ai_framework == "pydantic-ai" and ai_backend != "memory" else "False" }},
         tool_names=(
             "ontology",
+            "aggregate",
 {%- if ai_backend != "memory" %}
             "catalog",
             "draw_card",

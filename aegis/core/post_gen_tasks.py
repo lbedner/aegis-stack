@@ -512,6 +512,7 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(project_path, "app/services/ai/domains/voice/queries.py")
         remove_file(project_path, "app/services/ai/domains/voice/live_engines.py")
         remove_file(project_path, "app/services/ai/domains/voice/realtime_calls.py")
+        remove_file(project_path, "app/services/ai/domains/voice/live_voice.py")
         remove_file(project_path, "app/components/backend/startup/live_engine.py")
         remove_file(
             project_path, "app/components/web_frontend/routes/partials/chat_live.py"
@@ -529,6 +530,7 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(project_path, "tests/_voice_catalog.py")
         remove_file(project_path, "tests/_realtime.py")
         remove_file(project_path, "tests/services/ai/voice/test_realtime_calls.py")
+        remove_file(project_path, "tests/services/ai/voice/test_live_voice.py")
         remove_file(project_path, "tests/services/ai/voice/test_live_engines.py")
         remove_file(project_path, "tests/services/ai/test_sentiment.py")
         # The spend reads (the Overseer's Costs) read the usage ledgers.

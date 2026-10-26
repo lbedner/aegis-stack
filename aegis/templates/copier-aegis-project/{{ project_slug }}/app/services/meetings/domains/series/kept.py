@@ -18,6 +18,7 @@ from app.services.meetings.models import (
     NoteItem,
     SeriesNotes,
     Theme,
+    fitted,
 )
 
 THEMES = "themes"
@@ -92,7 +93,7 @@ async def keep_series_failure(
 ) -> None:
     """Why the series could not be written; its themes stay."""
     row = await _row(db, owner_user_id, link)
-    row.error = error[:500]
+    row.error = fitted(error)
     db.add(row)
     await db.commit()
 

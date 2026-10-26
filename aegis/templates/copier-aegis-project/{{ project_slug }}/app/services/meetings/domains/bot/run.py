@@ -39,7 +39,12 @@ from app.services.meetings.domains.bot.dispatch import start_meeting
 from app.services.meetings.domains.bot.meet import CallState, MeetPage, open_meet
 from app.services.meetings.domains.bot.row import heartbeat, transition
 from app.services.meetings.domains.bot.transcript import BEAT_SECONDS, Transcript
-from app.services.meetings.domains.bot.voice import spoken, voice_of
+from app.services.meetings.domains.bot.voice import (
+    live,
+    live_engine_of,
+    spoken,
+    voice_of,
+)
 from app.services.meetings.domains.moments.tidy import cleaner
 from app.services.meetings.domains.people.participants import keep_heard
 from app.services.meetings.domains.people.service import guides_writer
@@ -261,10 +266,15 @@ async def _start(
 
 
 async def _join(
-    meeting: Meeting, login: str, start: card.Start, voice: Any | None
+    meeting: Meeting,
+    login: str,
+    start: card.Start,
+    voice: Any | None,
+    engine: Any | None,
 ) -> None:
     """Into the call signed in as the agent it was sent as (``login``),
-    showing its card (``start``), speaking in ``voice`` (``voice_of``)."""
+    showing its card (``start``), speaking in ``voice`` (``voice_of``), her
+    answers made live on ``engine`` where there is one (``live_engine_of``)."""
     meeting_id: int = meeting.id  # type: ignore[assignment]
     pulse = _Pulse(meeting_id)
     keep_in = settings.MEETINGS_KEEP_AUDIO_DIR
@@ -291,11 +301,12 @@ async def _join(
                 logger.warning("No captions in this call", meeting_id=meeting_id)
             shown = _Card(call, pulse, captions)
             await shown.update()
-            answering = Answers(call, voice)
-            try:
-                await _stay(call, pulse, transcript, hearing, shown, answering)
-            finally:
-                answering.close()
+            async with live(call, voice, engine, meeting.owner_user_id) as her_voice:
+                answering = Answers(call, voice, her_voice)
+                try:
+                    await _stay(call, pulse, transcript, hearing, shown, answering)
+                finally:
+                    answering.close()
             await call.show(status=card.LEAVING)
             await call.leave()
     finally:
@@ -328,6 +339,7 @@ async def run_meeting(meeting_id: int) -> None:
         account = await sent_as(session, meeting.account_id)
         start = await _start(session, meeting, account)
         voice = await voice_of(session)
+        engine = await live_engine_of(session, voice)
     # What the bot spends (her answers, its speech, the notes after) is the
     # meeting owner's, bound once for the run.
     with acting_as(meeting.owner_user_id, None):
@@ -337,7 +349,7 @@ async def run_meeting(meeting_id: int) -> None:
                     MeetingStatus.FAILED,
                     f"The bot joins Google Meet so far, not {meeting.platform.title()}",
                 )
-            await _join(meeting, account.login_secret, start, voice)
+            await _join(meeting, account.login_secret, start, voice, engine)
             await _move(meeting_id, MeetingStatus.LEFT, NOT_DONE)
         except _RunEnded as ended:
             await _move(meeting_id, ended.status, NOT_DONE, ended.reason)

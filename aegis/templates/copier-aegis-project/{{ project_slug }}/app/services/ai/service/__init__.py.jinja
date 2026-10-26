@@ -93,6 +93,7 @@ if TYPE_CHECKING:
         profiles,
         realtime_calls,
     )
+    from app.services.ai.domains.voice.live_voice import live_voice
 {%- endif %}
 {%- if ai_voice %}
     from app.services.ai.domains.voice.models import SpeechRequest

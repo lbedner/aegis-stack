@@ -79,7 +79,15 @@ def bot_on(
 ) -> None:
     """The bot runs on ``session`` and joins ``call`` instead of a browser,
     beating on every look; what it says aloud is ``speech`` (no voice when
-    None)."""
+    None), and she has no live voice in the call."""
+
+    @asynccontextmanager
+    async def her_live(
+        call: Any, voice: Any, engine: Any, owner: int | None
+    ) -> AsyncIterator[Any]:
+        yield None
+
+    monkeypatch.setattr(bot, "live", her_live)
     monkeypatch.setattr(bot, "get_async_session", opens(session))
     monkeypatch.setattr(bot, "POLL_SECONDS", poll_seconds)
     monkeypatch.setattr(bot, "BEAT_SECONDS", 0)
@@ -224,6 +232,33 @@ class FakeCall:
         if self.sound and self.on_audio is not None:
             self.on_audio(SECOND)
         return self.shown.pop(0) if len(self.shown) > 1 else self.shown[0]
+
+
+class FakeLive:
+    """Her live voice in a call, as the bot binds it (``actions.live.LIVE``):
+    what it was asked, what it answers (or the error it raises), what it
+    said aloud, and whether it is still open."""
+
+    def __init__(
+        self,
+        said: str | Exception = "",
+        *,
+        spoken: tuple[str, ...] = (),
+        open: bool = True,
+    ) -> None:
+        self.said, self.open = said, open
+        self.asked: list[str] = []
+        self.spoken = list(spoken)
+
+    async def ask(self, text: str) -> str:
+        self.asked.append(text)
+        if isinstance(self.said, Exception):
+            raise self.said
+        self.spoken.append(self.said)
+        return self.said
+
+    def spoke(self, text: str) -> bool:
+        return text in self.spoken
 
 
 def hold_the_series_writer(monkeypatch: pytest.MonkeyPatch) -> list[Any]:

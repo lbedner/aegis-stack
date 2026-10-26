@@ -22,7 +22,14 @@ from app.services.meetings.domains.actions.runs import (
 )
 from app.services.meetings.domains.moments.service import moments_of
 from app.services.meetings.models import MeetingActionRun, MeetingMoment
-from tests._meetings import a_meeting, a_runner_looked_in, asked_a_question, said, topic
+from tests._meetings import (
+    FakeLive,
+    a_meeting,
+    a_runner_looked_in,
+    asked_a_question,
+    said,
+    topic,
+)
 
 # Ask AI (``ask_ai``) renders only with the AI service on pydantic-ai and a
 # database.
@@ -494,3 +501,114 @@ def test_what_answers_her_unasked_is_hers_unless_a_setting_names_another(
     monkeypatch.setattr(settings, "MEETINGS_AUTO_ACTIONS", "")
     monkeypatch.delitem(registry._actions, registry.ANSWERS)  # no AI here
     assert answerer() is None
+
+
+@needs_her
+async def test_in_a_call_with_her_live_voice_she_answers_through_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Live, her answer is made and heard in the call at once; once the
+    live call fails, or is over, she answers as she did, in a chat turn."""
+    from types import SimpleNamespace
+
+    from app.services.meetings.domains.actions import ask_ai
+    from app.services.meetings.domains.actions.live import LIVE
+
+    class Her:
+        async def chat(self, message: str, **kwargs: Any) -> Any:
+            return SimpleNamespace(content="From the chat.")
+
+    monkeypatch.setattr(ask_ai, "her", Her)
+    live = FakeLive("Said live.")
+    token = LIVE.set(live)
+    try:
+        assert await ask_ai.answer("Who owns billing?", None) == "Said live."
+        assert live.asked == ["Who owns billing?"]
+        LIVE.set(FakeLive(RuntimeError("Her live call ended")))
+        assert await ask_ai.answer("Who owns billing?", None) == "From the chat."
+        LIVE.set(FakeLive("Said live.", open=False))
+        assert await ask_ai.answer("Who owns billing?", None) == "From the chat."
+    finally:
+        LIVE.reset(token)
+
+
+@needs_her
+async def test_her_live_call_is_told_only_what_it_has_not_heard(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One call lasts the meeting and holds every question put to it, and
+    what led to each: sent again, each answer would cost more than the
+    last. Each question after the first carries only the lines since."""
+    from app.services.meetings.domains.actions import ask_ai
+    from app.services.meetings.domains.actions.live import LIVE
+    from app.services.meetings.domains.actions.prompt import Excerpt
+
+    first = Excerpt("addressed", "", "Dana", "who owns billing?", [("Sam", "Late.")])
+    then = Excerpt(
+        "addressed",
+        "",
+        "Dana",
+        "and search?",
+        [("Sam", "Late."), ("Dana", "who owns billing?"), ("Sam", "Search is mine.")],
+    )
+    live = FakeLive("Sam does.")
+    token = LIVE.set(live)
+    try:
+        await ask_ai.answer(ask_ai.for_the_model(first), None)
+        await ask_ai.answer(ask_ai.for_the_model(then), None)
+    finally:
+        LIVE.reset(token)
+
+    assert "Late." in live.asked[0]
+    assert "Late." not in live.asked[1] and "Search is mine." in live.asked[1]
+    assert "and search?" in live.asked[1]
+
+
+# Two runs, each reading its moment and meeting: a loop by construction.
+@pytest.mark.queryspy(allow_n_plus_one=True)
+async def test_only_a_line_put_to_her_by_name_is_answered_aloud(
+    async_db_session: AsyncSession,
+    held: list[Awaitable[Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """In a call with her live voice, a question asked of an action in the
+    app (a setting asking Ask AI of every question, say) is not said aloud
+    in the call: only a line put to her by name is."""
+    from app.services.meetings.domains.actions.live import LIVE
+    from app.services.meetings.domains.moments import service as moments_service
+    from tests._session import opens
+
+    heard: list[Any] = []
+
+    async def probe(prompt: str, owner_user_id: int | None) -> str:
+        heard.append(LIVE.get())
+        return "Done."
+
+    monkeypatch.setitem(
+        registry._actions,
+        "probe",
+        Action("probe", "Probe", registry.QUESTIONS, "app", run=probe),
+    )
+    monkeypatch.setattr(moments_service, "answerer", lambda: None)  # none asked
+    monkeypatch.setattr(runs, "get_async_session", opens(async_db_session))
+    meeting_id = await a_meeting(async_db_session)  # the bot joins as "Notes"
+    await said(
+        async_db_session,
+        meeting_id,
+        ("Dana", "Can the CSV export ship this week?"),
+        ("Dana", "Hey Notes, who owns billing?"),
+    )
+    asked, put_to_her = await moments_of(async_db_session, meeting_id)
+    token = LIVE.set(FakeLive("Said live."))
+    try:
+        for moment in (asked, put_to_her):
+            await runs.ask(
+                async_db_session, moment.id or 0, "probe", owner_user_id=None
+            )
+        for started in held:
+            await started
+    finally:
+        LIVE.reset(token)
+
+    assert (asked.kind, put_to_her.kind) == ("question", "addressed")
+    assert heard[0] is None and heard[1] is not None

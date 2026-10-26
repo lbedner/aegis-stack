@@ -110,13 +110,27 @@ CARD = """(() => {
   }
   const video = canvas.captureStream(0).getVideoTracks()[0];
   setInterval(() => video.requestFrame(), 500);
-  let voice = null, mic = null;
+  let voice = null, mic = null, until = 0;
   function microphone() {
     if (!voice) {
       voice = new AudioContext();
       mic = voice.createMediaStreamDestination();
     }
     return mic;
+  }
+  function bytes(encoded) {
+    return Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0));
+  }
+  // Every sound into the mic plays after what is already playing (a line
+  // said and a live voice's pieces alike); how long is still to play.
+  function queue(sound) {
+    const source = voice.createBufferSource();
+    source.buffer = sound;
+    source.connect(mic);
+    const at = Math.max(voice.currentTime, until);
+    source.start(at);
+    until = at + sound.duration;
+    return until - voice.currentTime;
   }
   window.__meetingCard = {
     show(update) {
@@ -125,15 +139,19 @@ CARD = """(() => {
       draw();
     },
     async speak(audio) {
-      const out = microphone();
+      microphone();
       await voice.resume();
-      const bytes = Uint8Array.from(atob(audio), (c) => c.charCodeAt(0));
-      const sound = await voice.decodeAudioData(bytes.buffer);
-      const source = voice.createBufferSource();
-      source.buffer = sound;
-      source.connect(out);
-      source.start();
-      return sound.duration;
+      return queue(await voice.decodeAudioData(bytes(audio).buffer));
+    },
+    async stream(pcm, rate) {
+      microphone();
+      await voice.resume();
+      const raw = bytes(pcm);
+      const samples = new Int16Array(raw.buffer, 0, raw.length >> 1);
+      const sound = voice.createBuffer(1, samples.length, rate);
+      const level = sound.getChannelData(0);
+      for (let i = 0; i < samples.length; i++) level[i] = samples[i] / 32768;
+      return queue(sound);
     },
     picture() { return canvas.toDataURL(); },
   };
@@ -182,3 +200,13 @@ async def speak(page: Page, audio: bytes) -> float:
     microphone; how many seconds it lasts."""
     encoded = base64.b64encode(audio).decode()
     return await page.evaluate("(audio) => window.__meetingCard.speak(audio)", encoded)
+
+
+async def stream(page: Page, pcm: bytes, rate: int) -> float:
+    """Play a piece of speech still being made (PCM16 mono at ``rate``)
+    into the microphone, after what is already playing; how many seconds
+    are still to play."""
+    encoded = base64.b64encode(pcm).decode()
+    return await page.evaluate(
+        "([pcm, rate]) => window.__meetingCard.stream(pcm, rate)", [encoded, rate]
+    )

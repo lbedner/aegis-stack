@@ -41,11 +41,13 @@ from app.services.meetings.models.actions import (
 from app.services.meetings.models.base import (
     IN_PROGRESS,
     LEAVABLE,
+    MOST_ERROR_CHARS,
     NOT_DONE,
     STILL_WANTED,
     UNKNOWN,
     MeetingStatus,
     Platform,
+    fitted,
 )
 from app.services.meetings.models.calendar import CalendarEvent
 from app.services.meetings.models.meeting import (
@@ -97,6 +99,8 @@ from app.services.meetings.models.series import (
 )
 
 __all__ = [
+    "MOST_ERROR_CHARS",
+    "fitted",
     "ASKED",
     "ActionChoice",
     "ActionItem",

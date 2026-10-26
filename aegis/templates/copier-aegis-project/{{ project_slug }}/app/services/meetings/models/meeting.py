@@ -11,7 +11,11 @@ from sqlalchemy import Index, Text
 from sqlmodel import Field, SQLModel
 
 from app.core.time import utcnow
-from app.services.meetings.models.base import _OWNER_FK, MeetingStatus
+from app.services.meetings.models.base import (
+    _OWNER_FK,
+    MOST_ERROR_CHARS,
+    MeetingStatus,
+)
 from app.services.meetings.models.moments import MomentRecord
 from app.services.meetings.models.notes import ActionItem, Notes
 
@@ -42,7 +46,7 @@ class Meeting(SQLModel, table=True):
     status: str = Field(default=MeetingStatus.REQUESTED, max_length=16)
     failure_reason: str | None = Field(
         default=None,
-        max_length=500,
+        max_length=MOST_ERROR_CHARS,
         description="Why it ended as failed: refused, timed out, the page changed",
     )
     bot_name: str = Field(max_length=100)

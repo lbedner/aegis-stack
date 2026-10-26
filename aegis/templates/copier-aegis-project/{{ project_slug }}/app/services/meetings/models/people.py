@@ -12,7 +12,7 @@ from sqlalchemy import Index, Text
 from sqlmodel import Field, SQLModel
 
 from app.core.time import utcnow
-from app.services.meetings.models.base import _OWNER_FK
+from app.services.meetings.models.base import _OWNER_FK, MOST_ERROR_CHARS
 from app.services.meetings.models.notes import NoteItem
 
 
@@ -93,7 +93,7 @@ class PersonGuide(SQLModel, table=True):
     person_id: int = Field(
         foreign_key="meeting_person.id", unique=True, ondelete="CASCADE"
     )
-    error: str | None = Field(default=None, max_length=500)
+    error: str | None = Field(default=None, max_length=MOST_ERROR_CHARS)
     model_name: str | None = Field(default=None, max_length=255)
     meetings: int = Field(default=0, description="How many meetings it was read from")
     note: str | None = Field(

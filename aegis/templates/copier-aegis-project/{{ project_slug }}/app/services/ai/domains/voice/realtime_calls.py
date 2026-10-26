@@ -32,9 +32,10 @@ from app.services.ai.domains.chat.readings import reading_stage
 from app.services.ai.domains.chat.user_memory import memory_user
 from app.services.ai.domains.spend import recording as usage_recording
 from app.services.ai.domains.voice.catalog import GEMINI_PREBUILT, get_voice
+from app.services.ai.domains.voice import live_engines
 from app.services.ai.domains.voice.live_engines import is_gpt_live
 from app.services.ai.domains.voice.models import TTSProvider
-from app.services.ai.models import MessageRole
+from app.services.ai.models import AIProvider, MessageRole
 from app.services.ai.service.trace import record_tool_call, record_tool_result
 
 # What OpenAI transcribes the caller's side with: a saved turn needs both
@@ -250,12 +251,14 @@ async def realtime_for(
     admin: bool | None = None,
     instructions: str | None = None,
     max_output_tokens: int | None = None,
+    hang_up: bool = True,
 ) -> Any:
     """The agent on ``model`` (a Pydantic AI realtime model string), built
     for the caller (``user_id``, ``admin``) by the function a typed turn
     builds her with (``_build_turn``). The engine's ``instructions`` (how
     to talk on a call) lead its prompt, and ``max_output_tokens`` caps one
-    reply."""
+    reply. Without ``hang_up`` she has no ``end_call``: a call that answers
+    one question after another ends when its caller ends it."""
     from app.services.ai.domains.chat.agent_loader import resolve_agent
 
     config = await (resolve_agent(agent_slug) if agent_slug else resolve_agent())
@@ -270,8 +273,47 @@ async def realtime_for(
         model,
         instructions=await call_instructions(agent, history),
         model_settings=_model_settings(model, voice, max_output_tokens, instructions),
-        toolsets=[CALL_TOOLS],
+        toolsets=[CALL_TOOLS] if hang_up else [],
     )
+
+
+async def open_call(
+    ai: Any,
+    engine: Any,
+    *,
+    user_id: str,
+    surface: str,
+    agent_slug: str | None,
+    voice: str | None,
+    conversation: Any = None,
+    admin: bool | None = None,
+    hang_up: bool = True,
+) -> tuple[Any, Any]:
+    """A live call on ``engine`` (``live_engines``): the conversation it
+    saves into (``conversation``, else a new one of ``surface``'s for
+    ``user_id``) and her, built for it on the engine's model with its call
+    manners (``realtime_for``)."""
+    model = live_engines.realtime_model(engine)
+    if conversation is None:
+        conversation = await ai.conversation_manager.create_conversation(
+            provider=AIProvider(engine.llm.served_by.slug),
+            model=model,
+            user_id=user_id,
+            surface=surface,
+        )
+    realtime = await realtime_for(
+        ai,
+        conversation=conversation,
+        model=model,
+        agent_slug=agent_slug,
+        voice=voice,
+        user_id=user_id,
+        admin=admin,
+        instructions=engine.instructions,
+        max_output_tokens=engine.max_output_tokens,
+        hang_up=hang_up,
+    )
+    return conversation, realtime
 
 
 async def drive(
@@ -287,6 +329,8 @@ async def drive(
     on_event: Callable[[Any], Awaitable[None]] | None = None,
     on_saved: Callable[[float], Awaitable[None]] | None = None,
     on_drawn: Callable[[list[str]], Awaitable[None]] | None = None,
+    on_turn: Callable[[tuple[str, str, list[dict[str, Any]]]], Awaitable[None]]
+    | None = None,
 ) -> CallEnd:
     """Run one call to its end, and say who ended it (``CallEnd``): the
     agent's tools in a turn's context, each finished turn saved into the
@@ -295,7 +339,8 @@ async def drive(
     audio both ways), ``on_event`` sees every event, ``on_saved`` hears of
     each saved turn with the call's cost so far, and ``on_drawn`` of the
     cards a step drew as it finishes - so a chart is up while it is being
-    talked about, not once the turn is saved."""
+    talked about, not once the turn is saved. ``on_turn`` has each finished
+    turn (what was heard, what was said, its steps) before it is saved."""
     started = datetime.now(UTC)
     usage = None
     ended: CallEnd = "provider"
@@ -346,6 +391,8 @@ async def drive(
                         if on_event:
                             await on_event(event)
                         if log.observe(event) and (turn := log.take()):
+                            if on_turn:
+                                await on_turn(turn)
                             cost = await keep(session, turn, interrupted=False)
                             if on_saved:
                                 await on_saved(cost)

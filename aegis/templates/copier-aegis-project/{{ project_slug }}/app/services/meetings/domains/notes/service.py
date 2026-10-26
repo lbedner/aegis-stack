@@ -29,6 +29,7 @@ from app.services.meetings.models import (
     NoteItem,
     Notes,
     Position,
+    fitted,
 )
 
 SUMMARY = "summary"
@@ -151,7 +152,7 @@ async def keep_failure(db: AsyncSession, meeting_id: int, error: str) -> None:
     row = await queries.locked_notes(db, meeting_id) or MeetingNotes(
         meeting_id=meeting_id
     )
-    row.error = error[:500]
+    row.error = fitted(error)
     db.add(row)
     await db.commit()
 

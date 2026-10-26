@@ -316,6 +316,10 @@ def test_a_question_asked_of_someone_in_the_call_is_theirs(said: str) -> None:
         ),
         ("Hey illiana. How you doing?", "How you doing?"),
         ("Hey Illiana, how's it going?", "how's it going?"),
+        (  # captioned as asked, though it opens on no question word
+            "So Illiana, um, if redis goes down? Uh, what happens?",
+            "um, if redis goes down? Uh, what happens?",
+        ),
         (
             "So Iliana tell me who owns the billing service.",
             "tell me who owns the billing service.",

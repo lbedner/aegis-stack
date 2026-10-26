@@ -15,6 +15,7 @@ from app.services.meetings.models import (
     MeetingGuidePointLine,
     NoteItem,
     PersonGuide,
+    fitted,
 )
 
 
@@ -69,7 +70,7 @@ async def keep_guide(
 async def keep_guide_failure(db: AsyncSession, person_id: int, error: str) -> None:
     """Why the person's guide could not be written; its points stay."""
     row = await _row(db, person_id)
-    row.error = error[:500]
+    row.error = fitted(error)
     db.add(row)
     await db.commit()
 

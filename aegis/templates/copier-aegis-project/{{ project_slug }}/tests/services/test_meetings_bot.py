@@ -269,6 +269,24 @@ async def test_a_meeting_another_run_has_is_left_to_it(
     assert after.status == MeetingStatus.IN_CALL
 
 
+async def test_a_long_failure_is_kept_cut_to_fit(
+    run: Callable[..., Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Playwright's errors carry their whole call log: kept whole, the
+    failure was refused by Postgres and the meeting never said it failed."""
+    from app.services.meetings.models import MOST_ERROR_CHARS
+
+    async def stuck(*args: Any, **kwargs: Any) -> None:
+        raise TimeoutError("Locator.click: Timeout 5000ms exceeded." + " log" * 300)
+
+    monkeypatch.setattr(bot, "_join", stuck)
+    meeting = await run(FakeCall([CallState.IN_CALL]))
+
+    assert meeting.status == MeetingStatus.FAILED
+    reason = meeting.failure_reason or ""
+    assert reason.startswith("Locator.click") and len(reason) <= MOST_ERROR_CHARS
+
+
 async def test_a_bot_that_cannot_be_started_fails_the_meeting_with_why(
     async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:

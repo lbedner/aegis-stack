@@ -45,12 +45,15 @@ def _letters(text: str) -> str:
 
 def said_again(before: str, shown: str) -> bool:
     """Whether ``shown`` opens with words ``before`` already said (letters
-    only): its first ``OPENING`` found in it, whole to ``ALIKE``, from its
-    start or from mid-way (Meet draws a block again from either)."""
+    only, over the first ``OPENING``, to ``ALIKE``): opening alike (the name
+    spelled anew), or found whole in it, from mid-way (Meet draws a block
+    again from its start or from mid-way)."""
     a, b = _letters(before), _letters(shown)
     n = min(len(a), len(b), OPENING)
     if n < FEWEST_LETTERS:
         return False
+    if SequenceMatcher(None, a[:n], b[:n]).ratio() >= ALIKE:
+        return True
     found = SequenceMatcher(None, a, b[:n], autojunk=False).find_longest_match()
     return found.size >= ALIKE * n
 

@@ -19,6 +19,7 @@ from app.services.meetings.models import (
     Meeting,
     MeetingStatus,
     TranscriptLine,
+    fitted,
 )
 
 # A run whose heartbeat is older than this is gone (the process stopped).
@@ -45,7 +46,7 @@ async def transition(
     if to == MeetingStatus.LEFT:
         values["left_at"] = now
     if to == MeetingStatus.FAILED:
-        values["failure_reason"] = reason
+        values["failure_reason"] = None if reason is None else fitted(reason)
     moved = await queries.move(db, meeting_id, from_, values)
     await db.commit()
     return moved

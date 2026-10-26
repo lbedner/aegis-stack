@@ -508,6 +508,7 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         # sqlalchemy.
         remove_dir(project_path, "app/services/ai/models/voice")
         remove_file(project_path, "app/services/ai/domains/voice/profiles.py")
+        remove_file(project_path, "app/services/ai/domains/voice/pronunciations.py")
         remove_file(project_path, "app/services/ai/domains/voice/design.py")
         remove_file(project_path, "app/services/ai/domains/voice/queries.py")
         remove_file(project_path, "app/services/ai/domains/voice/live_engines.py")

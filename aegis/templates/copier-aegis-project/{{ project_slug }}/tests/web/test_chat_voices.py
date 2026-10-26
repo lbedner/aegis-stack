@@ -373,3 +373,102 @@ def _form(profile: VoiceProfile, **changes: str) -> dict[str, str]:
     }
     values.update(changes)
     return values
+
+
+# Each test saves, then reads the list back as the next turn does, so the
+# same reads repeat by construction.
+@pytest.mark.queryspy(allow_n_plus_one=True)
+class TestPronunciation:
+    """How terms are said, edited beside the voices: a row saved here is
+    said its way on the next turn, by every voice, with no restart."""
+
+    SAID = f"{VOICES}/pronunciation"
+
+    @pytest.fixture(autouse=True)
+    def _fresh_list(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from app.services.ai.domains.voice import spoken
+
+        monkeypatch.setattr(spoken, "_saved", {})
+
+    def _said(self, html: str) -> dict[str, str]:
+        rows = select(html, "#voice-pronunciation tbody tr")
+        return {text(row[0]): text(row[1]) for row in rows}
+
+    def test_the_dialog_opens_on_the_list(
+        self, hx: TestClient, voices: dict[str, VoiceProfile]
+    ) -> None:
+        opener = one(hx.get(VOICES).text, "[data-pronunciations]")
+        assert opener.get("hx-get") == self.SAID
+        assert self._said(hx.get(self.SAID).text)["Traefik"] == "traffic"
+
+    async def test_a_saved_term_is_said_its_way_from_the_next_turn(
+        self, hx: TestClient, async_db_session: AsyncSession
+    ) -> None:
+        from app.services.ai.domains.voice import pronunciations, spoken
+
+        response = hx.post(self.SAID, data={"term": "Illiana", "say": "ill-ee-ah-na"})
+
+        assert response.status_code == 200
+        assert self._said(response.text)["Illiana"] == "ill-ee-ah-na"
+        assert spoken.pronounced("Hi Illiana") == "Hi ill-ee-ah-na"
+        rows = await pronunciations.saved(async_db_session)
+        assert [(r.term, r.say) for r in rows] == [("Illiana", "ill-ee-ah-na")]
+
+    async def test_saving_a_listed_term_again_changes_how_it_is_said(
+        self, hx: TestClient, async_db_session: AsyncSession
+    ) -> None:
+        from app.services.ai.domains.voice import pronunciations, spoken
+
+        hx.post(self.SAID, data={"term": "redis", "say": "ree-dis"})
+        hx.post(self.SAID, data={"term": "Redis", "say": "red-dis"})
+
+        assert spoken.pronounced("Redis") == "red-dis"
+        assert len(await pronunciations.saved(async_db_session)) == 1
+
+    async def test_removing_a_saved_term_brings_back_the_default(
+        self, hx: TestClient, async_db_session: AsyncSession
+    ) -> None:
+        from app.services.ai.domains.voice import pronunciations, spoken
+
+        hx.post(self.SAID, data={"term": "Traefik", "say": "tray-fik"})
+        listed = hx.get(self.SAID).text
+        (remove,) = select(listed, "#voice-pronunciation tbody button[hx-post]")
+        assert remove.get("hx-vals") == '{"term": "Traefik"}'
+
+        response = hx.post(f"{self.SAID}/delete", data={"term": "Traefik"})
+
+        assert self._said(response.text)["Traefik"] == "traffic"
+        assert await pronunciations.saved(async_db_session) == []
+        assert spoken.pronounced("Traefik") == "traffic"
+
+    def test_a_term_needs_how_it_is_said(self, hx: TestClient) -> None:
+        response = hx.post(self.SAID, data={"term": "Illiana", "say": " "})
+
+        assert response.status_code == 422
+        assert "Illiana" not in self._said(response.text)
+
+    async def test_the_app_starts_with_the_saved_list(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        from app.services.ai.domains.voice import pronunciations, spoken
+
+        await pronunciations.save(async_db_session, "Steward", "stew-ard")
+        spoken.use_saved([])
+
+        await profiles.load_active(async_db_session, settings, SimpleNamespace())
+
+        assert spoken.pronounced("Steward") == "stew-ard"
+
+    async def test_a_voice_outside_the_webserver_says_the_saved_list(
+        self, async_db_session: AsyncSession
+    ) -> None:
+        """The meeting bot and the CLI read the voice themselves
+        (``active_settings``); the saved list comes with it."""
+        from app.services.ai.domains.voice import pronunciations, spoken
+
+        await pronunciations.save(async_db_session, "Steward", "stew-ard")
+        spoken.use_saved([])
+
+        await profiles.active_settings(async_db_session, settings)
+
+        assert spoken.pronounced("Steward") == "stew-ard"

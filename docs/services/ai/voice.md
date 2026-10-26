@@ -379,6 +379,44 @@ call and a tool to end it.
 
 ---
 
+## Pronunciation
+
+One list says how every voice says a term: answers read aloud, the meeting
+bot, previews, and live calls. It starts with the stack's own names
+(Traefik as "traffic", Redis as "red-iss", PostgreSQL, SQLite, htmx,
+Pydantic, Ollama, uvicorn, Aegis, MCP, OTel), kept in code in
+`app/services/ai/domains/voice/spoken.py`, so a stack without a database
+still has it.
+
+- **Read aloud**, the speech service swaps each term as a whole word, in
+  any case, before the text is sent (`Traefiker` is left alone).
+- **On a live call** the model speaks for itself, so it is told the list
+  as a "Say X as Y" section with the engine's call manners, which reach
+  whichever model speaks (GPT-Live's voice model takes them as its own).
+- **An app's own terms** join it with one call, at import:
+
+  ```python
+  from app.services.ai.service import register_pronunciation
+
+  register_pronunciation("Steward", "stew-ard")
+  ```
+
+- **Edits** are rows (`voice_pronunciation`), made in the chat's voice
+  dialog (Pronunciation) or over the API. A row wins over a default or an
+  app's own term and takes effect on the next thing said, with no restart;
+  removing it brings the default back. An entry may also keep an IPA
+  spelling, for a provider's own dictionary; none reads it yet.
+
+```bash
+curl http://localhost:8000/api/v1/voice/pronunciation | jq
+# An admin's: save one, or drop the saved row for a term
+curl -X POST http://localhost:8000/api/v1/voice/pronunciation \
+  -H "Content-Type: application/json" -d '{"term": "Illiana", "say": "ill-ee-ah-na"}'
+curl -X DELETE http://localhost:8000/api/v1/voice/pronunciation/Illiana
+```
+
+---
+
 ## In Overseer
 
 Overseer > AI > Voice has two tabs.

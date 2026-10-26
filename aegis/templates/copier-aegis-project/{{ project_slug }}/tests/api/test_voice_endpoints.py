@@ -827,3 +827,23 @@ def test_the_models_table_leaves_out_the_library(
 
     assert "Amelia" not in {r["name"] for r in rows}
     assert "Kore" in {r["name"] for r in rows}
+
+
+class TestPronunciation:
+    """How every voice says terms, over the API: listed on every stack,
+    changed by an admin where the stack keeps a database."""
+
+    def test_the_list_is_read_on_every_stack(self, client: TestClient) -> None:
+        listed = client.get("/api/v1/voice/pronunciation").json()
+
+        assert {"term": "Traefik", "say": "traffic", "ipa": None} in listed
+
+    def test_changing_it_is_an_admins(self, client: TestClient) -> None:
+        pytest.importorskip("app.services.ai.domains.voice.pronunciations")
+        saved = client.post(
+            "/api/v1/voice/pronunciation", json={"term": "Aegis", "say": "ay-jis"}
+        )
+        removed = client.delete("/api/v1/voice/pronunciation/Aegis")
+
+        assert saved.status_code in (401, 403)
+        assert removed.status_code in (401, 403)

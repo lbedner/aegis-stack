@@ -2,7 +2,9 @@
 show it, and the two changes they make: a row put on the active voice
 profile, another profile made the active one (an admin's, each answered
 with the overview as it now is). Where the stack keeps no profiles (no
-database) the overview is what its settings use."""
+database) the overview is what its settings use. Beside it, how every
+voice says terms (``pronunciation_list``): read on every stack, changed
+where there is a database to keep the change."""
 
 from collections.abc import AsyncIterator
 from typing import Any
@@ -13,7 +15,9 @@ from app.components.backend.api.ai.service import ai_service
 from app.core.log import logger
 import app.services.ai.service as ai
 from app.services.ai.service import (
+    Pronunciation,
     VoiceOverview,
+    pronunciation_list,
     switch_voice,
     use_voice,
     voice_overview,
@@ -69,6 +73,12 @@ async def activate(profile_id: int, db: Any = Depends(_session)) -> VoiceOvervie
         raise HTTPException(404, f"No voice profile {profile_id}") from None
     return await voice_overview(db)
 
+
+
+@router.get("/pronunciation", response_model=list[Pronunciation])
+async def pronunciation() -> list[Pronunciation]:
+    """How every voice says terms: the defaults, an app's own, the saved."""
+    return pronunciation_list()
 
 if KEEPS_PROFILES:
     # The voice designer (``design``): a profile's voice put together, heard
@@ -154,3 +164,30 @@ if KEEPS_PROFILES:
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from None
         return next(s for s in await design.profile_summaries(db) if s.id == profile.id)
+
+    from app.services.ai.service import pronunciations
+
+    @router.post(
+        "/pronunciation", response_model=list[Pronunciation], dependencies=CHANGE
+    )
+    async def pronunciation_save(
+        said: Pronunciation, db: Any = Depends(_session)
+    ) -> list[Pronunciation]:
+        """Say ``said.term`` its way from the next thing said."""
+        try:
+            await pronunciations.save(db, said.term, said.say, said.ipa)
+        except pronunciations.PronunciationError as exc:
+            raise HTTPException(422, str(exc)) from None
+        return pronunciation_list()
+
+    @router.delete(
+        "/pronunciation/{term}",
+        response_model=list[Pronunciation],
+        dependencies=CHANGE,
+    )
+    async def pronunciation_remove(
+        term: str, db: Any = Depends(_session)
+    ) -> list[Pronunciation]:
+        """Drop ``term``'s saved row: it is said the default way again."""
+        await pronunciations.remove(db, term)
+        return pronunciation_list()

@@ -17,7 +17,7 @@ from app.core.voice_settings import (
     Reply,
     WorkingSound,
 )
-from app.services.ai.domains.voice import queries
+from app.services.ai.domains.voice import pronunciations, queries
 from app.services.ai.domains.voice.catalog import (
     get_stt_models,
 )
@@ -194,7 +194,9 @@ def apply(profile: VoiceProfile, settings: Any, service: Any) -> None:
 async def active_settings(session: AsyncSession, settings: Any) -> Any:
     """``settings`` in the active profile's voice: what anything headless (a
     worker, the CLI) speaks and hears with, as only the webserver applies
-    the profile at startup (``load_active``)."""
+    the profile at startup (``load_active``). The saved pronunciations come
+    with the voice, as they do there."""
+    await pronunciations.load(session)
     active = await active_profile(session)
     return settings if active is None else settings_for(active, settings)
 
@@ -210,7 +212,9 @@ async def load_active(
     session: AsyncSession, settings: Any, service: Any
 ) -> VoiceProfile | None:
     """At startup: seed a first profile from .env if there is none, then run
-    on the active one. After the first boot the table wins over .env."""
+    on the active one, saying terms the saved way. After the first boot the
+    table wins over .env."""
+    await pronunciations.load(session)
     active = await seeded_active(session, settings)
     if active is not None:
         apply(active, settings, service)

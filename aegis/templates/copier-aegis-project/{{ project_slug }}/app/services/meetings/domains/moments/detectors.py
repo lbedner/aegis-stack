@@ -282,8 +282,10 @@ def addressed(heard: Heard) -> str | None:
 def _asked(ask: str) -> str | None:
     """``ask``, all of it, where any sentence of it asks (``asks``: a
     speaker talks on past the question, and captions mark a pause in one as
-    its end) or it opens on a request; she reads the whole of it."""
-    asking = any(asks(sentence) for sentence in SENTENCES.split(ask))
+    its end), was captioned as asked (put to her by name, a rising "?" is
+    enough: *if Redis goes down? what happens?*), or opens on a request;
+    she reads the whole of it."""
+    asking = "?" in ask or any(asks(sentence) for sentence in SENTENCES.split(ask))
     return ask if ask and (asking or set(_words(ask)[:1]) & REQUESTS) else None
 
 

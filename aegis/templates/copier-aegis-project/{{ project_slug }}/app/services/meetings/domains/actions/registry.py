@@ -64,8 +64,10 @@ def actions_for(kind: str) -> list[Action]:
     return [a for a in _actions.values() if kind in a.kinds]
 
 
-# Her action (``ask_ai``): she answers, where the stack has her.
+# Her action (``ask_ai``): she answers, where the stack has her, in a
+# conversation of the meetings' own (``SURFACE``, kept out of her chat's list).
 ANSWERS = "ai"
+SURFACE = "meetings"
 # What a coding agent can take: a question, asked of the bot by name or not.
 QUESTIONS = frozenset({QUESTION, ADDRESSED})
 

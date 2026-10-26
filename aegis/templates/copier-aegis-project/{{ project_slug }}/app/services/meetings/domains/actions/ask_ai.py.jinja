@@ -3,10 +3,15 @@
 prompt, model and tools, the system's ontology among them), from the
 meeting so far, in a conversation of the meetings' own (``SURFACE``, kept
 out of her chat's list). Runs in the app; metered as her turns are. A
-question put to her by name (``addressed``) is answered unasked."""
+question put to her by name (``addressed``) is answered unasked. In a
+call with her live voice (``actions.live``), the answer to a line put to
+her by name is made through it, heard in the call as she makes it."""
 
 from typing import Any
+from weakref import WeakKeyDictionary
 
+from app.core.log import logger
+from app.services.meetings.domains.actions.live import LIVE
 from app.services.meetings.domains.actions.prompt import (
     Excerpt,
     said_before,
@@ -15,12 +20,11 @@ from app.services.meetings.domains.actions.prompt import (
 from app.services.meetings.domains.actions.registry import (
     ANSWERS,
     QUESTIONS,
+    SURFACE,
     Action,
     register_action,
 )
 
-# The chat surface her answers are kept under.
-SURFACE = "meetings"
 # How she answers in a call: what she says is heard, not read.
 SAY_IT = (
     "Answer it as you would out loud in the meeting: briefly, in two or "
@@ -39,6 +43,26 @@ def for_the_model(heard: Excerpt) -> str:
     )
 
 
+# What each live call has been told of the meeting so far (its lines).
+TOLD: WeakKeyDictionary[Any, set[str]] = WeakKeyDictionary()
+
+
+def _since(prompt: str, told: set[str]) -> str:
+    """``prompt`` (``for_the_model``) for her live call, which holds every
+    question put to it and what led to each: after the first, only the
+    meeting's lines it has not heard (``told``, kept up)."""
+    said, _, asked = prompt.partition("\n\n")
+    lines = said.splitlines()[1:]  # under "The meeting so far:"
+    new = [line for line in lines if line not in told]
+    first = not told
+    told.update(lines)
+    if first:
+        return prompt
+    return (
+        f"Since then in the meeting:\n{chr(10).join(new) or '(nothing new)'}\n\n{asked}"
+    )
+
+
 def her() -> Any:
     """The AI service she answers through."""
     # Here, not at the top: the AI service loads every tool, the meetings'
@@ -51,7 +75,14 @@ def her() -> Any:
 
 
 async def answer(prompt: str, owner_user_id: int | None) -> str:
-    """Her answer: a turn of her own agent, as the meeting's owner."""
+    """Her answer: through her live voice in the call, where there is one,
+    else a turn of her own agent, as the meeting's owner."""
+    live = LIVE.get()
+    if live is not None and live.open:
+        try:
+            return await live.ask(_since(prompt, TOLD.setdefault(live, set())))
+        except (RuntimeError, TimeoutError) as exc:
+            logger.warning(f"Her live answer failed ({exc}); she answers in chat")
     owner = {} if owner_user_id is None else {"user_id": str(owner_user_id)}
     said = await her().chat(
         prompt,

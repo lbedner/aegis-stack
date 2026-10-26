@@ -41,7 +41,6 @@ from app.core.config import settings
 from app.core.db import get_async_session
 from app.core.log import logger
 from app.services.ai.service import (
-    AIProvider,
     LiveEngine,
     live_engines,
     realtime_calls,
@@ -207,32 +206,22 @@ def live_router(
 
     async def call_for(conversation_id: str | None, engine: LiveEngine) -> Any:
         """The conversation the call saves into (a call without one starts
-        one) and the agent as the engine's brain."""
-        model = live_engines.realtime_model(engine)
-        conversation = (
-            await chat.find_conversation(mount, conversation_id)
-            if conversation_id
-            else await ai_service.conversation_manager.create_conversation(
-                provider=AIProvider(engine.llm.served_by.slug),
-                model=model,
-                user_id=mount.user,
-                surface=mount.surface,
-            )
-        )
-        if conversation is None:
-            raise LookupError("not this mount's conversation")
-        realtime = await realtime_calls.realtime_for(
+        one) and the agent as the engine's brain (``open_call``)."""
+        conversation = None
+        if conversation_id:
+            conversation = await chat.find_conversation(mount, conversation_id)
+            if conversation is None:
+                raise LookupError("not this mount's conversation")
+        return await realtime_calls.open_call(
             ai_service,
+            engine,
             conversation=conversation,
-            model=model,
+            user_id=mount.user,
+            surface=mount.surface,
             agent_slug=agent_slug,
             voice=settings.TTS_VOICE,
-            user_id=mount.user,
             admin=admin,
-            instructions=engine.instructions,
-            max_output_tokens=engine.max_output_tokens,
         )
-        return conversation, realtime
 
     async def show_cards(ws: WebSocket, card_ids: list[str]) -> None:
         """A card drawn mid-call, up while it is talked about."""

@@ -3,7 +3,9 @@ answer to one (an ``addressed`` moment; ``actions.ask_ai``) is done, it is
 posted in the chat at once and said aloud, and one that failed, that it
 could not find it. An answer not back within ``LOOKING_AFTER`` seconds is
 said to be looked up (``LOOKING``, its speech made as it joins), once; a
-quick one is just said. Without a voice it types instead.
+quick one is just said. Without a voice it types instead. With her live
+voice (``voice.live``) she is heard as she makes the answer: nothing is
+said while she thinks, and her answer is not said again.
 
 Speech is said apart from the call's loop (``_speaking``): made a sentence
 at a time, the first played while the rest are made, so captions are read
@@ -29,13 +31,19 @@ NOT_FOUND = "Sorry, I couldn't find that."
 class Answers:
     """The call's questions put to the bot, from heard to answered."""
 
-    def __init__(self, call: Any, voice: Any | None) -> None:
-        self.call, self.voice = call, voice
+    def __init__(self, call: Any, voice: Any | None, live: Any | None = None) -> None:
+        # ``live``: her live voice in the call (``voice.live``), which says
+        # her answers itself as she makes them.
+        self.call, self.voice, self.live = call, voice, live
         # What answers her (``answerer``); with nothing, nothing is waited on.
         self.answers = answerer()
         self.waiting: dict[int, float] = {}  # moment -> when it was heard
         self.told: set[int] = set()  # those said to be looked up
-        self.looking = asyncio.create_task(spoken(LOOKING, voice))
+        # Made ahead, to be said at once; made only when needed when she is
+        # live (``_looking``), since she is heard as she thinks then.
+        self.looking: asyncio.Task[bytes | None] | None = (
+            None if live is not None else asyncio.create_task(spoken(LOOKING, voice))
+        )
         self.to_say: asyncio.Queue[str] = asyncio.Queue()
         self.speaking = asyncio.create_task(self._speaking())
 
@@ -67,14 +75,18 @@ class Answers:
             self._aloud(said)
         since = now - LOOKING_AFTER
         slow = {m for m, heard in self.waiting.items() if heard <= since} - self.told
-        if slow:
+        if slow and not self._live():
             self.told |= slow
             if self.voice is None:
                 await self.call.say(LOOKING)
             self._aloud(LOOKING)
 
+    def _live(self) -> bool:
+        return self.live is not None and self.live.open
+
     def _aloud(self, text: str) -> None:
-        if self.voice is not None:
+        said_live = self.live is not None and self.live.spoke(text)
+        if self.voice is not None and not said_live:
             self.to_say.put_nowait(text)
 
     async def said(self) -> None:
@@ -89,7 +101,7 @@ class Answers:
             text = await self.to_say.get()
             try:
                 parts = (
-                    [self.looking]
+                    [self._looking()]
                     if text == LOOKING
                     else [
                         asyncio.create_task(spoken(sentence, self.voice))
@@ -115,6 +127,12 @@ class Answers:
             finally:
                 self.to_say.task_done()
 
+    def _looking(self) -> asyncio.Task[bytes | None]:
+        if self.looking is None:
+            self.looking = asyncio.create_task(spoken(LOOKING, self.voice))
+        return self.looking
+
     def close(self) -> None:
-        self.looking.cancel()
+        if self.looking is not None:
+            self.looking.cancel()
         self.speaking.cancel()

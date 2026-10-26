@@ -13,6 +13,7 @@ from sqlalchemy import Index, Text
 from sqlmodel import Field, SQLModel
 
 from app.core.time import utcnow
+from app.services.meetings.models.base import MOST_ERROR_CHARS
 
 
 class NoteItem(BaseModel):
@@ -138,7 +139,7 @@ class MeetingNotes(SQLModel, table=True):
     meeting_id: int = Field(
         foreign_key="meeting.id", primary_key=True, ondelete="CASCADE"
     )
-    error: str | None = Field(default=None, max_length=500)
+    error: str | None = Field(default=None, max_length=MOST_ERROR_CHARS)
     model_name: str | None = Field(default=None, max_length=255)
     written_at: datetime = Field(default_factory=utcnow)
 

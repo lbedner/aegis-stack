@@ -1,11 +1,19 @@
 """What every meetings table shares: the owner column's foreign key, the
-platforms, a meeting's statuses and how they group, and the name for a
-line nobody's caption named."""
+platforms, a meeting's statuses and how they group, the name for a line
+nobody's caption named, and how much a kept failure says."""
 
 from enum import StrEnum
 
 # Who said a line nobody's caption named.
 UNKNOWN = "Unknown"
+# The most a kept failure says (a meeting's, its notes', a guide's, a
+# series'): an error can carry a whole call log, which the column refuses.
+MOST_ERROR_CHARS = 500
+
+
+def fitted(error: str) -> str:
+    """``error`` cut to what a kept failure holds (``MOST_ERROR_CHARS``)."""
+    return error[:MOST_ERROR_CHARS]
 
 # An owner column references ``user.id`` only when the stack has auth (a
 # deleted user takes their meetings and people with them); without it the

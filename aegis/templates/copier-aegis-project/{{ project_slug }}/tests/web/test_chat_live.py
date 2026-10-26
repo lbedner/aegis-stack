@@ -32,7 +32,7 @@ from app.components.web_frontend.overseer_ai_chat import OVERSEER
 from app.components.web_frontend.routes.partials import chat_live
 from app.services.ai.domains.voice import realtime_calls
 from app.services.system.models import ComponentStatus
-from tests._realtime import VOICE, FakeRealtime
+from tests._realtime import ENGINE, VOICE, FakeRealtime
 from tests.web.dom import one
 from tests.web.overseer import sign_in, status_with
 
@@ -52,17 +52,6 @@ def client(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     app.dependency_overrides[overseer_access.overseer_socket_gate] = signed_in
     return TestClient(app)
 
-
-ENGINE = SimpleNamespace(
-    key="gemini-live",
-    instructions="## THIS IS A LIVE VOICE CALL",
-    max_output_tokens=1_200,
-    llm=SimpleNamespace(
-        model_id="gemini-3.8-live",
-        title="Gemini 3.8 Live",
-        served_by=SimpleNamespace(slug="google"),
-    ),
-)
 
 
 @pytest.fixture

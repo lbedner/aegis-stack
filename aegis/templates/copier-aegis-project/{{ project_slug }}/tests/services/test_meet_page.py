@@ -4,6 +4,7 @@ ending. It runs in the browser container, so it is skipped where none is
 up. The fake is shaped like the real Meet page as last checked (October
 2026); when Meet changes, ``meet.py`` and this page change together."""
 
+import asyncio
 from collections.abc import AsyncIterator
 
 from playwright.async_api import Page
@@ -143,6 +144,34 @@ async def test_it_unmutes_only_while_it_speaks(
 
     assert heard == ["Turn off microphone (ctrl + d)"]
     assert await meet.page.get_attribute("#mic", "aria-label") == (
+        "Turn on microphone (ctrl + d)"
+    )
+
+
+async def test_a_live_voice_keeps_the_mic_open_until_it_is_hushed(
+    meet: MeetPage, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Meet opens a mic late: unmuted for each answer, a live voice lost its
+    first second every time. The mic opens on its first piece and stays open
+    (silent between answers) until the voice is done."""
+    from app.services.meetings.domains.bot import meet as meet_module
+
+    await meet.ask_to_join("Notes")
+    await meet.page.evaluate("admit()")
+    monkeypatch.setattr(meet_module, "FIRST_UNMUTE", 0.0)
+
+    async def stream(page: Page, pcm: bytes, rate: int) -> float:
+        return 0.0
+
+    monkeypatch.setattr(card, "stream", stream)
+    label = "#mic"
+    await meet.stream(b"\x00\x01", 24_000)
+    await asyncio.sleep(0.2)
+    talking = await meet.page.get_attribute(label, "aria-label")
+    await meet.hush()
+
+    assert talking == "Turn off microphone (ctrl + d)"
+    assert await meet.page.get_attribute(label, "aria-label") == (
         "Turn on microphone (ctrl + d)"
     )
 

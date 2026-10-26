@@ -12,7 +12,7 @@ from sqlalchemy import Index, Text
 from sqlmodel import Field, SQLModel
 
 from app.core.time import utcnow
-from app.services.meetings.models.base import _OWNER_FK
+from app.services.meetings.models.base import _OWNER_FK, MOST_ERROR_CHARS
 from app.services.meetings.models.notes import NoteItem
 from app.services.meetings.models.people import ThreadSection
 
@@ -99,7 +99,7 @@ class MeetingSeries(SQLModel, table=True):
     )
     summary: str = Field(default="", sa_type=Text)
     meetings: int = Field(default=0, description="How many meetings it was read from")
-    error: str | None = Field(default=None, max_length=500)
+    error: str | None = Field(default=None, max_length=MOST_ERROR_CHARS)
     model_name: str | None = Field(default=None, max_length=255)
     written_at: datetime = Field(default_factory=utcnow)
 

@@ -200,38 +200,59 @@ class TestACallKnowsWhoSheIs:
         (``_build_turn``), for the caller, so each can do what the other
         can."""
         from app.services.ai.domains.chat import agent_loader
-        from app.services.ai.domains.voice import realtime_calls
 
-        config = agent_loader.default_agent_config()
-        built: dict[str, Any] = {}
+        built, realtime = await _built(monkeypatch, admin=True)
 
-        async def build_turn(
-            conversation: Any, agent_config: Any, **kwargs: Any
-        ) -> Any:
-            built.update(kwargs, slug=agent_config.slug)
-            agent = SimpleNamespace(
-                system_prompt_parts=_no_parts, realtime=lambda model, **kw: kw
-            )
-            return SimpleNamespace(agent=agent, conversation_context="")
+        slug = agent_loader.default_agent_config().slug
+        assert built == {"user_id": USER, "admin": True, "slug": slug}
+        assert realtime["toolsets"] == [CALL_TOOLS]  # she can hang up
 
-        async def _no_parts() -> list[Any]:
-            return []
+    @pytest.mark.asyncio
+    async def test_a_call_she_must_not_end_gives_her_no_way_to(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A meeting's live voice answers question after question: a "thanks"
+        must not hang it up, so it has no ``end_call``."""
+        _, realtime = await _built(monkeypatch, hang_up=False)
 
-        async def resolve(*_: Any) -> Any:
-            return config
+        assert realtime["toolsets"] == []
 
-        monkeypatch.setattr(agent_loader, "resolve_agent", resolve)
-        await realtime_calls.realtime_for(
-            SimpleNamespace(_build_turn=build_turn),
-            conversation=None,
-            model="google:gemini-3.8-live",
-            agent_slug=None,
-            voice=None,
-            user_id=USER,
-            admin=True,
+
+async def _built(
+    monkeypatch: pytest.MonkeyPatch, **asked: Any
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """What ``realtime_for`` built her with (``_build_turn``'s keywords) and
+    what it asked her realtime agent for, the agent row the default."""
+    from app.services.ai.domains.chat import agent_loader
+    from app.services.ai.domains.voice import realtime_calls
+
+    config = agent_loader.default_agent_config()
+    built: dict[str, Any] = {}
+
+    async def build_turn(conversation: Any, agent_config: Any, **kwargs: Any) -> Any:
+        built.update(kwargs, slug=agent_config.slug)
+        agent = SimpleNamespace(
+            system_prompt_parts=_no_parts, realtime=lambda model, **kw: kw
         )
+        return SimpleNamespace(agent=agent, conversation_context="")
 
-        assert built == {"user_id": USER, "admin": True, "slug": config.slug}
+    async def _no_parts() -> list[Any]:
+        return []
+
+    async def resolve(*_: Any) -> Any:
+        return config
+
+    monkeypatch.setattr(agent_loader, "resolve_agent", resolve)
+    realtime = await realtime_calls.realtime_for(
+        SimpleNamespace(_build_turn=build_turn),
+        conversation=None,
+        model="google:gemini-3.8-live",
+        agent_slug=None,
+        voice=None,
+        user_id=USER,
+        **asked,
+    )
+    return built, realtime
 
 
 class TestACallRemembers:

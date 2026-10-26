@@ -14,6 +14,7 @@ from app.services.meetings.domains.bot.meet import CallState
 from app.services.meetings.models import MeetingActionRun
 from tests._meetings import (
     FakeCall,
+    FakeLive,
     a_meeting,
     asked_a_question,
     hold_the_answers,
@@ -263,6 +264,11 @@ async def test_a_caption_meet_draws_again_is_the_same_line(
             "Iliana, can you tell me how a? Uh, request gets to the database.",
             True,
         ),
+        (  # drawn again with the name spelled anew in its first words
+            "So Illiana, um, if redis goes down?",
+            "So Ileana, um,",
+            True,
+        ),
         (  # drawn again from mid-way
             "Yeah, I don't know, Illiana said. It was fine earlier, though.",
             "Ileana said it was fine earlier.",
@@ -301,3 +307,64 @@ async def test_with_nothing_to_answer_her_it_waits_on_nothing(
 
     assert answering.waiting == {}
     answering.close()
+
+
+async def test_an_answer_she_said_live_is_posted_not_said_again(
+    async_db_session: AsyncSession, voiced: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Live, she is heard as she makes the answer: it is posted in the chat
+    and not made into speech again, and nothing is said while she thinks."""
+    monkeypatch.setattr(answers, "LOOKING_AFTER", 0.0)
+    _, moment_id = await asked_a_question(async_db_session, lines=HER)
+    call = FakeCall([CallState.IN_CALL])
+    answering = answers.Answers(
+        call, voice="hers", live=FakeLive(spoken=("Sam owns billing.",))
+    )
+
+    await answering.heard([(moment_id, "addressed")])
+    await answering.answer(async_db_session)  # slow, but she is talking already
+    await _over(async_db_session, "done", "Sam owns billing.")
+    await answering.answer(async_db_session)
+    await answering.said()
+
+    assert call.said == ["Sam owns billing."] and call.spoken == []
+    answering.close()
+
+
+async def test_her_live_engine_is_her_voice_profiles_where_she_answers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The bot runs in a worker, where the settings are the .env's, not the
+    voice profile's: the engine is the profile's (``voice_of``), and there
+    is none to open where she is not the one answering."""
+    from types import SimpleNamespace
+
+    from app.services.meetings.domains.bot import voice
+
+    asked: list[str] = []
+
+    class Engines:
+        async def resolve(self, session: Any, key: str) -> str:
+            asked.append(key)
+            return "her engine"
+
+    from app.services.meetings.domains.actions.registry import ANSWERS
+
+    monkeypatch.setattr(voice, "answerer", lambda: ANSWERS)  # she answers
+    monkeypatch.setattr(
+        voice, "optional", lambda name: SimpleNamespace(live_engines=Engines())
+    )
+    profile = SimpleNamespace(VOICE_LIVE_ENGINE="gpt-realtime-2.1-mini")
+
+    assert await voice.live_engine_of(None, profile) == "her engine"  # type: ignore[arg-type]
+    assert asked == ["gpt-realtime-2.1-mini"]
+    assert await voice.live_engine_of(None, None) is None  # type: ignore[arg-type]
+    monkeypatch.setattr(voice, "answerer", lambda: "agent")  # a coding agent answers
+    assert await voice.live_engine_of(None, profile) is None  # type: ignore[arg-type]
+
+
+async def test_without_a_voice_there_is_no_live_voice() -> None:
+    from app.services.meetings.domains.bot import voice
+
+    async with voice.live(FakeCall([CallState.IN_CALL]), None, None, None) as live:
+        assert live is None and voice.LIVE.get() is None

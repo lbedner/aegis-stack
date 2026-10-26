@@ -9,6 +9,15 @@
 
 ### Added
 
+- **Illiana answers live in a call.** Where a live engine is enabled, a
+  question put to her in a meeting goes to a realtime session the bot
+  opens as it joins (her own agent, tools and all), and her answer is
+  heard as she makes it, streamed into the call, instead of after a chat
+  turn and a separate speech step. It is still kept on its moment and
+  posted in the chat; without a live engine she answers as before. The AI
+  service gains `live_voice`: a live call put questions in text, its
+  audio handed to the caller.
+
 - **Hey Illiana.** Put something to the meeting bot by name ("Illiana,
   how many workers are there?", "Hey" optional) and Illiana herself
   answers in the call, with her own tools (the twin among them): the
@@ -451,6 +460,12 @@
   parts already show, and what the change touches is folded away.
 
 ### Fixed
+
+- **A meeting whose bot failed on a long error says it failed.** An
+  error carrying a browser's whole call log was longer than the failure
+  column holds, so Postgres refused it and the meeting never left
+  "joining". Every kept failure (a meeting's, its notes', a guide's, a
+  series') is cut to fit, in one place.
 
 - **Spend is whoever it is done for.** A ledger row whose caller names no
   user is now the user being acted for (bound once, as a chat turn and a

@@ -138,6 +138,7 @@ class MeetPage:
     def __init__(self, page: Page) -> None:
         self.page = page
         self.spoken = False  # whether it has said anything yet
+        self.open_mic = False  # held open while a live voice speaks
 
     async def _shown(self, selector: str) -> bool:
         """On the page and visible: Meet keeps controls it is not showing."""
@@ -214,16 +215,41 @@ class MeetPage:
         """Redraw the card its camera shows (``card.show``)."""
         await card.show(self.page, **update)
 
-    async def speak(self, audio: bytes) -> None:
-        """Say ``audio`` into the call: unmuted only while it plays."""
+    async def _unmute(self) -> None:
+        """The mic open to speak, a moment later the first time (Meet opens
+        it late then)."""
         await self._answer_prompts()
         if await self._click_if_visible(MIC_ON) and not self.spoken:
             await asyncio.sleep(FIRST_UNMUTE)
         self.spoken = True
+
+    async def speak(self, audio: bytes) -> None:
+        """Say ``audio`` into the call: unmuted while it plays, but for the
+        mic a live voice holds open (``stream``), which stays open."""
+        held = self.open_mic
+        if not held:
+            await self._unmute()
         try:
             seconds = await card.speak(self.page, audio)
             await asyncio.sleep(seconds + SPOKEN_TAIL)
         finally:
+            if not held:
+                await self._click_if_visible(MIC_OFF)
+
+    async def stream(self, pcm: bytes, rate: int) -> None:
+        """Say a piece of speech still being made (a live voice's, PCM16 at
+        ``rate``). The mic opens on its first piece and stays open, silent
+        between answers, until ``hush``: Meet opens a mic late, and unmuted
+        for each answer, its first second was lost every time."""
+        if not self.open_mic:
+            await self._unmute()
+            self.open_mic = True
+        await card.stream(self.page, pcm, rate)
+
+    async def hush(self) -> None:
+        """The mic a live voice held open, closed."""
+        if self.open_mic:
+            self.open_mic = False
             await self._click_if_visible(MIC_OFF)
 
     async def leave(self) -> None:

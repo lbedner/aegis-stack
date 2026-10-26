@@ -110,6 +110,15 @@ async def test_the_card_redraws_when_its_status_changes(page: Page) -> None:
     assert before != after
 
 
+def _pcm(seconds: float, rate: int = 16_000) -> bytes:
+    """A tone as PCM16 mono: what a live voice sends, a piece at a time."""
+    samples = (
+        int(8000 * math.sin(2 * math.pi * 440 * n / rate))
+        for n in range(int(rate * seconds))
+    )
+    return b"".join(struct.pack("<h", s) for s in samples)
+
+
 def _tone(seconds: float) -> bytes:
     """A short WAV tone: what the page decodes as it would TTS's audio."""
     rate = 16_000
@@ -118,11 +127,7 @@ def _tone(seconds: float) -> bytes:
         w.setnchannels(1)
         w.setsampwidth(2)
         w.setframerate(rate)
-        samples = (
-            int(8000 * math.sin(2 * math.pi * 440 * n / rate))
-            for n in range(int(rate * seconds))
-        )
-        w.writeframes(b"".join(struct.pack("<h", s) for s in samples))
+        w.writeframes(_pcm(seconds, rate))
     return out.getvalue()
 
 
@@ -130,3 +135,13 @@ async def test_speech_plays_into_the_mic_and_says_how_long(page: Page) -> None:
     seconds = await card.speak(page, _tone(0.5))
 
     assert seconds == pytest.approx(0.5, abs=0.05)
+
+
+async def test_speech_still_being_made_plays_piece_after_piece(page: Page) -> None:
+    """A live voice sends its speech in pieces as it is made: each plays
+    after the one before, and the page says how much is still to play."""
+    first = await card.stream(page, _pcm(0.25, 24_000), 24_000)
+    second = await card.stream(page, _pcm(0.25, 24_000), 24_000)
+
+    assert first == pytest.approx(0.25, abs=0.05)
+    assert second == pytest.approx(0.5, abs=0.08)

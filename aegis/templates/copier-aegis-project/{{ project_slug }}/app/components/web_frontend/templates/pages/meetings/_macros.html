@@ -76,17 +76,24 @@
 {# Who said what: one speaker's lines in a row under their name, each line
    with its time and its own anchor (an item jumps to it); ``hit``, the
    line a search opened it at, marked. #}
-{% macro transcript(turns, clock, voices, hit=None) %}
+{# ``base`` and ``asks``: each line can be asked what it is about (where the
+   stack has Illiana), her answer opening under it in a slot the body's live
+   re-read keeps (``hx-preserve``). The slot holds the ask too: one at a time
+   (``hx-sync``), and saying she is on it (``hx-indicator``), however often
+   the body is drawn again meanwhile. #}
+{% macro transcript(turns, clock, voices, hit=None, base=None, asks=False) %}
 {% if turns %}
-<ol class="space-y-4 text-sm">
+<ol class="space-y-4 text-sm"{% if asks %} hx-target="next .about-slot" hx-indicator="next .about-slot" hx-sync="next .about-slot:drop"{% endif %}>
   {% for name, rows in turns %}
   <li data-turn class="grid scroll-mt-12 gap-1">
     {{ speaker(name, voices) }}
     {% for line in rows %}
-    <p id="line-{{ line.id }}" {% if hit and line.id == hit %}data-hit{% endif %} class="flex gap-3 scroll-mt-20 rounded px-2 -mx-2 target:bg-aegis-teal/10 data-[hit]:bg-aegis-teal/10">
+    <p id="line-{{ line.id }}" {% if hit and line.id == hit %}data-hit{% endif %} class="group/line flex gap-3 scroll-mt-20 rounded px-2 -mx-2 target:bg-aegis-teal/10 data-[hit]:bg-aegis-teal/10">
       <span class="w-10 shrink-0 pt-0.5 text-xs tabular-nums text-aegis-muted">{{ clock[line.id] }}</span>
-      <span class="leading-relaxed text-aegis-text">{{ line.text }}</span>
+      <span class="flex-1 leading-relaxed text-aegis-text">{{ line.text }}</span>
+      {% if asks %}{{ ask_about(base, line.id) }}{% endif %}
     </p>
+    {% if asks %}<div id="about-line-{{ line.id }}" class="about-slot" hx-preserve></div>{% endif %}
     {% endfor %}
   </li>
   {% endfor %}
@@ -160,4 +167,12 @@
   </li>
   {% endfor %}
 </ul>
+{% endmacro %}
+
+
+{# Asking Illiana what a line is about (``.ask-about``): shown on the line's
+   hover (or focus), her answer drawn into the slot after it (``transcript``).
+   Kept small: a live call draws every line again every few seconds. #}
+{% macro ask_about(base, line_id) %}
+<button type="button" class="ask-about" data-about="{{ line_id }}" hx-post="{{ base }}/lines/{{ line_id }}/about">What's this about?</button>
 {% endmacro %}

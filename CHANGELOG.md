@@ -9,6 +9,19 @@
 
 ### Added
 
+- **"What's this about?" on any line of a meeting.** On the meeting
+  page and in Overseer's drawer, live or after the call, any line can be
+  asked what its speaker is talking about: Illiana answers under it, on
+  the asker's page alone, and where it is a part of the system she draws
+  its wiring and links to it in Overseer. The API asks the same
+  (`POST /api/v1/meetings/{id}/lines/{line_id}/about`). "Ask AI" on a
+  question is now "Ask Illiana".
+
+- **The meeting bot joins quietly.** It announces itself in the chat
+  only (the notice that what is said is transcribed stays), no longer
+  aloud, so its joining does not cut into the call; it speaks only to
+  answer.
+
 - **Illiana answers live in a call.** Where a live engine is enabled, a
   question put to her in a meeting goes to a realtime session the bot
   opens as it joins (her own agent, tools and all), and her answer is

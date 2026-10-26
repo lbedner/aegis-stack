@@ -81,6 +81,22 @@ def covered(said: Said, moments: list[MeetingMoment]) -> tuple[int, Said]:
     return first, lines
 
 
+def around(
+    said: Said, line_id: int, either_side: int = CONTEXT_LINES // 2
+) -> tuple[Said, tuple[str, int, str], Said] | None:
+    """The line ``line_id`` of ``said`` (speaker, line id, text, in order),
+    with up to ``either_side`` lines before it and after it; None for a line
+    ``said`` does not hold."""
+    at = next((n for n, (_, i, _) in enumerate(said) if i == line_id), None)
+    if at is None:
+        return None
+    return (
+        said[max(0, at - either_side) : at],
+        said[at],
+        said[at + 1 : at + 1 + either_side],
+    )
+
+
 def turns(lines: Iterable[tuple[str, int, str]]) -> str:
     """Lines as a framing quotes them, one per turn: ``Speaker: text``."""
     return "\n".join(f"{who}: {text}" for who, _, text in lines)

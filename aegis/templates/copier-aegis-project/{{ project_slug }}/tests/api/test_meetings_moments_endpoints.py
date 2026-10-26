@@ -4,6 +4,7 @@ its prompt; every owner's for Overseer's admin; and a runner on another
 machine, holding a token, claims a run and posts its result."""
 
 from importlib.util import find_spec
+from unittest.mock import AsyncMock
 
 from fastapi.testclient import TestClient
 import pytest
@@ -11,7 +12,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.meetings.domains.actions import tokens
 from tests._audit import as_admin, let_into_overseer
-from tests._meetings import asked_a_question, someone_else
+from tests._meetings import a_meeting, asked_a_question, said, someone_else
 
 MEETINGS = "/api/v1/meetings"
 ADMIN = "/api/v1/meetings/admin"
@@ -32,6 +33,30 @@ async def test_an_owner_reads_a_meetings_moments_and_what_each_offers(
     (moment,) = response.json()
     assert (moment["kind"], moment["speaker"]) == ("question", "Dana")
     assert {"copy", "agent"} <= {a["name"] for a in moment["actions"]}
+
+
+async def test_an_owner_asks_illiana_what_a_line_is_about(
+    authenticated_client: TestClient,
+    async_db_session: AsyncSession,
+    acting_owner_user_id: int | None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.components.backend.api.meetings import moments as api
+    from app.services.meetings.models import LineAbout
+
+    asked = AsyncMock(side_effect=[LineAbout(summary="The job runner."), None])
+    monkeypatch.setattr(api, "line_about", asked)
+    meeting_id = await a_meeting(async_db_session, acting_owner_user_id)
+    (line,) = await said(async_db_session, meeting_id, ("Dana", "Move it to Redis."))
+    here = f"{MEETINGS}/{meeting_id}/lines/{line}/about"
+
+    answered = authenticated_client.post(here)
+    unanswered = authenticated_client.post(here)
+
+    assert answered.status_code == 200, answered.text
+    assert answered.json() == {"summary": "The job runner.", "card_id": None}
+    assert unanswered.status_code == 404
+    assert asked.await_args.args[1:] == (meeting_id, line)
 
 
 async def test_an_owner_asks_an_action_and_reads_the_prompt_to_copy(

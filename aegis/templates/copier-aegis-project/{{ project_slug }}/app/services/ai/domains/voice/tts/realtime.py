@@ -24,6 +24,10 @@ RATE = 24_000
 SPEED_MIN, SPEED_MAX = 0.25, 1.5
 # How long one line may take before it fails instead of hanging.
 WAIT_SECONDS = 60.0
+# The line is whole at ``response.done``; waiting on OpenAI's side of the
+# close took two seconds more, measured, on every line. ``websockets``
+# takes it, though the SDK's options type does not name it.
+CLOSING: Any = {"close_timeout": 0.1}
 
 
 READER = (
@@ -100,7 +104,9 @@ async def say(
     event or a response that did not complete."""
     async with asyncio.timeout(WAIT_SECONDS):
         # No reconnecting: a dropped session has lost the line anyway.
-        async with client.realtime.connect(model=model, max_retries=0) as connection:
+        async with client.realtime.connect(
+            model=model, max_retries=0, websocket_connection_options=CLOSING
+        ) as connection:
             await connection.session.update(session=_session(voice, speed))
             await connection.response.create(response=reading(text, delivery))
             pcm = bytearray()

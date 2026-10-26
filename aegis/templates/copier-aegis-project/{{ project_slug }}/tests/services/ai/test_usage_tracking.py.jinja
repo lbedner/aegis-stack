@@ -167,6 +167,31 @@ class TestWhatTheLedgerKeeps:
         assert row is not None
         assert row.duration_ms == 1234.5
 
+    async def test_spend_no_caller_names_is_whoever_it_is_done_for(
+        self,
+        async_db_session: AsyncSession,
+        llm: LargeLanguageModel,
+        price: LLMPrice,
+    ) -> None:
+        """Who it is done for is bound once (``acting_as``: a turn, a
+        meeting's bot) and every row written inside is theirs, nothing
+        passing it down; one naming its own user keeps it."""
+        from app.core.tools import acting_as
+        from app.services.ai.domains.spend import recording as usage_recording
+
+        with acting_as(7, None):
+            with _store_session(async_db_session):
+                for user_id in (None, "u-named"):
+                    await usage_recording.record_usage(
+                        action="tts",
+                        model_name="gpt-4o",
+                        usage={"input_tokens": 1, "output_tokens": 1},
+                        user_id=user_id,
+                    )
+
+        rows = (await async_db_session.exec(select(LLMUsage))).all()
+        assert sorted(r.user_id or "" for r in rows) == ["7", "u-named"]
+
     async def test_a_turn_names_its_conversation(
         self,
         async_db_session: AsyncSession,

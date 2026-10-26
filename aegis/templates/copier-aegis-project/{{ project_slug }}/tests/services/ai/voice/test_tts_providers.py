@@ -220,6 +220,7 @@ class _Realtime:
 
     def __init__(self, events: list[Any]) -> None:
         self.sent: dict[str, Any] = {}
+        self.connected: dict[str, Any] = {}
         self.audio_sent = False
         self._events = events
         self.session = SimpleNamespace(update=self._keep("session"))
@@ -246,7 +247,11 @@ class _Realtime:
             yield event
 
     def client(self) -> Any:
-        return SimpleNamespace(realtime=SimpleNamespace(connect=lambda **kwargs: self))
+        def connect(**kwargs: Any) -> "_Realtime":
+            self.connected = kwargs
+            return self
+
+        return SimpleNamespace(realtime=SimpleNamespace(connect=connect))
 
 
 def _done(status: str = "completed") -> Any:
@@ -332,6 +337,22 @@ class TestOpenAIRealtimeSpeech:
         await provider.synthesize(SpeechRequest(text="Hi.", speed=3.0))
 
         assert realtime.sent["session"]["audio"]["output"]["speed"] == 1.5
+
+    async def test_a_line_is_back_without_waiting_on_the_session_to_close(
+        self,
+    ) -> None:
+        """The audio is whole at ``response.done``; OpenAI's side of the
+        close took two seconds more, measured, before a line was given back."""
+        realtime = _Realtime([_done()])
+        provider = get_tts_provider(
+            TTSProvider.OPENAI, api_key="k", model="gpt-realtime-2.1-mini"
+        )
+        provider._client = realtime.client()
+
+        await provider.synthesize(SpeechRequest(text="Hi."))
+
+        options = realtime.connected["websocket_connection_options"]
+        assert options["close_timeout"] < 0.5
 
     async def test_an_error_or_unfinished_response_fails_the_line(self) -> None:
         for events in (

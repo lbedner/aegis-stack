@@ -32,15 +32,18 @@ def test_an_explicit_value_wins() -> None:
     assert settings.API_BASE_URL == "https://api.example.test"
 
 
-def test_inside_a_container_the_container_port_wins(
+def test_inside_a_container_it_is_the_webserver_on_its_own_port(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The published port is the host's business, not the container's.
 
     ``make serve`` publishes 8005 and writes it to .env.ports, which the
     container reads too - so the app computed its own address as the
-    port it is not listening on and could not call its own API.
+    port it is not listening on and could not call its own API. And
+    ``localhost`` is each container itself: a worker asking the app how it
+    is heard "the webserver did not answer". By its service name, every
+    container of the stack reaches it, the webserver too.
     """
     monkeypatch.setenv("DOCKER_CONTAINER", "1")
     settings = Settings(PORT=8000, WEBSERVER_HOST_PORT=8005)
-    assert settings.API_BASE_URL == "http://localhost:8000"
+    assert settings.API_BASE_URL == "http://webserver:8000"

@@ -49,7 +49,10 @@ if TYPE_CHECKING:
     # What callers outside reach through here, each loaded when used
     # (``app.services.shared.facade``); the agents' seeds render only
     # with an AI that runs them.
-    from app.services.meetings.domains.accounts.service import IMAGE_TYPES  # noqa: F401
+    from app.services.meetings.domains.accounts.service import (  # noqa: F401
+        IMAGE_TYPES,
+        SWITCHES,
+    )
     from app.services.meetings.domains.actions.runs import fail_abandoned  # noqa: F401
     from app.services.meetings.domains.agents import (  # noqa: F401
         load_meetings_agent_fixtures,

@@ -9,6 +9,19 @@
 
 ### Added
 
+- **Hey Illiana.** Put something to the meeting bot by name ("Illiana,
+  how many workers are there?", "Hey" optional) and Illiana herself
+  answers in the call, with her own tools (the twin among them): the
+  answer is posted in the chat at once and said aloud a sentence at a
+  time, with a "Let me look that up." first when she is slow. Such a line
+  is a moment of its own, "Asked by name", answered without being asked
+  for. The name is matched loosely, since captions misspell it; she waits
+  for the speaker to pause before taking the question, and what the
+  person she answered says straight back needs no name. A new agent
+  switch, **Answers anyone**, beside Camera in both Overseers' Agents
+  tab, limits who may ask to the meeting's owner. Ask AI is now Illiana
+  too; the `meeting-answers` agent is gone.
+
 - **Each voice wears its provider's logo.** In both Overseers' voice
   editor, every voice, and the one chosen, shows its provider's mark (the
   catalog's, as the Providers page shows it: Gemini's is Google's), or its
@@ -438,6 +451,22 @@
   parts already show, and what the change touches is folded away.
 
 ### Fixed
+
+- **Spend is whoever it is done for.** A ledger row whose caller names no
+  user is now the user being acted for (bound once, as a chat turn and a
+  meeting's bot do), instead of nobody's: the meeting bot's speech, which
+  passed no user, was unattributed. Nothing has to pass a user down.
+
+- **OpenAI realtime speech is two seconds quicker a line.** Each line
+  waited on OpenAI's side of closing its session after its audio was
+  already whole; it no longer does.
+
+- **Workers reach the webserver.** The scheduler and every worker were
+  pointed at `localhost` for the app's own API, which inside a worker's
+  container is the worker itself, so whatever ran there and asked the app
+  how it was (Illiana in a meeting, among others) heard "the webserver did
+  not answer". In a container the app now reaches its API by the
+  webserver's service name.
 
 - **`ai conversations` runs again.** The asyncio.run -> await port
   (#1821) left `await list_conversations(...)[:limit]`, which slices the

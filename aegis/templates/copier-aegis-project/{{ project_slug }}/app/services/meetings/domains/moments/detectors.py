@@ -10,6 +10,7 @@ found on disk like its ``tools`` and imported before either is first read.
 
 from collections.abc import Callable
 from dataclasses import dataclass
+from difflib import SequenceMatcher
 from functools import cache
 import re
 
@@ -22,14 +23,18 @@ EXTENSIONS = "meeting_moments"
 @dataclass(frozen=True)
 class Heard:
     """One line as a detector reads it: who said it, whether that is the
-    owner, what was said so far, and everyone who has spoken in the call
-    (by the names it gave them)."""
+    owner, what was said so far, everyone who has spoken in the call (by
+    the names it gave them), the bot's name where this speaker may wake it
+    (``addressee``; empty where they may not, or it is the bot's own), and
+    whether it was said right after the bot spoke (``replying``)."""
 
     line_id: int
     speaker: str
     text: str
     is_me: bool
     people: frozenset[str] = frozenset()
+    addressee: str = ""
+    replying: bool = False
 
 
 Detector = Callable[[Heard], str | None]
@@ -96,7 +101,11 @@ FILLERS = frozenset(
 # Fewer real words than this, past the fillers, is a sound, not a question.
 FEWEST_WORDS = 3
 SENTENCE = re.compile(r"[.!?]+")
-WORD = re.compile(r"[a-z']+")
+# Between one whole sentence and the next, its mark kept.
+SENTENCES = re.compile(r"(?<=[.!?])\s+")
+WORD = re.compile(r"[a-z']+", re.IGNORECASE)
+# What a word is said as with a verb run on: how's, who're, what'd.
+RUN_ON = re.compile(r"'(?:s|re|d|ll)$")
 
 
 # Said to someone in the call: *you*, or asking their leave.
@@ -112,7 +121,7 @@ def question(heard: Heard) -> str | None:
     (``asks``), and not asked of someone in the call (``asked_of_someone``).
     Captions end anything said with a rising tone in one."""
     text = heard.text.strip()
-    if heard.is_me or not text.endswith("?"):
+    if heard.is_me or not text.endswith("?") or addressed(heard):
         return None
     if not asks(text) or asked_of_someone(text, heard.people - {heard.speaker}):
         return None
@@ -144,7 +153,7 @@ def asks(text: str) -> bool:
     clauses = [_words(clause) for clause in last.split(",")]
     if sum(len(clause) for clause in clauses) < FEWEST_WORDS:
         return False
-    opens = any(clause and clause[0] in ASKING for clause in clauses)
+    opens = any(clause and RUN_ON.sub("", clause[0]) in ASKING for clause in clauses)
     tagged = len(clauses[-1]) == 1 and clauses[-1][0] in TAGS
     return opens or tagged
 
@@ -158,3 +167,124 @@ def _words(clause: str) -> list[str]:
 
 
 register_detector(QUESTION, question, title="Questions")
+
+
+# The kind a line put to the bot by name is: it answers it, out loud.
+ADDRESSED = "addressed"
+# What a line opens on before her name and still says it to her.
+GREETINGS = frozenset("hey hi hello hiya yo ok okay".split())
+# A word asking for something done, opening what she is asked.
+REQUESTS = frozenset(
+    "tell show find check look give remind summarize summarise explain list "
+    "pull read open walk please".split()
+)
+# How close a captioned word must be to her name: captions spell it as
+# they hear it (Illiana, Iliana, Eliana).
+NAME_LIKE = 0.75
+ENDS = ("?", ".", "!")
+
+
+# What Meet calls the bot's own captions, in its own page.
+ITSELF = "You"
+# How soon after the bot spoke a line is said back to it, needing no name.
+FOLLOW_SECONDS = 8.0
+# What is said back that answers nothing: a reply made only of these (and
+# fillers) is not put to it.
+THANKS = frozenset(
+    "thanks thank you cool great got it nice perfect awesome sure no yep nope "
+    "right gotcha good".split()
+)
+
+
+def addressee(speaker: str, is_me: bool, bot: str, anyone: bool) -> str:
+    """The bot's name for a line ``speaker`` said (``Heard.addressee``):
+    empty where they may not wake it (only its owner may, and they are not
+    it) or the line is the bot's own."""
+    return bot if not its_own(speaker, bot) and (anyone or is_me) else ""
+
+
+def its_own(speaker: str, bot: str) -> bool:
+    """Whether a line ``speaker`` said is the bot's own."""
+    return speaker in (ITSELF, bot)
+
+
+# The line before a line, as whether it is said back to the bot is read:
+# who said it, how long before this one began it ended, and who last put
+# something to the bot.
+Before = tuple[str, float, str]
+
+
+def replying(before: Before | None, speaker: str, bot: str) -> bool:
+    """Whether a line ``speaker`` said is said back to the bot: the line
+    before it (who said it, how long before this one began, and who last
+    put something to the bot) is the bot's own, within ``FOLLOW_SECONDS``,
+    answering ``speaker``. Someone else talking just after it is not."""
+    if before is None:
+        return False
+    said, gap, asker = before
+    return its_own(said, bot) and gap <= FOLLOW_SECONDS and speaker == asker
+
+
+@cache  # captions say the same words over and over, on every look
+def named(word: str, name: str) -> bool:
+    """Whether ``word`` is ``name`` (its first name) as a caption spells it."""
+    first = name.split()[0].lower() if name.strip() else ""
+    return (
+        bool(first) and SequenceMatcher(None, word.lower(), first).ratio() >= NAME_LIKE
+    )
+
+
+def mentions(text: str, name: str) -> bool:
+    """Whether ``text`` says ``name`` anywhere (to her, or about her)."""
+    return any(named(word, name) for word in WORD.findall(text.lower()))
+
+
+def cut_at_name(text: str, name: str) -> list[str]:
+    """``text`` cut before each sentence that says ``name``: one piece for
+    each time it is spoken to (a speaker talking on stays one caption), the
+    first what came before."""
+    pieces = [""]
+    for sentence in SENTENCES.split(text.strip()):
+        if pieces[-1] and mentions(sentence, name):
+            pieces.append(sentence)
+        else:
+            pieces[-1] = f"{pieces[-1]} {sentence}".strip()
+    return pieces
+
+
+def addressed(heard: Heard) -> str | None:
+    """What a line asks of the bot, where it is put to it by name: opening
+    on its name (after a greeting at most) or closing on it, said to its end,
+    and asking something (``asks``) or for something done (``REQUESTS``).
+    A line that names it in passing is about it, not to it. Said back to it
+    (``replying``), the whole line is, its name or not, unless all it says
+    is thanks (``THANKS``)."""
+    text = heard.text.strip()
+    if not heard.addressee or not text.endswith(ENDS):
+        return None
+    if heard.replying and not mentions(text, heard.addressee):
+        return text if set(_words(text)) - THANKS - FILLERS else None
+    words = list(WORD.finditer(text))
+    at = next(
+        (i for i, w in enumerate(words) if named(w.group(), heard.addressee)), None
+    )
+    if at is None:
+        return None
+    if all(w.group().lower() in GREETINGS | FILLERS for w in words[:at]):
+        ask = text[words[at].end() :].lstrip(" ,.;:!-")
+    elif at == len(words) - 1:
+        ask = text[: words[at].start()].rstrip(" ,;:-") + text[-1]
+    else:
+        return None
+    return _asked(ask)
+
+
+def _asked(ask: str) -> str | None:
+    """``ask``, all of it, where any sentence of it asks (``asks``: a
+    speaker talks on past the question, and captions mark a pause in one as
+    its end) or it opens on a request; she reads the whole of it."""
+    asking = any(asks(sentence) for sentence in SENTENCES.split(ask))
+    return ask if ask and (asking or set(_words(ask)[:1]) & REQUESTS) else None
+
+
+register_detector(ADDRESSED, addressed, title="Asked by name")

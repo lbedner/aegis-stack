@@ -1,7 +1,7 @@
 {# Each Google account the bot joins calls as (an agent): who it is,
    whether its sign-in still works, the meetings it is in now, each
    opening in the Meetings drawer, its card in a call (its picture, else
-   its initials, and whether its camera is on), and, with accounts here,
+   its initials, and its on/off settings: camera, answers anyone), and, with accounts here,
    who owns a meeting it joins from its calendar that nobody on the invite
    owns. One is made by signing it in. #}
 {% from "components/macros/feedback.html" import error_banner %}
@@ -23,9 +23,11 @@
     {{ file_button("agent-image-" ~ cell.agent, "Change picture" if cell.image else "Add picture", cell.accept) }}
   </form>
   {% if cell.image %}<button type="button" data-write hx-delete="{{ base }}/image" {{ redraw|safe }} class="text-xs text-aegis-muted hover:text-aegis-text">Remove</button>{% endif %}
-  <form data-write data-camera hx-post="{{ base }}/camera" hx-trigger="change" {{ redraw|safe }}>
-    {{ checkbox("on", cell.camera, "Camera", "1") }}
+  {% for s in cell.switches %}
+  <form data-write data-switch="{{ s.name }}" hx-post="{{ base }}/{{ s.name }}" hx-trigger="change" {{ redraw|safe }}>
+    {{ checkbox("on", s.on, s.label, "1") }}
   </form>
+  {% endfor %}
 </div>
 {%- endmacro %}
 {% macro default_owner(cell) -%}

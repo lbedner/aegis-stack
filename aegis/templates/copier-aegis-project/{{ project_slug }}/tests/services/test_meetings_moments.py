@@ -12,7 +12,15 @@ from app.services.meetings.domains.moments.tidy import meeting_ids_of
 from app.services.meetings.domains.notes.queries import delete_in
 from app.services.meetings.models import Caption, MeetingActionRun, MeetingMoment
 from app.services.meetings.service import MeetingsService, write_captions
-from tests._meetings import MEET, a_meeting, kept_series, said, someone_else, topic
+from tests._meetings import (
+    MEET,
+    a_meeting,
+    hold_the_answers,
+    kept_series,
+    said,
+    someone_else,
+    topic,
+)
 
 
 async def test_a_question_someone_asks_is_a_moment(
@@ -293,3 +301,170 @@ def test_a_question_asked_of_someone_in_the_call_is_theirs(said: str) -> None:
     answer, not an agent's."""
     heard = Heard(1, "Dana Okafor", said, is_me=False, people=PEOPLE)
     assert detectors.question(heard) is None
+
+
+@pytest.mark.parametrize(
+    ("said", "asked"),
+    [
+        (
+            "Hey Illiana, what did we decide about the launch?",
+            "what did we decide about the launch?",
+        ),
+        (
+            "Eliana, can you check what the worker is doing?",
+            "can you check what the worker is doing?",
+        ),
+        ("Hey illiana. How you doing?", "How you doing?"),
+        ("Hey Illiana, how's it going?", "how's it going?"),
+        (
+            "So Iliana tell me who owns the billing service.",
+            "tell me who owns the billing service.",
+        ),
+        (
+            "What would break if Redis went down, Illiana?",
+            "What would break if Redis went down?",
+        ),
+        (  # talking on past the question, in the same line
+            "Illiana, what are you all about? She wasn't gonna get that.",
+            "what are you all about? She wasn't gonna get that.",
+        ),
+        (  # a pause captioned as a question mark mid-question
+            "Ileana, can you tell me how? Request gets from the traffic layer.",
+            "can you tell me how? Request gets from the traffic layer.",
+        ),
+    ],
+)
+def test_a_line_put_to_the_bot_by_name_wakes_it(said: str, asked: str) -> None:
+    """Captions spell her as they hear her (Iliana, Eliana): a line that
+    opens on her name, after a greeting at most, or closes on it, and asks
+    something, is put to her; what she is asked is the rest of it."""
+    heard = Heard(1, "Dana", said, is_me=False, addressee="Illiana")
+
+    assert detectors.addressed(heard) == asked
+
+
+@pytest.mark.parametrize(
+    "said",
+    [
+        "I know he built Iliana to listen to the calls.",  # about her
+        "Right or actually is Eliana on here?",  # about her
+        "Good morning, Illiana.",  # nothing asked
+        "Hey Illiana, what did",  # not said to its end yet
+    ],
+)
+def test_a_line_about_the_bot_or_asking_nothing_does_not(said: str) -> None:
+    heard = Heard(1, "Dana", said, is_me=False, addressee="Illiana")
+
+    assert detectors.addressed(heard) is None
+
+
+def test_only_a_speaker_who_may_wake_the_bot_does() -> None:
+    """``addressee`` is the bot's name only where that speaker may wake it
+    (anyone, or only the owner: its agent's setting) and is not the bot."""
+    heard = Heard(1, "Dana", "Hey Illiana, who owns billing?", is_me=False)
+
+    assert detectors.addressed(heard) is None
+
+
+def test_a_line_said_back_to_the_bot_is_put_to_it_without_its_name() -> None:
+    """Right after it spoke, a reply needs no "Hey Illiana" again: what
+    is said back (asked or not) is put to it."""
+    asked = "Can you tell us how a request reaches the database?"
+    told = "The one from the traffic layer."
+
+    def back(
+        text: str, replying: bool = True, addressee: str = "Illiana"
+    ) -> str | None:
+        return detectors.addressed(
+            Heard(1, "Dana", text, False, addressee=addressee, replying=replying)
+        )
+
+    assert back(asked) == asked and back(told) == told
+    assert back(asked, replying=False) is None
+    assert back(asked, addressee="") is None  # one who may not wake it
+    assert back("Okay.") is None  # a sound, not a reply
+    assert back("And the database.") == "And the database."  # short, still asks
+    assert back("Thank you.") is None and back("Got it, thanks!") is None
+
+
+@pytest.fixture
+def her_answer_held(monkeypatch: pytest.MonkeyPatch) -> None:
+    hold_the_answers(monkeypatch)
+
+
+async def test_a_line_put_to_the_bot_is_its_moment_not_a_question(
+    async_db_session: AsyncSession, her_answer_held: None
+) -> None:
+    meeting_id = await a_meeting(async_db_session)  # the bot joins as "Notes"
+
+    await said(async_db_session, meeting_id, ("Dana", "Hey Notes, who owns billing?"))
+
+    (moment,) = await moments_of(async_db_session, meeting_id)
+    assert (moment.kind, moment.text) == ("addressed", "who owns billing?")
+
+
+async def test_an_agent_that_answers_only_its_owner_is_woken_only_by_them(
+    async_db_session: AsyncSession, her_answer_held: None
+) -> None:
+    from app.services.meetings.models import BotAccount
+
+    agent = BotAccount(
+        name="work", display_name="Notes", login_secret="X", answers_anyone=False
+    )
+    async_db_session.add(agent)
+    await async_db_session.commit()
+    meeting = await MeetingsService(async_db_session, None).request(
+        MEET, "Notes", account_id=agent.id
+    )
+    meeting_id = meeting.id or 0
+    await said(async_db_session, meeting_id, ("Sam", "Hi."))
+    await MeetingsService(async_db_session, None).set_me(meeting_id, "Sam")
+
+    await said(async_db_session, meeting_id, ("Dana", "Hey Notes, who owns billing?"))
+    await said(async_db_session, meeting_id, ("Sam", "Hey Notes, who owns search?"))
+
+    kinds = [(m.kind, m.text) for m in await moments_of(async_db_session, meeting_id)]
+    assert ("addressed", "who owns search?") in kinds
+    assert ("addressed", "who owns billing?") not in kinds
+
+
+async def test_each_question_put_to_the_bot_is_its_own_card(
+    async_db_session: AsyncSession, her_answer_held: None
+) -> None:
+    """Questions asked close together are one card; questions put to her by
+    name are each answered."""
+    from app.services.meetings.domains.moments.service import cards_of
+
+    meeting_id = await a_meeting(async_db_session)
+    await said(
+        async_db_session,
+        meeting_id,
+        ("Dana", "Hey Notes, who owns billing?"),
+        ("Dana", "Hey Notes, who owns search?"),
+    )
+
+    cards = await cards_of(async_db_session, meeting_id)
+    assert len({id(card) for card in cards.values()}) == 2
+
+
+async def test_what_its_asker_says_right_after_the_bot_is_put_to_it(
+    async_db_session: AsyncSession, her_answer_held: None
+) -> None:
+    """Only from the one it answered: someone else talking just after it
+    is not talking to it."""
+    meeting_id = await a_meeting(async_db_session)
+
+    await said(
+        async_db_session,
+        meeting_id,
+        ("Dana", "Hey Notes, how does a request get in?"),
+        ("You", "Could you finish the question?"),
+        ("Dana", "How does a request reach the database?"),
+        ("You", "Through the gateway, then the API."),
+        ("Sam", "Can we move on to lunch now?"),
+        apart=2.0,
+    )
+
+    kinds = [(m.kind, m.text) for m in await moments_of(async_db_session, meeting_id)]
+    assert ("addressed", "How does a request reach the database?") in kinds
+    assert ("addressed", "Can we move on to lunch now?") not in kinds

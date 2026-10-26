@@ -11,6 +11,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.core.time import utcnow
 from app.services.meetings import queries
 from app.services.meetings.domains.moments import service as moments
+from app.services.meetings.domains.moments.detectors import Before
 from app.services.meetings.domains.people import participants
 from app.services.meetings.models import (
     IN_PROGRESS,
@@ -75,12 +76,15 @@ async def write_captions(
     rows: dict[str, int],
     at_seconds: float,
     starts: dict[str, float],
-) -> None:
+    before: dict[str, Before] | None = None,
+) -> list[tuple[int, str]]:
     """Each caption as its transcript line: a caption already in ``rows``
     (caption line -> row id) updates its row, a new one adds a row (and
     its id to ``rows``), its speaker becoming a participant the first time
     they speak. A new line starts when it was first captioned (``starts``,
-    by caption line); ``at_seconds`` is when it last changed."""
+    by caption line); ``at_seconds`` is when it last changed. The line
+    before each (``before``, by caption line), where the writer kept it,
+    goes to the detectors as is."""
     new = [c for c in captions if c.line not in rows]
     speakers = (
         await participants.participants(
@@ -109,6 +113,13 @@ async def write_captions(
         await queries.update_lines(db, changed)
     await db.flush()
     rows |= {line: row.id for line, row in added.items()}
-    made = await moments.seen(db, meeting_id, {rows[c.line]: c.text for c in captions})
+    kept = (
+        None if before is None else {rows[k]: b for k, b in before.items() if k in rows}
+    )
+    made = await moments.seen(
+        db, meeting_id, {rows[c.line]: c.text for c in captions}, kept
+    )
     await moments.ask_for_new(db, made)
+    found = [(m.id or 0, m.kind) for m in made]  # read before the commit expires them
     await db.commit()
+    return found

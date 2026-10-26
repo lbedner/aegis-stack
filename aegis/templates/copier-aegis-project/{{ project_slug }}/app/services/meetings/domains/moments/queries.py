@@ -3,16 +3,23 @@ said some lines (or every line of some meetings), a meeting's moments with
 where each was said, their runs, the call's lines up to a point, and which
 meetings there are to read over."""
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.meetings.domains.moments.detectors import Heard
+from app.services.meetings.domains.moments.detectors import (
+    ADDRESSED,
+    Before,
+    Heard,
+    addressee,
+    replying,
+)
 from app.services.meetings.domains.notes.queries import with_speaker
 from app.services.meetings.models import (
     NOT_DONE,
     UNKNOWN,
+    BotAccount,
     Meeting,
     MeetingActionRun,
     MeetingMoment,
@@ -23,23 +30,123 @@ from app.services.meetings.models import (
 
 
 async def heard_in(db: AsyncSession, meeting_ids: list[int]) -> list[tuple[Heard, int]]:
-    """Every line of these meetings as a detector reads it (with everyone
-    who spoke in its meeting, ``people_in``), and its meeting."""
-    query = with_speaker(
-        select(
-            TranscriptLine.id,
-            TranscriptLine.meeting_id,
-            TranscriptLine.text,
-            MeetingParticipant.display_name,
-            MeetingPerson.is_me,
-        )
-    ).where(col(TranscriptLine.meeting_id).in_(meeting_ids))
-    rows = (await db.exec(query)).all()
-    people = await people_in(db, meeting_ids)
+    """Every line of these meetings as a detector reads it (``hearing``),
+    and its meeting."""
+    rows = await _lines(db, meeting_ids)
+    heard = await hearing(db, meeting_ids)
+    before = _befores(rows, await _put_to_it(db, meeting_ids))
     return [
-        (Heard(i or 0, who or UNKNOWN, text, bool(me), people.get(m, frozenset())), m)
-        for i, m, text, who, me in rows
+        (heard(i, m, who, text, me, before.get(i)), m)
+        for i, m, text, _, _, who, me in rows
     ]
+
+
+async def hearing(
+    db: AsyncSession, meeting_ids: list[int]
+) -> Callable[[int, int, str, str, bool, Before | None], Heard]:
+    """How a detector reads a line of these meetings (its id, meeting,
+    speaker, text, whether the owner said it, and the line before it): with
+    everyone who spoke in its meeting, and the bot's name where this speaker
+    may wake it and whether it is said back to it."""
+    people = await people_in(db, meeting_ids)
+    wakers = await wakers_in(db, meeting_ids)
+
+    def heard(
+        line_id: int,
+        meeting_id: int,
+        speaker: str,
+        text: str,
+        is_me: bool,
+        before: Before | None,
+    ) -> Heard:
+        bot, anyone = wakers[meeting_id]
+        return Heard(
+            line_id,
+            speaker,
+            text,
+            is_me,
+            people.get(meeting_id, frozenset()),
+            addressee(speaker, is_me, bot, anyone),
+            replying(before, speaker, bot),
+        )
+
+    return heard
+
+
+async def wakers_in(
+    db: AsyncSession, meeting_ids: list[int]
+) -> dict[int, tuple[str, bool]]:
+    """Each meeting's bot: the name it joined as, and whether anyone may
+    wake it (its agent's setting; anyone, without an agent)."""
+    query = (
+        select(Meeting.id, Meeting.bot_name, BotAccount.answers_anyone)
+        .outerjoin(BotAccount, col(Meeting.account_id) == col(BotAccount.id))
+        .where(col(Meeting.id).in_(meeting_ids))
+    )
+    return {
+        m or 0: (name, anyone is not False)
+        for m, name, anyone in (await db.exec(query)).all()
+    }
+
+
+async def before_in(db: AsyncSession, meeting_ids: list[int]) -> dict[int, Before]:
+    """The line before each line of these meetings (``Before``), read back
+    from them: for a writer that has not kept it as it went."""
+    return _befores(await _lines(db, meeting_ids), await _put_to_it(db, meeting_ids))
+
+
+Line = tuple[int, int, str, float, float, str, bool]
+
+
+async def _lines(db: AsyncSession, meeting_ids: list[int]) -> list[Line]:
+    """Every line of these meetings in the order said: id, meeting, text,
+    start, end, speaker and whether the owner said it."""
+    query = (
+        with_speaker(
+            select(
+                TranscriptLine.id,
+                TranscriptLine.meeting_id,
+                TranscriptLine.text,
+                TranscriptLine.start_seconds,
+                TranscriptLine.end_seconds,
+                MeetingParticipant.display_name,
+                MeetingPerson.is_me,
+            )
+        )
+        .where(col(TranscriptLine.meeting_id).in_(meeting_ids))
+        .order_by(
+            col(TranscriptLine.meeting_id),
+            col(TranscriptLine.start_seconds),
+            col(TranscriptLine.id),
+        )
+    )
+    return [
+        (i or 0, m, text, start, end, who or UNKNOWN, bool(me))
+        for i, m, text, start, end, who, me in (await db.exec(query)).all()
+    ]
+
+
+async def _put_to_it(db: AsyncSession, meeting_ids: list[int]) -> set[int]:
+    """The lines of these meetings put to the bot (``addressed``)."""
+    query = select(MeetingMoment.line_id).where(
+        col(MeetingMoment.meeting_id).in_(meeting_ids),
+        MeetingMoment.kind == ADDRESSED,
+    )
+    return set((await db.exec(query)).all())
+
+
+def _befores(lines: list[Line], put_to_it: set[int]) -> dict[int, Before]:
+    """Before each line (but a meeting's first), from ``lines`` in order:
+    who said the one before, how long before this began that ended, and who
+    last put something to the bot (a line in ``put_to_it``)."""
+    before: dict[int, Before] = {}
+    last: dict[int, Before] = {}  # meeting -> its line so far, as the next sees it
+    for i, m, _, start, end, who, _ in lines:
+        said, ended, asker = last.get(m, ("", 0.0, ""))
+        if m in last:
+            before[i] = (said, start - ended, asker)
+        last[m] = (who, end, who if i in put_to_it else asker)
+    return before
 
 
 async def in_meetings(

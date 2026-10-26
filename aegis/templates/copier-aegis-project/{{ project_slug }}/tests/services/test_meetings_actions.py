@@ -4,9 +4,11 @@ in the app, or on a runner on another machine. Asking one makes a run,
 claimed once by what runs it and finished with what it came back with."""
 
 from collections.abc import Awaitable
+from importlib.util import find_spec
 from typing import Any
 
 import pytest
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.config import settings
@@ -21,6 +23,13 @@ from app.services.meetings.domains.actions.runs import (
 from app.services.meetings.domains.moments.service import moments_of
 from app.services.meetings.models import MeetingActionRun, MeetingMoment
 from tests._meetings import a_meeting, a_runner_looked_in, asked_a_question, said, topic
+
+# Ask AI (``ask_ai``) renders only with the AI service on pydantic-ai and a
+# database.
+needs_her = pytest.mark.skipif(
+    find_spec("app.services.meetings.domains.actions.ask_ai") is None,
+    reason="this stack has no Ask AI",
+)
 
 
 @pytest.fixture
@@ -413,3 +422,75 @@ def test_an_action_is_registered_once() -> None:
 
     with pytest.raises(ValueError):
         register_action(copy)  # type: ignore[arg-type]
+
+
+@needs_her
+async def test_a_question_put_to_the_bot_is_answered_by_her_unasked(
+    async_db_session: AsyncSession,
+    held: list[Awaitable[Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Named, she answers: no setting asks it. She is asked as herself,
+    Overseer's own agent (her prompt, her tools), with the meeting so far,
+    in a conversation of the meetings' own."""
+    from types import SimpleNamespace
+
+    from app.services.meetings.domains.actions import ask_ai
+    from tests._session import opens
+
+    monkeypatch.setattr(runs, "get_async_session", opens(async_db_session))
+    asked: list[tuple[str, dict[str, Any]]] = []
+
+    class Her:
+        async def chat(self, message: str, **kwargs: Any) -> Any:
+            asked.append((message, kwargs))
+            return SimpleNamespace(content="Sam owns billing.")
+
+    monkeypatch.setattr(ask_ai, "her", Her)
+    meeting_id = await a_meeting(async_db_session)  # the bot joins as "Notes"
+    await said(
+        async_db_session,
+        meeting_id,
+        ("Dana", "The invoices went out late again."),
+        ("Dana", "Hey Notes, who owns billing?"),
+    )
+    for started in held:
+        await started
+
+    (run,) = (await async_db_session.exec(select(MeetingActionRun))).all()
+    assert (run.action, run.status, run.result) == ("ai", "done", "Sam owns billing.")
+    message, how = asked[0]
+    assert "The invoices went out late again." in message
+    assert "who owns billing?" in message
+    assert how["agent_slug"] is None and how["surface"] == "meetings"
+
+
+@needs_her
+def test_ask_ai_answers_a_question_and_a_question_put_to_her() -> None:
+    assert "ai" in {a.name for a in registry.actions_for("question")}
+    assert "ai" in {a.name for a in registry.actions_for("addressed")}
+
+
+def test_a_line_put_to_the_bot_offers_what_a_question_does() -> None:
+    """Put to her by name, it is still a question a coding agent can take."""
+    names = {action.name for action in registry.actions_for("addressed")}
+
+    assert {"copy", "agent"} <= names
+
+
+@needs_her
+def test_what_answers_her_unasked_is_hers_unless_a_setting_names_another(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One choice, read by the moments and by the bot in the call alike:
+    hers, else a setting's; none where the stack has nothing to answer."""
+    from app.services.meetings.domains.moments.service import answerer
+
+    assert answerer() == registry.ANSWERS
+    monkeypatch.setattr(settings, "MEETINGS_AUTO_ACTIONS", "addressed=agent")
+    assert answerer() == "agent"
+    monkeypatch.setattr(settings, "MEETINGS_AUTO_ACTIONS", "addressed=copy")
+    assert answerer() is None  # copied by a person, never answered
+    monkeypatch.setattr(settings, "MEETINGS_AUTO_ACTIONS", "")
+    monkeypatch.delitem(registry._actions, registry.ANSWERS)  # no AI here
+    assert answerer() is None

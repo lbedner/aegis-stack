@@ -13,6 +13,7 @@ from datetime import datetime
 import json
 import re
 import time
+from typing import Literal
 
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
@@ -51,6 +52,11 @@ class AgentNameError(ValueError):
     """A name an agent cannot have."""
 
 
+# An agent's on/off settings, by field, with how the Overseers name them:
+# whether it shows its card in a call, and whether anyone in one (not only
+# the meeting's owner) may ask it something by name.
+Switch = Literal["camera", "answers_anyone"]
+SWITCHES: dict[Switch, str] = {"camera": "Camera", "answers_anyone": "Answers anyone"}
 # What a browser draws on the card, and the most a picture may weigh.
 IMAGE_TYPES = frozenset(
     {"image/png", "image/jpeg", "image/webp", "image/gif", "image/svg+xml"}
@@ -181,10 +187,13 @@ async def set_default_owner(
     return account
 
 
-async def set_camera(db: AsyncSession, name: str, on: bool) -> BotAccount:
-    """Whether the agent called ``name`` shows its card in a call."""
+async def set_switch(
+    db: AsyncSession, name: str, switch: Switch, on: bool
+) -> BotAccount:
+    """One of the on/off settings (``SWITCHES``) of the agent called
+    ``name``."""
     account = await pick(db, name)
-    account.camera = on
+    setattr(account, switch, on)
     db.add(account)
     await db.commit()
     return account

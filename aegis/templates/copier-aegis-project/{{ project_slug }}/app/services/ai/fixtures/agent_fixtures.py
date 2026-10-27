@@ -44,6 +44,7 @@ __all__ = [
     "attach_tools",
     "built_in_agents",
     "default_agent_definition",
+    "grant_knowledge",
     "load_agent_fixtures",
     "seed_missing_agents",
 ]
@@ -78,18 +79,29 @@ def attach_tools(session: Session, slug: str, names: Sequence[str]) -> int:
     return attached
 
 
-def attach_modules(session: Session, slug: str, names: Sequence[str]) -> int:
-    """Give agent ``slug`` the memory modules ``names`` it lacks, and say
+def _extend(session: Session, slug: str, field: str, names: Sequence[str]) -> int:
+    """Add to agent ``slug``'s list ``field`` the ``names`` it lacks, and say
     how many: additive by name, as ``attach_tools``. The caller commits."""
     agent = session.exec(select(Agent).where(Agent.slug == slug)).first()
     if agent is None:
         return 0
-    missing = [name for name in names if name not in agent.memory_modules]
+    held: list[str] = getattr(agent, field)
+    missing = [name for name in names if name not in held]
     if not missing:
         return 0  # a re-seed: nothing to look up
-    agent.memory_modules = [*agent.memory_modules, *missing]  # a new list: tracked
+    setattr(agent, field, [*held, *missing])  # a new list: tracked
     session.add(agent)
     return len(missing)
+
+
+def attach_modules(session: Session, slug: str, names: Sequence[str]) -> int:
+    """Give agent ``slug`` the memory modules ``names`` it lacks."""
+    return _extend(session, slug, "memory_modules", names)
+
+
+def grant_knowledge(session: Session, slug: str, names: Sequence[str]) -> int:
+    """Grant agent ``slug`` the knowledge bases ``names`` it lacks."""
+    return _extend(session, slug, "knowledge_base_ids", names)
 
 
 def seed_missing_modules(session: Session, definitions: list[dict[str, Any]]) -> int:
@@ -212,8 +224,9 @@ def load_agent_fixtures(session: Session) -> dict[str, int]:
         session: Database session
 
     Returns:
-        dict with counts: agents, tools and the tools and memory modules
-        granted the default agent (``tool_links``, ``module_links``)
+        dict with counts: agents, tools and the tools, knowledge bases and
+        memory modules granted the default agent (``tool_links``,
+        ``knowledge_links``, ``module_links``)
     """
     added = seed_missing_agents(session, built_in_agents())
 
@@ -236,7 +249,10 @@ def load_agent_fixtures(session: Session) -> dict[str, int]:
     tool_links = attach_tools(
         session, DEFAULT_AGENT_SLUG, default_agent_config().tool_names
     )
-    if tool_links:
+    knowledge_links = grant_knowledge(
+        session, DEFAULT_AGENT_SLUG, default_agent_config().knowledge_base_ids
+    )
+    if tool_links or knowledge_links:
         session.commit()
 
     module_links = attach_modules(
@@ -251,5 +267,6 @@ def load_agent_fixtures(session: Session) -> dict[str, int]:
         "agents": added,
         "tools": tools_added,
         "tool_links": tool_links,
+        "knowledge_links": knowledge_links,
         "module_links": module_links,
     }

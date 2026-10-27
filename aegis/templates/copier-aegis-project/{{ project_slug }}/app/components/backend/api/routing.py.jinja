@@ -34,6 +34,9 @@ from app.components.backend.api.voice.router import router as voice_router
 from app.components.backend.api.llm.routes import router as llm_router
 {%- endif %}
 {%- if ai_rag %}
+{%- if ai_backend != "memory" %}
+from app.components.backend.api.rag.knowledge import router as knowledge_router
+{%- endif %}
 from app.components.backend.api.rag.routes import router as rag_router
 {%- endif %}
 {%- endif %}
@@ -152,6 +155,9 @@ def include_routers(app: FastAPI) -> None:
     {%- endif %}
     {%- if ai_rag %}
     app.include_router(rag_router, prefix="/api/v1")
+    {%- if ai_backend != "memory" %}
+    app.include_router(knowledge_router, prefix="/api/v1")
+    {%- endif %}
     {%- endif %}
     {%- endif %}
     {%- if include_comms %}

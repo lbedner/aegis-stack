@@ -113,7 +113,15 @@ def default_agent_config() -> AgentConfig:
             "storage",
 {%- endif %}
             "plugins",
+{%- if ai_rag %}
+            "knowledge",
+{%- endif %}
         ),
+{%- if ai_rag %}
+        # What she knows: the RAG service's default collection, the one
+        # ``rag index <path>`` fills.
+        knowledge_base_ids=("default",),
+{%- endif %}
 {%- if ai_backend != "memory" %}
         # ... and its map always in the prompt, the tool for depth.
         memory_modules=(APP_MAP,),

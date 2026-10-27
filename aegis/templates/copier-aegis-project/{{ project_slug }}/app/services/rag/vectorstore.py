@@ -7,7 +7,9 @@ Supports configurable embedding providers:
 """
 
 import asyncio
+from collections import Counter
 from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -17,9 +19,10 @@ from chromadb.errors import NotFoundError
 
 from app.core import secrets
 from app.core.log import logger
+from app.core.time import utcnow
 
 from .ids import generate_chunk_id
-from .models import CollectionInfo, Document, IndexStats, SearchResult
+from .models import CollectionInfo, Document, IndexedFile, IndexStats, SearchResult
 from .shaping import build_where_clause, clean_metadata, deduplicate_results
 
 
@@ -192,6 +195,9 @@ class VectorStoreManager:
         ids: list[str] = []
         texts: list[str] = []
         metadatas: list[dict[str, Any]] = []
+        # When, on every chunk: what the index holds and since when is the
+        # index's own (the knowledge base's records are read from it).
+        indexed_at = utcnow().isoformat()
 
         for i, doc in enumerate(documents):
             # Use deterministic IDs based on source + chunk index
@@ -210,7 +216,7 @@ class VectorStoreManager:
                 metadata = doc.metadata
 
             # ChromaDB requires string/int/float/bool values
-            metadatas.append(clean_metadata(metadata))
+            metadatas.append(clean_metadata({**metadata, "indexed_at": indexed_at}))
 
         # Upsert to collection in batches (upsert = add or update)
         batch_size = 500
@@ -318,15 +324,13 @@ class VectorStoreManager:
     async def list_indexed_files(
         self,
         collection_name: str,
-    ) -> list[dict[str, Any]]:
+    ) -> list[IndexedFile]:
         """
-        List all unique source files indexed in a collection.
+        List all unique source files indexed in a collection, each with
+        its chunk count, when it was last indexed and what it is.
 
         Args:
             collection_name: Target collection
-
-        Returns:
-            List of dicts with source path and chunk count
         """
         try:
             collection = await asyncio.to_thread(
@@ -337,18 +341,31 @@ class VectorStoreManager:
         except NotFoundError:
             return []
 
-        # Get all documents (just metadata)
-        results = await asyncio.to_thread(collection.get)
+        # Every chunk's metadata, never its text
+        results = await asyncio.to_thread(collection.get, include=["metadatas"])
 
-        # Group by source
-        files: dict[str, int] = {}
+        # Group by source: its chunks, its latest stamp, its type.
+        chunks: Counter[str] = Counter()
+        latest: dict[str, str] = {}
+        kinds: dict[str, str] = {}
         for meta in results["metadatas"] or []:
-            source = meta.get("source", "unknown")
-            files[source] = files.get(source, 0) + 1
+            source = str(meta.get("source", "unknown"))
+            chunks[source] += 1
+            if stamp := meta.get("indexed_at"):
+                latest[source] = max(latest.get(source, ""), str(stamp))
+            if kind := meta.get("file_type"):
+                kinds[source] = str(kind)
 
         return [
-            {"source": source, "chunks": count}
-            for source, count in sorted(files.items())
+            IndexedFile(
+                source=source,
+                chunks=count,
+                indexed_at=datetime.fromisoformat(latest[source])
+                if source in latest
+                else None,
+                content_type=kinds.get(source),
+            )
+            for source, count in sorted(chunks.items())
         ]
 
     async def search(

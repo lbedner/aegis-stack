@@ -117,6 +117,26 @@ class TestAgentSeed:
         session.refresh(agent)
         assert "ontology" in {t.name for t in agent.tools}
 
+{%- if ai_rag %}
+
+    def test_the_default_agent_is_granted_her_knowledge(self, session: Session) -> None:
+        """Her knowledge base, on a fresh seed and on a re-seed of one seeded
+        before: additive by name, like a tool, so what someone else granted
+        stays."""
+        load_agent_fixtures(session)
+        agent = session.exec(
+            select(Agent).where(Agent.slug == DEFAULT_AGENT_SLUG)
+        ).one()
+        assert agent.knowledge_base_ids == ["default"]
+
+        agent.knowledge_base_ids = ["policies"]
+        session.add(agent)
+        session.commit()
+        assert load_agent_fixtures(session)["knowledge_links"] == 1
+        session.refresh(agent)
+        assert agent.knowledge_base_ids == ["policies", "default"]
+{%- endif %}
+
     def test_the_default_agent_looks_up_what_left_her_prompt(
         self, session: Session
     ) -> None:

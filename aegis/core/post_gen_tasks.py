@@ -556,10 +556,14 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
             "app/components/frontend/dashboard/modals/agents_tab.py",
         )
         remove_file(project_path, "tests/services/ai/test_agent_registry.py")
-        # KB metadata models are DB-backed; the rag service itself stays
-        # (Chroma is file-based and works without a database).
+        # The knowledge base's records are DB-backed; the rag service itself
+        # stays (Chroma is file-based and works without a database).
         remove_file(project_path, "app/services/rag/models/knowledge.py")
+        remove_file(project_path, "app/services/rag/knowledge.py")
+        remove_file(project_path, "app/services/rag/queries.py")
+        remove_file(project_path, "app/components/backend/api/rag/knowledge.py")
         remove_file(project_path, "tests/services/rag/test_knowledge_models.py")
+        remove_file(project_path, "tests/services/rag/test_knowledge_sync.py")
         # chat_kit + the spend domain's recording ledger the LLM catalog +
         # conversation tables removed above, so they only work with a
         # persistent backend (spend goes with its domain, above).
@@ -624,6 +628,7 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(project_path, "tests/cli/test_rag_cli_registration.py")
         # Remove RAG-related files within AI service
         remove_file(project_path, "app/services/ai/domains/chat/rag_context.py")
+        remove_file(project_path, "app/services/ai/domains/chat/knowledge.py")
         remove_dir(project_path, "app/components/frontend/dashboard/modals/rag_tab")
 
     # chat_kit is a pydantic-ai chat engine (imports ``pydantic_ai``); it has

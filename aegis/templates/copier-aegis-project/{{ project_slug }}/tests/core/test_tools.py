@@ -128,6 +128,8 @@ EXPECTED_EFFECTS = {
     "research_thread": "read",
     "research_history": "read",
     "meetings_search": "read",
+    # What an agent knows: its knowledge bases, searched.
+    "knowledge": "read",
     "record_reading": "writes",
     "save_memory": "writes",
     "replace_memory": "writes",

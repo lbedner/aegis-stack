@@ -1,7 +1,6 @@
 <div align="center" markdown>
 
-<img src="docs/images/aegis_stack_wordmark.svg" alt="Aegis Stack" width="500">
-<br>
+<img src="docs/images/aegis_stack_banner.png" alt="Aegis Stack" width="600">
 
 *Inspired by the Neverwinter Nights toolset, Project Zero Dawn, and Dr. Wily.*
 

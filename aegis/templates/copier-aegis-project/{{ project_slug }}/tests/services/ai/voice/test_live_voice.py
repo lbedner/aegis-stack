@@ -37,6 +37,7 @@ def _her(
     played: list[Any],
     built: dict[str, Any] | None = None,
     on_end: Callable[[], Awaitable[None]] | None = None,
+    instructions: str | None = None,
 ) -> AbstractAsyncContextManager[LiveVoice | None]:
     """Her live voice on ``realtime`` as the engine's call, its audio kept,
     what she was built with in ``built``."""
@@ -57,6 +58,7 @@ def _her(
         surface="meetings",
         user_id="7",
         on_end=on_end,
+        instructions=instructions,
     )
 
 
@@ -79,6 +81,52 @@ async def test_a_question_is_answered_aloud_and_its_words_given_back(
     assert played == [(VOICE, 24_000)]  # heard as it was made, at its rate
     assert built["hang_up"] is False  # a "thanks" must not end her
     assert not voice.open  # closed with the meeting
+
+
+async def test_gpt_live_spoken_to_in_text_is_never_opened(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """GPT-Live listens and talks at once: asked a question as text it says
+    nothing until its session expires, so there is no voice of it to speak
+    to in text, under whatever key its engine row has."""
+    from types import SimpleNamespace
+
+    built: dict[str, Any] = {}
+    gpt_live = SimpleNamespace(
+        **{**vars(ENGINE), "key": "calls", "llm": SimpleNamespace(
+            model_id="gpt-live-1", served_by=SimpleNamespace(slug="openai")
+        )}
+    )
+
+    async def realtime_for(*args: Any, **kwargs: Any) -> Any:
+        built.update(kwargs)
+        return FakeRealtime([], after_text=True)
+
+    monkeypatch.setattr(realtime_calls, "realtime_for", realtime_for)
+
+    async def play(chunk: bytes, rate: int) -> None:
+        pass
+
+    async with live_voice(
+        ai_service, engine=gpt_live, play=play, surface="meetings"
+    ) as voice:
+        assert voice is None
+    assert built == {}
+
+
+async def test_how_she_talks_is_the_callers_else_the_engines(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The engine's call manners are for a call with one person; a caller
+    with others in it (a meeting) gives its own."""
+    for given, used in ((None, ENGINE.instructions), ("## A MEETING", "## A MEETING")):
+        built: dict[str, Any] = {}
+        realtime = FakeRealtime([], after_text=True)
+        async with _her(
+            async_db_session, monkeypatch, realtime, [], built, instructions=given
+        ):
+            pass
+        assert built["instructions"] == used
 
 
 async def test_once_the_call_is_over_she_is_asked_nothing_more(

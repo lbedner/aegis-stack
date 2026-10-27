@@ -10,6 +10,7 @@ Whole only in the webserver, where startup registers every health check
 and the routes are; anywhere else the model is what is on disk, marked
 ``partial``. Readers ask ``current``: built once, kept once whole."""
 
+import asyncio
 from collections.abc import Callable, Iterable
 from functools import cache
 import inspect
@@ -21,6 +22,7 @@ from starlette.routing import Route
 import yaml
 
 from app.core import ownership, runtime, secrets, source_index
+from app.core.concurrency import background
 from app.core.constants import ComponentName, QueueName
 from app.core.ontology import calls, domain
 from app.core.ontology.model import (
@@ -68,6 +70,17 @@ def current() -> SystemModel:
         if _kept is None or (_kept.partial and _registered()):
             _kept = system_model()
     return _kept
+
+
+async def warm() -> None:
+    """Build the model now, off the loop, without waiting: the first to ask
+    (``current``) gets this build. The webserver runs it once its parts
+    have registered, a worker queue as it starts."""
+    background(_build())
+
+
+async def _build() -> None:
+    await asyncio.to_thread(current)
 
 
 def _registered() -> bool:

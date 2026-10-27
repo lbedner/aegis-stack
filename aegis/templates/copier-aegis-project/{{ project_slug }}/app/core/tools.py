@@ -117,6 +117,13 @@ class RegisteredTool:
     # Shown to admins only, as Overseer shows it: an MCP token reaches it
     # only when its owner is an admin (``mcp.server``).
     admin: bool = False
+    # What a call of it is, as a person watching reads it ("Looking up how
+    # the parts connect"): ``steps.doing``.
+    doing: str | None = None
+
+
+# Code mode's one tool: a script run against the read tools, in the sandbox.
+RUN_CODE = "run_code"
 
 
 class Refused(BaseModel):
@@ -153,6 +160,7 @@ def register_tool(
     effect: ToolEffect | None = None,
     admin: bool = False,
     replace: bool = False,
+    doing: str | None = None,
 ) -> None:
     """Register a callable under a tool name.
 
@@ -176,7 +184,12 @@ def register_tool(
             f"may not change its effect to {effect!r}"
         )
     _registry[name] = RegisteredTool(
-        name=name, func=func, description=description, effect=effect, admin=admin
+        name=name,
+        func=func,
+        description=description,
+        effect=effect,
+        admin=admin,
+        doing=doing,
     )
 
 

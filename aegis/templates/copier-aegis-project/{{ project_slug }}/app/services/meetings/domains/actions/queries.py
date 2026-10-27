@@ -10,16 +10,22 @@ from sqlmodel import col, delete, select, update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.time import utcnow
+from app.services.meetings.domains.moments.detectors import ADDRESSED
+from app.services.meetings.domains.notes.queries import with_speaker
 from app.services.meetings.models import (
     ASKED,
     CLAIMED,
     DONE,
     FAILED,
     GOING,
+    UNKNOWN,
+    Going,
     Meeting,
     MeetingActionRun,
     MeetingMoment,
+    MeetingParticipant,
     MeetingRunnerToken,
+    TranscriptLine,
 )
 from app.services.shared.queries import owner_clause, owner_filters, visible_to
 
@@ -136,13 +142,51 @@ async def answered(
     return {m: (status, result) for m, status, result in (await db.exec(query)).all()}
 
 
-async def going_in(db: AsyncSession, meeting_id: int) -> set[str]:
-    """The statuses of the meeting's runs not yet done (asked, claimed)."""
-    query = _with_moment(select(MeetingActionRun.status)).where(
-        MeetingMoment.meeting_id == meeting_id,
-        col(MeetingActionRun.status).in_(GOING),
+async def going_in(db: AsyncSession, meeting_id: int) -> list[Going]:
+    """The meeting's runs not yet done (asked, claimed), oldest first, each
+    with the question it answers and who asked it."""
+    query = _runs_in(meeting_id).where(col(MeetingActionRun.status).in_(GOING))
+    order = (col(MeetingActionRun.asked_at), col(MeetingActionRun.id))
+    return await _going(db, query.order_by(*order))
+
+
+async def answered_in(db: AsyncSession, meeting_id: int, last: int = 3) -> list[Going]:
+    """The meeting's last ``last`` answers to lines put to the bot by name
+    (said aloud and posted in the call's chat), done or failed, newest
+    first, each with what it came back with."""
+    query = _runs_in(meeting_id).where(
+        col(MeetingActionRun.status).in_((DONE, FAILED)),
+        MeetingMoment.kind == ADDRESSED,
     )
-    return set((await db.exec(query.distinct())).all())
+    order = (col(MeetingActionRun.finished_at).desc(), col(MeetingActionRun.id).desc())
+    return await _going(db, query.order_by(*order).limit(last))
+
+
+def _runs_in(meeting_id: int) -> Any:
+    """The meeting's runs, each with its question and who asked it."""
+    return with_speaker(
+        _with_moment(
+            select(
+                MeetingActionRun, MeetingParticipant.display_name, MeetingMoment.text
+            )
+        ).join(TranscriptLine, col(TranscriptLine.id) == MeetingMoment.line_id)
+    ).where(MeetingMoment.meeting_id == meeting_id)
+
+
+async def _going(db: AsyncSession, query: Any) -> list[Going]:
+    return [
+        Going(
+            id=run.id or 0,
+            moment=run.moment_id,
+            action=run.action,
+            status=run.status,
+            runner=run.runner,
+            speaker=speaker or UNKNOWN,
+            text=text,
+            result=run.result,
+        )
+        for run, speaker, text in (await db.exec(query)).all()
+    ]
 
 
 async def drop_runs(db: AsyncSession, moment_ids: list[int], action: str) -> None:

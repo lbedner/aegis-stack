@@ -17,7 +17,16 @@ from app.components.web_frontend.rendering import TZ_COOKIE
 from app.components.web_frontend.routes.meetings import send_and_open
 from app.services.meetings import service as meetings_service
 from app.services.meetings.domains.calendar.service import read_calendars
-from app.services.meetings.models import ActionItem, NoteItem, Notes
+from app.services.meetings.models import (
+    CAPTIONS,
+    JOIN,
+    LABEL,
+    MISSED,
+    ActionItem,
+    MeetingBotStep,
+    NoteItem,
+    Notes,
+)
 from app.services.meetings.service import MeetingsService
 from tests._meetings import (
     MEET,
@@ -160,6 +169,31 @@ async def test_my_items_come_first_and_each_jumps_to_its_line(
     assert "Book the room" in everyone and "Write the docs" in everyone
     assert "Meet on Monday" in text(one(html, "#decisions"))
     assert "And I write the docs." in text(one(html, f"#line-{lines[1]}"))
+
+
+async def test_what_the_bot_did_on_meets_page_shows_with_what_it_saw(
+    authenticated_client: TestClient,
+    finished: Callable[..., Any],
+    async_db_session: AsyncSession,
+) -> None:
+    """A control it found by Meet's shortcut, or not at all, opens on
+    the page's buttons as it saw them: what to look for it as now."""
+    meeting_id, _ = await finished()
+    async_db_session.add_all(
+        [
+            MeetingBotStep(meeting_id=meeting_id, step=JOIN, how=LABEL),
+            MeetingBotStep(
+                meeting_id=meeting_id, step=CAPTIONS, how=MISSED, seen="Show captions"
+            ),
+        ]
+    )
+    await async_db_session.commit()
+
+    html = page_html(authenticated_client, f"/meetings/{meeting_id}")
+
+    steps = one(html, "[data-bot-steps]")
+    assert "Join" in text(steps)
+    assert "Show captions" in text(one(steps, "details"))
 
 
 async def test_picking_who_i_am_changes_my_items(

@@ -31,7 +31,7 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.usage import UsageLimits
 
-from app.core.tools import result_text
+from app.core.tools import RUN_CODE, result_text
 from app.services.ai.service import (
     CODE_MODE_TOOL_CALLS_LIMIT,
     AgentConfig,
@@ -42,7 +42,7 @@ from app.services.ai.service.trace import call_args_preview, sandbox_calls
 
 from .server import TEXT_CAP, McpStep, reachable, sandbox_steps
 
-NAME = "run_code"
+NAME = RUN_CODE
 # The harness describes a REPL; each MCP call is its own run.
 FRESH = "Over MCP every call starts fresh: nothing carries over from an earlier call."
 

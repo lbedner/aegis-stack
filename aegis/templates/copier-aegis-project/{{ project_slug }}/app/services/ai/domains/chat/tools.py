@@ -6,6 +6,7 @@ import functools
 import inspect
 from typing import Any
 
+from app.core import steps
 from app.core.log import logger
 from app.core.tools import ADMIN_ONLY, Refused, ToolFunc, get_tool
 from app.services.ai.domains.chat.tool_telemetry import instrument
@@ -22,7 +23,9 @@ def resolve_tools(names: Iterable[str]) -> list[ToolFunc]:
     Every callable is wrapped for the per-call ledger on the way out. This
     is the one seam an agent's tools all pass through, so a new tool is
     measured by existing rather than by remembering a decorator. Outside
-    that, a refused argument is answered (``_told``) rather than raised.
+    that, each call is heard as a step by whoever is watching the turn,
+    native or inside a code-mode script, and a refused argument is
+    answered (``_told``) rather than raised.
     """
     resolved: list[ToolFunc] = []
     for name in names:
@@ -31,15 +34,16 @@ def resolve_tools(names: Iterable[str]) -> list[ToolFunc]:
             logger.warning("Tool has no registered callable; skipping", tool_name=name)
             continue
         func = _admins_only(entry.func) if entry.admin else entry.func
-        resolved.append(_told(instrument(entry.name, func)))
+        resolved.append(_told(entry.name, instrument(entry.name, func)))
     return resolved
 
 
-def _told(func: ToolFunc) -> ToolFunc:
-    """``func`` answering its ``ValueError`` (a tool refusing an argument,
-    naming what it knows) as the model's to correct, as a LangChain turn
-    does: raised, Pydantic AI ends the turn, a live call with it. The
-    ledger beneath has recorded it as failed."""
+def _told(name: str, func: ToolFunc) -> ToolFunc:
+    """``func`` (the tool ``name``) heard as a step (``steps.heard``), and
+    answering its ``ValueError`` (a tool refusing an argument, naming what
+    it knows) as the model's to correct, as a LangChain turn does: raised,
+    Pydantic AI ends the turn, a live call with it. The ledger beneath has
+    recorded it as failed."""
 
     def told(exc: ValueError) -> Refused:
         return Refused(error=f"{type(exc).__name__}: {exc}")
@@ -48,6 +52,7 @@ def _told(func: ToolFunc) -> ToolFunc:
 
         @functools.wraps(func)
         async def answer(*args: Any, **kwargs: Any) -> Any:
+            steps.heard(name)
             try:
                 return await func(*args, **kwargs)
             except ValueError as exc:
@@ -57,6 +62,7 @@ def _told(func: ToolFunc) -> ToolFunc:
 
     @functools.wraps(func)
     def answer_sync(*args: Any, **kwargs: Any) -> Any:
+        steps.heard(name)
         try:
             return func(*args, **kwargs)
         except ValueError as exc:

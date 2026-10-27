@@ -9,6 +9,62 @@
 
 ### Added
 
+- **The meeting bot's card presents what it is working on.** While
+  anything is in flight, its camera card is about one request: the agent
+  small at the top left with its state and step count, the question as
+  put as the headline (her name and fillers off, a question mark on a
+  question), what Illiana is doing a step of her turn at a time and saying
+  meanwhile, then her answer in brief on a panel while she says it and a
+  few seconds after. Other requests are pills along the foot (next, and
+  her last answers that looked something up), a line put to her shows as
+  it is heard, and the bottom right is left clear for the host's own
+  picture. Drawn at 1280 by 720. In a call she is told it is a meeting
+  (over her own prompt, in place of a one-to-one call's manners): asked
+  whether she can hear, she says yes instead of searching for proof, and
+  she leads with the answer, then the counts, names and times behind it.
+  On her way in she waits up to fifteen seconds for Meet to draw its
+  captions button, and her own words heard back through the asker's mic
+  are told as her echo by all she said while it was captioned (both
+  captions grow together), so she no longer answers her echo.
+  Captions Meet had not offered when she joined are turned on later,
+  captions an account kept on from its last call count as on, and they go
+  on before she posts in the chat, so she hears from the moment she is in.
+  A control whose label Meet has renamed falls back to Meet's keyboard
+  shortcut (captions, the chat), and what the bot did on Meet's page is
+  kept per meeting (`meeting_bot_step`: each control, how it went, the
+  page's buttons where its label was gone, and why it left), shown as a
+  strip on the meeting page and in Overseer's drawer. A tool says what a
+  call of it is with `register_tool(..., doing="...")`; any listener can
+  hear an agent's steps through `app.core.steps`. "Let me look that up"
+  is said only once she starts looking something up, never on a timer, so
+  "can you hear me?" is just answered. A voice set to GPT-Live (which
+  never answers a question put as text) no longer leaves her silent in a
+  call: she answers typed and said instead (live needs a realtime engine,
+  such as `gpt-realtime-2.1`). One place in the bot now follows each
+  question put to her from heard to said, and the card, her mic and her
+  echo all read it: an answer stays on the card until she has said it,
+  her mic opens once a question is put to her and closes once her answer
+  has played (it no longer mutes between sentences, which cut each one's
+  start), each step goes under the question it is a step of, and her own
+  words heard back through the asker's microphone while she talks are her
+  echo, not their reply (she answered twice), and one question Meet
+  captions twice is asked once. A run changing in the bot's
+  own process wakes it at once (`actions.changes`), so her answer is said
+  and shown as it lands rather than on the next look; awaiting it no longer
+  looks twice a second, and each look reads where the bot is in one call to
+  the page instead of bringing back the whole page's text.
+
+- **A worker queue can start what its jobs need.** A queue module's
+  `STARTUP` steps run once its worker has started, on every backend (arq,
+  TaskIQ, Dramatiq). The meetings queue builds the twin (her map) there, so
+  no call waits seconds for its first build.
+
+- **The composer says what she runs on.** Its chips are the agent (opening
+  its editor), the chat model, and what calls run on ("Calls: GPT Realtime
+  2.1"). The Models dialog lists chat models only, so its one check says one
+  thing; the realtime models a call can reach are picked in the voice
+  dialog, beside the voices, and set the engine live calls and meetings use.
+
 - **A line naming a part of the system offers what it is.** On a
   meeting's transcript, a line that names a part the stack has (the
   "finance service", "Redis", "the scheduler", "Plaid") gets a chip:

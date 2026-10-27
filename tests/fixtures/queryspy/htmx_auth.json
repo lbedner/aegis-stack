@@ -72,7 +72,7 @@
       "kind": "repeated_statement",
       "label": "SELECT ... FROM meeting",
       "file": "app/services/meetings/queries.py",
-      "function": "counts"
+      "function": "meetings_counts"
     },
     {
       "kind": "repeated_statement",
@@ -166,6 +166,24 @@
     },
     {
       "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_action_run JOIN meeting_moment ON meeting_moment.id = meeting_action_run.moment_id JOIN meeting_transcript_line ON meeting_transcript_line.id = meeting_moment.line_id LEFT OUTER JOIN meeting_participant ON meeting_transcript_line.participant_id = meeting_participant.id LEFT OUTER JOIN meeting_person ON meeting_person.id = meeting_participant.person_id WHERE meeting_moment.meeting_id = :meeting_id_1 AND meeting_action_run.status IN (__[POSTCOMPILE_status_1]) AND meeting_moment.kind = :kind_1 ORDER BY meeting_action_run.finished_at DESC, meeting_action_run.id DESC LIMIT :param_1",
+      "file": "app/services/meetings/domains/actions/queries.py",
+      "function": "_going"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_action_run JOIN meeting_moment ON meeting_moment.id = meeting_action_run.moment_id JOIN meeting_transcript_line ON meeting_transcript_line.id = meeting_moment.line_id LEFT OUTER JOIN meeting_participant ON meeting_transcript_line.participant_id = meeting_participant.id LEFT OUTER JOIN meeting_person ON meeting_person.id = meeting_participant.person_id WHERE meeting_moment.meeting_id = :meeting_id_1 AND meeting_action_run.status IN (__[POSTCOMPILE_status_1]) ORDER BY meeting_action_run.asked_at, meeting_action_run.id",
+      "file": "app/services/meetings/domains/actions/queries.py",
+      "function": "_going"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_action_run WHERE meeting_action_run.id = :pk_1",
+      "file": "app/services/meetings/domains/actions/runs.py",
+      "function": "_run_in_the_app"
+    },
+    {
+      "kind": "repeated_statement",
       "label": "SELECT ... FROM meeting_action_run WHERE meeting_action_run.moment_id IN (__[POSTCOMPILE_moment_id_1]) AND meeting_action_run.action = :action_1 AND meeting_action_run.status IN (__[POSTCOMPILE_status_1])",
       "file": "app/services/meetings/domains/actions/queries.py",
       "function": "answered"
@@ -199,6 +217,12 @@
       "label": "SELECT ... FROM meeting_bot_account ORDER BY meeting_bot_account.id",
       "file": "app/services/meetings/domains/accounts/queries.py",
       "function": "every_account"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_bot_step WHERE meeting_bot_step.meeting_id = :meeting_id_1 ORDER BY meeting_bot_step.at, meeting_bot_step.id",
+      "file": "app/services/meetings/queries.py",
+      "function": "steps"
     },
     {
       "kind": "repeated_statement",
@@ -259,6 +283,12 @@
       "label": "SELECT ... FROM meeting_moment JOIN meeting_transcript_line ON meeting_transcript_line.id = meeting_moment.line_id LEFT OUTER JOIN meeting_participant ON meeting_transcript_line.participant_id = meeting_participant.id LEFT OUTER JOIN meeting_person ON meeting_person.id = meeting_participant.person_id WHERE meeting_moment.meeting_id = :meeting_id_1 ORDER BY meeting_transcript_line.start_seconds, meeting_moment.id",
       "file": "app/services/meetings/domains/moments/queries.py",
       "function": "of_meeting"
+    },
+    {
+      "kind": "repeated_statement",
+      "label": "SELECT ... FROM meeting_moment WHERE meeting_moment.id = :pk_1",
+      "file": "app/services/meetings/domains/actions/runs.py",
+      "function": "_run_in_the_app"
     },
     {
       "kind": "repeated_statement",
@@ -601,12 +631,6 @@
       "label": "SELECT ... FROM secret WHERE secret.name IN (__[POSTCOMPILE_name_1])",
       "file": "app/components/secrets/store.py",
       "function": "get_many"
-    },
-    {
-      "kind": "repeated_statement",
-      "label": "SELECT DISTINCT ... FROM meeting_action_run JOIN meeting_moment ON meeting_moment.id = meeting_action_run.moment_id WHERE meeting_moment.meeting_id = :meeting_id_1 AND meeting_action_run.status IN (__[POSTCOMPILE_status_1])",
-      "file": "app/services/meetings/domains/actions/queries.py",
-      "function": "going_in"
     },
     {
       "kind": "repeated_statement",

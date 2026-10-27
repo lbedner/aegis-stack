@@ -14,7 +14,7 @@ from typing import Any
 import redis.asyncio as aioredis
 from taskiq import TaskiqMessage, TaskiqMiddleware, TaskiqResult
 
-from app.components.worker import runtime
+from app.components.worker import queue_discovery, runtime
 from app.components.worker.events import publish_event
 from app.components.worker.heartbeat import mark_busy, mark_idle, worker_id
 from app.components.worker.patterns import unwrap
@@ -52,7 +52,8 @@ class EventPublishMiddleware(TaskiqMiddleware):
         Creates an async Redis connection and publishes a worker.started
         event to the Redis Stream. Called once when the TaskIQ worker
         process starts, before any tasks are consumed. What the Overseer
-        saved is applied first.
+        saved is applied first, and the queue's own startup
+        (``queue_discovery.started``) runs last.
         """
         await apply_saved_overrides()
         try:
@@ -72,6 +73,7 @@ class EventPublishMiddleware(TaskiqMiddleware):
             )
         except Exception as e:
             logger.debug(f"Failed to initialize event publishing: {e}")
+        await queue_discovery.started(self._queue_name)
 
     async def shutdown(self) -> None:
         """Gracefully shut down the middleware.

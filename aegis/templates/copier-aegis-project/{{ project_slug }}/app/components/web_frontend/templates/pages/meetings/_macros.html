@@ -14,6 +14,25 @@
 {% if meeting.failure_reason %}<p role="alert" class="text-sm text-error">{{ meeting.failure_reason }}</p>{% endif %}
 {% endmacro %}
 
+{# What the bot did on Meet's page (``models.bot``): each control, and how
+   it went where not by its label (Meet's shortcut, or not found), then why
+   it left. A step with what the page showed opens on it: the buttons Meet
+   had, for what a renamed control is called now. #}
+{% macro bot_steps(steps) %}
+{% if steps %}
+<div data-bot-steps class="flex flex-wrap items-start gap-x-4 gap-y-1 text-xs">
+  {% for s in steps %}
+  {% if s.seen %}
+  <details>
+    <summary class="cursor-pointer">{{ badge(s.said, s.tone) }}</summary>
+    <p class="mt-1 max-w-prose whitespace-pre-line text-aegis-muted">{{ s.seen }}</p>
+  </details>
+  {% else %}{{ badge(s.said, s.tone) }}{% endif %}
+  {% endfor %}
+</div>
+{% endif %}
+{% endmacro %}
+
 {# The notes, or why there are none: the summary, then what the caller
    puts first (the Meetings page puts my items there), then the lists. A
    rewrite that failed keeps the notes it had, and says so above them. #}

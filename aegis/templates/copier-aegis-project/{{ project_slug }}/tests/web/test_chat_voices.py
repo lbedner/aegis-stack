@@ -24,10 +24,12 @@ from app.services.ai.domains.voice import profiles
 from app.services.ai.models.voice import VoiceProfile
 from app.services.system.models import ComponentStatus
 from tests._voice_catalog import keep_voice_settings
-from tests.web.dom import none, one, oob, select, text
+from tests.web.dom import none, one, oob, select, text, triggers
 from tests.web.overseer import sign_in, status_with
 
 VOICES = f"{OVERSEER.path}/voices"
+# A realtime model a live call can run on.
+LIVE = "gemini-3.8-live"
 
 
 @pytest.fixture
@@ -58,6 +60,48 @@ def _restore_settings(monkeypatch: pytest.MonkeyPatch) -> None:
     """Switching a profile writes the running settings; each test puts
     them back."""
     keep_voice_settings(monkeypatch)
+
+
+@pytest.fixture
+def calls(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """The realtime models a call can reach, and what calls run on: the
+    last of these picks."""
+    from app.components.web_frontend import chat_models as models
+
+    picked: list[str] = []
+    titles = {LIVE: "Gemini Live", "gpt-realtime-2.1": "GPT Realtime 2.1"}
+
+    async def catalog(mode: str = "chat") -> list[dict[str, Any]]:
+        return [
+            {"model_id": LIVE, "title": "Gemini Live", "vendor": "google"},
+            {
+                "model_id": "gpt-realtime-2.1",
+                "title": "GPT Realtime 2.1",
+                "vendor": "openai",
+            },
+        ]
+
+    async def calling(db: Any) -> Any:
+        return (
+            SimpleNamespace(model_id=picked[-1], title=titles[picked[-1]])
+            if picked
+            else None
+        )
+
+    async def use_for_calls(model_id: str) -> str | None:
+        if model_id not in titles:
+            return f"A live call cannot run on {model_id}."
+        picked.append(model_id)
+        return None
+
+    async def icons(listed: list[dict[str, Any]]) -> dict[str, str]:
+        return {}
+
+    monkeypatch.setattr(models, "catalog", catalog)
+    monkeypatch.setattr(models, "calling_model", calling)
+    monkeypatch.setattr(models, "use_for_calls", use_for_calls)
+    monkeypatch.setattr(models, "vendor_icons", icons)
+    return picked
 
 
 @pytest.fixture
@@ -98,8 +142,50 @@ class TestTheChip:
         self, hx: TestClient, voices: dict[str, VoiceProfile]
     ) -> None:
         chip = one(hx.get(f"{VOICES}/chip").text, "button#chat-voice")
-        assert text(chip) == "Marin"
+        assert text(chip) == "Voice: Marin"
         assert chip.get("hx-get") == VOICES
+
+    def test_with_a_live_engine_it_names_what_calls_run_on(
+        self, hx: TestClient, voices: dict[str, VoiceProfile], calls: list[str]
+    ) -> None:
+        calls.append(LIVE)
+        chip = one(hx.get(f"{VOICES}/chip").text, "button#chat-voice")
+        assert text(chip) == "Calls: Gemini Live"
+
+
+class TestCalls:
+    """What a live call runs on is picked here, with the voice it speaks in:
+    the realtime models a call can reach, the one in use checked."""
+
+    def test_it_lists_what_a_call_can_run_on(
+        self, hx: TestClient, voices: dict[str, VoiceProfile], calls: list[str]
+    ) -> None:
+        calls.append("gpt-realtime-2.1")
+        html = hx.get(VOICES).text
+        rows = select(html, "[data-call-model]")
+        # The one in use leads: the list is long, and it is what you check.
+        assert [r.get("data-call-model") for r in rows] == ["gpt-realtime-2.1", LIVE]
+        current = one(html, "[data-call-model][aria-current=true]")
+        assert current.get("data-call-model") == "gpt-realtime-2.1"
+
+    def test_a_pick_sets_what_calls_run_on(
+        self, hx: TestClient, voices: dict[str, VoiceProfile], calls: list[str]
+    ) -> None:
+        response = hx.post(f"{VOICES}/calls", data={"model_id": "gpt-realtime-2.1"})
+
+        assert calls == ["gpt-realtime-2.1"]
+        _, siblings = oob(response.text)
+        chip = [e for e in siblings if e.get("id") == "chat-voice"]
+        assert [text(e) for e in chip] == ["Calls: GPT Realtime 2.1"]
+        current = one(response.text, "[data-call-model][aria-current=true]")
+        assert current.get("data-call-model") == "gpt-realtime-2.1"
+
+    def test_a_refused_pick_says_why(
+        self, hx: TestClient, voices: dict[str, VoiceProfile], calls: list[str]
+    ) -> None:
+        response = hx.post(f"{VOICES}/calls", data={"model_id": "nope"})
+
+        assert calls == [] and "nope" in triggers(response)["toast"]["text"]
 
 
 class TestTheDialog:
@@ -159,7 +245,7 @@ class TestSwitching:
         assert active is not None and active.name == "Nova, plain"
         primary, siblings = oob(response.text)
         chip = [e for e in siblings if e.get("id") == "chat-voice"]
-        assert [text(e) for e in chip] == ["Nova, plain"]
+        assert [text(e) for e in chip] == ["Voice: Nova, plain"]
         current = [
             e
             for root in primary
@@ -277,8 +363,8 @@ class TestEditing:
         voices: dict[str, VoiceProfile],
         async_db_session: AsyncSession,
     ) -> None:
-        """One place picks what a call runs on (the Models dialog); the
-        voice form neither offers it nor loses it on a save."""
+        """One place picks what a call runs on (the dialog's Calls list);
+        the voice form neither offers it nor loses it on a save."""
         marin = voices["marin"]
         form = one(hx.get(f"{VOICES}/{marin.id}/edit").text, "form[data-voice-form]")
         assert form.cssselect("select[name=live_engine]") == []

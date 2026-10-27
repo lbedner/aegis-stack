@@ -62,6 +62,13 @@ FAKE_MEET = """
     const blocks = captions.children;
     blocks[blocks.length - 2].lastElementChild.textContent += ' ' + text;
   }
+  // Meet's shortcuts: ``c`` turns the captions on, ctrl+alt+c opens the
+  // chat (off with ``window.shortcuts = false``).
+  document.addEventListener('keydown', (event) => {
+    if (window.shortcuts === false || event.key !== 'c') return;
+    if (event.ctrlKey && event.altKey) chat.hidden = false;
+    else if (!event.ctrlKey) captions.hidden = false;
+  });
   function admit() { note.textContent = ''; call.hidden = false; }
   function toggleMic() {
     const on = mic.getAttribute('aria-label').startsWith('Turn off');
@@ -128,11 +135,16 @@ async def test_it_joins_with_its_camera_and_mic_and_the_mic_off(
     )
 
 
-async def test_it_unmutes_only_while_it_speaks(
+async def test_it_stays_unmuted_through_an_answer_until_hushed(
     meet: MeetPage, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """Muted between sentences, Meet opened the mic late for each and cut
+    every one's start: unmuted from its first sound until hushed."""
+    from app.services.meetings.domains.bot import meet as meet_module
+
     await meet.ask_to_join("Notes")
     await meet.page.evaluate("admit()")
+    monkeypatch.setattr(meet_module, "FIRST_UNMUTE", 0.0)
     heard: list[str | None] = []
 
     async def speak(page: Page, audio: bytes) -> float:
@@ -140,9 +152,13 @@ async def test_it_unmutes_only_while_it_speaks(
         return 0.0
 
     monkeypatch.setattr(card, "speak", speak)
-    await meet.speak(b"audio")
+    await meet.speak(b"One.")
+    between = await meet.page.get_attribute("#mic", "aria-label")
+    await meet.speak(b"Two.")
+    await meet.hush()
 
-    assert heard == ["Turn off microphone (ctrl + d)"]
+    talking = "Turn off microphone (ctrl + d)"
+    assert heard == [talking, talking] and between == talking
     assert await meet.page.get_attribute("#mic", "aria-label") == (
         "Turn on microphone (ctrl + d)"
     )
@@ -225,6 +241,102 @@ async def test_meets_prompts_over_the_call_are_answered_before_it_talks(
     await meet.page.evaluate("prompts()")
     assert await meet.turn_on_captions()
     assert await meet.page.locator(".prompt").count() == 0
+
+
+async def test_captions_already_on_count_as_on(meet: MeetPage) -> None:
+    """Meet keeps an account's captions on from its last call: there is
+    no button to turn them on, and they are on."""
+    await meet.ask_to_join("Notes")
+    await meet.page.evaluate("admit(); captions.hidden = false")
+    await meet.page.locator("[aria-label^='Turn on captions']").evaluate(
+        "b => b.remove()"
+    )
+
+    assert await meet.turn_on_captions()
+    assert ("captions", "already") in _took(meet)
+
+
+async def _without(meet: MeetPage, label: str) -> None:
+    """Meet's control named ``label`` gone, as when Meet renames it."""
+    await meet.page.locator(f"[aria-label^='{label}']").evaluate("b => b.remove()")
+
+
+def _took(meet: MeetPage) -> dict[tuple[str, str], str | None]:
+    """What the bot did on the page since the last look, and what the page
+    showed where it was kept."""
+    return {(step, how): seen for step, how, seen, _ in meet.taken()}
+
+
+async def test_captions_without_their_button_come_on_by_meets_shortcut(
+    meet: MeetPage,
+) -> None:
+    """What the page showed instead is kept: what to look for it as now."""
+    await meet.ask_to_join("Notes")
+    await meet.page.evaluate("admit()")
+    await _without(meet, "Turn on captions")
+
+    assert await meet.turn_on_captions()
+
+    took = _took(meet)
+    assert ("join", "label") in took
+    assert "Leave call" in (took[("captions", "shortcut")] or "")
+
+
+async def test_captions_meet_draws_a_while_after_it_is_in_are_waited_for(
+    meet: MeetPage,
+) -> None:
+    """Meet draws the captions button seconds after letting it in: on its
+    way in it waits for it, not for its shortcut."""
+    await meet.ask_to_join("Notes")
+    await meet.page.evaluate(
+        "admit(); window.shortcuts = false;"
+        "const button = document.querySelector('[aria-label^=\"Turn on captions\"]');"
+        "button.remove(); setTimeout(() => call.appendChild(button), 500)"
+    )
+    meet.taken()
+
+    assert await meet.turn_on_captions(wait_ms=5000)
+
+    assert list(_took(meet)) == [("captions", "label")]
+
+
+async def test_the_chat_without_its_button_opens_by_meets_shortcut(
+    meet: MeetPage,
+) -> None:
+    await meet.ask_to_join("Notes")
+    await meet.page.evaluate("admit()")
+    await _without(meet, "Chat with everyone")
+
+    await meet.say("Notes is taking notes.")
+
+    assert await meet.page.evaluate("window.said") == "Notes is taking notes."
+    assert ("chat", "shortcut") in _took(meet)
+
+
+async def test_a_control_nothing_works_is_kept_missed_once(meet: MeetPage) -> None:
+    await meet.ask_to_join("Notes")
+    await meet.page.evaluate("admit(); window.shortcuts = false")
+    await _without(meet, "Turn on captions")
+    meet.taken()
+
+    assert not await meet.turn_on_captions()
+    assert not await meet.turn_on_captions()
+
+    took = _took(meet)
+    assert list(took) == [("captions", "missed")]
+    assert "Leave call" in (took[("captions", "missed")] or "")
+
+
+async def test_its_mic_never_switched_blind(meet: MeetPage) -> None:
+    """Meet's mic shortcut toggles: pressed not knowing which way it is,
+    it could leave the mic open, so a mic without its button is missed."""
+    await meet.ask_to_join("Notes")
+    await meet.page.evaluate("admit()")
+    await meet.page.locator("#mic").evaluate("b => b.remove()")
+
+    await meet.unmute()
+
+    assert ("mic", "missed") in _took(meet)
 
 
 async def test_captions_read_as_lines_that_grow(meet: MeetPage) -> None:

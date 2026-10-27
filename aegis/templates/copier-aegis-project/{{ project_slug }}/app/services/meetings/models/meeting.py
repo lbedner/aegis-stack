@@ -17,6 +17,7 @@ from app.services.meetings.models.base import (
     MOST_ERROR_CHARS,
     MeetingStatus,
 )
+from app.services.meetings.models.bot import MeetingBotStep
 from app.services.meetings.models.moments import MomentRecord
 from app.services.meetings.models.notes import ActionItem, Notes
 
@@ -166,6 +167,8 @@ class MeetingRecord(BaseModel):
     can_look_over: bool = False
     # What the call threw up (``domains.moments``).
     moments: list[MomentRecord] = []
+    # What the bot did on the call's page, and how (``models.bot``).
+    steps: list[MeetingBotStep] = []
     # Read it again every few seconds: the bot is in or on its way, the
     # notes are being written, or an action asked in the call is running.
     following: bool = False

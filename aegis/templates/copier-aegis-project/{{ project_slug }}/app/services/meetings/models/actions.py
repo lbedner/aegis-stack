@@ -96,6 +96,23 @@ class RunRecord(BaseModel):
     finished_at: datetime | None = None
 
 
+class Going(BaseModel):
+    """A run of the call's, as the bot's card lists it: its action, where it
+    is (asked, claimed by ``runner``, or over), the question it answers
+    (``moment``) and who asked it, and what it came back with, once over."""
+
+    model_config = FIGURES
+
+    id: int
+    moment: int
+    action: str
+    status: str
+    runner: str | None = None
+    speaker: str
+    text: str
+    result: str | None = None
+
+
 class LineAbout(BaseModel):
     """What a line of a call is about, as Illiana says it to the one who
     asked: her few words, and the card she drew of the part it names (its

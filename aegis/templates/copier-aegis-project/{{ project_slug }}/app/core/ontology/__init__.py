@@ -16,7 +16,7 @@ from app.core.ontology.model import (
     SystemModel,
     TaskNode,
 )
-from app.core.ontology.system import current, system_model, with_app
+from app.core.ontology.system import current, system_model, warm, with_app
 
 __all__ = [
     "SCHEMA_VERSION",
@@ -32,5 +32,6 @@ __all__ = [
     "TaskNode",
     "current",
     "system_model",
+    "warm",
     "with_app",
 ]

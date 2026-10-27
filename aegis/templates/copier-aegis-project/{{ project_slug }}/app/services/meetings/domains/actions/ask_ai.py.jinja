@@ -13,7 +13,7 @@ from typing import Any
 from weakref import WeakKeyDictionary
 
 from app.core.log import logger
-from app.services.meetings.domains.actions.live import LIVE
+from app.services.meetings.domains.actions.live import IN_A_MEETING, LIVE
 from app.services.meetings.domains.actions.prompt import (
     Excerpt,
     Said,
@@ -30,13 +30,9 @@ from app.services.meetings.domains.actions.registry import (
 )
 from app.services.meetings.models import LineAbout
 
-# How she answers in a call: what she says is heard, not read.
-SAY_IT = (
-    "Answer it as you would out loud in the meeting: briefly, in two or "
-    "three sentences, with no lists or markdown. When the meeting does not "
-    "hold the answer, look it up with your tools; when you cannot find it, "
-    "say so plainly instead of guessing."
-)
+# What closes each question put to her: how she answers it is the meeting's
+# (``IN_A_MEETING``: her live call's manners, else what leads a chat turn).
+SAY_IT = "Answer it out loud, as one of the people in the meeting."
 
 
 def for_the_model(heard: Excerpt) -> str:
@@ -80,15 +76,17 @@ def her() -> Any:
 
 
 async def answer(prompt: str, owner_user_id: int | None) -> str:
-    """Her answer: through her live voice in the call, where there is one,
-    else a turn of her own agent, as the meeting's owner."""
+    """Her answer: through her live voice in the call, where there is one
+    (told it is a meeting as it opened), else a turn of her own agent, as
+    the meeting's owner, the meeting's manners over her prompt
+    (``IN_A_MEETING``)."""
     live = LIVE.get()
     if live is not None and live.open:
         try:
             return await live.ask(_since(prompt, TOLD.setdefault(live, set())))
         except (RuntimeError, TimeoutError) as exc:
             logger.warning(f"Her live answer failed ({exc}); she answers in chat")
-    return (await _her_turn(prompt, owner_user_id)).content
+    return (await _her_turn(prompt, owner_user_id, IN_A_MEETING)).content
 
 
 # What she is asked of a line: what its speaker is talking about.
@@ -133,10 +131,14 @@ async def about(
 
 
 async def _her_turn(
-    prompt: str, owner_user_id: int | None, admin: bool | None = None
+    prompt: str,
+    owner_user_id: int | None,
+    instructions: str | None = None,
+    admin: bool | None = None,
 ) -> Any:
     """A turn of her own agent, as the meeting's owner (its chat ``user_id``
-    theirs, else the default), in the meetings' conversations."""
+    theirs, else the default), in the meetings' conversations, its manners
+    (``instructions``) over her prompt."""
     owner = {} if owner_user_id is None else {"user_id": str(owner_user_id)}
     return await her().chat(
         prompt,
@@ -144,6 +146,7 @@ async def _her_turn(
         admin=admin,
         agent_slug=None,
         surface=SURFACE,
+        instructions=instructions,
         **owner,
     )
 

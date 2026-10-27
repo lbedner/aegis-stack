@@ -221,6 +221,7 @@ class MeetingsService:
         return MeetingRecord(
             meeting=meeting,
             moments=found,
+            steps=await queries.steps(self.db, meeting_id),
             following=under_way or writing or cleaning or moments.answering(found),
             notes=notes,
             notes_error=kept.error if kept else None,

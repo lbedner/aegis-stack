@@ -10,6 +10,7 @@ import pytest
 
 from app.components.backend.hooks import backend_hooks
 from app.core import concurrency
+from app.core.ontology import system as ontology_system
 from app.integrations import main
 
 
@@ -29,7 +30,7 @@ async def test_it_is_built_once_every_startup_hook_has_run(
     monkeypatch.setattr(backend_hooks, "execute_shutdown_hooks", nothing)
     monkeypatch.setattr(main.flet_fastapi.app_manager, "start", nothing)
     monkeypatch.setattr(main.flet_fastapi.app_manager, "shutdown", nothing)
-    monkeypatch.setattr(main.ontology, "current", lambda: ran.append("model"))
+    monkeypatch.setattr(ontology_system, "current", lambda: ran.append("model"))
 
     async with main.lifespan(FastAPI()):
         await asyncio.gather(*concurrency._background)

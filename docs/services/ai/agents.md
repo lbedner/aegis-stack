@@ -81,10 +81,14 @@ async def lookup_order(order_id: str) -> OrderSummary:
     """Fetch an order summary for the given order id."""
     ...
 
-register_tool("lookup_order", lookup_order, effect="read")
+register_tool(
+    "lookup_order", lookup_order, effect="read", doing="Looking up the order"
+)
 ```
 
 A tool hands back a typed model, never a `dict`: what an agent reads is that model's JSON, its schema types code mode's script and an MCP client's structured answer, and a renamed field fails a test instead of a conversation. A refusal the model can correct from is `Refused(error=...)` (`app.core.tools`), returned rather than raised. The service pattern's `returns-model` rule gates it.
+
+`doing` is what a call of it is, as a person watching reads it: a meeting bot's card shows it under the question Illiana is answering (`app.core.steps`). Each call is heard where it runs, so a read inside a code-mode script is a step too. A tool without one shows as its name made readable ("Lookup order"), and code mode's `run_code` as its script's first comment.
 
 Then grant it to an agent by inserting a `tool` row named `lookup_order` and linking it via `agent_tool`. A row naming a tool with no registered callable is skipped with a warning, never an error: a stale grant degrades that one tool, not the agent.
 

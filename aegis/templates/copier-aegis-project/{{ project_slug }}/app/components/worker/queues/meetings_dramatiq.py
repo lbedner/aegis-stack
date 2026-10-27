@@ -7,11 +7,16 @@ once."""
 import app.components.worker.broker  # noqa: F401
 import dramatiq
 from app.core.constants import ServiceName
+from app.core.ontology.system import warm
 from app.services.meetings.service import run_meeting
 
 # ponytail: Dramatiq always has a time limit (ten minutes by default); a
 # day stands in for none (the bot's own rules decide when it leaves).
 A_DAY_MS = 24 * 60 * 60 * 1000
+
+# What its jobs want ready as the worker starts (``queue_discovery.started``):
+# her map (the twin) takes seconds to build, once a process.
+STARTUP = (warm,)
 
 
 # A call is never run twice: one the worker lost is failed, not rejoined.

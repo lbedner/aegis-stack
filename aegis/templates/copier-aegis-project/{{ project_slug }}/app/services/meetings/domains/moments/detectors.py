@@ -94,6 +94,8 @@ ASKING = frozenset(
 )
 # A statement asked at its end: ``..., right?``
 TAGS = frozenset({"right", "correct"})
+# What says nothing anywhere in speech, not only where a clause opens.
+UMS = frozenset("uh um uhm er erm hmm ah".split())
 # What opens a clause in speech without saying anything.
 FILLERS = frozenset(
     "um uh hmm okay ok so yeah yes well oh and but like wait alright".split()
@@ -188,6 +190,11 @@ ENDS = ("?", ".", "!")
 ITSELF = "You"
 # How soon after the bot spoke a line is said back to it, needing no name.
 FOLLOW_SECONDS = 8.0
+# How soon after the bot's words (played, or captioned) a line of them is
+# its own speech heard back (through the asker's microphone, captioned as
+# theirs), not a reply: begun while it talks (a gap below zero), or just
+# after, as captions run late.
+ECHO_SECONDS = 1.5
 # What is said back that answers nothing: a reply made only of these (and
 # fillers) is not put to it.
 THANKS = frozenset(
@@ -209,20 +216,33 @@ def its_own(speaker: str, bot: str) -> bool:
 
 
 # The line before a line, as whether it is said back to the bot is read:
-# who said it, how long before this one began it ended, and who last put
-# something to the bot.
-Before = tuple[str, float, str]
+# who said it, how long before this one began it ended, who last put
+# something to the bot, and what it said.
+Before = tuple[str, float, str, str]
 
 
-def replying(before: Before | None, speaker: str, bot: str) -> bool:
-    """Whether a line ``speaker`` said is said back to the bot: the line
-    before it (who said it, how long before this one began, and who last
-    put something to the bot) is the bot's own, within ``FOLLOW_SECONDS``,
-    answering ``speaker``. Someone else talking just after it is not."""
+def replying(before: Before | None, speaker: str, bot: str, text: str) -> bool:
+    """Whether a line ``speaker`` said (``text``) is said back to the bot:
+    the line before it (who said it, how long before this one began, who
+    last put something to the bot, and what it said) is the bot's own,
+    within ``FOLLOW_SECONDS``, answering ``speaker``. Someone else talking
+    just after it is not, nor the bot's own words heard back while it is
+    still talking (``echoes``, within ``ECHO_SECONDS``)."""
     if before is None:
         return False
-    said, gap, asker = before
-    return its_own(said, bot) and gap <= FOLLOW_SECONDS and speaker == asker
+    said, gap, asker, its_words = before
+    back = its_own(said, bot) and gap <= FOLLOW_SECONDS and speaker == asker
+    return back and not (gap <= ECHO_SECONDS and echoes(text, its_words))
+
+
+def echoes(text: str, said: str) -> bool:
+    """Whether ``text`` is a run of ``said``'s words, in order: its speech
+    heard back ("Let me." of "Let me look that up.")."""
+    theirs, its = WORD.findall(text.lower()), WORD.findall(said.lower())
+    size = len(theirs)
+    return bool(theirs) and any(
+        its[at : at + size] == theirs for at in range(len(its) - size + 1)
+    )
 
 
 @cache  # captions say the same words over and over, on every look
@@ -264,19 +284,62 @@ def addressed(heard: Heard) -> str | None:
         return None
     if heard.replying and not mentions(text, heard.addressee):
         return text if set(_words(text)) - THANKS - FILLERS else None
+    ask = _past_name(text, heard.addressee)
+    return None if ask is None else _asked(ask)
+
+
+def put_to(text: str, name: str) -> str:
+    """What ``text`` puts to ``name``, as a card shows it: its name off (with
+    the greeting before it, or where it closes the line), the fillers it
+    opens on, and its ums anywhere (``UMS``: captions mark a pause on one,
+    and end the question on a "."), a question ending on "?" ("Uh, hey
+    Illiana, are there any, uh? Errors." is "Are there any errors?"); a
+    line without the name keeps all but its fillers. Done on the text,
+    no model asked, so the card shows it at once."""
+    said = text.strip()
+    ask = _past_name(said, name)
+    ask = _without_ums(said if ask is None else ask)
+    while (first := WORD.match(ask)) and first.group().lower() in GREETINGS | FILLERS:
+        ask = ask[first.end() :].lstrip(" ,.;:!-")
+    if not ask:
+        return said
+    if ask.endswith(".") and asks(ask):
+        ask = ask[:-1] + "?"
+    return ask[:1].upper() + ask[1:]
+
+
+def _without_ums(text: str) -> str:
+    """``text`` without its ums, and what captions hung on them: the comma
+    before one, and a capital after one they took for a sentence's end."""
+    kept: list[str] = []
+    lower = False
+    for token in text.split():
+        if token.strip(",.?!;:").lower() in UMS:
+            if kept:
+                kept[-1] = kept[-1].rstrip(",")
+            lower = lower or token.endswith((".", "?", "!"))
+            continue
+        if lower and token[:1].isupper() and token != "I" and token[:2] != "I'":
+            token = token[:1].lower() + token[1:]
+        lower = False
+        kept.append(token)
+    return " ".join(kept)
+
+
+def _past_name(text: str, name: str) -> str | None:
+    """``text`` past ``name``: after it, where it opens on it (after a
+    greeting at most), or before it, where it closes on it; None where the
+    name is neither (said in passing, or not at all)."""
     words = list(WORD.finditer(text))
-    at = next(
-        (i for i, w in enumerate(words) if named(w.group(), heard.addressee)), None
-    )
+    at = next((i for i, w in enumerate(words) if named(w.group(), name)), None)
     if at is None:
         return None
     if all(w.group().lower() in GREETINGS | FILLERS for w in words[:at]):
-        ask = text[words[at].end() :].lstrip(" ,.;:!-")
-    elif at == len(words) - 1:
-        ask = text[: words[at].start()].rstrip(" ,;:-") + text[-1]
-    else:
-        return None
-    return _asked(ask)
+        return text[words[at].end() :].lstrip(" ,.;:!-")
+    if at == len(words) - 1:
+        end = text[-1] if text.endswith(ENDS) else ""
+        return text[: words[at].start()].rstrip(" ,;:-") + end
+    return None
 
 
 def _asked(ask: str) -> str | None:

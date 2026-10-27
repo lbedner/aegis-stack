@@ -15,7 +15,7 @@ its citations with it.
 the rows are how they are kept (``domains.notes``, ``domains.people``).
 
 One module per domain the tables belong to (``accounts``, ``actions``,
-``calendar``, ``moments``, ``notes``, ``people``, ``series``), the meeting
+``bot``, ``calendar``, ``moments``, ``notes``, ``people``, ``series``), the meeting
 itself (``meeting``), and what they all share (``base``). Importing this
 package imports every table module, which is the point: a model never
 imported is absent from ``SQLModel.metadata``, and alembic autogenerate
@@ -34,6 +34,7 @@ from app.services.meetings.models.actions import (
     IN_THE_APP,
     TONES,
     ActionChoice,
+    Going,
     LineAbout,
     MeetingActionRun,
     MeetingRunnerToken,
@@ -49,6 +50,20 @@ from app.services.meetings.models.base import (
     MeetingStatus,
     Platform,
     fitted,
+)
+from app.services.meetings.models.bot import (
+    ALREADY,
+    CAPTIONS,
+    CHAT,
+    JOIN,
+    LABEL,
+    LEAVE,
+    LEFT,
+    MIC,
+    MISSED,
+    SHORTCUT,
+    MeetingBotStep,
+    Took,
 )
 from app.services.meetings.models.calendar import CalendarEvent
 from app.services.meetings.models.meeting import (
@@ -101,6 +116,18 @@ from app.services.meetings.models.series import (
 )
 
 __all__ = [
+    "ALREADY",
+    "CAPTIONS",
+    "CHAT",
+    "JOIN",
+    "LABEL",
+    "LEAVE",
+    "LEFT",
+    "MIC",
+    "MISSED",
+    "SHORTCUT",
+    "MeetingBotStep",
+    "Took",
     "MOST_ERROR_CHARS",
     "fitted",
     "ASKED",
@@ -153,6 +180,7 @@ __all__ = [
     "Platform",
     "Position",
     "Quote",
+    "Going",
     "LineAbout",
     "RunRecord",
     "STILL_WANTED",

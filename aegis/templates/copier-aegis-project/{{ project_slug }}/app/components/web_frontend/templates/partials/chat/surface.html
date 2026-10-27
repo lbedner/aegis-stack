@@ -7,9 +7,10 @@
    a spoken turn is heard, or none), approvals (the change queue's
    review list's URL, or none), voices (the voice chip: voice with a
    database, for an operator), calls (live calls: the same, on a mount
-   not bound per request). #}
+   not bound per request), agent_url (the answering agent's editor, where
+   the mount has one). #}
 {% from "components/macros/icons.html" import icon %}
-{% from "components/macros/chat.html" import assistant_row, button_classes, conversation_field, turn_head, voice_states %}
+{% from "components/macros/chat.html" import agent_chip, assistant_row, button_classes, conversation_field, turn_head, voice_states %}
 {# A call's states, as the phone and the call bar both draw them. #}
 {% macro phone_states() %}{% call voice_states(record=True, work=True) %}{{ icon("phone", "w-4 h-4") }}{% endcall %}{% endmacro %}
 <div id="chat" class="flex flex-col h-full"
@@ -88,6 +89,7 @@
     {# The chips are a row of their own above the box: beside it, in the
        drawer, they took the width the message needs. #}
     <div class="w-full flex flex-wrap items-center gap-x-4 gap-y-1" data-composer-chips>
+      {% if agent_url %}{{ agent_chip(assistant, agent_url) }}{% endif %}
       {% if picker %}<span id="chat-model" hx-get="{{ chat_path }}/models/chip" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></span>{% endif %}
       {% if voices %}<span id="chat-voice" hx-get="{{ chat_path }}/voices/chip" hx-trigger="load" hx-target="this" hx-swap="outerHTML"></span>{% endif %}
     </div>

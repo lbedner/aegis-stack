@@ -50,8 +50,6 @@ def chat_router(mount: ChatSurface, guard: Callable[..., Any]) -> APIRouter:
     ``guard``."""
     router = APIRouter(prefix=mount.path, dependencies=[Depends(guard)])
     models_path = f"{mount.path}/models"
-    # Live calls are picked with the models where calls are on offer.
-    calls = chat.offers_calls(mount)
     # The mount this request is served (``ChatSurface.bind``).
     Mount = Annotated[ChatSurface, Depends(chat.resolver(mount))]  # noqa: N806
 
@@ -221,15 +219,13 @@ def chat_router(mount: ChatSurface, guard: Callable[..., Any]) -> APIRouter:
             )
 
         @operator.get("/models", response_class=HTMLResponse)
-        async def models_dialog(
-            request: Request, q: str = "", show: str = "all"
-        ) -> Response:
+        async def models_dialog(request: Request, q: str = "") -> Response:
             """The picker, in the modal; the same route re-renders its list as
-            the search or the filter changes."""
+            the search changes."""
             from app.components.web_frontend import chat_models as models
 
             current = await models.running_model()
-            picker = await models.picker(q, current, models_path, calls, show)
+            picker = await models.picker(q, current, models_path)
             return dialog(request, MODELS_TEMPLATE, picker=picker)
 
         @operator.post("/models", response_class=HTMLResponse)
@@ -237,21 +233,15 @@ def chat_router(mount: ChatSurface, guard: Callable[..., Any]) -> APIRouter:
             request: Request,
             model_id: Annotated[str, Form()],
             q: Annotated[str, Form()] = "",
-            kind: Annotated[str, Form()] = "chat",
-            show: Annotated[str, Form()] = "all",
         ) -> Response:
-            """A pick sets its role - the chat model, or what a live call runs
-            on - and updates the dialog in place (compare and switch twice
-            without reopening) and the chip out of band; a refused pick says
-            why and changes nothing."""
+            """A pick sets the chat model and updates the dialog in place
+            (compare and switch twice without reopening) and the chip out of
+            band; a refused pick says why and changes nothing."""
             from app.components.web_frontend import chat_models as models
 
-            if calls and kind == "realtime":
-                refused = await models.use_for_calls(model_id)
-            else:
-                refused = await models.switch(model_id)
+            refused = await models.switch(model_id)
             current = await models.running_model()
-            picker = await models.picker(q, current, models_path, calls, show)
+            picker = await models.picker(q, current, models_path)
             if refused:
                 return with_toast(
                     dialog(request, MODELS_TEMPLATE, picker=picker),

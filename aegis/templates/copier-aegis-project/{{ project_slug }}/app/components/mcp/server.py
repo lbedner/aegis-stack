@@ -25,7 +25,7 @@ from pydantic import BaseModel, ConfigDict
 
 from app.core.config import settings
 from app.core.log import logger
-from app.core.tools import acting_as, get_tool, mcp_servable
+from app.core.tools import RUN_CODE, acting_as, get_tool, mcp_servable
 from mcp import types
 
 
@@ -156,8 +156,6 @@ def reachable(names: Iterable[str]) -> list[str]:
     _, _, admin = _reach()
     return [name for name in names if admin or not _admin_only(name)]
 
-
-RUN_CODE = "run_code"
 
 
 def code_tool_builder() -> Callable[[Sequence[str]], Awaitable[Tool]] | None:

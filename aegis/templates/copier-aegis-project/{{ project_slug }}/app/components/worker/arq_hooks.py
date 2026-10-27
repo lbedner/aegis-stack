@@ -21,7 +21,7 @@ from arq.constants import result_key_prefix
 from arq.jobs import deserialize_result
 import redis.asyncio as aioredis
 
-from app.components.worker import runtime
+from app.components.worker import queue_discovery, runtime
 from app.components.worker.events import publish_event
 from app.components.worker.heartbeat import (
     PAUSE_KEY,
@@ -72,7 +72,8 @@ def for_queue(queue: str, max_jobs: int) -> tuple[Hook, Hook, Hook, Hook]:
     for one queue; ``max_jobs`` is what its worker reports it runs with."""
 
     async def on_startup(ctx: dict[str, Any]) -> None:
-        """Apply what the Overseer saved, then publish worker.started."""
+        """Apply what the Overseer saved, publish worker.started, then the
+        queue's own startup (``queue_discovery.started``)."""
         await apply_saved_overrides()
         try:
             redis_url = settings.redis_url_effective
@@ -92,6 +93,7 @@ def for_queue(queue: str, max_jobs: int) -> tuple[Hook, Hook, Hook, Hook]:
             )
         except Exception as e:
             logger.debug(f"Failed to initialize event publishing: {e}")
+        await queue_discovery.started(queue)
 
     async def on_shutdown(ctx: dict[str, Any]) -> None:
         """Publish worker.stopped event on worker shutdown."""

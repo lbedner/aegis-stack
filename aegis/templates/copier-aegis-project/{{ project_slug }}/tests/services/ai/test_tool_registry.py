@@ -101,3 +101,21 @@ async def test_a_refused_argument_is_the_models_to_correct() -> None:
     told = Refused(error="ValueError: No component 'x'; known: backend")
     assert await tool(component="x") == told
     assert sync_tool(component="x") == told
+
+
+@pytest.mark.usefixtures("clean_registry")
+async def test_each_call_is_a_step_for_whoever_is_watching() -> None:
+    """Heard where the call runs, not where the model asked for it: a read
+    run inside a code-mode script is a step too, as its tool says it."""
+    from app.core.steps import watching
+
+    register_tool("strict", strict, effect="read", doing="Checking the part")
+    register_tool("strict_sync", strict_sync, effect="read")
+    tool, sync_tool = resolve_tools(["strict", "strict_sync"])
+    steps: list[str] = []
+
+    with watching(steps.append):
+        await tool(component="x")
+        sync_tool(component="x")
+
+    assert steps == ["Checking the part", "Strict sync"]

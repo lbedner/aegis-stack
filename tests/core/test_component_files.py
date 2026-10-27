@@ -7,6 +7,7 @@ from pathlib import Path
 from aegis.core.component_files import (
     PROJECT_SLUG_PLACEHOLDER,
     _is_skippable_template_file,
+    dependent_files,
     get_component_files,
     get_template_path,
 )
@@ -103,3 +104,39 @@ class TestAnotherSpecsGatedFilesAreNotYours:
         )
 
         assert [f for f in without if "web_frontend" in f]
+
+
+class TestFilesListedUnderTwoGatesNeedBoth:
+    """A file in two answer-keyed extras groups is gated on *both*.
+
+    Deploy's off-site copy sits under its ``include_database`` bucket and
+    its ``include_scheduler`` bucket — "listed under both, so it goes when
+    either does" (``components.py``). ``aegis add database`` into a deploy
+    stack honoured only the first: it copied ``offsite.py`` and
+    ``drill.py`` into a stack with no scheduler, where ``backup.py``
+    renders empty, so ``app/services/system`` could not import (aegis
+    issue #1873).
+    """
+
+    OFFSITE = "app/services/system/offsite.py"
+
+    def test_dependent_files_needs_every_gate(self) -> None:
+        """Adding the database must not bring the scheduler's files."""
+        answers = {"include_deploy": True, "include_database": True}
+
+        files = dependent_files("database", answers, expand=True)
+
+        assert not [f for f in files if f.endswith("offsite.py")]
+        assert not [f for f in files if f.endswith("test_offsite_backup.py")]
+
+    def test_dependent_files_with_both_gates_keeps_it(self) -> None:
+        """With a scheduler too, the off-site copy is the database's neighbour."""
+        answers = {
+            "include_deploy": True,
+            "include_database": True,
+            "include_scheduler": True,
+        }
+
+        files = dependent_files("database", answers, expand=True)
+
+        assert self.OFFSITE in files

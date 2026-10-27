@@ -42,6 +42,7 @@ QUALITY_CHECK_TIMEOUTS = {
 
 STANDARD_ENV_OVERRIDES = {
     "VIRTUAL_ENV": "",  # Ensure clean uv environment
+    "AEGIS_CONFORMANCE": "1",  # tests/_conformance.py
 }
 
 

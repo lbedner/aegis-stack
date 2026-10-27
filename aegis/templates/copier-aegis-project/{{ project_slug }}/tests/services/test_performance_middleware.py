@@ -168,10 +168,14 @@ class TestFailingRequestsAreTimed:
     record the sample. Otherwise 500s are invisible to anyone watching
     the Performance tab — which is exactly when you'd want to see them."""
 
-    def test_exception_is_still_recorded(self, app: FastAPI) -> None:
+    def test_exception_is_still_recorded(
+        self, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         def _boom() -> None:
             raise RuntimeError("simulated failure")
 
+        # The app is shared: the route is gone after the test.
+        monkeypatch.setattr(app.router, "routes", list(app.router.routes))
         app.add_api_route("/__perf_test_boom", _boom, methods=["GET"])
 
         client = TestClient(app, raise_server_exceptions=True)

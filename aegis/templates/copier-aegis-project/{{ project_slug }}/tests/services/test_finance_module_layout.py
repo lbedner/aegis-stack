@@ -25,6 +25,9 @@ from app.services.finance.domains.planning import budgets, recurring
 from app.services.finance.domains.planning import queries as planning_queries
 from app.services.finance.domains.planning.recurring import forecast
 from app.services.finance.service import FinanceService
+from tests._conformance import CONFORMANCE
+
+pytestmark = CONFORMANCE
 
 # Public function -> the submodule that must DEFINE it. Membership is the
 # claim being made: streams own the row's lifecycle, matching owns the

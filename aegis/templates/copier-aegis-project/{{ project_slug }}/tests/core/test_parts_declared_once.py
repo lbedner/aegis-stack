@@ -12,6 +12,9 @@ import pytest
 from app.core import source_index
 from app.core.parts import PARTS
 from app.core.source_index import ROOT
+from tests._conformance import CONFORMANCE
+
+pytestmark = CONFORMANCE
 
 # Where those tables once were.
 READERS = (

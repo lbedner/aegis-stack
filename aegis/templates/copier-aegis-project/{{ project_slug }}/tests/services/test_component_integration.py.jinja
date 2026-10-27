@@ -224,15 +224,12 @@ class TestComponentIntegration:
             queues_component = worker_status.sub_components["queues"]
             assert queues_component.status == ComponentStatusType.WARNING
 
-            # Verify individual queue statuses. The template generates
-            # ``media`` with no registered functions (bare queue config)
-            # and ``system`` with functions — so ``media`` rolls up as
-            # ``INFO`` ("configured but nothing to do") while ``system``
-            # with functions but no live worker is a genuine ``WARNING``.
+            # Verify individual queue statuses. ``system`` declares tasks
+            # but has no live worker in this scenario, a genuine
+            # ``WARNING``; ``load_test``'s worker is reporting healthy.
             # Parent ``queues`` still aggregates to ``WARNING`` because
             # any WARNING child escalates.
             queue_sub_components = queues_component.sub_components
-            assert queue_sub_components["media"].status == ComponentStatusType.INFO
             assert (
                 queue_sub_components["system"].status == ComponentStatusType.WARNING
             )

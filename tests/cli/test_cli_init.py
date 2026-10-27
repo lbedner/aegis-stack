@@ -285,7 +285,6 @@ class TestCLIInit:
         worker_files = [
             "app/components/worker/queues/system.py",
             "app/components/worker/queues/load_test.py",
-            "app/components/worker/queues/media.py",
             "app/components/worker/tasks/simple_system_tasks.py",
             "app/components/worker/tasks/load_tasks.py",
             "app/components/worker/constants.py",

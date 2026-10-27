@@ -13,6 +13,7 @@ import pytest
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.tools import result_data
 from app.services.research.domains.sources import registry
 from app.services.research.domains.sources.registry import UnknownSourceError
 from app.services.research.domains.watches.refresh import refresh_every_watch
@@ -392,7 +393,7 @@ async def test_an_agent_reads_an_items_history_as_plain_rows(
     await svc.refresh_watch(watch.id)  # type: ignore[arg-type]
     item = (await _items(async_db_session))["1"]
 
-    rows = await tools.research_history(item.id)  # type: ignore[arg-type]
+    rows = result_data(await tools.research_history(item.id))  # type: ignore[arg-type]
 
     assert rows == [{"as_of": "2026-09-01", "score": 12, "comment_count": 0}]
 

@@ -25,7 +25,7 @@ from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.discovery import import_modules_named
-from app.services.change_queue.schemas import ChangeDisplayRow
+from app.services.change_queue.schemas import ChangeDisplayRow, ChangeTypeContract
 
 
 @dataclass(frozen=True)
@@ -80,17 +80,16 @@ def registered_change_types() -> tuple[str, ...]:
     return tuple(sorted(_EXECUTORS))
 
 
-def change_type_contracts() -> dict[str, dict[str, Any]]:
-    """Every registered type as an agent reads it: its title, when to use
-    it, the table it changes, and the payload's JSON schema, straight from
-    the payload model."""
+def change_type_contracts() -> dict[str, ChangeTypeContract]:
+    """Every registered type as an agent reads it, its payload's schema
+    straight from the payload model."""
     return {
-        name: {
-            "title": executor.title,
-            "description": executor.description,
-            "object": executor.object.__tablename__ if executor.object else None,
-            "schema": executor.payload_model.model_json_schema(),
-        }
+        name: ChangeTypeContract(
+            title=executor.title,
+            description=executor.description,
+            object=executor.object.__tablename__ if executor.object else None,
+            payload_schema=executor.payload_model.model_json_schema(),
+        )
         for name, executor in sorted(_EXECUTORS.items())
     }
 

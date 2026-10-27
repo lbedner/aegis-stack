@@ -13,7 +13,7 @@ from app.core.ontology.model import PartNode
 from app.core.ontology.parts import node_of
 from app.core.parts import Category
 from app.core.replays import Hop
-from app.core.tools import get_tool
+from app.core.tools import get_tool, result_data
 from app.services.system import kept_requests, service_pieces, tools
 from app.services.system.service_pieces import Piece
 from tests._ontology import model_of
@@ -110,11 +110,11 @@ async def test_illianas_tool_reads_what_the_api_does() -> None:
     )
     await _id("/api/v1/other")
     recent = [r.model_dump(mode="json") for r in await kept_requests.recent()]
-    assert await tools.requests() == {"requests": recent, "kept": replays.KEEP}
-    assert (await tools.requests(route="/me"))["requests"] == recent[1:]
+    assert result_data(await tools.requests()) == {"requests": recent, "kept": replays.KEEP}
+    assert (result_data(await tools.requests(route="/me")))["requests"] == recent[1:]
     found = await kept_requests.find(request_id)
     assert found is not None
-    assert await tools.requests(request_id=request_id) == {
+    assert result_data(await tools.requests(request_id=request_id)) == {
         "request": found.model_dump(mode="json")
     }
     with pytest.raises(ValueError, match="kept"):

@@ -6,7 +6,7 @@ from typing import Any
 import pytest
 
 from app.core import storage as storage_seam
-from app.core.tools import get_tool
+from app.core.tools import get_tool, result_data
 from app.services.system import tools
 
 
@@ -27,8 +27,8 @@ async def test_the_buckets_and_what_one_holds(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(storage_seam, "get_storage", Bucketed)
-    assert await tools.storage() == {"buckets": ["my-app"]}
-    assert await tools.storage(bucket="my-app", prefix="docs/") == {
+    assert result_data(await tools.storage()) == {"buckets": ["my-app"]}
+    assert result_data(await tools.storage(bucket="my-app", prefix="docs/")) == {
         "bucket": "my-app",
         "prefix": "docs/",
         "folders": ["docs/2026/"],

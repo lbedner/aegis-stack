@@ -39,6 +39,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app.core.log import logger
+from app.core.tools import result_text
 
 # Errors are stored for triage, not for display; a stack-sized string in a
 # telemetry row helps nobody.
@@ -139,10 +140,8 @@ async def _write(
 
 def _size_of(result: Any) -> int:
     """How much context the result cost, best effort."""
-    if isinstance(result, str):
-        return len(result.encode())
     try:
-        return len(str(result).encode())
+        return len(result_text(result).encode())
     except Exception:  # noqa: BLE001 - a weird repr is not worth a failed turn
         return 0
 

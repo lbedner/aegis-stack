@@ -16,7 +16,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from app.core.tools import ADMIN_ONLY, acting_as, register_tool
+from app.core.tools import ADMIN_ONLY, Refused, acting_as, register_tool
 from app.services.ai.domains.chat.tools import resolve_tools
 
 
@@ -75,7 +75,7 @@ async def test_an_admin_tool_answers_only_an_admin() -> None:
     (tool,) = resolve_tools(["peek"])
 
     with acting_as(None, "assistant", admin=False):
-        assert await tool() == ADMIN_ONLY
+        assert await tool() == Refused(error=ADMIN_ONLY)
     with acting_as(None, "assistant", admin=True):
         assert await tool() == "the logs"
 
@@ -98,6 +98,6 @@ async def test_a_refused_argument_is_the_models_to_correct() -> None:
     register_tool("strict_sync", strict_sync, effect="read")
     tool, sync_tool = resolve_tools(["strict", "strict_sync"])
 
-    told = "ValueError: No component 'x'; known: backend"
+    told = Refused(error="ValueError: No component 'x'; known: backend")
     assert await tool(component="x") == told
     assert sync_tool(component="x") == told

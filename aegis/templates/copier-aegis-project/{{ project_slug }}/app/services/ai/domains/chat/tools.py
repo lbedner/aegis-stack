@@ -7,7 +7,7 @@ import inspect
 from typing import Any
 
 from app.core.log import logger
-from app.core.tools import ADMIN_ONLY, ToolFunc, get_tool
+from app.core.tools import ADMIN_ONLY, Refused, ToolFunc, get_tool
 from app.services.ai.domains.chat.tool_telemetry import instrument
 from app.services.shared.deps import caller_is_admin
 
@@ -41,8 +41,8 @@ def _told(func: ToolFunc) -> ToolFunc:
     does: raised, Pydantic AI ends the turn, a live call with it. The
     ledger beneath has recorded it as failed."""
 
-    def told(exc: ValueError) -> str:
-        return f"{type(exc).__name__}: {exc}"
+    def told(exc: ValueError) -> Refused:
+        return Refused(error=f"{type(exc).__name__}: {exc}")
 
     if inspect.iscoroutinefunction(func):
 
@@ -72,7 +72,7 @@ def _admins_only(func: ToolFunc) -> ToolFunc:
     @functools.wraps(func)  # the schema the model sees is func's
     async def guarded(*args: Any, **kwargs: Any) -> Any:
         if not await caller_is_admin():
-            return ADMIN_ONLY
+            return Refused(error=ADMIN_ONLY)
         result = func(*args, **kwargs)
         return await result if inspect.isawaitable(result) else result
 

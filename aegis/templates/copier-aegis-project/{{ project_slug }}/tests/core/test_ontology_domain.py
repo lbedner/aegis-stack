@@ -87,7 +87,7 @@ def test_every_change_type_says_what_it_changes(model: SystemModel) -> None:
         from app.services.change_queue.registry import change_type_contracts
 
         for name, contract in change_type_contracts().items():
-            schema = contract["schema"]
+            schema = contract.payload_schema
             described = [schema, *schema.get("$defs", {}).values()]
             fields = [f for s in described for f in s.get("properties", {}).values()]
             assert all(f.get("description") for f in fields), name

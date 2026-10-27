@@ -5,6 +5,7 @@ under that client, and nothing moves until a person approves it.
 """
 
 from collections.abc import Iterator
+import json
 from typing import Any
 
 from fastmcp import Client, FastMCP
@@ -47,8 +48,10 @@ def server(
 async def _call(
     server: FastMCP, client: Implementation, tool: str, arguments: dict[str, Any]
 ) -> Any:
+    """The answer as the client reads it: the JSON of the tool's model."""
     async with Client(server, client_info=client) as session:
-        return (await session.call_tool(tool, arguments, raise_on_error=False)).data
+        result = await session.call_tool(tool, arguments, raise_on_error=False)
+    return json.loads(result.content[0].text)
 
 
 async def test_a_proposal_is_a_card_and_moves_nothing_until_approved(

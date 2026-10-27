@@ -14,7 +14,6 @@ so the activity shows what a client looked at, not only that it ran one.
 """
 
 from collections.abc import Sequence
-import json
 from typing import Any
 
 from fastmcp.exceptions import ToolError
@@ -32,6 +31,7 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.usage import UsageLimits
 
+from app.core.tools import result_text
 from app.services.ai.service import (
     CODE_MODE_TOOL_CALLS_LIMIT,
     AgentConfig,
@@ -107,7 +107,7 @@ def _note_steps(outcome: ToolReturnPart) -> None:
     if gathered is None:
         return
     gathered.extend(
-        _step(call, json.dumps(done.content, default=str) if done else None)
+        _step(call, result_text(done.content) if done else None)
         for call, done in sandbox_calls(outcome)
     )
 

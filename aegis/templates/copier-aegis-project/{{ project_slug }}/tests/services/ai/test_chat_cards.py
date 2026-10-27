@@ -17,6 +17,7 @@ from typing import Any
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.tools import result_data
 from app.services.ai.domains.chat import cards
 from app.services.ai.domains.chat.cards import attach_cards, card_stage, draw_card
 from app.services.ai.domains.chat.user_memory import memory_user
@@ -37,7 +38,7 @@ async def _drawn(
     kind: str, payload: Any
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     with memory_user("0", conversation_id="conv-1"), card_stage() as staged:
-        result = await draw_card(kind, payload)
+        result = result_data(await draw_card(kind, payload))
     return result, staged
 
 
@@ -58,7 +59,7 @@ class TestDrawing:
 
     @pytest.mark.asyncio
     async def test_outside_a_turn_it_says_so(self) -> None:
-        result = await draw_card("trend", TREND)
+        result = result_data(await draw_card("trend", TREND))
         assert "error" in result
 
     @pytest.mark.asyncio

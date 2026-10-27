@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.core.tools import acting_as
+from app.core.tools import acting_as, result_data
 from app.services.meetings import tools
 from app.services.meetings.domains.notes.service import keep_notes
 from app.services.meetings.domains.search import queries
@@ -261,7 +261,7 @@ async def test_the_chat_tool_answers_with_the_lines_linked(
     )
 
     with acting_as(1, "assistant", admin=admin):
-        hits = await tools.meetings_search("pricing")
+        hits = result_data(await tools.meetings_search("pricing"))
 
     found = {hit["meeting_id"] for hit in hits}
     assert found == ({mine, theirs} if admin else {mine})

@@ -11,11 +11,15 @@ Services register their own tools at import time:
 
     from app.core.tools import register_tool
 
-    async def lookup_order(order_id: str) -> str:
+    async def lookup_order(order_id: str) -> OrderSummary:
         \"\"\"Fetch an order summary.\"\"\"
         ...
 
     register_tool("lookup_order", lookup_order, effect="read")
+
+A tool hands back a model (``FIGURES``), never a dict: its JSON is what
+the model reads, and its schema types code mode's script and an MCP
+client. A refusal the model can correct from is ``Refused``.
 """
 
 from collections.abc import Callable, Iterable, Iterator
@@ -24,7 +28,11 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from pydantic import BaseModel
+from pydantic_core import to_json, to_jsonable_python
+
 from app.core.discovery import import_modules_named
+from app.core.figures import FIGURES
 from app.core.log import logger
 
 ToolFunc = Callable[..., Any]
@@ -109,6 +117,29 @@ class RegisteredTool:
     # Shown to admins only, as Overseer shows it: an MCP token reaches it
     # only when its owner is an admin (``mcp.server``).
     admin: bool = False
+
+
+class Refused(BaseModel):
+    """A call a tool would not carry out, and why: an answer the model
+    corrects from, where an exception would end its turn."""
+
+    model_config = FIGURES
+
+    error: str
+
+
+def result_data(result: Any) -> Any:
+    """A tool's result as JSON data: its model dumped, dates and the like as
+    their JSON strings, what is already data as it is."""
+    return to_jsonable_python(result, fallback=str)
+
+
+def result_text(result: Any) -> str:
+    """A tool's result as the text a model or a trace reads: a string as
+    it is, anything else (a model, above all) as its JSON."""
+    if isinstance(result, str):
+        return result
+    return to_json(result, fallback=str).decode()
 
 
 _registry: dict[str, RegisteredTool] = {}

@@ -10,13 +10,21 @@ Lookups read the turn's owner, as the read surface does.
 
 from __future__ import annotations
 
-from typing import Any
-
 from app.core.db import get_async_session
 from app.core.tools import current_owner_user_id, register_tool
+from app.services.finance.schemas.answers import (
+    Bill,
+    BillCandidate,
+    BillCandidates,
+    Bills,
+    Categories,
+    CategoryRef,
+    Tags,
+    TagUse,
+)
 
 
-async def categories() -> dict[str, Any]:
+async def categories() -> Categories:
     """Every assignable category: 'id', 'name' and 'classification'
     ('expense' | 'income' | 'transfer'). The id is what a
     transaction.categorize proposal's 'category_id' takes.
@@ -27,15 +35,15 @@ async def categories() -> dict[str, Any]:
         rows = await ledger_queries.all_categories(
             session, owner_user_id=current_owner_user_id.get(), include_archived=False
         )
-    return {
-        "categories": [
-            {"id": row.id, "name": row.name, "classification": row.classification}
+    return Categories(
+        categories=[
+            CategoryRef(id=row.id, name=row.name, classification=row.classification)
             for row in rows
         ]
-    }
+    )
 
 
-async def bills() -> dict[str, Any]:
+async def bills() -> Bills:
     """Every live bill and income stream: 'id', 'name', 'direction'
     ('outflow' | 'inflow'), 'frequency', 'amount' (cents - ALWAYS a
     number, never null: the figure the user declared, else the one
@@ -54,26 +62,24 @@ async def bills() -> dict[str, Any]:
 
     async with get_async_session() as session:
         rows = await queries.active_streams(session, owner_user_id=current_owner_user_id.get())
-    return {
-        "bills": [
-            {
-                "id": s.id,
-                "name": s.name,
-                "direction": s.direction,
-                "frequency": s.frequency,
-                "amount": s.amount,
-                "amount_is_declared": s.expected_amount is not None,
-                "next_expected_date": (
-                    s.next_expected_date.isoformat() if s.next_expected_date else None
-                ),
-                "last_date": s.last_date.isoformat() if s.last_date else None,
-            }
+    return Bills(
+        bills=[
+            Bill(
+                id=s.id,
+                name=s.name,
+                direction=s.direction,
+                frequency=s.frequency,
+                amount=s.amount,
+                amount_is_declared=s.expected_amount is not None,
+                next_expected_date=s.next_expected_date,
+                last_date=s.last_date,
+            )
             for s in rows
         ]
-    }
+    )
 
 
-async def bill_candidates(stream_id: int) -> dict[str, Any]:
+async def bill_candidates(stream_id: int) -> BillCandidates:
     """The ranked shortlist of unclaimed transactions that could be this
     bill's payment - the same heuristic the app's manual match picker
     uses (direction, amount band, due-date window, name affinity).
@@ -85,22 +91,22 @@ async def bill_candidates(stream_id: int) -> dict[str, Any]:
 
     async with get_async_session() as session:
         rows = await recurring_match_candidates(session, stream_id, owner_user_id=current_owner_user_id.get())
-    return {
-        "stream_id": stream_id,
-        "candidates": [
-            {
-                "id": t.id,
-                "date": t.date_.isoformat(),
-                "payee": t.merchant_name or t.name,
-                "amount": t.amount,
-                "account_id": t.account_id,
-            }
+    return BillCandidates(
+        stream_id=stream_id,
+        candidates=[
+            BillCandidate(
+                id=t.id,
+                date=t.date_,
+                payee=t.merchant_name or t.name,
+                amount=t.amount,
+                account_id=t.account_id,
+            )
             for t in rows
         ],
-    }
+    )
 
 
-async def tags() -> dict[str, Any]:
+async def tags() -> Tags:
     """Every live tag with how many transactions wear it: 'id', 'name',
     'count'. Tags are the label axis ORTHOGONAL to categories (a
     "Business" tag on a Software-categorized row). A transaction.tag
@@ -110,7 +116,7 @@ async def tags() -> dict[str, Any]:
 
     async with get_async_session() as session:
         rows = await list_tags(session, owner_user_id=current_owner_user_id.get())
-    return {"tags": [{"id": t.id, "name": t.name, "count": count} for t, count in rows]}
+    return Tags(tags=[TagUse(id=t.id, name=t.name, count=count) for t, count in rows])
 
 
 # Built-in registration: importing this module makes the tools grantable

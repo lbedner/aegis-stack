@@ -8,8 +8,9 @@ registry at import time. A code-mode agent granted these names calls them
 as functions from inside its sandboxed script; a plain agent calls them
 as ordinary tools.
 
-Returns are plain JSON-safe dicts (cents-integer money, ISO dates) so
-values traverse the sandbox boundary without model-object baggage.
+Returns are typed models (``schemas.answers``: cents-integer money,
+dates): code mode hands its sandbox their JSON, and their schemas type the
+script's stubs.
 
 Owner scoping: a tool reads the turn's owner (``current_owner_user_id``),
 so a signed-in turn sees only its own household; a turn without one
@@ -53,6 +54,27 @@ from app.services.finance.domains.planning.goals import goal_metadata
 from app.services.finance.domains.planning.recurring import (
     queries as recurring_queries,
 )
+from app.services.finance.models.accounts import (
+    FinanceAccount,
+    FinanceLiabilityDetail,
+    FinanceValuation,
+)
+from app.services.finance.schemas.answers import (
+    AccountFacts,
+    BalanceSheet,
+    Cashflow,
+    Envelope,
+    GoalFacts,
+    Holding,
+    LedgerRow,
+    LiabilityFacts,
+    Lien,
+    MonthFlow,
+    PropertyFacts,
+    Quote,
+    Transactions,
+    Upcoming,
+)
 from app.services.finance.utils import current_date
 
 # Sized for years of a personal ledger (a few thousand rows/year); rows
@@ -72,20 +94,22 @@ def _months_back_start(today: date, span: int) -> date:
     return date(total_months // 12, total_months % 12 + 1, 1)
 
 
-async def ledger(months: int = 12, detail: str = "monthly") -> dict[str, Any]:
+async def ledger(months: int = 12, detail: str = "monthly") -> Cashflow | Transactions:
     """Cash flow from the transaction ledger.
 
     Args:
         months: How many months back to include (1-24).
         detail: "monthly" or "transactions".
 
-    Monthly detail returns a dict with key 'months': a list, oldest
-    first, of entries carrying 'month', 'income_cents', 'spend_cents'
-    and 'net_cents'. Transaction detail returns keys 'total', 'returned'
-    and 'transactions': a list, newest first, of entries carrying
-    'date', 'payee', 'amount_cents' (signed, negative = outflow),
-    'category', 'account' and 'pending'; fewer returned rows than
-    'total' means the page was capped.
+    Monthly detail answers 'months': a list, oldest first, of entries
+    carrying 'month', 'income_cents', 'spend_cents' and 'net_cents'.
+    Transaction detail answers 'total', 'returned' and 'transactions': a
+    list, newest first, of entries carrying 'id' (what a proposal's
+    'transaction_id' takes), 'date', 'payee', 'amount_cents' (signed,
+    negative = outflow), 'category', 'category_id', 'uncategorized'
+    (no category, or an import catch-all), 'account', 'tags' and
+    'pending'; fewer returned rows than 'total' means the page was
+    capped.
     """
     if detail == "monthly":
         span = max(1, min(int(months), 24))
@@ -93,17 +117,17 @@ async def ledger(months: int = 12, detail: str = "monthly") -> dict[str, Any]:
             rows = await monthly_cashflow(
                 session, owner_user_id=current_owner_user_id.get(), months=span
             )
-        return {
-            "months": [
-                {
-                    "month": row.month,
-                    "income_cents": row.income,
-                    "spend_cents": row.expense,
-                    "net_cents": row.net,
-                }
+        return Cashflow(
+            months=[
+                MonthFlow(
+                    month=row.month,
+                    income_cents=row.income,
+                    spend_cents=row.expense,
+                    net_cents=row.net,
+                )
                 for row in rows
             ]
-        }
+        )
     if detail != "transactions":
         raise ValueError('detail must be "monthly" or "transactions"')
 
@@ -131,45 +155,45 @@ async def ledger(months: int = 12, detail: str = "monthly") -> dict[str, Any]:
             session, [t.id for t, _name in rows if t.id is not None]
         )
     account_names = {account.id: account.name for account in account_rows}
-    return {
-        "total": total,
-        "returned": len(rows),
-        "transactions": [
-            {
-                # The id is what a transaction.categorize proposal's
-                # 'transaction_id' takes - names alone cannot propose.
-                "id": txn.id,
-                "date": txn.date_.isoformat(),
+    return Transactions(
+        total=total,
+        returned=len(rows),
+        transactions=[
+            LedgerRow(
+                # What a transaction.categorize proposal's transaction_id
+                # takes - names alone cannot propose.
+                id=txn.id,
+                date=txn.date_,
                 # Curated merchant name first - what the register shows -
                 # then the provider's merchant string, then the raw
                 # descriptor. A renamed payee that only lived in the
                 # curation layer was invisible to the assistant.
-                "payee": curated_name or txn.merchant_name or txn.name,
-                "amount_cents": txn.amount,
-                "category": category_names.get(txn.category_id),
-                "category_id": txn.category_id,
+                payee=curated_name or txn.merchant_name or txn.name,
+                amount_cents=txn.amount,
+                category=category_names.get(txn.category_id),
+                category_id=txn.category_id,
                 # True for BOTH shapes of uncategorized: no category at
                 # all, or the import catch-all bucket ("Uncategorized",
                 # "Misc", ...). Filtering category is None alone misses
                 # the second shape - a model burned four runs on that.
-                "uncategorized": txn.category_id is None
+                uncategorized=txn.category_id is None
                 or (category_names.get(txn.category_id) or "").lower()
                 in UNCATEGORIZED_CATEGORY_NAMES,
-                "account": account_names.get(txn.account_id),
+                account=account_names.get(txn.account_id),
                 # The label axis, orthogonal to category ("Business" on
                 # a Software row) - what tag rollups compute over.
-                "tags": sorted(t.name for t in tags_by_txn.get(txn.id, [])),
-                "pending": txn.pending,
-            }
+                tags=sorted(t.name for t in tags_by_txn.get(txn.id, [])),
+                pending=txn.pending,
+            )
             for txn, curated_name in rows
         ],
-    }
+    )
 
 
-async def accounts() -> dict[str, Any]:
+async def accounts() -> BalanceSheet:
     """The full balance sheet: every account with its balance and role.
 
-    Returns a dict with key 'accounts': a list where every entry
+    Answers 'accounts': a list where every entry
     carries 'id', 'name', 'account_type', 'classification',
     'balance_cents' (liabilities are negative = owed) and 'hidden'.
     Investment accounts add 'holdings', a list of entries with 'ticker',
@@ -221,7 +245,7 @@ async def accounts() -> dict[str, Any]:
 
     today = current_date()
     horizon = today + timedelta(days=_UPCOMING_WINDOW_DAYS)
-    upcoming_by_account: dict[int, list[dict[str, Any]]] = {}
+    upcoming_by_account: dict[int, list[Upcoming]] = {}
     for stream in streams:
         when = stream.next_expected_date
         if stream.account_id is None or when is None:
@@ -231,11 +255,7 @@ async def accounts() -> dict[str, Any]:
         amount = stream.amount
         sign = 1 if stream.direction == "inflow" else -1
         upcoming_by_account.setdefault(stream.account_id, []).append(
-            {
-                "name": stream.name,
-                "date": when.isoformat(),
-                "amount_cents": sign * abs(amount),
-            }
+            Upcoming(name=stream.name, date=when, amount_cents=sign * abs(amount))
         )
 
     balances = {
@@ -264,123 +284,119 @@ async def accounts() -> dict[str, Any]:
             )
         )
 
-    holdings_by_account: dict[int, list[dict[str, Any]]] = {}
+    holdings_by_account: dict[int, list[Holding]] = {}
     for holding, security, market_value_cents in holdings:
         holdings_by_account.setdefault(holding.account_id, []).append(
-            {
-                "ticker": security.ticker if security else None,
-                "name": security.name if security else None,
-                "quantity": holding.quantity_e8 / 1e8,
-                "market_value_cents": market_value_cents,
-            }
+            Holding(
+                ticker=security.ticker if security else None,
+                name=security.name if security else None,
+                quantity=holding.quantity_e8 / 1e8,
+                market_value_cents=market_value_cents,
+            )
         )
 
-    out: list[dict[str, Any]] = []
-    for account in account_rows:
-        entry: dict[str, Any] = {
-            "id": account.id,
-            "name": account.name,
-            "account_type": account.account_type,
-            "classification": account.classification,
-            # Same rule the accounts tab renders: authoritative balance
-            # writes win; a never-written 0 falls back to the register sum.
-            "balance_cents": balances[account.id],
-            "hidden": account.is_hidden,
-        }
-        envelope_meta = envelope_metadata(account.metadata_)
-        if envelope_meta is not None:
-            # The domain field is named monthly_credit, but the amount is
-            # booked once per cadence period - a "monthly" key next to
-            # cadence="weekly" reads as a contradiction, and models have
-            # mis-stated the allowance because of it.
-            entry["envelope"] = {
-                "credit_cents": envelope_meta.monthly_credit,
-                "cadence": envelope_meta.cadence,
-                "auto_credit": envelope_meta.auto_credit,
-            }
-        property_meta = property_metadata(account.metadata_)
-        if property_meta is not None:
-            # Provenance rides with the number: an owner's estimate and an
-            # appraisal are not interchangeable in a lending conversation,
-            # and a bare figure invites the model to present one as the other.
-            valuation = valuation_rows.get(account.id)
-            entry["property"] = {
-                "kind": property_meta.property_kind,
-                "valuation_source": (
-                    valuation.source
-                    if valuation is not None
-                    else property_meta.valuation_source
+    return BalanceSheet(
+        accounts=[
+            AccountFacts(
+                id=account.id,
+                name=account.name,
+                account_type=account.account_type,
+                classification=account.classification,
+                # Same rule the accounts tab renders: authoritative balance
+                # writes win; a never-written 0 falls back to the register sum.
+                balance_cents=balances[account.id],
+                hidden=account.is_hidden,
+                envelope=_envelope(account.metadata_),
+                property=_property(
+                    account,
+                    valuation_rows.get(account.id),
+                    sorted(liens_by_property.get(account.id, [])),
+                    balances[account.id],
                 ),
-                "valuation_as_of": (
-                    valuation.as_of_date.isoformat()
-                    if valuation is not None
-                    else property_meta.valuation_as_of.isoformat()
-                    if property_meta.valuation_as_of
-                    else None
-                ),
-                "is_estimate": (
-                    valuation.is_estimate if valuation is not None else None
-                ),
-                "purchase_price_cents": property_meta.purchase_price,
-                "purchase_date": (
-                    property_meta.purchase_date.isoformat()
-                    if property_meta.purchase_date
-                    else None
-                ),
-                "ownership_share_bps": property_meta.ownership_share_bps,
-                "include_in_net_worth": property_meta.include_in_net_worth,
-            }
-            liens = sorted(liens_by_property.get(account.id, []))
-            position = secured_position(
-                balances[account.id], [owed for _, _, owed, _ in liens]
+                goal=_goal(account.metadata_),
+                holdings=holdings_by_account.get(account.id),
+                upcoming=upcoming_by_account.get(account.id),
+                liability=_liability(liabilities.get(account.id)),
             )
-            if position is not None:
-                # Absent entirely when nothing is linked: an unlinked
-                # property must not read as a 100%-equity claim.
-                entry["property"]["equity_cents"] = position.equity
-                entry["property"]["ltv_bps"] = position.ltv_bps
-                entry["property"]["liens"] = [
-                    {"account": name, "lien_position": lien_position}
-                    for _, name, _, lien_position in liens
-                ]
-        goal_meta = goal_metadata(account.metadata_)
-        if goal_meta is not None:
-            entry["goal"] = {
-                "target_cents": goal_meta.target_amount,
-                "status": goal_meta.status,
-                "monthly_contribution_cents": goal_meta.monthly_contribution,
-                "priority": goal_meta.priority,
-            }
-        if account.id in holdings_by_account:
-            entry["holdings"] = holdings_by_account[account.id]
-        if account.id in upcoming_by_account:
-            entry["upcoming"] = upcoming_by_account[account.id]
-        detail = liabilities.get(account.id)
-        if detail is not None:
-            entry["liability"] = {
-                "type": detail.liability_type,
-                "interest_rate_bps": detail.interest_rate_bps,
-                "minimum_payment_cents": detail.minimum_payment_amount,
-                "next_payment_due": (
-                    detail.next_payment_due_date.isoformat()
-                    if detail.next_payment_due_date
-                    else None
-                ),
-                "last_statement_balance_cents": detail.last_statement_balance,
-                "last_payment_cents": detail.last_payment_amount,
-                "last_payment_date": (
-                    detail.last_payment_date.isoformat()
-                    if detail.last_payment_date
-                    else None
-                ),
-                "ytd_interest_paid_cents": detail.ytd_interest_paid,
-                "ytd_principal_paid_cents": detail.ytd_principal_paid,
-            }
-        out.append(entry)
-    return {"accounts": out}
+            for account in account_rows
+        ]
+    )
 
 
-async def quote(ticker: str) -> dict[str, Any]:
+def _envelope(metadata: dict[str, Any] | None) -> Envelope | None:
+    meta = envelope_metadata(metadata)
+    if meta is None:
+        return None
+    # The domain field is named monthly_credit, but the amount is booked
+    # once per cadence period - a "monthly" key next to cadence="weekly"
+    # reads as a contradiction, and models have mis-stated the allowance
+    # because of it.
+    return Envelope(
+        credit_cents=meta.monthly_credit, cadence=meta.cadence, auto_credit=meta.auto_credit
+    )
+
+
+def _property(
+    account: FinanceAccount,
+    valuation: FinanceValuation | None,
+    liens: list[tuple[int, str, int, int | None]],
+    balance: int,
+) -> PropertyFacts | None:
+    meta = property_metadata(account.metadata_)
+    if meta is None:
+        return None
+    # Provenance rides with the number: an owner's estimate and an
+    # appraisal are not interchangeable in a lending conversation, and a
+    # bare figure invites the model to present one as the other.
+    position = secured_position(balance, [owed for _, _, owed, _ in liens])
+    # Equity, LTV and liens are absent entirely when nothing is linked: an
+    # unlinked property must not read as a 100%-equity claim.
+    return PropertyFacts(
+        kind=meta.property_kind,
+        valuation_source=valuation.source if valuation else meta.valuation_source,
+        valuation_as_of=valuation.as_of_date if valuation else meta.valuation_as_of,
+        is_estimate=valuation.is_estimate if valuation else None,
+        purchase_price_cents=meta.purchase_price,
+        purchase_date=meta.purchase_date,
+        ownership_share_bps=meta.ownership_share_bps,
+        include_in_net_worth=meta.include_in_net_worth,
+        equity_cents=position.equity if position else None,
+        ltv_bps=position.ltv_bps if position else None,
+        liens=[Lien(account=name, lien_position=at) for _, name, _, at in liens]
+        if position
+        else None,
+    )
+
+
+def _goal(metadata: dict[str, Any] | None) -> GoalFacts | None:
+    meta = goal_metadata(metadata)
+    if meta is None:
+        return None
+    return GoalFacts(
+        target_cents=meta.target_amount,
+        status=meta.status,
+        monthly_contribution_cents=meta.monthly_contribution,
+        priority=meta.priority,
+    )
+
+
+def _liability(detail: FinanceLiabilityDetail | None) -> LiabilityFacts | None:
+    if detail is None:
+        return None
+    return LiabilityFacts(
+        type=detail.liability_type,
+        interest_rate_bps=detail.interest_rate_bps,
+        minimum_payment_cents=detail.minimum_payment_amount,
+        next_payment_due=detail.next_payment_due_date,
+        last_statement_balance_cents=detail.last_statement_balance,
+        last_payment_cents=detail.last_payment_amount,
+        last_payment_date=detail.last_payment_date,
+        ytd_interest_paid_cents=detail.ytd_interest_paid,
+        ytd_principal_paid_cents=detail.ytd_principal_paid,
+    )
+
+
+async def quote(ticker: str) -> Quote:
     """Latest stored closing price for a ticker in the security catalog.
 
     Args:
@@ -390,10 +406,10 @@ async def quote(ticker: str) -> dict[str, Any]:
     async with get_async_session() as session:
         security = await investment_queries.security_by_ticker(session, symbol)
         if security is None or security.id is None:
-            return {"found": False, "ticker": symbol}
+            return Quote(found=False, ticker=symbol)
         price = await investment_queries.latest_price_for_security(session, security.id)
     if price is None:
-        return {"found": False, "ticker": symbol}
+        return Quote(found=False, ticker=symbol)
     # Normalize to cents in integer arithmetic regardless of the row's
     # stored scale; float exponents would drift on sub-cent scales.
     if price.price_scale > 2:
@@ -402,13 +418,9 @@ async def quote(ticker: str) -> dict[str, Any]:
     else:
         close_cents = price.close_price * 10 ** (2 - price.price_scale)
     as_of: date = price.price_date
-    return {
-        "found": True,
-        "ticker": symbol,
-        "name": security.name,
-        "close_cents": close_cents,
-        "as_of": as_of.isoformat(),
-    }
+    return Quote(
+        found=True, ticker=symbol, name=security.name, close_cents=close_cents, as_of=as_of
+    )
 
 
 # Built-in registration: importing this module makes the tools grantable

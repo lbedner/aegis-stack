@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from app.core.tools import get_tool
+from app.core.tools import get_tool, result_data
 from app.services.system import db_query, db_rows, tools
 from tests._audit import Recorded
 
@@ -33,7 +33,7 @@ async def test_a_statement_answers_with_its_rows_and_is_audited(
     monkeypatch.setattr(db_query, "run", lambda sql: answer)
     sql = "SELECT kind, count(*) AS runs FROM job_execution GROUP BY kind"
 
-    found = await tools.query(sql)
+    found = result_data(await tools.query(sql))
 
     assert found == {
         "columns": ["kind", "runs"],

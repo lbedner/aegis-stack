@@ -282,14 +282,38 @@ def dependent_files(
     from .components import COMPONENTS
     from .services import SERVICES
 
+    specs = {**SERVICES, **COMPONENTS}
+    # Every gate is a spec's own flag; other group names describe a variant
+    # (``scheduler_persistence``) and gate nothing.
+    gates = {AnswerKeys.include_key(name) for name in specs}
     key = AnswerKeys.include_key(component)
     paths = [
         path
-        for name, spec in {**SERVICES, **COMPONENTS}.items()
+        for name, spec in specs.items()
         if name != component and answers.get(AnswerKeys.include_key(name))
         for path in (spec.files.extras or {}).get(key, [])
+        if _other_gates_hold(spec, key, path, answers, gates)
     ]
     return _expand_directories_to_files(paths) if expand else paths
+
+
+def _other_gates_hold(
+    spec: Any, key: str, path: str, answers: dict[str, Any], gates: set[str]
+) -> bool:
+    """Whether every *other* gate on ``path`` is also enabled.
+
+    A spec may list one file under two answer keys, meaning it needs both:
+    deploy's off-site copy sits under ``include_database`` and
+    ``include_scheduler``, since it is the scheduled backup sent onwards.
+    Honouring only the group that brought the file in wrote ``offsite.py``
+    into a deploy stack with no scheduler, where the backup module it
+    imports renders empty (aegis issue #1873).
+    """
+    for group, files in (spec.files.extras or {}).items():
+        gates_this = group != key and group in gates and path in files
+        if gates_this and not answers.get(group):
+            return False
+    return True
 
 
 # The one extras group that is a backend variant, not an answer to gate on.

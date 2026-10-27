@@ -10,6 +10,7 @@ from datetime import date
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.tools import result_data
 from app.services.change_queue import tools as change_tools
 from app.services.finance.service import FinanceService
 from tests._change_queue import queue_tools_on
@@ -69,10 +70,10 @@ async def test_propose_is_the_only_write_and_moves_nothing(
     with memory_user(
         "1", owner_user_id=1, agent_slug="finance-assistant", conversation_id="conv-9"
     ):
-        result = await change_tools.propose(
+        result = result_data(await change_tools.propose(
             "transaction.categorize",
             {"transaction_id": txn.id, "category_id": cat.id},
-        )
+        ))
 
     assert result["status"] == "pending"
     assert result["change_type"] == "transaction.categorize"
@@ -124,7 +125,7 @@ async def test_pending_hands_the_model_a_line_per_row_not_a_table(
             "transaction.categorize",
             {"transaction_id": txn.id, "category_id": cat.id},
         )
-        result = await change_tools.pending()
+        result = result_data(await change_tools.pending())
 
     (entry,) = result["pending"]
     assert "display" not in entry
@@ -165,13 +166,13 @@ async def test_pending_also_shows_what_the_user_decided(
     with memory_user(
         "1", owner_user_id=1, agent_slug="finance-assistant", conversation_id="conv-9"
     ):
-        filed = await change_tools.propose(
+        filed = result_data(await change_tools.propose(
             "transaction.categorize",
             {"transaction_id": txn.id, "category_id": cat.id},
-        )
+        ))
         await change_queue.reject(session, filed["pending_change_id"], owner_user_id=None)
         await session.commit()
-        result = await change_tools.pending()
+        result = result_data(await change_tools.pending())
 
     assert result["pending"] == []
     (entry,) = result["decided"]
@@ -222,7 +223,7 @@ async def test_pending_narrows_to_the_card_asked_about(
                 "transaction.categorize",
                 {"transaction_id": txn.id, "category_id": cat.id},
             )
-        result = await change_tools.pending(about="state farm")
+        result = result_data(await change_tools.pending(about="state farm"))
 
     assert [e["summary"].split(" /")[0] for e in result["pending"]] == [
         "Transaction: State Farm Auto ($168.40 on Jul 5, 2026)"
@@ -259,12 +260,12 @@ async def test_pending_reports_a_withdrawal_as_withdrawn(
     with memory_user(
         "1", owner_user_id=1, agent_slug="finance-assistant", conversation_id="conv-9"
     ):
-        filed = await change_tools.propose(
+        filed = result_data(await change_tools.propose(
             "transaction.categorize",
             {"transaction_id": txn.id, "category_id": cat.id},
-        )
+        ))
         await change_tools.withdraw(filed["pending_change_id"], reason="Superseded.")
-        result = await change_tools.pending(about="state farm")
+        result = result_data(await change_tools.pending(about="state farm"))
 
     (entry,) = result["decided"]
     assert entry["status"] == "withdrawn"
@@ -304,8 +305,8 @@ async def test_pending_lists_cards_not_rows(
     with memory_user(
         "1", owner_user_id=1, agent_slug="finance-assistant", conversation_id="conv-9"
     ):
-        filed = await change_tools.propose_many("transaction.categorize", payloads)
-        result = await change_tools.pending(about="state farm")
+        filed = result_data(await change_tools.propose_many("transaction.categorize", payloads))
+        result = result_data(await change_tools.pending(about="state farm"))
 
     (card,) = result["pending"]
     assert card["batch_id"] == filed["batch_id"]

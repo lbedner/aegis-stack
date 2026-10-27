@@ -9,7 +9,6 @@ counts and its stop reason, under one spelling for every provider."""
 from collections.abc import AsyncIterator, Sequence
 from dataclasses import dataclass, field
 import inspect
-import json
 from typing import Any
 
 from langchain_core.messages import AIMessageChunk, ToolMessage
@@ -17,9 +16,10 @@ from langchain_core.tools import StructuredTool
 
 from app.core.log import logger
 {%- if ai_backend != "memory" %}
+from app.core.tools import Refused, result_text
 from app.services.ai.domains.chat.user_memory import memory_user
 {%- else %}
-from app.core.tools import acting_as
+from app.core.tools import Refused, acting_as, result_text
 {%- endif %}
 
 # The most rounds of tool calls one turn runs; the last round's text is
@@ -142,11 +142,11 @@ async def _answer(tools: dict[str, StructuredTool], call: dict[str, Any]) -> str
     fails says why, as Pydantic AI hands a model its tool's error."""
     tool = tools.get(call["name"])
     if tool is None:
-        return f"No tool named {call['name']!r}."
+        return result_text(Refused(error=f"No tool named {call['name']!r}."))
     try:
         result = await tool.ainvoke(call.get("args") or {})
     except Exception as exc:
         logger.warning("Tool call failed", tool=call["name"], error=str(exc))
-        return f"{type(exc).__name__}: {exc}"
-    return result if isinstance(result, str) else json.dumps(result, default=str)
+        return result_text(Refused(error=f"{type(exc).__name__}: {exc}"))
+    return result_text(result)
 {%- endif %}

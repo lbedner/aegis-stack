@@ -42,7 +42,10 @@ def test_a_function_opening_its_own_session_is_flagged(tmp_path: Path) -> None:
 
 
 def test_entry_points_may_open_the_session(tmp_path: Path) -> None:
-    for module in ("notes/jobs.py", "notes/health.py", "notes/health_store.py"):
+    """A job, a health check and an agent's tool have no caller holding a
+    session to hand down: each opens the one."""
+    modules = ("notes/jobs.py", "notes/health.py", "notes/health_store.py", "notes/tools.py")
+    for module in modules:
         _write(
             tmp_path,
             module,
@@ -52,6 +55,17 @@ def test_entry_points_may_open_the_session(tmp_path: Path) -> None:
                     await prune(session)
             """,
         )
+    _write(
+        tmp_path,
+        "notes/lookups.py",
+        """
+        async def note_tags() -> NoteTags:
+            async with get_async_session() as session:
+                return await tags(session)
+
+        register_tool("note_tags", note_tags, effect="read")
+        """,
+    )
     assert _findings(tmp_path)["takes-session"] == []
 
 
@@ -70,8 +84,9 @@ def test_an_optional_session_is_flagged(tmp_path: Path) -> None:
 
 def test_a_record_handed_back_as_a_dict_is_flagged(tmp_path: Path) -> None:
     """A model, not keys no type checker holds; a label's counts (``dict[str,
-    int]``) are figures, not a record, and a tool's answer is JSON for the
-    model."""
+    int]``) are figures, not a record. A registered tool's answer is held
+    too, whether it reads the database or not: its schema is what code mode
+    and an MCP client are typed by."""
     _write(
         tmp_path,
         "notes/queries.py",
@@ -96,16 +111,25 @@ def test_a_record_handed_back_as_a_dict_is_flagged(tmp_path: Path) -> None:
         async def note_counts(session: AsyncSession) -> dict[str, Any]:
             return (await summary(session)).model_dump(mode="json")
 
-        async def note_tags(session: AsyncSession) -> dict[str, Any]:
-            return {}
+        async def note_tags(session: AsyncSession) -> NoteTags:
+            return NoteTags()
+
+        async def note_words(text: str) -> dict[str, Any]:
+            return {"words": len(text.split())}
+
+        def _plain(text: str) -> dict[str, Any]:
+            return {"text": text}
 
         register_tool(
             "note_counts", note_counts, description="Notes", effect="read"
         )
         register_tool("note_tags", func=note_tags, effect="read")
+        register_tool("note_words", note_words, effect="read")
         """,
     )
     assert _findings(tmp_path)["returns-model"] == [
+        "notes/lookups.py: note_counts",
+        "notes/lookups.py: note_words",
         "notes/queries.py: counts",
         "notes/queries.py: maybe",
     ]

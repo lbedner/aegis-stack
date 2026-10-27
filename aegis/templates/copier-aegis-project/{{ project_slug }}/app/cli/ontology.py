@@ -14,7 +14,7 @@ import typer
 
 from app.core.ontology import exports, with_app
 from app.core.ontology.model import stack
-from app.core.tools import acting_as
+from app.core.tools import acting_as, result_data
 from app.i18n import lazy_t, t
 
 app = typer.Typer(name="ontology", help=lazy_t("ontology.help"))
@@ -63,7 +63,7 @@ async def _ask(**query: Any) -> None:
                 found = await tools.ontology(**query)
             except ValueError as exc:
                 raise typer.BadParameter(str(exc)) from None
-    typer.echo(json.dumps(found, indent=2, default=str))
+    typer.echo(json.dumps(result_data(found), indent=2))
 
 
 @app.command("find", help=lazy_t("ontology.help_find"))

@@ -10,7 +10,7 @@ import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.ontology.model import ContainerNode, EdgeKind, SystemModel
-from app.core.tools import acting_as
+from app.core.tools import acting_as, result_data
 from app.services.ai.domains.chat import cards, path_card
 from app.services.ai.domains.chat.cards import card_stage, draw_card
 from app.services.ai.domains.chat.path_card import PathAsk, PathCard
@@ -153,8 +153,8 @@ async def test_drawn_it_is_stored_staged_and_says_why_when_it_cannot_be(
 
     monkeypatch.setattr(path_card.staged_paths, "route", route)
     with memory_user("0", conversation_id="conv-1", admin=True), card_stage():
-        drawn = await draw_card("path", {"title": "Me", "route": "GET /me"})
-        refused = await draw_card("path", {"title": "x", "route": "GET /nope"})
+        drawn = result_data(await draw_card("path", {"title": "Me", "route": "GET /me"}))
+        refused = result_data(await draw_card("path", {"title": "x", "route": "GET /nope"}))
     stored = await async_db_session.get(ChatCard, drawn["id"])
     assert stored is not None and stored.payload["path"]["path"] == KEPT.path
     assert "GET /nope" in refused["error"]

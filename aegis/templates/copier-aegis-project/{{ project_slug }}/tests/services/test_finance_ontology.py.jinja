@@ -12,6 +12,7 @@ import pytest
 
 from app.core.config import settings
 from app.core.ontology import system_model
+from app.core.tools import result_data
 from app.services.ai.domains.chat.prompts import build_system_prompt
 from app.services.finance.domains.detection.analyst import prompts
 from app.services.system import tools
@@ -27,7 +28,11 @@ def ask(app: FastAPI, client: TestClient, monkeypatch: pytest.MonkeyPatch) -> As
     model = system_model(app)
     monkeypatch.setattr("app.core.ontology.system.current", lambda: model)
     monkeypatch.setattr(settings, "AUTH_ENABLED", True)
-    return tools.ontology
+
+    async def asked(**kwargs: Any) -> dict[str, Any]:
+        return result_data(await tools.ontology(**kwargs))
+
+    return asked
 
 
 # What the finance prompt said of the data before the model said it: each

@@ -1,11 +1,10 @@
 """Meetings' tools (``app.core.tools.load_tools``): search what was said in
 the meetings, for Overseer's chat or any agent granted it. Read-only."""
 
-from typing import Any
-
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
 
 from app.core.db import get_async_session
+from app.core.figures import FIGURES
 from app.core.formatting import format_clock
 from app.core.tools import current_owner_user_id, register_tool
 from app.services.meetings.domains.search.service import hit_link, search_meetings
@@ -15,7 +14,7 @@ from app.services.shared.deps import caller_is_admin
 class MeetingHit(BaseModel):
     """One place a search found the words, as the tool hands it over."""
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = FIGURES
 
     meeting_id: int
     # "Transcript", or the part of the notes ("Summary", "Decisions", ...).
@@ -27,7 +26,7 @@ class MeetingHit(BaseModel):
     link: str
 
 
-async def meetings_search(query: str, limit: int = 20) -> list[dict[str, Any]]:
+async def meetings_search(query: str, limit: int = 20) -> list[MeetingHit]:
     """Search what was said in the user's meetings (an admin's: everyone's)
     and in their notes, by words, not meaning: give the few words that
     would have been said ("pricing", "launch date"), not a question. Newest
@@ -47,7 +46,7 @@ async def meetings_search(query: str, limit: int = 20) -> list[dict[str, Any]]:
             at=None if hit.at is None else format_clock(hit.at),
             text=hit.text,
             link=hit_link(hit, overseer=admin),
-        ).model_dump(mode="json")
+        )
         for hit in hits
     ]
 

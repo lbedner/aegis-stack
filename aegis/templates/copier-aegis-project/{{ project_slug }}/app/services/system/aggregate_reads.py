@@ -3,12 +3,34 @@
 the app (``listed``), since an agent reads what its map names. The
 figures are an operator's: the tool, and the map's lines, an admin's."""
 
-from typing import Any
+from pydantic import BaseModel
 
 from app.core import aggregates, ranges
+from app.core.figures import FIGURES
+from app.core.tools import register_tool
 
 
-async def aggregate(name: str | None = None, days: int | None = None) -> dict[str, Any]:
+class Named(BaseModel):
+    """An aggregate there is, and the question it answers."""
+
+    model_config = FIGURES
+
+    name: str
+    about: str
+
+
+class Listed(BaseModel):
+    """The aggregates there are, and the windows ``days`` takes."""
+
+    model_config = FIGURES
+
+    aggregates: list[Named]
+    windows: list[int]
+
+
+async def aggregate(
+    name: str | None = None, days: int | None = None
+) -> Listed | BaseModel:
     """What each part of the app holds, as figures: counts and sums grouped
     by label, never a row. No ``name``: the aggregates there are
     (``<part>.<name>``), the question each answers, and the windows
@@ -16,15 +38,24 @@ async def aggregate(name: str | None = None, days: int | None = None) -> dict[st
     figures over the last ``days``. Sort, join or chart them in the script;
     only the answer need reach the model."""
     if name is None:
-        return {
-            "aggregates": [
-                {"name": key, "about": one.about}
+        return Listed(
+            aggregates=[
+                Named(name=key, about=one.about)
                 for key, one in sorted(aggregates.declared().items())
             ],
-            "windows": list(ranges.DAYS),
-        }
-    return (await aggregates.read(name, days)).model_dump(mode="json")
+            windows=list(ranges.DAYS),
+        )
+    return await aggregates.read(name, days)
 
+
+
+register_tool(
+    "aggregate",
+    aggregate,
+    description="What each part holds: counts and sums by label, never rows",
+    effect="read",
+    admin=True,
+)
 
 def listed() -> str:
     """The aggregates there are, as an agent's map names them; empty where

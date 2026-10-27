@@ -3,14 +3,15 @@
 A service is a folder convention, not a runtime object, so its functions
 are read with ``ast`` rather than imported: deterministic, and no import
 side effects. An instance is a service function that touches the
-database, either by taking a session or by opening one.
+database, either by taking a session or by opening one, or a registered
+tool (whose answer is held to a model whatever it reads).
 
 The rule is the unit of work: the caller (a route's dependency, a job, a
 task) opens one session and hands it down; a service function takes it
 as a required parameter and never opens its own. On SQLite a second
 session inside a request waits on the first one's write lock and fails
 with "database is locked". Entry points with no caller (``jobs.py``,
-``health.py``) open the one session and pass it on.
+``health.py``, an agent's tool) open the one session and pass it on.
 """
 
 from dataclasses import dataclass
@@ -29,17 +30,15 @@ from app.services.system.patterns import (
 
 SERVICES = "app/services"  # the services' folder, from the project's root
 # Modules whose functions start a unit of work themselves (and any
-# ``health_*`` check module).
-ENTRY_POINTS = frozenset({"jobs", "health"})
+# ``health_*`` check module, and any registered tool).
+ENTRY_POINTS = frozenset({"jobs", "health", "tools"})
 OPENERS = frozenset(
     {"get_async_session", "db_session", "AsyncSessionLocal", "SessionLocal"}
 )
 SESSION_NAMES = frozenset({"session", "db"})
 # A record handed back by its keys, which no type checker holds: a label's
-# counts (``dict[str, int]``) are figures, not a record. A tool's answer is
-# JSON for the model: a registered tool, or a tools module's plumbing.
+# counts (``dict[str, int]``) are figures, not a record.
 RECORDS = frozenset({"dict", "dict[str,Any]", "list[dict[str,Any]]"})
-TOOLS = "tools"
 
 
 @dataclass(frozen=True)
@@ -54,7 +53,7 @@ class ServiceFunction:
     statements: int
     source: SourceText
     returns: str | None
-    tool: bool  # an agent's tool, or its tools module's plumbing
+    tool: bool  # registered: an agent's or an MCP client's
 
     @property
     def service(self) -> str:
@@ -68,19 +67,20 @@ class ServiceFunction:
     @property
     def entry_point(self) -> bool:
         stem = Path(self.path).stem
-        return stem in ENTRY_POINTS or stem.startswith("health_")
+        return self.tool or stem in ENTRY_POINTS or stem.startswith("health_")
 
 
 def _function(function: Function, module: Module, path: str) -> ServiceFunction | None:
-    """``function`` as the pattern reads it, if it touches the database:
-    takes a session (by name or annotation) or opens one."""
+    """``function`` as the pattern reads it, if it touches the database
+    (takes a session, by name or annotation, or opens one) or is a tool."""
     params = [
         p
         for p in function.params
         if p.name in SESSION_NAMES or "Session" in (p.annotation or "")
     ]
     opens = bool(function.calls & OPENERS)
-    if not params and not opens:
+    tool = function.qualname in module.tools
+    if not params and not opens and not tool:
         return None
     return ServiceFunction(
         path=path,
@@ -93,7 +93,7 @@ def _function(function: Function, module: Module, path: str) -> ServiceFunction 
         statements=function.statements,
         source=SourceText.of(function, module.lines, f"{SERVICES}/{path}"),
         returns=function.returns,
-        tool=Path(path).stem == TOOLS or function.qualname in module.tools,
+        tool=tool,
     )
 
 
@@ -153,8 +153,8 @@ SERVICE = Pattern(
             "Takes its session",
             "A second session inside a request waits on the first one's write "
             'lock (SQLite: "database is locked") and splits one unit of work in '
-            "two. Entry points with no caller (jobs.py, health.py) open the one "
-            "session themselves.",
+            "two. Entry points with no caller (jobs.py, health.py, an agent's "
+            "tool) open the one session themselves.",
             lambda f: not f.opens,
             exempt=lambda f: f.entry_point,
             gate=True,
@@ -165,9 +165,9 @@ SERVICE = Pattern(
             "A dict's keys are a contract no type checker holds: a renamed key "
             "breaks the health check, the API or an agent at run time. A read "
             "returns a typed model (FIGURES where an agent, the API or Overseer "
-            "reads it); a label's counts may stay a dict[str, int].",
+            "reads it); a label's counts may stay a dict[str, int]. A tool's "
+            "answer too: its schema types code mode's script and an MCP client.",
             lambda f: not _record(f.returns),
-            exempt=lambda f: f.tool,
             gate=True,
             action="Return a model with model_config = FIGURES.",
         ),

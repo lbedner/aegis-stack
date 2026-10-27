@@ -34,7 +34,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field, ValidationError
 
-from app.core.tools import register_tool
+from app.core.figures import FIGURES
+from app.core.tools import Refused, register_tool
 
 # Bounded: readings are context re-injected EVERY turn, so an unbounded
 # list would slowly crowd out the conversation itself. Oldest go first.
@@ -84,9 +85,18 @@ def reading_stage() -> Iterator[list[Reading]]:
         _staged.reset(token)
 
 
+class Recorded(BaseModel):
+    """What a reading kept: how many items, under what title."""
+
+    model_config = FIGURES
+
+    recorded: int
+    title: str
+
+
 async def record_reading(
     title: str, items: list[dict[str, Any]], kind: str = "receipt"
-) -> dict[str, Any]:
+) -> Recorded | Refused:
     """Durably record what you just read out of an attached image.
 
     Call this THE MOMENT you finish reading a receipt, order, or
@@ -100,13 +110,13 @@ async def record_reading(
     an 'error' explaining exactly what to fix."""
     staged = _staged.get()
     if staged is None:
-        return {"error": "No conversation turn is active; nothing was recorded."}
+        return Refused(error="No conversation turn is active; nothing was recorded.")
     try:
         reading = Reading(kind=kind, title=title, items=items)
     except ValidationError as e:
-        return {"error": f"invalid reading: {e}"}
+        return Refused(error=f"invalid reading: {e}")
     staged.append(reading)
-    return {"recorded": len(reading.items), "title": reading.title}
+    return Recorded(recorded=len(reading.items), title=reading.title)
 
 
 async def merge_staged_readings(

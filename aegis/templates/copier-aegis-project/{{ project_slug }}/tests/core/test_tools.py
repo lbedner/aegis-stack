@@ -5,15 +5,19 @@ serve them without the AI service.
 """
 
 from collections.abc import Callable
+from datetime import datetime
 import importlib
 import json
 from pathlib import Path
 import subprocess
 import sys
 
+from pydantic import BaseModel
 import pytest
 
 import app
+from app.core.chat_transcript import card_component
+from app.core.figures import FIGURES
 from app.core.tools import (
     get_tool,
     load_tools,
@@ -21,6 +25,8 @@ from app.core.tools import (
     native_write_tool_names,
     register_tool,
     registered_tool_names,
+    result_data,
+    result_text,
     unregister_tool,
 )
 
@@ -214,3 +220,35 @@ def test_a_services_tools_module_loads_without_editing_anything(
     load_tools()
 
     assert "demo_lookup" in registered_tool_names()
+
+
+class _Proposed(BaseModel):
+    model_config = FIGURES
+
+    pending_change_id: int
+    change_type: str
+    at: datetime
+
+
+def test_a_tools_model_reads_back_as_its_json() -> None:
+    """A tool hands back a model: every surface that keeps or shows its
+    result as text (the trace, a LangChain turn) gets its JSON, never its
+    repr."""
+    proposed = _Proposed(
+        pending_change_id=7, change_type="tag", at=datetime(2026, 10, 26)
+    )
+    shape = {"pending_change_id": 7, "change_type": "tag", "at": "2026-10-26T00:00:00"}
+
+    assert json.loads(result_text(proposed)) == shape
+    assert result_data([proposed]) == [shape]
+    assert result_text("refused: no such tag") == "refused: no such tag"
+
+
+def test_a_card_tools_model_still_names_its_card() -> None:
+    proposed = _Proposed(
+        pending_change_id=7, change_type="tag", at=datetime(2026, 10, 26)
+    )
+
+    marker = card_component("propose", proposed)
+
+    assert isinstance(marker, dict) and marker["pending_change_id"] == 7

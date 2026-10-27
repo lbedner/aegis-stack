@@ -11,6 +11,7 @@ import importlib.util
 
 import pytest
 
+from app.core.tools import result_data
 from app.services.ai.domains.chat.readings import (
     Reading,
     ReadingItem,
@@ -39,9 +40,9 @@ class TestRecordReading:
     @pytest.mark.asyncio
     async def test_a_reading_stages_inside_a_turn(self) -> None:
         with reading_stage() as staged:
-            result = await record_reading(
+            result = result_data(await record_reading(
                 title="Target order 8/27", items=_ITEMS, kind="receipt"
-            )
+            ))
 
         assert result["recorded"] == 3
         assert len(staged) == 1
@@ -50,16 +51,16 @@ class TestRecordReading:
 
     @pytest.mark.asyncio
     async def test_recording_outside_a_turn_reports_not_saves(self) -> None:
-        result = await record_reading(title="x", items=_ITEMS)
+        result = result_data(await record_reading(title="x", items=_ITEMS))
 
         assert "error" in result
 
     @pytest.mark.asyncio
     async def test_bad_items_are_rejected_with_a_correctable_error(self) -> None:
         with reading_stage() as staged:
-            result = await record_reading(
+            result = result_data(await record_reading(
                 title="x", items=[{"label": "", "amount_cents": -5}]
-            )
+            ))
 
         assert "error" in result
         assert staged == []
@@ -67,7 +68,7 @@ class TestRecordReading:
     @pytest.mark.asyncio
     async def test_empty_items_are_rejected(self) -> None:
         with reading_stage() as staged:
-            result = await record_reading(title="x", items=[])
+            result = result_data(await record_reading(title="x", items=[]))
 
         assert "error" in result
         assert staged == []

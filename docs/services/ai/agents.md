@@ -65,14 +65,26 @@ The database decides WHICH tools an agent may call; Python decides WHAT each nam
 
 ```python
 # app/services/orders/tools.py
+from pydantic import BaseModel
+
+from app.core.figures import FIGURES
 from app.core.tools import register_tool
 
-async def lookup_order(order_id: str) -> str:
+class OrderSummary(BaseModel):
+    model_config = FIGURES
+
+    order_id: str
+    status: str
+    total_cents: int
+
+async def lookup_order(order_id: str) -> OrderSummary:
     """Fetch an order summary for the given order id."""
     ...
 
 register_tool("lookup_order", lookup_order, effect="read")
 ```
+
+A tool hands back a typed model, never a `dict`: what an agent reads is that model's JSON, its schema types code mode's script and an MCP client's structured answer, and a renamed field fails a test instead of a conversation. A refusal the model can correct from is `Refused(error=...)` (`app.core.tools`), returned rather than raised. The service pattern's `returns-model` rule gates it.
 
 Then grant it to an agent by inserting a `tool` row named `lookup_order` and linking it via `agent_tool`. A row naming a tool with no registered callable is skipped with a warning, never an error: a stale grant degrades that one tool, not the agent.
 

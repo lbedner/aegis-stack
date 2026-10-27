@@ -10,9 +10,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel, SerializerFunctionWrapHandler, model_serializer
+from pydantic import BaseModel
 
-from app.core.figures import FIGURES
+from app.core.figures import FIGURES, absent
+from app.core.tools import Refused
 
 if TYPE_CHECKING:
     from app.services.change_queue.models import PendingChange
@@ -34,19 +35,9 @@ class ChangeDisplayRow(BaseModel):
     label: str
     value: str
     # Where the value leads, when it names something that has a page (a
-    # campaign, an issue): the card shows the value as a link to it.
-    url: str | None = None
-
-    @model_serializer(mode="wrap")
-    def _without_a_blank_url(
-        self, handler: SerializerFunctionWrapHandler
-    ) -> dict[str, Any]:
-        """A row with no link serializes as label and value alone, so a
-        model reading the card is not handed a field of nulls."""
-        data = handler(self)
-        if data.get("url") is None:
-            data.pop("url", None)
-        return data
+    # campaign, an issue): the card shows the value as a link to it. A row
+    # with none is label and value alone, not a field of nulls.
+    url: str | None = absent()
 
 
 class PendingChangeResponse(BaseModel):
@@ -114,4 +105,100 @@ class BatchResolveResponse(BaseModel):
     approved: int
     rejected: int
     failed: int
+
+
+# What the queue's tools hand an agent (``tools``).
+
+
+class ChangeTypeContract(BaseModel):
+    """A change type as an agent reads it: its title, when to use it, the
+    table it changes, and its payload's JSON schema."""
+
+    model_config = FIGURES
+
+    title: str
+    description: str
+    object: str | None
+    payload_schema: dict[str, Any]
+
+
+class NotFiled(Refused):
+    """Why the queue would not take a call, with the contracts when it was
+    a proposal."""
+
+    change_types: dict[str, ChangeTypeContract] | None = absent()
+
+
+class Proposed(BaseModel):
+    """A pending change, as its card will show it."""
+
+    model_config = FIGURES
+
+    pending_change_id: int
+    change_type: str
+    title: str
+    status: str
+    display: list[ChangeDisplayRow]
+
+
+class BatchRow(BaseModel):
+    model_config = FIGURES
+
+    id: int
+    pending_change_id: int
+    status: str
+    display: list[ChangeDisplayRow]
+
+
+class ProposedBatch(BaseModel):
+    """A batch of pending changes, one card."""
+
+    model_config = FIGURES
+
+    batch_id: str
+    change_type: str
+    title: str
+    count: int
+    items: list[BatchRow]
+
+
+class FiledCard(BaseModel):
+    """One card an agent filed: a batch, or a single proposal."""
+
+    model_config = FIGURES
+
+    batch_id: str | None  # None for a single proposal
+    pending_change_ids: list[int]
+    rows: int
+    change_type: str
+    title: str
+    status: str  # pending, approved, rejected, withdrawn, or mixed
+    filed_at: datetime
+    decided_at: datetime | None
+    summary: str  # what it does, with one example row
+
+
+class Filed(BaseModel):
+    """An agent's own cards: awaiting the user, and decided lately."""
+
+    model_config = FIGURES
+
+    pending: list[FiledCard]
+    decided: list[FiledCard]
+    note: str | None = absent()  # in a chat, which redraws them
+
+
+class Withdrawn(BaseModel):
+    model_config = FIGURES
+
+    pending_change_id: int
+    status: str
+    note: str | None
+
+
+class BatchWithdrawn(BaseModel):
+    model_config = FIGURES
+
+    batch_id: str
+    withdrawn: int  # rows
 {% endif %}

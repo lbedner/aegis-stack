@@ -15,6 +15,8 @@ import pprint
 import re
 from typing import Any
 
+from app.core.tools import result_data
+
 # Rendered while text is still arriving; dropped from the final render.
 STREAM_CURSOR = "▌"
 
@@ -226,12 +228,13 @@ def card_component(
     """
     if tool not in CARD_TOOLS:
         return None
-    data: Any = content
     if isinstance(content, str):
         try:
             data = json.loads(content)
         except (TypeError, ValueError):
             return None
+    else:
+        data = result_data(content)
     if not isinstance(data, dict) or data.get("error"):
         return None
     if tool == "pending":

@@ -111,3 +111,45 @@ class ResearchCounts(BaseModel):
     watches: int
     items: int
     last_refresh: datetime | None
+
+
+# What the tools hand over per item: enough to cite and judge it.
+SNIPPET = 280
+
+
+class ResearchHit(BaseModel):
+    """An item as a tool reads it: its numbers, where it is, and the start
+    of its text."""
+
+    model_config = FIGURES
+
+    id: int
+    source: str
+    kind: str
+    title: str | None
+    url: str | None
+    author: str | None
+    published_at: datetime | None
+    score: int | None
+    comment_count: int | None
+    parent_id: int | None  # the item it answers
+    text: str | None
+    deleted: bool
+
+    @classmethod
+    def of(cls, item: ResearchItem) -> ResearchHit:
+        return cls(
+            **item.model_dump(include=set(cls.model_fields) - {"text", "deleted"}),
+            text=(item.text or "")[:SNIPPET] or None,
+            deleted=item.deleted_at is not None,
+        )
+
+
+class ResearchDay(BaseModel):
+    """An item's numbers on one day."""
+
+    model_config = FIGURES
+
+    as_of: date
+    score: int | None
+    comment_count: int | None

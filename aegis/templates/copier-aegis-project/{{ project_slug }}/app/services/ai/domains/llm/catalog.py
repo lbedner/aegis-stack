@@ -7,7 +7,6 @@ this module is what the picker and a chat turn ask of the catalog.
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any
 
 from pydantic import BaseModel
 
@@ -172,7 +171,7 @@ async def catalog(
     vendor: str | None = None,
     modality: str | None = None,
     limit: int = 20,
-) -> dict[str, Any]:
+) -> CatalogAnswer:
     """The model catalog: models this install could run, newest first, each
     with its vendor, the lab that made it, its context window and its price
     in USD per million input and output tokens. ``text`` matches the id or
@@ -187,7 +186,7 @@ async def catalog(
     return CatalogAnswer(
         models=tuple(CatalogModel(**row.model_dump(include=fields)) for row in rows),
         read_at=utcnow(),
-    ).model_dump(mode="json")
+    )
 
 
 register_tool(

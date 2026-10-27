@@ -31,7 +31,8 @@ from pydantic import BaseModel, ValidationError, computed_field, model_validator
 
 from app.core.chat_transcript import card_markers
 from app.core.db import get_async_session
-from app.core.tools import current_conversation_id, register_tool
+from app.core.figures import FIGURES
+from app.core.tools import Refused, current_conversation_id, register_tool
 from app.services.ai.domains.chat import path_card
 from app.services.ai.models.chat_card import ChatCard
 
@@ -322,7 +323,16 @@ def attach_cards(entry: dict[str, Any], drawn: list[dict[str, Any]]) -> None:
     drawn.clear()
 
 
-async def draw_card(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
+class Drawn(BaseModel):
+    """A card drawn under the answer."""
+
+    model_config = FIGURES
+
+    kind: str
+    id: str
+
+
+async def draw_card(kind: str, payload: dict[str, Any]) -> Drawn | Refused:
     """Draw a card under your answer. Asked for a table, chart or graph,
     draw it here: a table typed into your answer is not a card. Asked for
     a kind (a table, a pie), draw that kind. Otherwise the numbers your
@@ -362,7 +372,7 @@ async def draw_card(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
     ("[diagram]", "the card shows its connections"). One card per answer:
     drawing again replaces the one before, so fix a card by redrawing it.
 
-    Returns {'kind', 'id'}, or {'error'} saying what to fix. An error drew
+    Answers its 'kind' and 'id', or an 'error' saying what to fix. An error drew
     nothing: fix what it says and call again before you answer, never
     answer as if the card were there.
 
@@ -371,11 +381,11 @@ async def draw_card(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
     staged = _staged.get()
     conversation_id = current_conversation_id.get()
     if staged is None or not conversation_id:
-        return {"error": "No conversation turn is active; nothing was drawn."}
+        return Refused(error="No conversation turn is active; nothing was drawn.")
     declared = lookup((kind or "").strip())
     if declared is None:
         offered = ", ".join(kind_names())
-        return {"error": f"Unknown card kind {kind!r}. Available kinds: {offered}."}
+        return Refused(error=f"Unknown card kind {kind!r}. Available kinds: {offered}.")
     try:
         data = declared.schema.model_validate(payload)
     except ValidationError as exc:
@@ -386,26 +396,26 @@ async def draw_card(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
             f"{err.get('msg', 'is invalid')}"
             for err in exc.errors()[:4]
         )
-        return {
-            "error": f"{declared.name} card: {faults}. "
+        return Refused(
+            error=f"{declared.name} card: {faults}. "
             f"It takes {shape_of(declared.schema)}."
-        }
+        )
     held = len(getattr(data, "rows", None) or [])
     if declared.rows and not held:
-        return {
-            "error": f"{declared.name} card has no rows. Draw it from what "
+        return Refused(
+            error=f"{declared.name} card has no rows. Draw it from what "
             "the lookup returned, in the same script, after it returns."
-        }
+        )
     if declared.rows and held > declared.rows:
-        return {
-            "error": f"{declared.name} card takes at most {declared.rows} rows, "
+        return Refused(
+            error=f"{declared.name} card takes at most {declared.rows} rows, "
             f"got {held}. Narrow it and say the rest in prose."
-        }
+        )
     if declared.prepare is not None:
         try:
             data = await declared.prepare(data)
         except ValueError as exc:
-            return {"error": f"{declared.name} card: {exc}"}
+            return Refused(error=f"{declared.name} card: {exc}")
     card = ChatCard(
         conversation_id=conversation_id,
         kind=declared.name,
@@ -414,7 +424,7 @@ async def draw_card(kind: str, payload: dict[str, Any]) -> dict[str, Any]:
     async with get_async_session() as session:
         session.add(card)
     staged.append({"kind": MARKER, "id": card.id})
-    return {"kind": declared.name, "id": card.id}
+    return Drawn(kind=declared.name, id=card.id)
 
 
 # The model reads the docstring as the tool's description; appended at

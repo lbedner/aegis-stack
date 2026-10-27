@@ -12,8 +12,9 @@ calls and MCP may serve them.
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from datetime import timedelta
-from typing import Any
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
+from typing import Any, TypeVar
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -26,6 +27,19 @@ from app.core.tools import (
     register_tool,
 )
 from app.services import change_queue
+from app.services.change_queue.schemas import (
+    BatchRow,
+    BatchWithdrawn,
+    ChangeTypeContract,
+    Filed,
+    FiledCard,
+    Proposed,
+    NotFiled,
+    ProposedBatch,
+    Withdrawn,
+)
+
+Answer = TypeVar("Answer")
 
 
 def _owner() -> int | None:
@@ -40,7 +54,7 @@ def _owner() -> int | None:
     return owner
 
 
-async def change_types() -> dict[str, Any]:
+async def change_types() -> dict[str, ChangeTypeContract]:
     """The changes you can propose: each change type's title, when to use
     it, and its payload's JSON schema (``propose``'s ``payload`` must match
     it exactly). Read this before proposing a type you have not used."""
@@ -48,10 +62,10 @@ async def change_types() -> dict[str, Any]:
 
 
 async def _committed(
-    work: Callable[[AsyncSession], Awaitable[dict[str, Any]]],
+    work: Callable[[AsyncSession], Awaitable[Answer]],
     *,
     vocabulary: bool = False,
-) -> dict[str, Any]:
+) -> Answer | NotFiled:
     """Run ``work`` in one committed session. A refusal (a bad payload,
     another agent's card, no signed-in user) is the tool's error result,
     with the change-type contracts when the refusal was a proposal."""
@@ -60,16 +74,14 @@ async def _committed(
             result = await work(session)
             await session.commit()
         except ValueError as e:
-            error: dict[str, Any] = {"error": str(e)}
-            if vocabulary:
-                error["change_types"] = change_queue.change_type_contracts()
-            return error
+            contracts = change_queue.change_type_contracts() if vocabulary else None
+            return NotFiled(error=str(e), change_types=contracts)
     return result
 
 
 async def propose_many(
     change_type: str, payloads: list[dict[str, Any]]
-) -> dict[str, Any]:
+) -> ProposedBatch | NotFiled:
     """Propose MANY changes of one type as a single batch the user
     resolves together ("approve them all"), with a per-row veto. Use
     this whenever more than one change of the same type is wanted - a
@@ -77,7 +89,7 @@ async def propose_many(
     payload follows the change type's contract. Never claim the changes
     happened - they are pending until the user acts.
     """
-    async def work(session: AsyncSession) -> dict[str, Any]:
+    async def work(session: AsyncSession) -> ProposedBatch:
         rows = await change_queue.propose_many(
             session,
             change_type,
@@ -86,24 +98,27 @@ async def propose_many(
             proposed_by_agent=current_agent_slug.get(),
             conversation_id=current_conversation_id.get(),
         )
-        # Tool results serialize into the model's context: typed cards
-        # become plain dicts at this boundary.
-        cards = [
-            card.model_dump(include={"id", "status", "display"})
-            for card in await change_queue.cards(session, rows)
-        ]
-        return {
-            "batch_id": rows[0].batch_id,
-            "change_type": change_type,
-            "title": change_queue.executor_for(change_type).title,
-            "count": len(cards),
-            "items": [card | {"pending_change_id": card["id"]} for card in cards],
-        }
+        cards = await change_queue.cards(session, rows)
+        return ProposedBatch(
+            batch_id=rows[0].batch_id,
+            change_type=change_type,
+            title=change_queue.executor_for(change_type).title,
+            count=len(cards),
+            items=[
+                BatchRow(
+                    id=card.id,
+                    pending_change_id=card.id,
+                    status=card.status,
+                    display=card.display,
+                )
+                for card in cards
+            ],
+        )
 
     return await _committed(work, vocabulary=True)
 
 
-async def propose(change_type: str, payload: dict[str, Any]) -> dict[str, Any]:
+async def propose(change_type: str, payload: dict[str, Any]) -> Proposed | NotFiled:
     """Propose a change for the user's approval. The ONLY write tool:
     nothing moves until the user approves the pending change in the
     app, and execution happens exclusively there.
@@ -115,7 +130,7 @@ async def propose(change_type: str, payload: dict[str, Any]) -> dict[str, Any]:
     ONE change per call; never claim a change happened - it is pending
     until the user acts.
     """
-    async def work(session: AsyncSession) -> dict[str, Any]:
+    async def work(session: AsyncSession) -> Proposed:
         row = await change_queue.propose(
             session,
             change_type,
@@ -125,14 +140,18 @@ async def propose(change_type: str, payload: dict[str, Any]) -> dict[str, Any]:
             conversation_id=current_conversation_id.get(),
         )
         card = await change_queue.card(session, row)
-        return {"pending_change_id": card.id} | card.model_dump(
-            include={"change_type", "title", "status", "display"}
+        return Proposed(
+            pending_change_id=card.id,
+            change_type=card.change_type,
+            title=card.title,
+            status=card.status,
+            display=card.display,
         )
 
     return await _committed(work, vocabulary=True)
 
 
-async def pending(about: str | None = None) -> dict[str, Any]:
+async def pending(about: str | None = None) -> Filed | NotFiled:
     """YOUR OWN cards: {"pending": [...]} still awaiting the user and
     {"decided": [...]} the user acted on in the last two weeks. One entry
     per card, with exactly these keys: batch_id (null for a single
@@ -152,7 +171,7 @@ async def pending(about: str | None = None) -> dict[str, Any]:
     try:
         owner = _owner()
     except ValueError as e:
-        return {"error": str(e)}
+        return NotFiled(error=str(e))
     needle = (about or "").strip().lower()
     horizon = utcnow() - timedelta(days=14)
     async with get_async_session() as session:
@@ -164,55 +183,78 @@ async def pending(about: str | None = None) -> dict[str, Any]:
             resolved_since=horizon,
         )
         bodies = await change_queue.describe_changes(session, rows)
-        cards: dict[str, dict[str, Any]] = {}
+        cards: dict[str, _Card] = {}
         for row, body in zip(rows, bodies):
             line = " / ".join(f"{ln.label}: {ln.value}" for ln in body)
             card = cards.setdefault(
                 row.batch_id or f"row-{row.id}",
-                {
-                    "batch_id": row.batch_id,
-                    "pending_change_ids": [],
-                    "rows": 0,
-                    "change_type": row.change_type,
-                    "title": change_queue.executor_for(row.change_type).title,
-                    "statuses": set(),
-                    "filed_at": row.created_at.isoformat(),
-                    "decided_at": row.resolved_at and row.resolved_at.isoformat(),
-                    "summary": line,
-                    "matches": False,
-                },
+                _Card(
+                    batch_id=row.batch_id,
+                    change_type=row.change_type,
+                    filed_at=row.created_at,
+                    decided_at=row.resolved_at,
+                    summary=line,
+                ),
             )
-            card["pending_change_ids"].append(row.id)
-            card["rows"] += 1
-            card["statuses"].add(change_queue.outcome_of(row))
-            card["matches"] |= not needle or needle in line.lower()
-    listing: dict[str, Any] = {"pending": [], "decided": []}
+            card.ids.append(row.id)
+            card.statuses.add(change_queue.outcome_of(row))
+            card.matches |= not needle or needle in line.lower()
+    waiting: list[FiledCard] = []
+    decided: list[FiledCard] = []
     for card in cards.values():
-        if not card.pop("matches"):
-            continue
-        statuses = card.pop("statuses")
-        card["status"] = next(iter(statuses)) if len(statuses) == 1 else "mixed"
-        if card["rows"] > 1:
-            card["summary"] = f"{card['rows']} rows, e.g. {card['summary']}"
-        listing["pending" if "pending" in statuses else "decided"].append(card)
-    if current_conversation_id.get():
-        # Only a chat redraws them; an MCP client's user sees nothing unless
-        # the client says it.
-        listing["note"] = (
-            "These cards are redrawn in the chat for the user, decided ones in "
-            "their final state. Point at them; never list their rows."
+        if card.matches:
+            (waiting if "pending" in card.statuses else decided).append(card.filed())
+    # Only a chat redraws them; an MCP client's user sees nothing unless
+    # the client says it.
+    note = REDRAWN if current_conversation_id.get() else None
+    return Filed(pending=waiting, decided=decided, note=note)
+
+
+REDRAWN = (
+    "These cards are redrawn in the chat for the user, decided ones in "
+    "their final state. Point at them; never list their rows."
+)
+
+
+@dataclass
+class _Card:
+    """A card being gathered from its rows (``pending``)."""
+
+    batch_id: str | None
+    change_type: str
+    filed_at: datetime
+    decided_at: datetime | None
+    summary: str  # its first row's
+    ids: list[int] = field(default_factory=list)
+    statuses: set[str] = field(default_factory=set)
+    matches: bool = False
+
+    def filed(self) -> FiledCard:
+        rows = len(self.ids)
+        status = next(iter(self.statuses)) if len(self.statuses) == 1 else "mixed"
+        return FiledCard(
+            batch_id=self.batch_id,
+            pending_change_ids=self.ids,
+            rows=rows,
+            change_type=self.change_type,
+            title=change_queue.executor_for(self.change_type).title,
+            status=status,
+            filed_at=self.filed_at,
+            decided_at=self.decided_at,
+            summary=f"{rows} rows, e.g. {self.summary}" if rows > 1 else self.summary,
         )
-    return listing
 
 
-async def withdraw(pending_change_id: int, reason: str | None = None) -> dict[str, Any]:
+async def withdraw(
+    pending_change_id: int, reason: str | None = None
+) -> Withdrawn | NotFiled:
     """Retract one of YOUR OWN still-pending proposals - the cleanup
     for a card you filed by mistake or have superseded. It resolves as
     rejected with a "withdrawn" note the user can still see, so give a
     short ``reason`` ("superseded by the five-row card"). Only the agent
     that proposed a change can withdraw it. Use it yourself, immediately,
     instead of asking the user to reject the card."""
-    async def work(session: AsyncSession) -> dict[str, Any]:
+    async def work(session: AsyncSession) -> Withdrawn:
         row = await change_queue.withdraw(
             session,
             pending_change_id,
@@ -220,21 +262,23 @@ async def withdraw(pending_change_id: int, reason: str | None = None) -> dict[st
             owner_user_id=_owner(),
             reason=reason,
         )
-        return {
-            "pending_change_id": row.id,
-            "status": row.status,
-            "note": (row.result or {}).get("note"),
-        }
+        return Withdrawn(
+            pending_change_id=row.id,
+            status=row.status,
+            note=(row.result or {}).get("note"),
+        )
 
     return await _committed(work)
 
 
-async def withdraw_batch(batch_id: str, reason: str | None = None) -> dict[str, Any]:
+async def withdraw_batch(
+    batch_id: str, reason: str | None = None
+) -> BatchWithdrawn | NotFiled:
     """Retract a whole still-pending card of YOUR OWN in one step - every
     row of one propose_many batch, one transaction, one reason the user
     will see on the folded card ("superseded by the five-row card").
     Prefer this over withdrawing a batch row by row."""
-    async def work(session: AsyncSession) -> dict[str, Any]:
+    async def work(session: AsyncSession) -> BatchWithdrawn:
         withdrawn = await change_queue.withdraw_batch(
             session,
             batch_id,
@@ -242,7 +286,7 @@ async def withdraw_batch(batch_id: str, reason: str | None = None) -> dict[str, 
             owner_user_id=_owner(),
             reason=reason,
         )
-        return {"batch_id": batch_id, "withdrawn": withdrawn}
+        return BatchWithdrawn(batch_id=batch_id, withdrawn=withdrawn)
 
     return await _committed(work)
 

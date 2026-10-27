@@ -17,6 +17,7 @@ from pydantic_ai.messages import (
 )
 
 from app.core.chat_transcript import card_component
+from app.core.tools import result_text
 {%- endif %}
 from app.services.ai.models import StreamingMessage
 
@@ -119,8 +120,7 @@ def record_tool_result(
         entry = {"tool": name}
         trace.append(entry)
     content = event.part.content
-    text = content if isinstance(content, str) else json.dumps(content, default=str)
-    entry["result"] = text[:_TRACE_RESULT_CAP]
+    entry["result"] = result_text(content)[:_TRACE_RESULT_CAP]
     marker = card_component(name, content)
     if marker is not None:
         entry["component"] = marker

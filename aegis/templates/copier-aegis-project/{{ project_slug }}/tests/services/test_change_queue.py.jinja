@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.core.tools import result_data
 from app.services import change_queue
 from app.services.change_queue import PendingChange
 from tests._change_queue import executed, note_type
@@ -80,10 +81,10 @@ def test_each_type_carries_its_contract() -> None:
     it, and the payload's JSON schema, from the model itself."""
     contract = change_queue.change_type_contracts()[NOTE]
 
-    assert contract["title"] == "Write a note"
-    assert contract["description"] == "A note, for the tests."
-    assert contract["schema"]["properties"]["text"]["type"] == "string"
-    assert contract["schema"]["required"] == ["text"]
+    assert contract.title == "Write a note"
+    assert contract.description == "A note, for the tests."
+    assert contract.payload_schema["properties"]["text"]["type"] == "string"
+    assert contract.payload_schema["required"] == ["text"]
 
 
 def test_a_services_change_types_module_registers_itself(
@@ -230,7 +231,7 @@ async def test_the_chat_tool_proposes_a_registered_type(
         agent_slug="helper",
         conversation_id="conv-1",
     ):
-        result = await chat_tools.propose(NOTE, {"text": "from chat"})
+        result = result_data(await chat_tools.propose(NOTE, {"text": "from chat"}))
 
     assert result["status"] == "pending"
     assert result["title"] == "Write a note"
@@ -258,11 +259,11 @@ async def test_an_agent_reads_each_contract_from_its_model(
     proposal that misses one says what the types are (#1414)."""
     from app.services.ai.domains.chat.user_memory import memory_user
 
-    listed = await chat_tools.change_types()
+    listed = result_data(await chat_tools.change_types())
     with memory_user("1", owner_user_id=acting_owner_user_id):
-        refused = await chat_tools.propose("no.such.type", {})
+        refused = result_data(await chat_tools.propose("no.such.type", {}))
 
-    assert listed[NOTE]["schema"]["required"] == ["text"]
+    assert listed[NOTE]["payload_schema"]["required"] == ["text"]
     assert "unknown change type" in refused["error"]
     assert refused["change_types"][NOTE]["title"] == "Write a note"
 
@@ -281,11 +282,11 @@ async def test_a_chat_proposal_belongs_to_the_turns_owner(
     from app.services.ai.domains.chat.user_memory import memory_user
 
     with memory_user("api-user", owner_user_id=acting_owner_user_id):
-        result = await chat_tools.propose(NOTE, {"text": "mine"})
-        mine = await chat_tools.pending()
+        result = result_data(await chat_tools.propose(NOTE, {"text": "mine"}))
+        mine = result_data(await chat_tools.pending())
     other = {% if include_auth %}424242{% else %}None{% endif %}
     with memory_user("api-user", owner_user_id=other):
-        theirs = await chat_tools.pending()
+        theirs = result_data(await chat_tools.pending())
 
     row = await change_queue.get_change(
         async_db_session, result["pending_change_id"], owner_user_id=None
@@ -303,8 +304,8 @@ async def test_a_chat_proposal_belongs_to_the_turns_owner(
 async def test_a_turn_without_an_owner_touches_no_cards(chat_tools: Any) -> None:
     """With auth, a turn nobody signed in to (an anonymous call, the CLI)
     declines: unscoped, it would reach every user's cards."""
-    proposed = await chat_tools.propose(NOTE, {"text": "orphan"})
-    listed = await chat_tools.pending()
+    proposed = result_data(await chat_tools.propose(NOTE, {"text": "orphan"}))
+    listed = result_data(await chat_tools.pending())
 
     assert "no signed-in user" in proposed["error"]
     assert "no signed-in user" in listed["error"]

@@ -49,6 +49,29 @@ It declares:
 The reference plugin, `aegis-stack-crawl4ai`, exercises most of that surface
 and is the best example to read.
 
+### What goes into the image
+
+Four levers, in order of size. Pick the smallest that carries what you need:
+
+| need | mechanism | ends up as |
+| --- | --- | --- |
+| a Python library | `pyproject_deps=["pillow>=11"]` | `pyproject.toml`, installed by `uv sync` |
+| an apt package, tens of MB | `docker_packages=["ffmpeg", "poppler-utils"]` | `docker/apt-packages.txt`, installed in its own layer |
+| a non-apt download, ~100 MB | `docker_steps=["fetch-model"]` plus `docker/build.d/fetch-model.sh` in your templates | run in name order by the build hook |
+| 500 MB–1 GB (a model, a JVM, a GPU runtime) | `docker_services=["inference"]` and your own `docker/inference/Dockerfile` | a service of its own, talked to over HTTP |
+
+`docker_packages` and `docker_steps` reach the image through two fixed hook
+blocks in `Dockerfile.jinja`, which copy `docker/apt-packages.txt` and run
+`docker/build.d/*.sh`. **The Dockerfile never mentions your plugin**, which is
+the point: that file is `warn-if-diverged`, so a project that has added its own
+build steps keeps its copy, and anything written into it by a plugin would
+never arrive. The hooks are data, and `aegis add`/`aegis remove` rewrite that
+data when plugins come and go — the same package requested by two plugins is
+installed once.
+
+Step scripts are files rather than commands on purpose: a `run this URL | sh`
+string cannot be read in review, and would be interpolated into a shell.
+
 ## What a project finds by convention
 
 Some of what a plugin contributes needs no wiring in `plugin.py`: the

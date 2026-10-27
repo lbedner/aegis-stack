@@ -51,6 +51,25 @@ RUN apt-get update -y && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
+# ---------------------------------------------------------------------------
+# Plugin hooks. These two blocks never change when a plugin comes or goes:
+# a plugin contributes DATA (docker/apt-packages.txt, docker/build.d/*.sh),
+# written by `aegis add` / `aegis remove`, so this file stays out of it.
+# ---------------------------------------------------------------------------
+
+# Packages plugins asked for. xargs, not sh -c: a package name is never
+# interpolated into a shell. ``apt-get update`` runs here because the base
+# block above ends by removing /var/lib/apt/lists.
+COPY docker/apt-packages.txt /tmp/apt-packages.txt
+RUN apt-get update -y && \
+    grep -v '^\s*#' /tmp/apt-packages.txt | xargs -r apt-get install -y --no-install-recommends && \
+    apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/apt-packages.txt
+
+# Build steps plugins ship (docker/build.d/<plugin>.sh), in name order.
+COPY docker/build.d/ /tmp/build.d/
+RUN for step in $(ls /tmp/build.d/*.sh 2>/dev/null | sort); do sh "$step"; done && \
+    rm -rf /tmp/build.d
+
 # Install uv with specific version for reproducibility
 RUN pip install --no-cache-dir uv==0.10.0
 {%- if include_payment and payment_provider == "stripe" %}

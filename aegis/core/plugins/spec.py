@@ -19,6 +19,7 @@ plugin needs them, not speculatively.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from enum import Enum
@@ -26,6 +27,12 @@ from pathlib import Path
 from typing import Any
 
 from ..file_manifest import FileManifest
+
+# A Debian package name: what apt accepts, and nothing a shell or a line in
+# ``docker/apt-packages.txt`` could reinterpret.
+_APT_PACKAGE_NAME = re.compile(r"^[a-z0-9][a-z0-9+.-]*$")
+# A script name under ``docker/build.d/``: no slashes, no shell metacharacters.
+_DOCKER_STEP_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 
 
 class PluginKind(Enum):
@@ -347,6 +354,17 @@ class PluginSpec:
     # Packaging / template
     pyproject_deps: list[str] = field(default_factory=list)
     docker_services: list[str] = field(default_factory=list)
+    # System packages the plugin's image needs (``ffmpeg``,
+    # ``poppler-utils``). The template's Dockerfile installs them from
+    # ``docker/apt-packages.txt``, a data file assembled from every active
+    # plugin's list — so a plugin never edits the Dockerfile itself.
+    # Validated as Debian package names at construction.
+    docker_packages: list[str] = field(default_factory=list)
+    # Build steps the plugin ships as ``docker/build.d/<name>.sh``
+    # scripts (tarball downloads, model fetches). The template's build hook
+    # runs them in name order. A name, not a command: reviewable in the
+    # diff, manifest-owned, and never interpolated into a shell.
+    docker_steps: list[str] = field(default_factory=list)
     # Worker queues the plugin ships, by name: each has a module at
     # ``app/components/worker/queues/<name>.py`` in its templates, and a
     # stack with the worker component runs a ``worker-<name>`` container
@@ -448,6 +466,28 @@ class PluginSpec:
     # CLI surface. Decoupled from ``name`` so the install identifier
     # (``crawl4ai``) and the user-facing verb (``crawl``) can differ.
     cli_name: str | None = None
+
+    def __post_init__(self) -> None:
+        """Refuse names that cannot be safe in the Dockerfile's shell.
+
+        ``docker_packages`` land in ``xargs`` (never a shell), and
+        ``docker_steps`` name files under ``docker/build.d/`` — but a name
+        with whitespace or a quote still breaks a filename or a line in
+        the data file. Validate at construction so a plugin author sees it
+        at import time, not in a failed image build.
+        """
+        for package in self.docker_packages:
+            if not _APT_PACKAGE_NAME.match(package):
+                raise ValueError(
+                    f"{self.name}: docker_packages entry {package!r} is not a "
+                    "Debian package name (expected [a-z0-9][a-z0-9+.-]*)"
+                )
+        for step in self.docker_steps:
+            if not _DOCKER_STEP_NAME.match(step):
+                raise ValueError(
+                    f"{self.name}: docker_steps entry {step!r} is not a script "
+                    "name (expected [a-z0-9][a-z0-9_-]*)"
+                )
 
     # ----- Read-only legacy aliases -------------------------------------
 

@@ -1085,6 +1085,8 @@ MESSAGES: dict[str, str] = {
     "plugins.label_requires_plugins": "必要なプラグイン：",
     "plugins.label_conflicts": "競合：",
     "plugins.label_python_deps": "Python 依存：",
+    "plugins.label_docker_packages": "システムパッケージ:",
+    "plugins.label_docker_steps": "ビルドステップ:",
     "plugins.deps_more": "（他 {count} 件）",
     "plugins.section_options": "オプション",
     "plugins.option_choices": "選択肢：",

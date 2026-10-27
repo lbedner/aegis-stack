@@ -1,0 +1,24 @@
+# System packages the stack's plugins asked for — nothing else.
+#
+# Written by `aegis add` / `aegis remove` from the project's plugins
+# (`_plugins` in .copier-answers.yml). A package belongs to the plugin whose
+# spec declares it (`docker_packages`), so to change this file, change the
+# spec — hand edits here survive until the next add, then they are gone.
+#
+# The Dockerfile installs these in its own layer above the application
+# code, so a source change never reinstalls them. One line per package, and
+# a package two plugins both need appears once.
+{%- set seen = [] %}
+{%- for plugin in _plugins or [] %}
+{%- set wanted = [] %}
+{%- for package in plugin.docker_packages or [] %}
+{%- if package not in seen %}{% set _ = seen.append(package) %}{% set _ = wanted.append(package) %}{% endif %}
+{%- endfor %}
+{%- if wanted %}
+
+# {{ plugin.name }}
+{%- for package in wanted %}
+{{ package }}
+{%- endfor %}
+{%- endif %}
+{%- endfor %}

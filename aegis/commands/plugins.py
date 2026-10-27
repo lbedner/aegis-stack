@@ -325,6 +325,12 @@ def plugins_info_command(
             else ""
         )
         lines.append(f"  {t('plugins.label_python_deps'):<15} {deps_preview}{more}")
+    if spec.docker_packages:
+        packages = ", ".join(_escape(p) for p in spec.docker_packages)
+        lines.append(f"  {t('plugins.label_docker_packages'):<15} {packages}")
+    if spec.docker_steps:
+        steps = ", ".join(_escape(s) + ".sh" for s in spec.docker_steps)
+        lines.append(f"  {t('plugins.label_docker_steps'):<15} {steps}")
 
     lines.append("")
     if options := options_of(spec):

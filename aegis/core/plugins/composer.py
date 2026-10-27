@@ -91,6 +91,12 @@ def serialize_plugin_to_answer(
         # data the plugin ships unconditionally.
         "pyproject_deps": list(spec.pyproject_deps),
         "docker_services": list(spec.docker_services),
+        # System packages and build steps: data for the Dockerfile's two
+        # hook blocks. The Dockerfile itself never changes when a plugin
+        # comes or goes — ``docker/apt-packages.txt`` and
+        # ``docker/build.d/`` carry the contributions.
+        "docker_packages": list(spec.docker_packages),
+        "docker_steps": list(spec.docker_steps),
         # Queues the plugin ships; compose runs a worker per queue, so a
         # stack with the worker component emits ``worker-<name>`` for each.
         "worker_queues": list(spec.worker_queues),

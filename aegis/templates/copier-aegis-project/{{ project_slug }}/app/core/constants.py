@@ -62,12 +62,11 @@ class ServiceName(StrEnum):
 
 
 class QueueName(StrEnum):
-    """The worker queues the stack ships with (``MEDIA`` is arq's); a
-    plugin's own are discovered alongside them, by name."""
+    """The worker queues the stack ships with; a plugin's own queues are
+    discovered alongside them, by name."""
 
     SYSTEM = "system"
     LOAD_TEST = "load_test"
-    MEDIA = "media"
 
 
 class APIEndpoints:

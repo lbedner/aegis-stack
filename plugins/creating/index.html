@@ -6159,6 +6159,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="What plugin.py declares">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-goes-into-the-image" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What goes into the image
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -6427,6 +6444,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="What plugin.py declares">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-goes-into-the-image" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What goes into the image
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -6524,6 +6558,49 @@ runs <code>aegis add scraper</code>.</p>
 </ul>
 <p>The reference plugin, <code>aegis-stack-crawl4ai</code>, exercises most of that surface
 and is the best example to read.</p>
+<h3 id="what-goes-into-the-image">What goes into the image</h3>
+<p>Four levers, in order of size. Pick the smallest that carries what you need:</p>
+<table>
+<thead>
+<tr>
+<th>need</th>
+<th>mechanism</th>
+<th>ends up as</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>a Python library</td>
+<td><code>pyproject_deps=["pillow&gt;=11"]</code></td>
+<td><code>pyproject.toml</code>, installed by <code>uv sync</code></td>
+</tr>
+<tr>
+<td>an apt package, tens of MB</td>
+<td><code>docker_packages=["ffmpeg", "poppler-utils"]</code></td>
+<td><code>docker/apt-packages.txt</code>, installed in its own layer</td>
+</tr>
+<tr>
+<td>a non-apt download, ~100 MB</td>
+<td><code>docker_steps=["fetch-model"]</code> plus <code>docker/build.d/fetch-model.sh</code> in your templates</td>
+<td>run in name order by the build hook</td>
+</tr>
+<tr>
+<td>500 MB–1 GB (a model, a JVM, a GPU runtime)</td>
+<td><code>docker_services=["inference"]</code> and your own <code>docker/inference/Dockerfile</code></td>
+<td>a service of its own, talked to over HTTP</td>
+</tr>
+</tbody>
+</table>
+<p><code>docker_packages</code> and <code>docker_steps</code> reach the image through two fixed hook
+blocks in <code>Dockerfile.jinja</code>, which copy <code>docker/apt-packages.txt</code> and run
+<code>docker/build.d/*.sh</code>. <strong>The Dockerfile never mentions your plugin</strong>, which is
+the point: that file is <code>warn-if-diverged</code>, so a project that has added its own
+build steps keeps its copy, and anything written into it by a plugin would
+never arrive. The hooks are data, and <code>aegis add</code>/<code>aegis remove</code> rewrite that
+data when plugins come and go — the same package requested by two plugins is
+installed once.</p>
+<p>Step scripts are files rather than commands on purpose: a <code>run this URL | sh</code>
+string cannot be read in review, and would be interpolated into a shell.</p>
 <h2 id="what-a-project-finds-by-convention">What a project finds by convention</h2>
 <p>Some of what a plugin contributes needs no wiring in <code>plugin.py</code>: the
 project looks for a module of a known name in every service package, on

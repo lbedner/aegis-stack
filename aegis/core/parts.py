@@ -162,7 +162,7 @@ def _entry(spec: PluginSpec) -> str:
         "marker": spec.marker_path,
         "containers": [
             *spec.docker_services,
-            *(f"worker-{queue}" for queue in spec.worker_queues),
+            *(f"worker-{queue}" for queue in spec.worker_queue_names),
         ],
         "agents": spec.agents,
         "tier": spec.tier,

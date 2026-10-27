@@ -1101,6 +1101,7 @@ MESSAGES: dict[str, str] = {
     "plugins.label_requires_plugins": "Benötigt Plug.:",
     "plugins.label_conflicts": "Konflikte:",
     "plugins.label_python_deps": "Python-Deps:",
+    "plugins.label_worker_queues": "Worker-Warteschlangen:",
     "plugins.label_docker_packages": "Systempakete:",
     "plugins.label_docker_steps": "Build-Schritte:",
     "plugins.deps_more": "(+{count} weitere)",

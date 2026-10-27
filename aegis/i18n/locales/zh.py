@@ -938,6 +938,7 @@ MESSAGES: dict[str, str] = {
     "plugins.label_requires_plugins": "所需插件：",
     "plugins.label_conflicts": "冲突项：",
     "plugins.label_python_deps": "Python 依赖：",
+    "plugins.label_worker_queues": "工作队列:",
     "plugins.label_docker_packages": "系统软件包:",
     "plugins.label_docker_steps": "构建步骤:",
     "plugins.deps_more": "（另有 {count} 项）",

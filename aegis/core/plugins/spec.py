@@ -33,6 +33,8 @@ from ..file_manifest import FileManifest
 _APT_PACKAGE_NAME = re.compile(r"^[a-z0-9][a-z0-9+.-]*$")
 # A script name under ``docker/build.d/``: no slashes, no shell metacharacters.
 _DOCKER_STEP_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
+# A queue name doubles as a module name under app/components/worker/queues/.
+_QUEUE_NAME = re.compile(r"^[a-z][a-z0-9_]*$")
 
 
 class PluginKind(Enum):
@@ -192,6 +194,25 @@ class OverseerPageWiring:
     """The rail group it is listed in: ``services`` or ``components``."""
 
     when: Callable[[dict[str, Any]], bool] | None = None
+
+
+@dataclass(frozen=True)
+class WorkerQueueWiring:
+    """A worker queue a plugin ships, and how its worker runs it.
+
+    A bare name (``worker_queues=["crawler"]``) is the common case and keeps
+    working; this carries the numbers a plugin needs to ship with its queue.
+    Without it a queue falls back to ``WORKER_QUEUE_DEFAULT`` (10 jobs),
+    which is wrong for work that pins a core: an ffmpeg conversion holding
+    one of two vCPUs, ten times over, is an unresponsive box (issue #1870).
+    """
+
+    name: str
+    # Jobs one worker process runs at once. None: keep the project default.
+    concurrency: int | None = None
+    # Seconds the oldest waiting job may sit before the queue reads as
+    # backed up.
+    max_wait_seconds: int | None = None
 
 
 @dataclass
@@ -365,11 +386,13 @@ class PluginSpec:
     # runs them in name order. A name, not a command: reviewable in the
     # diff, manifest-owned, and never interpolated into a shell.
     docker_steps: list[str] = field(default_factory=list)
-    # Worker queues the plugin ships, by name: each has a module at
+    # Worker queues the plugin ships: each has a module at
     # ``app/components/worker/queues/<name>.py`` in its templates, and a
     # stack with the worker component runs a ``worker-<name>`` container
     # for it (one process). Without the component the queue is only a file.
-    worker_queues: list[str] = field(default_factory=list)
+    # A bare name is enough; a ``WorkerQueueWiring`` also ships the
+    # queue's concurrency and backup threshold.
+    worker_queues: list[str | WorkerQueueWiring] = field(default_factory=list)
     template_files: list[str] = field(default_factory=list)
 
     # File ownership for cleanup (R1)
@@ -482,6 +505,21 @@ class PluginSpec:
                     f"{self.name}: docker_packages entry {package!r} is not a "
                     "Debian package name (expected [a-z0-9][a-z0-9+.-]*)"
                 )
+        for queue in self.worker_queues:
+            name = queue if isinstance(queue, str) else queue.name
+            if not _QUEUE_NAME.match(name):
+                raise ValueError(
+                    f"{self.name}: worker queue {name!r} is not a queue name "
+                    "(expected [a-z][a-z0-9_]*)"
+                )
+            if isinstance(queue, WorkerQueueWiring):
+                numbers = (queue.concurrency, queue.max_wait_seconds)
+                if any(number is not None and number <= 0 for number in numbers):
+                    raise ValueError(
+                        f"{self.name}: queue {name!r} needs positive numbers, got "
+                        f"concurrency={queue.concurrency}, "
+                        f"max_wait_seconds={queue.max_wait_seconds}"
+                    )
         for step in self.docker_steps:
             if not _DOCKER_STEP_NAME.match(step):
                 raise ValueError(
@@ -490,6 +528,14 @@ class PluginSpec:
                 )
 
     # ----- Read-only legacy aliases -------------------------------------
+
+    @property
+    def worker_queue_names(self) -> list[str]:
+        """The queue names, whether declared bare or as a wiring."""
+        return [
+            queue if isinstance(queue, str) else queue.name
+            for queue in self.worker_queues
+        ]
 
     @property
     def display_title(self) -> str:

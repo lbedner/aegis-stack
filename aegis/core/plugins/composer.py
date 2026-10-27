@@ -41,6 +41,7 @@ from .spec import (
     PluginWiring,
     RouterWiring,
     SymbolWiring,
+    WorkerQueueWiring,
 )
 
 PLUGINS_ANSWER_KEY = "_plugins"
@@ -99,7 +100,12 @@ def serialize_plugin_to_answer(
         "docker_steps": list(spec.docker_steps),
         # Queues the plugin ships; compose runs a worker per queue, so a
         # stack with the worker component emits ``worker-<name>`` for each.
-        "worker_queues": list(spec.worker_queues),
+        # Names only, so the compose loop reads a string either way.
+        "worker_queues": spec.worker_queue_names,
+        # The numbers those queues bring, rendered into
+        # ``app/core/plugin_queue_defaults.py``. A bare name contributes
+        # nothing here and inherits the project's default.
+        "worker_queue_settings": _serialize_queue_settings(spec),
         # CLI verb. When set, ``app/cli/main.py``'s plugin loop registers
         # ``app/cli/<cli_name>.py`` so ``<project> <cli_name> ...`` works
         # the same way the in-tree auth/llm subcommands do. Always present
@@ -118,6 +124,30 @@ def serialize_plugin_to_answer(
         ],
         "wiring": _serialize_wiring(spec.wiring, opts, spec.name),
     }
+
+
+def _serialize_queue_settings(spec: PluginSpec) -> list[dict[str, Any]]:
+    """The numbers a plugin's queues bring, for the rendered defaults module.
+
+    A bare queue name contributes nothing: its worker keeps the project's
+    default. Entries carry only what the plugin actually set, so the
+    generated ``QueueWorker(...)`` shows the plugin author's numbers and
+    lets the model's own defaults fill the rest.
+    """
+    settings: list[dict[str, Any]] = []
+    for queue in spec.worker_queues:
+        if not isinstance(queue, WorkerQueueWiring):
+            continue
+        if queue.concurrency is None and queue.max_wait_seconds is None:
+            continue
+        settings.append(
+            {
+                "name": queue.name,
+                "concurrency": queue.concurrency,
+                "max_wait_seconds": queue.max_wait_seconds,
+            }
+        )
+    return settings
 
 
 def serialize_plugins(

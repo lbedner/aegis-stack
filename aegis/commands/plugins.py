@@ -29,6 +29,7 @@ disk-install is a precondition external plugins happen to need.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import typer
 from rich.markup import escape as _escape
@@ -118,6 +119,18 @@ def _status_marker(status: CompatStatus) -> str:
         CompatStatus.CONFLICT: f"[{brand.AEGIS_ERROR}]✗[/]",
         CompatStatus.NOT_IN_PROJECT: "[dim]·[/dim]",
     }.get(status, "?")
+
+
+def _queue_with_numbers(queue: Any) -> str:
+    """``media (2 jobs)`` for a wiring that ships numbers, else its name."""
+    numbers = [
+        f"{queue.concurrency} jobs" if queue.concurrency is not None else "",
+        f"backed up after {queue.max_wait_seconds}s"
+        if queue.max_wait_seconds is not None
+        else "",
+    ]
+    detail = ", ".join(n for n in numbers if n)
+    return f"{queue.name} ({detail})" if detail else queue.name
 
 
 def _kind_label(spec: PluginSpec) -> str:
@@ -325,6 +338,12 @@ def plugins_info_command(
             else ""
         )
         lines.append(f"  {t('plugins.label_python_deps'):<15} {deps_preview}{more}")
+    if spec.worker_queues:
+        queues = ", ".join(
+            _escape(queue if isinstance(queue, str) else _queue_with_numbers(queue))
+            for queue in spec.worker_queues
+        )
+        lines.append(f"  {t('plugins.label_worker_queues'):<15} {queues}")
     if spec.docker_packages:
         packages = ", ".join(_escape(p) for p in spec.docker_packages)
         lines.append(f"  {t('plugins.label_docker_packages'):<15} {packages}")

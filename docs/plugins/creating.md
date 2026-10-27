@@ -44,7 +44,15 @@ It declares:
   process, bind-mounted in dev like the stack's own workers. Gate the module on
   `include_worker` and write one branch per `worker_backend` (arq, TaskIQ,
   Dramatiq); without the component the file renders empty and nothing reads
-  it.
+  it. A queue that needs numbers of its own declares them:
+  `worker_queues=[WorkerQueueWiring("media", concurrency=2, max_wait_seconds=900)]`.
+  Without that, the queue inherits `WORKER_QUEUE_DEFAULT` (10 jobs) — wrong for
+  work that pins a core, like an `ffmpeg` run: ten of them on a two-vCPU box is
+  an unresponsive machine. The numbers render into
+  `app/core/plugin_queue_defaults.py` and merge into `DEFAULT_QUEUES`, so they
+  are the project's own default from the moment the plugin lands; a project
+  that wants something else still sets `WORKER_QUEUES` in its environment, which
+  wins.
 
 The reference plugin, `aegis-stack-crawl4ai`, exercises most of that surface
 and is the best example to read.

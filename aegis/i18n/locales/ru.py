@@ -1067,6 +1067,7 @@ MESSAGES: dict[str, str] = {
     "plugins.label_requires_plugins": "Нужны плагины:",
     "plugins.label_conflicts": "Конфликты:",
     "plugins.label_python_deps": "Зависимости Python:",
+    "plugins.label_worker_queues": "Очереди воркеров:",
     "plugins.label_docker_packages": "Системные пакеты:",
     "plugins.label_docker_steps": "Шаги сборки:",
     "plugins.deps_more": "(ещё {count})",

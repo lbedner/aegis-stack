@@ -35,6 +35,8 @@ _APT_PACKAGE_NAME = re.compile(r"^[a-z0-9][a-z0-9+.-]*$")
 _DOCKER_STEP_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 # A queue name doubles as a module name under app/components/worker/queues/.
 _QUEUE_NAME = re.compile(r"^[a-z][a-z0-9_]*$")
+# The only two effects a tool may declare.
+_AGENT_TOOL_EFFECTS = frozenset({"read", "writes"})
 
 
 class PluginKind(Enum):
@@ -155,6 +157,24 @@ class SymbolWiring:
 
     module: str
     symbol: str
+    when: Callable[[dict[str, Any]], bool] | None = None
+
+
+@dataclass(frozen=True)
+class AgentToolWiring:
+    """A tool a plugin registers, and the effect it has, declared.
+
+    The declaration is the grant: a tool in the registry but not here is
+    not given to the agent, and the project's own ``tests/core/test_tools``
+    still fails it. The effect is a policy decision, never inferred from
+    the function — ``read`` for a lookup, ``writes`` for anything that
+    changes a row, and nothing in between.
+    """
+
+    name: str
+    effect: str
+    """``read`` or ``writes``."""
+
     when: Callable[[dict[str, Any]], bool] | None = None
 
 
@@ -283,6 +303,13 @@ class PluginWiring:
 
     health_checks: list[HealthCheckWiring] = field(default_factory=list)
     """Dashboard health-check rows."""
+
+    agent_tools: list[AgentToolWiring] = field(default_factory=list)
+    """Tools the plugin registers in its ``tools.py``, with their effect.
+
+    Declaring one grants it to the default chat agent and to the MCP
+    server; leaving it out is the deliberate "not for the agent" answer,
+    not an oversight the framework should paper over."""
 
 
 @dataclass(kw_only=True)
@@ -520,6 +547,13 @@ class PluginSpec:
                         f"concurrency={queue.concurrency}, "
                         f"max_wait_seconds={queue.max_wait_seconds}"
                     )
+        for tool in self.wiring.agent_tools:
+            if tool.effect not in _AGENT_TOOL_EFFECTS:
+                raise ValueError(
+                    f"{self.name}: agent tool {tool.name!r} declares effect "
+                    f"{tool.effect!r}; expected one of "
+                    f"{sorted(_AGENT_TOOL_EFFECTS)}"
+                )
         for step in self.docker_steps:
             if not _DOCKER_STEP_NAME.match(step):
                 raise ValueError(

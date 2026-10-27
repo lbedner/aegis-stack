@@ -338,6 +338,12 @@ def plugins_info_command(
             else ""
         )
         lines.append(f"  {t('plugins.label_python_deps'):<15} {deps_preview}{more}")
+    if spec.wiring.agent_tools:
+        tools = ", ".join(
+            f"{_escape(tool.name)} ({_escape(tool.effect)})"
+            for tool in spec.wiring.agent_tools
+        )
+        lines.append(f"  {t('plugins.label_agent_tools'):<15} {tools}")
     if spec.worker_queues:
         queues = ", ".join(
             _escape(queue if isinstance(queue, str) else _queue_with_numbers(queue))

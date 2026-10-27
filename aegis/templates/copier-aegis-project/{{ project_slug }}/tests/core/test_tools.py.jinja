@@ -150,6 +150,12 @@ EXPECTED_EFFECTS = {
     "pending": "proposes",
     "withdraw": "proposes",
     "withdraw_batch": "proposes",
+{%- for plugin in _plugins | default([]) %}
+{%- for tool in plugin.wiring.agent_tools | default([]) %}
+    # {{ plugin.name }}, declared in its spec: an effect someone decided.
+    "{{ tool.name }}": "{{ tool.effect }}",
+{%- endfor %}
+{%- endfor %}
 }
 
 

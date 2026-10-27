@@ -211,6 +211,9 @@ def _serialize_wiring(
         "health_checks": [
             _entry_to_dict(e) for e in wiring.health_checks if _entry_keeps(e, opts)
         ],
+        "agent_tools": [
+            _entry_to_dict(e) for e in wiring.agent_tools if _entry_keeps(e, opts)
+        ],
     }
 
 

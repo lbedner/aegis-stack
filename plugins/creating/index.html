@@ -6554,7 +6554,15 @@ runs <code>aegis add scraper</code>.</p>
   process, bind-mounted in dev like the stack's own workers. Gate the module on
   <code>include_worker</code> and write one branch per <code>worker_backend</code> (arq, TaskIQ,
   Dramatiq); without the component the file renders empty and nothing reads
-  it.</li>
+  it. A queue that needs numbers of its own declares them:
+  <code>worker_queues=[WorkerQueueWiring("media", concurrency=2, max_wait_seconds=900)]</code>.
+  Without that, the queue inherits <code>WORKER_QUEUE_DEFAULT</code> (10 jobs) — wrong for
+  work that pins a core, like an <code>ffmpeg</code> run: ten of them on a two-vCPU box is
+  an unresponsive machine. The numbers render into
+  <code>app/core/plugin_queue_defaults.py</code> and merge into <code>DEFAULT_QUEUES</code>, so they
+  are the project's own default from the moment the plugin lands; a project
+  that wants something else still sets <code>WORKER_QUEUES</code> in its environment, which
+  wins.</li>
 </ul>
 <p>The reference plugin, <code>aegis-stack-crawl4ai</code>, exercises most of that surface
 and is the best example to read.</p>

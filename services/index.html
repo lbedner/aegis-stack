@@ -6929,7 +6929,10 @@ that shows it, and <code>patterns --format json</code> prints the same report. T
 enforced rules (reads in queries, every job wired, a health check, other
 services through their facade) are held
 by <code>tests/services/test_service_layout.py</code>; reads still outside a queries
-module are recorded there as debt that may only shrink. A module at a
+module are recorded there as debt that may only shrink. Those tests hold
+Aegis's own code and run only in Aegis's CI: a project built on it sees
+the findings and is never failed by them. To hold your own code to the
+rules, run <code>patterns check --update</code> once, then <code>patterns check --strict</code>. A module at a
 service's top level that the table above does not name is flagged too
 (<strong>Logic lives in domains</strong>), each loose file listed, and so is a file
 past the size budget (<strong>Files stay readable</strong>): over 500 lines, 900 for

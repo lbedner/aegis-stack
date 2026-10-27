@@ -582,6 +582,8 @@ def test_an_app_mounts_the_surface_again_for_its_own_agent(
 
     monkeypatch.setattr(chat_surface, "conversations", conversations)
     monkeypatch.setattr(chat_surface, "assistant_name", assistant_name)
+    # The app is shared: the mount is gone after the test.
+    monkeypatch.setattr(app.router, "routes", list(app.router.routes))
     app.include_router(chat_router(mine, allow))
 
     html = TestClient(app).get("/chat/drawer").text

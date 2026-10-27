@@ -11,6 +11,7 @@ import pytest
 from app.components.web_frontend import macro_catalog, overseer_patterns
 from app.components.web_frontend.rendering import templates
 from app.services.system.models import ComponentStatus
+from tests._conformance import CONFORMANCE
 from tests.web.dom import one, select, text
 from tests.web.overseer import sign_in, status_with
 
@@ -97,6 +98,7 @@ def test_every_installed_pattern_renders_its_report(
 
 
 class TestMacroCatalog:
+    @CONFORMANCE
     @pytest.mark.parametrize("section", list(macro_catalog.FILES))
     def test_every_public_macro_has_an_example(self, section: str) -> None:
         examples = set(macro_catalog.EXAMPLES[section])

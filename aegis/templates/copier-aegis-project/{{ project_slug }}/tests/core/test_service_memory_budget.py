@@ -22,6 +22,9 @@ import sys
 import pytest
 
 import app.services
+from tests._conformance import CONFORMANCE
+
+pytestmark = CONFORMANCE
 
 # Megabytes each service this project ships adds when all of its modules
 # are loaded.

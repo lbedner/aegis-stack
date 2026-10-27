@@ -8,8 +8,13 @@ the standard fails on the drift. Likewise a subsystem left loose beside
 a service's standard files instead of in a package under ``domains/``.
 """
 
+from fastapi import FastAPI
+
 from app.core import ownership, source_index
-from app.services.system import pattern_findings, service_parts
+from app.services.system import pattern_findings, patterns, service_parts
+from tests._conformance import CONFORMANCE
+
+pytestmark = CONFORMANCE
 
 READS = "parts.reads-in-queries"
 # Files each part still reads in outside its queries modules: a ratchet,
@@ -111,3 +116,9 @@ def test_no_caller_outside_a_service_reaches_past_its_facade() -> None:
             if theirs and (mine is None or mine.name != theirs):
                 reaching.add(module.path)
     assert reaching <= REACHING_DEBT, sorted(reaching - REACHING_DEBT)
+
+
+def test_the_shipped_app_breaks_no_enforced_route_rule(app: FastAPI) -> None:
+    report = patterns.report(patterns.ROUTE, app.routes)
+    broken = {r.key: [i.label for i in r.violations] for r in report.enforced}
+    assert not any(broken.values()), broken

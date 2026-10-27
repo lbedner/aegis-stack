@@ -2,6 +2,10 @@
 # This Makefile is for developing the Aegis Stack CLI tool itself.
 # Generated projects have their own Makefiles for application development.
 
+# test-template* runs a generated stack's checks: hold it to Aegis's
+# standard (tests/_conformance.py in the template).
+export AEGIS_CONFORMANCE := 1
+
 # Run tests (excluding slow tests)
 test: ## Run tests (excluding slow tests - use 'test-all' for everything)
 	@uv run pytest -n auto --dist=loadgroup -m "not slow"

@@ -21,6 +21,9 @@ from pathlib import Path
 import pytest
 
 from app.services.system.service_parts import PIECES
+from tests._conformance import CONFORMANCE
+
+pytestmark = CONFORMANCE
 
 SPINE = {"service.py", "models.py", "queries.py", "health.py", "deps.py"}
 # What the service standard has a service hand the app at its root, found

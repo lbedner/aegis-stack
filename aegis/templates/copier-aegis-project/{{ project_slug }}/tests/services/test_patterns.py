@@ -1,7 +1,7 @@
 """The backend patterns, detected from the running app.
 
-Each pattern names its rules with the reason behind them; the enforced
-ones must hold for every instance in the shipped app.
+Each pattern names its rules with the reason behind them. Whether the
+shipped app holds the enforced ones is ``test_service_layout.py``'s.
 """
 
 from fastapi import FastAPI, Response
@@ -32,11 +32,6 @@ def _findings(app: FastAPI) -> dict[str, list[str]]:
 class TestRouteRules:
     def test_every_rule_says_why(self) -> None:
         assert all(rule.why for rule in ROUTE.rules)
-
-    def test_the_shipped_app_breaks_no_enforced_rule(self, app: FastAPI) -> None:
-        report = patterns.report(ROUTE, app.routes)
-        broken = {r.key: [i.label for i in r.violations] for r in report.enforced}
-        assert not any(broken.values()), broken
 
     def test_a_route_published_from_outside_the_api_is_flagged(self) -> None:
         findings = _findings(_app_with("/partials/thing"))

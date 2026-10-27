@@ -189,7 +189,10 @@ belongs - so it names each domain and what it owns.
     enforced rules (reads in queries, every job wired, a health check, other
     services through their facade) are held
     by `tests/services/test_service_layout.py`; reads still outside a queries
-    module are recorded there as debt that may only shrink. A module at a
+    module are recorded there as debt that may only shrink. Those tests hold
+    Aegis's own code and run only in Aegis's CI: a project built on it sees
+    the findings and is never failed by them. To hold your own code to the
+    rules, run `patterns check --update` once, then `patterns check --strict`. A module at a
     service's top level that the table above does not name is flagged too
     (**Logic lives in domains**), each loose file listed, and so is a file
     past the size budget (**Files stay readable**): over 500 lines, 900 for

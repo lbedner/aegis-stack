@@ -20,6 +20,10 @@ def get_spec() -> PluginSpec:
       — register Flet dashboard widgets.
     * ``wiring=PluginWiring(deps_providers=[...])`` — expose FastAPI
       dependency providers.
+    * ``wiring=PluginWiring(agent_tools=[AgentToolWiring("my_tool",
+      effect="read")])`` — grant a tool your ``tools.py`` registers to the
+      chat agent and the MCP server. Declaring it is the grant; the effect
+      (``read`` or ``writes``) is your call, never inferred.
     * ``required_components=["database"]`` — declare deps; ``aegis add``
       auto-resolves them.
 

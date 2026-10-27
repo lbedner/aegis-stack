@@ -93,7 +93,23 @@ disk, and picks up a plugin's the same way as its own.
 | `change_types.py` | changes a model proposes and the user approves |
 | `scheduled_jobs.py` | `JOBS`, the jobs that run on a schedule |
 | `aggregates.py` | `AGGREGATES`, what the plugin's data says about itself (`Aggregate` from `app.core.aggregates`): counts and sums an agent reads with `aggregate`, never rows |
-| `tools.py` | tools an agent or an MCP client can be granted (`register_tool`) |
+| `tools.py` | tools an agent or an MCP client can be granted (`register_tool`) — declaring one in the spec's `agent_tools` is what grants it |
+
+A tool is only usable once it is **declared**, with the effect it has:
+
+```python
+wiring=PluginWiring(
+    agent_tools=[AgentToolWiring("thumbnail", effect="read")]
+)
+```
+
+Registering it in `tools.py` and stopping there leaves it ungranted — the
+default chat agent and the `MCP_TOOLS` list are built from these
+declarations, and the generated project's `tests/core/test_tools.py` expects
+every registered tool to carry a decided effect. The effect is a policy
+call, never inferred: `read` for a lookup, `writes` for anything that
+changes a row. A tool you deliberately keep away from the agent is simply
+not declared.
 
 A scheduled job is a `ServiceJob` from `app.core.schedule`: the job
 function, a stable id, a display name and the trigger. In a project with a

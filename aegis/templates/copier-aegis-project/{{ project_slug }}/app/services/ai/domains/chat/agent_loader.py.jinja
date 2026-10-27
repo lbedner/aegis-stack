@@ -124,6 +124,11 @@ def default_agent_config() -> AgentConfig:
 {%- if ai_rag %}
             "knowledge",
 {%- endif %}
+{%- for plugin in _plugins | default([]) %}
+{%- for tool in plugin.wiring.agent_tools | default([]) %}
+            "{{ tool.name }}",
+{%- endfor %}
+{%- endfor %}
         ),
 {%- if ai_rag %}
         # What she knows: the RAG service's default collection, the one

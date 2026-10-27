@@ -44,6 +44,25 @@ must meet the cap outright. Shrink a file under its limit and the test tells
 you to delete its entry. The reader being protected is an agent: 500 lines is
 ~7k tokens, and past ~2000 the Read tool pages instead of loading.
 
+### Name the skill before you change the code
+
+Before editing under `aegis/`, `aegis/templates/`, or any `i18n/locales/`,
+name the skill from the index below that applies, and read its `SKILL.md` if
+this session has not. Two mechanisms, different strengths:
+
+- `.pi/extensions/skill-gate.ts` blocks `edit`/`write` under
+  `aegis/i18n/locales/`, `aegis/templates/copier-aegis-project/` and
+  `aegis/commands/` until the matching skill (`i18n`, `template-dev`,
+  `add-cli-command`) has been read in that session. It cannot be skipped.
+- Everything else is judgment: `plan-framework-change` before planning,
+  `add-service`/`add-component` for new specs, `create-plugin` for plugin
+  packages, `release` before a version.
+
+The failure this prevents is not hypothetical: locale files were filled with
+invented translations when the `i18n` skill says non-English values are the
+English string as a placeholder, and that translating is a separate reviewed
+PR.
+
 ### Scope control
 Fix exactly what is asked. No scope creep, no unrequested test suites, minimal
 viable change, and verify it works.

@@ -51,4 +51,9 @@ async def meetings_search(query: str, limit: int = 20) -> list[MeetingHit]:
     ]
 
 
-register_tool("meetings_search", meetings_search, effect="read")
+register_tool(
+    "meetings_search",
+    meetings_search,
+    effect="read",
+    doing="Searching the meetings",
+)

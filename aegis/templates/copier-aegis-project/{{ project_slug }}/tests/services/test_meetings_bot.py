@@ -19,7 +19,10 @@ from app.services.meetings.domains.bot import card, voice
 from app.services.meetings.domains.bot import run as bot
 from app.services.meetings.domains.bot.meet import CallState
 from app.services.meetings.models import (
+    CAPTIONS,
     CLAIMED,
+    LEFT,
+    SHORTCUT,
     Caption,
     Meeting,
     MeetingActionRun,
@@ -34,6 +37,7 @@ from tests._meetings import (
     FakeCall,
     asked_a_question,
     bot_on,
+    hold_the_answers,
 )
 
 # The run beats on every look here (BEAT_SECONDS is 0), by design.
@@ -541,7 +545,113 @@ async def test_its_card_says_it_cannot_see_captions_and_that_it_leaves(
 
     statuses = [c["status"] for c in call.cards if "status" in c]
     assert statuses[0] == card.NO_CAPTIONS
-    assert statuses[-1] == card.LEAVING
+    # Leaving, it is its own card again: no question left on it.
+    assert call.cards[-1] == {"status": card.LEAVING, "focus": None, "pills": []}
+
+
+async def test_what_it_did_on_the_page_is_kept_with_why_it_left(
+    run: Callable[..., Any], async_db_session: AsyncSession
+) -> None:
+    call = FakeCall([CallState.IN_CALL, CallState.ENDED])
+    call.took(CAPTIONS, SHORTCUT, "Leave call")
+
+    meeting = await run(call)
+
+    record = await MeetingsService(async_db_session, None).read(meeting.id)  # type: ignore[arg-type]
+    assert [(s.step, s.how) for s in record.steps] == [
+        (CAPTIONS, SHORTCUT),
+        (LEFT, CallState.ENDED),
+    ]
+    assert record.steps[0].seen == "Leave call"
+
+
+async def test_it_hears_the_call_before_it_says_it_is_in(
+    run: Callable[..., Any],
+) -> None:
+    """Posting in the chat can take seconds: what is said meanwhile is
+    heard."""
+    call = FakeCall([CallState.IN_CALL, CallState.ENDED])
+    heard_first: list[bool] = []
+
+    async def said() -> None:
+        heard_first.append(call.captions_on)
+
+    call.during["say"] = said
+
+    await run(call)
+
+    assert heard_first == [True]
+
+
+async def test_captions_meet_had_not_offered_yet_are_turned_on_later(
+    run: Callable[..., Any],
+) -> None:
+    """Meet can draw the captions button after the bot is in: it keeps
+    trying, and its card stops saying it cannot see them."""
+    call = FakeCall([CallState.IN_CALL] * 3 + [CallState.ENDED])
+    offered = iter([False, True])
+
+    async def turn_on_captions(wait_ms: int = 0) -> bool:
+        call.captions_on = next(offered, True)
+        return call.captions_on
+
+    call.turn_on_captions = turn_on_captions  # type: ignore[method-assign]
+
+    await run(call)
+
+    statuses = [c["status"] for c in call.cards if "status" in c]
+    assert call.captions_on
+    assert statuses[0] == card.NO_CAPTIONS
+    assert card.LISTENING in statuses
+
+
+def test_awaiting_her_answer_is_its_usual_pace() -> None:
+    """Her answer wakes the bot as it lands (``changes``), so awaiting it
+    needs no quick look (the page read and the database asked twice a
+    second); a line for her settling, or her answer playing, still does."""
+    assert bot.between(held=False, saying=False) == bot.POLL_SECONDS
+    assert bot.between(held=True, saying=False) == bot.QUICK_POLL_SECONDS
+    assert bot.between(held=False, saying=True) == bot.QUICK_POLL_SECONDS
+
+
+async def test_a_change_wakes_the_bot_from_its_wait_at_once() -> None:
+    """Between looks the bot waits, but a run changing (or a step of hers)
+    wakes it: her answer is read, said and shown as it lands."""
+    import asyncio
+
+    pulse = bot._Pulse(meeting_id=1)
+    loop = asyncio.get_running_loop()
+    loop.call_later(0.05, pulse.soon)
+    began = loop.time()
+
+    await pulse.nap(10.0)
+
+    assert loop.time() - began < 1.0 and pulse.wanted
+
+
+async def test_a_question_heard_is_on_its_card_at_the_next_look(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The card reads the runs in flight on a beat, or sooner once she
+    takes a step: a quick answer with no step came and went between beats
+    and never showed. A question heard is read at the next look."""
+    from app.services.meetings.domains.actions import registry
+    from app.services.meetings.domains.bot import transcript
+    from app.services.meetings.models import Caption
+
+    if registry.action_named(registry.ANSWERS) is None:  # a stack without her
+        pytest.skip("nothing answers her here")
+    hold_the_answers(monkeypatch)
+    asked = Caption("1", "Dana", "Hey Notes, who owns billing?")
+    call = FakeCall([CallState.IN_CALL] * 4 + [CallState.ENDED], captions=[[], [asked]])
+    bot_on(monkeypatch, async_db_session, call)
+    monkeypatch.setattr(bot, "BEAT_SECONDS", 3600)  # one beat, as it joins
+    monkeypatch.setattr(transcript, "SETTLE_SECONDS", 0.0)
+
+    meeting = await MeetingsService(async_db_session, None).request(MEET, "Notes")
+    await bot.run_meeting(meeting.id)  # type: ignore[arg-type]
+
+    assert card.QUESTION_HEARD in [c["status"] for c in call.cards if "status" in c]
 
 
 async def test_its_card_says_when_a_runner_is_answering(
@@ -564,7 +674,7 @@ async def test_its_card_says_when_a_runner_is_answering(
 
     await run(call, meeting=await async_db_session.get(Meeting, meeting_id))
 
-    assert {"status": card.ANSWERING} in call.cards
+    assert card.ANSWERING in [shown["status"] for shown in call.cards]
 
 
 async def test_an_agents_picture_and_camera_setting_come_with_it(
@@ -603,3 +713,14 @@ async def test_it_speaks_in_the_stacks_active_voice(
 
     assert await voice.spoken("I'm here", speaking) == b"mp3"
     assert asked == [("nova", "I'm here")]
+
+
+def test_its_worker_builds_the_twin_as_it_starts() -> None:
+    """Her map (the twin) takes seconds to build, once a process: the
+    meetings worker builds it as it starts, so no call waits on it."""
+    discovery = pytest.importorskip("app.components.worker.queue_discovery")
+    from app.core.ontology import system
+
+    queue = discovery.queue_module("meetings")
+
+    assert queue is not None and system.warm in queue.STARTUP

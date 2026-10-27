@@ -17,7 +17,7 @@ recorded prompt change and empties itself when a newer one appears.
 """
 
 {% if ai_backend != "memory" and ai_framework == "pydantic-ai" %}from collections.abc import Awaitable, Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from pydantic_ai.settings import ModelSettings
@@ -26,6 +26,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.core.config import settings
 from app.core.db import get_async_session
 from app.core.log import logger
+from app.core.tools import RUN_CODE
 from app.services.ai.domains.chat import queries
 from app.services.ai.domains.chat.builtin_fetchers import APP_MAP
 from app.services.ai.domains.chat.chat_kit import ContextProvider, ToolChatAgent
@@ -36,7 +37,7 @@ from app.services.ai.domains.chat.tools import resolve_tools
 from app.services.ai.models.agents import Agent
 from app.services.ai.domains.spend.recording import record_usage
 {% elif ai_backend != "memory" %}
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -48,7 +49,7 @@ from app.services.ai.domains.chat.builtin_fetchers import APP_MAP
 from app.services.ai.domains.chat.prompts import get_default_system_prompt
 from app.services.ai.models.agents import Agent
 {% else %}
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from app.core.config import settings
 from app.core.log import logger
@@ -75,6 +76,13 @@ class AgentConfig:
     memory_modules: tuple[str, ...] = ()
     knowledge_base_ids: tuple[str, ...] = ()
     code_mode: bool = False
+
+    def led_by(self, instructions: str | None) -> "AgentConfig":
+        """This agent with ``instructions`` (a caller's manners for the
+        turn: a call's, a meeting's) leading its own prompt."""
+        if not instructions:
+            return self
+        return replace(self, system_prompt=f"{instructions}\n\n{self.system_prompt}")
 
 
 def default_agent_config() -> AgentConfig:
@@ -310,7 +318,7 @@ def _tool_output_limits(*, code_mode: bool = False) -> Any:
                 action=Truncate(max_chars=TOOL_OUTPUT_CHAR_LIMIT),
             )
         ],
-        tool_filter=["run_code"] if code_mode else "all",
+        tool_filter=[RUN_CODE] if code_mode else "all",
     )
 
 

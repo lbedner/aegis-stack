@@ -2,6 +2,7 @@
 said is written, and when a line put to the bot is taken as said in full."""
 
 import asyncio
+from collections.abc import Callable
 from difflib import SequenceMatcher
 import re
 
@@ -69,7 +70,9 @@ class Transcript:
     a question put to it is never taken half said, nor waits on a beat. A
     caption is cut into a line for each time it names the bot
     (``cut_at_name``), so each question put to it is its own. Each write
-    gives back the moments it made."""
+    gives back the moments it made. When the bot is talking, and what it
+    says, is its own to tell (``her``: ``Answers.talk``): Meet captions it
+    late, or not at all."""
 
     def __init__(self, meeting_id: int, bot: str) -> None:
         self.meeting_id, self.bot = meeting_id, bot
@@ -79,8 +82,14 @@ class Transcript:
         self.changed: dict[str, float] = {}  # ... -> when it last changed
         # piece -> the line before it, as the detectors read it (``Before``)
         self.before: dict[str, Before] = {}
+        # piece -> what its ``before`` was told of her, and her words since
+        self.her_heard: dict[str, tuple[str, str]] = {}
         self.bot_spoke = -FOLLOW_SECONDS - 1  # when its own caption last moved
+        self.bot_said = ""  # what that caption says
+        # When what the bot says has played, and what it last said.
+        self.her: Callable[[], tuple[float, str]] = lambda: (float("-inf"), "")
         self.asker = ""  # who last put something to it
+        self.asked: dict[str, str] = {}  # speaker -> their last line for it
         self.held: set[str] = set()  # pieces for it, not yet said in full
         self.seen: dict[str, str] = {}  # caption line -> its text, last look
         self.text: dict[str, str] = {}  # caption line -> all of it heard so far
@@ -102,6 +111,7 @@ class Transcript:
         # shows now over what it showed then).
         for shown in {**self.unsure, **{c.line: c for c in captions}}.values():
             self._look(shown, now, patient=True)
+        self._hear_her()
         held = self.held = {
             line
             for line, c in self.pending.items()
@@ -113,6 +123,33 @@ class Transcript:
         if settled or now - self.written_at >= BEAT_SECONDS:
             return self._due(held)
         return []
+
+    def _hear_her(self) -> None:
+        """What she has said so far, to each line not yet written: her
+        caption and its echo under the asker's name grow together (taken in
+        either order), so an echo is told by all she said while it grew,
+        not by what she had said when it began."""
+        _, words = self.her()
+        heard = f"{self.bot_said} {words}"
+        for line in self.pending:
+            before = self.before.get(line)
+            if before is None:
+                continue
+            # What it was told before, and her words then: words that grow
+            # replace their last telling, others follow it.
+            base, last = self.her_heard.get(line, (before[3], ""))
+            if not heard.startswith(last):
+                base = f"{base} {last}"
+            self.her_heard[line] = (base, heard)
+            self.before[line] = (*before[:3], f"{base} {heard}")
+
+    def hearing(self) -> list[tuple[str, str]]:
+        """The lines for the bot still being said (``held``), first begun
+        first: who is saying each, and what of it so far."""
+        return [
+            (self.pending[line].speaker, self.pending[line].text)
+            for line in sorted(self.held, key=lambda line: self.first_seen[line])
+        ]
 
     def rest(self) -> list[Caption]:
         """Everything not yet written, held or not: on the way out."""
@@ -134,10 +171,10 @@ class Transcript:
             self.drawn_as.get(shown.line) or self._drawn_again(shown, now) or shown.line
         )
         c = Caption(line, shown.speaker, shown.text)
-        if its_own(c.speaker, self.bot):
-            self.bot_spoke = now
         self.seen[shown.line] = c.text
         self.text[line] = merge_caption(self.text.get(line, ""), c.text)
+        if its_own(c.speaker, self.bot):
+            self.bot_spoke, self.bot_said = now, self.text[line]
         self.spoke.append((now, c.speaker))
         self.latest[c.speaker] = (shown.line, line, now)
         self._cut(c, now)
@@ -178,7 +215,9 @@ class Transcript:
     def _back(self, caption: Caption) -> bool:
         """Whether a piece is said back to the bot (``replying``: the rule
         the detectors read it by)."""
-        return replying(self.before.get(caption.line), caption.speaker, self.bot)
+        return replying(
+            self.before.get(caption.line), caption.speaker, self.bot, caption.text
+        )
 
     def _cut(self, caption: Caption, now: float) -> None:
         """The caption's pieces (``cut_at_name``) that changed, to write:
@@ -188,8 +227,10 @@ class Transcript:
             line = caption.line if i == 0 else f"{caption.line}#{i}"
             if self.lines.get(line) != piece:
                 if line not in self.lines:
-                    gap = now - self.bot_spoke
-                    self.before[line] = (ITSELF, gap, self.asker)
+                    played, words = self.her()
+                    gap = now - max(self.bot_spoke, played)  # < 0: it is talking
+                    said = f"{self.bot_said} {words}"
+                    self.before[line] = (ITSELF, gap, self.asker, said)
                 self.lines[line] = piece
                 self.changed[line] = now
                 self.first_seen.setdefault(line, now - self.started)
@@ -201,17 +242,44 @@ class Transcript:
         writing = [c for line, c in self.pending.items() if line not in held]
         self.pending = {line: self.pending[line] for line in held}
         for c in writing:
-            if self._for_bot(c):
-                self.asker = c.speaker
+            if not self._for_bot(c):
+                continue
+            if (first := self._asked_again(c)) is not None:
+                # Written over the line it says again: one question, asked once.
+                self.rows[c.line] = self.rows[first]
                 logger.info(
-                    "Bot: a line for it, said in full",
+                    "Bot: a line for it drawn twice, kept as one",
                     meeting_id=self.meeting_id,
                     speaker=c.speaker,
-                    text=c.text,
-                    said_back=self._back(c),
-                    quiet_seconds=round(self.written_at - self.changed[c.line], 1),
+                    first=self.lines[first],
+                    again=c.text,
+                    blocks=(first, c.line),
                 )
+                continue
+            self.asker, self.asked[c.speaker] = c.speaker, c.line
+            logger.info(
+                "Bot: a line for it, said in full",
+                meeting_id=self.meeting_id,
+                speaker=c.speaker,
+                text=c.text,
+                said_back=self._back(c),
+                quiet_seconds=round(self.written_at - self.changed[c.line], 1),
+            )
         return writing
+
+    def _asked_again(self, caption: Caption) -> str | None:
+        """The line for the bot ``caption`` says again: its speaker's last,
+        written already, begun within ``AGAIN_SECONDS`` of it and opening
+        alike (``said_again``). Meet at times draws one question as two
+        blocks in a way ``_drawn_again`` misses (the second with the name
+        spelled anew). None for a line of its own."""
+        first = self.asked.get(caption.speaker)
+        if first is None or first not in self.rows or caption.line in self.rows:
+            return None
+        begun = abs(self.first_seen[caption.line] - self.first_seen[first])
+        if begun > AGAIN_SECONDS or not said_again(self.lines[first], caption.text):
+            return None
+        return first
 
     async def write(
         self, db: AsyncSession, writing: list[Caption]

@@ -9,12 +9,17 @@ from arq.connections import RedisSettings
 from app.components.worker import arq_hooks
 from app.core.config import settings
 from app.core.constants import ServiceName
+from app.core.ontology.system import warm
 from app.core.queue_workers import concurrency_for
 from app.services.meetings.service import run_meeting
 
 # ponytail: arq always has a job timeout; a day stands in for none (the
 # bot's own rules decide when it leaves).
 A_DAY_SECONDS = 24 * 60 * 60
+
+# What its jobs want ready as the worker starts (``queue_discovery.started``):
+# her map (the twin) takes seconds to build, once a process.
+STARTUP = (warm,)
 
 
 async def run_meeting_task(ctx: dict[str, Any], meeting_id: int) -> None:

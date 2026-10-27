@@ -16,8 +16,9 @@ from pydantic_ai.messages import (
     ToolReturnPart,
 )
 
+from app.core import steps
 from app.core.chat_transcript import card_component
-from app.core.tools import result_text
+from app.core.tools import get_tool, result_text
 {%- endif %}
 from app.services.ai.models import StreamingMessage
 
@@ -77,7 +78,10 @@ CALL_ID = "call_id"
 
 def record_tool_call(trace: list[dict[str, Any]], event: FunctionToolCallEvent) -> None:
     """Append a trace entry for a starting tool call (full code kept), with
-    the id its result is matched by (``record_tool_result``)."""
+    the id its result is matched by (``record_tool_result``). A call the
+    registry does not run (a code-mode script) is heard here as a step by
+    whoever is watching the turn (``steps.heard``); a registered tool is
+    heard where it runs (``resolve_tools``)."""
     entry: dict[str, Any] = {"tool": event.part.tool_name}
     if call_id := getattr(event.part, "tool_call_id", None):
         entry[CALL_ID] = call_id
@@ -96,6 +100,8 @@ def record_tool_call(trace: list[dict[str, Any]], event: FunctionToolCallEvent) 
         text = args if isinstance(args, str) else json.dumps(args)
         entry["args"] = (text or "")[:_TRACE_RESULT_CAP]
     trace.append(entry)
+    if get_tool(entry["tool"]) is None:
+        steps.heard(entry["tool"], entry.get("code") or entry.get("args", ""))
 
 
 def record_tool_result(

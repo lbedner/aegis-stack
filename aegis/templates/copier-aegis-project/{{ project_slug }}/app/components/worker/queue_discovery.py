@@ -10,10 +10,12 @@ they replaced went stale in two places at once.
 A backend registry supplies the parts that are actually its own: a
 predicate saying whether a module is one of its queues, a predicate
 saying whether a member is one of its tasks, and the names its middleware
-hooks go by. Everything else is here.
+hooks go by. Everything else is here, a queue's own startup work among it
+(``started``: its module's ``STARTUP``), which each backend's startup hook
+runs once the worker's own is done.
 """
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable, Sequence
 import importlib
 from pathlib import Path
 from typing import Any
@@ -31,6 +33,24 @@ def queue_module(queue_name: str) -> Any | None:
         return importlib.import_module(f"{QUEUES_PACKAGE}.{queue_name}")
     except ImportError:
         return None
+
+
+async def started(queue_name: str) -> None:
+    """The queue's own startup work, once its worker has started: each of
+    its module's ``STARTUP`` steps in turn (what its jobs want ready, such
+    as a model to build ahead). A step that fails is logged; the worker and
+    the steps after it go on."""
+    module = queue_module(queue_name)
+    steps: Sequence[Callable[[], Awaitable[None]]] = getattr(module, "STARTUP", ())
+    for step in steps:
+        try:
+            await step()
+        except Exception:
+            logger.exception(
+                "A queue's startup step failed",
+                queue=queue_name,
+                step=getattr(step, "__qualname__", repr(step)),
+            )
 
 
 def discover_queues(is_queue: Callable[[str], bool]) -> list[str]:

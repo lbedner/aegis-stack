@@ -10,15 +10,13 @@ and a search this many, with a "more - search to narrow" line rather than
 silent truncation. Needs the catalog, so offered with a persistence
 backend only.
 
-With voice, the same list picks what a live call runs on: the realtime
-models a call can reach sit under their vendor, marked Voice, a pick of
-one making it the active voice profile's engine (made on the spot when
-it has none); the list narrows to Text or Voice, the model a call runs on
-leading beside the chat model's.
+It holds the chat models only. What a live call runs on is picked with
+the voice it speaks in (``chat_voices``): the realtime models a call can
+reach (``call_rows``), a pick making one the active voice profile's engine
+(``use_for_calls``, made on the spot when it has none).
 """
 
-import asyncio
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from app.core.model_picker import (
     display_title,
@@ -32,9 +30,9 @@ from app.core.model_picker import (
     newest_first,
 )
 
-# The list's modalities, with voice: every model, the chat models, or what
-# a live call can run on.
-FILTERS = (("all", "All"), ("text", "Text"), ("voice", "Voice"))
+if TYPE_CHECKING:  # a session only where the stack has a database
+    from sqlmodel.ext.asyncio.session import AsyncSession
+
 # How many recently used models lead the list; read from a few more, as
 # some may not be callable now.
 RECENT = 3
@@ -75,16 +73,15 @@ async def call_models() -> list[dict[str, Any]]:
     ]
 
 
-async def calling_model() -> str | None:
+async def calling_model(db: "AsyncSession") -> Any | None:
     """The catalog model a live call runs on now (the active profile's
-    engine), or None."""
+    engine: its ``model_id`` and ``title``), or None; read on the request's
+    session (``db``)."""
     from app.core.config import settings
-    from app.core.db import get_async_session
     from app.services.ai.service import live_engines
 
-    async with get_async_session() as db:
-        engine = await live_engines.resolve(db, settings.VOICE_LIVE_ENGINE)
-        return engine.llm.model_id if engine else None
+    engine = await live_engines.resolve(db, settings.VOICE_LIVE_ENGINE)
+    return engine.llm if engine else None
 
 
 async def use_for_calls(model_id: str) -> str | None:
@@ -107,11 +104,22 @@ async def use_for_calls(model_id: str) -> str | None:
     return None
 
 
-async def vendor_icons(vendors: list[str]) -> dict[str, str]:
-    """``{vendor: icon URL}`` for the vendors the catalog holds a mark for
-    (served by the Overseer's icon route; none without the Overseer)."""
+async def call_rows(current: str | None = None) -> list[dict[str, Any]]:
+    """The realtime models a live call can reach, as picker rows: the one
+    in use (``current``) first, then the newest."""
+    live = newest_first([{**m, "kind": "realtime"} for m in await call_models()])
+    live.sort(key=lambda m: m["model_id"] != current)
+    icons = await vendor_icons(live)
+    return [_row(m, under_vendor=None, icons=icons) for m in live]
+
+
+async def vendor_icons(models: list[dict[str, Any]]) -> dict[str, str]:
+    """``{vendor: icon URL}`` for the vendors of ``models`` the catalog
+    holds a mark for (served by the Overseer's icon route; none without
+    the Overseer)."""
     from .chat_surface import marks
 
+    vendors = sorted({str(m.get("vendor") or "") for m in models})
     return await marks({v: (v,) for v in vendors})
 
 
@@ -198,8 +206,6 @@ def _row(
     )
     return {
         "model_id": model["model_id"],
-        "kind": model.get("kind", "chat"),
-        "voice": voice,
         "title": display_title(model, under_vendor=under_vendor),
         "facts": facts,
         "icon_name": icon_for,
@@ -260,35 +266,22 @@ def _recent(
     ]
 
 
-async def picker(
-    query: str, current: str, path: str, calls: bool = False, show: str = "all"
-) -> dict[str, Any]:
+async def picker(query: str, current: str, path: str) -> dict[str, Any]:
     """The dialog's contents: grouped by vendor, or flat when searching,
-    with the recently used leading and the active model marked; with
-    ``calls``, the live-call models too, the one calls run on marked.
-    ``path`` is the picker's own URL on the chat mount it opened from;
-    ``show`` narrows it to one modality (``FILTERS``), offered with calls."""
-    show = show if calls and show in dict(FILTERS) else "all"
-    # Three reads of their own, at once: the picker redraws on each key.
-    models, live, calling = await asyncio.gather(
-        catalog() if show in ("all", "text") else asyncio.sleep(0, []),
-        call_models() if calls and show in ("all", "voice") else asyncio.sleep(0, []),
-        calling_model() if calls else asyncio.sleep(0, None),
-    )
-    every = models + [{**m, "kind": "realtime"} for m in live]
-    icons = await vendor_icons(sorted({str(m.get("vendor") or "") for m in every}))
+    with the recently used leading and the active model marked. ``path``
+    is the picker's own URL on the chat mount it opened from."""
+    models = await catalog()
+    icons = await vendor_icons(models)
     query = query.strip()
     if query:
-        sections = _flat(every, query, icons)
+        sections = _flat(models, query, icons)
     else:
         # A pick leads at once: it has no usage until it answers.
-        leading = [current, *([calling] if calling else []), *await recent_ids()]
-        sections = _recent(every, leading, icons) + _grouped(every, icons)
+        leading = [current, *await recent_ids()]
+        sections = _recent(models, leading, icons) + _grouped(models, icons)
     return {
         "query": query,
-        "show": show,
-        "filters": FILTERS if calls else (),
-        "active": {current, calling} - {None},
+        "current": current,
         "sections": sections,
         "empty": not any(section["rows"] for section in sections),
         "path": path,

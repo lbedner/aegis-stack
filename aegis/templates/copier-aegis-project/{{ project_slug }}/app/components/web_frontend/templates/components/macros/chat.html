@@ -202,8 +202,8 @@ btn btn-outline {{ {"sm": "btn-sm", "xs": "btn-xs"}[size] }} {{ tones.get(tone, 
 {# The composer's chips are one button: a label that opens its dialog.
    ``mark`` names the attribute that says what the chip shows (for scripts
    and tests), ``value`` its value if any. #}
-{% macro composer_chip(id, label, path, title, mark, value=None, oob=False) %}
-<button type="button" id="{{ id }}" {% if oob %}hx-swap-oob="true"{% endif %} {{ hx_dialog(path) }}
+{% macro composer_chip(id, label, path, title, mark, value=None, oob=False, opens=None) %}
+<button type="button" id="{{ id }}" {% if oob %}hx-swap-oob="true"{% endif %} {{ opens or hx_dialog(path) }}
         title="{{ title }}" aria-label="{{ title }}"
         class="inline-flex items-center gap-1 text-xs text-aegis-muted hover:text-aegis-text transition-colors whitespace-nowrap">
   <span {{ mark }}{% if value is not none %}="{{ value }}"{% endif %}>{{ label }}</span>
@@ -215,10 +215,36 @@ btn btn-outline {{ {"sm": "btn-sm", "xs": "btn-xs"}[size] }} {{ tones.get(tone, 
    Re-rendered out of band by a pick. #}
 {% macro model_chip(chip, path, oob=False) %}{{ composer_chip("chat-model", chip.label, path, "Switch the active model", "data-model", chip.model, oob) }}{% endmacro %}
 
-{# The composer's voice chip: the active voice profile's name, opening the
-   voice dialog. Same place and weight as the model chip; it loads itself,
-   and a switch sends it back out of band. #}
-{% macro voice_chip(active, path, oob=False) %}{{ composer_chip("chat-voice", active.name if active else "Voice", path, "Change the voice", "data-voice-name", oob=oob) }}{% endmacro %}
+{# The composer's voice chip: what a live call runs on (``calling``), else
+   the active voice profile's name, opening the dialog that picks both.
+   Same place and weight as the model chip; it loads itself, and a pick
+   sends it back out of band. #}
+{% macro voice_chip(active, path, calling=None, oob=False) %}{{ composer_chip("chat-voice", "Calls: " ~ calling.title if calling else "Voice: " ~ (active.name if active else "default"), path, "Change what calls run on and the voice", "data-voice-name", oob=oob) }}{% endmacro %}
+
+{# The composer's agent chip: who answers here, opening the agent's editor
+   in the side drawer, where what it runs on is changed. #}
+{% macro agent_chip(name, url) %}{{ composer_chip("chat-agent", name, url, name ~ "'s settings", "data-assistant", opens=hx_drawer(url)) }}{% endmacro %}
+
+{# One model as a picker's row (the chat model's, a call's): a pick posts
+   its id from the form ``form`` (its attributes; ``hidden``, what else it
+   posts), ``mark`` naming it for the page; teal-checked when ``current``. #}
+{% macro model_row(row, current, mark, form, hidden="") %}
+<li>
+  <form {{ form }}>
+    {{ hidden }}
+    <button type="submit" name="model_id" value="{{ row.model_id }}" {{ mark }}="{{ row.model_id }}" {% if current %}aria-current="true"{% endif %}
+            class="w-full flex items-center gap-3 px-2 py-2 rounded text-left hover:bg-aegis-border/20 transition-colors">
+      {% if row.icon_name %}{{ avatar(row.icon_name, row.icon_url) }}{% else %}<span class="w-5 shrink-0"></span>{% endif %}
+      <span class="min-w-0 flex-1">
+        <span class="block text-sm text-aegis-text truncate">{{ row.title }}</span>
+        <span class="block text-xs text-aegis-muted truncate">{{ row.model_id }}</span>
+      </span>
+      {% if row.facts %}<span class="text-xs text-aegis-muted whitespace-nowrap">{{ row.facts }}</span>{% endif %}
+      {% if current %}{{ icon("check", "w-4 h-4 text-aegis-teal shrink-0", 2, '', label="In use") }}{% endif %}
+    </button>
+  </form>
+</li>
+{% endmacro %}
 
 {# One stored message as its bubble: the transcript and the settle swap
    draw messages through this, so the role switch has one home. #}

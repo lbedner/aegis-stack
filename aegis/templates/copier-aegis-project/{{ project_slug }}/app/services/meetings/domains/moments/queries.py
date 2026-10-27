@@ -67,7 +67,7 @@ async def hearing(
             is_me,
             people.get(meeting_id, frozenset()),
             addressee(speaker, is_me, bot, anyone),
-            replying(before, speaker, bot),
+            replying(before, speaker, bot, text),
         )
 
     return heard
@@ -137,15 +137,16 @@ async def _put_to_it(db: AsyncSession, meeting_ids: list[int]) -> set[int]:
 
 def _befores(lines: list[Line], put_to_it: set[int]) -> dict[int, Before]:
     """Before each line (but a meeting's first), from ``lines`` in order:
-    who said the one before, how long before this began that ended, and who
-    last put something to the bot (a line in ``put_to_it``)."""
+    who said the one before, how long before this began that ended, who
+    last put something to the bot (a line in ``put_to_it``), and what the
+    one before said."""
     before: dict[int, Before] = {}
     last: dict[int, Before] = {}  # meeting -> its line so far, as the next sees it
-    for i, m, _, start, end, who, _ in lines:
-        said, ended, asker = last.get(m, ("", 0.0, ""))
+    for i, m, text, start, end, who, _ in lines:
+        said, ended, asker, words = last.get(m, ("", 0.0, "", ""))
         if m in last:
-            before[i] = (said, start - ended, asker)
-        last[m] = (who, end, who if i in put_to_it else asker)
+            before[i] = (said, start - ended, asker, words)
+        last[m] = (who, end, who if i in put_to_it else asker, text)
     return before
 
 

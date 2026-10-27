@@ -4,7 +4,7 @@
    seconds. #}
 {% from "components/macros/layout.html" import page_header %}
 {% from "components/macros/form.html" import action %}
-{% from "pages/meetings/_macros.html" import failure, status_line %}
+{% from "pages/meetings/_macros.html" import bot_steps, failure, status_line %}
 {% set base = prefix ~ "/" ~ meeting.id %}
 <div id="meeting-body" class="grid gap-6"
      {% if following %}hx-get="{{ base }}/body" hx-trigger="every 3s" hx-swap="outerHTML"{% endif %}>
@@ -13,5 +13,6 @@
     {% if can_leave %}{{ action("Ask it to leave", 'data-leave hx-post="' ~ base ~ '/leave" hx-target="#meeting-body" hx-swap="outerHTML"', tone="warn") }}{% endif %}
   {% endcall %}
   {{ failure(meeting) }}
+  {{ bot_steps(steps) }}
   {% include "pages/meetings/_sections.html" %}
 </div>

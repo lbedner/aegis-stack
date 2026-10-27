@@ -20,7 +20,7 @@ from app.services.meetings.domains.bot import run as bot
 from app.services.meetings.domains.bot import transcript
 from app.services.meetings.domains.bot.audio import RATE
 from app.services.meetings.domains.bot.login import CALENDAR, LOGIN
-from app.services.meetings.domains.bot.meet import CallState
+from app.services.meetings.domains.bot.meet import CallState, Steps
 from app.services.meetings.domains.bot.row import transition, write_captions
 from app.services.meetings.domains.moments import tidy
 from app.services.meetings.domains.moments.service import moments_of
@@ -159,7 +159,7 @@ def hold_the_answers(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(action_runs, "background", lambda work: work.close())
 
 
-class FakeCall:
+class FakeCall(Steps):
     """A call whose states are scripted: one per look, the last repeating.
     ``during`` runs a hook at a named moment, as another process would."""
 
@@ -171,6 +171,7 @@ class FakeCall:
         captions: list[list[Caption]] | None = None,
         sound: bool = False,
     ):
+        super().__init__()
         self.states = states
         self.counts = people or [3]
         self.shown = captions or [[]]
@@ -185,6 +186,8 @@ class FakeCall:
         # What its camera showed (each change) and what it said aloud.
         self.cards: list[dict[str, Any]] = []
         self.spoken: list[bytes] = []
+        self.mic_open = False
+        self.until = float("-inf")  # when what it said has played
         self.captions_offered = True
 
     async def _at(self, moment: str) -> None:
@@ -211,7 +214,7 @@ class FakeCall:
     async def leave(self) -> None:
         self.left = True
 
-    async def turn_on_captions(self) -> bool:
+    async def turn_on_captions(self, wait_ms: int = 0) -> bool:
         self.captions_on = self.captions_offered
         return self.captions_offered
 
@@ -220,6 +223,12 @@ class FakeCall:
 
     async def speak(self, audio: bytes) -> None:
         self.spoken.append(audio)
+
+    async def unmute(self) -> None:
+        self.mic_open = True
+
+    async def hush(self) -> None:
+        self.mic_open = False
 
     async def captions(self) -> list[Caption]:
         if self.sound and self.on_audio is not None:

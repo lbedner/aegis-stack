@@ -187,7 +187,7 @@ class _Call:
     async def say(self, text: str) -> None:
         return None
 
-    async def turn_on_captions(self) -> bool:
+    async def turn_on_captions(self, wait_ms: int = 0) -> bool:
         return True
 
     async def captions(self) -> list[Any]:

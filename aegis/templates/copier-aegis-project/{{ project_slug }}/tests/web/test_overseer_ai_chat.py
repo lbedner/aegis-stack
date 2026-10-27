@@ -357,6 +357,20 @@ def test_the_hooks_the_scripts_read_are_the_ones_the_markup_emits(
         assert any(select(h, f"[{hook}]") for h in pages), hook
 
 
+@persisted
+def test_the_composer_names_the_agent_and_opens_it(client: TestClient) -> None:
+    """Who answers here, first among the composer's chips: it opens the
+    agent's editor, where what she runs on is changed."""
+    from app.components.web_frontend.overseer_ai_agents import agent_drawer_url
+    from app.services.ai.domains.chat.agent_loader import DEFAULT_AGENT_SLUG
+
+    page = _chat_page(client)
+    chip = one(page, "#chat-composer #chat-agent")
+
+    assert chip.get("hx-get") == agent_drawer_url(DEFAULT_AGENT_SLUG)
+    assert text(chip) == text(one(page, "[data-composer-chips] [data-assistant]"))
+
+
 class TestModelPicker:
     """The composer's model chip opens the picker: the models this install
     can call, grouped by vendor, the recently used leading, one search."""
@@ -377,16 +391,8 @@ class TestModelPicker:
                 {"model_id": "claude-x", "title": "Claude X", "vendor": "Anthropic"},
             ]
 
-        async def calling() -> str | None:
-            return switched[-1] if switched and switched[-1] == LIVE else None
-
-        async def use_for_calls(model_id: str) -> str | None:
-            switched.append(model_id)
-            return None
-
         async def running() -> str:
-            chat_picks = [m for m in switched if m != LIVE]
-            return chat_picks[-1] if chat_picks else "llama3"
+            return switched[-1] if switched else "llama3"
 
         async def recent() -> list[str]:
             return ["claude-x"]
@@ -397,7 +403,8 @@ class TestModelPicker:
             switched.append(model_id)
             return None
 
-        async def icons(vendors: list[str]) -> dict[str, str]:
+        async def icons(listed: list[dict[str, Any]]) -> dict[str, str]:
+            vendors = {m.get("vendor") for m in listed}
             return {"Anthropic": "/icons/Anthropic"} if "Anthropic" in vendors else {}
 
         monkeypatch.setattr(models, "catalog", catalog)
@@ -405,8 +412,6 @@ class TestModelPicker:
         monkeypatch.setattr(models, "recent_ids", recent)
         monkeypatch.setattr(models, "switch", switch)
         monkeypatch.setattr(models, "vendor_icons", icons)
-        monkeypatch.setattr(models, "calling_model", calling)
-        monkeypatch.setattr(models, "use_for_calls", use_for_calls)
         return switched
 
     def test_the_chip_names_the_model_and_opens_the_picker(
@@ -420,11 +425,7 @@ class TestModelPicker:
         assert text(one(chip, "[data-model]")) == "llama3"
         picker = client.get(chip.get("hx-get")).text
         assert one(picker, "#model-picker") is not None
-        rows = [
-            b.get("data-model-id")
-            for b in select(picker, "[data-model-id]")
-            if b.get("data-model-id") != LIVE  # a voice model, under its vendor
-        ]
+        rows = [b.get("data-model-id") for b in select(picker, "[data-model-id]")]
         # The model in use and the recently used lead, then each vendor's group.
         assert rows[:2] == ["llama3", "claude-x"]
         assert sorted(rows[2:]) == ["claude-x", "llama3"]
@@ -449,52 +450,15 @@ class TestModelPicker:
         assert chip.get("hx-swap-oob") == "true"
         assert text(one(chip, "[data-model]")) == "claude-x"
 
-    def test_live_calls_are_picked_in_the_same_list(
-        self, client: TestClient, catalog: list[str]
-    ) -> None:
-        """With voice, what a call runs on is a pick here too: a group of
-        the models a call can reach, a pick setting the call's engine and
-        leaving the chat model alone."""
-        if not (chat_surface.HAS_VOICE and chat_surface.PERSISTED):
-            pytest.skip("no live calls in this stack")
+    def test_it_holds_the_chat_models_only(self, client: TestClient) -> None:
+        """What a call runs on is picked with the voice (the Calls chip): one
+        list of one kind, so its one check says one thing."""
         picker = client.get(f"{CHAT}/models").text
-        live = one(picker, f'[data-model-id="{LIVE}"]')
-        kind = live.getparent().cssselect("input[name=kind]")[0]
-        assert kind.get("value") == "realtime"
 
-        response = client.post(
-            f"{CHAT}/models", data={"model_id": LIVE, "kind": "realtime"}
-        )
-
-        assert catalog == [LIVE]
-        current = {
-            b.get("data-model-id") for b in select(response.text, "[aria-current]")
+        assert LIVE not in {
+            b.get("data-model-id") for b in select(picker, "[data-model-id]")
         }
-        assert current == {"llama3", LIVE}  # the chat model and the call's
-        assert text(one(response.text, "#chat-model [data-model]")) == "llama3"
-
-    def test_text_or_voice_narrows_one_list_and_voice_sits_with_its_vendor(
-        self, client: TestClient
-    ) -> None:
-        """One list of every model she runs on, narrowed by modality: a
-        live model is a row under its own vendor, marked Voice, not a group
-        apart at the foot of the chat models."""
-        if not (chat_surface.HAS_VOICE and chat_surface.PERSISTED):
-            pytest.skip("no live calls in this stack")
-        every = client.get(f"{CHAT}/models").text
-        groups = {
-            text(one(group, "summary")).split()[0]: group
-            for group in select(every, "#model-list details")
-        }
-        assert "Live" not in groups
-        one(groups["google"], f'[data-model-id="{LIVE}"] [data-voice]')
-
-        def shown(show: str) -> set[str]:
-            found = client.get(f"{CHAT}/models", params={"show": show}).text
-            return {b.get("data-model-id") for b in select(found, "[data-model-id]")}
-
-        assert shown("voice") == {LIVE}
-        assert shown("text") == {"llama3", "claude-x"}
+        assert select(picker, "[data-filters]") == []
 
     def test_a_refused_pick_says_why(self, client: TestClient) -> None:
         response = client.post(f"{CHAT}/models", data={"model_id": "nope"})

@@ -438,4 +438,5 @@ register_tool(
     # It shows what a script computed and changes nothing.
     effect="read",
     replace=True,
+    doing="Drawing it",
 )

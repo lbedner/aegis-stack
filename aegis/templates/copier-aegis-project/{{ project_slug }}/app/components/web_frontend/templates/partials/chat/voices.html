@@ -1,22 +1,40 @@
-{# The assistant's voice, in the one modal: the voice profiles, each with a
-   preview; switch, make one from the active, or edit one; and how terms are
-   said. ``view`` picks the piece: the composer's chip, the list, one voice's
-   form, or the pronunciation list.
+{# The assistant's voice, in the one modal: what a live call runs on (where
+   the mount takes calls: ``call_rows``, ``calling``), the voice profiles,
+   each with a preview; switch, make one from the active, or edit one; and
+   how terms are said. ``view`` picks the piece: the composer's chip, the
+   list, one voice's form, or the pronunciation list.
    Previews play through voice.js's Listen handler ([data-speak]). #}
 {% from "components/macros/icons.html" import icon %}
-{% from "components/macros/chat.html" import voice_chip, speak_button %}
+{% from "components/macros/chat.html" import model_row, voice_chip, speak_button %}
 {% from "components/macros/form.html" import action, field, text_input, number_input, select, primary_button %}
 {% from "components/macros/feedback.html" import error_banner, empty_state %}
 {% from "components/macros/layout.html" import dialog_title %}
 {% from "components/macros/table.html" import data_table %}
 
 {% if view == "chip" %}
-{{ voice_chip(active, path) }}
+{{ voice_chip(active, path, calling) }}
 
 {% elif view == "list" %}
-{% if chip_oob %}{{ voice_chip(active, path, oob=True) }}{% endif %}
+{% if chip_oob %}{{ voice_chip(active, path, calling, oob=True) }}{% endif %}
 <div id="voice-profiles" class="space-y-4">
+  {% if call_rows is not none %}
+  {{ dialog_title("Calls and voice", "What a live call with " ~ assistant ~ " runs on (a meeting's too), and the voice it speaks in. A pick takes effect on the next call, or the next thing said.") }}
+  <section class="space-y-1" data-calls>
+    <h3 class="micro-label text-aegis-muted">Calls run on</h3>
+    {% if call_rows %}
+    <ul class="max-h-56 overflow-y-auto">
+      {% for row in call_rows %}
+      {{ model_row(row, calling is not none and calling.model_id == row.model_id, "data-call-model", hx_dialog_post(path ~ "/calls")) }}
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-xs text-aegis-muted">No live model can be reached: a call needs an OpenAI or Google key with a realtime model in the catalog.</p>
+    {% endif %}
+  </section>
+  <h3 class="micro-label text-aegis-muted">Voice</h3>
+  {% else %}
   {{ dialog_title("Voice", "How " ~ assistant ~ " hears and speaks. A switch takes effect on the next thing said.") }}
+  {% endif %}
   {% if voices %}
   <ul class="divide-y divide-aegis-border/60">
     {% for voice in voices %}

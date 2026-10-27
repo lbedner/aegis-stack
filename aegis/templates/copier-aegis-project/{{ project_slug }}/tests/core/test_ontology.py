@@ -333,3 +333,35 @@ def test_a_plugin_service_is_a_node_of_its_own(
     )
     plugin = _parts(system_model(app))["service:fake_plugin"]
     assert plugin.category is Category.APP
+
+
+async def test_a_warmed_model_is_built_once_off_the_loop_for_whoever_asks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The webserver warms the model once its parts have registered, a
+    worker as it starts (its queue's ``STARTUP``): neither waits for the
+    build, and the first to ask gets that build, not a second."""
+    import asyncio
+    import threading
+    import time
+    from types import SimpleNamespace
+
+    built: list[str] = []
+    release = threading.Event()
+
+    def build(app: object = None) -> object:
+        release.wait(5)
+        built.append(threading.current_thread().name)
+        return SimpleNamespace(partial=False)
+
+    monkeypatch.setattr(ontology_system, "_kept", None)
+    monkeypatch.setattr(ontology_system, "system_model", build)
+    began = time.monotonic()
+
+    await ontology_system.warm()
+    assert time.monotonic() - began < 1 and built == []  # not waited on
+    release.set()
+    model = await asyncio.to_thread(ontology_system.current)
+
+    assert len(built) == 1 and ontology_system.current() is model
+    assert built[0] != threading.current_thread().name  # off the loop

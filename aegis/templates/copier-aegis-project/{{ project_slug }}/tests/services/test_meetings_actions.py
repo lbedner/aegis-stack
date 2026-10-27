@@ -59,6 +59,83 @@ def test_a_question_offers_the_built_in_actions() -> None:
     assert offered["agent"].label == "Ask agent"
 
 
+async def test_a_meetings_runs_in_flight_say_what_was_asked_of_whom(
+    async_db_session: AsyncSession,
+) -> None:
+    """For the bot's card: each run not yet done, with its action, where it
+    is, and the question and who asked it."""
+    from app.services.meetings.domains.actions.queries import going_in
+    from app.services.meetings.models import Going
+
+    meeting_id, moment_id = await asked_a_question(async_db_session)
+    run = await ask(async_db_session, moment_id, "agent", owner_user_id=None)
+
+    going = await going_in(async_db_session, meeting_id)
+
+    assert going == [
+        Going(
+            id=run.id or 0,
+            moment=moment_id,
+            action="agent",
+            status="asked",
+            runner=None,
+            speaker="Dana",
+            text="Can the CSV export ship this week?",
+        )
+    ]
+
+
+async def test_her_answers_to_lines_put_to_her_newest_first(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """For the card's trail: the runs that answered a line put to the bot
+    by name (said aloud and posted in the chat), done or failed, newest
+    first, each with what it came back with. A question asked of the call
+    otherwise is not one of hers."""
+    from datetime import timedelta
+
+    from app.core.time import utcnow
+    from app.services.meetings.domains.actions.queries import answered_in
+    from app.services.meetings.domains.moments import service as moments_service
+
+    monkeypatch.setattr(moments_service, "answerer", lambda: None)  # none asked
+    meeting_id = await a_meeting(async_db_session)  # the bot joins as "Notes"
+    await said(
+        async_db_session,
+        meeting_id,
+        ("Dana", "Can the CSV export ship this week?"),
+        ("Dana", "Hey Notes, who owns billing?"),
+        ("Dana", "Hey Notes, is Redis up?"),
+    )
+    question, billing, redis = await moments_of(async_db_session, meeting_id)
+    now = utcnow()
+    for n, (moment, status, result) in enumerate(
+        [
+            (question, "done", "Yes."),
+            (billing, "done", "Sam does."),
+            (redis, "failed", "x"),
+        ]
+    ):
+        async_db_session.add(
+            MeetingActionRun(
+                moment_id=moment.id or 0,
+                action="agent",
+                prompt="-",
+                status=status,
+                result=result,
+                finished_at=now + timedelta(seconds=n),
+            )
+        )
+    await async_db_session.commit()
+
+    answered = await answered_in(async_db_session, meeting_id)
+
+    assert [(a.moment, a.status, a.result) for a in answered] == [
+        (redis.id, "failed", "x"),
+        (billing.id, "done", "Sam does."),
+    ]
+
+
 async def test_the_prompt_is_the_question_and_what_led_to_it(
     async_db_session: AsyncSession,
 ) -> None:
@@ -471,6 +548,10 @@ async def test_a_question_put_to_the_bot_is_answered_by_her_unasked(
     (run,) = (await async_db_session.exec(select(MeetingActionRun))).all()
     assert (run.action, run.status, run.result) == ("ai", "done", "Sam owns billing.")
     message, how = asked[0]
+    # Told she is in the meeting over her own prompt (``IN_A_MEETING``),
+    # not in what she is asked: what was said.
+    assert how["instructions"] == ask_ai.IN_A_MEETING
+    assert ask_ai.IN_A_MEETING not in message
     assert "The invoices went out late again." in message
     assert "who owns billing?" in message
     assert how["agent_slug"] is None and how["surface"] == "meetings"
@@ -577,15 +658,18 @@ async def test_only_a_line_put_to_her_by_name_is_answered_aloud(
 ) -> None:
     """In a call with her live voice, a question asked of an action in the
     app (a setting asking Ask Illiana of every question, say) is not said aloud
-    in the call: only a line put to her by name is."""
-    from app.services.meetings.domains.actions.live import LIVE
+    in the call: only a line put to her by name is. Each run knows the
+    moment it answers (``ASKED``), so whoever hears its steps knows whose."""
+    from app.services.meetings.domains.actions.live import ASKED, LIVE
     from app.services.meetings.domains.moments import service as moments_service
     from tests._session import opens
 
     heard: list[Any] = []
+    whose: list[int | None] = []
 
     async def probe(prompt: str, owner_user_id: int | None) -> str:
         heard.append(LIVE.get())
+        whose.append(ASKED.get())
         return "Done."
 
     monkeypatch.setitem(
@@ -616,6 +700,40 @@ async def test_only_a_line_put_to_her_by_name_is_answered_aloud(
 
     assert (asked.kind, put_to_her.kind) == ("question", "addressed")
     assert heard[0] is None and heard[1] is not None
+    assert whose == [asked.id, put_to_her.id]
+
+
+# Two runs' worth of reads around one ask: a loop by construction.
+@pytest.mark.queryspy(allow_n_plus_one=True)
+async def test_whoever_watches_hears_a_run_asked_taken_and_finished_at_once(
+    async_db_session: AsyncSession,
+    held: list[Awaitable[Any]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The bot in a call hears each change to a run made in its own process
+    as it happens (``changes.watching``), not on its next look."""
+    from app.services.meetings.domains.actions import changes
+    from tests._session import opens
+
+    async def probe(prompt: str, owner_user_id: int | None) -> str:
+        return "Done."
+
+    monkeypatch.setitem(
+        registry._actions,
+        "probe",
+        Action("probe", "Probe", registry.QUESTIONS, "app", run=probe),
+    )
+    monkeypatch.setattr(runs, "get_async_session", opens(async_db_session))
+    _, moment_id = await asked_a_question(async_db_session)
+    heard: list[str] = []
+
+    with changes.watching(lambda: heard.append("changed")):
+        await runs.ask(async_db_session, moment_id, "probe", owner_user_id=None)
+        for started in held:
+            await started
+    await runs.ask(async_db_session, moment_id, "probe", owner_user_id=None)
+
+    assert heard == ["changed"] * 3  # asked, taken, finished; then nobody
 
 
 def test_a_line_is_asked_about_with_the_lines_either_side_of_it() -> None:

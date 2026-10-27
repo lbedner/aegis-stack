@@ -530,6 +530,25 @@ Each worker process counts the jobs it is running in its busy key
 those keys to clear, and Overseer's queue card draws a row of slots per
 process when a queue has more than one, each lit by that process's jobs.
 
+### A queue's startup work
+
+A queue can say what its jobs want ready before the first one runs: a
+`STARTUP` tuple of async functions in its queue module. Each backend runs
+them once the worker's own startup is done (arq's `on_startup`, TaskIQ's
+middleware `startup`, Dramatiq's `after_worker_boot`), in order; one that
+fails is logged and the worker starts anyway.
+
+```python
+# app/components/worker/queues/meetings.py
+from app.core.ontology.system import warm
+
+# Her map (the twin) takes seconds to build, once a process.
+STARTUP = (warm,)
+```
+
+A step that takes long should start its work and return, as `warm` does
+(it builds on a thread of its own), so the worker takes jobs at once.
+
 ### CPU-bound tasks
 
 Every backend runs async tasks on one event loop per process: TaskIQ's,

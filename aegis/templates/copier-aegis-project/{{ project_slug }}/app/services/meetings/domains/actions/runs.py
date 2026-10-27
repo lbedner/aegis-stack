@@ -17,8 +17,8 @@ from app.core.concurrency import background
 from app.core.db import get_async_session
 from app.core.log import logger
 from app.core.time import utcnow
-from app.services.meetings.domains.actions import queries
-from app.services.meetings.domains.actions.live import aloud
+from app.services.meetings.domains.actions import changes, queries
+from app.services.meetings.domains.actions.live import aloud, asking
 from app.services.meetings.domains.actions.prompt import excerpt
 from app.services.meetings.domains.actions.registry import Action, action_named
 from app.services.meetings.models import (
@@ -81,6 +81,7 @@ async def ask(
     )
     db.add(run)
     await db.commit()
+    changes.changed()
     if action.where == IN_THE_APP:
         background(_run_in_the_app(run.id or 0, action))
     return run
@@ -118,6 +119,7 @@ async def finish(
     run.status, run.result, run.finished_at = (DONE if ok else FAILED), result, utcnow()
     db.add(run)
     await db.commit()
+    changes.changed()
     return run
 
 
@@ -139,11 +141,11 @@ async def _run_in_the_app(run_id: int, action: Action) -> None:
         run = await db.get_one(MeetingActionRun, run_id)
         moment = await db.get_one(MeetingMoment, run.moment_id)
         owner = (await db.get_one(Meeting, moment.meeting_id)).owner_user_id
-        prompt, kind = run.prompt, moment.kind
+        prompt, kind, asked = run.prompt, moment.kind, run.moment_id
     try:
         if action.run is None:
             raise ActionNotFoundError(f"{action.name} has nothing to run in the app")
-        with aloud(kind):
+        with aloud(kind), asking(asked):
             result, ok = await action.run(prompt, owner), True
     except Exception as exc:
         logger.exception("Action failed", action=action.name, run_id=run_id)
@@ -156,6 +158,8 @@ async def _take(db: AsyncSession, run_id: int, runner: str) -> bool:
     """Claim the run for ``runner`` if it is still asked."""
     taken = await queries.take(db, run_id, runner)
     await db.commit()
+    if taken:
+        changes.changed()
     return taken
 
 

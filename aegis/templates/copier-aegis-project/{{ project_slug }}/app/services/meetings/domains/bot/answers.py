@@ -1,30 +1,37 @@
-"""Questions put to the bot by name in a call, answered out loud: once her
-answer to one (an ``addressed`` moment; ``actions.ask_ai``) is done, it is
-posted in the chat at once and said aloud, and one that failed, that it
-could not find it. An answer not back within ``LOOKING_AFTER`` seconds is
-said to be looked up (``LOOKING``, its speech made as it joins), once; a
-quick one is just said. Without a voice it types instead. With her live
-voice (``voice.live``) she is heard as she makes the answer: nothing is
-said while she thinks, and her answer is not said again.
+"""Questions put to the bot by name in a call, from heard to said: the
+one place what she is doing about each is kept, for the card (``saying``),
+her mic (``mic``) and her echo (``talk``) to read.
+
+Once her answer to one (an ``addressed`` moment; ``actions.ask_ai``) is
+done, it is posted in the chat at once and said aloud, and one that
+failed, that it could not find it. Once she starts looking it up (a step
+of her turn answering it: ``looking_up``), she says so (``LOOKING``, its
+speech made as it joins), once; an answer she looks nothing up for is
+just said, however long it takes. Without a voice it types instead. With
+her live voice (``voice.live``) she is heard as she makes the answer:
+nothing is said while she thinks, and her answer is not said again. She
+is saying an answer until the last of it has played (the call's
+``until``), whichever way it was said.
 
 Speech is said apart from the call's loop (``_speaking``): made a sentence
-at a time, the first played while the rest are made, so captions are read
-on while it talks."""
+at a time, each played after the last as soon as it is made, so captions
+are read on while it talks."""
 
 import asyncio
+import math
 from typing import Any
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.log import logger
 from app.services.meetings.domains.actions.queries import answered
+from app.services.meetings.domains.bot.meet import SPOKEN_TAIL
 from app.services.meetings.domains.bot.voice import sentences, spoken
 from app.services.meetings.domains.moments.detectors import ADDRESSED
 from app.services.meetings.domains.moments.service import answerer
 from app.services.meetings.models import DONE
 
 LOOKING = "Let me look that up."
-LOOKING_AFTER = 3.0
 NOT_FOUND = "Sorry, I couldn't find that."
 
 
@@ -38,13 +45,17 @@ class Answers:
         # What answers her (``answerer``); with nothing, nothing is waited on.
         self.answers = answerer()
         self.waiting: dict[int, float] = {}  # moment -> when it was heard
+        self.looked: set[int] = set()  # those she has started looking up
         self.told: set[int] = set()  # those said to be looked up
+        # moment -> when its answer has played: never, while still to say
+        self.ends: dict[int, float] = {}
+        self.words = ""  # what she last said, or is saying
         # Made ahead, to be said at once; made only when needed when she is
         # live (``_looking``), since she is heard as she thinks then.
         self.looking: asyncio.Task[bytes | None] | None = (
             None if live is not None else asyncio.create_task(spoken(LOOKING, voice))
         )
-        self.to_say: asyncio.Queue[str] = asyncio.Queue()
+        self.to_say: asyncio.Queue[tuple[int | None, str]] = asyncio.Queue()
         self.speaking = asyncio.create_task(self._speaking())
 
     async def heard(self, made: list[tuple[int, str]]) -> None:
@@ -55,10 +66,43 @@ class Answers:
                 self.waiting[moment] = now
                 logger.info("Bot: asked by name, her answer asked", moment=moment)
 
+    def looking_up(self, moment: int | None) -> int | None:
+        """A step of her turn (a tool call, ``steps.watching``) answering
+        ``moment`` (its run's, ``actions.live.ASKED``): one of her live
+        call's has none, and is a step of the oldest question waited on, the
+        one it answers. She is looking that one up; the moment it is for."""
+        if moment is None:
+            moment = min(self.waiting, key=self.waiting.__getitem__, default=None)
+        if moment in self.waiting:
+            self.looked.add(moment)
+        return moment
+
+    def saying(self) -> set[int]:
+        """The questions whose answers she is still saying: to say, or not
+        yet played."""
+        now = asyncio.get_running_loop().time()
+        self.ends = {m: end for m, end in self.ends.items() if end > now}
+        return set(self.ends)
+
+    def talk(self) -> tuple[float, str]:
+        """When what she says has played, and what she last said: her own
+        words heard back meanwhile are her echo (``Transcript.her``)."""
+        return self.call.until, self.words
+
+    async def mic(self) -> None:
+        """Her mic open from a question put to her until the last of its
+        answer has played (``SPOKEN_TAIL`` after): Meet opens a mic late,
+        and opened as she spoke, her first words were lost."""
+        if self.voice is None:
+            return
+        if self.waiting or self.saying():
+            await self.call.unmute()
+        elif asyncio.get_running_loop().time() >= self.call.until + SPOKEN_TAIL:
+            await self.call.hush()
+
     async def answer(self, db: AsyncSession) -> None:
         """Each answer done since the last look, posted in the chat and
-        said aloud; for those still slow to come, that it is looking them
-        up."""
+        said aloud; for those she has started looking up, that she is."""
         if self.answers is None:  # nothing is waited on without it (``heard``)
             return
         done = await answered(db, sorted(self.waiting), self.answers)
@@ -72,11 +116,10 @@ class Answers:
             )
             said = result if status == DONE and result else NOT_FOUND
             await self.call.say(said)
-            self._aloud(said)
-        since = now - LOOKING_AFTER
-        slow = {m for m, heard in self.waiting.items() if heard <= since} - self.told
-        if slow and not self._live():
-            self.told |= slow
+            self._aloud(said, moment)
+        looked = (self.looked & self.waiting.keys()) - self.told
+        if looked and not self._live():
+            self.told |= looked
             if self.voice is None:
                 await self.call.say(LOOKING)
             self._aloud(LOOKING)
@@ -84,10 +127,19 @@ class Answers:
     def _live(self) -> bool:
         return self.live is not None and self.live.open
 
-    def _aloud(self, text: str) -> None:
-        said_live = self.live is not None and self.live.spoke(text)
-        if self.voice is not None and not said_live:
-            self.to_say.put_nowait(text)
+    def _aloud(self, text: str, moment: int | None = None) -> None:
+        """``text`` said, for ``moment``: by her live voice already, which
+        has played once the call's audio has, or to say now."""
+        if self.voice is None:
+            return
+        self.words = text
+        if self.live is not None and self.live.spoke(text):
+            ends = self.call.until
+        else:
+            self.to_say.put_nowait((moment, text))
+            ends = math.inf
+        if moment is not None:
+            self.ends[moment] = ends
 
     async def said(self) -> None:
         """Once everything given it to say has been said."""
@@ -98,7 +150,7 @@ class Answers:
         sentence's speech made at once, each played as soon as it and those
         before it are."""
         while True:
-            text = await self.to_say.get()
+            moment, text = await self.to_say.get()
             try:
                 parts = (
                     [self._looking()]
@@ -113,18 +165,19 @@ class Answers:
                 for n, part in enumerate(parts, 1):
                     if (audio := await part) is None:
                         continue
-                    made = loop.time() - began
                     await self.call.speak(audio)
                     logger.info(
-                        "Bot: said a sentence aloud",
+                        "Bot: a sentence to say",
                         sentence=f"{n}/{len(parts)}",
-                        ready_after=round(made, 1),
-                        done_after=round(loop.time() - began, 1),
+                        ready_after=round(loop.time() - began, 1),
+                        plays_for=round(self.call.until - loop.time(), 1),
                     )
             except Exception:
                 # Posted in the chat already: the call goes on unheard.
                 logger.exception("The bot could not say its answer aloud")
             finally:
+                if moment is not None:
+                    self.ends[moment] = self.call.until
                 self.to_say.task_done()
 
     def _looking(self) -> asyncio.Task[bytes | None]:

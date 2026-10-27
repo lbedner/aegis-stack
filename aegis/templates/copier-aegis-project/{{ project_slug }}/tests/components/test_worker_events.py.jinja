@@ -73,6 +73,49 @@ async def test_publish_event_swallows_redis_errors() -> None:
     # Should NOT raise
     await publish_event(redis, "job.started", "system")
 
+@pytest.mark.asyncio
+async def test_a_queue_starts_what_it_declares_and_one_failing_stops_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A queue's own startup work (its module's ``STARTUP``) runs once its
+    worker has started, in turn; a step that fails is logged, and the
+    worker and the steps after it go on."""
+    from types import SimpleNamespace
+
+    from app.components.worker import queue_discovery
+
+    ran: list[str] = []
+
+    async def first() -> None:
+        ran.append("first")
+
+    async def broken() -> None:
+        raise RuntimeError("no twin")
+
+    async def last() -> None:
+        ran.append("last")
+
+    queue = SimpleNamespace(STARTUP=(first, broken, last))
+    monkeypatch.setattr(queue_discovery, "queue_module", lambda name: queue)
+
+    await queue_discovery.started("meetings")
+
+    assert ran == ["first", "last"]
+
+
+@pytest.mark.asyncio
+async def test_a_queue_with_nothing_to_start_starts_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from types import SimpleNamespace
+
+    from app.components.worker import queue_discovery
+
+    monkeypatch.setattr(queue_discovery, "queue_module", lambda name: SimpleNamespace())
+    await queue_discovery.started("system")
+    monkeypatch.setattr(queue_discovery, "queue_module", lambda name: None)
+    await queue_discovery.started("gone")
+
 {% if worker_backend == "taskiq" %}
 
 # ---------------------------------------------------------------------------
@@ -242,8 +285,15 @@ async def test_the_worker_reports_what_it_runs_with(
     )
     mw = EventPublishMiddleware().set_queue_name("load_test")
 
+    starts: list[str] = []
+
+    async def start_queue(queue: str) -> None:
+        starts.append(queue)
+
+    monkeypatch.setattr(middleware.queue_discovery, "started", start_queue)
     await mw.startup()
     assert started["engine"] == "taskiq" and started["queue"] == "load_test"
+    assert starts == ["load_test"]  # its queue's own startup, after the worker's
     assert started["processes"] == 1 and started["concurrency"] == 50
 
     await mw.shutdown()
@@ -264,16 +314,28 @@ def test_worker_boot_applies_what_the_overseer_saved(
     """On the AsyncIO middleware's loop, the one async actors use."""
     from app.components.worker import middleware
 
+    import asyncio
+
     ran: list[Any] = []
 
     class Loop:
         def run_coroutine(self, coroutine: Any) -> None:
-            ran.append(coroutine.__name__)
-            coroutine.close()
+            asyncio.run(coroutine)
+
+    async def applied() -> None:
+        ran.append("apply_saved_overrides")
+
+    async def start_queue(queue: str) -> None:
+        ran.append(queue)
 
     monkeypatch.setattr(middleware, "get_event_loop_thread", lambda: Loop())
-    EventPublishMiddleware().after_worker_boot(MagicMock(), MagicMock())
-    assert ran == ["apply_saved_overrides"]
+    monkeypatch.setattr(middleware, "apply_saved_overrides", applied)
+    monkeypatch.setattr(middleware.queue_discovery, "started", start_queue)
+    mw = EventPublishMiddleware()
+    mw._queue_names = {"meetings"}
+    mw.after_worker_boot(MagicMock(), MagicMock())
+    # Then each of its queues' own startup, on the same loop.
+    assert ran == ["apply_saved_overrides", "meetings"]
 
 
 def test_before_process_message_publishes_job_started() -> None:
@@ -371,9 +433,16 @@ async def test_the_worker_reports_what_it_runs_with(
     monkeypatch.setattr(
         runtime, "start_reporting", lambda _redis, fields: started.update(fields)
     )
+    starts: list[str] = []
+
+    async def start_queue(queue: str) -> None:
+        starts.append(queue)
+
+    monkeypatch.setattr(arq_hooks.queue_discovery, "started", start_queue)
     await system.WorkerSettings.on_startup({})
 
     assert started["engine"] == "arq" and started["queue"] == "system"
+    assert starts == ["system"]  # its queue's own startup, after the worker's
     assert started["concurrency"] == system.WorkerSettings.max_jobs
 
 

@@ -1,6 +1,6 @@
 """The bot's run as kept on its meeting row: every status change, the
 heartbeat that tells a live run from a stopped one, failing the runs that
-stopped, and the captions as transcript lines. Each commits: a run holds
+stopped, the captions as transcript lines, and what it did on the page. Each commits: a run holds
 no session across a slow browser step."""
 
 from datetime import timedelta
@@ -17,7 +17,9 @@ from app.services.meetings.models import (
     IN_PROGRESS,
     Caption,
     Meeting,
+    MeetingBotStep,
     MeetingStatus,
+    Took,
     TranscriptLine,
     fitted,
 )
@@ -124,3 +126,12 @@ async def write_captions(
     found = [(m.id or 0, m.kind) for m in made]  # read before the commit expires them
     await db.commit()
     return found
+
+
+async def keep_steps(db: AsyncSession, meeting_id: int, steps: list[Took]) -> None:
+    """What the bot did on the meeting's page (``meet.Steps``), kept on it."""
+    db.add_all(
+        MeetingBotStep(meeting_id=meeting_id, step=step, how=how, seen=seen, at=at)
+        for step, how, seen, at in steps
+    )
+    await db.commit()

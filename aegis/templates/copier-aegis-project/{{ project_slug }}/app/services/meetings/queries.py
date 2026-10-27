@@ -15,6 +15,7 @@ from app.services.meetings.domains.notes import queries as notes_queries
 from app.services.meetings.models import (
     CalendarEvent,
     Meeting,
+    MeetingBotStep,
     MeetingParticipant,
     MeetingsCounts,
     MeetingStatus,
@@ -70,6 +71,16 @@ async def transcript(
         .where(TranscriptLine.meeting_id == meeting_id)
         # Lines captioned in the same look keep the order Meet showed them.
         .order_by(col(TranscriptLine.start_seconds), col(TranscriptLine.id))
+    )
+    return list(await db.exec(query))
+
+
+async def steps(db: AsyncSession, meeting_id: int) -> list[MeetingBotStep]:
+    """What the bot did on a meeting's page, in the order it did it."""
+    query = (
+        select(MeetingBotStep)
+        .where(MeetingBotStep.meeting_id == meeting_id)
+        .order_by(col(MeetingBotStep.at), col(MeetingBotStep.id))
     )
     return list(await db.exec(query))
 

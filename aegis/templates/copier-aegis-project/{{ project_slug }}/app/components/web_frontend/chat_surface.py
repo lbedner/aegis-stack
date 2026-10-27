@@ -112,6 +112,18 @@ async def assistant_name(chat: ChatSurface, session: Any = None) -> str:
     return agent.name
 
 
+def agent_url(chat: ChatSurface) -> str | None:
+    """The answering agent's editor (Overseer's agent drawer), where the
+    mount has one: a saved row, so with a database only."""
+    if not (PERSISTED and chat.agent_drawer):
+        return None
+    from app.services.ai.service import DEFAULT_AGENT_SLUG
+
+    from .overseer_ai_agents import agent_drawer_url
+
+    return agent_drawer_url(chat.agent_slug or DEFAULT_AGENT_SLUG)
+
+
 def resolver(mount: ChatSurface) -> Callable[..., Awaitable[ChatSurface]]:
     """The dependency every route takes its mount from: the mount's
     ``bind``, else the mount as declared."""
@@ -389,6 +401,7 @@ async def surface_context(chat: ChatSurface) -> dict[str, Any]:
         # Voice profiles are rows: the voice chip needs a database.
         "voices": HAS_VOICE and PERSISTED and chat.operator_controls,
         "calls": offers_calls(chat),
+        "agent_url": agent_url(chat),
         # The change queue lives with a persisted AI backend.
         "approvals": CARDS.PATH if CARDS else None,
     }

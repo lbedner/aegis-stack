@@ -81,6 +81,7 @@ class StreamingMixin(ChatMixin):
         surface: str | None = None,
         attachments: list[ChatAttachment] | None = None,
         subject: str | None = None,
+        instructions: str | None = None,
 {% if ai_rag %}
         use_rag: bool = False,
         rag_collection: str | None = None,
@@ -100,6 +101,7 @@ class StreamingMixin(ChatMixin):
             surface=surface,
             attachments=attachments,
             subject=subject,
+            instructions=instructions,
 {% if ai_rag %}
             use_rag=use_rag,
             rag_collection=rag_collection,
@@ -129,13 +131,13 @@ class StreamingMixin(ChatMixin):
         surface: str | None = None,
         attachments: list[ChatAttachment] | None = None,
         subject: str | None = None,
+        instructions: str | None = None,
 {% if ai_rag %}
         use_rag: bool = False,
         rag_collection: str | None = None,
         rag_top_k: int | None = None,
 {% endif %}    ) -> AsyncIterator[StreamingMessage]:
-        """
-        Stream a chat message with real-time response generation.
+        """Stream a chat message with real-time response generation.
 
         Args:
             message: The user's message
@@ -147,6 +149,7 @@ class StreamingMixin(ChatMixin):
             surface: Originating chat surface, recorded on new
                 conversations so each embedded chat lists only its own
                 history
+            instructions: This turn's manners (a meeting's), over its prompt
 {% if ai_rag %}
             use_rag: Enable RAG context injection from indexed codebase
             rag_collection: Collection to search (uses config default if None)
@@ -175,6 +178,7 @@ class StreamingMixin(ChatMixin):
                 subject=subject,
                 owner_user_id=owner_user_id,
                 admin=admin,
+                instructions=instructions,
 {% if ai_rag %}
                 use_rag=use_rag,
                 rag_collection=rag_collection,

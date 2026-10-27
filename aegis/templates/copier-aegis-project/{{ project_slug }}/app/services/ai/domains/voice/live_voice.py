@@ -112,12 +112,19 @@ async def live_voice(
     voice: str | None = None,
     agent_slug: str | None = None,
     on_end: Callable[[], Awaitable[None]] | None = None,
+    instructions: str | None = None,
 ) -> AsyncGenerator[LiveVoice | None]:
     """Her live voice (``LiveVoice``) on ``engine`` (``live_engines.resolve``,
     in the caller's session), saved into a conversation of ``surface``'s,
-    as ``user_id``, speaking in ``voice``; None where the call would not
-    come up, for the caller to answer the way it did. She cannot hang it up
+    as ``user_id``, speaking in ``voice``, talking as the engine's call
+    manners say or the caller's (``instructions``: a meeting's); None where
+    the call would not come up, for the caller to answer the way it did,
+    and on GPT-Live, which listens and talks at once: asked a question as
+    text, it says nothing until its session expires. She cannot hang it up
     (asked one question after another, a "thanks" must not end it)."""
+    if live_engines.is_gpt_live(live_engines.realtime_model(engine)):
+        yield None
+        return
     try:
         conversation, realtime = await open_call(
             ai,
@@ -127,6 +134,7 @@ async def live_voice(
             agent_slug=agent_slug,
             voice=voice or settings.TTS_VOICE,
             hang_up=False,
+            instructions=instructions,
         )
     except Exception:
         logger.exception("Her live voice could not be made; she answers as before")

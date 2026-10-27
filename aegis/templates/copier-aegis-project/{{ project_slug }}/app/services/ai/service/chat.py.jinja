@@ -40,15 +40,16 @@ class ChatMixin(TurnMixin):
         subject: str | None = None,
         owner_user_id: int | None = None,
         admin: bool | None = None,
+        instructions: str | None = None,
 {% if ai_rag %}
         use_rag: bool = False,
         rag_collection: str | None = None,
         rag_top_k: int | None = None,
 {% endif %}
     ) -> TurnSetup:
-        """Everything a turn needs before the model runs: the agent row,
-        the conversation with the user message added, and the runnable
-        ``_build_turn`` makes for it."""
+        """Everything a turn needs before the model runs: the agent row
+        (``instructions`` leading its prompt), the conversation with the
+        user message added, and the runnable ``_build_turn`` makes for it."""
         current = self.config
 
         # Resolve the requested agent definition (DB row or code default)
@@ -56,6 +57,7 @@ class ChatMixin(TurnMixin):
             agent_config = await resolve_agent(agent_slug)
         else:
             agent_config = await resolve_agent()
+        agent_config = agent_config.led_by(instructions)
 
         # Setup conversation and add user message. The stored text
         # carries the attachment marker; the bytes ride only this

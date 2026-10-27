@@ -12,7 +12,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.core.config import settings
 from app.core.discovery import optional
 from app.core.log import logger
-from app.services.meetings.domains.actions.live import LIVE
+from app.services.meetings.domains.actions.live import IN_A_MEETING, LIVE
 from app.services.meetings.domains.actions.registry import ANSWERS, SURFACE
 from app.services.meetings.domains.moments.detectors import SENTENCES
 from app.services.meetings.domains.moments.service import answerer
@@ -50,18 +50,20 @@ async def spoken(text: str, voice: Any | None) -> bytes | None:
 
 
 def sentences(text: str) -> list[str]:
-    """``text`` as it is said aloud, a sentence at a time: written for a
-    chat, its markdown is made plain first (the AI service's
-    ``to_spoken``), lists and all, where the stack has it."""
+    """``text`` as it is said aloud, a sentence at a time (none for blank
+    text): written for a chat, its markdown is made plain first (the AI
+    service's ``to_spoken``), lists and all, where the stack has it."""
     plain = getattr(optional(AI), "to_spoken", lambda said: said)(text)
-    return SENTENCES.split(plain.strip())
+    return [s for s in SENTENCES.split(plain.strip()) if s.strip()]
 
 
 async def live_engine_of(session: AsyncSession, voice: Any | None) -> Any | None:
     """The live engine her answers in a call are made on: her voice
     profile's (``voice``, from ``voice_of``: the bot runs in a worker, whose
     settings are the .env's), where she is the one answering (``answerer``)
-    and the stack has one enabled; else None."""
+    and the stack has one enabled; else None. One her live voice cannot be
+    spoken to on (GPT-Live) opens none (``live_voice``), and she answers as
+    without one."""
     engines = getattr(optional(AI), "live_engines", None)
     if voice is None or engines is None or answerer() != ANSWERS:
         return None
@@ -88,6 +90,7 @@ async def live(
         surface=SURFACE,
         user_id="default" if owner_user_id is None else str(owner_user_id),
         voice=getattr(voice, "TTS_VOICE", None),
+        instructions=IN_A_MEETING,  # a meeting's manners, not a call with one
         on_end=call.hush,  # however the call ends, the mic it held closes
     ) as spoken:
         token = LIVE.set(spoken)

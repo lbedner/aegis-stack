@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
@@ -268,10 +267,8 @@ async def realtime_for(
     instructions = "\n\n".join(filter(None, manners))
     config = await (resolve_agent(agent_slug) if agent_slug else resolve_agent())
     # GPT-Live takes the call manners as its own (``_model_settings``).
-    if instructions and not is_gpt_live(model):
-        config = replace(
-            config, system_prompt=f"{instructions}\n\n{config.system_prompt}"
-        )
+    if not is_gpt_live(model):
+        config = config.led_by(instructions)
     setup = await ai._build_turn(conversation, config, user_id=user_id, admin=admin)
     agent, history = setup.agent, setup.conversation_context
     return agent.realtime(
@@ -293,11 +290,13 @@ async def open_call(
     conversation: Any = None,
     admin: bool | None = None,
     hang_up: bool = True,
+    instructions: str | None = None,
 ) -> tuple[Any, Any]:
     """A live call on ``engine`` (``live_engines``): the conversation it
     saves into (``conversation``, else a new one of ``surface``'s for
     ``user_id``) and her, built for it on the engine's model with its call
-    manners (``realtime_for``)."""
+    manners (``realtime_for``), or the caller's (``instructions``: a call
+    with others in it, such as a meeting)."""
     model = live_engines.realtime_model(engine)
     if conversation is None:
         conversation = await ai.conversation_manager.create_conversation(
@@ -314,7 +313,7 @@ async def open_call(
         voice=voice,
         user_id=user_id,
         admin=admin,
-        instructions=engine.instructions,
+        instructions=engine.instructions if instructions is None else instructions,
         max_output_tokens=engine.max_output_tokens,
         hang_up=hang_up,
     )

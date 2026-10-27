@@ -183,4 +183,29 @@ def test_each_result_lands_on_its_own_call() -> None:
         ("service:auth", "service:auth"),
         ("service:blog", "service:blog"),
     ]
+
+
+def test_each_tool_call_is_a_step_for_whoever_is_watching() -> None:
+    """A call the registry does not run, a code-mode script, is heard as
+    a step where the model asks for it (``app.core.steps``): by its first
+    comment."""
+    from app.core.steps import watching
+    from app.core.tools import register_tool, unregister_tool
+    from app.services.ai.service.trace import record_tool_call
+
+    script = {"code": "# What depends on the cache\nprint(1)"}
+    call = SimpleNamespace(part=SimpleNamespace(tool_name="run_code", args=script))
+    registered = SimpleNamespace(part=SimpleNamespace(tool_name="look_up", args={}))
+    steps: list[str] = []
+
+    register_tool("look_up", str, effect="read", doing="Looking it up")
+    try:
+        with watching(steps.append):
+            record_tool_call([], call)
+            # A registered tool is heard where it runs (``resolve_tools``).
+            record_tool_call([], registered)
+    finally:
+        unregister_tool("look_up")
+
+    assert steps == ["What depends on the cache"]
 {%- endif %}

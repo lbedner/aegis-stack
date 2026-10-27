@@ -19,7 +19,7 @@ from typing import Any
 import dramatiq
 from dramatiq.asyncio import get_event_loop_thread
 import redis
-from app.components.worker import runtime
+from app.components.worker import queue_discovery, runtime
 from app.components.worker.heartbeat import mark_busy_sync, mark_idle_sync, worker_id
 from app.components.worker.patterns import unwrap
 from app.core import edges, run_log
@@ -100,13 +100,20 @@ class EventPublishMiddleware(dramatiq.Middleware):
     def after_worker_boot(
         self, broker: dramatiq.Broker, worker: dramatiq.Worker
     ) -> None:
-        """Apply what the Overseer saved, on the AsyncIO middleware's loop:
-        the one this worker's async actors and their database engine use."""
+        """Apply what the Overseer saved, then each of its queues' own
+        startup (``queue_discovery.started``), on the AsyncIO middleware's
+        loop: the one this worker's async actors and their database engine
+        use."""
         loop = get_event_loop_thread()
         if loop is None:
             logger.warning("No asyncio loop at worker boot: saved settings not applied")
             return
-        loop.run_coroutine(apply_saved_overrides())
+        loop.run_coroutine(self._booted())
+
+    async def _booted(self) -> None:
+        await apply_saved_overrides()
+        for queue_name in sorted(self._queue_names):
+            await queue_discovery.started(queue_name)
 
     def before_worker_boot(
         self, broker: dramatiq.Broker, worker: dramatiq.Worker

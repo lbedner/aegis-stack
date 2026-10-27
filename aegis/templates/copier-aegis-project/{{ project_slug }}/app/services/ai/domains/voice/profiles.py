@@ -68,8 +68,9 @@ def form_choices() -> dict[str, list[dict[str, Any]]]:
 
 def parse_form(form: Any) -> tuple[dict[str, Any], list[str]]:
     """A profile's edit form as column values, and what is wrong with it.
-    The live engine is not on the form: it is picked with the models
-    (``chat_models``); nor is the voice: the designer puts it together."""
+    The live engine is not on the form: the voice dialog's Calls list picks
+    it (``chat_models.use_for_calls``); nor is the voice: the designer puts
+    it together."""
     errors: list[str] = []
     name = str(form.get("name") or "").strip()
     if not name:

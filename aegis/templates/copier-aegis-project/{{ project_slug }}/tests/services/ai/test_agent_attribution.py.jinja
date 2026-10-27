@@ -487,6 +487,20 @@ class TestAgentSlugSelection:
         assert seen == ["support"]
 
 
+    async def test_a_callers_manners_lead_the_agents_prompt_not_the_message(
+        self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
+    ) -> None:
+        """Manners for the turn (a meeting's) lead the agent's own prompt,
+        as a live call's do; what was asked is kept as asked."""
+        service, _recorder, captured, monkeypatch = harness
+        _stub_resolve(monkeypatch, _custom_config())
+
+        await service.chat("hello", instructions="You are in a meeting.")
+
+        assert "You are in a meeting.\n\nYou are Support." in captured["system_prompt"]
+        assert "You are in a meeting." not in captured["message"]
+
+
 def _wrong_now(monkeypatch: pytest.MonkeyPatch, wrong: tuple[Attention, ...]) -> None:
     async def right_now() -> RightNow:
         return RightNow(attention=wrong, read_at=datetime.now(UTC))

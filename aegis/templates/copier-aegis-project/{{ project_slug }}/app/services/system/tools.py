@@ -397,6 +397,7 @@ register_tool(
     health,
     description="What is wrong now: every component's status and message",
     effect="read",
+    doing="Checking what is wrong now",
     admin=True,
 )
 register_tool(
@@ -404,6 +405,7 @@ register_tool(
     plugins,
     description="The plugins this app has, and the ones it could add",
     effect="read",
+    doing="Looking at the plugins",
     admin=True,
 )
 register_tool(
@@ -411,6 +413,7 @@ register_tool(
     errors,
     description="What broke: retained errors grouped into issues, with tracebacks",
     effect="read",
+    doing="Looking through the errors",
     admin=True,
 )
 register_tool(
@@ -418,6 +421,7 @@ register_tool(
     requests,
     description="What a request did: the recent ones, or one hop by hop",
     effect="read",
+    doing="Following a request",
     admin=True,
 )
 register_tool(
@@ -425,6 +429,7 @@ register_tool(
     logs,
     description="What led up to it: container logs by service, level and text",
     effect="read",
+    doing="Reading the logs",
     admin=True,
 )
 register_tool(
@@ -435,6 +440,7 @@ register_tool(
         "also its parts, routes, jobs and tools, and how they connect"
     ),
     effect="read",
+    doing="Looking up how the parts connect",
 )
 if importlib.util.find_spec("app.services.system.db_query"):
     register_tool(
@@ -442,6 +448,7 @@ if importlib.util.find_spec("app.services.system.db_query"):
         query,
         description="What the database holds: one read-only SQL statement",
         effect="read",
+        doing="Querying the database",
         admin=True,
     )
 if importlib.util.find_spec("app.components.storage"):
@@ -450,5 +457,6 @@ if importlib.util.find_spec("app.components.storage"):
         storage,
         description="What the buckets hold: the buckets, or one level of one",
         effect="read",
+        doing="Looking in the buckets",
         admin=True,
     )

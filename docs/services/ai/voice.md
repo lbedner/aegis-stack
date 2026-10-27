@@ -349,6 +349,11 @@ curl http://localhost:8000/voice/catalog/summary | jq
 
 The phone beside the chat's microphone opens a live call on the engine the
 voice profile names (Gemini Live, an OpenAI realtime model, or GPT-Live).
+The composer's chips say what each part runs on: the agent (opening its
+editor), the chat model (opening the Models dialog, chat models only) and
+**Calls: <engine>** (opening the voice dialog, whose Calls list picks the
+active profile's engine from the realtime models a call can reach, beside
+the voices themselves). Meetings answer live on the same engine.
 The server holds the engine's session; the page carries the audio over one
 WebSocket. The agent on a call is built the way a typed turn builds it:
 the same prompt, memory modules, contexts and tools, plus how to talk on a

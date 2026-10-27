@@ -15,6 +15,7 @@ and it says who it is in the chat; it speaks (``voice``) only to answer.
 
 import asyncio
 import base64
+import contextlib
 import math
 from pathlib import Path
 from typing import Any
@@ -24,19 +25,24 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.core.config import settings
 from app.core.db import get_async_session
 from app.core.log import logger
+from app.core.steps import watching
 from app.core.tools import acting_as
 from app.services.meetings.domains.accounts.service import (
     image_named,
     pick,
     sent_as,
 )
-from app.services.meetings.domains.actions.queries import going_in
+from app.services.meetings.domains.actions.changes import (
+    watching as runs_watching,
+)
+from app.services.meetings.domains.actions.live import ASKED
+from app.services.meetings.domains.actions.queries import answered_in, going_in
 from app.services.meetings.domains.bot import card
 from app.services.meetings.domains.bot.answers import Answers
 from app.services.meetings.domains.bot.audio import Hearing
 from app.services.meetings.domains.bot.dispatch import start_meeting
 from app.services.meetings.domains.bot.meet import CallState, MeetPage, open_meet
-from app.services.meetings.domains.bot.row import heartbeat, transition
+from app.services.meetings.domains.bot.row import heartbeat, keep_steps, transition
 from app.services.meetings.domains.bot.transcript import BEAT_SECONDS, Transcript
 from app.services.meetings.domains.bot.voice import (
     live,
@@ -48,18 +54,25 @@ from app.services.meetings.domains.people.participants import keep_heard
 from app.services.meetings.domains.people.service import guides_writer
 from app.services.meetings.domains.series.service import themes_writer
 from app.services.meetings.models import (
+    LEFT,
     NOT_DONE,
     STILL_WANTED,
     BotAccount,
+    Going,
     Meeting,
     MeetingStatus,
+    Took,
 )
 from app.services.meetings.service import JOINS, MeetingsService, notes_writer
 
 POLL_SECONDS = 2.0
-# How often instead while a line for the bot is held or its answer awaited:
-# a beat of the slower one would be on every answer.
+# How often instead while a line for the bot is settling or its answer is
+# still playing: a beat of the slower one would be on every answer. Her
+# answer awaited needs none: it wakes the bot as it lands (``changes``).
 QUICK_POLL_SECONDS = 0.5
+# How often the runs in flight are read again while any is: the card says
+# what is going on without waiting for a beat.
+GOING_SECONDS = 2.0
 # Said in every call the bot joins, after who it is: nobody is recorded
 # without being told.
 TRANSCRIBED = "What is said here is transcribed."
@@ -74,6 +87,9 @@ WAIT_FOR_OTHERS_SECONDS = 900.0
 # look. A page that says the call ended, or the bot was removed, is over
 # at once.
 GONE_SECONDS = 10.0
+# How long it waits on its way in for Meet to offer captions: Meet draws
+# them seconds after letting it in, and what is said meanwhile is lost.
+CAPTIONS_WAIT_MS = 15_000
 
 
 class _RunEnded(Exception):  # noqa: N818 - control flow, not an error
@@ -88,36 +104,47 @@ class _Pulse:
     """The run's heartbeat, every ``BEAT_SECONDS``: False once the meeting
     is no longer one the run should be in (asked to leave, or failed by
     another process). Each beat also reads the call's runs not yet done
-    (``going``), for its card."""
+    (``going``) and its last answers (``answered``), for its card; while any
+    is going, or once wanted (``soon``), every ``GOING_SECONDS`` between
+    beats too."""
 
     def __init__(self, meeting_id: int) -> None:
         self.meeting_id = meeting_id
-        self.last = float("-inf")
-        self.going: set[str] = set()
+        self.last = self.read = float("-inf")
+        self.going: list[Going] = []
+        self.answered: list[Going] = []  # its last answers, for the card's trail
+        self.wanted = False
+        self.woken = asyncio.Event()
+
+    def soon(self) -> None:
+        """Read the runs in flight on the next look, not the next beat, and
+        look now: a run changed here (``changes.watching``) or she took a
+        step."""
+        self.wanted = True
+        self.woken.set()
+
+    async def nap(self, seconds: float) -> None:
+        """Wait ``seconds`` until the next look, or until woken (``soon``)."""
+        with contextlib.suppress(TimeoutError):
+            await asyncio.wait_for(self.woken.wait(), seconds)
+        self.woken.clear()
 
     async def still_wanted(self) -> bool:
         now = asyncio.get_running_loop().time()
-        if now - self.last < BEAT_SECONDS:
-            return True
-        self.last = now
-        async with get_async_session() as session:
-            self.going = await going_in(session, self.meeting_id)
-            return await heartbeat(session, self.meeting_id) in STILL_WANTED
+        if now - self.last >= BEAT_SECONDS:
+            self.last = self.read = now
+            async with get_async_session() as session:
+                await self._read(session)
+                return await heartbeat(session, self.meeting_id) in STILL_WANTED
+        if self.wanted or (self.going and now - self.read >= GOING_SECONDS):
+            self.read, self.wanted = now, False
+            async with get_async_session() as session:
+                await self._read(session)
+        return True
 
-
-class _Card:
-    """What the bot's card says it is doing, from what the pulse last read,
-    redrawn only when that changes."""
-
-    def __init__(self, call: MeetPage, pulse: _Pulse, captions: bool) -> None:
-        self.call, self.pulse, self.captions = call, pulse, captions
-        self.shown = card.LISTENING
-
-    async def update(self) -> None:
-        status = card.status_of(self.captions, self.pulse.going)
-        if status != self.shown:
-            self.shown = status
-            await self.call.show(status=status)
+    async def _read(self, session: AsyncSession) -> None:
+        self.going = await going_in(session, self.meeting_id)
+        self.answered = await answered_in(session, self.meeting_id)
 
 
 async def _move(
@@ -162,7 +189,7 @@ async def _stay(
     pulse: _Pulse,
     transcript: Transcript,
     hearing: Hearing,
-    shown: _Card,
+    shown: card.Card,
     answering: Answers,
 ) -> None:
     """Back when the bot should leave: asked to, alone too long once the
@@ -175,6 +202,7 @@ async def _stay(
     alone_since: float | None = loop.time()
     others_came = False
     gone_since: float | None = None
+    captions_tried = -math.inf
     try:
         while True:
             state = await call.state()
@@ -188,6 +216,14 @@ async def _stay(
                 await asyncio.sleep(POLL_SECONDS)
                 continue
             gone_since = None
+            # Meet can draw its captions button after the bot is in: looked
+            # for again on the beat, not on every look.
+            if not shown.captions and loop.time() - captions_tried >= BEAT_SECONDS:
+                captions_tried = loop.time()
+                shown.captions = await call.turn_on_captions()
+            if steps := call.taken():
+                async with get_async_session() as session:
+                    await keep_steps(session, transcript.meeting_id, steps)
             spoke = len(transcript.spoke)
             if writing := transcript.take(await call.captions()):
                 async with get_async_session() as session:
@@ -196,10 +232,18 @@ async def _stay(
             if answering.waiting:
                 async with get_async_session() as session:
                     await answering.answer(session)
+            await answering.mic()
             hearing.settle(transcript.spoke, loop.time())
             if not await pulse.still_wanted():
                 return
-            await shown.update()
+            saying = answering.saying()
+            await shown.update(
+                pulse.going,
+                saying,
+                pulse.answered,
+                transcript.hearing(),
+                her=(transcript.bot_spoke, transcript.bot_said),
+            )
             # A caption that moved is someone here, whatever Meet's People
             # count says: it can read 1 with others in the call.
             talking = len(transcript.spoke) > spoke
@@ -218,8 +262,7 @@ async def _stay(
                     others_came=others_came,
                 )
                 return
-            quick = transcript.held or answering.waiting
-            await asyncio.sleep(QUICK_POLL_SECONDS if quick else POLL_SECONDS)
+            await pulse.nap(between(bool(transcript.held), bool(saying)))
     finally:
         if rest := transcript.rest():
             async with get_async_session() as session:
@@ -231,14 +274,19 @@ async def _stay(
                 await keep_heard(session, transcript.meeting_id, hearing.seconds)
 
 
+def between(held: bool, saying: bool) -> float:
+    """How long until the next look: quick while a line for the bot is
+    settling (``held``) or its answer is playing (``saying``)."""
+    return QUICK_POLL_SECONDS if held or saying else POLL_SECONDS
+
+
 async def _left_because(call: MeetPage, meeting_id: int, state: CallState) -> None:
     """Say why the call is over for the bot, with what the page showed: the
-    one record of a call it left on its own."""
+    one record of a call it left on its own, kept with its steps."""
+    page = await call.page_text()
+    call.took(LEFT, state, page)
     logger.warning(
-        "The call is over for the bot",
-        meeting_id=meeting_id,
-        state=state,
-        page=await call.page_text(),
+        "The call is over for the bot", meeting_id=meeting_id, state=state, page=page
     )
 
 
@@ -269,37 +317,72 @@ async def _join(
     start: card.Start,
     voice: Any | None,
     engine: Any | None,
+    taken: list[Took],
 ) -> None:
     """Into the call signed in as the agent it was sent as (``login``),
     showing its card (``start``), speaking in ``voice`` (``voice_of``), her
-    answers made live on ``engine`` where there is one (``live_engine_of``)."""
+    answers made live on ``engine`` where there is one (``live_engine_of``).
+    What it did on the page and has not kept yet ends up in ``taken``."""
     meeting_id: int = meeting.id  # type: ignore[assignment]
     pulse = _Pulse(meeting_id)
     keep_in = settings.MEETINGS_KEEP_AUDIO_DIR
     hearing = Hearing(Path(keep_in) / str(meeting_id) if keep_in else None)
     async with open_meet(meeting.url, hearing.heard, login=login, start=start) as call:
-        if not await pulse.still_wanted():
-            raise _RunEnded(MeetingStatus.LEFT)
-        await call.ask_to_join(meeting.bot_name)
-        await _step(meeting_id, MeetingStatus.WAITING, MeetingStatus.JOINING)
-        await _admitted(call, pulse)
-        await _step(meeting_id, MeetingStatus.IN_CALL, MeetingStatus.WAITING)
-        transcript = Transcript(meeting_id, meeting.bot_name)
-        # In the chat only: said aloud, it cut into the call as it joined.
-        await call.say(announcement(meeting.bot_name))
-        captions = await call.turn_on_captions()
-        if not captions:
-            logger.warning("No captions in this call", meeting_id=meeting_id)
-        shown = _Card(call, pulse, captions)
-        await shown.update()
+        try:
+            await _in_call(call, meeting, pulse, hearing, voice, engine)
+        finally:
+            taken.extend(call.taken())
+
+
+async def _in_call(
+    call: MeetPage,
+    meeting: Meeting,
+    pulse: _Pulse,
+    hearing: Hearing,
+    voice: Any | None,
+    engine: Any | None,
+) -> None:
+    """The call, from asking to join to leaving."""
+    meeting_id: int = meeting.id  # type: ignore[assignment]
+    if not await pulse.still_wanted():
+        raise _RunEnded(MeetingStatus.LEFT)
+    await call.ask_to_join(meeting.bot_name)
+    await _step(meeting_id, MeetingStatus.WAITING, MeetingStatus.JOINING)
+    await _admitted(call, pulse)
+    await _step(meeting_id, MeetingStatus.IN_CALL, MeetingStatus.WAITING)
+    transcript = Transcript(meeting_id, meeting.bot_name)
+    # Hearing first: posting in the chat can take seconds.
+    captions = await call.turn_on_captions(CAPTIONS_WAIT_MS)
+    if not captions:
+        logger.warning("No captions in this call", meeting_id=meeting_id)
+    # In the chat only: said aloud, it cut into the call as it joined.
+    await call.say(announcement(meeting.bot_name))
+    shown = card.Card(call, captions, meeting.bot_name)
+    await shown.update([], set(), [])
+    answering: Answers | None = None
+
+    def heard(step: str) -> None:
+        """A step of her turns here (live, or answered in the app): on
+        the card under the question it answers, read at the next look,
+        and, for one put to her, that she looks it up."""
+        moment = ASKED.get()
+        if answering is not None:
+            moment = answering.looking_up(moment)
+        if moment is not None:
+            shown.heard(step, moment)
+            pulse.soon()
+
+    # What is started inside (her live call, her answers) carries them.
+    with watching(heard), runs_watching(pulse.soon):
         async with live(call, voice, engine, meeting.owner_user_id) as her_voice:
             answering = Answers(call, voice, her_voice)
+            transcript.her = answering.talk
             try:
                 await _stay(call, pulse, transcript, hearing, shown, answering)
             finally:
                 answering.close()
-        await call.show(status=card.LEAVING)
-        await call.leave()
+    await call.show(status=card.LEAVING, focus=None, pills=[])
+    await call.leave()
 
 
 async def _after(meeting_id: int) -> None:
@@ -331,6 +414,7 @@ async def run_meeting(meeting_id: int) -> None:
         engine = await live_engine_of(session, voice)
     # What the bot spends (her answers, its speech, the notes after) is the
     # meeting owner's, bound once for the run.
+    taken: list[Took] = []
     with acting_as(meeting.owner_user_id, None):
         try:
             if meeting.platform not in JOINS:
@@ -338,7 +422,7 @@ async def run_meeting(meeting_id: int) -> None:
                     MeetingStatus.FAILED,
                     f"The bot joins Google Meet so far, not {meeting.platform.title()}",
                 )
-            await _join(meeting, account.login_secret, start, voice, engine)
+            await _join(meeting, account.login_secret, start, voice, engine, taken)
             await _move(meeting_id, MeetingStatus.LEFT, NOT_DONE)
         except _RunEnded as ended:
             await _move(meeting_id, ended.status, NOT_DONE, ended.reason)
@@ -350,6 +434,10 @@ async def run_meeting(meeting_id: int) -> None:
         except Exception as exc:
             logger.exception("Meeting bot failed", meeting_id=meeting_id)
             await _move(meeting_id, MeetingStatus.FAILED, NOT_DONE, str(exc))
+        finally:
+            if taken:
+                async with get_async_session() as session:
+                    await keep_steps(session, meeting_id, taken)
         await _after(meeting_id)
 
 

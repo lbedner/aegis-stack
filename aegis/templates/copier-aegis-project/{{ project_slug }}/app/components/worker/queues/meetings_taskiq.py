@@ -8,9 +8,14 @@ from app.components.worker.broker import PausableRedisStreamBroker
 from app.components.worker.middleware import EventPublishMiddleware
 from app.core.config import settings
 from app.core.constants import ServiceName
+from app.core.ontology.system import warm
 from app.services.meetings.service import run_meeting
 
 redis_url = settings.redis_url_effective
+
+# What its jobs want ready as the worker starts (``queue_discovery.started``):
+# her map (the twin) takes seconds to build, once a process.
+STARTUP = (warm,)
 
 broker = (
     # ``consumer_id="0"``: a new group gets the backlog it was created to

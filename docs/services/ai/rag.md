@@ -20,15 +20,15 @@ RAG enables semantic search over your codebase or documents. Index files into Ch
 aegis init my-app --services "ai[sqlite,rag]"
 cd my-app && uv sync && source .venv/bin/activate
 
-# 2. Index your codebase
-my-app rag index ./app --collection code --extensions .py
+# 2. Index your documents and code (into "default", what Illiana knows)
+my-app rag index ./docs
+my-app rag index ./app --extensions .py
 
-# 3. Search your code
-my-app rag search "how does authentication work" --collection code
+# 3. Search them
+my-app rag search "how does authentication work"
 
-# 4. Chat with codebase context
-my-app ai chat --rag --collection code --top-k 20 --sources \
-  "Explain how the auth service validates tokens"
+# 4. Ask Illiana: she searches it with her knowledge tool, citing sources
+my-app ai chat "Explain how the auth service validates tokens"
 ```
 
 ---
@@ -202,9 +202,17 @@ my-app rag install-model --model sentence-transformers/all-MiniLM-L6-v2
 
 ---
 
+## Illiana's Knowledge
+
+The `default` collection is what Illiana knows: `rag index <path>` fills it, and her `knowledge` tool searches it when a question is about the app, its business or its documents, citing each passage's source. The tool searches whatever knowledge bases (collections) the asking agent is granted, its `knowledge_base_ids`; an agent granted none searches nothing. Illiana is granted `default` on a fresh seed and on a re-seed of an older database, additively, so a knowledge base granted by hand stays. The tool is a read, so an MCP client may be served it.
+
+With a database, each collection is also a `knowledge_base` record and each file indexed into it a `knowledge_base_source`, kept to the index whenever they are read (`GET /rag/knowledge`). The index is the truth; the records add what it cannot hold, such as what a knowledge base is for.
+
+---
+
 ## API Endpoints
 
-All endpoints are prefixed with `/rag`.
+All endpoints are prefixed with `/rag`. A read needs a signed-in user; a change (indexing, adding or removing a source, deleting a collection) needs an admin, since an index call names a path on the server.
 
 ### POST `/rag/index`
 
@@ -269,9 +277,21 @@ Get collection info (name, document count, metadata).
 
 List indexed files with chunk counts.
 
+### POST `/rag/collections/{name}/sources`
+
+Add one source: a `file` uploaded (multipart; kept beside the index, in `sources/<name>/`) or a `path` the server holds (form field). Indexed again if it was before. Answers the source's path and its chunks.
+
+### DELETE `/rag/collections/{name}/sources?source=<path>`
+
+Remove one source, by its path as the collection's files list it. 404 when the collection holds none.
+
 ### DELETE `/rag/collections/{name}`
 
 Delete a collection.
+
+### GET `/rag/knowledge`
+
+With a database: every knowledge base and its sources (name, path, type, chunks, when indexed), brought up to the index first.
 
 ### GET `/rag/health`
 
@@ -314,39 +334,17 @@ Environment variables for RAG:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `RAG_EMBEDDING_PROVIDER` | `sentence-transformers` | `sentence-transformers` or `openai` |
-| `RAG_EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | Embedding model name |
+| `RAG_EMBEDDING_MODEL` | `BAAI/bge-small-en-v1.5` | Embedding model name |
 | `RAG_MODEL_CACHE_DIR` | system default | Local model cache path |
-| `RAG_CHUNK_SIZE` | `1000` | Characters per chunk |
-| `RAG_CHUNK_OVERLAP` | `200` | Overlap between chunks |
-| `RAG_DEFAULT_TOP_K` | `5` | Default search results count |
+| `RAG_CHUNK_SIZE` | `2000` | Characters per chunk |
+| `RAG_CHUNK_OVERLAP` | `400` | Overlap between chunks |
+| `RAG_DEFAULT_TOP_K` | `15` | Default search results count |
 
 ---
 
 ## Chat Integration
 
-### CLI Flags
-
-```bash
-my-app ai chat --rag --collection code --top-k 20 --sources \
-  "How does the scheduler component work?"
-```
-
-| Flag | Description |
-|------|-------------|
-| `--rag` | Enable RAG context for this chat |
-| `--collection` | Collection to search |
-| `--top-k` | Number of results to include (default: 5) |
-| `--sources` | Show source file references after response |
-
-### Slash Commands (Interactive)
-
-```
-/rag              Show RAG status
-/rag code         Enable RAG with collection "code"
-/rag off          Disable RAG
-/sources          Toggle source references
-/sources enable   Enable source references
-```
+In a chat or a call, Illiana reaches the index through her `knowledge` tool (see [Illiana's Knowledge](#illianas-knowledge)): she searches when a question is about the app, its business or its documents, and cites each passage's source. An agent searches only the knowledge bases granted to it.
 
 ### Context Injection
 
@@ -369,9 +367,12 @@ When RAG is enabled, search results are injected into Illiana's system prompt:
 | `app/services/rag/chunking.py` | Text chunking |
 | `app/services/rag/vectorstore.py` | ChromaDB wrapper |
 | `app/services/rag/shaping.py` | Metadata, filters, dedup |
-| `app/services/ai/rag_context.py` | Prompt context formatting |
+| `app/services/rag/uploads.py` | Where an uploaded source is kept |
+| `app/services/rag/knowledge.py` | The knowledge base's records, kept to the index (with a database) |
+| `app/services/ai/domains/chat/knowledge.py` | The `knowledge` tool |
+| `app/services/ai/domains/chat/rag_context.py` | Prompt context formatting |
 | `app/cli/rag/` | CLI commands |
-| `app/components/backend/api/rag/router.py` | API endpoints |
+| `app/components/backend/api/rag/routes.py` | API endpoints (`sources.py`: one source; `knowledge.py`: the records) |
 
 ---
 

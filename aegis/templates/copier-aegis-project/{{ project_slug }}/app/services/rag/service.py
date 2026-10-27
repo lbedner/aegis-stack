@@ -385,10 +385,11 @@ class RAGService:
         # Chunk the file
         chunks = await self.chunker.chunk(documents)
 
-        # Index chunks (upsert will update existing)
+        # Its old chunks first: a file that shrank would leave its last ones.
+        source_path = str(file_path.absolute())
+        await self.vectorstore.remove_by_source(collection_name, source_path)
         stats = await self.vectorstore.add_documents(chunks, collection_name)
 
-        source_path = str(file_path.absolute())
         file_hash = get_file_hash(source_path)
 
         logger.debug(
@@ -453,8 +454,7 @@ class RAGService:
         Returns:
             list[IndexedFile]: List of files with chunk counts
         """
-        raw_files = await self.vectorstore.list_indexed_files(collection_name)
-        return [IndexedFile(source=f["source"], chunks=f["chunks"]) for f in raw_files]
+        return await self.vectorstore.list_indexed_files(collection_name)
 
     # ============================================
     # Collection Management

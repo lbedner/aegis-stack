@@ -1,0 +1,27 @@
+{% if ai_backend != "memory" %}"""The knowledge base's records over the API (``rag.knowledge``): each
+knowledge base and the sources it holds, as the index holds them now. Only
+where there is a database to keep them."""
+
+from fastapi import APIRouter, Depends
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.core.db import get_async_db
+from app.services.rag import knowledge
+from app.services.rag.models.knowledge import KnowledgeRecord
+
+from .routes import READ
+
+router = APIRouter(prefix="/rag", tags=["rag"])
+
+
+@router.get(
+    "/knowledge",
+    response_model=list[KnowledgeRecord],
+    dependencies=READ,
+)
+async def knowledge_bases(
+    session: AsyncSession = Depends(get_async_db),
+) -> list[KnowledgeRecord]:
+    """Every knowledge base and its sources."""
+    return await knowledge.current(session)
+{% endif %}

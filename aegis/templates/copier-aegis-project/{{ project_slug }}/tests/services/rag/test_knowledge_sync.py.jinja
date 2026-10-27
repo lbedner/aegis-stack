@@ -1,0 +1,102 @@
+"""The knowledge base's records (``knowledge_base``, ``knowledge_base_source``)
+mirror what the index holds: a collection is a knowledge base, an indexed
+file one of its sources. The index is the truth; ``knowledge.current``
+brings the records up to it before they are read."""
+{%- if ai_backend != "memory" %}
+
+from datetime import datetime
+from typing import Any
+
+from fastapi import FastAPI
+import pytest
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.services.rag import knowledge
+from app.services.rag.models import IndexedFile
+from app.services.shared.deps import get_owner_user_id
+
+INDEXED = datetime(2026, 10, 27, 9, 30)
+
+
+class _Index:
+    """An index holding ``held``: collection -> its files."""
+
+    def __init__(self, held: dict[str, list[IndexedFile]]) -> None:
+        self.held = held
+
+    async def list_collections(self) -> list[str]:
+        return sorted(self.held)
+
+    async def list_files(self, collection_name: str) -> list[IndexedFile]:
+        return self.held.get(collection_name, [])
+
+
+def _indexed(source: str, chunks: int = 3) -> IndexedFile:
+    return IndexedFile(
+        source=source, chunks=chunks, indexed_at=INDEXED, content_type="documentation"
+    )
+
+
+@pytest.fixture
+def index(monkeypatch: pytest.MonkeyPatch) -> _Index:
+    held = _Index({})
+    monkeypatch.setattr(knowledge, "get_rag_service", lambda: held)
+    return held
+
+
+@pytest.mark.asyncio
+async def test_the_records_hold_what_the_index_holds(
+    async_db_session: AsyncSession, index: _Index
+) -> None:
+    index.held = {"default": [_indexed("/docs/a.md"), _indexed("/docs/b.md", 1)]}
+
+    (base,) = await knowledge.current(async_db_session)
+
+    assert base.name == "default"
+    assert [(s.file_path, s.chunks, s.indexed_at) for s in base.sources] == [
+        ("/docs/a.md", 3, INDEXED),
+        ("/docs/b.md", 1, INDEXED),
+    ]
+    assert {s.name for s in base.sources} == {"a.md", "b.md"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.queryspy(allow_n_plus_one=True)  # two reads, each reading the records
+async def test_what_left_the_index_leaves_the_records(
+    async_db_session: AsyncSession, index: _Index
+) -> None:
+    index.held = {"default": [_indexed("/docs/a.md")], "old": [_indexed("/x.md")]}
+    await knowledge.current(async_db_session)
+
+    index.held = {"default": [_indexed("/docs/b.md")]}
+    (base,) = await knowledge.current(async_db_session)
+
+    assert base.name == "default"
+    assert [s.file_path for s in base.sources] == ["/docs/b.md"]
+
+
+@pytest.mark.asyncio
+async def test_a_file_indexed_before_chunks_said_when_says_none(
+    async_db_session: AsyncSession, index: _Index
+) -> None:
+    index.held = {"default": [IndexedFile(source="/docs/old.md", chunks=2)]}
+
+    (base,) = await knowledge.current(async_db_session)
+
+    assert base.sources[0].indexed_at is None
+
+
+@pytest.mark.asyncio
+async def test_the_records_list_what_the_index_holds(
+    app: FastAPI, async_client_with_db: Any, index: _Index
+) -> None:
+    index.held = {"default": [_indexed("/docs/a.md", 2)]}
+    app.dependency_overrides[get_owner_user_id] = lambda: None
+
+    response = async_client_with_db.get("/api/v1/rag/knowledge")
+
+    assert response.status_code == 200
+    (base,) = response.json()
+    assert base["name"] == "default"
+    assert [(s["name"], s["chunks"]) for s in base["sources"]] == [("a.md", 2)]
+{%- endif %}

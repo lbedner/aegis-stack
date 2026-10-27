@@ -2,12 +2,13 @@
 RAG service API router.
 
 FastAPI router for RAG endpoints implementing document indexing,
-search, and collection management.
+search, and collection management. A read is a signed-in user's; a change
+(indexing names a path on the server) is an admin's.
 """
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.services.rag.collections import collection_info
@@ -17,8 +18,14 @@ from app.services.rag.service import (
     LoaderError,
     SearchError,
 )
+from app.services.shared.deps import get_admin_actor, get_owner_user_id
+
+from .sources import router as sources_router
 
 router = APIRouter(prefix="/rag", tags=["rag"])
+READ = [Depends(get_owner_user_id)]
+CHANGE = [Depends(get_admin_actor)]
+router.include_router(sources_router)
 
 
 # Request/Response models
@@ -98,7 +105,7 @@ class CollectionFilesResponse(BaseModel):
     total_chunks: int
 
 
-@router.post("/index", response_model=IndexResponse)
+@router.post("/index", response_model=IndexResponse, dependencies=CHANGE)
 async def index_documents(request: IndexRequest) -> IndexResponse:
     """
     Index documents from a path into a collection.
@@ -138,7 +145,7 @@ async def index_documents(request: IndexRequest) -> IndexResponse:
         raise HTTPException(status_code=500, detail=f"Unexpected error: {e}")
 
 
-@router.post("/search", response_model=SearchResponse)
+@router.post("/search", response_model=SearchResponse, dependencies=READ)
 async def search_documents(request: SearchRequest) -> SearchResponse:
     """
     Search for documents in a collection.
@@ -184,7 +191,7 @@ async def search_documents(request: SearchRequest) -> SearchResponse:
         raise HTTPException(status_code=500, detail=f"Unexpected error: {e}")
 
 
-@router.get("/collections", response_model=list[str])
+@router.get("/collections", response_model=list[str], dependencies=READ)
 async def list_collections() -> list[str]:
     """
     List all available collections.
@@ -198,7 +205,11 @@ async def list_collections() -> list[str]:
         raise HTTPException(status_code=500, detail=f"Failed to list collections: {e}")
 
 
-@router.get("/collections/{collection_name}", response_model=CollectionInfoResponse)
+@router.get(
+    "/collections/{collection_name}",
+    response_model=CollectionInfoResponse,
+    dependencies=READ,
+)
 async def get_collection_info(collection_name: str) -> CollectionInfoResponse:
     """
     Get information about a specific collection.
@@ -229,7 +240,9 @@ async def get_collection_info(collection_name: str) -> CollectionInfoResponse:
 
 
 @router.get(
-    "/collections/{collection_name}/files", response_model=CollectionFilesResponse
+    "/collections/{collection_name}/files",
+    response_model=CollectionFilesResponse,
+    dependencies=READ,
 )
 async def get_collection_files(collection_name: str) -> CollectionFilesResponse:
     """
@@ -271,7 +284,7 @@ async def get_collection_files(collection_name: str) -> CollectionFilesResponse:
         )
 
 
-@router.delete("/collections/{collection_name}")
+@router.delete("/collections/{collection_name}", dependencies=CHANGE)
 async def delete_collection(collection_name: str) -> dict[str, Any]:
     """
     Delete a collection.
@@ -299,7 +312,7 @@ async def delete_collection(collection_name: str) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"Failed to delete collection: {e}")
 
 
-@router.get("/health")
+@router.get("/health", dependencies=READ)
 async def rag_health() -> dict[str, Any]:
     """
     RAG service health endpoint.

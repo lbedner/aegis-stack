@@ -120,6 +120,9 @@ class IndexedFile(BaseModel):
 
     source: str = Field(..., description="Source file path")
     chunks: int = Field(..., ge=0, description="Number of chunks from this file")
+    # Its latest chunk's, None where it was indexed before chunks said when.
+    indexed_at: datetime | None = None
+    content_type: str | None = None  # the loader's file type
 
 
 __all__ = [

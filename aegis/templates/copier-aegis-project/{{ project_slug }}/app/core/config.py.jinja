@@ -201,7 +201,7 @@ class Settings(
     # runs a script on the read tools where AI's code mode is. In ``.env``:
     # a JSON list.
 {%- set mcp_code = include_ai and ai_framework == "pydantic-ai" and ai_backend != "memory" %}
-    MCP_TOOLS: list[str] = {{ (["health", "errors", "logs", "requests", "ontology", "aggregate"] + (["ledger", "accounts", "quote", "categories", "bills", "bill_candidates", "tags"] if include_finance else []) + (["run_code"] if mcp_code else [])) | tojson }}
+    MCP_TOOLS: list[str] = {{ (["health", "errors", "logs", "requests", "ontology", "aggregate"] + (["ledger", "accounts", "quote", "categories", "bills", "bill_candidates", "tags"] if include_finance else []) + (["knowledge"] if include_ai and ai_rag else []) + (["run_code"] if mcp_code else [])) | tojson }}
     # Whose data an MCP call reads and whose cards it files; None reads
     # every row (a single-tenant install). With auth, proposals need it.
     MCP_OWNER_USER_ID: int | None = None

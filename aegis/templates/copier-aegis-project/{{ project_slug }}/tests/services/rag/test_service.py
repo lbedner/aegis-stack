@@ -1,6 +1,8 @@
 """Tests for RAG service core functionality."""
 
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -188,3 +190,34 @@ def test_the_rag_service_is_built_on_first_use(
     monkeypatch.setattr(settings, "RAG_CHUNK_SIZE", 1234)
     assert get_rag_service().config.chunk_size == 1234
     get_rag_service.cache_clear()
+
+
+class _Store:
+    """A vector store keeping the order it was asked in."""
+
+    def __init__(self) -> None:
+        self.asked: list[str] = []
+
+    async def remove_by_source(self, collection_name: str, source: str) -> int:
+        self.asked.append(f"remove {source}")
+        return 0
+
+    async def add_documents(self, documents: list[Any], collection_name: str) -> Any:
+        self.asked.append(f"add {len(documents)}")
+        return SimpleNamespace(chunk_ids=[])
+
+
+@pytest.mark.asyncio
+async def test_a_file_added_again_keeps_none_of_its_old_chunks(
+    rag_service: RAGService, tmp_path: Path
+) -> None:
+    """A file that shrank would leave its last chunks behind, answering
+    searches with text it no longer holds: its old chunks go first."""
+    note = tmp_path / "note.md"
+    note.write_text("# Note\n\nShort now.")
+    store = _Store()
+    rag_service.vectorstore = store  # type: ignore[assignment]
+
+    await rag_service.add_file(note, "default")
+
+    assert store.asked == [f"remove {note.absolute()}", "add 1"]

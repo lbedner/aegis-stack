@@ -3780,6 +3780,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#illianas-knowledge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Illiana's Knowledge
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#api-endpoints" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -3847,10 +3858,43 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#post-ragcollectionsnamesources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /rag/collections/{name}/sources
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#delete-ragcollectionsnamesourcessourcepath" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DELETE /rag/collections/{name}/sources?source=&lt;path&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#delete-ragcollectionsname" class="md-nav__link">
     <span class="md-ellipsis">
       
         DELETE /rag/collections/{name}
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-ragknowledge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /rag/knowledge
       
     </span>
   </a>
@@ -3934,28 +3978,6 @@
   
     <nav class="md-nav" aria-label="Chat Integration">
       <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#cli-flags" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        CLI Flags
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#slash-commands-interactive" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Slash Commands (Interactive)
-      
-    </span>
-  </a>
-  
-</li>
         
           <li class="md-nav__item">
   <a href="#context-injection" class="md-nav__link">
@@ -6903,6 +6925,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#illianas-knowledge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Illiana's Knowledge
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#api-endpoints" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -6970,10 +7003,43 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#post-ragcollectionsnamesources" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /rag/collections/{name}/sources
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#delete-ragcollectionsnamesourcessourcepath" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DELETE /rag/collections/{name}/sources?source=&lt;path&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#delete-ragcollectionsname" class="md-nav__link">
     <span class="md-ellipsis">
       
         DELETE /rag/collections/{name}
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#get-ragknowledge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /rag/knowledge
       
     </span>
   </a>
@@ -7059,28 +7125,6 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#cli-flags" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        CLI Flags
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#slash-commands-interactive" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Slash Commands (Interactive)
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
   <a href="#context-injection" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -7145,15 +7189,15 @@
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>aegis<span class="w"> </span>init<span class="w"> </span>my-app<span class="w"> </span>--services<span class="w"> </span><span class="s2">&quot;ai[sqlite,rag]&quot;</span>
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="nb">cd</span><span class="w"> </span>my-app<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>uv<span class="w"> </span>sync<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">source</span><span class="w"> </span>.venv/bin/activate
 </span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
-</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="c1"># 2. Index your codebase</span>
-</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>my-app<span class="w"> </span>rag<span class="w"> </span>index<span class="w"> </span>./app<span class="w"> </span>--collection<span class="w"> </span>code<span class="w"> </span>--extensions<span class="w"> </span>.py
-</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>
-</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="c1"># 3. Search your code</span>
-</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>my-app<span class="w"> </span>rag<span class="w"> </span>search<span class="w"> </span><span class="s2">&quot;how does authentication work&quot;</span><span class="w"> </span>--collection<span class="w"> </span>code
-</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>
-</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="c1"># 4. Chat with codebase context</span>
-</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>my-app<span class="w"> </span>ai<span class="w"> </span>chat<span class="w"> </span>--rag<span class="w"> </span>--collection<span class="w"> </span>code<span class="w"> </span>--top-k<span class="w"> </span><span class="m">20</span><span class="w"> </span>--sources<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="w">  </span><span class="s2">&quot;Explain how the auth service validates tokens&quot;</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="c1"># 2. Index your documents and code (into &quot;default&quot;, what Illiana knows)</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>my-app<span class="w"> </span>rag<span class="w"> </span>index<span class="w"> </span>./docs
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>my-app<span class="w"> </span>rag<span class="w"> </span>index<span class="w"> </span>./app<span class="w"> </span>--extensions<span class="w"> </span>.py
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="c1"># 3. Search them</span>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a>my-app<span class="w"> </span>rag<span class="w"> </span>search<span class="w"> </span><span class="s2">&quot;how does authentication work&quot;</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="c1"># 4. Ask Illiana: she searches it with her knowledge tool, citing sources</span>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>my-app<span class="w"> </span>ai<span class="w"> </span>chat<span class="w"> </span><span class="s2">&quot;Explain how the auth service validates tokens&quot;</span>
 </span></code></pre></div>
 <hr />
 <h2 id="architecture">Architecture</h2>
@@ -7275,8 +7319,12 @@
 <p>Only needed for local sentence-transformers. OpenAI embeddings don't require a local download.</p>
 </div>
 <hr />
+<h2 id="illianas-knowledge">Illiana's Knowledge</h2>
+<p>The <code>default</code> collection is what Illiana knows: <code>rag index &lt;path&gt;</code> fills it, and her <code>knowledge</code> tool searches it when a question is about the app, its business or its documents, citing each passage's source. The tool searches whatever knowledge bases (collections) the asking agent is granted, its <code>knowledge_base_ids</code>; an agent granted none searches nothing. Illiana is granted <code>default</code> on a fresh seed and on a re-seed of an older database, additively, so a knowledge base granted by hand stays. The tool is a read, so an MCP client may be served it.</p>
+<p>With a database, each collection is also a <code>knowledge_base</code> record and each file indexed into it a <code>knowledge_base_source</code>, kept to the index whenever they are read (<code>GET /rag/knowledge</code>). The index is the truth; the records add what it cannot hold, such as what a knowledge base is for.</p>
+<hr />
 <h2 id="api-endpoints">API Endpoints</h2>
-<p>All endpoints are prefixed with <code>/rag</code>.</p>
+<p>All endpoints are prefixed with <code>/rag</code>. A read needs a signed-in user; a change (indexing, adding or removing a source, deleting a collection) needs an admin, since an index call names a path on the server.</p>
 <h3 id="post-ragindex">POST <code>/rag/index</code></h3>
 <p>Index documents from a path.</p>
 <div class="language-json highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="c1">// Request</span>
@@ -7326,8 +7374,14 @@
 <p>Get collection info (name, document count, metadata).</p>
 <h3 id="get-ragcollectionsnamefiles">GET <code>/rag/collections/{name}/files</code></h3>
 <p>List indexed files with chunk counts.</p>
+<h3 id="post-ragcollectionsnamesources">POST <code>/rag/collections/{name}/sources</code></h3>
+<p>Add one source: a <code>file</code> uploaded (multipart; kept beside the index, in <code>sources/&lt;name&gt;/</code>) or a <code>path</code> the server holds (form field). Indexed again if it was before. Answers the source's path and its chunks.</p>
+<h3 id="delete-ragcollectionsnamesourcessourcepath">DELETE <code>/rag/collections/{name}/sources?source=&lt;path&gt;</code></h3>
+<p>Remove one source, by its path as the collection's files list it. 404 when the collection holds none.</p>
 <h3 id="delete-ragcollectionsname">DELETE <code>/rag/collections/{name}</code></h3>
 <p>Delete a collection.</p>
+<h3 id="get-ragknowledge">GET <code>/rag/knowledge</code></h3>
+<p>With a database: every knowledge base and its sources (name, path, type, chunks, when indexed), brought up to the index first.</p>
 <h3 id="get-raghealth">GET <code>/rag/health</code></h3>
 <p>RAG service health status and configuration.</p>
 <hr />
@@ -7389,7 +7443,7 @@
 </tr>
 <tr>
 <td><code>RAG_EMBEDDING_MODEL</code></td>
-<td><code>all-MiniLM-L6-v2</code></td>
+<td><code>BAAI/bge-small-en-v1.5</code></td>
 <td>Embedding model name</td>
 </tr>
 <tr>
@@ -7399,60 +7453,24 @@
 </tr>
 <tr>
 <td><code>RAG_CHUNK_SIZE</code></td>
-<td><code>1000</code></td>
+<td><code>2000</code></td>
 <td>Characters per chunk</td>
 </tr>
 <tr>
 <td><code>RAG_CHUNK_OVERLAP</code></td>
-<td><code>200</code></td>
+<td><code>400</code></td>
 <td>Overlap between chunks</td>
 </tr>
 <tr>
 <td><code>RAG_DEFAULT_TOP_K</code></td>
-<td><code>5</code></td>
+<td><code>15</code></td>
 <td>Default search results count</td>
 </tr>
 </tbody>
 </table>
 <hr />
 <h2 id="chat-integration">Chat Integration</h2>
-<h3 id="cli-flags">CLI Flags</h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>my-app<span class="w"> </span>ai<span class="w"> </span>chat<span class="w"> </span>--rag<span class="w"> </span>--collection<span class="w"> </span>code<span class="w"> </span>--top-k<span class="w"> </span><span class="m">20</span><span class="w"> </span>--sources<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-17-2"><a id="__codelineno-17-2" name="__codelineno-17-2" href="#__codelineno-17-2"></a><span class="w">  </span><span class="s2">&quot;How does the scheduler component work?&quot;</span>
-</span></code></pre></div>
-<table>
-<thead>
-<tr>
-<th>Flag</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>--rag</code></td>
-<td>Enable RAG context for this chat</td>
-</tr>
-<tr>
-<td><code>--collection</code></td>
-<td>Collection to search</td>
-</tr>
-<tr>
-<td><code>--top-k</code></td>
-<td>Number of results to include (default: 5)</td>
-</tr>
-<tr>
-<td><code>--sources</code></td>
-<td>Show source file references after response</td>
-</tr>
-</tbody>
-</table>
-<h3 id="slash-commands-interactive">Slash Commands (Interactive)</h3>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>/rag              Show RAG status
-</span><span id="__span-18-2"><a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a>/rag code         Enable RAG with collection &quot;code&quot;
-</span><span id="__span-18-3"><a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a>/rag off          Disable RAG
-</span><span id="__span-18-4"><a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a>/sources          Toggle source references
-</span><span id="__span-18-5"><a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a>/sources enable   Enable source references
-</span></code></pre></div>
+<p>In a chat or a call, Illiana reaches the index through her <code>knowledge</code> tool (see <a href="#illianas-knowledge">Illiana's Knowledge</a>): she searches when a question is about the app, its business or its documents, and cites each passage's source. An agent searches only the knowledge bases granted to it.</p>
 <h3 id="context-injection">Context Injection</h3>
 <p>When RAG is enabled, search results are injected into Illiana's system prompt:</p>
 <p><strong>RAGContext</strong> (<code>app/services/ai/rag_context.py</code>):
@@ -7494,7 +7512,19 @@
 <td>Metadata, filters, dedup</td>
 </tr>
 <tr>
-<td><code>app/services/ai/rag_context.py</code></td>
+<td><code>app/services/rag/uploads.py</code></td>
+<td>Where an uploaded source is kept</td>
+</tr>
+<tr>
+<td><code>app/services/rag/knowledge.py</code></td>
+<td>The knowledge base's records, kept to the index (with a database)</td>
+</tr>
+<tr>
+<td><code>app/services/ai/domains/chat/knowledge.py</code></td>
+<td>The <code>knowledge</code> tool</td>
+</tr>
+<tr>
+<td><code>app/services/ai/domains/chat/rag_context.py</code></td>
 <td>Prompt context formatting</td>
 </tr>
 <tr>
@@ -7502,8 +7532,8 @@
 <td>CLI commands</td>
 </tr>
 <tr>
-<td><code>app/components/backend/api/rag/router.py</code></td>
-<td>API endpoints</td>
+<td><code>app/components/backend/api/rag/routes.py</code></td>
+<td>API endpoints (<code>sources.py</code>: one source; <code>knowledge.py</code>: the records)</td>
 </tr>
 </tbody>
 </table>

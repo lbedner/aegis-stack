@@ -1,0 +1,26 @@
+{%- if include_worker -%}
+"""The concurrency the stack's plugins ask for, by queue.
+
+Rendered from the plugins in ``.copier-answers.yml``: a queue's number lives
+in the plugin that ships it, not here, so `aegis add`/`aegis remove` rewrite
+this file and nobody edits it by hand. ``app/core/queue_workers.py`` merges
+it into ``DEFAULT_QUEUES``; ``WORKER_QUEUES`` in the environment still
+replaces the whole mapping for a project that wants something else.
+"""
+
+from app.core.queue_workers import QueueWorker
+
+{%- set lines = [] %}
+{%- for plugin in _plugins | default([]) %}
+{%- for queue in plugin.worker_queue_settings | default([]) %}
+{%- set args = [] %}
+{%- if queue.concurrency %}{% set _ = args.append("concurrency=" ~ queue.concurrency) %}{% endif %}
+{%- if queue.max_wait_seconds %}{% set _ = args.append("max_wait_seconds=" ~ queue.max_wait_seconds) %}{% endif %}
+{%- set _ = lines.append('    "' ~ queue.name ~ '": QueueWorker(' ~ (args | join(", ")) ~ "),") %}
+{%- endfor %}
+{%- endfor %}
+
+PLUGIN_QUEUE_DEFAULTS: dict[str, QueueWorker] = {% if lines %}{
+{{ lines | join("\n") }}
+}{% else %}{}{% endif %}
+{%- endif -%}

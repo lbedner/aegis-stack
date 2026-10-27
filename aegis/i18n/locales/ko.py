@@ -1051,6 +1051,7 @@ MESSAGES: dict[str, str] = {
     "plugins.label_requires_plugins": "필요 플러그인:",
     "plugins.label_conflicts": "충돌:",
     "plugins.label_python_deps": "Python 의존성:",
+    "plugins.label_worker_queues": "워커 대기열:",
     "plugins.label_docker_packages": "시스템 패키지:",
     "plugins.label_docker_steps": "빌드 단계:",
     "plugins.deps_more": "(외 {count}개)",

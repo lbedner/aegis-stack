@@ -7,7 +7,80 @@
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-10-28
+
 ### Added
+
+- **Overseer fills Illiana's knowledge base, and the workers embed.** A
+  collection is filled from Overseer by upload, by a path the server
+  holds, or by parts of this app picked from the twin; indexing runs as a
+  background job a batch of files at a time, its progress pushed to the
+  collection's drawer. With a worker, each batch is read, chunked and
+  embedded on the system queue (arq, TaskIQ, Dramatiq) and the vectors
+  come back through Redis; only the webserver opens Chroma. PyTorch's
+  threads follow the container's CPU quota. The drawer gains a files table
+  with a per-file menu (Open in Code, Re-index, Remove), and file icons
+  come from VS Code's Material Icon Theme. (#1892)
+
+- **Illiana knows what the index holds.** The RAG service becomes her
+  general knowledge: `knowledge_base` rows record what the index holds,
+  the `knowledge` tool searches the bases an agent is given (Illiana gets
+  `default`, what `rag index` fills), and a source is added or removed one
+  at a time (`POST`/`DELETE /rag/collections/{name}/sources`). Every `/rag`
+  route now asks who is asking: reads need a signed-in user, changes an
+  admin. Re-adding a shrunk file leaves none of its old chunks. (#1874)
+
+- **Each service says what it holds.** A service declares `AGGREGATES` in
+  its `aggregates.py`: counts and sums by label over one of the app's
+  windows, figures only, app-wide. One admin `aggregate` tool lists them
+  and reads one, cached for a minute. Twelve so far: scheduler runs, AI
+  spend, sign-ins, blog posts, sentiment, changes, meetings, research,
+  insights and finance spend among them. (#1838, #1841)
+
+- **Reads and tools hand back models.** A function that takes a session,
+  and every registered tool, returns a frozen typed model, never a dict;
+  `patterns check` gates it (`returns-model`). Code mode's stubs are typed
+  from the models, and `Refused` is a refusal an agent corrects from.
+  (#1850, #1859)
+
+- **Voices say the stack's names right.** One pronunciation list (Traefik,
+  PostgreSQL, htmx, Pydantic, uvicorn and the rest by default; an app adds
+  its own with `register_pronunciation`, and saved rows are edited from the
+  voice dialog or `/voice/pronunciation`) is used by every path that
+  speaks: read aloud, the meeting bot, previews and live calls. (#1843)
+
+- **A plugin grants its tools and declares their effect.**
+  `PluginWiring.agent_tools` names each tool with its effect (`read` or
+  `writes`); the declaration is the grant, feeding the default agent's
+  tools, `MCP_TOOLS` and the generated project's tool test, so a plugin's
+  tool is used, not only registered. (#1887)
+
+- **A plugin ships its queue's concurrency.** A `worker_queues` entry may be
+  `WorkerQueueWiring("media", concurrency=2, max_wait_seconds=900)`, so a
+  heavy queue no longer gets the light default of ten; a bare name keeps
+  the project's default. (#1885)
+
+- **A plugin adds system packages and build steps to the image.** The
+  Dockerfile gains two fixed hooks and plugins contribute data:
+  `docker_packages` (apt packages, deduplicated) and `docker_steps` (the
+  plugin's own build scripts), both above the source copy. A diverged
+  Dockerfile never needs touching to add or remove a plugin. (#1884)
+
+- **A new plugin is scaffolded with its release workflow.** Tag-driven, as
+  the reference plugin's: an rc tag publishes to TestPyPI, a bare tag to
+  PyPI with attestations, through Trusted Publishing, after `make check`.
+  The `create-plugin` skill says how to set it up and test CI locally.
+  (#1889)
+
+- **The Flet dashboard, polished.** Logs get a toolbar (level, order,
+  services, search) and lines that keep one edge, and fill the popup or
+  tab they are in. The Container table sizes its columns so a name reads,
+  a row opens to its image, and an opened row stays open. The Server
+  Overview leads with the container's live CPU, memory, network and disk
+  charts, as htmx's does. A meeting or series reads as tabs, each part in
+  a card, speakers in htmx's colours, the transcript wrapping. Secrets and
+  Settings are tables on tabs of their own. The stack list scrolls inside
+  the window and keeps its place on a refresh. (#1894)
 
 - **The meeting bot's card presents what it is working on.** While
   anything is in flight, its camera card is about one request: the agent
@@ -537,6 +610,31 @@
 
 ### Fixed
 
+- **The Flet dashboard can make changes on the local dev build.** In
+  Docker it called the API at the webserver's container name, which a
+  change without auth is refused at, so it offered no Restart and no
+  secret fields; and the secrets list itself was behind the change check.
+  It now calls its own process and sends the page it was opened at as its
+  origin, so the API refuses a change from it exactly where it refuses a
+  browser's (a LAN address, a domain, a deployed build), and its socket
+  refuses another site's page. (#1894)
+
+- **An open dropdown in a table stays open.** A row's hover tint redrew the
+  row, and with it a menu in it, so moving onto the menu closed it; a row
+  holding a field is no longer tinted. (#1894)
+
+- **A voice not in the catalog is said so.** Using a voice, model or engine
+  the catalog does not have from Overseer's voice page was a 500; it is
+  now an error message, and the profile is left as it was.
+
+- **A broken `run_code` script over MCP is an error again.** pydantic-ai
+  2.62 hands a script's failure back as a retried tool return, which read
+  as a result. (#1890)
+
+- **A deploy stack with a database and no scheduler imports.** A file two
+  extras groups list now ships when either is on, so the off-site backup
+  module is there. (#1882)
+
 - **A broken `run_code` script over MCP is an error again.** From
   pydantic-ai 2.62 a script's syntax error comes back as the tool's
   return, marked retried, instead of as a retry prompt, so `run_code`
@@ -824,6 +922,11 @@
   backend did not start.
 
 ### Removed
+
+- **The media queue stub.** `queues/media.py` shipped in every arq stack
+  with no tasks and no worker serving it, and took the `media` name from
+  the plugin that owns it. A guard now requires every template queue to
+  declare tasks and a compose service. (#1875)
 
 - **`POST /voice/settings`**, which answered with merged settings and
   saved nothing. `POST /voice/use` changes the voice, on the active

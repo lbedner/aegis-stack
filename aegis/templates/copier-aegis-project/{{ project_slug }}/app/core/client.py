@@ -60,8 +60,11 @@ class APIClient(SessionCookieMixin):
         on_unauthorized: UnauthorizedHandler | None = None,
         on_session_rotated: SessionRotatedHandler | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
+        origin: str | None = None,
     ) -> None:
         self.base_url = base_url or settings.API_BASE_URL
+        # The page it speaks for, its ``Origin``: changes judged as a page's.
+        self.origin = origin
         self.timeout = timeout
         self.on_unauthorized = on_unauthorized
         # Fired with the CURRENT refresh token whenever the backend mints
@@ -96,7 +99,10 @@ class APIClient(SessionCookieMixin):
         self._client = httpx.AsyncClient(
             timeout=timeout,
             follow_redirects=True,
-            headers={"User-Agent": get_component_title(ComponentName.FRONTEND)},
+            headers={
+                "User-Agent": get_component_title(ComponentName.FRONTEND),
+                **({"Origin": origin} if origin is not None else {}),
+            },
             **({"transport": transport} if transport is not None else {}),
         )
         # Opt-in GET cache (see ``get``'s ``cache_ttl``). Key is
@@ -492,8 +498,3 @@ def error_detail(body: Any, status: int) -> str:
     if isinstance(body, dict) and body.get("detail"):
         return str(body["detail"])
     return f"status {status}"
-
-
-def get_api_client() -> APIClient:
-    """Dependency provider for APIClient."""
-    return APIClient()

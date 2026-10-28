@@ -214,6 +214,7 @@ class DataTable(ft.Container):
         on_selection_change: Any = _UNSET,
         on_row_click: Any = _UNSET,
         selected_indices: set[int] | None = None,
+        keep_expanded: bool = False,
     ) -> None:
         """Feed the table new data IN PLACE of a rebuild.
 
@@ -226,7 +227,8 @@ class DataTable(ft.Container):
         The sort choice persists across new data (a sorted table must not
         silently unsort because a row was edited). Selection and expanded
         rows reset by default - the old row indices point at the old data
-        - but ``selected_indices`` can seed a carried selection, and the
+        - but ``selected_indices`` can seed a carried selection,
+        ``keep_expanded`` keeps the rows still there open, and the
         callback keywords let a caller whose closures capture the fetched
         rows hand over fresh ones. Omitted keywords keep what the table
         already has.
@@ -241,7 +243,9 @@ class DataTable(ft.Container):
         if on_row_click is not _UNSET:
             self._on_row_click = on_row_click
         self._selected = set(selected_indices) if selected_indices else set()
-        self._expanded.clear()
+        self._expanded = (
+            {i for i in self._expanded if i < len(rows)} if keep_expanded else set()
+        )
         self._expand_cache.clear()
         self._expand_widgets = {}
         self._render()

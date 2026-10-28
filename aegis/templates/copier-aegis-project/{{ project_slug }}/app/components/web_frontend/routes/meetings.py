@@ -41,7 +41,6 @@ from app.services.meetings.service import (
     line_about,
     parts_named,
     send_bot,
-    voices,
 )
 
 router = APIRouter(prefix="/meetings")
@@ -157,14 +156,9 @@ async def body_context(record: MeetingRecord) -> dict[str, Any]:
     """What one meeting's body shows (and Overseer's drawer): the service's
     read of it, as it is, and how these pages draw it."""
     tone = TONES.get(record.meeting.status, "muted")
-    owners = [i.owner for i in (record.notes.action_items if record.notes else [])]
-    colors = voices([*record.people, *(owner for owner in owners if owner)])
     asks = asks_about()
     return dict(record) | {
         "status": status_cell(record.status, tone),
-        # Each speaker's color (--aegis-chart-N), in the transcript, on the
-        # action items they own, and in who talked (none: heard, not named).
-        "voices": colors,
         # Who talked, as the house's ranked rows: audio no caption named
         # stands apart, unmarked.
         "talk": [
@@ -172,8 +166,10 @@ async def body_context(record: MeetingRecord) -> dict[str, Any]:
                 "label": name,
                 "value": span,
                 "ratio": ratio,
-                "dot": colors.get(name),
-                "tone": None if name in colors else "muted",
+                # Each speaker's color (``voices``, --aegis-chart-N); none:
+                # heard, not named.
+                "dot": record.voices.get(name),
+                "tone": None if name in record.voices else "muted",
             }
             for name, span, ratio in heard_rows(record.heard_seconds)
         ],

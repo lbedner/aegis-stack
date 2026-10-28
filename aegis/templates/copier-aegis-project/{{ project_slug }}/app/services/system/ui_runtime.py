@@ -38,6 +38,9 @@ NET_IN, NET_OUT, DISK_READ, DISK_WRITE = "net_in", "net_out", "disk_read", "disk
 PIDS = "pids"
 # Each live figure's name, in both UIs and on its chart.
 FIGURES = {CPU: "CPU", MEMORY: "Memory", "network": "Network", "disk": "Disk I/O"}
+# The charts a server's Overview leads with, in both UIs: the figures it
+# runs on. Processes and events stay on the Container section.
+OVERVIEW_CHARTS = tuple(FIGURES)
 # Shown only before the containers sampler's first reading.
 PENDING = {"rows": [], "note": "Reading the containers.", "pending": True}
 
@@ -246,12 +249,14 @@ async def section(
     *,
     wait: bool = True,
     draw: bool = True,
+    only: tuple[str, ...] = (),
 ) -> tuple[dict[str, Any], list[dict[str, Any]] | None]:
     """A page's Container section, its ``containers`` and its ``charts``
     (None without ``draw``: a live view between a long window's tier
-    steps), from one reading of the sampler."""
+    steps; given ``only``, those charts alone), from one reading of the
+    sampler."""
     tables, note = await _reading([page], wait)
-    drawn = await charts(page, window, tables) if draw else None
+    drawn = await charts(page, window, tables, only) if draw else None
     return _view(page, tables, note), drawn
 
 
@@ -294,16 +299,18 @@ async def charts(
     page: str,
     window: int = series.DEFAULT_WINDOW,
     tables: dict[str, Any] | None | Literal["latest"] = "latest",
+    only: tuple[str, ...] = (),
 ) -> list[dict[str, Any]]:
     """The page's charts from what was sampled (no runtime call): its
     containers', or, for a server outside Docker, what it reports of itself
     (``host_of``), over the last ``window`` seconds.
     ``[{"key", "title", "subtitle", "data", "empty"}]``; empty with nothing
-    to chart. ``tables``: a reading already in hand (``section``)."""
+    to chart. ``tables``: a reading already in hand (``section``);
+    ``only``: the charts drawn, by key (every one, empty)."""
     if tables == "latest":
         tables = await series.latest(SAMPLER) if runtime.deployed() else None
     rows = ((tables or {}).get(page) or {}).get("rows", [])
-    specs = _charts_for(page, tables)
+    specs = [s for s in _charts_for(page, tables) if not only or s.key in only]
     words = series.phrase(window)
     read: dict[str, dict[str, list[tuple[float, float]]]] = {}
     lines: dict[str, set[str]] = {}

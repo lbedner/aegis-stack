@@ -80,13 +80,15 @@ _UNSHOWN = {
 RESTART = "/partials/overseer/runtime/restart/{name}"
 
 
-async def context(page: str, query: Mapping[str, str]) -> dict[str, Any]:
-    """The section's cards and its charts over the chosen ``window`` as last
-    sampled, so it opens full and never waits on the runtime (``PENDING``
-    before the first sample), the range chips, and where it all refreshes
-    from."""
+async def context(
+    page: str, query: Mapping[str, str], only: tuple[str, ...] = ()
+) -> dict[str, Any]:
+    """The section's cards and its charts (given ``only``, those alone) over
+    the chosen ``window`` as last sampled, so it opens full and never waits
+    on the runtime (``PENDING`` before the first sample), the range chips,
+    and where it all refreshes from."""
     seconds, offered = await ui_runtime.window_of(page, query.get("window"))
-    table, charts = await ui_runtime.section(page, seconds, wait=False)
+    table, charts = await ui_runtime.section(page, seconds, wait=False, only=only)
     return {
         "container": toned(table),
         "container_charts": chart_panel(
@@ -487,9 +489,10 @@ def events(  # noqa: ANN201 - async iterator
     redraw = series.Redraw(window)
 
     async def frame() -> dict[str, str]:
-        table, drawn = await ui_runtime.section(page, window, draw=redraw.due())
-        shown = [c for c in drawn or () if not charts or c["key"] in charts]
+        table, drawn = await ui_runtime.section(
+            page, window, draw=redraw.due(), only=charts
+        )
         sent = {} if charts else {EVENT: render(table)}
-        return sent | chart_frames(EVENT, shown, held)
+        return sent | chart_frames(EVENT, drawn or [], held)
 
     return fragments_events(frame, series.TICK_SECONDS, max_frames)

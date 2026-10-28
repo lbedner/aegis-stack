@@ -7,6 +7,9 @@ from typing import Any
 import flet as ft
 
 from app.components.frontend.dashboard.modals.meetings_moments import moments_controls
+from app.components.frontend.dashboard.modals.modal_sections.chart_primitives import (
+    ChartColors,
+)
 from tests.components.frontend._tree import texts, walk
 
 
@@ -40,6 +43,14 @@ async def _nothing(*_: Any) -> None:
 def _shown(*moments: dict[str, Any]) -> str:
     controls = moments_controls({"moments": list(moments)}, _nothing, _nothing)
     return " | ".join(texts(ft.Column(controls)))
+
+
+def test_who_said_it_is_marked_in_their_color() -> None:
+    """The meeting's color for the speaker (``voices``), as the htmx page's."""
+    record = {"moments": [_moment()], "voices": {"Dana": 4}}
+    shown = ft.Column(moments_controls(record, _nothing, _nothing))
+    dots = [n.bgcolor for n in walk(shown) if getattr(n, "data", None) == "voice"]
+    assert dots == [ChartColors.RAMP[3]]
 
 
 def test_a_question_reads_with_its_actions() -> None:

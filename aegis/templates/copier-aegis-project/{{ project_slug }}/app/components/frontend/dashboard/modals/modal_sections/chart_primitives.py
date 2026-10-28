@@ -7,6 +7,7 @@ from typing import Any
 
 import flet as ft
 
+from app.components.frontend.controls.status_dot import status_dot
 from app.components.frontend.theme import AegisTheme as Theme
 
 
@@ -63,6 +64,14 @@ class ChartColors:
         FUCHSIA,
         YELLOW,
     )
+
+
+def chart_dot(n: int, data: str | None = None) -> ft.Container:
+    """A small dot in the ramp's ``n``th color (1 on), as the htmx pages'
+    ``chart_dot`` marks a speaker or a source."""
+    dot = status_dot(ChartColors.RAMP[(n - 1) % len(ChartColors.RAMP)], 8)
+    dot.data = data
+    return dot
 
 
 def chart_tooltip_kwargs() -> dict[str, Any]:

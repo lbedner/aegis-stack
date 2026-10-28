@@ -155,6 +155,9 @@ class MeetingRecord(BaseModel):
     people: list[str]
     me: str | None = None
     mine: list[ActionItem]
+    # Each name's color in the theme's chart ramp (1 on), one per name in
+    # this meeting: who spoke, and who owns an action item.
+    voices: dict[str, int] = {}
     under_way: bool
     writing: bool
     can_leave: bool

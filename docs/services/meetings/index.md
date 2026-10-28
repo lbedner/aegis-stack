@@ -335,7 +335,7 @@ Overseer's routes, across every owner. Reading them takes an admin where the sta
 | `GET /api/v1/meetings/admin/calendar/{event_id}?tz=` | One meeting on a calendar: all of the above, what its organizer wrote (`description`, Google's join and dial-in lines left out), and who is invited (`invited`: each email, with the name and color of whoever spoke on its link and plainly is them) |
 | `POST /api/v1/meetings/admin/{id}/owner` | Give a meeting nobody owns to someone (`{"user_id": 3}`), its people and action items with it; 409 if someone owns it, 422 for an id nobody here has |
 | `GET /api/v1/meetings/admin/search?q=` | Search every owner's meetings |
-| `GET /api/v1/meetings/admin/{id}` | One meeting with its notes (or why there are none), transcript, how long each speaker was heard (`heard_seconds`), and which speaker the owner is (`me`) |
+| `GET /api/v1/meetings/admin/{id}` | One meeting with its notes (or why there are none), transcript, how long each speaker was heard (`heard_seconds`), each speaker's and action item owner's color in the chart ramp (`voices`), and which speaker the owner is (`me`) |
 | `GET /api/v1/meetings/admin/{id}/threads` | Its threads, as the owner's route reads them |
 | `GET /api/v1/meetings/admin/{id}/moments` | Its moments, as the owner's route reads them |
 | `POST /api/v1/meetings/admin/{id}/moments/find` | Its call read over again |

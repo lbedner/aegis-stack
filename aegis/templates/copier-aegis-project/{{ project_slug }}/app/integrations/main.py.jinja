@@ -47,7 +47,7 @@ from app.components.web_frontend.main import (  # noqa: E402
 {%- endif %}
 from app.core import ontology  # noqa: E402
 from app.core.config import settings  # noqa: E402
-from app.core.constants import dashboard_upload_dir  # noqa: E402
+from app.core.constants import DASHBOARD_PATH, dashboard_upload_dir  # noqa: E402
 from app.core.log import logger, setup_logging  # noqa: E402
 
 
@@ -171,7 +171,7 @@ def create_integrated_app() -> FastAPI:
         return RedirectResponse(url="/dashboard/")
 {%- endif %}
 
-    app.mount("/dashboard", flet_app)
+    app.mount(DASHBOARD_PATH, flet_app)
     # Splice the paste-capture script into the dashboard page: pasted
     # images post to /api/v1/pastebox, where consumer surfaces (chat's
     # attachment bar) drain them. Flet has no clipboard-image API of its

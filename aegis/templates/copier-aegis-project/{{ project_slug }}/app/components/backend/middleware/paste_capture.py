@@ -17,6 +17,8 @@ from pathlib import Path
 
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from app.core.constants import DASHBOARD_PATH
+
 # Posts every pasted image file; non-file pastes (plain text) fall
 # through untouched so normal text paste keeps working.
 _PASTE_SCRIPT = b"""<script>
@@ -52,7 +54,7 @@ class PasteCaptureMiddleware:
     the dashboard mount - every other response streams through as-is.
     """
 
-    def __init__(self, app: ASGIApp, mount_path: str = "/dashboard") -> None:
+    def __init__(self, app: ASGIApp, mount_path: str = DASHBOARD_PATH) -> None:
         self.app = app
         self.mount_path = mount_path
 

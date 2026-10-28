@@ -31,7 +31,9 @@ class FakePage:
     async work to actually happen).
     """
 
-    def __init__(self) -> None:
+    def __init__(self, url: str | None = "http://localhost:8001/dashboard") -> None:
+        # Where the browser opened it: the local dev build's dashboard.
+        self.url = url
         self.updates = 0
         self.tasks: list[Any] = []
         self.overlay: list[Any] = []

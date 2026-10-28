@@ -18,6 +18,7 @@ from app.services.system.ui import get_component_subtitle, get_component_title
 from ...cards.card_utils import get_status_detail
 from ..base_detail_popup import BaseDetailPopup
 from ..load_tests_tab import LoadTestsTab
+from ..modal_constants import ModalLayout
 from .cache_tab import CacheTab
 from .lifecycle_tab import LifecycleTab
 from .overview_tab import OverviewTab
@@ -97,7 +98,7 @@ class BackendDetailDialog(BaseDetailPopup):
             sections=[tabs],
             subtitle_text=get_component_subtitle(ComponentName.BACKEND, backend_component.metadata),
             scrollable=False,
-            width=1100,
-            height=800,
+            width=ModalLayout.LARGE_WIDTH,
+            height=ModalLayout.LARGE_HEIGHT,
             status_detail=get_status_detail(backend_component),
         )

@@ -15,6 +15,32 @@ from app.components.frontend.theme import AegisTheme as Theme
 # marks WHICH ONE, and nothing else in the bar competes with it.
 _INDICATOR_COLOR = Theme.Colors.ACCENT
 _ANIMATION_MS = 200
+# The first tab of a record's pane, and of a modal given none of its own.
+OVERVIEW = "Overview"
+
+
+def fills(controls: list[ft.Control]) -> bool:
+    """Whether ``controls`` is one control that fills what holds it
+    (``expand``) and scrolls itself: a scroll around it would leave it no
+    height to fill."""
+    return len(controls) == 1 and bool(controls[0].expand)
+
+
+def part_tab(name: str, controls: list[ft.Control]) -> ft.Tab:
+    """A tab whose page is ``controls``, scrolled on its own under the bar
+    unless it ``fills`` it."""
+    page = ft.Column(
+        controls,
+        spacing=Theme.Spacing.MD,
+        scroll=None if fills(controls) else ft.ScrollMode.AUTO,
+        expand=True,
+    )
+    return ft.Tab(
+        text=name,
+        content=ft.Container(
+            page, padding=ft.padding.only(top=Theme.Spacing.MD), expand=True
+        ),
+    )
 
 
 class PulseTabs(ft.Tabs):

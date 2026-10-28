@@ -1,7 +1,8 @@
 """Meetings > Series in the Flet Overseer: what each series of meetings
 (one link, met again and again) keeps coming back to, every owner's,
-beside a pane that reads the selected series (its summary over time, then
-each theme with its lines: ``meetings_threads``) and writes it again,
+beside a pane that reads the selected series, a tab per part (its facts
+and summary, its run over time, then each theme with its lines:
+``meetings_threads``) and writes it again,
 following it while it is being written. The same as the htmx Overseer's
 Series drawer, over the admin API (``api/meetings/series.py``).
 """
@@ -14,13 +15,19 @@ import flet as ft
 
 from app.components.frontend.controls import DataTableColumn, PrimaryText
 from app.components.frontend.controls.buttons import PulseButton
-from app.components.frontend.controls.record_detail import build_field_blocks
+from app.components.frontend.controls.tabs import OVERVIEW
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.formatting import counted, format_date
 
-from .meetings_follow import ListBesidePane, WrittenPane, hint
+from .meetings_follow import (
+    ListBesidePane,
+    PartTabs,
+    WrittenPane,
+    details,
+    hint,
+    summary,
+)
 from .meetings_threads import thread_controls
-from .modal_sections import SectionHeader
 
 API = "/api/v1/meetings/admin/series"
 
@@ -37,10 +44,10 @@ def series_cells(row: dict[str, Any]) -> list[str]:
     ]
 
 
-def series_view(record: dict[str, Any]) -> ft.Column:
-    """One series read in full (``SeriesRecord``): where it was read from,
-    its headline, its run over time a part at a time (settled, shifted,
-    still open, the mood), then what it keeps coming back to."""
+def series_view(record: dict[str, Any], *, selected: str = OVERVIEW) -> PartTabs:
+    """One series read in full (``SeriesRecord``), a tab per part: where it
+    was read from and its headline; its run over time a part at a time
+    (settled, shifted, still open, the mood); what it keeps coming back to."""
     series = record["series"]
     facts = [
         ("Owner", series.get("owner_user_id")),
@@ -48,12 +55,9 @@ def series_view(record: dict[str, Any]) -> ft.Column:
         ("Read from", counted(int(series.get("meetings") or 0), "meeting")),
         ("Written by", series.get("model_name")),
     ]
-    controls: list[ft.Control] = [
-        PrimaryText(str(record.get("name") or ""), size=Theme.Typography.H3),
-        *build_field_blocks([("", facts)]),
-    ]
+    overview: list[ft.Control] = [details(facts)]
     if series.get("error"):
-        controls.append(
+        overview.append(
             PrimaryText(
                 f"The last write failed: {series['error']}",
                 size=Theme.Typography.BODY,
@@ -61,44 +65,53 @@ def series_view(record: dict[str, Any]) -> ft.Column:
             )
         )
     if record.get("writing"):
-        controls.append(hint("Writing the series…"))
-    controls += [
-        SectionHeader("Over time"),
-        PrimaryText(
-            str(series.get("summary") or "Nothing yet."), size=Theme.Typography.BODY
-        ),
-        *thread_controls(record.get("over_time") or []),
-        *thread_controls(record.get("sections") or []),
-    ]
-    return ft.Column(
-        controls, spacing=Theme.Spacing.SM, scroll=ft.ScrollMode.AUTO, expand=True
+        overview.append(hint("Writing the series…"))
+    overview.append(summary(str(series.get("summary") or "Nothing yet.")))
+    return PartTabs(
+        {
+            OVERVIEW: overview,
+            "Over time": thread_controls(record.get("over_time") or []),
+            "Themes": thread_controls(record.get("sections") or []),
+        },
+        selected=selected,
     )
 
 
 class SeriesPane(WrittenPane):
     """The selected series, read from the API, written again from here and
-    followed while it is being written."""
+    followed while it is being written, on the tab the reader left it at."""
 
     def __init__(self, page: ft.Page) -> None:
         super().__init__(page, API, "Select a series")
+        self._view: PartTabs | None = None
 
     def record_id(self, record: dict[str, Any]) -> int:
         return int(record["series"]["id"])
 
     def draw(self, record: dict[str, Any]) -> None:
         series_id = self.record_id(record)
-        controls: list[ft.Control] = [series_view(record)]
+        controls: list[ft.Control] = [
+            PrimaryText(str(record.get("name") or ""), size=Theme.Typography.H3)
+        ]
         if record.get("can_write"):
             controls.append(
-                PulseButton(
-                    on_click_callable=lambda: self.write_again(
-                        series_id, "write", "This series cannot be written now"
-                    ),
-                    text="Write it again",
-                    variant="muted",
-                    compact=True,
+                ft.Row(
+                    [
+                        PulseButton(
+                            on_click_callable=lambda: self.write_again(
+                                series_id, "write", "This series cannot be written now"
+                            ),
+                            text="Write it again",
+                            variant="muted",
+                            compact=True,
+                        )
+                    ]
                 )
             )
+        self._view = series_view(
+            record, selected=self._view.picked if self._view else OVERVIEW
+        )
+        controls.append(self._view)
         self.content = ft.Column(controls, spacing=Theme.Spacing.MD, expand=True)
         if self.page:
             self.update()

@@ -6,12 +6,17 @@ Container."""
 import json
 from unittest.mock import MagicMock
 
+import flet as ft
 import pytest
 
+from app.components.frontend.controls import H3Text
 from app.components.frontend.controls.buttons import IconCopyButton
+from app.components.frontend.controls.dropdown import NativeDropdown
+from app.components.frontend.controls.inputs import StyledTextField
 from app.components.frontend.dashboard.modals import logs_section
 from app.components.frontend.dashboard.modals.logs_popup import LogsPopup
 from app.components.frontend.dashboard.modals.logs_section import LogsSection, _line
+from app.components.frontend.dashboard.modals.modal_constants import ModalLayout
 from app.components.frontend.dashboard.modals.modal_sections.chart_primitives import (
     ChartColors,
 )
@@ -183,7 +188,22 @@ async def test_following_ends_with_the_tab(monkeypatch: pytest.MonkeyPatch) -> N
 
 def test_the_logs_popup_holds_every_services_logs() -> None:
     popup = LogsPopup(page=MagicMock())
-    assert any(isinstance(n, LogsSection) for n in walk(popup))
+    (section,) = [n for n in walk(popup) if isinstance(n, LogsSection)]
+    # The popup's title names it: no heading repeats it.
+    assert not [n for n in walk(section) if isinstance(n, H3Text)]
+
+
+def test_the_logs_popup_is_large_and_its_lines_fill_it() -> None:
+    """The lines are as tall as what holds them, scrolled inside
+    themselves: nothing around them scrolls (it would leave them no
+    height to fill)."""
+    popup = LogsPopup(page=MagicMock())
+    assert popup.panel.width == ModalLayout.LARGE_WIDTH
+    assert popup.panel.height == ModalLayout.LARGE_HEIGHT
+    (lines,) = [n for n in walk(popup) if isinstance(n, ft.ListView)]
+    assert lines.expand and lines.height is None
+    scrolled = [n for n in walk(popup) if isinstance(n, ft.Column) and n.scroll]
+    assert not [c for c in scrolled if any(n is lines for n in walk(c))]
 
 
 def _row(**given: object) -> dict[str, object]:
@@ -205,7 +225,59 @@ def _row(**given: object) -> dict[str, object]:
 
 def test_a_warning_or_worse_has_a_stripe_in_its_color() -> None:
     assert _line(_row(level="error")).border.left.color == Theme.Colors.ERROR
-    assert _line(_row(level="info")).border is None
+    assert _line(_row(level="info")).border.left.color == ft.Colors.TRANSPARENT
+
+
+def test_every_line_starts_at_the_same_edge() -> None:
+    """A stripe takes no room of its own: a warning lines up with the rest."""
+    error, info = _line(_row(level="error")), _line(_row(level="info"))
+    assert error.padding == info.padding
+    assert error.border.left.width == info.border.left.width
+
+
+def test_a_long_message_wraps_beside_its_time_and_level() -> None:
+    """The message and its fields are one text taking what the fixed time
+    and level leave, so a long one wraps in its own column, never under
+    the time."""
+    line = _line(_row(level="info", fields=[("pathname", "/code/app.py")]))
+    head = next(n for n in walk(line) if isinstance(n, ft.Row))
+    assert not head.wrap
+    (said,) = [n for n in head.controls if getattr(n, "expand", False)]
+    assert "pathname=" in "".join(t for t in texts(said))
+    assert "Write failed" in texts(said)
+
+
+def test_the_copy_button_does_not_make_a_line_taller() -> None:
+    (button,) = [n for n in walk(_line(_row())) if isinstance(n, IconCopyButton)]
+    assert button.height is not None and button.height <= logs_section.COPY_SIZE
+
+
+def test_every_toolbar_dropdown_shows_its_choice() -> None:
+    """A choice keyed "" draws as an empty box; each starts on a real one,
+    in the house dropdown."""
+    section = LogsSection("redis")
+    pickers = [n for n in walk(section) if isinstance(n, ft.Dropdown)]
+    assert pickers and all(isinstance(p, NativeDropdown) for p in pickers)
+    for picker in pickers:
+        assert picker.value in [o.key for o in picker.options if o.key]
+
+
+def test_all_levels_reads_every_level() -> None:
+    section = LogsSection("redis")
+    picked: dict[str, str] = {}
+    section._pick = picked.update  # type: ignore[method-assign]
+    picker = next(
+        n
+        for n in walk(section)
+        if isinstance(n, ft.Dropdown) and any(o.key == "error" for o in n.options)
+    )
+    picker.on_change(MagicMock(control=MagicMock(value=picker.options[0].key)))
+    assert picked == {"level": ""}
+
+
+def test_the_search_is_the_house_field() -> None:
+    fields = [n for n in walk(LogsSection("redis")) if isinstance(n, ft.TextField)]
+    assert fields and all(isinstance(f, StyledTextField) for f in fields)
 
 
 def test_the_lead_is_left_out_and_the_search_marked() -> None:
@@ -233,8 +305,6 @@ def test_each_service_has_its_own_color() -> None:
 
 def test_the_level_picker_offers_what_the_page_does() -> None:
     """The levels htmx offers, lines with none among them, from one list."""
-    import flet as ft
-
     picker = next(
         n
         for n in walk(LogsSection("redis"))

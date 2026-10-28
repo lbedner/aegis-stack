@@ -457,6 +457,27 @@ def test_the_cli_shows_a_meeting_as_the_pages_read_it() -> None:
         assert part in shown
 
 
+async def test_the_read_gives_each_speaker_and_owner_their_color(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """One color per name for both Overseers (``voices``): who spoke, and
+    an action item's owner who did not."""
+    hold_the_writer(monkeypatch)
+    meeting_id, _ = await ended(
+        async_db_session,
+        None,
+        ("Leonard", "I'll book the room."),
+        notes=lambda ids: Notes(
+            summary="Room.",
+            action_items=[ActionItem(text="Send the deck", owner="Grace")],
+        ),
+    )
+
+    record = await MeetingsService(async_db_session, None).read(meeting_id)
+
+    assert record.voices == voices(["Leonard", "Grace"])
+
+
 async def test_the_read_says_who_spoke_what_is_mine_and_what_can_be_done(
     async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:

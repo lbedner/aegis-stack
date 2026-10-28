@@ -82,10 +82,37 @@ convention's discovery in the template (`app/core/discovery.py`
 
 ## Gates
 
-- `make check` in the plugin repository (ruff and the spec tests).
+- `make check` in the plugin repository (ruff and the spec tests) — run it
+  the way `test.yml` does (`uv sync --all-extras && make check`) before
+  pushing; see *CI and release* above for the unreleased-framework case.
 - The template's tests passing inside a generated project after `aegis add <name>`,
   under the queryspy strict gate.
 - `make lint` and `make typecheck` in that generated project.
+
+## CI and release
+
+The scaffold ships both workflows; neither runs until the repository has a
+remote, which is the step people forget:
+
+- `.github/workflows/test.yml` — on push to `main` and every PR: `uv sync
+  --all-extras` then `make check` (ruff + the spec tests), the same gate as
+  below. Test it locally first, exactly that way: `uv sync --all-extras &&
+  make check` in the plugin repo installs the *published* `aegis-stack`, so
+  a plugin that uses a symbol from an unreleased framework fails here rather
+  than in CI. That is the cheap place to find it.
+- `.github/workflows/release.yml` — tag-driven. `v0.1.0-rc1` publishes to
+  TestPyPI and drafts a pre-release; `v0.1.0` publishes to PyPI with
+  Sigstore attestations and drafts the GitHub release. It needs **Trusted
+  Publishing** configured once on PyPI and TestPyPI (owner/repo, workflow
+  `release.yml`, environments `release` and `release-test`) — there is no
+  token in the repository.
+
+A plugin built against an unreleased framework cannot be green in CI until
+that release exists: `uv sync` installs what is on the index. Verify it
+against the unreleased checkout instead —
+`uv pip install -e ../aegis-stack` — and keep `aegis_version` and the
+`aegis-stack` dependency floor equal to the first release that carries what
+you use.
 
 ## Pitfalls
 

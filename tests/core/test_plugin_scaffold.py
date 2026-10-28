@@ -51,6 +51,7 @@ class TestScaffoldStructure:
             "Makefile",
             ".gitignore",
             ".pre-commit-config.yaml",
+            ".github/workflows/release.yml",
             ".github/workflows/test.yml",
             "src/aegis_stack_scraper/__init__.py",
             "src/aegis_stack_scraper/plugin.py",

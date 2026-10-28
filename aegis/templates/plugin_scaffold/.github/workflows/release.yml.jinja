@@ -1,0 +1,108 @@
+name: Release to PyPI
+
+# Tag-driven: a `-rc` tag publishes to TestPyPI and drafts a pre-release,
+# a plain `v*.*.*` tag publishes to PyPI. Trusted Publishing means no token
+# in the repo — configure the publisher once on PyPI (and TestPyPI) for
+# this repository, workflow `release.yml`, environment `release`.
+on:
+  push:
+    tags:
+      - 'v*.*.*-rc*'  # Pre-release tags (v0.1.0-rc1, etc.) → TestPyPI
+      - 'v*.*.*'      # Production tags (v0.1.0, etc.) → PyPI
+
+jobs:
+  build:
+    name: Build Package
+    runs-on: ubuntu-latest
+    env:
+      UV_PYTHON: "3.11"  # The floor this plugin supports
+      UV_LINK_MODE: "copy"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+      - run: uv python install 3.11
+      - run: uv sync --all-extras
+      # The same gate the test workflow runs: a tag that fails its own
+      # suite must not reach an index.
+      - run: make check
+      - run: uv build
+      - uses: actions/upload-artifact@v7
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  publish-testpypi:
+    name: Publish to TestPyPI
+    needs: build
+    if: contains(github.ref, '-rc')
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # REQUIRED for Trusted Publishing
+      contents: write  # For creating GitHub pre-releases
+    environment:
+      name: release-test
+      url: https://test.pypi.org/project/{{ dist }}/
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          print-hash: true
+      - id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      - uses: softprops/action-gh-release@v3
+        with:
+          name: "v${% raw %}{{ steps.version.outputs.VERSION }}{% endraw %} (Release Candidate)"
+          draft: true
+          generate_release_notes: true
+          prerelease: true
+          files: dist/*
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: build
+    if: "!contains(github.ref, '-rc')"
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # REQUIRED for Trusted Publishing
+      contents: write  # For creating GitHub releases
+    environment:
+      name: release
+      url: https://pypi.org/project/{{ dist }}/
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          print-hash: true
+          attestations: true  # Sigstore attestations
+      - id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      - uses: softprops/action-gh-release@v3
+        with:
+          name: "v${% raw %}{{ steps.version.outputs.VERSION }}{% endraw %}"
+          draft: true
+          generate_release_notes: true
+          body: |
+            ## Installation
+
+            Inside an Aegis Stack project:
+
+            ```bash
+            pip install {{ dist }}==${% raw %}{{ steps.version.outputs.VERSION }}{% endraw %}
+            aegis add {{ name }}
+            ```
+
+            - [PyPI](https://pypi.org/project/{{ dist }}/${% raw %}{{ steps.version.outputs.VERSION }}{% endraw %}/)
+            - [Aegis Stack](https://github.com/lbedner/aegis-stack)
+          files: dist/*
+          prerelease: false

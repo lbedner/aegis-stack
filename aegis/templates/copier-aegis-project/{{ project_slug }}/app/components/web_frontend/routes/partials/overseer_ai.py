@@ -417,8 +417,12 @@ async def rag_search(
 
 @with_voice.post("/voice/use")
 async def use_voice(request: Request, db: Db = Depends(overseer_db)) -> Response:
-    """A row's model, voice or engine on the active voice profile."""
-    said = await overseer_ai_voice.use(db, await form_fields(request))
+    """A row's model, voice or engine on the active voice profile; one the
+    catalog does not have is said so (``use_voice``'s ValueError)."""
+    try:
+        said = await overseer_ai_voice.use(db, await form_fields(request))
+    except ValueError as exc:
+        return toast_response(str(exc), "error")
     return go_to(section_url("voice"), f"Now using {said}.", target="#overseer-main")
 
 

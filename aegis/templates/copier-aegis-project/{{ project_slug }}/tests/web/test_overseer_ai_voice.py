@@ -151,6 +151,25 @@ async def test_use_puts_a_voice_on_the_active_profile(
     assert "Kore" in text(_rows(_voice(client), "use")[0])
 
 
+async def test_a_choice_not_in_the_catalog_is_the_toast(
+    client: TestClient, hers: VoiceProfile, async_db_session: AsyncSession
+) -> None:
+    """A row's ``use`` naming nothing the catalog has says so, and the
+    profile is left as it was (a 500 before)."""
+    before = (hers.tts_provider, hers.tts_model, hers.tts_voice)
+    response = client.post(
+        f"{PARTIALS}/voice/use",
+        data={"tts_voice": "no-such-voice"},
+        headers={"HX-Request": "true"},
+    )
+
+    assert response.status_code == 200, response.text
+    toast = triggers(response)["toast"]
+    assert toast["tone"] == "error" and "voice catalog" in toast["text"]
+    await async_db_session.refresh(hers)
+    assert (hers.tts_provider, hers.tts_model, hers.tts_voice) == before
+
+
 async def test_another_profile_is_made_the_one_in_use(
     client: TestClient, hers: VoiceProfile, async_db_session: AsyncSession
 ) -> None:

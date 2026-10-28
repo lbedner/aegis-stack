@@ -2,31 +2,37 @@
 (``ui_runtime.containers``), added to every component modal that has a
 container behind it by ``BaseDetailPopup`` itself."""
 
-from importlib.util import find_spec
 from unittest.mock import MagicMock
 
 import flet as ft
 import pytest
 
+from app.components.frontend.controls import DataTable, H3Text
+from app.components.frontend.controls.expand_arrow import EXPAND_ICON_WIDTH
+from app.components.frontend.controls.tabs import PulseTabs
 from app.components.frontend.dashboard.modals import container_section
-from app.components.frontend.dashboard.modals.base_detail_popup import BaseDetailPopup
+from app.components.frontend.dashboard.modals.base_detail_popup import (
+    RUNTIME_WIDTH,
+    BaseDetailPopup,
+)
 from app.components.frontend.dashboard.modals.container_section import (
     ContainerSection,
 )
 from app.components.frontend.dashboard.modals.logs_section import LogsSection
+from app.components.frontend.dashboard.modals.modal_constants import ModalLayout
 from app.components.frontend.dashboard.modals.modal_sections import (
     DateRangeChips,
     LineChartCard,
 )
+from app.components.frontend.dashboard.modals.table_tab import ACTIONS_WIDTH
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core import series
-from app.core.config import settings
 from app.services.shared.deps import NO_AUTH_REFUSAL
 from app.services.system import ui_runtime
 from app.services.system.models import ComponentStatus
 from tests._fake_runtime import REDIS, FakeRuntime, use_runtime
 from tests.components.frontend._fakes import FakePage
-from tests.components.frontend._tree import texts, walk
+from tests.components.frontend._tree import tab_names, tabs_in, texts, walk
 
 
 async def test_it_stops_reading_when_the_tab_goes(
@@ -114,14 +120,49 @@ def test_the_modal_reads_inside_the_watch() -> None:
 def test_a_tabbed_modal_gets_a_container_tab() -> None:
     """A popup whose body is a tab bar (not scrolled) takes the section as a
     tab, rather than below the tabs in a column that cannot scroll."""
-    from app.components.frontend.controls.tabs import PulseTabs
-
     tabs = PulseTabs(tabs=[ft.Tab(text="Overview", content=ft.Text("x"))])
     component = ComponentStatus(name="cache", message="", metadata={})
     BaseDetailPopup(FakePage(), component, "Title", sections=[tabs], scrollable=False)  # type: ignore[arg-type]
-    assert [t.text for t in tabs.tabs] == ["Overview", "Container", "Logs"]
+    assert tab_names(tabs) == ["Overview", "Container", "Logs"]
     assert any(isinstance(c, ContainerSection) for c in walk(tabs.tabs[1]))
     assert any(isinstance(c, LogsSection) for c in walk(tabs.tabs[2]))
+    # The tab names it: no heading repeats the name inside.
+    for tab in tabs.tabs[1:]:
+        assert not [c for c in walk(tab.content) if isinstance(c, H3Text)]
+
+
+def test_a_modal_without_tabs_gets_its_container_and_logs_as_tabs() -> None:
+    """Its own sections are its first tab, Container and Logs beside it,
+    tall enough to read them."""
+    component = ComponentStatus(name="cache", message="", metadata={})
+    popup = BaseDetailPopup(  # type: ignore[arg-type]
+        FakePage(), component, "Title", sections=[ft.Text("own")], height=340
+    )
+    tabs = tabs_in(popup)
+    assert tab_names(popup) == ["Overview", "Container", "Logs"]
+    assert "own" in texts(tabs.tabs[0])
+    assert popup.panel.height >= ModalLayout.DEFAULT_HEIGHT
+    # The Logs tab is its lines, which scroll themselves; the tab does not.
+    logs_page = next(n for n in walk(tabs.tabs[2]) if isinstance(n, ft.Column))
+    assert logs_page.scroll is None
+
+
+def test_a_modal_with_its_container_is_big_enough_to_read_it() -> None:
+    """The container's columns and its logs need the room
+    (``RUNTIME_WIDTH``): a smaller modal, tabbed or not, grows to it."""
+    tabs = PulseTabs(tabs=[ft.Tab(text="Overview", content=ft.Text("x"))])
+    component = ComponentStatus(name="cache", message="", metadata={})
+    popup = BaseDetailPopup(  # type: ignore[arg-type]
+        FakePage(),
+        component,
+        "T",
+        sections=[tabs],
+        scrollable=False,
+        width=900,
+        height=550,
+    )
+    assert popup.panel.width >= RUNTIME_WIDTH
+    assert popup.panel.height >= ModalLayout.DEFAULT_HEIGHT
 
 
 async def test_a_chart_with_nothing_in_its_window_says_so(
@@ -180,26 +221,30 @@ def test_an_events_chart_draws_dots_not_a_line() -> None:
     assert all(p.point for p in line.data_points)
 
 
+def _opened_where(monkeypatch: pytest.MonkeyPatch, refused: str | None) -> None:
+    """The dashboard opened where a change is ``refused`` (None: allowed;
+    ``page_refusal``'s rule is tested on its own)."""
+    monkeypatch.setattr(container_section, "page_refusal", lambda page: refused)
+
+
 async def test_each_container_has_a_restart(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A Restart that confirms before it calls the API."""
     use_runtime(monkeypatch, FakeRuntime(REDIS))
+    _opened_where(monkeypatch, None)
     section = ContainerSection("redis")
     await section.load()
     assert _restarts(section)
 
 
-@pytest.mark.skipif(
-    find_spec("app.services.auth") is not None, reason="with auth: admins only"
-)
-async def test_without_auth_a_deployed_build_hides_restart_and_says_why(
+async def test_where_a_change_is_refused_no_restart_and_why(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The restart API refuses it there (``refusal_at`` the address this
-    dashboard calls the API at), so the button is not offered."""
+    """Opened where the dashboard may not make a change
+    (``page_refusal``), the button is not offered."""
     use_runtime(monkeypatch, FakeRuntime(REDIS))
-    monkeypatch.setattr(settings, "BUILD_ID", "abc1234")
+    _opened_where(monkeypatch, NO_AUTH_REFUSAL)
     section = ContainerSection("redis")
     await section.load()
     assert not _restarts(section)
@@ -251,20 +296,31 @@ def test_a_chart_draws_where_warning_begins_as_a_dashed_guide() -> None:
     assert chart.max_y >= 12
 
 
+def _reading_one_row(monkeypatch: pytest.MonkeyPatch, **given: str) -> ContainerSection:
+    """A section whose every reading is one row: ``given`` over an ``x`` in
+    each column."""
+    row = {key: "x" for _, key, _ in container_section.COLUMNS} | given
+
+    async def section(*_: object, **__: object) -> tuple:
+        return {"rows": [row], "note": None}, []
+
+    monkeypatch.setattr(ui_runtime, "section", section)
+    return ContainerSection("redis")
+
+
 async def test_a_figure_past_its_threshold_takes_its_tone(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The htmx section's colours: CPU at a warning in amber, memory at the
     alert in red, a figure under its threshold plain."""
-    row = {key: "x" for _, key, _ in container_section.COLUMNS}
-    row |= {"cpu": "95%", "memory": "1 GB", "disk": "9 B/s"}
-    row |= {"cpu_status": "warning", "memory_status": "unhealthy"}
-
-    async def section(page: str, window: int, draw: bool = True) -> tuple:
-        return {"rows": [row], "note": None}, []
-
-    monkeypatch.setattr(ui_runtime, "section", section)
-    shown = ContainerSection("redis")
+    shown = _reading_one_row(
+        monkeypatch,
+        cpu="95%",
+        memory="1 GB",
+        disk="9 B/s",
+        cpu_status="warning",
+        memory_status="unhealthy",
+    )
     await shown.load()
     colors = {
         n.value: n.color for n in walk(shown) if isinstance(n, ft.Text) and n.value
@@ -272,3 +328,48 @@ async def test_a_figure_past_its_threshold_takes_its_tone(
     assert colors["95%"] == Theme.Colors.WARNING
     assert colors["1 GB"] == Theme.Colors.ERROR
     assert colors["9 B/s"] == ft.Colors.ON_SURFACE
+
+
+# What a container's name needs to be read.
+NAME_ROOM = 160
+
+
+def test_the_fixed_columns_leave_the_name_room() -> None:
+    """Everything the table takes but the name: its fixed columns, Restart,
+    the arrow a row opens by, a gap between every two cells and the row's
+    own padding; inside the narrowest modal it opens in, past that modal's
+    padding and the tab's."""
+    fixed = [width for _, _, width in container_section.COLUMNS if width]
+    cells = len(container_section.COLUMNS) + 2  # Restart, the arrow
+    taken = sum(fixed) + ACTIONS_WIDTH + EXPAND_ICON_WIDTH
+    taken += Theme.Spacing.MD * (cells - 1) + Theme.Spacing.MD * 2
+    room = RUNTIME_WIDTH - 2 * ModalLayout.CONTENT_PADDING - 2 * Theme.Spacing.MD
+    assert room - taken >= NAME_ROOM
+
+
+async def test_an_opened_row_stays_open_when_it_reads_again(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The section reads its containers again every few seconds: a row the
+    reader opened stays open, in the same table."""
+    shown = _reading_one_row(monkeypatch, image="aegis-stack-my-app:latest")
+    await shown.load()
+    (table,) = [n for n in walk(shown) if isinstance(n, DataTable)]
+    table._toggle_expand(0)
+
+    await shown.load()
+
+    assert [n for n in walk(shown) if isinstance(n, DataTable)] == [table]
+    assert "aegis-stack-my-app:latest" in texts(table)
+
+
+async def test_a_row_opens_to_its_image(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A long image name is no column of its own: a row opens to it, and to
+    the figures its columns may cut short."""
+    image, disk = "aegis-stack-my-app:latest", "read 25.1 MB, write 47.7 MB"
+    shown = _reading_one_row(monkeypatch, image=image, disk=disk)
+    await shown.load()
+    assert "image" not in [key for _, key, _ in container_section.COLUMNS]
+    (table,) = [n for n in walk(shown) if isinstance(n, DataTable)]
+    opened = texts(table._expandable_content(0))
+    assert image in opened and disk in opened

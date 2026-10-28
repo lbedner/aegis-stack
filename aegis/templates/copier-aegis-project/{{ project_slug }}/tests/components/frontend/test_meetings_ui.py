@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock
 import flet as ft
 import pytest
 
+from app.components.frontend.controls import SectionCard
 from app.components.frontend.dashboard.cards.meetings_card import MeetingsCard
 from app.components.frontend.dashboard.modals import meetings_modal
 from app.components.frontend.dashboard.modals.meetings_modal import (
@@ -15,13 +16,16 @@ from app.components.frontend.dashboard.modals.meetings_modal import (
     actions_for,
     following,
     meeting_cells,
-    record_view,
 )
 from app.components.frontend.dashboard.modals.meetings_people_tab import guide_view
+from app.components.frontend.dashboard.modals.meetings_record import RecordView
+from app.components.frontend.dashboard.modals.modal_sections.chart_primitives import (
+    ChartColors,
+)
 from app.services.meetings.health import MEETINGS_MODAL_ID
 from app.services.system.models import ComponentStatus, ComponentStatusType
 from tests._meetings import MEET, record
-from tests.components.frontend._tree import texts, walk
+from tests.components.frontend._tree import tab_names, tabs_in, texts, walk
 
 MEETING = {
     "id": 7,
@@ -80,17 +84,92 @@ def test_a_meeting_reads_with_its_notes_transcript_and_what_was_heard() -> None:
         transcript=[{"id": 3, "speaker": "Ada", "at": 61.0, "text": "I will."}],
     )
 
-    shown = " | ".join(texts(record_view(record)))
+    shown = " | ".join(texts(RecordView(record)))
 
     for said in ("Ada writes the docs.", "Write the docs", "Ada 42s", "I will."):
         assert said in shown
     assert "01:01" in shown
 
 
+NOTES = {
+    "summary": "Ada writes the docs.",
+    "decisions": [],
+    "action_items": [],
+    "open_questions": [],
+}
+
+
+def test_a_meeting_reads_in_tabs() -> None:
+    """Its threads have a tab once its notes are there and settled."""
+    assert tab_names(RecordView(_record())) == [
+        "Overview",
+        "Notes",
+        "Moments",
+        "Transcript",
+    ]
+    assert "Threads" in tab_names(RecordView(_record(notes=NOTES)))
+
+
+def test_each_part_of_the_notes_is_its_own_card() -> None:
+    view = RecordView(_record(notes=NOTES))
+    cards = [n for n in walk(view.pages["Notes"]) if isinstance(n, SectionCard)]
+    assert [texts(card)[0] for card in cards] == [
+        "Summary",
+        "Yours",
+        "Action items",
+        "Decisions",
+        "Open questions",
+    ]
+
+
+def test_a_line_opens_the_transcript() -> None:
+    said = [{"id": 3, "speaker": "Ada", "at": 1.0, "text": "Hi."}]
+    view = RecordView(_record(transcript=said))
+    view.open_at(3)
+    assert view.picked == "Transcript"
+
+
+def test_the_pane_keeps_its_tab_when_it_reads_again() -> None:
+    """Followed, a meeting is drawn again every few seconds: the tab the
+    reader is on stays open."""
+    pane = MeetingPane(MagicMock(expires_at=None), on_change=AsyncMock())
+    pane._draw(_record(notes=NOTES))
+    tabs_in(pane).selected_index = 1  # the reader's click, as Flet keeps it
+
+    pane._draw(_record(notes=NOTES))
+
+    assert tabs_in(pane).picked == "Notes"
+
+
+def test_each_speaker_and_owner_is_marked_in_their_color() -> None:
+    """The meeting's color for each name (``voices``), as the htmx page's:
+    on every line they said, and on the action items they own."""
+    items = [{"text": "Send the deck", "owner": "Grace", "due": None, "lines": []}]
+    view = RecordView(
+        _record(
+            notes=NOTES | {"action_items": items},
+            transcript=[{"id": 3, "speaker": "Ada", "at": 1.0, "text": "Hi."}],
+            voices={"Ada": 2, "Grace": 5},
+        )
+    )
+    dots = [n.bgcolor for n in walk(view) if getattr(n, "data", None) == "voice"]
+    assert ChartColors.RAMP[1] in dots and ChartColors.RAMP[4] in dots
+
+
+def test_a_long_line_wraps_beside_its_clock() -> None:
+    """Who said it and what take the width the clock leaves: a long line
+    wraps there instead of running off the pane."""
+    said = [{"id": 3, "speaker": "Ada", "at": 1.0, "text": "Long. " * 40}]
+    view = RecordView(_record(transcript=said, voices={"Ada": 2}))
+    (line,) = view.pages["Transcript"].controls
+    clock, rest = line.controls
+    assert clock.width and rest.expand
+
+
 def test_notes_that_failed_say_why() -> None:
     record = _record(notes_error="the model is down")
 
-    assert "the model is down" in " | ".join(texts(record_view(record)))
+    assert "the model is down" in " | ".join(texts(RecordView(record)))
 
 
 def test_the_actions_are_the_ones_the_read_allows() -> None:
@@ -106,9 +185,9 @@ def test_my_items_come_first_once_i_say_which_speaker_i_am() -> None:
     mine = [{"text": "Write the docs", "owner": "Ada", "due": None, "lines": []}]
     notes = {"summary": "Docs.", "decisions": [], "action_items": mine}
 
-    shown = " | ".join(texts(record_view(_record(notes=notes, mine=mine))))
+    shown = " | ".join(texts(RecordView(_record(notes=notes, mine=mine))))
     unsaid = " | ".join(
-        texts(record_view(_record(notes=notes, meeting=MEETING | {"me": None})))
+        texts(RecordView(_record(notes=notes, meeting=MEETING | {"me": None})))
     )
 
     assert shown.index("Write the docs") < shown.index("Action items")

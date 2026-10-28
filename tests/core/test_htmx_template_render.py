@@ -26,7 +26,7 @@ from aegis.core.component_files import get_copier_defaults, get_template_path
 PROJECT_SLUG_PLACEHOLDER = "{{ project_slug }}"
 
 # The property is "Flet owns /dashboard", not what the local is called.
-FLET_MOUNT = 'app.mount("/dashboard"'
+FLET_MOUNT = "app.mount(DASHBOARD_PATH, flet_app)"
 
 
 def _env() -> Environment:

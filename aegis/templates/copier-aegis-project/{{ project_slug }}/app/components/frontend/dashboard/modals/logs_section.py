@@ -13,15 +13,20 @@ import flet as ft
 
 from app.components.frontend.controls import (
     BodyText,
-    H3Text,
     NumericText,
     SecondaryText,
 )
 from app.components.frontend.controls.buttons import IconCopyButton
+from app.components.frontend.controls.dropdown import (
+    NativeDropdown,
+    chosen,
+    filter_dropdown,
+)
+from app.components.frontend.controls.inputs import StyledTextField
 from app.components.frontend.core.session_health import SessionLoops, page_is_connected
 from app.components.frontend.dashboard.modals.modal_sections import DateRangeChips
 from app.components.frontend.dashboard.modals.modal_sections.chart_primitives import (
-    ChartColors,
+    chart_dot,
 )
 from app.components.frontend.theme import TONE_COLORS
 from app.components.frontend.theme import AegisTheme as Theme
@@ -38,6 +43,12 @@ EDGED = tuple(
 # The most lines a section holds while following: each is a control Flet
 # diffs on the event loop, so a modal left open must not grow without end.
 MAX_LINES = 1000
+# A line's fixed columns, so every line's message starts at one edge.
+TIME_WIDTH = 60
+LEVEL_WIDTH = 60
+SERVICE_WIDTH = 110
+# The copy button's box: a bare icon button is 40 high, taller than a line.
+COPY_SIZE = 24
 MUTED = ft.TextStyle(color=ft.Colors.ON_SURFACE_VARIANT)
 MARKED = ft.TextStyle(
     color=Theme.Colors.PRIMARY,
@@ -50,7 +61,8 @@ class LogsSection(ft.Column):
     behind every page with none."""
 
     def __init__(self, page: str | None = None) -> None:
-        super().__init__(spacing=Theme.Spacing.SM)
+        # As tall as what holds it; its lines scroll inside it.
+        super().__init__(spacing=Theme.Spacing.SM, expand=True)
         self._page_key = page
         self._query: dict[str, str] = {}
         self._services: set[str] = set()  # ticked; none is every service
@@ -62,13 +74,11 @@ class LogsSection(ft.Column):
         self.paused = False
         self._following: Future[None] | None = None
         self._note = SecondaryText("", visible=False)
-        self._lines = ft.ListView(spacing=2, height=420)
+        self._lines = ft.ListView(spacing=2, expand=True)
         self._services_menu = ft.PopupMenuButton(
             content=SecondaryText("Services"), visible=page is None
         )
-        self._pause = ft.IconButton(
-            ft.Icons.PAUSE, tooltip="Pause", on_click=lambda _: self._toggle_pause()
-        )
+        self._pause = _tool(ft.Icons.PAUSE, "Pause", lambda _: self._toggle_pause())
         filters = ft.Row(
             [
                 DateRangeChips(
@@ -76,52 +86,49 @@ class LogsSection(ft.Column):
                     selected_days=ui_logs.DEFAULT_WINDOW,
                     on_change=lambda seconds: self._pick({"window": str(seconds)}),
                 ),
-                ft.Dropdown(
-                    options=[
-                        ft.dropdown.Option("", "All levels"),
-                        *(
-                            ft.dropdown.Option(level, label)
-                            for level, label in ui_logs.LEVEL_CHOICES
-                        ),
-                    ],
-                    value="",
-                    dense=True,
+                filter_dropdown(
+                    "All levels",
+                    list(ui_logs.LEVEL_CHOICES),
                     width=150,
-                    on_change=lambda e: self._pick({"level": e.control.value or ""}),
+                    on_change=lambda e: self._pick({"level": chosen(e.control.value)}),
                 ),
-                ft.Dropdown(
+                NativeDropdown(
                     options=[
                         ft.dropdown.Option(order, name)
                         for order, name in ui_logs.ORDERS
                     ],
                     value=ui_logs.DEFAULT_ORDER,
-                    dense=True,
                     width=160,
+                    enable_filter=False,
+                    enable_search=False,
                     on_change=lambda e: self._pick({"order": e.control.value or ""}),
                 ),
                 self._services_menu,
-                ft.TextField(
+                StyledTextField(
+                    compact=True,
                     hint_text="Search lines",
-                    dense=True,
-                    width=220,
+                    prefix_icon=ft.Icons.SEARCH,
+                    width=240,
                     on_submit=lambda e: self._pick({"q": e.control.value or ""}),
                 ),
                 self._pause,
-                ft.IconButton(
+                _tool(
                     ft.Icons.VERTICAL_ALIGN_TOP,
-                    tooltip="Top",
-                    on_click=lambda _: self._lines.scroll_to(offset=0, duration=200),
+                    "Top",
+                    lambda _: self._lines.scroll_to(offset=0, duration=200),
                 ),
-                ft.IconButton(
+                _tool(
                     ft.Icons.VERTICAL_ALIGN_BOTTOM,
-                    tooltip="Bottom",
-                    on_click=lambda _: self._lines.scroll_to(offset=-1, duration=200),
+                    "Bottom",
+                    lambda _: self._lines.scroll_to(offset=-1, duration=200),
                 ),
             ],
             wrap=True,
-            spacing=Theme.Spacing.MD,
+            spacing=Theme.Spacing.SM,
+            run_spacing=Theme.Spacing.SM,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
         )
-        self.controls = [H3Text("Logs"), filters, self._note, self._lines]
+        self.controls = [filters, self._note, self._lines]
 
     def did_mount(self) -> None:
         self.page.run_task(self.show, {})
@@ -223,64 +230,29 @@ def _line(
     row: dict[str, Any], titles: dict[str, str] | None = None, query: str = ""
 ) -> ft.Control:
     """One line: time, its service in its own color (with ``titles``) and
-    which of its containers when it has several (``source``), level, then
-    the message (the lead the time repeats left out, the search marked), its
-    logger and its fields; a traceback folds under it. Hovering it shows a
-    copy of the whole line."""
+    which of its containers when it has several (``source``), level, each
+    in its own fixed column, then the message (the lead the time repeats
+    left out, the search marked), its logger and its fields, as one text
+    wrapping in what is left; a traceback folds under it. Hovering it
+    shows a copy of the whole line."""
     fields = " ".join(f"{key}={value}" for key, value in row["fields"])
     logger = f"[{row['logger']}]" if row["logger"] else ""
     service = titles.get(row["page"], row["page"]) if titles else ""
     level = row["level"] or ""
-    head = ft.Row(
-        [
-            NumericText(row["at"], size=11, color=ft.Colors.ON_SURFACE_VARIANT),
-            ft.Row(
-                [
-                    ft.Container(
-                        width=8,
-                        height=8,
-                        border_radius=4,
-                        bgcolor=ChartColors.RAMP[row["color"] % len(ChartColors.RAMP)],
-                        data="service-dot",
-                    ),
-                    BodyText(service, size=11),
-                ],
-                spacing=6,
-                visible=bool(service),
-            ),
-            ft.Container(
-                SecondaryText(row["source"], size=11),
-                tooltip=row["instance"],
-                visible=bool(row["source"]),
-            ),
-            ft.Text(level, size=11, color=LEVEL_COLORS.get(level), width=60),
-            BodyText(
-                "",
-                size=12,
-                selectable=True,
-                spans=[
-                    *_marked(row["message"], query),
-                    *([ft.TextSpan(f" {logger}", MUTED)] if logger else []),
-                ],
-            ),
-            BodyText(
-                "",
-                size=11,
-                selectable=True,
-                visible=bool(fields),
-                spans=[
-                    span
-                    for key, value in row["fields"]
-                    for span in (
-                        ft.TextSpan(f" {key}=", MUTED),
-                        *_marked(value, query),
-                    )
-                ],
+    said = BodyText(
+        "",
+        size=12,
+        selectable=True,
+        expand=True,
+        spans=[
+            *_marked(row["message"], query),
+            *([ft.TextSpan(f" {logger}", MUTED)] if logger else []),
+            *(
+                span
+                for key, value in row["fields"]
+                for span in (ft.TextSpan(f"  {key}=", MUTED), *_marked(value, query))
             ),
         ],
-        spacing=Theme.Spacing.SM,
-        vertical_alignment=ft.CrossAxisAlignment.START,
-        wrap=True,
     )
     whole = " ".join(
         part
@@ -298,24 +270,78 @@ def _line(
     copy = IconCopyButton(
         lambda: "\n".join(part for part in (whole, row["trace"]) if part),
         icon_size=14,
+        width=COPY_SIZE,
+        height=COPY_SIZE,
+        padding=0,
         opacity=0,  # shown on hover; hidden, it still holds its place
     )
-    head.controls.append(copy)
+    head = ft.Row(
+        [
+            NumericText(
+                row["at"], size=11, color=ft.Colors.ON_SURFACE_VARIANT, width=TIME_WIDTH
+            ),
+            ft.Container(
+                ft.Row(
+                    [
+                        chart_dot(row["color"] + 1, data="service-dot"),
+                        BodyText(
+                            service,
+                            size=11,
+                            no_wrap=True,
+                            overflow=ft.TextOverflow.ELLIPSIS,
+                            expand=True,
+                        ),
+                    ],
+                    spacing=6,
+                ),
+                width=SERVICE_WIDTH,
+                tooltip=service or None,
+                visible=bool(service),
+            ),
+            ft.Container(
+                SecondaryText(row["source"], size=11),
+                tooltip=row["instance"],
+                visible=bool(row["source"]),
+            ),
+            ft.Text(level, size=11, color=LEVEL_COLORS.get(level), width=LEVEL_WIDTH),
+            said,
+            copy,
+        ],
+        spacing=Theme.Spacing.SM,
+        vertical_alignment=ft.CrossAxisAlignment.START,
+    )
     body: ft.Control = head
     if row["trace"]:
+        # Folded under the message, past the time, service and level.
+        indent = TIME_WIDTH + LEVEL_WIDTH + 2 * Theme.Spacing.SM
+        if service:
+            indent += SERVICE_WIDTH + Theme.Spacing.SM
         trace = ft.ExpansionTile(
             title=SecondaryText("Traceback", size=11),
             controls=[SecondaryText(row["trace"], size=11, selectable=True)],
             dense=True,
+            tile_padding=ft.padding.only(left=indent),
+            controls_padding=ft.padding.only(left=indent),
         )
         body = ft.Column([head, trace], spacing=0)
-    edge = LEVEL_COLORS[level] if level in EDGED else None
+    edge = LEVEL_COLORS[level] if level in EDGED else ft.Colors.TRANSPARENT
     return ft.Container(
         body,
-        border=ft.border.only(left=ft.BorderSide(2, edge)) if edge else None,
-        padding=ft.padding.only(left=6) if edge else None,
+        border=ft.border.only(left=ft.BorderSide(2, edge)),
+        padding=ft.padding.only(left=6, top=2, bottom=2),
         opacity=0.6 if level == "debug" else None,
         on_hover=lambda e: _reveal(copy, e.data == "true"),
+    )
+
+
+def _tool(icon: str, tooltip: str, on_click: Any) -> ft.IconButton:
+    """A toolbar icon: small and quiet, as the house icon buttons are."""
+    return ft.IconButton(
+        icon,
+        tooltip=tooltip,
+        icon_size=18,
+        icon_color=ft.Colors.ON_SURFACE_VARIANT,
+        on_click=on_click,
     )
 
 

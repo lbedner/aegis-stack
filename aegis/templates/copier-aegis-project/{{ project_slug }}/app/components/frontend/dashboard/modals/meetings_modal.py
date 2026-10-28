@@ -20,16 +20,15 @@ from app.components.frontend.controls import (
     ConfirmDialog,
     DataTable,
     DataTableColumn,
-    NativeDropdown,
     PrimaryText,
 )
 from app.components.frontend.controls.buttons import PulseButton
+from app.components.frontend.controls.dropdown import chosen, filter_dropdown
 from app.components.frontend.controls.inputs import StyledTextField
-from app.components.frontend.controls.record_detail import build_field_blocks
 from app.components.frontend.controls.snack_bar import ErrorSnackBar, SuccessSnackBar
-from app.components.frontend.controls.tabs import PulseTabs
+from app.components.frontend.controls.tabs import OVERVIEW, PulseTabs
 from app.components.frontend.theme import AegisTheme as Theme
-from app.core.formatting import format_clock, format_date
+from app.core.formatting import format_date
 from app.services.meetings.domains.accounts.service import agent_names
 from app.services.meetings.health import MEETINGS_MODAL_ID
 from app.services.meetings.service import call_length, status_label
@@ -40,14 +39,14 @@ from ..cards.card_utils import get_status_detail
 from .base_detail_popup import BaseDetailPopup
 from .meetings_agents_tab import AGENTS, AgentPicker, AgentsTab
 from .meetings_calendar_tab import CalendarTab
-from .meetings_follow import FOLLOW_SECONDS, api, follow, hint
-from .meetings_moments import Acts, moment_actions, moments_controls
+from .meetings_follow import FOLLOW_SECONDS, api, follow
+from .meetings_moments import moment_actions
 from .meetings_owners import give_box
 from .meetings_people_tab import PeopleTab
+from .meetings_record import RecordView, following
 from .meetings_search_tab import SearchTab
 from .meetings_series_tab import SeriesTab
-from .meetings_threads import ThreadsBlock
-from .modal_sections import EmptyStatePlaceholder, SectionHeader
+from .modal_sections import EmptyStatePlaceholder
 
 API = "/api/v1/meetings/admin"
 # Where a meeting is sent from: the owner's route, so the admin's own.
@@ -65,13 +64,18 @@ def meeting_cells(
     owner, agent (by id, ``agents``), when asked, status and length."""
     length = call_length(_when(meeting.get("joined_at")), _when(meeting.get("left_at")))
     return [
-        str(meeting.get("title") or meeting.get("url") or "-"),
+        meeting_name(meeting) or "-",
         str(meeting.get("owner_user_id") or "-"),
         (agents or {}).get(meeting.get("account_id")) or "-",
         format_date(meeting.get("created_at")) or "-",
         status_label(str(meeting.get("status") or "")),
         length or "-",
     ]
+
+
+def meeting_name(meeting: dict[str, Any]) -> str:
+    """What its calendar calls it, else its link."""
+    return str(meeting.get("title") or meeting.get("url") or "")
 
 
 def actions_for(record: dict[str, Any]) -> list[str]:
@@ -86,140 +90,6 @@ def actions_for(record: dict[str, Any]) -> list[str]:
     ]
 
 
-def following(record: dict[str, Any]) -> bool:
-    """Read again every few seconds, while the service says something is
-    happening (``MeetingRecord.following``)."""
-    return bool(record.get("following"))
-
-
-def _items(items: list[dict[str, Any]], empty: str) -> list[ft.Control]:
-    if not items:
-        return [hint(empty)]
-    return [
-        PrimaryText(
-            " · ".join(
-                str(part)
-                for part in (i.get("text"), i.get("owner"), i.get("due"))
-                if part
-            ),
-            size=Theme.Typography.BODY,
-        )
-        for i in items
-    ]
-
-
-def _notes(record: dict[str, Any]) -> list[ft.Control]:
-    notes = record.get("notes")
-    if record.get("under_way"):
-        return [hint("The notes are written once the bot has left.")]
-    if record.get("writing"):
-        return [hint("Writing the notes…")]
-    if notes:
-        me = record.get("me")
-        failed = record.get("notes_error")
-        return [
-            *(
-                [
-                    PrimaryText(
-                        "Writing them again failed, so these are the last ones: "
-                        f"{failed}",
-                        size=Theme.Typography.BODY_SMALL,
-                        color=Theme.Colors.ERROR,
-                    )
-                ]
-                if failed
-                else []
-            ),
-            PrimaryText(str(notes.get("summary") or ""), size=Theme.Typography.BODY),
-            SectionHeader("Yours"),
-            *_items(
-                record.get("mine") or [],
-                "Nothing for you." if me else "Say which speaker you are to see yours.",
-            ),
-            SectionHeader("Action items"),
-            *_items(notes.get("action_items") or [], "No action items."),
-            SectionHeader("Decisions"),
-            *_items(notes.get("decisions") or [], "No decisions."),
-            SectionHeader("Open questions"),
-            *_items(notes.get("open_questions") or [], "None left open."),
-        ]
-    if record.get("notes_error"):
-        return [
-            PrimaryText(
-                f"The notes could not be written: {record['notes_error']}",
-                size=Theme.Typography.BODY,
-                color=Theme.Colors.ERROR,
-            )
-        ]
-    return [
-        hint(
-            "No notes yet."
-            if record.get("transcript")
-            else "Nothing was said, so there is nothing to note."
-        )
-    ]
-
-
-def has_threads(record: dict[str, Any]) -> bool:
-    """Its threads are read once its notes are there and settled."""
-    return bool(record.get("notes")) and not following(record)
-
-
-def _transcript(lines: list[dict[str, Any]], hit: int | None) -> list[ft.Control]:
-    if not lines:
-        return [hint("Nothing said yet.")]
-    return [
-        PrimaryText(
-            f"{format_clock(float(line.get('at') or 0))}  "
-            f"{line.get('speaker')}: {line.get('text')}",
-            size=Theme.Typography.BODY,
-            # Each line a place to scroll to; a search's hit stands out.
-            key=f"line-{line.get('id')}",
-            weight=(
-                ft.FontWeight.BOLD
-                if hit and line.get("id") == hit
-                else Theme.Typography.WEIGHT_REGULAR
-            ),
-        )
-        for line in lines
-    ]
-
-
-def record_view(
-    record: dict[str, Any], hit: int | None = None, acts: Acts | None = None
-) -> ft.Column:
-    """One meeting read in full (``MeetingRecord``): who and how it went,
-    its notes, then what was said; ``hit``, the line a search opened it
-    at, marked."""
-    meeting = record["meeting"]
-    name = str(meeting.get("title") or meeting.get("url") or "")
-    facts = [
-        ("Link", meeting.get("url") if meeting.get("title") else None),
-        ("Status", record.get("status")),
-        ("Length", record.get("length")),
-        ("Bot", meeting.get("bot_name")),
-        ("Owner", meeting.get("owner_user_id")),
-        ("Owner speaks as", record.get("me")),
-        ("Notes by", record.get("model_name")),
-        ("Heard", record.get("heard")),
-    ]
-    return ft.Column(
-        [
-            PrimaryText(name, size=Theme.Typography.BODY),
-            *build_field_blocks([("", facts)]),
-            SectionHeader("Notes"),
-            *_notes(record),
-            *(moments_controls(record, *acts) if acts else []),
-            *([ThreadsBlock(int(meeting["id"]))] if has_threads(record) else []),
-            SectionHeader("Transcript"),
-            *_transcript(record.get("transcript") or [], hit),
-        ],
-        spacing=Theme.Spacing.SM,
-        scroll=ft.ScrollMode.AUTO,
-        expand=True,
-    )
-
-
 class MeetingPane(ft.Container):
     """The selected meeting, read from the API, with what can be done to it,
     followed while something is happening."""
@@ -230,9 +100,10 @@ class MeetingPane(ft.Container):
         self._on_change = on_change
         self._showing: int | None = None
         self._following: int | None = None
-        # The line a search opened the meeting at, and the view holding it.
+        # The line a search opened the meeting at, and the view holding it
+        # (its tab kept while the meeting is drawn again).
         self._line: int | None = None
-        self._view: ft.Column | None = None
+        self._view: RecordView | None = None
         self.width = 520
         self.padding = ft.padding.all(Theme.Spacing.MD)
         self.border = ft.border.all(1, ft.Colors.OUTLINE_VARIANT)
@@ -253,8 +124,8 @@ class MeetingPane(ft.Container):
         """The meeting, scrolled to ``line`` (a search hit's) when given."""
         self._line = line
         self._present(await api(self.page).get(f"{API}/{meeting_id}"))
-        if line and self._view is not None and self.page:
-            self._view.scroll_to(key=f"line-{line}", duration=300)
+        if line and self._view is not None:
+            self._view.open_at(line)
 
     def _present(self, record: Any) -> None:
         """A meeting read in full (the API's ``MeetingRecord``, from a read
@@ -302,29 +173,38 @@ class MeetingPane(ft.Container):
             )
             for key, (text, variant, act) in doing.items()
         }
-        speaker = NativeDropdown(
-            label="I am",
+        # "Nobody here" a key of its own (a choice keyed "" draws empty).
+        speaker = filter_dropdown(
+            "Nobody here",
+            [(name, name) for name in record.get("people") or []],
             value=record.get("me") or "",
-            options=[
-                ft.dropdown.Option(key="", text="Nobody here"),
-                *[ft.dropdown.Option(key=name) for name in record.get("people") or []],
-            ],
             width=220,
-            enable_filter=False,
-            enable_search=False,
             on_change=lambda e: self.page.run_task(
-                self._set_me, meeting_id, str(e.control.value or "")
+                self._set_me, meeting_id, chosen(e.control.value)
             ),
         )
+        speaker.label = "I am"
         acts = moment_actions(
             self.page, f"{API}/{meeting_id}", lambda: self.show(meeting_id)
         )
-        self._view = record_view(record, self._line, acts)
-        self.content = ft.Column(
-            [
-                ft.Row([buttons[a] for a in actions_for(record)], spacing=8),
+        self._view = RecordView(
+            record,
+            self._line,
+            acts,
+            overview=[
                 *([speaker] if record.get("people") else []),
                 *give_box(self.page, record, self._present),
+            ],
+            selected=self._view.picked if self._view else OVERVIEW,
+        )
+        self.content = ft.Column(
+            [
+                PrimaryText(
+                    meeting_name(record["meeting"]),
+                    size=Theme.Typography.BODY_LARGE,
+                    weight=ft.FontWeight.W_600,
+                ),
+                ft.Row([buttons[a] for a in actions_for(record)], spacing=8),
                 self._view,
             ],
             spacing=Theme.Spacing.MD,
@@ -495,6 +375,6 @@ class MeetingsDetailDialog(BaseDetailPopup):
             ],
             scrollable=False,
             width=1280,
-            height=840,
+            height=960,
             status_detail=get_status_detail(component_data),
         )

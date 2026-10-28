@@ -90,7 +90,16 @@ async def booted(page: MagicMock) -> Any:
 async def test_the_view_gets_a_header_and_a_body(booted: _StubView) -> None:
     header, body = booted.controls
     assert isinstance(header, ft.Container)
-    assert isinstance(body, ft.SelectionArea)
+    assert isinstance(body.content, ft.SelectionArea)
+
+
+async def test_the_body_is_the_window_below_the_header(booted: _StubView) -> None:
+    """A selection area takes no ``expand``, so the body around it does:
+    the views get the window's height, and each scrolls what it holds
+    (an outer scroll would give them no height to fill)."""
+    body = booted.controls[1]
+    assert body.expand
+    assert body.content.content.content.scroll is None
 
 
 async def test_refresh_is_reachable_from_page_data(booted: _StubView) -> None:
@@ -99,8 +108,8 @@ async def test_refresh_is_reachable_from_page_data(booted: _StubView) -> None:
     assert callable(booted.page.data["update_component"])
 
 
-def _containers(body: ft.SelectionArea) -> list[ft.Control]:
-    return [c for c in body.content.content.controls if c.visible is not None]
+def _containers(body: ft.Container) -> list[ft.Control]:
+    return [c for c in body.content.content.content.controls if c.visible is not None]
 
 
 async def test_the_toggle_cycles_exactly_one_visible_view(

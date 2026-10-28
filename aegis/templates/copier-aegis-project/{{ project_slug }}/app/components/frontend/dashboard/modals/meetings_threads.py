@@ -14,8 +14,7 @@ from app.components.frontend.theme import AegisTheme as Theme
 from app.core.formatting import counted
 from app.services.meetings.domains.people.service import said_when
 
-from .meetings_follow import api, hint
-from .modal_sections import SectionHeader
+from .meetings_follow import api, card, hint
 
 API = "/api/v1/meetings/admin"
 
@@ -58,16 +57,16 @@ def _item(item: dict[str, Any], other: str | None) -> ft.Control:
 
 
 def thread_controls(sections: list[dict[str, Any]]) -> list[ft.Control]:
-    """Each section under its heading, its threads or why there are none."""
-    controls: list[ft.Control] = []
-    for section in sections:
-        items = section.get("items") or []
-        controls.append(SectionHeader(str(section.get("title") or "")))
-        controls.extend(
-            [_item(i, section.get("other")) for i in items]
-            or [hint(str(section.get("empty") or ""))]
+    """Each section in a card under its title: its threads, or why there
+    are none."""
+    return [
+        card(
+            str(section.get("title") or ""),
+            [_item(i, section.get("other")) for i in section.get("items") or []]
+            or [hint(str(section.get("empty") or ""))],
         )
-    return controls
+        for section in sections
+    ]
 
 
 class ThreadsBlock(ft.Column):

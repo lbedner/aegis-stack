@@ -17,7 +17,7 @@ from app.components.frontend.theme import AegisTheme as Theme
 from app.core.formatting import format_clock
 from app.services.meetings.service import by_kind
 
-from .meetings_follow import api
+from .meetings_follow import api, voiced
 from .modal_sections import SectionHeader
 
 # Ask the action named of the moment (its id); copy a prompt.
@@ -61,15 +61,20 @@ def moments_controls(
     """A section per kind of moment the record holds, in the order first
     heard; nothing when nothing was."""
     folds = {} if folds is None else folds
+    voices = record.get("voices") or {}
     controls: list[ft.Control] = []
     for listed in by_kind(record.get("moments") or [], itemgetter("kind")):
         controls.append(SectionHeader(listed[0]["title"]))
-        controls.extend(_moment(m, ask, copy, folds) for m in listed)
+        controls.extend(_moment(m, ask, copy, folds, voices) for m in listed)
     return controls
 
 
 def _moment(
-    moment: dict[str, Any], ask: Ask, copy: Copy, folds: dict[int, bool]
+    moment: dict[str, Any],
+    ask: Ask,
+    copy: Copy,
+    folds: dict[int, bool],
+    voices: dict[str, int],
 ) -> ft.Control:
     """A card folded to what was asked (its topic, else its question), a
     dot per answer: open while one is going, else as the reader left it.
@@ -90,7 +95,7 @@ def _moment(
         dense=True,
         shape=ft.RoundedRectangleBorder(radius=Theme.Components.CARD_RADIUS),
         collapsed_shape=ft.RoundedRectangleBorder(radius=Theme.Components.CARD_RADIUS),
-        controls=[_inside(moment, ask, copy)],
+        controls=[_inside(moment, ask, copy, voices)],
     )
     return ft.Container(
         tile,
@@ -106,14 +111,16 @@ def _dot(run: dict[str, Any]) -> ft.Control:
     return dot
 
 
-def _inside(moment: dict[str, Any], ask: Ask, copy: Copy) -> ft.Control:
+def _inside(
+    moment: dict[str, Any], ask: Ask, copy: Copy, voices: dict[str, int]
+) -> ft.Control:
     return ft.Container(
         ft.Column(
             [
-                *_said(moment),
+                *_said(moment, voices),
                 *(
                     ft.Container(
-                        ft.Column(_said(more), spacing=2),
+                        ft.Column(_said(more, voices), spacing=2),
                         padding=ft.padding.only(left=Theme.Spacing.SM),
                     )
                     for more in moment.get("also") or []
@@ -131,9 +138,13 @@ def _inside(moment: dict[str, Any], ask: Ask, copy: Copy) -> ft.Control:
     )
 
 
-def _said(moment: dict[str, Any]) -> list[ft.Control]:
+def _said(moment: dict[str, Any], voices: dict[str, int]) -> list[ft.Control]:
     return [
-        SecondaryText(f"{moment['speaker']} · {format_clock(moment['at'])}"),
+        voiced(
+            moment["speaker"],
+            voices,
+            SecondaryText(f"{moment['speaker']} · {format_clock(moment['at'])}"),
+        ),
         PrimaryText(moment["text"], size=Theme.Typography.BODY),
     ]
 

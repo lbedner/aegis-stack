@@ -209,29 +209,26 @@ class StatusOverviewPanel(ft.Container):
     """
     Status overview panel showing all components at a glance.
 
-    Uses DataTable for consistent styling with other tables.
+    Uses DataTable for consistent styling with other tables. As tall as
+    its column, its rows scrolled inside it, so a long stack reads to
+    its end.
     """
 
     def __init__(self) -> None:
         """Initialize the status overview panel."""
-        super().__init__()
+        super().__init__(expand=True)
 
-        # Single column with "Aegis Stack" header
-        self._columns = [DataTableColumn("Aegis Stack")]
-
-        # Placeholder - will be populated by update_components
-        self._table: DataTable | None = None
-
-        # Initial empty table
+        # One table for the session, its rows filled by update_components
         self._table = DataTable(
-            columns=self._columns,
+            columns=[DataTableColumn("Aegis Stack")],
             rows=[],
             row_padding=8,
+            expand=True,
             empty_message="Loading components...",
         )
         self.content = self._table
 
-        # What the current table was built from, so an unchanged refresh
+        # What the current rows were built from, so an unchanged refresh
         # can be skipped entirely.
         self._components: dict[str, ComponentStatus] = {}
 
@@ -242,10 +239,10 @@ class StatusOverviewPanel(ft.Container):
         Args:
             components: Dictionary mapping component names to ComponentStatus
         """
-        # Rebuilding assigns a brand new DataTable, so every row and cell
-        # is a new object and Flet sends a full replacement. Measured at
-        # 231 controls with 1 surviving a refresh whose rendered output
-        # was identical - which in the steady state is every refresh.
+        # New rows are new objects, so Flet sends every row and cell
+        # again. Measured at 231 controls with 1 surviving a refresh whose
+        # rendered output was identical - which in the steady state is
+        # every refresh.
         if self._components == components:
             return
         self._components = dict(components)
@@ -323,10 +320,6 @@ class StatusOverviewPanel(ft.Container):
             if comp_name not in added and comp_name != ComponentName.FRONTEND:
                 rows.append([create_status_cell(comp_name, comp_data)])
 
-        # Rebuild table with new rows
-        self._table = DataTable(
-            columns=self._columns,
-            rows=rows,
-            row_padding=8,
-        )
-        self.content = self._table
+        # New rows in the same table: its list, and the reader's place in
+        # it, stay.
+        self._table.set_rows(rows)

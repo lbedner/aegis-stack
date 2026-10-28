@@ -14,9 +14,13 @@ import flet as ft
 from app.components.frontend.controls import (
     DataTable,
     DataTableColumn,
+    PrimaryText,
     SecondaryText,
+    SectionCard,
 )
+from app.components.frontend.controls.record_detail import build_field_blocks
 from app.components.frontend.controls.snack_bar import ErrorSnackBar
+from app.components.frontend.controls.tabs import OVERVIEW, PulseTabs, part_tab
 from app.components.frontend.core.session_health import (
     SessionLoops,
     page_is_connected,
@@ -25,6 +29,7 @@ from app.components.frontend.state.session_state import get_session_state
 from app.components.frontend.theme import AegisTheme as Theme
 
 from .modal_sections import EmptyStatePlaceholder
+from .modal_sections.chart_primitives import chart_dot
 
 FOLLOW_SECONDS = 3
 
@@ -35,6 +40,68 @@ def api(page: ft.Page) -> Any:
 
 def hint(text: str) -> ft.Control:
     return SecondaryText(text, size=Theme.Typography.BODY_SMALL)
+
+
+def card(title: str, controls: list[ft.Control]) -> SectionCard:
+    """One part of a record, in a card under its title."""
+    return SectionCard(
+        title,
+        ft.Column(controls, spacing=Theme.Spacing.XS),
+        body_padding=Theme.Spacing.MD,
+    )
+
+
+def summary(text: str) -> SectionCard:
+    """A record's headline, in its Summary card."""
+    return card("Summary", [PrimaryText(text, size=Theme.Typography.BODY)])
+
+
+def details(facts: list[tuple[str, Any]]) -> SectionCard:
+    """A record's facts, label beside value, in its Details card."""
+    return card("Details", build_field_blocks([("", facts)]))
+
+
+class PartTabs(PulseTabs):
+    """A record's parts, a tab each (``parts``: its name, then what it
+    shows), each scrolled on its own; ``selected`` the one open first. A
+    pane drawing its record again opens the one ``picked`` (Flet keeps the
+    reader's click in ``selected_index``)."""
+
+    def __init__(
+        self, parts: dict[str, list[ft.Control]], *, selected: str = OVERVIEW
+    ) -> None:
+        super().__init__(
+            tabs=[part_tab(name, controls) for name, controls in parts.items()],
+            selected_index=list(parts).index(selected) if selected in parts else 0,
+        )
+        # Each tab's page, by its name.
+        self.pages = {tab.text: tab.content.content for tab in self.tabs}
+
+    @property
+    def picked(self) -> str:
+        return list(self.pages)[self.selected_index]
+
+    def pick(self, name: str) -> None:
+        self.selected_index = list(self.pages).index(name)
+
+
+def voiced(name: str | None, voices: dict[str, int], said: ft.Control) -> ft.Control:
+    """``said`` after a dot in ``name``'s color in this meeting (the read's
+    ``voices``), as the htmx pages mark a speaker; as it is with no name."""
+    if not name:
+        return said
+    said.expand = True
+    return ft.Row(
+        [
+            ft.Container(
+                chart_dot(voices.get(name, 1), data="voice"),
+                padding=ft.padding.only(top=6),
+            ),
+            said,
+        ],
+        spacing=6,
+        vertical_alignment=ft.CrossAxisAlignment.START,
+    )
 
 
 async def follow(

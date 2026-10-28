@@ -16,12 +16,17 @@ import flet as ft
 from app.components.frontend.controls import (
     DataTable,
     DataTableColumn,
-    NativeDropdown,
     PrimaryText,
     SecondaryText,
     ThemedSwitch,
 )
 from app.components.frontend.controls.buttons import PulseButton
+from app.components.frontend.controls.dropdown import (
+    ALL,
+    chosen,
+    filter_dropdown,
+    filter_options,
+)
 from app.components.frontend.controls.inputs import StyledTextField
 from app.components.frontend.controls.snack_bar import ErrorSnackBar, SuccessSnackBar
 from app.components.frontend.controls.tabs import PulseTabs
@@ -38,7 +43,8 @@ from .documents_activity import ActivityTab
 from .documents_detail_pane import API, CHANNELS, DocumentDetailPane
 from .modal_sections import EmptyStatePlaceholder, row_matches
 
-ALL = "all"
+# The tag filter's no-filter choice; its tags are read again on each load.
+ANY_TAG = "Any tag"
 
 
 def display_date(doc: dict[str, Any]) -> str:
@@ -53,27 +59,6 @@ def matching_documents(docs: list[dict[str, Any]], query: str) -> list[dict[str,
         for doc in docs
         if row_matches(query, [doc.get("title"), *doc.get("tags", [])])
     ]
-
-
-def _filter_dropdown(
-    everything: str,
-    options: list[tuple[str, str]],
-    *,
-    width: int,
-    on_change: Any,
-) -> NativeDropdown:
-    """A toolbar filter: dense, unlabeled, first entry means no filter."""
-    return NativeDropdown(
-        value=ALL,
-        options=[
-            ft.dropdown.Option(key=ALL, text=everything),
-            *[ft.dropdown.Option(key=k, text=t) for k, t in options],
-        ],
-        width=width,
-        enable_filter=False,
-        enable_search=False,
-        on_change=on_change,
-    )
 
 
 def _title_cell(doc: dict[str, Any]) -> Any:
@@ -99,20 +84,20 @@ class DocumentsTab(ft.Container):
         self.page = page
         self._docs: list[dict[str, Any]] = []
         self._query = ""
-        self._kind = _filter_dropdown(
+        self._kind = filter_dropdown(
             "All kinds",
             [(k, k.title()) for k in DOCUMENT_KINDS],
             width=150,
             on_change=lambda _: page.run_task(self._load),
         )
-        self._channel = _filter_dropdown(
+        self._channel = filter_dropdown(
             "Any channel",
             [(c, c.title()) for c in CHANNELS],
             width=150,
             on_change=lambda _: page.run_task(self._load),
         )
-        self._tag = _filter_dropdown(
-            "Any tag", [], width=170, on_change=lambda _: page.run_task(self._load)
+        self._tag = filter_dropdown(
+            ANY_TAG, [], width=170, on_change=lambda _: page.run_task(self._load)
         )
         self._replaced = ThemedSwitch(
             value=False, on_change=lambda _: page.run_task(self._load)
@@ -181,12 +166,8 @@ class DocumentsTab(ft.Container):
         # ponytail: one page of 100, searched client-side; add paging when
         # a cabinet outgrows it.
         params: dict[str, Any] = {"page_size": 100}
-        if self._kind.value != ALL:
-            params["kind"] = self._kind.value
-        if self._tag.value != ALL:
-            params["tag"] = self._tag.value
-        if self._channel.value != ALL:
-            params["channel"] = self._channel.value
+        filters = {"kind": self._kind, "tag": self._tag, "channel": self._channel}
+        params |= {k: v for k, menu in filters.items() if (v := chosen(menu.value))}
         if self._replaced.value:
             params["include_superseded"] = "true"
         data = await api.get(API, params=params)
@@ -194,10 +175,7 @@ class DocumentsTab(ft.Container):
         self._docs = items if isinstance(items, list) else []
         tags = await api.get(f"{API}/tags")
         labels = [str(t["label"]) for t in tags] if isinstance(tags, list) else []
-        self._tag.options = [
-            ft.dropdown.Option(key=ALL, text="Any tag"),
-            *[ft.dropdown.Option(key=t, text=t) for t in labels],
-        ]
+        self._tag.options = filter_options(ANY_TAG, [(t, t) for t in labels])
         if self._tag.value not in {ALL, *labels}:
             self._tag.value = ALL
         if self._tag.page is not None:
@@ -246,7 +224,7 @@ class DocumentsTab(ft.Container):
 
     async def _file(self, name: str, data: bytes) -> None:
         """A picked file arrived on the server: hand it to the store."""
-        kind = self._kind.value if self._kind.value != ALL else "other"
+        kind = chosen(self._kind.value) or "other"
         media_type = mimetypes.guess_type(name)[0] or "application/octet-stream"
         code, body = await self._api().request_with_status(
             "POST",

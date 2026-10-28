@@ -2,16 +2,24 @@
 API, a paste field for each one this app may set, and never a value on
 screen. Writes go through the API, which holds the admin check."""
 
+from importlib.util import find_spec
 from types import SimpleNamespace
 from typing import Any
 
 import flet as ft
 import pytest
 
+from app.components.frontend.controls import DataTable
 from app.components.frontend.dashboard.modals import secrets_modal
-from app.components.frontend.dashboard.modals.secrets_modal import SecretsSection
+from app.components.frontend.dashboard.modals.secrets_modal import (
+    SecretsDetailDialog,
+    SecretsSection,
+)
+from app.core.config import settings
+from app.services.shared.deps import NO_AUTH_REFUSAL
+from app.services.system.models import ComponentStatus
 from tests.components.frontend._fakes import FakePage
-from tests.components.frontend._tree import texts, walk
+from tests.components.frontend._tree import tab_names, tabs_in, texts, walk
 
 ROWS = [
     {"name": "OPENAI_API_KEY", "owner": "AI", "label": "", "secret": True,
@@ -102,6 +110,31 @@ def _fields(section: SecretsSection) -> dict[str, ft.TextField]:
     return {str(c.data): c for c in walk(section) if isinstance(c, ft.TextField)}
 
 
+async def test_the_keys_are_one_table_a_row_each(api: FakeAPI) -> None:
+    (table,) = [c for c in walk(await _section()) if isinstance(c, DataTable)]
+    assert [c.header for c in table._columns] == [
+        "Key",
+        "Used by",
+        "State",
+        "Value",
+        "",
+    ]
+    assert len(table._rows) == len(ROWS)
+
+
+def test_secrets_and_settings_are_a_tab_each() -> None:
+    component = ComponentStatus(
+        name="secrets", status="healthy", message="ok", metadata={"writable": True}
+    )
+    tabs = tabs_in(SecretsDetailDialog(component, FakePage()))  # type: ignore[arg-type]
+    assert tab_names(tabs) == ["Secrets", "Settings"]
+    shown = [
+        [n._setting for n in walk(tab) if isinstance(n, SecretsSection)]
+        for tab in tabs.tabs
+    ]
+    assert shown == [[False], [True]]
+
+
 async def test_a_paste_field_only_where_the_app_may_set_it(api: FakeAPI) -> None:
     fields = _fields(await _section())
     assert set(fields) == {
@@ -152,6 +185,21 @@ async def test_a_key_read_through_settings_gets_no_field(
 
 async def test_read_only_shows_no_fields(api: FakeAPI) -> None:
     assert _fields(await _section(writable=False)) == {}
+
+
+@pytest.mark.skipif(
+    find_spec("app.services.auth") is not None, reason="with auth: admins only"
+)
+async def test_without_auth_a_deployed_build_lists_them_but_says_why_not_set(
+    api: FakeAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The dashboard may not make a change there (``operator_refusal``),
+    so no paste fields, and a line saying why."""
+    monkeypatch.setattr(settings, "BUILD_ID", "abc1234")
+    section = await _section()
+    assert _fields(section) == {}
+    assert "OPENAI_API_KEY" in texts(section)
+    assert NO_AUTH_REFUSAL in texts(section)
 
 
 async def test_a_refused_list_says_why(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -224,7 +272,7 @@ async def test_settings_show_their_default_and_apply_on_restart(api: FakeAPI) ->
     section = await _section(setting=True)
     assert ("GET", "/api/v1/secrets?setting=true", None) in api.calls
     shown = texts(section)
-    assert any("Default" in t and "90.0" in t for t in shown)
+    assert "Default" in shown and "90.0" in shown
     assert any("80" in t for t in shown)
     field = _fields(section)["MEMORY_THRESHOLD_PERCENT"]
     assert not field.password

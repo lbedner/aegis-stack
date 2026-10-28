@@ -95,6 +95,10 @@ class Defaults:
     COMPONENT_CHECK_TIMEOUT = 2.0
 
 
+# Where the dashboard (Flet) is mounted, and so its socket's path.
+DASHBOARD_PATH = "/dashboard"
+
+
 def dashboard_upload_dir() -> Path:
     """Directory where the dashboard's FilePicker uploads land.
 

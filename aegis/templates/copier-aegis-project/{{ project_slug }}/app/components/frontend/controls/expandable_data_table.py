@@ -10,9 +10,11 @@ from typing import Any
 import flet as ft
 
 from app.components.frontend.controls.data_table import (
+    HOVER_TINT,
     DataTableColumn,
     build_cell,
     header_cell,
+    holds_a_field,
     style_cell,
 )
 from app.components.frontend.controls.expand_arrow import (
@@ -85,7 +87,7 @@ class ExpandableTableRow(ft.Container):
             ),
             bgcolor=ft.Colors.SURFACE,
             padding=ft.padding.symmetric(horizontal=Theme.Spacing.MD, vertical=10),
-            on_hover=self._on_hover,
+            on_hover=None if holds_a_field(row.cells) else self._on_hover,
             # Animation disabled for debugging
             # animate=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
         )
@@ -116,7 +118,7 @@ class ExpandableTableRow(ft.Container):
     def _on_hover(self, e: ft.ControlEvent) -> None:
         """Handle hover state change."""
         if e.data == "true":
-            e.control.bgcolor = ft.Colors.with_opacity(0.08, ft.Colors.ON_SURFACE)
+            e.control.bgcolor = HOVER_TINT
         else:
             e.control.bgcolor = ft.Colors.SURFACE
         if e.control.page:  # Guard: only update if control is on page

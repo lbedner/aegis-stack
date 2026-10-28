@@ -16,14 +16,12 @@ import flet as ft
 from app.components.frontend.controls import DataTableColumn, PrimaryText
 from app.components.frontend.controls.buttons import PulseButton
 from app.components.frontend.controls.inputs import StyledTextField
-from app.components.frontend.controls.record_detail import build_field_blocks
 from app.components.frontend.controls.snack_bar import SuccessSnackBar
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.formatting import format_date
 
-from .meetings_follow import ListBesidePane, WrittenPane, api, hint
+from .meetings_follow import ListBesidePane, WrittenPane, api, card, details, hint
 from .meetings_threads import quote_lines, thread_controls
-from .modal_sections import SectionHeader
 
 API = "/api/v1/meetings/admin/people"
 
@@ -66,7 +64,7 @@ def guide_view(record: dict[str, Any]) -> ft.Column:
     ]
     controls: list[ft.Control] = [
         PrimaryText(str(record.get("person") or ""), size=Theme.Typography.H3),
-        *build_field_blocks([("", facts)]),
+        details(facts),
     ]
     if guide.get("error"):
         controls.append(
@@ -78,10 +76,13 @@ def guide_view(record: dict[str, Any]) -> ft.Column:
         )
     if record.get("writing"):
         controls.append(hint("Writing the guide…"))
-    for section in record.get("sections") or []:
-        points = section.get("points") or []
-        controls.append(SectionHeader(str(section.get("title") or "")))
-        controls.extend([_point(p) for p in points] or [hint("Nothing yet.")])
+    controls.extend(
+        card(
+            str(section.get("title") or ""),
+            [_point(p) for p in section.get("points") or []] or [hint("Nothing yet.")],
+        )
+        for section in record.get("sections") or []
+    )
     controls.extend(thread_controls(record.get("threads") or []))
     return ft.Column(
         controls, spacing=Theme.Spacing.SM, scroll=ft.ScrollMode.AUTO, expand=True

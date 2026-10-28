@@ -12,12 +12,15 @@ call sites stay short.
 from collections.abc import Iterator
 from typing import Any
 
+import flet as ft
+
 
 def walk(node: Any) -> Iterator[Any]:
     """Every control in the tree, depth-first: the node itself, its
     ``content``, then ``controls`` - the two container conventions every
     Flet control uses - with a tile's ``title`` and ``subtitle`` before
-    them (an ``ExpansionTile`` folds its controls under those)."""
+    them (an ``ExpansionTile`` folds its controls under those), and a tab
+    bar's tabs after (each ``Tab`` holds its page as ``content``)."""
     if node is None:
         return
     yield node
@@ -25,6 +28,19 @@ def walk(node: Any) -> Iterator[Any]:
         yield from walk(getattr(node, slot, None))
     for child in getattr(node, "controls", None) or []:
         yield from walk(child)
+    for tab in getattr(node, "tabs", None) or []:
+        yield from walk(tab)
+
+
+def tabs_in(node: Any) -> ft.Tabs:
+    """The one tab bar in the tree."""
+    (tabs,) = [n for n in walk(node) if isinstance(n, ft.Tabs)]
+    return tabs
+
+
+def tab_names(node: Any) -> list[str]:
+    """The names of the one tab bar's tabs, in order."""
+    return [str(tab.text) for tab in tabs_in(node).tabs]
 
 
 def texts(node: Any) -> list[str]:

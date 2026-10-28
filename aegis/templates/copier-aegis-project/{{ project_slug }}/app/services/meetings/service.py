@@ -19,7 +19,7 @@ from app.services.meetings.domains.notes import queries as notes_queries
 from app.services.meetings.domains.notes.service import notes_of
 from app.services.meetings.domains.people import participants
 from app.services.meetings.domains.people import queries as people_queries
-from app.services.meetings.domains.people.heard import heard_line
+from app.services.meetings.domains.people.heard import heard_line, voices
 from app.services.meetings.domains.series import queries as series_queries
 from app.services.meetings.models import (
     IN_PROGRESS,
@@ -75,7 +75,6 @@ if TYPE_CHECKING:
     from app.services.meetings.domains.people.heard import (  # noqa: F401
         heard_rows,
         voice,
-        voices,
     )
 
 DEFAULT_BOT_NAME = "Notetaker"
@@ -218,6 +217,9 @@ class MeetingsService:
         found = await moments.moments_of(
             self.db, meeting_id, [(row.speaker, row.id, row.text) for row in transcript]
         )
+        # Only a speaker has a participant row: the transcript names them.
+        people = sorted({row.speaker for row in transcript})
+        owners = [i.owner for i in (notes.action_items if notes else []) if i.owner]
         return MeetingRecord(
             meeting=meeting,
             moments=found,
@@ -231,8 +233,8 @@ class MeetingsService:
             length=call_length(meeting.joined_at, meeting.left_at),
             heard=heard_line(heard),
             heard_seconds=heard,
-            # Only a speaker has a participant row: the transcript names them.
-            people=sorted({row.speaker for row in transcript}),
+            people=people,
+            voices=voices([*people, *owners]),
             me=participants.me_in(here),
             mine=mine,
             under_way=under_way,

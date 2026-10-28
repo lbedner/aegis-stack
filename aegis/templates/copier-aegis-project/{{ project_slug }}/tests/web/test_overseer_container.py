@@ -161,9 +161,7 @@ async def test_after_its_first_frame_a_chart_sends_only_its_new_points(
     points, not the whole window again; a new line sends it all."""
     readings = iter([["a"], ["a"], ["a", "b"]])
 
-    async def section(
-        page: str, window: int, wait: bool = True, draw: bool = True
-    ) -> tuple:
+    async def section(*_: object, **__: object) -> tuple:
         names = next(readings)
         data = series.chart(
             {name: [(1.0, 1.0), (2.0, 2.0), (3.0, 3.0)] for name in names}, str

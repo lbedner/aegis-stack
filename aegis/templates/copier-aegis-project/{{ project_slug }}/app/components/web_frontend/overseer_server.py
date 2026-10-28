@@ -13,7 +13,7 @@ from app.components.backend.middleware.performance import metrics_service
 from app.core import runtime
 from app.core.formatting import format_relative_time
 from app.services.load_test.api import request_form
-from app.services.system import ui_backend, ui_cache
+from app.services.system import ui_backend, ui_cache, ui_runtime
 from app.services.system.models import ComponentStatus
 
 from . import (
@@ -101,17 +101,14 @@ def overview_context(backend: ComponentStatus) -> dict[str, Any]:
     }
 
 
-# The container charts the Overview leads with: the figures it runs on.
-# Processes and events stay on the Container section.
-OVERVIEW_CHARTS = ("cpu", "memory", "network", "disk")
-
-
 async def overview_charts(query: Mapping[str, str]) -> dict[str, Any] | None:
-    """The ``OVERVIEW_CHARTS`` as the Container section draws them (its
+    """The ``ui_runtime.OVERVIEW_CHARTS`` as the Container section draws them (its
     range chips), on its stream asked for just those; None with no
     container charts to draw."""
-    panel = (await overseer_container.context("server", query))["container_charts"]
-    charts = [chart for chart in panel["charts"] if chart["key"] in OVERVIEW_CHARTS]
+    panel = (
+        await overseer_container.context("server", query, ui_runtime.OVERVIEW_CHARTS)
+    )["container_charts"]
+    charts = panel["charts"]
     stream = with_query(
         overseer_container.EVENTS.format(page="server"),
         window=str(panel["window"]),

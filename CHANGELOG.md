@@ -610,6 +610,15 @@
 
 ### Fixed
 
+- **An update regenerates a Postgres stack's migrations with the database
+  down.** With no Postgres to reach, `migrate_gen` replays the revisions
+  on scratch SQLite, each schema an attached database, and a revision
+  adding a key from a table in a schema to `user` (finance's auth link)
+  could not replay there: the update failed and rolled back. SQLite holds
+  no key across its databases, so on that scratch replay such a key is
+  left out, as SQLite would leave it, and one an existing revision adds
+  is not written again.
+
 - **The Flet dashboard can make changes on the local dev build.** In
   Docker it called the API at the webserver's container name, which a
   change without auth is refused at, so it offered no Restart and no

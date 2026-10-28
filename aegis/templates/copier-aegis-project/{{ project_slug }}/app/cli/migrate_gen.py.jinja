@@ -35,6 +35,7 @@ from alembic.config import Config
 from alembic.operations import ops
 from alembic.script import ScriptDirectory
 from app.cli.migrate_owners import claimed_by, includes_object, own_tables
+from app.cli.migrate_sqlite import kept_by_a_revision
 from app.cli.plugin_data import SCRATCH
 from app.core.model_registry import import_all_models
 
@@ -282,6 +283,8 @@ def _additive(op: ops.MigrateOperation, conn: Connection) -> bool:
         if getattr(op, "constraint_name", None) is None:
             op.constraint_name = _conventional_name(op, table.name, cols)
         is_fk = isinstance(op, ops.CreateForeignKeyOp)
+        if is_fk and conn.dialect.name == "sqlite" and kept_by_a_revision(op, VERSIONS):
+            return False  # SQLite never reflects a key across its databases
         return cols not in _reflected_column_sets(
             conn, table.name, table.schema, foreign_keys=is_fk
         )

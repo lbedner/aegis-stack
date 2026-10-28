@@ -1,0 +1,44 @@
+"""A Postgres project's revisions replayed on ``migrate_gen``'s scratch SQLite.
+
+With no Postgres to reach (an update run with the stack down) ``migrate_gen``
+replays onto SQLite, each Postgres schema an attached database. SQLite
+holds no foreign key across attached databases (its dialect leaves one
+out), so a revision adding one from a table in a schema to ``user`` (an
+auth link's) cannot replay there as written: alembic's batch mode copies
+the key onto its temp table in that table's schema, and looks for the
+target there. Replayed on the scratch database, such a key is what SQLite
+makes of it, nothing; regenerated, one an existing revision already adds
+is not written again (``kept_by_a_revision``), since SQLite never
+reflects it.
+"""
+{% if include_database %}
+
+from pathlib import Path
+
+from alembic.operations import Operations, ops
+from alembic.operations.toimpl import create_constraint
+from app.cli.plugin_data import SCRATCH
+
+
+def _crosses_schemas(op: ops.CreateForeignKeyOp) -> bool:
+    return op.kw.get("source_schema") != op.kw.get("referent_schema")
+
+
+@Operations.implementation_for(ops.CreateForeignKeyOp)
+def _create_foreign_key(operations: Operations, op: ops.CreateForeignKeyOp) -> None:
+    """Every revision's foreign key, but one across schemas on the scratch
+    SQLite (``SCRATCH``), where it would be dropped anyway."""
+    conn = operations.migration_context.connection
+    scratch = conn is not None and conn.info.get(SCRATCH)
+    if scratch and conn.dialect.name == "sqlite" and _crosses_schemas(op):
+        return
+    create_constraint(operations, op)
+
+
+def kept_by_a_revision(op: ops.CreateForeignKeyOp, versions: Path) -> bool:
+    """Whether ``op`` is a key across schemas an existing revision adds."""
+    name = f'"{op.constraint_name}"'
+    return _crosses_schemas(op) and any(
+        name in path.read_text() for path in versions.glob("*.py")
+    )
+{% endif %}

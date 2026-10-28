@@ -38,6 +38,10 @@ def _generator() -> dict[str, Any]:
         "Connection": sa.Connection,
         "os": os,
         "ops": ops,
+        # Its keys stay within one database: no revision's to keep for it
+        # (``migrate_sqlite.kept_by_a_revision`` is for keys across schemas).
+        "kept_by_a_revision": lambda _op, _versions: False,
+        "VERSIONS": None,
     }
     exec(source[start:end], namespace)  # noqa: S102
     return namespace

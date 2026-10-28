@@ -14,13 +14,18 @@
    Alpine ``toasts`` component (static/js/app.js) queues it. One region per
    page, fixed to the viewport, outside ``#app-content`` so it survives
    section swaps. Polite live region: announced, never interrupting. #}
-{# Above the side drawer (z-[60]): a save made inside it answers here. #}
+{# Above the side drawer (z-[60]): a save made inside it answers here. A
+   popover, so it sits in the top layer: a modal dialog is drawn above any
+   z-index, and an error raised while one is open (a form inside it that
+   failed) would otherwise be hidden behind it. Each toast shows the region
+   again, so it rises above a dialog opened since. #}
 {% macro toast_region() %}
 <div id="toasts"
      x-data="toasts"
+     popover="manual"
      @toast.window="push($event.detail)"
      aria-live="polite"
-     class="fixed bottom-4 right-4 left-4 sm:left-auto z-[70] flex flex-col gap-2 sm:max-w-sm">
+     class="fixed inset-auto bottom-4 right-4 left-4 sm:left-auto m-0 p-0 border-0 bg-transparent overflow-visible z-[70] flex flex-col gap-2 sm:max-w-sm">
   <template x-for="item in items" :key="item.id">
     <div role="status"
          x-transition:enter="transition-all duration-200"

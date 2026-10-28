@@ -71,6 +71,12 @@ def test_the_tree_is_the_source_and_nothing_else(client: TestClient) -> None:
         "Dockerfile",
     ]
     assert SECRET not in html
+    # Each file after its type's icon, as a knowledge base's drawer shows it.
+    icons = [
+        i.get("data-file-type")
+        for i in select(html, "[data-code-tree] a [data-file-type]")
+    ]
+    assert icons == ["python", "python", "markdown", "docker"]
     folders = [text(s) for s in select(html, "[data-code-tree] summary")]
     assert folders == ["app", "core", "docs"]
 
@@ -409,3 +415,13 @@ def test_a_frame_is_the_apps_only_when_it_is_a_file_the_tree_shows(
     own = f'File "{project}/app/y.py", line 1, in f'
     assert overseer_code.own_frames(library) == []
     assert [f.path for f in overseer_code.own_frames(own)] == ["app/y.py"]
+
+
+def test_an_indexed_file_opens_here_by_its_full_path(
+    client: TestClient, project: Path
+) -> None:
+    """A knowledge base names its sources by their full path on this
+    server: one in the project opens in the tree, one outside it does not."""
+    url = overseer_code.file_url(f"{project}/app/main.py")
+    assert url and "app%2Fmain.py" in url
+    assert overseer_code.file_url("/srv/docs/intro.md") is None

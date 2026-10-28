@@ -198,13 +198,17 @@ class _Store:
     def __init__(self) -> None:
         self.asked: list[str] = []
 
-    async def remove_by_source(self, collection_name: str, source: str) -> int:
-        self.asked.append(f"remove {source}")
+    async def remove_by_source(self, collection_name: str, sources: list[str]) -> int:
+        self.asked.append(f"remove {sources[0]}")
         return 0
 
     async def add_documents(self, documents: list[Any], collection_name: str) -> Any:
         self.asked.append(f"add {len(documents)}")
         return SimpleNamespace(chunk_ids=[])
+
+    async def delete_collection(self, collection_name: str) -> bool:
+        self.asked.append(f"delete {collection_name}")
+        return True
 
 
 @pytest.mark.asyncio
@@ -221,3 +225,46 @@ async def test_a_file_added_again_keeps_none_of_its_old_chunks(
     await rag_service.add_file(note, "default")
 
     assert store.asked == [f"remove {note.absolute()}", "add 1"]
+
+
+@pytest.mark.asyncio
+async def test_an_upload_goes_with_its_source_and_its_collection(
+    rag_service: RAGService, tmp_path: Path
+) -> None:
+    """Whoever removes it (the CLI, the API, Overseer): a kept upload is
+    deleted with its source, every one with its collection; a file the
+    server held stays, and a name no collection could have touches nothing."""
+    rag_service.vectorstore = _Store()  # type: ignore[assignment]
+    folder = tmp_path / "sources" / "default"
+    folder.mkdir(parents=True)
+    (folder / "a.md").write_text("a")
+    (folder / "b.md").write_text("b")
+    held = tmp_path / "held.md"
+    held.write_text("held")
+
+    await rag_service.remove_file(str(folder / "a.md"), "default")
+    await rag_service.remove_file(str(held), "default")
+    assert not (folder / "a.md").exists() and (folder / "b.md").exists()
+    assert held.exists()
+
+    await rag_service.delete_collection("..")
+    await rag_service.delete_collection("default")
+    assert not folder.exists() and held.exists()
+
+
+@pytest.mark.asyncio
+async def test_a_link_planted_for_a_kept_folder_is_never_followed(
+    rag_service: RAGService, tmp_path: Path
+) -> None:
+    """Deleting a collection whose kept folder is a link to elsewhere, or
+    removing a source that links into it, leaves what lies outside alone."""
+    rag_service.vectorstore = _Store()  # type: ignore[assignment]
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "keep.md").write_text("mine")
+    (tmp_path / "sources").mkdir()
+    (tmp_path / "sources" / "docs").symlink_to(elsewhere)
+
+    await rag_service.delete_collection("docs")
+
+    assert (elsewhere / "keep.md").read_text() == "mine"

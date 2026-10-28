@@ -8,7 +8,7 @@ Supports configurable embedding providers:
 
 import asyncio
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -17,13 +17,19 @@ import chromadb
 from chromadb.config import Settings as ChromaSettings
 from chromadb.errors import NotFoundError
 
-from app.core import secrets
+from app.core import cpus, secrets
 from app.core.log import logger
-from app.core.time import utcnow
 
-from .ids import generate_chunk_id
-from .models import CollectionInfo, Document, IndexedFile, IndexStats, SearchResult
-from .shaping import build_where_clause, clean_metadata, deduplicate_results
+from .models import (
+    CollectionInfo,
+    Document,
+    Embedded,
+    IndexedFile,
+    IndexStats,
+    SearchResult,
+)
+from .shaping import build_where_clause, deduplicate_results, prepare
+from .uploads import check_name
 
 
 class VectorStoreError(Exception):
@@ -68,6 +74,13 @@ class VectorStoreManager:
         self._embedding_function: Any = None
         # The key the cached OpenAI embedding function was built with.
         self._embedding_key: str | None = None
+        # Threads a local model embeds with: one CPU left for a server's own
+        # work by default; a worker, with nothing else waiting, sets all.
+        self.threads: int | None = None
+        # One embedding call at a time in this process (``embed``), and one
+        # load of the model however many ask for it at once (``_embedding``).
+        self._embedding_lock = asyncio.Lock()
+        self._loading = asyncio.Lock()
 
     @property
     def client(self) -> chromadb.ClientAPI:
@@ -93,7 +106,8 @@ class VectorStoreManager:
         """The embedding function for the configured provider, built once.
         OpenAI's key is read now (``.env``, then the secrets store) and the
         function rebuilt when it changes, so a key saved while the app runs
-        is used."""
+        is used. Built in a thread: loading a local model takes seconds, and
+        the server answers everything else meanwhile."""
         # OpenAI embeds with its key; the local model downloads with the
         # Hugging Face token, when one is set.
         key = (
@@ -101,10 +115,19 @@ class VectorStoreManager:
             if self.embedding_provider == "openai"
             else await secrets.get("HF_TOKEN")
         )
-        if self._embedding_function is None or key != self._embedding_key:
-            self._embedding_function = self._create_embedding_function(key)
-            self._embedding_key = key
+        async with self._loading:
+            if self._embedding_function is None or key != self._embedding_key:
+                self._embedding_function = await asyncio.to_thread(
+                    self._create_embedding_function, key
+                )
+                self._embedding_key = key
         return self._embedding_function
+
+    async def _open(self, collection_name: str) -> Any:
+        """``collection_name`` opened for what embeds nothing (counting,
+        listing, removing, storing vectors embedded already), so the model
+        is never loaded for it. NotFoundError when it is not there."""
+        return await asyncio.to_thread(self.client.get_collection, name=collection_name)
 
     def _create_embedding_function(self, key: str | None) -> Any:
         """Create embedding function based on configured provider."""
@@ -138,6 +161,11 @@ class VectorStoreManager:
             if key:
                 os.environ.setdefault("HF_TOKEN", key)
             logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
+            # Threads by the container's CPUs, not the machine's (``threads``):
+            # a capped container would otherwise starve.
+            import torch
+
+            torch.set_num_threads(self.threads or cpus.spare_one())
 
             from chromadb.utils.embedding_functions import (
                 SentenceTransformerEmbeddingFunction,
@@ -166,125 +194,90 @@ class VectorStoreManager:
         metadata_fields: list[str] | None = None,
         progress_callback: Callable[[int, int, int], None] | None = None,
     ) -> IndexStats:
-        """
-        Add documents to a collection using upsert.
+        """Embed ``documents`` here and store them (upsert, by deterministic
+        ids: indexing a file again replaces its chunks); ``progress_callback``
+        (batch, batches, chunks) as each stored batch lands."""
+        check_name(collection_name)  # before the embedding, not after it
+        embedded = await self.embed(documents, metadata_fields)
+        return await self.store(embedded, collection_name, progress_callback)
 
-        Uses deterministic IDs based on source path + chunk index,
-        so re-indexing the same file will update existing chunks.
-
-        Args:
-            documents: Documents to add
-            collection_name: Target collection name
-            metadata_fields: Metadata fields to include (default: all)
-            progress_callback: Optional callback(batch_num, total_batches, chunks_processed)
-
-        Returns:
-            IndexStats: Indexing statistics including chunk IDs
-        """
-        start_time = asyncio.get_event_loop().time()
-
-        # Get or create collection with configured embedding function
-        collection = await asyncio.to_thread(
-            self.client.get_or_create_collection,
-            name=collection_name,
-            metadata={"hnsw:space": "cosine"},
-            embedding_function=await self._embedding(),
+    async def embed(
+        self, documents: list[Document], metadata_fields: list[str] | None = None
+    ) -> Embedded:
+        """Chunks to vectors, by the configured model: the slow part, run one
+        call at a time in this process (each already spreads over every CPU
+        it may use, so two at once only fight). Stores nothing: a worker's
+        half, or this process's when there is no worker."""
+        prepared = prepare(documents, metadata_fields)
+        if not prepared.texts:
+            return prepared
+        model = await self._embedding()
+        async with self._embedding_lock:
+            vectors = await asyncio.to_thread(model, prepared.texts)
+        return prepared.model_copy(
+            update={"vectors": [[float(x) for x in v] for v in vectors]}
         )
 
-        # Prepare documents for ChromaDB
-        ids: list[str] = []
-        texts: list[str] = []
-        metadatas: list[dict[str, Any]] = []
-        # When, on every chunk: what the index holds and since when is the
-        # index's own (the knowledge base's records are read from it).
-        indexed_at = utcnow().isoformat()
-
-        for i, doc in enumerate(documents):
-            # Use deterministic IDs based on source + chunk index
-            source = doc.metadata.get("source", f"unknown_{i}")
-            chunk_idx = doc.metadata.get("chunk_index", i)
-            doc_id = generate_chunk_id(source, chunk_idx)
-            ids.append(doc_id)
-            texts.append(doc.content)
-
-            # Filter metadata if specified
-            if metadata_fields:
-                metadata = {
-                    k: v for k, v in doc.metadata.items() if k in metadata_fields
-                }
-            else:
-                metadata = doc.metadata
-
-            # ChromaDB requires string/int/float/bool values
-            metadatas.append(clean_metadata({**metadata, "indexed_at": indexed_at}))
-
-        # Upsert to collection in batches (upsert = add or update)
-        batch_size = 500
-        total_batches = (len(ids) + batch_size - 1) // batch_size
-
-        for batch_num, batch_start in enumerate(range(0, len(ids), batch_size)):
-            batch_end = min(batch_start + batch_size, len(ids))
-
+    async def store(
+        self,
+        embedded: Embedded,
+        collection_name: str,
+        progress_callback: Callable[[int, int, int], None] | None = None,
+    ) -> IndexStats:
+        """Store chunks embedded already (here or by a worker), in batches of
+        500, embedding nothing: the one writer's half, quick."""
+        check_name(collection_name)
+        start_time = asyncio.get_event_loop().time()
+        try:
+            collection = await self._open(collection_name)
+        except NotFoundError:
+            # A new collection records its model, so search embeds alike.
+            collection = await asyncio.to_thread(
+                self.client.create_collection,
+                name=collection_name,
+                metadata={"hnsw:space": "cosine"},
+                embedding_function=await self._embedding(),
+            )
+        size = 500
+        batches = (len(embedded.ids) + size - 1) // size
+        for n, at in enumerate(range(0, len(embedded.ids), size)):
+            end = min(at + size, len(embedded.ids))
             await asyncio.to_thread(
                 collection.upsert,
-                ids=ids[batch_start:batch_end],
-                documents=texts[batch_start:batch_end],
-                metadatas=metadatas[batch_start:batch_end],
+                ids=embedded.ids[at:end],
+                documents=embedded.texts[at:end],
+                metadatas=embedded.metadatas[at:end],  # type: ignore[arg-type]
+                embeddings=embedded.vectors[at:end],  # type: ignore[arg-type]
             )
-
             if progress_callback:
-                progress_callback(batch_num + 1, total_batches, batch_end)
-
-            logger.debug(
-                "vectorstore.add_documents.batch",
-                batch=batch_num + 1,
-                total_batches=total_batches,
-                chunks=batch_end,
-            )
-
-        end_time = asyncio.get_event_loop().time()
-        duration_ms = (end_time - start_time) * 1000
-
-        total_count = await asyncio.to_thread(collection.count)
-
+                progress_callback(n + 1, batches, end)
+        duration_ms = (asyncio.get_event_loop().time() - start_time) * 1000
         stats = IndexStats(
             collection_name=collection_name,
-            documents_added=len(documents),
-            total_documents=total_count,
+            documents_added=len(embedded.ids),
+            total_documents=await asyncio.to_thread(collection.count),
             duration_ms=duration_ms,
-            chunk_ids=ids,  # Return the IDs that were added
+            chunk_ids=embedded.ids,
         )
-
         logger.debug(
-            "vectorstore.add_documents",
+            "vectorstore.store",
             collection=collection_name,
-            count=len(documents),
+            count=len(embedded.ids),
             duration_ms=round(duration_ms, 2),
         )
-
         return stats
 
     async def remove_by_source(
         self,
         collection_name: str,
-        source_path: str,
+        sources: list[str],
+        keep: Collection[str] = (),
     ) -> int:
-        """
-        Remove all chunks for a specific source file.
-
-        Args:
-            collection_name: Target collection
-            source_path: Source file path to remove
-
-        Returns:
-            Number of chunks removed
-        """
+        """Remove every chunk of each of ``sources`` (files) but ``keep``
+        (ids just stored over, the same ids, so a file read again loses
+        only the chunks past its new end), in one call; the number removed."""
         try:
-            collection = await asyncio.to_thread(
-                self.client.get_collection,
-                name=collection_name,
-                embedding_function=await self._embedding(),
-            )
+            collection = await self._open(collection_name)
         except NotFoundError:
             logger.warning(
                 "vectorstore.collection_not_found",
@@ -292,34 +285,31 @@ class VectorStoreManager:
             )
             return 0
 
-        # Find all chunks with this source path
+        # Their ids only: the chunks' text and metadata are not needed.
         results = await asyncio.to_thread(
-            collection.get,
-            where={"source": source_path},
+            collection.get, where={"source": {"$in": sources}}, include=[]
         )
 
-        if not results["ids"]:
+        ids = [i for i in results["ids"] if i not in keep]
+        if not ids:
             logger.debug(
                 "vectorstore.remove_by_source.no_matches",
                 collection=collection_name,
-                source=source_path,
+                sources=len(sources),
             )
             return 0
 
         # Delete the matching documents
-        await asyncio.to_thread(
-            collection.delete,
-            ids=results["ids"],
-        )
+        await asyncio.to_thread(collection.delete, ids=ids)
 
         logger.debug(
             "vectorstore.remove_by_source",
             collection=collection_name,
-            source=source_path,
-            count=len(results["ids"]),
+            sources=len(sources),
+            count=len(ids),
         )
 
-        return len(results["ids"])
+        return len(ids)
 
     async def list_indexed_files(
         self,
@@ -333,11 +323,7 @@ class VectorStoreManager:
             collection_name: Target collection
         """
         try:
-            collection = await asyncio.to_thread(
-                self.client.get_collection,
-                name=collection_name,
-                embedding_function=await self._embedding(),
-            )
+            collection = await self._open(collection_name)
         except NotFoundError:
             return []
 
@@ -471,11 +457,7 @@ class VectorStoreManager:
     async def get_collection_info(self, collection_name: str) -> CollectionInfo | None:
         """Get information about a collection including document count."""
         try:
-            collection = await asyncio.to_thread(
-                self.client.get_collection,
-                name=collection_name,
-                embedding_function=await self._embedding(),
-            )
+            collection = await self._open(collection_name)
             count = await asyncio.to_thread(collection.count)
 
             # Get unique document count from metadata sources

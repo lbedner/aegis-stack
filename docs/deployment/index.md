@@ -26,15 +26,16 @@ Your application is now running at `http://your-server-ip`, or at the name `aegi
 
 ## No server yet? Provision one
 
-!!! warning "Experimental Feature"
-    Run end to end against a live Hetzner account with an `sslip.io` name; the `--domain` path through Cloudflare is tested only against a mocked API.
-
 ```bash
 export HCLOUD_TOKEN=...      # Hetzner Cloud API token, read & write
 aegis deploy-provision --email you@example.com
+
+# or on DigitalOcean
+export DIGITALOCEAN_TOKEN=...
+aegis deploy-provision --provider digitalocean --email you@example.com
 ```
 
-This replaces steps 1 and 2 above. It creates a server in your own Hetzner account (showing the monthly price first), points a name at it (`<ip>.sslip.io`, or yours with `--domain` and its DNS provider's keys, Porkbun's or Cloudflare's), turns on HTTPS for that name with Let's Encrypt, and runs `aegis deploy`. The server, the bill and the data stay yours. `aegis deploy-destroy` removes the server and its DNS record. All options: [`aegis deploy-provision`](../cli-reference.md#aegis-deploy-provision).
+This replaces steps 1 and 2 above. It creates a server in your own Hetzner or DigitalOcean account (showing the monthly price first), points a name at it (`<ip>.sslip.io`, or yours with `--domain` and its DNS provider's keys, Porkbun's or Cloudflare's), turns on HTTPS for that name with Let's Encrypt, and runs `aegis deploy`. The server, the bill and the data stay yours. `aegis deploy-destroy` removes the server and its DNS record. All options: [`aegis deploy-provision`](../cli-reference.md#aegis-deploy-provision).
 
 ## From the Overseer
 

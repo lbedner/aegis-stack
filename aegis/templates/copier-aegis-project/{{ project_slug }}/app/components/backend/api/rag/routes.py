@@ -6,18 +6,23 @@ search, and collection management. A read is a signed-in user's; a change
 (indexing names a path on the server) is an admin's.
 """
 
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from app.services.rag import knowable
 from app.services.rag.collections import collection_info
 from app.services.rag.config import get_rag_service
+from app.services.rag.knowable import Knowable
 from app.services.rag.service import (
     IndexingError,
     LoaderError,
     SearchError,
 )
+from app.services.rag.sources import idle
+from app.services.rag.uploads import check_name
 from app.services.shared.deps import get_admin_actor, get_owner_user_id
 
 from .sources import router as sources_router
@@ -123,6 +128,7 @@ async def index_documents(request: IndexRequest) -> IndexResponse:
         HTTPException: If indexing fails
     """
     try:
+        check_name(request.collection_name)  # a 400 now, not after embedding
         stats = await get_rag_service().refresh_index(
             path=request.path,
             collection_name=request.collection_name,
@@ -139,6 +145,8 @@ async def index_documents(request: IndexRequest) -> IndexResponse:
 
     except LoaderError as e:
         raise HTTPException(status_code=400, detail=f"Failed to load documents: {e}")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from None
     except IndexingError as e:
         raise HTTPException(status_code=500, detail=f"Indexing failed: {e}")
     except Exception as e:
@@ -189,6 +197,15 @@ async def search_documents(request: SearchRequest) -> SearchResponse:
         raise HTTPException(status_code=500, detail=f"Search failed: {e}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Unexpected error: {e}")
+
+
+@router.get("/knowable", response_model=Knowable, dependencies=CHANGE)
+async def knowable_sources() -> Knowable:
+    """What of this app a knowledge base can know: its parts by kind (the
+    ids ``part`` takes when adding sources), the file types they hold, and
+    each part's files and bytes by type. An admin's, as adding is: it names
+    the server's folder and what is in it."""
+    return await asyncio.to_thread(knowable.knowable)
 
 
 @router.get("/collections", response_model=list[str], dependencies=READ)
@@ -298,6 +315,10 @@ async def delete_collection(collection_name: str) -> dict[str, Any]:
     Raises:
         HTTPException: If deletion fails
     """
+    try:
+        idle(collection_name)
+    except ValueError as e:  # its next batch would make it again
+        raise HTTPException(status_code=409, detail=str(e)) from None
     try:
         deleted = await get_rag_service().delete_collection(collection_name)
         if not deleted:

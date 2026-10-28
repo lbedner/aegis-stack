@@ -10,6 +10,14 @@
 <svg class="{{ class }}" fill="none" stroke="currentColor" stroke-width="{{ stroke }}" {% if label %}role="img" aria-label="{{ label }}"{% else %}aria-hidden="true"{% endif %} {{ attrs|safe }}><use href="#i-{{ name }}"/></svg>
 {%- endmacro %}
 
+{# A file by its type, as VS Code's Material Icon Theme draws it
+   (``file_icons.icon_for``): an image, so the browser fetches each type's
+   once however many files show it. #}
+{% macro file_icon(path, class="w-4 h-4") -%}
+{%- set found = icon_for(path) -%}
+<img src="{{ found.url }}" alt="" width="16" height="16" data-file-type="{{ found.kind }}" class="{{ class }} shrink-0">
+{%- endmacro %}
+
 {% macro sprite() %}
 <svg xmlns="http://www.w3.org/2000/svg" class="hidden" aria-hidden="true" data-icons>
   <defs>

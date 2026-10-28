@@ -51,6 +51,7 @@ OWNERS = (
     "app.services.system.db_trend",
     "app.services.system.load_cost",
     "app.core.aggregates",
+    "app.services.rag.embedding",
     # Last: the shared cache claims whatever is left in its database.
     "app.services.system.ui_cache",
 )

@@ -132,3 +132,33 @@ class TestLoaderUtilities:
         expected = [".py", ".js", ".ts", ".md", ".json", ".yaml"]
         for ext in expected:
             assert ext in LOADER_MAP
+
+
+def test_the_files_a_load_reads_are_named_first(sample_codebase: Path) -> None:
+    """What indexing streams in batches: a folder's files, as ``load`` would
+    read them (its types, nothing excluded), a file itself, before any is
+    read; FileNotFoundError for nothing there."""
+    loader = CodebaseLoader()
+
+    found = loader.files(sample_codebase, [".py"])
+
+    assert sorted(p.name for p in found) == ["core.py", "main.py", "utils.py"]
+    readme = sample_codebase / "README.md"
+    assert loader.files(readme) == [readme]
+    with pytest.raises(FileNotFoundError):
+        loader.files(sample_codebase / "gone")
+
+
+@pytest.mark.asyncio
+async def test_an_empty_file_loads_as_nothing_a_wrong_one_fails(tmp_path: Path) -> None:
+    """Empty (an ``__init__.py``): nothing to know, not a failure. A type
+    it does not read, or a file it cannot, says so: a caller tells them
+    apart from an empty one."""
+    loader = CodebaseLoader()
+    (tmp_path / "__init__.py").write_text("\n")
+    (tmp_path / "blob.bin").write_bytes(b"\0")
+
+    assert await loader.load(tmp_path / "__init__.py") == []
+    with pytest.raises(ValueError, match="blob.bin"):
+        await loader.load(tmp_path / "blob.bin")
+    assert await loader.load(tmp_path) == []  # a folder skips both quietly

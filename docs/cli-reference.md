@@ -634,9 +634,6 @@ aegis deploy-setup
 
 ### aegis deploy-provision
 
-!!! warning "Experimental Feature"
-    `deploy-provision` and `deploy-destroy` have run end to end against a live Hetzner account with an `sslip.io` name (server, HTTPS certificate, deploy, destroy). The `--domain` path through Cloudflare and the whole `--provider digitalocean` path are tested only against a mocked API. Expect rough edges, and check your provider's console after a failed run.
-
 Create a server in your own Hetzner Cloud or DigitalOcean account and deploy to it. Shows the
 monthly price and asks before creating anything. The server boots with the
 project's `scripts/server-setup.sh` as cloud-init user-data, so it arrives with

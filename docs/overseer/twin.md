@@ -2,6 +2,10 @@
 
 The Twin is a model of your app that stays true to it: built from its code, and kept in step with it as it runs. Nobody writes or maintains it. Overseer draws it, Illiana and MCP clients read it through their tools, and the API serves it as JSON.
 
+The map in Overseer is the Twin drawn; the ontology, its first layer, is its vocabulary.
+
+--8<-- "docs/images/twin.svg"
+
 It has five layers, each saying something more certain than the one above it:
 
 | Layer | Says | Read from | Where you see it |
@@ -16,25 +20,7 @@ The ontology is the Twin's vocabulary, the nouns and verbs every other layer is 
 
 ## Zoom
 
-Every layer reads at any zoom, the way a C4 diagram does:
-
-```
-            Context ....... Container ....... Component ........ Code
-            the stack,      backend, db,      services and      file:line
-            what it calls   redis, worker     their pieces
-          +-----------------------------------------------------------+
-Ontology  | what exists                                               |
-Dry paths | what could happen                                         |
-Live      | what is                                                   |
-Observed  | what does happen                                          |
-Recorded  | what did happen                                           |
-          +-----------------------------------------------------------+
-                  one typed read: frozen Pydantic models
-                  /                 |                  \
-           Overseer map       Illiana's tools      MCP, the API
-```
-
-Overseer's map starts at the Server (containers), opens a service into its pieces (components), and links each hop to the lines of code it ran through.
+Every layer reads at any zoom, the way a C4 diagram does: the grid above, left to right. Overseer's map starts at the Server (containers), opens a service into its pieces (components), and links each hop to the lines of code it ran through.
 
 ## One read for every reader
 

@@ -1,7 +1,8 @@
 {# The RAG index: how it is set up, anything misconfigured, and each
-   collection (a row opens its files in the drawer). #}
+   collection (a row opens its files in the drawer); a new one made. #}
 {% from "components/macros/layout.html" import card, drawer_sync, facts, stats_strip %}
 {% from "components/macros/table.html" import data_table %}
+{% from "components/macros/form.html" import action %}
 <div class="space-y-4">
   {{ stats_strip(figures, id="ai-rag-figures") }}
   {% if problems %}
@@ -12,6 +13,7 @@
   <div class="grid gap-4 lg:grid-cols-3">
     <div class="lg:col-span-2">
     {% call card("Collections", id="ai-collections") %}
+      <div>{{ action("New knowledge base", new, "primary") }}</div>
       {{ data_table([
         {"key": "name", "label": "Collection", "kind": "link", "target": "#overseer-main"},
         {"key": "chunks", "label": "Chunks", "kind": "int", "align": "right"},

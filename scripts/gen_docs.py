@@ -57,6 +57,16 @@ with open("README.md") as readme:
         content,
     )
 
+    # The banner is the home page's title: wrapped in the page's one <h1>,
+    # Material adds no "Overview" heading of its own above it. The first
+    # heading after it is the headline, which carries the page.
+    content = re.sub(
+        r"(<img [^>]*>)", r'<h1 class="home-banner">\1</h1>', content, count=1
+    )
+    content = re.sub(
+        r"^## (.+)$", r"## \1 { .home-headline }", content, count=1, flags=re.M
+    )
+
     # Fix links to documentation pages (remove 'docs/' prefix)
     # Use regex to catch all docs/*.md links instead of manually listing each one
     content = re.sub(r"\]\(docs/([^)]+\.md)\)", r"](\1)", content)

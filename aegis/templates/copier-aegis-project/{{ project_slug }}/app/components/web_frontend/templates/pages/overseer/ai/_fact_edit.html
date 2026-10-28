@@ -1,9 +1,9 @@
 {# Correct one saved fact (dialog body). #}
 {% from "components/macros/layout.html" import dialog_title %}
-{% from "components/macros/form.html" import field, text_input, textarea, primary_button %}
+{% from "components/macros/form.html" import field, form_footer, text_input, textarea %}
 {{ dialog_title("Correct a saved fact", "Agents quote it back in every later conversation.") }}
 <form hx-post="{{ url }}" hx-swap="none" class="space-y-4">
   {% call field("Fact") %}{{ textarea("fact", fact.fact, rows=3) }}{% endcall %}
   {% call field("Category") %}{{ text_input("category", fact.category) }}{% endcall %}
-  {{ primary_button("Save", "submit", "data-write") }}
+  {{ form_footer("Save", attrs="data-write") }}
 </form>

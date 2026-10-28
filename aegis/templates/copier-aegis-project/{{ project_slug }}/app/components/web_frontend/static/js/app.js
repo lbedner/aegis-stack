@@ -16,6 +16,11 @@ document.addEventListener('alpine:init', () => {
     items: [],
     _seq: 0,
     push(detail) {
+      // Shown again on top: the top layer stacks by order of showing.
+      if (this.$root.showPopover) {
+        if (this.$root.matches(':popover-open')) this.$root.hidePopover();
+        this.$root.showPopover();
+      }
       const id = ++this._seq;
       const tone = detail.tone || 'ok';
       this.items.push({ id, text: detail.text, tone });
@@ -24,6 +29,78 @@ document.addEventListener('alpine:init', () => {
     },
     dismiss(id) {
       this.items = this.items.filter((item) => item.id !== id);
+    },
+  }));
+});
+
+// A form in steps (macros/form.html ``wizard``): one step shown at a
+// time, Next only once its fields are valid, and any step already reached
+// a click away. ``$bytes`` says a size for people, as charts and the
+// server do (charts.js, loaded after this file, by the time it is asked);
+// ``$files`` says how many files and how big ("" for none), of a list
+// picked or (``$tally``) of a count and a size.
+function tally(n, bytes) {
+  return n ? `${n} file${n === 1 ? '' : 's'} · ${formatValue(bytes, 'bytes')}` : '';
+}
+document.addEventListener('alpine:init', () => {
+  Alpine.magic('bytes', () => (n) => formatValue(n, 'bytes'));
+  Alpine.magic('tally', () => tally);
+  Alpine.magic('files', () => (files) => tally(files.length, [...files].reduce((t, f) => t + f.size, 0)));
+  Alpine.data('wizard', (count) => ({
+    step: 0,
+    reached: 0,
+    count,
+    done(i) {
+      return i < this.reached && i !== this.step;
+    },
+    valid() {
+      const here = this.$root.querySelector(`[data-wizard-step="${this.step}"]`);
+      return [...here.querySelectorAll('input, select, textarea')].every((f) => f.reportValidity());
+    },
+    go(i) {
+      if (i <= this.reached) this.step = i;
+    },
+    next() {
+      if (!this.valid()) return;
+      this.step = Math.min(this.step + 1, this.count - 1);
+      this.reached = Math.max(this.reached, this.step);
+    },
+    back() {
+      this.step = Math.max(this.step - 1, 0);
+    },
+    // Enter in a field is Next, not a submit that skips the steps after
+    // it (and their checks); on the last step it submits as ever.
+    enter(event) {
+      if (event.target.tagName !== 'INPUT' || this.step === this.count - 1) return;
+      event.preventDefault();
+      this.next();
+    },
+  }));
+  // A file picker that keeps what was picked before (macros/form.html
+  // ``file_button`` with ``submit=False``): a second pick adds to the
+  // first (one file where it takes one), each listed with its size and
+  // removable. The input's own files are kept to the list, so the form
+  // posts what it shows; a removal says so with a ``change``.
+  Alpine.data('filePicker', (multiple) => ({
+    files: [],
+    keep(files) {
+      const kept = new DataTransfer();
+      for (const f of files) kept.items.add(f);
+      this.$refs.input.files = kept.files;
+      this.files = [...kept.files];
+    },
+    add() {
+      const picked = [...this.$refs.input.files];
+      const before = multiple ? this.files : [];
+      const fresh = picked.filter((f) => !before.some((b) => b.name === f.name && b.size === f.size));
+      this.keep([...before, ...fresh]);
+    },
+    remove(i) {
+      this.keep(this.files.filter((_, at) => at !== i));
+      this.$refs.input.dispatchEvent(new Event('change', { bubbles: true }));
+    },
+    get said() {
+      return this.$files(this.files) || 'Nothing chosen';
     },
   }));
 });
@@ -68,6 +145,17 @@ function placeDropdown(details) {
 document.addEventListener('toggle', (event) => {
   if (event.target.matches?.('details[data-dropdown]')) placeDropdown(event.target);
 }, true);
+// An open dropdown closes on a click off it, or on one of its entries (so
+// a dialog an entry opens is never under it). One listener for them all:
+// a table can have a menu a row.
+function closesDropdown(details, target) {
+  return !details.contains(target) || Boolean(target.closest('[role="menu"] a, [role="menu"] button'));
+}
+document.addEventListener('click', (event) => {
+  document.querySelectorAll('details[data-dropdown][open]').forEach((details) => {
+    if (closesDropdown(details, event.target)) details.removeAttribute('open');
+  });
+});
 
 function toast(text, tone) {
   window.dispatchEvent(new CustomEvent('toast', { detail: { text, tone } }));
@@ -251,6 +339,12 @@ document.addEventListener('click', (event) => {
 // toast instead of a silently unchanged page.
 document.body.addEventListener('htmx:responseError', (event) => {
   if (event.detail.elt.dataset.apiDone !== undefined) return; // told below
+  // A drawer for an item no longer there (deleted from that very drawer,
+  // or a stale link): it closes, and its parameter leaves the address.
+  if (event.detail.target?.id === 'drawer-body' && event.detail.xhr.status === 404) {
+    document.getElementById('drawer')?.close();
+    return;
+  }
   toast(`Request failed (${event.detail.xhr.status})`, 'error');
 });
 
@@ -924,4 +1018,4 @@ document.body.addEventListener('htmx:load', () => {
   applyMapFocus(document.getElementById('overview-stack'));
 });
 
-if (typeof module !== 'undefined') module.exports = { revealTab, placeDropdown, outsideClick, dismiss, navigates, markCurrent, spanned, inView, splitMatches, mapFocus, pathFocus, sourceColumn, kept, volumeOf };
+if (typeof module !== 'undefined') module.exports = { revealTab, placeDropdown, closesDropdown, outsideClick, dismiss, navigates, markCurrent, spanned, inView, splitMatches, mapFocus, pathFocus, sourceColumn, kept, volumeOf };

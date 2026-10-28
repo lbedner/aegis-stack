@@ -61,6 +61,8 @@ class TestToastRegion:
 
     def test_listens_for_the_toast_event(self, page: str) -> None:
         assert one(page, "#toasts").get("@toast.window") is not None
+        # In the top layer, so a modal dialog never hides one.
+        assert one(page, "#toasts").get("popover") == "manual"
 
     def test_reload_snackbar_is_gone(self, page: str) -> None:
         for banned in ("appFlashSnackbar", "__app_snackbar", 'x-data="snackbar()"'):

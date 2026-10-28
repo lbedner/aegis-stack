@@ -154,3 +154,33 @@ class TestEstimateChunks:
         # Content equal to chunk size
         result = estimate_chunks(100, 100, 0)
         assert result == 1
+
+
+@pytest.mark.asyncio
+async def test_no_chunk_is_only_the_overlap_of_the_one_before(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A long paragraph split again can leave a piece that is nothing but the
+    overlap carried from the chunk before: the same text twice in the index,
+    and a chunk the line mapping cannot place after the one before it."""
+    from app.services.rag import chunking
+
+    paragraphs = []  # every word its own, so one chunk inside another is a copy
+    for n in range(4):
+        paragraphs.append(f"## Section {n}")
+        paragraphs.append(" ".join(f"w{n}x{i}" for i in range(15 + 20 * n)))
+    text = "\n\n".join(paragraphs)
+    unplaced: list[str] = []
+    monkeypatch.setattr(
+        chunking.logger,
+        "warning",
+        lambda event, **_: unplaced.append(event),
+    )
+
+    chunks = await DocumentChunker(chunk_size=200, chunk_overlap=40).chunk(
+        [Document(content=text, metadata={"source": "a.md", "language": "markdown"})]
+    )
+
+    pieces = [c.content for c in chunks]
+    assert not [b for a, b in zip(pieces, pieces[1:], strict=False) if b in a]
+    assert unplaced == []

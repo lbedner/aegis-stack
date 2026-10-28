@@ -3869,6 +3869,28 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#get-ragknowable" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /rag/knowable
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-ragcollectionsnamereindexsourcepath" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /rag/collections/{name}/reindex?source=&lt;path&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#delete-ragcollectionsnamesourcessourcepath" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -7014,6 +7036,28 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#get-ragknowable" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GET /rag/knowable
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#post-ragcollectionsnamereindexsourcepath" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        POST /rag/collections/{name}/reindex?source=&lt;path&gt;
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#delete-ragcollectionsnamesourcessourcepath" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -7321,6 +7365,12 @@
 <hr />
 <h2 id="illianas-knowledge">Illiana's Knowledge</h2>
 <p>The <code>default</code> collection is what Illiana knows: <code>rag index &lt;path&gt;</code> fills it, and her <code>knowledge</code> tool searches it when a question is about the app, its business or its documents, citing each passage's source. The tool searches whatever knowledge bases (collections) the asking agent is granted, its <code>knowledge_base_ids</code>; an agent granted none searches nothing. Illiana is granted <code>default</code> on a fresh seed and on a re-seed of an older database, additively, so a knowledge base granted by hand stays. The tool is a read, so an MCP client may be served it.</p>
+<p>Overseer fills it too, and nobody types a path: on the AI page's Knowledge section, <strong>New knowledge base</strong> makes a collection from parts of the app ticked (a service, a component, the shared code, the docs) and the file types to read of them, and files uploaded for what is not this app. The twin knows which files each part owns, templates and stylesheets as much as code, so ticking <code>ai</code> reads the AI service's files and nothing else. The file types offered are the ones those parts hold that the loader reads (<code>LOADER_MAP</code> in <code>loaders.py</code>, grouped as code, web, config, data, docs and scripts), the loader's defaults ticked; the form totals files, size and about how many chunks as things are ticked. A collection's drawer lists each file with its type, chunks and when it was indexed, linked to it in Overseer &gt; Code when it is the app's own; a file's menu opens it there, re-indexes it or removes it. The drawer adds more the same way, and behind its "..." menu re-indexes every source (after a change of embedding model or chunking) or deletes the collection.</p>
+<p>Adding from Overseer runs as a background job in the webserver (the one process that writes the index), a batch of 50 files at a time: each batch is read, chunked, embedded and stored, then dropped, so memory holds a few batches however much is picked.</p>
+<p>Embedding is the slow part, so with a worker it happens there: each batch is a task on the system queue (four out at a time), and its vectors come back through Redis (<code>rag:embedded:&lt;run&gt;</code>) to the webserver, which stores them. Embedded Chroma is safe in one process only, so no other process ever writes it, and no Chroma server is needed. The webserver loads the model only to search (and once when a collection is made, to record which model it uses): counts, file lists, removals and stores of vectors embedded already never load it, and the load runs in a thread, so the server keeps answering meanwhile. A worker process loads the model once and embeds one batch at a time, with every CPU it has (the webserver leaves one spare for its own work); more worker processes (<code>SYSTEM_WORKER_PROCESSES</code>, or replicas) embed more batches at once. With RAG in the stack the system worker gets 2G and 2 CPUs and the webserver 1.5G (<code>SYSTEM_WORKER_MEMORY</code>, <code>SYSTEM_WORKER_CPUS</code>, <code>WEBSERVER_MEMORY</code> override them). Uploaded files are embedded in the webserver, since only it is sure to see them (reading a collection again too), once the workers have their batches. An empty file (an <code>__init__.py</code>) holds nothing to know and is passed over, not called unreadable. Each batch is numbered: one handed back twice (a task retried after it answered) is stored once, and the job ends only when every batch is in. A batch that does not come back within ten minutes, or that a worker could not embed, fails the job, saying how many are missing; what was stored stays, and running it again is safe: a file's new chunks are stored over its old ones (the same ids), then only those past its new end go.</p>
+<p>Without a worker, every batch is embedded in the webserver, one at a time: slow on CPU for a large pick, and the dialog says so. Add a worker (<code>aegis add worker</code>), or embed with a hosted model (<code>RAG_EMBEDDING_PROVIDER=openai</code>).</p>
+<p>The dialog closes at once and the collection's drawer follows the job, its progress pushed over SSE as it changes, and loads the new files when it ends; one job runs per collection at a time, and a collection being indexed cannot be deleted (409) until it finishes. A name the index cannot take (3 or more letters, digits, dots, dashes or underscores, no spaces) is refused before anything is read (by the dialog as it is typed, and the API with a 400, <code>POST /rag/index</code> too), and by the CLI before anything is embedded. The API's <code>POST /rag/collections/{name}/sources</code> reads the same way and answers when done.</p>
+<p>An uploaded source is kept beside the index (<code>sources/&lt;collection&gt;/</code>) so it can be read again. However it leaves, it goes from there too: removed (<code>rag remove</code>, the API, Overseer), its collection deleted, or its collection rebuilt by <code>rag index</code>. A file the server held is never touched.</p>
 <p>With a database, each collection is also a <code>knowledge_base</code> record and each file indexed into it a <code>knowledge_base_source</code>, kept to the index whenever they are read (<code>GET /rag/knowledge</code>). The index is the truth; the records add what it cannot hold, such as what a knowledge base is for.</p>
 <hr />
 <h2 id="api-endpoints">API Endpoints</h2>
@@ -7375,7 +7425,11 @@
 <h3 id="get-ragcollectionsnamefiles">GET <code>/rag/collections/{name}/files</code></h3>
 <p>List indexed files with chunk counts.</p>
 <h3 id="post-ragcollectionsnamesources">POST <code>/rag/collections/{name}/sources</code></h3>
-<p>Add one source: a <code>file</code> uploaded (multipart; kept beside the index, in <code>sources/&lt;name&gt;/</code>) or a <code>path</code> the server holds (form field). Indexed again if it was before. Answers the source's path and its chunks.</p>
+<p>Add sources, multipart: any number of <code>file</code> uploads (each kept beside the index, in <code>sources/&lt;name&gt;/</code>), a <code>path</code> the server holds (a file or a folder), and parts of this app as <code>part</code>, repeated (the ids <code>GET /rag/knowable</code> lists: the twin reads each part's own files). <code>extensions</code> (<code>.py, .md</code>, as <code>rag index --extensions</code> takes them; the loader's defaults when empty) and <code>exclude</code> (globs, in place of the loader's own), comma-separated, apply to the folder and the parts. Each file's chunks are replaced, so the collection's other sources stay; with <code>replace=true</code> they go too, once the new ones are in (the end <code>rag index</code> reaches). Nothing changes when nothing can be read. Answers the files read, their chunks and any upload that could not be read; 400 when nothing could be. An admin's.</p>
+<h3 id="get-ragknowable">GET <code>/rag/knowable</code></h3>
+<p>What of this app a knowledge base can know: its parts by kind (the ids <code>part</code> takes), the file types they hold (grouped as code, web, config, data, docs and scripts), each part's files and bytes by type, the types ticked by default, every type an upload may be, and the app's name and the folder it is read from. An admin's: it names the server's folder and what is in it.</p>
+<h3 id="post-ragcollectionsnamereindexsourcepath">POST <code>/rag/collections/{name}/reindex?source=&lt;path&gt;</code></h3>
+<p>Read every source of the collection again (after a change of embedding model or chunking), or <code>source</code> alone, by its path as the collection's files list it. Answers as adding does; 400 for a <code>source</code> the collection does not hold, which is never read in. An admin's.</p>
 <h3 id="delete-ragcollectionsnamesourcessourcepath">DELETE <code>/rag/collections/{name}/sources?source=&lt;path&gt;</code></h3>
 <p>Remove one source, by its path as the collection's files list it. 404 when the collection holds none.</p>
 <h3 id="delete-ragcollectionsname">DELETE <code>/rag/collections/{name}</code></h3>
@@ -7504,6 +7558,14 @@
 <td>Text chunking</td>
 </tr>
 <tr>
+<td><code>app/services/rag/embedding.py</code></td>
+<td>Files read, chunked and embedded a batch at a time, on the workers when there are any, handed back through Redis</td>
+</tr>
+<tr>
+<td><code>app/services/rag/separators.py</code></td>
+<td>Where the chunker cuts, by language</td>
+</tr>
+<tr>
 <td><code>app/services/rag/vectorstore.py</code></td>
 <td>ChromaDB wrapper</td>
 </tr>
@@ -7512,8 +7574,16 @@
 <td>Metadata, filters, dedup</td>
 </tr>
 <tr>
+<td><code>app/services/rag/sources.py</code></td>
+<td>Sources added (uploads kept beside the index, server files or folders) or replacing a collection, every source read again</td>
+</tr>
+<tr>
 <td><code>app/services/rag/uploads.py</code></td>
-<td>Where an uploaded source is kept</td>
+<td>Where an uploaded source is kept (never anywhere else), and letting kept ones go with their source or collection</td>
+</tr>
+<tr>
+<td><code>app/services/rag/knowable.py</code></td>
+<td>What of the app can be known: each part (the twin's map) and the docs, with their readable files by type and size</td>
 </tr>
 <tr>
 <td><code>app/services/rag/knowledge.py</code></td>

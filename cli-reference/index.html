@@ -7946,10 +7946,6 @@ Keys you added yourself, and keys still in <code>.env.example</code>, stay as th
 </span></code></pre></div></p>
 <hr />
 <h3 id="aegis-deploy-provision">aegis deploy-provision</h3>
-<div class="admonition warning">
-<p class="admonition-title">Experimental Feature</p>
-<p><code>deploy-provision</code> and <code>deploy-destroy</code> have run end to end against a live Hetzner account with an <code>sslip.io</code> name (server, HTTPS certificate, deploy, destroy). The <code>--domain</code> path through Cloudflare and the whole <code>--provider digitalocean</code> path are tested only against a mocked API. Expect rough edges, and check your provider's console after a failed run.</p>
-</div>
 <p>Create a server in your own Hetzner Cloud or DigitalOcean account and deploy to it. Shows the
 monthly price and asks before creating anything. The server boots with the
 project's <code>scripts/server-setup.sh</code> as cloud-init user-data, so it arrives with

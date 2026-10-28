@@ -7024,14 +7024,14 @@
 </span></code></pre></div>
 <p>Your application is now running at <code>http://your-server-ip</code>, or at the name <code>aegis deploy-provision</code> gave it. The Overseer at <code>/dashboard/</code> admits only private networks until you add your address to <code>ADMIN_IP_ALLOWLIST</code> (see <a href="../components/ingress/">Ingress</a>) and redeploy.</p>
 <h2 id="no-server-yet-provision-one">No server yet? Provision one</h2>
-<div class="admonition warning">
-<p class="admonition-title">Experimental Feature</p>
-<p>Run end to end against a live Hetzner account with an <code>sslip.io</code> name; the <code>--domain</code> path through Cloudflare is tested only against a mocked API.</p>
-</div>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="nb">export</span><span class="w"> </span><span class="nv">HCLOUD_TOKEN</span><span class="o">=</span>...<span class="w">      </span><span class="c1"># Hetzner Cloud API token, read &amp; write</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>aegis<span class="w"> </span>deploy-provision<span class="w"> </span>--email<span class="w"> </span>you@example.com
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="c1"># or on DigitalOcean</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="nb">export</span><span class="w"> </span><span class="nv">DIGITALOCEAN_TOKEN</span><span class="o">=</span>...
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>aegis<span class="w"> </span>deploy-provision<span class="w"> </span>--provider<span class="w"> </span>digitalocean<span class="w"> </span>--email<span class="w"> </span>you@example.com
 </span></code></pre></div>
-<p>This replaces steps 1 and 2 above. It creates a server in your own Hetzner account (showing the monthly price first), points a name at it (<code>&lt;ip&gt;.sslip.io</code>, or yours with <code>--domain</code> and its DNS provider's keys, Porkbun's or Cloudflare's), turns on HTTPS for that name with Let's Encrypt, and runs <code>aegis deploy</code>. The server, the bill and the data stay yours. <code>aegis deploy-destroy</code> removes the server and its DNS record. All options: <a href="../cli-reference/#aegis-deploy-provision"><code>aegis deploy-provision</code></a>.</p>
+<p>This replaces steps 1 and 2 above. It creates a server in your own Hetzner or DigitalOcean account (showing the monthly price first), points a name at it (<code>&lt;ip&gt;.sslip.io</code>, or yours with <code>--domain</code> and its DNS provider's keys, Porkbun's or Cloudflare's), turns on HTTPS for that name with Let's Encrypt, and runs <code>aegis deploy</code>. The server, the bill and the data stay yours. <code>aegis deploy-destroy</code> removes the server and its DNS record. All options: <a href="../cli-reference/#aegis-deploy-provision"><code>aegis deploy-provision</code></a>.</p>
 <h2 id="from-the-overseer">From the Overseer</h2>
 <p>With the htmx frontend and Redis, Overseer &gt; Deployments on your dev build
 does the same from the page: a new server (a size and region picked from

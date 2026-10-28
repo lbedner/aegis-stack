@@ -94,10 +94,20 @@ async def run(reads: Sequence[str], code: str) -> Any:
     limits = UsageLimits(tool_calls_limit=CODE_MODE_TOOL_CALLS_LIMIT)
     result = await _agent(reads, code, {}).run(NAME, usage_limits=limits)
     outcome = _outcome(result.all_messages())
-    if isinstance(outcome, ToolReturnPart):
+    if isinstance(outcome, ToolReturnPart) and outcome.outcome == "success":
         _note_steps(outcome)
         return outcome.content
-    raise ToolError(outcome.model_response() if outcome else "The script did not run.")
+    raise ToolError(_why(outcome))
+
+
+def _why(outcome: ToolReturnPart | RetryPromptPart | None) -> str:
+    """Why the script failed: a retry prompt, or (pydantic-ai 2.62 on) a
+    return whose outcome is not a success."""
+    if outcome is None:
+        return "The script did not run."
+    if isinstance(outcome, RetryPromptPart):
+        return outcome.model_response()
+    return outcome.model_response_str()
 
 
 def _note_steps(outcome: ToolReturnPart) -> None:

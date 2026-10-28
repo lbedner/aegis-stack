@@ -537,6 +537,13 @@
 
 ### Fixed
 
+- **A broken `run_code` script over MCP is an error again.** From
+  pydantic-ai 2.62 a script's syntax error comes back as the tool's
+  return, marked retried, instead of as a retry prompt, so `run_code`
+  handed it to the client as a result and recorded the call as a success.
+  Only a successful return is a result now; on any pydantic-ai version
+  the client is told why the script failed.
+
 - **A meeting whose bot failed on a long error says it failed.** An
   error carrying a browser's whole call log was longer than the failure
   column holds, so Postgres refused it and the meeting never left

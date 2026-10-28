@@ -10,6 +10,7 @@
    definition and references (app.js, ``_symbol.html``). #}
 {% from "components/macros/layout.html" import code_block %}
 {% from "components/macros/feedback.html" import empty_state %}
+{% from "components/macros/icons.html" import file_icon %}
 {% from "components/macros/form.html" import range_form, search_input %}
 {% macro code_tree(nodes) %}
 <ul class="space-y-0.5">
@@ -24,7 +25,7 @@
     {% set url = code_scope.url(node.path) %}
     <a href="{{ url }}" data-path="{{ node.path }}" {{ hx_replace(url, "#" ~ code_page.pane) }}
        {% if node.path == code_path %}aria-current="page"{% endif %}
-       class="nav-link py-0.5 px-2 text-xs font-mono truncate">{{ node.name }}</a>
+       class="nav-link gap-1.5 py-0.5 px-2 text-xs font-mono">{{ file_icon(node.name, "w-3.5 h-3.5") }}<span class="min-w-0 truncate">{{ node.name }}</span></a>
     {% endif %}
   </li>
   {% endfor %}

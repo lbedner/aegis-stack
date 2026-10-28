@@ -2,7 +2,7 @@
    them (a page opens its preview), the edit form, and its tags. Read pages
    hands it to the worker; the pages fill in on the next open. #}
 {% from "components/macros/layout.html" import card, dialog_title, facts %}
-{% from "components/macros/form.html" import action, field, text_input, textarea, date_input, primary_button, select %}
+{% from "components/macros/form.html" import action, date_input, field, form_footer, select, text_input, textarea %}
 <div class="space-y-4">
   {{ dialog_title(document.title, facts=[document.kind, details[2][1], (document.page_count or 0) ~ " pages"]|join(" . ")) }}
   <div class="flex flex-wrap items-center gap-2">
@@ -29,7 +29,7 @@
       {% call field("Dated") %}{{ date_input("document_date", document.document_date, block=True) }}{% endcall %}
     </div>
     {% call field("Note") %}{{ textarea("note", document.note or "", rows=3) }}{% endcall %}
-    {{ primary_button("Save", type="submit", attrs="data-write") }}
+    {{ form_footer("Save", cancel=False, attrs="data-write") }}
   </form>
   {% endcall %}
   {% call card("Tags", id="document-tags") %}

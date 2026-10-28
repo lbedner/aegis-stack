@@ -44,7 +44,7 @@ text-aegis-text border border-aegis-teal bg-aegis-teal/10 rounded hover:bg-aegis
 
 {# Shared input styling; every control below uses it so the bar reads as one. #}
 {%- set _control_classes -%}
-bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-text placeholder:text-aegis-muted/50 focus:border-aegis-teal focus:outline-none transition-colors
+bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-text placeholder:text-aegis-muted/50 focus:border-aegis-teal focus:outline-none transition-colors [&:user-invalid]:border-error
 {%- endset -%}
 
 
@@ -77,16 +77,33 @@ bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-
 {% if label %}</label>{% endif %}
 {% endmacro %}
 
-{# A file input behind a button-styled label: picking a file submits its
-   form (``name="file"``). #}
-{% macro file_button(id, label, accept=None) %}
-<input id="{{ id }}" type="file" name="file" required {% if accept %}accept="{{ accept }}"{% endif %} class="sr-only" @change="$el.form.requestSubmit()">
-<label for="{{ id }}" class="inline-flex items-center cursor-pointer {{ _button_size }} leading-normal rounded border border-aegis-teal text-aegis-text hover:bg-aegis-teal/10 transition-colors">{{ label }}</label>
+{# Every file picker: the native input hidden behind a button-styled label,
+   so it looks like every other button. Picking submits its form (an
+   upload button); with ``submit=False`` it keeps what was picked (a second
+   pick adds to the first, where ``multiple``), says how many and how big,
+   and lists each, removable (the ``filePicker`` component in app.js), for a
+   form with its own submit. #}
+{% macro file_button(id, label, accept=None, name="file", submit=True, required=True, multiple=False) %}
+{%- set button = "inline-flex items-center cursor-pointer " ~ _button_size ~ " leading-normal rounded border border-aegis-teal text-aegis-text hover:bg-aegis-teal/10 transition-colors" -%}
+{%- set input -%}<input id="{{ id }}" type="file" name="{{ name }}" {% if required %}required{% endif %} {% if multiple %}multiple{% endif %} {% if accept %}accept="{{ accept }}"{% endif %} class="sr-only" {% if submit %}@change="$el.form.requestSubmit()"{% else %}x-ref="input" @change="add()"{% endif %}>{%- endset -%}
+{%- set picker -%}{{ input }}<label for="{{ id }}" class="{{ button }}">{{ label }}</label>{%- endset -%}
+{% if submit %}
+<span class="inline-flex items-center gap-2 min-w-0">{{ picker }}</span>
+{% else %}
+<div data-file-picker x-data="filePicker({{ 'true' if multiple else 'false' }})" class="space-y-2 min-w-0">
+  <span class="inline-flex items-center gap-2">{{ picker }}<span data-chosen x-text="said" class="text-xs text-aegis-muted">Nothing chosen</span></span>
+  <ul x-show="files.length" x-cloak class="space-y-1">
+    <template x-for="(f, i) in files" :key="f.name + f.size">
+      <li class="flex items-center gap-2 text-xs"><span x-text="f.name" class="truncate text-aegis-text"></span><span x-text="$bytes(f.size)" class="shrink-0 text-aegis-muted"></span><button type="button" @click="remove(i)" :aria-label="'Remove ' + f.name" class="shrink-0 text-aegis-muted hover:text-error">{{ icon("x-mark", "w-3.5 h-3.5", 2) }}</button></li>
+    </template>
+  </ul>
+</div>
+{% endif %}
 {% endmacro %}
 
-{% macro checkbox(name, checked=False, label=None, value=None) %}
+{% macro checkbox(name, checked=False, label=None, value=None, attrs="") %}
 <label class="inline-flex items-center gap-2 text-xs text-aegis-muted cursor-pointer">
-  <input type="checkbox" name="{{ name }}" {% if value is not none %}value="{{ value }}"{% endif %} {% if checked %}checked{% endif %} class="accent-aegis-teal">
+  <input type="checkbox" name="{{ name }}" {% if value is not none %}value="{{ value }}"{% endif %} {% if checked %}checked{% endif %} {{ attrs|safe }} class="accent-aegis-teal">
   {% if label %}<span>{{ label }}</span>{% endif %}
 </label>
 {% endmacro %}
@@ -145,14 +162,81 @@ bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-
 {% endmacro %}
 
 {# A labelled field. The control comes via {% call %}; ``error`` renders
-   under it (pattern 1's 422 re-render passes field errors here). #}
-{% macro field(label, error=None) %}
-<div class="space-y-1">
+   under it (pattern 1's 422 re-render passes field errors here); ``hint``
+   says what the control takes (its ``pattern``, its ``required``), shown
+   only once what was typed does not fit, before anything is sent. #}
+{% macro field(label, error=None, hint=None) %}
+<div class="group/field space-y-1">
   <label class="block text-xxs text-aegis-muted caps">{{ label }}
     {{ caller() }}
   </label>
   {% if error %}<p class="text-xs text-error">{{ error }}</p>{% endif %}
+  {% if hint %}<p data-invalid class="hidden text-xs text-error group-has-[:user-invalid]/field:block">{{ hint }}</p>{% endif %}
 </div>
+{% endmacro %}
+
+{# A dialog or drawer form is sections then a footer: each part of what is
+   being done its own section, divided from the one before (``title`` and
+   a ``hint`` such as "optional" over it, or neither for a plain run of
+   fields), and the footer at the bottom right. #}
+{% macro form_section(title=None, hint=None) %}
+<section class="space-y-3 border-t border-aegis-border pt-4 first:border-t-0 first:pt-0">
+  {% if title %}<div class="flex items-baseline justify-between gap-3"><h3 class="text-sm font-semibold text-aegis-text">{{ title }}</h3>{% if hint %}<span class="text-xs text-aegis-muted">{{ hint }}</span>{% endif %}</div>{% endif %}
+  {{ caller() }}
+</section>
+{% endmacro %}
+
+{# Closing the dialog it is in, unchanged: every dialog's Cancel. #}
+{% macro cancel_button() %}
+<button type="button" data-cancel @click="$el.closest('dialog').close()" class="text-xs text-aegis-muted hover:text-aegis-text">Cancel</button>
+{%- endmacro %}
+
+{# A dialog or drawer form's last row, at the bottom right: Cancel (closing
+   the dialog it is in; ``cancel=False`` for a form inside a drawer's card,
+   which closing would not suit), then the submit. What its caller gives
+   (a Remove) sits at the left. In a ``wizard`` it walks the steps: Back,
+   Next, and the submit only on the last. #}
+{% macro form_footer(label, cancel=True, attrs="", wizard=False) %}
+<div class="flex items-center justify-end gap-3 border-t border-aegis-border pt-4">
+  {% if caller is defined %}<div class="mr-auto flex items-center gap-2">{{ caller() }}</div>{% endif %}
+  {% if cancel %}{{ cancel_button() }}{% endif %}
+  {% if wizard %}
+  <button type="button" data-wizard-back x-show="step > 0" x-cloak @click="back()" class="text-xs text-aegis-muted hover:text-aegis-text">Back</button>
+  <span data-wizard-next x-show="step < count - 1">{{ primary_button("Next", "button", '@click="next()"') }}</span>
+  <span data-wizard-submit x-show="step === count - 1" x-cloak>{{ primary_button(label, "submit", attrs) }}</span>
+  {% else %}
+  {{ primary_button(label, "submit", attrs) }}
+  {% endif %}
+</div>
+{% endmacro %}
+
+{# A form in steps (the ``wizard`` component in app.js), for one with much
+   to pick from: its steps down the left, numbered (a check once passed,
+   with its answer, ``summary``, an Alpine expression), each a click back
+   once reached; the step at hand on the right (each in ``wizard_step``),
+   and ``form_footer(..., wizard=True)`` walking them; Enter in a field
+   is Next until the last step. ``steps`` are
+   (title, summary or None) pairs. #}
+{% macro wizard(steps) %}
+<div data-wizard x-data="wizard({{ steps|length }})" @keydown.enter="enter($event)" class="grid gap-6 sm:grid-cols-[11rem_1fr]">
+  <ol data-wizard-steps class="space-y-4">
+    {% for title, summary in steps %}{% set i = loop.index0 %}
+    <li><button type="button" @click="go({{ i }})" :disabled="{{ i }} > reached" class="flex w-full items-start gap-3 text-left disabled:cursor-default">
+      <span class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs"
+            :class="step === {{ i }} ? 'border-aegis-teal text-aegis-text' : done({{ i }}) ? 'border-aegis-teal text-aegis-teal' : 'border-aegis-border text-aegis-muted'">
+        <span x-show="!done({{ i }})">{{ loop.index }}</span><span x-show="done({{ i }})" x-cloak>{{ icon("check", "h-3.5 w-3.5", 2.5) }}</span>
+      </span>
+      <span class="min-w-0 pt-0.5"><span data-step-title class="block text-sm" :class="step === {{ i }} ? 'font-semibold text-aegis-text' : 'text-aegis-muted'">{{ title }}</span>{% if summary %}<span x-show="done({{ i }})" x-cloak x-text="{{ summary }}" class="block truncate text-xs text-aegis-muted"></span>{% endif %}</span>
+    </button></li>
+    {% endfor %}
+  </ol>
+  <div class="min-w-0 space-y-4">{{ caller() }}</div>
+</div>
+{% endmacro %}
+
+{# One step of a ``wizard``, numbered from 0: shown while it is at hand. #}
+{% macro wizard_step(n) %}
+<div data-wizard-step="{{ n }}" x-show="step === {{ n }}" {% if n %}x-cloak{% endif %} class="space-y-4">{{ caller() }}</div>
 {% endmacro %}
 
 {% macro text_input(name, value=None, placeholder="", required=False, autofocus=False, pattern=None, attrs="") %}

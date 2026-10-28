@@ -2,7 +2,7 @@
    agent's context right now. A fetcher's output is code, so only a static
    module's text is editable. #}
 {% from "components/macros/layout.html" import card, dialog_title %}
-{% from "components/macros/form.html" import checkbox, field, text_input, textarea, primary_button %}
+{% from "components/macros/form.html" import checkbox, field, form_footer, text_input, textarea %}
 <div class="space-y-4">
   {{ dialog_title(module.name, facts=module.slug) }}
   {% call card("Preview", "what an agent is handed", id="ai-module-preview") %}
@@ -23,6 +23,6 @@
     {% call field("Content") %}{{ textarea("prompt_content", module.prompt_content or "", rows=8) }}{% endcall %}
     {% endif %}
     {{ checkbox("is_active", module.is_active, "Active") }}
-    {{ primary_button("Save", type="submit", attrs="data-write") }}
+    {{ form_footer("Save", attrs="data-write") }}
   </form>
 </div>

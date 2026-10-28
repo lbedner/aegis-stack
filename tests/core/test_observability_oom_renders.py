@@ -112,8 +112,15 @@ def test_docker_compose_webserver_rightsized_to_768m() -> None:
         if "scheduler:" in rendered
         else rendered.split("# REDIS")[0]
     )
-    assert "memory: 768M" in webserver_block
+    assert "memory: ${WEBSERVER_MEMORY:-768M}" in webserver_block
     assert "memory: 512M" not in webserver_block  # old default
+
+
+def test_docker_compose_webserver_gets_room_to_index_with_rag() -> None:
+    """The webserver is the knowledge base's one writer, so with RAG it
+    holds Chroma and the embedding model: twice the room."""
+    rendered = _render("docker-compose.yml.jinja", _ctx(ai_rag=True))
+    assert "memory: ${WEBSERVER_MEMORY:-1536M}" in rendered
 
 
 def test_docker_compose_drops_app_reservations() -> None:
@@ -160,12 +167,12 @@ def test_docker_compose_traefik_rightsized_to_128m() -> None:
 def test_docker_compose_rightsized_blocks_count_matches() -> None:
     """Whole-file regression guard: with redis + traefik + ingress on,
     exactly two services land at ``memory: 128M`` (redis + traefik) and
-    one at ``memory: 768M`` (webserver)."""
+    one at 768M (webserver)."""
     rendered = _render(
         "docker-compose.yml.jinja", _ctx(include_redis=True, include_ingress=True)
     )
     assert rendered.count("memory: 128M") == 2
-    assert rendered.count("memory: 768M") == 1
+    assert rendered.count("memory: ${WEBSERVER_MEMORY:-768M}") == 1
 
 
 def test_logfire_configure_is_passed_the_settings_token() -> None:

@@ -132,11 +132,16 @@ def line_url(path: str, line: int) -> str:
 
 
 def file_url(path: str, line: int | None = None) -> str | None:
-    """Where one of the app's own files opens here, at ``line`` when given;
-    None for one the tree does not show, or while the page is off."""
-    if not (enabled() and shown(path)):
+    """Where one of the app's own files opens here, at ``line`` when given:
+    ``path`` from the project's root, or its full path on this server (a
+    knowledge base's source, ``local_path``). None for one the tree does
+    not show, or while the page is off."""
+    if not enabled():
         return None
-    return line_url(path, line) if line else Scope().url(path)
+    local = path if shown(path) else local_path(path)
+    if local is None:
+        return None
+    return line_url(local, line) if line else Scope().url(local)
 
 
 def module_url(module: str) -> str | None:

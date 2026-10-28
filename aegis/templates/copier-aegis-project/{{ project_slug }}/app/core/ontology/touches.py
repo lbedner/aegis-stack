@@ -1,5 +1,6 @@
 """What a change touches, read from the system model (``touched``): each
-changed file to the part owning it, the parts that depend on those, and
+changed file to the part owning it (and each file's top-level part,
+``parts_of``), the parts that depend on those, and
 the tables, routes, jobs and worker tasks its files define. A path may be
 a project's (``app/...``) or its template's
 (``.../{{ project_slug }}/app/...py.jinja``).
@@ -12,6 +13,7 @@ from collections.abc import Callable, Iterable
 from pydantic import BaseModel, ConfigDict
 
 from app.core import source_index
+from app.core.ontology.graph import roots
 from app.core.ontology.model import EdgeKind, Kind, SystemModel
 from app.core.ontology.parts import node_of
 
@@ -86,9 +88,24 @@ def touched(
     )
 
 
+def parts_of(
+    model: SystemModel,
+    paths: Iterable[str],
+    owner_of: Callable[[str], str | None] | None = None,
+) -> dict[str, str]:
+    """Each of ``paths`` (``app/...``, any kind of file: a template, a
+    stylesheet) to the top-level part owning it, a part in one counted as
+    that part: what knowing a part reads. Files no part owns are left out."""
+    top = roots(model)
+    owner_of = owner_of or _owners({n.id for n in model.nodes})
+    found = {p: top.get(owner_of(p) or "") for p in paths if p.startswith("app/")}
+    return {path: part for path, part in found.items() if part}
+
+
 def _owners(ids: set[str]) -> Callable[[str], str | None]:
+    """A module's, or a file's by its path, owning node."""
     index = source_index.project()
-    return lambda module: node_of(module, index, ids)
+    return lambda where: node_of(where, index, ids)
 
 
 def summary(found: Touched) -> str:

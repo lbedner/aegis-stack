@@ -116,19 +116,20 @@ class TestBadge:
 
 
 class TestDropdown:
-    def test_menu_items_close_the_menu_they_live_in(self) -> None:
+    def test_menu_items_are_the_menus_buttons(self) -> None:
+        """What closes the menu (a click outside it, or on an item) is
+        app.js's one listener, keyed on ``data-dropdown``
+        (``tests/web/test_app_js.py``)."""
         html = render(
             '{% call dropdown("More") %}'
             '{{ menu_item("Edit", \'hx-get="/x/edit" hx-target="#dialog-body"\') }}'
             '{{ menu_item("Remove", \'hx-delete="/x"\', danger=True) }}'
             "{% endcall %}"
         )
-        details = one(html, "details")
-        assert details.get("@click.outside")
+        details = one(html, "details[data-dropdown]")
         items = select(details, "[role=menu] li button")
         assert [text(i) for i in items] == ["Edit", "Remove"]
         assert items[0].get("hx-get") == "/x/edit"
-        assert "details" in (items[0].get("@click") or "")
         assert "text-error" in items[1].get("class")
 
     def test_app_js_places_every_dropdown(self) -> None:

@@ -1,0 +1,58 @@
+<svg class="twin-grid" viewBox="0 0 950 520" role="img" aria-labelledby="twin-grid-title" xmlns="http://www.w3.org/2000/svg">
+<title id="twin-grid-title">The Twin: five layers, each read at four zooms, through one typed read</title>
+<defs><marker id="twin-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="tw-fill-muted"/></marker></defs>
+<text x="301.0" y="22" text-anchor="middle" class="tw-head">Context</text>
+<text x="301.0" y="42" text-anchor="middle" class="tw-muted">the stack, what it calls</text>
+<text x="483.0" y="22" text-anchor="middle" class="tw-head">Container</text>
+<text x="483.0" y="42" text-anchor="middle" class="tw-muted">backend, db, redis, worker</text>
+<text x="665.0" y="22" text-anchor="middle" class="tw-head">Component</text>
+<text x="665.0" y="42" text-anchor="middle" class="tw-muted">services and their pieces</text>
+<text x="847.0" y="22" text-anchor="middle" class="tw-head">Code</text>
+<text x="847.0" y="42" text-anchor="middle" class="tw-muted">file:line</text>
+<line x1="218" y1="62" x2="930" y2="62" class="tw-rule" marker-end="url(#twin-arrow)"/>
+<text x="574.0" y="80" text-anchor="middle" class="tw-small">zoom in</text>
+<text x="0" y="114" class="tw-head">Ontology</text>
+<text x="0" y="133" class="tw-muted">what exists</text>
+<rect x="214" y="92" width="174" height="52" rx="8" class="tw-code"/>
+<rect x="396" y="92" width="174" height="52" rx="8" class="tw-code"/>
+<rect x="578" y="92" width="174" height="52" rx="8" class="tw-code"/>
+<rect x="760" y="92" width="174" height="52" rx="8" class="tw-code"/>
+<text x="0" y="174" class="tw-head">Dry paths</text>
+<text x="0" y="193" class="tw-muted">what could happen</text>
+<rect x="214" y="152" width="174" height="52" rx="8" class="tw-code"/>
+<rect x="396" y="152" width="174" height="52" rx="8" class="tw-code"/>
+<rect x="578" y="152" width="174" height="52" rx="8" class="tw-code"/>
+<rect x="760" y="152" width="174" height="52" rx="8" class="tw-code"/>
+<text x="0" y="234" class="tw-head">Live state</text>
+<text x="0" y="253" class="tw-muted">what is</text>
+<rect x="214" y="212" width="174" height="52" rx="8" class="tw-stack"/>
+<rect x="396" y="212" width="174" height="52" rx="8" class="tw-stack"/>
+<rect x="578" y="212" width="174" height="52" rx="8" class="tw-stack"/>
+<rect x="760" y="212" width="174" height="52" rx="8" class="tw-stack"/>
+<text x="0" y="294" class="tw-head">Observed calls</text>
+<text x="0" y="313" class="tw-muted">what does happen</text>
+<rect x="214" y="272" width="174" height="52" rx="8" class="tw-requests"/>
+<rect x="396" y="272" width="174" height="52" rx="8" class="tw-requests"/>
+<rect x="578" y="272" width="174" height="52" rx="8" class="tw-requests"/>
+<rect x="760" y="272" width="174" height="52" rx="8" class="tw-requests"/>
+<text x="0" y="354" class="tw-head">Recorded requests</text>
+<text x="0" y="373" class="tw-muted">what did happen</text>
+<rect x="214" y="332" width="174" height="52" rx="8" class="tw-requests"/>
+<rect x="396" y="332" width="174" height="52" rx="8" class="tw-requests"/>
+<rect x="578" y="332" width="174" height="52" rx="8" class="tw-requests"/>
+<rect x="760" y="332" width="174" height="52" rx="8" class="tw-requests"/>
+<rect x="214" y="406" width="720" height="40" rx="8" class="tw-read"/>
+<text x="574" y="431" text-anchor="middle" class="tw-head">one typed read: frozen Pydantic models</text>
+<line x1="574" y1="446" x2="321.0" y2="484" class="tw-rule" marker-end="url(#twin-arrow)"/>
+<text x="321.0" y="506" text-anchor="middle" class="tw-head">Overseer map</text>
+<line x1="574" y1="446" x2="574" y2="484" class="tw-rule" marker-end="url(#twin-arrow)"/>
+<text x="574" y="506" text-anchor="middle" class="tw-head">Illiana's tools</text>
+<line x1="574" y1="446" x2="827.0" y2="484" class="tw-rule" marker-end="url(#twin-arrow)"/>
+<text x="827.0" y="506" text-anchor="middle" class="tw-head">MCP, the API</text>
+<rect x="0" y="410" width="16" height="16" rx="4" class="tw-code"/>
+<text x="24" y="423" class="tw-muted">from the code</text>
+<rect x="0" y="438" width="16" height="16" rx="4" class="tw-stack"/>
+<text x="24" y="451" class="tw-muted">from the running stack</text>
+<rect x="0" y="466" width="16" height="16" rx="4" class="tw-requests"/>
+<text x="24" y="479" class="tw-muted">from real requests</text>
+</svg>

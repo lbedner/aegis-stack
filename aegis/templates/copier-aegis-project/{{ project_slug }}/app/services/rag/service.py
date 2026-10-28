@@ -5,9 +5,11 @@ This module provides the main RAGService class that handles document loading,
 chunking, indexing, and semantic search functionality.
 """
 
+import asyncio
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
+import shutil
 import time
 from typing import Any
 
@@ -18,6 +20,7 @@ from .config import RAGServiceConfig
 from .ids import get_file_hash
 from .loaders import CodebaseLoader
 from .models import Document, FileIndexResult, IndexedFile, IndexStats, SearchResult
+from .uploads import forget_kept, kept_folder
 from .vectorstore import VectorStoreManager
 
 
@@ -27,7 +30,7 @@ class RAGServiceError(Exception):
     pass
 
 
-class LoaderError(RAGServiceError):
+class LoaderError(RAGServiceError, ValueError):
     """Exception raised when document loading fails."""
 
     pass
@@ -285,8 +288,8 @@ class RAGService:
             collection=collection_name,
         )
 
-        # Delete existing collection
-        await self.vectorstore.delete_collection(collection_name)
+        # Delete existing collection (its uploads too: a rebuild replaces it)
+        await self.delete_collection(collection_name)
 
         # Phase 1: Load documents
         load_start = time.perf_counter()
@@ -387,7 +390,7 @@ class RAGService:
 
         # Its old chunks first: a file that shrank would leave its last ones.
         source_path = str(file_path.absolute())
-        await self.vectorstore.remove_by_source(collection_name, source_path)
+        await self.vectorstore.remove_by_source(collection_name, [source_path])
         stats = await self.vectorstore.add_documents(chunks, collection_name)
 
         file_hash = get_file_hash(source_path)
@@ -413,7 +416,8 @@ class RAGService:
         collection_name: str,
     ) -> FileIndexResult:
         """
-        Remove all chunks for a specific file from the collection.
+        Remove all chunks for a specific file from the collection, and the
+        file itself if it was uploaded (kept beside the index).
 
         Args:
             source_path: The source path as stored in metadata
@@ -422,10 +426,10 @@ class RAGService:
         Returns:
             FileIndexResult: Result with count of removed chunks
         """
-        count = await self.vectorstore.remove_by_source(collection_name, source_path)
-
+        count = await self.vectorstore.remove_by_source(collection_name, [source_path])
+        if folder := kept_folder(self.config.persist_directory, collection_name):
+            await asyncio.to_thread(forget_kept, [source_path], folder)
         file_hash = get_file_hash(source_path)
-
         logger.debug(
             "rag_service.remove_file",
             file=source_path,
@@ -465,7 +469,9 @@ class RAGService:
         return await self.vectorstore.list_collections()
 
     async def delete_collection(self, collection_name: str) -> bool:
-        """Delete a ChromaDB collection."""
+        """Delete a collection, and the sources uploaded to it."""
+        if folder := kept_folder(self.config.persist_directory, collection_name):
+            await asyncio.to_thread(shutil.rmtree, folder, ignore_errors=True)
         return await self.vectorstore.delete_collection(collection_name)
 
     # ============================================

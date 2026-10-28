@@ -7,6 +7,7 @@ through the filters, so a page never hand-writes a ``<table>``.
 from dataclasses import dataclass
 from datetime import date
 
+from app.components.web_frontend.assets import STATIC_DIR
 from app.components.web_frontend.rendering import templates
 from tests.web.dom import none, one, select, text
 
@@ -134,6 +135,32 @@ class TestCellKinds:
         assert text(one(render(columns, [{"key": "cache:user:1"}]), "td code")) == (
             "cache:user:1"
         )
+
+    def test_code_wraps_anywhere_so_the_table_fits(self) -> None:
+        """A path has no spaces: it breaks mid-word rather than push the
+        columns after it out of view on a narrow screen."""
+        columns = [{"key": "key", "label": "Key", "kind": "code"}]
+        code = one(render(columns, [{"key": "/code/app/cli/ai/chat.py"}]), "td code")
+        assert "[overflow-wrap:anywhere]" in code.get("class")
+
+    def test_a_file_is_drawn_by_its_type(self) -> None:
+        """As VS Code's Material Icon Theme draws it, by the theme's own map:
+        a whole name first, then the longest extension, else a plain file."""
+        columns = [{"key": "file", "label": "File", "kind": "file"}]
+        paths = ["a.py", "README.md", "app.js", "x.css", "Dockerfile", "notes.zzz"]
+        html = render(columns, [{"file": {"path": p}} for p in paths])
+        icons = select(html, "img[data-file-type]")
+        assert [i.get("data-file-type") for i in icons] == [
+            "python",
+            "readme",
+            "javascript",
+            "css",
+            "docker",
+            "file",
+        ]
+        # Each a file served with the app: the theme's icons are vendored.
+        for icon in icons:
+            assert (STATIC_DIR / icon.get("src").removeprefix("/static/")).is_file()
 
     def test_a_link_opens_its_item_in_the_target(self) -> None:
         columns = [

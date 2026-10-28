@@ -98,3 +98,24 @@ def test_the_summary_says_each_part_and_what_depends_on_it() -> None:
 def test_a_jobs_module_names_its_job_and_the_task_running_it() -> None:
     found = _touched("app/services/payment/jobs.py")
     assert (found.jobs, found.tasks) == ((SETTLE.id,), (SETTLING.id,))
+
+
+def test_each_file_goes_to_its_top_level_part() -> None:
+    """What knowing a part reads: its files of any kind, a sub-part's too,
+    never its tests or a file no part owns."""
+    owners = {
+        "app/services/payment/models.py": PAYMENT.id,
+        "app/services/payment/domains/charges/refunds.py": CHARGES.id,
+        "app/components/web_frontend/templates/pay.html": PAYMENT.id,
+        "app/services/blog/posts.py": BLOG.id,
+        "tests/services/payment/test_models.py": PAYMENT.id,
+    }
+
+    found = touches.parts_of(MODEL, [*owners, "app/stray.txt"], owners.get)
+
+    assert found == {
+        "app/services/payment/models.py": PAYMENT.id,
+        "app/services/payment/domains/charges/refunds.py": PAYMENT.id,
+        "app/components/web_frontend/templates/pay.html": PAYMENT.id,
+        "app/services/blog/posts.py": BLOG.id,
+    }

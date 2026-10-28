@@ -4,28 +4,32 @@
    that reply used (``used``), lands on ``focus``, and saves without
    leaving the chat (``stay``). #}
 {% from "components/macros/layout.html" import card, dialog_title, facts %}
-{% from "components/macros/form.html" import checkbox, field, select, text_input, textarea, primary_button %}
+{% from "components/macros/form.html" import checkbox, field, form_footer, form_section, select, text_input, textarea %}
 <div class="space-y-4">
   {{ dialog_title(agent.name, facts=agent.slug) }}
   {% if used %}
   {% call card("This reply used", id="chat-reply-used") %}{{ facts(used) }}{% endcall %}
   {% endif %}
   <form hx-post="{{ save_url }}" hx-swap="none" data-agent class="space-y-4">
+    {% call form_section() %}
     {% if stay %}
     <input type="hidden" name="stay" value="1">
     <p class="text-xs text-aegis-muted">Shared by every conversation. Applies from your next message.</p>
     {% endif %}
     {% call field("Name") %}{{ text_input("name", agent.name, required=True) }}{% endcall %}
     {% call field("Description") %}{{ text_input("description", agent.description) }}{% endcall %}
+    {% call field("Category") %}{{ text_input("category", agent.category) }}{% endcall %}
+    {{ checkbox("is_active", agent.is_active, "Active") }}
+    {% endcall %}
+    {% call form_section("Model") %}
+    {% call field("Model") %}{{ select("model_id", model_choices, selected=agent.model_id or "", blank="The active model", block=True, grouped=True) }}{% endcall %}
     <div class="grid grid-cols-2 gap-3">
-      {% call field("Category") %}{{ text_input("category", agent.category) }}{% endcall %}
-      {% call field("Model") %}{{ select("model_id", model_choices, selected=agent.model_id or "", blank="The active model", block=True, grouped=True) }}{% endcall %}
       {% call field("Temperature") %}{{ text_input("temperature", agent.temperature, placeholder="Default") }}{% endcall %}
       {% call field("Max tokens") %}{{ text_input("max_tokens", agent.max_tokens, placeholder="Default", autofocus=(focus == "max_tokens")) }}{% endcall %}
     </div>
-    {% call field("System prompt") %}{{ textarea("system_prompt", agent.system_prompt or "", rows=10) }}{% endcall %}
-    {{ checkbox("is_active", agent.is_active, "Active") }}
-    {{ primary_button("Save", type="submit", attrs="data-write") }}
+    {% endcall %}
+    {% call form_section("System prompt") %}{{ textarea("system_prompt", agent.system_prompt or "", rows=10, attrs='aria-label="System prompt"') }}{% endcall %}
+    {{ form_footer("Save", attrs="data-write") }}
   </form>
   {% call card("Grants", id="ai-agent-grants") %}{{ facts(grants) }}{% endcall %}
 </div>

@@ -10,7 +10,9 @@
    colours by sign, ``toned`` colours by sign without the plus), ``date``,
    ``int``, ``status`` (the value is
    ``{"label", "tone"}``, rendered as a ``badge``), ``code`` (monospace,
-   wrapping: a key, a rule, a command) or ``link`` (the value is
+   wrapping: a key, a rule, a command), ``file`` (the value is ``{"path",
+   "url"}``: the path as code after its type's icon, ``file_icon``, linked
+   when it has a ``url``) or ``link`` (the value is
    ``{"label", "url"}``, and ``sub``, a muted second line under it; the
    link replaces ``target``, default ``#app-content``, the way a list's
    row opens its item), ``avatar`` (the
@@ -32,7 +34,12 @@
    row: each row then gets a toggle and a hidden full-width row under it
    with that macro's output (the Flet expandable rows). #}
 {% from "components/macros/feedback.html" import empty_state %}
+{% from "components/macros/icons.html" import file_icon %}
 {% from "components/macros/layout.html" import avatar, badge %}
+
+{# A key, a rule, a path: monospace, wrapping anywhere so a long one
+   never pushes the columns after it out of view. #}
+{% macro _code(text) %}<code class="font-mono text-xs whitespace-normal [overflow-wrap:anywhere]">{{ text }}</code>{% endmacro %}
 
 {% macro _cell(row, col) -%}
 {%- set value = row[col.key] if row is mapping or col.key is number else row|attr(col.key) -%}
@@ -53,7 +60,9 @@
 {%- set icon_url = row["icon_url"] if row is mapping and "icon_url" in row else row|attr("icon_url") -%}
 <span class="inline-flex items-center gap-2">{{ avatar(value, icon_url if icon_url is string else None) }}<span>{{ value }}</span></span>
 {%- elif col.kind == "code" -%}
-<code class="font-mono text-xs whitespace-normal break-words">{{ value }}</code>
+{{ _code(value) }}
+{%- elif col.kind == "file" -%}
+<span class="inline-flex items-start gap-2">{{ file_icon(value.path) }}{% if value.url %}<a href="{{ value.url }}" class="hover:text-aegis-teal">{{ _code(value.path) }}</a>{% else %}{{ _code(value.path) }}{% endif %}</span>
 {%- elif col.kind == "link" -%}
 {%- set link -%}{% if value.url %}<a href="{{ value.url }}" {{ hx_replace(value.url, col.target or "#app-content") }} class="text-aegis-text hover:text-aegis-teal">{{ value.label }}</a>{% else %}{{ value.label }}{% endif %}{%- endset -%}
 {%- if col.mark -%}

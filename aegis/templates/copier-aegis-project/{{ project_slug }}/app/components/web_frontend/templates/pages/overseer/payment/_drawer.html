@@ -1,7 +1,7 @@
 {# One transaction in the drawer: what it was and who paid, and the refund
    form when it can be refunded (the whole amount unless it is lowered). #}
 {% from "components/macros/layout.html" import badge, card, dialog_title, facts as fact_list %}
-{% from "components/macros/form.html" import field, money_input, select, primary_button %}
+{% from "components/macros/form.html" import field, form_footer, money_input, select %}
 <div class="space-y-4">
   {{ dialog_title("Transaction #" ~ txn.id) }}
   <div>{{ badge(status.label, status.tone) }}</div>
@@ -12,7 +12,7 @@
     <input type="hidden" name="original" value="{{ txn.amount }}">
     {% call field("Amount") %}{{ money_input("amount", refund.amount) }}{% endcall %}
     {% call field("Reason") %}{{ select("reason", refund.reasons, refund.reason, blank=None, block=True) }}{% endcall %}
-    {{ primary_button("Issue refund", "submit") }}
+    {{ form_footer("Issue refund", cancel=False) }}
   </form>
   {% endcall %}
   {% endif %}

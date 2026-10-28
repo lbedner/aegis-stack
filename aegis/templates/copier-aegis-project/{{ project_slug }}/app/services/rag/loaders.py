@@ -7,7 +7,7 @@ and metadata extraction.
 
 import asyncio
 import fnmatch
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Any
 
 from app.core.log import logger
@@ -101,6 +101,19 @@ DEFAULT_EXCLUDE_PATTERNS = [
 ]
 
 
+def excluded(path: PurePath, patterns: list[str] = DEFAULT_EXCLUDE_PATTERNS) -> bool:
+    """Whether ``path`` (relative, from where reading started) matches an
+    exclusion pattern: a ``**`` glob, or any of its parts by a pattern's
+    simple form (``.venv`` excludes any path through one)."""
+    for pattern in patterns:
+        if path.match(pattern):
+            return True
+        simple_pattern = pattern.replace("**/", "").replace("/**", "")
+        if any(fnmatch.fnmatch(part, simple_pattern) for part in path.parts):
+            return True
+    return False
+
+
 class CodebaseLoader:
     """Loads source files from a codebase directory."""
 
@@ -150,7 +163,7 @@ class CodebaseLoader:
 
         if path.is_file():
             doc = await self._load_file(path)
-            if doc:
+            if doc is not None:
                 documents.append(doc)
         else:
             documents = await self._load_directory(path, extensions, exclude)
@@ -163,39 +176,55 @@ class CodebaseLoader:
 
         return documents
 
+    def files(
+        self,
+        path: str | Path,
+        extensions: list[str] | None = None,
+        exclude_patterns: list[str] | None = None,
+    ) -> list[Path]:
+        """The files ``load`` reads at ``path``, before any is: the file
+        itself, or a folder's of ``extensions`` with nothing excluded (each
+        defaulting as ``load``'s do). FileNotFoundError for nothing there.
+        Blocking (a walk): off the loop."""
+        path = Path(path)
+        if not path.exists():
+            raise FileNotFoundError(f"Path not found: {path}")
+        if path.is_file():
+            return [path]
+        exclude = exclude_patterns or self.exclude_patterns
+        wanted = {e.lower() for e in extensions or self.extensions}
+        return [
+            found
+            for found in sorted(path.rglob("*"))  # one walk, whatever the types
+            if found.suffix.lower() in wanted
+            and found.is_file()
+            and not excluded(found.relative_to(path), exclude)
+        ]
+
     async def _load_file(self, file_path: Path) -> Document | None:
-        """Load a single file."""
+        """Load a single file: None for one that holds nothing (an empty
+        ``__init__.py``: nothing to know, not a failure); ValueError for a
+        type it does not read, OSError for one it cannot."""
         ext = file_path.suffix.lower()
-
         if ext not in LOADER_MAP:
+            raise ValueError(f"Not a type the loader reads: {file_path.name}")
+        content = await asyncio.to_thread(
+            file_path.read_text, encoding="utf-8", errors="replace"
+        )
+        if not content.strip():
             return None
-
-        try:
-            # Run file I/O in thread pool to not block event loop
-            content = await asyncio.to_thread(
-                file_path.read_text, encoding="utf-8", errors="replace"
-            )
-
-            file_info = LOADER_MAP[ext]
-
-            return Document(
-                content=content,
-                metadata={
-                    "source": str(file_path.absolute()),
-                    "file_name": file_path.name,
-                    "extension": ext,
-                    "file_type": file_info["type"],
-                    "language": file_info["language"],
-                    "size_bytes": len(content.encode("utf-8")),
-                },
-            )
-        except Exception as e:
-            logger.warning(
-                "codebase_loader.file_error",
-                file_path=str(file_path),
-                error=str(e),
-            )
-            return None
+        file_info = LOADER_MAP[ext]
+        return Document(
+            content=content,
+            metadata={
+                "source": str(file_path.absolute()),
+                "file_name": file_path.name,
+                "extension": ext,
+                "file_type": file_info["type"],
+                "language": file_info["language"],
+                "size_bytes": len(content.encode("utf-8")),
+            },
+        )
 
     async def _load_directory(
         self,
@@ -206,33 +235,10 @@ class CodebaseLoader:
         """Load all matching files from directory."""
         documents: list[Document] = []
 
-        def should_exclude(file_path: Path) -> bool:
-            """Check if file matches any exclusion pattern."""
-            # Get relative path for pattern matching
-            try:
-                rel_path = file_path.relative_to(directory)
-            except ValueError:
-                rel_path = file_path
-
-            # Check each exclusion pattern
-            for pattern in exclude_patterns:
-                # Use pathlib's match which handles ** patterns
-                if rel_path.match(pattern):
-                    return True
-                # Also check individual path components for simple exclusions
-                # e.g., ".venv" should exclude any path containing .venv
-                simple_pattern = pattern.replace("**/", "").replace("/**", "")
-                for part in rel_path.parts:
-                    if fnmatch.fnmatch(part, simple_pattern):
-                        return True
-            return False
-
-        # Collect all matching files
-        tasks = []
-        for ext in extensions:
-            for file_path in directory.rglob(f"*{ext}"):
-                if not should_exclude(file_path):
-                    tasks.append(self._load_file(file_path))
+        tasks = [
+            self._load_file(f)
+            for f in self.files(directory, extensions, exclude_patterns)
+        ]
 
         # Load files concurrently
         if tasks:

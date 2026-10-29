@@ -6523,7 +6523,15 @@
 </span></code></pre></div>
 <p>Keep the key. It is what a database row should store, alongside the backend name if the row might outlive a migration, which is exactly what the documents service records.</p>
 <h2 id="a-link-instead-of-a-proxy">A Link Instead of a Proxy</h2>
-<p>Serving a 40 MB scan through the app costs a worker for the length of the download. A presigned URL hands the browser a time-limited link to the object itself:</p>
+<p>Serving a 40 MB scan through the app costs a worker for the length of the download. A presigned URL hands the browser a time-limited link to the object itself.</p>
+<p>The link is signed <strong>for a host</strong> (SigV4 signs it into the URL), so it only
+works where that host resolves: in the dev stack the app talks to
+<code>http://seaweedfs:8333</code>, which a browser on the host cannot reach, and a link
+signed for it answers <code>403</code> even after you re-point the port. Set
+<code>S3_PUBLIC_ENDPOINT_URL</code> to the address a reader actually uses
+(<code>http://localhost:8333</code> in dev, the real hostname in production) and the
+links are signed for that instead; leave it empty when the app and its readers
+share one address.</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">fastapi</span><span class="w"> </span><span class="kn">import</span> <span class="n">APIRouter</span><span class="p">,</span> <span class="n">HTTPException</span><span class="p">,</span> <span class="n">Response</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">fastapi.responses</span><span class="w"> </span><span class="kn">import</span> <span class="n">RedirectResponse</span>
 </span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>

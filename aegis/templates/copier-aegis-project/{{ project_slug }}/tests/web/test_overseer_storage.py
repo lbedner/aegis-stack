@@ -338,9 +338,15 @@ def test_the_apps_bucket_has_no_checkboxes(signed_in: TestClient) -> None:
     )
 
 
+def test_a_file_shows_its_types_icon(signed_in: TestClient) -> None:
+    html = _browse(signed_in, "bucket=demo-files")
+    icons = select(html, "#storage-browse [data-file-type]")
+    assert "readme" in [i.get("data-file-type") for i in icons]
+
+
 def test_row_actions_sit_behind_an_options_menu(signed_in: TestClient) -> None:
     html = _browse(signed_in, "bucket=demo-files")
-    menu = one(html, "#storage-browse details[data-row-menu]")
+    menu = one(html, "#storage-browse details[data-dropdown]")
     assert select(menu, "a[href*='/download']")
     assert select(menu, "[hx-get*='confirm-delete']")
 

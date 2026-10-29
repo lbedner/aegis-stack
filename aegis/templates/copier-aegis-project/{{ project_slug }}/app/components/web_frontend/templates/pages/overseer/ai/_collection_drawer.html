@@ -1,15 +1,45 @@
-{# One collection in the drawer: the files it indexed and the chunks each
-   became, and deleting it. #}
-{% from "components/macros/layout.html" import card, dialog_title %}
+{# One collection in the drawer: its indexing job (followed as it runs,
+   pushed, or how the last one ended), each file it indexed (its type,
+   chunks and when; opened in Overseer > Code, re-indexed or removed from
+   its row's menu); sources to add (the steps, in the dialog), and the
+   whole collection re-indexed or deleted, behind "...". #}
+{% from "components/macros/layout.html" import card, dialog_title, dropdown, menu_item %}
 {% from "components/macros/table.html" import data_table %}
 {% from "components/macros/form.html" import action %}
-<div class="space-y-4">
+{% macro file_actions(row) -%}
+{% call dropdown(options=True) %}
+    {% if row.source.url %}{{ menu_item("Open in Code", url=row.source.url) }}{% endif %}
+    {{ menu_item("Re-index", row.reindex) }}
+    {{ menu_item("Remove", row.remove, danger=True) }}
+{% endcall %}
+{%- endmacro %}
+<div class="space-y-4" data-wide>
   {{ dialog_title(name, facts=(files|length) ~ " files") }}
-  <div>{{ action("Delete collection", delete, "danger") }}</div>
+  <div id="ai-collection-actions" class="flex flex-wrap items-center gap-2">
+    {{ action("Add sources", add, "primary") }}
+    {% call dropdown(options=True) %}
+      {{ menu_item("Re-index", reindex) }}
+      {{ menu_item("Delete collection", delete, danger=True) }}
+    {% endcall %}
+  </div>
+  {% if job %}
+  {% call card(job.title, id="ai-collection-job") %}
+  {% if job.events %}
+  {# Followed while it runs, pushed as it changes; closed once it ends. #}
+  <div hx-ext="sse" sse-connect="{{ job.events }}" sse-close="{{ job.done }}">
+    <div sse-swap="{{ job.event }}" hx-target="this">{% include "pages/overseer/ai/_collection_job.html" %}</div>
+  </div>
+  {% else %}
+  {% include "pages/overseer/ai/_collection_job.html" %}
+  {% endif %}
+  {% endcall %}
+  {% endif %}
   {% call card("Files", id="ai-collection-files") %}
     {{ data_table([
-      {"key": "source", "label": "Source", "kind": "code"},
+      {"key": "source", "label": "Source", "kind": "file"},
+      {"key": "type", "label": "Type"},
       {"key": "chunks", "label": "Chunks", "kind": "int", "align": "right"},
-    ], files, empty="No files in this collection") }}
+      {"key": "indexed", "label": "Indexed", "kind": "date"},
+    ], files, empty="No files in this collection", actions=file_actions) }}
   {% endcall %}
 </div>

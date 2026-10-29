@@ -1,12 +1,14 @@
 """Secrets component detail modal: every declared credential, and a paste
-field for each one this app may set; below them the settings marked
-``Configurable``, whose saved values apply when the app restarts. An unset key reads Missing when
+field for each one this app may set, as a table; on a tab of their own
+the settings marked ``Configurable``, whose saved values apply when the app restarts. An unset key reads Missing when
 something enabled needs it and Not used when it is only a choice; a key
 with a provider check can be tested, and is checked again when saved.
 
 Reads and writes go through the secrets API (``/api/v1/secrets``), which
 holds the admin check and the rules (``.env`` wins, read-only stores
-refuse). A field is never filled: a value goes in, and only its source and
+refuse). Where the dashboard may not make a change (``page_refusal``:
+the address it was opened at), the keys are listed with no paste fields,
+and a line saying why. A field is never filled: a value goes in, and only its source and
 last four characters come back.
 """
 
@@ -14,7 +16,14 @@ from typing import Any
 
 import flet as ft
 
-from app.components.frontend.controls import H3Text, PrimaryText, SecondaryText
+from app.components.frontend.controls import (
+    DataTable,
+    DataTableColumn,
+    PrimaryText,
+    SecondaryText,
+    TableCellText,
+    TableNameText,
+)
 from app.components.frontend.controls.buttons import PulseButton
 from app.components.frontend.controls.dropdown import NativeDropdown
 from app.components.frontend.controls.inputs import StyledTextField
@@ -24,6 +33,8 @@ from app.components.frontend.controls.snack_bar import (
     SuccessSnackBar,
     WarningSnackBar,
 )
+from app.components.frontend.controls.tabs import PulseTabs, part_tab
+from app.components.frontend.core.changes import page_refusal
 from app.components.frontend.state.session_state import get_session_state
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core import saved_settings, secrets
@@ -35,6 +46,7 @@ from app.services.system.ui import get_component_subtitle, get_component_title
 from ..cards.card_utils import get_status_detail
 from ..cards.secrets_card import counts
 from .base_detail_popup import BaseDetailPopup
+from .modal_constants import ModalLayout
 from .modal_sections import metric_row
 
 API = "/api/v1/secrets"
@@ -44,6 +56,14 @@ VERDICT_BARS: dict[str, type[BaseSnackBar]] = {
     "unverified": WarningSnackBar,
     "rejected": ErrorSnackBar,
 }
+# The table's columns; the last holds what can be done to a key.
+COLUMNS = [
+    DataTableColumn("Key", width=260, style="primary"),
+    DataTableColumn("Used by", width=120),
+    DataTableColumn("State", width=110),
+    DataTableColumn("Value", width=150),
+    DataTableColumn("", sortable=False, hideable=False),
+]
 
 
 def _summary(rows: list[dict[str, Any]]) -> str:
@@ -59,12 +79,14 @@ def _status(row: dict[str, Any]) -> secrets.SecretStatus:
     return secrets.SecretStatus(**row)
 
 
-def _shown(row: dict[str, Any]) -> str:
+def _value(row: dict[str, Any]) -> str:
+    """The value in effect as it may be shown: a key's last four, a
+    setting or provider config whole; a dash when there is none."""
     status = _status(row)
     value = status.in_effect
     if not value or not (status.is_set or status.setting):
-        return status.state
-    return f"{status.state} · {'•••• ' if status.secret else ''}{value}"
+        return "—"
+    return f"{'•••• ' if status.secret else ''}{value}"
 
 
 def _menu(offered: list[dict[str, str]], **kwargs: Any) -> NativeDropdown:
@@ -74,16 +96,19 @@ def _menu(offered: list[dict[str, str]], **kwargs: Any) -> NativeDropdown:
 
 
 class SecretsSection(ft.Column):
-    """One row per declared secret (or, with ``setting``, per saved
-    setting), grouped by the code that reads it."""
+    """A table row per declared secret (or, with ``setting``, per saved
+    setting), the code that reads it in its Used by column."""
 
     def __init__(self, page: ft.Page, writable: bool, setting: bool = False) -> None:
         super().__init__(spacing=Theme.Spacing.SM)
         self._page = page
-        self._writable = writable
+        self._refused = page_refusal(page) if writable else None
+        self._writable = writable and self._refused is None
         self._setting = setting
         self._list = f"{API}?setting=true" if setting else API
         self._fields: dict[str, ft.TextField | ft.Dropdown] = {}
+        # Each key's actions cell, where a picked choice is put.
+        self._actions: dict[str, ft.Row] = {}
         # A setting's closed set of values, by name: picked, never typed.
         self._offered: dict[str, list[dict[str, str]]] = {}
 
@@ -98,6 +123,7 @@ class SecretsSection(ft.Column):
         status, rows = await self._api.request_with_status("GET", self._list)
         self.controls.clear()
         self._fields.clear()
+        self._actions.clear()
         if status != 200 or not isinstance(rows, list):
             self.controls.append(
                 SecondaryText(
@@ -118,24 +144,39 @@ class SecretsSection(ft.Column):
                 if self._setting
                 else PrimaryText(_summary(rows))
             )
-            owner = None
-            for row in rows:
-                if row["owner"] != owner:
-                    owner = row["owner"]
-                    self.controls.append(H3Text(owner))
-                self.controls.append(self._row(row))
+            if self._refused:
+                self.controls.append(SecondaryText(self._refused))
+            self.controls.append(
+                DataTable(
+                    columns=COLUMNS,
+                    rows=[self._row(row) for row in rows],
+                    row_padding=6,
+                    empty_message="Nothing declared",
+                )
+            )
         if self.page is not None:
             self.update()
 
-    def _row(self, row: dict[str, Any]) -> ft.Control:
+    def _row(self, row: dict[str, Any]) -> list[ft.Control]:
         name = row["name"]
-        cells: list[ft.Control] = [
-            ft.Column(
-                [PrimaryText(name), SecondaryText(_shown(row))],
-                spacing=2,
-                width=280,
-            )
+        self._actions[name] = ft.Row(
+            self._acts(row),
+            spacing=Theme.Spacing.SM,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        )
+        return [
+            TableNameText(name),
+            TableCellText(row["owner"]),
+            TableCellText(_status(row).state),
+            TableCellText(_value(row)),
+            self._actions[name],
         ]
+
+    def _acts(self, row: dict[str, Any]) -> list[ft.Control]:
+        """What can be done to a key: test it, and set or remove it where
+        this app may; else where it is changed instead."""
+        name = row["name"]
+        cells: list[ft.Control] = []
         if row["source"] and row.get("verifiable"):
             cells.append(
                 PulseButton(lambda: self.test(name), "Test", "muted", compact=True)
@@ -160,11 +201,7 @@ class SecretsSection(ft.Column):
                         lambda: self.remove(name), "Remove", "muted", compact=True
                     )
                 )
-        return ft.Row(
-            cells,
-            spacing=Theme.Spacing.SM,
-            vertical_alignment=ft.CrossAxisAlignment.CENTER,
-        )
+        return cells
 
     def _field(self, row: dict[str, Any]) -> ft.TextField | ft.Dropdown:
         """A setting with a closed set of values is a dropdown at the value
@@ -198,9 +235,7 @@ class SecretsSection(ft.Column):
             )
             return
         field = self._fields[name]
-        row = next(
-            c for c in self.controls if isinstance(c, ft.Row) and field in c.controls
-        )
+        row = self._actions[name]
         menu = _menu(body, on_change=lambda e: self.choose(name, e.control.value))
         row.controls.insert(row.controls.index(field), menu)
         if self.page is not None:
@@ -253,7 +288,8 @@ class SecretsSection(ft.Column):
 
 
 class SecretsDetailDialog(BaseDetailPopup):
-    """How many credentials are set, and setting the rest."""
+    """How many credentials are set, and setting the rest; the saved
+    settings on a tab of their own."""
 
     def __init__(self, component_data: ComponentStatus, page: ft.Page) -> None:
         metadata = component_data.metadata or {}
@@ -265,21 +301,16 @@ class SecretsDetailDialog(BaseDetailPopup):
             title_text=get_component_title(ComponentName.SECRETS),
             subtitle_text=get_component_subtitle(ComponentName.SECRETS, metadata),
             sections=[
-                overview,
-                ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
-                ft.Container(SecretsSection(page, writable), padding=Theme.Spacing.MD),
-                ft.Divider(height=1, color=ft.Colors.OUTLINE_VARIANT),
-                ft.Container(
-                    ft.Column(
-                        [
-                            H3Text("Settings"),
-                            SecretsSection(page, writable, setting=True),
-                        ]
-                    ),
-                    padding=Theme.Spacing.MD,
-                ),
+                PulseTabs(
+                    tabs=[
+                        part_tab("Secrets", [overview, SecretsSection(page, writable)]),
+                        part_tab(
+                            "Settings", [SecretsSection(page, writable, setting=True)]
+                        ),
+                    ]
+                )
             ],
-            width=900,
-            height=620,
+            width=ModalLayout.LARGE_WIDTH,
+            height=ModalLayout.LARGE_HEIGHT,
             status_detail=get_status_detail(component_data),
         )

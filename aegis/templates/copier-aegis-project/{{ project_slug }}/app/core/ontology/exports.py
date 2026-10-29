@@ -9,6 +9,7 @@ from typing import Any
 
 import yaml
 
+from app.core.ontology.graph import roots
 from app.core.ontology.model import (
     EdgeKind,
     ExternalNode,
@@ -121,26 +122,13 @@ def _parts(model: SystemModel) -> list[PartNode]:
     ]
 
 
-def _roots(model: SystemModel) -> dict[str, str]:
-    """Each part's id to the top-level part it is in (itself, or the part
-    a sub-part belongs to)."""
-    owner = {n.id: n.owner for n in model.nodes if isinstance(n, PartNode)}
-
-    def root(found: str) -> str:
-        while owner.get(found):
-            found = owner[found]  # type: ignore[assignment]
-        return found
-
-    return {part: root(part) for part in owner}
-
-
 def _held(model: SystemModel) -> dict[str, Counter[Kind]]:
     """Each top-level part's routes, jobs, tables and tools, a sub-part's
     counted toward the part it is in."""
-    roots = _roots(model)
+    top = roots(model)
     held: dict[str, Counter[Kind]] = {p.id: Counter() for p in _parts(model)}
     for node in model.nodes:
-        part = roots.get(node.owner or "")
+        part = top.get(node.owner or "")
         if part in held:
             held[part][node.kind] += 1
     return held
@@ -149,13 +137,13 @@ def _held(model: SystemModel) -> dict[str, Counter[Kind]]:
 def _needs(model: SystemModel, part: PartNode) -> list[str]:
     """What ``part`` (or a part in it) depends on or calls, as Backstage
     references to the entities ``backstage`` makes of them."""
-    roots = _roots(model)
+    top = roots(model)
     found = {n.id: n for n in model.nodes}
     needs: dict[str, None] = {}
     for edge in model.edges:
-        if edge.kind not in NEEDS or roots.get(edge.source) != part.id:
+        if edge.kind not in NEEDS or top.get(edge.source) != part.id:
             continue
-        target = found.get(roots.get(edge.target, edge.target))
+        target = found.get(top.get(edge.target, edge.target))
         if isinstance(target, ExternalNode):
             needs[f"resource:{target.name}"] = None
         elif isinstance(target, PartNode) and target.id != part.id:

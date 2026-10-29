@@ -9,28 +9,28 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![Copier](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/copier-org/copier/master/img/badge/badge-grayscale-inverted-border-orange.json)](https://github.com/copier-org/copier)
 <br>
-[![Monthly Downloads](https://img.shields.io/pypi/dm/aegis-stack)](https://pypi.org/project/aegis-stack/)
-[![Total Downloads](https://static.pepy.tech/badge/aegis-stack)](https://pepy.tech/project/aegis-stack)
-<br>
-[![Commits per Month](https://img.shields.io/github/commit-activity/m/lbedner/aegis-stack)](https://github.com/lbedner/aegis-stack/commits)
-[![Total Commits](https://img.shields.io/github/commit-activity/t/lbedner/aegis-stack)](https://github.com/lbedner/aegis-stack/commits)
-[![Last Commit](https://img.shields.io/github/last-commit/lbedner/aegis-stack)](https://github.com/lbedner/aegis-stack/commits)
+[![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![HTMX](https://img.shields.io/badge/htmx-3366CC?logo=htmx&logoColor=white)](https://htmx.org)
+[![Pydantic](https://img.shields.io/badge/Pydantic-E92063?logo=pydantic&logoColor=white)](https://docs.pydantic.dev)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org)
 
 </div>
 
-**Aegis Stack is an open-source CLI that scaffolds production-ready FastAPI applications and lets you add, remove, and update components and services on existing projects without rewrites.**
+## Full-stack Python apps that know what they are.
 
-You need to ship reliable software, but management only gave you 2 weeks.
+Aegis Stack assembles a complete FastAPI system (API, workers, scheduler, database, auth, AI) and builds a typed map from its architecture, code, and live runtime ([the Twin](https://docs.aegis-stack.io/overseer/twin/)). That lets the system draw itself, explain itself, and catch changes that break its rules.
 
-No time for health checks, proper testing, or clean architecture. Just enough time for duct tape and hope.
+Build a [private finance system](https://docs.aegis-stack.io/services/finance/), an [agent that joins your meetings](https://docs.aegis-stack.io/services/meetings/), an [MCP server](https://docs.aegis-stack.io/components/mcp/) for your own tools, a [local AI app on Ollama](https://docs.aegis-stack.io/components/inference/), or a [voice-first](https://docs.aegis-stack.io/services/ai/voice/) internal assistant, and run it all from the same place.
 
-**What if you could go from idea to working prototype in the time it takes to grab coffee?**
+**An app.** Build from a [blueprint](https://docs.aegis-stack.io/cli-reference/#aegis-blueprints) or pick your pieces. Add or remove them later; your changes are merged, not overwritten.
+
+**A server.** One command, or one button in Overseer, [provisions a server](https://docs.aegis-stack.io/deployment/#no-server-yet-provision-one) in your own Hetzner or DigitalOcean account, adds HTTPS, and deploys. The server, the bill, and the data stay yours.
+
+**A control plane.** A live map of your system, from the whole stack down to a single function, with errors, deploys, jobs, resources, and cost on the same map. See [Overseer](https://docs.aegis-stack.io/overseer/).
+
+**An operator.** Talk to [Illiana](https://docs.aegis-stack.io/services/ai/illiana/) or type. She reads that map, answers with diagrams instead of guesses, and reviews every pull request against the system's rules.
 
 ![Aegis Stack Quick Start Demo](docs/images/aegis-demo.gif)
-
-**Ship FastAPI apps that grow with you.**
-
-Aegis Stack scaffolds complete FastAPI applications with auth, payments, workers, AI, and a built-in control plane. Add what you need, remove what you don't, update when the framework improves.
 
 ## Quick Start
 
@@ -180,6 +180,8 @@ Every generated project ships with GitHub Actions and developer tooling pre-wire
 
 | Capability | What you get | |
 |---|---|---|
+| **[Provision](https://docs.aegis-stack.io/deployment/#no-server-yet-provision-one)** | `aegis deploy-provision` rents a server on Hetzner or DigitalOcean (price shown first), names it, turns on HTTPS, and deploys. More providers to come | ![Available](https://img.shields.io/badge/-available-2ea043) |
+| **[From Overseer](https://docs.aegis-stack.io/deployment/#from-the-overseer)** | Overseer > Deployments: pick a size and region at its price, see whether the stack fits, then deploy, back up, roll back, or destroy from the page | ![Available](https://img.shields.io/badge/-available-2ea043) |
 | **[Deploy CLI](https://docs.aegis-stack.io/deployment/)** | One-command deploys to any VPS over SSH (rsync + Docker), no PaaS lock-in | ![Available](https://img.shields.io/badge/-available-2ea043) |
 | **[Server Setup](https://docs.aegis-stack.io/deployment/#aegis-deploy-setup)** | `aegis deploy-setup` provisions Ubuntu, Debian, or Fedora boxes (Docker + firewall) | ![Available](https://img.shields.io/badge/-available-2ea043) |
 | **[Backups & Rollback](https://docs.aegis-stack.io/deployment/#backup-and-rollback)** | `pg_dump` before every deploy, retention policy, automatic rollback on failed health checks | ![Available](https://img.shields.io/badge/-available-2ea043) |
@@ -187,7 +189,7 @@ Every generated project ships with GitHub Actions and developer tooling pre-wire
 
 [Deployment Docs →](https://docs.aegis-stack.io/deployment/)
 
-## Your Stack Grows With You
+## Not a Starter Template
 
 **Your choices aren't permanent.** Start with what you need today, add when requirements change, remove what you outgrow.
 
@@ -261,6 +263,17 @@ When the AI service is enabled, Aegis exposes an additional interface: **Illiana
 - **[Aegis Pulse](https://pulse.aegis-stack.io/)** - Package analytics with honest decomposition (Total / Filtered / Human)
 - **[Sector 7G](https://sector-7g.dev/dashboard/)** - Live demo: millions of tasks on a single $5 VPS, zero restarts
 - **[NWVault Revival](https://167.99.48.44/)** - Searchable archive of the original Neverwinter Vault (2002-2014), built in 24 hours
+
+<div align="center" markdown>
+
+[![Monthly Downloads](https://img.shields.io/pypi/dm/aegis-stack)](https://pypi.org/project/aegis-stack/)
+[![Total Downloads](https://static.pepy.tech/badge/aegis-stack)](https://pepy.tech/project/aegis-stack)
+<br>
+[![Commits per Month](https://img.shields.io/github/commit-activity/m/lbedner/aegis-stack)](https://github.com/lbedner/aegis-stack/commits)
+[![Total Commits](https://img.shields.io/github/commit-activity/t/lbedner/aegis-stack)](https://github.com/lbedner/aegis-stack/commits)
+[![Last Commit](https://img.shields.io/github/last-commit/lbedner/aegis-stack)](https://github.com/lbedner/aegis-stack/commits)
+
+</div>
 
 ## Learn More
 

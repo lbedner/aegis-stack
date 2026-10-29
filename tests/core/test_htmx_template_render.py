@@ -26,7 +26,7 @@ from aegis.core.component_files import get_copier_defaults, get_template_path
 PROJECT_SLUG_PLACEHOLDER = "{{ project_slug }}"
 
 # The property is "Flet owns /dashboard", not what the local is called.
-FLET_MOUNT = 'app.mount("/dashboard"'
+FLET_MOUNT = "app.mount(DASHBOARD_PATH, flet_app)"
 
 
 def _env() -> Environment:
@@ -361,11 +361,14 @@ class TestWebFrontendScaffolding:
             # Inputs, buttons and the controls that post as form fields.
             "form.html": {
                 "action",
+                "cancel_button",
                 "checkbox",
                 "file_button",
                 "checklist",
                 "date_input",
                 "field",
+                "form_footer",
+                "form_section",
                 "money_input",
                 "number_input",
                 "or_divider",
@@ -380,6 +383,8 @@ class TestWebFrontendScaffolding:
                 "submit_button",
                 "text_input",
                 "textarea",
+                "wizard",
+                "wizard_step",
             },
             # Structure and chrome: what holds content, not what collects it.
             "layout.html": {
@@ -431,7 +436,14 @@ class TestWebFrontendScaffolding:
                 "theme_toggle",
                 "appearance_head",
             },
-            "table.html": {"_cell", "_tone", "data_table", "pager", "table_row"},
+            "table.html": {
+                "_cell",
+                "_code",
+                "_tone",
+                "data_table",
+                "pager",
+                "table_row",
+            },
             # Telling the user what happened, including the out-of-band
             # wrapper the row-action responses use to say it.
             "feedback.html": {
@@ -648,10 +660,10 @@ class TestNodePipeline:
         assert "@layer components" in source
 
     def test_daisyui_form_controls_focus_without_a_second_border(self) -> None:
-        """DaisyUI 4 focuses ``.input``/``.select``/``.textarea``/``.file-input``
-        with a 2px outline offset outside the border, which reads as a second
-        border. One rule turns it off for all of them, the way the house
-        controls already focus (the border turns teal)."""
+        """DaisyUI 4 focuses ``.input``/``.select``/``.textarea`` with a 2px
+        outline offset outside the border, which reads as a second border.
+        One rule turns it off for all of them, the way the house controls
+        already focus (the border turns teal)."""
         source = re.sub(
             r"/\*.*?\*/",
             "",
@@ -664,8 +676,18 @@ class TestNodePipeline:
             if "outline-none" in match.group(2)
             for sel in match.group(1).split(",")
         }
-        for control in (".input", ".select", ".textarea", ".file-input"):
+        for control in (".input", ".select", ".textarea"):
             assert f"{control}:focus" in selectors, control
+
+    def test_every_file_picker_is_a_button(self) -> None:
+        """A file picker looks like every other button: the ``file_button``
+        macro, never DaisyUI's grey ``file-input``."""
+        styled = [
+            path.name
+            for path in (_web_frontend_tree() / "templates").rglob("*.html")
+            if "file-input" in path.read_text()
+        ]
+        assert not styled, styled
 
     def test_biome_never_runs_unscoped(self) -> None:
         """Biome with no path walks the whole project and rewrites every .js

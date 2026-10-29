@@ -7,7 +7,10 @@ width-less column in an expandable table collapsed to a few pixels, wrapping
 its text one character per line.
 """
 
+from typing import Any
+
 import flet as ft
+import pytest
 
 from app.components.frontend.controls.data_table import (
     DataTable,
@@ -198,6 +201,58 @@ class TestHoverRevealedCells:
         _hover(row, False)
 
         assert action.opacity == 1
+
+
+class TestARowWithAFieldIsNotRepaintedUnderThePointer:
+    """Repainting a row (its hover tint) rebuilds what it holds: an open
+    menu closes as the pointer moves down onto it, a field being typed in
+    loses its place. A row holding one is left as it is."""
+
+    @pytest.mark.parametrize(
+        "field",
+        [
+            pytest.param(lambda: ft.Dropdown(options=[]), id="dropdown"),
+            pytest.param(lambda: ft.TextField(), id="text_field"),
+        ],
+    )
+    def test_it_is_never_tinted(self, field: Any) -> None:
+        held = ft.Row([ft.Container(content=field())])
+        row = DataTableRow(COLUMNS, ["6643", "FID FRDM 2040", held])
+
+        _hover(row, True)
+
+        assert row.bgcolor == row._default_bgcolor
+
+    def test_a_plain_row_still_is(self) -> None:
+        row = DataTableRow(COLUMNS, VALUES)
+
+        _hover(row, True)
+
+        assert row.bgcolor != row._default_bgcolor
+
+    def test_its_hover_actions_still_show(self) -> None:
+        """Only the tint is left out: an action revealed under the pointer
+        still is."""
+        action = ft.Container(content=ft.Text("Save"))
+        action.reveal_on_hover = True
+        held = ft.Row([ft.TextField(), action])
+        row = DataTableRow(COLUMNS, ["6643", "FID FRDM 2040", held])
+
+        _hover(row, True)
+
+        assert action.opacity == 1
+
+    def test_an_expandable_row_with_a_field_is_not_tinted_either(self) -> None:
+        cells = ["6643", "FID FRDM 2040", ft.Dropdown(options=[])]
+        row = ExpandableTableRow(
+            COLUMNS,
+            ExpandableRow(cells=cells, expanded_content=ft.Text("detail")),
+            is_expanded=False,
+            on_toggle=lambda _e: None,
+        )
+        gesture = row.content.controls[0]
+
+        assert gesture.content.on_hover is None
 
 
 def _rendered_first_cells(table: DataTable) -> list[str]:

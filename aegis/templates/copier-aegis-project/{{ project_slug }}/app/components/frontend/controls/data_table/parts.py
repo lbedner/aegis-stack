@@ -65,6 +65,21 @@ class SelectionCheckbox(ft.Checkbox):
 
 
 _SELECTION_CELL_WIDTH = 36
+# A row's tint under the pointer.
+HOVER_TINT = ft.Colors.with_opacity(0.08, ft.Colors.ON_SURFACE)
+# What a row may hold that its hover tint must not repaint: repainting the
+# row rebuilds it, so an open menu closes and a field loses its place.
+_FIELDS = (ft.Dropdown, ft.TextField)
+
+
+def holds_a_field(controls: list[Any]) -> bool:
+    """Whether a row of ``controls`` holds one of ``_FIELDS``: its hover
+    tint is left out (both tables' rows)."""
+    return any(
+        isinstance(c, _FIELDS)
+        or (isinstance(c, ft.Control) and holds_a_field(c._get_children()))
+        for c in controls
+    )
 
 
 class DataTableRow(ft.Container):
@@ -74,7 +89,8 @@ class DataTableRow(ft.Container):
     pointer is over its row: row actions stay out of the way until wanted,
     without the table becoming a wall of buttons. A control can clear its own
     flag to pin itself visible - what an action in flight does, so a spinner
-    does not vanish when the pointer wanders off.
+    does not vanish when the pointer wanders off. A row holding a field
+    (``holds_a_field``) is never tinted, nor repainted but to reveal one.
     """
 
     def __init__(
@@ -117,6 +133,7 @@ class DataTableRow(ft.Container):
             if show_border
             else None
         )
+        self._tints = not holds_a_field(row_data)
         self.on_hover = self._on_hover
         if on_click is not None:
             # Whole-row affordance: ink ripple + pointer so a row reads as
@@ -135,10 +152,8 @@ class DataTableRow(ft.Container):
         every enter, so at most one row ever wears the tint.
         """
         hovered = e.data == "true"
-        if hovered:
-            e.control.bgcolor = ft.Colors.with_opacity(0.08, ft.Colors.ON_SURFACE)
-        else:
-            e.control.bgcolor = self._default_bgcolor
+        if self._tints:
+            e.control.bgcolor = HOVER_TINT if hovered else self._default_bgcolor
         for control in self._hover_revealed:
             # Re-read the flag each time: a control that pinned itself visible
             # while its action runs must not be hidden again on pointer-out.
@@ -146,8 +161,14 @@ class DataTableRow(ft.Container):
                 set_revealed(control, hovered)
         if self._on_hover_change is not None:
             self._on_hover_change(self, hovered)
-        if e.control.page:  # Guard: only update if control is on page
+        if self._repaints and e.control.page:  # only once it is on a page
             e.control.update()
+
+    @property
+    def _repaints(self) -> bool:
+        """Whether hovering changes how the row looks: its tint, or an
+        action it reveals."""
+        return self._tints or bool(self._hover_revealed)
 
     def clear_hover(self) -> None:
         """Reset the hover tint from outside - the stuck-state cure."""
@@ -155,5 +176,5 @@ class DataTableRow(ft.Container):
         for control in self._hover_revealed:
             if getattr(control, "reveal_on_hover", False):
                 set_revealed(control, False)
-        if self.page:
+        if self._repaints and self.page:
             self.update()

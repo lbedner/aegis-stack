@@ -142,6 +142,26 @@ def test_a_dropdown_at_the_foot_of_the_window_opens_above() -> None:
     assert out == {"foot": "100%", "head": ""}
 
 
+CLOSE_HARNESS = (
+    STUBS
+    + """
+const { closesDropdown } = require(APP_JS);
+const menu = { contains: (t) => t.inside };
+const at = (spot) => ({ inside: spot !== 'outside',
+  closest: (sel) => (spot === 'entry' && sel.includes('[role="menu"] button') ? {} : null) });
+console.log(JSON.stringify(['outside', 'entry', 'button', 'heading']
+  .map((spot) => closesDropdown(menu, at(spot)))));
+"""
+)
+
+
+def test_a_dropdown_closes_on_a_click_off_it_or_on_an_entry() -> None:
+    """One listener for every menu (a thousand-row table has a menu a
+    row): a click elsewhere or on one of its entries closes it; its own
+    button and a heading in it do not."""
+    assert run(CLOSE_HARNESS, APP_JS=APP_JS) == [True, True, False, False]
+
+
 COPY_HARNESS = (
     STUBS
     + """
@@ -626,3 +646,27 @@ def test_a_refusal_that_is_not_a_form_is_said_never_swapped_in() -> None:
     refusal) would blank the part of the page it targets."""
     out = run(REFUSED_HARNESS, APP_JS=APP_JS)
     assert out == {"json": False, "form": True, "toasts": ["No agent called x"]}
+
+
+GONE_HARNESS = (
+    STUBS
+    + """
+let closed = false;
+const toasts = [];
+window.dispatchEvent = (e) => toasts.push(e.detail && e.detail.text);
+document.getElementById = (id) => (id === 'drawer' ? { close: () => { closed = true; } } : null);
+require(APP_JS);
+const failed = (target, status) => fire('htmx:responseError',
+  { detail: { elt: { dataset: {} }, target: { id: target }, xhr: { status } } });
+failed('drawer-body', 404);
+failed('overseer-main', 500);
+console.log(JSON.stringify({ closed, toasts }));
+"""
+)
+
+
+def test_a_drawer_for_an_item_no_longer_there_closes() -> None:
+    """Deleted from that very drawer, or a stale link: the drawer closes
+    (its parameter leaves the address), no error; any other failure says so."""
+    out = run(GONE_HARNESS, APP_JS=APP_JS)
+    assert out == {"closed": True, "toasts": ["Request failed (500)"]}

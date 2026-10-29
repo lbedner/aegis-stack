@@ -1,13 +1,17 @@
 """Chroma-shaped in, Chroma-shaped out.
 
-Metadata coercion, the where clause, and collapsing several chunks
-of one document down to its best hit. None of it touches the store,
-so none of it needs the manager.
+Chunks prepared for the store (``prepare``: ids, texts, metadata), metadata
+coercion, the where clause, and collapsing several chunks of one document
+down to its best hit. None of it touches the store, so none of it needs
+the manager.
 """
 
 from typing import Any
 
-from .models import SearchResult
+from app.core.time import utcnow
+
+from .ids import generate_chunk_id
+from .models import Document, Embedded, SearchResult
 
 
 def deduplicate_results(results: list[SearchResult], top_k: int) -> list[SearchResult]:
@@ -73,3 +77,19 @@ def build_where_clause(filter_metadata: dict[str, Any]) -> dict[str, Any]:
         conditions.append({key: value})
 
     return {"$and": conditions}
+
+
+def prepare(documents: list[Document], fields: list[str] | None = None) -> Embedded:
+    """Chunks as the store keeps them, not yet embedded: each one's id (by
+    its source and place in it, so indexing a file again replaces its
+    chunks), text, and metadata (only ``fields``, given them; when it was
+    indexed, always: what the index holds and since when is its own)."""
+    indexed_at = utcnow().isoformat()
+    ids, texts, metadatas = [], [], []
+    for i, doc in enumerate(documents):
+        source = doc.metadata.get("source", f"unknown_{i}")
+        ids.append(generate_chunk_id(source, doc.metadata.get("chunk_index", i)))
+        texts.append(doc.content)
+        kept = {k: v for k, v in doc.metadata.items() if not fields or k in fields}
+        metadatas.append(clean_metadata({**kept, "indexed_at": indexed_at}))
+    return Embedded(ids=ids, texts=texts, metadatas=metadatas)

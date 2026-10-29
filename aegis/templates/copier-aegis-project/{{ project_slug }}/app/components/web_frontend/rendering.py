@@ -18,6 +18,7 @@ from markupsafe import Markup, escape
 from starlette.responses import Response
 
 from app.components.web_frontend.assets import COMPONENT_DIR, static_url
+from app.components.web_frontend.file_icons import icon_for
 from app.components.web_frontend.filters import FILTERS
 from app.components.web_frontend.themes import theme_named, themes
 from app.core import series
@@ -29,6 +30,7 @@ from app.services.system import topology, ui_runtime
 templates = Jinja2Templates(directory=str(COMPONENT_DIR / "templates"))
 
 templates.env.globals["static"] = static_url
+templates.env.globals["icon_for"] = icon_for
 # The themes a page may wear, as the toggle offers them, and the one the
 # stack opens with; a name no theme file has fails here, at boot, naming
 # the ones that exist.
@@ -108,6 +110,13 @@ def hx_dialog_post(url: str) -> Markup:
     return Markup(
         f'hx-post="{escape(url)}" hx-target="#dialog-body" hx-swap="innerHTML"'
     )
+
+
+def hx_post(url: str, extra: str = "") -> Markup:
+    """The attributes for "post to ``url`` and swap nothing": the answer's
+    headers say what happened (a toast, a page to go to); ``extra`` rides
+    along (``data-write``)."""
+    return Markup(f'hx-post="{escape(url)}" hx-swap="none" {extra}')
 
 
 def hx_replace(url: str, target: str, oob: str | None = None) -> Markup:

@@ -23,6 +23,23 @@ class TestJobRunner:
         assert snapshot.error is None
 
     @pytest.mark.asyncio
+    async def test_the_latest_job_of_a_name_is_found_without_waiting(self) -> None:
+        """No await: a caller checks it and starts one as a single step."""
+        runner = JobRunner()
+
+        async def work(handle: JobHandle) -> dict:
+            return {}
+
+        first = runner.start("index:docs", work)
+        await runner.wait(first)
+        second = runner.start("index:docs", work)
+        runner.start("index:code", work)
+
+        assert runner.latest("index:docs").job_id == second  # type: ignore[union-attr]
+        assert runner.latest("index:gone") is None
+        await runner.wait(second)
+
+    @pytest.mark.asyncio
     async def test_a_raising_job_fails_with_the_real_error(self) -> None:
         runner = JobRunner()
 

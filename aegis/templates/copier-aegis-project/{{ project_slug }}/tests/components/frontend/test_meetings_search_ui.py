@@ -8,7 +8,7 @@ import flet as ft
 import pytest
 
 from app.components.frontend.dashboard.modals import meetings_search_tab
-from app.components.frontend.dashboard.modals.meetings_modal import record_view
+from app.components.frontend.dashboard.modals.meetings_record import RecordView
 from app.components.frontend.dashboard.modals.meetings_search_tab import (
     SearchTab,
     hit_cells,
@@ -39,7 +39,8 @@ def test_the_meeting_opens_marked_at_the_hits_line() -> None:
     ]
     read = record().model_dump(mode="json") | {"transcript": transcript}
 
-    lines = {c.key: c for c in walk(record_view(read, hit=3)) if c.key}
+    view = RecordView(read, hit=3)
+    lines = {c.key: c for c in walk(view) if getattr(c, "key", None)}
 
     assert lines["line-3"].weight == ft.FontWeight.BOLD
     assert lines["line-2"].weight != ft.FontWeight.BOLD

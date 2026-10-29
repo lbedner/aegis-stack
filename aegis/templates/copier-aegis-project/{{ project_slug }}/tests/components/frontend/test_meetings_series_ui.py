@@ -3,12 +3,15 @@ its pane (its summary over time, then what it keeps coming back to), drawn
 from the admin API's ``SeriesRow`` and ``SeriesRecord``."""
 
 from typing import Any
+from unittest.mock import MagicMock
 
+from app.components.frontend.controls import SectionCard
 from app.components.frontend.dashboard.modals.meetings_series_tab import (
+    SeriesPane,
     series_cells,
     series_view,
 )
-from tests.components.frontend._tree import texts
+from tests.components.frontend._tree import tab_names, tabs_in, texts, walk
 
 SERIES = {
     "id": 5,
@@ -69,7 +72,9 @@ def test_a_series_row_says_what_it_is_whose_and_how_many_meetings() -> None:
 
 
 def test_a_series_reads_with_its_summary_and_its_themes() -> None:
-    shown = " | ".join(texts(series_view(_record())))
+    pane = SeriesPane(MagicMock())
+    pane.draw(_record())
+    shown = " | ".join(texts(pane))
 
     assert "Dev call" in shown and "Dana keeps asking for the report." in shown
     assert "Still open" in shown and "Since meeting 11" in shown
@@ -83,3 +88,30 @@ def test_a_failed_write_and_one_under_way_are_said() -> None:
 
     assert "The last write failed: model down" in shown
     assert "Writing the series…" in shown
+
+
+def test_a_series_reads_in_tabs() -> None:
+    assert tab_names(series_view(_record())) == ["Overview", "Over time", "Themes"]
+
+
+def test_each_part_of_a_series_is_its_own_card() -> None:
+    tabs = tabs_in(series_view(_record()))
+    titles = {
+        tab.text: [texts(c)[0] for c in walk(tab) if isinstance(c, SectionCard)]
+        for tab in tabs.tabs
+    }
+    assert titles["Overview"] == ["Details", "Summary"]
+    assert titles["Over time"] == ["Still open"]
+    assert titles["Themes"] == ["Keeps coming up"]
+
+
+def test_the_series_pane_keeps_its_tab_when_it_reads_again() -> None:
+    """Followed while it is written, a series is drawn again: the tab the
+    reader is on stays open."""
+    pane = SeriesPane(MagicMock())
+    pane.draw(_record())
+    tabs_in(pane).selected_index = 2  # the reader's click, as Flet keeps it
+
+    pane.draw(_record())
+
+    assert tabs_in(pane).picked == "Themes"

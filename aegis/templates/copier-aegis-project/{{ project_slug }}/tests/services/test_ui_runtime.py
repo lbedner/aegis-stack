@@ -142,6 +142,16 @@ async def test_a_section_can_leave_its_charts_undrawn(
     assert view["rows"] and charts is None
 
 
+async def test_a_section_draws_only_the_charts_asked_for(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A server's Overview leads with ``OVERVIEW_CHARTS``: the rest are
+    neither drawn nor handed back."""
+    use_runtime(monkeypatch, FakeRuntime(REDIS))
+    _, drawn = await ui_runtime.section("redis", only=ui_runtime.OVERVIEW_CHARTS)
+    assert drawn and {c["key"] for c in drawn} <= set(ui_runtime.OVERVIEW_CHARTS)
+
+
 async def test_reading_a_page_marks_the_sampler_watched(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

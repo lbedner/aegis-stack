@@ -3,16 +3,19 @@ gets (``BaseDetailPopup`` adds it): the same rows as the htmx Container section
 (``ui_runtime.containers``), read again while the modal is open. Each row
 has a Restart that confirms, then calls the restart API (behind
 ``get_admin_actor``; it audits every attempt), as the htmx section's does.
-Where that API refuses this dashboard (``refusal_at`` the address it calls
-the API at), no Restart, and a line saying why."""
+Where the dashboard may not make a change (``page_refusal``: the
+address it was opened at), no Restart, and a line saying why. Given ``only_charts``, it is
+those charts alone, with no table (a server's Overview)."""
 
 import asyncio
 from typing import Any
 
 import flet as ft
 
-from app.components.frontend.controls import ConfirmDialog, H3Text, SecondaryText
+from app.components.frontend.controls import ConfirmDialog, SecondaryText
+from app.components.frontend.controls.record_detail import build_field_blocks
 from app.components.frontend.controls.snack_bar import ErrorSnackBar, SuccessSnackBar
+from app.components.frontend.core.changes import page_refusal
 from app.components.frontend.core.session_health import SessionLoops, page_is_connected
 from app.components.frontend.dashboard.cards.card_utils import get_status_color
 from app.components.frontend.dashboard.modals.modal_sections import (
@@ -22,33 +25,42 @@ from app.components.frontend.dashboard.modals.modal_sections import (
 from app.components.frontend.state.session_state import get_session_state
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core import series
-from app.core.config import settings
-from app.services.shared.deps import refusal_at
 from app.services.system import ui_runtime
 
 from .table_tab import TableTab
 
 REFRESH_SECONDS = 5.0
-# Each column's heading, ``ui_runtime`` row key and width.
+# Each column's heading, ``ui_runtime`` row key and width (None fills).
+# Fixed widths fit the default modal with the name and Restart beside them;
+# the image, a long name of its own, is in what a row opens to (``DETAIL``).
 COLUMNS = [
     ("Container", "name", None),
-    ("State", "state", 130),
-    (ui_runtime.FIGURES["cpu"], "cpu", 70),
+    ("State", "state", 90),
+    (ui_runtime.FIGURES["cpu"], "cpu", 64),
     (ui_runtime.FIGURES["memory"], "memory", 150),
-    (ui_runtime.FIGURES["network"], "network", 170),
-    (ui_runtime.FIGURES["disk"], "disk", 170),
-    ("Restarts", "restarts", 70),
-    ("Up", "uptime", 80),
-    ("Image", "image", 160),
+    (ui_runtime.FIGURES["network"], "network", 180),
+    (ui_runtime.FIGURES["disk"], "disk", 190),
+    ("Restarts", "restarts", 76),
+    ("Up", "uptime", 50),
+]
+# What a row opens to: its image, and the figures its columns may cut short.
+DETAIL = [
+    ("Image", "image"),
+    (ui_runtime.FIGURES["network"], "network"),
+    (ui_runtime.FIGURES["disk"], "disk"),
 ]
 
 
 class ContainerSection(ft.Column):
     """The containers behind one Overseer page (``page``: ``redis``, ...)."""
 
-    def __init__(self, page: str) -> None:
+    def __init__(self, page: str, only_charts: tuple[str, ...] = ()) -> None:
         super().__init__(spacing=Theme.Spacing.SM)
         self._key = page
+        self._only = only_charts
+        # One table, its rows read again in place: a row the reader opened
+        # stays open.
+        self._table: TableTab | None = None
         self._open = False
         self._window = series.DEFAULT_WINDOW
         self._offered = series.WINDOWS
@@ -95,7 +107,9 @@ class ContainerSection(ft.Column):
             self._offered, self._chips = offered, self._chips_for(offered)
         self._redraw.window = self._window
         draw = self._redraw.due()
-        view, charts = await ui_runtime.section(self._key, self._window, draw=draw)
+        view, charts = await ui_runtime.section(
+            self._key, self._window, draw=draw, only=self._only
+        )
         self._charts = charts if charts is not None else self._charts
         self._show(view, self._charts)
         if self.page is not None:
@@ -119,21 +133,7 @@ class ContainerSection(ft.Column):
     def _show(
         self, view: dict[str, Any], charts: list[dict[str, Any]] | None = None
     ) -> None:
-        refused = refusal_at(settings.API_BASE_URL)
-        body: ft.Control = (
-            SecondaryText(view["note"])
-            if view["note"]
-            else TableTab(
-                view["rows"],
-                COLUMNS,
-                "No containers",
-                actions=None if refused else self._restart_button,
-                color_of=_figure_color,
-            )
-        )
-        self.controls = [H3Text("Container"), body]
-        if refused and view["rows"]:
-            self.controls.append(SecondaryText(refused))
+        self.controls = [] if self._only else self._rows(view)
         if charts:
             self.controls.append(self._chips)
             self.controls.append(
@@ -143,6 +143,28 @@ class ContainerSection(ft.Column):
                     run_spacing=Theme.Spacing.MD,
                 )
             )
+
+    def _rows(self, view: dict[str, Any]) -> list[ft.Control]:
+        """The containers' table (or why there is none), and why there is
+        no Restart where the API refuses it."""
+        refused = page_refusal(self.page)
+        if view["note"]:
+            self._table = None
+        elif self._table is None:
+            self._table = TableTab(
+                view["rows"],
+                COLUMNS,
+                "No containers",
+                actions=None if refused else self._restart_button,
+                color_of=_figure_color,
+                detail=_detail,
+            )
+        else:
+            self._table.show(view["rows"])
+        shown: list[ft.Control] = [self._table or SecondaryText(view["note"])]
+        if refused and view["rows"]:
+            shown.append(SecondaryText(refused))
+        return shown
 
 
 async def restart(page: ft.Page, name: str) -> None:
@@ -163,6 +185,12 @@ def _figure_color(row: dict[str, str], key: str) -> str | None:
     section's; under it, plain."""
     status = row.get(f"{key}_status")
     return get_status_color(status) if status in ("warning", "unhealthy") else None
+
+
+def _detail(row: dict[str, str]) -> ft.Control:
+    """A row's ``DETAIL``, label beside value."""
+    fields = [(label, row.get(key)) for label, key in DETAIL]
+    return ft.Column(build_field_blocks([("", fields)]), spacing=Theme.Spacing.XS)
 
 
 def _chart(chart: dict[str, Any]) -> ft.Control:

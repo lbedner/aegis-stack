@@ -13,7 +13,6 @@ the authorization, the same trust model as an unguessable download link.
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import AsyncIterator
 import json
 from typing import Any
@@ -103,18 +102,7 @@ async def job_events(job_id: str) -> StreamingResponse:
         )
 
     async def stream() -> AsyncIterator[str]:
-        try:
-            while True:
-                snapshot = await queue.get()
-                if snapshot is None:
-                    break
-                yield f"event: status\ndata: {json.dumps(snapshot)}\n\n"
-                if snapshot["status"] != "running":
-                    break
-        except asyncio.CancelledError:
-            # Client went away; nothing to clean up beyond the subscription.
-            raise
-        finally:
-            runner.unsubscribe(job_id, queue)
+        async for snapshot in runner.follow(job_id, queue):
+            yield f"event: status\ndata: {json.dumps(snapshot)}\n\n"
 
     return StreamingResponse(until_closing(stream()), media_type="text/event-stream")

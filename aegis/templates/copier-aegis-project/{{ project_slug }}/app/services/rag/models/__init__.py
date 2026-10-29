@@ -125,6 +125,40 @@ class IndexedFile(BaseModel):
     content_type: str | None = None  # the loader's file type
 
 
+class Embedded(BaseModel):
+    """Chunks ready to store: each one's id, text and metadata, and its
+    vector once embedded. Plain JSON, so a worker that embeds can hand them
+    to the one process that stores them."""
+
+    ids: list[str]
+    texts: list[str]
+    metadatas: list[dict[str, Any]]
+    vectors: list[list[float]] = Field(default_factory=list)
+
+
+class EmbeddedBatch(BaseModel):
+    """A batch of files read, chunked and embedded, for the one process
+    that stores it: which batch of the run (``n``), the sources read, the
+    files that could not be, and their chunks; or why the batch failed."""
+
+    n: int = 0
+    read: list[str] = Field(default_factory=list)
+    missed: list[str] = Field(default_factory=list)
+    embedded: Embedded = Field(
+        default_factory=lambda: Embedded(ids=[], texts=[], metadatas=[])
+    )
+    error: str | None = None
+
+
+class Indexed(BaseModel):
+    """Sources added to a collection, or all of it read again: the files
+    read, their chunks, and the ones that could not be read."""
+
+    files: int
+    chunks: int
+    unread: list[str]
+
+
 __all__ = [
     "Document",
     "SearchResult",
@@ -132,4 +166,7 @@ __all__ = [
     "CollectionInfo",
     "FileIndexResult",
     "IndexedFile",
+    "Embedded",
+    "EmbeddedBatch",
+    "Indexed",
 ]

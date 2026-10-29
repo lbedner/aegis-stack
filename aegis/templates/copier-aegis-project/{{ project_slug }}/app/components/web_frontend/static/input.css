@@ -505,7 +505,6 @@
    so it comes after DaisyUI's own component styles. */
 .input:focus, .input:focus-within,
 .select:focus, .select:focus-within,
-.textarea:focus, .textarea:focus-within,
-.file-input:focus, .file-input:focus-within {
+.textarea:focus, .textarea:focus-within {
   @apply outline-none border-aegis-teal;
 }

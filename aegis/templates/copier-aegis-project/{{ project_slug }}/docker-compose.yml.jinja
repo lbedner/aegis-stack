@@ -107,7 +107,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 768M
+          memory: ${WEBSERVER_MEMORY:-{{ "1536M" if ai_rag else "768M" }}}
           cpus: '${WEBSERVER_CPUS:-2.0}'
 {%- if include_ingress %}
     labels:
@@ -252,7 +252,10 @@ services:
     deploy:
       resources:
         limits:
-{%- if include_finance or include_documents %}
+{%- if ai_rag %}
+          memory: ${SYSTEM_WORKER_MEMORY:-2G}
+          cpus: '${SYSTEM_WORKER_CPUS:-2.0}'
+{%- elif include_finance or include_documents %}
           # Not a maintenance worker once finance or documents are in the
           # stack: finance_import_task and extract_document_task both land
           # on this queue and are the heaviest jobs the app has. An

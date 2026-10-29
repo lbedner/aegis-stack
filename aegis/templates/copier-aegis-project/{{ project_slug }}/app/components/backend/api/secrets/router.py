@@ -2,7 +2,8 @@
 credentials. No route returns a value: status carries the source, the last
 four characters, and who set it when. The rules (declared names only,
 ``.env`` wins, read-only backends refuse) are ``app.core.secrets``'s; these
-routes add the operator check (``get_admin_actor``) and map refusals to status codes.
+routes add the operator checks (reading the list is ``get_admin_reader``'s,
+everything else ``get_admin_actor``'s) and map refusals to status codes.
 """
 
 from dataclasses import asdict
@@ -12,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
 
 from app.core import secrets
-from app.services.shared.deps import Actor, get_admin_actor
+from app.services.shared.deps import Actor, get_admin_actor, get_admin_reader
 
 router = APIRouter(prefix="/secrets", tags=["secrets"])
 
@@ -79,7 +80,7 @@ def _refused(exc: Exception) -> HTTPException:
 
 @router.get("", response_model=list[SecretStatusResponse])
 async def list_secrets(
-    setting: bool = False, _actor: Actor = Depends(get_admin_actor)
+    setting: bool = False, _reader: None = Depends(get_admin_reader)
 ) -> list[SecretStatusResponse]:
     """Every declared credential, or with ``setting`` every saved setting
     (``Configurable``): where it is set, never a credential's value."""

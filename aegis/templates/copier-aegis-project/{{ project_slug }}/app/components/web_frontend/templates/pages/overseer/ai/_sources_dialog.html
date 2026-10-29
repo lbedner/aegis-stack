@@ -1,0 +1,81 @@
+{# Sources into a collection, in steps (dialog body): its name (a new one
+   only), the parts of this app to read (the twin knows each part's files,
+   so nobody types a path; every part ticked to start), the file types to
+   read of them (the loader's own ticked), files uploaded alongside, and a
+   review of all of it with how much it is. Each step's answer shows beside
+   it once passed. With ``name`` it adds to that collection. What it posts
+   is what the API takes (``part``, ``extension``, ``file``). #}
+{% from "components/macros/layout.html" import dialog_title %}
+{% from "components/macros/form.html" import action, checkbox, field, file_button, form_footer, text_input, wizard, wizard_step %}
+{# Every one of ``ids`` (an Alpine expression) in ``key`` ticked, or none
+   once all are: a group's one button, saying which it will do. #}
+{% macro all_or_none(label, key, ids, marker) %}{{ action(label, marker ~ " x-text=\"has('" ~ key ~ "', " ~ ids ~ ") ? 'None' : 'All'\" @click=\"flip('" ~ key ~ "', " ~ ids ~ ")\"") }}{% endmacro %}
+{# Each kind of part's ids, then every file type: what the All/None buttons flip. #}
+{% set groups = knowable.parts|map(attribute=1)|map("map", attribute=0)|map("list")|list %}
+{% set every_type = knowable.types|map(attribute=1)|sum(start=[]) %}
+{% set first = 0 if name else 1 %}
+{% set steps = ([] if name else [("Name", "title")]) + [("Source code", "partsSaid"), ("File types", "typesSaid"), ("Files", "filesSaid"), ("Review", None)] %}
+{{ dialog_title("Add to " ~ name if name else "New knowledge base", "What it holds: parts of this app, files of your own, or both.") }}
+<form id="ai-sources" data-write data-wide hx-post="{{ add_url }}" hx-encoding="multipart/form-data" hx-swap="none"
+      x-data='{ held: {{ knowable.held|tojson }}, size: {{ chunk_size }}, uploaded: [], title: "",
+        groups: {{ groups|tojson }}, parts: {{ groups|sum(start=[])|tojson }},
+        types: {{ every_type|tojson }}, exts: {{ knowable.ticked|tojson }},
+        has(key, ids) { return ids.every((i) => this[key].includes(i)) },
+        flip(key, ids) { this[key] = this.has(key, ids) ? this[key].filter((i) => !ids.includes(i)) : [...new Set([...this[key], ...ids])] },
+        count(e) { return this.parts.reduce((n, p) => n + ((this.held[p] || {})[e] || [0])[0], 0) },
+        get partsSaid() { const n = this.groups.flat().length, k = this.parts.length; return k ? `${k === n ? "All " + n : k + " of " + n} parts` : "None" },
+        get typesSaid() { return this.exts.length ? this.exts.join(" ") : "None" },
+        get filesSaid() { return this.$files(this.uploaded) || "None" },
+        get total() { let f = this.uploaded.length, b = this.uploaded.reduce((n, u) => n + u.size, 0); for (const p of this.parts) for (const e of this.exts) { const h = (this.held[p] || {})[e]; if (h) { f += h[0]; b += h[1] } } return [f, b] },
+        get said() { const [f, b] = this.total; return f ? `${this.$tally(f, b)} · about ${Math.ceil(b / this.size)} chunks` : "Nothing to read yet" } }'
+      @change='if ($event.target.type === "file") uploaded = [...$event.target.files]'>
+  {% if name %}<input type="hidden" name="collection" value="{{ name }}">{% endif %}
+  {% call wizard(steps) %}
+  {% if not name %}
+  {% call wizard_step(0) %}
+  {% call field("Name", hint=named) %}{{ text_input("collection", None, "policies, code, handbook", required=True, autofocus=True, pattern=name_pattern, attrs='x-model="title"') }}{% endcall %}
+  {% endcall %}
+  {% endif %}
+  {% call wizard_step(first) %}
+  <p data-root class="text-xs text-aegis-muted">This app's own code, <span class="text-aegis-text">{{ knowable.app }}</span>, read from <code class="font-mono text-aegis-text">{{ knowable.root }}</code>.</p>
+  <p class="text-xs text-aegis-muted">Each box is a part of the app: a service, a component, its shared code, or its docs. Everything is ticked; untick what you do not want read.</p>
+  {% for group, picks in knowable.parts %}
+  <div class="flex items-center gap-3">
+    <p class="text-aegis-muted text-xxs caps">{{ group }}</p>
+    {{ all_or_none("None", "parts", "groups[" ~ loop.index0 ~ "]", "data-all-parts") }}
+  </div>
+  <div class="grid gap-1 sm:grid-cols-3">
+    {% for id, part, what in picks %}<div title="{{ what }}">{{ checkbox("part", True, part, id, 'x-model="parts"') }}</div>{% endfor %}
+  </div>
+  {% endfor %}
+  {% endcall %}
+  {% call wizard_step(first + 1) %}
+  <div class="flex items-center gap-3">
+    <p class="text-xs text-aegis-muted">Which kinds of file to read from those parts. The number is how many files of that kind they hold.</p>
+    {# Every type, or none once all are ticked: as a checklist's top button. #}
+    {{ all_or_none("All", "exts", "types", "data-all-types") }}
+  </div>
+  {% for group, exts in knowable.types %}
+  <div data-file-types class="flex flex-wrap items-center gap-x-4 gap-y-1">
+    <span class="w-14 text-aegis-muted text-xxs caps">{{ group }}</span>
+    {% for ext in exts %}<span class="inline-flex items-center gap-1">{{ checkbox("extension", ext in knowable.ticked, ext, ext, 'x-model="exts"') }}<span x-text="count('{{ ext }}')" class="text-xxs text-aegis-muted"></span></span>{% endfor %}
+  </div>
+  {% endfor %}
+  {% endcall %}
+  {% call wizard_step(first + 2) %}
+  <p class="text-xs text-aegis-muted">Any number, added alongside the source code: policies, handbooks, notes, anything that is not this app. Pick again to add more.</p>
+  {{ file_button("ai-sources-files", "Choose files", knowable.readable|join(","), submit=False, required=False, multiple=True) }}
+  {% endcall %}
+  {% call wizard_step(first + 3) %}
+  <dl data-review class="grid grid-cols-[8rem_1fr] gap-x-4 gap-y-2 text-sm">
+    {% if not name %}<dt class="text-aegis-muted">Name</dt><dd x-text="title" class="text-aegis-text"></dd>{% endif %}
+    <dt class="text-aegis-muted">Source code</dt><dd class="text-aegis-text"><span x-text="partsSaid"></span> <span class="text-aegis-muted">of {{ knowable.app }}, from <code class="font-mono">{{ knowable.root }}</code></span></dd>
+    <dt class="text-aegis-muted">File types</dt><dd x-text="typesSaid" class="text-aegis-text"></dd>
+    <dt class="text-aegis-muted">Files</dt><dd x-text="filesSaid" class="text-aegis-text"></dd>
+  </dl>
+  <p data-total x-text="said" class="text-base font-semibold text-aegis-text"></p>
+  {% if slow %}<p data-slow class="text-xs text-aegis-muted">Embedding runs on this server's CPU, one batch at a time, so a big pick takes a while. A worker (<code class="font-mono">aegis add worker</code>) spreads it out; a hosted model (<code class="font-mono">RAG_EMBEDDING_PROVIDER=openai</code>) is faster still.</p>{% endif %}
+  {% endcall %}
+  {{ form_footer("Add" if name else "Make knowledge base", wizard=True, attrs=':disabled="!total[0]"') }}
+  {% endcall %}
+</form>

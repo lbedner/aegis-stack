@@ -18,9 +18,10 @@ from app.components.frontend.controls import (
     DataTableColumn,
     NativeDropdown,
 )
+from app.components.frontend.controls.dropdown import chosen, filter_dropdown
 from app.components.frontend.controls.tabs import PulseTabs
 from app.components.frontend.dashboard.modals.modal_sections.chart_primitives import (
-    ChartColors,
+    chart_dot,
 )
 from app.components.frontend.dashboard.modals.voice_settings.designer import (
     API,
@@ -154,12 +155,12 @@ class VoiceSettingsTab(ft.Container):
     def _pick(
         self, label: str, choices: dict[str, str], value: str, field: str
     ) -> ft.Control:
-        return NativeDropdown(
-            options=[ft.dropdown.Option("", f"All {label.lower()}")]
-            + [ft.dropdown.Option(k, v) for k, v in choices.items()],
+        return filter_dropdown(
+            f"All {label.lower()}",
+            list(choices.items()),
             value=value,
             width=170,
-            on_change=lambda e: self._set(field, e.control.value or ""),
+            on_change=lambda e: self._set(field, chosen(e.control.value)),
         )
 
     def _set(self, field: str, value: str) -> None:
@@ -196,12 +197,7 @@ class VoiceSettingsTab(ft.Container):
         url = preview_url(row)
         provider = ft.Row(
             [
-                ft.Container(
-                    width=8,
-                    height=8,
-                    border_radius=4,
-                    bgcolor=ChartColors.RAMP[color % len(ChartColors.RAMP)],
-                ),
+                chart_dot(color + 1),
                 BodyText(row["provider_name"], size=11),
             ],
             spacing=6,

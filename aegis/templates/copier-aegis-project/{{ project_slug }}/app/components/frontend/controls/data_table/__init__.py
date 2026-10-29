@@ -17,9 +17,11 @@ from .cells import (
     style_cell,
 )
 from .parts import (
+    HOVER_TINT,
     DataTableHeader,
     DataTableRow,
     SelectionCheckbox,
+    holds_a_field,
     set_revealed,
 )
 from .table import DataTable
@@ -27,6 +29,7 @@ from .table import DataTable
 __all__ = [
     "CELL_ELLIPSIS_KWARGS",
     "CELL_TOOLTIPS_ENABLED",
+    "HOVER_TINT",
     "PICKER_GUTTER_WIDTH",
     "DataTable",
     "DataTableColumn",
@@ -37,6 +40,7 @@ __all__ = [
     "cell_text",
     "get_alignment",
     "header_cell",
+    "holds_a_field",
     "set_revealed",
     "style_cell",
 ]

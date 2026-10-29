@@ -1,8 +1,8 @@
 """Walking the system model: a node's neighbours and the shortest paths
 between two nodes, over its edges either way. Pure functions of the model,
 so the MCP tool, Overseer's map (ON-03) and the dry path (ON-10) share
-them, and a node's wiring (``wiring``), which a path card both checks
-when drawn and draws."""
+them, a node's wiring (``wiring``), which a path card both checks when
+drawn and draws, and each part's top-level part (``roots``)."""
 
 from collections import deque
 import difflib
@@ -127,3 +127,16 @@ def wiring(model: SystemModel, node_id: str) -> list[Edge]:
     queues = [end for end in ends if parse_node_id(end)[0] is Kind.QUEUE]
     edges += [e for queue in queues for e in touching.get(queue, [])]
     return list(dict.fromkeys(edges))
+
+
+def roots(model: SystemModel) -> dict[str, str]:
+    """Each part's id to the top-level part it is in (itself, or the part
+    a sub-part belongs to)."""
+    owner = {n.id: n.owner for n in model.nodes if isinstance(n, PartNode)}
+
+    def root(found: str) -> str:
+        while owner.get(found):
+            found = owner[found]  # type: ignore[assignment]
+        return found
+
+    return {part: root(part) for part in owner}

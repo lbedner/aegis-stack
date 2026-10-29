@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import OrderedDict
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -234,6 +234,23 @@ class JobRunner:
     def get(self, job_id: str) -> JobSnapshot | None:
         job = self._jobs.get(job_id)
         return job.snapshot() if job else None
+
+    def latest(self, name: str) -> JobSnapshot | None:
+        """This process's newest job named ``name``, running or ended: no
+        await, so a caller can check it and ``start`` as one step."""
+        job = next((j for j in reversed(self._jobs.values()) if j.name == name), None)
+        return job.snapshot() if job else None
+
+    async def follow(
+        self, job_id: str, queue: asyncio.Queue[dict[str, Any] | None]
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Each state of a job subscribed to (``subscribe_any``) until it
+        ends; unsubscribed however the reader stops."""
+        try:
+            while (snapshot := await queue.get()) is not None:
+                yield snapshot
+        finally:
+            self.unsubscribe(job_id, queue)
 
     def subscribe(self, job_id: str) -> asyncio.Queue[dict[str, Any] | None] | None:
         """Queue of snapshot dicts, primed with the current state.

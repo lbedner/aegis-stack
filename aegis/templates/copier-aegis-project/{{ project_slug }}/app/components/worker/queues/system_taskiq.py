@@ -13,6 +13,7 @@ from app.components.worker.middleware import EventPublishMiddleware
 from app.components.worker.tasks.service_jobs import service_job_tasks
 from app.core.config import settings
 from app.core.constants import QueueName
+from app.core.discovery import present
 from app.core.log import logger
 
 # Use redis_url_effective for Docker vs local auto-detection
@@ -74,18 +75,36 @@ async def cleanup_temp_files() -> dict[str, str]:
     }
 
 
-@broker.task
 async def extract_document_task(
     job_id: str, document_id: int, owner_user_id: int | None, force: bool
 ) -> dict:
     """Read a stored document's pages; progress lands in the shared job store.
 
-    The documents service is imported lazily so a stack without it still
-    loads this queue and simply never receives the task.
+    The documents service is imported lazily, so the worker boots
+    without loading it.
     """
     from app.services.documents.domains.extraction.jobs import run_extraction_job
 
     return await run_extraction_job(job_id, document_id, owner_user_id, force)
+
+
+# Registered only where the service is: elsewhere the task reaches nothing.
+if present("app.services.documents"):
+    extract_document_task = broker.task(extract_document_task)
+
+
+async def embed_files_task(key: str, n: int, files: list[str]) -> None:
+    """Read, chunk and embed a batch of files for the knowledge base; the
+    vectors go back through Redis to the one process that writes the index.
+    The RAG service is imported lazily, as the documents one is."""
+    from app.services.rag.embedding import embed_batch
+
+    await embed_batch(key, n, files)
+
+
+# Registered only where the service is: elsewhere the task reaches nothing.
+if present("app.services.rag"):
+    embed_files_task = broker.task(embed_files_task)
 
 
 # The scheduled service jobs, bound here so the registry sees them as this

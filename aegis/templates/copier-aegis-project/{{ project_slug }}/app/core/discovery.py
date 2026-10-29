@@ -49,14 +49,19 @@ def declared_by(package: ModuleType, name: str, attr: str) -> list[tuple[str, An
     return found
 
 
+def present(module: str) -> bool:
+    """Whether the stack has ``module``, without importing it. A missing
+    package above it (a service the stack lacks) is "not here" too."""
+    try:
+        return find_spec(module) is not None
+    except ModuleNotFoundError:
+        return False
+
+
 def optional(module: str, name: str | None = None) -> Any:
     """``module`` (or its ``name``) where the stack has it, else None: a
-    part rendered only with what it needs (a writer that asks a model). A
-    missing package above it (a service the stack lacks) is "not here" too."""
-    try:
-        if find_spec(module) is None:
-            return None
-    except ModuleNotFoundError:
+    part rendered only with what it needs (a writer that asks a model)."""
+    if not present(module):
         return None
     found = importlib.import_module(module)
     return found if name is None else getattr(found, name)

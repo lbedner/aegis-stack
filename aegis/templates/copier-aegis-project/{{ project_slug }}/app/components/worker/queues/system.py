@@ -4,10 +4,12 @@ System worker queue configuration.
 Handles system maintenance and monitoring tasks using native arq patterns.
 """
 
+from arq import func
 from arq.connections import RedisSettings
 
 from app.components.worker import arq_hooks
 from app.components.worker.tasks.document_tasks import extract_document_task
+from app.components.worker.tasks.rag_tasks import embed_files_task
 from app.components.worker.tasks.service_jobs import service_job_tasks
 from app.components.worker.tasks.simple_system_tasks import (
     cleanup_temp_files,
@@ -15,6 +17,7 @@ from app.components.worker.tasks.simple_system_tasks import (
 )
 from app.core.config import settings
 from app.core.constants import QueueName
+from app.core.discovery import present
 from app.core.queue_workers import concurrency_for
 
 
@@ -28,9 +31,14 @@ class WorkerSettings:
     functions = [
         system_health_check,
         cleanup_temp_files,
-        extract_document_task,
         *service_job_tasks(),
     ]
+    # A service's task only where the service is: elsewhere it reaches nothing.
+    if present("app.services.documents"):
+        functions.append(extract_document_task)
+    if present("app.services.rag"):
+        # A batch waits for the one model this process embeds with.
+        functions.append(func(embed_files_task, timeout=30 * 60))
 
     # arq configuration with improved connection settings
     base_settings = RedisSettings.from_dsn(settings.redis_url_effective)

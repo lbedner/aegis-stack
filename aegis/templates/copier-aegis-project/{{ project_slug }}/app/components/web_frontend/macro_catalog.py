@@ -142,6 +142,7 @@ EXAMPLES: dict[str, dict[str, str]] = {
             {% set on_click %}@click="$dispatch('toast', { text: 'Clicked', tone: 'ok' })"{% endset %}
             {% call dropdown("Actions", align="left") %}
               {{ menu_item("Retry", on_click) }}
+              {{ menu_item("Open", url="#") }}
               {{ menu_item("Delete", "", danger=True) }}
             {% endcall %}""",
         "menu_heading": """
@@ -154,10 +155,15 @@ EXAMPLES: dict[str, dict[str, str]] = {
             {% endcall %}""",
         "dropdown": """
             {% set on_click %}@click="$dispatch('toast', { text: 'Clicked', tone: 'ok' })"{% endset %}
-            {% call dropdown("Actions", align="left") %}
-              {{ menu_item("Retry", on_click) }}
-              {{ menu_item("Pause", "") }}
-            {% endcall %}""",
+            <span class="flex items-center gap-3">
+              {% call dropdown("Actions", align="left") %}
+                {{ menu_item("Retry", on_click) }}
+                {{ menu_item("Pause", "") }}
+              {% endcall %}
+              {% call dropdown(align="left", options=True) %}
+                {{ menu_item("Remove", on_click, danger=True) }}
+              {% endcall %}
+            </span>""",
         "dialog_title": """
             {{ dialog_title("Remove user", "They lose access at once. Their history stays.") }}""",
         "confirm": """
@@ -261,7 +267,29 @@ EXAMPLES: dict[str, dict[str, str]] = {
         "checkbox": """{{ checkbox("failed_only", True, "Failed only") }}""",
         "search_input": """{{ search_input("catalog", placeholder="Search keys") }}""",
         "filter_input": """{{ filter_input("#catalog-demo-rows", placeholder="Filter rows") }}""",
-        "file_button": """{{ file_button("catalog-demo-file", "Add picture", "image/png,image/jpeg") }}""",
+        "file_button": """
+            {{ file_button("catalog-demo-file", "Add picture", "image/png,image/jpeg") }}
+            {{ file_button("catalog-demo-files", "Choose files", submit=False, multiple=True) }}""",
+        "form_section": """
+            {% call form_section("Files", "optional") %}
+              {{ file_button("catalog-demo-section-files", "Choose files", submit=False, multiple=True) }}
+            {% endcall %}""",
+        "form_footer": """{{ form_footer("Save") }}""",
+        "cancel_button": """{{ cancel_button() }}""",
+        "wizard": """
+            <form x-data="{}">
+            {% call wizard([("Name", None), ("Review", None)]) %}
+              {% call wizard_step(0) %}{% call field("Name") %}{{ text_input("name", placeholder="policies") }}{% endcall %}{% endcall %}
+              {% call wizard_step(1) %}<p class="text-sm">All set.</p>{% endcall %}
+              {{ form_footer("Make it", wizard=True) }}
+            {% endcall %}
+            </form>""",
+        "wizard_step": """
+            <form x-data="{}">
+            {% call wizard([("One", None)]) %}
+              {% call wizard_step(0) %}<p class="text-sm">The step at hand.</p>{% endcall %}
+            {% endcall %}
+            </form>""",
         "field": """
             {% call field("Email", error="Enter a valid address") %}
               {{ text_input("email", "ops@") }}

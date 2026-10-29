@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 import pytest
 
 from app.core.audit import get_audit
-from app.services.shared.deps import Actor, get_admin_actor
+from app.services.shared.deps import Actor, get_admin_actor, get_admin_reader
 
 ADMIN = Actor(7, "ops@example.com", "ops@example.com")
 
@@ -32,8 +32,9 @@ def recording(client: TestClient) -> Recorded:
 
 
 def as_admin(client: TestClient) -> TestClient:
-    """``client`` acting as ``ADMIN``."""
+    """``client`` acting as ``ADMIN``: its changes and its reads."""
     client.app.dependency_overrides[get_admin_actor] = lambda: ADMIN
+    client.app.dependency_overrides[get_admin_reader] = lambda: None
     return client
 
 

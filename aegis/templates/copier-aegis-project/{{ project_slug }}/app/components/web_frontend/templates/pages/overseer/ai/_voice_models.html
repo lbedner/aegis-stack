@@ -5,7 +5,7 @@
    a time) and Use puts it on the profile. Below, a line said in a chosen
    voice and a file transcribed. #}
 {% from "components/macros/chat.html" import speak_button %}
-{% from "components/macros/form.html" import action, checklist, filter_input, primary_button %}
+{% from "components/macros/form.html" import action, checklist, file_button, filter_input, primary_button %}
 {% from "components/macros/layout.html" import chart_dot %}
 {% from "pages/overseer/_macros.html" import rows_scroller %}
 {% set head = "px-3 py-1.5 text-left font-medium" %}
@@ -56,7 +56,7 @@
       <audio x-show="src" :src="src" controls autoplay class="h-8"></audio>
     </div>
     <form id="ai-voice-transcribe" data-write hx-post="{{ transcribe_url }}" hx-encoding="multipart/form-data" hx-target="#ai-voice-result" hx-swap="innerHTML" class="flex items-center gap-2">
-      <input type="file" name="audio" accept="audio/*" required aria-label="Audio file" class="file-input file-input-sm">
+      {{ file_button("ai-voice-audio", "Choose audio", "audio/*", name="audio", submit=False) }}
       {{ primary_button("Transcribe", "submit") }}
     </form>
   </div>

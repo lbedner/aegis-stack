@@ -1,8 +1,10 @@
 """The Overview tab: what the process is doing right now.
 
-Four metric cards over a configuration panel. The host's CPU, memory and
-disk meters take their checks' status colour (``get_status_color``), the
-saved thresholds' rule, as htmx's meters do.
+Four metric cards over a configuration panel, then, as htmx's Overview:
+with containers to read, the server's own live charts (the Container
+section's ``ui_runtime.OVERVIEW_CHARTS``); without, the host's CPU, memory
+and disk meters, in their checks' status colour (``get_status_color``),
+the saved thresholds' rule.
 """
 
 import flet as ft
@@ -13,10 +15,12 @@ from app.components.frontend.controls import (
     SecondaryText,
 )
 from app.components.frontend.theme import AegisTheme as Theme
-from app.services.system import ui_backend
+from app.core import runtime
+from app.services.system import ui_backend, ui_runtime
 from app.services.system.models import ComponentStatus
 
 from ...cards.card_utils import create_progress_indicator, get_status_color
+from ..container_section import ContainerSection
 from ..modal_sections import (
     MetricCard,
 )
@@ -85,58 +89,12 @@ class OverviewTab(ft.Container):
             )
 
         method_text = ui_backend.method_summary(metadata)
-
-        # Build system metrics
-        cpu_data = sub_components.get("cpu")
-        memory_data = sub_components.get("memory")
-        disk_data = sub_components.get("disk")
-
-        system_metrics = []
-
-        # CPU metric
-        if cpu_data and cpu_data.metadata:
-            cpu_percent = cpu_data.metadata.get("percent_used", 0.0)
-            cpu_cores = cpu_data.metadata.get("cpu_count", 0)
-            cpu_color = get_status_color(cpu_data.status.value)
-            system_metrics.append(
-                create_progress_indicator(
-                    label=f"CPU Usage ({cpu_cores} cores)",
-                    value=cpu_percent,
-                    details=f"{cpu_percent:.1f}%",
-                    color=cpu_color,
-                )
-            )
-
-        # Memory metric
-        if memory_data and memory_data.metadata:
-            memory_percent = memory_data.metadata.get("percent_used", 0.0)
-            memory_total = memory_data.metadata.get("total_gb", 0.0)
-            memory_available = memory_data.metadata.get("available_gb", 0.0)
-            memory_used = memory_total - memory_available
-            memory_color = get_status_color(memory_data.status.value)
-            system_metrics.append(
-                create_progress_indicator(
-                    label="Memory Usage",
-                    value=memory_percent,
-                    details=f"{memory_used:.1f} / {memory_total:.1f} GB",
-                    color=memory_color,
-                )
-            )
-
-        # Disk metric
-        if disk_data and disk_data.metadata:
-            disk_percent = disk_data.metadata.get("percent_used", 0.0)
-            disk_free = disk_data.metadata.get("free_gb", 0.0)
-            disk_total = disk_data.metadata.get("total_gb", 0.0)
-            disk_color = get_status_color(disk_data.status.value)
-            system_metrics.append(
-                create_progress_indicator(
-                    label="Disk Usage",
-                    value=disk_percent,
-                    details=f"{disk_free:.1f} GB free / {disk_total:.1f} GB",
-                    color=disk_color,
-                )
-            )
+        page = ui_runtime.page_of(backend_component.name)
+        resources = (
+            [ContainerSection(page, only_charts=ui_runtime.OVERVIEW_CHARTS)]
+            if page is not None and runtime.deployed()
+            else _host_meters(sub_components)
+        )
 
         self.content = ft.Column(
             [
@@ -157,20 +115,77 @@ class OverviewTab(ft.Container):
                         horizontal=Theme.Spacing.MD, vertical=Theme.Spacing.SM
                     ),
                 ),
-                # System Metrics section
                 ft.Container(height=Theme.Spacing.MD),  # Spacer
-                H3Text("System Metrics"),
-                ft.Container(
-                    content=ft.Column(
-                        system_metrics
-                        if system_metrics
-                        else [SecondaryText("No metrics available")],
-                        spacing=Theme.Spacing.MD,
-                    ),
-                    padding=ft.padding.symmetric(vertical=Theme.Spacing.SM),
-                ),
+                *resources,
             ],
             spacing=Theme.Spacing.SM,
             scroll=ft.ScrollMode.AUTO,
         )
         self.padding = ft.padding.all(Theme.Spacing.MD)
+
+
+def _host_meters(sub_components: dict[str, ComponentStatus]) -> list[ft.Control]:
+    """The machine it runs on, all there is without containers to read."""
+    cpu_data = sub_components.get("cpu")
+    memory_data = sub_components.get("memory")
+    disk_data = sub_components.get("disk")
+
+    system_metrics: list[ft.Control] = []
+
+    # CPU metric
+    if cpu_data and cpu_data.metadata:
+        cpu_percent = cpu_data.metadata.get("percent_used", 0.0)
+        cpu_cores = cpu_data.metadata.get("cpu_count", 0)
+        cpu_color = get_status_color(cpu_data.status.value)
+        system_metrics.append(
+            create_progress_indicator(
+                label=f"CPU Usage ({cpu_cores} cores)",
+                value=cpu_percent,
+                details=f"{cpu_percent:.1f}%",
+                color=cpu_color,
+            )
+        )
+
+    # Memory metric
+    if memory_data and memory_data.metadata:
+        memory_percent = memory_data.metadata.get("percent_used", 0.0)
+        memory_total = memory_data.metadata.get("total_gb", 0.0)
+        memory_available = memory_data.metadata.get("available_gb", 0.0)
+        memory_used = memory_total - memory_available
+        memory_color = get_status_color(memory_data.status.value)
+        system_metrics.append(
+            create_progress_indicator(
+                label="Memory Usage",
+                value=memory_percent,
+                details=f"{memory_used:.1f} / {memory_total:.1f} GB",
+                color=memory_color,
+            )
+        )
+
+    # Disk metric
+    if disk_data and disk_data.metadata:
+        disk_percent = disk_data.metadata.get("percent_used", 0.0)
+        disk_free = disk_data.metadata.get("free_gb", 0.0)
+        disk_total = disk_data.metadata.get("total_gb", 0.0)
+        disk_color = get_status_color(disk_data.status.value)
+        system_metrics.append(
+            create_progress_indicator(
+                label="Disk Usage",
+                value=disk_percent,
+                details=f"{disk_free:.1f} GB free / {disk_total:.1f} GB",
+                color=disk_color,
+            )
+        )
+
+    return [
+        H3Text("System Metrics"),
+        ft.Container(
+            content=ft.Column(
+                system_metrics
+                if system_metrics
+                else [SecondaryText("No metrics available")],
+                spacing=Theme.Spacing.MD,
+            ),
+            padding=ft.padding.symmetric(vertical=Theme.Spacing.SM),
+        ),
+    ]

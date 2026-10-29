@@ -66,6 +66,14 @@ class FakeRedis:
     async def rpush(self, key: str, *values: str) -> None:
         self.lists.setdefault(key, []).extend(values)
 
+    async def blpop(
+        self, keys: list[str], timeout: float = 0
+    ) -> tuple[str, str] | None:
+        """The first of ``keys`` holding anything, popped; None at once
+        where Redis would wait ``timeout`` (nothing else can push here)."""
+        key = next((k for k in keys if self.lists.get(k)), None)
+        return None if key is None else (key, self.lists[key].pop(0))
+
     async def lrange(self, key: str, start: int, end: int) -> list[str]:
         items = self.lists.get(key, [])
         return items[start:] if end == -1 else items[start : end + 1]

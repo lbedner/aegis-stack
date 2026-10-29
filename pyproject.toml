@@ -1,7 +1,7 @@
 [project]
 name = "aegis-stack"
-version = "0.16.1"
-description = "A production-ready FastAPI platform with modular components and a built-in control plane. Try: uvx aegis-stack init my-project"
+version = "0.17.0"
+description = "Full-stack Python apps that know what they are: a complete FastAPI application, shipped with Overseer, a control plane that maps your system and watches it. Try: uvx aegis-stack init my-project"
 readme = "README.md"
 requires-python = ">=3.11,<3.15"
 license = { text = "MIT" }

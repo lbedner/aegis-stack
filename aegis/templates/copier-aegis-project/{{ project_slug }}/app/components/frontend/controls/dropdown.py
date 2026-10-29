@@ -298,3 +298,45 @@ class NativeDropdown(ft.Dropdown):  # type: ignore[misc]
         }
         defaults.update(kwargs)
         super().__init__(**defaults)
+
+
+# A toolbar filter's first choice: no filter. A choice keyed "" draws as
+# an empty box, so "everything" has a key of its own.
+ALL = "all"
+
+
+def filter_dropdown(
+    everything: str,
+    options: list[tuple[str, str]],
+    *,
+    width: int,
+    on_change: Any,
+    value: str = "",
+) -> NativeDropdown:
+    """A toolbar filter: dense, unlabeled, first entry means no filter;
+    ``value`` the filter it starts on (none, by default). Read a choice
+    back with ``chosen``."""
+    return NativeDropdown(
+        value=value or ALL,
+        options=filter_options(everything, options),
+        width=width,
+        enable_filter=False,
+        enable_search=False,
+        on_change=on_change,
+    )
+
+
+def filter_options(
+    everything: str, options: list[tuple[str, str]]
+) -> list[ft.dropdown.Option]:
+    """A filter's choices: ``everything`` (``ALL``) first, then ``options``
+    (``(key, text)``); a filter whose choices change is given them again."""
+    return [
+        ft.dropdown.Option(key=ALL, text=everything),
+        *[ft.dropdown.Option(key=k, text=t) for k, t in options],
+    ]
+
+
+def chosen(value: str | None) -> str:
+    """A filter's choice as what it filters by: none for ``ALL``."""
+    return "" if value in (None, ALL) else value

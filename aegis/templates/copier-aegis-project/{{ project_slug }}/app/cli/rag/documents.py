@@ -10,6 +10,7 @@ from app.core.log import suppress_logs
 from app.i18n import lazy_t, t
 from app.services.rag.config import get_rag_config
 from app.services.rag.service import RAGService
+from app.services.rag.sources import listed
 from rich.panel import Panel
 from rich.progress import (
     BarColumn,
@@ -43,12 +44,7 @@ async def index_documents(
 
     rag_service = get_rag_service()
 
-    # Parse extensions
-    ext_list = None
-    if extensions:
-        ext_list = [e.strip() for e in extensions.split(",")]
-        # Ensure extensions start with dot
-        ext_list = [e if e.startswith(".") else f".{e}" for e in ext_list]
+    ext_list = listed(extensions, dotted=True)
 
     console.print(f"\n[dim]{t('rag.indexing_label')}[/dim] {path}")
     console.print(f"[dim]{t('rag.collection_label')}[/dim] {collection}")

@@ -157,6 +157,12 @@ class Settings(
     S3_SECRET_KEY: str = "aegis-secret"
     S3_REGION: str = "us-east-1"
     S3_PATH_STYLE: bool = True
+    # What a presigned link is signed for. SigV4 signs the Host header, so a
+    # link signed for the endpoint the containers use (``seaweedfs:8333``)
+    # answers 403 from anywhere else — the dev stack's usual surprise. Empty:
+    # the same address as S3_ENDPOINT_URL, right where app and readers share
+    # one (production behind a real hostname).
+    S3_PUBLIC_ENDPOINT_URL: str = ""
 {%- endif %}
 
 {%- if scheduler_backend != "memory" or (include_scheduler and include_database) %}

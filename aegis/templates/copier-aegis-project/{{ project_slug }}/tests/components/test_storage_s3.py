@@ -246,3 +246,34 @@ def test_remove_many_deletes_every_key_in_one_call(store) -> None:
     assert asyncio.run(store.fetch(store.bucket, "a.txt")) is None
     assert asyncio.run(store.fetch(store.bucket, "b.txt")) is None
     assert asyncio.run(store.fetch(store.bucket, "c.txt")) is not None
+
+
+def test_a_presigned_link_names_the_address_a_browser_can_reach(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The bucket is reached by the containers, the link by a person.
+
+    In the dev stack the app talks to ``http://seaweedfs:8333`` and the link
+    is signed *for that host* (SigV4 signs it), so a browser on the host gets
+    a 403 or no answer at all. ``S3_PUBLIC_ENDPOINT_URL`` is what the link is
+    signed for instead; unset, links keep naming the app's own endpoint.
+    """
+    from moto import mock_aws
+
+    monkeypatch.setenv("AWS_ACCESS_KEY_ID", "testing")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "testing")
+    with mock_aws():
+        store = S3Storage(
+            bucket="unit-test-bucket",
+            endpoint_url="http://seaweedfs:8333",
+            access_key="testing",
+            secret_key="testing",
+            region="us-east-1",
+            path_style=True,
+            public_endpoint_url="http://localhost:8336",
+        )
+
+        url = asyncio.run(store.presigned_url("sha256/aa/bb/" + "0" * 64))
+
+    assert url is not None
+    assert url.startswith("http://localhost:8336/")

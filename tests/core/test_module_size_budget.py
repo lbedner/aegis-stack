@@ -70,7 +70,9 @@ BUDGET: dict[str, int] = {
     # settings are the third group to land here by default; grouping them
     # into nested models is the split this file keeps asking for. 816:
     # the off-site backup's four settings (#1482), with the deploy ones.
-    "core/config.py.jinja": 816,
+    # +6: the S3 public endpoint setting (storage). A setting is not logic,
+    # but the ratchet is per file — splitting this module is its own job.
+    "core/config.py.jinja": 822,
     # declare.py is unchanged at 408 and under the 500 cap. It trips the
     # SHARE rule only because detect.py - the other big file in
     # recurring/ - became a package, leaving declare the largest thing

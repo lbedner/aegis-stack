@@ -23,7 +23,16 @@ Keep the key. It is what a database row should store, alongside the backend name
 
 ## A Link Instead of a Proxy
 
-Serving a 40 MB scan through the app costs a worker for the length of the download. A presigned URL hands the browser a time-limited link to the object itself:
+Serving a 40 MB scan through the app costs a worker for the length of the download. A presigned URL hands the browser a time-limited link to the object itself.
+
+The link is signed **for a host** (SigV4 signs it into the URL), so it only
+works where that host resolves: in the dev stack the app talks to
+`http://seaweedfs:8333`, which a browser on the host cannot reach, and a link
+signed for it answers `403` even after you re-point the port. Set
+`S3_PUBLIC_ENDPOINT_URL` to the address a reader actually uses
+(`http://localhost:8333` in dev, the real hostname in production) and the
+links are signed for that instead; leave it empty when the app and its readers
+share one address.
 
 ```python
 from fastapi import APIRouter, HTTPException, Response

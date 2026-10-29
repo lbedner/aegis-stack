@@ -45,13 +45,24 @@ class S3Storage:
         secret_key: str | None,
         region: str,
         path_style: bool = True,
+        public_endpoint_url: str | None = None,
     ) -> None:
         import boto3
         from botocore.config import Config
 
         self.bucket = bucket
         self.endpoint_url = endpoint_url
+        # What a presigned link is signed for. SigV4 signs the Host header,
+        # so a link signed for the endpoint the containers use
+        # (``http://seaweedfs:8333``) answers 403 anywhere else. Empty: the
+        # same endpoint, which is right when the app and its readers share
+        # one address.
+        self.public_endpoint_url = public_endpoint_url or endpoint_url
         self.region = region
+        self.path_style = path_style
+        self._access_key = access_key
+        self._secret_key = secret_key
+        self._public_client: Any = None
         self._client: Any = boto3.client(
             "s3",
             endpoint_url=endpoint_url,
@@ -77,7 +88,30 @@ class S3Storage:
             secret_key=settings.S3_SECRET_KEY or None,
             region=settings.S3_REGION,
             path_style=settings.S3_PATH_STYLE,
+            public_endpoint_url=getattr(settings, "S3_PUBLIC_ENDPOINT_URL", None)
+            or None,
         )
+
+    def _signing_client(self) -> Any:
+        """The client whose address ends up in the link."""
+        if self.public_endpoint_url == self.endpoint_url:
+            return self._client
+        if self._public_client is None:
+            import boto3
+            from botocore.config import Config
+
+            self._public_client = boto3.client(
+                "s3",
+                endpoint_url=self.public_endpoint_url,
+                aws_access_key_id=self._access_key,
+                aws_secret_access_key=self._secret_key,
+                region_name=self.region,
+                config=Config(
+                    signature_version="s3v4",
+                    s3={"addressing_style": "path" if self.path_style else "virtual"},
+                ),
+            )
+        return self._public_client
 
     # -- the protocol -----------------------------------------------------
 
@@ -98,10 +132,14 @@ class S3Storage:
     async def presigned_url(
         self, key: str, *, expires_seconds: int = 600
     ) -> str | None:
-        """A time-limited link straight to the object, no app in the middle."""
+        """A time-limited link straight to the object, no app in the middle.
+
+        Signed against ``public_endpoint_url`` — via a second client only
+        when that differs, so the common case keeps one.
+        """
         validate_key(key)
         return await asyncio.to_thread(
-            self._client.generate_presigned_url,
+            self._signing_client().generate_presigned_url,
             "get_object",
             Params={"Bucket": self.bucket, "Key": key},
             ExpiresIn=expires_seconds,

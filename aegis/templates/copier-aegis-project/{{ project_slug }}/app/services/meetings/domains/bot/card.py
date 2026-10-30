@@ -305,6 +305,11 @@ async def speak(page: Page, audio: bytes) -> float:
     return await page.evaluate("(audio) => window.__meetingCard.speak(audio)", encoded)
 
 
+async def silence(page: Page) -> None:
+    """Cut off whatever is playing into the microphone, and all queued after it."""
+    await page.evaluate("() => window.__meetingCard.silence()")
+
+
 async def stream(page: Page, pcm: bytes, rate: int) -> float:
     """Play a piece of speech still being made (PCM16 mono at ``rate``)
     into the microphone, after what is already playing; how many seconds

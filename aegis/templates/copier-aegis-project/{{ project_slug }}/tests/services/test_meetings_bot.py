@@ -649,6 +649,10 @@ async def test_a_question_heard_is_on_its_card_at_the_next_look(
     monkeypatch.setattr(transcript, "SETTLE_SECONDS", 0.0)
 
     meeting = await MeetingsService(async_db_session, None).request(MEET, "Notes")
+    # Dana is not its owner: anyone may wake it here.
+    await accounts.set_switch(
+        async_db_session, accounts.DEFAULT_AGENT, "answers_anyone", True
+    )
     await bot.run_meeting(meeting.id)  # type: ignore[arg-type]
 
     assert card.QUESTION_HEARD in [c["status"] for c in call.cards if "status" in c]

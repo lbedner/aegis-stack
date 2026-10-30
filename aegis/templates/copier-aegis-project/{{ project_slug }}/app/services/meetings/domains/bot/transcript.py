@@ -19,6 +19,7 @@ from app.services.meetings.domains.moments.detectors import (
     its_own,
     mentions,
     replying,
+    stops,
 )
 from app.services.meetings.models import Caption
 
@@ -112,12 +113,16 @@ class Transcript:
         for shown in {**self.unsure, **{c.line: c for c in captions}}.values():
             self._look(shown, now, patient=True)
         self._hear_her()
+        # A stop is due at once: it waits on neither a pause nor the beat.
+        stopping = {line for line, c in self.pending.items() if self._stops(c)}
         held = self.held = {
             line
             for line, c in self.pending.items()
-            if self._for_bot(c) and now - self.changed[line] < SETTLE_SECONDS
+            if line not in stopping
+            and self._for_bot(c)
+            and now - self.changed[line] < SETTLE_SECONDS
         }
-        settled = any(
+        settled = bool(stopping) or any(
             self._for_bot(c) for line, c in self.pending.items() if line not in held
         )
         if settled or now - self.written_at >= BEAT_SECONDS:
@@ -212,6 +217,11 @@ class Transcript:
             return False
         return self._back(caption) or mentions(caption.text, self.bot)
 
+    def _stops(self, caption: Caption) -> bool:
+        """Whether a piece someone else said is a stop (``stops``): whether
+        they may stop the bot is the detector's to say, once written."""
+        return not its_own(caption.speaker, self.bot) and stops(caption.text, self.bot)
+
     def _back(self, caption: Caption) -> bool:
         """Whether a piece is said back to the bot (``replying``: the rule
         the detectors read it by)."""
@@ -242,6 +252,9 @@ class Transcript:
         writing = [c for line, c in self.pending.items() if line not in held]
         self.pending = {line: self.pending[line] for line in held}
         for c in writing:
+            if self._stops(c):  # nobody is answered now: only her name wakes her
+                self.asker = ""
+                continue
             if not self._for_bot(c):
                 continue
             if (first := self._asked_again(c)) is not None:

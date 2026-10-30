@@ -369,3 +369,16 @@ async def test_speech_still_being_made_plays_piece_after_piece(page: Page) -> No
 
     assert first == pytest.approx(0.25, abs=0.05)
     assert second == pytest.approx(0.5, abs=0.08)
+
+
+async def test_silenced_what_was_playing_stops_and_the_next_plays_at_once(
+    page: Page,
+) -> None:
+    """Told to stop, what she was saying is cut off: what she says next
+    plays at once, not after it."""
+    await card.speak(page, _tone(0.5))
+
+    await card.silence(page)
+    after = await card.speak(page, _tone(0.25))
+
+    assert after == pytest.approx(0.25, abs=0.05)

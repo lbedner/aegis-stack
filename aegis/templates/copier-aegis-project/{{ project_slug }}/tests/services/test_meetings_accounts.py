@@ -209,14 +209,14 @@ async def test_an_agent_keeps_its_image_and_whether_its_camera_is_on(
     )
     await accounts.set_switch(async_db_session, accounts.DEFAULT_AGENT, "camera", False)
     await accounts.set_switch(
-        async_db_session, accounts.DEFAULT_AGENT, "answers_anyone", False
+        async_db_session, accounts.DEFAULT_AGENT, "answers_anyone", True
     )
 
     [row] = await accounts.overview(async_db_session)
     kept = await accounts.image_named(async_db_session, accounts.DEFAULT_AGENT)
 
     assert row.image is not None and not row.account.camera
-    assert not row.account.answers_anyone
+    assert row.account.answers_anyone
     assert kept is not None and (kept.data, kept.content_type) == (
         PIXEL_PNG,
         "image/png",

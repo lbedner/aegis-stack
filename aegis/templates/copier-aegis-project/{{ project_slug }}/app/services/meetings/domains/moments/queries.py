@@ -10,6 +10,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.meetings.domains.moments.detectors import (
     ADDRESSED,
+    STOP,
     Before,
     Heard,
     addressee,
@@ -126,27 +127,30 @@ async def _lines(db: AsyncSession, meeting_ids: list[int]) -> list[Line]:
     ]
 
 
-async def _put_to_it(db: AsyncSession, meeting_ids: list[int]) -> set[int]:
-    """The lines of these meetings put to the bot (``addressed``)."""
-    query = select(MeetingMoment.line_id).where(
+async def _put_to_it(db: AsyncSession, meeting_ids: list[int]) -> dict[int, str]:
+    """The lines of these meetings put to the bot (``addressed``) or
+    stopping it (``stop``), and which."""
+    query = select(MeetingMoment.line_id, MeetingMoment.kind).where(
         col(MeetingMoment.meeting_id).in_(meeting_ids),
-        MeetingMoment.kind == ADDRESSED,
+        col(MeetingMoment.kind).in_((ADDRESSED, STOP)),
     )
-    return set((await db.exec(query)).all())
+    return dict((await db.exec(query)).all())
 
 
-def _befores(lines: list[Line], put_to_it: set[int]) -> dict[int, Before]:
+def _befores(lines: list[Line], put_to_it: dict[int, str]) -> dict[int, Before]:
     """Before each line (but a meeting's first), from ``lines`` in order:
     who said the one before, how long before this began that ended, who
-    last put something to the bot (a line in ``put_to_it``), and what the
-    one before said."""
+    last put something to the bot (a line ``put_to_it``; nobody since a
+    stop), and what the one before said."""
     before: dict[int, Before] = {}
     last: dict[int, Before] = {}  # meeting -> its line so far, as the next sees it
     for i, m, text, start, end, who, _ in lines:
         said, ended, asker, words = last.get(m, ("", 0.0, "", ""))
         if m in last:
             before[i] = (said, start - ended, asker, words)
-        last[m] = (who, end, who if i in put_to_it else asker, text)
+        kind = put_to_it.get(i)
+        asker = who if kind == ADDRESSED else "" if kind == STOP else asker
+        last[m] = (who, end, asker, text)
     return before
 
 
@@ -197,7 +201,7 @@ async def of_meeting(
     db: AsyncSession, meeting_id: int
 ) -> list[tuple[MeetingMoment, float, str]]:
     """A meeting's moments in the order they were said, each with when and
-    by whom."""
+    by whom; never a stop, which is the bot's to obey, not the meeting's."""
     query = (
         with_speaker(
             select(
@@ -206,7 +210,7 @@ async def of_meeting(
                 MeetingParticipant.display_name,
             ).join(TranscriptLine, col(TranscriptLine.id) == MeetingMoment.line_id)
         )
-        .where(MeetingMoment.meeting_id == meeting_id)
+        .where(MeetingMoment.meeting_id == meeting_id, MeetingMoment.kind != STOP)
         .order_by(col(TranscriptLine.start_seconds), col(MeetingMoment.id))
     )
     return [

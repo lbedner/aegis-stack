@@ -3,6 +3,7 @@ the kinds of moment it takes and where it runs: in the browser (copied),
 in the app, or on a runner on another machine. Asking one makes a run,
 claimed once by what runs it and finished with what it came back with."""
 
+import asyncio
 from collections.abc import Awaitable
 from importlib.util import find_spec
 from typing import Any
@@ -449,6 +450,35 @@ async def test_an_action_that_runs_in_the_app_finishes_on_its_own(
 
     await async_db_session.refresh(run)
     assert (run.status, run.result, run.runner) == ("done", "Yes, Thursday.", "app")
+
+
+async def test_a_run_told_to_stop_is_cut_off_and_failed_as_stopped(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Dropped while it works (the bot told to stop): the work in the app is
+    cancelled, never finished, and the run says it was stopped."""
+    from tests._session import opens
+
+    monkeypatch.setattr(runs, "get_async_session", opens(async_db_session))
+    started, never = asyncio.Event(), asyncio.Event()
+
+    async def answer(prompt: str, owner_user_id: int | None) -> str:
+        started.set()
+        await never.wait()
+        return "too late"
+
+    _register(
+        monkeypatch, Action("slow", "Slow", frozenset({"question"}), "app", run=answer)
+    )
+    _, moment_id = await asked_a_question(async_db_session)
+    run = await ask(async_db_session, moment_id, "slow", owner_user_id=None)
+    await asyncio.wait_for(started.wait(), 5)
+
+    await runs.drop(async_db_session, [moment_id])
+    await asyncio.sleep(0.05)
+
+    await async_db_session.refresh(run)
+    assert (run.status, run.result) == ("failed", runs.STOPPED)
 
 
 async def test_a_kind_can_ask_an_action_by_itself(

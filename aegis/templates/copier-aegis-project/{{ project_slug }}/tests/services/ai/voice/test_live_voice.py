@@ -129,6 +129,27 @@ async def test_how_she_talks_is_the_callers_else_the_engines(
         assert built["instructions"] == used
 
 
+async def test_told_to_stop_her_answer_is_cut_off_and_she_stays_on(
+    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Stopped mid-answer: the provider cancels it where it was heard to,
+    the question owed is answered with nothing, and the call stays up for
+    the next one."""
+    realtime = FakeRealtime([], after_text=True)  # still answering
+
+    async with _her(async_db_session, monkeypatch, realtime, []) as voice:
+        assert voice is not None
+        asking = asyncio.create_task(voice.ask("Who owns billing?"))
+        while not realtime.live.sent:
+            await asyncio.sleep(0.01)
+
+        await voice.stop()
+
+        assert await asyncio.wait_for(asking, 1) == ""
+        assert realtime.live.interrupted == [0]
+        assert voice.open
+
+
 async def test_once_the_call_is_over_she_is_asked_nothing_more(
     async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:

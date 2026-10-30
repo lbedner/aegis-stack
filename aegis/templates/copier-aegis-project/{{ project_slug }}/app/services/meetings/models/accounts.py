@@ -46,7 +46,7 @@ class BotAccount(SQLModel, table=True):
         default=True, description="Its camera on in a call, showing its card"
     )
     answers_anyone: bool = Field(
-        default=True,
+        default=False,
         description="Answers anyone in a call who puts a question to it by "
         "name; off: only its meeting's owner",
     )

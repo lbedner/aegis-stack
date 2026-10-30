@@ -8,7 +8,7 @@ Another service registers its own detectors and actions in its
 found on disk like its ``tools`` and imported before either is first read.
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from difflib import SequenceMatcher
 from functools import cache
@@ -84,14 +84,17 @@ def detectors() -> dict[str, Detector]:
 
 # The kind the meetings service finds itself.
 QUESTION = "question"
-# What a question opens on, or a clause of it: who or what it asks, or
-# the verb turned to ask it.
-ASKING = frozenset(
-    "who whom whose what what's when where where's why how which "
+# What asks who or what.
+WH = frozenset("who whom whose what what's when where where's why how which".split())
+# The verbs turned to ask whether; right after a name, it is who the line
+# is about ("Iliana is listening").
+VERBS = frozenset(
     "is isn't are aren't am was wasn't were weren't do don't does doesn't "
     "did didn't can can't could couldn't would wouldn't will won't should "
-    "shouldn't shall have haven't has hasn't had may might anyone anybody".split()
+    "shouldn't shall have haven't has hasn't had may might".split()
 )
+# What a question opens on, or a clause of it.
+ASKING = WH | VERBS | {"anyone", "anybody"}
 # A statement asked at its end: ``..., right?``
 TAGS = frozenset({"right", "correct"})
 # What says nothing anywhere in speech, not only where a clause opens.
@@ -143,8 +146,13 @@ def asked_of_someone(text: str, people: frozenset[str]) -> bool:
     # (``when did Tom ship it?``) reads as one put to them.
     said = " ".join(_sentences(text)[-2:]).lower()
     words = set(WORD.findall(NOT_ADDRESSED.sub(" ", said)))
-    names = {first for person in people if len(first := person.split()[0].lower()) > 2}
-    return bool(words & YOU or words & names or LEAVE.search(said))
+    return bool(words & YOU or words & first_names(people) or LEAVE.search(said))
+
+
+def first_names(people: Iterable[str]) -> set[str]:
+    """``people``'s first names, lowercased, as a line would say them (too
+    short to tell from a word left out)."""
+    return {first for person in people if len(first := person.split()[0].lower()) > 2}
 
 
 def asks(text: str) -> bool:
@@ -184,6 +192,8 @@ REQUESTS = frozenset(
 # they hear it (Illiana, Iliana, Eliana).
 NAME_LIKE = 0.75
 ENDS = ("?", ".", "!")
+# The word a name runs straight on into, nothing between.
+ABOUT = re.compile(r"\s+([a-z']+)", re.IGNORECASE)
 
 
 # What Meet calls the bot's own captions, in its own page.
@@ -201,6 +211,8 @@ THANKS = frozenset(
     "thanks thank you cool great got it nice perfect awesome sure no yep nope "
     "right gotcha good".split()
 )
+# Her, spoken of: a line saying one of these is about her, not to her.
+SHE = frozenset("she she's she'll she'd her hers herself".split())
 
 
 def addressee(speaker: str, is_me: bool, bot: str, anyone: bool) -> str:
@@ -280,12 +292,21 @@ def addressed(heard: Heard) -> str | None:
     (``replying``), the whole line is, its name or not, unless all it says
     is thanks (``THANKS``)."""
     text = heard.text.strip()
-    if not heard.addressee or not text.endswith(ENDS):
+    if not heard.addressee or not text.endswith(ENDS) or stop(heard):
         return None
     if heard.replying and not mentions(text, heard.addressee):
-        return text if set(_words(text)) - THANKS - FILLERS else None
+        return text if _says_back(heard) else None
     ask = _past_name(text, heard.addressee)
     return None if ask is None else _asked(ask)
+
+
+def _says_back(heard: Heard) -> bool:
+    """Whether a line said right after the bot is said back to it: more
+    than thanks (``THANKS``), and not to another person in the call (named)
+    or about the bot (``SHE``)."""
+    words = set(_words(heard.text))
+    others = heard.people - {heard.speaker, ITSELF, heard.addressee}
+    return bool(words - THANKS - FILLERS) and not words & (SHE | first_names(others))
 
 
 def put_to(text: str, name: str) -> str:
@@ -334,8 +355,12 @@ def _past_name(text: str, name: str) -> str | None:
     at = next((i for i, w in enumerate(words) if named(w.group(), name)), None)
     if at is None:
         return None
-    if all(w.group().lower() in GREETINGS | FILLERS for w in words[:at]):
-        return text[words[at].end() :].lstrip(" ,.;:!-")
+    opening = {w.group().lower() for w in words[:at]}
+    if opening <= GREETINGS | FILLERS:
+        rest = text[words[at].end() :]
+        # "So Iliana is listening": her name as who the line is about.
+        about = (run := ABOUT.match(rest)) and run.group(1).lower() in VERBS
+        return None if about and not opening & GREETINGS else rest.lstrip(" ,.;:!-")
     if at == len(words) - 1:
         end = text[-1] if text.endswith(ENDS) else ""
         return text[: words[at].start()].rstrip(" ,;:-") + end
@@ -353,3 +378,45 @@ def _asked(ask: str) -> str | None:
 
 
 register_detector(ADDRESSED, addressed, title="Asked by name")
+
+
+# The kind a stop is: everything the bot is doing dropped (``bot.answers``).
+STOP = "stop"
+# What stops her, each said by itself.
+STOPS = frozenset(
+    {
+        "stop", "stop it", "stop talking", "quiet", "be quiet", "hush", "silence",
+        "shut up", "enough", "that's enough", "never mind", "nevermind", "cancel",
+    }
+)  # fmt: skip
+# Said around a stop, changing nothing.
+AROUND_A_STOP = GREETINGS | FILLERS | {"no", "please"}
+CLAUSE = re.compile(r"[.!?,;]+")
+
+
+def stop(heard: Heard) -> str | None:
+    """A stop (``stops``) from one who may wake the bot."""
+    return (
+        heard.text if heard.addressee and stops(heard.text, heard.addressee) else None
+    )
+
+
+def stops(text: str, name: str) -> bool:
+    """Whether ``text`` is only a stop (``STOPS``, alone in each clause,
+    ``name`` and a greeting at most beside it). Read as soon as it is heard,
+    not once the caption ends: stopped a word early, she only goes quiet."""
+    # ponytail: a caption caught at "Stop" that grows into "Stop the deploy
+    # ..." has already stopped her; a model's read would cost a second.
+    clauses = [
+        " ".join(
+            word
+            for word in WORD.findall(clause)
+            if word not in AROUND_A_STOP and not named(word, name)
+        )
+        for clause in CLAUSE.split(text.lower())
+    ]
+    said = [clause for clause in clauses if clause]
+    return bool(said) and all(clause in STOPS for clause in said)
+
+
+register_detector(STOP, stop, title="Told to stop")

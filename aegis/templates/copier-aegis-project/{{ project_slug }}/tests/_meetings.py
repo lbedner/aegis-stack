@@ -189,6 +189,7 @@ class FakeCall(Steps):
         self.mic_open = False
         self.until = float("-inf")  # when what it said has played
         self.captions_offered = True
+        self.silenced = False  # what was playing cut off
 
     async def _at(self, moment: str) -> None:
         if moment in self.during:
@@ -230,6 +231,9 @@ class FakeCall(Steps):
     async def hush(self) -> None:
         self.mic_open = False
 
+    async def silence(self) -> None:
+        self.silenced = True
+
     async def captions(self) -> list[Caption]:
         if self.sound and self.on_audio is not None:
             self.on_audio(SECOND)
@@ -251,6 +255,7 @@ class FakeLive:
         self.said, self.open = said, open
         self.asked: list[str] = []
         self.spoken = list(spoken)
+        self.stopped = False
 
     async def ask(self, text: str) -> str:
         self.asked.append(text)
@@ -261,6 +266,9 @@ class FakeLive:
 
     def spoke(self, text: str) -> bool:
         return text in self.spoken
+
+    async def stop(self) -> None:
+        self.stopped = True
 
 
 def hold_the_series_writer(monkeypatch: pytest.MonkeyPatch) -> list[Any]:

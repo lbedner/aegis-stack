@@ -236,6 +236,7 @@
   const video = canvas.captureStream(0).getVideoTracks()[0];
   setInterval(() => video.requestFrame(), 1000 / FPS);
   let voice = null, mic = null, until = 0;
+  const playing = new Set();  // what is playing or queued, to cut off
   function microphone() {
     if (!voice) {
       voice = new AudioContext();
@@ -253,6 +254,8 @@
     source.buffer = sound;
     source.connect(mic);
     const at = Math.max(voice.currentTime, until);
+    playing.add(source);
+    source.onended = () => playing.delete(source);
     source.start(at);
     until = at + sound.duration;
     return until - voice.currentTime;
@@ -277,6 +280,11 @@
       const level = sound.getChannelData(0);
       for (let i = 0; i < samples.length; i++) level[i] = samples[i] / 32768;
       return queue(sound);
+    },
+    silence() {
+      for (const source of playing) source.stop();
+      playing.clear();
+      until = 0;
     },
     picture() { return canvas.toDataURL(); },
     // How far right the last drawing's text reached: never past the card.

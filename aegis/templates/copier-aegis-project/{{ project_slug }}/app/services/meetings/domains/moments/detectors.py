@@ -25,8 +25,9 @@ class Heard:
     """One line as a detector reads it: who said it, whether that is the
     owner, what was said so far, everyone who has spoken in the call (by
     the names it gave them), the bot's name where this speaker may wake it
-    (``addressee``; empty where they may not, or it is the bot's own), and
-    whether it was said right after the bot spoke (``replying``)."""
+    (``addressee``; empty where they may not, or it is the bot's own),
+    whether it was said right after the bot spoke (``replying``), and begun
+    while it was still talking (``over``)."""
 
     line_id: int
     speaker: str
@@ -35,6 +36,7 @@ class Heard:
     people: frozenset[str] = frozenset()
     addressee: str = ""
     replying: bool = False
+    over: bool = False
 
 
 Detector = Callable[[Heard], str | None]
@@ -211,6 +213,8 @@ THANKS = frozenset(
     "thanks thank you cool great got it nice perfect awesome sure no yep nope "
     "right gotcha good".split()
 )
+# What says nothing, put to the bot: thanks, a filler, an um.
+NOTHING = THANKS | FILLERS | UMS
 # Her, spoken of: a line saying one of these is about her, not to her.
 SHE = frozenset("she she's she'll she'd her hers herself".split())
 
@@ -245,6 +249,15 @@ def replying(before: Before | None, speaker: str, bot: str, text: str) -> bool:
     said, gap, asker, its_words = before
     back = its_own(said, bot) and gap <= FOLLOW_SECONDS and speaker == asker
     return back and not (gap <= ECHO_SECONDS and echoes(text, its_words))
+
+
+def talking_over(before: Before | None, speaker: str, bot: str, text: str) -> bool:
+    """Whether a line ``speaker`` said (``text``) was begun while the bot's
+    voice still played (a gap below zero), not its own words heard back."""
+    if before is None or its_own(speaker, bot):
+        return False
+    said, gap, _, its_words = before
+    return its_own(said, bot) and gap < 0 and not echoes(text, its_words)
 
 
 def echoes(text: str, said: str) -> bool:
@@ -290,23 +303,44 @@ def addressed(heard: Heard) -> str | None:
     and asking something (``asks``) or for something done (``REQUESTS``).
     A line that names it in passing is about it, not to it. Said back to it
     (``replying``), the whole line is, its name or not, unless all it says
-    is thanks (``THANKS``)."""
+    is thanks (``THANKS``); begun over it (``over``), only an ask is: the
+    rest cuts in (``cut_in``)."""
+    put = _put_to_her(heard)
+    if put is None:
+        return None
+    said, back = put
+    return said if back and not heard.over else _asked(said)
+
+
+def _put_to_her(heard: Heard) -> tuple[str, bool] | None:
+    """What a line, said to its end, puts to the bot, and whether it is
+    said back to it (``replying``: all of it, more than thanks); else what
+    its name opens or closes (``_past_name``). None for a stop, or a line
+    not put to it."""
     text = heard.text.strip()
     if not heard.addressee or not text.endswith(ENDS) or stop(heard):
         return None
     if heard.replying and not mentions(text, heard.addressee):
-        return text if _says_back(heard) else None
-    ask = _past_name(text, heard.addressee)
-    return None if ask is None else _asked(ask)
+        return (text, True) if _says_back(heard) else None
+    said = _past_name(text, heard.addressee)
+    return None if said is None else (said, False)
 
 
 def _says_back(heard: Heard) -> bool:
     """Whether a line said right after the bot is said back to it: more
     than thanks (``THANKS``), and not to another person in the call (named)
     or about the bot (``SHE``)."""
-    words = set(_words(heard.text))
+    words = set(WORD.findall(heard.text.lower()))
     others = heard.people - {heard.speaker, ITSELF, heard.addressee}
-    return bool(words - THANKS - FILLERS) and not words & (SHE | first_names(others))
+    return says_more(heard.text, NOTHING) and not words & (SHE | first_names(others))
+
+
+def says_more(text: str, than: frozenset[str], name: str = "") -> bool:
+    """Whether ``text`` says a word beyond ``than`` and ``name``."""
+    return any(
+        word not in than and not named(word, name)
+        for word in WORD.findall(text.lower())
+    )
 
 
 def put_to(text: str, name: str) -> str:
@@ -420,3 +454,37 @@ def stops(text: str, name: str) -> bool:
 
 
 register_detector(STOP, stop, title="Told to stop")
+
+
+# Cut in on: what the bot is saying paused, the rest kept (``bot.answers``).
+CUT_IN = "cut_in"
+# Told to go on: what it was saying when cut in on, said on.
+GO_ON = "go_on"
+# Kept with the transcript, never listed as moments: the bot's to obey.
+OBEYED = frozenset({STOP, CUT_IN, GO_ON})
+# Said over the bot that cuts in on nothing: a nod. "Wait" is a cut-in.
+NODS = (NOTHING | {"mm", "mhm", "huh"}) - {"wait"}
+
+
+def cut_in(heard: Heard) -> str | None:
+    """A line begun over the bot (``over``) by one who may wake it, more
+    than a nod (``NODS``) and no stop (``stop``: its own)."""
+    if not heard.over or not heard.addressee or stop(heard):
+        return None
+    return heard.text if says_more(heard.text, NODS, heard.addressee) else None
+
+
+def go_on(heard: Heard) -> str | None:
+    """A line put to the bot (``_put_to_her``) that asks nothing
+    (``_asked``) and is more than thanks: told to go on ("Go ahead,
+    Illiana", "Sorry, you were saying."), however it is said. Whether it
+    has anything to go on with is the bot's to say. Said over it, it holds
+    it (``cut_in``)."""
+    put = None if heard.over else _put_to_her(heard)
+    if put is None or _asked(put[0]) is not None:
+        return None
+    return heard.text if says_more(put[0], NOTHING) else None
+
+
+register_detector(CUT_IN, cut_in, title="Cut in on")
+register_detector(GO_ON, go_on, title="Told to go on")

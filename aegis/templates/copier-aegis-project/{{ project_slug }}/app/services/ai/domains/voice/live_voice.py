@@ -22,7 +22,9 @@ from app.core.log import logger
 from app.services.ai.domains.voice import live_engines
 from app.services.ai.domains.voice.realtime_calls import drive, open_call
 
-# Where a piece of her voice goes, at its sample rate (PCM16, mono).
+# Where a piece of her voice goes, at its sample rate (PCM16, mono): back
+# once it is about to be heard (paced to what plays), since ``stop`` cuts
+# her answer where ``play`` has taken it to.
 Play = Callable[[bytes, int], Awaitable[None]]
 # The longest one answer may take, tools and all, before it is given up.
 ANSWER_SECONDS = 90.0

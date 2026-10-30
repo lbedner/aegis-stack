@@ -433,6 +433,96 @@ def test_a_stop_counts_only_from_one_who_may_wake_the_bot_and_alone() -> None:
     assert stop("We should stop for lunch.") is None
 
 
+def test_a_line_begun_while_she_talks_is_over_her_unless_it_is_her_echo() -> None:
+    """``Before`` says how long before a line began she was last heard: below
+    zero, her voice was still playing. Her own words heard back meanwhile
+    are her echo, not someone over her."""
+    words = "The deploy failed at four because the cache was cold."
+
+    def over(text: str, gap: float = -2.0, speaker: str = "Leonard") -> bool:
+        before = ("You", gap, "Leonard", words)
+        return detectors.talking_over(before, speaker, "Illiana", text)
+
+    assert over("Wait, which deploy?")
+    assert not over("because the cache")  # her echo
+    assert not over("Wait, which deploy?", gap=0.5)  # she was done
+    assert not over("Wait, which deploy?", speaker="Illiana")
+    # Read back after the call, the line before is anyone's: two people
+    # talking over each other is not someone talking over her.
+    dana = ("Dana", -2.0, "Leonard", "The deploy is late.")
+    assert not detectors.talking_over(dana, "Leonard", "Illiana", "Wait, which?")
+    assert not detectors.talking_over(None, "Leonard", "Illiana", "Wait.")
+
+
+@pytest.mark.parametrize(
+    "said", ["Wait.", "Hold on, which deploy?", "Sorry, can I jump in?"]
+)
+def test_one_who_may_wake_her_talking_over_her_cuts_in(said: str) -> None:
+    heard = Heard(1, "Leonard", said, True, addressee="Illiana", over=True)
+
+    assert detectors.cut_in(heard) == said
+
+
+def test_said_back_over_her_only_a_real_ask_is_put_to_her() -> None:
+    """Her asker talking over her is said back to her (``replying``), but
+    "Hold on." is a cut-in, not a question to answer next."""
+
+    def back(text: str) -> str | None:
+        return detectors.addressed(
+            Heard(
+                1, "Leonard", text, True, addressee="Illiana", replying=True, over=True
+            )
+        )
+
+    assert back("Hold on.") is None
+    assert back("Wait, which deploy?") == "Wait, which deploy?"
+
+
+def test_a_nod_a_stop_or_one_who_may_not_wake_her_is_no_cut_in() -> None:
+    def cut(text: str, over: bool = True, addressee: str = "Illiana") -> str | None:
+        return detectors.cut_in(
+            Heard(1, "Leonard", text, True, addressee=addressee, over=over)
+        )
+
+    assert cut("Yeah, right.") is None and cut("Mm-hmm.") is None  # a nod
+    assert cut("Thanks, Illiana.") is None and cut("Erm.") is None
+    assert cut("Stop.") is None  # a stop's own
+    assert cut("Hold on.", over=False) is None
+    assert cut("Hold on.", addressee="") is None
+
+
+@pytest.mark.parametrize(
+    "said", ["Go ahead, Illiana.", "Okay Illiana, carry on.", "Illiana, go on."]
+)
+def test_a_line_put_to_her_that_asks_nothing_tells_her_to_go_on(said: str) -> None:
+    """No list of ways to say it: put to her, it asks nothing, and is no
+    stop or thanks. Whether she has anything to go on with is hers."""
+    heard = Heard(1, "Leonard", said, True, addressee="Illiana")
+
+    assert detectors.go_on(heard) == said
+    assert detectors.addressed(heard) is None
+
+
+def test_a_question_a_stop_thanks_or_another_named_is_no_go_on() -> None:
+    def go(text: str, replying: bool = False, addressee: str = "Illiana") -> str | None:
+        people = frozenset({"Leonard", "Dana"})
+        return detectors.go_on(
+            Heard(1, "Leonard", text, True, people, addressee, replying=replying)
+        )
+
+    assert go("Illiana, what failed?") is None
+    assert go("Illiana, stop.") is None and go("Thanks, Illiana.") is None
+    assert go("Go ahead, Illiana.", addressee="") is None
+    assert go("Go ahead.") is None  # to anyone
+    assert go("Sorry, you were saying.", replying=True) == "Sorry, you were saying."
+    assert go("Go ahead, Dana.", replying=True) is None  # to another
+    # Said over her, it holds her: a cut-in, never also a go-on.
+    over = Heard(
+        1, "Leonard", "Illiana, hold on.", True, addressee="Illiana", over=True
+    )
+    assert detectors.go_on(over) is None
+
+
 @pytest.fixture
 def her_answer_held(monkeypatch: pytest.MonkeyPatch) -> None:
     hold_the_answers(monkeypatch)

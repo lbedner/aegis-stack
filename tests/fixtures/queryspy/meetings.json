@@ -220,7 +220,7 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM meeting_moment JOIN meeting_transcript_line ON meeting_transcript_line.id = meeting_moment.line_id LEFT OUTER JOIN meeting_participant ON meeting_transcript_line.participant_id = meeting_participant.id LEFT OUTER JOIN meeting_person ON meeting_person.id = meeting_participant.person_id WHERE meeting_moment.meeting_id = :meeting_id_1 AND meeting_moment.kind != :kind_1 ORDER BY meeting_transcript_line.start_seconds, meeting_moment.id",
+      "label": "SELECT ... FROM meeting_moment JOIN meeting_transcript_line ON meeting_transcript_line.id = meeting_moment.line_id LEFT OUTER JOIN meeting_participant ON meeting_transcript_line.participant_id = meeting_participant.id LEFT OUTER JOIN meeting_person ON meeting_person.id = meeting_participant.person_id WHERE meeting_moment.meeting_id = :meeting_id_1 AND (meeting_moment.kind NOT IN (__[POSTCOMPILE_kind_1])) ORDER BY meeting_transcript_line.start_seconds, meeting_moment.id",
       "file": "app/services/meetings/domains/moments/queries.py",
       "function": "of_meeting"
     },

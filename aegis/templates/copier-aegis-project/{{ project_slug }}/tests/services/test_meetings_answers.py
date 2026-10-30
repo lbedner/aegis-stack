@@ -5,9 +5,10 @@ is done, and that it is looking it up only once she starts to."""
 from typing import Any
 
 import pytest
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.meetings.domains.actions import registry
+from app.services.meetings.domains.actions import registry, runs
 from app.services.meetings.domains.actions.registry import Action
 from app.services.meetings.domains.bot import answers
 from app.services.meetings.domains.bot.meet import CallState
@@ -45,8 +46,6 @@ async def _unused(prompt: str, owner_user_id: int | None) -> str:
 
 async def _over(db: AsyncSession, status: str, result: str) -> None:
     """Her answer to the one question put to her, done or failed."""
-    from sqlmodel import select
-
     (run,) = (await db.exec(select(MeetingActionRun))).all()
     run.status, run.result = status, result
     db.add(run)
@@ -67,7 +66,7 @@ async def test_a_quick_answer_is_said_without_looking_it_up_first(
     call = FakeCall([CallState.IN_CALL])
     answering = answers.Answers(call, voice="hers")
 
-    await answering.heard([(moment_id, "addressed")])
+    await answering.heard(async_db_session, [(moment_id, "addressed")])
     await _over(async_db_session, "done", "Sam owns billing.")
     await answering.answer(async_db_session)
     await answering.answer(async_db_session)  # said once
@@ -87,7 +86,7 @@ async def test_a_slow_answer_with_nothing_to_look_up_is_just_said(
     call = FakeCall([CallState.IN_CALL])
     answering = answers.Answers(call, voice="hers")
 
-    await answering.heard([(moment_id, "addressed")])
+    await answering.heard(async_db_session, [(moment_id, "addressed")])
     await answering.answer(async_db_session)
     await answering.said()
 
@@ -104,7 +103,7 @@ async def test_once_she_looks_it_up_she_says_so_once(
     call = FakeCall([CallState.IN_CALL])
     answering = answers.Answers(call, voice="hers")
 
-    await answering.heard([(moment_id, "addressed")])
+    await answering.heard(async_db_session, [(moment_id, "addressed")])
     answering.looking_up(moment_id)
     await answering.answer(async_db_session)
     answering.looking_up(moment_id)
@@ -130,7 +129,7 @@ async def test_an_answer_is_posted_at_once_and_spoken_a_sentence_at_a_time(
     call = FakeCall([CallState.IN_CALL])
     answering = answers.Answers(call, voice="hers")
 
-    await answering.heard([(moment_id, "addressed")])
+    await answering.heard(async_db_session, [(moment_id, "addressed")])
     await _over(async_db_session, "done", "Sam owns billing. Dana owns search.")
     await answering.answer(async_db_session)
     assert call.said == ["Sam owns billing. Dana owns search."] and call.spoken == []
@@ -149,7 +148,7 @@ async def test_a_step_of_another_run_is_not_her_looking_it_up(
     call = FakeCall([CallState.IN_CALL])
     answering = answers.Answers(call, voice="hers")
 
-    await answering.heard([(moment_id, "addressed")])
+    await answering.heard(async_db_session, [(moment_id, "addressed")])
     assert answering.looking_up(moment_id + 99) == moment_id + 99
     await answering.answer(async_db_session)
     await answering.said()
@@ -170,7 +169,7 @@ async def test_she_is_saying_her_answer_until_it_has_played(
     call = FakeCall([CallState.IN_CALL])
     her_voice = FakeLive(spoken=("Sam owns billing.",)) if live else None
     answering = answers.Answers(call, voice="hers", live=her_voice)
-    await answering.heard([(moment_id, "addressed")])
+    await answering.heard(async_db_session, [(moment_id, "addressed")])
     await _over(async_db_session, "done", "Sam owns billing.")
     call.until = asyncio.get_running_loop().time() + 0.2  # what plays
     await answering.answer(async_db_session)
@@ -196,7 +195,7 @@ async def test_her_mic_is_open_from_the_question_until_her_answer_has_played(
 
     await answering.mic()
     assert not call.mic_open
-    await answering.heard([(moment_id, "addressed")])
+    await answering.heard(async_db_session, [(moment_id, "addressed")])
     await answering.mic()
     assert call.mic_open
     await _over(async_db_session, "done", "Sam owns billing. Dana owns search.")
@@ -222,7 +221,7 @@ async def test_her_markdown_is_said_as_plain_sentences(
     call = FakeCall([CallState.IN_CALL])
     answering = answers.Answers(call, voice="hers")
 
-    await answering.heard([(moment_id, "addressed")])
+    await answering.heard(async_db_session, [(moment_id, "addressed")])
     await _over(
         async_db_session, "done", "- **Sam** owns billing.\n- Dana owns search."
     )
@@ -241,7 +240,7 @@ async def test_a_failed_answer_is_said_as_not_found_and_no_voice_types_it(
     call = FakeCall([CallState.IN_CALL])
     answering = answers.Answers(call, voice=None)
 
-    await answering.heard([(moment_id, "addressed"), (moment_id + 99, "question")])
+    await answering.heard(async_db_session, [(moment_id, "addressed"), (moment_id + 99, "question")])
     await _over(async_db_session, "failed", "x")
     await answering.answer(async_db_session)
 
@@ -287,6 +286,33 @@ async def test_a_line_for_the_bot_is_written_once_its_speaker_pauses(
     other = Caption("4", "Sam", "Can we move on to lunch now?")
     await _took(async_db_session, transcript, [other])
     assert "4" not in transcript.pending  # not the one it answered: not held
+
+
+async def test_a_stop_is_written_the_moment_it_is_heard(
+    async_db_session: AsyncSession, voiced: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A stop waits on neither the beat nor its speaker's pause: named or
+    not, it is written (and stops her) at the next look."""
+    from app.services.meetings.domains.bot import transcript as captions
+    from app.services.meetings.models import Caption
+
+    monkeypatch.setattr(captions, "BEAT_SECONDS", 3600.0)
+    monkeypatch.setattr(captions, "SETTLE_SECONDS", 60.0)
+    meeting_id = await a_meeting(async_db_session)
+    transcript = captions.Transcript(meeting_id, "Notes")
+
+    plain = await _took(async_db_session, transcript, [Caption("1", "Dana", "Stop.")])
+    named = await _took(
+        async_db_session, transcript, [Caption("2", "Dana", "Hey Notes, stop.")]
+    )
+
+    assert [kind for _, kind in plain] == ["stop"]
+    assert [kind for _, kind in named] == ["stop"]
+    # Stopped, what she is told next is put to her only by name.
+    monkeypatch.setattr(captions, "SETTLE_SECONDS", 0.0)
+    await _took(async_db_session, transcript, [Caption("3", "You", "Then the")])
+    after = Caption("4", "Dana", "How does a request reach the database?")
+    assert await _took(async_db_session, transcript, [after]) == []
 
 
 async def test_her_own_words_heard_back_through_a_mic_are_not_put_to_her(
@@ -551,7 +577,7 @@ async def test_with_nothing_to_answer_her_it_waits_on_nothing(
     call = FakeCall([CallState.IN_CALL])
     answering = answers.Answers(call, voice="hers")
 
-    await answering.heard([(1, "addressed")])
+    await answering.heard(async_db_session, [(1, "addressed")])
 
     assert answering.waiting == {}
     answering.close()
@@ -568,7 +594,7 @@ async def test_an_answer_she_said_live_is_posted_not_said_again(
         call, voice="hers", live=FakeLive(spoken=("Sam owns billing.",))
     )
 
-    await answering.heard([(moment_id, "addressed")])
+    await answering.heard(async_db_session, [(moment_id, "addressed")])
     answering.looking_up(None)  # a step of her live call's
     await answering.answer(async_db_session)  # looking, but she is talking already
     await _over(async_db_session, "done", "Sam owns billing.")
@@ -650,3 +676,30 @@ async def test_without_a_voice_there_is_no_live_voice() -> None:
 
     async with voice.live(FakeCall([CallState.IN_CALL]), None, None, None) as live:
         assert live is None and voice.LIVE.get() is None
+
+
+async def test_told_to_stop_she_drops_everything_and_listens_again(
+    async_db_session: AsyncSession, voiced: None
+) -> None:
+    """A stop while she answers: the answer owed is never said, what is
+    playing is cut off, her live answer is stopped and her mic closed; the
+    next question put to her is answered as ever."""
+    _, moment_id = await asked_a_question(async_db_session, lines=HER)
+    call = FakeCall([CallState.IN_CALL])
+    live = FakeLive()
+    answering = answers.Answers(call, voice="hers", live=live)
+    await answering.heard(async_db_session, [(moment_id, "addressed")])
+    await answering.mic()
+
+    await answering.heard(async_db_session, [(moment_id + 1, "stop")])
+    await answering.answer(async_db_session)
+    await answering.said()
+
+    assert call.said == [] and call.spoken == []
+    assert call.silenced and live.stopped and not call.mic_open
+    assert answering.saying() == set() and not answering.waiting
+    (run,) = (await async_db_session.exec(select(MeetingActionRun))).all()
+    assert (run.status, run.result) == ("failed", runs.STOPPED)
+    await answering.heard(async_db_session, [(moment_id, "addressed")])
+    assert answering.waiting
+    answering.close()

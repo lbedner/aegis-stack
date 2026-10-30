@@ -354,6 +354,11 @@ class MeetPage(Steps):
         await self.unmute()
         self._played(await card.stream(self.page, pcm, rate))
 
+    async def silence(self) -> None:
+        """What it is saying cut off: nothing still to play."""
+        await card.silence(self.page)
+        self._played(0.0)
+
     def _played(self, seconds: float) -> None:
         self.until = asyncio.get_running_loop().time() + seconds
 

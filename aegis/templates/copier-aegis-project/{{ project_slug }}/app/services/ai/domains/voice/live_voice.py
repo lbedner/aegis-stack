@@ -72,6 +72,14 @@ class LiveVoice:
         """Whether ``text`` is an answer she said aloud here."""
         return text in self._said
 
+    async def stop(self) -> None:
+        """Told to stop: the answer she is saying cancelled where it was
+        heard to (its audio not yet played discarded), and the question it
+        answers given nothing; the call stays up for the next."""
+        await self.turned(("", "", []))
+        if (session := self._session) is not None:
+            await session.interrupt(played_bytes=session.played_audio_bytes)
+
     async def turned(self, turn: tuple[str, str, list[dict[str, Any]]]) -> None:
         """Each finished turn of the call (``drive``'s ``on_turn``): what she
         said is the answer owed."""

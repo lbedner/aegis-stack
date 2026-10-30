@@ -18,16 +18,18 @@ at a time, each played after the last as soon as it is made, so captions
 are read on while it talks."""
 
 import asyncio
+import contextlib
 import math
 from typing import Any
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.log import logger
+from app.services.meetings.domains.actions import runs
 from app.services.meetings.domains.actions.queries import answered
 from app.services.meetings.domains.bot.meet import SPOKEN_TAIL
 from app.services.meetings.domains.bot.voice import sentences, spoken
-from app.services.meetings.domains.moments.detectors import ADDRESSED
+from app.services.meetings.domains.moments.detectors import ADDRESSED, STOP
 from app.services.meetings.domains.moments.service import answerer
 from app.services.meetings.models import DONE
 
@@ -58,13 +60,39 @@ class Answers:
         self.to_say: asyncio.Queue[tuple[int | None, str]] = asyncio.Queue()
         self.speaking = asyncio.create_task(self._speaking())
 
-    async def heard(self, made: list[tuple[int, str]]) -> None:
-        """New moments (id, kind): each put to the bot is waited on."""
+    async def heard(self, db: AsyncSession, made: list[tuple[int, str]]) -> None:
+        """New moments (id, kind): each put to the bot is waited on; a stop
+        drops everything before it (``stop``)."""
         now = asyncio.get_running_loop().time()
         for moment, kind in made:
+            if kind == STOP:
+                await self.stop(db)
+                continue
             if kind == ADDRESSED and self.answers and moment not in self.waiting:
                 self.waiting[moment] = now
                 logger.info("Bot: asked by name, her answer asked", moment=moment)
+
+    async def stop(self, db: AsyncSession) -> None:
+        """Told to stop: every answer owed dropped (its run cut off and
+        failed, never posted or said), what she is saying cut off (her live
+        answer, what is queued, what the call is playing) and her mic
+        closed. She listens again: only a line put to her wakes her."""
+        logger.info("Bot: told to stop", dropped=len(self.waiting))
+        await runs.drop(db, sorted(self.waiting))
+        self.speaking.cancel()
+        # Over before what it said is forgotten: its end is written as it stops.
+        with contextlib.suppress(asyncio.CancelledError):
+            await self.speaking
+        while not self.to_say.empty():
+            self.to_say.get_nowait()
+            self.to_say.task_done()
+        for kept in (self.waiting, self.ends, self.looked, self.told):
+            kept.clear()
+        self.speaking = asyncio.create_task(self._speaking())
+        if self.live is not None:
+            await self.live.stop()
+        await self.call.silence()
+        await self.call.hush()
 
     def looking_up(self, moment: int | None) -> int | None:
         """A step of her turn (a tool call, ``steps.watching``) answering
@@ -151,6 +179,7 @@ class Answers:
         before it are."""
         while True:
             moment, text = await self.to_say.get()
+            parts: list[asyncio.Task[bytes | None]] = []
             try:
                 parts = (
                     [self._looking()]
@@ -172,6 +201,11 @@ class Answers:
                         ready_after=round(loop.time() - began, 1),
                         plays_for=round(self.call.until - loop.time(), 1),
                     )
+            except asyncio.CancelledError:  # told to stop: none of it is made
+                for part in parts:
+                    if part is not self.looking:  # made once, said again later
+                        part.cancel()
+                raise
             except Exception:
                 # Posted in the chat already: the call goes on unheard.
                 logger.exception("The bot could not say its answer aloud")

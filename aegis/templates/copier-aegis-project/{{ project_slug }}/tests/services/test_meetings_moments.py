@@ -332,6 +332,7 @@ def test_a_question_asked_of_someone_in_the_call_is_theirs(said: str) -> None:
             "Illiana, what are you all about? She wasn't gonna get that.",
             "what are you all about? She wasn't gonna get that.",
         ),
+        ("Hey Illiana is Redis up?", "is Redis up?"),  # a greeting: to her
         (  # a pause captioned as a question mark mid-question
             "Ileana, can you tell me how? Request gets from the traffic layer.",
             "can you tell me how? Request gets from the traffic layer.",
@@ -354,6 +355,10 @@ def test_a_line_put_to_the_bot_by_name_wakes_it(said: str, asked: str) -> None:
         "Right or actually is Eliana on here?",  # about her
         "Good morning, Illiana.",  # nothing asked
         "Hey Illiana, what did",  # not said to its end yet
+        # her name who the line is about, said to someone else
+        "So, so Iliana is actually, uh, going to this website and the one good"
+        " thing about Google meet is that all of this?",
+        "And Illiana has the logs open, right?",
     ],
 )
 def test_a_line_about_the_bot_or_asking_nothing_does_not(said: str) -> None:
@@ -379,8 +384,9 @@ def test_a_line_said_back_to_the_bot_is_put_to_it_without_its_name() -> None:
     def back(
         text: str, replying: bool = True, addressee: str = "Illiana"
     ) -> str | None:
+        people = frozenset({"Dana", "Lawrence Casely-Hayford"})
         return detectors.addressed(
-            Heard(1, "Dana", text, False, addressee=addressee, replying=replying)
+            Heard(1, "Dana", text, False, people, addressee, replying=replying)
         )
 
     assert back(asked) == asked and back(told) == told
@@ -389,6 +395,42 @@ def test_a_line_said_back_to_the_bot_is_put_to_it_without_its_name() -> None:
     assert back("Okay.") is None  # a sound, not a reply
     assert back("And the database.") == "And the database."  # short, still asks
     assert back("Thank you.") is None and back("Got it, thanks!") is None
+    # Said to another in the call (by name), or about it (*she*): not back.
+    assert back("Were you able to hear that Lawrence?") is None
+    assert back("No, she's only supposed to listen to me.") is None
+
+
+@pytest.mark.parametrize(
+    "said",
+    [
+        "Hey Illiana, stop.",
+        "Stop.",
+        "Illiana, be quiet.",
+        "Okay, that's enough.",
+        "Stop, stop, stop.",
+        "Shut up, Illiana.",
+        "Never mind",
+        "Illiana stop talking",
+        "No, no. Stop.",
+    ],
+)
+def test_one_who_may_wake_the_bot_stops_it(said: str) -> None:
+    """A stop, said by itself (her name and a greeting at most beside it),
+    stops her: at once, not waiting for the caption to end, and it is
+    never a question put to her."""
+    heard = Heard(1, "Leonard", said, True, addressee="Illiana", replying=True)
+
+    assert detectors.stop(heard) == said
+    assert detectors.addressed(heard) is None
+
+
+def test_a_stop_counts_only_from_one_who_may_wake_the_bot_and_alone() -> None:
+    def stop(text: str, addressee: str = "Illiana") -> str | None:
+        return detectors.stop(Heard(1, "Leonard", text, True, addressee=addressee))
+
+    assert stop("Stop.", addressee="") is None  # one who may not wake her
+    assert stop("Stop the deploy and tell me why it failed.") is None
+    assert stop("We should stop for lunch.") is None
 
 
 @pytest.fixture
@@ -412,9 +454,7 @@ async def test_an_agent_that_answers_only_its_owner_is_woken_only_by_them(
 ) -> None:
     from app.services.meetings.models import BotAccount
 
-    agent = BotAccount(
-        name="work", display_name="Notes", login_secret="X", answers_anyone=False
-    )
+    agent = BotAccount(name="work", display_name="Notes", login_secret="X")
     async_db_session.add(agent)
     await async_db_session.commit()
     meeting = await MeetingsService(async_db_session, None).request(
@@ -472,3 +512,25 @@ async def test_what_its_asker_says_right_after_the_bot_is_put_to_it(
     kinds = [(m.kind, m.text) for m in await moments_of(async_db_session, meeting_id)]
     assert ("addressed", "How does a request reach the database?") in kinds
     assert ("addressed", "Can we move on to lunch now?") not in kinds
+
+
+async def test_after_a_stop_what_its_asker_says_next_is_not_put_to_it(
+    async_db_session: AsyncSession, her_answer_held: None
+) -> None:
+    """Stopped, she listens again: only her name wakes her, not the window
+    after her last words. A stop is no moment of the meeting to list."""
+    meeting_id = await a_meeting(async_db_session)
+
+    await said(
+        async_db_session,
+        meeting_id,
+        ("Dana", "Hey Notes, how does a request get in?"),
+        ("You", "Through the gateway, then the API."),
+        ("Dana", "Stop."),
+        ("You", "Then the"),
+        ("Dana", "How does a request reach the database?"),
+        apart=2.0,
+    )
+
+    kinds = [m.kind for m in await moments_of(async_db_session, meeting_id)]
+    assert kinds == ["addressed", "question"]  # the room's question, not hers

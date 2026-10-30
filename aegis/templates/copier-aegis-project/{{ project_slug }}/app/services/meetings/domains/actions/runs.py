@@ -9,6 +9,7 @@ finished (its runner died, a restart took the app's) fails once it is
 ``ABANDONED_AFTER`` old.
 """
 
+import asyncio
 from datetime import timedelta
 
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -35,6 +36,9 @@ from app.services.meetings.models import (
 # longer ago than this is never coming back.
 ABANDONED_AFTER = timedelta(minutes=30)
 ABANDONED = "Its runner stopped before it answered."
+STOPPED = "Told to stop."
+# Each run working in the app now (``_run_in_the_app``), by id: to cut off.
+_working: dict[int, asyncio.Task[None]] = {}
 
 
 class ActionNotFoundError(LookupError):
@@ -83,8 +87,18 @@ async def ask(
     await db.commit()
     changes.changed()
     if action.where == IN_THE_APP:
-        background(_run_in_the_app(run.id or 0, action))
+        _working[run.id or 0] = background(_run_in_the_app(run.id or 0, action))
     return run
+
+
+async def drop(db: AsyncSession, moment_ids: list[int]) -> None:
+    """Every run still going on these moments stopped: those working in the
+    app cut off, and each failed as ``STOPPED``, never finished."""
+    for run_id in await queries.fail_going(db, moment_ids, STOPPED):
+        if (task := _working.pop(run_id, None)) is not None:
+            task.cancel()
+    await db.commit()
+    changes.changed()
 
 
 async def claim(
@@ -150,8 +164,12 @@ async def _run_in_the_app(run_id: int, action: Action) -> None:
     except Exception as exc:
         logger.exception("Action failed", action=action.name, run_id=run_id)
         result, ok = str(exc) or type(exc).__name__, False
+    _working.pop(run_id, None)
     async with get_async_session() as db:
-        await finish(db, run_id, owner, result, ok=ok, runner=IN_THE_APP)
+        try:
+            await finish(db, run_id, owner, result, ok=ok, runner=IN_THE_APP)
+        except RunNotFoundError:  # stopped (``drop``) as it came back
+            logger.info("Action stopped before its answer landed", run_id=run_id)
 
 
 async def _take(db: AsyncSession, run_id: int, runner: str) -> bool:

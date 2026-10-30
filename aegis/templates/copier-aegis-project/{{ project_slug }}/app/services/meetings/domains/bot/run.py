@@ -228,7 +228,7 @@ async def _stay(
             if writing := transcript.take(await call.captions()):
                 async with get_async_session() as session:
                     made = await transcript.write(session, writing)
-                await answering.heard(made)
+                    await answering.heard(session, made)
             if answering.waiting:
                 async with get_async_session() as session:
                     await answering.answer(session)
@@ -262,7 +262,9 @@ async def _stay(
                     others_came=others_came,
                 )
                 return
-            await pulse.nap(between(bool(transcript.held), bool(saying)))
+            # Quick while she answers too: a stop is heard at the next look.
+            busy = bool(saying) or bool(answering.waiting)
+            await pulse.nap(between(bool(transcript.held), busy))
     finally:
         if rest := transcript.rest():
             async with get_async_session() as session:

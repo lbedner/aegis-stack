@@ -87,6 +87,21 @@ async def fail_claimed_before(db: AsyncSession, cutoff: datetime, result: str) -
     return int(moved.rowcount or 0)
 
 
+async def fail_going(db: AsyncSession, moment_ids: list[int], result: str) -> list[int]:
+    """Fail every run on these moments still asked or claimed, with
+    ``result``: their ids. The caller commits."""
+    moved = await db.exec(  # type: ignore[call-overload]
+        update(MeetingActionRun)
+        .where(
+            col(MeetingActionRun.moment_id).in_(moment_ids),
+            col(MeetingActionRun.status).in_((ASKED, CLAIMED)),
+        )
+        .values(status=FAILED, result=result, finished_at=utcnow())
+        .returning(col(MeetingActionRun.id))
+    )
+    return [run_id for (run_id,) in moved.all()]
+
+
 async def run(
     db: AsyncSession, run_id: int, owner_user_id: int | None = None
 ) -> MeetingActionRun | None:

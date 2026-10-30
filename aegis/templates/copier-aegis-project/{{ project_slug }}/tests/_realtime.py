@@ -42,6 +42,8 @@ class FakeSession:
         self.ends = ends
         self.audio: list[bytes] = []
         self.sent: list[str] = []
+        self.interrupted: list[int] = []  # where each answer was cut off
+        self.played_audio_bytes = 0
         self.usage = SimpleNamespace(input_tokens=100, output_tokens=40)
         self._heard: asyncio.Event | None = None
         self._asked: asyncio.Event | None = None
@@ -71,6 +73,10 @@ class FakeSession:
 
     async def close(self) -> None:
         self._flag("_closed").set()
+
+    async def interrupt(self, *, played_bytes: int) -> bool:
+        self.interrupted.append(played_bytes)
+        return True
 
     def stream_audio(self) -> AsyncIterator[bytes]:
         async def voice() -> AsyncIterator[bytes]:

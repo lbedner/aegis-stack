@@ -104,7 +104,8 @@ async def test_an_agents_card_is_set_from_its_row(
     row = one(page_html(overseer, AGENTS), "#overseer-meeting-agents tbody tr")
     one(row, "form[data-agent-image] input[type=file]")
     assert one(row, "form[data-switch=camera] input").get("checked") is not None
-    assert one(row, "form[data-switch=answers_anyone] input").get("checked") is not None
+    # A new agent answers only its owner.
+    assert one(row, "form[data-switch=answers_anyone] input").get("checked") is None
 
     pictured = overseer.post(
         f"{PARTIALS}/agents/notetaker/image",
@@ -112,8 +113,8 @@ async def test_an_agents_card_is_set_from_its_row(
         headers=HX,
     )
     off = overseer.post(f"{PARTIALS}/agents/notetaker/camera", headers=HX)
-    owner_only = overseer.post(
-        f"{PARTIALS}/agents/notetaker/answers_anyone", headers=HX
+    anyone = overseer.post(
+        f"{PARTIALS}/agents/notetaker/answers_anyone", data={"on": "on"}, headers=HX
     )
 
     assert pictured.status_code == 200, pictured.text
@@ -124,8 +125,8 @@ async def test_an_agents_card_is_set_from_its_row(
     assert "?v=" in image.get("src")
     assert "immutable" in shown.headers["cache-control"]
     assert one(off.text, "form[data-switch=camera] input").get("checked") is None
-    answering = one(owner_only.text, "form[data-switch=answers_anyone] input")
-    assert answering.get("checked") is None
+    answering = one(anyone.text, "form[data-switch=answers_anyone] input")
+    assert answering.get("checked") is not None
 
 
 SVG = b'<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"/>'

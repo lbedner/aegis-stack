@@ -257,7 +257,7 @@ aegis deploy-cd-setup --dry-run      # see the plan without touching anything
 aegis deploy-cd-setup --force        # rotate the existing deploy key
 ```
 
-**What the workflow runs:** it writes `.aegis/deploy.yml` back from `DEPLOY_CONFIG` (and `.env.deploy` from `DEPLOY_ENV`, once [`aegis deploy-cd-env`](#aegis-deploy-cd-env) pushed one), then runs `aegis deploy` from the aegis-stack the project is on: the `_commit` in `.copier-answers.yml` (so `aegis update` keeps CI in step), else the release that wrote the workflow. A runner has no `aegis` of its own. Two deploys never run at once.
+**What the workflow runs:** it writes `.aegis/deploy.yml` back from `DEPLOY_CONFIG` (and `.env.deploy` from `DEPLOY_ENV`, once [`aegis deploy-cd-env`](#aegis-deploy-cd-env) pushed one), then runs `aegis deploy` from the aegis-stack the project is on: the `_commit` in `.copier-answers.yml` (so `aegis update` keeps CI in step), else the release that wrote the workflow. A runner has no `aegis` of its own. The deploy is rolling (`aegis deploy --rolling`, no downtime), as you would run it by hand: Run workflow has a **rolling** box, ticked by default, to untick for a standard deploy; a `v*` tag push (`--on-tag`) always deploys rolling. Two deploys never run at once.
 
 **What it does not ship:** until `aegis deploy-cd-env` has run, the runner has no `.env.deploy` or `.env`, so a CI deploy keeps the server's `.env` as the last deploy from your machine left it. A change to `.aegis/deploy.yml` reaches CI when you re-run `aegis deploy-cd-setup --force`.
 

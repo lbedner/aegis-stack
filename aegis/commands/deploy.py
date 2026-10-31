@@ -2274,9 +2274,17 @@ def _render_deploy_workflow(on_tag: bool) -> str:
     the project's: the CLI declares its own). The env is the
     ``.env.deploy`` ``deploy-cd-env`` pushed, as it was; never pushed, no
     file is written and the server keeps its ``.env``. A deploy waits for
-    the one before it.
+    the one before it, and is rolling (``--rolling``) as a deploy by hand
+    would be: Run workflow's box, ticked by default; a tag push always.
     """
-    triggers = ["  workflow_dispatch:"]
+    triggers = [
+        "  workflow_dispatch:",
+        "    inputs:",
+        "      rolling:",
+        "        description: Deploy without downtime (aegis deploy --rolling)",
+        "        type: boolean",
+        "        default: true",
+    ]
     if on_tag:
         triggers.append("  push:")
         triggers.append("    tags:")
@@ -2326,7 +2334,11 @@ jobs:
         echo "ref=$ref" >> "$GITHUB_OUTPUT"
 
     - name: Deploy
-      run: uvx --from git+{GITHUB_REPO_URL}@${{{{ steps.aegis.outputs.ref }}}} aegis deploy
+      env:
+        ROLLING: ${{{{ github.event_name != 'workflow_dispatch' || inputs.rolling }}}}
+      run: |
+        flags=; if [ "$ROLLING" = true ]; then flags=--rolling; fi
+        uvx --from git+{GITHUB_REPO_URL}@${{{{ steps.aegis.outputs.ref }}}} aegis deploy $flags
 """
 
 

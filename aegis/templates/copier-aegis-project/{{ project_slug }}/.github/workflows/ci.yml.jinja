@@ -1,3 +1,16 @@
+{#- Every job's checkout is followed by the same uv, Python and install. #}
+{%- macro setup() %}    - name: Install uv
+      uses: astral-sh/setup-uv@v7
+      with:
+        enable-cache: true
+        cache-dependency-glob: "uv.lock"
+
+    - name: Set up Python
+      run: uv python install {{ python_version }}
+
+    - name: Install dependencies
+      run: uv sync
+{% endmacro -%}
 name: CI
 
 on:
@@ -12,18 +25,7 @@ jobs:
     steps:
     - uses: actions/checkout@v6
 
-    - name: Install uv
-      uses: astral-sh/setup-uv@v7
-      with:
-        enable-cache: true
-        cache-dependency-glob: "uv.lock"
-
-    - name: Set up Python
-      run: uv python install {{ python_version }}
-
-    - name: Install dependencies
-      run: uv sync
-
+{{ setup() }}
     - name: Run linting
       run: uv run ruff check .
 
@@ -32,18 +34,7 @@ jobs:
     steps:
     - uses: actions/checkout@v6
 
-    - name: Install uv
-      uses: astral-sh/setup-uv@v7
-      with:
-        enable-cache: true
-        cache-dependency-glob: "uv.lock"
-
-    - name: Set up Python
-      run: uv python install {{ python_version }}
-
-    - name: Install dependencies
-      run: uv sync
-
+{{ setup() }}
     - name: Run type checking
       run: uv run ty check
 
@@ -59,18 +50,7 @@ jobs:
     steps:
     - uses: actions/checkout@v6
 
-    - name: Install uv
-      uses: astral-sh/setup-uv@v7
-      with:
-        enable-cache: true
-        cache-dependency-glob: "uv.lock"
-
-    - name: Set up Python
-      run: uv python install {{ python_version }}
-
-    - name: Install dependencies
-      run: uv sync
-
+{{ setup() }}
     - name: Run tests{% if include_database %} (fails on new N+1 query sites too)
       run: uv run pytest --queryspy-strict --queryspy-baseline .queryspy-baseline.json --shard {% raw %}${{ matrix.shard }}{% endraw %}/2{% else %}
       run: uv run pytest --shard {% raw %}${{ matrix.shard }}{% endraw %}/2{% endif %}
@@ -84,3 +64,106 @@ jobs:
     steps:
     - name: Every shard passed
       run: test "{% raw %}${{ needs.test-shard.result }}{% endraw %}" = success
+
+  # Illiana's review of a pull request: docs/services/ai/illiana.md
+  # ("Pull Request Review"). Nothing here fails a repository that has not
+  # set ILLIANA_BLOCKS.
+{%- set reviews = include_ai and ai_framework == "pydantic-ai" and ai_backend != "memory" %}
+  illiana:
+    name: Illiana
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # One review at a time per pull request, so a push never posts a second
+    # comment beside the first.
+    concurrency:
+      group: illiana-{% raw %}${{ github.event.pull_request.number }}{% endraw %}
+      cancel-in-progress: true
+    permissions:
+      contents: read
+      pull-requests: write  # her comment
+      issues: write
+{%- if reviews and include_database and database_engine == "postgres" %}
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: {{ project_slug }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL_LOCAL: postgresql://postgres:postgres@localhost:5432/{{ project_slug }}
+{%- endif %}
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        fetch-depth: 0
+
+{{ setup() }}
+    - name: Known debt, from the base branch
+      # Its code, checked with this branch's environment. A base too old to
+      # check keeps the baseline this branch carries.
+      run: |
+        git worktree add "$RUNNER_TEMP/base" "origin/{% raw %}${{ github.base_ref }}{% endraw %}"
+        if (cd "$RUNNER_TEMP/base" && "$GITHUB_WORKSPACE/.venv/bin/python" -m app.cli.main patterns check --update); then
+          cp "$RUNNER_TEMP/base/.patterns-baseline.json" .
+        fi
+
+    - name: New findings, annotated
+      id: findings
+      # Her verdict is held to the last step, so her comment still posts.
+      run: |
+        set +e
+        git diff --name-only "origin/{% raw %}${{ github.base_ref }}{% endraw %}...HEAD" > "$RUNNER_TEMP/changed"
+        mapfile -t changed < "$RUNNER_TEMP/changed"
+        uv run python -m app.cli.main patterns check --strict "${changed[@]}"
+        echo "code=$?" >> "$GITHUB_OUTPUT"
+{%- if reviews %}
+
+    - name: Is there her app
+      id: key
+      env:
+        APP: {% raw %}${{ secrets.ILLIANA_APP_ID }}{% endraw %}
+      run: echo "app=${APP:+true}" >> "$GITHUB_OUTPUT"
+
+    # Her own GitHub App (her name and face on the comment), where its
+    # secrets are set; the workflow's bot otherwise, a bad key included.
+    - name: Illiana's token
+      id: app
+      if: steps.key.outputs.app == 'true'
+      continue-on-error: true
+      uses: actions/create-github-app-token@v3
+      with:
+        app-id: {% raw %}${{ secrets.ILLIANA_APP_ID }}{% endraw %}
+        private-key: {% raw %}${{ secrets.ILLIANA_APP_PRIVATE_KEY }}{% endraw %}
+
+    # Her write-up needs a model, so only ILLIANA_REVIEW=model gives her the
+    # key (a key alone does not), and the database her agent row is in;
+    # without it she still posts the verdict and every place, in the rules'
+    # words.
+    - name: Illiana's review, on the pull request
+      continue-on-error: true
+      env:
+        OPENAI_API_KEY: {% raw %}${{ vars.ILLIANA_REVIEW == 'model' && secrets.OPENAI_API_KEY || '' }}{% endraw %}
+        AI_PROVIDER: openai
+        AI_MODEL: gpt-6-luna
+        GH_TOKEN: {% raw %}${{ steps.app.outputs.token || github.token }}{% endraw %}
+      run: |
+        mapfile -t changed < "$RUNNER_TEMP/changed"
+        if [ -n "$OPENAI_API_KEY" ]; then
+          uv run alembic -c alembic/alembic.ini upgrade head >&2 \
+            || echo "::warning::Migrations failed; her write-up falls back to the rules' words."
+        fi
+        uv run python -m app.cli.main patterns review "${changed[@]}" \
+          --pr "{% raw %}${{ github.event.pull_request.number }}{% endraw %}" --commit "{% raw %}${{ github.event.pull_request.head.sha }}{% endraw %}"
+{%- endif %}
+
+    - name: Illiana's verdict
+      if: vars.ILLIANA_BLOCKS == 'true'
+      run: exit "{% raw %}${{ steps.findings.outputs.code }}{% endraw %}"

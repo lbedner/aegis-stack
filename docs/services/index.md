@@ -192,7 +192,10 @@ belongs - so it names each domain and what it owns.
     module are recorded there as debt that may only shrink. Those tests hold
     Aegis's own code and run only in Aegis's CI: a project built on it sees
     the findings and is never failed by them. To hold your own code to the
-    rules, run `patterns check --update` once, then `patterns check --strict`. A module at a
+    rules, run `patterns check --update` once, then `patterns check --strict`;
+    the generated CI's `Illiana` job does it on every pull request, failing
+    none until you ask it to
+    ([setting it up](ai/illiana.md#pull-request-review)). A module at a
     service's top level that the table above does not name is flagged too
     (**Logic lives in domains**), each loose file listed, and so is a file
     past the size budget (**Files stay readable**): over 500 lines, 900 for
@@ -238,9 +241,8 @@ belongs - so it names each domain and what it owns.
     error (red) where it blocks and a warning where it is advisory, titled
     with her name; with changed files given, what they touch and her
     verdict, each place marked as blocking or advisory, go in the job
-    summary. No CI job
-    ships with the app; its `CLAUDE.md` asks a coding agent to run the
-    check before it finishes.
+    summary. The app's `CLAUDE.md` asks a coding agent to run the check
+    before it finishes.
     `patterns review` is Illiana's write-up of the same new findings, as
     Markdown for a pull request: her verdict first (blocked or clear, the
     rules', never hers), every finding listed from the check with her note
@@ -249,12 +251,12 @@ belongs - so it names each domain and what it owns.
     one. It is one call, no tools, as its own agent (`pr-reviewer`,
     seeded with her persona and the reviewing, so its model and how long
     it writes are set in Agents), spend recorded; nothing new, or the
-    same findings an earlier review covered, no call. aegis-stack's own
-    CI posts it as one comment on each pull request, edited on each push:
+    same findings an earlier review covered, no call. With `--pr` it is
+    posted as one comment on each pull request, edited on each push:
     the latest review on top, each earlier one kept below it, collapsed,
     by the commit it reviewed.
-    Each new finding on a line the pull request changed also gets her own
-    review thread there: the rule, whether it blocks, why and the fix
+    In aegis-stack's own CI, each new finding on a line the pull request
+    changed also gets her own review thread there: the rule, whether it blocks, why and the fix
     (`scripts/illiana_threads.py`). `patterns check` writes its new places
     as JSON to the file `PATTERNS_FOUND` names, each with the key the
     baseline knows it by, and a thread carries that key: on each push she

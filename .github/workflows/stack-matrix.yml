@@ -298,28 +298,12 @@ jobs:
           AI_PROVIDER: openai
           AI_MODEL: gpt-6-luna
           GH_TOKEN: ${{ steps.app.outputs.token || github.token }}
-          REPO: ${{ github.repository }}
-          PR: ${{ github.event.pull_request.number }}
         run: |
           stack="$RUNNER_TEMP/head/everything"
-          review="$RUNNER_TEMP/review.md"
-          changed=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")
-          # Its comment as it stands: the reviews before this one, kept
-          # below it; the same findings again change nothing.
-          id=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
-            --jq '.[] | select(.body | startswith("<!-- illiana-review -->")) | .id' | head -1)
-          previous="$RUNNER_TEMP/previous.md"
-          : > "$previous"
-          [ -z "$id" ] || gh api "repos/$REPO/issues/comments/$id" --jq .body > "$previous"
+          mapfile -t changed < <(git diff --name-only "origin/${{ github.base_ref }}...HEAD")
           (cd "$stack" && uv run alembic -c alembic/alembic.ini upgrade head >&2 \
-            && uv run python -m app.cli.main patterns review $changed \
-              --previous "$previous" --commit "${{ github.event.pull_request.head.sha }}") > "$review"
-          [ -s "$review" ] || exit 0
-          if [ -n "$id" ]; then
-            gh api -X PATCH "repos/$REPO/issues/comments/$id" -F body=@"$review" > /dev/null
-          else
-            gh api "repos/$REPO/issues/$PR/comments" -F body=@"$review" > /dev/null
-          fi
+            && uv run python -m app.cli.main patterns review "${changed[@]}" \
+              --pr "${{ github.event.pull_request.number }}" --commit "${{ github.event.pull_request.head.sha }}")
 
       # Her threads on the lines (scripts/illiana_threads.py); never the gate.
       - name: Illiana's threads, on the lines

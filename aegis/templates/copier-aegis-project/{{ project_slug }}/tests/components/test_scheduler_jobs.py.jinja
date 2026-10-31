@@ -163,6 +163,33 @@ async def test_running_a_job_by_hand_passes_its_stored_args(
 
     assert await trigger.run_triggered_job(job, "id", "Name", ["a_job", "system"])
     assert seen == [("a_job", "system", "1")]
+
+
+async def test_a_job_kept_already_is_updated_without_a_failed_insert() -> None:
+    """Every start adds each job again. Inserted first, one kept already
+    failed on its key before it was updated: Postgres logged an ERROR for
+    every job on every start."""
+    from apscheduler.jobstores.base import ConflictingIdError
+    from sqlalchemy import create_engine, event
+
+    from app.components.scheduler.main import StoredJobs
+
+    store = StoredJobs(engine=create_engine("sqlite://"))
+    scheduler = AsyncIOScheduler(jobstores={"default": store})
+    scheduler.start(paused=True)
+    scheduler.add_job(print, "interval", hours=1, id="chore", name="Chore")
+    sent: list[str] = []
+    event.listen(store.engine, "before_cursor_execute", lambda *a: sent.append(a[2]))
+
+    again = scheduler.add_job(
+        print, "interval", hours=2, id="chore", name="Chore", replace_existing=True
+    )
+
+    assert not [statement for statement in sent if statement.startswith("INSERT")]
+    assert scheduler.get_job("chore").trigger.interval.total_seconds() == 7200
+    with pytest.raises(ConflictingIdError):
+        store.add_job(again)
+    scheduler.shutdown(wait=False)
 {%- endif %}
 
 def test_interval_jobs_keep_their_times_across_restarts(

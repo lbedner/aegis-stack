@@ -192,6 +192,31 @@ async def test_a_live_voice_keeps_the_mic_open_until_it_is_hushed(
     )
 
 
+async def test_a_live_voice_is_fed_no_further_ahead_than_it_plays(
+    meet: MeetPage, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A live voice is made faster than it plays: taken all at once, the call
+    held seconds of it and her session counted it heard, so cut in on, she
+    was cut off past where the room was. Each piece is taken once no more
+    than ``AHEAD_SECONDS`` is left to play."""
+    from app.services.meetings.domains.bot import meet as meet_module
+
+    await meet.ask_to_join("Notes")
+    await meet.page.evaluate("admit()")
+    monkeypatch.setattr(meet_module, "FIRST_UNMUTE", 0.0)
+    monkeypatch.setattr(meet_module, "AHEAD_SECONDS", 0.1)
+
+    async def stream(page: Page, pcm: bytes, rate: int) -> float:
+        return 0.4  # left to play
+
+    monkeypatch.setattr(card, "stream", stream)
+    loop = asyncio.get_running_loop()
+    began = loop.time()
+    await meet.stream(b"\x00\x01", 24_000)
+
+    assert loop.time() - began >= 0.3
+
+
 async def test_it_waits_for_meet_to_draw_its_lobby(meet: MeetPage) -> None:
     """Meet draws the lobby a while after the page loads."""
     await meet.page.evaluate(

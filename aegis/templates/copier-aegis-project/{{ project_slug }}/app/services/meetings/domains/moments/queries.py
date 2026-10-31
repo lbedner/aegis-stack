@@ -10,11 +10,13 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.meetings.domains.moments.detectors import (
     ADDRESSED,
+    OBEYED,
     STOP,
     Before,
     Heard,
     addressee,
     replying,
+    talking_over,
 )
 from app.services.meetings.domains.notes.queries import with_speaker
 from app.services.meetings.models import (
@@ -48,7 +50,7 @@ async def hearing(
     """How a detector reads a line of these meetings (its id, meeting,
     speaker, text, whether the owner said it, and the line before it): with
     everyone who spoke in its meeting, and the bot's name where this speaker
-    may wake it and whether it is said back to it."""
+    may wake it, whether it is said back to it and begun over it."""
     people = await people_in(db, meeting_ids)
     wakers = await wakers_in(db, meeting_ids)
 
@@ -69,6 +71,7 @@ async def hearing(
             people.get(meeting_id, frozenset()),
             addressee(speaker, is_me, bot, anyone),
             replying(before, speaker, bot, text),
+            talking_over(before, speaker, bot, text),
         )
 
     return heard
@@ -201,7 +204,8 @@ async def of_meeting(
     db: AsyncSession, meeting_id: int
 ) -> list[tuple[MeetingMoment, float, str]]:
     """A meeting's moments in the order they were said, each with when and
-    by whom; never a stop, which is the bot's to obey, not the meeting's."""
+    by whom; never what the bot was told (``OBEYED``: a stop, a cut-in, to go
+    on), which is the bot's to obey, not the meeting's."""
     query = (
         with_speaker(
             select(
@@ -210,7 +214,10 @@ async def of_meeting(
                 MeetingParticipant.display_name,
             ).join(TranscriptLine, col(TranscriptLine.id) == MeetingMoment.line_id)
         )
-        .where(MeetingMoment.meeting_id == meeting_id, MeetingMoment.kind != STOP)
+        .where(
+            MeetingMoment.meeting_id == meeting_id,
+            col(MeetingMoment.kind).not_in(OBEYED),
+        )
         .order_by(col(TranscriptLine.start_seconds), col(MeetingMoment.id))
     )
     return [

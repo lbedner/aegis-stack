@@ -315,6 +315,36 @@ async def test_a_stop_is_written_the_moment_it_is_heard(
     assert await _took(async_db_session, transcript, [after]) == []
 
 
+async def test_a_line_begun_over_her_is_written_at_once_and_cuts_in(
+    async_db_session: AsyncSession, voiced: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Talking over her waits on neither the beat nor a pause: it is written,
+    and cuts in, at the next look. Her echo meanwhile waits as ever."""
+    import asyncio
+
+    from app.services.meetings.domains.bot import transcript as captions
+    from app.services.meetings.models import Caption
+
+    monkeypatch.setattr(captions, "BEAT_SECONDS", 3600.0)
+    monkeypatch.setattr(captions, "SETTLE_SECONDS", 60.0)
+    meeting_id = await a_meeting(async_db_session)
+    transcript = captions.Transcript(meeting_id, "Notes")
+    words = "The deploy failed at four because the cache was cold."
+    now = asyncio.get_running_loop().time
+    transcript.her = lambda: (now() + 60, words)  # playing
+
+    echo = Caption("1", "Dana", "because the cache")
+    assert await _took(async_db_session, transcript, [echo]) == []
+    over = Caption("2", "Dana", "Wait, which deploy?")
+    made = await _took(async_db_session, transcript, [echo, over])
+    assert "cut_in" in [kind for _, kind in made]
+
+    # Once she is quiet, what it grows into waits as ever.
+    transcript.her = lambda: (now() - 1, words)
+    grown = Caption("2", "Dana", "Wait, which deploy? The one at four?")
+    assert transcript.take([echo, grown]) == []
+
+
 async def test_her_own_words_heard_back_through_a_mic_are_not_put_to_her(
     async_db_session: AsyncSession, voiced: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -702,4 +732,139 @@ async def test_told_to_stop_she_drops_everything_and_listens_again(
     assert (run.status, run.result) == ("failed", runs.STOPPED)
     await answering.heard(async_db_session, [(moment_id, "addressed")])
     assert answering.waiting
+    answering.close()
+
+
+class _Playing(FakeCall):
+    """A call each sentence said into plays for the next of ``lengths``
+    seconds, after what it plays already."""
+
+    def __init__(self, *lengths: float) -> None:
+        super().__init__([CallState.IN_CALL])
+        self.lengths = list(lengths)
+
+    async def speak(self, audio: bytes) -> None:
+        import asyncio
+
+        await super().speak(audio)
+        now = asyncio.get_running_loop().time()
+        self.until = max(self.until, now) + self.lengths.pop(0)
+
+
+async def _saying(
+    db: AsyncSession, call: FakeCall, answer: str, live: Any = None
+) -> tuple[answers.Answers, int]:
+    """Her answer to the one question put to her, being said into ``call``."""
+    import asyncio
+
+    _, moment_id = await asked_a_question(db, lines=HER)
+    answering = answers.Answers(call, voice="hers", live=live)
+    await answering.heard(db, [(moment_id, "addressed")])
+    await _over(db, "done", answer)
+    if live is not None:
+        call.until = asyncio.get_running_loop().time() + 60
+    await answering.answer(db)
+    await answering.said()
+    return answering, moment_id
+
+
+async def test_cut_in_on_she_goes_quiet_and_goes_on_when_told(
+    async_db_session: AsyncSession, voiced: None
+) -> None:
+    """Talked over, she stops where she has been heard to and listens; told
+    to go on, she says the rest, from the sentence she was cut off in."""
+    call = _Playing(0.0, 60.0, 60.0)  # the first sentence heard already
+    answering, moment_id = await _saying(async_db_session, call, "One. Two. Three.")
+
+    await answering.heard(async_db_session, [(moment_id + 1, "cut_in")])
+    await answering.mic()
+    assert call.silenced and not call.mic_open and answering.saying() == set()
+    call.lengths = [1.0, 1.0]
+    await answering.heard(async_db_session, [(moment_id + 2, "go_on")])
+    await answering.said()
+
+    assert call.spoken == [b"One.", b"Two.", b"Three.", b"Two.", b"Three."]
+    assert call.said == ["One. Two. Three."]  # in the chat once, all of it
+    answering.close()
+
+
+async def test_a_question_after_a_cut_in_drops_the_rest(
+    async_db_session: AsyncSession, voiced: None
+) -> None:
+    """Cut in on with a new question, she answers that: what she was
+    saying is not gone on with."""
+    call = _Playing(60.0, 60.0)
+    answering, moment_id = await _saying(async_db_session, call, "One. Two.")
+
+    await answering.heard(
+        async_db_session, [(moment_id + 1, "cut_in"), (moment_id + 2, "addressed")]
+    )
+    await answering.heard(async_db_session, [(moment_id + 3, "go_on")])
+    await answering.said()
+
+    assert call.spoken == [b"One.", b"Two."]
+    assert moment_id + 2 in answering.waiting
+    answering.close()
+
+
+async def test_told_to_go_on_said_back_is_not_asked_too(
+    async_db_session: AsyncSession, voiced: None
+) -> None:
+    """Said back to her, "Sorry, carry on." is a reply as well as a go-on:
+    cut in on, it is only the go-on."""
+    call = _Playing(60.0)
+    answering, moment_id = await _saying(async_db_session, call, "One.")
+
+    await answering.heard(async_db_session, [(moment_id + 1, "cut_in")])
+    call.lengths = [1.0]
+    told = [(moment_id + 2, "addressed"), (moment_id + 3, "go_on")]
+    await answering.heard(async_db_session, told)
+    await answering.said()
+
+    assert moment_id + 2 not in answering.waiting
+    assert call.spoken == [b"One.", b"One."]
+    answering.close()
+
+
+async def test_cut_in_on_live_she_is_asked_to_carry_on(
+    async_db_session: AsyncSession, voiced: None
+) -> None:
+    """Live, her answer is cut where it was heard to in her call (``stop``),
+    and going on is hers: asked to carry on from there."""
+    call = FakeCall([CallState.IN_CALL])
+    live = FakeLive(spoken=("One. Two.",))
+    answering, moment_id = await _saying(async_db_session, call, "One. Two.", live)
+
+    await answering.heard(async_db_session, [(moment_id + 1, "cut_in")])
+    assert live.stopped and call.silenced
+    await answering.heard(async_db_session, [(moment_id + 2, "go_on")])
+    assert answering.going_on is not None
+    await answering.going_on
+
+    assert live.asked == [answers.CARRY_ON]
+    answering.close()
+
+
+async def test_cut_in_on_live_while_her_answer_is_still_made(
+    async_db_session: AsyncSession, voiced: None
+) -> None:
+    """Live, she is heard as she makes her answer, before its run is back:
+    cut in on then, she stops, and what she says going on is posted."""
+    import asyncio
+
+    _, moment_id = await asked_a_question(async_db_session, lines=HER)
+    call = FakeCall([CallState.IN_CALL])
+    live = FakeLive("Sam owns billing.")
+    answering = answers.Answers(call, voice="hers", live=live)
+    await answering.heard(async_db_session, [(moment_id, "addressed")])
+    call.until = asyncio.get_running_loop().time() + 60  # her voice playing
+
+    await answering.heard(async_db_session, [(moment_id + 1, "cut_in")])
+    await _over(async_db_session, "done", "")  # cut off: nothing came back
+    await answering.answer(async_db_session)
+    await answering.heard(async_db_session, [(moment_id + 2, "go_on")])
+    assert answering.going_on is not None
+    await answering.going_on
+
+    assert live.stopped and call.said == ["Sam owns billing."]
     answering.close()

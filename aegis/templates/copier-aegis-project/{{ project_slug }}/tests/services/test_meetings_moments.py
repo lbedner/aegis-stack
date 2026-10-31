@@ -3,6 +3,7 @@ detector per kind reads each line as the bot writes it, and again as it
 grows; the first kind is a question someone other than the owner asks."""
 
 import pytest
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.meetings.domains.moments import detectors
@@ -184,8 +185,6 @@ async def test_what_the_bot_obeyed_is_not_read_over(
 ) -> None:
     """A cut-in, a go-on and a stop are the call's, read as it heard them
     (her voice, played): read over from the lines kept, none is dropped."""
-    from app.services.meetings.domains.moments import queries
-
     meeting_id = await a_meeting(async_db_session)
     (line,) = await said(async_db_session, meeting_id, ("Dana", "Hold on there."))
     async_db_session.add(
@@ -197,8 +196,10 @@ async def test_what_the_bot_obeyed_is_not_read_over(
 
     await find_again(async_db_session, [meeting_id])
 
-    kept = await queries.in_meetings(async_db_session, [meeting_id])
-    assert (line, "cut_in") in kept
+    kinds = await async_db_session.exec(
+        select(MeetingMoment.kind).where(MeetingMoment.line_id == line)
+    )
+    assert "cut_in" in kinds.all()
 
 
 async def test_a_call_still_going_is_not_read_over(

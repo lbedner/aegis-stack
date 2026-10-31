@@ -3,10 +3,8 @@
 Pins regressions caught during the deploy-cd-setup PR review:
 - ``_detect_github_repo`` must accept repo names containing dots (``next.js``)
   and strip optional ``.git`` / trailing slashes across SSH and HTTPS forms.
-- ``_render_deploy_workflow`` must conditionally inject the
-  ``uv python install`` step and the tag-push trigger.
-- ``_project_python_minor`` must extract major.minor from a
-  ``requires-python`` constraint and degrade gracefully when missing.
+- ``_render_deploy_workflow`` must conditionally inject the tag-push
+  trigger, and run on a bare runner.
 """
 
 from __future__ import annotations
@@ -20,13 +18,13 @@ import pytest
 import typer
 import yaml
 
+from aegis import __version__
 from aegis.commands import deploy as deploy_mod
 from aegis.commands.deploy import (
     ROLLING_ROLLOUT_TIMEOUT_DEFAULT,
     _create_backup,
     _detect_github_repo,
     _is_neon_database,
-    _project_python_minor,
     _render_deploy_workflow,
     _rollback_to_backup,
     _rolling_health_verdict,
@@ -34,6 +32,7 @@ from aegis.commands.deploy import (
     _rolling_new_services,
     _rolling_scale_command,
 )
+from aegis.config.defaults import version_to_git_tag
 
 
 def _git_init_with_origin(path: Path, remote: str) -> None:
@@ -106,25 +105,67 @@ def test_the_workflows_deploy_step_runs_a_command_deploy_accepts() -> None:
 
     from aegis.__main__ import app
 
-    step = next(
-        line.split("run: uv run aegis ", 1)[1]
-        for line in _render_deploy_workflow(on_tag=False).splitlines()
-        if "run: uv run aegis deploy" in line
-    )
+    step = _step(_render_deploy_workflow(on_tag=False), "Deploy")["run"]
+    step = step.split(" aegis ", 1)[1]
     result = CliRunner().invoke(app, [*step.split(), "--help"])
     assert result.exit_code == 0, result.output
 
 
-def test_render_deploy_workflow_pins_python_when_version_provided() -> None:
-    out = _render_deploy_workflow(on_tag=False, python_version="3.13")
-    yaml.safe_load(out)  # must remain valid YAML
-    assert "uv python install 3.13" in out
+def _step(workflow: str, name: str) -> dict[str, Any]:
+    """The workflow's step called ``name``."""
+    steps = yaml.safe_load(workflow)["jobs"]["deploy"]["steps"]
+    return next(s for s in steps if s.get("name") == name)
 
 
-def test_render_deploy_workflow_omits_python_step_when_none() -> None:
-    out = _render_deploy_workflow(on_tag=False, python_version=None)
-    yaml.safe_load(out)
-    assert "uv python install" not in out
+def test_the_runner_writes_the_deploy_config_it_is_given() -> None:
+    """``.aegis/`` is gitignored, so a checkout has no deploy config; the
+    one ``deploy-cd-setup`` pushed comes back from its secret."""
+    step = _step(_render_deploy_workflow(on_tag=False), "Write the deploy config")
+    assert step["env"]["DEPLOY_CONFIG"] == "${{ secrets.DEPLOY_CONFIG }}"
+    assert ".aegis/deploy.yml" in step["run"]
+
+
+@pytest.mark.parametrize(
+    ("answers", "ref"),
+    [
+        ("_commit: 0f096b58ef46\n", "0f096b58ef46"),
+        ("_commit: 'v0.16.1'\n", "v0.16.1"),
+        ("_commit: None\n", version_to_git_tag(__version__)),
+        ("project_slug: app\n", version_to_git_tag(__version__)),
+    ],
+)
+def test_the_runner_deploys_with_the_aegis_stack_the_project_is_on(
+    tmp_path: Path, answers: str, ref: str
+) -> None:
+    """A runner has no ``aegis`` (it is no project dependency), so the CLI
+    comes from the commit ``aegis update`` last recorded, else the release
+    that wrote the workflow."""
+    workflow = _render_deploy_workflow(on_tag=False)
+    (tmp_path / ".copier-answers.yml").write_text(answers)
+    output = tmp_path / "github_output"
+    subprocess.run(
+        [
+            "bash",
+            "-c",
+            _step(workflow, "Resolve the aegis-stack this project is on")["run"],
+        ],
+        cwd=tmp_path,
+        env={"GITHUB_OUTPUT": str(output), "PATH": "/usr/bin:/bin"},
+        check=True,
+    )
+    assert output.read_text() == f"ref={ref}\n"
+    deploy = _step(workflow, "Deploy")["run"]
+    assert deploy.startswith(
+        "uvx --from git+https://github.com/lbedner/aegis-stack@${{ steps.aegis.outputs.ref }} aegis deploy"
+    )
+    assert "uv run" not in workflow and "uv sync" not in workflow
+    # The CLI's Python is its own; the project's pin once broke it (3.14).
+    assert "uv python install" not in workflow
+
+
+def test_two_deploys_never_run_at_once() -> None:
+    concurrency = yaml.safe_load(_render_deploy_workflow(on_tag=False))["concurrency"]
+    assert concurrency == {"group": "deploy", "cancel-in-progress": False}
 
 
 def test_render_deploy_workflow_references_required_secrets() -> None:
@@ -193,34 +234,6 @@ def test_rolling_rollout_timeout_default_is_generous() -> None:
     # budget (start_period + retries x interval) decides the outcome, not
     # a short wall clock.
     assert ROLLING_ROLLOUT_TIMEOUT_DEFAULT >= 600
-
-
-def test_project_python_minor_parses_requires_python(tmp_path: Path) -> None:
-    (tmp_path / "pyproject.toml").write_text(
-        '[project]\nrequires-python = ">=3.13,<3.15"\n'
-    )
-    assert _project_python_minor(tmp_path) == "3.13"
-
-
-def test_project_python_minor_returns_none_for_missing_pyproject(
-    tmp_path: Path,
-) -> None:
-    assert _project_python_minor(tmp_path) is None
-
-
-def test_project_python_minor_returns_none_when_constraint_missing(
-    tmp_path: Path,
-) -> None:
-    (tmp_path / "pyproject.toml").write_text('[project]\nname = "foo"\n')
-    assert _project_python_minor(tmp_path) is None
-
-
-def test_project_python_minor_returns_none_for_malformed_toml(tmp_path: Path) -> None:
-    (tmp_path / "pyproject.toml").write_text("this is = not :: valid toml [")
-    assert _project_python_minor(tmp_path) is None
-
-
-# --- Neon-aware deploy (issue #765) -----------------------------------------
 
 
 def _write_answers(path: Path, provider: str) -> None:
@@ -886,3 +899,49 @@ def test_the_boot_step_fails_when_the_database_lacks_what_the_code_reads(
     """The boot step logs a failed migration and carries on, as a boot
     must; the rolling deploy asks ``schema_gaps`` after it, and stops."""
     assert _boot_step(tmp_path, gaps) == code
+
+
+def test_setup_pushes_the_deploy_config_it_saves(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The runner deploys from the secret, so it is the file, ``ci`` block
+    and all, not a copy of some of its fields."""
+    (tmp_path / ".aegis").mkdir()
+    (tmp_path / ".aegis" / "deploy.yml").write_text(
+        yaml.safe_dump(
+            {
+                "server": {"host": "203.0.113.7", "user": "root", "path": "/opt/app"},
+                "domain": "app.example.com",
+            }
+        )
+    )
+    pushed: dict[str, str] = {}
+    done = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+
+    def push(name: str, value: str, repo: str) -> subprocess.CompletedProcess:
+        pushed[name] = value
+        return done
+
+    def push_file(name: str, path: Path, repo: str) -> subprocess.CompletedProcess:
+        pushed[name] = path.read_text()
+        return done
+
+    monkeypatch.setattr(deploy_mod, "_check_gh_cli", lambda: None)
+    monkeypatch.setattr(deploy_mod, "_list_gh_secrets", lambda repo: set())
+    monkeypatch.setattr(deploy_mod, "_install_pubkey_on_server", lambda *a: done)
+    monkeypatch.setattr(deploy_mod, "_set_gh_secret", push)
+    monkeypatch.setattr(deploy_mod, "_set_gh_secret_from_file", push_file)
+
+    deploy_mod.deploy_cd_setup_command(
+        project_path=str(tmp_path),
+        repo="acme/app",
+        on_tag=False,
+        force=False,
+        dry_run=False,
+        keep_key=None,
+    )
+
+    saved = (tmp_path / ".aegis" / "deploy.yml").read_text()
+    assert pushed["DEPLOY_CONFIG"] == saved
+    assert yaml.safe_load(saved)["ci"]["github"]["repo"] == "acme/app"
+    assert {"DEPLOY_SSH_KEY", "DEPLOY_HOST", "DEPLOY_USER"} <= set(pushed)

@@ -217,7 +217,7 @@ aegis deploy-setup --public-key ~/.ssh/id_ed25519.pub
 
 ### aegis deploy-cd-setup
 
-Wire up GitHub Actions continuous deployment in one command. Generates a dedicated SSH deploy key, installs the public key on your server, pushes the private key + host + user as repo secrets, and scaffolds `.github/workflows/deploy.yml`.
+Wire up GitHub Actions continuous deployment in one command. Generates a dedicated SSH deploy key, installs the public key on your server, pushes the private key, host, user and deploy config as repo secrets, and scaffolds `.github/workflows/deploy.yml`.
 
 **Usage:**
 ```bash
@@ -244,7 +244,7 @@ aegis deploy-cd-setup [OPTIONS]
 1. Detects the GitHub repo from `git remote get-url origin` (or honors `--repo`)
 2. Generates a fresh ed25519 keypair in a temp dir, no passphrase, comment `github-actions-deploy@OWNER/REPO`
 3. Appends the public key to the deploy user's `authorized_keys` on the server (idempotent)
-4. Pushes three secrets to the repo: `DEPLOY_SSH_KEY` (private key), `DEPLOY_HOST`, `DEPLOY_USER`
+4. Pushes four secrets to the repo: `DEPLOY_SSH_KEY` (private key), `DEPLOY_HOST`, `DEPLOY_USER`, and `DEPLOY_CONFIG` (the whole `.aegis/deploy.yml`, which is gitignored, so a checkout has none)
 5. Writes `.github/workflows/deploy.yml` (workflow_dispatch by default; `--on-tag` adds the tag trigger)
 6. Records the key fingerprint in `.aegis/deploy.yml` under `ci.github` so re-runs detect "already configured"
 7. Securely deletes the temp private key (overwrites then unlinks)
@@ -256,6 +256,10 @@ aegis deploy-cd-setup --on-tag       # also auto-deploy on v* tag pushes
 aegis deploy-cd-setup --dry-run      # see the plan without touching anything
 aegis deploy-cd-setup --force        # rotate the existing deploy key
 ```
+
+**What the workflow runs:** it writes `.aegis/deploy.yml` back from `DEPLOY_CONFIG`, then runs `aegis deploy` from the aegis-stack the project is on: the `_commit` in `.copier-answers.yml` (so `aegis update` keeps CI in step), else the release that wrote the workflow. A runner has no `aegis` of its own. Two deploys never run at once.
+
+**What it does not ship:** the runner has no `.env.deploy` or `.env`, so a CI deploy keeps the server's `.env` as the last deploy from your machine left it. A change to `.aegis/deploy.yml` reaches CI when you re-run `aegis deploy-cd-setup --force`.
 
 !!! tip "Why a dedicated deploy key"
     Don't reuse your personal SSH key for CI. A dedicated key has a smaller blast radius (only deploys this one project), can be rotated without touching your other servers, and shows up as a distinct identity in `auth.log`. This command generates one for you.

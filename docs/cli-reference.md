@@ -762,6 +762,32 @@ aegis deploy-cd-setup --force  # rotate the deploy key
 
 ---
 
+### aegis deploy-cd-env
+
+Push the production env to GitHub for deploys from Actions: `.env.deploy` (or
+`--env-file`), whole, as the `DEPLOY_ENV` secret of the repo
+`aegis deploy-cd-setup` wired. The workflow writes it back before it deploys.
+Never falls back to `.env`, and refuses an env a deploy would refuse. Run it
+again after changing the file.
+
+**Usage:**
+```bash
+aegis deploy-cd-env [OPTIONS]
+```
+
+**Options:**
+
+- `--env-file PATH`, The env file to push (default: `.env.deploy`)
+- `--project-path TEXT`, Path to the project (default: current directory)
+
+**Examples:**
+```bash
+aegis deploy-cd-env
+aegis deploy-cd-env --env-file prod.env
+```
+
+---
+
 ### aegis deploy-agent
 
 Run what Overseer > Deployments asks for on this machine: a provider's sizes

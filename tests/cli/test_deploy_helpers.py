@@ -163,6 +163,27 @@ def test_the_runner_deploys_with_the_aegis_stack_the_project_is_on(
     assert "uv python install" not in workflow
 
 
+@pytest.mark.parametrize("pushed", [True, False])
+def test_the_runner_ships_the_env_it_is_given(tmp_path: Path, pushed: bool) -> None:
+    """The env ``deploy-cd-env`` pushed comes back as ``.env.deploy``, byte
+    for byte (quotes, comments and all), for ``aegis deploy`` to ship. Never
+    pushed, there is no file, so the server keeps its own ``.env``."""
+    env = 'SECRET_KEY="a b#c"\n# note\nexport TOKEN=x=y\n'
+    step = _step(_render_deploy_workflow(on_tag=False), "Write the deploy env")
+    assert step["env"]["DEPLOY_ENV"] == "${{ secrets.DEPLOY_ENV }}"
+    subprocess.run(
+        ["bash", "-c", step["run"]],
+        cwd=tmp_path,
+        env={"DEPLOY_ENV": env if pushed else "", "PATH": "/usr/bin:/bin"},
+        check=True,
+    )
+    written = tmp_path / ".env.deploy"
+    if pushed:
+        assert written.read_text().rstrip("\n") == env.rstrip("\n")
+    else:
+        assert not written.exists()
+
+
 def test_two_deploys_never_run_at_once() -> None:
     concurrency = yaml.safe_load(_render_deploy_workflow(on_tag=False))["concurrency"]
     assert concurrency == {"group": "deploy", "cancel-in-progress": False}
@@ -901,36 +922,49 @@ def test_the_boot_step_fails_when_the_database_lacks_what_the_code_reads(
     assert _boot_step(tmp_path, gaps) == code
 
 
+def _cd_project(root: Path, ci: dict[str, Any] | None, **extra: Any) -> None:
+    """A project's ``.aegis/deploy.yml``, with ``ci`` as setup leaves it (or
+    ``None``: setup never ran)."""
+    config: dict[str, Any] = {
+        "server": {"host": "203.0.113.7", "user": "root", "path": "/opt/app"},
+        **extra,
+    }
+    if ci is not None:
+        config["ci"] = ci
+    (root / ".aegis").mkdir()
+    (root / ".aegis" / "deploy.yml").write_text(yaml.safe_dump(config))
+
+
+WIRED = {"github": {"repo": "acme/app"}}
+
+
+def _record_gh_pushes(monkeypatch: pytest.MonkeyPatch) -> dict[str, tuple[str, str]]:
+    """Fakes the gh layer; each pushed secret's name -> (value, repo)."""
+    pushed: dict[str, tuple[str, str]] = {}
+
+    def push(name: str, value: str, repo: str) -> subprocess.CompletedProcess:
+        pushed[name] = (value, repo)
+        return subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+
+    def push_file(name: str, path: Path, repo: str) -> subprocess.CompletedProcess:
+        return push(name, path.read_text(), repo)
+
+    monkeypatch.setattr(deploy_mod, "_check_gh_cli", lambda: None)
+    monkeypatch.setattr(deploy_mod, "_set_gh_secret", push)
+    monkeypatch.setattr(deploy_mod, "_set_gh_secret_from_file", push_file)
+    return pushed
+
+
 def test_setup_pushes_the_deploy_config_it_saves(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The runner deploys from the secret, so it is the file, ``ci`` block
     and all, not a copy of some of its fields."""
-    (tmp_path / ".aegis").mkdir()
-    (tmp_path / ".aegis" / "deploy.yml").write_text(
-        yaml.safe_dump(
-            {
-                "server": {"host": "203.0.113.7", "user": "root", "path": "/opt/app"},
-                "domain": "app.example.com",
-            }
-        )
-    )
-    pushed: dict[str, str] = {}
+    _cd_project(tmp_path, None, domain="app.example.com")
+    pushed = _record_gh_pushes(monkeypatch)
     done = subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
-
-    def push(name: str, value: str, repo: str) -> subprocess.CompletedProcess:
-        pushed[name] = value
-        return done
-
-    def push_file(name: str, path: Path, repo: str) -> subprocess.CompletedProcess:
-        pushed[name] = path.read_text()
-        return done
-
-    monkeypatch.setattr(deploy_mod, "_check_gh_cli", lambda: None)
     monkeypatch.setattr(deploy_mod, "_list_gh_secrets", lambda repo: set())
     monkeypatch.setattr(deploy_mod, "_install_pubkey_on_server", lambda *a: done)
-    monkeypatch.setattr(deploy_mod, "_set_gh_secret", push)
-    monkeypatch.setattr(deploy_mod, "_set_gh_secret_from_file", push_file)
 
     deploy_mod.deploy_cd_setup_command(
         project_path=str(tmp_path),
@@ -942,6 +976,55 @@ def test_setup_pushes_the_deploy_config_it_saves(
     )
 
     saved = (tmp_path / ".aegis" / "deploy.yml").read_text()
-    assert pushed["DEPLOY_CONFIG"] == saved
+    assert pushed["DEPLOY_CONFIG"] == (saved, "acme/app")
     assert yaml.safe_load(saved)["ci"]["github"]["repo"] == "acme/app"
     assert {"DEPLOY_SSH_KEY", "DEPLOY_HOST", "DEPLOY_USER"} <= set(pushed)
+
+
+@pytest.mark.parametrize("env_file", [None, "prod.env"])
+def test_env_push_sends_the_env_file_whole_to_the_repo_setup_wired(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, env_file: str | None
+) -> None:
+    """``.env.deploy`` (or the file it is pointed at), whole, as one secret
+    (on stdin, never in argv), to the repo ``deploy-cd-setup`` recorded."""
+    _cd_project(tmp_path, WIRED)
+    (tmp_path / ".env.deploy").write_text(SAFE + "# deploy\n")
+    (tmp_path / "prod.env").write_text(SAFE + "# other\n")
+    (tmp_path / ".env").write_text("AUTH_ENABLED=false\n")
+    pushed = _record_gh_pushes(monkeypatch)
+
+    deploy_mod.deploy_cd_env_command(
+        project_path=str(tmp_path),
+        env_file=str(tmp_path / env_file) if env_file else None,
+    )
+
+    sent = (tmp_path / (env_file or ".env.deploy")).read_text()
+    assert pushed == {"DEPLOY_ENV": (sent, "acme/app")}
+
+
+@pytest.mark.parametrize(
+    ("ci", "files"),
+    [
+        # The dev .env is never pushed in .env.deploy's place.
+        pytest.param(WIRED, {".env": SAFE}, id="no-env-deploy"),
+        pytest.param(None, {".env.deploy": SAFE}, id="setup-never-ran"),
+        pytest.param({"github": None}, {".env.deploy": SAFE}, id="ci-github-null"),
+        # What a deploy would refuse is refused before it reaches GitHub.
+        pytest.param(WIRED, {".env.deploy": "APP_ENV=dev\n"}, id="open-env"),
+    ],
+)
+def test_env_push_refuses_rather_than_guess(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    ci: dict[str, Any] | None,
+    files: dict[str, str],
+) -> None:
+    _cd_project(tmp_path, ci)
+    for name, text in files.items():
+        (tmp_path / name).write_text(text)
+    pushed = _record_gh_pushes(monkeypatch)
+
+    with pytest.raises(typer.Exit):
+        deploy_mod.deploy_cd_env_command(project_path=str(tmp_path), env_file=None)
+
+    assert pushed == {}

@@ -7219,7 +7219,7 @@ The Flet dashboard shows the commands only.</p>
 </div>
 <hr />
 <h3 id="aegis-deploy-cd-setup">aegis deploy-cd-setup</h3>
-<p>Wire up GitHub Actions continuous deployment in one command. Generates a dedicated SSH deploy key, installs the public key on your server, pushes the private key + host + user as repo secrets, and scaffolds <code>.github/workflows/deploy.yml</code>.</p>
+<p>Wire up GitHub Actions continuous deployment in one command. Generates a dedicated SSH deploy key, installs the public key on your server, pushes the private key, host, user and deploy config as repo secrets, and scaffolds <code>.github/workflows/deploy.yml</code>.</p>
 <p><strong>Usage:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>aegis<span class="w"> </span>deploy-cd-setup<span class="w"> </span><span class="o">[</span>OPTIONS<span class="o">]</span>
 </span></code></pre></div></p>
@@ -7243,7 +7243,7 @@ The Flet dashboard shows the commands only.</p>
 <li>Detects the GitHub repo from <code>git remote get-url origin</code> (or honors <code>--repo</code>)</li>
 <li>Generates a fresh ed25519 keypair in a temp dir, no passphrase, comment <code>github-actions-deploy@OWNER/REPO</code></li>
 <li>Appends the public key to the deploy user's <code>authorized_keys</code> on the server (idempotent)</li>
-<li>Pushes three secrets to the repo: <code>DEPLOY_SSH_KEY</code> (private key), <code>DEPLOY_HOST</code>, <code>DEPLOY_USER</code></li>
+<li>Pushes four secrets to the repo: <code>DEPLOY_SSH_KEY</code> (private key), <code>DEPLOY_HOST</code>, <code>DEPLOY_USER</code>, and <code>DEPLOY_CONFIG</code> (the whole <code>.aegis/deploy.yml</code>, which is gitignored, so a checkout has none)</li>
 <li>Writes <code>.github/workflows/deploy.yml</code> (workflow_dispatch by default; <code>--on-tag</code> adds the tag trigger)</li>
 <li>Records the key fingerprint in <code>.aegis/deploy.yml</code> under <code>ci.github</code> so re-runs detect "already configured"</li>
 <li>Securely deletes the temp private key (overwrites then unlinks)</li>
@@ -7254,6 +7254,8 @@ The Flet dashboard shows the commands only.</p>
 </span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>aegis<span class="w"> </span>deploy-cd-setup<span class="w"> </span>--dry-run<span class="w">      </span><span class="c1"># see the plan without touching anything</span>
 </span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>aegis<span class="w"> </span>deploy-cd-setup<span class="w"> </span>--force<span class="w">        </span><span class="c1"># rotate the existing deploy key</span>
 </span></code></pre></div></p>
+<p><strong>What the workflow runs:</strong> it writes <code>.aegis/deploy.yml</code> back from <code>DEPLOY_CONFIG</code>, then runs <code>aegis deploy</code> from the aegis-stack the project is on: the <code>_commit</code> in <code>.copier-answers.yml</code> (so <code>aegis update</code> keeps CI in step), else the release that wrote the workflow. A runner has no <code>aegis</code> of its own. Two deploys never run at once.</p>
+<p><strong>What it does not ship:</strong> the runner has no <code>.env.deploy</code> or <code>.env</code>, so a CI deploy keeps the server's <code>.env</code> as the last deploy from your machine left it. A change to <code>.aegis/deploy.yml</code> reaches CI when you re-run <code>aegis deploy-cd-setup --force</code>.</p>
 <div class="admonition tip">
 <p class="admonition-title">Why a dedicated deploy key</p>
 <p>Don't reuse your personal SSH key for CI. A dedicated key has a smaller blast radius (only deploys this one project), can be rotated without touching your other servers, and shows up as a distinct identity in <code>auth.log</code>. This command generates one for you.</p>

@@ -14,8 +14,9 @@ from typing import Any, TypedDict
 
 from app.core import ownership, series
 from app.core.constants import ComponentName
-from app.core.ontology import EdgeKind, SystemModel, current
+from app.core.ontology import EdgeKind, SystemModel
 from app.core.ontology.model import parse_node_id
+from app.core.ontology.shared import twin
 from app.core.ownership import HOST
 from app.services.system import topology, ui_resources, ui_runtime
 from app.services.system.models import ComponentStatusType
@@ -247,7 +248,7 @@ async def overview(
     if drawn:
         placed = await _drawn(stack, [e for e, _ in entries], state, path)
     else:
-        model = await asyncio.to_thread(current)
+        model = await twin()
         _name_causes(stack, _cause_links(model, stack))
         placed = {"overview_stack": stack}
     server = found[host]["rows"] if host in found else []
@@ -285,7 +286,7 @@ async def _drawn(
         stack.append(overseer_worker.queue_node(worker))
     _inherit(stack)
     whole = {item["key"]: item for item in stack} if path else {}  # unopened
-    model = await asyncio.to_thread(current)
+    model = await twin()
     shape, pieces, links, tones = None, [], [], {}
     if zoom == HOST:
         stack, shape = overseer_zoom.opened(stack, model)

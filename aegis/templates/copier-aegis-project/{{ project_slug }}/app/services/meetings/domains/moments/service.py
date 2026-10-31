@@ -24,6 +24,7 @@ from app.services.meetings.domains.actions.registry import (
 from app.services.meetings.domains.moments import queries
 from app.services.meetings.domains.moments.detectors import (
     ADDRESSED,
+    OBEYED,
     Before,
     Detector,
     Heard,
@@ -57,20 +58,25 @@ async def seen(
     meeting_id: int,
     lines: dict[int, str],
     before: dict[int, Before] | None = None,
+    partial: set[int] | None = None,
 ) -> list[MeetingMoment]:
     """Every detector over ``lines`` (row id -> what was said so far): a
     moment found on a line is made, or its text follows the line. The line
     before each (``Before``) is the writer's, kept as it went (the bot's
-    ``Transcript``), else read back. Returns the moments made now."""
+    ``Transcript``), else read back. A line still being said (``partial``)
+    is read only for what the bot obeys (``OBEYED``): a question is asked
+    once it is said in full. Returns the moments made now."""
     if not lines or not detectors():
         return []
     heard = await queries.hearing(db, [meeting_id])
     if before is None:
         before = await queries.before_in(db, [meeting_id])
-    hits = _hits(
+    said = (
         heard(line_id, meeting_id, speaker, lines[line_id], is_me, before.get(line_id))
         for line_id, speaker, is_me in await queries.speakers(db, lines)
     )
+    partial = partial or set()
+    hits = [hit for hit in _hits(said) if hit[0] not in partial or hit[1] in OBEYED]
     if not hits:  # most flushes: nothing to keep, so nothing more to read
         return []
     on = [line_id for line_id, _, _ in hits]
@@ -81,10 +87,15 @@ async def seen(
 async def find_again(db: AsyncSession, meeting_ids: list[int]) -> None:
     """Every detector over these meetings' lines as they are now: a moment
     found is made, or follows its line, and one no longer found goes unless
-    something was asked of it."""
+    something was asked of it. What the bot obeyed (``OBEYED``) stays as the
+    call heard it: her voice as it played is not kept to read it by."""
     said = await queries.heard_in(db, meeting_ids)
-    hits = _hits(heard for heard, _ in said)
-    kept = await queries.in_meetings(db, meeting_ids)
+    hits = [hit for hit in _hits(heard for heard, _ in said) if hit[1] not in OBEYED]
+    kept = {
+        key: moment
+        for key, moment in (await queries.in_meetings(db, meeting_ids)).items()
+        if key[1] not in OBEYED
+    }
     await _keep(db, hits, kept, {heard.line_id: m for heard, m in said})
     found = {(line_id, kind) for line_id, kind, _ in hits}
     await drop_unasked(db, [m.id or 0 for key, m in kept.items() if key not in found])

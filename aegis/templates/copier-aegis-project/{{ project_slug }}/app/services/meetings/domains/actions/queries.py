@@ -6,6 +6,7 @@ runner tokens."""
 from datetime import datetime
 from typing import Any
 
+from sqlalchemy import Update
 from sqlmodel import col, delete, select, update
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -77,12 +78,10 @@ async def fail_claimed_before(db: AsyncSession, cutoff: datetime, result: str) -
     """Fail every run still claimed that was claimed before ``cutoff``, with
     ``result``: how many. The caller commits."""
     moved = await db.exec(  # type: ignore[call-overload]
-        update(MeetingActionRun)
-        .where(
+        _failing(result).where(
             MeetingActionRun.status == CLAIMED,
             col(MeetingActionRun.claimed_at) < cutoff,
         )
-        .values(status=FAILED, result=result, finished_at=utcnow())
     )
     return int(moved.rowcount or 0)
 
@@ -91,15 +90,21 @@ async def fail_going(db: AsyncSession, moment_ids: list[int], result: str) -> li
     """Fail every run on these moments still asked or claimed, with
     ``result``: their ids. The caller commits."""
     moved = await db.exec(  # type: ignore[call-overload]
-        update(MeetingActionRun)
+        _failing(result)
         .where(
             col(MeetingActionRun.moment_id).in_(moment_ids),
             col(MeetingActionRun.status).in_((ASKED, CLAIMED)),
         )
-        .values(status=FAILED, result=result, finished_at=utcnow())
         .returning(col(MeetingActionRun.id))
     )
     return [run_id for (run_id,) in moved.all()]
+
+
+def _failing(result: str) -> Update:
+    """Runs failed with ``result``, as of now: the ones a ``where`` picks."""
+    return update(MeetingActionRun).values(
+        status=FAILED, result=result, finished_at=utcnow()
+    )
 
 
 async def run(

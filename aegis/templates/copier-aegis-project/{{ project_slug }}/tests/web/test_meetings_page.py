@@ -414,14 +414,18 @@ async def test_a_line_naming_a_part_offers_what_it_is(
     from app.core.ontology.model import Kind, PartNode
     from app.core.parts import Category
     from app.services.meetings.domains.actions import about
-    from app.services.meetings.domains.actions.heard import heard
+    from app.services.meetings.domains.actions.heard import Heard, heard
 
     parts = (
         PartNode(kind=Kind.COMPONENT, name="scheduler", category=Category.COMPUTE),
         PartNode(kind=Kind.COMPONENT, name="cache", category=Category.DATA),
     )
     monkeypatch.setattr(page, "asks_about", lambda: True)
-    monkeypatch.setattr(about, "heard_here", lambda: heard(parts))
+
+    async def heard_here() -> Heard:
+        return heard(parts)
+
+    monkeypatch.setattr(about, "heard_here", heard_here)
     meeting_id, lines = await ended(
         async_db_session,
         acting_owner_user_id,

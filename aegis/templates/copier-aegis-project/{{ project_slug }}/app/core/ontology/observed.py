@@ -9,7 +9,6 @@ read (``contains``), a table no part owns is anyone's, the server reaching
 a part with routes is it serving them, and the queue handing work to a
 part is the other half of work handed to it."""
 
-import asyncio
 import time
 
 from app.core import edges
@@ -35,11 +34,11 @@ DECLARING = (EdgeKind.CALLS, EdgeKind.DEPENDS_ON, EdgeKind.CONTAINS)
 
 
 async def running() -> SystemModel:
-    """The model (``current``) with what this build has done so far: what
-    its readers (the API, the MCP tool) give out."""
-    from app.core.ontology.system import current
+    """The model (``shared.twin``) with what this build has done so far:
+    what its readers (the API, the MCP tool) give out."""
+    from app.core.ontology.shared import twin
 
-    model = await asyncio.to_thread(current)  # the first build reads the source
+    model = await twin()
     return overlaid(model, await edges.observed(), time.time())
 
 

@@ -9,16 +9,19 @@ import re
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.log import logger
+from app.services.meetings.domains.bot.audio import CAPTION_LAG
 from app.services.meetings.domains.bot.meet import merge_caption
 from app.services.meetings.domains.bot.row import write_captions
 from app.services.meetings.domains.moments.detectors import (
     FOLLOW_SECONDS,
     ITSELF,
+    NODS,
     Before,
     cut_at_name,
     its_own,
     mentions,
     replying,
+    says_more,
     stops,
     talking_over,
 )
@@ -93,6 +96,9 @@ class Transcript:
         self.asker = ""  # who last put something to it
         self.asked: dict[str, str] = {}  # speaker -> their last line for it
         self.held: set[str] = set()  # pieces for it, not yet said in full
+        # Of those, the ones written early (due at once, ``_at_once``) and
+        # unchanged since: written again only once said in full.
+        self.early: set[str] = set()
         self.seen: dict[str, str] = {}  # caption line -> its text, last look
         self.text: dict[str, str] = {}  # caption line -> all of it heard so far
         # caption line -> when it was first captioned, from when the bot got in
@@ -114,21 +120,18 @@ class Transcript:
         for shown in {**self.unsure, **{c.line: c for c in captions}}.values():
             self._look(shown, now, patient=True)
         self._hear_her()
-        # A stop, or a line begun over her, is due at once: it waits on
-        # neither a pause nor the beat.
-        at_once = {line for line, c in self.pending.items() if self._at_once(c)}
-        held = self.held = {
+        at_once = {
             line
             for line, c in self.pending.items()
-            if line not in at_once
-            and self._for_bot(c)
-            and now - self.changed[line] < SETTLE_SECONDS
+            if line not in self.early and self._at_once(c)
         }
-        settled = bool(at_once) or any(
-            self._for_bot(c) for line, c in self.pending.items() if line not in held
-        )
+        for_bot = {line for line, c in self.pending.items() if self._for_bot(c)}
+        held = self.held = {
+            line for line in for_bot if now - self.changed[line] < SETTLE_SECONDS
+        }
+        settled = bool(at_once or for_bot - held)
         if settled or now - self.written_at >= BEAT_SECONDS:
-            return self._due(held)
+            return self._due(held, at_once & held)
         return []
 
     def _hear_her(self) -> None:
@@ -163,7 +166,7 @@ class Transcript:
         now = asyncio.get_running_loop().time()
         for shown in list(self.unsure.values()):
             self._look(shown, now, patient=False)
-        return self._due(set())
+        return self._due(set(), set())
 
     def _look(self, shown: Caption, now: float, patient: bool) -> None:
         """One block Meet shows, taken in: under its own line, or the one it
@@ -220,14 +223,26 @@ class Transcript:
         return self._back(caption) or mentions(caption.text, self.bot)
 
     def _at_once(self, caption: Caption) -> bool:
-        """Whether a piece is due at once: a stop, or begun over her
-        (``talking_over``: not her echo) while she still talks; once she is
-        quiet, what it grows into waits as ever."""
+        """Whether a piece is due at once, waiting on neither a pause nor the
+        beat: a stop, or more than a nod begun over her (``talking_over``: not
+        her echo) while she is still heard; once she is quiet, what it grows
+        into waits as ever."""
         if self._stops(caption):
             return True
-        playing = self.her()[0] > asyncio.get_running_loop().time()
+        heard_to, _ = self._heard()
         before = self.before.get(caption.line)
-        return playing and talking_over(before, caption.speaker, self.bot, caption.text)
+        return (
+            heard_to > asyncio.get_running_loop().time()
+            and says_more(caption.text, NODS, self.bot)
+            and talking_over(before, caption.speaker, self.bot, caption.text)
+        )
+
+    def _heard(self) -> tuple[float, str]:
+        """When her voice is heard to have ended (her captions show
+        ``CAPTION_LAG`` behind it, as does a line said over it), and what
+        she last said."""
+        played, words = self.her()
+        return played + CAPTION_LAG, words
 
     def _stops(self, caption: Caption) -> bool:
         """Whether a piece someone else said is a stop (``stops``): whether
@@ -248,9 +263,10 @@ class Transcript:
         for i, piece in enumerate(pieces):
             line = caption.line if i == 0 else f"{caption.line}#{i}"
             if self.lines.get(line) != piece:
+                self.early.discard(line)
                 if line not in self.lines:
-                    played, words = self.her()
-                    gap = now - max(self.bot_spoke, played)  # < 0: it is talking
+                    heard_to, words = self._heard()
+                    gap = now - max(self.bot_spoke, heard_to)  # < 0: it is talking
                     said = f"{self.bot_said} {words}"
                     self.before[line] = (ITSELF, gap, self.asker, said)
                 self.lines[line] = piece
@@ -258,16 +274,20 @@ class Transcript:
                 self.first_seen.setdefault(line, now - self.started)
                 self.pending[line] = Caption(line, caption.speaker, piece)
 
-    def _due(self, held: set[str]) -> list[Caption]:
-        """What changed, but the pieces ``held``: taken as written now."""
+    def _due(self, held: set[str], early: set[str]) -> list[Caption]:
+        """What changed, but the pieces ``held``: taken as written now. Those
+        ``early`` among them are written too, and held on (``early``)."""
         self.written_at = asyncio.get_running_loop().time()
-        writing = [c for line, c in self.pending.items() if line not in held]
+        writing = [
+            c for line, c in self.pending.items() if line not in held or line in early
+        ]
         self.pending = {line: self.pending[line] for line in held}
+        self.early = (self.early & held) | early
         for c in writing:
             if self._stops(c):  # nobody is answered now: only her name wakes her
                 self.asker = ""
                 continue
-            if not self._for_bot(c):
+            if c.line in self.early or not self._for_bot(c):
                 continue
             if (first := self._asked_again(c)) is not None:
                 # Written over the line it says again: one question, asked once.
@@ -319,4 +339,5 @@ class Transcript:
             self.written_at - self.started,
             starts=self.first_seen,
             before=self.before,
+            early=frozenset(c.line for c in writing if c.line in self.early),
         )

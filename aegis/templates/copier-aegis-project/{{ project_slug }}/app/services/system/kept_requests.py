@@ -18,8 +18,9 @@ from pydantic import BaseModel
 from app.core import replays
 from app.core.edges import part_of
 from app.core.figures import FIGURES
-from app.core.ontology import Kind, current
+from app.core.ontology import Kind, SystemModel
 from app.core.ontology.model import parse_node_id
+from app.core.ontology.shared import twin
 from app.services.system import service_pieces
 
 
@@ -103,12 +104,12 @@ async def find(request_id: str) -> RequestHops | None:
     recording = await replays.find(request_id)
     if recording is None:
         return None
-    return await asyncio.to_thread(_read, recording)
+    return await asyncio.to_thread(_read, recording, await twin())
 
 
-def _read(recording: replays.Recording) -> RequestHops:
-    """``recording`` named as the model names it (read from source)."""
-    ids = {node.id for node in current().nodes}
+def _read(recording: replays.Recording, model: SystemModel) -> RequestHops:
+    """``recording`` named as ``model`` names it."""
+    ids = {node.id for node in model.nodes}
     hops = sorted(recording.hops, key=lambda hop: hop.at_ms)
     chains = [_named(hop.chain, ids) for hop in hops]
     services = {

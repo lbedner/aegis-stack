@@ -179,6 +179,28 @@ async def test_past_meetings_are_looked_over_again(
     assert sorted(lines) == sorted([real, asked])
 
 
+async def test_what_the_bot_obeyed_is_not_read_over(
+    async_db_session: AsyncSession,
+) -> None:
+    """A cut-in, a go-on and a stop are the call's, read as it heard them
+    (her voice, played): read over from the lines kept, none is dropped."""
+    from app.services.meetings.domains.moments import queries
+
+    meeting_id = await a_meeting(async_db_session)
+    (line,) = await said(async_db_session, meeting_id, ("Dana", "Hold on there."))
+    async_db_session.add(
+        MeetingMoment(
+            meeting_id=meeting_id, line_id=line, kind="cut_in", text="Hold on there."
+        )
+    )
+    await async_db_session.commit()
+
+    await find_again(async_db_session, [meeting_id])
+
+    kept = await queries.in_meetings(async_db_session, [meeting_id])
+    assert (line, "cut_in") in kept
+
+
 async def test_a_call_still_going_is_not_read_over(
     async_db_session: AsyncSession,
 ) -> None:
@@ -337,12 +359,18 @@ def test_a_question_asked_of_someone_in_the_call_is_theirs(said: str) -> None:
             "Ileana, can you tell me how? Request gets from the traffic layer.",
             "can you tell me how? Request gets from the traffic layer.",
         ),
+        (  # asked by its tone, captioned as said (meeting 63)
+            "Illiana, you can't list the components and services.",
+            "you can't list the components and services.",
+        ),
+        ("Good morning, Illiana.", "Good morning."),  # greeted: she greets back
     ],
 )
 def test_a_line_put_to_the_bot_by_name_wakes_it(said: str, asked: str) -> None:
     """Captions spell her as they hear her (Iliana, Eliana): a line that
-    opens on her name, after a greeting at most, or closes on it, and asks
-    something, is put to her; what she is asked is the rest of it."""
+    opens on her name, after a greeting at most, or closes on it, is put to
+    her, asked or not (a tone asks what captions write as said); what she
+    is asked is the rest of it."""
     heard = Heard(1, "Dana", said, is_me=False, addressee="Illiana")
 
     assert detectors.addressed(heard) == asked
@@ -353,7 +381,6 @@ def test_a_line_put_to_the_bot_by_name_wakes_it(said: str, asked: str) -> None:
     [
         "I know he built Iliana to listen to the calls.",  # about her
         "Right or actually is Eliana on here?",  # about her
-        "Good morning, Illiana.",  # nothing asked
         "Hey Illiana, what did",  # not said to its end yet
         # her name who the line is about, said to someone else
         "So, so Iliana is actually, uh, going to this website and the one good"
@@ -412,6 +439,9 @@ def test_a_line_said_back_to_the_bot_is_put_to_it_without_its_name() -> None:
         "Never mind",
         "Illiana stop talking",
         "No, no. Stop.",
+        "Actually, Eliana stop.",  # what is said to her by name
+        "Ileana stop! I.",  # grown past the stop
+        "Illiana, um, stop. We should go.",
     ],
 )
 def test_one_who_may_wake_the_bot_stops_it(said: str) -> None:
@@ -431,6 +461,7 @@ def test_a_stop_counts_only_from_one_who_may_wake_the_bot_and_alone() -> None:
     assert stop("Stop.", addressee="") is None  # one who may not wake her
     assert stop("Stop the deploy and tell me why it failed.") is None
     assert stop("We should stop for lunch.") is None
+    assert stop("We should stop for lunch, Illiana.") is None
 
 
 def test_a_line_begun_while_she_talks_is_over_her_unless_it_is_her_echo() -> None:
@@ -496,11 +527,12 @@ def test_a_nod_a_stop_or_one_who_may_not_wake_her_is_no_cut_in() -> None:
 )
 def test_a_line_put_to_her_that_asks_nothing_tells_her_to_go_on(said: str) -> None:
     """No list of ways to say it: put to her, it asks nothing, and is no
-    stop or thanks. Whether she has anything to go on with is hers."""
+    stop or thanks. Whether she has anything to go on with is hers: with
+    nothing, it is put to her as any line is."""
     heard = Heard(1, "Leonard", said, True, addressee="Illiana")
 
     assert detectors.go_on(heard) == said
-    assert detectors.addressed(heard) is None
+    assert detectors.addressed(heard) is not None
 
 
 def test_a_question_a_stop_thanks_or_another_named_is_no_go_on() -> None:

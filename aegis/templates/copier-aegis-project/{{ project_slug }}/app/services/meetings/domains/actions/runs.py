@@ -94,6 +94,8 @@ async def ask(
 async def drop(db: AsyncSession, moment_ids: list[int], result: str = STOPPED) -> None:
     """Every run still going on these moments stopped: those working in the
     app cut off, and each failed as ``result`` (``STOPPED``), never finished."""
+    if not moment_ids:
+        return
     for run_id in await queries.fail_going(db, moment_ids, result):
         if (task := _working.pop(run_id, None)) is not None:
             task.cancel()

@@ -80,6 +80,7 @@ async def write_captions(
     at_seconds: float,
     starts: dict[str, float],
     before: dict[str, Before] | None = None,
+    early: frozenset[str] = frozenset(),
 ) -> list[tuple[int, str]]:
     """Each caption as its transcript line: a caption already in ``rows``
     (caption line -> row id) updates its row, a new one adds a row (and
@@ -87,7 +88,8 @@ async def write_captions(
     they speak. A new line starts when it was first captioned (``starts``,
     by caption line); ``at_seconds`` is when it last changed. The line
     before each (``before``, by caption line), where the writer kept it,
-    goes to the detectors as is."""
+    goes to the detectors as is. A line written ``early``, still being said,
+    is read only for what the bot obeys (``moments.seen``)."""
     new = [c for c in captions if c.line not in rows]
     speakers = (
         await participants.participants(
@@ -120,7 +122,11 @@ async def write_captions(
         None if before is None else {rows[k]: b for k, b in before.items() if k in rows}
     )
     made = await moments.seen(
-        db, meeting_id, {rows[c.line]: c.text for c in captions}, kept
+        db,
+        meeting_id,
+        {rows[c.line]: c.text for c in captions},
+        kept,
+        partial={rows[line] for line in early if line in rows},
     )
     await moments.ask_for_new(db, made)
     found = [(m.id or 0, m.kind) for m in made]  # read before the commit expires them

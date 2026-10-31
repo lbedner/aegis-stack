@@ -17,8 +17,9 @@ from fastapi import HTTPException
 from app.core import exposure
 from app.core.constants import ComponentName
 from app.core.formatting import counted, format_duration_ms, format_number, page_number
-from app.core.ontology import Kind, current
+from app.core.ontology import Kind
 from app.core.ontology.model import parse_node_id
+from app.core.ontology.shared import twin
 from app.services.system import topology, ui_database
 from app.services.system.ui import registry_key
 
@@ -68,9 +69,8 @@ def listed() -> set[str]:
 async def owners() -> dict[str, str]:
     """Each table's owner as the ontology reads it: the id of the part its
     model's module belongs to (``service:auth``). None for a table no model
-    declares, or one whose model no part owns. The model is read off the
-    loop: its first build parses the source."""
-    model = await asyncio.to_thread(current)
+    declares, or one whose model no part owns."""
+    model = await twin()
     return {n.name: n.owner for n in model.nodes if n.kind is Kind.OBJECT and n.owner}
 
 

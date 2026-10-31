@@ -793,7 +793,7 @@ async def test_asked_about_a_part_a_line_names_she_is_told_which(
     from app.core.ontology.model import Kind, PartNode
     from app.core.parts import Category
     from app.services.meetings.domains.actions import about, ask_ai
-    from app.services.meetings.domains.actions.heard import heard
+    from app.services.meetings.domains.actions.heard import Heard, heard
     from app.services.meetings.service import MeetingsService, line_about
 
     asked: list[str] = []
@@ -807,7 +807,11 @@ async def test_asked_about_a_part_a_line_names_she_is_told_which(
         kind=Kind.COMPONENT, name="scheduler", category=Category.COMPUTE
     )
     monkeypatch.setattr(ask_ai, "her", Her)
-    monkeypatch.setattr(about, "heard_here", lambda: heard([scheduler]))
+
+    async def heard_here() -> Heard:
+        return heard([scheduler])
+
+    monkeypatch.setattr(about, "heard_here", heard_here)
     meeting_id = await a_meeting(async_db_session)
     (line,) = await said(async_db_session, meeting_id, ("Dana", "The scheduler."))
     svc = MeetingsService(async_db_session, None)

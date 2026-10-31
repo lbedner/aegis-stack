@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 import pytest
 
 from app.core import secrets, source_index
+from app.core.cache import CacheService
 from app.core.ontology import (
     SCHEMA_VERSION,
     EdgeKind,
@@ -22,10 +23,11 @@ from app.core.ontology import (
     SystemModel,
     TaskNode,
     calls,
+    shared,
     system_model,
 )
 from app.core.ontology import system as ontology_system
-from app.core.ontology.model import ContainerNode
+from app.core.ontology.model import ContainerNode, stack
 from app.core.ontology.parts import service_folders
 from app.core.parts import Category
 from app.services.system import health, redis_keys, topology
@@ -311,9 +313,7 @@ def test_before_startup_the_model_says_it_is_partial(
 ) -> None:
     """Outside the webserver nothing has registered: what is on disk, said
     to be partial rather than passed off as the whole."""
-    monkeypatch.setattr(
-        health, "registered_health_names", lambda: {"components": (), "services": ()}
-    )
+    _registered(monkeypatch, webserver=False)
     found = system_model()
     assert found.partial
     assert "component:backend" in _parts(found)
@@ -338,9 +338,9 @@ def test_a_plugin_service_is_a_node_of_its_own(
 async def test_a_warmed_model_is_built_once_off_the_loop_for_whoever_asks(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The webserver warms the model once its parts have registered, a
-    worker as it starts (its queue's ``STARTUP``): neither waits for the
-    build, and the first to ask gets that build, not a second."""
+    """The webserver warms the model once its parts have registered: it
+    does not wait for the build, and the first to ask gets that build, not
+    a second."""
     import asyncio
     import threading
     import time
@@ -365,3 +365,77 @@ async def test_a_warmed_model_is_built_once_off_the_loop_for_whoever_asks(
 
     assert len(built) == 1 and ontology_system.current() is model
     assert built[0] != threading.current_thread().name  # off the loop
+
+
+def _registered(monkeypatch: pytest.MonkeyPatch, *, webserver: bool) -> None:
+    """A webserver (every part registered) or a worker (none)."""
+    names = ("backend",) if webserver else ()
+    monkeypatch.setattr(
+        health, "registered_health_names", lambda: {"components": names, "services": ()}
+    )
+
+
+class _Redis(CacheService):
+    """The shared cache as Redis is to the processes: what one keeps, the
+    others read."""
+
+    backend_name = "redis"
+
+
+@pytest.fixture
+def kept_in(monkeypatch: pytest.MonkeyPatch) -> CacheService:
+    """The shared cache, empty, with nothing built in this process."""
+    cache = _Redis()
+    monkeypatch.setattr(shared, "get_cache", lambda: cache)
+    monkeypatch.setattr(ontology_system, "_kept", None)
+    return cache
+
+
+async def test_a_worker_reads_the_whole_model_the_webserver_kept(
+    kept_in: CacheService, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Built, the model imports the whole app (every route, every job):
+    a worker takes the webserver's, whole, rather than build its own."""
+    whole = SystemModel(partial=False, stack=stack(), nodes=(), edges=())
+    await shared.keep(whole)
+    built: list[object] = []
+    monkeypatch.setattr(ontology_system, "system_model", built.append)
+    _registered(monkeypatch, webserver=False)
+
+    assert await shared.twin() == whole
+    assert built == []
+
+
+async def test_a_partial_model_is_never_kept_and_one_not_kept_is_built(
+    kept_in: CacheService, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    partial = SystemModel(partial=True, stack=stack(), nodes=(), edges=())
+    await shared.keep(partial)
+    monkeypatch.setattr(ontology_system, "system_model", lambda: partial)
+    _registered(monkeypatch, webserver=False)
+
+    assert await kept_in.get(shared.KEY) is None
+    assert await shared.twin() is partial
+
+
+async def test_without_redis_nothing_is_kept(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The cache is the process's own: a copy there serves no other."""
+    cache = CacheService()
+    monkeypatch.setattr(shared, "get_cache", lambda: cache)
+
+    await shared.keep(SystemModel(partial=False, stack=stack(), nodes=(), edges=()))
+
+    assert await cache.get(shared.KEY) is None
+
+
+async def test_the_webserver_builds_its_own_never_the_one_kept(
+    kept_in: CacheService, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """What was kept is the last build's: the webserver's code may be newer."""
+    old = SystemModel(partial=False, stack=stack(), nodes=(), edges=())
+    new = SystemModel(partial=False, stack=stack(), nodes=(), edges=())
+    await shared.keep(old)
+    monkeypatch.setattr(ontology_system, "system_model", lambda: new)
+    _registered(monkeypatch, webserver=True)
+
+    assert await shared.twin() is new

@@ -717,14 +717,3 @@ async def test_it_speaks_in_the_stacks_active_voice(
 
     assert await voice.spoken("I'm here", speaking) == b"mp3"
     assert asked == [("nova", "I'm here")]
-
-
-def test_its_worker_builds_the_twin_as_it_starts() -> None:
-    """Her map (the twin) takes seconds to build, once a process: the
-    meetings worker builds it as it starts, so no call waits on it."""
-    discovery = pytest.importorskip("app.components.worker.queue_discovery")
-    from app.core.ontology import system
-
-    queue = discovery.queue_module("meetings")
-
-    assert queue is not None and system.warm in queue.STARTUP

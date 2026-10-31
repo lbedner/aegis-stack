@@ -682,7 +682,7 @@ MESSAGES: dict[str, str] = {
         "  2. Install public key in {user}@{host}:~/.ssh/authorized_keys"
     ),
     "deploy.cd_plan_secrets": (
-        "  3. Push DEPLOY_SSH_KEY / DEPLOY_HOST / DEPLOY_USER to {repo} secrets"
+        "  3. Push DEPLOY_SSH_KEY / DEPLOY_HOST / DEPLOY_USER / DEPLOY_CONFIG to {repo} secrets"
     ),
     "deploy.cd_plan_workflow": "  4. Scaffold {path}",
     "deploy.cd_dry_run": "Dry run; no changes made.",

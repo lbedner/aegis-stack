@@ -24,7 +24,9 @@ from typing import Any
 import typer
 import yaml
 
+from .. import __version__
 from ..cli import brand
+from ..config.defaults import GITHUB_REPO_URL, version_to_git_tag
 from ..constants import AnswerKeys, PostgresProviders
 from ..core.component_files import template_module
 from ..core.copier_manager import AEGIS_GIT_EMAIL, load_copier_answers
@@ -2080,6 +2082,7 @@ def deploy_exec_command(
 _GH_DEPLOY_KEY_SECRET = "DEPLOY_SSH_KEY"
 _GH_DEPLOY_HOST_SECRET = "DEPLOY_HOST"
 _GH_DEPLOY_USER_SECRET = "DEPLOY_USER"
+_GH_DEPLOY_CONFIG_SECRET = "DEPLOY_CONFIG"
 
 
 # Server-only state, and everything that has no business on a server. With
@@ -2248,36 +2251,20 @@ def _key_fingerprint(key_path: Path) -> str:
     return result.stdout.strip() if result.returncode == 0 else ""
 
 
-def _project_python_minor(project_root: Path) -> str | None:
-    """Extract a major.minor Python version (e.g. ``3.13``) from the project's
-    ``pyproject.toml``'s ``requires-python``.
-
-    Returns ``None`` if the file or constraint is missing/unparseable, in
-    which case callers should omit the ``uv python install`` step and let
-    uv resolve from the lock file.
-    """
-    pyproject = project_root / "pyproject.toml"
-    if not pyproject.exists():
-        return None
-    import tomllib
-
-    try:
-        with open(pyproject, "rb") as f:
-            data = tomllib.load(f)
-    except (OSError, tomllib.TOMLDecodeError):
-        return None
-    constraint = data.get("project", {}).get("requires-python", "")
-    match = re.search(r"(\d+)\.(\d+)", constraint)
-    return f"{match.group(1)}.{match.group(2)}" if match else None
-
-
-def _render_deploy_workflow(on_tag: bool, python_version: str | None = None) -> str:
+def _render_deploy_workflow(on_tag: bool) -> str:
     """Render the GitHub Actions deploy.yml content.
 
     Always includes ``workflow_dispatch``. ``on_tag`` additionally fires on
-    ``v*`` tag pushes. When ``python_version`` is set, an explicit
-    ``uv python install`` step is emitted before ``uv sync`` to pin the
-    runtime, mirroring ci.yml.
+    ``v*`` tag pushes.
+
+    A runner has neither of what a deploy from a laptop leans on: the
+    ``aegis`` CLI (no project dependency) and ``.aegis/deploy.yml``
+    (gitignored). The config comes back from the ``DEPLOY_CONFIG`` secret
+    ``deploy-cd-setup`` pushed; the CLI is the aegis-stack the project is
+    on, the ``_commit`` ``aegis update`` last recorded, else the release
+    that wrote this workflow, on whichever Python ``uvx`` picks for it (not
+    the project's: the CLI declares its own). A deploy waits for the one
+    before it.
     """
     triggers = ["  workflow_dispatch:"]
     if on_tag:
@@ -2285,18 +2272,14 @@ def _render_deploy_workflow(on_tag: bool, python_version: str | None = None) -> 
         triggers.append("    tags:")
         triggers.append("      - 'v*'")
     on_block = "\n".join(triggers)
-    py_step = (
-        f"""
-    - name: Set up Python
-      run: uv python install {python_version}
-"""
-        if python_version
-        else ""
-    )
     return f"""name: Deploy
 
 on:
 {on_block}
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -2312,17 +2295,23 @@ jobs:
     - name: Trust server host key
       run: ssh-keyscan -H ${{{{ secrets.{_GH_DEPLOY_HOST_SECRET} }}}} >> ~/.ssh/known_hosts
 
+    - name: Write the deploy config
+      env:
+        {_GH_DEPLOY_CONFIG_SECRET}: ${{{{ secrets.{_GH_DEPLOY_CONFIG_SECRET} }}}}
+      run: mkdir -p .aegis && printf '%s\\n' "${_GH_DEPLOY_CONFIG_SECRET}" > {DEPLOY_CONFIG_FILE}
+
     - name: Install uv
       uses: astral-sh/setup-uv@v7
-      with:
-        enable-cache: true
-        cache-dependency-glob: "uv.lock"
-{py_step}
-    - name: Install dependencies
-      run: uv sync
+
+    - name: Resolve the aegis-stack this project is on
+      id: aegis
+      run: |
+        ref=$(sed -n 's/^_commit: *//p' .copier-answers.yml | tr -d "'\\"")
+        if [ -z "$ref" ] || [ "$ref" = "None" ]; then ref={version_to_git_tag(__version__)}; fi
+        echo "ref=$ref" >> "$GITHUB_OUTPUT"
 
     - name: Deploy
-      run: uv run aegis deploy
+      run: uvx --from git+{GITHUB_REPO_URL}@${{{{ steps.aegis.outputs.ref }}}} aegis deploy
 """
 
 
@@ -2361,7 +2350,8 @@ def deploy_cd_setup_command(
 
     Generates a dedicated ed25519 deploy key, installs the public key on
     the deploy server's authorized_keys, pushes the private key + host +
-    user to GitHub Actions secrets, and scaffolds .github/workflows/deploy.yml.
+    user + deploy config to GitHub Actions secrets, and scaffolds
+    .github/workflows/deploy.yml.
 
     Requires the GitHub CLI (gh) authenticated via 'gh auth login', and an
     .aegis/deploy.yml from a prior 'aegis deploy-init'.
@@ -2415,6 +2405,7 @@ def deploy_cd_setup_command(
             _GH_DEPLOY_KEY_SECRET,
             _GH_DEPLOY_HOST_SECRET,
             _GH_DEPLOY_USER_SECRET,
+            _GH_DEPLOY_CONFIG_SECRET,
         }
         if clash:
             brand.error(
@@ -2483,6 +2474,16 @@ def deploy_cd_setup_command(
         brand.error(t("deploy.cd_install_failed", error=install.stderr), err=True)
         raise typer.Exit(1)
 
+    # The config with its ci.github block (merged, not clobbered): saved
+    # below and pushed as DEPLOY_CONFIG, so the runner deploys from this
+    # same file (.aegis/ is gitignored, so a checkout has none).
+    config.setdefault("ci", {})["github"] = {
+        "repo": repo_slug,
+        "deploy_key_fingerprint": fingerprint,
+        "workflow_path": str(workflow_path.relative_to(project_root)),
+    }
+    config_text = yaml.safe_dump(config, default_flow_style=False, sort_keys=False)
+
     # Push secrets
     typer.echo(t("deploy.cd_pushing_secrets", repo=repo_slug))
     secret_calls = [
@@ -2499,6 +2500,10 @@ def deploy_cd_setup_command(
         (
             _GH_DEPLOY_USER_SECRET,
             lambda: _set_gh_secret(_GH_DEPLOY_USER_SECRET, user, repo_slug),
+        ),
+        (
+            _GH_DEPLOY_CONFIG_SECRET,
+            lambda: _set_gh_secret(_GH_DEPLOY_CONFIG_SECRET, config_text, repo_slug),
         ),
     ]
     for name, call in secret_calls:
@@ -2520,24 +2525,12 @@ def deploy_cd_setup_command(
         )
     )
     workflow_path.parent.mkdir(parents=True, exist_ok=True)
-    workflow_path.write_text(
-        _render_deploy_workflow(
-            on_tag=on_tag,
-            python_version=_project_python_minor(project_root),
-        )
-    )
+    workflow_path.write_text(_render_deploy_workflow(on_tag=on_tag))
 
-    # Update .aegis/deploy.yml with ci.github block (merge, don't clobber)
-    config.setdefault("ci", {})["github"] = {
-        "repo": repo_slug,
-        "deploy_key_fingerprint": fingerprint,
-        "workflow_path": str(workflow_path.relative_to(project_root)),
-    }
     # _save_deploy_config relies on cwd; pass project_path through directly
     config_path = project_root / DEPLOY_CONFIG_FILE
     config_path.parent.mkdir(exist_ok=True)
-    with open(config_path, "w") as f:
-        yaml.safe_dump(config, f, default_flow_style=False, sort_keys=False)
+    config_path.write_text(config_text)
 
     # Optional: keep a local copy of the private key
     if keep_key:

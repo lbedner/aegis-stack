@@ -65,6 +65,10 @@ SPOKEN_TAIL = 0.3
 # Before its first words in a call, a moment after unmuting: Meet opens the
 # microphone late the first time, and cut "Let me look that up" short.
 FIRST_UNMUTE = 0.4
+# How far ahead of what plays a live voice is taken: made faster than it
+# plays, it is otherwise all taken at once, and her session counts it heard
+# (``played_audio_bytes``), so cut off, she is cut past where the room was.
+AHEAD_SECONDS = 0.5
 NAME_INPUT = 'input[type="text"]'
 JOIN_BUTTON = (
     'button:has-text("Join now"), button:has-text("Ask to join"), '
@@ -350,9 +354,12 @@ class MeetPage(Steps):
 
     async def stream(self, pcm: bytes, rate: int) -> None:
         """Say a piece of speech still being made (a live voice's, PCM16 at
-        ``rate``), as ``speak`` does."""
+        ``rate``), as ``speak`` does, back once no more than
+        ``AHEAD_SECONDS`` is left to play."""
         await self.unmute()
-        self._played(await card.stream(self.page, pcm, rate))
+        left = await card.stream(self.page, pcm, rate)
+        self._played(left)
+        await asyncio.sleep(max(0.0, left - AHEAD_SECONDS))
 
     async def silence(self) -> None:
         """What it is saying cut off: nothing still to play."""

@@ -20,6 +20,7 @@ from app.services.meetings.domains.moments.detectors import (
     mentions,
     replying,
     stops,
+    talking_over,
 )
 from app.services.meetings.models import Caption
 
@@ -113,16 +114,17 @@ class Transcript:
         for shown in {**self.unsure, **{c.line: c for c in captions}}.values():
             self._look(shown, now, patient=True)
         self._hear_her()
-        # A stop is due at once: it waits on neither a pause nor the beat.
-        stopping = {line for line, c in self.pending.items() if self._stops(c)}
+        # A stop, or a line begun over her, is due at once: it waits on
+        # neither a pause nor the beat.
+        at_once = {line for line, c in self.pending.items() if self._at_once(c)}
         held = self.held = {
             line
             for line, c in self.pending.items()
-            if line not in stopping
+            if line not in at_once
             and self._for_bot(c)
             and now - self.changed[line] < SETTLE_SECONDS
         }
-        settled = bool(stopping) or any(
+        settled = bool(at_once) or any(
             self._for_bot(c) for line, c in self.pending.items() if line not in held
         )
         if settled or now - self.written_at >= BEAT_SECONDS:
@@ -216,6 +218,16 @@ class Transcript:
         if its_own(caption.speaker, self.bot):
             return False
         return self._back(caption) or mentions(caption.text, self.bot)
+
+    def _at_once(self, caption: Caption) -> bool:
+        """Whether a piece is due at once: a stop, or begun over her
+        (``talking_over``: not her echo) while she still talks; once she is
+        quiet, what it grows into waits as ever."""
+        if self._stops(caption):
+            return True
+        playing = self.her()[0] > asyncio.get_running_loop().time()
+        before = self.before.get(caption.line)
+        return playing and talking_over(before, caption.speaker, self.bot, caption.text)
 
     def _stops(self, caption: Caption) -> bool:
         """Whether a piece someone else said is a stop (``stops``): whether

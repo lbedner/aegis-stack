@@ -3702,6 +3702,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#pull-request-review" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pull Request Review
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#configuration" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -6777,6 +6788,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#pull-request-review" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pull Request Review
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#configuration" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -7093,18 +7115,50 @@
 </span><span id="__span-9-10"><a id="__codelineno-9-10" name="__codelineno-9-10" href="#__codelineno-9-10"></a><span class="w">  </span>--no-buffer
 </span></code></pre></div>
 <p>See <a href="../api/">API Reference</a> for full endpoint documentation.</p>
+<h2 id="pull-request-review">Pull Request Review</h2>
+<p>A generated project's CI (<code>.github/workflows/ci.yml</code>) has an <code>Illiana</code> job that reviews every pull request. It checks the change against the app's pattern rules (<code>patterns check</code>), with the base branch's own findings as the known debt, and annotates each new finding on its line. She then posts one comment on the pull request (<code>patterns review</code>) that explains the findings, and edits it on each push. Her verdict is advisory: the job passes whatever she finds until you ask her to block (step 3 below).</p>
+<p>Her comment needs the AI service on PydanticAI with a database (<code>ai_backend</code> <code>sqlite</code> or <code>postgres</code>). Without it the job still runs the check and gives the verdict. A project made before the job existed gets it with <code>aegis update</code>.</p>
+<p>The rest is optional and set as repository secrets:</p>
+<ol>
+<li>
+<p><strong>Her write-up:</strong> set <code>OPENAI_API_KEY</code> and the repository variable <code>ILLIANA_REVIEW</code> to <code>model</code>. A key alone turns nothing on. Without both she still posts the verdict and every finding, in the rules' own words.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>gh<span class="w"> </span>secret<span class="w"> </span><span class="nb">set</span><span class="w"> </span>OPENAI_API_KEY
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>gh<span class="w"> </span>variable<span class="w"> </span><span class="nb">set</span><span class="w"> </span>ILLIANA_REVIEW<span class="w"> </span>--body<span class="w"> </span>model
+</span></code></pre></div>
+</li>
+<li>
+<p><strong>Her name on the comment:</strong> without her own GitHub App, the comment comes from <code>github-actions[bot]</code>. To post as her:</p>
+<ol>
+<li>Create a GitHub App (<strong>Settings &gt; Developer settings &gt; GitHub Apps &gt; New GitHub App</strong>). It needs no webhook. Under repository permissions, give it <strong>Pull requests: Read and write</strong> and <strong>Issues: Read and write</strong>.</li>
+<li>On the app's page, generate a private key (a <code>.pem</code> download) and note the <strong>App ID</strong>.</li>
+<li>Install the app on the repository (<strong>Install App</strong>).</li>
+<li>
+<p>Set its two secrets:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>gh<span class="w"> </span>secret<span class="w"> </span><span class="nb">set</span><span class="w"> </span>ILLIANA_APP_ID<span class="w"> </span>--body<span class="w"> </span>&lt;app<span class="w"> </span>id&gt;
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>gh<span class="w"> </span>secret<span class="w"> </span><span class="nb">set</span><span class="w"> </span>ILLIANA_APP_PRIVATE_KEY<span class="w"> </span>&lt;<span class="w"> </span>path/to/the-app.private-key.pem
+</span></code></pre></div>
+</li>
+</ol>
+<p>One app serves every repository it is installed on.</p>
+</li>
+<li>
+<p><strong>Holding a change on her verdict:</strong> set the repository variable <code>ILLIANA_BLOCKS</code> to <code>true</code>. A new place that breaks a rule which holds a change then fails the job. To hold the merge too, make <code>Illiana</code> a required status check in the branch's protection rules.</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>gh<span class="w"> </span>variable<span class="w"> </span><span class="nb">set</span><span class="w"> </span>ILLIANA_BLOCKS<span class="w"> </span>--body<span class="w"> </span><span class="nb">true</span>
+</span></code></pre></div>
+</li>
+</ol>
 <h2 id="configuration">Configuration</h2>
 <p>Illiana uses the same configuration as the AI service:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="c1"># .env</span>
-</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="nv">AI_ENABLED</span><span class="o">=</span><span class="nb">true</span>
-</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="nv">AI_PROVIDER</span><span class="o">=</span>public<span class="w">      </span><span class="c1"># or openai, anthropic, groq, ollama, etc.</span>
-</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="nv">AI_MODEL</span><span class="o">=</span>auto
-</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="nv">AI_TEMPERATURE</span><span class="o">=</span><span class="m">0</span>.7
-</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="nv">AI_MAX_TOKENS</span><span class="o">=</span><span class="m">1000</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="c1"># .env</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="nv">AI_ENABLED</span><span class="o">=</span><span class="nb">true</span>
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="nv">AI_PROVIDER</span><span class="o">=</span>public<span class="w">      </span><span class="c1"># or openai, anthropic, groq, ollama, etc.</span>
+</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="nv">AI_MODEL</span><span class="o">=</span>auto
+</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="nv">AI_TEMPERATURE</span><span class="o">=</span><span class="m">0</span>.7
+</span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="nv">AI_MAX_TOKENS</span><span class="o">=</span><span class="m">1000</span>
 </span></code></pre></div>
 <p>Switch models at any time:</p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>my-app<span class="w"> </span>llm<span class="w"> </span>use<span class="w"> </span>gpt-4o
-</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a>my-app<span class="w"> </span>llm<span class="w"> </span>use<span class="w"> </span>claude-sonnet-4-20250514
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>my-app<span class="w"> </span>llm<span class="w"> </span>use<span class="w"> </span>gpt-4o
+</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>my-app<span class="w"> </span>llm<span class="w"> </span>use<span class="w"> </span>claude-sonnet-4-20250514
 </span></code></pre></div>
 <hr />
 <p><strong>Next Steps:</strong></p>

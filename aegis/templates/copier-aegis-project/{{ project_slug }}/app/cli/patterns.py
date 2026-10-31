@@ -12,7 +12,8 @@ for a pull request's job summary.
 
 ``patterns check``: the findings not in the known debt (``pattern_check``).
 
-``patterns review``: Illiana's write-up of those findings (``pattern_review``).
+``patterns review``: Illiana's write-up of those findings (``pattern_review``);
+with ``--pr``, her one comment on that pull request, edited in place.
 """
 
 import contextlib
@@ -20,6 +21,7 @@ import io
 import json
 import os
 from pathlib import Path
+import subprocess
 import sys
 from typing import Annotated, Any
 
@@ -230,14 +232,49 @@ async def review(
     changed: Annotated[list[str] | None, typer.Argument()] = None,
     previous: Path | None = None,
     commit: str = "",
+    pr: int | None = None,
 ) -> None:
     if not _writes():
         typer.echo("patterns review needs the AI service on PydanticAI.", err=True)
         return
     fresh = pattern_check.new_spots(_findings(), source_index.project())
-    earlier = previous.read_text() if previous and previous.is_file() else ""
+    if pr is None:
+        earlier = previous.read_text() if previous and previous.is_file() else ""
+        said = await pattern_review.review(fresh, _reach(changed), earlier, commit)
+        typer.echo(said, nl=False)
+        return
+    comments = f"repos/{os.environ['GITHUB_REPOSITORY']}/issues"
+    found, earlier = _her_comment(f"{comments}/{pr}/comments")
     said = await pattern_review.review(fresh, _reach(changed), earlier, commit)
-    typer.echo(said, nl=False)
+    if not said:  # the reviews before it covered these findings
+        return
+    body = json.dumps({"body": said})
+    if found:
+        _gh("-X", "PATCH", f"{comments}/comments/{found}", "--input", "-", body=body)
+    else:
+        _gh("-X", "POST", f"{comments}/{pr}/comments", "--input", "-", body=body)
+
+
+def _her_comment(listing: str) -> tuple[str, str]:
+    """Her comment among a pull request's (``MARKER`` opens it): its id
+    and body, or ``("", "")`` before her first."""
+    marker = json.dumps(pattern_review.MARKER)
+    out = _gh(
+        listing,
+        "--paginate",
+        "--jq",
+        f".[] | select(.body | startswith({marker})) | [.id, .body]",
+    )
+    first = next((line for line in out.splitlines() if line), "")
+    found, body = json.loads(first) if first else ("", "")
+    return str(found), body
+
+
+def _gh(*args: str, body: str | None = None) -> str:
+    """``gh api`` as CI's token (``GH_TOKEN``) gives it."""
+    return subprocess.run(
+        ["gh", "api", *args], input=body, capture_output=True, text=True, check=True
+    ).stdout
 
 
 def _writes() -> bool:

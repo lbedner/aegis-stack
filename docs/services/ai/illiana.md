@@ -236,6 +236,40 @@ curl -X POST http://localhost:8000/api/v1/ai/chat/stream \
 
 See [API Reference](api.md) for full endpoint documentation.
 
+## Pull Request Review
+
+A generated project's CI (`.github/workflows/ci.yml`) has an `Illiana` job that reviews every pull request. It checks the change against the app's pattern rules (`patterns check`), with the base branch's own findings as the known debt, and annotates each new finding on its line. She then posts one comment on the pull request (`patterns review`) that explains the findings, and edits it on each push. Her verdict is advisory: the job passes whatever she finds until you ask her to block (step 3 below).
+
+Her comment needs the AI service on PydanticAI with a database (`ai_backend` `sqlite` or `postgres`). Without it the job still runs the check and gives the verdict. A project made before the job existed gets it with `aegis update`.
+
+The rest is optional and set as repository secrets:
+
+1. **Her write-up:** set `OPENAI_API_KEY` and the repository variable `ILLIANA_REVIEW` to `model`. A key alone turns nothing on. Without both she still posts the verdict and every finding, in the rules' own words.
+
+    ```bash
+    gh secret set OPENAI_API_KEY
+    gh variable set ILLIANA_REVIEW --body model
+    ```
+
+2. **Her name on the comment:** without her own GitHub App, the comment comes from `github-actions[bot]`. To post as her:
+    1. Create a GitHub App (**Settings > Developer settings > GitHub Apps > New GitHub App**). It needs no webhook. Under repository permissions, give it **Pull requests: Read and write** and **Issues: Read and write**.
+    2. On the app's page, generate a private key (a `.pem` download) and note the **App ID**.
+    3. Install the app on the repository (**Install App**).
+    4. Set its two secrets:
+
+        ```bash
+        gh secret set ILLIANA_APP_ID --body <app id>
+        gh secret set ILLIANA_APP_PRIVATE_KEY < path/to/the-app.private-key.pem
+        ```
+
+    One app serves every repository it is installed on.
+
+3. **Holding a change on her verdict:** set the repository variable `ILLIANA_BLOCKS` to `true`. A new place that breaks a rule which holds a change then fails the job. To hold the merge too, make `Illiana` a required status check in the branch's protection rules.
+
+    ```bash
+    gh variable set ILLIANA_BLOCKS --body true
+    ```
+
 ## Configuration
 
 Illiana uses the same configuration as the AI service:

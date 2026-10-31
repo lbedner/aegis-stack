@@ -865,6 +865,7 @@ MESSAGES: dict[str, str] = {
     "deploy.cd_complete": "GitHub Actions CD configured!",
     "deploy.cd_fingerprint": "  Deploy key fingerprint: {fingerprint}",
     "deploy.cd_next_commit": "  Next: commit {path} and push.",
+    "deploy.cd_next_env": "  To ship the env from Actions too: aegis deploy-cd-env",
     "deploy.cd_next_run": ("  Then trigger a deploy from the Actions tab on GitHub."),
     "deploy.cd_key_discarded": (
         "Note: the private key was sent to GitHub secrets and discarded "
@@ -1126,6 +1127,10 @@ MESSAGES: dict[str, str] = {
         "Overwrite existing GitHub secrets and deploy.yml workflow"
     ),
     "deploy.help_opt_dry_run": "Print planned actions without making any changes",
+    "deploy.help_opt_cd_env_file": "The env file to push (default: .env.deploy)",
+    "deploy.cd_env_not_set_up": "CD is not set up for this project. Run 'aegis deploy-cd-setup' first.",
+    "deploy.cd_env_missing": "{path} not found. Put the production env there, or pass --env-file PATH.",
+    "deploy.cd_env_pushed": "Pushed {file} to {repo} as {name}. The next deploy from Actions ships it.",
     "deploy.help_opt_local_key_path": (
         "Path to copy the generated private key to before cleanup. "
         "Default: no local copy (the key only lives in GitHub secrets)."

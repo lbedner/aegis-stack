@@ -851,6 +851,7 @@ MESSAGES: dict[str, str] = {
     "deploy.cd_complete": "GitHub Actions CD configured!",
     "deploy.cd_fingerprint": "  Deploy key fingerprint: {fingerprint}",
     "deploy.cd_next_commit": "  Next: commit {path} and push.",
+    "deploy.cd_next_env": "  To ship the env from Actions too: aegis deploy-cd-env",
     "deploy.cd_next_run": ("  Then trigger a deploy from the Actions tab on GitHub."),
     "deploy.cd_key_discarded": (
         "Note: the private key was sent to GitHub secrets and discarded "
@@ -1074,6 +1075,10 @@ MESSAGES: dict[str, str] = {
     "deploy.help_opt_gh_tags": "Déclencher aussi le workflow de déploiement lors des push sur les tags v*",
     "deploy.help_opt_gh_overwrite": "Écraser les secrets GitHub et le workflow deploy.yml existants",
     "deploy.help_opt_dry_run": "Afficher les actions prévues sans rien modifier",
+    "deploy.help_opt_cd_env_file": "Le fichier env à envoyer (par défaut : .env.deploy)",
+    "deploy.cd_env_not_set_up": "Le CD n'est pas configuré pour ce projet. Lancez d'abord 'aegis deploy-cd-setup'.",
+    "deploy.cd_env_missing": "{path} introuvable. Placez-y l'env de production, ou passez --env-file PATH.",
+    "deploy.cd_env_pushed": "{file} envoyé vers {repo} en tant que {name}. Le prochain déploiement depuis Actions l'utilisera.",
     "deploy.help_opt_local_key_path": "Chemin où copier la clé privée générée avant le nettoyage. Par défaut : pas de copie locale (la clé n'existe que dans les secrets GitHub).",
     # ── plugins CLI (typer.Typer + commands) ───────────────────────────
     "plugins.help": "Inspecter les plugins Aegis installés et rechercher dans le registre",

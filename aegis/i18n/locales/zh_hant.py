@@ -697,6 +697,7 @@ MESSAGES: dict[str, str] = {
     "deploy.cd_complete": "GitHub Actions CD configured!",
     "deploy.cd_fingerprint": "  Deploy key fingerprint: {fingerprint}",
     "deploy.cd_next_commit": "  Next: commit {path} and push.",
+    "deploy.cd_next_env": "  To ship the env from Actions too: aegis deploy-cd-env",
     "deploy.cd_next_run": ("  Then trigger a deploy from the Actions tab on GitHub."),
     "deploy.cd_key_discarded": (
         "Note: the private key was sent to GitHub secrets and discarded "
@@ -907,6 +908,10 @@ MESSAGES: dict[str, str] = {
     "deploy.help_opt_gh_tags": "推送 v* 標籤時也觸發部署工作流程",
     "deploy.help_opt_gh_overwrite": "覆寫既有的 GitHub Secrets 與 deploy.yml 工作流程",
     "deploy.help_opt_dry_run": "僅列出預定執行的動作,不實際進行任何變更",
+    "deploy.help_opt_cd_env_file": "要推送的 env 檔案（預設：.env.deploy）",
+    "deploy.cd_env_not_set_up": "此專案尚未設定 CD。請先執行 'aegis deploy-cd-setup'。",
+    "deploy.cd_env_missing": "找不到 {path}。請將正式環境 env 放在那裡，或傳入 --env-file PATH。",
+    "deploy.cd_env_pushed": "已將 {file} 以 {name} 推送至 {repo}。下一次從 Actions 部署時會使用它。",
     "deploy.help_opt_local_key_path": "清理前將生成的私鑰另存至此路徑。預設：不保留本地副本（金鑰僅存放於 GitHub Secrets 中）。",
     # ── plugins CLI (typer.Typer + commands) ───────────────────────────
     "plugins.help": "檢視已安裝的 Aegis 外掛並搜尋外掛登錄表",

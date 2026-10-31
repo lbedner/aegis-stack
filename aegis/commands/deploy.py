@@ -32,7 +32,7 @@ from ..core.component_files import template_module
 from ..core.copier_manager import AEGIS_GIT_EMAIL, load_copier_answers
 from ..core.deploy_protocol import protocol, step
 from ..core.footprint import COMPOSE_FILES
-from ..core.template_cleanup import deploy_env_file, env_value
+from ..core.template_cleanup import DEPLOY_ENV_FILE, deploy_env_file, env_value
 from ..i18n import lazy_t, t
 from .deploy_backup import (
     archive_storage,
@@ -233,13 +233,14 @@ DEV_ENVS = template_module(
 _OFF = frozenset({"false", "0", "no", "off", "f", "n"})  # pydantic's false
 
 
-def unsafe_settings(project_root: Path) -> list[str]:
-    """The settings in the env file a deploy ships (``deploy_env_file``)
-    that would put the app online open: sign-in off (projects with auth),
-    a development APP_ENV (unset is the app's default, dev, which also
-    skips its own SECRET_KEY check), no SECRET_KEY. Nothing without an env
-    file: the server keeps the one it has."""
-    env_file = deploy_env_file(project_root)
+def unsafe_settings(project_root: Path, env_file: Path | None = None) -> list[str]:
+    """The settings in the env file a deploy ships (``env_file``, else
+    ``deploy_env_file``) that would put the app online open: sign-in off
+    (projects with auth), a development APP_ENV (unset is the app's
+    default, dev, which also skips its own SECRET_KEY check), no
+    SECRET_KEY. Nothing without an env file: the server keeps the one it
+    has."""
+    env_file = env_file or deploy_env_file(project_root)
     if env_file is None:
         return []
     auth = _project_answers(project_root).get(AnswerKeys.AUTH)
@@ -252,11 +253,12 @@ def unsafe_settings(project_root: Path) -> list[str]:
     return [name for name, unsafe in checks.items() if unsafe]
 
 
-def refuse_unsafe_env(project_root: Path) -> None:
+def refuse_unsafe_env(project_root: Path, env_file: Path | None = None) -> None:
     """Stop, naming what to fix, before a deploy reaches the server (or a
-    provision buys one) when ``unsafe_settings`` names anything."""
-    if unsafe := unsafe_settings(project_root):
-        shipped = deploy_env_file(project_root)
+    provision buys one, or the env reaches the deploys from Actions) when
+    ``unsafe_settings`` names anything."""
+    if unsafe := unsafe_settings(project_root, env_file):
+        shipped = env_file or deploy_env_file(project_root)
         assert shipped is not None  # what unsafe_settings read
         named = ", ".join(unsafe)
         brand.error(t("deploy.env_unsafe", file=shipped.name, settings=named), err=True)
@@ -2083,6 +2085,7 @@ _GH_DEPLOY_KEY_SECRET = "DEPLOY_SSH_KEY"
 _GH_DEPLOY_HOST_SECRET = "DEPLOY_HOST"
 _GH_DEPLOY_USER_SECRET = "DEPLOY_USER"
 _GH_DEPLOY_CONFIG_SECRET = "DEPLOY_CONFIG"
+_GH_DEPLOY_ENV_SECRET = "DEPLOY_ENV"
 
 
 # Server-only state, and everything that has no business on a server. With
@@ -2104,7 +2107,7 @@ _RSYNC_EXCLUDES = (
     ".ruff_cache",
     "data/",
     ".env",
-    ".env.deploy",
+    DEPLOY_ENV_FILE,
     ".aegis/",
     "backups/",
     "node_modules/",
@@ -2163,6 +2166,11 @@ def _tracked_tree(project_root: Path) -> Iterator[Path]:
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target, follow_symlinks=False)
         yield Path(staging)
+
+
+def _ci_github(config: dict) -> dict:
+    """The ``ci.github`` block ``deploy-cd-setup`` records, or ``{}``."""
+    return (config.get("ci") or {}).get("github") or {}
 
 
 def _detect_github_repo(project_root: Path) -> str | None:
@@ -2263,8 +2271,10 @@ def _render_deploy_workflow(on_tag: bool) -> str:
     ``deploy-cd-setup`` pushed; the CLI is the aegis-stack the project is
     on, the ``_commit`` ``aegis update`` last recorded, else the release
     that wrote this workflow, on whichever Python ``uvx`` picks for it (not
-    the project's: the CLI declares its own). A deploy waits for the one
-    before it.
+    the project's: the CLI declares its own). The env is the
+    ``.env.deploy`` ``deploy-cd-env`` pushed, as it was; never pushed, no
+    file is written and the server keeps its ``.env``. A deploy waits for
+    the one before it.
     """
     triggers = ["  workflow_dispatch:"]
     if on_tag:
@@ -2299,6 +2309,11 @@ jobs:
       env:
         {_GH_DEPLOY_CONFIG_SECRET}: ${{{{ secrets.{_GH_DEPLOY_CONFIG_SECRET} }}}}
       run: mkdir -p .aegis && printf '%s\\n' "${_GH_DEPLOY_CONFIG_SECRET}" > {DEPLOY_CONFIG_FILE}
+
+    - name: Write the deploy env
+      env:
+        {_GH_DEPLOY_ENV_SECRET}: ${{{{ secrets.{_GH_DEPLOY_ENV_SECRET} }}}}
+      run: if [ -n "${_GH_DEPLOY_ENV_SECRET}" ]; then printf '%s\\n' "${_GH_DEPLOY_ENV_SECRET}" > {DEPLOY_ENV_FILE}; fi
 
     - name: Install uv
       uses: astral-sh/setup-uv@v7
@@ -2372,7 +2387,7 @@ def deploy_cd_setup_command(
         _check_gh_cli()
 
     # Preflight: deploy config
-    config = _require_deploy_config(project_path)
+    config = _require_deploy_config(str(project_root))
     host = config["server"]["host"]
     user = config["server"]["user"]
 
@@ -2386,9 +2401,7 @@ def deploy_cd_setup_command(
     marker = f"github-actions-deploy@{repo_slug}"
 
     # Preflight: collisions
-    existing_ci = (
-        config.get("ci", {}).get("github") if isinstance(config, dict) else None
-    )
+    existing_ci = _ci_github(config)
     if existing_ci and not force:
         brand.error(
             t(
@@ -2558,8 +2571,65 @@ def deploy_cd_setup_command(
     typer.echo(
         t("deploy.cd_next_commit", path=str(workflow_path.relative_to(project_root)))
     )
+    typer.echo(t("deploy.cd_next_env"))
     typer.echo(t("deploy.cd_next_run"))
     if not keep_key:
         typer.echo("")
         brand.warn(t("deploy.cd_key_discarded"))
         typer.echo(t("deploy.cd_key_recover_hint"))
+
+
+def deploy_cd_env_command(
+    project_path: str | None = typer.Option(
+        None, "--project-path", help=lazy_t("common.help_project_path")
+    ),
+    env_file: str | None = typer.Option(
+        None, "--env-file", help=lazy_t("deploy.help_opt_cd_env_file")
+    ),
+) -> None:
+    """
+    Push the production env to GitHub, for deploys from Actions to ship.
+
+    Sends .env.deploy (or --env-file), whole, as the DEPLOY_ENV secret of
+    the repo 'aegis deploy-cd-setup' wired; the workflow writes it back
+    before it deploys. Run it again after changing the file.
+
+    Examples:
+        - aegis deploy-cd-env
+        - aegis deploy-cd-env --env-file prod.env
+    """
+    project_root = _get_project_root(project_path)
+    repo_slug = _ci_github(_require_deploy_config(str(project_root))).get("repo")
+    if not repo_slug:
+        brand.error(t("deploy.cd_env_not_set_up"), err=True)
+        raise typer.Exit(1)
+
+    # Never falls back to .env the way a deploy does: that is the dev env,
+    # and the next deploy from Actions would ship it to production.
+    path = Path(env_file).expanduser() if env_file else project_root / DEPLOY_ENV_FILE
+    if not path.is_file():
+        brand.error(t("deploy.cd_env_missing", path=str(path)), err=True)
+        raise typer.Exit(1)
+    refuse_unsafe_env(project_root, path)
+
+    _check_gh_cli()
+    typer.echo(t("deploy.cd_pushing_secrets", repo=repo_slug))
+    result = _set_gh_secret_from_file(_GH_DEPLOY_ENV_SECRET, path, repo_slug)
+    if result.returncode != 0:
+        brand.error(
+            t(
+                "deploy.cd_secret_failed",
+                name=_GH_DEPLOY_ENV_SECRET,
+                error=result.stderr,
+            ),
+            err=True,
+        )
+        raise typer.Exit(1)
+    brand.success(
+        t(
+            "deploy.cd_env_pushed",
+            file=path.name,
+            repo=repo_slug,
+            name=_GH_DEPLOY_ENV_SECRET,
+        )
+    )

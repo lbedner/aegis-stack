@@ -808,6 +808,7 @@ MESSAGES: dict[str, str] = {
     "deploy.cd_complete": "GitHub Actions CD configured!",
     "deploy.cd_fingerprint": "  Deploy key fingerprint: {fingerprint}",
     "deploy.cd_next_commit": "  Next: commit {path} and push.",
+    "deploy.cd_next_env": "  To ship the env from Actions too: aegis deploy-cd-env",
     "deploy.cd_next_run": ("  Then trigger a deploy from the Actions tab on GitHub."),
     "deploy.cd_key_discarded": (
         "Note: the private key was sent to GitHub secrets and discarded "
@@ -1020,6 +1021,10 @@ MESSAGES: dict[str, str] = {
     "deploy.help_opt_gh_tags": "v* 태그 푸시 시에도 배포 워크플로 실행",
     "deploy.help_opt_gh_overwrite": "기존 GitHub Secrets와 deploy.yml 워크플로 덮어쓰기",
     "deploy.help_opt_dry_run": "실제 변경 없이 예정된 작업만 출력",
+    "deploy.help_opt_cd_env_file": "전송할 env 파일 (기본값: .env.deploy)",
+    "deploy.cd_env_not_set_up": "이 프로젝트에는 CD가 설정되어 있지 않습니다. 먼저 'aegis deploy-cd-setup'을 실행하세요.",
+    "deploy.cd_env_missing": "{path}을(를) 찾을 수 없습니다. 프로덕션 env를 그곳에 두거나 --env-file PATH를 지정하세요.",
+    "deploy.cd_env_pushed": "{file}을(를) {name}로 {repo}에 전송했습니다. 다음 Actions 배포에서 반영됩니다.",
     "deploy.help_opt_local_key_path": "정리 전에 생성된 개인 키를 복사해 둘 경로. 기본값: 로컬 복사본 없음 (키는 GitHub Secrets에만 저장).",
     # ── plugins CLI (typer.Typer + commands) ───────────────────────────
     "plugins.help": "설치된 Aegis 플러그인 확인 및 레지스트리 검색",

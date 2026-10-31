@@ -18,6 +18,7 @@ from .commands.components import components_command
 from .commands.deploy import (
     deploy_backup_command,
     deploy_backups_command,
+    deploy_cd_env_command,
     deploy_cd_setup_command,
     deploy_command,
     deploy_exec_command,
@@ -153,6 +154,7 @@ app.command(name="deploy-setup")(deploy_setup_command)
 app.command(name="deploy-provision")(deploy_provision_command)
 app.command(name="deploy-destroy")(deploy_destroy_command)
 app.command(name="deploy-cd-setup")(deploy_cd_setup_command)
+app.command(name="deploy-cd-env")(deploy_cd_env_command)
 app.command(name="deploy-agent")(deploy_agent_command)
 app.command(name="deploy")(deploy_command)
 app.command(name="deploy-backup")(deploy_backup_command)

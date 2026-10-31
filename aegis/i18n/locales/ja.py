@@ -833,6 +833,7 @@ MESSAGES: dict[str, str] = {
     "deploy.cd_complete": "GitHub Actions CD configured!",
     "deploy.cd_fingerprint": "  Deploy key fingerprint: {fingerprint}",
     "deploy.cd_next_commit": "  Next: commit {path} and push.",
+    "deploy.cd_next_env": "  To ship the env from Actions too: aegis deploy-cd-env",
     "deploy.cd_next_run": ("  Then trigger a deploy from the Actions tab on GitHub."),
     "deploy.cd_key_discarded": (
         "Note: the private key was sent to GitHub secrets and discarded "
@@ -1054,6 +1055,10 @@ MESSAGES: dict[str, str] = {
     "deploy.help_opt_gh_tags": "v* タグへの push 時もデプロイワークフローを起動",
     "deploy.help_opt_gh_overwrite": "既存の GitHub Secrets と deploy.yml ワークフローを上書き",
     "deploy.help_opt_dry_run": "実際には変更せず、予定されている操作のみ表示",
+    "deploy.help_opt_cd_env_file": "送信する env ファイル（デフォルト：.env.deploy）",
+    "deploy.cd_env_not_set_up": "このプロジェクトでは CD が設定されていません。先に 'aegis deploy-cd-setup' を実行してください。",
+    "deploy.cd_env_missing": "{path} が見つかりません。本番用の env をそこに置くか、--env-file PATH を指定してください。",
+    "deploy.cd_env_pushed": "{file} を {name} として {repo} に送信しました。次の Actions からのデプロイで反映されます。",
     "deploy.help_opt_local_key_path": "クリーンアップ前に生成した秘密鍵をコピーする保存先パス。デフォルト：ローカルコピーなし（鍵は GitHub Secrets にのみ保持）。",
     # ── plugins CLI (typer.Typer + commands) ───────────────────────────
     "plugins.help": "インストール済み Aegis プラグインの確認とレジストリの検索",

@@ -1173,9 +1173,13 @@ def _settings_field_names(config_path: Path) -> set[str] | None:
     return None
 
 
+# The production env, kept beside the dev ``.env``.
+DEPLOY_ENV_FILE = ".env.deploy"
+
+
 def deploy_env_file(project_root: Path) -> Path | None:
     """The env file a deploy ships to the server: ``.env.deploy`` over ``.env``."""
-    candidates = (project_root / ".env.deploy", project_root / ".env")
+    candidates = (project_root / DEPLOY_ENV_FILE, project_root / ".env")
     return next((path for path in candidates if path.exists()), None)
 
 

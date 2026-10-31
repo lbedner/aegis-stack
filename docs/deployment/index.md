@@ -257,9 +257,9 @@ aegis deploy-cd-setup --dry-run      # see the plan without touching anything
 aegis deploy-cd-setup --force        # rotate the existing deploy key
 ```
 
-**What the workflow runs:** it writes `.aegis/deploy.yml` back from `DEPLOY_CONFIG`, then runs `aegis deploy` from the aegis-stack the project is on: the `_commit` in `.copier-answers.yml` (so `aegis update` keeps CI in step), else the release that wrote the workflow. A runner has no `aegis` of its own. Two deploys never run at once.
+**What the workflow runs:** it writes `.aegis/deploy.yml` back from `DEPLOY_CONFIG` (and `.env.deploy` from `DEPLOY_ENV`, once [`aegis deploy-cd-env`](#aegis-deploy-cd-env) pushed one), then runs `aegis deploy` from the aegis-stack the project is on: the `_commit` in `.copier-answers.yml` (so `aegis update` keeps CI in step), else the release that wrote the workflow. A runner has no `aegis` of its own. Two deploys never run at once.
 
-**What it does not ship:** the runner has no `.env.deploy` or `.env`, so a CI deploy keeps the server's `.env` as the last deploy from your machine left it. A change to `.aegis/deploy.yml` reaches CI when you re-run `aegis deploy-cd-setup --force`.
+**What it does not ship:** until `aegis deploy-cd-env` has run, the runner has no `.env.deploy` or `.env`, so a CI deploy keeps the server's `.env` as the last deploy from your machine left it. A change to `.aegis/deploy.yml` reaches CI when you re-run `aegis deploy-cd-setup --force`.
 
 !!! tip "Why a dedicated deploy key"
     Don't reuse your personal SSH key for CI. A dedicated key has a smaller blast radius (only deploys this one project), can be rotated without touching your other servers, and shows up as a distinct identity in `auth.log`. This command generates one for you.
@@ -277,6 +277,24 @@ aegis deploy-cd-setup --force        # rotate the existing deploy key
     aegis deploy-cd-setup --force --keep-key ~/.ssh/aegis_deploy_ci
     ```
     This generates a fresh key, replaces the public key on the server, overwrites the GitHub secret, and saves a local copy. The previous key is rotated out.
+
+---
+
+### aegis deploy-cd-env
+
+Push the production env to GitHub, so a deploy from Actions ships it. Sends `.env.deploy` (or `--env-file`), whole and as written, as the `DEPLOY_ENV` secret of the repo `aegis deploy-cd-setup` wired; the workflow writes it back to `.env.deploy` before `aegis deploy`, which copies it to the server as it does from your machine. Run it again after changing the file: the secret is replaced, never merged.
+
+**Usage:**
+```bash
+aegis deploy-cd-env [OPTIONS]
+```
+
+**Options:**
+
+- `--env-file PATH`, The env file to push (default: `.env.deploy`)
+- `--project-path TEXT`, Path to the project (default: current directory)
+
+It refuses rather than guess: with no `.env.deploy` it never pushes `.env` in its place (that is the dev env, and the next deploy would ship it to production), without `deploy-cd-setup` there is no repo to push to, and an env a deploy would refuse (sign-in off, a development `APP_ENV`, no `SECRET_KEY`) is refused before it reaches GitHub. A workflow written before this command existed has no step that reads `DEPLOY_ENV`; `aegis deploy-cd-setup --force` writes the current one (and rotates the key).
 
 ---
 

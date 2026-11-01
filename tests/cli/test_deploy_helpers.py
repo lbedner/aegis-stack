@@ -106,9 +106,42 @@ def test_the_workflows_deploy_step_runs_a_command_deploy_accepts() -> None:
     from aegis.__main__ import app
 
     step = _step(_render_deploy_workflow(on_tag=False), "Deploy")["run"]
-    step = step.split(" aegis ", 1)[1]
-    result = CliRunner().invoke(app, [*step.split(), "--help"])
+    command = step.strip().splitlines()[-1].split(" aegis ", 1)[1]
+    command = command.replace("$flags", "--rolling")
+    result = CliRunner().invoke(app, [*command.split(), "--help"])
     assert result.exit_code == 0, result.output
+
+
+@pytest.mark.parametrize(
+    ("rolling", "flags"), [("true", "--rolling"), ("false", ""), ("", "")]
+)
+def test_a_deploy_from_actions_is_rolling_unless_unticked(
+    rolling: str, flags: str
+) -> None:
+    """Run workflow has a "rolling" box, ticked by default, as a deploy by
+    hand would pass ``--rolling``; a tag push deploys rolling too."""
+    workflow = _render_deploy_workflow(on_tag=True)
+    box = yaml.safe_load(workflow)[True]["workflow_dispatch"]["inputs"]["rolling"]
+    assert box == {
+        "description": "Deploy without downtime (aegis deploy --rolling)",
+        "type": "boolean",
+        "default": True,
+    }
+    step = _step(workflow, "Deploy")
+    assert step["env"]["ROLLING"] == (
+        "${{ github.event_name != 'workflow_dispatch' || inputs.rolling }}"
+    )
+    first = step["run"].strip().splitlines()[0]
+    out = subprocess.run(
+        # As GitHub runs a step: ``bash -e``, so an unticked box must not
+        # end the script.
+        ["bash", "-e", "-c", f'{first}; printf %s "$flags"'],
+        env={"ROLLING": rolling, "PATH": "/usr/bin:/bin"},
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert out.stdout == flags
 
 
 def _step(workflow: str, name: str) -> dict[str, Any]:
@@ -154,7 +187,7 @@ def test_the_runner_deploys_with_the_aegis_stack_the_project_is_on(
         check=True,
     )
     assert output.read_text() == f"ref={ref}\n"
-    deploy = _step(workflow, "Deploy")["run"]
+    deploy = _step(workflow, "Deploy")["run"].strip().splitlines()[-1]
     assert deploy.startswith(
         "uvx --from git+https://github.com/lbedner/aegis-stack@${{ steps.aegis.outputs.ref }} aegis deploy"
     )

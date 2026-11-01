@@ -119,6 +119,7 @@ async def live_voice(
     play: Play,
     surface: str,
     user_id: str = "default",
+    owner_user_id: int | None = None,
     voice: str | None = None,
     agent_slug: str | None = None,
     on_end: Callable[[], Awaitable[None]] | None = None,
@@ -126,7 +127,7 @@ async def live_voice(
 ) -> AsyncGenerator[LiveVoice | None]:
     """Her live voice (``LiveVoice``) on ``engine`` (``live_engines.resolve``,
     in the caller's session), saved into a conversation of ``surface``'s,
-    as ``user_id``, speaking in ``voice``, talking as the engine's call
+    as ``user_id`` and owned by ``owner_user_id``, speaking in ``voice``, talking as the engine's call
     manners say or the caller's (``instructions``: a meeting's); None where
     the call would not come up, for the caller to answer the way it did,
     and on GPT-Live, which listens and talks at once: asked a question as
@@ -140,6 +141,7 @@ async def live_voice(
             ai,
             engine,
             user_id=user_id,
+            owner_user_id=owner_user_id,
             surface=surface,
             agent_slug=agent_slug,
             voice=voice or settings.TTS_VOICE,
@@ -159,6 +161,7 @@ async def live_voice(
             model=live_engines.realtime_model(engine),
             agent_slug=agent_slug,
             user_id=user_id,
+            owner_user_id=owner_user_id,
             alongside=spoken.carry,
             on_turn=spoken.turned,
         )

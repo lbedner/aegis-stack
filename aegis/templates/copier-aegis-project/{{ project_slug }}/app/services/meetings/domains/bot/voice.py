@@ -89,6 +89,7 @@ async def live(
         play=call.stream,
         surface=SURFACE,
         user_id="default" if owner_user_id is None else str(owner_user_id),
+        owner_user_id=owner_user_id,
         voice=getattr(voice, "TTS_VOICE", None),
         instructions=IN_A_MEETING,  # a meeting's manners, not a call with one
         on_end=call.hush,  # however the call ends, the mic it held closes

@@ -381,6 +381,14 @@ call and a tool to end it.
 - **Her voice.** A call speaks the profile's voice where the engine's
   provider has it: Gemini Live speaks a Gemini voice, an OpenAI engine an
   OpenAI one. With a voice the engine does not have, it speaks its own.
+- **Who is calling.** A call is a turn on its mount: the mount's `bind`
+  (an app's chat bound to the signed-in user and what they are looking
+  at), the signed-in owner and the mount's `gate` all run on the call's
+  socket, so its conversation, tools and briefing are theirs and a turn
+  the gate refuses (a spent budget) is a call refused before it opens. The
+  phone is an operator control: a caller `bind` gives none is refused on
+  the socket too, not only shown no phone. A `bind` may depend on what a socket carries (the session cookie or a
+  bearer header) and never on `Request`, which a socket does not have.
 
 ---
 

@@ -248,14 +248,17 @@ async def realtime_for(
     agent_slug: str | None,
     voice: str | None,
     user_id: str,
+    owner_user_id: int | None = None,
+    subject: str | None = None,
     admin: bool | None = None,
     instructions: str | None = None,
     max_output_tokens: int | None = None,
     hang_up: bool = True,
 ) -> Any:
     """The agent on ``model`` (a Pydantic AI realtime model string), built
-    for the caller (``user_id``, ``admin``) by the function a typed turn
-    builds her with (``_build_turn``). The engine's ``instructions`` (how
+    for the caller (``user_id``, ``owner_user_id``, ``admin``) about the
+    call's ``subject`` by the function a typed turn builds her with
+    (``_build_turn``). The engine's ``instructions`` (how
     to talk on a call) lead its prompt, and ``max_output_tokens`` caps one
     reply. Without ``hang_up`` she has no ``end_call``: a call that answers
     one question after another ends when its caller ends it. The
@@ -269,7 +272,14 @@ async def realtime_for(
     # GPT-Live takes the call manners as its own (``_model_settings``).
     if not is_gpt_live(model):
         config = config.led_by(instructions)
-    setup = await ai._build_turn(conversation, config, user_id=user_id, admin=admin)
+    setup = await ai._build_turn(
+        conversation,
+        config,
+        user_id=user_id,
+        subject=subject,
+        owner_user_id=owner_user_id,
+        admin=admin,
+    )
     agent, history = setup.agent, setup.conversation_context
     return agent.realtime(
         model,
@@ -288,15 +298,17 @@ async def open_call(
     agent_slug: str | None,
     voice: str | None,
     conversation: Any = None,
+    owner_user_id: int | None = None,
+    subject: str | None = None,
     admin: bool | None = None,
     hang_up: bool = True,
     instructions: str | None = None,
 ) -> tuple[Any, Any]:
     """A live call on ``engine`` (``live_engines``): the conversation it
     saves into (``conversation``, else a new one of ``surface``'s for
-    ``user_id``) and her, built for it on the engine's model with its call
-    manners (``realtime_for``), or the caller's (``instructions``: a call
-    with others in it, such as a meeting)."""
+    ``user_id`` about ``subject``) and her, built for it on the engine's
+    model with its call manners (``realtime_for``), or the caller's
+    (``instructions``: a call with others in it, such as a meeting)."""
     model = live_engines.realtime_model(engine)
     if conversation is None:
         conversation = await ai.conversation_manager.create_conversation(
@@ -304,6 +316,7 @@ async def open_call(
             model=model,
             user_id=user_id,
             surface=surface,
+            subject=subject,
         )
     realtime = await realtime_for(
         ai,
@@ -312,6 +325,8 @@ async def open_call(
         agent_slug=agent_slug,
         voice=voice,
         user_id=user_id,
+        owner_user_id=owner_user_id,
+        subject=subject,
         admin=admin,
         instructions=engine.instructions if instructions is None else instructions,
         max_output_tokens=engine.max_output_tokens,
@@ -328,6 +343,8 @@ async def drive(
     model: str,
     agent_slug: str | None,
     user_id: str,
+    owner_user_id: int | None = None,
+    subject: str | None = None,
     admin: bool | None = None,
     alongside: Callable[[Any], Awaitable[None]] | None = None,
     on_event: Callable[[Any], Awaitable[None]] | None = None,
@@ -380,8 +397,10 @@ async def drive(
         with (
             memory_user(
                 user_id,
+                owner_user_id=owner_user_id,
                 agent_slug=agent_slug,
                 conversation_id=conversation_id,
+                subject=subject,
                 admin=admin,
             ),
             reading_stage(),

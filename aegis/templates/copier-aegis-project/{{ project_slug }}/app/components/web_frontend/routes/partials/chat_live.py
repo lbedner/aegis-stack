@@ -11,13 +11,15 @@ the rest: the agent's tools, the saved turns, the priced usage.
 ``live_router(mount, socket_guard)`` builds it under the mount's path,
 behind a guard a socket can run (it carries cookies, never a bearer
 header). It is its own router, apart from the mount's pages: a page guard
-reads an HTTP request a socket does not have.
+reads an HTTP request a socket does not have. Otherwise a call is a
+turn: the mount's ``bind`` (whose call it is, about what), the signed-in
+owner and the mount's ``gate``, as ``/stream`` takes them.
 """
 
 import asyncio
 from collections.abc import Callable
 import json
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, WebSocket
 from pydantic_ai.messages import (
@@ -46,6 +48,7 @@ from app.services.ai.service import (
     realtime_calls,
 )
 from app.services.ai.service.trace import record_tool_call
+from app.services.shared.deps import get_optional_owner_user_id
 
 # Sent the moment the call is up, so the assistant speaks first: a cue
 # rather than a line, so the greeting varies.
@@ -195,6 +198,11 @@ async def _carry(
         await session.close()
 
 
+def _answers(mount: ChatSurface) -> str | None:
+    """Who answers the call: the mount's voice agent, else its chat agent."""
+    return mount.voice_agent_slug or mount.agent_slug
+
+
 def live_router(
     mount: ChatSurface, socket_guard: Callable[..., Any], *, admin: bool = False
 ) -> APIRouter:
@@ -202,23 +210,29 @@ def live_router(
     ``socket_guard``; ``admin`` when that guard lets only admins in, so the
     call's agent reaches the admin tools."""
     router = APIRouter(prefix=mount.path, dependencies=[Depends(socket_guard)])
-    agent_slug = mount.voice_agent_slug or mount.agent_slug
 
-    async def call_for(conversation_id: str | None, engine: LiveEngine) -> Any:
+    async def call_for(
+        bound: ChatSurface,
+        owner_user_id: int | None,
+        conversation_id: str | None,
+        engine: LiveEngine,
+    ) -> Any:
         """The conversation the call saves into (a call without one starts
         one) and the agent as the engine's brain (``open_call``)."""
         conversation = None
         if conversation_id:
-            conversation = await chat.find_conversation(mount, conversation_id)
+            conversation = await chat.find_conversation(bound, conversation_id)
             if conversation is None:
                 raise LookupError("not this mount's conversation")
         return await realtime_calls.open_call(
             ai_service,
             engine,
             conversation=conversation,
-            user_id=mount.user,
-            surface=mount.surface,
-            agent_slug=agent_slug,
+            user_id=bound.user,
+            owner_user_id=owner_user_id,
+            subject=bound.subject,
+            surface=bound.surface,
+            agent_slug=_answers(bound),
             voice=settings.TTS_VOICE,
             admin=admin,
         )
@@ -229,15 +243,29 @@ def live_router(
             await _send(ws, {"type": "card", "url": f"{mount.path}/cards/{card_id}"})
 
     @router.websocket("/live/ws")
-    async def live_call(ws: WebSocket, conversation_id: str | None = None) -> None:
+    async def live_call(
+        ws: WebSocket,
+        bound: Annotated[ChatSurface, Depends(chat.resolver(mount))],
+        refusal: Annotated[str | None, Depends(chat.gatekeeper(mount))],
+        owner_user_id: Annotated[int | None, Depends(get_optional_owner_user_id)],
+        conversation_id: str | None = None,
+    ) -> None:
         """A call, for as long as the page holds the socket."""
         await ws.accept()
+        if not bound.operator_controls:  # no phone on their page (offers_calls)
+            await ws.close(code=1008)
+            return
+        if refusal:
+            await ws.close(code=1008, reason=refusal)
+            return
         engine, info = await _engine_now()
         if engine is None:
             await ws.close(code=1008, reason="No live engine is enabled.")
             return
         try:
-            conversation, realtime = await call_for(conversation_id, engine)
+            conversation, realtime = await call_for(
+                bound, owner_user_id, conversation_id, engine
+            )
         except Exception:
             logger.exception("Opening a live call failed")
             await ws.close(code=1011)
@@ -251,8 +279,10 @@ def live_router(
             on_drawn=lambda card_ids: show_cards(ws, card_ids),
             conversation_id=conversation.id,
             model=live_engines.realtime_model(engine),
-            agent_slug=agent_slug,
-            user_id=mount.user,
+            agent_slug=_answers(bound),
+            user_id=bound.user,
+            owner_user_id=owner_user_id,
+            subject=bound.subject,
             admin=admin,
         )
         try:

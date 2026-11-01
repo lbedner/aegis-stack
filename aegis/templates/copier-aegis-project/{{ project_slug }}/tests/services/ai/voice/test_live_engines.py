@@ -66,6 +66,36 @@ class TestTheRows:
         )
         assert stored.one() == "Be terse."
 
+    @pytest.mark.asyncio
+    async def test_an_unedited_engine_takes_the_new_default(
+        self, seeded: AsyncSession, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An engine still holding a former default was never edited, so
+        the current one replaces it; an edited engine keeps its own."""
+        former = "Say what you see."
+        monkeypatch.setattr(
+            live_engines, "FORMER_DEFAULTS", frozenset({live_engines.digest(former)})
+        )
+        rows = await _keyed(seeded)
+        rows["gemini-live"].instructions = former
+        rows["gpt-live"].instructions = "Be terse."
+        seeded.add_all(rows.values())
+        await seeded.commit()
+
+        assert await live_engines.refresh_defaults(seeded) == 1
+
+        stored = dict(
+            (await seeded.exec(select(LiveEngine.key, LiveEngine.instructions))).all()
+        )
+        assert stored["gemini-live"] == live_engines.LIVE_CALL_INSTRUCTIONS
+        assert stored["gpt-live"] == "Be terse."
+
+    def test_the_current_default_is_not_a_former_one(self) -> None:
+        assert (
+            live_engines.digest(live_engines.LIVE_CALL_INSTRUCTIONS)
+            not in live_engines.FORMER_DEFAULTS
+        )
+
 
 class TestHowTheyTalk:
     @pytest.mark.asyncio

@@ -359,9 +359,11 @@ WebSocket. The agent on a call is built the way a typed turn builds it:
 the same prompt, memory modules, contexts and tools, plus how to talk on a
 call and a tool to end it.
 
-- **Working, not narrating.** While the agent runs a step, the page plays
-  soft key taps (the profile's "while it works" sound) instead of the agent
-  announcing its lookups.
+- **Working, not narrating.** From the moment your turn ends until the
+  agent starts to speak, and while it runs a step, the call bar shows it
+  working and the page plays soft key taps (the profile's "while it works"
+  sound) instead of the agent announcing its lookups: you know you were
+  heard before the answer comes.
 - **The quiet.** No provider ends a call on silence, and a call bills while
   it is open, so the page counts real quiet: nobody speaking (from your
   first sound, where the provider reports it: OpenAI and xAI do, Gemini

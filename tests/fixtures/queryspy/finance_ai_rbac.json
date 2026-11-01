@@ -1612,13 +1612,13 @@
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM memory_module WHERE memory_module.slug = :slug_1",
+      "label": "SELECT ... FROM context_module WHERE context_module.slug = :slug_1",
       "file": "app/services/ai/domains/chat/queries.py",
-      "function": "memory_module_by_slug"
+      "function": "context_module_by_slug"
     },
     {
       "kind": "repeated_statement",
-      "label": "SELECT ... FROM memory_module WHERE memory_module.slug = :slug_1",
+      "label": "SELECT ... FROM context_module WHERE context_module.slug = :slug_1",
       "file": "app/services/finance/domains/detection/analyst/seeds.py",
       "function": "load_finance_agent_fixtures"
     },

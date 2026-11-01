@@ -32,9 +32,9 @@ if TYPE_CHECKING:
 {%- endif %}
     from app.services.ai.domains.chat.fetchers import FetchContext, register_fetcher
 {%- if ai_backend != "memory" %}
-    from app.services.ai.domains.chat.memory_modules import (
-        list_memory_modules,
-        update_memory_module,
+    from app.services.ai.domains.chat.context_modules import (
+        list_context_modules,
+        update_context_module,
     )
     from app.services.ai.domains.chat.path_card import PathCard
 {%- endif %}
@@ -115,7 +115,7 @@ if TYPE_CHECKING:
 {%- endif %}
     from app.services.ai.models import AIProvider
 {%- if ai_backend != "memory" %}
-    from app.services.ai.models.agents import Agent, AgentPromptChange, MemoryModule
+    from app.services.ai.models.agents import Agent, AgentPromptChange, ContextModule
     from app.services.ai.models.llm import (
         LargeLanguageModel,
         LLMDeployment,

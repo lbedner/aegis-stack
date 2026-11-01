@@ -40,7 +40,7 @@ def agent_row_cells(agent: dict[str, Any]) -> list[str]:
         agent.get("name", agent.get("slug", "")),
         agent.get("model_id") or "active default",
         str(len(agent.get("tools", []))),
-        str(len(agent.get("memory_modules", []))),
+        str(len(agent.get("context_modules", []))),
     ]
 
 
@@ -163,7 +163,7 @@ class AgentEditPopup(BasePopup):
         )
 
         grants = ", ".join(agent.get("tools", [])) or "(none)"
-        modules = ", ".join(agent.get("memory_modules", [])) or "(none)"
+        modules = ", ".join(agent.get("context_modules", [])) or "(none)"
         kbs = ", ".join(agent.get("knowledge_base_ids", [])) or "(none)"
 
         body = ft.Column(

@@ -75,10 +75,10 @@ async def test_config_tools_run_in_the_loop(registered_lookup: str) -> None:
 
 def test_module_scope_wires_a_context_provider() -> None:
     """An agent config with modules gets the module provider automatically."""
-    from app.services.ai.domains.chat.module_context import MemoryModuleContextProvider
+    from app.services.ai.domains.chat.module_context import ContextModuleProvider
 
     agent = build_chat_agent(
-        _config(memory_modules=("diet", "house-rules")),
+        _config(context_modules=("diet", "house-rules")),
         model=TestModel(custom_output_text="ok"),
         model_name="test-model",
         deps_type=_Deps,
@@ -86,7 +86,7 @@ def test_module_scope_wires_a_context_provider() -> None:
     )
 
     providers = agent._providers  # noqa: SLF001 - wiring check, not behavior
-    assert any(isinstance(p, MemoryModuleContextProvider) for p in providers)
+    assert any(isinstance(p, ContextModuleProvider) for p in providers)
 
 
 def test_no_modules_means_no_module_provider() -> None:

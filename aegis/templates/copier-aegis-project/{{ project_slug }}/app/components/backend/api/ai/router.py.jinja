@@ -61,7 +61,7 @@ router = APIRouter(prefix="/ai", tags=["ai"])
 {% if ai_backend != "memory" %}
 
 
-# Memory modules and saved facts both live in their own module.
+# Context modules and saved facts both live in their own module.
 router.include_router(memory_routes.router, tags=["ai: memory"])
 {% endif %}
 

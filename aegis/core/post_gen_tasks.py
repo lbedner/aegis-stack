@@ -476,14 +476,14 @@ def cleanup_components(project_path: Path, context: dict[str, Any]) -> None:
         remove_file(project_path, "app/services/ai/domains/chat/user_memory.py")
         remove_file(project_path, "tests/services/ai/test_user_memory.py")
         remove_file(project_path, "app/components/backend/api/ai/memory.py")
-        # Memory modules are DB rows (the memory_module table).
-        remove_file(project_path, "app/services/ai/domains/chat/memory_modules.py")
-        remove_file(project_path, "tests/services/ai/test_memory_modules.py")
+        # Context modules are DB rows (the context_module table).
+        remove_file(project_path, "app/services/ai/domains/chat/context_modules.py")
+        remove_file(project_path, "tests/services/ai/test_context_modules.py")
         # Reference fetchers query the conversation tables (removed above).
         # The fetcher registry itself (fetchers.py) stays: it is DB-free.
         remove_file(project_path, "app/services/ai/domains/chat/builtin_fetchers.py")
         remove_file(project_path, "tests/services/ai/test_builtin_fetchers.py")
-        # Module context assembly reads memory_module rows.
+        # Module context assembly reads context_module rows.
         remove_file(project_path, "app/services/ai/domains/chat/module_context.py")
         remove_file(project_path, "tests/services/ai/test_module_context.py")
         # Sentiment scoring reads/writes conversation + sentiment tables.

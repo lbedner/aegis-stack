@@ -1,5 +1,5 @@
 """The Overseer AI page's Agents and Memory sections: the agent registry
-(each agent's definition, edited in the drawer), memory modules (edited,
+(each agent's definition, edited in the drawer), context modules (edited,
 with a preview of what they render), and the facts saved about a user
 (corrected and forgotten). Every write goes through the registry's own
 functions on the request's session."""
@@ -38,7 +38,7 @@ AGENT: dict[str, Any] = {
     "is_active": True,
     "code_mode": False,
     "tools": ["save_memory", "search_transactions"],
-    "memory_modules": ["user_facts"],
+    "context_modules": ["user_facts"],
     "knowledge_base_ids": [],
 }
 

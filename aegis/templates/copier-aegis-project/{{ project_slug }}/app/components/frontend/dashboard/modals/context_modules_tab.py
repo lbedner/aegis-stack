@@ -1,9 +1,9 @@
 """
-Memory Modules Tab Component
+Context Modules Tab Component
 
-Manages the database-driven memory-module registry: lists modules (click a row
+Manages the database-driven context-module registry: lists modules (click a row
 to edit one) and previews what a module actually renders into an agent's
-context. Backed by /api/v1/ai/memory-modules.
+context. Backed by /api/v1/ai/context-modules.
 
 The preview is the point. A module's content is either static text or the
 output of a registered fetcher, and in the fetcher case the row shows only a
@@ -97,7 +97,7 @@ def module_edit_payload(
     }
 
 
-class MemoryModuleEditPopup(BasePopup):
+class ContextModuleEditPopup(BasePopup):
     """Edit one module's definition, with a live preview of what it renders."""
 
     def __init__(
@@ -171,7 +171,7 @@ class MemoryModuleEditPopup(BasePopup):
                                     weight=Theme.Typography.WEIGHT_SEMIBOLD,
                                 ),
                                 SecondaryText(
-                                    f"Memory module  |  {self._slug}  |  "
+                                    f"Context module  |  {self._slug}  |  "
                                     f"{module_source_label(module)}"
                                 ),
                             ],
@@ -276,7 +276,7 @@ class MemoryModuleEditPopup(BasePopup):
         from app.components.frontend.state.session_state import get_session_state
 
         api = get_session_state(self._page).api_client
-        response = await api.get(f"/api/v1/ai/memory-modules/{self._slug}/preview")
+        response = await api.get(f"/api/v1/ai/context-modules/{self._slug}/preview")
         if not isinstance(response, dict):
             ErrorSnackBar("Could not render this module.").launch(self._page)
             return
@@ -313,7 +313,7 @@ class MemoryModuleEditPopup(BasePopup):
 
         api = get_session_state(self._page).api_client
         response = await api.patch(
-            f"/api/v1/ai/memory-modules/{self._slug}", json=payload
+            f"/api/v1/ai/context-modules/{self._slug}", json=payload
         )
         if not isinstance(response, dict):
             ErrorSnackBar(
@@ -329,8 +329,8 @@ class MemoryModuleEditPopup(BasePopup):
         self.close()
 
 
-class MemoryModulesTab(ft.Container):
-    """The memory-module registry: what an agent can be handed as context."""
+class ContextModulesTab(ft.Container):
+    """The context-module registry: what an agent can be handed as context."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -339,7 +339,7 @@ class MemoryModulesTab(ft.Container):
         self._modules: list[dict[str, Any]] = []
         self._facts_section = UserFactsSection()
         self._content_column = ft.Column(
-            [SecondaryText("Loading memory modules...")],
+            [SecondaryText("Loading context modules...")],
             spacing=0,
             expand=True,
         )
@@ -353,9 +353,9 @@ class MemoryModulesTab(ft.Container):
         from app.components.frontend.state.session_state import get_session_state
 
         api = get_session_state(self.page).api_client
-        modules = await api.get("/api/v1/ai/memory-modules")
+        modules = await api.get("/api/v1/ai/context-modules")
         if not isinstance(modules, list):
-            self._render_error("Could not load memory modules.")
+            self._render_error("Could not load context modules.")
             return
         self._modules = modules
         self._render_modules(modules)
@@ -384,12 +384,12 @@ class MemoryModulesTab(ft.Container):
         table = DataTable(
             columns=columns,
             rows=rows,
-            empty_message="No memory modules registered yet.",
+            empty_message="No context modules registered yet.",
             on_row_click=self._on_row_click,
         )
 
         self._content_column.controls = [
-            H3Text("Memory Modules"),
+            H3Text("Context Modules"),
             SecondaryText(
                 "Reusable blocks of context an agent opts into. Lower priority "
                 "renders first, and a module is dropped when it will not fit "
@@ -410,7 +410,7 @@ class MemoryModulesTab(ft.Container):
     def _on_row_click(self, index: int) -> None:
         if not 0 <= index < len(self._modules):
             return
-        popup = MemoryModuleEditPopup(
+        popup = ContextModuleEditPopup(
             self.page,
             self._modules[index],
             on_saved=self._load_modules,

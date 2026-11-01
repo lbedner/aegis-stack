@@ -1,4 +1,4 @@
-"""Tests for the memory-module fetcher registry."""
+"""Tests for the context-module fetcher registry."""
 
 from collections.abc import Generator
 from unittest.mock import MagicMock

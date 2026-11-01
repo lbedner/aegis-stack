@@ -356,7 +356,7 @@ active profile's engine from the realtime models a call can reach, beside
 the voices themselves). Meetings answer live on the same engine.
 The server holds the engine's session; the page carries the audio over one
 WebSocket. The agent on a call is built the way a typed turn builds it:
-the same prompt, memory modules, contexts and tools, plus how to talk on a
+the same prompt, context modules, contexts and tools, plus how to talk on a
 call and a tool to end it.
 
 - **Working, not narrating.** While the agent runs a step, the page plays

@@ -1,6 +1,6 @@
-"""Memory-module fetcher registry.
+"""Context-module fetcher registry.
 
-The dynamic half of memory modules: a ``memory_module`` row's
+The dynamic half of context modules: a ``context_module`` row's
 ``fetch_function`` names a fetcher registered here, and the context
 renderer runs it per request to pull live, per-user data into the
 prompt. Mirrors the tool registry (``app.core.tools``): the database decides

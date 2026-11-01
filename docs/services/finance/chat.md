@@ -30,7 +30,7 @@ Everything the answer asserts numerically came out of the last box up from the b
 
 ## The Two Halves of the Context
 
-**A snapshot, every turn.** The `finance_snapshot` memory module is fetched into context before the agent sees your message: balances, the net-worth trend, credit card and loan detail, portfolio positions, monthly cashflow, category spend against its norm, recent transactions, open anomalies, the cash forecast, and what is due next. It exists so the assistant opens a conversation already knowing your situation rather than spending three turns discovering it.
+**A snapshot, every turn.** The `finance_snapshot` context module is fetched into context before the agent sees your message: balances, the net-worth trend, credit card and loan detail, portfolio positions, monthly cashflow, category spend against its norm, recent transactions, open anomalies, the cash forecast, and what is due next. It exists so the assistant opens a conversation already knowing your situation rather than spending three turns discovering it.
 
 **Tools, on demand.** The snapshot is a briefing, not the ledger. Anything specific comes from a tool call.
 
@@ -115,7 +115,7 @@ Everything about the agent lives in its database row and is editable from the AI
 | `temperature` | `0.4` | warmer than the analyst's restatement work |
 | `max_tokens` | `4000` | a chat answer plus the code-mode loop |
 | `code_mode` | on | arithmetic is computed, not estimated |
-| `memory_modules` | `finance_snapshot` | the briefing above |
+| `context_modules` | `finance_snapshot` | the briefing above |
 
 Seeding is idempotent and never overwrites a row that already exists, so an edited prompt survives a re-seed. Tool attachment is additive by name; a tool row that is missing is skipped with a warning rather than breaking the tab.
 
@@ -130,4 +130,4 @@ Conversations are tagged with the surface they started on. The history drawer in
 | Topic | Description |
 |-------|-------------|
 | [AI Agents](../ai/agents.md) | agent rows, tools, and the dashboard that edits them |
-| [Memory Modules](../ai/memory-modules.md) | how the snapshot is fetched into context |
+| [Context Modules](../ai/context-modules.md) | how the snapshot is fetched into context |

@@ -21,8 +21,8 @@ my-app ai sentiment       # Conversation sentiment statistics
 my-app agents list             # All agents with their grants
 my-app agents show <slug>      # One agent's full definition
 my-app agents test <slug>      # One chat turn as the agent
-my-app memory-modules list     # Memory module catalog
-my-app memory-modules show <slug>  # One module's definition
+my-app context-modules list     # Context module catalog
+my-app context-modules show <slug>  # One module's definition
 
 # LLM Catalog
 my-app llm sync           # Sync ~2000 models from cloud/Ollama
@@ -236,7 +236,7 @@ Every agent with its model, active state, and tool/module counts.
 my-app agents show assistant
 ```
 
-One agent's full definition: sampling, tools, memory modules, knowledge base scope, and the system prompt.
+One agent's full definition: sampling, tools, context modules, knowledge base scope, and the system prompt.
 
 ### agents test
 
@@ -245,16 +245,16 @@ my-app agents test assistant
 my-app agents test support -m "What are your hours?"
 ```
 
-Runs one turn the way chat does (the agent's tools, memory modules and code mode, usage recorded) in a conversation of its own, deleted after, and prints the reply.
+Runs one turn the way chat does (the agent's tools, context modules and code mode, usage recorded) in a conversation of its own, deleted after, and prints the reply.
 
-### memory-modules list / show
+### context-modules list / show
 
 ```bash
-my-app memory-modules list
-my-app memory-modules show <slug>
+my-app context-modules list
+my-app context-modules show <slug>
 ```
 
-The [memory module](memory-modules.md) catalog: kind (static, dynamic, hybrid), priority, active state, and per-module detail.
+The [context module](context-modules.md) catalog: kind (static, dynamic, hybrid), priority, active state, and per-module detail.
 
 ---
 

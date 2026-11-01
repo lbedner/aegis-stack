@@ -424,7 +424,7 @@ async def startup_database_init() -> None:
 {% endif %}
 
 {% if include_ai and ai_backend != "memory" %}
-        # Seed the agent registry: agents, memory modules, and one tool row
+        # Seed the agent registry: agents, context modules, and one tool row
         # per registered tool. Tool rows are what grants attach to by name,
         # so an unseeded registry leaves every agent without its tools.
         try:

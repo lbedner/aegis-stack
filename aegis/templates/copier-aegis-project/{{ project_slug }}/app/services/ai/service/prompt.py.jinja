@@ -124,7 +124,7 @@ class PromptMixin(ContextsMixin):
             memory_context=memory_context,
         )
 
-        # The agent row's memory modules (e.g. the finance snapshot): the
+        # The agent row's context modules (e.g. the finance snapshot): the
         # same briefing the chat_kit runtime injects via its provider.
         if agent_modules_context:
             system_prompt += f"\n\n{agent_modules_context}"

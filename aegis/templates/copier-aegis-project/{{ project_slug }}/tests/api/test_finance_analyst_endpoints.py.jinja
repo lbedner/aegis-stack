@@ -56,7 +56,7 @@ def analyst_ready(monkeypatch):
 
         monkeypatch.setattr("app.services.ai.domains.llm.providers.model_for", _model_for)
 
-        session.add(analyst.MemoryModule(**analyst.snapshot_module_definition()))
+        session.add(analyst.ContextModule(**analyst.snapshot_module_definition()))
         session.add(analyst.Agent(**analyst.analyst_agent_definition()))
         service = FinanceService(session)
         await service.create_manual_account(

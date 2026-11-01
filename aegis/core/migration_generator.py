@@ -167,9 +167,59 @@ AI_MIGRATION = ServiceMigrationSpec(
     cleared_tables=["llm_deployment", "llm_price"],
 )
 
+
+def _carry_rows(old: str, new: str, cols: str, *, schema: str | None = None) -> str:
+    """The body of ``upgrade()`` moving ``old``'s rows into ``new``, the table
+    the models replaced it with, ids included, then dropping ``old``.
+
+    Revisions derived from the models only add, so a renamed table arrives
+    as a new one beside the old: this is the rename's data half. ``schema``
+    is where ``old`` lives on Postgres (SQLite keeps one file). The
+    sequence is moved past the copied ids so the next insert does not
+    collide with them. A database that never had ``old`` is left alone.
+    """
+    where = f"{schema!r} if postgres else None" if schema else "None"
+    named = f'f"{{schema}}.{old}" if schema else "{old}"' if schema else f'"{old}"'
+    return f"""\
+    bind = op.get_bind()
+    postgres = bind.dialect.name == "postgresql"
+    schema = {where}
+    if sa.inspect(bind).has_table("{old}", schema=schema):
+        old = {named}
+        cols = "{cols}"
+        op.execute(f"INSERT INTO {new} ({{cols}}) SELECT {{cols}} FROM {{old}}")
+        if postgres:
+            op.execute(
+                "SELECT setval(pg_get_serial_sequence('{new}', 'id'), "
+                "COALESCE((SELECT MAX(id) FROM {new}), 0) + 1, false)"
+            )
+        op.drop_table("{old}", schema=schema)"""
+
+
+# Memory modules were renamed context modules: carry the modules over, and
+# each agent's list of them, then retire the old names.
+_CONTEXT_MODULE_CARRY_OVER = (
+    _carry_rows(
+        "memory_module",
+        "context_module",
+        "id, slug, name, description, category, prompt_content, fetch_function, "
+        "context_key, supports_days_back, default_days_back, priority, "
+        "token_estimate, is_active, created_at, updated_at",
+    )
+    + """
+    inspector = sa.inspect(bind)
+    if inspector.has_table("agent") and "memory_modules" in {
+        c["name"] for c in inspector.get_columns("agent")
+    }:
+        op.execute("UPDATE agent SET context_modules = memory_modules")
+        with op.batch_alter_table("agent") as batch:
+            batch.drop_column("memory_modules")"""
+)
+
 AGENTS_MIGRATION = ServiceMigrationSpec(
     service_name="ai_agents",
     description="AI agent registry tables (agents, tools, agent-tool links)",
+    data_after=_CONTEXT_MODULE_CARRY_OVER,
 )
 
 KNOWLEDGE_MIGRATION = ServiceMigrationSpec(
@@ -267,25 +317,16 @@ SCHEDULER_MIGRATION = ServiceMigrationSpec(
 # The propose/approve queue. Shared by every service that proposes, so it is
 # named for itself, not a service; its revision follows finance's because the
 # table used to be finance's, and the rows it held carry over (``data_after``).
-_FINANCE_QUEUE_CARRY_OVER = """\
-    # The queue was finance's until it was shared: carry its rows over, ids
-    # included (chat transcripts point at them), then retire the old table.
-    bind = op.get_bind()
-    schema = "finance" if bind.dialect.name == "postgresql" else None
-    if sa.inspect(bind).has_table("finance_pending_change", schema=schema):
-        old = f"{schema}.finance_pending_change" if schema else "finance_pending_change"
-        cols = (
-            "id, owner_user_id, change_type, payload, proposed_by_agent, "
-            "conversation_id, batch_id, status, result, created_at, "
-            "updated_at, resolved_at"
-        )
-        op.execute(f"INSERT INTO pending_change ({cols}) SELECT {cols} FROM {old}")
-        if schema:
-            op.execute(
-                "SELECT setval(pg_get_serial_sequence('pending_change', 'id'), "
-                "COALESCE((SELECT MAX(id) FROM pending_change), 0) + 1, false)"
-            )
-        op.drop_table("finance_pending_change", schema=schema)"""
+# The queue was finance's until it was shared: its rows carry over, ids
+# included (chat transcripts point at them).
+_FINANCE_QUEUE_CARRY_OVER = _carry_rows(
+    "finance_pending_change",
+    "pending_change",
+    "id, owner_user_id, change_type, payload, proposed_by_agent, "
+    "conversation_id, batch_id, status, result, created_at, updated_at, "
+    "resolved_at",
+    schema="finance",
+)
 
 CHANGE_QUEUE_MIGRATION = ServiceMigrationSpec(
     service_name="change_queue",

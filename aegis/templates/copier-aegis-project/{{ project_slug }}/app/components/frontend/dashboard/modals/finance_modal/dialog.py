@@ -170,7 +170,7 @@ class FinanceDetailDialog(BaseDetailPopup):
         # Chat rides the AI service: without it there is no chat API to
         # speak to, so the tab simply does not exist rather than erroring.
         if analyst_enabled:
-            # The snapshot memory module maps chat user ids to finance
+            # The snapshot context module maps chat user ids to finance
             # owners; the analyst's standalone id ("0" = unscoped owner)
             # is the one id that resolves in a single-tenant install. The
             # generic default ("api-user") is unparseable and would skip

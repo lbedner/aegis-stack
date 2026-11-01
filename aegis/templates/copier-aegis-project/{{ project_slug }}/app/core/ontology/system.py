@@ -56,38 +56,39 @@ WORKER = ComponentName.WORKER
 # Where code is: the part it belongs to and the module defining it.
 Placed = Callable[[Callable[..., Any]], dict[str, str | None]]
 
-
 _kept: SystemModel | None = None
 _building = threading.Lock()
 
 
-def current() -> SystemModel:
-    """The model readers (the MCP tool, the API) ask for, built once: a
-    partial one again only once health checks have registered since (the
-    webserver's startup), else it is all this process will ever see."""
+def current(kept: SystemModel | None = None) -> SystemModel:
+    """The model readers ask for, built once (a partial one again once
+    health checks have registered: the webserver's startup); where nothing
+    registered, ``kept`` (the webserver's whole one: ``shared``) instead."""
     global _kept
     with _building:  # two first asks (threads) build it once
-        if _kept is None or (_kept.partial and _registered()):
-            _kept = system_model()
+        registered = _registered()
+        if _kept is None or (_kept.partial and registered):
+            _kept = (None if registered else kept) or system_model()
     return _kept
 
 
 async def warm() -> None:
     """Build the model now, off the loop, without waiting: the first to ask
-    (``current``) gets this build. The webserver runs it once its parts
-    have registered, a worker queue as it starts."""
+    (``current``) gets this build, and it is kept for the other processes.
+    The webserver runs it once its parts have registered."""
     background(_build())
 
 
 async def _build() -> None:
-    await asyncio.to_thread(current)
+    from app.core.ontology.shared import keep  # it reads this module's
+
+    await keep(await asyncio.to_thread(current))
 
 
 def _registered() -> bool:
     from app.services.system import health
 
-    names = health.registered_health_names()
-    return bool(names["components"] or names["services"])
+    return any(health.registered_health_names().values())
 
 
 def with_app() -> SystemModel:

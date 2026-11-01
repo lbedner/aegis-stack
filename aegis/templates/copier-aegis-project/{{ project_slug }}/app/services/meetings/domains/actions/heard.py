@@ -96,14 +96,13 @@ def heard(nodes: Iterable[Node]) -> Heard:
 _kept: tuple[SystemModel, Heard] | None = None
 
 
-def heard_here() -> Heard:
-    """What talk can name in this stack (``heard`` over the twin's
-    ``current`` model), made once a model. The twin's first build parses the
-    source: an async caller asks off the loop (``asyncio.to_thread``)."""
+async def heard_here() -> Heard:
+    """What talk can name in this stack (``heard`` over the twin's model:
+    ``shared.twin``), made once a model."""
     global _kept
-    from app.core.ontology.system import current  # the twin, built when asked
+    from app.core.ontology.shared import twin  # read when asked
 
-    model = current()
+    model = await twin()
     if _kept is None or _kept[0] is not model:
         _kept = (model, heard(model.nodes))
     return _kept[1]

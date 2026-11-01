@@ -2,6 +2,9 @@
 (``bot.answers``): it says her answer in the chat and aloud when its run
 is done, and that it is looking it up only once she starts to."""
 
+import asyncio
+from contextlib import asynccontextmanager
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -9,10 +12,15 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.meetings.domains.actions import registry, runs
-from app.services.meetings.domains.actions.registry import Action
-from app.services.meetings.domains.bot import answers
+from app.services.meetings.domains.actions.live import IN_A_MEETING
+from app.services.meetings.domains.actions.registry import ANSWERS, Action
+from app.services.meetings.domains.bot import answers, voice
+from app.services.meetings.domains.bot import transcript as captions
 from app.services.meetings.domains.bot.meet import CallState
-from app.services.meetings.models import MeetingActionRun
+from app.services.meetings.domains.bot.transcript import said_again
+from app.services.meetings.domains.moments import detectors
+from app.services.meetings.domains.moments.service import moments_of
+from app.services.meetings.models import Caption, MeetingActionRun
 from tests._meetings import (
     FakeCall,
     FakeLive,
@@ -36,7 +44,9 @@ def voiced(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(answers, "spoken", spoken)
     hold_the_answers(monkeypatch)
     if registry.action_named(registry.ANSWERS) is None:  # a stack without her
-        her = Action(registry.ANSWERS, "Ask Illiana", registry.QUESTIONS, "app", run=_unused)
+        her = Action(
+            registry.ANSWERS, "Ask Illiana", registry.QUESTIONS, "app", run=_unused
+        )
         monkeypatch.setitem(registry._actions, registry.ANSWERS, her)
 
 
@@ -163,7 +173,6 @@ async def test_she_is_saying_her_answer_until_it_has_played(
 ) -> None:
     """Her answer is back before it is heard: she is saying it until the
     last of it has played, made into speech or said live."""
-    import asyncio
 
     _, moment_id = await asked_a_question(async_db_session, lines=HER)
     call = FakeCall([CallState.IN_CALL])
@@ -187,7 +196,6 @@ async def test_her_mic_is_open_from_the_question_until_her_answer_has_played(
     """Meet opens a mic late: opened as she spoke, each answer, and each
     sentence of one, lost its first words. It opens once a question is put
     to her and closes once the last of her answer has played."""
-    import asyncio
 
     _, moment_id = await asked_a_question(async_db_session, lines=HER)
     call = FakeCall([CallState.IN_CALL])
@@ -240,7 +248,9 @@ async def test_a_failed_answer_is_said_as_not_found_and_no_voice_types_it(
     call = FakeCall([CallState.IN_CALL])
     answering = answers.Answers(call, voice=None)
 
-    await answering.heard(async_db_session, [(moment_id, "addressed"), (moment_id + 99, "question")])
+    await answering.heard(
+        async_db_session, [(moment_id, "addressed"), (moment_id + 99, "question")]
+    )
     await _over(async_db_session, "failed", "x")
     await answering.answer(async_db_session)
 
@@ -254,8 +264,6 @@ async def test_a_line_for_the_bot_is_written_once_its_speaker_pauses(
     """Captions put a question mark on every pause: a line naming the bot,
     or said right after it spoke, waits until it stops changing, then is
     written at once, never on the beat half said."""
-    from app.services.meetings.domains.bot import transcript as captions
-    from app.services.meetings.models import Caption
 
     monkeypatch.setattr(captions, "BEAT_SECONDS", 0.0)
     meeting_id = await a_meeting(async_db_session)
@@ -293,8 +301,6 @@ async def test_a_stop_is_written_the_moment_it_is_heard(
 ) -> None:
     """A stop waits on neither the beat nor its speaker's pause: named or
     not, it is written (and stops her) at the next look."""
-    from app.services.meetings.domains.bot import transcript as captions
-    from app.services.meetings.models import Caption
 
     monkeypatch.setattr(captions, "BEAT_SECONDS", 3600.0)
     monkeypatch.setattr(captions, "SETTLE_SECONDS", 60.0)
@@ -320,10 +326,6 @@ async def test_a_line_begun_over_her_is_written_at_once_and_cuts_in(
 ) -> None:
     """Talking over her waits on neither the beat nor a pause: it is written,
     and cuts in, at the next look. Her echo meanwhile waits as ever."""
-    import asyncio
-
-    from app.services.meetings.domains.bot import transcript as captions
-    from app.services.meetings.models import Caption
 
     monkeypatch.setattr(captions, "BEAT_SECONDS", 3600.0)
     monkeypatch.setattr(captions, "SETTLE_SECONDS", 60.0)
@@ -340,9 +342,52 @@ async def test_a_line_begun_over_her_is_written_at_once_and_cuts_in(
     assert "cut_in" in [kind for _, kind in made]
 
     # Once she is quiet, what it grows into waits as ever.
-    transcript.her = lambda: (now() - 1, words)
+    transcript.her = lambda: (now() - captions.CAPTION_LAG - 1, words)
     grown = Caption("2", "Dana", "Wait, which deploy? The one at four?")
     assert transcript.take([echo, grown]) == []
+
+
+async def test_a_question_begun_over_her_cuts_in_at_once_and_is_asked_in_full(
+    async_db_session: AsyncSession, voiced: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Begun over her, a question cuts in at once but is asked only once it
+    is said in full: meeting 63's "Can you tell me?" was answered before
+    "if we're using SQLite?" was said."""
+    monkeypatch.setattr(captions, "BEAT_SECONDS", 3600.0)
+    monkeypatch.setattr(captions, "SETTLE_SECONDS", 60.0)
+    meeting_id = await a_meeting(async_db_session)
+    transcript = captions.Transcript(meeting_id, "Notes")
+    now = asyncio.get_running_loop().time
+    transcript.her = lambda: (now() + 60, "The inventory has fourteen components.")
+
+    begun = Caption("1", "Dana", "Notes, can you tell me?")
+    made = await _took(async_db_session, transcript, [begun])
+    assert [kind for _, kind in made] == ["cut_in"]
+
+    monkeypatch.setattr(captions, "SETTLE_SECONDS", 0.0)
+    whole = Caption("1", "Dana", "Notes, can you tell me if we use SQLite?")
+    made = await _took(async_db_session, transcript, [whole])
+    assert "addressed" in [kind for _, kind in made]
+
+
+async def test_a_line_captioned_just_after_her_voice_ended_was_begun_over_her(
+    async_db_session: AsyncSession, voiced: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A caption shows ``CAPTION_LAG`` after its words: one seen a second
+    after her voice ended was begun while she was still heard (meeting 62's
+    "Illiana, wait." and "We gotta stop." were taken as said after her)."""
+
+    monkeypatch.setattr(captions, "SETTLE_SECONDS", 60.0)
+    meeting_id = await a_meeting(async_db_session)
+    transcript = captions.Transcript(meeting_id, "Notes")
+    words = "There is one task running right now, the meetings queue."
+    ended = asyncio.get_running_loop().time() - 1
+    transcript.her = lambda: (ended, words)
+
+    over = Caption("1", "Dana", "Notes, wait.")
+    made = await _took(async_db_session, transcript, [over])
+
+    assert "cut_in" in [kind for _, kind in made]
 
 
 async def test_her_own_words_heard_back_through_a_mic_are_not_put_to_her(
@@ -352,9 +397,6 @@ async def test_her_own_words_heard_back_through_a_mic_are_not_put_to_her(
     captioned as theirs: words of hers said back while she talks are her
     echo, not asked of her again. The same words said once she is done are
     a reply."""
-    from app.services.meetings.domains.bot import transcript as captions
-    from app.services.meetings.domains.moments import detectors
-    from app.services.meetings.models import Caption
 
     monkeypatch.setattr(captions, "BEAT_SECONDS", 0.0)
     monkeypatch.setattr(captions, "SETTLE_SECONDS", 0.0)
@@ -385,8 +427,6 @@ async def test_her_echo_is_told_by_her_words_as_both_are_captioned(
     """Her caption and its echo under the asker's name grow together: the
     echo, first seen at "Yes,", is held until it settles and then told by
     all she has said by then, not by her first word."""
-    from app.services.meetings.domains.bot import transcript as captions
-    from app.services.meetings.models import Caption
 
     monkeypatch.setattr(captions, "BEAT_SECONDS", 0.0)
     monkeypatch.setattr(captions, "SETTLE_SECONDS", 0.0)
@@ -419,10 +459,6 @@ async def test_her_words_heard_back_while_her_voice_plays_are_her_echo(
     """Meet captions her late, or not at all: what she is saying and until
     when is the bot's own (``her``). Her words heard back while it plays
     are her echo; said back once it has played, a reply."""
-    import asyncio
-
-    from app.services.meetings.domains.bot import transcript as captions
-    from app.services.meetings.models import Caption
 
     monkeypatch.setattr(captions, "BEAT_SECONDS", 0.0)
     monkeypatch.setattr(captions, "SETTLE_SECONDS", 0.0)
@@ -456,9 +492,6 @@ async def test_a_question_put_to_her_again_at_once_is_asked_once(
     misses (``_drawn_again``): the same speaker putting the same to her
     within ``AGAIN_SECONDS`` is that line again, written over it and asked
     once. Asked again later, it is asked again."""
-    from app.services.meetings.domains.bot import transcript as captions
-    from app.services.meetings.domains.moments.service import moments_of
-    from app.services.meetings.models import Caption
 
     monkeypatch.setattr(captions, "BEAT_SECONDS", 0.0)
     monkeypatch.setattr(captions, "SETTLE_SECONDS", 0.0)
@@ -486,8 +519,6 @@ async def test_a_line_for_her_is_heard_before_it_is_said_in_full(
     """While a line for her is still being said (held until its speaker
     pauses), it is already hers to show: who is saying it, and what of it
     so far."""
-    from app.services.meetings.domains.bot import transcript as captions
-    from app.services.meetings.models import Caption
 
     monkeypatch.setattr(captions, "SETTLE_SECONDS", 60.0)
     meeting_id = await a_meeting(async_db_session)
@@ -506,8 +537,6 @@ async def test_each_time_the_bot_is_named_in_one_long_caption_is_its_own_line(
 ) -> None:
     """Meet keeps one caption while a speaker talks on: it is cut before each
     sentence naming the bot, so each question put to it is heard."""
-    from app.services.meetings.domains.bot import transcript as captions
-    from app.services.meetings.models import Caption
 
     monkeypatch.setattr(captions, "SETTLE_SECONDS", 0.0)
     meeting_id = await a_meeting(async_db_session)
@@ -531,8 +560,6 @@ async def test_a_caption_meet_draws_again_is_the_same_line(
     """Meet sometimes starts a second block for what a speaker is still
     saying (the name spelled anew, the rest run on): it is that line drawn
     again, asked once, never two questions."""
-    from app.services.meetings.domains.bot import transcript as captions
-    from app.services.meetings.models import Caption
 
     monkeypatch.setattr(captions, "BEAT_SECONDS", 0.0)
     monkeypatch.setattr(captions, "SETTLE_SECONDS", 0.0)
@@ -547,8 +574,6 @@ async def test_a_caption_meet_draws_again_is_the_same_line(
     made += await _took(async_db_session, transcript, [first, begun])
     made += await _took(async_db_session, transcript, [first, again])
     made += await _took(async_db_session, transcript, [first, again])
-
-    from app.services.meetings.domains.moments.service import moments_of
 
     (moment,) = await moments_of(async_db_session, meeting_id)
     assert [kind for _, kind in made] == ["addressed"]
@@ -593,8 +618,6 @@ async def test_a_caption_meet_draws_again_is_the_same_line(
 def test_a_block_is_the_last_drawn_again_only_where_it_says_it_again(
     before: str, shown: str, again: bool
 ) -> None:
-    from app.services.meetings.domains.bot.transcript import said_again
-
     assert said_again(before, shown) is again
 
 
@@ -641,9 +664,6 @@ async def test_her_live_engine_is_her_voice_profiles_where_she_answers(
     """The bot runs in a worker, where the settings are the .env's, not the
     voice profile's: the engine is the profile's (``voice_of``), and there
     is none to open where she is not the one answering."""
-    from types import SimpleNamespace
-
-    from app.services.meetings.domains.bot import voice
 
     asked: list[str] = []
 
@@ -651,8 +671,6 @@ async def test_her_live_engine_is_her_voice_profiles_where_she_answers(
         async def resolve(self, session: Any, key: str) -> Any:
             asked.append(key)
             return SimpleNamespace(key=key)
-
-    from app.services.meetings.domains.actions.registry import ANSWERS
 
     monkeypatch.setattr(voice, "answerer", lambda: ANSWERS)  # she answers
     monkeypatch.setattr(
@@ -674,11 +692,6 @@ async def test_her_live_call_is_told_she_is_in_the_meeting(
     """Her live call's manners are a meeting's (``IN_A_MEETING``), not a
     call with one person's: one of several, heard through the captions,
     seen as a card, so asked whether she can hear she says so."""
-    from contextlib import asynccontextmanager
-    from types import SimpleNamespace
-
-    from app.services.meetings.domains.actions.live import IN_A_MEETING
-    from app.services.meetings.domains.bot import voice
 
     told: dict[str, Any] = {}
 
@@ -702,8 +715,6 @@ async def test_her_live_call_is_told_she_is_in_the_meeting(
 
 
 async def test_without_a_voice_there_is_no_live_voice() -> None:
-    from app.services.meetings.domains.bot import voice
-
     async with voice.live(FakeCall([CallState.IN_CALL]), None, None, None) as live:
         assert live is None and voice.LIVE.get() is None
 
@@ -755,7 +766,6 @@ async def _saying(
     db: AsyncSession, call: FakeCall, answer: str, live: Any = None
 ) -> tuple[answers.Answers, int]:
     """Her answer to the one question put to her, being said into ``call``."""
-    import asyncio
 
     _, moment_id = await asked_a_question(db, lines=HER)
     answering = answers.Answers(call, voice="hers", live=live)
@@ -838,8 +848,7 @@ async def test_cut_in_on_live_she_is_asked_to_carry_on(
     await answering.heard(async_db_session, [(moment_id + 1, "cut_in")])
     assert live.stopped and call.silenced
     await answering.heard(async_db_session, [(moment_id + 2, "go_on")])
-    assert answering.going_on is not None
-    await answering.going_on
+    await answering.said()
 
     assert live.asked == [answers.CARRY_ON]
     answering.close()
@@ -850,7 +859,6 @@ async def test_cut_in_on_live_while_her_answer_is_still_made(
 ) -> None:
     """Live, she is heard as she makes her answer, before its run is back:
     cut in on then, she stops, and what she says going on is posted."""
-    import asyncio
 
     _, moment_id = await asked_a_question(async_db_session, lines=HER)
     call = FakeCall([CallState.IN_CALL])
@@ -863,8 +871,7 @@ async def test_cut_in_on_live_while_her_answer_is_still_made(
     await _over(async_db_session, "done", "")  # cut off: nothing came back
     await answering.answer(async_db_session)
     await answering.heard(async_db_session, [(moment_id + 2, "go_on")])
-    assert answering.going_on is not None
-    await answering.going_on
+    await answering.said()
 
     assert live.stopped and call.said == ["Sam owns billing."]
     answering.close()

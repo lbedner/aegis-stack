@@ -3,7 +3,6 @@
 alone. Nothing is kept. A line that names a part of the system
 (``parts_named``) offers what that part is, the part riding the ask."""
 
-import asyncio
 from itertools import groupby
 from typing import TYPE_CHECKING
 
@@ -27,7 +26,7 @@ def asks_about() -> bool:
 async def parts_named(lines: list[TranscriptRow]) -> dict[int, list[tuple[str, str]]]:
     """The parts of the system each line names, by line id: each part and
     the name it was heard by, once a turn (a speaker's lines in a row)."""
-    hears = await asyncio.to_thread(heard_here)
+    hears = await heard_here()
     named: dict[int, list[tuple[str, str]]] = {}
     for _, rows in groupby(lines, key=lambda row: row.speaker):
         seen: set[str] = set()
@@ -56,7 +55,7 @@ async def line_about(
     if found is None:
         return None
     admin = True if svc.owner_user_id is None else None
-    known = (await asyncio.to_thread(heard_here)).ids if part else frozenset()
+    known = (await heard_here()).ids if part else frozenset()
     return await ask(
         *found,
         owner_user_id=meeting.owner_user_id,

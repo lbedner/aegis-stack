@@ -9,6 +9,7 @@ import pytest
 
 from app.core import edges, replays, source_index
 from app.core.ontology import Kind, current
+from app.core.ontology import system as ontology_system
 from app.core.ontology.model import PartNode
 from app.core.ontology.parts import node_of
 from app.core.parts import Category
@@ -42,7 +43,7 @@ async def fresh(monkeypatch: pytest.MonkeyPatch) -> AsyncIterator[None]:
             (Kind.SERVICE, "auth"),
         )
     )
-    monkeypatch.setattr(kept_requests, "current", lambda: model)
+    monkeypatch.setattr(ontology_system, "current", lambda _=None: model)
     pieces = [
         Piece("piece:router", "Router", "entry", (), (ROUTES,)),
         Piece("piece:queries", "Queries", "data", (), (QUERIES,)),

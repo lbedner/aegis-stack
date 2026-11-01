@@ -26,6 +26,8 @@ Every layer reads at any zoom, the way a C4 diagram does: the grid above, left t
 
 Overseer, Illiana and the API read the same models (`frozen`, `extra="forbid"`), so a request is described the same way on the replay page, in Illiana's answer and in the JSON: a part by its ontology id, a line of code by its path, line, service and piece.
 
+The webserver builds the model as it starts and keeps it in Redis (`ontology:model`). Every other process (a worker, where Illiana answers in a meeting, or the MCP server over stdio) reads that copy rather than importing the whole app to build its own; with no Redis, or nothing kept yet, it builds one as the webserver does.
+
 ## From a shell
 
 A coding agent (or you) asks the Twin from the app's CLI, with no server up: the same answers the `ontology` tool gives Illiana and MCP clients, as JSON, built with the app so its routes are in them.

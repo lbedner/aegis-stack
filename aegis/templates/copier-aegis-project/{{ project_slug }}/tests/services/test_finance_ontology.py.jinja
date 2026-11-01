@@ -26,7 +26,7 @@ def ask(app: FastAPI, client: TestClient, monkeypatch: pytest.MonkeyPatch) -> As
     """``tools.ontology`` over this app's whole model, as a chat user
     (not an admin) asks it."""
     model = system_model(app)
-    monkeypatch.setattr("app.core.ontology.system.current", lambda: model)
+    monkeypatch.setattr("app.core.ontology.system.current", lambda _=None: model)
     monkeypatch.setattr(settings, "AUTH_ENABLED", True)
 
     async def asked(**kwargs: Any) -> dict[str, Any]:

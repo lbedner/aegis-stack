@@ -14,6 +14,7 @@ from app.components.web_frontend import (
     overseer_map,
     overseer_zoom,
 )
+from app.core.ontology import system as ontology_system
 from app.core.ontology.model import Edge, EdgeKind, RouteNode
 from app.services.system import service_pieces
 from app.services.system.service_pieces import Piece
@@ -39,7 +40,7 @@ def _opened(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> TestClient:
         source="service:auth", target="component:database", kind=EdgeKind.CALLS
     )
     model = model_of([route], [calling])
-    monkeypatch.setattr(overseer_container, "current", lambda: model)
+    monkeypatch.setattr(ontology_system, "current", lambda _=None: model)
     lacking = overseer_conformance.Conformance({}, {"service_auth": ["Tests"]})
     monkeypatch.setattr(overseer_conformance, "conformance", lambda: lacking)
     auth_opens(monkeypatch)

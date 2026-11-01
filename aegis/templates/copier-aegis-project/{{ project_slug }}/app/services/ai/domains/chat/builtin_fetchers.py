@@ -8,14 +8,13 @@ agent's). Importing this module registers them; app fetchers should
 follow the same pattern in their own modules.
 """
 
-import asyncio
 from datetime import UTC, datetime, timedelta
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.db import get_async_session
+from app.core.ontology.shared import twin
 from app.core.ontology.summary import summary, text
-from app.core.ontology.system import current
 from app.services.ai.domains.chat import queries
 from app.services.shared.deps import caller_is_admin
 from app.services.system.aggregate_reads import listed
@@ -68,7 +67,7 @@ async def app_map(ctx: FetchContext) -> str | None:
     parts for an admin, its tables and the changes to them for anyone, as
     the ``ontology`` tool answers each; for an admin, also the aggregates
     the ``aggregate`` tool reads. The model is built once a process."""
-    model = await asyncio.to_thread(current)  # the first build reads the source
+    model = await twin()
     if not await caller_is_admin():
         return text(summary(model.domain()))
     return "\n\n".join(part for part in (text(summary(model)), listed()) if part)

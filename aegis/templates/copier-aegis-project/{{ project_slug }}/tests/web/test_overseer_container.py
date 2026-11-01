@@ -19,6 +19,7 @@ from app.components.web_frontend import (
 from app.core import edges, runtime, secrets, series
 from app.core.config import settings
 from app.core.ontology import calls
+from app.core.ontology import system as ontology_system
 from app.core.ontology.model import Edge, EdgeKind
 from app.core.runtime import Instance
 from app.services.system import topology, ui_runtime
@@ -402,7 +403,9 @@ def _failing(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> TestClient:
         target="component:database",
         kind=EdgeKind.DEPENDS_ON,
     )
-    monkeypatch.setattr(overseer_container, "current", lambda: model_of(edges=[needs]))
+    monkeypatch.setattr(
+        ontology_system, "current", lambda _=None: model_of(edges=[needs])
+    )
     return TestClient(app)
 
 

@@ -517,7 +517,7 @@ def model(monkeypatch: pytest.MonkeyPatch) -> SystemModel:
         Edge(source=refund.id, target=table.id, kind=EdgeKind.CHANGES),
     ]
     found = model_of([*parts, *routes, charge, table, customer, refund], edges)
-    monkeypatch.setattr("app.core.ontology.system.current", lambda: found)
+    monkeypatch.setattr("app.core.ontology.system.current", lambda _=None: found)
 
     # Traffic other tests sent in this process is not this model's.
     async def nothing_seen() -> dict[Any, Any]:
@@ -576,7 +576,7 @@ async def test_a_queue_has_its_own_health_and_a_part_named_like_it_does_not(
     queue = QueueNode(name="load_test", owner="component:backend")
     shared = PartNode(kind=Kind.SHARED, name="load_test", category=Category.STACK)
     found = model_of([*model.nodes, queue, shared], model.edges)
-    monkeypatch.setattr("app.core.ontology.system.current", lambda: found)
+    monkeypatch.setattr("app.core.ontology.system.current", lambda _=None: found)
     checked = ComponentStatus(name="load_test", message="idle")
     tree = checked
     for name in ("queues", "worker", "components"):
@@ -617,7 +617,7 @@ async def test_a_task_is_listed_on_its_queue(
     """Asked what a queue runs, she reads it off the listing."""
     task = TaskNode(name="sync_catalog", queue="system", owner="component:backend")
     found = model_of([*model.nodes, task], model.edges)
-    monkeypatch.setattr("app.core.ontology.system.current", lambda: found)
+    monkeypatch.setattr("app.core.ontology.system.current", lambda _=None: found)
 
     result = result_data(await tools.ontology(kind="task"))
 

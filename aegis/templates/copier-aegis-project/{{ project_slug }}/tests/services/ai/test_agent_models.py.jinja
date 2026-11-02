@@ -25,7 +25,7 @@ from app.services.ai.fixtures.agent_fixtures import (
     load_agent_fixtures,
 )
 from app.services.ai.models import Agent, AgentTool, Tool
-from app.services.ai.models.agents import MemoryModule
+from app.services.ai.models.agents import ContextModule
 
 
 @pytest.fixture
@@ -79,7 +79,7 @@ class TestAgentSeed:
         from app.core.config import Settings
 
         assert agent.max_tokens > Settings.model_fields["AI_MAX_TOKENS"].default
-        assert agent.is_active and not agent.memory_modules
+        assert agent.is_active and not agent.context_modules
 
     def test_every_seeded_agent_records_its_seed(self, session: Session) -> None:
         """The seed is the first recorded change, so an agent's
@@ -152,29 +152,29 @@ class TestAgentSeed:
     def test_the_default_agent_knows_the_app_without_asking(
         self, session: Session
     ) -> None:
-        """The app's map is a memory module of its own, the default agent's."""
+        """The app's map is a context module of its own, the default agent's."""
         load_agent_fixtures(session)
 
-        modules = {m.slug: m for m in session.exec(select(MemoryModule)).all()}
+        modules = {m.slug: m for m in session.exec(select(ContextModule)).all()}
         assert modules[APP_MAP].fetch_function == APP_MAP
         agent = session.exec(
             select(Agent).where(Agent.slug == DEFAULT_AGENT_SLUG)
         ).one()
-        assert APP_MAP in agent.memory_modules
+        assert APP_MAP in agent.context_modules
 
     def test_a_database_seeded_before_the_map_gets_it(self, session: Session) -> None:
         """Its agent has neither the grant nor the module's row: the next
         seed adds both, additive by name."""
-        seed_agent(session, default_agent_definition() | {"memory_modules": []})
+        seed_agent(session, default_agent_definition() | {"context_modules": []})
         session.commit()
 
         assert load_agent_fixtures(session)["module_links"] == 1
 
-        assert APP_MAP in {m.slug for m in session.exec(select(MemoryModule)).all()}
+        assert APP_MAP in {m.slug for m in session.exec(select(ContextModule)).all()}
         agent = session.exec(
             select(Agent).where(Agent.slug == DEFAULT_AGENT_SLUG)
         ).one()
-        assert APP_MAP in agent.memory_modules
+        assert APP_MAP in agent.context_modules
 
     def test_seed_is_idempotent(self, session: Session) -> None:
         load_agent_fixtures(session)

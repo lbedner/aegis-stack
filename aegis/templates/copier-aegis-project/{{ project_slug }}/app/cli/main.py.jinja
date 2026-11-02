@@ -58,7 +58,7 @@ GROUPS: dict[str, tuple[str, str]] = {
     "rag": ("app.cli.rag", "app"),
     "llm": ("app.cli.llm", "app"),
     "agents": ("app.cli.agents", "app"),
-    "memory-modules": ("app.cli.agents", "modules_app"),
+    "context-modules": ("app.cli.agents", "modules_app"),
 {%- for p in _plugins | default([]) %}
 {%- if p.cli_name %}
     "{{ p.cli_name }}": ("app.cli.{{ p.cli_name | replace("-", "_") }}", "app"),

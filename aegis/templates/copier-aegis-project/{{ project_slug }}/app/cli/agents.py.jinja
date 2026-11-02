@@ -3,7 +3,7 @@
 Inspect and smoke-test the database-driven agent registry: list agents,
 show one agent's full definition, run a single test turn through the
 agent loader against the configured model, and change an agent's system
-prompt (``agents prompt``), which records why. The memory-modules commands
+prompt (``agents prompt``), which records why. The context-modules commands
 inspect the reusable context blocks agents opt into.
 """
 
@@ -15,7 +15,7 @@ from rich.table import Table
 
 from app.cli import theme
 from app.i18n import lazy_t, t
-from app.services.ai.service import Agent, AgentConfig, AgentPromptChange, MemoryModule
+from app.services.ai.service import Agent, AgentConfig, AgentPromptChange, ContextModule
 
 app = typer.Typer(help=lazy_t("agents.help"))
 modules_app = typer.Typer(help=lazy_t("agents.modules_help"))
@@ -56,12 +56,12 @@ async def _set_prompt(slug: str, prompt: str, note: str) -> None:
     await update_agent(slug, {"system_prompt": prompt}, source="cli", note=note)
 
 
-async def _load_modules() -> list[MemoryModule]:
+async def _load_modules() -> list[ContextModule]:
     from app.core.db import get_async_session
-    from app.services.ai.service import list_memory_modules
+    from app.services.ai.service import list_context_modules
 
     async with get_async_session() as session:
-        return await list_memory_modules(session, active_only=False)
+        return await list_context_modules(session, active_only=False)
 
 
 async def _run_test_turn(slug: str, message: str) -> tuple[AgentConfig, str]:
@@ -108,7 +108,7 @@ async def list_agents() -> None:
             agent.model_id or t("agents.default_model"),
             _active_text(agent.is_active),
             str(len(agent.tools)),
-            str(len(agent.memory_modules)),
+            str(len(agent.context_modules)),
         )
     console.print(table)
 
@@ -126,7 +126,7 @@ async def show_agent(slug: str = typer.Argument(...)) -> None:
 
     none_text = t("agents.none")
     tools = ", ".join(tool.name for tool in agent.tools) or none_text
-    modules = ", ".join(agent.memory_modules) or none_text
+    modules = ", ".join(agent.context_modules) or none_text
     kbs = ", ".join(agent.knowledge_base_ids) or none_text
     lines = [
         f"[dim]{t('agents.col_name')}[/dim]  {agent.name}",
@@ -257,7 +257,7 @@ async def show_prompt_history(slug: str = typer.Argument(...)) -> None:
     console.print(table)
 
 
-def _module_kind(module: MemoryModule) -> str:
+def _module_kind(module: ContextModule) -> str:
     if module.prompt_content and module.fetch_function:
         return t("agents.module_hybrid")
     if module.fetch_function:

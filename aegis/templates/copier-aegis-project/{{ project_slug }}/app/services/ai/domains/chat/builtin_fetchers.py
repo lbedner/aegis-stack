@@ -1,4 +1,4 @@
-"""Framework reference fetchers for memory modules.
+"""Framework reference fetchers for context modules.
 
 Three fetchers ship with the framework: ``recent_conversations`` (a real,
 useful example over the conversation tables), ``user_profile`` (a shape
@@ -22,7 +22,7 @@ from app.services.system.aggregate_reads import listed
 from .fetchers import FetchContext, register_fetcher
 
 RECENT_CONVERSATION_LIMIT = 5
-# The app map's fetcher, and the memory module rendering it.
+# The app map's fetcher, and the context module rendering it.
 APP_MAP = "app_map"
 
 
@@ -74,7 +74,7 @@ async def app_map(ctx: FetchContext) -> str | None:
 
 
 # Built-in registration: importing this module makes these fetchers
-# referencable from memory_module.fetch_function. replace=True keeps
+# referencable from context_module.fetch_function. replace=True keeps
 # re-imports idempotent.
 register_fetcher(
     "recent_conversations",

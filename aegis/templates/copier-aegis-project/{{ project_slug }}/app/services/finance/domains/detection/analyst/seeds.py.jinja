@@ -1,4 +1,4 @@
-{% if include_ai and ai_backend != "memory" %}"""The database handoff: agent + memory-module seed rows and their loader."""
+{% if include_ai and ai_backend != "memory" %}"""The database handoff: agent + context-module seed rows and their loader."""
 
 from typing import Any
 
@@ -8,7 +8,7 @@ from sqlmodel import (
 )
 
 from app.core.log import logger
-from app.services.ai.service import Agent, MemoryModule, seed_agent
+from app.services.ai.service import Agent, ContextModule, seed_agent
 
 from app.core.tools import load_tools
 from app.services.finance.domains.detection.analyst.prompts import (
@@ -38,7 +38,7 @@ SNAPSHOT_TOKEN_ESTIMATE = 1_200
 
 
 def snapshot_module_definition() -> dict[str, Any]:
-    """The seed row for the snapshot memory module."""
+    """The seed row for the snapshot context module."""
     return {
         "slug": SNAPSHOT_MODULE_SLUG,
         "name": "Finance snapshot",
@@ -73,7 +73,7 @@ def analyst_agent_definition() -> dict[str, Any]:
         "system_prompt": ANALYST_SYSTEM_PROMPT,
         "temperature": ANALYST_TEMPERATURE,
         "max_tokens": ANALYST_MAX_TOKENS,
-        "memory_modules": [SNAPSHOT_MODULE_SLUG],
+        "context_modules": [SNAPSHOT_MODULE_SLUG],
         "knowledge_base_ids": [],
         "is_active": True,
     }
@@ -84,7 +84,7 @@ def deep_dive_agent_definition() -> dict[str, Any]:
 
     A SEPARATE agent row rather than a mode on the daily one, so it can be
     pointed at a bigger model and given a larger token budget without
-    changing what runs nightly. Both read the same memory module.
+    changing what runs nightly. Both read the same context module.
     """
     return {
         "slug": DEEP_DIVE_AGENT_SLUG,
@@ -95,7 +95,7 @@ def deep_dive_agent_definition() -> dict[str, Any]:
         "system_prompt": DEEP_DIVE_SYSTEM_PROMPT,
         "temperature": DEEP_DIVE_TEMPERATURE,
         "max_tokens": DEEP_DIVE_MAX_TOKENS,
-        "memory_modules": [SNAPSHOT_MODULE_SLUG],
+        "context_modules": [SNAPSHOT_MODULE_SLUG],
         "knowledge_base_ids": [],
         "is_active": True,
     }
@@ -162,7 +162,7 @@ def finance_chat_agent_definition() -> dict[str, Any]:
         "system_prompt": FINANCE_CHAT_SYSTEM_PROMPT,
         "temperature": FINANCE_CHAT_TEMPERATURE,
         "max_tokens": FINANCE_CHAT_MAX_TOKENS,
-        "memory_modules": [SNAPSHOT_MODULE_SLUG],
+        "context_modules": [SNAPSHOT_MODULE_SLUG],
         "knowledge_base_ids": [],
         "is_active": True,
         "code_mode": True,
@@ -170,7 +170,7 @@ def finance_chat_agent_definition() -> dict[str, Any]:
 
 
 def load_finance_agent_fixtures(session: Session) -> dict[str, int]:
-    """Seed the finance agents and their memory module, skipping existing rows.
+    """Seed the finance agents and their context module, skipping existing rows.
 
     Idempotent, and never mutates a row that is already there: all of it is
     editable from the dashboard, and a re-seed must not undo that. Tool
@@ -178,20 +178,20 @@ def load_finance_agent_fixtures(session: Session) -> dict[str, int]:
     """
     counts = {
         "finance_agents": 0,
-        "finance_memory_modules": 0,
+        "finance_context_modules": 0,
         "finance_tool_links": 0,
     }
 
     module = snapshot_module_definition()
     if (
         session.exec(
-            select(MemoryModule).where(MemoryModule.slug == module["slug"])
+            select(ContextModule).where(ContextModule.slug == module["slug"])
         ).first()
         is None
     ):
-        session.add(MemoryModule(**module))
-        counts["finance_memory_modules"] = 1
-        logger.info(f"Seeded memory module '{module['slug']}'")
+        session.add(ContextModule(**module))
+        counts["finance_context_modules"] = 1
+        logger.info(f"Seeded context module '{module['slug']}'")
 
     for definition in (
         analyst_agent_definition(),

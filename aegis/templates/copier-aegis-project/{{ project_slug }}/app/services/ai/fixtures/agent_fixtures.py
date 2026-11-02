@@ -6,7 +6,7 @@ agent loader resolves this row on DB backends and falls back to the same
 in-code definition on the memory backend, so this seed is the single DB
 source of the default agent. Beside it, the ``sentiment`` agent the batch
 scorer runs as, so its model is picked in Agents, and the app map, the
-memory module the default agent always has (``app_map``).
+context module the default agent always has (``app_map``).
 """
 
 from collections.abc import Sequence
@@ -29,7 +29,7 @@ from app.services.ai.domains.chat.sentiment import (
     SENTIMENT_SYSTEM_PROMPT,
     SENTIMENT_TEMPERATURE,
 )
-from app.services.ai.models.agents import Agent, MemoryModule, Tool
+from app.services.ai.models.agents import Agent, ContextModule, Tool
 from app.services.system.pattern_review import REVIEWER, reviewer_prompt
 
 # The registry only holds tools whose module was imported, and seeding runs
@@ -95,8 +95,8 @@ def _extend(session: Session, slug: str, field: str, names: Sequence[str]) -> in
 
 
 def attach_modules(session: Session, slug: str, names: Sequence[str]) -> int:
-    """Give agent ``slug`` the memory modules ``names`` it lacks."""
-    return _extend(session, slug, "memory_modules", names)
+    """Give agent ``slug`` the context modules ``names`` it lacks."""
+    return _extend(session, slug, "context_modules", names)
 
 
 def grant_knowledge(session: Session, slug: str, names: Sequence[str]) -> int:
@@ -110,10 +110,10 @@ def seed_missing_modules(session: Session, definitions: list[dict[str, Any]]) ->
     commits."""
     slugs = [definition["slug"] for definition in definitions]
     present = set(
-        session.exec(select(MemoryModule.slug).where(col(MemoryModule.slug).in_(slugs)))
+        session.exec(select(ContextModule.slug).where(col(ContextModule.slug).in_(slugs)))
     )
     missing = [d for d in definitions if d["slug"] not in present]
-    session.add_all(MemoryModule(**definition) for definition in missing)
+    session.add_all(ContextModule(**definition) for definition in missing)
     return len(missing)
 
 
@@ -148,7 +148,7 @@ def default_agent_definition() -> dict[str, Any]:
         "system_prompt": config.system_prompt,
         "temperature": config.temperature,
         "max_tokens": config.max_tokens,
-        "memory_modules": list(config.memory_modules),
+        "context_modules": list(config.context_modules),
         "knowledge_base_ids": list(config.knowledge_base_ids),
         "is_active": True,
         "code_mode": config.code_mode,
@@ -168,7 +168,7 @@ def sentiment_agent_definition() -> dict[str, Any]:
         "system_prompt": SENTIMENT_SYSTEM_PROMPT,
         "temperature": SENTIMENT_TEMPERATURE,
         "max_tokens": SENTIMENT_MAX_TOKENS,
-        "memory_modules": [],
+        "context_modules": [],
         "knowledge_base_ids": [],
         "code_mode": False,
     }
@@ -186,7 +186,7 @@ def reviewer_agent_definition() -> dict[str, Any]:
         "model_id": None,
         "system_prompt": reviewer_prompt(default_agent_config().system_prompt),
         "max_tokens": 8000,
-        "memory_modules": [],
+        "context_modules": [],
         "knowledge_base_ids": [],
         "code_mode": False,
     }
@@ -225,7 +225,7 @@ def load_agent_fixtures(session: Session) -> dict[str, int]:
 
     Returns:
         dict with counts: agents, tools and the tools, knowledge bases and
-        memory modules granted the default agent (``tool_links``,
+        context modules granted the default agent (``tool_links``,
         ``knowledge_links``, ``module_links``)
     """
     added = seed_missing_agents(session, built_in_agents())
@@ -256,7 +256,7 @@ def load_agent_fixtures(session: Session) -> dict[str, int]:
         session.commit()
 
     module_links = attach_modules(
-        session, DEFAULT_AGENT_SLUG, default_agent_config().memory_modules
+        session, DEFAULT_AGENT_SLUG, default_agent_config().context_modules
     )
     # Its row, looked up only when this seed added an agent or a grant, so
     # a re-seed looks nothing up.

@@ -5,7 +5,7 @@ from .agent_prompt_change import AgentPromptChange
 from .agent_tool import AgentTool
 from .agent_tool_call import AgentToolCall
 from .agent_user_memory import AgentUserMemory
-from .memory_module import MemoryModule
+from .context_module import ContextModule
 from .tool import Tool
 
 __all__ = [
@@ -14,6 +14,6 @@ __all__ = [
     "AgentTool",
     "AgentToolCall",
     "AgentUserMemory",
-    "MemoryModule",
+    "ContextModule",
     "Tool",
 ]

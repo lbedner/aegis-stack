@@ -11,7 +11,7 @@ importing the old module did.
 
 from app.services.ai.service import (
     Agent,
-    MemoryModule,
+    ContextModule,
 )
 from app.services.finance.constants import (
     ANALYST_NOTE_INSIGHT_TYPE,
@@ -79,12 +79,12 @@ __all__ = [
     "ANALYST_RULES",
     "ANALYST_SYSTEM_PROMPT",
     "Agent",
+    "ContextModule",
     "DEEP_DIVE_AGENT_SLUG",
     "DEEP_DIVE_INSIGHT_TYPE",
     "DEEP_DIVE_SYSTEM_PROMPT",
     "DeepDive",
     "MAX_ANOMALY_LINES",
-    "MemoryModule",
     "ReportFacts",
     "SNAPSHOT_MODULE_SLUG",
     "STANDALONE_USER_ID",

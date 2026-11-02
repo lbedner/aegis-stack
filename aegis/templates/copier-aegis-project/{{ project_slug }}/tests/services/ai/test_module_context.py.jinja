@@ -1,4 +1,4 @@
-"""Tests for memory-module context rendering (priority, budget, hybrid)."""
+"""Tests for context-module context rendering (priority, budget, hybrid)."""
 {% if ai_backend != "memory" %}
 
 from collections.abc import AsyncGenerator, Generator
@@ -14,10 +14,10 @@ from app.services.ai.domains.chat.fetchers import (
     registered_fetcher_names,
     unregister_fetcher,
 )
-from app.services.ai.domains.chat.memory_modules import create_memory_module
+from app.services.ai.domains.chat.context_modules import create_context_module
 from app.services.ai.domains.chat.module_context import (
-    MemoryModuleContextProvider,
-    render_memory_modules,
+    ContextModuleProvider,
+    render_context_modules,
 )
 
 
@@ -51,7 +51,7 @@ class TestHybridRendering:
             return f"LIVE DATA for {ctx.user_id}"
 
         register_fetcher("live", live)
-        await create_memory_module(
+        await create_context_module(
             slug="diet",
             name="Diet",
             prompt_content="STATIC RULES",
@@ -59,7 +59,7 @@ class TestHybridRendering:
             session=session,
         )
 
-        block = await render_memory_modules(
+        block = await render_context_modules(
             ["diet"], user_id="u1", session=session
         )
 
@@ -78,7 +78,7 @@ class TestHybridRendering:
             return "data"
 
         register_fetcher("live", live)
-        await create_memory_module(
+        await create_context_module(
             slug="orders",
             name="Orders",
             fetch_function="live",
@@ -87,19 +87,19 @@ class TestHybridRendering:
             session=session,
         )
 
-        await render_memory_modules(["orders"], user_id="u1", session=session)
+        await render_context_modules(["orders"], user_id="u1", session=session)
 
         assert seen["days_back"] == 14
 
     async def test_priority_orders_modules(self, session: AsyncSession) -> None:
-        await create_memory_module(
+        await create_context_module(
             slug="later",
             name="Later",
             prompt_content="SECOND",
             priority=200,
             session=session,
         )
-        await create_memory_module(
+        await create_context_module(
             slug="first",
             name="First",
             prompt_content="FIRST",
@@ -107,7 +107,7 @@ class TestHybridRendering:
             session=session,
         )
 
-        block = await render_memory_modules(
+        block = await render_context_modules(
             ["later", "first"], user_id="u1", session=session
         )
 
@@ -119,7 +119,7 @@ class TestTokenBudget:
     async def test_over_budget_drops_lowest_priority_first(
         self, session: AsyncSession
     ) -> None:
-        await create_memory_module(
+        await create_context_module(
             slug="core",
             name="Core",
             prompt_content="core rules",
@@ -127,7 +127,7 @@ class TestTokenBudget:
             token_estimate=100,
             session=session,
         )
-        await create_memory_module(
+        await create_context_module(
             slug="extra",
             name="Extra",
             prompt_content="extra rules",
@@ -135,7 +135,7 @@ class TestTokenBudget:
             token_estimate=100,
             session=session,
         )
-        await create_memory_module(
+        await create_context_module(
             slug="fluff",
             name="Fluff",
             prompt_content="fluff rules",
@@ -144,7 +144,7 @@ class TestTokenBudget:
             session=session,
         )
 
-        block = await render_memory_modules(
+        block = await render_context_modules(
             ["core", "extra", "fluff"],
             user_id="u1",
             token_budget=250,
@@ -168,7 +168,7 @@ class TestTokenBudget:
 
         register_fetcher("live", live)
         # No explicit token_estimate: estimated from rendered content.
-        await create_memory_module(
+        await create_context_module(
             slug="big-hybrid",
             name="Big Hybrid",
             prompt_content="y" * 400,
@@ -176,7 +176,7 @@ class TestTokenBudget:
             priority=1,
             session=session,
         )
-        await create_memory_module(
+        await create_context_module(
             slug="small",
             name="Small",
             prompt_content="z" * 40,
@@ -186,7 +186,7 @@ class TestTokenBudget:
 
         # ~200 tokens of hybrid (800 chars) exceeds a 150-token budget even
         # though the static half alone (100 tokens) would fit.
-        block = await render_memory_modules(
+        block = await render_context_modules(
             ["big-hybrid", "small"],
             user_id="u1",
             token_budget=150,
@@ -206,11 +206,11 @@ class TestDegradation:
 
         warned = MagicMock()
         monkeypatch.setattr(module_context_module.logger, "warning", warned)
-        await create_memory_module(
+        await create_context_module(
             slug="real", name="Real", prompt_content="REAL", session=session
         )
 
-        block = await render_memory_modules(
+        block = await render_context_modules(
             ["real", "ghost-module"], user_id="u1", session=session
         )
 
@@ -221,7 +221,7 @@ class TestDegradation:
 
     async def test_no_modules_renders_nothing(self, session: AsyncSession) -> None:
         """Empty scope = byte-identical pre-port context (no block at all)."""
-        assert await render_memory_modules([], user_id="u1", session=session) is None
+        assert await render_context_modules([], user_id="u1", session=session) is None
 
     async def test_owned_session_is_shared_with_fetchers(
         self, session: AsyncSession, monkeypatch: pytest.MonkeyPatch
@@ -239,10 +239,10 @@ class TestDegradation:
             return "data"
 
         register_fetcher("capture", capture)
-        await create_memory_module(
+        await create_context_module(
             slug="live-a", name="A", fetch_function="capture", session=session
         )
-        await create_memory_module(
+        await create_context_module(
             slug="live-b", name="B", fetch_function="capture", session=session
         )
 
@@ -255,7 +255,7 @@ class TestDegradation:
 
         monkeypatch.setattr(module_context_module, "get_async_session", fake_session)
 
-        block = await render_memory_modules(["live-a", "live-b"], user_id="u1")
+        block = await render_context_modules(["live-a", "live-b"], user_id="u1")
 
         assert block is not None
         assert opened["count"] == 1, "exactly one owned session per render"
@@ -270,7 +270,7 @@ class TestProvider:
 
         import app.services.ai.domains.chat.module_context as module_context_module
 
-        await create_memory_module(
+        await create_context_module(
             slug="rules", name="Rules", prompt_content="THE RULES", session=session
         )
 
@@ -282,7 +282,7 @@ class TestProvider:
             module_context_module, "get_async_session", fake_session
         )
 
-        provider = MemoryModuleContextProvider(("rules",))
+        provider = ContextModuleProvider(("rules",))
         block = await provider.build(_Deps(user_id="u1"))
 
         assert block is not None
@@ -291,7 +291,7 @@ class TestProvider:
     async def test_provider_without_user_id_contributes_nothing(
         self, session: AsyncSession
     ) -> None:
-        provider = MemoryModuleContextProvider(("rules",))
+        provider = ContextModuleProvider(("rules",))
 
         assert await provider.build(object()) is None
 
@@ -327,12 +327,12 @@ class TestTheCaller:
         monkeypatch.setattr(module_context_module, "get_async_session", fake_session)
         monkeypatch.setattr(module_context_module, "caller_is_admin", admin_lookup)
         register_fetcher("asks", asks)
-        await create_memory_module(
+        await create_context_module(
             slug="map", name="Map", fetch_function="asks", session=session
         )
 
         with acting_as(1, "assistant"):
-            await render_memory_modules(["map"], user_id="u1")
+            await render_context_modules(["map"], user_id="u1")
             assert current_admin.get() is None  # put back as it was
 
         assert opened == ["lookup", "render"]

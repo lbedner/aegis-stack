@@ -64,7 +64,7 @@ def _voiced(service: AIService) -> tuple[FakeSTT, FakeTTS]:
 
 {% if ai_backend != "memory" and ai_framework == "pydantic-ai" %}
 @pytest.mark.asyncio
-# Two turns, so every per-turn query (the agent row, its memory modules)
+# Two turns, so every per-turn query (the agent row, its context modules)
 # runs exactly twice by design; three would still be an N+1 inside a turn.
 @pytest.mark.queryspy(threshold=3)
 async def test_a_spoken_turn_is_the_typed_turn(

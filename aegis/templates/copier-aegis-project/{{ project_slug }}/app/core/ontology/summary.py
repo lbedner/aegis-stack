@@ -3,7 +3,7 @@ with no arguments. The app, its nodes counted by kind, its parts where the
 reader may see them, and its data: the tables by the part owning them, each
 with the tables it links to, and the changes that can be made to them.
 Read from the model alone, so the same model answers the same; ``text``
-writes it as an agent always has it (``app_map``, a memory module)."""
+writes it as an agent always has it (``app_map``, a context module)."""
 
 from collections import Counter
 

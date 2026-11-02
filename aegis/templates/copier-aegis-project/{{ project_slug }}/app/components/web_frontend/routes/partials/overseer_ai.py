@@ -38,7 +38,7 @@ from app.core.log import logger
 
 router = APIRouter(prefix=PARTIALS)
 # What the stack has decides what is mounted (at the end): a database for
-# the catalog, agents, memory modules and saved facts; RAG for its
+# the catalog, agents, context modules and saved facts; RAG for its
 # collections and search; voice for transcription. A route for something
 # the stack lacks is not there (a 404), never a crash.
 stored = APIRouter()
@@ -143,15 +143,15 @@ async def module_drawer(
 ) -> Response:
     context = await overseer_ai_agents.module_context(db, slug)
     if context is None:
-        raise HTTPException(status_code=404, detail="No such memory module.")
+        raise HTTPException(status_code=404, detail="No such context module.")
     return dialog(request, "pages/overseer/ai/_module_drawer.html", **context)
 
 
 async def update_module(db: Db, slug: str, changes: dict[str, Any]) -> Any:
     """The module registry's update (keeps the content invariant)."""
-    from app.services.ai.service import update_memory_module
+    from app.services.ai.service import update_context_module
 
-    return await update_memory_module(slug, session=db, **changes)
+    return await update_context_module(slug, session=db, **changes)
 
 
 @stored.post("/modules/{slug}")
@@ -162,7 +162,7 @@ async def save_module(
 ) -> Response:
     module = await overseer_ai_agents.module_row(db, slug)
     if module is None:
-        raise HTTPException(status_code=404, detail="No such memory module.")
+        raise HTTPException(status_code=404, detail="No such context module.")
     form = await form_fields(request)
     try:
         changes = overseer_ai_agents.parse_module_form(

@@ -15,7 +15,7 @@ from app.services.ai.domains.chat.fetchers import (
     registered_fetcher_names,
     run_fetcher,
 )
-from app.services.ai.models.agents import Agent, MemoryModule
+from app.services.ai.models.agents import Agent, ContextModule
 from app.services.finance.constants import ANALYST_NOTE_INSIGHT_TYPE
 from app.services.finance.domains.detection import analyst, generate_insights
 from app.services.finance.models import (
@@ -695,16 +695,16 @@ class TestFixtures:
         # Three agents: the nightly note, the deep dive, and the chat
         # assistant behind the dashboard's Chat tab.
         assert counts["finance_agents"] == 3
-        assert counts["finance_memory_modules"] == 1
+        assert counts["finance_context_modules"] == 1
         agent = db_session.exec(
             select(Agent).where(Agent.slug == analyst.ANALYST_AGENT_SLUG)
         ).one()
         module = db_session.exec(
-            select(MemoryModule).where(
-                MemoryModule.slug == analyst.SNAPSHOT_MODULE_SLUG
+            select(ContextModule).where(
+                ContextModule.slug == analyst.SNAPSHOT_MODULE_SLUG
             )
         ).one()
-        assert agent.memory_modules == [module.slug]
+        assert agent.context_modules == [module.slug]
         assert module.fetch_function == analyst.SNAPSHOT_MODULE_SLUG
         assert agent.model_id is None  # follows the service's configured model
 
@@ -713,7 +713,7 @@ class TestFixtures:
         again = analyst.load_finance_agent_fixtures(db_session)
 
         assert again["finance_agents"] == 0
-        assert again["finance_memory_modules"] == 0
+        assert again["finance_context_modules"] == 0
         assert again["finance_tool_links"] == 0
         agents = db_session.exec(
             select(Agent).where(Agent.slug == analyst.ANALYST_AGENT_SLUG)

@@ -33,7 +33,11 @@ class Agent(SQLModel, table=True):
     system_prompt: str
     temperature: float = Field(default=0.7)
     max_tokens: int = Field(default=1000)
-    memory_modules: list[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
+    # A server default too: the column replaced ``memory_modules`` on tables
+    # that already had rows, which the rename's revision then fills.
+    context_modules: list[str] = Field(
+        default_factory=list, sa_column=Column(JSON, nullable=False, server_default="[]")
+    )
     knowledge_base_ids: list[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
     is_active: bool = Field(default=True)
     # Grants this agent sandboxed code execution (code mode): the model

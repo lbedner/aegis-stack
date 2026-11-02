@@ -1,6 +1,6 @@
 # Agent Registry
 
-Agents are how the AI service works: every chat request resolves an **agent definition** (persona, sampling parameters, model pin, tool grants, memory modules, knowledge base scope) and runs through it. A freshly generated project ships one seeded agent, `assistant`, that behaves exactly like plain chat, so you never have to think about the registry until you want more than one agent, or want to customize the one you have.
+Agents are how the AI service works: every chat request resolves an **agent definition** (persona, sampling parameters, model pin, tool grants, context modules, knowledge base scope) and runs through it. A freshly generated project ships one seeded agent, `assistant`, that behaves exactly like plain chat, so you never have to think about the registry until you want more than one agent, or want to customize the one you have.
 
 ## One Runtime, Two Config Sources
 
@@ -16,7 +16,7 @@ There is a single chat runtime. What changes with your storage backend is where 
                                     |
                  +------------------v-------------------+
                  |  context assembly                    |
-                 |  memory modules (static + fetchers)  |
+                 |  context modules (static + fetchers)  |
                  |  per-user memory (guarded injection) |
                  |  KB retrieval (scoped to the agent)  |
                  +------------------+-------------------+
@@ -30,7 +30,7 @@ There is a single chat runtime. What changes with your storage backend is where 
 - **Persistence backend** (`ai[sqlite]` or `ai[postgres]`): definitions live in the `agent` table, cached warm per process. A missing or inactive row falls back to the code default, so a half-seeded database never breaks chat.
 - **Memory backend** (the default `ai`): the code default is the only config source. Same shape, same behavior, no tables involved.
 
-Because the seeded `assistant` row is built from the same in-code default, the two sources cannot drift. The one difference is the app map: with a persistence backend the `assistant` always has the `app_map` memory module (see [Memory Modules](memory-modules.md)), which needs the module tables a memory-backed project does not have.
+Because the seeded `assistant` row is built from the same in-code default, the two sources cannot drift. The one difference is the app map: with a persistence backend the `assistant` always has the `app_map` context module (see [Context Modules](context-modules.md)), which needs the module tables a memory-backed project does not have.
 
 ### What each backend provides
 
@@ -38,7 +38,7 @@ Because the seeded `assistant` row is built from the same in-code default, the t
 |---|---|---|
 | Agent config | code default | `agent` rows (seeded default) |
 | Tools | code-registered only | code registry + per-agent grants |
-| Memory modules | not available | full CRUD, hybrid modules |
+| Context modules | not available | full CRUD, hybrid modules |
 | Per-user memory | not available | `save_memory` tool + guarded injection |
 | Sentiment analysis | not available | batch job (off by default) |
 | KB scoping | all collections | per-agent `knowledge_base_ids` |
@@ -53,7 +53,7 @@ An `agent` row holds:
 | `system_prompt` | The agent's persona, used verbatim. The `assistant` row is seeded with Illiana's whole persona, so what the row shows is what she runs on; the model in force and the live context are appended after it |
 | `model_id` | Optional model pin. `NULL` means "use the service's active model", so the default agent tracks your configured provider. In the Overseer's agent editor it is picked from the models this install can call, grouped by vendor |
 | `temperature`, `max_tokens` | Sampling parameters applied to every request |
-| `memory_modules` | Slugs of [memory modules](memory-modules.md) rendered into this agent's context |
+| `context_modules` | Slugs of [context modules](context-modules.md) rendered into this agent's context |
 | `knowledge_base_ids` | RAG collections this agent may search; empty means unrestricted |
 | `is_active` | Inactive agents fall back to the code default |
 
@@ -185,7 +185,7 @@ my-app ai sentiment
 my-app agents list              # every agent with grants at a glance
 my-app agents show assistant    # full definition including the prompt
 my-app agents test assistant    # one chat turn as the agent
-my-app memory-modules list      # the module catalog
+my-app context-modules list      # the module catalog
 ```
 
 **Dashboard**: the AI service modal has an Agents tab listing every agent with an active toggle and a detail view.
@@ -201,7 +201,7 @@ Edits through the API invalidate the loader's warm cache, so the next chat reque
 
 ## Related Pages
 
-- [Memory Modules](memory-modules.md): reusable context blocks agents opt into
+- [Context Modules](context-modules.md): reusable context blocks agents opt into
 - [RAG](rag.md): the retrieval pipeline agents scope over
 - [Cost Tracking](cost-tracking.md): usage rows carry per-agent attribution (`chat:<slug>`)
 - [Finance Chat](../finance/chat.md): a service-owned agent whose tools read

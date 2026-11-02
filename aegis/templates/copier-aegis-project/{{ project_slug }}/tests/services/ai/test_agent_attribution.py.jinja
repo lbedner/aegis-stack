@@ -250,17 +250,17 @@ class TestTheTurnCarriesItsSubject:
     async def test_a_briefing_is_fetched_for_the_subject(
         self, harness: tuple[AIService, MagicMock, dict[str, Any], pytest.MonkeyPatch]
     ) -> None:
-        """An agent's memory module reads the turn's subject: a project's
+        """An agent's context module reads the turn's subject: a project's
         briefing, not only a user's."""
         service, _recorder, _captured, monkeypatch = harness
-        _stub_resolve(monkeypatch, _custom_config(memory_modules=("briefing",)))
+        _stub_resolve(monkeypatch, _custom_config(context_modules=("briefing",)))
         asked: dict[str, Any] = {}
 
         async def render(modules: Any, **kwargs: Any) -> str:
             asked.update(kwargs)
             return ""
 
-        monkeypatch.setattr(turn_module, "render_memory_modules", render)
+        monkeypatch.setattr(turn_module, "render_context_modules", render)
 
         async for _chunk in service.stream_chat("downloads?", user_id="7", subject="3"):
             pass
@@ -280,14 +280,14 @@ class TestTheTurnCarriesItsSubject:
         from app.services.shared.deps import caller_is_admin
 
         service, _recorder, _captured, monkeypatch = harness
-        _stub_resolve(monkeypatch, _custom_config(memory_modules=("app_map",)))
+        _stub_resolve(monkeypatch, _custom_config(context_modules=("app_map",)))
         seen: list[bool] = []
 
         async def render(modules: Any, **kwargs: Any) -> str:
             seen.append(await caller_is_admin())
             return ""
 
-        monkeypatch.setattr(turn_module, "render_memory_modules", render)
+        monkeypatch.setattr(turn_module, "render_context_modules", render)
         monkeypatch.setattr(settings, "AUTH_ENABLED", True)
 
         await service.chat("hi", user_id="7", admin=admin)

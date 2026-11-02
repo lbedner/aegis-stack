@@ -26,7 +26,7 @@ _MODALS = "app.components.frontend.dashboard.modals"
 AIAnalyticsTab = optional(f"{_MODALS}.ai_analytics_tab", "AIAnalyticsTab")
 RAGTab = optional(f"{_MODALS}.rag_tab", "RAGTab")
 LLMCatalogTab = optional(f"{_MODALS}.llm_catalog_tab", "LLMCatalogTab")
-MemoryModulesTab = optional(f"{_MODALS}.memory_modules_tab", "MemoryModulesTab")
+ContextModulesTab = optional(f"{_MODALS}.context_modules_tab", "ContextModulesTab")
 AgentsTab = optional(f"{_MODALS}.agents_tab", "AgentsTab")
 VoiceSettingsTab = optional(f"{_MODALS}.voice_settings", "VoiceSettingsTab")
 
@@ -213,10 +213,10 @@ class AIDetailDialog(BaseDetailPopup):
         if AgentsTab is not None:
             tabs_list.append(ft.Tab(text="Agents", content=AgentsTab()))
 
-        # Add Memory Modules tab, right after Agents: an agent's definition
+        # Add Context Modules tab, right after Agents: an agent's definition
         # names the modules it uses, so the two are read together.
-        if MemoryModulesTab is not None:
-            tabs_list.append(ft.Tab(text="Memory", content=MemoryModulesTab()))
+        if ContextModulesTab is not None:
+            tabs_list.append(ft.Tab(text="Memory", content=ContextModulesTab()))
 
         # Add RAG tab only if RAG service is enabled
         if RAGTab is not None:

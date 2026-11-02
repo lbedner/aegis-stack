@@ -58,6 +58,7 @@ from app.services.meetings.models import (
     NOT_DONE,
     STILL_WANTED,
     BotAccount,
+    Caption,
     Going,
     Meeting,
     MeetingStatus,
@@ -121,6 +122,10 @@ class _Pulse:
         look now: a run changed here (``changes.watching``) or she took a
         step."""
         self.wanted = True
+        self.wake()
+
+    def wake(self) -> None:
+        """Look now, not at the end of the nap."""
         self.woken.set()
 
     async def nap(self, seconds: float) -> None:
@@ -205,7 +210,8 @@ async def _stay(
     captions_tried = -math.inf
     try:
         while True:
-            state = await call.state()
+            look = await call.look()
+            state = look.state
             if state != CallState.IN_CALL:
                 gone_since = loop.time() if gone_since is None else gone_since
                 # Only Leave missing (WAITING) waits out GONE_SECONDS.
@@ -225,7 +231,7 @@ async def _stay(
                 async with get_async_session() as session:
                     await keep_steps(session, transcript.meeting_id, steps)
             spoke = len(transcript.spoke)
-            if writing := transcript.take(await call.captions()):
+            if writing := transcript.take(look.captions):
                 async with get_async_session() as session:
                     made = await transcript.write(session, writing)
                     await answering.heard(session, made)
@@ -247,7 +253,7 @@ async def _stay(
             # A caption that moved is someone here, whatever Meet's People
             # count says: it can read 1 with others in the call.
             talking = len(transcript.spoke) > spoke
-            people = await call.people()
+            people = look.people
             if talking or people is None or people > 1:
                 others_came = others_came or talking or people is not None
                 alone_since = None
@@ -301,16 +307,20 @@ def announcement(name: str) -> str:
 
 
 async def _start(
-    session: AsyncSession, meeting: Meeting, account: BotAccount
+    session: AsyncSession, meeting: Meeting, account: BotAccount, voice: Any | None
 ) -> card.Start:
-    """The card the bot joins as: the name it joins as, and its agent's
-    (``account``) picture and camera setting."""
+    """The card the bot joins as: the name it joins as, its agent's
+    (``account``) picture and camera setting, and whether its keys tap while
+    it works (its ``voice``'s working sound)."""
     kept = await image_named(session, account.name)
     image = None
     if kept is not None:
         encoded = base64.b64encode(kept.data).decode()
         image = f"data:{kept.content_type};base64,{encoded}"
-    return card.Start(name=meeting.bot_name, image=image, camera=account.camera)
+    taps = getattr(voice, "VOICE_WORKING_SOUND", None) == "typing"
+    return card.Start(
+        name=meeting.bot_name, image=image, camera=account.camera, taps=taps
+    )
 
 
 async def _join(
@@ -361,6 +371,13 @@ async def _in_call(
     await call.say(announcement(meeting.bot_name))
     shown = card.Card(call, captions, meeting.bot_name)
     await shown.update([], set(), [])
+
+    def moved(captions: list[Caption]) -> None:
+        """Captions moved: a look now where they may need her."""
+        if transcript.worth_a_look(captions):
+            pulse.wake()
+
+    await call.watch_captions(moved)
     answering: Answers | None = None
 
     def heard(step: str) -> None:
@@ -411,8 +428,8 @@ async def run_meeting(meeting_id: int) -> None:
     async with get_async_session() as session:
         meeting = await MeetingsService(session, None).get(meeting_id)
         account = await sent_as(session, meeting.account_id)
-        start = await _start(session, meeting, account)
         voice = await voice_of(session)
+        start = await _start(session, meeting, account, voice)
         engine = await live_engine_of(session, voice)
     # What the bot spends (her answers, its speech, the notes after) is the
     # meeting owner's, bound once for the run.

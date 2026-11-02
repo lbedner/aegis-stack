@@ -3,10 +3,8 @@
 kept under its own secret. A stack from before them keeps working: its one
 sign-in becomes the first agent's, and its meetings that agent's."""
 
-from collections.abc import Callable
 import json
 import time
-from typing import Any
 
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -18,7 +16,14 @@ from app.services.meetings.domains.bot.login import LOGIN
 from app.services.meetings.domains.bot.meet import CallState
 from app.services.meetings.models import MeetingStatus
 from app.services.meetings.service import DEFAULT_BOT_NAME, MeetingsService, transition
-from tests._meetings import MEET, PIXEL_PNG, bot_on, hold_the_bot, signed_in_state
+from tests._meetings import (
+    MEET,
+    PIXEL_PNG,
+    FakeCall,
+    bot_on,
+    hold_the_bot,
+    signed_in_state,
+)
 from tests._secret_settings import FakeStore, use_store
 
 
@@ -90,7 +95,7 @@ async def test_the_bot_joins_with_its_agents_own_sign_in(
     work = await accounts.keep_agent(async_db_session, "work", "Work Notes", None)
     svc = MeetingsService(async_db_session, None)
     meeting = await bot.send_bot(svc, MEET, "", agent="work")
-    call = _Call()
+    call = FakeCall([CallState.IN_CALL, CallState.ENDED], people=[2])
     bot_on(monkeypatch, async_db_session, call)
 
     await bot.run_meeting(meeting.id)  # type: ignore[arg-type]
@@ -166,38 +171,6 @@ async def test_a_broken_sign_in_is_said_and_the_rest_still_show(
     assert rows["work"].sign_in == accounts.UNREADABLE
     assert rows["away"].sign_in == accounts.UNREADABLE
     assert rows["home"].sign_in == accounts.SIGNED_IN
-
-
-class _Call:
-    """A call that lets the bot in and ends: who it was asked to join as,
-    and the sign-in it was opened with."""
-
-    def __init__(self) -> None:
-        self.on_audio: Callable[[str], None] | None = None
-        self.login: str | None = None
-        self.asked_as: str | None = None
-        self.states = [CallState.IN_CALL, CallState.ENDED]
-
-    async def ask_to_join(self, bot_name: str) -> None:
-        self.asked_as = bot_name
-
-    async def state(self) -> CallState:
-        return self.states.pop(0) if len(self.states) > 1 else self.states[0]
-
-    async def say(self, text: str) -> None:
-        return None
-
-    async def turn_on_captions(self, wait_ms: int = 0) -> bool:
-        return True
-
-    async def captions(self) -> list[Any]:
-        return []
-
-    async def people(self) -> int:
-        return 2
-
-    async def leave(self) -> None:
-        return None
 
 
 async def test_an_agent_keeps_its_image_and_whether_its_camera_is_on(

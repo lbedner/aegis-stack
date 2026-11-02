@@ -53,6 +53,7 @@ from app.services.meetings.models.base import (
 )
 from app.services.meetings.models.bot import (
     ALREADY,
+    CAMERA,
     CAPTIONS,
     CHAT,
     JOIN,
@@ -117,6 +118,7 @@ from app.services.meetings.models.series import (
 
 __all__ = [
     "ALREADY",
+    "CAMERA",
     "CAPTIONS",
     "CHAT",
     "JOIN",

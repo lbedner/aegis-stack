@@ -20,7 +20,7 @@ from app.services.meetings.domains.bot import run as bot
 from app.services.meetings.domains.bot import transcript
 from app.services.meetings.domains.bot.audio import RATE
 from app.services.meetings.domains.bot.login import CALENDAR, LOGIN
-from app.services.meetings.domains.bot.meet import CallState, Steps
+from app.services.meetings.domains.bot.meet import CallState, Look, Steps
 from app.services.meetings.domains.bot.row import transition, write_captions
 from app.services.meetings.domains.moments import tidy
 from app.services.meetings.domains.moments.service import moments_of
@@ -205,9 +205,6 @@ class FakeCall(Steps):
     async def page_text(self) -> str:
         return ""
 
-    async def people(self) -> int:
-        return self.counts.pop(0) if len(self.counts) > 1 else self.counts[0]
-
     async def say(self, text: str) -> None:
         self.said.append(text)
         await self._at("say")
@@ -234,10 +231,19 @@ class FakeCall(Steps):
     async def silence(self) -> None:
         self.silenced = True
 
-    async def captions(self) -> list[Caption]:
+    async def watch_captions(self, moved: Callable[[list[Caption]], None]) -> None:
+        return None
+
+    async def look(self) -> Look:
+        """The next scripted state; in the call, its captions and count."""
+        state = await self.state()
+        if state != CallState.IN_CALL:
+            return Look(state, [], None)
         if self.sound and self.on_audio is not None:
             self.on_audio(SECOND)
-        return self.shown.pop(0) if len(self.shown) > 1 else self.shown[0]
+        captions = self.shown.pop(0) if len(self.shown) > 1 else self.shown[0]
+        people = self.counts.pop(0) if len(self.counts) > 1 else self.counts[0]
+        return Look(state, captions, people)
 
 
 class FakeLive:

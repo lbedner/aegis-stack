@@ -114,6 +114,14 @@ class TestServicesRegistry:
         assert ComponentNames.SCHEDULER in spec.required_components
         assert ComponentNames.WORKER in spec.recommended_components
 
+    def test_the_graphql_client_ships_only_with_insights(self) -> None:
+        """Meant for insights' GitHub source (nothing reads it yet): a stack
+        without insights carried it, and its test, unused."""
+        from aegis.core.file_manifest import iter_cleanup_paths
+
+        removed = set(iter_cleanup_paths(SERVICES["insights"], selected=False))
+        assert {"app/core/graphql.py", "tests/core/test_graphql_client.py"} <= removed
+
     def test_auth_service_specification(self):
         """Test the auth service specification is properly defined."""
         auth_spec = SERVICES["auth"]

@@ -838,6 +838,7 @@ SERVICES: dict[str, ServiceSpec] = {
             "app/services/insights/",
             "app/cli/insights.py",
             "app/components/backend/api/insights/",
+            "app/core/graphql.py",
         ],
         files=FileManifest(
             # Mirrors cleanup_components() lines 654-683 (insights NOT enabled).
@@ -863,6 +864,10 @@ SERVICES: dict[str, ServiceSpec] = {
                 "tests/test_cache_integration.py",
                 "app/components/frontend/dashboard/cards/insights_card.py",
                 "app/components/frontend/dashboard/modals/insights_modal",
+                # A GraphQL client nothing reads yet, meant for GitHub's API
+                # (its collectors' source): no stack without insights wants it.
+                "app/core/graphql.py",
+                "tests/core/test_graphql_client.py",
             ],
         ),
     ),

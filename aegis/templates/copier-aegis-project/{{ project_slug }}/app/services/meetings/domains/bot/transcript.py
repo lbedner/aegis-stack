@@ -99,6 +99,9 @@ class Transcript:
         # Of those, the ones written early (due at once, ``_at_once``) and
         # unchanged since: written again only once said in full.
         self.early: set[str] = set()
+        # Pieces for it a stop called off while they were still being said:
+        # written, never asked (``_call_off``).
+        self.called_off: set[str] = set()
         self.seen: dict[str, str] = {}  # caption line -> its text, last look
         self.text: dict[str, str] = {}  # caption line -> all of it heard so far
         # caption line -> when it was first captioned, from when the bot got in
@@ -159,6 +162,7 @@ class Transcript:
         return [
             (self.pending[line].speaker, self.pending[line].text)
             for line in sorted(self.held, key=lambda line: self.first_seen[line])
+            if line not in self.called_off
         ]
 
     def rest(self) -> list[Caption]:
@@ -222,6 +226,33 @@ class Transcript:
             return False
         return self._back(caption) or mentions(caption.text, self.bot)
 
+    def worth_a_look(self, moved: list[Caption]) -> bool:
+        """Whether captions that just moved (``MeetPage.watch_captions``) may
+        need the bot before its next look: one of someone else's names it,
+        or comes from the one it answers (``asker``) while a reply still
+        counts (``FOLLOW_SECONDS``: ``replying``, before the look reads it),
+        a line put to it is still being said (``held``), or anyone talks
+        over its voice."""
+        others = [c for c in moved if not its_own(c.speaker, self.bot)]
+        if not others:
+            return False
+        since = self._since_her(asyncio.get_running_loop().time())
+        return (
+            bool(self.held)
+            or since < 0
+            or any(
+                mentions(c.text, self.bot)
+                or (c.speaker == self.asker and since <= FOLLOW_SECONDS)
+                for c in others
+            )
+        )
+
+    def _since_her(self, now: float) -> float:
+        """How long since the bot last spoke (its captions, or its voice as
+        heard: ``_heard``); below zero while it still talks."""
+        heard_to, _ = self._heard()
+        return now - max(self.bot_spoke, heard_to)
+
     def _at_once(self, caption: Caption) -> bool:
         """Whether a piece is due at once, waiting on neither a pause nor the
         beat: a stop, or more than a nod begun over her (``talking_over``: not
@@ -265,9 +296,9 @@ class Transcript:
             if self.lines.get(line) != piece:
                 self.early.discard(line)
                 if line not in self.lines:
-                    heard_to, words = self._heard()
-                    gap = now - max(self.bot_spoke, heard_to)  # < 0: it is talking
+                    _, words = self._heard()
                     said = f"{self.bot_said} {words}"
+                    gap = self._since_her(now)
                     self.before[line] = (ITSELF, gap, self.asker, said)
                 self.lines[line] = piece
                 self.changed[line] = now
@@ -281,13 +312,17 @@ class Transcript:
         writing = [
             c for line, c in self.pending.items() if line not in held or line in early
         ]
+        stopping = [c for c in writing if self._stops(c)]
+        for stop in stopping:
+            self._call_off(stop)
         self.pending = {line: self.pending[line] for line in held}
         self.early = (self.early & held) | early
+        kept = self.early | self.called_off
         for c in writing:
-            if self._stops(c):  # nobody is answered now: only her name wakes her
+            if c in stopping:  # nobody is answered now: only her name wakes her
                 self.asker = ""
                 continue
-            if c.line in self.early or not self._for_bot(c):
+            if c.line in kept or not self._for_bot(c):
                 continue
             if (first := self._asked_again(c)) is not None:
                 # Written over the line it says again: one question, asked once.
@@ -312,16 +347,31 @@ class Transcript:
             )
         return writing
 
+    def _call_off(self, stop: Caption) -> None:
+        """What ``stop``'s speaker was still putting to it, begun before the
+        stop and not yet written: a stop is written at once, a question only
+        once it settles, so it would be asked after the stop meant for it."""
+        self.called_off |= {
+            line
+            for line, c in self.pending.items()
+            if c.speaker == stop.speaker
+            and line != stop.line
+            and line not in self.rows
+            and self.first_seen[line] <= self.first_seen[stop.line]
+            and self._for_bot(c)
+        }
+
     def _asked_again(self, caption: Caption) -> str | None:
         """The line for the bot ``caption`` says again: its speaker's last,
-        written already, begun within ``AGAIN_SECONDS`` of it and opening
-        alike (``said_again``). Meet at times draws one question as two
-        blocks in a way ``_drawn_again`` misses (the second with the name
-        spelled anew). None for a line of its own."""
+        written already, begun within ``AGAIN_SECONDS`` of it last moving
+        and opening alike (``said_again``). Meet at times draws one question
+        as two blocks in a way ``_drawn_again`` misses (the second with the
+        name spelled anew, a long one redrawn whole as it ends). None for a
+        line of its own."""
         first = self.asked.get(caption.speaker)
         if first is None or first not in self.rows or caption.line in self.rows:
             return None
-        begun = abs(self.first_seen[caption.line] - self.first_seen[first])
+        begun = self.started + self.first_seen[caption.line] - self.changed[first]
         if begun > AGAIN_SECONDS or not said_again(self.lines[first], caption.text):
             return None
         return first
@@ -339,5 +389,6 @@ class Transcript:
             self.written_at - self.started,
             starts=self.first_seen,
             before=self.before,
-            early=frozenset(c.line for c in writing if c.line in self.early),
+            # Read only for what she obeys: still being said, or called off.
+            early=frozenset(c.line for c in writing) & (self.early | self.called_off),
         )

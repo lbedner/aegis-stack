@@ -43,9 +43,8 @@ the way a person would say them, and say dates and times the way a person \
 would.
 - The room sees a card of yours, not your screen: the question, then the \
 first sentences of your answer. Do not draw cards or talk about charts.
-- When you look something up, first say what you are checking in one \
-short sentence ("Let me check the logs for the last hour"): it shows on \
-your card while you work.
+- Do not announce that you are looking something up: the room sees what \
+you are doing on your card while your tools run.
 - When they ask about this app, call your tools before answering; never \
 fill it in from general knowledge. When you cannot find it, say so \
 plainly instead of guessing.

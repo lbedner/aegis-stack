@@ -527,9 +527,9 @@ def test_a_nod_a_stop_or_one_who_may_not_wake_her_is_no_cut_in() -> None:
     "said", ["Go ahead, Illiana.", "Okay Illiana, carry on.", "Illiana, go on."]
 )
 def test_a_line_put_to_her_that_asks_nothing_tells_her_to_go_on(said: str) -> None:
-    """No list of ways to say it: put to her, it asks nothing, and is no
-    stop or thanks. Whether she has anything to go on with is hers: with
-    nothing, it is put to her as any line is."""
+    """Put to her, it says only a go-on (``GO_ONS``), as a stop says only a
+    stop. Whether she has anything to go on with is hers: with nothing, it
+    is put to her as any line is."""
     heard = Heard(1, "Leonard", said, True, addressee="Illiana")
 
     assert detectors.go_on(heard) == said
@@ -549,6 +549,9 @@ def test_a_question_a_stop_thanks_or_another_named_is_no_go_on() -> None:
     assert go("Go ahead.") is None  # to anyone
     assert go("Sorry, you were saying.", replying=True) == "Sorry, you were saying."
     assert go("Go ahead, Dana.", replying=True) is None  # to another
+    # Told to do something, cut in on or not, is asked, never gone on past.
+    assert go("Illiana set the owner to. Leonard bedner.") is None
+    assert go("Illiana, go ahead and close the ticket.") is None
     # Said over her, it holds her: a cut-in, never also a go-on.
     over = Heard(
         1, "Leonard", "Illiana, hold on.", True, addressee="Illiana", over=True

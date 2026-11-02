@@ -177,7 +177,8 @@ async def test_what_the_bot_did_on_meets_page_shows_with_what_it_saw(
     async_db_session: AsyncSession,
 ) -> None:
     """A control it found by Meet's shortcut, or not at all, opens on
-    the page's buttons as it saw them: what to look for it as now."""
+    the page's buttons as it saw them: what to look for it as now. Only
+    what went wrong is marked; the rest is plain."""
     meeting_id, _ = await finished()
     async_db_session.add_all(
         [
@@ -194,6 +195,7 @@ async def test_what_the_bot_did_on_meets_page_shows_with_what_it_saw(
     steps = one(html, "[data-bot-steps]")
     assert "Join" in text(steps)
     assert "Show captions" in text(one(steps, "details"))
+    assert [t.get("data-tone") for t in select(steps, "[data-tone]")] == ["error"]
 
 
 async def test_picking_who_i_am_changes_my_items(

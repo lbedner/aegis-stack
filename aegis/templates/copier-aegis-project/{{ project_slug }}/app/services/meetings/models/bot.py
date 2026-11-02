@@ -1,5 +1,6 @@
 """What the bot did on the meeting's page (``domains.bot.meet``): each
-control it worked (joining, the captions, the chat, its mic, leaving) and
+control it worked (joining, the captions, the chat, its mic and camera,
+leaving) and
 how, and why it left; so a change to Meet's page is a record on the
 meeting, not only a log line."""
 
@@ -16,6 +17,7 @@ JOIN = "join"
 CAPTIONS = "captions"
 CHAT = "chat"
 MIC = "mic"
+CAMERA = "camera"
 LEAVE = "leave"
 LEFT = "left"
 # How a control was worked: by its label, by Meet's keyboard shortcut where
@@ -53,9 +55,11 @@ class MeetingBotStep(SQLModel, table=True):
 
     @property
     def said(self) -> str:
-        """The step as the page shows it ("Chat · by shortcut")."""
-        how = None if self.how == LABEL else HOW_SAID.get(self.how, self.how)
-        return " · ".join(filter(None, (self.step.capitalize(), how)))
+        """The step as the page shows it ("Chat (by shortcut)")."""
+        step = self.step.capitalize()
+        if self.how == LABEL:
+            return step
+        return f"{step} ({HOW_SAID.get(self.how, self.how)})"
 
     @property
     def tone(self) -> str:

@@ -321,6 +321,32 @@ async def test_a_stop_is_written_the_moment_it_is_heard(
     assert await _took(async_db_session, transcript, [after]) == []
 
 
+async def test_a_stop_calls_off_what_its_speaker_was_still_asking(
+    async_db_session: AsyncSession, voiced: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A stop is written at once, a question only once it settles: the
+    question its speaker was still saying ("All open AI questions",
+    "Actually, Illiana, stop") was asked after the stop, and answered.
+    Called off, it is in the transcript, never asked."""
+
+    monkeypatch.setattr(captions, "BEAT_SECONDS", 3600.0)
+    monkeypatch.setattr(captions, "SETTLE_SECONDS", 60.0)
+    meeting_id = await a_meeting(async_db_session)
+    transcript = captions.Transcript(meeting_id, "Notes")
+    asking = Caption("1", "Dana", "Notes, what are all the open questions?")
+    stop = Caption("2", "Dana", "Actually, Notes, stop.")
+
+    await _took(async_db_session, transcript, [asking])
+    stopped = await _took(async_db_session, transcript, [asking, stop])
+    monkeypatch.setattr(captions, "SETTLE_SECONDS", 0.0)
+    later = await _took(async_db_session, transcript, [asking, stop])
+
+    assert [kind for _, kind in stopped] == ["stop"]
+    assert later == []
+    assert transcript.hearing() == []
+    assert "open questions" in " ".join(transcript.lines.values())
+
+
 async def test_a_line_begun_over_her_is_written_at_once_and_cuts_in(
     async_db_session: AsyncSession, voiced: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -345,6 +371,33 @@ async def test_a_line_begun_over_her_is_written_at_once_and_cuts_in(
     transcript.her = lambda: (now() - captions.CAPTION_LAG - 1, words)
     grown = Caption("2", "Dana", "Wait, which deploy? The one at four?")
     assert transcript.take([echo, grown]) == []
+
+
+async def test_a_caption_moving_wakes_her_only_where_it_may_be_for_her() -> None:
+    """The page tells her each caption that moved; she looks at once only
+    where it may need her: her name or a stop, more of a line still being
+    put to her, the one she is answering while a reply still counts, or
+    anyone over her voice. Small talk and her own captions wait for the
+    next look."""
+    transcript = captions.Transcript(1, "Notes")
+    now = asyncio.get_running_loop().time
+
+    assert transcript.worth_a_look([Caption("1", "Dana", "Hey Notes, who")])
+    assert transcript.worth_a_look([Caption("1", "Dana", "Notes, stop.")])
+    assert not transcript.worth_a_look([Caption("2", "Sam", "Lunch at noon?")])
+    assert not transcript.worth_a_look([Caption("3", "Notes", "Sure, Dana.")])
+
+    transcript.held = {"1"}  # Dana's question, still being said
+    assert transcript.worth_a_look([Caption("2", "Sam", "Lunch at noon?")])
+    transcript.held = set()
+    transcript.asker = "Sam"
+    transcript.her = lambda: (now() - 60, "It ships at four.")  # long since
+    assert not transcript.worth_a_look([Caption("2", "Sam", "And after that?")])
+    transcript.her = lambda: (now() - 3, "It ships at four.")  # just said
+    assert transcript.worth_a_look([Caption("2", "Sam", "And after that?")])
+    transcript.asker = ""
+    transcript.her = lambda: (now() + 60, "The deploy failed.")  # playing
+    assert transcript.worth_a_look([Caption("2", "Sam", "Wait.")])
 
 
 async def test_a_question_begun_over_her_cuts_in_at_once_and_is_asked_in_full(
@@ -511,6 +564,29 @@ async def test_a_question_put_to_her_again_at_once_is_asked_once(
     assert [kind for _, kind in made] == ["addressed", "addressed"]
     assert len(lines) == 1  # one transcript line, Meet's later words
     assert len(await moments_of(async_db_session, meeting_id)) == 2
+
+
+async def test_a_long_question_drawn_again_as_it_ends_is_asked_once(
+    async_db_session: AsyncSession, voiced: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Meet redrew a long question whole, her name spelled anew, as its
+    speaker finished: begun long after the first block, but moments after
+    it last moved. It was answered twice."""
+
+    monkeypatch.setattr(captions, "BEAT_SECONDS", 0.0)
+    monkeypatch.setattr(captions, "SETTLE_SECONDS", 0.0)
+    monkeypatch.setattr(captions.Transcript, "_drawn_again", lambda *a: None)
+    meeting_id = await a_meeting(async_db_session)
+    transcript = captions.Transcript(meeting_id, "Notes")
+    first = Caption("1", "Dana", "Notes, do you have access to all of our meetings?")
+    again = Caption("2", "Dana", "Nodes, do you have access to all of our meetings?")
+
+    made = await _took(async_db_session, transcript, [first])
+    transcript.first_seen["1"] -= 10  # begun well before, said until now
+    made += await _took(async_db_session, transcript, [first, again])
+
+    assert [kind for _, kind in made] == ["addressed"]
+    assert len(await moments_of(async_db_session, meeting_id)) == 1
 
 
 async def test_a_line_for_her_is_heard_before_it_is_said_in_full(

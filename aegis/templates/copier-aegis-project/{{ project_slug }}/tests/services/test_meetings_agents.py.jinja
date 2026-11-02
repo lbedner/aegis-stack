@@ -11,7 +11,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.ai.domains.chat.agent_loader import AgentConfig
 from app.services.ai.domains.spend import recording
-from app.services.ai.models.agents import Agent
+from app.services.ai.models.agents import Agent, ContextModule
 from app.services.meetings.domains.notes import writer as notes
 from app.services.meetings.domains import agents
 from app.services.meetings.service import MeetingsService
@@ -24,6 +24,7 @@ def _slugs(session: Session) -> list[str]:
     return sorted(row.slug for row in rows)
 
 
+@pytest.mark.queryspy(allow_n_plus_one=True)  # seeded twice, on purpose
 def test_each_writer_is_seeded_once_and_an_edit_is_kept(db_session: Session) -> None:
     agents.load_meetings_agent_fixtures(db_session)
     guide = db_session.exec(select(Agent).where(Agent.slug == agents.GUIDE_AGENT)).one()
@@ -44,9 +45,14 @@ def test_each_writer_is_seeded_once_and_an_edit_is_kept(db_session: Session) -> 
     assert guide.system_prompt == "Mine."
 
 
-def test_overseers_chat_is_granted_the_meetings_search(db_session: Session) -> None:
-    """The default agent, whose answers Overseer's chat gives, can search
-    the meetings once the meetings' agents are seeded."""
+@pytest.mark.queryspy(allow_n_plus_one=True)  # seeded twice, on purpose
+def test_overseers_chat_is_granted_the_meetings_and_how_to_read_them(
+    db_session: Session,
+) -> None:
+    """The default agent, whose answers Overseer's chat gives (and hers in
+    a call), can search the meetings and read each series once the
+    meetings' agents are seeded, with a module of its own saying how: text
+    only, edited in Agents like any other, never rewritten by a re-seed."""
     from app.services.ai.domains.chat.agent_loader import DEFAULT_AGENT_SLUG
     from app.services.ai.fixtures.agent_fixtures import load_agent_fixtures
 
@@ -57,7 +63,18 @@ def test_overseers_chat_is_granted_the_meetings_search(db_session: Session) -> N
     assistant = db_session.exec(
         select(Agent).where(Agent.slug == DEFAULT_AGENT_SLUG)
     ).one()
-    assert "meetings_search" in {tool.name for tool in assistant.tools}
+    assert {"meetings_search", "meetings_series"} <= {t.name for t in assistant.tools}
+    assert agents.MEETINGS_MODULE in assistant.context_modules
+    module = db_session.exec(
+        select(ContextModule).where(ContextModule.slug == agents.MEETINGS_MODULE)
+    ).one()
+    assert module.fetch_function is None
+    assert module.prompt_content == agents.MEETINGS_GUIDE
+    module.prompt_content = "Mine."
+    db_session.commit()
+    agents.load_meetings_agent_fixtures(db_session)
+    db_session.refresh(module)
+    assert module.prompt_content == "Mine."
 
 
 async def _notes_written(session: AsyncSession) -> list[str]:

@@ -81,6 +81,7 @@ class TestAgentSeed:
         assert agent.max_tokens > Settings.model_fields["AI_MAX_TOKENS"].default
         assert agent.is_active and not agent.context_modules
 
+    @pytest.mark.queryspy(allow_n_plus_one=True)  # each service seeds its own modules
     def test_every_seeded_agent_records_its_seed(self, session: Session) -> None:
         """The seed is the first recorded change, so an agent's
         history starts at the text it was born with."""
@@ -221,6 +222,7 @@ class TestAgentSeed:
         assert refreshed.system_prompt == "Customized prompt"
 
 
+@pytest.mark.queryspy(allow_n_plus_one=True)  # each service seeds its own modules
 class TestStartupSeedsTheRegistry:
     """Nothing in a running project used to call the fixture loaders, so a
     deployed stack had agents without tools (or no agents at all). Startup

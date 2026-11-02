@@ -8,6 +8,7 @@ import io
 from itertools import count
 import math
 import struct
+import time
 from typing import Any
 import wave
 
@@ -72,9 +73,7 @@ def test_a_question_shows_as_put_without_her_name_or_fillers(
     """The card shows what was asked, not how it was said to her or how
     captions marked its pauses: no name, no fillers, a question mark on a
     question. Done on the text, at once: no model is asked."""
-    from app.services.meetings.domains.moments.detectors import put_to
-
-    assert put_to(said, "Notes") == question
+    assert card.put_to(said, "Notes") == question
 
 
 @pytest.mark.parametrize(
@@ -126,6 +125,7 @@ async def test_the_card_is_about_one_request_and_the_rest_are_pills() -> None:
             "verdict": None,
             "detail": None,
             "voice": None,
+            "working": True,
         },
         # Earlier: what she looked something up for; a mic check is not.
         "pills": [
@@ -172,7 +172,7 @@ async def test_her_answer_stays_up_a_while_even_once_said() -> None:
 
     await shown.update([], set(), [done])  # back, and already played
     lingering = call.cards[-1]["focus"]
-    await shown.update([], set(), [done], hearing=[("Dana", "Hey Notes, and")])
+    await shown.update([], set(), [done], hearing=[("Dana", "Hey Notes, and who")])
     asked = call.cards[-1]
 
     assert lingering["verdict"] == "Yes, 60." and lingering["status"] == card.SAYING
@@ -213,6 +213,18 @@ async def test_a_line_for_her_is_the_card_as_it_is_heard() -> None:
     assert call.cards[-1]["status"] == card.QUESTION_HEARD
     assert call.cards[-1]["focus"]["question"] == "Who owns"
     assert call.cards[-1]["focus"]["status"] == card.HEARING
+
+
+@pytest.mark.parametrize("said", ["Hey, Notes.", "Thanks, Notes.", "Notes, stop."])
+async def test_a_line_that_asks_her_nothing_is_not_a_question_heard(said: str) -> None:
+    """Her name alone ("Hey Notes"), thanks or a stop puts nothing to her:
+    the card keeps listening until something is asked. A go-on is asked
+    where she has nothing to go on with ("Yeah, go ahead": do it)."""
+    call, shown = _card()
+
+    await shown.update([], set(), [], hearing=[("Dana", said)])
+
+    assert not call.cards or call.cards[-1]["status"] == card.LISTENING
 
 
 def test_the_picture_is_not_carried_in_the_page_script() -> None:
@@ -269,6 +281,37 @@ async def test_the_camera_is_the_card_and_the_mic_its_voice(page: Page) -> None:
     ]
 
 
+async def test_the_camera_is_sent_as_detail_not_motion(page: Page) -> None:
+    """Sent as motion, Meet's encoder never refined a still card: the last
+    one stayed behind it as a ghost."""
+    hint = await page.evaluate(
+        """async () => (await navigator.mediaDevices.getUserMedia({video: true}))
+          .getVideoTracks()[0].contentHint"""
+    )
+    assert hint == "detail"
+
+
+async def test_an_unchanged_card_still_sends_frames(page: Page) -> None:
+    """Sent only when redrawn, Meet saw no picture from the moment the bot
+    joined until its card first changed, and showed its initials."""
+    frames = await page.evaluate(
+        """async () => {
+          const stream = await navigator.mediaDevices.getUserMedia({video: true});
+          await new Promise((r) => setTimeout(r, 300));
+          const video = document.createElement('video');
+          video.muted = true;
+          video.srcObject = stream;
+          await video.play();
+          let seen = 0;
+          const count = () => { seen += 1; video.requestVideoFrameCallback(count); };
+          video.requestVideoFrameCallback(count);
+          await new Promise((r) => setTimeout(r, 1000));
+          return seen;
+        }"""
+    )
+    assert frames >= 5
+
+
 async def _devices(page: Page) -> list[str]:
     return await page.evaluate(
         """async () => (await navigator.mediaDevices.enumerateDevices())
@@ -300,12 +343,56 @@ async def test_the_card_redraws_when_its_status_changes(page: Page) -> None:
     assert before != after
 
 
+async def _pictures_over_a_while(page: Page) -> set[str]:
+    """The card's pictures, sampled across a few of the dots' beats."""
+    seen = set()
+    for _ in range(5):
+        seen.add(await page.evaluate("() => window.__meetingCard.picture()"))
+        await page.wait_for_timeout(300)
+    return seen
+
+
+async def test_listening_her_dots_keep_going(page: Page) -> None:
+    """Listening, dots run on after the word: something is happening on
+    her end though nothing has been asked of her."""
+    assert len(await _pictures_over_a_while(page)) > 1
+
+
+async def test_any_other_status_holds_still(page: Page) -> None:
+    await card.show(page, status=card.NO_CAPTIONS)
+    assert len(await _pictures_over_a_while(page)) == 1
+
+
+async def _typing(page: Page, status: str, working: bool) -> bool:
+    """Whether the card's keys tap a moment after its request is ``status``
+    (``working``: a runner has it)."""
+    focus = card.Focus(question="Who owns billing?", status=status, working=working)
+    await card.show(page, status=card.ANSWERING, focus=focus.model_dump())
+    await page.wait_for_timeout(250)
+    return await page.evaluate("() => window.__meetingCard.typing()")
+
+
+async def test_while_she_works_and_has_said_nothing_keys_tap() -> None:
+    """The chat's own key taps (``taps.js``), into her mic: the room hears
+    her working instead of her saying what she is looking up. Once she
+    speaks, or with the sound off, the keys are quiet."""
+    async with _card_page(card.Start(name="Illiana", taps=True)) as page:
+        assert await page.evaluate("() => window.__meetingCard.typing()") is False
+        assert await _typing(page, card.ANSWERING_ITEM, working=True) is True
+        assert await _typing(page, "answering on laptop", working=True) is True
+        assert await _typing(page, card.SAYING, working=False) is False
+    async with _card_page(card.Start(name="Illiana")) as page:
+        assert await _typing(page, card.ANSWERING_ITEM, working=True) is False
+
+
 async def test_answering_it_presents_one_request_and_keeps_the_corner_clear(
     page: Page,
 ) -> None:
     """Answering, the card is the request: a long question is cut to fit,
     never drawn past the card, and the bottom right (where Meet lays the
-    host's own picture) is left empty. With nothing, the card it was."""
+    host's own picture) is left empty. With nothing, the card it was
+    (one held still: Listening's dots run on)."""
+    await card.show(page, status=card.NO_CAPTIONS)
     idle = await page.evaluate("() => window.__meetingCard.picture()")
     focus = card.Focus(
         question="Why " * 60,
@@ -326,7 +413,7 @@ async def test_answering_it_presents_one_request_and_keeps_the_corner_clear(
     shown = await page.evaluate("() => window.__meetingCard.picture()")
     widest = await page.evaluate("() => window.__meetingCard.widest()")
     corner = await page.evaluate("() => window.__meetingCard.cornerClear()")
-    await card.show(page, status=card.LISTENING, focus=None, pills=[])
+    await card.show(page, status=card.NO_CAPTIONS, focus=None, pills=[])
     back = await page.evaluate("() => window.__meetingCard.picture()")
 
     assert shown != idle and widest <= 640
@@ -365,10 +452,14 @@ async def test_speech_still_being_made_plays_piece_after_piece(page: Page) -> No
     """A live voice sends its speech in pieces as it is made: each plays
     after the one before, and the page says how much is still to play."""
     first = await card.stream(page, _pcm(0.25, 24_000), 24_000)
+    sent = time.monotonic()
     second = await card.stream(page, _pcm(0.25, 24_000), 24_000)
+    # Some of the first piece has played by the time the second is queued:
+    # at most as long as the second took to send.
+    played = time.monotonic() - sent
 
     assert first == pytest.approx(0.25, abs=0.05)
-    assert second == pytest.approx(0.5, abs=0.08)
+    assert 0.5 - played - 0.05 <= second <= 0.5 + 0.05
 
 
 async def test_silenced_what_was_playing_stops_and_the_next_plays_at_once(

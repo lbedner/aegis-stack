@@ -3,7 +3,7 @@ on a project without auth reads every meeting)."""
 
 from collections.abc import Awaitable, Callable
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 from urllib.parse import urlsplit
 
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -16,7 +16,7 @@ from app.services.meetings.domains.bot.row import transition
 from app.services.meetings.domains.moments import service as moments
 from app.services.meetings.domains.moments import tidy
 from app.services.meetings.domains.notes import queries as notes_queries
-from app.services.meetings.domains.notes.service import notes_of
+from app.services.meetings.domains.notes.service import in_parts, notes_of, whose
 from app.services.meetings.domains.people import participants
 from app.services.meetings.domains.people import queries as people_queries
 from app.services.meetings.domains.people.heard import heard_line, voices
@@ -38,6 +38,7 @@ from app.services.meetings.models import (
     MeetingStatus,
     MeetingTheme,
     MeetingThemeLine,
+    Notes,
     Platform,
     TranscriptLine,
     TranscriptRow,
@@ -76,6 +77,20 @@ if TYPE_CHECKING:
         heard_rows,
         voice,
     )
+    from app.services.meetings.domains.people.service import said_when  # noqa: F401
+    from app.services.meetings.domains.search.service import (  # noqa: F401
+        NOTHING_FOUND,
+        SearchHit,
+        meeting_link,
+        search_meetings,
+    )
+    from app.services.meetings.domains.series.service import (  # noqa: F401
+        SeriesNotFoundError,
+        SeriesService,
+        series_name,
+    )
+    from app.services.meetings.models import MeetingSeries  # noqa: F401
+    from app.services.meetings.queries import status_platform_counts  # noqa: F401
 
 DEFAULT_BOT_NAME = "Notetaker"
 
@@ -356,6 +371,27 @@ def notes_writer() -> Callable[[int], Awaitable[None]] | None:
 def status_label(status: str) -> str:
     """A meeting's status as the pages say it: "in_call" -> "In call"."""
     return status.replace("_", " ").capitalize()
+
+
+class NotePoint(NamedTuple):
+    """One point of a meeting's notes as they read: its part ("Summary",
+    "Action items"), whose it is and when it is due."""
+
+    part: str
+    text: str
+    who: str | None
+    due: str | None
+
+
+def note_points(notes: Notes) -> list[NotePoint]:
+    """The notes as they read: the summary, then each part's points."""
+    return [
+        NotePoint(
+            status_label(kind), item.text, whose(item), getattr(item, "due", None)
+        )
+        for kind, items in in_parts(notes)
+        for item in items
+    ]
 
 
 def call_length(joined: datetime | None, left: datetime | None) -> str | None:

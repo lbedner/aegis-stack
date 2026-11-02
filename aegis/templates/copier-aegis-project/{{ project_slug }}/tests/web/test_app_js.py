@@ -162,7 +162,7 @@ def test_a_dropdown_closes_on_a_click_off_it_or_on_an_entry() -> None:
     assert run(CLOSE_HARNESS, APP_JS=APP_JS) == [True, True, False, False]
 
 
-COPY_HARNESS = (
+COPY_START = (
     STUBS
     + """
 const toasts = [];
@@ -174,8 +174,16 @@ Object.defineProperty(globalThis, 'navigator', {
   configurable: true,
 });
 require(APP_JS);
-const button = { dataset: { copy: 'postgres://db' }, querySelector: () => null };
-fire('click', { target: { closest: (sel) => (sel === '[data-copy]' ? button : null) } });
+const press = (button) => fire('click', { target: {
+  closest: (sel) => (sel.split(', ').some((one) => one.slice(1, -1) in button.marks)
+    ? button : null) } });
+"""
+)
+COPY_HARNESS = (
+    COPY_START
+    + """
+press({ marks: { 'data-copy': 1 }, dataset: { copy: 'postgres://db' },
+        querySelector: () => null });
 setTimeout(() => console.log(JSON.stringify({ written, toasts })), 0);
 """
 )
@@ -188,6 +196,37 @@ def test_any_copy_button_copies_its_text() -> None:
     result = out
     assert result["written"] == ["postgres://db"]
     assert result["toasts"][-1]["tone"] == "ok"
+
+
+# A transcript on the page: each line's label and its words, one with a
+# button among them, as ``_macros.html``'s ``transcript`` draws them.
+COPY_FROM_HARNESS = (
+    COPY_START
+    + """
+const said = (text, buttons = []) => ({ cloneNode: () => ({
+  querySelectorAll: () => buttons.map((label) => ({ remove: () => {
+    text = text.replace(label, ''); } })),
+  get textContent() { return text; } }) });
+const lines = [
+  { dataset: { copyLine: 'Ada [00:00]' }, querySelector: () => said('Hello. ') },
+  { dataset: { copyLine: 'Leonard [00:01]' },
+    querySelector: () => said('Ship it scheduler', ['scheduler']) },
+];
+document.querySelectorAll = (sel) =>
+  (sel === '#meeting-transcript [data-copy-line]' ? lines : []);
+press({ marks: { 'data-copy-from': 1 }, dataset: { copyFrom: '#meeting-transcript' },
+        querySelector: () => null });
+setTimeout(() => console.log(JSON.stringify(written)), 0);
+"""
+)
+
+
+def test_a_copy_from_the_page_takes_each_line_without_its_buttons() -> None:
+    """A transcript copied from the page reads one line each, its label then
+    its words, with the buttons among the words left out."""
+    assert run(COPY_FROM_HARNESS, APP_JS=APP_JS) == [
+        "Ada [00:00]: Hello.\nLeonard [00:01]: Ship it\n"
+    ]
 
 
 PROGRESS_HARNESS = (

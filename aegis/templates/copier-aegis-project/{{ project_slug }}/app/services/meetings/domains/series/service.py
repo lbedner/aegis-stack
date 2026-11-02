@@ -60,6 +60,13 @@ class SeriesService:
             raise SeriesNotFoundError(f"Series {series_id} not found")
         return found
 
+    async def meetings(self, series: MeetingSeries) -> list[int]:
+        """The ids of the series' latest meetings, newest first."""
+        found = await queries.meetings_on(
+            self.db, series.owner_user_id, series.link, MEETINGS
+        )
+        return [m.id for m in found]  # type: ignore[misc]
+
     async def read(self, series_id: int) -> SeriesRecord:
         """The series in full: its meetings and its themes, each with every
         line it was said in."""
@@ -68,9 +75,7 @@ class SeriesService:
         notes = await notes_of(self.db, series)
         lines = {n for kind in PARTS for p in getattr(notes, kind) for n in p.lines}
         cited = await quotes(self.db, lines)
-        meetings = [
-            m.id for m in await queries.meetings_on(self.db, owner, link, MEETINGS)
-        ]
+        meetings = await self.meetings(series)
         writing = (owner, link) in THEMING
         return SeriesRecord(
             series=series,

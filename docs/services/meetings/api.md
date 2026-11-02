@@ -5,10 +5,10 @@
 | Route | What it does |
 |-------|--------------|
 | `POST /api/v1/meetings` | `{"url": ..., "agent": ..., "bot_name": ...}`: record the meeting and start the bot as `agent` (the first unless named; `422` for one there is not), joining as `bot_name` or the agent's own name; answers `202` before it joins |
-| `GET /api/v1/meetings/{id}` | The meeting and its status |
+| `GET /api/v1/meetings/{id}` | The meeting in full: its status, notes and every line said |
 | `GET /api/v1/meetings/{id}/threads` | Its commitments, earlier commitments raised, contradictions and positions, each with the lines it cites |
 | `POST /api/v1/meetings/{id}/leave` | Ask the bot to leave |
-| `GET /api/v1/meetings/search?q=` | The caller's meetings' lines and note items with the words, newest meeting first |
+| `GET /api/v1/meetings/search?q=` | The caller's meetings' lines and note items with any of the words, those with more of them first, then newest meeting first |
 | `GET /api/v1/meetings/{id}/moments` | What the call threw up (its questions), each with who said it, the actions it offers and the runs asked of it |
 | `POST /api/v1/meetings/{id}/moments/find` | Read the call over again for moments: what it holds after |
 | `POST /api/v1/meetings/{id}/moments/{moment_id}/runs` | `{"action": ...}`: ask an action of a moment; `202` with the run, `404` for an action that cannot be asked (a browser one) |

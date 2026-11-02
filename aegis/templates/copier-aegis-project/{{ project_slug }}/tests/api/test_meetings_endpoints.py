@@ -40,8 +40,10 @@ def test_asking_the_bot_in_starts_it_and_answers_at_once(
     meeting = response.json()
     assert meeting["status"] == "requested" and meeting["bot_name"] == "Notes"
     assert started == [meeting["id"]]
-    read = authenticated_app_client.get(f"/api/v1/meetings/{meeting['id']}")
-    assert read.json()["url"] == MEET
+    # Read back in full, as the admin's read is: the notes and every line.
+    read = authenticated_app_client.get(f"/api/v1/meetings/{meeting['id']}").json()
+    assert read["meeting"]["url"] == MEET
+    assert read["notes"] is None and read["transcript"] == []
 
 
 def test_a_link_it_cannot_join_is_refused_and_nothing_starts(

@@ -15,6 +15,7 @@ from app.components.frontend.controls.buttons import PulseButton
 from app.components.frontend.controls.inputs import StyledTextField
 from app.components.frontend.theme import AegisTheme as Theme
 from app.services.meetings.domains.people.service import said_when
+from app.services.meetings.service import NOTHING_FOUND
 
 from .meetings_follow import api
 from .modal_sections import EmptyStatePlaceholder
@@ -37,8 +38,8 @@ def hit_cells(hit: dict[str, Any]) -> list[str]:
 
 
 class SearchTab(ft.Container):
-    """The words, the hits for them newest meeting first, and the meeting
-    the chosen hit is in, at its line."""
+    """The words, the hits with the most of them first (then newest
+    meeting first), and the meeting the chosen hit is in, at its line."""
 
     def __init__(self, page: ft.Page, pane: MeetingPane) -> None:
         super().__init__()
@@ -89,7 +90,7 @@ class SearchTab(ft.Container):
             ],
             rows=[hit_cells(hit) for hit in self._hits],
             scroll_height=600,
-            empty_message="Nothing said in any meeting has those words.",
+            empty_message=NOTHING_FOUND,
             on_row_click=lambda i: self.page.run_task(self._open, i),
         )
         if self._table.page:

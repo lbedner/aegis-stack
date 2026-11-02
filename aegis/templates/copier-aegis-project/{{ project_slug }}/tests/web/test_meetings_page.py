@@ -380,6 +380,42 @@ async def test_the_page_has_the_calendar_of_the_meetings_i_am_invited_to(
     assert "month=2026-11" in (later.get("href") or "")
 
 
+async def test_the_transcript_copies_as_plain_lines(
+    authenticated_client: TestClient,
+    async_db_session: AsyncSession,
+    acting_owner_user_id: int | None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Copied, a call reads as who said what and when, one line each
+    ("Ada [00:00]: ..."): nothing of the page comes with it, not even the
+    "What's this about?" each line offers."""
+    from app.components.web_frontend.routes import meetings as page
+
+    monkeypatch.setattr(page, "asks_about", lambda: True)
+    meeting_id, _ = await ended(
+        async_db_session,
+        acting_owner_user_id,
+        ("Ada", 'Is it "done" <yet>?'),
+        ("Leonard", "Friday."),
+    )
+
+    html = page_html(authenticated_client, f"/meetings/{meeting_id}")
+
+    button = one(html, "#meeting-transcript [data-copy-from]")
+    lines = select(html, f"{button.get('data-copy-from')} [data-copy-line]")
+    assert [line.get("data-copy-line") for line in lines] == [
+        "Ada [00:00]",
+        "Leonard [00:01]",
+    ]
+    # What each line says; the "What's this about?" beside it is not in it
+    # (and app.js leaves out any button that is).
+    assert [text(one(line, "[data-said]")) for line in lines] == [
+        'Is it "done" <yet>?',
+        "Friday.",
+    ]
+    assert select(html, "[data-about]")
+
+
 async def test_a_line_asks_her_what_it_is_about(
     authenticated_client: TestClient,
     finished: Callable[..., Any],

@@ -1650,6 +1650,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 "app/components/frontend/dashboard/modals/meetings_people_tab.py",
                 "app/components/frontend/dashboard/modals/meetings_search_tab.py",
                 "tests/services/test_meetings_search.py",
+                "tests/services/test_meetings_tool.py",
                 "tests/api/test_meetings_search_endpoints.py",
                 "tests/components/frontend/test_meetings_search_ui.py",
                 "tests/api/test_meetings_endpoints.py",

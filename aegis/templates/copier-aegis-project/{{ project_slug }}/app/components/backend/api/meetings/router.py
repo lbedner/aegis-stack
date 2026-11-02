@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from app.services.meetings.deps import as_http, get_meetings_service
 from app.services.meetings.domains.bot.run import send_bot
 from app.services.meetings.domains.threads.service import meeting_threads
-from app.services.meetings.models import Meeting, ThreadSection
+from app.services.meetings.models import Meeting, MeetingRecord, ThreadSection
 from app.services.meetings.service import MeetingsService
 
 router = APIRouter(prefix="/meetings", tags=["meetings"])
@@ -30,12 +30,14 @@ async def join_meeting(
         return await send_bot(svc, body.url, body.bot_name, body.agent)
 
 
-@router.get("/{meeting_id}", response_model=Meeting)
+@router.get("/{meeting_id}", response_model=MeetingRecord)
 async def get_meeting(
     meeting_id: int, svc: MeetingsService = Depends(get_meetings_service)
-) -> Meeting:
+) -> MeetingRecord:
+    """The meeting in full, as the admin's read is: its notes and every
+    line said."""
     with as_http():
-        return await svc.get(meeting_id)
+        return await svc.read(meeting_id)
 
 
 @router.get("/{meeting_id}/threads", response_model=list[ThreadSection])

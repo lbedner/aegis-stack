@@ -37,6 +37,19 @@ SUMMARY = "summary"
 PARTS = tuple(name for name in Notes.model_fields if name != SUMMARY)
 
 
+def in_parts(notes: Notes) -> list[tuple[str, list[NoteItem]]]:
+    """Each part of ``notes`` with its points, as they read: the summary
+    first, as a point of its own."""
+    return [(SUMMARY, [NoteItem(text=notes.summary)])] + [
+        (kind, getattr(notes, kind)) for kind in PARTS
+    ]
+
+
+def whose(item: NoteItem) -> str | None:
+    """Whose a point is: an action item's owner, a position's speaker."""
+    return getattr(item, "owner", None) or getattr(item, "speaker", None)
+
+
 def _names(notes: Notes) -> set[str]:
     """Every name the model gave in ``notes``."""
     found = {a.owner for a in notes.action_items}
@@ -47,7 +60,7 @@ def _names(notes: Notes) -> set[str]:
 
 def _columns(item: NoteItem, who: dict[str, int | None]) -> dict[str, Any]:
     """The columns past ``text`` that ``item``'s kind has."""
-    owner = getattr(item, "owner", None) or getattr(item, "speaker", None)
+    owner = whose(item)
     to = getattr(item, "to", None)
     return {
         "person_id": who.get(owner) if owner else None,
@@ -89,10 +102,8 @@ async def keep_notes(
     before = await queries.commitment_lines(db, meeting_id)
     old = {i.id: i for i in await queries.items_of(db, [meeting_id])}
     taken: set[int] = set()
-    parts = [(SUMMARY, [NoteItem(text=notes.summary)])]
-    parts += [(kind, getattr(notes, kind)) for kind in PARTS]
     rows: list[tuple[MeetingNoteItem, NoteItem]] = []
-    for kind, items in parts:
+    for kind, items in in_parts(notes):
         for place, item in enumerate(items):
             same = _same(item.lines, before, taken) if kind == COMMITMENTS else None
             values = {

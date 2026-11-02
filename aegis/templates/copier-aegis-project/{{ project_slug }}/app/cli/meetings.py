@@ -4,6 +4,7 @@ Meetings added here have no owner, the way a project without auth keeps
 everything.
 """
 
+from itertools import groupby
 from pathlib import Path
 import shlex
 
@@ -35,11 +36,18 @@ from app.services.meetings.domains.bot.login import (
 )
 from app.services.meetings.domains.bot.run import run_meeting
 from app.services.meetings.domains.moments import tidy
-from app.services.meetings.models import MeetingRecord
+from app.services.meetings.models import MeetingRecord, Notes, SeriesRecord
 from app.services.meetings.service import (
+    NOTHING_FOUND,
     MeetingNotFoundError,
     MeetingsService,
+    SearchHit,
+    SeriesNotFoundError,
+    SeriesService,
     UnsupportedMeetingLinkError,
+    note_points,
+    said_when,
+    search_meetings,
 )
 
 app = typer.Typer(help="Calls the meeting bot joins, and what was said in them.")
@@ -127,6 +135,7 @@ def describe(record: MeetingRecord) -> list[str]:
         f"Meeting {meeting.id}  {meeting.platform}  {meeting.url}",
         *[f"{label}: {value}" for label, value in facts if value],
         f"Requested {format_relative_time(meeting.created_at)}",
+        *_notes(record.notes),
         *[
             f"[dim]{format_clock(row.at)}[/dim] {row.speaker}: {row.text}"
             for row in record.transcript
@@ -135,9 +144,63 @@ def describe(record: MeetingRecord) -> list[str]:
     ]
 
 
+def _part(title: str, points: list[str]) -> list[str]:
+    """A part of the notes or a series, its title over its points; nothing
+    when it has none."""
+    return [f"[bold]{title}[/bold]", *points] if points else []
+
+
+def _point(text: str, *said: str | None) -> str:
+    """One point, with what is said of it (whose, when due, where it
+    stands) after it."""
+    extra = ", ".join(s for s in said if s)
+    return f"  {text} ({extra})" if extra else f"  {text}"
+
+
+def _notes(notes: Notes | None) -> list[str]:
+    """The notes as they read: the summary, then each part's points."""
+    points = note_points(notes) if notes else []
+    return [
+        line
+        for part, said in groupby(points, key=lambda p: p.part)
+        for line in _part(
+            part, [_point(p.text, p.who, p.due and f"due {p.due}") for p in said]
+        )
+    ]
+
+
+def found(hits: list[SearchHit]) -> list[str]:
+    """What ``search`` prints: each hit where it was said, as the pages
+    label it, then who said it (or its part of the notes) and the text."""
+    if not hits:
+        return [f"[dim]{NOTHING_FOUND}[/dim]"]
+    return [
+        f"{said_when(hit.meeting_id, hit.at)}  {hit.speaker or hit.part}: {hit.text}"
+        for hit in hits
+    ]
+
+
+def series_lines(record: SeriesRecord) -> list[str]:
+    """One series as ``series`` prints it: its headline, its run over time,
+    what it keeps coming back to and where each stands, its meetings."""
+    series = record.series
+    return [
+        f"Series {series.id}  {record.name}",
+        *([series.summary] if series.summary else []),
+        *[
+            line
+            for section in (*record.over_time, *record.sections)
+            for line in _part(
+                section.title, [_point(i.text, i.status) for i in section.items]
+            )
+        ],
+        f"Meetings: {', '.join(map(str, record.meetings))}",
+    ]
+
+
 @app.command()
 async def show(meeting_id: int = typer.Argument(..., help="The meeting's id")) -> None:
-    """One meeting: its status, who was heard, and its transcript."""
+    """One meeting: its status, who was heard, its notes and its transcript."""
     async with get_async_session() as session:
         try:
             record = await MeetingsService(session, owner_user_id=None).read(meeting_id)
@@ -145,6 +208,49 @@ async def show(meeting_id: int = typer.Argument(..., help="The meeting's id")) -
             theme.fail(str(exc))
     for line in describe(record):
         console.print(line)
+
+
+@app.command()
+async def search(
+    query: str = typer.Argument(..., help="Words said, or a question"),
+    limit: int = typer.Option(20, "--limit", "-n"),
+) -> None:
+    """What was said with any of the words, those with the most first."""
+    async with get_async_session() as session:
+        hits = await search_meetings(session, None, query, limit)
+    for line in found(hits):
+        console.print(line)
+
+
+@app.command("series")
+async def series_of(
+    series_id: int | None = typer.Argument(None, help="A series' id"),
+) -> None:
+    """The series (a recurring meeting read over time), or one in full."""
+    async with get_async_session() as session:
+        svc = SeriesService(session, owner_user_id=None)
+        if series_id is None:
+            rows = await svc.series()
+        else:
+            try:
+                record = await svc.read(series_id)
+            except SeriesNotFoundError as exc:
+                theme.fail(str(exc))
+    if series_id is not None:
+        for line in series_lines(record):
+            console.print(line)
+        return
+    table = Table(title="Series")
+    for column in ("ID", "Name", "Meetings", "Written"):
+        table.add_column(column)
+    for row in rows:
+        table.add_row(
+            str(row.series.id),
+            row.name,
+            str(row.series.meetings),
+            format_relative_time(row.series.written_at),
+        )
+    console.print(table)
 
 
 @app.command()

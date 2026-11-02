@@ -13,7 +13,9 @@ my-app meetings login --agent work       # Sign in another agent (--name, --emai
 my-app meetings join <link>              # Send the bot in and wait (--agent, --bot-name)
 my-app meetings leave <id>               # Ask it to leave
 my-app meetings list                     # Newest first (-n LIMIT)
-my-app meetings show <id>                # Status and transcript
+my-app meetings show <id>                # Status, notes and transcript
+my-app meetings search "<words>"         # Lines and notes with any of the words (-n LIMIT)
+my-app meetings series [ID]              # The series, or one in full
 my-app meetings look-over [ID...]        # Read calls over again for moments (--series, --all)
 
 # Runner

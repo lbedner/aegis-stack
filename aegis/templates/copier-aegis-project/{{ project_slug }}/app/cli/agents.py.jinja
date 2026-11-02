@@ -15,7 +15,13 @@ from rich.table import Table
 
 from app.cli import theme
 from app.i18n import lazy_t, t
-from app.services.ai.service import Agent, AgentConfig, AgentPromptChange, ContextModule
+from app.services.ai.service import (
+    Agent,
+    AgentConfig,
+    AgentPromptChange,
+    ContextModule,
+    module_sources,
+)
 
 app = typer.Typer(help=lazy_t("agents.help"))
 modules_app = typer.Typer(help=lazy_t("agents.modules_help"))
@@ -257,12 +263,17 @@ async def show_prompt_history(slug: str = typer.Argument(...)) -> None:
     console.print(table)
 
 
+_SOURCE_KINDS = {
+    "static": "agents.module_static",
+    "subject": "agents.module_per_subject",
+    "fetcher": "agents.module_dynamic",
+}
+
+
 def _module_kind(module: ContextModule) -> str:
-    if module.prompt_content and module.fetch_function:
-        return t("agents.module_hybrid")
-    if module.fetch_function:
-        return t("agents.module_dynamic")
-    return t("agents.module_static")
+    """Each of the module's sources, in render order, as Overseer and the
+    dashboard name them."""
+    return " + ".join(t(_SOURCE_KINDS[s]) for s in module_sources(module))
 
 
 @modules_app.command("list", help=lazy_t("agents.modules_help_list"))

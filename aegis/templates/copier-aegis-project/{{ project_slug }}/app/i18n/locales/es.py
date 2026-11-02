@@ -758,7 +758,7 @@ MESSAGES: dict[str, str] = {
     "agents.module_not_found": "No se encontró el módulo de memoria '{slug}'.",
     "agents.module_static": "estático",
     "agents.module_dynamic": "dinámico",
-    "agents.module_hybrid": "híbrido",
+    "agents.module_per_subject": "per subject",
     "agents.module_content": "Contenido estático:",
     # Comandos slash
     "slash.help_desc": "Mostrar comandos disponibles",

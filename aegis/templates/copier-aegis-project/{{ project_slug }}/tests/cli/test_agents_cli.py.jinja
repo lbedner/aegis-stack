@@ -244,8 +244,7 @@ class TestContextModulesCli:
 
         assert result.exit_code == 0
         assert "diet" in result.output
-        assert "hybrid" in result.output
-        assert "static" in result.output
+        assert "static + dynamic" in result.output
 
     @patch("app.cli.agents._load_modules")
     def test_show_module(self, mock_load) -> None:

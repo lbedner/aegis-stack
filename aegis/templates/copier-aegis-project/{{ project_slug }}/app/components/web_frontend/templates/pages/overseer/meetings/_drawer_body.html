@@ -22,8 +22,8 @@
     </span>
   </div>
   {{ failure(meeting) }}
-  {{ bot_steps(steps) }}
   {{ facts([
+    ("On Meet", steps and bot_steps(steps)),
     ("Bot", meeting.bot_name),
     ("Owner", owner or meeting.owner_user_id),
     ("Owner speaks as", me),

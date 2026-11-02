@@ -16,6 +16,8 @@ NOTES_AGENT = "meeting-notes"
 GUIDE_AGENT = "meeting-guide"
 THEMES_AGENT = "meeting-themes"
 QUESTIONS_AGENT = "meeting-questions"
+# The context module telling the default agent how to read the meetings.
+MEETINGS_MODULE = "meetings"
 # Generous: a long meeting's notes run past the chat's 1000 tokens.
 MAX_TOKENS = 8000
 
@@ -141,20 +143,55 @@ def meetings_agent_definitions() -> list[dict[str, Any]]:
     ]
 
 
+# How the default agent reads the meetings: text only (no fetcher), so it
+# is edited in Agents like any other module; the tools do the reading.
+MEETINGS_GUIDE = """Meetings. You sat in the meetings the bot joined, and \
+you can read them back. When someone asks about past meetings, a series, \
+what was decided, or what keeps coming up, look it up before answering; \
+never answer from memory or say you lack access.
+- Summarize the way a colleague would: where it stands, then the two or \
+three things that matter. Go deeper only when asked.
+- You see every meeting for an admin, otherwise only the asker's own: do \
+not hedge about permissions."""
+
+
+def meetings_module_definition() -> dict[str, Any]:
+    """The seed row for how the default agent reads the meetings."""
+    return {
+        "slug": MEETINGS_MODULE,
+        "name": "Meetings",
+        "description": "How to read the meetings: a series, or what was said",
+        "category": "meetings",
+        "prompt_content": MEETINGS_GUIDE,
+        "context_key": MEETINGS_MODULE,
+    }
+
+
 def load_meetings_agent_fixtures(session: Session) -> dict[str, int]:
-    """Seed the meetings' agents that are missing; a row edited in Agents
-    is never touched. The default agent, Overseer's chat, is granted the
-    meetings search (``tools.meetings_search``)."""
+    """Seed the meetings' agents (and the module) that are missing; a row
+    edited in Agents is never touched. The default agent, Overseer's chat,
+    is granted the meetings' tools (``tools``) and the module saying how to
+    read them."""
     # Here, not at the top: the AI fixtures package loads these seeds.
     from app.services.ai.service import DEFAULT_AGENT_SLUG
     from app.services.ai.fixtures.agent_fixtures import (
+        attach_modules,
         attach_tools,
         seed_missing_agents,
+        seed_missing_modules,
     )
 
     seeded = seed_missing_agents(session, meetings_agent_definitions())
-    granted = attach_tools(session, DEFAULT_AGENT_SLUG, ["meetings_search"])
-    if granted:
+    granted = attach_tools(
+        session, DEFAULT_AGENT_SLUG, ["meetings_search", "meetings_series"]
+    )
+    module = seed_missing_modules(session, [meetings_module_definition()])
+    attached = attach_modules(session, DEFAULT_AGENT_SLUG, [MEETINGS_MODULE])
+    if granted or module or attached:
         session.commit()
-    return {"meetings_agents": seeded, "meetings_tool_links": granted}
+    return {
+        "meetings_agents": seeded,
+        "meetings_tool_links": granted,
+        "meetings_modules": module,
+    }
 {% endif %}

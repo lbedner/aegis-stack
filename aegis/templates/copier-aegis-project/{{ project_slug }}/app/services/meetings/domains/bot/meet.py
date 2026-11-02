@@ -22,7 +22,7 @@ import contextlib
 from contextlib import asynccontextmanager
 from enum import StrEnum
 import re
-from typing import Any
+from typing import Any, NamedTuple
 
 from playwright.async_api import Page
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
@@ -32,8 +32,16 @@ from app.core.time import utcnow
 from app.services.meetings.domains.bot import card
 from app.services.meetings.domains.bot.audio import listen
 from app.services.meetings.domains.bot.login import LOGIN, stored_login
+from app.services.meetings.domains.bot.scripts import (
+    ANSWER_PROMPTS,
+    BUTTONS,
+    LOOK,
+    MOVED,
+    WATCH_CAPTIONS,
+)
 from app.services.meetings.models import (
     ALREADY,
+    CAMERA,
     CAPTIONS,
     CHAT,
     JOIN,
@@ -59,6 +67,8 @@ USE_MEDIA = 'button:has-text("Use microphone and camera")'
 CONTINUE_WITHOUT_MEDIA = 'button:has-text("Continue without microphone and camera")'
 MIC_ON = 'button[aria-label^="Turn on microphone"]'
 MIC_OFF = 'button[aria-label^="Turn off microphone"]'
+CAMERA_ON = 'button[aria-label^="Turn on camera"]'
+CAMERA_OFF = 'button[aria-label^="Turn off camera"]'
 # After its words have played, a moment before it mutes: the end is not
 # cut off.
 SPOKEN_TAIL = 0.3
@@ -79,8 +89,6 @@ LOBBY_TIMEOUT_MS = 30_000
 LEAVE_BUTTON = 'button[aria-label*="Leave call"]'
 # How much of the page a log of why the bot left keeps.
 PAGE_TEXT_KEPT = 1000
-# The participant count badge: named "People" by aria-labelledby, not a label.
-PEOPLE_BUTTON = 'role=button[name="People"]'
 CHAT_BUTTON = 'button[aria-label*="Chat with everyone"]'
 CHAT_INPUT = 'textarea[aria-label*="Send a message"]'
 CAPTIONS_BUTTON = 'button[aria-label^="Turn on captions"]'
@@ -91,43 +99,11 @@ CAPTIONS_SHORTCUT = "c"
 CHAT_SHORTCUT = "Control+Alt+c"
 # How long a shortcut has to show what it does.
 SHORTCUT_WAIT_MS = 2000
-# The page's buttons as a reader hears them (their labels, else their
-# text), once each: what to look for a control as, where its label is gone.
-BUTTONS = """() => [...new Set([...document.querySelectorAll('button, [role=button]')]
-  .filter((button) => button.checkVisibility())
-  .map((button) => (button.getAttribute('aria-label') || button.innerText || '')
-    .trim().replace(/\\s+/g, ' '))
-  .filter(Boolean))].join('\\n')"""
 BUTTONS_KEPT = 2000
-# What Meet puts over the call once the bot is in, each covering the chat,
-# captions and Leave until answered: that a notetaker (Gemini) is on,
-# accepted with "Join now" (the bot is one itself), and tips about its
-# camera ("Got it"). Answered in one look, the click going to the button
-# itself so one prompt stacked over another cannot block it. Only ever run
-# in the call: in the lobby "Join now" is the join button.
-ANSWER_PROMPTS = """() => {
-  for (const button of document.querySelectorAll('button, [role=button]')) {
-    const said = (button.innerText || button.getAttribute('aria-label') || '').trim();
-    if ((said === 'Join now' || said === 'Got it') && button.checkVisibility()) {
-      button.click();
-    }
-  }
-}"""
 # How long the bot keeps trying to post in the chat: a prompt can come a
 # moment after it is let in.
 SAY_TRIES = 30
 CAPTIONS_REGION = 'role=region[name="Captions"]'
-# Each block is a speaker's name, then what they said. A block is tagged
-# the first time it is read, so one Meet is still writing reads as the same
-# line on the next look; the counter is the page's, so blocks never share
-# a tag. A block with a button is the region's own control, not a caption.
-READ_CAPTIONS = """(region) => [...region.children].flatMap((block) => {
-  if (block.querySelector('button')) return [];
-  const [speaker, ...words] = block.innerText.split('\\n');
-  if (!speaker || !words.length) return [];
-  block.dataset.line ??= String((window.captionLines = (window.captionLines || 0) + 1));
-  return [{line: block.dataset.line, speaker: speaker.trim(), text: words.join(' ').trim()}];
-})"""
 
 
 # How much of what Meet shows has to match what was already heard to find
@@ -170,16 +146,14 @@ PAGE_TEXTS = (
 )
 
 
-# The state ``PAGE_TEXTS`` names, from the page's text, else in the call
-# while Leave shows, else waiting.
-STATE = """([texts, leave, inCall, waiting]) => {
-  const body = document.body.innerText;
-  for (const [state, said] of texts) {
-    if (said.some((text) => body.includes(text))) return state;
-  }
-  const button = document.querySelector(leave);
-  return button && button.checkVisibility() ? inCall : waiting;
-}"""
+class Look(NamedTuple):
+    """The call as one look saw it: where the bot is, the caption blocks on
+    screen (oldest first) and how many are in (None where the page does
+    not say), the last two read only in the call."""
+
+    state: CallState
+    captions: list[Caption]
+    people: int | None
 
 
 class MeetPageError(RuntimeError):
@@ -206,9 +180,10 @@ class Steps:
 
 
 class MeetPage(Steps):
-    def __init__(self, page: Page) -> None:
+    def __init__(self, page: Page, camera: bool = False) -> None:
         super().__init__()
         self.page = page
+        self.camera = camera  # its card shown from the lobby on
         self._pressed: set[str] = set()  # the shortcuts tried, once a call
         self.spoken = False  # whether it has said anything yet
         self.open_mic = False  # open until ``hush``
@@ -260,22 +235,24 @@ class MeetPage(Steps):
     async def _buttons(self) -> str:
         return str(await self.page.evaluate(BUTTONS))[:BUTTONS_KEPT]
 
-    async def _mic(self, click: str, already: str) -> bool:
-        """The mic switched by clicking ``click``, or already as wanted
-        (``already`` showing); never by its shortcut."""
+    async def _switch(self, step: str, click: str, already: str) -> bool:
+        """``step``'s control (the mic, the camera) switched by clicking
+        ``click``, or already as wanted (``already`` showing); never by its
+        shortcut, which toggles."""
         if await self._click_if_visible(click):
-            self.took(MIC, LABEL)
+            self.took(step, LABEL)
             return True
         if await self._shown(already):
-            self.took(MIC, ALREADY)
+            self.took(step, ALREADY)
         else:
-            await self._missed(MIC)
+            await self._missed(step)
         return False
 
     async def ask_to_join(self, bot_name: str) -> None:
         """Once Meet has drawn its lobby: its camera and microphone taken
-        (the card's), the microphone muted, named, and the join button
-        clicked."""
+        (the card's), the camera on where it shows its card (Meet keeps it
+        as the account last left it), the microphone muted, named, and the
+        join button clicked."""
         join = self.page.locator(JOIN_BUTTON).first
         try:
             await join.wait_for(timeout=LOBBY_TIMEOUT_MS)
@@ -284,33 +261,44 @@ class MeetPage(Steps):
             raise MeetPageError("No join button on the meeting page") from None
         if not await self._click_if_visible(USE_MEDIA):
             await self._click_if_visible(CONTINUE_WITHOUT_MEDIA)
-        await self._mic(MIC_OFF, MIC_ON)
+        if self.camera:
+            await self._switch(CAMERA, CAMERA_ON, CAMERA_OFF)
+        await self._switch(MIC, MIC_OFF, MIC_ON)
         if await self._shown(NAME_INPUT):
             await self.page.locator(NAME_INPUT).first.fill(bot_name)
         await join.click(timeout=5000)
         self.took(JOIN, LABEL)
 
     async def state(self) -> CallState:
-        """Where the bot is, read in the page in one look: only the answer
-        comes back, not the page's text (it grows with the call)."""
-        texts = [[state.value, list(said)] for state, said in PAGE_TEXTS]
-        found = await self.page.evaluate(
-            STATE, [texts, LEAVE_BUTTON, CallState.IN_CALL, CallState.WAITING]
-        )
-        return CallState(found)
+        """Where the bot is (``look``): only the answer comes back, not the
+        page's text (it grows with the call)."""
+        return (await self.look()).state
 
     async def page_text(self) -> str:
         """What the page says, cut to what a log line can carry."""
         return (await self.page.inner_text("body"))[:PAGE_TEXT_KEPT]
 
-    async def people(self) -> int | None:
-        """How many are in the call, the bot included; None when the page
-        does not say."""
-        # What is on the page now: a call that just ended has no button, and
-        # waiting for one would hold the bot until a timeout.
-        texts = await self.page.locator(PEOPLE_BUTTON).all_inner_texts()
-        found = re.search(r"\d+", texts[0]) if texts else None
-        return int(found.group()) if found else None
+    async def look(self) -> Look:
+        """The call now (``LOOK``), in one trip to the page."""
+        texts = [[state.value, list(said)] for state, said in PAGE_TEXTS]
+        seen = await self.page.evaluate(
+            LOOK, [texts, LEAVE_BUTTON, CallState.IN_CALL, CallState.WAITING]
+        )
+        count = re.search(r"\d+", seen["people"] or "")
+        return Look(
+            state=CallState(seen["state"]),
+            captions=[Caption(**c) for c in seen["captions"]],
+            people=int(count.group()) if count else None,
+        )
+
+    async def watch_captions(self, moved: Callable[[list[Caption]], None]) -> None:
+        """Have the page tell ``moved`` the caption blocks that moved, as
+        soon as they do (``WATCH_CAPTIONS``), so the bot need not wait for
+        its next look to hear what is put to it."""
+        await self.page.expose_function(
+            MOVED, lambda seen: moved([Caption(**c) for c in seen])
+        )
+        await self.page.evaluate(WATCH_CAPTIONS, MOVED)
 
     async def _answer_prompts(self) -> None:
         """Answer whatever Meet has put over the call, before any in-call
@@ -340,7 +328,7 @@ class MeetPage(Steps):
         if self.open_mic:
             return
         await self._answer_prompts()
-        if await self._mic(MIC_ON, MIC_OFF) and not self.spoken:
+        if await self._switch(MIC, MIC_ON, MIC_OFF) and not self.spoken:
             await asyncio.sleep(FIRST_UNMUTE)
         self.spoken = self.open_mic = True
 
@@ -373,7 +361,7 @@ class MeetPage(Steps):
         """The mic closed, where it is open."""
         if self.open_mic:
             self.open_mic = False
-            await self._mic(MIC_OFF, MIC_ON)
+            await self._switch(MIC, MIC_OFF, MIC_ON)
 
     async def leave(self) -> None:
         await self._answer_prompts()
@@ -397,14 +385,6 @@ class MeetPage(Steps):
         return await self._work(
             CAPTIONS, CAPTIONS_BUTTON, CAPTIONS_SHORTCUT, CAPTIONS_REGION
         )
-
-    async def captions(self) -> list[Caption]:
-        """The caption blocks on screen now, oldest first."""
-        await self._answer_prompts()
-        region = self.page.locator(CAPTIONS_REGION)
-        if not await region.count():
-            return []
-        return [Caption(**c) for c in await region.first.evaluate(READ_CAPTIONS)]
 
 
 @asynccontextmanager
@@ -432,4 +412,4 @@ async def open_meet(
         await page.goto(url, wait_until="domcontentloaded")
         if start is not None and start.image:
             await card.show(page, image=start.image)
-        yield MeetPage(page)
+        yield MeetPage(page, camera=start is not None and start.camera)

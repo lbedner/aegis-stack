@@ -144,6 +144,14 @@ nav:
         - Getting Started: services/research/index.md
       - Meetings (Experimental):
         - Getting Started: services/meetings/index.md
+        - Agents and Calendars: services/meetings/agents.md
+        - In the Call: services/meetings/bot.md
+        - Talking to Illiana: services/meetings/illiana.md
+        - Questions and Actions: services/meetings/moments.md
+        - Notes, People and Series: services/meetings/notes.md
+        - Meetings Page and Overseer: services/meetings/pages.md
+        - CLI Commands: services/meetings/cli.md
+        - API Reference: services/meetings/api.md
     - Data:
       - Documents:
         - Getting Started: services/documents/index.md

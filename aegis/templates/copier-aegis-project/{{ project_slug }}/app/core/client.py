@@ -93,7 +93,7 @@ class APIClient(SessionCookieMixin):
         # ``follow_redirects`` lets the OAuth callback chain (303 → /) work
         # end-to-end. The User-Agent names the frontend, so its sign-ins
         # read as that in Overseer > Sessions, not as ``python-httpx``.
-        # ``transport`` is the seam, matching GraphQLClient: a test hands
+        # ``transport`` is the seam: a test hands
         # in ``httpx.MockTransport`` and never monkeypatches httpx (the
         # auth lifecycle is only testable with a server that answers).
         self._client = httpx.AsyncClient(

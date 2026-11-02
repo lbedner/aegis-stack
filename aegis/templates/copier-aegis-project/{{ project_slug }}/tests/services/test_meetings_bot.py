@@ -696,6 +696,27 @@ async def test_an_agents_picture_and_camera_setting_come_with_it(
     assert not call.start.camera
 
 
+@pytest.mark.parametrize("sound", ["typing", "none"])
+async def test_its_keys_tap_while_it_works_as_its_voice_is_set(
+    run: Callable[..., Any], monkeypatch: pytest.MonkeyPatch, sound: str
+) -> None:
+    """Its voice's working sound, as the chat's: key taps, or nothing."""
+    voiced = SimpleNamespace(VOICE_WORKING_SOUND=sound)
+    call = FakeCall([CallState.IN_CALL, CallState.ENDED])
+
+    async def voice_of(_: AsyncSession) -> SimpleNamespace:
+        return voiced
+
+    async def no_engine(*_: Any) -> None:
+        return None
+
+    monkeypatch.setattr(bot, "voice_of", voice_of)
+    monkeypatch.setattr(bot, "live_engine_of", no_engine)
+    await run(call)
+
+    assert call.start.taps is (sound == "typing")
+
+
 async def test_it_speaks_in_the_stacks_active_voice(
     async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:

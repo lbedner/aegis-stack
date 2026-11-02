@@ -12,13 +12,16 @@ agent small at the top left, the others as pills along the foot (up next,
 and its last answers), the bottom right left clear for the host's own
 picture Meet lays there. The browser has no devices of its
 own, so the page lists these as its camera, microphone and speaker; with
-none, Meet says "Camera not found" and never asks. The canvas is redrawn only when the
-card changes (``show``), drawn at twice its size for a sharp picture, and
-sent ten frames a second, steady: fewer, Meet left a change half drawn or
-not drawn at all. An agent with its camera off gives Meet no
+none, Meet says "Camera not found" and never asks. The canvas is drawn
+for each frame (a frame not drawn is not sent), at twice its size for a
+sharp picture, and sent ten frames a second, steady, as detail (a slide, not a face): fewer,
+or as motion, Meet left a change half drawn, not drawn at all, or the last
+card's ghost behind it. An agent with its camera off gives Meet no
 picture at all. The script runs in the page itself, never in the frames
 Meet opens inside it, and carries no picture: its initials stand until
-the page has loaded and the picture is handed over (``open_meet``).
+the page has loaded and the picture is handed over (``open_meet``). While
+the agent works on a request and has said nothing, its mic carries soft
+key taps (``taps``, the chat's own), not it saying what it looks up.
 """
 
 import asyncio
@@ -33,8 +36,19 @@ from typing import Any
 from playwright.async_api import Page
 from pydantic import BaseModel, ConfigDict
 
+from app.core.log import logger
 from app.services.meetings.domains.bot.voice import sentences
-from app.services.meetings.domains.moments.detectors import put_to
+from app.services.meetings.domains.moments.detectors import (
+    FILLERS,
+    GREETINGS,
+    NOTHING,
+    UMS,
+    WORD,
+    asks,
+    past_name,
+    says_more,
+    stops,
+)
 from app.services.meetings.models import CLAIMED, DONE, IN_THE_APP, Going
 
 LISTENING = "Listening"
@@ -70,6 +84,47 @@ class Start(BaseModel):
     name: str
     image: str | None = None
     camera: bool = True
+    # Key taps while it works (the voice's ``VOICE_WORKING_SOUND`` "typing").
+    taps: bool = False
+
+
+def put_to(text: str, name: str) -> str:
+    """What ``text`` puts to ``name``, as a card shows it: its name off (with
+    the greeting before it, or where it closes the line), the fillers it
+    opens on, and its ums anywhere (``UMS``: captions mark a pause on one,
+    and end the question on a "."), a question ending on "?" ("Uh, hey
+    Illiana, are there any, uh? Errors." is "Are there any errors?"); a
+    line without the name keeps all but its fillers, and one asking her
+    nothing (her name and greetings, thanks, or a stop) puts nothing ("").
+    Done on the text, no model asked, so the card shows it at once."""
+    said = text.strip()
+    ask = past_name(said, name)
+    ask = _without_ums(said if ask is None else ask)
+    while (first := WORD.match(ask)) and first.group().lower() in GREETINGS | FILLERS:
+        ask = ask[first.end() :].lstrip(" ,.;:!-")
+    if not says_more(ask, NOTHING) or stops(said, name):
+        return ""
+    if ask.endswith(".") and asks(ask):
+        ask = ask[:-1] + "?"
+    return ask[:1].upper() + ask[1:]
+
+
+def _without_ums(text: str) -> str:
+    """``text`` without its ums, and what captions hung on them: the comma
+    before one, and a capital after one they took for a sentence's end."""
+    kept: list[str] = []
+    lower = False
+    for token in text.split():
+        if token.strip(",.?!;:").lower() in UMS:
+            if kept:
+                kept[-1] = kept[-1].rstrip(",")
+            lower = lower or token.endswith((".", "?", "!"))
+            continue
+        if lower and token[:1].isupper() and token != "I" and token[:2] != "I'":
+            token = token[:1].lower() + token[1:]
+        lower = False
+        kept.append(token)
+    return " ".join(kept)
 
 
 class Focus(BaseModel):
@@ -88,6 +143,8 @@ class Focus(BaseModel):
     # What it is saying while it works, as Meet captions it ("Let me check
     # the recent logs"), until its answer is back.
     voice: str | None = None
+    # Whether a runner has taken it and works on it (key taps play).
+    working: bool = False
 
 
 class Pill(BaseModel):
@@ -166,7 +223,8 @@ class Card:
         for m in were.keys() - going_on:
             if m in over:
                 self.back_at.setdefault(m, now)
-        asked = bool(going or hearing)  # something else to show
+        heard = [q for _, text in hearing if (q := put_to(text, self.name))]
+        asked = bool(going or heard)  # something else to show
         said = {
             m: run.model_copy(update={"status": DONE})
             for m, run in were.items()
@@ -186,9 +244,8 @@ class Card:
         self.seen_at = {m: self.seen_at.get(m, now) for m in self.runs}
         listed = sorted(self.runs.values(), key=lambda run: (_rank(run), run.id))
         status = status_of(self.captions, listed)
-        if hearing and not listed:
+        if heard and not listed:
             status = QUESTION_HEARD
-        heard = [put_to(text, self.name) for _, text in hearing]
         focus: Focus | None = None
         if listed and (_rank(listed[0]) < HEARD_RANK or not heard):
             first = listed.pop(0)
@@ -220,7 +277,7 @@ class Card:
             )
 
     def _asked(self, run: Going) -> str:
-        return put_to(run.text, self.name)
+        return put_to(run.text, self.name) or run.text
 
     def _focus(self, run: Going, over: Going | None, her: tuple[float, str]) -> Focus:
         if run.status == DONE:
@@ -251,6 +308,7 @@ class Card:
             step=step,
             steps=steps,
             voice=voice,
+            working=run.status == CLAIMED,
         )
 
 
@@ -275,6 +333,9 @@ def initials(name: str) -> str:
 # Defines ``window.__meetingCard`` and answers getUserMedia before the
 # page's own scripts run (``card.js``, ``__START__`` the card as it joins).
 CARD = (Path(__file__).parent / "card.js").read_text()
+# The chat's key taps (``window.keyTaps``), where the stack has the web
+# frontend that keeps them; without, the card is quiet while it works.
+TAPS = Path(__file__).parents[4] / "components/web_frontend/static/js/taps.js"
 
 
 def script(start: Start) -> str:
@@ -285,10 +346,14 @@ def script(start: Start) -> str:
     card = start.model_dump(exclude={"image"}) | {
         "initials": initials(start.name),
         "status": LISTENING,
+        "listening": LISTENING,
         "focus": None,
         "pills": [],
     }
-    return CARD.replace("__START__", json.dumps(card))
+    if start.taps and not TAPS.exists():
+        logger.warning("No key taps: this stack has no web frontend's taps.js")
+    taps = TAPS.read_text() if start.taps and TAPS.exists() else ""
+    return taps + CARD.replace("__START__", json.dumps(card))
 
 
 async def show(page: Page, **update: Any) -> None:

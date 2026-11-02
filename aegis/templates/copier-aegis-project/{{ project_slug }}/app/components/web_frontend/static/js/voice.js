@@ -53,41 +53,19 @@
     if (state === 'idle') say(null);
   };
 
-  // --- Working: soft key taps until it speaks --------------------------------
-  // Generated, not a recording: a short burst of filtered noise per key, at
-  // the uneven pace of someone typing.
+  // --- Working: soft key taps until it speaks (taps.js) ---------------------
   let ear = null; // the AudioContext, made on the mic press that allows it
-  let typing = null;
+  let keys = null;
   let quiet = null;
-  const tap = () => {
-    const length = 0.018 + Math.random() * 0.02;
-    const buffer = ear.createBuffer(1, Math.ceil(ear.sampleRate * length), ear.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length) ** 3;
-    const source = ear.createBufferSource();
-    const tone = ear.createBiquadFilter();
-    const level = ear.createGain();
-    source.buffer = buffer;
-    tone.type = 'bandpass';
-    tone.frequency.value = 1800 + Math.random() * 1800;
-    level.gain.value = 0.05 + Math.random() * 0.05;
-    source.connect(tone).connect(level).connect(ear.destination);
-    source.start();
-  };
-  const keepTyping = () => {
-    tap();
-    // Unhurried keys, and often the pause between words.
-    typing = setTimeout(keepTyping, Math.random() < 0.25 ? 500 + Math.random() * 700 : 150 + Math.random() * 200);
-  };
   const startTyping = () => {
-    if (voice().sound !== 'typing' || typing || !ear) return;
+    if (voice().sound !== 'typing' || !ear) return;
     ear.resume();
-    keepTyping();
+    keys ??= keyTaps(ear, ear.destination);
+    keys.start();
   };
   const stopTyping = () => {
-    clearTimeout(typing);
     clearTimeout(quiet);
-    typing = null;
+    keys?.stop();
   };
 
   // The first sound of the voice ends the typing and shows it speaking -

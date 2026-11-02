@@ -14,7 +14,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.services.meetings.domains.bot import card
 from app.services.meetings.domains.bot import run as bot
 from app.services.meetings.domains.bot.meet import CallState, MeetPage, merge_caption
-from app.services.meetings.models import MeetingStatus
+from app.services.meetings.models import Caption, MeetingStatus
 from app.services.meetings.service import MeetingsService
 from tests._browser import live_browser
 from tests._meetings import MEET, SAID, SHOWN, bot_on
@@ -33,6 +33,7 @@ FAKE_MEET = """
     Continue without microphone and camera</button>
 </div>
 <button id="mic" aria-label="Turn off microphone (ctrl + d)" onclick="toggleMic()">mic</button>
+<button id="camera" aria-label="Turn on camera (ctrl + e)" onclick="toggleCamera()">camera</button>
 <div id="lobby">
   <input type="text" aria-label="Your name">
   <button onclick="lobby.hidden = true; note.textContent = 'Asking to be let in...'">
@@ -73,6 +74,11 @@ FAKE_MEET = """
   function toggleMic() {
     const on = mic.getAttribute('aria-label').startsWith('Turn off');
     mic.setAttribute('aria-label', (on ? 'Turn on' : 'Turn off') + ' microphone (ctrl + d)');
+  }
+  // Meet keeps the camera as the account last left it: here, off.
+  function toggleCamera() {
+    const on = camera.getAttribute('aria-label').startsWith('Turn off');
+    camera.setAttribute('aria-label', (on ? 'Turn on' : 'Turn off') + ' camera (ctrl + e)');
   }
   function deny() { note.textContent = 'Someone in the call denied your request to join'; }
   function end(text) { call.remove(); note.textContent = text; }
@@ -132,6 +138,28 @@ async def test_it_joins_with_its_camera_and_mic_and_the_mic_off(
     assert await meet.page.evaluate("window.media") == "on"
     assert await meet.page.get_attribute("#mic", "aria-label") == (
         "Turn on microphone (ctrl + d)"
+    )
+
+
+async def test_its_camera_is_on_as_it_joins_though_meet_kept_it_off(
+    meet: MeetPage,
+) -> None:
+    """Its card and face from the first moment: Meet keeps the camera as
+    the account last left it."""
+    camera = MeetPage(meet.page, camera=True)
+    await camera.ask_to_join("Notes")
+
+    assert await meet.page.get_attribute("#camera", "aria-label") == (
+        "Turn off camera (ctrl + e)"
+    )
+    assert ("camera", "label") in _took(camera)
+
+
+async def test_an_agent_with_its_camera_off_joins_with_it_off(meet: MeetPage) -> None:
+    await meet.ask_to_join("Notes")
+
+    assert await meet.page.get_attribute("#camera", "aria-label") == (
+        "Turn on camera (ctrl + e)"
     )
 
 
@@ -247,8 +275,9 @@ async def test_once_admitted_it_counts_people_and_talks_in_chat(
 
     await meet.say("Notes is taking notes.")
 
-    assert await meet.state() == CallState.IN_CALL
-    assert await meet.people() == 3
+    look = await meet.look()
+    assert look.state == CallState.IN_CALL
+    assert look.people == 3
     assert await meet.page.evaluate("window.said") == "Notes is taking notes."
 
 
@@ -364,16 +393,69 @@ async def test_its_mic_never_switched_blind(meet: MeetPage) -> None:
     assert ("mic", "missed") in _took(meet)
 
 
+async def test_a_look_is_one_trip_to_the_page(meet: MeetPage) -> None:
+    """Where the bot is, the captions and how many are in: read together
+    on every look, each read its own trip once cost a look six."""
+    await meet.ask_to_join("Notes")
+    await meet.page.evaluate("admit(); captions.hidden = false; caption('Ada', 'Hi.')")
+    trips = 0
+    evaluate = meet.page.evaluate
+
+    async def counted(*args: object, **kwargs: object) -> object:
+        nonlocal trips
+        trips += 1
+        return await evaluate(*args, **kwargs)  # type: ignore[arg-type]
+
+    meet.page.evaluate = counted  # type: ignore[method-assign]
+    look = await meet.look()
+
+    assert trips == 1
+    assert (look.state, look.people) == (CallState.IN_CALL, 3)
+    assert [(c.speaker, c.text) for c in look.captions] == [("Ada", "Hi.")]
+
+
+async def test_a_caption_that_moves_is_told_at_once(meet: MeetPage) -> None:
+    """The page tells the bot as soon as a caption moves, not on its next
+    look: only the blocks that moved, a few at a time, read as a look reads
+    them (the same line as the block grows)."""
+    told: list[list[Caption]] = []
+    await meet.ask_to_join("Notes")
+    await meet.page.evaluate("admit(); captions.hidden = false; caption('Ada', 'Hi.')")
+    await meet.watch_captions(told.append)
+
+    await meet.page.evaluate("caption('Leonard', 'Hey Notes,')")
+    await meet.page.evaluate("more('who owns this?')")
+    for _ in range(40):
+        if told and told[-1][-1].text == "Hey Notes, who owns this?":
+            break
+        await asyncio.sleep(0.05)
+
+    look = await meet.look()
+    assert [(c.speaker, c.text) for c in told[-1]] == [
+        ("Leonard", "Hey Notes, who owns this?")
+    ]
+    assert told[-1][0].line == look.captions[-1].line
+    assert len(told) <= 2  # the two changes, close together, told as one or two
+
+
+async def test_waiting_to_be_let_in_a_look_reads_no_captions(meet: MeetPage) -> None:
+    await meet.ask_to_join("Notes")
+
+    look = await meet.look()
+
+    assert (look.state, look.captions, look.people) == (CallState.WAITING, [], None)
+
+
 async def test_captions_read_as_lines_that_grow(meet: MeetPage) -> None:
     """Meet writes a speaker's block as they talk: it stays one line."""
     await meet.ask_to_join("Notes")
     await meet.page.evaluate("admit()")
     await meet.turn_on_captions()
     await meet.page.evaluate("caption('Leonard', 'Okay.')")
-    first = await meet.captions()
+    first = (await meet.look()).captions
 
     await meet.page.evaluate("more('Testing.'); caption('Ada', 'Hello.')")
-    after = await meet.captions()
+    after = (await meet.look()).captions
 
     assert [(c.speaker, c.text) for c in first] == [("Leonard", "Okay.")]
     assert [(c.speaker, c.text) for c in after] == [

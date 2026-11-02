@@ -26,8 +26,12 @@
   let picture = null, widest = 0;
   // Frames a second, steady whether or not the card changed: at two, and
   // in bursts, Meet left a change half drawn (the old card's ghost) or not
-  // drawn at all. An unchanged card costs the encoder next to nothing.
+  // drawn at all. Each is drawn again: a canvas not drawn on sends nothing
+  // however often a frame is asked of it, and Meet showed the agent's
+  // initials until its card first changed. An unchanged card costs the
+  // encoder next to nothing.
   const FPS = 10;
+  const BEAT = 400;  // ms between the Listening dots
 
   function avatar(g, cx, cy, r) {
     g.save();
@@ -58,6 +62,13 @@
     g.fillStyle = TEAL;
     g.font = '24px sans-serif';
     g.fillText(card.status, cx, 276);
+    if (card.status === card.listening) {
+      // Dots after the word, a beat apart: something is happening on her
+      // end. Drawn from where the word ends, so it never shifts.
+      g.textAlign = 'left';
+      const dots = Math.floor(performance.now() / BEAT) % 4;
+      g.fillText('.'.repeat(dots), cx + g.measureText(card.status).width / 2, 276);
+    }
   }
 
   // ``text`` in lines no wider than ``width``, at most ``most`` of them, the
@@ -234,8 +245,11 @@
     image.src = src;
   }
   const video = canvas.captureStream(0).getVideoTracks()[0];
-  setInterval(() => video.requestFrame(), 1000 / FPS);
-  let voice = null, mic = null, until = 0;
+  // Sent as detail (a slide, not a face): as motion, the encoder never
+  // refined a still card, and the last one stayed behind it as a ghost.
+  video.contentHint = 'detail';
+  let voice = null, mic = null, until = 0, keys = null;
+  setInterval(() => { draw(); video.requestFrame(); typing(); }, 1000 / FPS);
   const playing = new Set();  // what is playing or queued, to cut off
   function microphone() {
     if (!voice) {
@@ -259,6 +273,16 @@
     source.start(at);
     until = at + sound.duration;
     return until - voice.currentTime;
+  }
+  // Key taps into the mic (taps.js, read in ahead of this where on) while
+  // it works on the request in focus and nothing it says is playing.
+  function typing() {
+    const working = card.focus?.working && window.keyTaps;
+    if (!working || (voice && until > voice.currentTime)) return keys?.stop();
+    const out = microphone();
+    keys ??= window.keyTaps(voice, out);
+    voice.resume();
+    keys.start();
   }
   window.__meetingCard = {
     show(update) {
@@ -287,6 +311,7 @@
       until = 0;
     },
     picture() { return canvas.toDataURL(); },
+    typing() { return Boolean(keys?.on); },
     // How far right the last drawing's text reached: never past the card.
     widest() { return widest; },
     cornerClear,

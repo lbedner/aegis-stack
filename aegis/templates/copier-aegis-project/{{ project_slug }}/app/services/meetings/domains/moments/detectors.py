@@ -315,13 +315,13 @@ def addressed(heard: Heard) -> str | None:
 def _put_to_her(heard: Heard) -> str | None:
     """What a line, said to its end, puts to the bot: all of it, said back
     to it (``replying``: more than thanks); else what its name opens or
-    closes (``_past_name``). None for a stop, or a line not put to it."""
+    closes (``past_name``). None for a stop, or a line not put to it."""
     text = heard.text.strip()
     if not heard.addressee or not text.endswith(ENDS) or stop(heard):
         return None
     if heard.replying and not mentions(text, heard.addressee):
         return text if _says_back(heard) else None
-    return _past_name(text, heard.addressee)
+    return past_name(text, heard.addressee)
 
 
 def _says_back(heard: Heard) -> bool:
@@ -341,45 +341,7 @@ def says_more(text: str, than: frozenset[str], name: str = "") -> bool:
     )
 
 
-def put_to(text: str, name: str) -> str:
-    """What ``text`` puts to ``name``, as a card shows it: its name off (with
-    the greeting before it, or where it closes the line), the fillers it
-    opens on, and its ums anywhere (``UMS``: captions mark a pause on one,
-    and end the question on a "."), a question ending on "?" ("Uh, hey
-    Illiana, are there any, uh? Errors." is "Are there any errors?"); a
-    line without the name keeps all but its fillers. Done on the text,
-    no model asked, so the card shows it at once."""
-    said = text.strip()
-    ask = _past_name(said, name)
-    ask = _without_ums(said if ask is None else ask)
-    while (first := WORD.match(ask)) and first.group().lower() in GREETINGS | FILLERS:
-        ask = ask[first.end() :].lstrip(" ,.;:!-")
-    if not ask:
-        return said
-    if ask.endswith(".") and asks(ask):
-        ask = ask[:-1] + "?"
-    return ask[:1].upper() + ask[1:]
-
-
-def _without_ums(text: str) -> str:
-    """``text`` without its ums, and what captions hung on them: the comma
-    before one, and a capital after one they took for a sentence's end."""
-    kept: list[str] = []
-    lower = False
-    for token in text.split():
-        if token.strip(",.?!;:").lower() in UMS:
-            if kept:
-                kept[-1] = kept[-1].rstrip(",")
-            lower = lower or token.endswith((".", "?", "!"))
-            continue
-        if lower and token[:1].isupper() and token != "I" and token[:2] != "I'":
-            token = token[:1].lower() + token[1:]
-        lower = False
-        kept.append(token)
-    return " ".join(kept)
-
-
-def _past_name(text: str, name: str) -> str | None:
+def past_name(text: str, name: str) -> str | None:
     """``text`` past ``name``: after it, where it opens on it (after a
     greeting at most), or before it, where it closes on it; None where the
     name is neither (said in passing, or not at all)."""
@@ -421,8 +383,8 @@ STOPS = frozenset(
         "shut up", "enough", "that's enough", "never mind", "nevermind", "cancel",
     }
 )  # fmt: skip
-# Said around a stop, changing nothing.
-AROUND_A_STOP = GREETINGS | FILLERS | {"no", "please"}
+# Said around a stop or a go-on, changing nothing.
+AROUND = GREETINGS | FILLERS | {"no", "please", "sorry"}
 CLAUSE = re.compile(r"[.!?,;]+")
 
 
@@ -434,27 +396,33 @@ def stop(heard: Heard) -> str | None:
 
 
 def stops(text: str, name: str) -> bool:
-    """Whether ``text`` is a stop (``STOPS``, a greeting at most beside it):
-    alone in each clause, or the first said from her ``name`` on (the
-    clause said to her). Read as soon as it is heard, not
-    once the caption ends: stopped a word early, she only goes quiet."""
+    """Whether ``text`` is a stop (``STOPS``, ``says_only``). Read as soon
+    as it is heard, not once the caption ends: stopped a word early, she
+    only goes quiet."""
     # ponytail: a caption caught at "Stop" that grows into "Stop the deploy
     # ..." has already stopped her; a model's read would cost a second.
+    return says_only(text, name, STOPS)
+
+
+def says_only(text: str, name: str, these: frozenset[str]) -> bool:
+    """Whether ``text`` says one of ``these`` (``AROUND`` at most beside
+    it): alone in each clause, or the first said from her ``name`` on (the
+    clause said to her)."""
     clauses = [
         [(word, named(word, name)) for word in WORD.findall(clause)]
         for clause in CLAUSE.split(text.lower())
     ]
     said = [
-        " ".join(w for w, its_name in words if not its_name and w not in AROUND_A_STOP)
+        " ".join(w for w, its_name in words if not its_name and w not in AROUND)
         for words in clauses
     ]
     to_her = next(
         (i for i, words in enumerate(clauses) if any(n for _, n in words)), None
     )
-    if to_her is not None and next(filter(None, said[to_her:]), "") in STOPS:
+    if to_her is not None and next(filter(None, said[to_her:]), "") in these:
         return True
     said = [clause for clause in said if clause]
-    return bool(said) and all(clause in STOPS for clause in said)
+    return bool(said) and all(clause in these for clause in said)
 
 
 register_detector(STOP, stop)
@@ -464,6 +432,13 @@ register_detector(STOP, stop)
 CUT_IN = "cut_in"
 # Told to go on: what it was saying when cut in on, said on.
 GO_ON = "go_on"
+# What tells her to go on, each said by itself.
+GO_ONS = frozenset(
+    {
+        "go on", "go ahead", "carry on", "continue", "keep going", "proceed",
+        "go for it", "you were saying", "as you were saying", "resume",
+    }
+)  # fmt: skip
 # Kept with the transcript, never listed as moments: the bot's to obey.
 OBEYED = frozenset({STOP, CUT_IN, GO_ON})
 # Said over the bot that cuts in on nothing: a nod. "Wait" is a cut-in.
@@ -479,15 +454,14 @@ def cut_in(heard: Heard) -> str | None:
 
 
 def go_on(heard: Heard) -> str | None:
-    """A line put to the bot (``_put_to_her``) that asks nothing
-    (``_asked``) and is more than thanks: told to go on ("Go ahead,
-    Illiana", "Sorry, you were saying."), however it is said. Whether it
-    has anything to go on with is the bot's to say. Said over it, it holds
-    it (``cut_in``)."""
-    said = None if heard.over else _put_to_her(heard)
-    if said is None or _asked(said) is not None:
+    """A line put to the bot (``_put_to_her``) saying only a go-on
+    (``GO_ONS``, ``says_only``): "Go ahead, Illiana", "Sorry, you were
+    saying." One telling it to do anything else is asked, never gone on
+    past. Whether it has anything to go on with is the bot's to say. Said
+    over it, it holds it (``cut_in``)."""
+    if heard.over or _put_to_her(heard) is None:
         return None
-    return heard.text if says_more(said, NOTHING) else None
+    return heard.text if says_only(heard.text, heard.addressee, GO_ONS) else None
 
 
 register_detector(CUT_IN, cut_in)

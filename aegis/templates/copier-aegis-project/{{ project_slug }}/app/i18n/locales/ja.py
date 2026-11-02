@@ -758,7 +758,7 @@ MESSAGES: dict[str, str] = {
     "agents.module_not_found": "メモリモジュール '{slug}' が見つかりません。",
     "agents.module_static": "静的",
     "agents.module_dynamic": "動的",
-    "agents.module_hybrid": "ハイブリッド",
+    "agents.module_per_subject": "per subject",
     "agents.module_content": "静的コンテンツ:",
     # スラッシュコマンド
     "slash.help_desc": "利用可能なコマンドを表示",

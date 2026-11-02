@@ -20,6 +20,10 @@ from app.components.web_frontend import overseer_ai_agents  # noqa: E402
 from app.components.web_frontend.routes.partials import (  # noqa: E402
     overseer_ai as partials,
 )
+from app.services.ai.domains.chat.context_modules import (  # noqa: E402
+    serialize_context_module,
+)
+from app.services.ai.models.agents import ContextModule  # noqa: E402
 from app.services.system.models import ComponentStatus  # noqa: E402
 from tests.web.dom import one, select, text, triggers  # noqa: E402
 from tests.web.overseer import sign_in, status_with  # noqa: E402
@@ -242,20 +246,21 @@ def test_a_bad_number_is_refused_before_the_registry(client: TestClient) -> None
     assert triggers(response)["toast"]["tone"] == "error"
 
 
-MODULE: dict[str, Any] = {
-    "slug": "user_facts",
-    "name": "User facts",
-    "description": "What the user told it",
-    "category": "memory",
-    "prompt_content": None,
-    "fetch_function": "fetch_user_facts",
-    "context_key": "facts",
-    "supports_days_back": False,
-    "default_days_back": None,
-    "priority": 10,
-    "token_estimate": 200,
-    "is_active": True,
-}
+def _module_row(**fields: Any) -> dict[str, Any]:
+    """A module row as the Memory tab is handed it: by the one serializer."""
+    return serialize_context_module(ContextModule(**fields))
+
+
+MODULE = _module_row(
+    slug="user_facts",
+    name="User facts",
+    description="What the user told it",
+    category="memory",
+    fetch_function="fetch_user_facts",
+    context_key="facts",
+    priority=10,
+    token_estimate=200,
+)
 FACTS = [
     {
         "index": 0,
@@ -277,14 +282,17 @@ def memory(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     async def modules(db: Any) -> list[dict[str, Any]]:
         return [
             MODULE,
-            MODULE
-            | {
-                "slug": "persona",
-                "name": "Persona",
-                "fetch_function": None,
-                "prompt_content": "Be kind.",
-                "is_active": False,
-            },
+            _module_row(
+                slug="persona",
+                name="Persona",
+                description="What the user told it",
+                category="memory",
+                prompt_content="Be kind.",
+                context_key="facts",
+                priority=10,
+                token_estimate=200,
+                is_active=False,
+            ),
         ]
 
     from app.services.ai.domains.chat.user_memory import UserFact

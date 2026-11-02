@@ -803,7 +803,7 @@ MESSAGES: dict[str, str] = {
     "agents.module_not_found": "Context module '{slug}' not found.",
     "agents.module_static": "static",
     "agents.module_dynamic": "dynamic",
-    "agents.module_hybrid": "hybrid",
+    "agents.module_per_subject": "per subject",
     "agents.module_content": "Static content:",
     "agents.prompt_help": "Change an agent's system prompt, and see what it was.",
     "agents.prompt_help_set": "Set an agent's system prompt from a file or an earlier version, recording why.",

@@ -801,7 +801,7 @@ MESSAGES: dict[str, str] = {
     "agents.module_not_found": "未找到记忆模块 '{slug}'。",
     "agents.module_static": "静态",
     "agents.module_dynamic": "动态",
-    "agents.module_hybrid": "混合",
+    "agents.module_per_subject": "per subject",
     "agents.module_content": "静态内容：",
     "agents.prompt_help": "修改智能体的系统提示词，并查看其历史。",
     "agents.prompt_help_set": "从文件或较早的版本设置智能体的系统提示词，并记录原因。",

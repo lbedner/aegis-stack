@@ -23,6 +23,12 @@ from .rendering import drawer_state, form_number, status_cell
 
 AGENT_PARAM = "agent"
 MODULE_PARAM = "module"
+# A module's sources (``module_sources``), as the Memory tab names them.
+_SOURCE_LABELS = {
+    "static": "Static text",
+    "subject": "Text per subject",
+    "fetcher": "Fetcher: {fetch_function}",
+}
 
 
 def agents_url(**query: str | None) -> str:
@@ -190,9 +196,9 @@ async def memory_context(db: Any, query: Any) -> dict[str, Any]:
             {
                 "name": {"label": m["name"], "url": memory_url(module=m["slug"])},
                 "category": m.get("category"),
-                "source": f"Fetcher: {m['fetch_function']}"
-                if m.get("fetch_function")
-                else "Static text",
+                "source": " + ".join(
+                    _SOURCE_LABELS[s].format(**m) for s in m["sources"]
+                ),
                 "priority": m.get("priority"),
                 "tokens": m.get("token_estimate"),
                 "state": _active(m),

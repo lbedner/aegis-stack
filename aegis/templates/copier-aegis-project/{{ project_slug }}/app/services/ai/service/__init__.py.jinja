@@ -33,7 +33,10 @@ if TYPE_CHECKING:
     from app.services.ai.domains.chat.fetchers import FetchContext, register_fetcher
 {%- if ai_backend != "memory" %}
     from app.services.ai.domains.chat.context_modules import (
+        get_context_entry,
         list_context_modules,
+        module_sources,
+        set_context_entry,
         update_context_module,
     )
     from app.services.ai.domains.chat.path_card import PathCard

@@ -1,6 +1,8 @@
 """Tests for context module CRUD (hybrid, column-driven)."""
 {% if ai_backend != "memory" %}
 
+from typing import Any
+
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -8,8 +10,12 @@ from app.services.ai.domains.chat.context_modules import (
     InvalidContextModuleError,
     create_context_module,
     delete_context_module,
+    get_context_entry,
     get_context_module,
     list_context_modules,
+    module_sources,
+    serialize_context_module,
+    set_context_entry,
     update_context_module,
 )
 
@@ -77,9 +83,7 @@ class TestHybridRoundTrip:
 class TestValidation:
     async def test_empty_module_is_rejected(self, session: AsyncSession) -> None:
         with pytest.raises(InvalidContextModuleError):
-            await create_context_module(
-                slug="empty", name="Empty", session=session
-            )
+            await create_context_module(slug="empty", name="Empty", session=session)
 
     async def test_update_cannot_empty_a_module(self, session: AsyncSession) -> None:
         await create_context_module(
@@ -168,4 +172,126 @@ class TestCrud:
     async def test_delete_unknown_is_an_error(self, session: AsyncSession) -> None:
         with pytest.raises(InvalidContextModuleError, match="not found"):
             await delete_context_module("ghost", session=session)
+
+
+class TestPerSubject:
+    """A per-subject module holds its own text for each subject (a project,
+    a ledger): written here, read back for that subject only."""
+
+    async def test_a_per_subject_module_needs_no_other_content(
+        self, session: AsyncSession
+    ) -> None:
+        module = await create_context_module(
+            slug="notes", name="Notes", per_subject=True, session=session
+        )
+        assert module.per_subject is True
+
+    @pytest.mark.queryspy(allow_n_plus_one=True)  # each call a request of its own
+    async def test_an_entry_is_its_subjects_alone(self, session: AsyncSession) -> None:
+        await create_context_module(
+            slug="notes", name="Notes", per_subject=True, session=session
+        )
+
+        await set_context_entry(
+            "notes", "3", "A CLI that scaffolds apps.", session=session
+        )
+
+        assert await get_context_entry("notes", "3", session=session) == (
+            "A CLI that scaffolds apps."
+        )
+        assert await get_context_entry("notes", "8", session=session) is None
+
+    @pytest.mark.queryspy(allow_n_plus_one=True)  # each call a request of its own
+    async def test_a_write_racing_another_replaces_it(
+        self, session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Two writes to a subject with no text yet: the later one finds the
+        other's row only as it commits, and replaces it."""
+        from app.services.ai.domains.chat import queries
+
+        await create_context_module(
+            slug="notes", name="Notes", per_subject=True, session=session
+        )
+        await set_context_entry("notes", "3", "first", session=session)
+        real = queries.context_entry
+        looks: list[int] = []
+
+        async def raced(*args: Any) -> Any:
+            looks.append(1)
+            return None if len(looks) == 1 else await real(*args)
+
+        monkeypatch.setattr(queries, "context_entry", raced)
+
+        entry = await set_context_entry("notes", "3", "second", session=session)
+
+        assert entry is not None and entry.content == "second"
+        assert await get_context_entry("notes", "3", session=session) == "second"
+
+    @pytest.mark.queryspy(allow_n_plus_one=True)  # each call a request of its own
+    async def test_setting_again_replaces_and_records_who(
+        self, session: AsyncSession
+    ) -> None:
+        await create_context_module(
+            slug="notes", name="Notes", per_subject=True, session=session
+        )
+        await set_context_entry("notes", "3", "first", session=session)
+
+        entry = await set_context_entry(
+            "notes", "3", "second", user_id=7, session=session
+        )
+
+        assert entry is not None and entry.updated_by_user_id == 7
+        assert await get_context_entry("notes", "3", session=session) == "second"
+
+    @pytest.mark.queryspy(allow_n_plus_one=True)  # each call a request of its own
+    async def test_blank_text_removes_the_entry(self, session: AsyncSession) -> None:
+        await create_context_module(
+            slug="notes", name="Notes", per_subject=True, session=session
+        )
+        await set_context_entry("notes", "3", "something", session=session)
+
+        assert await set_context_entry("notes", "3", "  ", session=session) is None
+        assert await get_context_entry("notes", "3", session=session) is None
+
+    async def test_only_a_per_subject_module_takes_an_entry(
+        self, session: AsyncSession
+    ) -> None:
+        await create_context_module(
+            slug="rules", name="Rules", prompt_content="x", session=session
+        )
+        with pytest.raises(InvalidContextModuleError, match="per subject"):
+            await set_context_entry("rules", "3", "text", session=session)
+        with pytest.raises(InvalidContextModuleError, match="not found"):
+            await set_context_entry("ghost", "3", "text", session=session)
+
+    async def test_its_sources_name_the_subject_text_in_render_order(
+        self, session: AsyncSession
+    ) -> None:
+        module = await create_context_module(
+            slug="notes",
+            name="Notes",
+            prompt_content="rules",
+            fetch_function="live",
+            per_subject=True,
+            session=session,
+        )
+
+        assert module_sources(module) == ["static", "subject", "fetcher"]
+        assert serialize_context_module(module)["sources"] == module_sources(module)
+
+    @pytest.mark.queryspy(allow_n_plus_one=True)  # each call a request of its own
+    async def test_deleting_the_module_deletes_its_entries(
+        self, session: AsyncSession
+    ) -> None:
+        await create_context_module(
+            slug="notes", name="Notes", per_subject=True, session=session
+        )
+        await set_context_entry("notes", "3", "old notes", session=session)
+
+        await delete_context_module("notes", session=session)
+        await create_context_module(
+            slug="notes", name="Notes", per_subject=True, session=session
+        )
+
+        assert await get_context_entry("notes", "3", session=session) is None
 {% endif %}

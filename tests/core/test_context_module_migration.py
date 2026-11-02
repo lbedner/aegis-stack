@@ -31,8 +31,12 @@ def _upgrade(conn: sa.Connection) -> None:
 
 def _renamed(conn: sa.Connection, *, old: bool) -> None:
     """The tables as the agents revision leaves them, before its data: the
-    new names created, the old ones still there when ``old``."""
-    conn.exec_driver_sql(f"CREATE TABLE context_module ({_MODULE_COLUMNS})")
+    new names created (with what context modules have since gained, by its
+    server default), the old ones still there when ``old``."""
+    conn.exec_driver_sql(
+        f"CREATE TABLE context_module ({_MODULE_COLUMNS}, "
+        "per_subject BOOLEAN NOT NULL DEFAULT 0)"
+    )
     extra = ", memory_modules JSON NOT NULL DEFAULT '[]'" if old else ""
     conn.exec_driver_sql(
         "CREATE TABLE agent (id INTEGER PRIMARY KEY, slug VARCHAR NOT NULL, "

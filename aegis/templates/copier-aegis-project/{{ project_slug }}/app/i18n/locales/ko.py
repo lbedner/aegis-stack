@@ -758,7 +758,7 @@ MESSAGES: dict[str, str] = {
     "agents.module_not_found": "메모리 모듈 '{slug}'을(를) 찾을 수 없습니다.",
     "agents.module_static": "정적",
     "agents.module_dynamic": "동적",
-    "agents.module_hybrid": "하이브리드",
+    "agents.module_per_subject": "per subject",
     "agents.module_content": "정적 콘텐츠:",
     # Slash commands
     "slash.help_desc": "사용 가능한 명령어 표시",

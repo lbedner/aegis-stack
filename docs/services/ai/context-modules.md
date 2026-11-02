@@ -1,18 +1,19 @@
 # Context Modules
 
-Context modules are reusable prompt-context blocks that agents opt into. Each module can carry **static text** (rules, guidance, framing that never changes), a **dynamic fetcher** (live, per-user data pulled at request time), or **both**. They are the structured alternative to growing one giant hand-written context builder: each concern lives in its own module, agents pick the modules they need, and a token budget keeps the total in check.
+Context modules are reusable prompt-context blocks that agents opt into. Each module can carry **static text** (rules, guidance, framing that never changes), **text per subject** (what people wrote about the project, ledger or meeting a turn is about), a **dynamic fetcher** (live, per-user data pulled at request time), or any mix. They are the structured alternative to growing one giant hand-written context builder: each concern lives in its own module, agents pick the modules they need, and a token budget keeps the total in check.
 
 Modules require a persistence backend (`ai[sqlite]` or `ai[postgres]`).
 
 ## The Hybrid Model
 
-A module row has two independent content columns; assembly is column-driven:
+A module row has three independent content sources; assembly is column-driven:
 
 | Columns set | Behavior |
 |---|---|
 | `prompt_content` only | Static block, injected verbatim |
+| `per_subject` only | The turn's subject's own text, or nothing for a subject with none |
 | `fetch_function` only | Live data from the named fetcher |
-| Both | Hybrid: static block first, then the live data |
+| Any mix | Static block first, then the subject's text, then the live data |
 
 There is deliberately no "type" field. Whether a module is static, dynamic, or hybrid is simply which columns are filled, so promoting a static module to hybrid is filling one more column, not a migration.
 
@@ -25,13 +26,31 @@ Modules render as the caller: a fetcher that asks whether the caller is an admin
 | `slug` | Unique identifier; agents reference modules by slug |
 | `context_key` | The label the rendered block carries in the prompt (defaults to the slug) |
 | `prompt_content` | Optional static text |
+| `per_subject` | Whether the module holds its own text for each subject |
 | `fetch_function` | Optional name of a registered fetcher |
 | `supports_days_back`, `default_days_back` | Whether and how far the fetcher looks back |
 | `priority` | Render order; lower renders first and wins budget contention |
 | `token_estimate` | Optional explicit size; `0` means estimate from rendered content |
 | `is_active` | Inactive modules are skipped |
 
-A module must have `prompt_content`, `fetch_function`, or both; creating or editing one into an empty state is rejected.
+A module must have `prompt_content`, `per_subject` or `fetch_function`; creating or editing one into an empty state is rejected.
+
+### Text per subject
+
+A `per_subject` module keeps one row of text for each subject, in `context_module_entry` (module, subject, text, who last wrote it). The subject is what the turn is about as the app names it, a project's id for instance: the app hands it to the render, the model never chooses it. A turn about subject `3` reads subject `3`'s text and no other's, and every per-subject module's text for the turn loads in one query.
+
+```python
+from app.services.ai.domains.chat.context_modules import (
+    get_context_entry,
+    set_context_entry,
+)
+
+await set_context_entry("project_notes", "3", "A CLI that scaffolds apps.", user_id=7, session=session)
+await get_context_entry("project_notes", "3", session=session)  # "A CLI that scaffolds apps."
+await set_context_entry("project_notes", "3", "", session=session)  # blank text removes it
+```
+
+Who may write a subject's text is the app's to decide, as it decides who may talk about the subject; the entry records who did. Deleting a module deletes its entries.
 
 ## The App Map
 

@@ -11,20 +11,22 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from datetime import datetime
 
+from sqlalchemy import func
+from sqlalchemy.orm import selectinload
+from sqlmodel import col, select
+from sqlmodel.ext.asyncio.session import AsyncSession
+
 from app.models.conversation import Conversation, ConversationMessage
-from app.services.ai.models.conversation import ConversationStats
 from app.services.ai.models.agents import (
     Agent,
     AgentPromptChange,
     AgentUserMemory,
     ContextModule,
+    ContextModuleEntry,
 )
+from app.services.ai.models.conversation import ConversationStats
 from app.services.ai.models.sentiment import SentimentAnalysis
 from app.services.shared.queries import within
-from sqlalchemy import func
-from sqlalchemy.orm import selectinload
-from sqlmodel import col, select
-from sqlmodel.ext.asyncio.session import AsyncSession
 
 # --- Conversations (ConversationManager) --------------------------------
 
@@ -308,6 +310,34 @@ async def context_modules_by_slugs(
         )
     ).all()
     return {module.slug: module for module in rows}
+
+
+async def context_entry(
+    session: AsyncSession, module_id: int, subject: str
+) -> ContextModuleEntry | None:
+    return (
+        await session.exec(
+            select(ContextModuleEntry).where(
+                ContextModuleEntry.module_id == module_id,
+                ContextModuleEntry.subject == subject,
+            )
+        )
+    ).first()
+
+
+async def context_entries_for(
+    session: AsyncSession, module_ids: Iterable[int], subject: str
+) -> dict[int, str]:
+    """Each module's text for ``subject``, in one query: ``{module_id: text}``."""
+    rows = (
+        await session.exec(
+            select(ContextModuleEntry.module_id, ContextModuleEntry.content).where(
+                col(ContextModuleEntry.module_id).in_(list(module_ids)),
+                ContextModuleEntry.subject == subject,
+            )
+        )
+    ).all()
+    return dict(rows)
 
 
 async def user_memory_for(

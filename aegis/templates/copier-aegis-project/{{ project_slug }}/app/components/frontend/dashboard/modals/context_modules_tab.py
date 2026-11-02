@@ -32,28 +32,18 @@ from app.components.frontend.theme import AegisTheme as Theme
 from .base_popup import BasePopup
 from .user_facts_section import UserFactsSection
 
-STATIC_SOURCE = "static text"
-FETCHER_SOURCE = "fetcher"
-BOTH_SOURCES = "static + fetcher"
+SOURCE_LABELS = {
+    "static": "static text",
+    "subject": "text per subject",
+    "fetcher": "fetcher",
+}
 NO_SOURCE = "none"
 
 
 def module_source_label(module: dict[str, Any]) -> str:
-    """Where a module's content comes from (pure).
-
-    Named rather than implied, because "static" and "fetched" fail in
-    completely different ways: static text is wrong in the database, a fetcher
-    is wrong in code or unregistered entirely.
-    """
-    has_static = bool((module.get("prompt_content") or "").strip())
-    has_fetcher = bool((module.get("fetch_function") or "").strip())
-    if has_static and has_fetcher:
-        return BOTH_SOURCES
-    if has_fetcher:
-        return FETCHER_SOURCE
-    if has_static:
-        return STATIC_SOURCE
-    return NO_SOURCE
+    """Where a module's content comes from (pure), as the server names it
+    (``sources``, from ``serialize_context_module``)."""
+    return " + ".join(SOURCE_LABELS[s] for s in module.get("sources", [])) or NO_SOURCE
 
 
 def module_row_cells(module: dict[str, Any]) -> list[str]:

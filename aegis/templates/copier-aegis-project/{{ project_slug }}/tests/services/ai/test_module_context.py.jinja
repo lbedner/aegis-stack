@@ -8,22 +8,27 @@ from unittest.mock import MagicMock
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from app.services.ai.domains.chat.context_modules import (
+    create_context_module,
+    set_context_entry,
+)
 from app.services.ai.domains.chat.fetchers import (
     FetchContext,
     register_fetcher,
     registered_fetcher_names,
     unregister_fetcher,
 )
-from app.services.ai.domains.chat.context_modules import create_context_module
 from app.services.ai.domains.chat.module_context import (
     ContextModuleProvider,
     render_context_modules,
 )
+from app.services.ai.models.agents import ContextModuleEntry
 
 
 @dataclass
 class _Deps:
     user_id: str
+    subject: str | None = None
 
 
 @pytest.fixture(autouse=True)
@@ -43,9 +48,7 @@ def session(async_db_session: AsyncSession) -> AsyncSession:
 
 
 class TestHybridRendering:
-    async def test_static_renders_before_live_data(
-        self, session: AsyncSession
-    ) -> None:
+    async def test_static_renders_before_live_data(self, session: AsyncSession) -> None:
         async def live(ctx: FetchContext) -> str | None:
             """Live half."""
             return f"LIVE DATA for {ctx.user_id}"
@@ -59,17 +62,13 @@ class TestHybridRendering:
             session=session,
         )
 
-        block = await render_context_modules(
-            ["diet"], user_id="u1", session=session
-        )
+        block = await render_context_modules(["diet"], user_id="u1", session=session)
 
         assert block is not None
         assert block.index("STATIC RULES") < block.index("LIVE DATA for u1")
         assert '<module name="diet">' in block
 
-    async def test_days_back_flows_from_module_row(
-        self, session: AsyncSession
-    ) -> None:
+    async def test_days_back_flows_from_module_row(self, session: AsyncSession) -> None:
         seen: dict[str, int | None] = {}
 
         async def live(ctx: FetchContext) -> str | None:
@@ -262,24 +261,32 @@ class TestDegradation:
         assert seen == [session, session], "fetchers reuse the owned session"
 
 
+@pytest.fixture
+def provider_session(
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> AsyncSession:
+    """The session the provider's render opens: the test's own."""
+    from contextlib import asynccontextmanager
+
+    import app.services.ai.domains.chat.module_context as module_context_module
+
+    @asynccontextmanager
+    async def fake_session() -> AsyncGenerator[AsyncSession]:
+        yield session
+
+    monkeypatch.setattr(module_context_module, "get_async_session", fake_session)
+    return session
+
+
 class TestProvider:
     async def test_provider_builds_block_from_deps_user_id(
-        self, session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+        self, provider_session: AsyncSession
     ) -> None:
-        from contextlib import asynccontextmanager
-
-        import app.services.ai.domains.chat.module_context as module_context_module
-
         await create_context_module(
-            slug="rules", name="Rules", prompt_content="THE RULES", session=session
-        )
-
-        @asynccontextmanager
-        async def fake_session() -> AsyncGenerator[AsyncSession]:
-            yield session
-
-        monkeypatch.setattr(
-            module_context_module, "get_async_session", fake_session
+            slug="rules",
+            name="Rules",
+            prompt_content="THE RULES",
+            session=provider_session,
         )
 
         provider = ContextModuleProvider(("rules",))
@@ -337,4 +344,89 @@ class TestTheCaller:
 
         assert opened == ["lookup", "render"]
         assert seen == [True]
+
+
+class TestPerSubject:
+    async def test_a_subjects_text_renders_between_static_and_live(
+        self, session: AsyncSession
+    ) -> None:
+        async def live(ctx: FetchContext) -> str | None:
+            """Live half."""
+            return "LIVE DATA"
+
+        register_fetcher("live", live)
+        await create_context_module(
+            slug="notes",
+            name="Notes",
+            prompt_content="STATIC RULES",
+            fetch_function="live",
+            per_subject=True,
+            session=session,
+        )
+        await set_context_entry("notes", "3", "NOTES FOR 3", session=session)
+
+        block = await render_context_modules(
+            ["notes"], user_id="u1", session=session, subject="3"
+        )
+
+        assert block is not None
+        assert (
+            block.index("STATIC RULES")
+            < block.index("NOTES FOR 3")
+            < block.index("LIVE DATA")
+        )
+
+    async def test_each_subject_reads_only_its_own(self, session: AsyncSession) -> None:
+        notes = await create_context_module(
+            slug="notes", name="Notes", per_subject=True, session=session
+        )
+        audience = await create_context_module(
+            slug="audience", name="Audience", per_subject=True, session=session
+        )
+        # Written as rows, so the render's own reads are all the gate sees.
+        for module, subject, text in (
+            (notes, "3", "NOTES FOR 3"),
+            (audience, "3", "AUDIENCE FOR 3"),
+            (notes, "8", "NOTES FOR 8"),
+        ):
+            session.add(
+                ContextModuleEntry(module_id=module.id, subject=subject, content=text)
+            )
+        await session.flush()
+
+        block = await render_context_modules(
+            ["notes", "audience"], user_id="u1", session=session, subject="3"
+        )
+
+        assert block is not None
+        assert "NOTES FOR 3" in block and "AUDIENCE FOR 3" in block
+        assert "NOTES FOR 8" not in block
+
+    async def test_a_turn_about_nothing_reads_no_subjects_text(
+        self, session: AsyncSession
+    ) -> None:
+        notes = await create_context_module(
+            slug="notes", name="Notes", per_subject=True, session=session
+        )
+        session.add(ContextModuleEntry(module_id=notes.id, subject="3", content="x"))
+        await session.flush()
+
+        assert (
+            await render_context_modules(["notes"], user_id="u1", session=session)
+            is None
+        )
+
+    async def test_the_provider_renders_the_subject_its_deps_carry(
+        self, provider_session: AsyncSession
+    ) -> None:
+        await create_context_module(
+            slug="notes", name="Notes", per_subject=True, session=provider_session
+        )
+        await set_context_entry("notes", "3", "NOTES FOR 3", session=provider_session)
+
+        block = await ContextModuleProvider(("notes",)).build(
+            _Deps(user_id="u1", subject="3")
+        )
+
+        assert block is not None and "NOTES FOR 3" in block
 {% endif %}

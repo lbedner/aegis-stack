@@ -758,7 +758,7 @@ MESSAGES: dict[str, str] = {
     "agents.module_not_found": "找不到記憶模組 '{slug}'。",
     "agents.module_static": "靜態",
     "agents.module_dynamic": "動態",
-    "agents.module_hybrid": "混合",
+    "agents.module_per_subject": "per subject",
     "agents.module_content": "靜態內容：",
     # 斜槓命令
     "slash.help_desc": "查看可用命令",

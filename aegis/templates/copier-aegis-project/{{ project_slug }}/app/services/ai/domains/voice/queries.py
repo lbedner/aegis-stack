@@ -63,6 +63,10 @@ async def engine_keys(session: AsyncSession) -> set[str]:
     return set((await session.exec(select(LiveEngine.key))).all())
 
 
+async def all_engines(session: AsyncSession) -> list[LiveEngine]:
+    return list((await session.exec(select(LiveEngine))).all())
+
+
 async def enabled_engines(session: AsyncSession) -> list[LiveEngine]:
     """The engines on offer, in their order, each with its catalog model
     and the org that serves it."""

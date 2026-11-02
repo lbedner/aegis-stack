@@ -6,6 +6,7 @@ from .agent_tool import AgentTool
 from .agent_tool_call import AgentToolCall
 from .agent_user_memory import AgentUserMemory
 from .context_module import ContextModule
+from .context_module_entry import ContextModuleEntry
 from .tool import Tool
 
 __all__ = [
@@ -15,5 +16,6 @@ __all__ = [
     "AgentToolCall",
     "AgentUserMemory",
     "ContextModule",
+    "ContextModuleEntry",
     "Tool",
 ]

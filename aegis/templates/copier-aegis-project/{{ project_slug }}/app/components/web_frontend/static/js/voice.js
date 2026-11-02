@@ -403,30 +403,33 @@
     if (out.hangUp) return hangUp();
     // Redrawn on a change it shows: a step's own label too; the quiet's
     // re-arming only once it is a countdown.
-    const changed = ['talking', 'working', 'muted', 'nudged'].some((key) => now[key] !== was[key]);
+    const changed = ['talking', 'working', 'owed', 'muted', 'nudged'].some((key) => now[key] !== was[key]);
     if (changed || event.type === 'begin' || event.type === 'step' || (out.quiet && now.nudged)) draw();
   };
   // The call as it stands: speaking, working (the typing under it while it
-  // says nothing), or listening.
+  // says nothing: a step running, or your turn heard and its answer owed),
+  // or listening.
   const draw = () => {
-    const { talking, working } = call.state;
-    show(phone(), talking ? 'speaking' : working ? 'working' : 'recording');
-    if (working && !talking) startTyping();
+    const { talking, working, owed } = call.state;
+    const busy = working || owed;
+    show(phone(), talking ? 'speaking' : busy ? 'working' : 'recording');
+    if (busy && !talking) startTyping();
     else stopTyping();
     sayState();
   };
   // The status line: the quiet counted down to the hang-up once it has
   // checked in (a pause to think is no warning), muted, the step it is
-  // running (as the relay names it and the trail will), or listening.
+  // running (as the relay names it and the trail will), your turn heard, or
+  // listening.
   const sayState = () => {
-    const { nudged, muted: mute, working } = call.state;
+    const { nudged, muted: mute, working, owed } = call.state;
     const left = nudged && call.quietEnds && Math.ceil((call.quietEnds - Date.now()) / 1000);
     if (left > 0) {
       const line = phrase('hanging-up').cloneNode(true);
       line.querySelector('[data-countdown]').textContent = left;
       return say(null, line.textContent);
     }
-    say(mute ? 'muted' : working ? 'working' : 'live', working ? call.step : null);
+    say(mute ? 'muted' : working ? 'working' : owed ? 'thinking' : 'live', working ? call.step : null);
   };
   // A step it runs (the relay names it), and the end of its steps.
   const stepping = (step) => {

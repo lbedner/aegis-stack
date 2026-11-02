@@ -11,6 +11,7 @@ the app's, and an edit is never overwritten.
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any
 
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -37,18 +38,20 @@ which this section decides:
 chart, a flow or how a part is wired under the call while you talk. When a \
 typed answer would get a card, call it here too, in the same script as the \
 lookup it draws, before you speak, so it is up as you start to explain; \
-then say what it means, naming its parts as the map titles them, never \
+then say what it means, naming its parts as the card titles them, never \
 what the card looks like. Never say you cannot show a chart.
 - Lead with the answer, then give as much as the question needs. A quick \
 question gets a sentence or two. A question about how or why something \
 works gets a real explanation, the way you would explain it to a colleague: \
 walk it through end to end in one reply, with the reasons, not one step a \
-turn waiting to be asked for the next.
+turn waiting to be asked for the next. Never offer to tell them more or ask \
+whether they want the details: if more would help, look it up and say it.
 - Never read out a list, a table or markdown. Round figures the way a \
 person would say them, and say dates the way a person would.
-- When they ask about this app - how a part works, what depends on what, \
-what would happen if a part failed, where something is in the code - call \
-your tools before answering. Never fill it in from general knowledge.
+- When they ask about anything your tools can answer - their numbers, a \
+breakdown by country or source, how a part works, what depends on what - \
+call your tools before answering, and when the first answer raises the next \
+question, look that up too. Never fill it in from general knowledge.
 - Do not announce that you are looking something up: they hear you \
 working while your tools run.
 - They are calling about this app and their own data. A word that does \
@@ -63,6 +66,17 @@ to ask - say a short goodbye, then call end_call and say nothing more."""
 # backstop against a runaway monologue - about two minutes - not the
 # length itself: the instructions are that, and a walk-through runs long.
 REPLY_CAP = 2_400
+
+# Every default LIVE_CALL_INSTRUCTIONS has had, by digest: an engine still
+# holding one was never edited, so it takes the current default. Add the
+# old one here whenever the default changes.
+FORMER_DEFAULTS = frozenset(
+    {
+        "0cd96842a556cdcdad725d0aaa26f15789dafea55931f1d325c03a9d3bc8f9a5",
+        "a146cd9f48ccb02cc3511d8fdb24b256d9a5af71832746796d6661b2edbc9a8c",
+        "6e99d34920873a2119da1b68e28435ab47bea1770ae7319b897b41bdd8b01014",
+    }
+)
 
 # The engines a fresh app offers, by catalog model id.
 ENGINE_SEEDS: tuple[dict[str, Any], ...] = (
@@ -176,3 +190,23 @@ async def seed_missing(
     if added:
         await session.commit()
     return len(added)
+
+
+def digest(instructions: str) -> str:
+    return hashlib.sha256(instructions.encode()).hexdigest()
+
+
+async def refresh_defaults(session: AsyncSession) -> int:
+    """Hand the current instructions to each engine still holding a former
+    default; an edited engine keeps its own. Returns how many changed."""
+    stale = [
+        engine
+        for engine in await queries.all_engines(session)
+        if engine.instructions and digest(engine.instructions) in FORMER_DEFAULTS
+    ]
+    for engine in stale:
+        engine.instructions = LIVE_CALL_INSTRUCTIONS
+    session.add_all(stale)
+    if stale:
+        await session.commit()
+    return len(stale)

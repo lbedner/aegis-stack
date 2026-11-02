@@ -1,8 +1,7 @@
 """Context-module context assembly: priority order, token budget, hybrid.
 
-Turns an agent's ``context_modules`` list into one labeled context block.
-Each module renders its static ``prompt_content`` first, then its
-``fetch_function`` output (live per-user data). Modules render in
+Turns an agent's ``context_modules`` list into one labeled context block,
+each module's sources in the order ``ContextModule`` documents. Modules render in
 priority order (lower number first); when a token budget is given,
 higher-priority modules claim it first and any module that does not fit
 the remaining budget is dropped - deterministic and logged.
@@ -65,11 +64,14 @@ async def _render_module(
     user_id: str,
     session: AsyncSession | None,
     subject: str | None = None,
+    entry: str | None = None,
 ) -> str | None:
-    """Static block first, then the live fetcher data."""
+    """One module's sources, in ``ContextModule``'s order."""
     parts: list[str] = []
     if module.prompt_content:
         parts.append(module.prompt_content.strip())
+    if entry:
+        parts.append(entry.strip())
     if module.fetch_function:
         dynamic = await run_fetcher(
             module.fetch_function,
@@ -152,10 +154,18 @@ async def render_context_modules(
                 current_admin.reset(settled)
 
     modules = await _load_modules(session, module_slugs)
+    per_subject = [m.id for m in modules if m.per_subject and m.id is not None]
+    entries = (
+        await queries.context_entries_for(session, per_subject, subject)
+        if subject and per_subject
+        else {}
+    )
 
     rendered: list[_RenderedModule] = []
     for module in modules:
-        content = await _render_module(module, user_id, session, subject)
+        content = await _render_module(
+            module, user_id, session, subject, entries.get(module.id or 0)
+        )
         if content is None:
             continue
         rendered.append(
@@ -179,8 +189,9 @@ async def render_context_modules(
 class ContextModuleProvider:
     """chat_kit ContextProvider over an agent's context modules.
 
-    Reads ``user_id`` off the agent deps (duck-typed); deps without one
-    contribute nothing, so the provider is safe on any deps shape.
+    Reads ``user_id``, and ``subject`` where the app set one, off the agent
+    deps (duck-typed); deps without a user contribute nothing, so the
+    provider is safe on any deps shape.
     """
 
     name = "context-modules"
@@ -205,4 +216,5 @@ class ContextModuleProvider:
             self._module_slugs,
             user_id=str(user_id),
             token_budget=self._token_budget,
+            subject=getattr(deps, "subject", None),
         )

@@ -3494,14 +3494,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../../ai/memory-modules/" class="md-nav__link">
+      <a href="../../ai/context-modules/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Memory Modules
+    Context Modules
   
 
     
@@ -6605,7 +6605,7 @@
 </span></code></pre></div>
 <p>Everything the answer asserts numerically came out of the last box up from the bottom.</p>
 <h2 id="the-two-halves-of-the-context">The Two Halves of the Context</h2>
-<p><strong>A snapshot, every turn.</strong> The <code>finance_snapshot</code> memory module is fetched into context before the agent sees your message: balances, the net-worth trend, credit card and loan detail, portfolio positions, monthly cashflow, category spend against its norm, recent transactions, open anomalies, the cash forecast, and what is due next. It exists so the assistant opens a conversation already knowing your situation rather than spending three turns discovering it.</p>
+<p><strong>A snapshot, every turn.</strong> The <code>finance_snapshot</code> context module is fetched into context before the agent sees your message: balances, the net-worth trend, credit card and loan detail, portfolio positions, monthly cashflow, category spend against its norm, recent transactions, open anomalies, the cash forecast, and what is due next. It exists so the assistant opens a conversation already knowing your situation rather than spending three turns discovering it.</p>
 <p><strong>Tools, on demand.</strong> The snapshot is a briefing, not the ledger. Anything specific comes from a tool call.</p>
 <table>
 <thead>
@@ -6747,7 +6747,7 @@
 <td>arithmetic is computed, not estimated</td>
 </tr>
 <tr>
-<td><code>memory_modules</code></td>
+<td><code>context_modules</code></td>
 <td><code>finance_snapshot</code></td>
 <td>the briefing above</td>
 </tr>
@@ -6771,7 +6771,7 @@
 <td>agent rows, tools, and the dashboard that edits them</td>
 </tr>
 <tr>
-<td><a href="../../ai/memory-modules/">Memory Modules</a></td>
+<td><a href="../../ai/context-modules/">Context Modules</a></td>
 <td>how the snapshot is fetched into context</td>
 </tr>
 </tbody>

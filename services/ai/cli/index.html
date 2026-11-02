@@ -3498,14 +3498,14 @@
   
   
     <li class="md-nav__item">
-      <a href="../memory-modules/" class="md-nav__link">
+      <a href="../context-modules/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     
   
-    Memory Modules
+    Context Modules
   
 
     
@@ -3971,10 +3971,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#memory-modules-list-show" class="md-nav__link">
+  <a href="#context-modules-list-show" class="md-nav__link">
     <span class="md-ellipsis">
       
-        memory-modules list / show
+        context-modules list / show
       
     </span>
   </a>
@@ -6936,10 +6936,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#memory-modules-list-show" class="md-nav__link">
+  <a href="#context-modules-list-show" class="md-nav__link">
     <span class="md-ellipsis">
       
-        memory-modules list / show
+        context-modules list / show
       
     </span>
   </a>
@@ -7222,8 +7222,8 @@
 </span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>my-app<span class="w"> </span>agents<span class="w"> </span>list<span class="w">             </span><span class="c1"># All agents with their grants</span>
 </span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>my-app<span class="w"> </span>agents<span class="w"> </span>show<span class="w"> </span>&lt;slug&gt;<span class="w">      </span><span class="c1"># One agent&#39;s full definition</span>
 </span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a>my-app<span class="w"> </span>agents<span class="w"> </span><span class="nb">test</span><span class="w"> </span>&lt;slug&gt;<span class="w">      </span><span class="c1"># One chat turn as the agent</span>
-</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>my-app<span class="w"> </span>memory-modules<span class="w"> </span>list<span class="w">     </span><span class="c1"># Memory module catalog</span>
-</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>my-app<span class="w"> </span>memory-modules<span class="w"> </span>show<span class="w"> </span>&lt;slug&gt;<span class="w">  </span><span class="c1"># One module&#39;s definition</span>
+</span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a>my-app<span class="w"> </span>context-modules<span class="w"> </span>list<span class="w">     </span><span class="c1"># Context module catalog</span>
+</span><span id="__span-0-16"><a id="__codelineno-0-16" name="__codelineno-0-16" href="#__codelineno-0-16"></a>my-app<span class="w"> </span>context-modules<span class="w"> </span>show<span class="w"> </span>&lt;slug&gt;<span class="w">  </span><span class="c1"># One module&#39;s definition</span>
 </span><span id="__span-0-17"><a id="__codelineno-0-17" name="__codelineno-0-17" href="#__codelineno-0-17"></a>
 </span><span id="__span-0-18"><a id="__codelineno-0-18" name="__codelineno-0-18" href="#__codelineno-0-18"></a><span class="c1"># LLM Catalog</span>
 </span><span id="__span-0-19"><a id="__codelineno-0-19" name="__codelineno-0-19" href="#__codelineno-0-19"></a>my-app<span class="w"> </span>llm<span class="w"> </span>sync<span class="w">           </span><span class="c1"># Sync ~2000 models from cloud/Ollama</span>
@@ -7442,17 +7442,17 @@
 <h3 id="agents-show">agents show</h3>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>my-app<span class="w"> </span>agents<span class="w"> </span>show<span class="w"> </span>assistant
 </span></code></pre></div>
-<p>One agent's full definition: sampling, tools, memory modules, knowledge base scope, and the system prompt.</p>
+<p>One agent's full definition: sampling, tools, context modules, knowledge base scope, and the system prompt.</p>
 <h3 id="agents-test">agents test</h3>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>my-app<span class="w"> </span>agents<span class="w"> </span><span class="nb">test</span><span class="w"> </span>assistant
 </span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>my-app<span class="w"> </span>agents<span class="w"> </span><span class="nb">test</span><span class="w"> </span>support<span class="w"> </span>-m<span class="w"> </span><span class="s2">&quot;What are your hours?&quot;</span>
 </span></code></pre></div>
-<p>Runs one turn the way chat does (the agent's tools, memory modules and code mode, usage recorded) in a conversation of its own, deleted after, and prints the reply.</p>
-<h3 id="memory-modules-list-show">memory-modules list / show</h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>my-app<span class="w"> </span>memory-modules<span class="w"> </span>list
-</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>my-app<span class="w"> </span>memory-modules<span class="w"> </span>show<span class="w"> </span>&lt;slug&gt;
+<p>Runs one turn the way chat does (the agent's tools, context modules and code mode, usage recorded) in a conversation of its own, deleted after, and prints the reply.</p>
+<h3 id="context-modules-list-show">context-modules list / show</h3>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>my-app<span class="w"> </span>context-modules<span class="w"> </span>list
+</span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a>my-app<span class="w"> </span>context-modules<span class="w"> </span>show<span class="w"> </span>&lt;slug&gt;
 </span></code></pre></div>
-<p>The <a href="../memory-modules/">memory module</a> catalog: kind (static, dynamic, hybrid), priority, active state, and per-module detail.</p>
+<p>The <a href="../context-modules/">context module</a> catalog: kind (static, dynamic, hybrid), priority, active state, and per-module detail.</p>
 <hr />
 <h2 id="llm-catalog-commands">LLM Catalog Commands</h2>
 <p>Manage the local model catalog. See <a href="../llm-catalog/">LLM Catalog</a> for full documentation.</p>

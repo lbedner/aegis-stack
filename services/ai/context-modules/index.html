@@ -12,7 +12,7 @@
         <meta name="author" content="Aegis Stack Contributors">
       
       
-        <link rel="canonical" href="https://docs.aegis-stack.io/services/ai/memory-modules/">
+        <link rel="canonical" href="https://docs.aegis-stack.io/services/ai/context-modules/">
       
       
         <link rel="prev" href="../agents/">
@@ -29,7 +29,7 @@
     
     
       
-        <title>Memory Modules - Aegis Stack</title>
+        <title>Context Modules - Aegis Stack</title>
       
     
     
@@ -100,7 +100,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#memory-modules" class="md-skip">
+        <a href="#context-modules" class="md-skip">
           Skip to content
         </a>
       
@@ -133,7 +133,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Memory Modules
+              Context Modules
             
           </span>
         </div>
@@ -3514,7 +3514,7 @@
   <span class="md-ellipsis">
     
   
-    Memory Modules
+    Context Modules
   
 
     
@@ -3532,7 +3532,7 @@
   <span class="md-ellipsis">
     
   
-    Memory Modules
+    Context Modules
   
 
     
@@ -6586,8 +6586,8 @@
   
 
 
-<h1 id="memory-modules">Memory Modules</h1>
-<p>Memory modules are reusable prompt-context blocks that agents opt into. Each module can carry <strong>static text</strong> (rules, guidance, framing that never changes), a <strong>dynamic fetcher</strong> (live, per-user data pulled at request time), or <strong>both</strong>. They are the structured alternative to growing one giant hand-written context builder: each concern lives in its own module, agents pick the modules they need, and a token budget keeps the total in check.</p>
+<h1 id="context-modules">Context Modules</h1>
+<p>Context modules are reusable prompt-context blocks that agents opt into. Each module can carry <strong>static text</strong> (rules, guidance, framing that never changes), a <strong>dynamic fetcher</strong> (live, per-user data pulled at request time), or <strong>both</strong>. They are the structured alternative to growing one giant hand-written context builder: each concern lives in its own module, agents pick the modules they need, and a token budget keeps the total in check.</p>
 <p>Modules require a persistence backend (<code>ai[sqlite]</code> or <code>ai[postgres]</code>).</p>
 <h2 id="the-hybrid-model">The Hybrid Model</h2>
 <p>A module row has two independent content columns; assembly is column-driven:</p>
@@ -6660,7 +6660,7 @@
 </table>
 <p>A module must have <code>prompt_content</code>, <code>fetch_function</code>, or both; creating or editing one into an empty state is rejected.</p>
 <h2 id="the-app-map">The App Map</h2>
-<p>The default <code>assistant</code> always has one module, <code>app_map</code>, seeded with the agent: what the app is, read from its code. It lists each top-level part with what it is for, the tables by owner with the tables each links to, and the changes an agent may propose. An admin's map includes the parts and the aggregates the <code>aggregate</code> tool reads; anyone else's is the tables and changes alone, as the <code>ontology</code> tool answers each. It carries nothing live (no traffic, health or row counts), so its text stays the same turn to turn and a provider's prompt cache serves it. The <code>ontology</code> tool stays for depth: one node, its neighbours, the paths between two. Another agent opts in by adding <code>app_map</code> to its <code>memory_modules</code>.</p>
+<p>The default <code>assistant</code> always has one module, <code>app_map</code>, seeded with the agent: what the app is, read from its code. It lists each top-level part with what it is for, the tables by owner with the tables each links to, and the changes an agent may propose. An admin's map includes the parts and the aggregates the <code>aggregate</code> tool reads; anyone else's is the tables and changes alone, as the <code>ontology</code> tool answers each. It carries nothing live (no traffic, health or row counts), so its text stays the same turn to turn and a provider's prompt cache serves it. The <code>ontology</code> tool stays for depth: one node, its neighbours, the paths between two. Another agent opts in by adding <code>app_map</code> to its <code>context_modules</code>.</p>
 <h2 id="writing-a-fetcher">Writing a Fetcher</h2>
 <p>Fetchers are plain async functions registered by name, exactly like tools. The framework ships the registry plus three fetchers: <code>recent_conversations</code>, a <code>user_profile</code> stub meant to be replaced, and <code>app_map</code>. Your application registers its own domain fetchers:</p>
 <div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.ai.fetchers</span><span class="w"> </span><span class="kn">import</span> <span class="n">FetchContext</span><span class="p">,</span> <span class="n">register_fetcher</span>
@@ -6680,9 +6680,9 @@
 </span><span id="__span-0-15"><a id="__codelineno-0-15" name="__codelineno-0-15" href="#__codelineno-0-15"></a><span class="n">register_fetcher</span><span class="p">(</span><span class="s2">&quot;fetch_open_orders&quot;</span><span class="p">,</span> <span class="n">fetch_open_orders</span><span class="p">)</span>
 </span></code></pre></div>
 <p>Then create a module that uses it:</p>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.ai.memory_modules</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_memory_module</span>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.ai.context_modules</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_context_module</span>
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="k">await</span> <span class="n">create_memory_module</span><span class="p">(</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="k">await</span> <span class="n">create_context_module</span><span class="p">(</span>
 </span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="n">slug</span><span class="o">=</span><span class="s2">&quot;open-orders&quot;</span><span class="p">,</span>
 </span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;Open Orders&quot;</span><span class="p">,</span>
 </span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    <span class="n">prompt_content</span><span class="o">=</span><span class="s2">&quot;When the user asks about orders, use the live list below.&quot;</span><span class="p">,</span>
@@ -6693,7 +6693,7 @@
 </span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>    <span class="n">session</span><span class="o">=</span><span class="n">session</span><span class="p">,</span>
 </span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a><span class="p">)</span>
 </span></code></pre></div>
-<p>Finally, add <code>"open-orders"</code> to an agent's <code>memory_modules</code> list. Every chat with that agent now renders:</p>
+<p>Finally, add <code>"open-orders"</code> to an agent's <code>context_modules</code> list. Every chat with that agent now renders:</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>&lt;module name=&quot;open-orders&quot;&gt;
 </span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>When the user asks about orders, use the live list below.
 </span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
@@ -6712,8 +6712,8 @@
 <h2 id="priority-and-token-budget">Priority and Token Budget</h2>
 <p>Modules render in priority order (lower number first). When a token budget is set, higher-priority modules claim it first and any module that does not fit the remaining budget is dropped, with a warning naming it. Hybrid modules are budgeted on <strong>both</strong> halves: the estimate covers the static text plus the fetched data, so a module cannot sneak past the budget on its static half alone. Set <code>token_estimate</code> on the row for an exact figure; leave it at <code>0</code> to estimate from the rendered content.</p>
 <h2 id="inspecting-modules">Inspecting Modules</h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>my-app<span class="w"> </span>memory-modules<span class="w"> </span>list<span class="w">    </span><span class="c1"># slug, kind, priority, active</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>my-app<span class="w"> </span>memory-modules<span class="w"> </span>show<span class="w"> </span>open-orders
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>my-app<span class="w"> </span>context-modules<span class="w"> </span>list<span class="w">    </span><span class="c1"># slug, kind, priority, active</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>my-app<span class="w"> </span>context-modules<span class="w"> </span>show<span class="w"> </span>open-orders
 </span></code></pre></div>
 <h2 id="related-pages">Related Pages</h2>
 <ul>

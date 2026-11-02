@@ -1,4 +1,4 @@
-"""Memory module model."""
+"""Context module model."""
 
 from datetime import datetime
 
@@ -7,10 +7,10 @@ from sqlmodel import Field, SQLModel
 from app.core.time import utcnow
 
 
-class MemoryModule(SQLModel, table=True):
+class ContextModule(SQLModel, table=True):
     """
     A reusable prompt-context block agents opt into via
-    ``Agent.memory_modules``.
+    ``Agent.context_modules``.
 
     Hybrid by design: ``prompt_content`` (static text) and
     ``fetch_function`` (a registered fetcher name) are independent
@@ -19,7 +19,7 @@ class MemoryModule(SQLModel, table=True):
     ``kind`` column.
     """
 
-    __tablename__ = "memory_module"
+    __tablename__ = "context_module"
 
     id: int | None = Field(default=None, primary_key=True)
     slug: str = Field(unique=True, index=True)

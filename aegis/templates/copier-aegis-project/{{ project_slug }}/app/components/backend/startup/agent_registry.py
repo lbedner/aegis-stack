@@ -2,7 +2,7 @@
 
 
 def seed_agent_registry() -> dict[str, int]:
-    """Seed the agent registry (agents, memory modules, tool rows).
+    """Seed the agent registry (agents, context modules, tool rows).
 
     Idempotent and additive: existing rows are never mutated, so a project
     whose agents were tuned from the dashboard keeps that tuning. Runs at

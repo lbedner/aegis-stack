@@ -12,10 +12,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import sqlalchemy as sa
-from alembic.migration import MigrationContext
-from alembic.operations import Operations
 
 from aegis.core.migration_generator import MEETINGS_MIGRATION, _place_data_statements
+from tests.core._data_after import run_data_after
 
 
 def test_the_index_follows_the_tables_it_indexes(tmp_path: Path) -> None:
@@ -41,12 +40,6 @@ def test_on_sqlite_it_does_nothing() -> None:
         conn.exec_driver_sql(
             "CREATE TABLE meeting_transcript_line (id INTEGER PRIMARY KEY, text TEXT)"
         )
-        namespace: dict[str, object] = {
-            "op": Operations(MigrationContext.configure(conn)),
-            "sa": sa,
-        }
-        body = MEETINGS_MIGRATION.data_after
-        exec(compile(f"def upgrade():\n{body}\n", "revision", "exec"), namespace)
-        namespace["upgrade"]()  # type: ignore[operator]
+        run_data_after(conn, MEETINGS_MIGRATION.data_after)
 
         assert sa.inspect(conn).get_indexes("meeting_transcript_line") == []

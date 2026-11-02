@@ -18,7 +18,7 @@ from app.services.meetings.service import load_meetings_agent_fixtures
 
 
 def load_agent_registry_fixtures(session: Session) -> dict[str, int]:
-    """The agent registry alone: agents, memory modules, and tool rows.
+    """The agent registry alone: agents, context modules, and tool rows.
 
     Split out from the full set because startup runs it on every boot: the
     LLM catalog fixtures are a much larger static seed and belong to their

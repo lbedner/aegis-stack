@@ -1,4 +1,4 @@
-{# What agents are handed: the memory modules they opt into (a row opens
+{# What agents are handed: the context modules they opt into (a row opens
    its editor and a preview of what it renders) and the facts saved about
    the user, corrected or forgotten here. #}
 {% from "components/macros/layout.html" import card, drawer_sync %}
@@ -8,7 +8,7 @@
 <span class="flex items-center justify-end gap-2">{{ action("Correct", row.edit) }}{{ action("Forget", row.forget, "danger") }}</span>
 {%- endmacro %}
 <div class="space-y-4">
-  {% call card("Memory modules", id="ai-modules") %}
+  {% call card("Context modules", id="ai-modules") %}
     {{ data_table([
       {"key": "name", "label": "Module", "kind": "link", "target": "#overseer-main"},
       {"key": "category", "label": "Category"},
@@ -16,7 +16,7 @@
       {"key": "priority", "label": "Priority", "kind": "int", "align": "right"},
       {"key": "tokens", "label": "Tokens", "kind": "int", "align": "right"},
       {"key": "state", "label": "State", "kind": "status"},
-    ], modules, empty="No memory modules") }}
+    ], modules, empty="No context modules") }}
   {% endcall %}
   {% call card("Saved facts", "what the user told it", id="ai-facts") %}
     {{ data_table([

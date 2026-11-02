@@ -1,7 +1,7 @@
 """Per-turn context providers.
 
 GENERIC. A small protocol so any caller can push "what's true right now"
-to the model without a tool call (a memory module's briefing, say).
+to the model without a tool call (a context module's briefing, say).
 
 Providers run BEFORE the model call, so they receive the agent *deps*
 directly (not a ``RunContext``). Each returns a formatted block or ``None``

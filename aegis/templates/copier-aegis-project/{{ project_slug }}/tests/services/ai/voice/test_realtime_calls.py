@@ -193,7 +193,7 @@ class TestACallKnowsWhoSheIs:
     async def test_a_call_is_built_the_way_a_typed_turn_is(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A call built her from the agent row alone: no memory modules, no
+        """A call built her from the agent row alone: no context modules, no
         health, no saved memory. Asked how the database is set up, she
         reached for the ontology tool her app map answers (2026-10-16).
         A call and a typed turn build her through one function

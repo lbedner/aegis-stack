@@ -213,7 +213,7 @@ async def build_finance_snapshot(
 
 
 async def finance_snapshot(ctx: FetchContext) -> str | None:
-    """Memory-module fetcher: the owner's finances as prompt context."""
+    """Context-module fetcher: the owner's finances as prompt context."""
     try:
         owner_user_id = owner_user_id_for(ctx.user_id)
     except ValueError:

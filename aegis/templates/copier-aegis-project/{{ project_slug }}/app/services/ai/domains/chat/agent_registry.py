@@ -176,6 +176,6 @@ def serialize_agent(agent: Agent) -> dict[str, Any]:
         "is_active": agent.is_active,
         "code_mode": agent.code_mode,
         "tools": [tool.name for tool in agent.tools],
-        "memory_modules": list(agent.memory_modules),
+        "context_modules": list(agent.context_modules),
         "knowledge_base_ids": list(agent.knowledge_base_ids),
     }

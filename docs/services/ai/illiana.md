@@ -157,7 +157,7 @@ RAG disabled
 
 ## Context and Live Data
 
-Illiana's system prompt is her persona, the model in force, her saved memory and her memory modules (the app map), plus retrieved code when RAG is on. Nothing in it changes turn to turn. The app map names each part with what it is for and how it is built (each option as chosen, and what else it could be: `backend taskiq (of arq, taskiq, dramatiq)`), the scheduled jobs with whose they are and when they run, the tables and the changes that can be proposed. A job reaches the parts its code imports, so asking about the database finds the job that backs it up.
+Illiana's system prompt is her persona, the model in force, her saved memory and her context modules (the app map), plus retrieved code when RAG is on. Nothing in it changes turn to turn. The app map names each part with what it is for and how it is built (each option as chosen, and what else it could be: `backend taskiq (of arq, taskiq, dramatiq)`), the scheduled jobs with whose they are and when they run, the tables and the changes that can be proposed. A job reaches the parts its code imports, so asking about the database finds the job that backs it up.
 
 ### Live data, asked for
 

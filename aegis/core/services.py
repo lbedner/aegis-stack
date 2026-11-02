@@ -352,7 +352,7 @@ SERVICES: dict[str, ServiceSpec] = {
     "ai": ServiceSpec(
         readme=ReadmeWiring(
             reach="/api/v1/ai, chat on the dashboard, CLI groups `ai`, `llm`, `agents`",
-            cli_groups=["ai", "llm", "agents", "memory-modules"],
+            cli_groups=["ai", "llm", "agents", "context-modules"],
             env_groups=["AI SERVICE CONFIGURATION", "RAG SERVICE CONFIGURATION"],
             first_steps=[
                 "Pick a provider: `uv run <project_slug> ai use-provider <provider>`",
@@ -368,7 +368,7 @@ SERVICES: dict[str, ServiceSpec] = {
         description="Conversational agents, RAG, model catalog, TTS and STT (PydanticAI / LangChain across 7 providers)",
         long_description=(
             "A complete AI platform: multi-provider chat, a database-"
-            "driven agent registry with tools and memory modules, an LLM "
+            "driven agent registry with tools and context modules, an LLM "
             "catalog with roughly 2000 models, cost tracking with usage "
             "analytics, sentiment analytics, optional RAG for codebase-"
             "aware conversations, and optional voice (TTS/STT). Pick "
@@ -551,7 +551,7 @@ SERVICES: dict[str, ServiceSpec] = {
                 "tests/cli/test_slash_commands.py",
                 "tests/cli/test_status_line.py",
                 "tests/services/ai",
-                # Seeds the agent registry (agents, memory modules, tool
+                # Seeds the agent registry (agents, context modules, tool
                 # rows) at boot. Pure AI surface.
                 "app/components/backend/startup/agent_registry.py",
                 "app/components/backend/startup/llm_catalog.py",

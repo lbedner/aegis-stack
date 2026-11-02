@@ -1,10 +1,10 @@
 """The Overseer AI page's Agents and Memory sections.
 
 Agents: the agent registry, each agent's definition edited in the drawer
-(persona, sampling, model pin, active). Grants (tools, memory modules) are
+(persona, sampling, model pin, active). Grants (tools, context modules) are
 shown, not edited: the registry keeps them out of its editable fields.
 
-Memory: the memory modules an agent opts into, edited in the drawer beside
+Memory: the context modules an agent opts into, edited in the drawer beside
 a preview of what the module renders right now (the only way to tell a
 working fetcher from a silently empty one), and the facts saved about the
 user, corrected and forgotten.
@@ -61,7 +61,7 @@ def _row(agent: dict[str, Any]) -> dict[str, Any]:
         "model": agent.get("model_id") or "Default",
         "state": _active(agent),
         "tools": len(agent.get("tools") or []),
-        "modules": len(agent.get("memory_modules") or []),
+        "modules": len(agent.get("context_modules") or []),
     }
 
 
@@ -89,7 +89,7 @@ async def agent_context(db: Any, slug: str) -> dict[str, Any] | None:
         "model_choices": await model_choices(agent.get("model_id")),
         "grants": [
             ("Tools", ", ".join(agent.get("tools") or []) or None),
-            ("Memory modules", ", ".join(agent.get("memory_modules") or []) or None),
+            ("Context modules", ", ".join(agent.get("context_modules") or []) or None),
             (
                 "Knowledge bases",
                 ", ".join(map(str, agent.get("knowledge_base_ids") or [])) or None,
@@ -142,14 +142,14 @@ def memory_url(**query: str | None) -> str:
 
 
 async def module_rows(db: Any) -> list[dict[str, Any]]:
-    """Every memory module, active or not, in render order."""
-    from app.services.ai.domains.chat.memory_modules import (
-        list_memory_modules,
-        serialize_memory_module,
+    """Every context module, active or not, in render order."""
+    from app.services.ai.domains.chat.context_modules import (
+        list_context_modules,
+        serialize_context_module,
     )
 
-    modules = await list_memory_modules(db, active_only=False)
-    return [serialize_memory_module(m) for m in modules]
+    modules = await list_context_modules(db, active_only=False)
+    return [serialize_context_module(m) for m in modules]
 
 
 async def module_row(db: Any, slug: str) -> dict[str, Any] | None:
@@ -158,10 +158,10 @@ async def module_row(db: Any, slug: str) -> dict[str, Any] | None:
 
 async def render_preview(db: Any, slug: str) -> str | None:
     """What the module hands an agent now, rendered by the real renderer."""
-    from app.services.ai.domains.chat.module_context import render_memory_modules
+    from app.services.ai.domains.chat.module_context import render_context_modules
     from app.services.ai.domains.chat.user_memory import DEFAULT_MEMORY_USER_ID
 
-    return await render_memory_modules(
+    return await render_context_modules(
         [slug], user_id=DEFAULT_MEMORY_USER_ID, session=db
     )
 

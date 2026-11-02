@@ -57,9 +57,9 @@ def _clean_agent_cache():
 
 @pytest.fixture
 def use_test_session(monkeypatch):
-    """Point the memory-module renderer at the test's own session.
+    """Point the context-module renderer at the test's own session.
 
-    ``render_memory_modules`` opens its own session when the caller does not
+    ``render_context_modules`` opens its own session when the caller does not
     supply one, which in a test would reach the real database.
     """
 
@@ -100,7 +100,7 @@ def _returns(value: Any) -> Any:
 
 async def _seed_agent(session: AsyncSession) -> None:
     """Insert the analyst rows on the async session the run will use."""
-    session.add(analyst.MemoryModule(**analyst.snapshot_module_definition()))
+    session.add(analyst.ContextModule(**analyst.snapshot_module_definition()))
     session.add(analyst.Agent(**analyst.analyst_agent_definition()))
     await session.flush()
 
@@ -229,7 +229,7 @@ class TestRunAnalystNote:
         self, async_db_session: AsyncSession, monkeypatch, use_test_session
     ) -> None:
         """The whole design rests on this: the model is handed the deterministic
-        figures. If the memory module does not make it into the turn, the agent
+        figures. If the context module does not make it into the turn, the agent
         is writing from nothing and every number it produces is invented."""
         use_test_session(async_db_session)
         seen: dict[str, str] = {}

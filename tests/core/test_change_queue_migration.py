@@ -11,8 +11,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import sqlalchemy as sa
-from alembic.migration import MigrationContext
-from alembic.operations import Operations
 
 from aegis.core.migration_generator import (
     CHANGE_QUEUE_MIGRATION,
@@ -20,6 +18,7 @@ from aegis.core.migration_generator import (
     _place_data_statements,
     get_services_needing_migrations,
 )
+from tests.core._data_after import run_data_after
 
 _COLUMNS = (
     "id INTEGER PRIMARY KEY, owner_user_id INTEGER, "
@@ -71,13 +70,7 @@ def test_the_carry_over_runs_after_the_table_exists(tmp_path: Path) -> None:
 
 
 def _upgrade(conn: sa.Connection) -> None:
-    body = CHANGE_QUEUE_MIGRATION.data_after
-    namespace: dict[str, object] = {
-        "op": Operations(MigrationContext.configure(conn)),
-        "sa": sa,
-    }
-    exec(compile(f"def upgrade():\n{body}\n", "revision", "exec"), namespace)
-    namespace["upgrade"]()  # type: ignore[operator]
+    run_data_after(conn, CHANGE_QUEUE_MIGRATION.data_after)
 
 
 def test_finance_rows_move_with_their_ids() -> None:

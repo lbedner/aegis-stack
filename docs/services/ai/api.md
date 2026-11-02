@@ -439,7 +439,7 @@ Requires a database backend (`ai[sqlite]` / `ai[postgres]`). See [Agents](agents
 
 ### GET `/api/v1/ai/agents`
 
-List every agent definition, including tool and memory-module grants.
+List every agent definition, including tool and context-module grants.
 
 ```bash
 curl http://localhost:8000/api/v1/ai/agents
@@ -456,7 +456,7 @@ curl http://localhost:8000/api/v1/ai/agents
     "system_prompt": "...",
     "is_active": true,
     "tools": [],
-    "memory_modules": [],
+    "context_modules": [],
     "knowledge_base_ids": []
   }
 ]

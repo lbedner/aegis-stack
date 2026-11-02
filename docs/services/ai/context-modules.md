@@ -1,6 +1,6 @@
-# Memory Modules
+# Context Modules
 
-Memory modules are reusable prompt-context blocks that agents opt into. Each module can carry **static text** (rules, guidance, framing that never changes), a **dynamic fetcher** (live, per-user data pulled at request time), or **both**. They are the structured alternative to growing one giant hand-written context builder: each concern lives in its own module, agents pick the modules they need, and a token budget keeps the total in check.
+Context modules are reusable prompt-context blocks that agents opt into. Each module can carry **static text** (rules, guidance, framing that never changes), a **dynamic fetcher** (live, per-user data pulled at request time), or **both**. They are the structured alternative to growing one giant hand-written context builder: each concern lives in its own module, agents pick the modules they need, and a token budget keeps the total in check.
 
 Modules require a persistence backend (`ai[sqlite]` or `ai[postgres]`).
 
@@ -35,7 +35,7 @@ A module must have `prompt_content`, `fetch_function`, or both; creating or edit
 
 ## The App Map
 
-The default `assistant` always has one module, `app_map`, seeded with the agent: what the app is, read from its code. It lists each top-level part with what it is for, the tables by owner with the tables each links to, and the changes an agent may propose. An admin's map includes the parts and the aggregates the `aggregate` tool reads; anyone else's is the tables and changes alone, as the `ontology` tool answers each. It carries nothing live (no traffic, health or row counts), so its text stays the same turn to turn and a provider's prompt cache serves it. The `ontology` tool stays for depth: one node, its neighbours, the paths between two. Another agent opts in by adding `app_map` to its `memory_modules`.
+The default `assistant` always has one module, `app_map`, seeded with the agent: what the app is, read from its code. It lists each top-level part with what it is for, the tables by owner with the tables each links to, and the changes an agent may propose. An admin's map includes the parts and the aggregates the `aggregate` tool reads; anyone else's is the tables and changes alone, as the `ontology` tool answers each. It carries nothing live (no traffic, health or row counts), so its text stays the same turn to turn and a provider's prompt cache serves it. The `ontology` tool stays for depth: one node, its neighbours, the paths between two. Another agent opts in by adding `app_map` to its `context_modules`.
 
 ## Writing a Fetcher
 
@@ -62,9 +62,9 @@ register_fetcher("fetch_open_orders", fetch_open_orders)
 Then create a module that uses it:
 
 ```python
-from app.services.ai.memory_modules import create_memory_module
+from app.services.ai.context_modules import create_context_module
 
-await create_memory_module(
+await create_context_module(
     slug="open-orders",
     name="Open Orders",
     prompt_content="When the user asks about orders, use the live list below.",
@@ -76,7 +76,7 @@ await create_memory_module(
 )
 ```
 
-Finally, add `"open-orders"` to an agent's `memory_modules` list. Every chat with that agent now renders:
+Finally, add `"open-orders"` to an agent's `context_modules` list. Every chat with that agent now renders:
 
 ```
 <module name="open-orders">
@@ -103,8 +103,8 @@ Modules render in priority order (lower number first). When a token budget is se
 ## Inspecting Modules
 
 ```bash
-my-app memory-modules list    # slug, kind, priority, active
-my-app memory-modules show open-orders
+my-app context-modules list    # slug, kind, priority, active
+my-app context-modules show open-orders
 ```
 
 ## Related Pages

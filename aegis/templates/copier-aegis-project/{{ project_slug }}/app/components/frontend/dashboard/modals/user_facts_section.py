@@ -1,6 +1,6 @@
 """Saved facts: the other half of the AI modal's Memory tab.
 
-Memory modules are what the system assembles for an agent; these are what
+Context modules are what the system assembles for an agent; these are what
 the user told it. Facts are written by the ``save_memory`` tool mid
 conversation and injected into every later turn, which makes an unreviewable
 store a liability: a number the model misheard would be quoted back

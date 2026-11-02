@@ -11,7 +11,7 @@ from typing import Any
 
 from app.services.ai.domains.chat.agent_loader import AgentConfig
 {%- if ai_backend != "memory" and ai_framework == "pydantic-ai" %}
-from app.services.ai.domains.chat.module_context import render_memory_modules
+from app.services.ai.domains.chat.module_context import render_context_modules
 from app.services.ai.domains.chat.user_memory import (
     build_user_memory_context,
     memory_user,
@@ -97,7 +97,7 @@ class TurnMixin(PromptMixin):
         # read in, so a new conversation opens still holding it.
         readings = known.readings
 
-        # The agent row's memory modules (e.g. the finance snapshot).
+        # The agent row's context modules (e.g. the finance snapshot).
         # LangChain's runtime takes neither: its prompt is the persona,
         # the contexts and the history, clipped by message count.
         # Rendered as the caller: the app map gives an admin the parts.
@@ -109,8 +109,8 @@ class TurnMixin(PromptMixin):
             subject=subject,
             admin=admin,
         ):
-            agent_modules_context = await render_memory_modules(
-                agent_config.memory_modules, user_id=user_id, subject=subject
+            agent_modules_context = await render_context_modules(
+                agent_config.context_modules, user_id=user_id, subject=subject
             )
 {%- endif %}
 {% endif %}

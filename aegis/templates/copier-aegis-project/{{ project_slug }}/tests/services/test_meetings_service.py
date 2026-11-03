@@ -12,7 +12,7 @@ import pytest
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.cli.meetings import describe
+from app.cli.meetings import describe, found, series_lines
 from app.components.backend.startup import meetings_recovery
 from app.core.constants import CHART_RAMP
 from app.core.time import utcnow
@@ -24,20 +24,27 @@ from app.services.meetings.models import (
     MeetingParticipant,
     MeetingPerson,
     MeetingsCounts,
+    MeetingSeries,
     MeetingStatus,
+    NoteItem,
     Notes,
     Platform,
+    SeriesRecord,
+    ThreadItem,
+    ThreadSection,
     TranscriptLine,
     TranscriptRow,
 )
 from app.services.meetings.queries import meetings_counts
 from app.services.meetings.service import (
+    NOTHING_FOUND,
     STALE_SECONDS,
     MeetingInProgressError,
     MeetingNotFoundError,
     MeetingsService,
     NotASpeakerError,
     NothingToWriteError,
+    SearchHit,
     UnsupportedMeetingLinkError,
     detect_platform,
     fail_interrupted,
@@ -457,6 +464,80 @@ def test_the_cli_shows_a_meeting_as_the_pages_read_it() -> None:
         assert part in shown
 
 
+def test_the_cli_shows_a_meeting_s_notes_before_its_transcript() -> None:
+    """``meetings show`` prints the notes as they read: the summary, then
+    each part's points with whose they are and when they are due."""
+    notes = Notes(
+        summary="Shipping slips a week.",
+        decisions=[NoteItem(text="Ship on Friday.")],
+        action_items=[ActionItem(text="Book the room.", owner="Ada", due="Monday")],
+    )
+    shown = "\n".join(describe(shared_record(notes=notes)))
+
+    for part in ("Summary", "Shipping slips", "Decisions", "Ship on Friday."):
+        assert part in shown
+    assert "Book the room. (Ada, due Monday)" in shown
+    assert shown.index("Ship on Friday.") < shown.index("No transcript yet.")
+
+
+def test_the_cli_prints_what_a_search_found() -> None:
+    """``meetings search`` prints each hit with its meeting, its part, and
+    for a line who said it and how far into the call."""
+    asked = utcnow()
+    hits = [
+        SearchHit(
+            meeting_id=7,
+            meeting_url=MEET,
+            requested_at=asked,
+            part="Transcript",
+            speaker="Ada",
+            line_id=1,
+            at=61.0,
+            text="We ship Friday.",
+        ),
+        SearchHit(
+            meeting_id=8,
+            meeting_url=MEET,
+            requested_at=asked,
+            part="Decisions",
+            speaker=None,
+            line_id=None,
+            at=None,
+            text="Ship on Friday.",
+        ),
+    ]
+
+    shown = found(hits)
+
+    assert "Meeting 7" in shown[0] and "01:01" in shown[0]
+    assert "Ada: We ship Friday." in shown[0]
+    assert "Meeting 8" in shown[1] and "Decisions: Ship on Friday." in shown[1]
+    assert found([]) == [f"[dim]{NOTHING_FOUND}[/dim]"]
+
+
+def test_the_cli_shows_a_series_as_it_reads() -> None:
+    """``meetings series ID`` prints the series' headline, its run over
+    time, what it keeps coming back to with where each stands, and its
+    meetings."""
+    point = ThreadItem(text="Ship on Friday.", quotes=[], meeting_id=9)
+    theme = ThreadItem(text="Hiring.", quotes=[], meeting_id=9, status="open")
+    record = SeriesRecord(
+        series=MeetingSeries(id=3, link=MEET, summary="Shipping slips."),
+        name="Standup",
+        meetings=[9, 4],
+        over_time=[ThreadSection(key="settled", title="Settled", items=[point])],
+        sections=[ThreadSection(key="themes", title="Themes", items=[theme])],
+        writing=False,
+        can_write=False,
+    )
+
+    shown = "\n".join(series_lines(record))
+
+    for part in ("Series 3  Standup", "Shipping slips.", "Settled", "Ship on Friday."):
+        assert part in shown
+    assert "Hiring. (open)" in shown and "Meetings: 9, 4" in shown
+
+
 async def test_the_read_gives_each_speaker_and_owner_their_color(
     async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -547,7 +628,6 @@ def test_every_speaker_in_a_meeting_has_a_color_of_their_own() -> None:
     assert len(set(colors.values())) == len(names)
     assert set(colors.values()) <= set(range(1, CHART_RAMP + 1))
     assert voices(["Ada"]) == {"Ada": voice("Ada")}
-
 
 
 def test_the_service_imports_without_its_ai_half() -> None:

@@ -63,7 +63,7 @@ def test_overseers_chat_is_granted_the_meetings_and_how_to_read_them(
     assistant = db_session.exec(
         select(Agent).where(Agent.slug == DEFAULT_AGENT_SLUG)
     ).one()
-    assert {"meetings_search", "meetings_series"} <= {t.name for t in assistant.tools}
+    assert "meetings" in {t.name for t in assistant.tools}
     assert agents.MEETINGS_MODULE in assistant.context_modules
     module = db_session.exec(
         select(ContextModule).where(ContextModule.slug == agents.MEETINGS_MODULE)

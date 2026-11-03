@@ -7,20 +7,15 @@ model pass (``test_meetings_series_themes``); here they are kept by hand."""
 import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.core.tools import acting_as, result_data
-from app.services.meetings import tools
 from app.services.meetings.domains.series.queries import series_link
 from app.services.meetings.domains.series.service import (
     SeriesNotFoundError,
     SeriesService,
 )
 from app.services.meetings.domains.threads.service import meeting_threads
-from app.services.meetings.models import NoteItem, Notes, Theme, ThreadSection
+from app.services.meetings.models import NoteItem, Theme, ThreadSection
 from app.services.meetings.service import MeetingsService
-from tests._meetings import MEET, asked_twice, ended, kept_series
-from tests._session import opens
-
-OTHER = "https://meet.google.com/xyz-wxyz-xyz"
+from tests._meetings import MEET, OTHER, asked_twice, ended, kept_series
 
 
 def _themes(sections: list[ThreadSection]) -> ThreadSection:
@@ -98,7 +93,6 @@ async def test_a_meetings_threads_say_what_keeps_coming_up(
         async_db_session,
         None,
         ("Dana", "Unrelated."),
-        notes=lambda _: Notes(summary="-"),
     )
     await kept_series(
         async_db_session,
@@ -118,7 +112,6 @@ async def test_a_meetings_threads_say_what_keeps_coming_up(
         async_db_session,
         None,
         ("Ada", "Hi."),
-        notes=lambda _: Notes(summary="-"),
         url=OTHER,
     )
     assert _themes(await meeting_threads(svc, on_its_own)).items == []
@@ -156,44 +149,3 @@ async def test_another_owners_series_is_not_found(
     with pytest.raises(SeriesNotFoundError):
         await SeriesService(async_db_session, 1).read(theirs)
     assert (await SeriesService(async_db_session, None).read(theirs)).series.id
-
-
-@pytest.mark.parametrize("admin", [True, False])
-async def test_the_chat_tool_lists_the_series_then_reads_one(
-    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch, admin: bool
-) -> None:
-    """Asked how a series is going, she lists them (an admin's: everyone's)
-    with each one's headline, then reads the one asked about: what keeps
-    coming up and where it stands, and what is settled and still open."""
-    monkeypatch.setattr(tools, "get_async_session", opens(async_db_session))
-    mine = await kept_series(
-        async_db_session,
-        1,
-        name="Dev call",
-        summary="Shipping slips a week.",
-        themes=[Theme(text="The usage report", status="answered")],
-        settled=[NoteItem(text="Ship Friday")],
-        still_open=[NoteItem(text="Who owns billing")],
-    )
-    theirs = await kept_series(async_db_session, 2, url=OTHER)
-
-    with acting_as(1, "assistant", admin=admin):
-        listed = result_data(await tools.meetings_series())
-        read = result_data(await tools.meetings_series(mine))
-        hidden = result_data(await tools.meetings_series(theirs))
-
-    assert {s["series_id"] for s in listed} == ({mine, theirs} if admin else {mine})
-    dev = next(s for s in listed if s["series_id"] == mine)
-    assert (dev["name"], dev["meetings"], dev["headline"]) == (
-        "Dev call",
-        2,
-        "Shipping slips a week.",
-    )
-    assert read["headline"] == "Shipping slips a week."
-    assert read["themes"] == [{"text": "The usage report", "status": "answered"}]
-    assert (read["settled"], read["still_open"]) == (
-        ["Ship Friday"],
-        ["Who owns billing"],
-    )
-    assert "shifted" not in read  # a part with nothing in it is left out
-    assert ("error" in hidden) is not admin

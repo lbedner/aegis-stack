@@ -14,14 +14,13 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from sqlmodel import SQLModel
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.core.tools import acting_as, result_data
-from app.services.meetings import tools
 from app.services.meetings.domains.notes.service import keep_notes
 from app.services.meetings.domains.search import queries
 from app.services.meetings.domains.search.service import search_meetings
 from app.services.meetings.models import (
     ActionItem,
     BotAccount,
+    CalendarEvent,
     Meeting,
     MeetingNoteItem,
     MeetingNoteLine,
@@ -34,7 +33,6 @@ from app.services.meetings.models import (
 )
 from app.services.meetings.service import MeetingsService
 from tests._meetings import ended, said
-from tests._session import opens
 
 POSTGRES = os.environ.get("TEST_POSTGRES_URL")
 TABLES = [
@@ -42,6 +40,7 @@ TABLES = [
     for model in (
         BotAccount,
         Meeting,
+        CalendarEvent,
         MeetingPerson,
         MeetingParticipant,
         TranscriptLine,
@@ -50,10 +49,6 @@ TABLES = [
         MeetingNoteLine,
     )
 ]
-
-
-def _summary(_: list[int]) -> Notes:
-    return Notes(summary="-")
 
 
 @pytest.fixture(params=["sqlite", "postgres"])
@@ -94,7 +89,6 @@ async def test_a_word_said_finds_its_line_with_who_said_it_and_when(
         1,
         ("Ada", "Shall we start?"),
         ("Lawrence", "Our pricing is too low for the enterprise tier."),
-        notes=_summary,
     )
 
     hits = await search_meetings(db, 1, "pricing")
@@ -114,11 +108,32 @@ async def test_a_word_said_finds_its_line_with_who_said_it_and_when(
 
 
 async def test_a_word_finds_its_other_forms(db: AsyncSession) -> None:
-    _, ids = await ended(db, 1, ("Lawrence", "We priced it at 49."), notes=_summary)
+    _, ids = await ended(db, 1, ("Lawrence", "We priced it at 49."))
 
     assert [h.line_id for h in await search_meetings(db, 1, "pricing")] == ids
 
 
+async def test_any_word_finds_a_line_and_the_lines_with_more_come_first(
+    db: AsyncSession,
+) -> None:
+    """Asked as a question, no one line holds every word of it: a line
+    with any of them is found, the ones with more of them first."""
+    _, ids = await ended(
+        db,
+        1,
+        ("Ada", "Lunch is at noon."),
+        ("Lisa", "I never got a nudge on Saturday."),
+        ("Leonard", "Hey Lisa, if someone does not respond to a message we nudge."),
+    )
+
+    hits = await search_meetings(
+        db, 1, "Lisa not receiving messages never responded to the nudge"
+    )
+
+    assert [h.line_id for h in hits] == [ids[2], ids[1]]
+
+
+@pytest.mark.queryspy(allow_n_plus_one=True)  # searched again on purpose
 async def test_a_word_in_the_notes_finds_the_item_at_its_line(
     db: AsyncSession,
 ) -> None:
@@ -178,7 +193,7 @@ async def test_each_notes_text_that_matches_is_read_once(db: AsyncSession) -> No
 async def test_newest_meeting_first_and_its_lines_in_the_order_said(
     db: AsyncSession,
 ) -> None:
-    older, _ = await ended(db, 1, ("Ada", "Pricing first."), notes=_summary)
+    older, _ = await ended(db, 1, ("Ada", "Pricing first."))
     newer, ids = await ended(
         db,
         1,
@@ -200,14 +215,15 @@ async def test_newest_meeting_first_and_its_lines_in_the_order_said(
 
 
 async def test_one_owner_never_finds_anothers_meetings(db: AsyncSession) -> None:
-    mine, _ = await ended(db, 1, ("Ada", "Pricing for us."), notes=_summary)
-    theirs, _ = await ended(db, 2, ("Grace", "Pricing for them."), notes=_summary)
+    mine, _ = await ended(db, 1, ("Ada", "Pricing for us."))
+    theirs, _ = await ended(db, 2, ("Grace", "Pricing for them."))
 
     assert {h.meeting_id for h in await search_meetings(db, 1, "pricing")} == {mine}
     every = await search_meetings(db, None, "pricing")
     assert {h.meeting_id for h in every} == {mine, theirs}
 
 
+@pytest.mark.queryspy(allow_n_plus_one=True)  # searched again on purpose
 async def test_a_line_is_found_as_it_reads_now(db: AsyncSession) -> None:
     """A caption grows while it is said, and a meeting can be deleted: the
     search keeps up with both."""
@@ -233,6 +249,7 @@ async def test_a_line_is_found_as_it_reads_now(db: AsyncSession) -> None:
     assert await search_meetings(db, 1, "budget") == []
 
 
+@pytest.mark.queryspy(allow_n_plus_one=True)  # searched again on purpose
 async def test_notes_written_again_are_searched_as_they_read_now(
     db: AsyncSession,
 ) -> None:
@@ -245,47 +262,11 @@ async def test_notes_written_again_are_searched_as_they_read_now(
     assert [h.text for h in await search_meetings(db, 1, "hiring")] == ["About hiring."]
 
 
-@pytest.mark.parametrize("admin", [True, False])
-async def test_the_chat_tool_answers_with_the_lines_linked(
-    async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch, admin: bool
-) -> None:
-    """Overseer's chat (an admin) reads every owner's meetings and links
-    Overseer's drawer at the line; anyone else reads their own, linked to
-    their Meetings page."""
-    monkeypatch.setattr(tools, "get_async_session", opens(async_db_session))
-    mine, ids = await ended(
-        async_db_session, 1, ("Lawrence", "Pricing at 49."), notes=_summary
-    )
-    theirs, _ = await ended(
-        async_db_session, 2, ("Grace", "Pricing at 59."), notes=_summary
-    )
-
-    with acting_as(1, "assistant", admin=admin):
-        hits = result_data(await tools.meetings_search("pricing"))
-
-    found = {hit["meeting_id"] for hit in hits}
-    assert found == ({mine, theirs} if admin else {mine})
-    hit = next(h for h in hits if h["meeting_id"] == mine)
-    link = (
-        f"/overseer/services/meetings?meeting={mine}&line={ids[0]}"
-        if admin
-        else f"/meetings/{mine}#line-{ids[0]}"
-    )
-    assert hit == {
-        "meeting_id": mine,
-        "part": "Transcript",
-        "speaker": "Lawrence",
-        "at": "00:00",
-        "text": "Pricing at 49.",
-        "link": link,
-    }
-
-
 @pytest.mark.parametrize("query", ["", "   ", '"', "AND (", "pricing* NEAR(", "-"])
 async def test_any_text_is_a_search_never_an_error(
     db: AsyncSession, query: str
 ) -> None:
-    await ended(db, 1, ("Ada", "Pricing."), notes=_summary)
+    await ended(db, 1, ("Ada", "Pricing."))
 
     hits = await search_meetings(db, 1, query)
 

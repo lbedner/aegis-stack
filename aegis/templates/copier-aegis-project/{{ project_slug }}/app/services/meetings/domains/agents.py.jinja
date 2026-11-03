@@ -149,6 +149,8 @@ MEETINGS_GUIDE = """Meetings. You sat in the meetings the bot joined, and \
 you can read them back. When someone asks about past meetings, a series, \
 what was decided, or what keeps coming up, look it up before answering; \
 never answer from memory or say you lack access.
+- Asked about one call, read that meeting whole before answering: a \
+search finds a few lines, and the answer is often in the ones around them.
 - Summarize the way a colleague would: where it stands, then the two or \
 three things that matter. Go deeper only when asked.
 - You see every meeting for an admin, otherwise only the asker's own: do \
@@ -182,9 +184,7 @@ def load_meetings_agent_fixtures(session: Session) -> dict[str, int]:
     )
 
     seeded = seed_missing_agents(session, meetings_agent_definitions())
-    granted = attach_tools(
-        session, DEFAULT_AGENT_SLUG, ["meetings_search", "meetings_series"]
-    )
+    granted = attach_tools(session, DEFAULT_AGENT_SLUG, ["meetings"])
     module = seed_missing_modules(session, [meetings_module_definition()])
     attached = attach_modules(session, DEFAULT_AGENT_SLUG, [MEETINGS_MODULE])
     if granted or module or attached:

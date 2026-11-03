@@ -48,6 +48,8 @@ from tests._secret_settings import use_store
 from tests._session import opens
 
 MEET = "https://meet.google.com/abc-defg-hij"
+# A meeting on another link: another series.
+OTHER = "https://meet.google.com/xyz-wxyz-xyz"
 # Another owner than the one signed in. With auth, a meeting's owner is a
 # user: 999 is one conftest seeds (``KNOWN_OWNER_IDS``).
 THEIRS = 999
@@ -349,15 +351,22 @@ async def a_runner_looked_in(session: AsyncSession) -> None:
     await tokens.resolve(session, value)
 
 
+def summary_only(_: list[int]) -> Notes:
+    """Notes that say next to nothing, for a meeting whose notes do not
+    matter to the test."""
+    return Notes(summary="-")
+
+
 async def ended(
     session: AsyncSession,
     owner: int | None,
     *lines: tuple[str, str],
-    notes: Callable[[list[int]], Notes],
+    notes: Callable[[list[int]], Notes] = summary_only,
     url: str = MEET,
 ) -> tuple[int, list[int]]:
     """A meeting of ``owner``'s on ``url`` the bot has left, having heard
-    ``lines``, with the notes ``notes`` writes from their row ids. Returns
+    ``lines``, with the notes ``notes`` writes from their row ids (next to
+    nothing unless given). Returns
     its id and those ids."""
     meeting = await MeetingsService(session, owner).request(url, "Notes")
     meeting_id: int = meeting.id  # type: ignore[assignment]
@@ -442,9 +451,7 @@ async def asked_twice(
     usage report: the meetings, and the line she asked in each."""
     meetings, asked = [], []
     for said in ("The usage report?", "Still no report."):
-        meeting_id, ids = await ended(
-            session, owner, ("Dana", said), notes=lambda _: Notes(summary="-")
-        )
+        meeting_id, ids = await ended(session, owner, ("Dana", said))
         meetings.append(meeting_id)
         asked.append(ids[0])
     return meetings, asked

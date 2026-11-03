@@ -15,10 +15,8 @@ from app.services.ai.domains.spend import recording
 from app.services.meetings.domains.series import themes
 from app.services.meetings.domains.series.service import THEMING, SeriesService
 from app.services.meetings.models import NoteItem, Notes, SeriesRecord
-from tests._meetings import answering, ended
+from tests._meetings import OTHER, answering, ended
 from tests._session import opens
-
-OTHER = "https://meet.google.com/xyz-wxyz-xyz"
 
 
 @pytest.fixture(autouse=True)

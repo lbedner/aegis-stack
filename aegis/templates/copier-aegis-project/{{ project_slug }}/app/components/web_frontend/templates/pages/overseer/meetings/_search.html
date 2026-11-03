@@ -24,7 +24,7 @@
       {% endfor %}
     </ul>
     {% else %}
-    <p class="text-sm text-aegis-muted">Nothing said in any meeting has those words.</p>
+    <p class="text-sm text-aegis-muted">{{ search.empty }}</p>
     {% endif %}
   </div>
   {% endcall %}

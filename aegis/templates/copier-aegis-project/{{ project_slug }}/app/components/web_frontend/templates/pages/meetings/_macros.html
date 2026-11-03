@@ -110,9 +110,9 @@
   <li data-turn class="grid scroll-mt-12 gap-1">
     {{ speaker(name, voices) }}
     {% for line in rows %}
-    <p id="line-{{ line.id }}" {% if hit and line.id == hit %}data-hit{% endif %} class="group/line flex gap-3 scroll-mt-20 rounded px-2 -mx-2 target:bg-aegis-teal/10 data-[hit]:bg-aegis-teal/10">
+    <p id="line-{{ line.id }}" data-copy-line="{{ name }} [{{ clock[line.id] }}]" {% if hit and line.id == hit %}data-hit{% endif %} class="group/line flex gap-3 scroll-mt-20 rounded px-2 -mx-2 target:bg-aegis-teal/10 data-[hit]:bg-aegis-teal/10">
       <span class="w-10 shrink-0 pt-0.5 text-xs tabular-nums text-aegis-muted">{{ clock[line.id] }}</span>
-      <span class="flex-1 leading-relaxed text-aegis-text">{{ line.text }}{% for part, name in parts.get(line.id, []) %} {{ ask_about(base, line.id, part, name) }}{% endfor %}</span>
+      <span data-said class="flex-1 leading-relaxed text-aegis-text">{{ line.text }}{% for part, name in parts.get(line.id, []) %} {{ ask_about(base, line.id, part, name) }}{% endfor %}</span>
       {% if asks %}{{ ask_about(base, line.id) }}{% endif %}
     </p>
     {% if asks %}<div id="about-line-{{ line.id }}" class="about-slot" hx-preserve></div>{% endif %}

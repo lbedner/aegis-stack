@@ -29,6 +29,6 @@ Only the meeting's owner, unless the agent's **Answers anyone** switch is on (Ov
 - **Live** where the stack has a live voice engine: you hear her as she makes the answer. Otherwise she answers in a chat turn and the bot says it a sentence at a time.
 - **Her card**: see [Its card and its voice](bot.md#its-card-and-its-voice).
 - **The chat** gets every answer too.
-- **Earlier meetings** she reads back with two tools: `meetings_series` (each series' headline, what keeps coming up, what is settled and still open) and `meetings_search` (the words said). A **Meetings** [context module](../ai/context-modules.md) tells her when to use which; edit it in Overseer > AI > Memory.
+- **Earlier meetings** she reads back with one tool, `meetings`: asked nothing, every series' headline and the latest meetings; a series in full (what keeps coming up, what is settled and still open); a meeting in full (its notes and every line said); or a search of the words said. A **Meetings** [context module](../ai/context-modules.md) tells her how to read them; edit it in Overseer > AI > Memory.
 
 Stops, cut-ins and go-ons are kept with the transcript, not listed as moments.

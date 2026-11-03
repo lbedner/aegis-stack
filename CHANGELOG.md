@@ -16,6 +16,23 @@
   gate refuses (a spent budget). The session lookup works on a socket
   (`get_session_token`), and the meeting bot's live voice is its meeting
   owner's. (#1672)
+- **Illiana reads a meeting whole.** One `meetings` tool replaces
+  `meetings_search` and `meetings_series`: asked nothing, the series and
+  the latest meetings; a series in full with its meetings; a meeting in
+  full, its notes and every line said; or a search. A grant of either old
+  tool is left in place and does nothing. The transcript tab copies the
+  call as plain lines. The CLI reads them too: `meetings search` and
+  `meetings series [ID]`, and `meetings show` prints the notes. (#1932)
+
+### Changed
+
+- **Meetings search matches any of the words.** Those with more of the
+  words come first, then the newest meeting, so a question asked whole
+  finds the lines that answer it; every word used to have to be on one
+  line. (#1932)
+- **`GET /api/v1/meetings/{id}` returns the meeting in full** (the
+  `MeetingRecord` the admin's read returns: its notes and every line), not
+  the bare row; the row is now under `meeting`. (#1932)
 
 ## [0.17.0] - 2026-10-28
 

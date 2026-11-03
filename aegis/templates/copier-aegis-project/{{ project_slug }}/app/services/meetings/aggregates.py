@@ -7,7 +7,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.core import ranges
 from app.core.aggregates import Aggregate, tally
 from app.core.figures import FIGURES
-from app.services.meetings.queries import status_platform_counts
+from app.services.meetings.service import status_platform_counts
 
 
 class Meetings(BaseModel):

@@ -186,11 +186,27 @@ function showCopied(button, on) {
   if (on) button.dataset.copied = 'true';
   else delete button.dataset.copied;
 }
+// A part of the page copied as it reads (``data-copy-from``, a selector):
+// each ``data-copy-line`` in it, its label then its words (``data-said``),
+// without the buttons among them. Read when pressed, so a page drawn again
+// every few seconds never carries its text twice.
+function pageText(selector) {
+  return [...document.querySelectorAll(`${selector} [data-copy-line]`)]
+    .map((line) => {
+      const said = line.querySelector('[data-said]').cloneNode(true);
+      for (const button of said.querySelectorAll('button')) button.remove();
+      return `${line.dataset.copyLine}: ${said.textContent.trim()}\n`;
+    })
+    .join('');
+}
 document.addEventListener('click', (event) => {
-  const button = event.target.closest('[data-copy]');
-  if (!button || !button.dataset.copy) return;
+  const button = event.target.closest('[data-copy], [data-copy-from]');
+  if (!button) return;
+  const { copy, copyFrom } = button.dataset;
+  const text = copyFrom ? pageText(copyFrom) : copy;
+  if (!text) return;
   const ticks = button.querySelector('[data-copy-done]');
-  copyText(button.dataset.copy).then(
+  copyText(text).then(
     () => {
       if (!ticks) return toast('Copied to clipboard', 'ok');
       showCopied(button, true);

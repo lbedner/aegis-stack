@@ -8,7 +8,7 @@ import pytest
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.components.web_frontend import overseer_meetings
-from app.services.meetings.domains.search.service import hit_link, search_meetings
+from app.services.meetings.domains.search.service import meeting_link, search_meetings
 from app.services.meetings.models import NoteItem, Notes
 from app.services.system.models import ComponentStatus
 from tests._meetings import THEIRS, ended
@@ -82,7 +82,7 @@ async def test_the_chats_link_opens_the_meeting_at_its_line(
     )
     (hit,) = await search_meetings(async_db_session, None, "pricing")
 
-    page = page_html(overseer, hit_link(hit, overseer=True))
+    page = page_html(overseer, meeting_link(hit.meeting_id, hit.line_id, overseer=True))
     drawer = one(page, "[data-drawer-sync]").get("data-drawer-url") or ""
     html = page_html(overseer, drawer)
 

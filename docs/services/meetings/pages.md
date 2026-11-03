@@ -35,4 +35,4 @@ The Flet dashboard (`/dashboard`) has the same in its Meetings modal.
 
 ## Search
 
-Every word said, and every part of the notes, is searchable from the page, Overseer and the API. It matches words in their other forms ("pricing" finds "priced"), not meaning. Overseer's chat searches too, with the `meetings_search` tool.
+Every word said, and every part of the notes, is searchable from the page, Overseer and the API. It matches words in their other forms ("pricing" finds "priced"), not meaning: a line with any of the words is found, the ones with more of them first. Overseer's chat searches too, with the `meetings` tool.

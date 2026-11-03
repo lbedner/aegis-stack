@@ -14,8 +14,7 @@ from app.services.meetings.deps import (
     get_every_owners_series,
     get_series_service,
 )
-from app.services.meetings.domains.series.service import SeriesService
-from app.services.meetings.models import SeriesRecord, SeriesRow
+from app.services.meetings.service import SeriesRecord, SeriesRow, SeriesService
 from app.services.shared.deps import get_admin_actor, get_admin_reader
 
 

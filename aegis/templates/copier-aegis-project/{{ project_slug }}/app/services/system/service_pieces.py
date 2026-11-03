@@ -5,7 +5,8 @@ read from what its modules import (``source_index``). A loose module is no
 piece: the parts pattern's "Logic lives in domains" names it. No UI
 framework imports."""
 
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, replace
 
 from app.core.ontology import Kind
 from app.core.ontology.model import parse_node_id
@@ -32,6 +33,9 @@ class Piece:
     lane: str  # where it is drawn (``LANE_OF``; a domain's is ``domains``)
     modules: tuple[str, ...]
     paths: tuple[str, ...]
+    # The pieces it imports past the facade: the parts rule's ``own-facade``
+    # findings, by piece (the map draws them red).
+    skips: tuple[str, ...] = ()
 
 
 def _named(folder: Folder, module: Module) -> tuple[str, str, str] | None:
@@ -71,7 +75,25 @@ def pieces(folder: Folder) -> list[Piece]:
             return len(ORDER), piece.key
         return ORDER.index(piece.title), ""
 
-    return sorted(found, key=rank)
+    held_by = _holder(found)
+    skips: dict[str, set[str]] = {}
+    for module, _, name in folder.skips:
+        if (a := held_by(module.name)) and (b := held_by(name)) and a != b:
+            skips.setdefault(a, set()).add(b)
+    found.sort(key=rank)
+    return [replace(p, skips=tuple(sorted(skips.get(p.key, ())))) for p in found]
+
+
+def _holder(found: list[Piece]) -> Callable[[str], str | None]:
+    """The piece a module, or a name in one, belongs to; None outside."""
+    holder = {module: piece.key for piece in found for module in piece.modules}
+
+    def piece_of(name: str) -> str | None:
+        while name and name not in holder:
+            name = name.rpartition(".")[0]
+        return holder.get(name)
+
+    return piece_of
 
 
 def folder_of(subject: str) -> Folder | None:
@@ -99,13 +121,7 @@ def links(folder: Folder, found: list[Piece], ids: set[str]) -> dict[str, list[s
     parts (of ``ids``) outside the service, a node id each: a core client
     is the component it fronts (``ownership``). Stack code and the
     service's own sub-services are no line."""
-    holder = {module: piece.key for piece in found for module in piece.modules}
-
-    def piece_of(name: str) -> str | None:
-        while name and name not in holder:
-            name = name.rpartition(".")[0]
-        return holder.get(name)
-
+    held_by = _holder(found)
     order = [piece.key for piece in found]
     lines: dict[str, list[str]] = {}
     for piece in found:
@@ -113,7 +129,7 @@ def links(folder: Folder, found: list[Piece], ids: set[str]) -> dict[str, list[s
         for name in piece.modules:
             module = folder.index.get(name)
             for imported in module.imports if module else ():
-                if target := piece_of(imported):
+                if target := held_by(imported):
                     inside.add(target)
                 elif (node := node_of(imported, folder.index, ids)) and _out(
                     node, folder.subject

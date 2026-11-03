@@ -1,6 +1,8 @@
 """Authentication service: who the caller is, and the one way in to its
 domains (``auth.domains``) for callers outside it."""
 
+from typing import TYPE_CHECKING
+
 from app.core.config import settings
 from app.core.db import release_lock
 from app.core.security import verify_token
@@ -13,6 +15,7 @@ from app.services.auth.domains.users.accounts import (
     UserService,
 )
 from app.services.auth.domains.users.hooks import register_post_user_created
+from app.services.shared import facade
 {% if include_auth_org %}
 from app.services.auth.domains.orgs.invites import InviteService
 from app.services.auth.domains.orgs.memberships import MembershipService
@@ -27,6 +30,12 @@ from fastapi import Depends
 
 from app.core.security import VALID_ROLES
 {% endif %}
+
+if TYPE_CHECKING:
+    from app.services.auth.domains.sessions.queries import by_day  # noqa: F401
+    from app.services.auth.domains.sessions.tokens import (  # noqa: F401
+        REFRESH_TOKEN_RETENTION_DAYS,
+    )
 
 # What callers outside the service use of its domains.
 __all__ = [
@@ -163,3 +172,6 @@ def require_role(*required_roles: str):
 
     return dependency
 {% endif %}
+
+
+__getattr__ = facade.lazy(__name__, __file__)[0]

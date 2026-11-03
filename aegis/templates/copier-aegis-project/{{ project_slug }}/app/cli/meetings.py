@@ -17,37 +17,37 @@ from app.core.audit import cli_actor
 from app.core.config import settings
 from app.core.db import get_async_session
 from app.core.formatting import format_clock, format_relative_time
-from app.services.meetings.domains.accounts.service import (
+from app.services.meetings.service import (
     DEFAULT_AGENT,
+    NOTHING_FOUND,
     AgentNameError,
     AgentNotFoundError,
-    check_name,
-    keep_agent,
-    login_secret_for,
-    pick,
-)
-from app.services.meetings.domains.actions import tokens
-from app.services.meetings.domains.actions.runner import Runner, run_forever, run_once
-from app.services.meetings.domains.bot.login import (
     LoginError,
-    capture_login,
-    find_chrome,
-    save_login,
-)
-from app.services.meetings.domains.bot.run import run_meeting
-from app.services.meetings.domains.moments import tidy
-from app.services.meetings.models import MeetingRecord, Notes, SeriesRecord
-from app.services.meetings.service import (
-    NOTHING_FOUND,
     MeetingNotFoundError,
+    MeetingRecord,
     MeetingsService,
+    Notes,
+    Runner,
     SearchHit,
     SeriesNotFoundError,
+    SeriesRecord,
     SeriesService,
     UnsupportedMeetingLinkError,
+    actions_tokens,
+    capture_login,
+    check_name,
+    find_chrome,
+    keep_agent,
+    login_secret_for,
     note_points,
+    pick,
+    run_forever,
+    run_meeting,
+    run_once,
     said_when,
+    save_login,
     search_meetings,
+    tidy,
 )
 
 app = typer.Typer(help="Calls the meeting bot joins, and what was said in them.")
@@ -370,7 +370,7 @@ async def create_token(
 ) -> None:
     """A token for a runner. Its value is shown this once."""
     async with get_async_session() as session:
-        row, value = await tokens.create(session, owner, name)
+        row, value = await actions_tokens.create(session, owner, name)
     console.print(f"Runner token {row.name} ({row.hint}...), shown this once:")
     console.print(value, soft_wrap=True)
 
@@ -381,7 +381,7 @@ async def list_tokens(
 ) -> None:
     """The runner tokens not revoked, newest first."""
     async with get_async_session() as session:
-        rows = await tokens.live(session, owner)
+        rows = await actions_tokens.live(session, owner)
     table = Table("Id", "Name", "Token", "Made", "Last used")
     for row in rows:
         table.add_row(
@@ -402,7 +402,7 @@ async def revoke_token(
     """Revoke a runner token: its runner is refused from now."""
     async with get_async_session() as session:
         try:
-            await tokens.revoke(session, token_id, owner)
-        except tokens.RunnerTokenNotFoundError:
+            await actions_tokens.revoke(session, token_id, owner)
+        except actions_tokens.RunnerTokenNotFoundError:
             theme.fail(f"No live runner token {token_id}.")
     console.print(f"Revoked runner token {token_id}.")

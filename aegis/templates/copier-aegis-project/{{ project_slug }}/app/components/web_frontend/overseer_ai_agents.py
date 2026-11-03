@@ -41,7 +41,7 @@ def agent_drawer_url(slug: str) -> str:
 
 async def agent_rows(db: Any) -> list[dict[str, Any]]:
     """Every agent in the registry, as the admin surfaces serialize it."""
-    from app.services.ai.domains.chat.agent_registry import list_agents, serialize_agent
+    from app.services.ai.service import list_agents, serialize_agent
 
     return [serialize_agent(a) for a in await list_agents(session=db)]
 
@@ -149,10 +149,7 @@ def memory_url(**query: str | None) -> str:
 
 async def module_rows(db: Any) -> list[dict[str, Any]]:
     """Every context module, active or not, in render order."""
-    from app.services.ai.domains.chat.context_modules import (
-        list_context_modules,
-        serialize_context_module,
-    )
+    from app.services.ai.service import list_context_modules, serialize_context_module
 
     modules = await list_context_modules(db, active_only=False)
     return [serialize_context_module(m) for m in modules]
@@ -164,8 +161,7 @@ async def module_row(db: Any, slug: str) -> dict[str, Any] | None:
 
 async def render_preview(db: Any, slug: str) -> str | None:
     """What the module hands an agent now, rendered by the real renderer."""
-    from app.services.ai.domains.chat.module_context import render_context_modules
-    from app.services.ai.domains.chat.user_memory import DEFAULT_MEMORY_USER_ID
+    from app.services.ai.service import DEFAULT_MEMORY_USER_ID, render_context_modules
 
     return await render_context_modules(
         [slug], user_id=DEFAULT_MEMORY_USER_ID, session=db
@@ -174,10 +170,7 @@ async def render_preview(db: Any, slug: str) -> str | None:
 
 async def fact_rows(db: Any) -> list[Any]:
     """The facts saved about the user, each with the index that addresses it."""
-    from app.services.ai.domains.chat.user_memory import (
-        DEFAULT_MEMORY_USER_ID,
-        list_user_facts,
-    )
+    from app.services.ai.service import DEFAULT_MEMORY_USER_ID, list_user_facts
 
     return await list_user_facts(DEFAULT_MEMORY_USER_ID, session=db)
 

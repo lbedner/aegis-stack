@@ -176,6 +176,51 @@ def test_another_service_is_reached_through_its_facade(project: Path) -> None:
     ]
 
 
+def test_a_way_in_reaches_its_own_service_through_its_facade(project: Path) -> None:
+    """Its router, a tool, a job, the CLI or a page importing its own
+    service's domains, queries or models skips its facade; its service.py
+    or adapters, its internals importing each other, a test, and another
+    service (``through-facade``'s) do not."""
+    _write(project, "app/services/notes/domains/__init__.py")
+    _write(
+        project,
+        "app/services/notes/domains/tags.py",
+        "from app.services.notes.queries import count\n",
+    )
+    _write(
+        project,
+        "app/services/notes/tools.py",
+        """
+        from app.services.notes.service import read
+        from app.services.notes.queries import count
+        """,
+    )
+    _write(project, ROUTER, "from app.services.notes.models import Note\n")
+    _write(
+        project,
+        "app/cli/notes.py",
+        """
+        from app.services.notes.adapters import feed
+        from app.services.notes.domains import tags
+        """,
+    )
+    _write(
+        project, "tests/test_tags.py", "from app.services.notes.domains import tags\n"
+    )
+    _write(project, "app/services/tags/__init__.py")
+    _write(
+        project,
+        "app/services/tags/service.py",
+        "from app.services.notes.domains import tags\n",
+    )
+    assert _broken(project)["own-facade"] == ["service:notes"]
+    assert _evidence(project, "own-facade") == [
+        f"{ROUTER}:1",
+        "app/services/notes/tools.py:3",
+        "app/cli/notes.py:3",
+    ]
+
+
 def _lines(count: int) -> str:
     return "x = 1\n" * count
 

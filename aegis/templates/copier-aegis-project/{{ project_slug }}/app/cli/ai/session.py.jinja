@@ -18,11 +18,10 @@ from app.cli.chat_completer import ChatCompleter
 from app.cli.slash_commands import SlashCommandHandler
 from app.cli.status_line import ChatSessionState, create_toolbar_callback
 from app.i18n import t
+from app.services.ai.service import ProviderNotInstalledError, get_ai_config
 
 from ...core.config import settings
 from ...core.log import logger
-from ...services.ai.domains.llm.config import get_ai_config
-from ...services.ai.domains.llm.providers import ProviderNotInstalledError
 from ...services.system import live_status
 
 console = theme.console()
@@ -85,7 +84,7 @@ async def _interactive_chat_session(
         end="",
     )
     # Warm up the agent (lazy imports, model initialization)
-    from app.services.ai.domains.llm.providers import get_agent
+    from app.services.ai.service import get_agent
 
     _ = await get_agent(ai_config, settings)
     console.print(f" [{theme.ACCENT}]{t('ai.ok')}[/{theme.ACCENT}]")

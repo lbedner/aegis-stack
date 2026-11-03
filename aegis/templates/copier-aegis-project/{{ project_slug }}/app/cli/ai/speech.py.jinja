@@ -40,8 +40,7 @@ async def transcribe(
     import json
     from pathlib import Path
 
-    from app.services.ai.domains.voice import AudioFormat, AudioInput
-    from app.services.ai.service import AIService
+    from app.services.ai.service import AIService, AudioFormat, AudioInput
 
     async def run_transcribe() -> None:
         try:
@@ -192,8 +191,7 @@ async def speak(
 ) -> None:
     from pathlib import Path
 
-    from app.services.ai.domains.voice import SpeechRequest
-    from app.services.ai.service import AIService
+    from app.services.ai.service import AIService, SpeechRequest
 
     async def run_speak() -> None:
         try:

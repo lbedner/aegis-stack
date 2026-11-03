@@ -25,34 +25,54 @@ if TYPE_CHECKING:
     from app.services.ai.domains.chat.agent_registry import (
         AgentNotFoundError,
         InvalidAgentUpdateError,
+        list_agents,
         prompt_history,
         seed_agent,
+        serialize_agent,
         update_agent,
     )
 {%- endif %}
+    from app.services.ai.domains.chat.attachments import ChatAttachment
     from app.services.ai.domains.chat.fetchers import FetchContext, register_fetcher
 {%- if ai_backend != "memory" %}
     from app.services.ai.domains.chat.context_modules import (
+        InvalidContextModuleError,
         get_context_entry,
         list_context_modules,
         module_sources,
+        serialize_context_module,
         set_context_entry,
         update_context_module,
     )
+    from app.services.ai.domains.chat.module_context import render_context_modules
     from app.services.ai.domains.chat.path_card import PathCard
 {%- endif %}
-    from app.services.ai.domains.chat.prompts import DEFAULT_SYSTEM_PROMPT
+    from app.services.ai.domains.chat.prompts import (
+        DEFAULT_SYSTEM_PROMPT,
+        build_system_prompt,
+    )
+{%- if ai_backend != "memory" %}
+    from app.services.ai.domains.chat.queries import conversation_stats
+    from app.services.ai.domains.chat.sentiment import (
+        SentimentMix,
+        score_unscored_conversations,
+        sentiment_mix,
+        sentiment_stats,
+    )
+{%- endif %}
     from app.services.ai.domains.chat.tools import resolve_tools
 {%- if ai_backend != "memory" %}
     from app.services.ai.domains.chat.user_memory import (
         DEFAULT_MEMORY_USER_ID,
         MEMORY_CATEGORIES,
         delete_user_fact,
+        list_user_facts,
         update_user_fact,
     )
     from app.services.ai.domains.llm import active_model
 {%- endif %}
     from app.services.ai.domains.llm.base import ProviderError as ProviderSetupError
+    from app.services.ai.domains.llm.config import get_ai_config
 {%- if ai_backend != "memory" %}
     from app.services.ai.domains.llm.etl import (
         CatalogStats,
@@ -65,6 +85,11 @@ if TYPE_CHECKING:
         ollama_models_present,
     )
     from app.services.ai.domains.llm.llm_service import (
+        CurrentLLMConfig,
+        LLMListResult,
+        ModalityListResult,
+        SetModelResult,
+        VendorListResult,
         clear_active_model,
         get_current_config,
         get_model_info,
@@ -75,19 +100,49 @@ if TYPE_CHECKING:
     )
 {%- endif %}
     from app.services.ai.domains.llm.provider_management import (
+        PROVIDER_API_KEY_URLS,
+        ProviderReadiness,
         check_provider_dependency_installed,
+        get_env_var_name,
         get_existing_api_key,
+        get_missing_dependency,
+        get_valid_provider_names,
+        install_provider_dependency,
+        provider_readiness,
+        update_env_file,
+        usable_providers,
+        validate_provider_name,
     )
-    from app.services.ai.domains.llm.providers import model_for
+    from app.services.ai.domains.llm.providers import (
+        ProviderNotInstalledError,
+{%- if ai_framework == "pydantic-ai" %}
+        get_agent,
+{%- endif %}
+        model_for,
+    )
 {%- if ai_backend != "memory" %}
-    from app.services.ai.domains.llm.queries import org_icons, recent_model_ids
+    from app.services.ai.domains.llm.queries import (
+        org_icons,
+        recent_model_ids,
+        usage_by_model,
+    )
 {%- endif %}
 {%- if ai_framework == "pydantic-ai" and ai_backend != "memory" %}
     from app.services.ai.domains.llm.writer import write, writer
 {%- endif %}
 {%- if ai_backend != "memory" %}
-    from app.services.ai.domains.spend.recording import extract_usage, record_usage
-    from app.services.ai.domains.spend.windows import spend_windows
+    from app.services.ai.domains.spend import queries as spend_queries
+    from app.services.ai.domains.spend.recording import (
+        calculate_cost,
+        extract_usage,
+        record_usage,
+    )
+    from app.services.ai.domains.spend.schemas import (
+        ActionSpend,
+        ModelSpend,
+        SpendLedger,
+    )
+    from app.services.ai.domains.spend.windows import spend_since, spend_windows
 {%- endif %}
 {%- if ai_voice and ai_backend != "memory" %}
     from app.services.ai.domains.voice import (
@@ -100,7 +155,25 @@ if TYPE_CHECKING:
     from app.services.ai.domains.voice.live_voice import live_voice
 {%- endif %}
 {%- if ai_voice %}
-    from app.services.ai.domains.voice.models import SpeechRequest
+    from app.services.ai.domains.voice import (
+        AudioFormat,
+        AudioInput,
+        ModelInfo,
+        ProviderInfo,
+        SpeechRequest,
+        TTSService,
+        VoiceInfo,
+        VoicePreviewRequest,
+        VoiceSettingsResponse,
+        get_current_voice_config,
+        get_stt_models,
+        get_stt_providers,
+        get_tts_models,
+        get_tts_providers,
+        get_tts_voices,
+        get_voice,
+        speaking_model,
+    )
     from app.services.ai.domains.voice.overview import (
         VoiceOverview,
         switch_voice,
@@ -114,11 +187,22 @@ if TYPE_CHECKING:
         saved_keys,
         to_spoken,
     )
-    from app.services.ai.domains.voice.tts import TTSService
 {%- endif %}
-    from app.services.ai.models import AIProvider
+    from app.services.ai.models import (
+        AIProvider,
+        MessageRole,
+        StreamingMessage,
+        get_free_providers,
+        get_provider_capabilities,
+    )
 {%- if ai_backend != "memory" %}
-    from app.services.ai.models.agents import Agent, AgentPromptChange, ContextModule
+    from app.services.ai.models.agents import (
+        Agent,
+        AgentPromptChange,
+        AgentTool,
+        ContextModule,
+        Tool,
+    )
     from app.services.ai.models.llm import (
         LargeLanguageModel,
         LLMDeployment,
@@ -134,6 +218,7 @@ if TYPE_CHECKING:
         VoicePronunciation,
     )
 {%- endif %}
+    from app.services.ai.models.provider_names import provider_label
     from app.services.ai.service.ai_service import AIService
     from app.services.ai.service.base import (
         AIServiceError,

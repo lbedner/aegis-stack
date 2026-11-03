@@ -14,8 +14,7 @@ from app.components.frontend.controls import DataTable, DataTableColumn
 from app.components.frontend.controls.buttons import PulseButton
 from app.components.frontend.controls.inputs import StyledTextField
 from app.components.frontend.theme import AegisTheme as Theme
-from app.services.meetings.domains.people.service import said_when
-from app.services.meetings.service import NOTHING_FOUND
+from app.services.meetings.service import NOTHING_FOUND, said_when
 
 from .meetings_follow import api
 from .modal_sections import EmptyStatePlaceholder

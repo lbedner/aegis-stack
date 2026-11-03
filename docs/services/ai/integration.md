@@ -60,7 +60,7 @@ asyncio.run(main())
 **Location:** `app/services/ai/domains/llm/config.py`
 
 ```python
-from app.services.ai.domains.llm.config import get_ai_config
+from app.services.ai.service import get_ai_config
 
 config = get_ai_config(settings)
 
@@ -183,7 +183,7 @@ metadata = ctx.to_metadata()               # Storage-friendly format
 **Location:** `app/services/ai/domains/chat/prompts.py`
 
 ```python
-from app.services.ai.domains.chat.prompts import build_system_prompt
+from app.services.ai.service import build_system_prompt
 
 prompt = build_system_prompt(
     rag_context=rag_formatted,  # Code search results
@@ -208,9 +208,9 @@ Every AI request automatically:
 
 ```python
 # Manual cost calculation
-from app.services.ai.domains.spend import recording
+from app.services.ai.service import calculate_cost
 
-cost = await recording.calculate_cost("gpt-4o", 1500, 800)
+cost = await calculate_cost("gpt-4o", 1500, 800)
 ```
 
 See [Cost Tracking](cost-tracking.md) for the full analytics system.
@@ -220,7 +220,7 @@ See [Cost Tracking](cost-tracking.md) for the full analytics system.
 **Location:** `app/services/ai/models.py`
 
 ```python
-from app.services.ai.models import (
+from app.services.ai.service import (
     AIProvider,
     get_provider_capabilities,
     get_free_providers

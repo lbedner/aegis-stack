@@ -21,7 +21,7 @@ from app.core.db import db_session
 from app.core.log import logger
 from app.core.time import utcnow
 from app.models.refresh_token import RefreshToken
-from app.services.auth.domains.sessions.tokens import REFRESH_TOKEN_RETENTION_DAYS
+from app.services.auth.service import REFRESH_TOKEN_RETENTION_DAYS
 
 
 def _cutoff() -> datetime:

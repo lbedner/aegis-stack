@@ -6,21 +6,19 @@ FastAPI router for email, SMS, and voice call endpoints.
 
 from typing import Any
 
-from app.services.comms.models import (
+from app.services.comms.service import (
+    CallConfigurationError,
+    CallError,
     CallResponse,
+    EmailConfigurationError,
+    EmailError,
     EmailResponse,
     MakeCallRequest,
     SendEmailRequest,
     SendSMSRequest,
-    SMSResponse,
-)
-from app.services.comms.service import (
-    CallConfigurationError,
-    CallError,
-    EmailConfigurationError,
-    EmailError,
     SMSConfigurationError,
     SMSError,
+    SMSResponse,
     get_call_status,
     get_email_status,
     get_sms_status,

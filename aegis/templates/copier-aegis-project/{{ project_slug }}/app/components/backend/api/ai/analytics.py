@@ -61,7 +61,7 @@ async def get_sentiment_stats() -> dict[str, Any]:
     is enabled. Zero-filled when nothing has been scored yet.
     """
     from app.core.db import get_async_session
-    from app.services.ai.domains.chat.sentiment import sentiment_stats
+    from app.services.ai.service import sentiment_stats
 
     try:
         async with get_async_session() as session:
@@ -90,7 +90,7 @@ class AgentUpdateRequest(BaseModel):
 @router.get("/agents")
 async def list_registry_agents() -> list[dict[str, Any]]:
     """List all agents in the registry with their tool/module grants."""
-    from app.services.ai.domains.chat.agent_registry import list_agents, serialize_agent
+    from app.services.ai.service import list_agents, serialize_agent
 
     try:
         return [serialize_agent(agent) for agent in await list_agents()]
@@ -104,7 +104,7 @@ async def update_registry_agent(
     slug: str, request: AgentUpdateRequest
 ) -> dict[str, Any]:
     """Apply a partial agent update (invalidates its cached config)."""
-    from app.services.ai.domains.chat.agent_registry import (
+    from app.services.ai.service import (
         AgentNotFoundError,
         InvalidAgentUpdateError,
         serialize_agent,

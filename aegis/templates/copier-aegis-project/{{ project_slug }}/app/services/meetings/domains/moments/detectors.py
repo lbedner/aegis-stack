@@ -5,7 +5,8 @@ caption grows, and says what the moment is (its text) or None. Registered
 by kind, like tools: the meetings service registers ``question`` here.
 Another service registers its own detectors and actions in its
 ``meeting_moments`` module (``app/services/<name>/meeting_moments.py``),
-found on disk like its ``tools`` and imported before either is first read.
+found on disk like its ``tools`` and imported before either is first read,
+through the meetings facade (``register_detector``, ``register_action``).
 """
 
 from collections.abc import Callable, Iterable

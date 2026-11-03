@@ -3,13 +3,13 @@ The meetings list, a meeting's page and the calendar read the one map:
 a call's status (``MeetingStatus``) or a calendar meeting's state
 (``domains.calendar.entries``), the rest muted."""
 
-from app.services.meetings.domains.calendar.entries import (
+from app.services.meetings.service import (
     CANNOT_JOIN,
     MISSED,
     UPCOMING,
+    MeetingStatus,
     state_label,
 )
-from app.services.meetings.models import MeetingStatus
 
 from .rendering import status_cell
 

@@ -187,7 +187,7 @@ belongs - so it names each domain and what it owns.
     which parts each one has and which rules it breaks, with the file and line
     that shows it, and `patterns --format json` prints the same report. The
     enforced rules (reads in queries, every job wired, a health check, other
-    services through their facade) are held
+    services and its own ways in through its facade) are held
     by `tests/services/test_service_layout.py`; reads still outside a queries
     module are recorded there as debt that may only shrink. Those tests hold
     Aegis's own code and run only in Aegis's CI: a project built on it sees
@@ -207,10 +207,16 @@ belongs - so it names each domain and what it owns.
     A service that imports another's `domains/`, `adapters/`, `queries` or
     `models` is flagged too (**Other services through their facade**), each
     import's line listed: it depends on how the other is organised, not on
-    what it offers. A facade composed of many modules (AI's and finance's
-    `service/` packages) costs nothing to import: what its `if TYPE_CHECKING:`
-    block imports is all it offers, each name loaded on first use
-    (`app/services/shared/facade.py`). `patterns touches` takes a change's files (as arguments,
+    what it offers. A service's own ways in are held the same
+    (**Its own ways in through its facade**): its router, a tool or a job,
+    the CLI or a page importing its own `domains/`, `queries` or `models`
+    is flagged, each import's line listed, and opened up on the map that
+    line is drawn red. Running its own adapters (a job syncing a provider)
+    is their work, not a step past it. A facade offers what its
+    `if TYPE_CHECKING:` block imports, each name loaded on first use
+    (`app/services/shared/facade.py`); a `service.py` also offers its own
+    `__all__`, and a facade composed of many modules (AI's and finance's
+    `service/` packages) offers only the block, so it costs nothing to import. `patterns touches` takes a change's files (as arguments,
     or one per line from `git diff --name-only`) and says, from the app's
     ontology (the model layer of the [Twin](../overseer/twin.md)), which parts own them, which parts depend on those, and the
     tables, routes and jobs they define; Markdown for a pull request's job

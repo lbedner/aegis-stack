@@ -10,7 +10,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.services.meetings.domains.search import queries
 from app.services.meetings.models import UNKNOWN
-from app.services.meetings.service import status_label
+from app.services.meetings.domains.labels import status_label
 
 LIMIT = 50
 TRANSCRIPT = "Transcript"

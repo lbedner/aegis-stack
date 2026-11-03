@@ -22,7 +22,7 @@ from app.components.frontend.controls.record_detail import (
 from app.components.frontend.state.session_state import get_session_state
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.time import WEEKDAYS, month_days, month_grid, shift_month, today
-from app.services.meetings.domains.calendar.entries import state_label
+from app.services.meetings.service import state_label
 
 from .modal_sections import EmptyStatePlaceholder
 

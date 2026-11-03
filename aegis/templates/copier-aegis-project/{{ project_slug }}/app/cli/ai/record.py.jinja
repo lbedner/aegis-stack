@@ -64,13 +64,13 @@ async def record(
         console.print(f"  [{theme.ACCENT}]apt install portaudio19-dev[/{theme.ACCENT}]")
         raise typer.Exit(1)
 
-    from app.services.ai.domains.voice import (
+    from app.services.ai.service import (
+        AIService,
         AudioFormat,
         AudioInput,
         SpeechRequest,
         get_tts_models,
     )
-    from app.services.ai.service import AIService
 
     async def run_record() -> None:
         try:

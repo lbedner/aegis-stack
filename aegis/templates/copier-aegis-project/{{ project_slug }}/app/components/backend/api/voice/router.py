@@ -12,10 +12,11 @@ from pydantic import BaseModel
 from app.components.backend.api.voice.overview import router as overview_router
 from app.core.config import settings
 from app.core.log import logger
-from app.services.ai.domains.voice import (
+from app.services.ai.service import (
     ModelInfo,
     ProviderInfo,
     SpeechRequest,
+    TTSService,
     VoiceInfo,
     VoicePreviewRequest,
     VoiceSettingsResponse,
@@ -28,7 +29,6 @@ from app.services.ai.domains.voice import (
     get_voice,
     speaking_model,
 )
-from app.services.ai.service import TTSService
 
 router = APIRouter(prefix="/voice", tags=["voice"])
 

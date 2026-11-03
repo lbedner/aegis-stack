@@ -49,8 +49,7 @@ Any headless agent works (`codex exec {prompt}`, `aider --message {prompt}`). A 
 Register them in a `meeting_moments.py` beside any service's `service.py`:
 
 ```python
-from app.services.meetings.domains.moments.detectors import register_detector
-from app.services.meetings.domains.actions.registry import Action, register_action
+from app.services.meetings.service import Action, register_action, register_detector
 
 register_detector("decision", lambda heard: heard.text if "we decided" in heard.text.lower() else None, title="Decisions")
 register_action(Action("ticket", "File a ticket", frozenset({"question"}), "runner"))

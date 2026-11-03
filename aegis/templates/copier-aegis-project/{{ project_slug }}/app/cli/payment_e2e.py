@@ -13,7 +13,7 @@ from app.i18n import t
 if TYPE_CHECKING:
     from sqlmodel.ext.asyncio.session import AsyncSession
 
-    from app.services.payment.models import PaymentSubscription, PaymentTransaction
+    from app.services.payment.service import PaymentSubscription, PaymentTransaction
 
 console = theme.console()
 
@@ -36,11 +36,11 @@ async def _e2e(
     from app.core import secrets
     from app.core.db import get_async_session
     from app.models.user import User
-    from app.services.payment.models import (
+    from app.services.payment.service import (
         PaymentCustomer,
+        PaymentService,
         PaymentTransaction,
     )
-    from app.services.payment.service import PaymentService
 
     primary = primary_price
     secondary = secondary_price
@@ -336,7 +336,7 @@ async def _wait_for_sub(
 
     from sqlmodel import select
 
-    from app.services.payment.models import PaymentSubscription
+    from app.services.payment.service import PaymentSubscription
 
     for _ in range(16):
         result = await session.exec(
@@ -362,7 +362,7 @@ async def _latest_invoice_txn(
     """
     from sqlmodel import select
 
-    from app.services.payment.models import PaymentCustomer, PaymentTransaction
+    from app.services.payment.service import PaymentCustomer, PaymentTransaction
 
     cust_row = await session.exec(
         select(PaymentCustomer).where(

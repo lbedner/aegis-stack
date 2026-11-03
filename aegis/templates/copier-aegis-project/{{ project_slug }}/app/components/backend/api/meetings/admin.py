@@ -22,33 +22,30 @@ from app.services.meetings.deps import (
     picture_response,
     take_picture,
 )
-from app.services.meetings.domains.accounts.service import (
+from app.services.meetings.service import (
+    MOST_DAYS,
     AgentRow,
+    BotAccount,
+    CalendarEntry,
+    CalendarEventDetail,
+    Meeting,
+    MeetingRecord,
+    MeetingsService,
+    Owner,
     Switch,
+    ThreadSection,
+    chosen,
     clear_image,
+    entries_between,
+    entry_of,
+    meeting_threads,
     overview,
+    owners,
     set_default_owner,
     set_switch,
 )
-from app.services.meetings.domains.accounts.service import agents as every_agent
-from app.services.meetings.domains.calendar.entries import (
-    MOST_DAYS,
-    CalendarEntry,
-    CalendarEventDetail,
-    chosen,
-    entries_between,
-    entry_of,
-)
-from app.services.meetings.domains.calendar.owners import Owner, owners
-from app.services.meetings.domains.people.participants import give as give_away
-from app.services.meetings.domains.threads.service import meeting_threads
-from app.services.meetings.models import (
-    BotAccount,
-    Meeting,
-    MeetingRecord,
-    ThreadSection,
-)
-from app.services.meetings.service import MeetingsService
+from app.services.meetings.service import agents as every_agent
+from app.services.meetings.service import give as give_away
 from app.services.shared.deps import get_admin_actor, get_admin_reader
 
 LIMIT = 200

@@ -326,8 +326,12 @@ async def call_make(
 
 async def _call_make(to: str, twiml_url: str, timeout: int) -> None:
     """Async implementation of make call."""
-    from app.services.comms.models import MakeCallRequest
-    from app.services.comms.service import CallConfigurationError, CallError, make_call
+    from app.services.comms.service import (
+        CallConfigurationError,
+        CallError,
+        MakeCallRequest,
+        make_call,
+    )
 
     try:
         request = MakeCallRequest(to=to, twiml_url=twiml_url, timeout=timeout)

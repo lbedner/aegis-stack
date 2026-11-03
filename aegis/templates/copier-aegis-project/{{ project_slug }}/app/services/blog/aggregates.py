@@ -7,7 +7,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.core import ranges
 from app.core.aggregates import Aggregate
 from app.core.figures import FIGURES
-from app.services.blog.queries import count_posts_by_status
+from app.services.blog.service import count_posts_by_status
 
 
 class BlogPosts(BaseModel):

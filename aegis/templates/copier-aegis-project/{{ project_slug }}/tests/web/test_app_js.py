@@ -550,6 +550,36 @@ def test_hovering_a_map_node_keeps_it_and_its_neighbours_lit() -> None:
     ]
 
 
+FRAME_HARNESS = (
+    STUBS
+    + """
+const dimmed = {};
+const node = (key) => ({ dataset: { node: key },
+                         toggleAttribute: (name, on) => { dimmed[key] = on; } });
+const nodes = [node('database'), node('service_auth'), node('worker')];
+const lines = [{ dataset: { from: 'service_auth', to: 'database' },
+                 toggleAttribute: () => {} }];
+const map = { querySelectorAll: (s) => (s.startsWith('path') ? lines : nodes) };
+const root = { dataset: { hover: 'database' }, querySelector: () => map };
+document.getElementById = (id) => (id === 'overview-stack' ? root : null);
+require(APP_JS);
+fire('htmx:afterSwap', { detail: { elt: {} } });
+console.log(JSON.stringify(dimmed));
+"""
+)
+
+
+def test_a_live_frame_swaps_in_already_focused() -> None:
+    """A live frame's nodes take the hovered focus as they are swapped in,
+    before they paint: on ``htmx:load``, after the settle delay, each frame
+    showed its dimmed nodes lit and faded them back, a flicker a second."""
+    assert run(FRAME_HARNESS, APP_JS=APP_JS) == {
+        "database": False,
+        "service_auth": False,
+        "worker": True,
+    }
+
+
 LIT_HARNESS = (
     STUBS
     + """

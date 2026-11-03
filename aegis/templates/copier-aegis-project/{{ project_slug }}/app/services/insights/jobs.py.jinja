@@ -20,7 +20,7 @@ from app.core.db import get_async_session
 from app.services.insights.adapters.collectors.collection import CollectorService
 from .constants import SourceKeys
 {% if insights_per_user -%}
-from app.services.insights.domains.projects import ProjectService
+from app.services.insights.service import ProjectService
 {%- endif %}
 
 logger = logging.getLogger(__name__)

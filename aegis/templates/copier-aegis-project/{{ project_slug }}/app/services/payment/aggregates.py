@@ -7,7 +7,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.core import ranges
 from app.core.aggregates import Aggregate
 from app.core.figures import FIGURES
-from app.services.payment.domains.reporting.queries import status_counts
+from app.services.payment.service import status_counts
 
 
 class PaymentStatuses(BaseModel):

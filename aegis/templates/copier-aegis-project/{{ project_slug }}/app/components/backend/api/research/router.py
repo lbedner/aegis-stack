@@ -7,14 +7,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
 from app.services.research.deps import get_research_service
-from app.services.research.models import (
-    ResearchItem,
-    ResearchItemSnapshot,
-    ResearchWatch,
-)
 from app.services.research.service import (
     MAX_RESULTS,
+    ResearchItem,
+    ResearchItemSnapshot,
     ResearchService,
+    ResearchWatch,
     SourceFailedError,
     UnknownSourceError,
     WatchNotFoundError,

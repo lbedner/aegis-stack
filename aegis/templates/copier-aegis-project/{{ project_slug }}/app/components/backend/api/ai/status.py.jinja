@@ -12,7 +12,7 @@ from app.core.db import get_async_db
 {%- endif %}
 from app.core.log import logger
 {%- if ai_backend != "memory" %}
-from app.services.ai.domains.chat.queries import conversation_stats
+from app.services.ai.service import conversation_stats
 {%- endif %}
 
 router = APIRouter()

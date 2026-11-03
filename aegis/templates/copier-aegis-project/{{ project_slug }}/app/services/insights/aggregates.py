@@ -7,7 +7,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.core import ranges
 from app.core.aggregates import Aggregate
 from app.core.figures import FIGURES
-from app.services.insights import queries
+from app.services.insights.service import queries
 
 
 class DailyTotals(BaseModel):

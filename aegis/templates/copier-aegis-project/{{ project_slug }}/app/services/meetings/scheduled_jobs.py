@@ -2,7 +2,7 @@
 
 from app.core.db import get_async_session
 from app.core.schedule import ServiceJob
-from app.services.meetings.domains.calendar.service import read_calendars, send_due
+from app.services.meetings.service import read_calendars, send_due
 
 
 async def read_agent_calendars_job() -> None:

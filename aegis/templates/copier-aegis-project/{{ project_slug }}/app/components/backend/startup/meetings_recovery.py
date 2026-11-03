@@ -12,7 +12,7 @@ from app.core.db import get_async_session
 from app.core.log import logger
 from app.services.meetings.service import (
     STALE_SECONDS,
-    fail_abandoned,
+    actions_runs,
     fail_interrupted,
 )
 
@@ -25,7 +25,7 @@ async def sweep_forever() -> None:
         try:
             async with get_async_session() as session:
                 count = await fail_interrupted(session)
-                abandoned = await fail_abandoned(session)
+                abandoned = await actions_runs.fail_abandoned(session)
         except SQLAlchemyError as e:
             # The table arrives with a migration that may not have run yet.
             logger.warning(f"Interrupted meetings not checked: {e}")

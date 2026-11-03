@@ -5,10 +5,14 @@ from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel
 
 from app.services.meetings.deps import as_http, get_meetings_service
-from app.services.meetings.domains.bot.run import send_bot
-from app.services.meetings.domains.threads.service import meeting_threads
-from app.services.meetings.models import Meeting, MeetingRecord, ThreadSection
-from app.services.meetings.service import MeetingsService
+from app.services.meetings.service import (
+    Meeting,
+    MeetingRecord,
+    MeetingsService,
+    ThreadSection,
+    meeting_threads,
+    send_bot,
+)
 
 router = APIRouter(prefix="/meetings", tags=["meetings"])
 

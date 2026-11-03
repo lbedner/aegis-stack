@@ -40,7 +40,7 @@ A module must have `prompt_content`, `per_subject` or `fetch_function`; creating
 A `per_subject` module keeps one row of text for each subject, in `context_module_entry` (module, subject, text, who last wrote it). The subject is what the turn is about as the app names it, a project's id for instance: the app hands it to the render, the model never chooses it. A turn about subject `3` reads subject `3`'s text and no other's, and every per-subject module's text for the turn loads in one query.
 
 ```python
-from app.services.ai.domains.chat.context_modules import (
+from app.services.ai.service import (
     get_context_entry,
     set_context_entry,
 )

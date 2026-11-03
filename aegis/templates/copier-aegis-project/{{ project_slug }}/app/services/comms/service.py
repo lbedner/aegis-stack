@@ -26,14 +26,28 @@ from app.services.comms.domains.telephony.sms import (
     send_sms_simple,
     validate_sms_config,
 )
+from app.services.comms.models import (
+    CallResponse,
+    EmailResponse,
+    MakeCallRequest,
+    SendEmailRequest,
+    SendSMSRequest,
+    SMSResponse,
+)
 
 __all__ = [
     "CallConfigurationError",
     "CallError",
+    "CallResponse",
     "EmailConfigurationError",
     "EmailError",
+    "EmailResponse",
+    "MakeCallRequest",
     "SMSConfigurationError",
     "SMSError",
+    "SMSResponse",
+    "SendEmailRequest",
+    "SendSMSRequest",
     "get_call_status",
     "get_email_status",
     "get_sms_status",

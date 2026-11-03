@@ -12,7 +12,7 @@ import flet as ft
 from app.components.frontend.controls import PrimaryText
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.formatting import counted
-from app.services.meetings.domains.people.service import said_when
+from app.services.meetings.service import said_when
 
 from .meetings_follow import api, card, hint
 

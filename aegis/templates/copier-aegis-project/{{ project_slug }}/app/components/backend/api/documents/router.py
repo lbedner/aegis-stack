@@ -25,8 +25,11 @@ from app.core.formatting import safe_filename
 from app.core.untrusted import untrusted_response
 from app.components.backend.api.documents.pages import router as pages_router
 from app.services.documents.deps import get_document_service
-from app.services.documents.models import Document
-from app.services.documents.service import DocumentService, ProtectedDocumentError
+from app.services.documents.service import (
+    Document,
+    DocumentService,
+    ProtectedDocumentError,
+)
 from app.services.shared.deps import get_owner_user_id
 
 router = APIRouter(prefix="/documents", tags=["documents"])

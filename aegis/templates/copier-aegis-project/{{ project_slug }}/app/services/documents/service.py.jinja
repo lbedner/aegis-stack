@@ -10,7 +10,7 @@ again, a user who clicks upload twice all cost one document.
 from __future__ import annotations
 
 from datetime import date
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -24,6 +24,36 @@ from app.services.documents.models import (
     DocumentSummary,
     DocumentTag,
 )
+from app.services.shared import facade
+
+if TYPE_CHECKING:
+    from app.services.documents.domains.extraction.activity import (  # noqa: F401
+        ActivityRow,
+        activity_rows,
+        document_id_of,
+    )
+    from app.services.documents.domains.extraction.dispatch import (  # noqa: F401
+        start_extraction,
+    )
+{%- if include_worker %}
+    from app.services.documents.domains.extraction.jobs import (  # noqa: F401
+        run_extraction_job,
+    )
+{%- endif %}
+    from app.services.documents.domains.extraction.pages import (  # noqa: F401
+        DocumentContentMissingError,
+        DocumentNotFoundError,
+        extract_document,
+    )
+    from app.services.documents.domains.extraction.vision import (  # noqa: F401
+        vision_reader,
+    )
+    from app.services.documents.models import DocumentPage  # noqa: F401
+    from app.services.documents.queries import (  # noqa: F401
+        page_for,
+        pages_for,
+        tag_counts,
+    )
 
 # The columns a client may change after the fact. Storage, hash, size and
 # provenance describe the bytes and are fixed by them.
@@ -320,3 +350,6 @@ class DocumentService:
         self.db.add(document)
         await self.db.flush()
         return True
+
+
+__getattr__ = facade.lazy(__name__, __file__)[0]

@@ -29,9 +29,8 @@ from app.components.frontend.controls.snack_bar import ErrorSnackBar, SuccessSna
 from app.components.frontend.controls.tabs import OVERVIEW, PulseTabs
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.formatting import format_date
-from app.services.meetings.domains.accounts.service import agent_names
 from app.services.meetings.health import MEETINGS_MODAL_ID
-from app.services.meetings.service import call_length, status_label
+from app.services.meetings.service import agent_names, call_length, status_label
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_subtitle, get_component_title
 

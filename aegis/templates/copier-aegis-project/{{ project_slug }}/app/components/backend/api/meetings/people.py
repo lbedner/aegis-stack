@@ -15,8 +15,7 @@ from app.services.meetings.deps import (
     get_every_owners_people,
     get_people_service,
 )
-from app.services.meetings.domains.people.service import PeopleService
-from app.services.meetings.models import GuideRecord, GuideRow
+from app.services.meetings.service import GuideRecord, GuideRow, PeopleService
 from app.services.shared.deps import get_admin_actor, get_admin_reader
 
 

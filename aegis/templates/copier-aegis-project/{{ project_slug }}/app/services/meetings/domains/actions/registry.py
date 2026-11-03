@@ -9,7 +9,7 @@ An action takes some kinds of moment and runs in one place:
 
 Registered like tools and detectors. The built-ins are registered here;
 another service registers its own in its ``meeting_moments`` module
-(``domains.moments.detectors``).
+(``domains.moments.detectors``), through the meetings facade.
 """
 
 from collections.abc import Awaitable, Callable

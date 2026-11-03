@@ -12,7 +12,7 @@ from urllib.parse import urlencode
 
 from app.core.config import settings
 from app.core.time import today
-from app.services.ai.domains.llm.provider_management import usable_providers
+from app.services.ai.service import usable_providers
 
 from .overseer_ai_common import (
     PARTIALS,
@@ -46,14 +46,14 @@ KINDS = {
 
 async def list_models(**filters: Any) -> list[Any]:
     """The catalog's models (a persistence backend's module)."""
-    from app.services.ai.domains.llm.catalog import list_models as catalog
+    from app.services.ai.service import list_models as catalog
 
     return await catalog(**filters)
 
 
 async def get_model_info(model_id: str) -> Any:
     """One catalog model's details (a persistence backend's module)."""
-    from app.services.ai.domains.llm.llm_service import get_model_info as info
+    from app.services.ai.service import get_model_info as info
 
     return await info(model_id)
 
@@ -61,7 +61,7 @@ async def get_model_info(model_id: str) -> Any:
 async def catalog_vendors(db: Any) -> list[Any]:
     """Every vendor in the catalog with its model count, on the request's
     session (a persistence backend's module)."""
-    from app.services.ai.domains.llm.llm_service import list_vendors
+    from app.services.ai.service import list_vendors
 
     return await list_vendors(session=db)
 
@@ -110,7 +110,7 @@ async def section_context(db: Any, query: Any) -> dict[str, Any]:
         released_after=today() - reach if reach else None,
         mode=None,  # a place to look: every kind, each saying which
     )
-    from app.services.ai.domains.llm.queries import org_icons
+    from app.services.ai.service import org_icons
 
     marked = await org_icons(db, {m.vendor for m in models})
     filters: dict[str, Any] = {

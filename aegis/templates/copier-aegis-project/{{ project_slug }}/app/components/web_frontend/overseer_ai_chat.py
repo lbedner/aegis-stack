@@ -36,7 +36,7 @@ async def reply_agent_context(
 ) -> dict[str, Any] | None:
     """The agent behind a reply, in its drawer: what the reply used above
     the live editor, saved without leaving the chat."""
-    from app.services.ai.domains.chat.agent_loader import DEFAULT_AGENT_SLUG
+    from app.services.ai.service import DEFAULT_AGENT_SLUG
 
     from .overseer_ai_agents import agent_context
 

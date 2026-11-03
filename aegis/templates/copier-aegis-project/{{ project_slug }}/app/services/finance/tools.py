@@ -23,42 +23,6 @@ from typing import Any
 from app.core.db import get_async_session
 from app.core.tools import current_owner_user_id, register_tool
 from app.services.finance.constants import UNCATEGORIZED_CATEGORY_NAMES
-from app.services.finance.domains.investments import queries as investment_queries
-from app.services.finance.domains.investments.securities import (
-    list_current_holdings,
-)
-from app.services.finance.domains.ledger.accounts import (
-    account_transaction_totals,
-    effective_balance,
-    liability_details,
-)
-from app.services.finance.domains.ledger.properties import (
-    PROPERTY_ACCOUNT_TYPE,
-    property_metadata,
-    secured_position,
-)
-from app.services.finance.domains.ledger.queries.accounts import accounts_page
-from app.services.finance.domains.ledger.queries.categories import (
-    category_names_by_id,
-)
-from app.services.finance.domains.ledger.queries.transactions import (
-    transactions_window_with_payees,
-)
-from app.services.finance.domains.ledger.transactions import (
-    monthly_cashflow,
-    transaction_tags,
-)
-from app.services.finance.domains.ledger.valuations import preferred_valuation_row
-from app.services.finance.domains.planning.envelopes import envelope_metadata
-from app.services.finance.domains.planning.goals import goal_metadata
-from app.services.finance.domains.planning.recurring import (
-    queries as recurring_queries,
-)
-from app.services.finance.models.accounts import (
-    FinanceAccount,
-    FinanceLiabilityDetail,
-    FinanceValuation,
-)
 from app.services.finance.schemas.answers import (
     AccountFacts,
     BalanceSheet,
@@ -74,6 +38,26 @@ from app.services.finance.schemas.answers import (
     Quote,
     Transactions,
     Upcoming,
+)
+from app.services.finance.service import (
+    PROPERTY_ACCOUNT_TYPE,
+    FinanceAccount,
+    FinanceLiabilityDetail,
+    FinanceValuation,
+    account_transaction_totals,
+    effective_balance,
+    envelope_metadata,
+    goal_metadata,
+    investments_queries,
+    ledger_queries,
+    liability_details,
+    list_current_holdings,
+    monthly_cashflow,
+    preferred_valuation_row,
+    property_metadata,
+    recurring_queries,
+    secured_position,
+    transaction_tags,
 )
 from app.services.finance.utils import current_date
 
@@ -134,17 +118,17 @@ async def ledger(months: int = 12, detail: str = "monthly") -> Cashflow | Transa
     span = max(1, min(int(months), 24))
     from_date = _months_back_start(current_date(), span)
     async with get_async_session() as session:
-        rows, total = await transactions_window_with_payees(
+        rows, total = await ledger_queries.transactions_window_with_payees(
             session,
             owner_user_id=current_owner_user_id.get(),
             from_date=from_date,
             limit=_TRANSACTIONS_ROW_CAP,
         )
-        category_names = await category_names_by_id(
+        category_names = await ledger_queries.category_names_by_id(
             session,
             {t.category_id for t, _name in rows if t.category_id is not None},
         )
-        account_rows, _count = await accounts_page(
+        account_rows, _count = await ledger_queries.accounts_page(
             session,
             owner_user_id=current_owner_user_id.get(),
             include_hidden=True,
@@ -216,7 +200,7 @@ async def accounts() -> BalanceSheet:
     a plan survives every touched account's near-term debits.
     """
     async with get_async_session() as session:
-        account_rows, _count = await accounts_page(
+        account_rows, _count = await ledger_queries.accounts_page(
             session,
             owner_user_id=current_owner_user_id.get(),
             include_hidden=True,
@@ -404,10 +388,10 @@ async def quote(ticker: str) -> Quote:
     """
     symbol = ticker.strip().upper()
     async with get_async_session() as session:
-        security = await investment_queries.security_by_ticker(session, symbol)
+        security = await investments_queries.security_by_ticker(session, symbol)
         if security is None or security.id is None:
             return Quote(found=False, ticker=symbol)
-        price = await investment_queries.latest_price_for_security(session, security.id)
+        price = await investments_queries.latest_price_for_security(session, security.id)
     if price is None:
         return Quote(found=False, ticker=symbol)
     # Normalize to cents in integer arithmetic regardless of the row's
@@ -453,5 +437,5 @@ register_tool(
 # here keeps "import tools" the one line that registers the whole
 # finance tool surface. Filing a proposal is the shared queue's job
 # (``change_queue.tools``), which ``load_tools`` registers.
-from app.services.finance.domains.writes import lookups  # noqa: E402,F401
+from app.services.finance.service import writes_lookups  # noqa: E402, F401
 

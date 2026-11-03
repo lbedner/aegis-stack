@@ -9,8 +9,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core import ranges
 from app.core.aggregates import Aggregate
-from app.services.ai.domains.chat.sentiment import SentimentMix, sentiment_mix
-from app.services.ai.domains.spend.windows import spend_since
+from app.services.ai.service import SentimentMix, sentiment_mix, spend_since
 from app.services.system.node_now import UsageWindow
 
 

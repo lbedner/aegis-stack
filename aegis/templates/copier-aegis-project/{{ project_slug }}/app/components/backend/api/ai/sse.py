@@ -14,11 +14,11 @@ from fastapi.responses import StreamingResponse
 
 from app.core.chat_transcript import tool_label
 from app.core.log import logger
-from app.services.ai.models import StreamingMessage
 from app.services.ai.service import (
     AIServiceError,
     ConversationError,
     ProviderError,
+    StreamingMessage,
 )
 
 HEADERS = {

@@ -16,11 +16,8 @@ from app.components.backend.api.ai.service import ai_service
 from app.core import ranges, series
 from app.core.config import settings
 from app.core.formatting import format_relative_time
-from app.services.ai.domains.llm.provider_management import (
-    ProviderReadiness,
-    provider_readiness,
-)
 from app.services.ai.schemas import RecentActivity, UsageStatsResponse
+from app.services.ai.service import ProviderReadiness, provider_readiness
 from app.services.system.models import ComponentStatus
 
 from .chat_surface import HAS_VOICE, PERSISTED
@@ -232,7 +229,7 @@ async def _usage(db: Any, query: dict[str, str]) -> dict[str, Any]:
 async def sentiment_stats(db: Any) -> Any:
     """The sentiment job's tallies, a ``SentimentStats`` (a persistence
     backend's module)."""
-    from app.services.ai.domains.chat.sentiment import sentiment_stats as stats
+    from app.services.ai.service import sentiment_stats as stats
 
     return await stats(session=db)
 

@@ -419,3 +419,46 @@ class TestPythonFormattingParity:
         )
 
         assert plan.action == FileAction.SKIP
+
+    def test_a_merged_block_brings_the_import_the_projects_lint_dropped(
+        self, engine: RenderDiffEngine
+    ) -> None:
+        """At init the project's lint drops an import only a gated block
+        uses (``Any`` in config.py, without database). Merged against the
+        raw render, that drop read as the user's edit and was kept while
+        the block arrived, leaving a module that does not import (#1901)."""
+        if ruff_executable() is None:
+            pytest.skip("ruff not available")
+        tpl = engine.template_root / PROJECT_SLUG / "settings.py.jinja"
+        tpl.parent.mkdir(parents=True, exist_ok=True)
+        tpl.write_text(
+            "from typing import Any, Literal\n\n"
+            'MODE: Literal["a"] = "a"\n\n\n'
+            "def one() -> int:\n    return 1\n\n\n"
+            "def two() -> int:\n    return 2\n"
+            "{% if extra %}\n\nEXTRA: dict[str, Any] = {}\n{% endif %}"
+        )
+        (engine.project_path / "pyproject.toml").write_text(
+            '[tool.ruff.lint]\nselect = ["E", "F", "I"]\n'
+        )
+        # Linted at init (no Any), then edited by hand so it is no longer
+        # pristine and the add has to merge.
+        (engine.project_path / "settings.py").write_text(
+            "from typing import Literal\n\n"
+            'MODE: Literal["a"] = "a"\n\n\n'
+            "def one() -> int:\n    return 10  # the user's own\n\n\n"
+            "def two() -> int:\n    return 2\n"
+        )
+
+        plan = next(
+            p
+            for p in engine.plan({"extra": False}, {"extra": True})
+            if p.rel_path == "settings.py"
+        )
+
+        assert plan.action == FileAction.MERGE
+        assert plan.content is not None
+        assert not plan.conflict
+        assert "from typing import Any, Literal" in plan.content
+        assert "EXTRA: dict[str, Any] = {}" in plan.content
+        assert "return 10  # the user's own" in plan.content

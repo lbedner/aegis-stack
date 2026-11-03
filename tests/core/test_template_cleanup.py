@@ -14,10 +14,13 @@ import pytest
 import yaml
 
 from aegis.core.template_cleanup import (
+    SyncResult,
     TemplateRenderUnavailableError,
     _reconcile_new_answer_keys,
     _should_skip_sync,
+    _sync_python_file,
     cleanup_nested_project_directory,
+    ruff_executable,
     sync_template_changes,
 )
 
@@ -2178,3 +2181,45 @@ class TestNothingIsSkippedInSilence:
             pytest.raises(TemplateRenderUnavailableError),
         ):
             _reconcile_new_answer_keys(project, new_render)
+
+
+class TestSyncPythonFile:
+    def test_a_merged_block_brings_the_import_the_projects_lint_dropped(
+        self, tmp_path: Path
+    ) -> None:
+        """The update path's half of #1901: the renders are normalized with
+        the project's whole rule set, as init linted them, so an import
+        only a newly enabled block uses is not read as the user's drop."""
+        if ruff_executable() is None:
+            pytest.skip("ruff not available")
+        (tmp_path / "pyproject.toml").write_text(
+            '[tool.ruff.lint]\nselect = ["E", "F", "I"]\n'
+        )
+        body = (
+            'MODE: Literal["a"] = "a"\n\n\n'
+            "def one() -> int:\n    return {one}\n\n\n"
+            "def two() -> int:\n    return 2\n"
+        )
+        old = tmp_path / "old.py"
+        old.write_text("from typing import Any, Literal\n\n" + body.format(one=1))
+        new = tmp_path / "new.py"
+        new.write_text(
+            "from typing import Any, Literal\n\n"
+            + body.format(one=1)
+            + "\n\nEXTRA: dict[str, Any] = {}\n"
+        )
+        project = tmp_path / "settings.py"
+        project.write_text(
+            "from typing import Literal\n\n" + body.format(one="10  # the user's own")
+        )
+        result = SyncResult()
+
+        assert _sync_python_file(
+            project, old, new, Path("settings.py"), result, tmp_path
+        )
+
+        merged = project.read_text()
+        assert result.synced == ["settings.py"]
+        assert "from typing import Any, Literal" in merged
+        assert "EXTRA: dict[str, Any] = {}" in merged
+        assert "return 10  # the user's own" in merged

@@ -27,7 +27,7 @@ from pathlib import Path
 
 import pytest
 
-from aegis.core import render_diff
+from aegis.core import render_diff, template_cleanup
 from aegis.core.render_diff import FileAction, RenderDiffEngine
 from tests.core.conftest import make_render_diff_engine
 from tests.core.conftest import write_template_file as _write
@@ -79,7 +79,7 @@ class TestGitUnavailableDuringMerge:
         clean empty merge — that would silently truncate the user's file."""
         _diverge(engine)
         monkeypatch.setattr(
-            render_diff, "merge_three_way_text", lambda *_args, **_kwargs: (-1, "")
+            template_cleanup, "merge_three_way_text", lambda *_args, **_kwargs: (-1, "")
         )
 
         plans = engine.plan({"label": "old"}, {"label": "new"})
@@ -96,7 +96,7 @@ class TestGitUnavailableDuringMerge:
         _diverge(engine)
         original = (engine.project_path / "plain.py").read_text()
         monkeypatch.setattr(
-            render_diff, "merge_three_way_text", lambda *_args, **_kwargs: (-1, "")
+            template_cleanup, "merge_three_way_text", lambda *_args, **_kwargs: (-1, "")
         )
 
         plans = engine.plan({"label": "old"}, {"label": "new"})
@@ -116,12 +116,11 @@ class TestRuffUnavailableDuringMerge:
         never merge on inconsistent inputs."""
         _diverge(engine)
 
-        # ``_pristine`` also calls ``run_ruff_on_text`` (check_select="")
-        # before ``_merge`` ever runs (check_select="I"), so a plain call
-        # counter targets the wrong call. Discriminate on check_select
-        # instead: fail only the second of _merge's three "I"-mode calls.
+        # ``_pristine`` and ``_same`` already normalized both renders with
+        # the project's rules (check_select=""), and the engine reuses
+        # those, so the one normalization ``_merge`` runs fresh is the
+        # user's copy (check_select="I"): fail that one.
         real_run_ruff_on_text = render_diff.run_ruff_on_text
-        i_mode_calls = {"n": 0}
 
         def flaky(
             src: str,
@@ -130,9 +129,7 @@ class TestRuffUnavailableDuringMerge:
             rel_path: str | None = None,
         ) -> str | None:
             if check_select == "I":
-                i_mode_calls["n"] += 1
-                if i_mode_calls["n"] == 2:
-                    return None
+                return None
             return real_run_ruff_on_text(src, project_path, check_select, rel_path)
 
         monkeypatch.setattr(render_diff, "run_ruff_on_text", flaky)

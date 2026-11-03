@@ -31,12 +31,12 @@ PROJECT_SLUG_PLACEHOLDER = "{{ project_slug }}"
 
 
 def _signature_fn() -> Any:
-    """``_signature`` out of the rendered template, with its helper."""
+    """``_signature`` out of the rendered template, with its helpers."""
     env = Environment(loader=FileSystemLoader(str(get_template_path())))
     source = env.get_template(
         f"{PROJECT_SLUG_PLACEHOLDER}/app/cli/migrate_gen.py.jinja"
     ).render({**get_copier_defaults(), "include_database": True})
-    start = source.index("def _qualified(")
+    start = source.index("def _flat(")
     end = source.index("def _prune(")
     namespace: dict[str, Any] = {"Any": Any, "ops": ops, "text": sa.text}
     exec(source[start:end], namespace)  # noqa: S102

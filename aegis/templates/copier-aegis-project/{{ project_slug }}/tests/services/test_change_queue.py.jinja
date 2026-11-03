@@ -13,12 +13,13 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 import pytest
+from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.tools import result_data
 from app.services import change_queue
 from app.services.change_queue import PendingChange
-from tests._change_queue import executed, note_type
+from tests._change_queue import BREAKS_AT_FLUSH, GONE, executed, note_type
 
 NOTE = "test.note"
 
@@ -120,6 +121,61 @@ async def test_a_malformed_payload_dies_at_the_door(
         await change_queue.propose(
             async_db_session, NOTE, {"txt": "typo"}, owner_user_id=None
         )
+
+
+@pytest.mark.asyncio
+async def test_a_card_whose_world_moved_says_why_and_can_be_rejected(
+    async_db_session: AsyncSession,
+) -> None:
+    """A stored card ``describe`` now refuses renders the reason, and the
+    rest of its group still renders: the pending list, reject and withdraw
+    all read it."""
+    rows = [
+        await change_queue.propose(
+            async_db_session, NOTE, {"text": text}, owner_user_id=None
+        )
+        for text in ("still here", GONE + "the post was deleted")
+    ]
+
+    bodies = await change_queue.describe_changes(async_db_session, rows)
+    rejected = await change_queue.reject_row(async_db_session, rows[1])
+
+    assert bodies[0] == [
+        change_queue.ChangeDisplayRow(label="Note", value="still here")
+    ]
+    assert bodies[1][-1] == change_queue.ChangeDisplayRow(
+        label="No longer applies", value="the post was deleted"
+    )
+    assert rejected.status == "rejected"
+
+
+@pytest.mark.asyncio
+async def test_one_failing_approval_leaves_the_others_landed(
+    async_db_session: AsyncSession,
+) -> None:
+    """A row whose write fails at flush is undone alone: the batch's other
+    approvals land, and the failed one stays pending with its error."""
+    rows = [
+        await change_queue.propose(
+            async_db_session, NOTE, {"text": text}, owner_user_id=None
+        )
+        for text in ("first", BREAKS_AT_FLUSH, "last")
+    ]
+    ids = [row.id for row in rows]
+
+    outcome = await change_queue.approve_rows(async_db_session, rows)
+    await async_db_session.commit()
+
+    landed = (
+        await async_db_session.exec(
+            select(PendingChange)
+            .where(col(PendingChange.id).in_(ids))
+            .order_by(col(PendingChange.id))
+        )
+    ).all()
+    assert (outcome.approved, outcome.failed) == (2, 1)
+    assert [row.status for row in landed] == ["approved", "pending", "approved"]
+    assert "error" in landed[1].result
 
 
 @pytest.mark.asyncio

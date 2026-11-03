@@ -74,8 +74,8 @@ from .component_files import (
     _is_skippable_template_file,
 )
 from .template_cleanup import (
-    merge_three_way_text,
     normalize_for_compare,
+    normalized_merge,
     run_ruff_on_text,
 )
 
@@ -250,6 +250,10 @@ class RenderDiffEngine:
         # or None for verbatim/absent paths. Neither depends on answers, so
         # this is read from disk at most once per path per engine instance.
         self._source_cache: dict[str, tuple[FilePolicy, str] | None] = {}
+        # (rel_path, check_select, text) -> ruff's output. A merged .py file
+        # is compared, merged and written, normalizing the same text each
+        # time: two subprocesses per repeat without this.
+        self._ruff_cache: dict[tuple[str, str, str], str | None] = {}
 
     def _jinja_source(self, rel_path: str) -> tuple[FilePolicy, str] | None:
         if rel_path not in self._source_cache:
@@ -265,6 +269,15 @@ class RenderDiffEngine:
             else:
                 self._source_cache[rel_path] = None
         return self._source_cache[rel_path]
+
+    def _ruff(self, text: str, check_select: str, rel_path: str) -> str | None:
+        """``run_ruff_on_text`` on ``text``, at most once per engine."""
+        key = (rel_path, check_select, text)
+        if key not in self._ruff_cache:
+            self._ruff_cache[key] = run_ruff_on_text(
+                text, self.project_path, check_select, rel_path
+            )
+        return self._ruff_cache[key]
 
     def policy_for(self, rel_path: str) -> FilePolicy:
         """The policy this path's template declares, or DEFAULT."""
@@ -341,8 +354,8 @@ class RenderDiffEngine:
             return True
         if not rel_path.endswith(".py"):
             return False
-        left_norm = run_ruff_on_text(left, self.project_path, "", rel_path)
-        right_norm = run_ruff_on_text(right, self.project_path, "", rel_path)
+        left_norm = self._ruff(left, "", rel_path)
+        right_norm = self._ruff(right, "", rel_path)
         if left_norm is None or right_norm is None:
             return False
         return normalize_for_compare(left_norm) == normalize_for_compare(right_norm)
@@ -352,30 +365,27 @@ class RenderDiffEngine:
     ) -> str | None:
         """3-way merge: base = old render, theirs = disk, ours = new render.
 
-        ``.py`` files are normalized through ``ruff check --fix --select I``
-        first (import sorting only, never deletes code) so formatting noise
-        can't manufacture a conflict — the #715 Phase B discipline, same
-        as the update path's ``_sync_python_file``. If even one of the
-        three normalizations fails, merging on a mix of normalized and raw
-        content would reintroduce exactly the formatting noise the
-        normalization exists to remove — bail to ``None`` (caller
-        preserves) rather than merge on inconsistent inputs.
+        Through ``normalized_merge``, the update path's recipe too: a
+        ``.py`` file ruff-normalized so formatting noise can't manufacture
+        a conflict (#715), anything else as written.
 
         Returns ``None`` when the merge could not run at all: ruff
-        unavailable/failed on a ``.py`` file, or ``git merge-file`` itself
-        unavailable/erroring (``merge_three_way_text`` returncode outside
-        ``0..127``, in which case its ``merged`` text is `""` and must
-        never be mistaken for a legitimate empty-file merge result).
+        unavailable/failed on a ``.py`` file (the caller preserves), or
+        ``git merge-file`` itself unavailable/erroring
+        (``merge_three_way_text`` returncode outside ``0..127``, in which
+        case its ``merged`` text is `""` and must never be mistaken for a
+        legitimate empty-file merge result).
         """
-        theirs = disk_content
-        if rel_path.endswith(".py"):
-            theirs_n = run_ruff_on_text(theirs, self.project_path, "I", rel_path)
-            base_n = run_ruff_on_text(base, self.project_path, "I", rel_path)
-            ours_n = run_ruff_on_text(ours, self.project_path, "I", rel_path)
-            if theirs_n is None or base_n is None or ours_n is None:
-                return None
-            theirs, base, ours = theirs_n, base_n, ours_n
-        returncode, merged = merge_three_way_text(theirs, base, ours)
+
+        def normalize(text: str, check_select: str) -> str | None:
+            if not rel_path.endswith(".py"):
+                return text
+            return self._ruff(text, check_select, rel_path)
+
+        outcome = normalized_merge(disk_content, base, ours, normalize)
+        if outcome is None:
+            return None
+        returncode, merged = outcome
         if returncode < 0 or returncode > 127:
             return None
         return merged
@@ -505,7 +515,7 @@ class RenderDiffEngine:
         ``ManualUpdater._write_rendered`` so engine output matches what init
         + ``make fix`` would have produced)."""
         if rel_path.endswith(".py"):
-            formatted = run_ruff_on_text(content, self.project_path, "", rel_path)
+            formatted = self._ruff(content, "", rel_path)
             if formatted is not None:
                 content = formatted
         output_path.parent.mkdir(parents=True, exist_ok=True)

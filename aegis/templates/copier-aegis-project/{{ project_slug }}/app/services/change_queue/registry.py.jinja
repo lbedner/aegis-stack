@@ -35,8 +35,11 @@ class ChangeExecutor:
     ``execute`` runs the REAL service mutation and returns an audit
     summary, a model of what changed (kept as JSON on the row);
     ``describe`` resolves a LIST of payloads into one card body each, in
-    order - system truth from the database, never model-authored copy. It takes the list so a queue of cards costs a
-    fixed number of queries, not a lookup per card. Rows are ``ChangeDisplayRow``
+    order - system truth from the database, never model-authored copy. It
+    takes the list so a queue of cards costs a fixed number of queries, not
+    a lookup per card. A payload whose target is gone renders in place
+    ("bill 7 (missing)") rather than raising: a ``ValueError`` makes the
+    queue describe that group a row at a time. Rows are ``ChangeDisplayRow``
     end to end; they become plain dicts only at the freeze into the
     audit column and at the tool-result boundary.
     """

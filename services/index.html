@@ -7151,7 +7151,7 @@ this standard as a pattern: <strong>Overseer &gt; Patterns &gt; Service parts</s
 which parts each one has and which rules it breaks, with the file and line
 that shows it, and <code>patterns --format json</code> prints the same report. The
 enforced rules (reads in queries, every job wired, a health check, other
-services through their facade) are held
+services and its own ways in through its facade) are held
 by <code>tests/services/test_service_layout.py</code>; reads still outside a queries
 module are recorded there as debt that may only shrink. Those tests hold
 Aegis's own code and run only in Aegis's CI: a project built on it sees
@@ -7171,10 +7171,16 @@ the service and each piece says the same about its own files.
 A service that imports another's <code>domains/</code>, <code>adapters/</code>, <code>queries</code> or
 <code>models</code> is flagged too (<strong>Other services through their facade</strong>), each
 import's line listed: it depends on how the other is organised, not on
-what it offers. A facade composed of many modules (AI's and finance's
-<code>service/</code> packages) costs nothing to import: what its <code>if TYPE_CHECKING:</code>
-block imports is all it offers, each name loaded on first use
-(<code>app/services/shared/facade.py</code>). <code>patterns touches</code> takes a change's files (as arguments,
+what it offers. A service's own ways in are held the same
+(<strong>Its own ways in through its facade</strong>): its router, a tool or a job,
+the CLI or a page importing its own <code>domains/</code>, <code>queries</code> or <code>models</code>
+is flagged, each import's line listed, and opened up on the map that
+line is drawn red. Running its own adapters (a job syncing a provider)
+is their work, not a step past it. A facade offers what its
+<code>if TYPE_CHECKING:</code> block imports, each name loaded on first use
+(<code>app/services/shared/facade.py</code>); a <code>service.py</code> also offers its own
+<code>__all__</code>, and a facade composed of many modules (AI's and finance's
+<code>service/</code> packages) offers only the block, so it costs nothing to import. <code>patterns touches</code> takes a change's files (as arguments,
 or one per line from <code>git diff --name-only</code>) and says, from the app's
 ontology (the model layer of the <a href="../overseer/twin/">Twin</a>), which parts own them, which parts depend on those, and the
 tables, routes and jobs they define; Markdown for a pull request's job

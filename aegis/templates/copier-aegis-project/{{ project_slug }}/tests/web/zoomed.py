@@ -28,6 +28,7 @@ PIECES = [
         "entry",
         (ROUTER,),
         ("app/components/backend/api/auth/router.py",),
+        skips=("piece:queries",),  # the parts rule's finding: drawn red
     ),
     Piece(
         "piece:facade",

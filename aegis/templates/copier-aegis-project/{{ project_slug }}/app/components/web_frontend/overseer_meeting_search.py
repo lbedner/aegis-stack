@@ -6,11 +6,11 @@ chat links it), the words kept so the hits stay above it."""
 from typing import Any
 from urllib.parse import urlencode
 
-from app.services.meetings.domains.people.service import said_when
 from app.services.meetings.service import (
     NOTHING_FOUND,
     SearchHit,
     meeting_link,
+    said_when,
     search_meetings,
 )
 

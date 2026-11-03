@@ -13,7 +13,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.core.log import logger
-from app.services.ai.domains.chat.user_memory import DEFAULT_MEMORY_USER_ID
+from app.services.ai.service import DEFAULT_MEMORY_USER_ID
 
 router = APIRouter()
 
@@ -36,10 +36,7 @@ class ContextModuleUpdateRequest(BaseModel):
 async def list_registry_context_modules() -> list[dict[str, Any]]:
     """Every context module, active or not, in render order."""
     from app.core.db import get_async_session
-    from app.services.ai.domains.chat.context_modules import (
-        list_context_modules,
-        serialize_context_module,
-    )
+    from app.services.ai.service import list_context_modules, serialize_context_module
 
     try:
         async with get_async_session() as session:
@@ -58,7 +55,7 @@ async def update_registry_context_module(
 ) -> dict[str, Any]:
     """Apply a partial context-module update."""
     from app.core.db import get_async_session
-    from app.services.ai.domains.chat.context_modules import (
+    from app.services.ai.service import (
         InvalidContextModuleError,
         serialize_context_module,
         update_context_module,
@@ -92,7 +89,7 @@ async def preview_registry_context_module(
     dashboard can display what the model would actually be handed, which is
     the only way to tell a working module from a silently empty one.
     """
-    from app.services.ai.domains.chat.module_context import render_context_modules
+    from app.services.ai.service import render_context_modules
 
     try:
         rendered = await render_context_modules([slug], user_id=user_id)
@@ -119,11 +116,11 @@ async def list_saved_user_facts(user_id: str = DEFAULT_MEMORY_USER_ID) -> dict[s
     system assembles, these are what the user told it.
     """
     from app.core.db import get_async_session
-    from app.services.ai.domains.chat import user_memory
+    from app.services.ai.service import list_user_facts
 
     try:
         async with get_async_session() as session:
-            facts = await user_memory.list_user_facts(user_id, session=session)
+            facts = await list_user_facts(user_id, session=session)
     except Exception as e:
         logger.exception("Failed to list saved facts")
         raise HTTPException(status_code=500, detail="Failed to list saved facts") from e
@@ -138,11 +135,11 @@ async def update_saved_user_fact(
 ) -> dict[str, Any]:
     """Correct one saved fact in place."""
     from app.core.db import get_async_session
-    from app.services.ai.domains.chat import user_memory
+    from app.services.ai.service import update_user_fact
 
     try:
         async with get_async_session() as session:
-            updated = await user_memory.update_user_fact(
+            updated = await update_user_fact(
                 user_id,
                 index,
                 fact=request.fact,
@@ -165,11 +162,11 @@ async def delete_saved_user_fact(
 ) -> dict[str, Any]:
     """Forget one saved fact."""
     from app.core.db import get_async_session
-    from app.services.ai.domains.chat import user_memory
+    from app.services.ai.service import delete_user_fact
 
     try:
         async with get_async_session() as session:
-            await user_memory.delete_user_fact(user_id, index, session=session)
+            await delete_user_fact(user_id, index, session=session)
     except IndexError as e:
         raise HTTPException(status_code=404, detail=str(e)) from None
     except Exception as e:

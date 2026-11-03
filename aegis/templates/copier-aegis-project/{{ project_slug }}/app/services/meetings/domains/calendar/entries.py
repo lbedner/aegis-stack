@@ -11,7 +11,9 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.time import as_local, as_stored, utcnow
 from app.services.meetings.models import BotAccount, CalendarEvent
-from app.services.meetings.service import can_join, status_label, voice, voices
+from app.services.meetings.domains.labels import status_label
+from app.services.meetings.domains.people.heard import voice, voices
+from app.services.meetings.service import can_join
 
 from .queries import between, one, speakers_on
 

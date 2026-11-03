@@ -28,7 +28,7 @@ from app.components.frontend.controls.snack_bar import ErrorSnackBar, SuccessSna
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.formatting import format_bytes, format_date
 from app.core.log import logger
-from app.services.documents.models import DOCUMENT_KINDS
+from app.services.documents.service import DOCUMENT_KINDS
 
 from . import documents_actions as actions
 from .documents_pages import PagesStrip

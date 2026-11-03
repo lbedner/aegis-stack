@@ -30,10 +30,16 @@ from app.services.meetings.deps import (
     get_meetings_service,
     get_runner_token,
 )
-from app.services.meetings.domains.actions import runs, tokens
-from app.services.meetings.domains.moments.service import moments_of
-from app.services.meetings.models import LineAbout, MeetingRunnerToken, MomentRecord
-from app.services.meetings.service import MeetingsService, line_about
+from app.services.meetings.service import (
+    LineAbout,
+    MeetingRunnerToken,
+    MeetingsService,
+    MomentRecord,
+    actions_runs,
+    actions_tokens,
+    line_about,
+    moments_of,
+)
 from app.services.shared.deps import get_admin_actor, get_admin_reader
 
 
@@ -178,7 +184,7 @@ async def claim(
 ) -> ClaimedRun | Response:
     """The oldest run of ``actions`` waiting among the token's owner's
     meetings, now this runner's (named for its token)."""
-    run = await runs.claim(db, token.owner_user_id, body.actions, runner=token.name)
+    run = await actions_runs.claim(db, token.owner_user_id, body.actions, runner=token.name)
     if run is None:
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     return ClaimedRun(id=run.id or 0, action=run.action, prompt=run.prompt)
@@ -194,7 +200,7 @@ async def finish(
     """Post what a run this runner claimed came back with: done, or failed
     with why."""
     with as_http():
-        run = await runs.finish(
+        run = await actions_runs.finish(
             db,
             run_id,
             token.owner_user_id,
@@ -215,7 +221,7 @@ async def every_token(
     """The caller's runner tokens, newest first; never their values."""
     return [
         RunnerToken.model_validate(row)
-        for row in await tokens.live(svc.db, svc.owner_user_id)
+        for row in await actions_tokens.live(svc.db, svc.owner_user_id)
     ]
 
 
@@ -226,7 +232,7 @@ async def make_token(
     body: TokenRequest, svc: MeetingsService = Depends(get_meetings_service)
 ) -> NewRunnerToken:
     """A token for the caller's runner ``name``; its value is shown once."""
-    row, value = await tokens.create(svc.db, svc.owner_user_id, body.name)
+    row, value = await actions_tokens.create(svc.db, svc.owner_user_id, body.name)
     return NewRunnerToken(**RunnerToken.model_validate(row).model_dump(), value=value)
 
 
@@ -236,5 +242,5 @@ async def revoke_token(
 ) -> Response:
     """Revoke one of the caller's tokens: its runner is refused from now."""
     with as_http():
-        await tokens.revoke(svc.db, token_id, svc.owner_user_id)
+        await actions_tokens.revoke(svc.db, token_id, svc.owner_user_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

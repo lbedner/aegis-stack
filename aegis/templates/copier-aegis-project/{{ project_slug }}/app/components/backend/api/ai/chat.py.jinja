@@ -1,10 +1,10 @@
 """Talking to the model, and reading a conversation back."""
 
 from typing import Any
-from app.services.ai.domains.chat.attachments import ChatAttachment
 from app.core.log import logger
 from app.services.ai.service import (
     AIServiceError,
+    ChatAttachment,
     ConversationError,
     ProviderError,
 )

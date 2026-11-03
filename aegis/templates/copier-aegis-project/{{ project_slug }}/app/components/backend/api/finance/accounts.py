@@ -264,7 +264,7 @@ async def ingest_valuations(
     rejected with that line in the message, rather than importing the rest
     and leaving a hole nobody can see in the history.
     """
-    from app.services.finance.domains.ledger.series_parsing import parse_series_lines
+    from app.services.finance.service import parse_series_lines
 
     try:
         rows = parse_series_lines(body.text)

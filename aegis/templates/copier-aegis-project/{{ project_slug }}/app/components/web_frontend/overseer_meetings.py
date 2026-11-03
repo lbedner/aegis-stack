@@ -17,22 +17,25 @@ from collections.abc import Iterable
 from typing import Any
 
 from app.core.formatting import format_relative_time
-from app.services.meetings.domains.accounts.service import agent_names, agents
-from app.services.meetings.domains.calendar.entries import CalendarEventDetail
-from app.services.meetings.domains.calendar.owners import owners
-from app.services.meetings.domains.people.service import PeopleService, said_when
-from app.services.meetings.domains.search.service import LINE_PARAM, MEETING_PARAM
-from app.services.meetings.domains.series.service import SeriesService
-from app.services.meetings.models import (
+from app.services.meetings.service import (
+    LINE_PARAM,
+    MEETING_PARAM,
+    CalendarEventDetail,
     GuideRecord,
     GuideRow,
+    MeetingsService,
+    PeopleService,
     Quote,
     SeriesRecord,
     SeriesRow,
+    SeriesService,
     ThreadSection,
+    agent_names,
+    agents,
+    meetings_counts,
+    owners,
+    said_when,
 )
-from app.services.meetings.queries import meetings_counts
-from app.services.meetings.service import MeetingsService
 from app.services.system.models import ComponentStatus
 
 from .meeting_agents import agent_options, agents_context, owner_options

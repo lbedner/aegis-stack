@@ -33,7 +33,7 @@ from app.components.frontend.controls.tabs import PulseTabs
 from app.components.frontend.controls.uploads import BrowserUploads
 from app.components.frontend.theme import AegisTheme as Theme
 from app.core.formatting import format_bytes, format_date
-from app.services.documents.models import DOCUMENT_KINDS
+from app.services.documents.service import DOCUMENT_KINDS
 from app.services.system.models import ComponentStatus
 from app.services.system.ui import get_component_subtitle, get_component_title
 

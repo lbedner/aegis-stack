@@ -101,13 +101,21 @@ def test_no_name_a_service_facade_offers_is_a_module_beside_it(service: str) -> 
     assert not beside & set(facade._offered(package / "__init__.py"))
 
 
-@pytest.mark.parametrize("service", _facades())
+def _lazy_facades() -> list[str]:
+    """Each service whose facade offers names lazily: a ``service/``
+    package, or a ``service.py`` that also imports some of its own."""
+    modules = (ROOT / "app").glob("services/*/service.py")
+    lazy = [m.parent.name for m in modules if "facade.lazy(" in m.read_text()]
+    return sorted([*_facades(), *lazy])
+
+
+@pytest.mark.parametrize("service", _lazy_facades())
 def test_every_name_a_service_facade_offers_loads(service: str) -> None:
     """A name loads only when used, so one this stack's answers left out
     (a gate that does not match the module's) would fail only in the
     caller that reaches for it. Each is loaded here instead."""
     offering = import_module(f"app.services.{service}.service")
-    for name in offering.__all__:
+    for name in facade._offered(Path(str(offering.__file__))):
         assert getattr(offering, name) is not None, name
 
 

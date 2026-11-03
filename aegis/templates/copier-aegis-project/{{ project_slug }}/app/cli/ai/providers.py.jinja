@@ -11,16 +11,16 @@ from app.cli.ai.shared import (
     get_provider_display_name,
 )
 from app.i18n import lazy_t, t
+from app.services.ai.service import (
+    AIProvider,
+    get_ai_config,
+    get_free_providers,
+    get_provider_capabilities,
+)
 
 from ...core import secrets
 from ...core.audit import cli_actor
 from ...core.config import settings
-from ...services.ai.domains.llm.config import get_ai_config
-from ...services.ai.models import (
-    AIProvider,
-    get_free_providers,
-    get_provider_capabilities,
-)
 
 
 @app.command(help=lazy_t("ai.help_status"))
@@ -93,7 +93,7 @@ async def status() -> None:
 
 @app.command(help=lazy_t("ai.help_providers"))
 async def providers() -> None:
-    from app.services.ai.domains.llm.provider_management import provider_readiness
+    from app.services.ai.service import provider_readiness
 
     _yes = f"[{theme.ACCENT}]{t('ai.prov_yes')}[/{theme.ACCENT}]"
     _no = f"[{theme.ERROR}]{t('ai.prov_no')}[/{theme.ERROR}]"
@@ -192,7 +192,7 @@ async def add_provider(
 ) -> None:
     from rich.progress import Progress, SpinnerColumn, TextColumn
 
-    from app.services.ai.domains.llm.provider_management import (
+    from app.services.ai.service import (
         PROVIDER_API_KEY_URLS,
         get_env_var_name,
         get_existing_api_key,
@@ -335,7 +335,7 @@ async def use_provider(
         help=lazy_t("ai.arg_provider_switch"),
     ),
 ) -> None:
-    from app.services.ai.domains.llm.provider_management import (
+    from app.services.ai.service import (
         check_provider_dependency_installed,
         get_env_var_name,
         get_existing_api_key,

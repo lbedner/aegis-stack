@@ -34,14 +34,13 @@ from app.services.insights.deps import (
     get_owned_project,
     get_project_service,
 )
-from app.services.insights.models import Project
 from app.services.insights.schemas.projects import (
     ProjectCreate,
     ProjectResponse,
     ProjectUpdate,
     mask_credential,
 )
-from app.services.insights.service import ProjectService
+from app.services.insights.service import Project, ProjectService
 {%- endif %}
 
 router = APIRouter(prefix="/insights", tags=["insights"])

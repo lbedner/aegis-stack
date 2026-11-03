@@ -29,6 +29,7 @@ from .models import (
     BlogStatus,
     BlogTag,
 )
+from .queries import count_posts_by_status
 from .schemas import (
     BlogPostCreate,
     BlogPostResponse,
@@ -43,6 +44,7 @@ from .schemas import (
 
 __all__ = [
     "BlogService",
+    "count_posts_by_status",
     "json_to_posts",
     "markdown_to_post",
     "post_to_markdown",

@@ -1,9 +1,10 @@
 """A service facade that costs nothing to import.
 
 Callers outside a service reach it through its facade (the parts pattern's
-through-facade rule). A facade composed of many modules (a ``service/``
-package) would load the whole service for one name, so it offers what its
-``if TYPE_CHECKING:`` block imports, each loaded the first time it is used.
+through-facade and own-facade rules). Importing every name it offers would
+load the whole service for one, so a facade, a ``service/`` package or a
+``service.py``, offers what its ``if TYPE_CHECKING:`` block imports, each
+loaded the first time it is used.
 That block is the one list: type checkers read it as the imports it is, and
 ``lazy`` reads it as the names to offer::
 
@@ -21,8 +22,9 @@ from typing import Any
 
 
 def lazy(package: str, path: str) -> tuple[Callable[[str], Any], list[str]]:
-    """``__getattr__`` and ``__all__`` for the facade ``package`` (its
-    ``__init__`` at ``path``): each name its ``if TYPE_CHECKING:`` block
+    """``__getattr__`` and ``__all__`` for the facade ``package`` (its file
+    at ``path``, a ``service/__init__.py`` or a ``service.py``): each name
+    its ``if TYPE_CHECKING:`` block
     imports, loaded from its module on first use. Read from that module
     every time, never kept on the facade, so a test that patches the
     module a name is defined in patches it for every caller."""

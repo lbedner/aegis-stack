@@ -9,8 +9,7 @@ from importlib.util import find_spec
 from typing import Any
 from urllib.parse import quote
 
-from app.services.ai.models import AIProvider
-from app.services.ai.models.provider_names import provider_label
+from app.services.ai.service import AIProvider, provider_label
 
 # Voice and a database, as the chat surface reads them: one home.
 from .chat_surface import PERSISTED
@@ -69,7 +68,7 @@ async def mark_urls(db: Any, names: dict[str, tuple[str, ...]]) -> dict[str, str
     logos through this; only a persistence backend has the catalog."""
     if not PERSISTED or not names:
         return {}
-    from app.services.ai.domains.llm.queries import org_icons
+    from app.services.ai.service import org_icons
 
     stored = await org_icons(db, [n for pair in names.values() for n in pair])
     found = {

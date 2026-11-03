@@ -23,12 +23,14 @@ from app.services.payment.constants import (
     TransactionType,
 )
 from app.services.payment.health import cached_provider_health
-from app.services.payment.models import (
+from app.services.payment.service import (
+    CatalogEntry,
     PaymentDispute,
+    PaymentService,
     PaymentSubscription,
     PaymentTransaction,
+    get_catalog,
 )
-from app.services.payment.service import CatalogEntry, PaymentService, get_catalog
 from app.services.system.models import ComponentStatus
 
 from .filters import cents_to_input, dollars, money

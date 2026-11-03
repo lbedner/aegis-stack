@@ -17,12 +17,16 @@ from app.core.time import today
 from . import queries
 from .constants import MetricKeys, Periods
 from .models import (
+    EVENT_TYPE_LABELS,
     EventOrigin,
     InsightEvent,
     InsightMetric,
     InsightMetricType,
     InsightRecord,
     InsightSource,
+{%- if insights_per_user %}
+    Project,
+{%- endif %}
 )
 from .adapters.collectors.base import CollectionResult
 from .adapters.collectors.collection import CollectorService
@@ -43,6 +47,7 @@ from .utils import day_end, day_start
 
 __all__ = [
     "DOCS_EVENT_TYPES",
+    "EVENT_TYPE_LABELS",
     "GITHUB_EVENT_TYPES",
     "PYPI_EVENT_TYPES",
     "CollectionResult",
@@ -51,6 +56,7 @@ __all__ = [
     "InsightService",
     "InsightViewService",
 {%- if insights_per_user %}
+    "Project",
     "ProjectService",
 {%- endif %}
     "RedditCollector",
@@ -318,3 +324,4 @@ class InsightService:
     async def _get_metric_type_by_key(self, key: str) -> InsightMetricType | None:
         """Look up a metric type by key."""
         return await queries.metric_type_by_key(self.db, key)
+

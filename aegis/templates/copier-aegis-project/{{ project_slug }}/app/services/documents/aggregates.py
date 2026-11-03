@@ -7,7 +7,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.core import ranges
 from app.core.aggregates import Aggregate
 from app.core.figures import FIGURES
-from app.services.documents.queries import tag_counts
+from app.services.documents.service import tag_counts
 
 
 class DocumentTags(BaseModel):

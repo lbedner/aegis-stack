@@ -15,16 +15,18 @@ from pydantic import BaseModel
 
 from app.core.storage import get_storage
 from app.services.documents.deps import get_document_service
-from app.services.documents.domains.extraction.dispatch import start_extraction
-from app.services.documents.domains.extraction.pages import (
+from app.services.documents.service import (
+    Document,
     DocumentContentMissingError,
     DocumentNotFoundError,
+    DocumentPage,
+    DocumentService,
     extract_document,
+    page_for,
+    pages_for,
+    start_extraction,
+    vision_reader,
 )
-from app.services.documents.domains.extraction.vision import vision_reader
-from app.services.documents.models import Document, DocumentPage
-from app.services.documents.queries import page_for, pages_for
-from app.services.documents.service import DocumentService
 from app.services.shared.deps import get_owner_user_id
 
 router = APIRouter()

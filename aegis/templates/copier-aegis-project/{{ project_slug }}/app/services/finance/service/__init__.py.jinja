@@ -16,15 +16,100 @@ if TYPE_CHECKING:
         SNAPTRADE_KEYS,
         SnapTradeError,
     )
+    from app.services.finance.domains.detection import (
+        declare_recurring,
+        detect_recurring,
+        generate_insights,
+        plan_recurring,
+        promote_curated_streams,
+    )
 {%- if include_ai and ai_backend != "memory" %}
     from app.services.finance.domains.detection.analyst import (
+{%- if ai_framework == "pydantic-ai" %}
+        existing_note,
+{%- endif %}
         load_finance_agent_fixtures,
+{%- if ai_framework == "pydantic-ai" %}
+        run_analyst_note,
+{%- endif %}
     )
     from app.services.finance.domains.detection.analyst.shared import (
         STANDALONE_USER_ID,
     )
 {%- endif %}
-    from app.services.finance.domains.ledger.accounts import effective_balance
+    from app.services.finance.domains.detection.insights.commitments import (
+        commitment_rollup,
+        stream_staleness,
+    )
+    from app.services.finance.domains.investments import (
+        queries as investments_queries,
+    )
+    from app.services.finance.domains.investments.activity import replay_positions
+    from app.services.finance.domains.investments.loader import (
+        import_investment_activities,
+    )
+    from app.services.finance.domains.investments.optum import (
+        UnknownActivityTypeError,
+        parse_optum_settled_transactions,
+    )
+    from app.services.finance.domains.investments.securities import (
+        list_current_holdings,
+        market_value_cents,
+    )
+    from app.services.finance.domains.ledger import queries as ledger_queries
+    from app.services.finance.domains.ledger.accounts import (
+        account_transaction_totals,
+        effective_balance,
+        liability_details,
+    )
+    from app.services.finance.domains.ledger.categories import spending_by_category
+    from app.services.finance.domains.ledger.merchant_icon import (
+        domain_from_website,
+        fund_family_domain,
+        icons_for_names,
+    )
+    from app.services.finance.domains.ledger.networth import recompute_snapshots
+    from app.services.finance.domains.ledger.properties import (
+        PROPERTY_ACCOUNT_TYPE,
+        property_metadata,
+        secured_position,
+    )
+    from app.services.finance.domains.ledger.series_parsing import parse_series_lines
+    from app.services.finance.domains.ledger.transactions import (
+        monthly_cashflow,
+        transaction_tags,
+    )
+    from app.services.finance.domains.ledger.valuations import preferred_valuation_row
+    from app.services.finance.domains.planning.allocation import (
+        MonthlyFigures,
+        resolved_meta,
+        target_for_rule,
+    )
+    from app.services.finance.domains.planning.envelopes import envelope_metadata
+    from app.services.finance.domains.planning.goals import (
+        GOAL_ACCOUNT_TYPE,
+        goal_auto_contribute,
+        goal_eta,
+        goal_metadata,
+        goal_progress,
+        set_auto_contribute,
+        set_goal_metadata,
+    )
+    from app.services.finance.domains.planning.recurring import (
+        queries as recurring_queries,
+    )
+    from app.services.finance.domains.writes import lookups as writes_lookups
+    from app.services.finance.models import (
+        FinanceCategory,
+        FinanceRecurringStream,
+        FinanceTransaction,
+        FinanceTransactionSplit,
+    )
+    from app.services.finance.models.accounts import (
+        FinanceAccount,
+        FinanceLiabilityDetail,
+        FinanceValuation,
+    )
     from app.services.finance.service.finance_service import FinanceService
 
 __getattr__, __all__ = facade.lazy(__name__, __file__)

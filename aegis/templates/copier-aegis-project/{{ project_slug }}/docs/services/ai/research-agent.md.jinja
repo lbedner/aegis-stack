@@ -24,8 +24,7 @@ Flag an agent and attach the finance tools. With the seeded default agent:
 from sqlmodel import select
 
 from app.core.db import get_async_session
-from app.services.ai.domains.chat.agent_registry import update_agent
-from app.services.ai.models.agents import Agent, AgentTool, Tool
+from app.services.ai.service import Agent, AgentTool, Tool, update_agent
 
 FINANCE_TOOLS = [
     "ledger_summary",

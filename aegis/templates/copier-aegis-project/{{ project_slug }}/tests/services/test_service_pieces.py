@@ -82,6 +82,23 @@ def test_a_line_is_an_import_between_pieces_or_out_of_the_service(
     assert lines[keys["Health"]] == []
 
 
+def test_a_piece_skips_the_facade_where_the_parts_rule_says(tmp_path: Path) -> None:
+    """A piece's skips are the ``own-facade`` rule's findings, by piece: a
+    router into queries skips; the facade into queries is its job."""
+    project = _project(tmp_path)
+    write_tree(
+        project,
+        {
+            "app/components/backend/api/notes/router.py": (
+                "from app.services.notes.queries import count\n"
+            )
+        },
+    )
+    skips = {p.title: p.skips for p in service_pieces.pieces(_folder(project))}
+    assert skips["Router"] == ("piece:queries",)
+    assert skips["Facade"] == ()
+
+
 def test_a_component_sharing_the_services_name_is_still_outside_it() -> None:
     """The scheduler service and the scheduler component are two parts: a
     line to the component leaves the service; one to its own sub-service

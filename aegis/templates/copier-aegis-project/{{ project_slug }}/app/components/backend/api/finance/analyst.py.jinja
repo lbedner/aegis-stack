@@ -51,10 +51,7 @@ async def run_analyst(
     ``GET /api/v1/jobs/{id}/events``. The terminal event's ``result`` is the
     note in the synchronous response's shape.
     """
-    from app.services.finance.domains.detection.analyst import (
-        existing_note,
-        run_analyst_note,
-    )
+    from app.services.finance.service import existing_note, run_analyst_note
 
     today = current_date()
     if force:

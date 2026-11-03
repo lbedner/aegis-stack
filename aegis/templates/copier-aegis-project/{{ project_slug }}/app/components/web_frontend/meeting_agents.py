@@ -12,16 +12,17 @@ from typing import Any
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from app.services.meetings.domains.accounts.service import (
+from app.services.meetings.service import (
     IMAGE_TYPES,
     NOT_SIGNED_IN,
     SIGNED_IN,
     SWITCHES,
     AgentRow,
+    BotAccount,
+    Owner,
     overview,
+    owners,
 )
-from app.services.meetings.domains.calendar.owners import Owner, owners
-from app.services.meetings.models import BotAccount
 
 from .rendering import status_cell
 

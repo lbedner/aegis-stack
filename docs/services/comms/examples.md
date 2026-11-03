@@ -91,8 +91,7 @@ Create a worker task for sending emails:
 ```python
 # app/components/worker/tasks/comms.py
 from arq import Retry
-from app.services.comms.service import send_email
-from app.services.comms.models import SendEmailRequest
+from app.services.comms.service import SendEmailRequest, send_email
 from app.core.log import logger
 
 
@@ -156,8 +155,7 @@ async def send_sms_task(
     Returns:
         Result with message SID and status
     """
-    from app.services.comms.service import send_sms
-    from app.services.comms.models import SendSMSRequest
+    from app.services.comms.service import SendSMSRequest, send_sms
 
     logger.info(f"Sending SMS to {to}")
 

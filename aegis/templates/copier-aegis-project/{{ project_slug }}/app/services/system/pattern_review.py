@@ -10,6 +10,8 @@ instead), or when the findings are the ones an earlier review
 (``fingerprint``) already covered. One comment tells the
 whole sequence: the latest review on top, each earlier one below it."""
 
+from collections import Counter
+from collections.abc import Callable
 import json
 import re
 
@@ -36,8 +38,9 @@ EARLIER = "#### Earlier reviews"
 # GitHub refuses a comment past 65,536 characters: the oldest go first.
 MOST_CHARS = 60_000
 ACTION = "patterns_review"
-# The most she reads and the comment lists: a first run with no baseline
-# brings every finding the app has.
+# The most places she reads (the comment lists every one, and she is told
+# how many each part has): a first run with no baseline brings every
+# finding the app has.
 MOST_LISTED = 50
 # Places of one rule listed as they are; past this, folded under a count.
 SHOWN = 3
@@ -58,7 +61,8 @@ the person who made the change, as myself: "I", "you", plain sentences.
   holds the change, and then I say why it holds and what clears it, never
   that it could merge as it is. The findings, their places and what the
   change touches are shown under my words, so I never list them or count
-  them again.
+  them again. ``new_findings`` may be only the first of them; ``by_part``
+  counts every one, so my words cover every part they are in.
 - ``notes``: one per rule that fired, by its ``check``: what it means in
   this change and what to do, in a sentence or two, without repeating the
   rule's own why.
@@ -106,23 +110,41 @@ def facts(fresh: list[Spot], touched: str) -> str:
     }
     found = [
         {"place": s.at, "check": s.finding.check, "part": s.finding.subject}
-        for s in fresh
+        for s in fresh[:MOST_LISTED]
     ]
-    body = {"rules": rules, "new_findings": found, "touches": touched}
+    body = {
+        "rules": rules,
+        "new_findings": found,
+        "by_part": Counter(s.finding.subject for s in fresh),
+        "touches": touched,
+    }
     return json.dumps(body, separators=(",", ":"))
 
 
 def markdown(fresh: list[Spot], said: Review, touched: str, commit: str = "") -> str:
     """A review: her words, then each rule that fired once (her note on it,
-    else its why) with its places, her opinion set apart, and what the
-    change touches folded away; headed by the commit it reviewed."""
+    else its why) with every place, her opinion set apart, and what the
+    change touches folded away; headed by the commit it reviewed. Past
+    GitHub's limit, each part lists fewer, counting the rest where they
+    are."""
+    each = len(fresh)
+    text = _markdown(fresh, said, touched, commit, each)
+    while len(text) > MOST_CHARS and each > 1:
+        each //= 2
+        text = _markdown(fresh, said, touched, commit, each)
+    return text
+
+
+def _markdown(
+    fresh: list[Spot], said: Review, touched: str, commit: str, each: int
+) -> str:
     notes = {n.check: n.said for n in said.notes}
     title = (
         f"### Illiana's review of `{commit[:7]}`" if commit else "### Illiana's review"
     )
     head = [MARKER, f"<!-- spots:{fingerprint(fresh, touched)} -->", title]
     parts = [*head, "", _verdict(fresh), "", said.summary, ""]
-    for check, spots in _by_rule(fresh).items():
+    for check, spots in _by(fresh, lambda s: s.finding.check).items():
         found = spots[0].finding
         weight = "blocks" if found.blocking else "advisory"
         parts += [
@@ -130,7 +152,7 @@ def markdown(fresh: list[Spot], said: Review, touched: str, commit: str = "") ->
             "",
             notes.get(check) or found.why,
             "",
-            _places(spots),
+            _places(spots, each),
             "",
         ]
     if said.opinion:
@@ -148,17 +170,28 @@ def _verdict(fresh: list[Spot]) -> str:
     return "**Clear.** Nothing new here holds the change."
 
 
-def _by_rule(fresh: list[Spot]) -> dict[str, list[Spot]]:
-    """The findings by the rule that fired, in the order each first came."""
+def _by(spots: list[Spot], key: Callable[[Spot], str]) -> dict[str, list[Spot]]:
+    """``spots`` grouped by ``key`` (the rule that fired, the part), in the
+    order each first came."""
     found: dict[str, list[Spot]] = {}
-    for spot in fresh:
-        found.setdefault(spot.finding.check, []).append(spot)
+    for spot in spots:
+        found.setdefault(key(spot), []).append(spot)
     return found
 
 
-def _places(spots: list[Spot]) -> str:
-    """A rule's places, folded under their count past ``SHOWN``."""
-    listed = "\n".join(f"- `{s.at}`" for s in spots)
+def _places(spots: list[Spot], each: int) -> str:
+    """A rule's places by part, each part with its count where there are
+    several, at most ``each`` a part and the rest counted there; folded
+    under their count past ``SHOWN``."""
+    parts = _by(spots, lambda s: s.finding.subject)
+    blocks = []
+    for part, found in parts.items():
+        lines = [f"- `{s.at}`" for s in found[:each]]
+        if (more := len(found) - each) > 0:
+            lines.append(f"- _{more} more here; `patterns check` lists them all_")
+        head = [f"**`{part}`** · {len(found)}", ""] if len(parts) > 1 else []
+        blocks.append("\n".join([*head, *lines]))
+    listed = "\n\n".join(blocks)
     if len(spots) <= SHOWN:
         return listed
     return f"<details><summary>{len(spots)} places</summary>\n\n{listed}\n\n</details>"
@@ -188,15 +221,12 @@ async def review(
     if not fresh:
         now = markdown([], Review(summary=SEAL), touched, commit)
     else:
-        shown = fresh[:MOST_LISTED]
         try:
-            said = await _ask(facts(shown, touched))
+            said = await _ask(facts(fresh, touched))
         except Exception:
             logger.exception("Illiana's review write-up failed; the rules speak")
             said = Review(summary=UNSAID)
-        now = markdown(shown, said, touched, commit)
-        if more := len(fresh) - len(shown):
-            now += f"\n_... and {more} more; `patterns check` lists them all._\n"
+        now = markdown(fresh, said, touched, commit)
     return _with_earlier(now, previous)
 
 

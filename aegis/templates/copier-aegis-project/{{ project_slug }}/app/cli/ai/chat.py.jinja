@@ -9,12 +9,10 @@ from app.cli.ai.shared import (
 )
 from app.cli.ai.streaming import _send_message
 from app.i18n import lazy_t, t
+from app.services.ai.service import MessageRole
 
 from ...core.config import settings
 from ...core.log import suppress_logs
-from ...services.ai.models import (
-    MessageRole,
-)
 
 
 @app.command(help=lazy_t("ai.help_chat"))

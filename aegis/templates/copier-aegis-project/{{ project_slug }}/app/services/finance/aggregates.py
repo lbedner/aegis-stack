@@ -7,7 +7,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.aggregates import Aggregate
 from app.core.figures import FIGURES
-from app.services.finance.domains.ledger.categories import spending_by_category
+from app.services.finance.service import spending_by_category
 
 
 class Spend(BaseModel):

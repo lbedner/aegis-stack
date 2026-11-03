@@ -28,8 +28,7 @@ async def voice(
 ) -> None:
     from pathlib import Path
 
-    from app.services.ai.domains.voice import AudioFormat, AudioInput
-    from app.services.ai.service import AIService
+    from app.services.ai.service import AIService, AudioFormat, AudioInput
 
     async def run_voice() -> None:
         try:

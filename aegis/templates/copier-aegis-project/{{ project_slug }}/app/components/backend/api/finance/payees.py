@@ -49,10 +49,7 @@ async def list_merchants(
     """The owner's payees (plus any global seeds), for the assign picker
     and the payee directory. Carries usage so the directory can rank by
     weight; the picker just ignores those fields."""
-    from app.services.finance.domains.ledger.merchant_icon import (
-        domain_from_website,
-        icons_for_names,
-    )
+    from app.services.finance.service import domain_from_website, icons_for_names
 
     rows = await service.list_merchants(owner_user_id=owner_user_id)
     usage = await service.merchant_usage(

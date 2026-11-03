@@ -34,7 +34,7 @@ async def _preview_payload(db, plan: imports.ImportPlan) -> ImportPreviewRespons
     person deciding whether to press Import)."""
     from sqlmodel import select
 
-    from app.services.finance.models import FinanceAccount, FinanceCategory
+    from app.services.finance.service import FinanceAccount, FinanceCategory
 
     if plan.identical_batch_id is not None:
         return ImportPreviewResponse(
@@ -180,7 +180,7 @@ async def preview_declare_recurring(
     surprises unless shown first, and the proposed name is only editable
     if there is somewhere to edit it.
     """
-    from app.services.finance.domains.detection import plan_recurring
+    from app.services.finance.service import plan_recurring
 
     plan = await plan_recurring(
         service.db,
@@ -248,7 +248,7 @@ async def declare_recurring_transactions(
     reconciles at the same time, folding whatever else already described
     the same bill into one stream (see ``declare_recurring``).
     """
-    from app.services.finance.domains.detection import declare_recurring
+    from app.services.finance.service import declare_recurring
 
     if not body.transaction_ids:
         raise HTTPException(

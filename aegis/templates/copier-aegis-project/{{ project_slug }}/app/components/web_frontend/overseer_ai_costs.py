@@ -14,9 +14,13 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 from app.core.time import today
-from app.services.ai.domains.llm import queries as llm_queries
-from app.services.ai.domains.spend import queries
-from app.services.ai.domains.spend.schemas import ActionSpend, ModelSpend, SpendLedger
+from app.services.ai.service import (
+    ActionSpend,
+    ModelSpend,
+    SpendLedger,
+    spend_queries,
+    usage_by_model,
+)
 
 from . import overseer_ai_costs_views as views
 from .chat_surface import HAS_VOICE
@@ -39,29 +43,27 @@ MONTHS_SHOWN = 12
 
 async def ledger(db: Any, start: datetime, end: datetime) -> SpendLedger:
     """Every figure a report needs for ``[start, end)``, on one session."""
-    models = await llm_queries.usage_by_model(
-        db, user_id=None, start_time=start, end_time=end
-    )
+    models = await usage_by_model(db, user_id=None, start_time=start, end_time=end)
     return SpendLedger(
-        daily=await queries.daily_spend(db, start, end),
-        actions=await queries.spend_by_action(db, start, end),
-        users=await queries.spenders(db, start, end),
+        daily=await spend_queries.daily_spend(db, start, end),
+        actions=await spend_queries.spend_by_action(db, start, end),
+        users=await spend_queries.spenders(db, start, end),
         models=[
             ModelSpend(model_id=m.model_id, title=m.title, cost=float(m.cost))
             for m in models
         ],
-        voice=await queries.voice_spend(db, start, end) if HAS_VOICE else {},
+        voice=await spend_queries.voice_spend(db, start, end) if HAS_VOICE else {},
     )
 
 
 async def first_call(db: Any) -> datetime | None:
-    return await queries.first_call(db)
+    return await spend_queries.first_call(db)
 
 
 async def user_spend(
     db: Any, start: datetime, end: datetime
 ) -> dict[str | None, dict[str, ActionSpend]]:
-    return await queries.spend_by_user_action(db, start, end)
+    return await spend_queries.spend_by_user_action(db, start, end)
 
 
 # --- Month and tab -------------------------------------------------------------

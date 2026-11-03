@@ -10,13 +10,14 @@ the documents service (see ``overseer_sections``).
 from typing import Any
 
 from app.core.formatting import format_bytes, format_relative_time
-from app.services.documents import queries
-from app.services.documents.domains.extraction.activity import (
+from app.services.documents.service import (
+    DOCUMENT_KINDS,
+    Document,
+    DocumentService,
     activity_rows,
     document_id_of,
+    pages_for,
 )
-from app.services.documents.models import DOCUMENT_KINDS, Document
-from app.services.documents.service import DocumentService
 from app.services.system.jobs import get_job_runner
 from app.services.system.models import ComponentStatus
 
@@ -126,7 +127,7 @@ async def document_context(
     document = await service.get(document_id)
     if document is None or document.id is None:
         return None
-    pages = await queries.pages_for(service.db, document.id)
+    pages = await pages_for(service.db, document.id)
     base = f"{PARTIALS}/{document.id}"
     return {
         "document": document,

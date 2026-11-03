@@ -1030,8 +1030,11 @@ document.addEventListener('mouseout', (event) => {
   delete root.dataset.hover;
   applyMapFocus(root);
 });
-document.body.addEventListener('htmx:load', () => {
-  applyMapFocus(document.getElementById('overview-stack'));
-});
+// On the swap itself, before the frame paints: ``htmx:load`` waits out the
+// settle delay, so a live frame showed its dimmed nodes lit, then faded
+// them back. The page's first load still needs its own.
+const refocus = () => applyMapFocus(document.getElementById('overview-stack'));
+document.body.addEventListener('htmx:afterSwap', refocus);
+document.body.addEventListener('htmx:load', refocus);
 
 if (typeof module !== 'undefined') module.exports = { revealTab, placeDropdown, closesDropdown, outsideClick, dismiss, navigates, markCurrent, spanned, inView, splitMatches, mapFocus, pathFocus, sourceColumn, kept, volumeOf };

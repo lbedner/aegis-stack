@@ -15,14 +15,15 @@ from pydantic import BaseModel
 from sqlmodel import Session
 
 from app.core.db import engine
-from app.services.ai.domains.llm.etl import CatalogStats, get_catalog_stats
-from app.services.ai.domains.llm.llm_service import (
+from app.services.ai.service import (
+    CatalogStats,
     CurrentLLMConfig,
     LLMListResult,
     ModalityListResult,
     SetModelResult,
     VendorListResult,
     clear_active_model,
+    get_catalog_stats,
     get_current_config,
     list_modalities,
     list_models,
@@ -73,7 +74,7 @@ class VendorResponse(BaseModel):
 async def _usable_vendor_names() -> set[str]:
     """Vendors whose models the running install can answer with."""
     from app.core.config import settings
-    from app.services.ai.domains.llm.provider_management import usable_providers
+    from app.services.ai.service import usable_providers
 
     return set(await usable_providers(settings))
 
@@ -82,7 +83,7 @@ async def _vendor_icons(names: list[str]) -> dict[str, str]:
     """``{vendor: base64 png}`` from the catalog's org marks (filled at
     sync time from each brand's homepage)."""
     from app.core.db import get_async_session
-    from app.services.ai.domains.llm.queries import org_icons
+    from app.services.ai.service import org_icons
 
     async with get_async_session() as session:
         return await org_icons(session, names)

@@ -9,6 +9,16 @@
 
 ### Added
 
+- **A service's own ways in go through its facade, and the check says
+  so.** A new gated parts rule, **Its own ways in through its facade**
+  (`parts.own-facade`), flags its router, a tool or job, the CLI or a page
+  importing its own `domains/`, `queries` or `models`. `patterns check`,
+  `ontology node` and Illiana's review report it, and the map's red
+  "skips the facade" line is now that rule's finding rather than its own
+  guess from lanes. Every service now follows it: each one's callers
+  import through its facade, which offers what they used (finance's
+  `recompute_snapshots`, ai's voice catalog, insights' `Project`, and
+  so on). (#1933)
 - **A live call on a mount bound per request.** A call now runs its
   mount's `bind`, the signed-in owner and the mount's `gate`, as a typed
   turn does, so an app's chat for its own users can take calls: the call
@@ -33,6 +43,13 @@
 - **`GET /api/v1/meetings/{id}` returns the meeting in full** (the
   `MeetingRecord` the admin's read returns: its notes and every line), not
   the bare row; the row is now under `meeting`. (#1932)
+
+### Fixed
+
+- **The map no longer flickers while a node is hovered.** Each live frame
+  swapped its nodes in lit and dimmed them only after htmx's settle delay,
+  so the nodes a hover dims flashed back every frame; they now dim as the
+  frame is swapped in, before it paints. (#1933)
 
 ## [0.17.0] - 2026-10-28
 

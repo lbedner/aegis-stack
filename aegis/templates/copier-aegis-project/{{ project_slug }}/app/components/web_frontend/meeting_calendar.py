@@ -18,14 +18,14 @@ from zoneinfo import ZoneInfo
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.time import WEEKDAYS, month_days, shift_month
-from app.services.meetings.domains.calendar.entries import (
+from app.services.meetings.service import (
     CANCELLED,
     DAY,
+    BotAccount,
     CalendarEntry,
     chosen,
     entries_between,
 )
-from app.services.meetings.models import BotAccount
 
 from .meeting_status import state_cell
 from .rendering import with_query

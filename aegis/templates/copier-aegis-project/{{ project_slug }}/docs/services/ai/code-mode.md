@@ -17,7 +17,7 @@ Code mode is a per-agent grant stored on the agent row, exactly like tool
 attachments:
 
 ```python
-from app.services.ai.domains.chat.agent_registry import update_agent
+from app.services.ai.service import update_agent
 
 await update_agent("assistant", {"code_mode": True})
 ```

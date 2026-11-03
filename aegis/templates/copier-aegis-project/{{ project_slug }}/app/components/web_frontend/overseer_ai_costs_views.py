@@ -16,7 +16,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from app.services.ai.domains.spend.schemas import ActionSpend, ModelSpend, SpendLedger
+from app.services.ai.service import ActionSpend, ModelSpend, SpendLedger
 
 from .overseer_ai_common import dollars
 from .rendering import chart, ranked

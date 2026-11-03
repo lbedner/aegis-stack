@@ -18,11 +18,6 @@ from pydantic import BaseModel
 
 from app.components.backend.api.finance.base import _NOT_FOUND
 from app.services.finance.deps import get_finance_service
-from app.services.finance.domains.detection.insights.commitments import (
-    commitment_rollup,
-    stream_staleness,
-)
-from app.services.finance.models import FinanceRecurringStream, FinanceTransaction
 from app.services.finance.schemas import (
     ProjectionResponse,
     RecurringAttach,
@@ -37,7 +32,13 @@ from app.services.finance.schemas import (
     TransactionListResponse,
     TransactionResponse,
 )
-from app.services.finance.service import FinanceService
+from app.services.finance.service import (
+    FinanceRecurringStream,
+    FinanceService,
+    FinanceTransaction,
+    commitment_rollup,
+    stream_staleness,
+)
 from app.services.finance.utils import current_date
 from app.services.shared.deps import get_owner_user_id
 
@@ -80,10 +81,7 @@ async def hydrate_streams(
     a single-row caller lets it be looked up here.
     """
     from app.core.config import settings
-    from app.services.finance.domains.ledger.merchant_icon import (
-        domain_from_website,
-        icons_for_names,
-    )
+    from app.services.finance.service import domain_from_website, icons_for_names
 
     if payment_ids is None:
         transfer_ids = await service.transfer_stream_ids([s.id for s in streams])
@@ -175,10 +173,7 @@ async def rescan_recurring(
     sync/import, which is a long time to wait to see your own naming take
     effect.
     """
-    from app.services.finance.domains.detection import (
-        detect_recurring,
-        promote_curated_streams,
-    )
+    from app.services.finance.service import detect_recurring, promote_curated_streams
 
     result = await detect_recurring(service.db, owner_user_id=owner_user_id)
     await promote_curated_streams(service.db, owner_user_id=owner_user_id)

@@ -7,7 +7,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from app.core import ranges
 from app.core.aggregates import Aggregate
 from app.core.figures import FIGURES
-from app.services.auth.domains.sessions.queries import by_day
+from app.services.auth.service import by_day
 
 
 class SignIns(BaseModel):

@@ -2,21 +2,20 @@
 on a project without auth reads every meeting)."""
 
 from collections.abc import Awaitable, Callable
-from datetime import datetime
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING
 from urllib.parse import urlsplit
 
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.concurrency import background
 from app.core.discovery import optional
-from app.core.formatting import format_clock
 from app.services.meetings import queries
 from app.services.meetings.domains.bot.row import transition
+from app.services.meetings.domains.labels import call_length, status_label
 from app.services.meetings.domains.moments import service as moments
 from app.services.meetings.domains.moments import tidy
 from app.services.meetings.domains.notes import queries as notes_queries
-from app.services.meetings.domains.notes.service import in_parts, notes_of, whose
+from app.services.meetings.domains.notes.service import notes_of
 from app.services.meetings.domains.people import participants
 from app.services.meetings.domains.people import queries as people_queries
 from app.services.meetings.domains.people.heard import heard_line, voices
@@ -38,7 +37,6 @@ from app.services.meetings.models import (
     MeetingStatus,
     MeetingTheme,
     MeetingThemeLine,
-    Notes,
     Platform,
     TranscriptLine,
     TranscriptRow,
@@ -46,21 +44,56 @@ from app.services.meetings.models import (
 from app.services.shared import facade
 
 if TYPE_CHECKING:
-    # What callers outside reach through here, each loaded when used
-    # (``app.services.shared.facade``); the agents' seeds render only
-    # with an AI that runs them.
     from app.services.meetings.domains.accounts.service import (  # noqa: F401
+        DEFAULT_AGENT,
         IMAGE_TYPES,
+        NOT_SIGNED_IN,
+        SIGNED_IN,
         SWITCHES,
+        AgentImageError,
+        AgentNameError,
+        AgentNotFoundError,
+        AgentRow,
+        Switch,
+        agent_names,
+        agents,
+        check_name,
+        clear_image,
+        keep_agent,
+        login_secret_for,
+        overview,
+        pick,
+        set_default_owner,
+        set_switch,
+    )
+    from app.services.meetings.domains.actions import runs as actions_runs  # noqa: F401
+    from app.services.meetings.domains.actions import (  # noqa: F401
+        tokens as actions_tokens,
     )
     from app.services.meetings.domains.actions.about import (  # noqa: F401
         asks_about,
         line_about,
         parts_named,
     )
-    from app.services.meetings.domains.actions.runs import fail_abandoned  # noqa: F401
+    from app.services.meetings.domains.actions.registry import (  # noqa: F401
+        Action,
+        register_action,
+    )
+    from app.services.meetings.domains.actions.runner import (  # noqa: F401
+        Runner,
+        run_forever,
+        run_once,
+    )
+{%- if include_ai and ai_backend != "memory" and ai_framework == "pydantic-ai" %}
     from app.services.meetings.domains.agents import (  # noqa: F401
         load_meetings_agent_fixtures,
+    )
+{%- endif %}
+    from app.services.meetings.domains.bot.login import (  # noqa: F401
+        LoginError,
+        capture_login,
+        find_chrome,
+        save_login,
     )
     from app.services.meetings.domains.bot.row import (  # noqa: F401
         STALE_SECONDS,
@@ -72,13 +105,51 @@ if TYPE_CHECKING:
         run_meeting,
         send_bot,
     )
-    from app.services.meetings.domains.moments.service import by_kind  # noqa: F401
+    from app.services.meetings.domains.calendar.entries import (  # noqa: F401
+        CANCELLED,
+        CANNOT_JOIN,
+        DAY,
+        MISSED,
+        MOST_DAYS,
+        UPCOMING,
+        CalendarEntry,
+        CalendarEventDetail,
+        chosen,
+        entries_between,
+        entry_of,
+        state_label,
+    )
+    from app.services.meetings.domains.calendar.owners import (  # noqa: F401
+        Owner,
+        email_of,
+        owners,
+    )
+    from app.services.meetings.domains.calendar.service import (  # noqa: F401
+        read_calendars,
+        send_due,
+    )
+    from app.services.meetings.domains.labels import (  # noqa: F401
+        note_points,
+    )
+    from app.services.meetings.domains.moments.detectors import (  # noqa: F401
+        register_detector,
+    )
+    from app.services.meetings.domains.moments.service import (  # noqa: F401
+        by_kind,
+        moments_of,
+    )
     from app.services.meetings.domains.people.heard import (  # noqa: F401
         heard_rows,
         voice,
     )
-    from app.services.meetings.domains.people.service import said_when  # noqa: F401
+    from app.services.meetings.domains.people.participants import give  # noqa: F401
+    from app.services.meetings.domains.people.service import (  # noqa: F401
+        PeopleService,
+        said_when,
+    )
     from app.services.meetings.domains.search.service import (  # noqa: F401
+        LINE_PARAM,
+        MEETING_PARAM,
         NOTHING_FOUND,
         SearchHit,
         meeting_link,
@@ -89,8 +160,27 @@ if TYPE_CHECKING:
         SeriesService,
         series_name,
     )
-    from app.services.meetings.models import MeetingSeries  # noqa: F401
-    from app.services.meetings.queries import status_platform_counts  # noqa: F401
+    from app.services.meetings.domains.threads.service import (  # noqa: F401
+        meeting_threads,
+    )
+    from app.services.meetings.models import (  # noqa: F401
+        BotAccount,
+        GuideRecord,
+        GuideRow,
+        LineAbout,
+        MeetingRunnerToken,
+        MeetingSeries,
+        MomentRecord,
+        Notes,
+        Quote,
+        SeriesRecord,
+        SeriesRow,
+        ThreadSection,
+    )
+    from app.services.meetings.queries import (  # noqa: F401
+        meetings_counts,
+        status_platform_counts,
+    )
 
 DEFAULT_BOT_NAME = "Notetaker"
 
@@ -366,40 +456,6 @@ class MeetingsService:
 def notes_writer() -> Callable[[int], Awaitable[None]] | None:
     """What writes a meeting's notes, where the stack has a model to."""
     return optional(NOTES, "write_notes")
-
-
-def status_label(status: str) -> str:
-    """A meeting's status as the pages say it: "in_call" -> "In call"."""
-    return status.replace("_", " ").capitalize()
-
-
-class NotePoint(NamedTuple):
-    """One point of a meeting's notes as they read: its part ("Summary",
-    "Action items"), whose it is and when it is due."""
-
-    part: str
-    text: str
-    who: str | None
-    due: str | None
-
-
-def note_points(notes: Notes) -> list[NotePoint]:
-    """The notes as they read: the summary, then each part's points."""
-    return [
-        NotePoint(
-            status_label(kind), item.text, whose(item), getattr(item, "due", None)
-        )
-        for kind, items in in_parts(notes)
-        for item in items
-    ]
-
-
-def call_length(joined: datetime | None, left: datetime | None) -> str | None:
-    """How long the bot was in the call, as a stopwatch reads it; None
-    until it has been in and out."""
-    if joined is None or left is None:
-        return None
-    return format_clock((left - joined).total_seconds())
 
 
 __getattr__ = facade.lazy(__name__, __file__)[0]

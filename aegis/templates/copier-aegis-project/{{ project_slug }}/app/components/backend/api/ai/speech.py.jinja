@@ -4,15 +4,11 @@ from typing import Any
 from app.core.log import logger
 from app.services.ai.service import (
     AIServiceError,
-    ProviderError,
-)
-{% if ai_voice %}
-from app.services.ai.domains.voice import (
     AudioFormat,
     AudioInput,
+    ProviderError,
     SpeechRequest,
 )
-{% endif %}
 from fastapi import (
     APIRouter,
     Depends,

@@ -4,8 +4,7 @@ the user's, in the app."""
 
 from app.core.db import get_async_session
 from app.core.tools import current_owner_user_id, register_tool
-from app.services.research.models import ResearchDay, ResearchHit
-from app.services.research.service import ResearchService
+from app.services.research.service import ResearchDay, ResearchHit, ResearchService
 
 
 async def research_search(

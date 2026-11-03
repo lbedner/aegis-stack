@@ -32,20 +32,21 @@ from app.services.meetings.deps import (
     picture_response,
     take_picture,
 )
-from app.services.meetings.domains.accounts.service import (
+from app.services.meetings.service import (
     AgentImageError,
+    GuideRecord,
+    MeetingsService,
+    PeopleService,
+    SeriesRecord,
+    SeriesService,
     Switch,
     clear_image,
+    entry_of,
+    meeting_threads,
     set_default_owner,
     set_switch,
 )
-from app.services.meetings.domains.calendar.entries import entry_of
-from app.services.meetings.domains.people.participants import give as give_away
-from app.services.meetings.domains.people.service import PeopleService
-from app.services.meetings.domains.series.service import SeriesService
-from app.services.meetings.domains.threads.service import meeting_threads
-from app.services.meetings.models import GuideRecord, SeriesRecord
-from app.services.meetings.service import MeetingsService
+from app.services.meetings.service import give as give_away
 
 PREFIX = overseer_meetings.PARTIALS
 router = APIRouter(prefix=PREFIX)

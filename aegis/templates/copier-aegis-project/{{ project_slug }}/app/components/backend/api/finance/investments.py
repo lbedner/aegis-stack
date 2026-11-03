@@ -24,7 +24,6 @@ from app.components.backend.api.finance.base import (
     _NOT_FOUND,
 )
 from app.services.finance.deps import get_finance_service
-from app.services.finance.domains.investments.securities import market_value_cents
 from app.services.finance.schemas import (
     HoldingCreate,
     HoldingListResponse,
@@ -37,7 +36,7 @@ from app.services.finance.schemas import (
     TradeListResponse,
     TradeResponse,
 )
-from app.services.finance.service import FinanceService
+from app.services.finance.service import FinanceService, market_value_cents
 from app.services.finance.utils import current_date
 from app.services.shared.deps import get_owner_user_id
 
@@ -103,7 +102,7 @@ async def _read_investment_ledger(file: UploadFile, profile: str) -> list:
     """Shared parse step for the investment preview and commit endpoints:
     profile gate, size gate, then parse - with each failure mapped to the
     HTTP status the register import uses for the same class of problem."""
-    from app.services.finance.domains.investments.optum import (
+    from app.services.finance.service import (
         UnknownActivityTypeError,
         parse_optum_settled_transactions,
     )
@@ -141,7 +140,7 @@ async def preview_import_investments(
     on this, so the account choice is made looking at real numbers.
     """
     activities = await _read_investment_ledger(file, profile)
-    from app.services.finance.domains.investments.activity import replay_positions
+    from app.services.finance.service import replay_positions
 
     # Value each position at its security's last ledger price - the same
     # mark the loader will store, and the freshest one the file itself
@@ -189,9 +188,7 @@ async def import_investments(
     manual brokerage account on the spot - the same courtesy the register
     import extends when an OFX file names an account that doesn't exist yet.
     """
-    from app.services.finance.domains.investments.loader import (
-        import_investment_activities,
-    )
+    from app.services.finance.service import import_investment_activities
 
     if account_id is None and not (account_name or "").strip():
         raise HTTPException(
@@ -293,10 +290,7 @@ async def _attach_holding_icons(db: AsyncSession, items: list[HoldingResponse]) 
     match; an unrecognized family is left ``None`` (initial-letter
     fallback) rather than risking a wrong guessed logo.
     """
-    from app.services.finance.domains.ledger.merchant_icon import (
-        fund_family_domain,
-        icons_for_names,
-    )
+    from app.services.finance.service import fund_family_domain, icons_for_names
 
     domains = {
         item.name: domain

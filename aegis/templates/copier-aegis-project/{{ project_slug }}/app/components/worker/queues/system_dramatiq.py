@@ -56,7 +56,7 @@ async def extract_document_task(
     The documents service is imported lazily, so the worker boots
     without loading it.
     """
-    from app.services.documents.domains.extraction.jobs import run_extraction_job
+    from app.services.documents.service import run_extraction_job
 
     return await run_extraction_job(job_id, document_id, owner_user_id, force)
 

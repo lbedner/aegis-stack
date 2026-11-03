@@ -15,7 +15,6 @@ from fastapi import (
 
 from app.components.backend.api.finance.base import _NOT_FOUND
 from app.services.finance.deps import get_finance_service
-from app.services.finance.models import FinanceTransactionSplit
 from app.services.finance.schemas import (
     CategorySuggestionListResponse,
     SimilarTransaction,
@@ -35,7 +34,7 @@ from app.services.finance.schemas import (
     TransactionSplitRequest,
     UnsplitResponse,
 )
-from app.services.finance.service import FinanceService
+from app.services.finance.service import FinanceService, FinanceTransactionSplit
 from app.services.shared.deps import get_owner_user_id
 
 router = APIRouter()
@@ -108,10 +107,7 @@ async def list_transactions(
     payees = await service.merchant_names(
         {t.merchant_id for t in transactions if t.merchant_id is not None}
     )
-    from app.services.finance.domains.ledger.merchant_icon import (
-        domain_from_website,
-        icons_for_names,
-    )
+    from app.services.finance.service import domain_from_website, icons_for_names
 
     websites = await service.merchant_websites(
         {t.merchant_id for t in transactions if t.merchant_id is not None}

@@ -21,7 +21,6 @@ from fastapi import (
 
 from app.components.backend.api.finance.base import _NOT_FOUND
 from app.services.finance.deps import get_finance_service
-from app.services.finance.domains.planning.allocation import MonthlyFigures
 from app.services.finance.schemas import (
     GoalContribute,
     GoalCreate,
@@ -30,7 +29,7 @@ from app.services.finance.schemas import (
     GoalTargetPreview,
     GoalUpdate,
 )
-from app.services.finance.service import FinanceService
+from app.services.finance.service import FinanceService, MonthlyFigures
 from app.services.finance.utils import current_date
 from app.services.shared.deps import get_owner_user_id
 
@@ -46,7 +45,7 @@ router = APIRouter()
 def _probe_goal_rule(body: GoalCreate) -> None:
     """Fail a bad rule combination (percent without bps) BEFORE any account
     is created - the metadata contract's own validator is the authority."""
-    from app.services.finance.domains.planning.goals import set_goal_metadata
+    from app.services.finance.service import set_goal_metadata
 
     set_goal_metadata(
         None,
@@ -78,7 +77,7 @@ async def _new_goal_target(
     nothing to resolve against, so it is refused with the reason rather
     than stored as a target of zero.
     """
-    from app.services.finance.domains.planning.allocation import target_for_rule
+    from app.services.finance.service import target_for_rule
 
     if body.target_rule == "fixed":
         if body.target_amount is None:
@@ -121,13 +120,13 @@ async def goal_response(
     rules depend on the other goals) - a caller without one in hand lets
     this fetch it. ``figures`` is what a relative target resolves against;
     the listing fetches it once for every row."""
-    from app.services.finance.domains.planning.allocation import resolved_meta
-    from app.services.finance.domains.planning.goals import (
+    from app.services.finance.service import (
         GOAL_ACCOUNT_TYPE,
         goal_auto_contribute,
         goal_eta,
         goal_metadata,
         goal_progress,
+        resolved_meta,
     )
 
     stored = goal_metadata(account.metadata_)
@@ -192,7 +191,7 @@ async def preview_goal_target(
     """The dialog asks the server what a rule resolves to, rather than
     doing the arithmetic itself - the preview and the saved goal come out
     of the same function, so they cannot disagree."""
-    from app.services.finance.domains.planning.allocation import target_for_rule
+    from app.services.finance.service import target_for_rule
 
     scope = scope or []
     figures = await service.goal_month_figures(
@@ -289,7 +288,7 @@ async def create_goal(
             target_scope=body.target_scope,
         )
     if body.auto_contribute:
-        from app.services.finance.domains.planning.goals import set_auto_contribute
+        from app.services.finance.service import set_auto_contribute
 
         account.metadata_ = set_auto_contribute(account.metadata_, True)
         service.db.add(account)
@@ -305,7 +304,7 @@ async def update_goal(
     owner_user_id: int | None = Depends(get_owner_user_id),
 ) -> GoalResponse:
     """Partial update of targets/status; unknown statuses die in the schema."""
-    from app.services.finance.domains.planning.goals import (
+    from app.services.finance.service import (
         goal_metadata,
         set_auto_contribute,
         set_goal_metadata,
@@ -327,7 +326,7 @@ async def update_goal(
         body.target_amount if body.target_amount is not None else meta.target_amount
     )
     if rule != "fixed":
-        from app.services.finance.domains.planning.allocation import target_for_rule
+        from app.services.finance.service import target_for_rule
 
         figures = await service.goal_month_figures(
             owner_user_id=owner_user_id, today=current_date()
@@ -380,10 +379,7 @@ async def delete_goal(
 ) -> None:
     """Virtual goal: soft-delete the account. Linked goal: unflag - the
     real account survives, untouched."""
-    from app.services.finance.domains.planning.goals import (
-        GOAL_ACCOUNT_TYPE,
-        goal_metadata,
-    )
+    from app.services.finance.service import GOAL_ACCOUNT_TYPE, goal_metadata
 
     account = await service.get_account(account_id, owner_user_id=owner_user_id)
     if account is None or goal_metadata(account.metadata_) is None:
@@ -403,7 +399,7 @@ async def contribute_to_goal(
 ) -> GoalResponse:
     """Assign money to a virtual goal. Linked goals refuse: their
     contributions are their own real transfers."""
-    from app.services.finance.domains.planning.goals import goal_metadata
+    from app.services.finance.service import goal_metadata
 
     account = await service.get_account(account_id, owner_user_id=owner_user_id)
     if account is None or goal_metadata(account.metadata_) is None:

@@ -159,19 +159,15 @@ def test_a_piece_says_what_its_files_should_fix(
     assert into and all(line.get("data-tone") != "error" for line in into)
 
 
-def test_a_way_in_running_its_adapters_is_not_a_shortcut() -> None:
-    """Jobs run the providers' syncs and the collectors: a way in using
-    the service's adapters is its work, not a step past the facade; and
-    adapters sit with the domains, so reading what those know is no step
-    back (one-way use within a lane is a hint, not a line)."""
-    lane = {
-        "jobs": "entry",
-        "facade": "facade",
-        "adapters": service_pieces.LANE_OF["Adapters"],
+def test_red_past_the_facade_is_what_the_parts_rule_finds() -> None:
+    """The map draws the ``own-facade`` rule's findings, not a guess from
+    lanes: a tool into a domain is red; a way in to data it passes is not."""
+    lane = {"tools": "entry", "tags": "domains", "router": "entry", "queries": "data"}
+    links = [("tools", "tags"), ("router", "queries")]
+    tones = overseer_zoom._tones(links, lane, {k: k for k in lane}, {("tools", "tags")})
+    assert tones == {
+        ("tools", "tags"): {"tone": "error", "why": "tools skips the facade into tags"}
     }
-    links = [("jobs", "adapters"), ("facade", "adapters")]
-    assert overseer_zoom._tones(links, lane, {k: k for k in lane}) == {}
-    assert service_pieces.LANE_OF["Adapters"] == "domains"
 
 
 def test_a_service_reads_left_to_right_in_lanes() -> None:

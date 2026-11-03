@@ -10,7 +10,7 @@ service import from here (``__all__``), never from ``domains``.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import ColumnElement, case, delete, func, or_
 from sqlmodel import col, select
@@ -35,7 +35,12 @@ from app.services.research.models import (
     ResearchMatch,
     ResearchWatch,
 )
+from app.services.shared import facade
 from app.services.shared.queries import owner_filters
+
+if TYPE_CHECKING:
+    from app.services.research.models import ResearchDay, ResearchHit  # noqa: F401
+    from app.services.research.queries import item_counts  # noqa: F401
 
 # The most one search returns.
 MAX_RESULTS = 200
@@ -271,3 +276,6 @@ class ResearchService:
             col(ResearchItem.id).in_(found(threads_only=False)),
             col(ResearchItem.root_id).in_(found(threads_only=True)),
         )
+
+
+__getattr__ = facade.lazy(__name__, __file__)[0]

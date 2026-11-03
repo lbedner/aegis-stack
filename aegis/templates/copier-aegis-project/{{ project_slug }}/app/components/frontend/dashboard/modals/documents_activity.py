@@ -17,11 +17,7 @@ from app.components.frontend.controls.busy_bar import busy_bar
 from app.components.frontend.controls.jobs import follow_jobs
 from app.components.frontend.core.session_health import SessionLoops, page_is_connected
 from app.components.frontend.theme import AegisTheme as Theme
-from app.services.documents.domains.extraction.activity import (
-    ActivityRow,
-    activity_rows,
-    document_id_of,
-)
+from app.services.documents.service import ActivityRow, activity_rows, document_id_of
 
 from .documents_pages import API
 from .modal_sections import EmptyStatePlaceholder, status_dot

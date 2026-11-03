@@ -97,3 +97,29 @@ def test_an_index_the_database_already_has_is_still_dropped() -> None:
     op = ops.CreateIndexOp("ix_ledger_owner_again", "ledger", ["owner_user_id"])
 
     assert gen["_additive"](op, conn) is False
+
+
+def test_a_new_tables_indexes_tolerate_ones_already_there() -> None:
+    """The revision's ``create_table`` is ``if_not_exists`` because startup
+    may have built the table already (schema recovery, a plugin's
+    ``create_all``), indexes and all: an index created again killed the
+    revision before it was stamped (#1902). Under ``render_as_batch`` the
+    new table's indexes sit in a batch of their own."""
+    gen = _generator()
+    table = ops.CreateTableOp("shelf", [sa.Column("name", sa.String())])
+    index = ops.CreateIndexOp("ix_shelf_name", "shelf", ["name"])
+
+    gen["_tolerate_built_indexes"]([table, ops.ModifyTableOps("shelf", [index])])
+
+    assert index.if_not_exists is True
+
+
+def test_an_index_added_to_an_existing_table_stays_plain() -> None:
+    """Its batch may rebuild the table, and the rebuild's ``create_index``
+    takes no ``if_not_exists``."""
+    gen = _generator()
+    index = ops.CreateIndexOp("ix_ledger_id", "ledger", ["id"])
+
+    gen["_tolerate_built_indexes"]([ops.ModifyTableOps("ledger", [index])])
+
+    assert index.if_not_exists is None

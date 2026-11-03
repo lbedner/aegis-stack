@@ -13,9 +13,19 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.figures import FIGURES
 from app.services import change_queue
-from app.services.change_queue import ChangeDisplayRow, ChangeExecutor, registry
+from app.services.change_queue import (
+    ChangeDisplayRow,
+    ChangeExecutor,
+    PendingChange,
+    registry,
+)
 
 executed: list[str] = []
+# A note whose world moved after it was filed: ``describe`` refuses it with
+# the rest of the text as the reason.
+GONE = "gone: "
+# A note whose execution fails at flush, as a constraint violation does.
+BREAKS_AT_FLUSH = "breaks at flush"
 
 
 class NotePayload(BaseModel):
@@ -34,6 +44,10 @@ async def _execute(
     db: AsyncSession, payload: NotePayload, owner_user_id: int | None
 ) -> Noted:
     executed.append(payload.text)
+    if payload.text == BREAKS_AT_FLUSH:
+        # A write the database refuses: the session needs a rollback.
+        db.add(PendingChange(change_type=None, payload={}))  # type: ignore[arg-type]
+        await db.flush()
     return Noted(noted=payload.text)
 
 
@@ -41,6 +55,9 @@ async def _describe(
     db: AsyncSession, payloads: list[NotePayload], owner_user_id: int | None
 ) -> list[list[ChangeDisplayRow]]:
     # A note naming a path or an address links to it, as a card row can.
+    for p in payloads:
+        if p.text.startswith(GONE):
+            raise ValueError(p.text.removeprefix(GONE))
     return [
         [
             ChangeDisplayRow(

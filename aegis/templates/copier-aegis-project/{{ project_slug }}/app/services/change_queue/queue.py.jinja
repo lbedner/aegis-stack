@@ -191,10 +191,11 @@ async def _describe_rows(
     """Live card bodies for stored rows, in order: one ``describe`` call
     per change type and owner, however many rows share it.
 
-    Tolerant of tightened rules: validation guards the DOOR (propose); a
-    stored payload that no longer validates is exactly what
-    reject/withdraw exist to clean up, so it renders as its raw payload
-    instead of raising."""
+    Tolerant of tightened rules and a moved world: validation guards the
+    DOOR (propose); a stored payload that no longer validates, or that
+    ``describe`` now refuses (its target deleted, locked), is exactly what
+    reject/withdraw exist to clean up, so it renders why instead of
+    raising."""
     bodies: dict[int, list[ChangeDisplayRow]] = {}
     groups: dict[tuple[str, int | None], list[tuple[int, Any]]] = {}
     for index, row in enumerate(rows):
@@ -202,22 +203,46 @@ async def _describe_rows(
         try:
             model = executor.payload_model(**row.payload)
         except ValidationError:
-            bodies[index] = [
-                ChangeDisplayRow(label="Change", value=executor.title),
-                ChangeDisplayRow(
-                    label="Payload (no longer valid)", value=str(row.payload)
-                ),
-            ]
+            bodies[index] = _unusable(
+                executor.title, "Payload (no longer valid)", str(row.payload)
+            )
             continue
         groups.setdefault((row.change_type, row.owner_user_id), []).append(
             (index, model)
         )
     for (change_type, owner), members in groups.items():
-        described = await executor_for(change_type).describe(
-            db, [model for _, model in members], owner
-        )
+        models = [model for _, model in members]
+        executor = executor_for(change_type)
+        try:
+            described = await executor.describe(db, models, owner)
+        except ValueError:
+            # One refused row would take its group down: describe the
+            # group a row at a time, so only that one says why.
+            described = [
+                await _describe_alone(db, executor, model, owner) for model in models
+            ]
         bodies.update(zip((index for index, _ in members), described))
     return [bodies[index] for index in range(len(rows))]
+
+
+async def _describe_alone(
+    db: AsyncSession, executor: Any, model: Any, owner: int | None
+) -> list[ChangeDisplayRow]:
+    """One stored row's card, or why it no longer applies."""
+    try:
+        (body,) = await executor.describe(db, [model], owner)
+    except ValueError as e:
+        return _unusable(executor.title, "No longer applies", str(e))
+    return body
+
+
+def _unusable(title: str, label: str, why: str) -> list[ChangeDisplayRow]:
+    """The card of a stored row that can no longer be carried out: what it
+    was, and why not."""
+    return [
+        ChangeDisplayRow(label="Change", value=title),
+        ChangeDisplayRow(label=label, value=why),
+    ]
 
 
 async def approve(db: AsyncSession, change_id: int, *, {{ OWNER }}) -> PendingChange:
@@ -243,7 +268,10 @@ async def _approve(
     executor = executor_for(row.change_type)
     model = executor.payload_model(**row.payload)
     try:
-        result = await executor.execute(db, model, row.owner_user_id)
+        # A savepoint per row: a write that fails at flush is undone alone,
+        # never the batch's approvals before it.
+        async with db.begin_nested():
+            result = await executor.execute(db, model, row.owner_user_id)
     except Exception as e:
         # The row stays PENDING: the error is audit, the decision is
         # still the user's (reject it, or fix the world and re-approve).

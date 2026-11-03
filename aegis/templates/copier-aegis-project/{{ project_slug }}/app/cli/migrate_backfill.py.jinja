@@ -1,0 +1,105 @@
+"""What the rows already in a table get when a revision adds a required
+column to it: the model's own default, as a server default.
+
+``migrate_gen`` diffs the models against a scratch database that is empty
+by construction, while every database a revision then runs on is not.
+"""
+{% if include_database %}
+
+import json
+import os
+from typing import Any
+
+from sqlalchemy import text
+from sqlalchemy.sql.elements import TextClause
+from sqlmodel import SQLModel
+
+from alembic.operations import ops
+
+# Tables the caller empties before this revision's DDL runs, so a required
+# column with nothing to backfill is still safe to add to them. Passed in by
+# ``aegis`` from the service spec that declares the clear; empty otherwise.
+CLEARED_TABLES: set[str] = {
+    name for name in os.environ.get("AEGIS_CLEARED_TABLES", "").split(",") if name
+}
+
+
+def _literal_default(column: Any) -> TextClause | None:
+    """The model's own default, as SQL a backfill can use."""
+    arg = getattr(column.default, "arg", None) if column.default is not None else None
+    if callable(arg):
+        # ``default_factory=datetime.utcnow`` and friends: the database has
+        # its own now(), and nothing else callable can be rendered.
+        return text("CURRENT_TIMESTAMP") if _is_datetime(column) else None
+    if isinstance(arg, bool):
+        # Not 1/0: Postgres refuses an integer default on a boolean column.
+        return text("true" if arg else "false")
+    if isinstance(arg, int | float):
+        return text(str(arg))
+    if isinstance(arg, str):
+        escaped = arg.replace("'", "''")
+        return text(f"'{escaped}'")
+    return None
+
+
+def _factory_default(op: ops.AddColumnOp) -> TextClause | None:
+    """A JSON field's empty value from its ``default_factory`` (``list``,
+    ``dict``): a field given ``sa_column=`` keeps the factory on the model,
+    and SQLModel hands the Column through with no default of its own."""
+    for mapper in SQLModel._sa_registry.mappers:
+        table = mapper.local_table
+        if table.name != op.table_name or table.schema != op.schema:
+            continue
+        field = mapper.class_.model_fields.get(op.column.name)
+        factory = getattr(field, "default_factory", None)
+        if factory in (list, dict):
+            return text(f"'{json.dumps(factory())}'")
+    return None
+
+
+def model_default(op: ops.AddColumnOp) -> TextClause | None:
+    """What the model gives an added column's existing rows, as SQL: its
+    own default, else a JSON field's empty value; ``None`` when neither."""
+    default = _literal_default(op.column)
+    return default if default is not None else _factory_default(op)
+
+
+def _is_datetime(column: Any) -> bool:
+    return column.type.__class__.__name__ in {"DateTime", "TIMESTAMP"}
+
+
+def backfill_not_null(op: ops.AddColumnOp) -> None:
+    """Give a NOT NULL column something for the rows already in the table.
+
+    A column added to an EXISTING table lands on rows that predate it, and
+    SQLModel renders ``Field(default=...)`` as a Python-side default the
+    database never sees - so the column arrives NOT NULL with nothing to
+    fill it and the migration dies on the first row. The model's default is
+    the right value by definition, so it rides along as a server default.
+
+    A required column with no default at all (a foreign key, typically)
+    has no answer the models can supply: refuse here, where the message can
+    name the column, rather than inside alembic on the user's database.
+    """
+    column = op.column
+    if column.nullable or column.server_default is not None:
+        return
+    if op.table_name in CLEARED_TABLES:
+        # Emptied first, so there are no rows for the column to fail on.
+        return
+    default = model_default(op)
+    if default is None:
+        raise SystemExit(
+            f"{op.table_name}.{column.name} is NOT NULL with no default, and the "
+            "table already exists: rows that predate the column have nothing to "
+            "fill it with. Give the field a default, make it optional, or clear "
+            "the table in the service's pre_data_sql."
+        )
+    # A DefaultClause, as ``Column(server_default=...)`` would make: a bare
+    # text() here breaks the copy autogenerate takes of every column.
+    from sqlalchemy.schema import DefaultClause
+
+    DefaultClause(default)._set_parent_with_dispatch(column)
+{% else %}
+# No database component: no columns to backfill.
+{% endif %}

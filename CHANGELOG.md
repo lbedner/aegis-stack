@@ -7,6 +7,8 @@
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-11-02
+
 ### Added
 
 - **A service's own ways in go through its facade, and the check says
@@ -33,9 +35,48 @@
   tool is left in place and does nothing. The transcript tab copies the
   call as plain lines. The CLI reads them too: `meetings search` and
   `meetings series [ID]`, and `meetings show` prints the notes. (#1932)
+- **The meeting bot behaves in a room.** It answers only its meeting's
+  owner by default, and stops the moment it is told ("stop", "be quiet",
+  "never mind"), even inside a longer line. Talked over, it goes quiet
+  where the room heard it to and keeps the rest; "go on" said to it alone
+  resumes, and a new question replaces what was kept. A caption naming
+  it, replying to it or talking over it wakes it within a fraction of a
+  second. A question begun over it is asked only once said in full, and
+  it answers in a sentence unless asked for more. (#1904, #1905, #1912,
+  #1930)
+- **A context module can hold its own text for each subject.** A
+  `per_subject` module keeps a row per subject (`context_module_entry`),
+  rendered after its static text for the turn's subject, every module's
+  in one query; `set_context_entry` and `get_context_entry` write and read
+  it. (#1927)
+- **A call shows it heard you.** Between the end of your turn and the
+  first word of the answer the call bar reads working, with the status
+  line and the typing sound, and a call looks the follow-up up rather
+  than offering to. (#1928)
+- **Generated CI: Illiana reviews each pull request.** Projects get an
+  Illiana job: `patterns check --strict` on the changed files against the
+  base branch's own findings, one comment per PR (`patterns review --pr
+  N`), and a verdict that fails the job only with `ILLIANA_BLOCKS=true`.
+  (#1909)
+- **`aegis deploy-cd-env`** pushes `.env.deploy`, verbatim, as the
+  `DEPLOY_ENV` secret, and the deploy workflow writes it back before
+  deploying, so a deploy from Actions ships the production env. (#1907)
+- **Deploys from Actions are rolling** by default (a "rolling" box on
+  Run workflow; a tag push always rolls). (#1911)
+- **`S3_PUBLIC_ENDPOINT_URL`**: presigned links are signed for the
+  address a reader can reach, so "open the object" works in the dev
+  stack. Empty keeps the old behaviour. (#1898)
+- **Workers read the twin from Redis.** The webserver keeps the twin it
+  builds in Redis; a process where nothing registered (the meetings
+  worker) reads it instead of building its own, 248 to 160 MB idle.
+  (#1912)
 
 ### Changed
 
+- **Memory modules are context modules.** The table, the agent column,
+  the Overseer and Flet tabs, the CLI group, the API paths and the docs
+  say context module now; the agents revision moves the rows over, ids
+  included. Saved memory keeps its name. (#1926)
 - **Meetings search matches any of the words.** Those with more of the
   words come first, then the newest meeting, so a question asked whole
   finds the lines that answer it; every word used to have to be on one
@@ -46,10 +87,52 @@
 
 ### Fixed
 
+- **The deploy workflow runs on a GitHub runner.** It needed a global
+  `aegis` and a deploy config the checkout never had; it now runs the
+  aegis-stack the project is on (`uvx --from git+...@<ref>`) with the
+  config `deploy-cd-setup` pushed. (#1906)
+- **No duplicate-key ERROR per scheduled job on every start.** Postgres
+  logged one for each code-defined job re-added at startup; the job store
+  now checks before inserting. (#1905)
 - **The map no longer flickers while a node is hovered.** Each live frame
   swapped its nodes in lit and dimmed them only after htmx's settle delay,
   so the nodes a hover dims flashed back every frame; they now dim as the
   frame is swapped in, before it paints. (#1933)
+- **A revision applies over tables startup already built.** Startup's
+  schema recovery, or a plugin's `create_all`, can build a model's tables
+  before the revision that creates them runs; the revision skipped the
+  tables but created their indexes again and died before it was stamped
+  (`index ... already exists`, `DuplicateTable`), so every `make migrate`
+  after failed the same way. A new table's indexes are now
+  `if_not_exists` as the table is. (#1902, #1935)
+- **`aegis add` brings back an import a merged block needs.** A shared
+  file the project had edited was merged against the raw template, so an
+  import the project's own lint dropped at init (`Any` in `config.py`,
+  used only by the database block) read as the user's edit and stayed
+  dropped while the block arrived, leaving a module that does not import.
+  The template's renders are now linted as the project was before the
+  merge, by `aegis add` and `aegis update` alike. (#1901)
+- **A JSON list or dict column can be added to a table with rows.**
+  A field given `sa_column=Column(JSON, nullable=False)` and a
+  `default_factory` stopped `migrate_gen` with "NOT NULL with no
+  default"; its rows are now backfilled with `[]` or `{}`. `make
+  migrate-fix` backfills the same way, so it also covers JSON fields, a
+  default with a quote in it, and an existing server default, all of which
+  wrote a broken revision before. A required boolean added to a Postgres
+  table is backfilled with `true`/`false`, not `1`/`0`, which Postgres
+  refuses. (#1925)
+- **A pending change whose target moved says why, and can still be
+  rejected.** A card `describe` now refuses (its post deleted, its target
+  locked) took its whole group down: the pending list errored, the card
+  could not be rejected or withdrawn, and "Approve all" approved nothing.
+  It now reads "No longer applies" with the reason. One approval that
+  fails at flush is undone alone, in its own savepoint, instead of
+  rolling back the batch's others. (#1913)
+- **A button cannot be given two types.** `action()`,
+  `primary_button()` and `menu_item()` write the button's `type` themselves, so one passed
+  in `attrs` was a second attribute the browser ignored: a submit button
+  that silently never submitted. They now refuse it, naming the call.
+  (#1903)
 
 ## [0.17.0] - 2026-10-28
 

@@ -416,7 +416,7 @@
    under the label, what choosing it costs. #}
 {% macro menu_item(label, attrs="", danger=False, hint=None, url=None) %}
 {%- set tag = "a" if url else "button" %}
-<li><{{ tag }} {% if url %}href="{{ url }}"{% else %}type="button"{% endif %} {{ attrs|safe }}
+<li><{{ tag }} {% if url %}href="{{ url }}" {{ attrs|safe }}{% else %}type="button" {{ attrs|button_attrs|safe }}{% endif %}
             class="block w-full text-left px-3 py-1.5 text-sm {{ 'text-error' if danger else 'text-aegis-text' }} hover:bg-aegis-border/30 rounded transition-colors">{{ label }}{% if hint %}<span data-hint class="block text-xs text-aegis-muted">{{ hint }}</span>{% endif %}</{{ tag }}></li>
 {% endmacro %}
 

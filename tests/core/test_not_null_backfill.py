@@ -9,6 +9,7 @@ and needs the network, so it never runs on a pull request.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -22,29 +23,34 @@ from aegis.core.migration_generator import _prepend_to_upgrade
 PROJECT_SLUG_PLACEHOLDER = "{{ project_slug }}"
 
 
-def _generator_module() -> Any:
-    """The project's ``migrate_gen``, rendered and executed in isolation.
-
-    Rendered rather than imported: the file ships as a template, and the
-    logic under test only exists once Jinja has run.
-    """
+def _render(module: str) -> str:
     env = Environment(loader=FileSystemLoader(str(get_template_path())))
-    source = env.get_template(
-        f"{PROJECT_SLUG_PLACEHOLDER}/app/cli/migrate_gen.py.jinja"
+    return env.get_template(
+        f"{PROJECT_SLUG_PLACEHOLDER}/app/cli/{module}.py.jinja"
     ).render({**get_copier_defaults(), "include_database": True})
-    # The module imports the project's own registry at import time, which
-    # does not exist here, so only the pure functions are taken: everything
-    # under test operates on alembic ops and needs no project.
-    start = source.index("CLEARED_TABLES")
-    end = source.index("def _additive(")
+
+
+def _generator_module() -> Any:
+    """The project's ``migrate_backfill`` and ``migrate_gen._additive``,
+    rendered and executed in isolation.
+
+    Rendered rather than imported: the files ship as templates, and the
+    logic under test only exists once Jinja has run. Both import the
+    project (its models, its registry), which does not exist here, so only
+    the pure functions are taken: everything under test operates on
+    alembic ops and needs no project.
+    """
+    backfill = _render("migrate_backfill")
     namespace: dict[str, Any] = {
         "Any": Any,
         "text": sa.text,
         "os": __import__("os"),
         "ops": ops,
+        # No project models here, so a JSON field's factory is never found.
+        "SQLModel": SimpleNamespace(_sa_registry=SimpleNamespace(mappers=[])),
     }
-    exec(source[start:end], namespace)  # noqa: S102
-    exec(_additive_source(source), namespace)  # noqa: S102
+    exec(backfill[backfill.index("CLEARED_TABLES") :], namespace)  # noqa: S102
+    exec(_additive_source(_render("migrate_gen")), namespace)  # noqa: S102
     return namespace
 
 
@@ -61,13 +67,13 @@ def _add_column(
 
 
 class TestBackfillingAnAddedColumn:
-    """``_backfill_not_null``: what the rows that predate the column get."""
+    """``backfill_not_null``: what the rows that predate the column get."""
 
     def test_the_models_default_becomes_a_server_default(self) -> None:
         gen = _generator_module()
         column = sa.Column("enabled", sa.Boolean(), nullable=False, default=True)
 
-        gen["_backfill_not_null"](_add_column(column))
+        gen["backfill_not_null"](_add_column(column))
 
         # Without this the column arrives NOT NULL with nothing to fill it:
         # SQLModel's default is Python-side and the database never sees it.
@@ -81,17 +87,28 @@ class TestBackfillingAnAddedColumn:
         gen = _generator_module()
         column = sa.Column("mode", sa.String(32), nullable=False, default="chat")
 
-        gen["_backfill_not_null"](_add_column(column))
+        gen["backfill_not_null"](_add_column(column))
 
         default = column._copy().server_default
         assert isinstance(default, sa.DefaultClause)
         assert str(default.arg) == "'chat'"
 
+    def test_a_boolean_default_is_a_boolean_literal(self) -> None:
+        """Postgres refuses ``DEFAULT 1`` on a boolean column ("default
+        expression is of type integer"); ``true`` reads on both engines."""
+        gen = _generator_module()
+        column = sa.Column("enabled", sa.Boolean(), nullable=False, default=True)
+
+        gen["backfill_not_null"](_add_column(column))
+
+        assert isinstance(column.server_default, sa.DefaultClause)
+        assert str(column.server_default.arg) == "true"
+
     def test_a_string_default_is_quoted_and_escaped(self) -> None:
         gen = _generator_module()
         column = sa.Column("label", sa.String(), nullable=False, default="it's")
 
-        gen["_backfill_not_null"](_add_column(column))
+        gen["backfill_not_null"](_add_column(column))
 
         assert isinstance(column.server_default, sa.DefaultClause)
         assert str(column.server_default.arg) == "'it''s'"
@@ -100,7 +117,7 @@ class TestBackfillingAnAddedColumn:
         gen = _generator_module()
         column = sa.Column("note", sa.String(), nullable=True)
 
-        gen["_backfill_not_null"](_add_column(column))
+        gen["backfill_not_null"](_add_column(column))
 
         assert column.server_default is None
 
@@ -111,7 +128,7 @@ class TestBackfillingAnAddedColumn:
         column = sa.Column("org_id", sa.Integer(), nullable=False)
 
         with pytest.raises(SystemExit) as caught:
-            gen["_backfill_not_null"](_add_column(column))
+            gen["backfill_not_null"](_add_column(column))
 
         assert "llm_deployment.org_id" in str(caught.value)
 
@@ -121,7 +138,7 @@ class TestBackfillingAnAddedColumn:
         gen["CLEARED_TABLES"].add("llm_deployment")
         column = sa.Column("org_id", sa.Integer(), nullable=False)
 
-        gen["_backfill_not_null"](_add_column(column))
+        gen["backfill_not_null"](_add_column(column))
 
         assert column.server_default is None
 

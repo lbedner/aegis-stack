@@ -320,3 +320,29 @@ def test_a_primary_button_is_as_tall_as_an_action() -> None:
         return {c for c in classes if c.startswith(("text-xs", "text-sm", "py-", "px-"))}
 
     assert size(save) == size(read)
+
+
+class TestButtonType:
+    """A button macro takes ``type`` as its argument, never in ``attrs``:
+    the second ``type`` is one the browser ignores."""
+
+    def test_type_is_the_macros_argument(self) -> None:
+        html = render(
+            '{% from "components/macros/form.html" import action %}'
+            "{{ action('Go', 'data-write', type='submit') }}"
+        )
+        assert one(html, "button").get("type") == "submit"
+
+    @pytest.mark.parametrize(
+        "source",
+        [
+            '{% from "components/macros/form.html" import action %}'
+            """{{ action('Go', 'type="submit" data-write') }}""",
+            '{% from "components/macros/form.html" import primary_button %}'
+            """{{ primary_button('Go', attrs='type="submit"') }}""",
+            """{{ menu_item('Go', 'type="submit"') }}""",
+        ],
+    )
+    def test_type_in_attrs_is_refused(self, source: str) -> None:
+        with pytest.raises(ValueError, match="type="):
+            render(source)

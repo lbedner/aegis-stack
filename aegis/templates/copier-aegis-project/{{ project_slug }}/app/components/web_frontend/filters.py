@@ -310,6 +310,15 @@ def answer_tone(status: int) -> str:
     return "error" if status >= 500 else "warn" if status >= 400 else "ok"
 
 
+def button_attrs(attrs: str) -> str:
+    """A button macro's extra attributes, refusing a ``type=``: the macro
+    writes the button's type itself, and a second one is ignored by the
+    browser, so a submit button would silently never submit."""
+    if re.search(r"(^|\s)type\s*=", attrs):
+        raise ValueError(f"pass type= as the macro's argument, not in attrs: {attrs!r}")
+    return attrs
+
+
 def health_tone(state: str) -> str:
     """The badge tone for a health status value."""
     try:
@@ -333,4 +342,5 @@ FILTERS: dict[str, Callable[..., Any]] = {
     "answer_tone": answer_tone,
     "counted": counted,
     "color_tone": color_tone,
+    "button_attrs": button_attrs,
 }

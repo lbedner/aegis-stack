@@ -6,12 +6,14 @@ dealing with nested directory structures created during template updates.
 """
 
 import ast
+import functools
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -929,8 +931,13 @@ def _sync_python_file(
     # Full-rule normalization matches what ``make fix`` did to the project
     # file at init; comparison only, never written to disk.
     rel = relative.as_posix()
-    project_norm = run_ruff_on_text(project_text, project_path, "", rel_path=rel)
-    old_norm = run_ruff_on_text(old_text, project_path, "", rel_path=rel)
+
+    @functools.cache
+    def ruff(text: str, check_select: str) -> str | None:
+        return run_ruff_on_text(text, project_path, check_select, rel_path=rel)
+
+    project_norm = ruff(project_text, "")
+    old_norm = ruff(old_text, "")
     if project_norm is None or old_norm is None:
         _warn_raw_merge_fallback(relative)
         return False
@@ -945,7 +952,7 @@ def _sync_python_file(
         return True
 
     new_text = new_file.read_text(encoding="utf-8")
-    new_norm = run_ruff_on_text(new_text, project_path, "", rel_path=rel)
+    new_norm = ruff(new_text, "")
     if new_norm is not None and normalize_for_compare(old_norm) == (
         normalize_for_compare(new_norm)
     ):
@@ -953,18 +960,12 @@ def _sync_python_file(
         verbose_print(f"   Preserved: {relative} (template change is format-only)")
         return True
 
-    # Real user edit AND real template change: merge import-sorted and
-    # formatted versions of all three sides so formatting noise cannot
-    # conflict. ``--select I`` never deletes code, so the normalized ours
-    # side is safe to write back to disk.
-    project_safe = run_ruff_on_text(project_text, project_path, "I", rel_path=rel)
-    old_safe = run_ruff_on_text(old_text, project_path, "I", rel_path=rel)
-    new_safe = run_ruff_on_text(new_text, project_path, "I", rel_path=rel)
-    if project_safe is None or old_safe is None or new_safe is None:
+    # Real user edit AND real template change.
+    outcome = normalized_merge(project_text, old_text, new_text, ruff)
+    if outcome is None:
         _warn_raw_merge_fallback(relative)
         return False
-
-    returncode, merged = merge_three_way_text(project_safe, old_safe, new_safe)
+    returncode, merged = outcome
     if returncode == 0:
         project_file.write_text(merged, encoding="utf-8")
         result.synced.append(str(relative))
@@ -989,6 +990,29 @@ _MERGE_LABELS = (
     "-L",
     "new template",
 )
+
+
+def normalized_merge(
+    project: str, old: str, new: str, ruff: Callable[[str, str], str | None]
+) -> tuple[int, str] | None:
+    """``merge_three_way_text`` of a ``.py`` file, each side normalized by
+    ``ruff(text, check_select)`` so formatting noise cannot conflict.
+
+    The project's copy is import-sorted only (``--select I`` never deletes
+    the user's code, so the merge is safe to write back). The two renders
+    are template output, not the user's code, so they get the project's
+    whole rule set, as init gave it: an import its lint dropped (one only a
+    gated block uses) then reads the same in the old render and the
+    project, and comes back with the block that needs it instead of
+    reading as the user's edit (#1901).
+
+    ``None`` when ruff fails on any side: merging a mix of normalized and
+    raw text brings back the noise the normalization removes.
+    """
+    project_n, old_n, new_n = ruff(project, "I"), ruff(old, ""), ruff(new, "")
+    if project_n is None or old_n is None or new_n is None:
+        return None
+    return merge_three_way_text(project_n, old_n, new_n)
 
 
 def merge_three_way_text(current: str, base: str, other: str) -> tuple[int, str]:

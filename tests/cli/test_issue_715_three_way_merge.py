@@ -24,7 +24,7 @@ from collections.abc import Iterator
 
 import pytest
 
-from aegis.core import render_diff
+from aegis.core import template_cleanup
 from aegis.core.manual_updater import ManualUpdater
 from tests.cli.conftest import ProjectFactory
 
@@ -143,20 +143,20 @@ class TestThreeWayMergeFallback:
 
     @pytest.fixture
     def _no_merge(self) -> Iterator[None]:
-        # Patch target moved with the RD-04 rewiring (aegis-stack#919):
-        # the merge now runs inside the render-diff engine, so its module's
-        # reference is the one that matters — patching manual_updater's
-        # copy would silently intercept nothing and let a real merge run.
-        original = render_diff.merge_three_way_text
+        # Every merge, the render-diff engine's included, runs through
+        # ``template_cleanup.normalized_merge``, so its module's reference
+        # is the one that matters: patching another module's copy would
+        # silently intercept nothing and let a real merge run.
+        original = template_cleanup.merge_three_way_text
 
         def boom(*_args: object, **_kwargs: object) -> tuple[int, str]:
             return (-1, "")  # simulate git merge-file unavailable/failed
 
-        render_diff.merge_three_way_text = boom  # type: ignore[assignment]
+        template_cleanup.merge_three_way_text = boom  # type: ignore[assignment]
         try:
             yield
         finally:
-            render_diff.merge_three_way_text = original  # type: ignore[assignment]
+            template_cleanup.merge_three_way_text = original  # type: ignore[assignment]
 
     def test_falls_back_to_preserve_when_merge_unavailable(
         self, project_factory: ProjectFactory, _no_merge: None

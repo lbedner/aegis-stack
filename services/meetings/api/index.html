@@ -6736,7 +6736,7 @@
 </tr>
 <tr>
 <td><code>GET /api/v1/meetings/{id}</code></td>
-<td>The meeting and its status</td>
+<td>The meeting in full: its status, notes and every line said</td>
 </tr>
 <tr>
 <td><code>GET /api/v1/meetings/{id}/threads</code></td>
@@ -6748,7 +6748,7 @@
 </tr>
 <tr>
 <td><code>GET /api/v1/meetings/search?q=</code></td>
-<td>The caller's meetings' lines and note items with the words, newest meeting first</td>
+<td>The caller's meetings' lines and note items with any of the words, those with more of them first, then newest meeting first</td>
 </tr>
 <tr>
 <td><code>GET /api/v1/meetings/{id}/moments</code></td>

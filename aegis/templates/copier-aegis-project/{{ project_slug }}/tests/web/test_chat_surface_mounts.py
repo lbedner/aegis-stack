@@ -220,6 +220,20 @@ def test_a_mount_may_take_calls_without_the_operator_controls(
     assert client.get("/chat/voices").status_code == 404
     if chat_surface.HAS_VOICE and chat_surface.PERSISTED:
         assert 'id="chat-live"' in drawer
+        # The engine and its cost are the operator's to see.
+        assert "data-call-engine" not in drawer and "data-call-cost" not in drawer
+
+
+@pytest.mark.skipif(not chat_surface.HAS_VOICE, reason="no voice, no quiet to count")
+def test_a_mount_may_count_the_quiet_on_a_call_its_own_way(
+    turns: list[dict[str, Any]],
+) -> None:
+    """How long a call may go quiet before she checks in is the voice
+    profile's, install-wide, unless the mount says (``idle_seconds``)."""
+    app = FastAPI()
+    app.include_router(chat_router(replace(MOUNT, idle_seconds=20), allow))
+    drawer = TestClient(app, headers={"x-user": "7"}).get("/chat/drawer").text
+    assert json.loads(one(drawer, "#chat-mic").get("data-voice"))["idle"] == 20
 
 
 def test_a_bound_mount_gives_its_operators_the_controls_and_no_one_else(

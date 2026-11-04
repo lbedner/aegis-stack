@@ -94,6 +94,24 @@ class ChatSurface:
     # follows ``operator_controls``; True lets in a caller with no controls
     # (a signed-out visitor), and ``bind`` may decide it per request.
     calls: bool | None = None
+    # A bound on its calls, where someone other than the operator pays for
+    # the minutes. The longest a call runs, in seconds (None: no limit;
+    # how it ends: ``chat_live.WRAP_UP_SECONDS``).
+    longest_call: float | None = None
+    # Seconds of quiet before the assistant checks in (None: the active
+    # voice profile's, install-wide).
+    idle_seconds: int | None = None
+    # Asked after each saved turn of a call, with the bound mount: a reason
+    # ends the call there (a budget spent mid-call). ``gate`` asks once, as
+    # the call opens; this is a plain callable, as a socket mid-call has no
+    # request to resolve a dependency against.
+    call_check: Callable[["ChatSurface"], Awaitable[str | None]] | None = None
+    # Called once for every call ``gate`` let through, with how it ended
+    # (``chat_live.CallEnded``): where what the gate took for a call (a
+    # slot) is freed. ``gate`` runs on typed turns too, which have no end
+    # hook: a gate that takes something for calls only checks it is one
+    # (``HTTPConnection.scope["type"] == "websocket"``).
+    on_call_end: Callable[["ChatSurface", str], Awaitable[None]] | None = None
 
 
 def offers_calls(chat: ChatSurface) -> bool:
@@ -225,7 +243,7 @@ async def synthesize(text: str, tts: Any = None) -> Any:
         raise HTTPException(status_code=503, detail="Speech synthesis failed") from None
 
 
-def _voice() -> dict[str, str]:
+def _voice(chat: ChatSurface) -> dict[str, Any]:
     """How a spoken turn is heard (static/js/voice.js): each sentence as it
     streams or the settled answer, and what plays while the assistant works
     in silence - the active voice profile's, applied onto the settings."""
@@ -235,8 +253,10 @@ def _voice() -> dict[str, str]:
         "reply": settings.VOICE_REPLY,
         "sound": settings.VOICE_WORKING_SOUND,
         # Seconds of quiet on a live call before the assistant checks in
-        # (0: never); call-state.js counts it.
-        "idle": settings.VOICE_LIVE_IDLE_SECONDS,
+        # (0: never); call-state.js counts it. The mount's, else the profile's.
+        "idle": settings.VOICE_LIVE_IDLE_SECONDS
+        if chat.idle_seconds is None
+        else chat.idle_seconds,
     }
 
 
@@ -400,11 +420,13 @@ async def surface_context(chat: ChatSurface) -> dict[str, Any]:
     return thread | {
         "section_subtitle": f"Ask {thread['assistant']} anything",
         "chat_path": chat.path,
-        "voice": _voice() if HAS_VOICE else None,
+        "voice": _voice(chat) if HAS_VOICE else None,
         "picker": PERSISTED and chat.operator_controls,
         # Voice profiles are rows: the voice chip needs a database.
         "voices": HAS_VOICE and PERSISTED and chat.operator_controls,
         "calls": offers_calls(chat),
+        # A call's engine and running cost are the operator's figures.
+        "operator": chat.operator_controls,
         "agent_url": agent_url(chat),
         # The change queue lives with a persisted AI backend.
         "approvals": CARDS.PATH if CARDS else None,

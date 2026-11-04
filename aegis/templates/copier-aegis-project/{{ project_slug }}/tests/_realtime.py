@@ -56,12 +56,15 @@ class FakeSession:
         flag: asyncio.Event = getattr(self, name)
         return flag
 
-    async def _either(self, *names: str) -> None:
-        """Until one of these flags is set."""
-        waits = [asyncio.ensure_future(self._flag(name).wait()) for name in names]
+    async def _until(self, name: str) -> bool:
+        """Until this flag is set or the call is closed; whether it closed."""
+        waits = [
+            asyncio.ensure_future(self._flag(flag).wait()) for flag in (name, "_closed")
+        ]
         _, pending = await asyncio.wait(waits, return_when=asyncio.FIRST_COMPLETED)
         for wait in pending:
             wait.cancel()
+        return self._flag("_closed").is_set()
 
     async def send_audio(self, data: bytes) -> None:
         self.audio.append(data)
@@ -87,12 +90,11 @@ class FakeSession:
 
     def __aiter__(self) -> AsyncIterator[Any]:
         async def events() -> AsyncIterator[Any]:
-            if self.after_audio:
-                await self._flag("_heard").wait()
-            if self.after_text:
-                await self._either("_asked", "_closed")
-                if self._flag("_closed").is_set():
-                    return
+            # A call closed before its cue ends, as a real one does.
+            if self.after_audio and await self._until("_heard"):
+                return
+            if self.after_text and await self._until("_asked"):
+                return
             for event in self.events:
                 yield event
             if not self.ends:

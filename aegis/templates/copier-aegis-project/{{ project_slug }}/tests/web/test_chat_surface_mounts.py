@@ -176,10 +176,10 @@ def test_another_users_or_projects_conversation_is_absent(client: TestClient) ->
 def test_a_mount_for_an_apps_users_has_no_operator_controls(
     turns: list[dict[str, Any]],
 ) -> None:
-    """The model and voice chips set what the whole install answers with,
-    and a live call runs as the declared mount: an operator's. A mount for
-    an app's own users turns them off, and then neither the chips, the
-    call nor their routes exist. Speaking a turn and hearing one stay."""
+    """The model and voice chips set what the whole install answers with.
+    A mount for an app's own users turns them off, and then neither the
+    chips, their routes nor (unless it says so, ``calls``) the call exist.
+    Speaking a turn and hearing one stay."""
     closed = replace(MOUNT, operator_controls=False)
 
     async def bind_closed(request: Request) -> ChatSurface:
@@ -198,6 +198,42 @@ def test_a_mount_for_an_apps_users_has_no_operator_controls(
     assert client.post("/chat/voices").status_code in (404, 405)
     if chat_surface.HAS_VOICE:
         assert 'id="chat-mic"' in drawer
+
+
+def test_a_mount_may_take_calls_without_the_operator_controls(
+    turns: list[dict[str, Any]],
+) -> None:
+    """Calls are their own switch: a mount for signed-out visitors keeps the
+    model and voice chips (what the whole install answers with) out and
+    still offers the phone, which calls on what the install calls with."""
+    calling = replace(MOUNT, operator_controls=False, calls=True)
+
+    async def bind_calling(request: Request) -> ChatSurface:
+        return replace(calling, user=request.headers["x-user"])
+
+    app = FastAPI()
+    app.include_router(chat_router(replace(calling, bind=bind_calling), allow))
+    client = TestClient(app, headers={"x-user": "7", "x-project": "3"})
+
+    drawer = client.get("/chat/drawer").text
+    assert 'id="chat-model"' not in drawer and 'id="chat-voice"' not in drawer
+    assert client.get("/chat/voices").status_code == 404
+    if chat_surface.HAS_VOICE and chat_surface.PERSISTED:
+        assert 'id="chat-live"' in drawer
+        # The engine and its cost are the operator's to see.
+        assert "data-call-engine" not in drawer and "data-call-cost" not in drawer
+
+
+@pytest.mark.skipif(not chat_surface.HAS_VOICE, reason="no voice, no quiet to count")
+def test_a_mount_may_count_the_quiet_on_a_call_its_own_way(
+    turns: list[dict[str, Any]],
+) -> None:
+    """How long a call may go quiet before she checks in is the voice
+    profile's, install-wide, unless the mount says (``idle_seconds``)."""
+    app = FastAPI()
+    app.include_router(chat_router(replace(MOUNT, idle_seconds=20), allow))
+    drawer = TestClient(app, headers={"x-user": "7"}).get("/chat/drawer").text
+    assert json.loads(one(drawer, "#chat-mic").get("data-voice"))["idle"] == 20
 
 
 def test_a_bound_mount_gives_its_operators_the_controls_and_no_one_else(

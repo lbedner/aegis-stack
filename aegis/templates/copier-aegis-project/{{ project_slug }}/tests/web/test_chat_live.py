@@ -8,9 +8,11 @@ same socket under its own path.
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from importlib.util import find_spec
 import json
+import queue
 import threading
 from types import SimpleNamespace
 from typing import Any
@@ -55,7 +57,6 @@ def client(app: FastAPI, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     # The socket's own guard reads the session cookie; signed in here.
     app.dependency_overrides[overseer_access.overseer_socket_gate] = signed_in
     return TestClient(app)
-
 
 
 @pytest.fixture
@@ -109,14 +110,63 @@ def ended(monkeypatch: pytest.MonkeyPatch) -> threading.Event:
     done = threading.Event()
     drive = realtime_calls.drive
 
-    async def driven(*args: Any, **kwargs: Any) -> None:
+    async def driven(*args: Any, **kwargs: Any) -> Any:
         try:
-            await drive(*args, **kwargs)
+            return await drive(*args, **kwargs)
         finally:
             done.set()
 
     monkeypatch.setattr(realtime_calls, "drive", driven)
     return done
+
+
+@pytest.fixture
+def ends() -> tuple[queue.Queue[str], Callable[[ChatSurface, str], Awaitable[None]]]:
+    """How each call ended, as a mount's ``on_call_end`` heard it.
+
+    The hook runs after the call's last writes, so waiting on it is
+    waiting for the server to finish the call (``ended``)."""
+    heard: queue.Queue[str] = queue.Queue()
+
+    async def on_call_end(bound: ChatSurface, how: str) -> None:
+        heard.put(how)
+
+    return heard, on_call_end
+
+
+async def _let_in() -> None:
+    return None
+
+
+async def _no_engine() -> tuple[None, None]:
+    return None, None
+
+
+def _calls(mount: ChatSurface) -> TestClient:
+    """A mount's socket alone, its caller signed in as owner 7."""
+    calls = FastAPI()
+    calls.include_router(chat_live.live_router(mount, _let_in))
+
+    async def owner() -> int:
+        return 7
+
+    calls.dependency_overrides[get_optional_owner_user_id] = owner
+    return TestClient(calls)
+
+
+def _hear(ws: Any, until: str) -> tuple[list[bytes], list[dict[str, Any]]]:
+    """What the page heard and was told, up to the first event of a type."""
+    heard: list[bytes] = []
+    told: list[dict[str, Any]] = []
+    for _ in range(50):  # a bound, never a hang
+        message = ws.receive()
+        if message.get("bytes"):
+            heard.append(message["bytes"])
+        elif message.get("text"):
+            told.append(json.loads(message["text"]))
+            if told[-1]["type"] == until:
+                break
+    return heard, told
 
 
 class TestTheControls:
@@ -166,19 +216,10 @@ class TestTheCall:
     def test_it_carries_the_audio_both_ways(
         self, client: TestClient, gemini: FakeRealtime, ended: threading.Event
     ) -> None:
-        heard: list[bytes] = []
-        told: list[dict[str, Any]] = []
         with client.websocket_connect(SOCKET) as ws:
             ready = ws.receive_json()
             ws.send_bytes(b"\x10\x20")
-            for _ in range(20):  # a bound, never a hang
-                message = ws.receive()
-                if message.get("bytes"):
-                    heard.append(message["bytes"])
-                elif message.get("text"):
-                    told.append(json.loads(message["text"]))
-                if heard and any(t["type"] == "saved" for t in told):
-                    break
+            heard, told = _hear(ws, "saved")
             ws.close()
             assert ended.wait(5)
 
@@ -237,10 +278,7 @@ class TestTheCall:
     def test_no_engine_on_offer_is_refused(
         self, client: TestClient, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        async def none_on_offer() -> tuple[None, None]:
-            return None, None
-
-        monkeypatch.setattr(chat_live, "_engine_now", none_on_offer)
+        monkeypatch.setattr(chat_live, "_engine_now", _no_engine)
         with (
             pytest.raises(WebSocketDisconnect) as refused,
             client.websocket_connect(SOCKET) as ws,
@@ -249,25 +287,10 @@ class TestTheCall:
         assert refused.value.code == 1008
 
 
-async def _let_in() -> None:
-    return None
-
-
 class TestABoundCall:
     """A call is a turn: bound as the mount's pages are (``bind``), owned
     by the signed-in user (``get_optional_owner_user_id``) and let through
     by the mount's ``gate``."""
-
-    @staticmethod
-    def _calls(mount: ChatSurface) -> TestClient:
-        calls = FastAPI()
-        calls.include_router(chat_live.live_router(mount, _let_in))
-
-        async def owner() -> int:
-            return 7
-
-        calls.dependency_overrides[get_optional_owner_user_id] = owner
-        return TestClient(calls)
 
     def test_it_calls_as_the_mount_binds_it(
         self,
@@ -288,9 +311,7 @@ class TestABoundCall:
             return replace(OVERSEER, user="7", subject="42", voice_agent_slug="voice")
 
         monkeypatch.setattr(chat_live, "_tell", tell)
-        with self._calls(replace(OVERSEER, bind=bound)).websocket_connect(
-            SOCKET
-        ) as ws:
+        with _calls(replace(OVERSEER, bind=bound)).websocket_connect(SOCKET) as ws:
             ws.receive_json()
             ws.send_bytes(b"\x10\x20")  # the fake plays once it hears you
             ws.close()
@@ -303,17 +324,20 @@ class TestABoundCall:
         assert (built["subject"], built["agent_slug"]) == ("42", "voice")
         assert during and set(during) == {("42", 7)}
 
-    def test_a_call_the_gate_refuses_never_opens(self, gemini: FakeRealtime) -> None:
-        """Over a plan's budget, a call is refused as a typed turn is."""
+    def test_a_call_the_gate_refuses_never_opens(
+        self, gemini: FakeRealtime, ends: tuple[queue.Queue[str], Any]
+    ) -> None:
+        """Over a plan's budget, a call is refused as a typed turn is, and
+        never began: no end for the mount's hook."""
+        heard, on_call_end = ends
 
         async def spent() -> str:
             return "Today's budget is spent."
 
+        mount = replace(OVERSEER, gate=spent, on_call_end=on_call_end)
         with (
             pytest.raises(WebSocketDisconnect) as refused,
-            self._calls(replace(OVERSEER, gate=spent)).websocket_connect(
-                SOCKET
-            ) as ws,
+            _calls(mount).websocket_connect(SOCKET) as ws,
         ):
             ws.receive_json()
         assert (refused.value.code, refused.value.reason) == (
@@ -321,6 +345,7 @@ class TestABoundCall:
             "Today's budget is spent.",
         )
         assert not hasattr(gemini, "built")
+        assert heard.empty()
 
     def test_a_caller_the_mount_gives_no_controls_never_opens(
         self, gemini: FakeRealtime
@@ -333,13 +358,101 @@ class TestABoundCall:
 
         with (
             pytest.raises(WebSocketDisconnect) as refused,
-            self._calls(replace(OVERSEER, bind=customer)).websocket_connect(
-                SOCKET
-            ) as ws,
+            _calls(replace(OVERSEER, bind=customer)).websocket_connect(SOCKET) as ws,
         ):
             ws.receive_json()
         assert refused.value.code == 1008
         assert not hasattr(gemini, "built")
+
+    def test_a_caller_the_mount_lets_call_without_controls_is_put_through(
+        self,
+        app: FastAPI,  # the database, set up
+        gemini: FakeRealtime,
+        ended: threading.Event,
+    ) -> None:
+        """Calls are their own switch: a mount may let in a caller it gives
+        no controls (a signed-out visitor), on what the install calls with;
+        the engine and what the call cost stay the operator's to see."""
+
+        async def visitor() -> ChatSurface:
+            return replace(OVERSEER, user="v1", operator_controls=False, calls=True)
+
+        with _calls(replace(OVERSEER, bind=visitor)).websocket_connect(SOCKET) as ws:
+            ready = ws.receive_json()
+            ws.send_bytes(b"\x10\x20")  # the fake plays once it hears you
+            _, told = _hear(ws, "saved")
+            ws.close()
+            assert ended.wait(5)
+        assert gemini.built["user_id"] == "v1"
+        assert ready["engine"] is None
+        assert told[-1] == {"type": "saved"}
+
+
+class TestABoundedCall:
+    """A mount may bound its calls (someone other than the operator pays
+    for the minutes): a longest call, a check asked after each turn, and a
+    hook once each call the gate let through is over, however it ended."""
+
+    def test_it_wraps_up_then_ends_at_its_longest(
+        self,
+        app: FastAPI,  # the database, set up
+        gemini: FakeRealtime,
+        ends: tuple[queue.Queue[str], Any],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        heard, on_call_end = ends
+        monkeypatch.setattr(chat_live, "WRAP_UP_SECONDS", 0.1)
+        mount = replace(OVERSEER, longest_call=0.3, on_call_end=on_call_end)
+        with _calls(mount).websocket_connect(SOCKET) as ws:
+            _, told = _hear(ws, "ended")
+            assert heard.get(timeout=5) == "limit"
+        assert told[-1] == {"type": "ended", "reason": chat_live.TIME_UP}
+        assert gemini.live.sent[-1] == chat_live.WRAP_UP  # she says it first
+
+    def test_a_check_that_refuses_mid_call_ends_it_after_the_turn(
+        self,
+        app: FastAPI,  # the database, set up
+        gemini: FakeRealtime,
+        ends: tuple[queue.Queue[str], Any],
+    ) -> None:
+        heard, on_call_end = ends
+
+        async def spent(bound: ChatSurface) -> str | None:
+            return "Today's budget is spent."
+
+        mount = replace(OVERSEER, call_check=spent, on_call_end=on_call_end)
+        with _calls(mount).websocket_connect(SOCKET) as ws:
+            ws.send_bytes(b"\x10\x20")  # the fake plays once it hears you
+            _, told = _hear(ws, "ended")
+            assert heard.get(timeout=5) == "refused"
+        kinds = [t["type"] for t in told]
+        assert kinds.index("saved") < kinds.index("ended")  # the turn is kept
+        assert told[-1] == {"type": "ended", "reason": "Today's budget is spent."}
+
+    def test_the_end_hook_runs_once_for_each_call_the_gate_let_through(
+        self,
+        app: FastAPI,  # the database, set up
+        gemini: FakeRealtime,
+        ends: tuple[queue.Queue[str], Any],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Hung up, or failed as it opened: each is one end. A call the gate
+        refuses never began (``test_a_call_the_gate_refuses_never_opens``)."""
+        heard, on_call_end = ends
+        mount = replace(OVERSEER, on_call_end=on_call_end)
+        with _calls(mount).websocket_connect(SOCKET) as ws:
+            ws.receive()  # ready, or her voice
+            ws.close()
+            assert heard.get(timeout=5) == "page"
+
+        monkeypatch.setattr(chat_live, "_engine_now", _no_engine)
+        with (
+            pytest.raises(WebSocketDisconnect),
+            _calls(mount).websocket_connect(SOCKET) as ws,
+        ):
+            ws.receive_json()
+        assert heard.get(timeout=5) == "error"
+        assert heard.empty()
 
 
 def test_a_call_into_a_conversation_does_not_meet_them_again() -> None:

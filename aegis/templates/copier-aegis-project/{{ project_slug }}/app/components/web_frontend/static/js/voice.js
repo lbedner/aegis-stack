@@ -352,10 +352,11 @@
     if (chatComposer()) chatComposer().hidden = true;
     if (!callBar()) return;
     callBar().hidden = false;
-    field('engine').textContent = call.engine?.label || '';
-    field('cost-later').hidden = call.cost != null;
+    // The engine and cost are drawn for an operator only (``operator``).
+    if (field('engine')) field('engine').textContent = call.engine?.label || '';
+    if (field('cost-later')) field('cost-later').hidden = call.cost != null;
     if (call.cost != null) showCost(call.cost);
-    else field('cost').textContent = '';
+    else if (field('cost')) field('cost').textContent = '';
     tick();
   };
   const startBar = (engine) => {
@@ -566,6 +567,11 @@
       happen({ type: 'heard' });
     } else if (event.type === 'hang_up') {
       happen({ type: 'goodbye' });
+    } else if (event.type === 'ended') {
+      // The server ended it (its longest, a check refused): why, under the
+      // composer, which carries on the same conversation in text.
+      hangUp();
+      say(null, event.reason);
     } else if (event.type === 'working') {
       stepping(event.label);
     } else if (event.type === 'done') {
@@ -589,7 +595,7 @@
       htmx.ajax('GET', event.url, { target: call.slot, swap: 'innerHTML' });
     } else if (event.type === 'saved') {
       showTurns(call.conversation);
-      showCost(event.cost);
+      if (event.cost != null) showCost(event.cost); // an operator's call only
       if (field('cost-later')) field('cost-later').hidden = true;
     }
   };

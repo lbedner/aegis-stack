@@ -252,7 +252,7 @@ def live_router(
     ) -> None:
         """A call, for as long as the page holds the socket."""
         await ws.accept()
-        if not bound.operator_controls:  # no phone on their page (offers_calls)
+        if not chat.offers_calls(bound):  # no phone on their page
             await ws.close(code=1008)
             return
         if refusal:

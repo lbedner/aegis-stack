@@ -341,6 +341,27 @@ class TestABoundCall:
         assert refused.value.code == 1008
         assert not hasattr(gemini, "built")
 
+    def test_a_caller_the_mount_lets_call_without_controls_is_put_through(
+        self,
+        app: FastAPI,  # the database, set up
+        gemini: FakeRealtime,
+        ended: threading.Event,
+    ) -> None:
+        """Calls are their own switch: a mount may let in a caller it gives
+        no controls (a signed-out visitor), on what the install calls with."""
+
+        async def visitor() -> ChatSurface:
+            return replace(OVERSEER, user="v1", operator_controls=False, calls=True)
+
+        with self._calls(replace(OVERSEER, bind=visitor)).websocket_connect(
+            SOCKET
+        ) as ws:
+            ws.receive_json()
+            ws.send_bytes(b"\x10\x20")  # the fake plays once it hears you
+            ws.close()
+            assert ended.wait(5)
+        assert gemini.built["user_id"] == "v1"
+
 
 def test_a_call_into_a_conversation_does_not_meet_them_again() -> None:
     """A call into a conversation under way greets them as someone it

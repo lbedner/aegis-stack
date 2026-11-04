@@ -88,14 +88,19 @@ class ChatSurface:
     # set what the whole install answers with. A mount for an app's own
     # users turns them off, keeping the microphone and a reply read aloud;
     # its ``bind`` may turn them back on for the request of someone who
-    # runs the install (an admin). The live call needs them too.
+    # runs the install (an admin).
     operator_controls: bool = True
+    # Whether its users may call, on what the install calls with. None
+    # follows ``operator_controls``; True lets in a caller with no controls
+    # (a signed-out visitor), and ``bind`` may decide it per request.
+    calls: bool | None = None
 
 
 def offers_calls(chat: ChatSurface) -> bool:
     """Whether the mount takes live calls: voice, a database and the
-    operator's controls."""
-    return HAS_VOICE and PERSISTED and chat.operator_controls
+    mount's say (``calls``, else the operator's controls)."""
+    allowed = chat.operator_controls if chat.calls is None else chat.calls
+    return HAS_VOICE and PERSISTED and allowed
 
 
 async def assistant_name(chat: ChatSurface, session: Any = None) -> str:

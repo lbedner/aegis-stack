@@ -42,7 +42,7 @@ from pydantic_ai.run import AgentRunResultEvent
 from pydantic_ai.settings import ModelSettings
 from pydantic_ai.usage import UsageLimits
 
-from app.core.chat_transcript import as_markers, card_component, tool_label
+from app.core.chat_transcript import as_markers, card_component, trail_label
 from app.core.log import logger
 from app.services.ai.domains.chat.user_memory import memory_user
 from app.services.ai.domains.spend.recording import extract_usage, record_usage
@@ -254,7 +254,7 @@ def _tool_frame(event: FunctionToolCallEvent) -> ToolFrame:
         except (TypeError, ValueError):
             args = str(raw)
     name = str(getattr(part, "tool_name", "") or "")
-    return ToolFrame(tool=name, args=args, label=tool_label(name, args))
+    return ToolFrame(tool=name, args=args, label=trail_label(name, args))
 
 
 def _card_frame(event: FunctionToolResultEvent) -> CardFrame | None:

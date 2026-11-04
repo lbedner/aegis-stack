@@ -1,7 +1,8 @@
 {# A flow on the map (``path_card``), on the Replay page's own player and
    steps (``overseer_replay.card``): in the thread its first scene, still,
    marked to play; opened larger, it plays. A node's wiring has no steps:
-   its map, still, both ways. #}
+   its map, still, both ways. Opened larger, either is zoomed to show whole
+   in the dialog (``data-fit-whole``, static/js/app.js). #}
 {% from "partials/chat/cards/_frame.html" import card_frame %}
 {% from "components/macros/player.html" import stage %}
 {% from "components/macros/icons.html" import icon %}
@@ -11,8 +12,8 @@
 {% elif path["method"] %}{% set said = "Code path · " ~ path["method"] ~ " " ~ path["path"] ~ " · read from the code, not run" %}
 {% else %}{% set said = "Flow · along the map's lines" %}{% endif %}
 {% call card_frame("path", card["title"], said, card_url, large) %}
-  {% if large and path_steps %}<div class="px-3 py-3 overflow-x-auto">{{ stage(path_steps, path_scenes) }}</div>
-  {% elif large %}<div data-scene-map inert class="px-3 py-3 overflow-x-auto">{{ path_scenes[0].map }}</div>
+  {% if large and path_steps %}<div data-fit-whole class="px-3 py-3 overflow-x-auto">{{ stage(path_steps, path_scenes) }}</div>
+  {% elif large %}<div data-scene-map data-fit-whole inert class="px-3 py-3 overflow-x-auto">{{ path_scenes[0].map }}</div>
   {% else %}<div data-thumb class="relative overflow-hidden">
     <div data-scene-map inert class="pointer-events-none px-3 py-3 [zoom:0.55]">{{ path_scenes[0].map }}</div>
     {% if path_steps %}<span data-play-badge class="absolute inset-0 flex items-center justify-center"><span class="rounded-full border border-aegis-teal bg-aegis-bg/85 p-3 text-aegis-text">{{ icon("play", class="w-6 h-6") }}</span></span>{% endif %}

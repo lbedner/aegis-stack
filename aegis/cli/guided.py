@@ -36,6 +36,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from pathlib import Path
 
 import typer
 from rich.align import Align
@@ -58,6 +59,7 @@ from ..constants import (
 )
 from ..core.components import COMPONENTS, CORE_COMPONENTS
 from ..core.plugins.spec import PluginSpec, pairs_well_with, required_names
+from ..core.post_gen_tasks import next_steps
 from ..core.services import SERVICES
 from .brand import AEGIS_WARNING, experimental_label
 from .build_plan import BuildPlan, resolve_build_plan
@@ -1180,9 +1182,8 @@ class GuidedSelectionUI(BlueprintScreens):
                 grid.add_row(row)
         grid.add_row(Text())
         grid.add_row(Text(_g("done.next_steps", "NEXT STEPS"), style=LABEL))
-        grid.add_row(Text(f"  cd {project_path}", style=BODY))
-        grid.add_row(Text("  make serve", style=BODY))
-        grid.add_row(Text("  Overseer: http://localhost:8000/dashboard/", style=BODY))
+        for line in next_steps(Path(str(project_path))):
+            grid.add_row(Text(f"  {line.strip()}", style=BODY))
         if replay:
             grid.add_row(Text())
             grid.add_row(
@@ -1854,10 +1855,9 @@ def _capture_project_map(project_path: object) -> str:
     """
     import io
     from contextlib import redirect_stdout
-    from pathlib import Path as _Path
 
     try:
-        path = _Path(str(project_path))
+        path = Path(str(project_path))
         if not path.exists():
             return ""
         from ..core.project_map import render_project_map

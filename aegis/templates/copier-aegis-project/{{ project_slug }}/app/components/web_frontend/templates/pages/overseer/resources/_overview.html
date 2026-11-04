@@ -1,10 +1,20 @@
-{# Overseer > Resources (overseer_resources): the stack's totals, each
-   figure charted over the chosen window under them, then the rest of the
-   snapshot; the totals and the rest re-sent whole over SSE every tick while
-   the page is open, the charts' new points sent the same way. #}
+{# Overseer > Resources (overseer_resources): each figure charted over the
+   chosen window (CPU and memory with the stack's split in their headers,
+   ``_split.html``), the load costs beside them, then the rest of the
+   snapshot; the splits and the rest re-sent over SSE every tick while the
+   page is open, the charts' new points sent the same way. #}
+{% from "components/macros/layout.html" import chart_panel %}
 {% from "pages/overseer/_macros.html" import live_charts %}
 <div id="resources" hx-ext="sse" sse-connect="{{ resources_charts.events }}">
-  <div sse-swap="{{ resources_totals_event }}" hx-target="this">{% include "pages/overseer/resources/_totals.html" %}</div>
-  {{ live_charts(resources_charts, "#resources", request.url.path) }}
+  {% call live_charts(resources_charts, "#resources", request.url.path) %}
+    {# Inside the webserver, which Docker sees as one container
+       (ui_resources.load_costs): each part's own cost, on top of Python, the
+       app's core and the parts it uses (a library counts with the first part
+       that needs it), so the costs do not add up to the Server's memory.
+       Measured once a day, so not re-sent with the rest. #}
+    {{ chart_panel("resources-load", "Server: what each service costs to load", "bar", resources_load.chart,
+                   subtitle=("Import cost · " ~ resources_load.core ~ " core · daily") if resources_load.core is not none else none,
+                   empty="Measuring what each service costs to load, one at a time.") }}
+  {% endcall %}
   <div sse-swap="{{ resources_event }}" hx-target="this" class="mt-4">{% include "pages/overseer/resources/_body.html" %}</div>
 </div>

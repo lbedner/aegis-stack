@@ -32,6 +32,7 @@ from ..core.component_files import template_module
 from ..core.copier_manager import AEGIS_GIT_EMAIL, load_copier_answers
 from ..core.deploy_protocol import protocol, step
 from ..core.footprint import COMPOSE_FILES
+from ..core.overseer_url import overseer_path
 from ..core.template_cleanup import DEPLOY_ENV_FILE, deploy_env_file, env_value
 from ..i18n import lazy_t, t
 from .deploy_backup import (
@@ -169,7 +170,7 @@ def _admin_allowlist_set(project_root: Path) -> bool:
     return bool(env_file and env_value(env_file, "ADMIN_IP_ALLOWLIST"))
 
 
-def _print_deployed(config: dict, *, allowlist_set: bool, tls: bool = False) -> None:
+def _print_deployed(config: dict, project_root: Path, *, tls: bool = False) -> None:
     """Where the deployed app answers, and how to reach its Overseer.
 
     Traefik admits only private networks to the Overseer until
@@ -178,8 +179,8 @@ def _print_deployed(config: dict, *, allowlist_set: bool, tls: bool = False) -> 
     host = config.get("domain") or config["server"]["host"]
     url = f"{'https' if tls else 'http'}://{host}"
     typer.echo(t("deploy.app_running", url=url))
-    typer.echo(t("deploy.overseer", url=url))
-    if not allowlist_set:
+    typer.echo(t("deploy.overseer", url=url + overseer_path(project_root)))
+    if not _admin_allowlist_set(project_root):
         typer.echo(t("deploy.overseer_allowlist"))
     typer.echo(t("deploy.view_logs"))
     typer.echo(t("deploy.check_status"))
@@ -1618,9 +1619,7 @@ def deploy_command(
             if backup
             else None,
         )
-        _print_deployed(
-            config, allowlist_set=_admin_allowlist_set(project_root), tls=tls
-        )
+        _print_deployed(config, project_root, tls=tls)
         return
 
     brand.accent(t("deploy.deploying", host=host), bold=True)
@@ -1744,7 +1743,7 @@ def deploy_command(
     _prune_docker(host, user)
 
     brand.success(f"\n{t('deploy.complete')}", bold=True)
-    _print_deployed(config, allowlist_set=_admin_allowlist_set(project_root), tls=tls)
+    _print_deployed(config, project_root, tls=tls)
 
 
 def deploy_backup_command(

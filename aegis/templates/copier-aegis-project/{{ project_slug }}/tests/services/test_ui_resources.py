@@ -47,7 +47,7 @@ async def test_this_stack_is_its_containers_summed(
     assert _split(view, "cpu")["stack"] == 2 * STATS.cpu_percent
 
 
-async def test_the_rest_is_what_the_host_uses_beyond_this_stack(
+async def test_the_free_is_what_the_host_does_not_use(
     monkeypatch: pytest.MonkeyPatch, host: Any
 ) -> None:
     """Half of the host's memory in use, a tenth of its four cores busy."""
@@ -55,38 +55,20 @@ async def test_the_rest_is_what_the_host_uses_beyond_this_stack(
     view = await ui_resources.overview()
     memory, cpu = _split(view, "memory"), _split(view, "cpu")
     assert memory["total"] == HOST.memory
-    assert memory["rest"] == HOST.memory // 2 - 2 * STATS.memory_used
     assert memory["free"] == HOST.memory // 2
     # CPU in percent of one core, out of every core: 10% of 4 cores is 40.
     assert cpu["total"] == HOST.cpus * 100
-    assert cpu["rest"] == pytest.approx(40 - 2 * STATS.cpu_percent)
     assert cpu["free"] == pytest.approx(HOST.cpus * 100 - 40)
 
 
-async def test_the_rest_is_never_below_nothing(
+async def test_every_container_with_its_page_stopped_ones_last(
     monkeypatch: pytest.MonkeyPatch, host: Any
 ) -> None:
-    """The host check and the containers are read moments apart: a stack
-    that reads more than the host's in-use leaves no rest, not a negative."""
-    host(memory_percent=0.0, cpu_percent=0.0)
-    use_runtime(monkeypatch, FakeRuntime(REDIS, WORKER))
-    view = await ui_resources.overview()
-    assert _split(view, "memory")["rest"] == 0
-    assert _split(view, "cpu")["rest"] == 0
-
-
-async def test_every_container_heaviest_first_with_its_share(
-    monkeypatch: pytest.MonkeyPatch, host: Any
-) -> None:
-    """Running ones by memory, each with its page and its share of the
-    stack; a stopped one last, sharing nothing."""
     use_runtime(monkeypatch, FakeRuntime(REDIS, WORKER, STOPPED))
     rows = (await ui_resources.overview())["rows"]
     assert {r["name"] for r in rows} == {REDIS.name, WORKER.name, STOPPED.name}
-    assert rows[-1]["name"] == STOPPED.name and rows[-1]["share"] is None
-    running = [r for r in rows if r["share"] is not None]
-    assert sum(r["share"] for r in running) == pytest.approx(100)
-    assert {r["title"] for r in running} == {"Cache", "Worker"}
+    assert rows[-1]["name"] == STOPPED.name
+    assert {r["title"] for r in rows[:-1]} == {"Cache", "Worker"}
 
 
 async def test_without_a_deploy_target_it_says_what_is_missing(

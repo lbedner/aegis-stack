@@ -233,24 +233,14 @@ async def _collect_system_status() -> SystemStatus:
 
     # Group system metrics under backend component if it exists
     if ComponentName.BACKEND in component_results:
-        # Backend exists - recreate with system metrics as sub-components
+        # Backend exists - recreate with system metrics as sub-components.
+        # They are the host's figures, not the app's: each keeps its own
+        # status, and the Server stays as its own check says.
         backend_component = component_results[ComponentName.BACKEND]
-
-        # Propagate status from system metrics and original backend status
-        system_metrics_statuses = [
-            getattr(metric, 'status', ComponentStatusType.HEALTHY)
-            for metric in system_metrics.values()
-        ]
-        original_backend_status = getattr(
-            backend_component, 'status', ComponentStatusType.HEALTHY
-        )
-        all_backend_statuses = system_metrics_statuses + [original_backend_status]
-
-        backend_status = propagate_status(all_backend_statuses)
 
         component_results[ComponentName.BACKEND] = ComponentStatus(
             name=backend_component.name,
-            status=backend_status,
+            status=backend_component.status,
             message=backend_component.message,
             response_time_ms=backend_component.response_time_ms,
             metadata=backend_component.metadata,

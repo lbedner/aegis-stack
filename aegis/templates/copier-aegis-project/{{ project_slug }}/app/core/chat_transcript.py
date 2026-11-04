@@ -15,6 +15,8 @@ import pprint
 import re
 from typing import Any
 
+from app.core.config import settings
+from app.core.steps import doing
 from app.core.tools import result_data
 
 # Rendered while text is still arriving; dropped from the final render.
@@ -88,17 +90,54 @@ def tool_label(name: str, args: str = "") -> str:
     return f"{name}({inner})"
 
 
+def shows_calls() -> bool:
+    """Whether a step's trail line is its call or what it is doing
+    (``AI_CHAT_SHOW_CALLS``). Read with a default: this module ships in
+    stacks without AI, whose settings have no such field."""
+    return bool(getattr(settings, "AI_CHAT_SHOW_CALLS", True))
+
+
+def script_of(args: Any) -> str | None:
+    """A code-mode call's script, from its arguments as a JSON string or
+    already parsed; None for any other call."""
+    if isinstance(args, str):
+        try:
+            args = json.loads(args)
+        except ValueError:
+            return None
+    code = args.get("code") if isinstance(args, dict) else None
+    return code if isinstance(code, str) else None
+
+
+def first_code_line(code: str) -> str:
+    """A script's first line of code (no blank, no comment), clipped:
+    what the script was FOR, not the program."""
+    for line in code.splitlines():
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#"):
+            return stripped[:80]
+    return ""
+
+
+def trail_label(name: str, args: Any) -> str:
+    """A call's trail line, live and stored alike: the call, or what it is
+    doing (``steps.doing``, read from the whole script while its first
+    comment is still there) where ``AI_CHAT_SHOW_CALLS`` is off, so a
+    viewer sees the agent's steps, not its code."""
+    script = script_of(args)
+    text = args if isinstance(args, str) else json.dumps(args, default=str)
+    if not shows_calls():
+        return doing(name, text if script is None else script)
+    if script is None:
+        return tool_label(name, text)
+    return f"{name}: {first_code_line(script)}".rstrip()
+
+
 def trace_label(entry: dict[str, Any]) -> str:
     """A persisted trace entry as its trail line (same look as live)."""
-    name = str(entry.get("tool", ""))
     code = entry.get("code")
-    if isinstance(code, str):
-        for line in code.splitlines():
-            stripped = line.strip()
-            if stripped and not stripped.startswith("#"):
-                return f"{name}: {stripped[:80]}"
-        return f"{name}:"
-    return tool_label(name, str(entry.get("args", "") or ""))
+    args = {"code": code} if isinstance(code, str) else str(entry.get("args", "") or "")
+    return trail_label(str(entry.get("tool", "")), args)
 
 
 def _pretty(text: str) -> str:

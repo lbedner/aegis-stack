@@ -290,6 +290,43 @@ class TestComponentIntegration:
             assert "CPU usage: 96.0%" in cpu_status.message
 
     @pytest.mark.asyncio
+    async def test_the_hosts_figures_never_raise_the_server(self) -> None:
+        """The host's CPU, memory and disk are the machine's, not the app's:
+        they ride under the backend as their own checks, and the Server
+        stays as its own check says (a dot with no fault of its own read as
+        the app's)."""
+        from app.services.system.health import _health_checks
+        from app.services.system.health_probes import _system_metrics_cache
+
+        async def serving() -> ComponentStatus:
+            return ComponentStatus(name="backend", message="Serving")
+
+        full = type(
+            "MockMemory",
+            (),
+            {"percent": 95.0, "total": 8 * 1024**3, "available": 0.4 * 1024**3},
+        )()
+        before = _health_checks.get("backend")
+        register_health_check("backend", serving)
+        try:
+            # Read now, not from a figure an earlier test left cached.
+            with (
+                patch.dict(_system_metrics_cache, clear=True),
+                patch("psutil.virtual_memory", return_value=full),
+            ):
+                status = await get_system_status()
+        finally:
+            if before is None:
+                del _health_checks["backend"]
+            else:
+                _health_checks["backend"] = before
+        components = status.components["aegis"].sub_components["components"]
+        backend = components.sub_components["backend"]
+        assert backend.status == ComponentStatusType.HEALTHY
+        assert backend.message == "Serving"
+        assert backend.sub_components["memory"].healthy is False
+
+    @pytest.mark.asyncio
     async def test_system_metrics_normal_thresholds(self) -> None:
         """Test system metrics with normal resource usage."""
 

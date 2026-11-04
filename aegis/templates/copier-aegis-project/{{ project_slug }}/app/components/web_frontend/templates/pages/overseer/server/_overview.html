@@ -17,10 +17,11 @@
     {{ live_charts(overview_charts, "#server-charts", request.url.path) }}
   </div>
   {% endif %}
-  <div class="grid gap-4 {{ 'lg:grid-cols-3' if host_figures else 'lg:grid-cols-2' }}">
-    {# The machine it runs on, only without containers to read
-       (overseer_server.overview_context). #}
-    {% if host_figures %}
+  {# The machine it runs on and its status, only without containers to read
+     (overseer_server.overview_context): with them, the glance above has
+     its state and its figures. #}
+  {% if host_figures %}
+  <div class="grid gap-4 lg:grid-cols-3">
     <div class="lg:col-span-2">
       {% call card("Resources", "Current snapshot") %}
         <div class="space-y-6">
@@ -40,7 +41,7 @@
         </div>
       {% endcall %}
     </div>
-    {% endif %}
     {{ status_card(component, "backend", [("HTTP methods", methods or "-")]) }}
   </div>
+  {% endif %}
 </div>

@@ -15,10 +15,19 @@ from pydantic_ai.messages import (
     ToolCallPart,
     ToolReturnPart,
 )
+{%- endif %}
 
 from app.core import steps
-from app.core.chat_transcript import card_component
+{%- if ai_framework == "pydantic-ai" %}
+from app.core.chat_transcript import (
+    card_component,
+    first_code_line,
+    script_of,
+    trail_label,
+)
 from app.core.tools import get_tool, result_text
+{%- else %}
+from app.core.chat_transcript import first_code_line, script_of, trail_label
 {%- endif %}
 from app.services.ai.models import StreamingMessage
 
@@ -30,19 +39,11 @@ def call_args_preview(args: Any) -> str:
     line - the UI trail should say what each script was FOR, not dump
     the program. Ordinary calls keep their (clipped) arguments.
     """
-    parsed: Any = args
-    if isinstance(args, str):
-        try:
-            parsed = json.loads(args)
-        except ValueError:
-            parsed = args
-    if isinstance(parsed, dict) and isinstance(parsed.get("code"), str):
-        for line in parsed["code"].splitlines():
-            stripped = line.strip()
-            if stripped and not stripped.startswith("#"):
-                return json.dumps({"code": stripped[:80]})
-        return ""
-    text = args if isinstance(args, str) else json.dumps(parsed)
+    script = script_of(args)
+    if script is not None:
+        line = first_code_line(script)
+        return json.dumps({"code": line}) if line else ""
+    text = args if isinstance(args, str) else json.dumps(args)
     return (text or "")[:120]
 
 
@@ -52,16 +53,23 @@ def tool_notice(
     message_id: str,
     conversation_id: str | None,
     stream_delta: bool,
-    args: str = "",
+    args: Any = "",
 ) -> StreamingMessage:
-    """A content-free chunk naming a tool call, for the UI trail."""
+    """A content-free chunk naming a tool call, for the UI trail: its
+    arguments previewed, and its trail line (``trail_label``), read from
+    the whole call while a script's first comment is still there."""
     return StreamingMessage(
         content="",
         is_final=False,
         is_delta=stream_delta,
         message_id=message_id,
         conversation_id=conversation_id,
-        metadata={"event": "tool", "tool": tool_name, "args": args},
+        metadata={
+            "event": "tool",
+            "tool": tool_name,
+            "args": call_args_preview(args),
+            "label": trail_label(tool_name, args),
+        },
     )
 
 
@@ -86,16 +94,8 @@ def record_tool_call(trace: list[dict[str, Any]], event: FunctionToolCallEvent) 
     if call_id := getattr(event.part, "tool_call_id", None):
         entry[CALL_ID] = call_id
     args = event.part.args
-    parsed: Any = None
-    if isinstance(args, str):
-        try:
-            parsed = json.loads(args)
-        except ValueError:
-            parsed = None
-    elif isinstance(args, dict):
-        parsed = args
-    if isinstance(parsed, dict) and isinstance(parsed.get("code"), str):
-        entry["code"] = parsed["code"][:_TRACE_CODE_CAP]
+    if (script := script_of(args)) is not None:
+        entry["code"] = script[:_TRACE_CODE_CAP]
     else:
         text = args if isinstance(args, str) else json.dumps(args)
         entry["args"] = (text or "")[:_TRACE_RESULT_CAP]

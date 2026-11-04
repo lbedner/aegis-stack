@@ -73,7 +73,7 @@ class TestBracketErrors:
     @pytest.mark.parametrize(
         ("value", "message"),
         [
-            ("ai[bogus-framework]", "Invalid AI service syntax"),
+            ("ai[bogus-framework]", "Invalid ai service syntax"),
             ("auth[bogus-level]", "Invalid auth service syntax"),
             ("insights[bogus-source]", "Invalid insights service syntax"),
         ],

@@ -18,10 +18,8 @@ from typing import Any
 import pytest
 from filelock import FileLock
 
-from aegis.cli.utils import expand_scheduler_dependencies
-from aegis.core.component_utils import clean_component_names, restore_engine_info
 from aegis.core.copier_manager import generate_with_copier
-from aegis.core.dependency_resolver import DependencyResolver
+from aegis.core.selection import check_components
 from aegis.core.template_generator import TemplateGenerator
 
 from .test_stack_generation import STACK_COMBINATIONS, StackCombination
@@ -184,9 +182,8 @@ def _resolved_components(components: Iterable[str]) -> list[str]:
     so without this a cached worker project had no redis and every test on
     it ran against a project no user can generate.
     """
-    selected = expand_scheduler_dependencies(list(components))
-    clean = clean_component_names(selected)
-    return restore_engine_info(DependencyResolver.resolve_dependencies(clean), selected)
+    value = ",".join(components)
+    return check_components(value) if value else []
 
 
 @pytest.fixture(scope="session")

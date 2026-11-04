@@ -133,6 +133,34 @@ Start a project from one:
 
 A blueprint only pre-fills the answers `aegis init` would ask for, so the stack it produces is identical to selecting those options by hand. Add whatever it leaves out afterwards with `aegis add` and `aegis add-service`.
 
+### aegis menu
+
+The generator's menu as JSON, for tools and agents that compose a stack: every component and service, what its brackets take, and what it requires, recommends and conflicts with. `aegis components` and `aegis services` list the same data for a person. Each release also publishes it as `menu.json` on its GitHub release.
+
+**Usage:**
+```bash
+aegis menu
+aegis menu --components "worker[taskiq]" --services "ai[sqlite,openai]" --name my-app
+```
+
+**Options:**
+
+- `--components, -c TEXT` - A component selection to check, as `aegis init` takes it
+- `--services, -s TEXT` - A service selection to check, as `aegis init` takes it
+- `--name, -n TEXT` - The project name for the command (default: `my-app`)
+
+With a selection it runs the same checks `aegis init` runs, and prints either the command that builds it, with every component it brings spelled out:
+
+```json
+{"command": "uvx aegis-stack init my-app --components \"redis,worker[taskiq],database[sqlite]\" --services \"ai[sqlite,openai]\" --no-interactive"}
+```
+
+or the rules `aegis init` refuses it for, with the components that would satisfy a service's needs, and exits 1:
+
+```json
+{"rules": ["Service 'auth' requires component 'database'"], "missing": ["database"]}
+```
+
 ---
 
 ## Project Management Commands

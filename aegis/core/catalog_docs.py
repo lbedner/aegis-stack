@@ -58,8 +58,7 @@ def _row(spec: PluginSpec) -> str:
     badge = ALWAYS if _core(spec) else OPTIONAL
     if spec.experimental:
         badge = f"{badge} {EXPERIMENTAL}"
-    link = f"{DOCS_BASE_URL}{spec.docs_path}/"
-    return f"| **[{spec.display_title}]({link})** | {spec.description} | {badge} |"
+    return f"| **[{spec.display_title}]({spec.docs_url})** | {spec.description} | {badge} |"
 
 
 def table(kind: str) -> str:

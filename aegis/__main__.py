@@ -40,6 +40,7 @@ from .commands.deploy_upload import (
 )
 from .commands.ingress import ingress_enable_command
 from .commands.init import init_command
+from .commands.menu import menu_command
 from .commands.plugins import plugins_app
 from .commands.remove import remove_command
 from .commands.remove_service import remove_service_command
@@ -130,6 +131,7 @@ app.command(name="version")(version_command)
 app.command(name="components")(components_command)
 app.command(name="services")(services_command)
 app.command(name="blueprints")(blueprints_command)
+app.command(name="menu")(menu_command)
 app.command(name="init")(init_command)
 app.command(name="add")(add_command)
 app.command(name="add-service")(add_service_command)

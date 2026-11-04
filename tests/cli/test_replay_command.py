@@ -8,7 +8,7 @@ parsers unchanged.
 
 from __future__ import annotations
 
-from aegis.commands.init import build_replay_command
+from aegis.core.selection import build_replay_command
 
 
 class TestBuildReplayCommand:

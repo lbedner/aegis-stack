@@ -9,7 +9,6 @@ from pathlib import Path
 import typer
 
 from ..cli import brand
-from ..cli.callbacks import _split_service_list
 from ..cli.utils import detect_scheduler_backend
 from ..cli.validation import (
     validate_copier_project,
@@ -50,6 +49,7 @@ from ..core.option_spec import (
 )
 from ..core.post_gen_tasks import stack_holds_sqlite
 from ..core.project_map import render_project_map
+from ..core.selection import split_services
 from ..core.service_resolver import ServiceResolver
 from ..core.services import SERVICES, get_service_dependencies
 from ..core.version_compatibility import validate_version_compatibility
@@ -184,7 +184,7 @@ def add_service_command(
 
     # Parse services (respecting bracket syntax like ai[langchain,sqlite])
     assert services is not None  # Already validated by check above
-    selected_services = _split_service_list(services)
+    selected_services = split_services(services)
 
     # Create mapping: full name -> base name (for bracket syntax like ai[langchain,sqlite])
     # This is done once and used throughout to keep things DRY

@@ -33,7 +33,13 @@ from ..core.components import (
     CORE_COMPONENTS,
     ComponentType,
 )
-from ..core.service_resolver import ServiceResolver
+from ..core.selection import (
+    SelectionError,
+    build_replay_command,
+    check_components,
+    check_services,
+    stack_components,
+)
 from ..core.services import SERVICES
 from ..core.template_generator import TemplateGenerator
 from ..i18n import lazy_t, t
@@ -46,43 +52,6 @@ _SERVICES_HELP = lazy_t(
     backends="|".join(sorted(BACKENDS)),
     providers="|".join(sorted(PROVIDERS)),
 )
-
-
-def build_replay_command(
-    project_name: str,
-    components: list[str],
-    services: list[str],
-) -> str:
-    """The uvx one-liner that reproduces this exact stack non-interactively.
-
-    Selections carry their bracket syntax (``scheduler[sqlite]``,
-    ``auth[rbac]``, ``ai[memory,pydantic-ai,public,rag]``), so feeding them
-    back through ``--components``/``--services`` re-resolves to the same
-    project. CORE components ship in every project and are dropped.
-    """
-    parts = [f"uvx aegis-stack init {project_name}"]
-    # Defensive base-name dedupe: prefer the bracketed variant when both a
-    # plain and a configured form of the same component slipped through.
-    by_base: dict[str, str] = {}
-    order: list[str] = []
-    for comp in components:
-        base = comp.split("[", 1)[0]
-        if base in CORE_COMPONENTS:
-            continue
-        if base not in by_base:
-            by_base[base] = comp
-            order.append(base)
-        elif "[" in comp and "[" not in by_base[base]:
-            by_base[base] = comp
-    non_core = [by_base[base] for base in order]
-    # Quoted: bracket syntax is a glob pattern to zsh (and friends), so an
-    # unquoted database[postgres] makes the shell error before uvx runs.
-    if non_core:
-        parts.append(f'--components "{",".join(non_core)}"')
-    if services:
-        parts.append(f'--services "{",".join(services)}"')
-    parts.append("--no-interactive")
-    return " ".join(parts)
 
 
 def _remove_existing_project(project_path: Path) -> None:
@@ -125,23 +94,33 @@ def _print_guided_receipt(plan: BuildPlan, project_path: Path) -> None:
     the part worth keeping: what was built, how to run it, how to rebuild
     it. Reuses the post-gen i18n strings so quick and guided stay in step.
     """
-    from rich.console import Console
-    from rich.text import Text
-
-    from ..cli.brand import AEGIS_TEAL
-
     typer.echo()
     brand.success(t("postgen.ready"), bold=True)
     typer.echo(t("postgen.next_cd", path=project_path))
     typer.echo(t("postgen.next_serve"))
     typer.echo(t("postgen.next_dashboard"))
     typer.echo()
+    _print_replay(plan.project_name, plan.components, plan.services)
+
+
+def _print_replay(
+    project_name: str, components: list[str], services: list[str]
+) -> None:
+    """The replay hint: the exact command that recreates this stack
+    without the prompts."""
+    from rich.console import Console
+    from rich.text import Text
+
+    from ..cli.brand import AEGIS_TEAL
+
     brand.muted(t("init.replay_hint"))
-    replay = build_replay_command(plan.project_name, plan.components, plan.services)
-    # soft_wrap: emit one logical line. Rich would otherwise hard-wrap to
-    # the terminal width with REAL newlines, breaking copy-paste of the
-    # command; soft-wrapped output copies clean even when it displays
-    # across multiple rows.
+    replay = build_replay_command(project_name, components, services)
+    # Text, not markup interpolation: bracket syntax like worker[taskiq]
+    # would be parsed (and swallowed) as rich markup tags. soft_wrap: emit
+    # one logical line. Rich would otherwise hard-wrap to the terminal
+    # width with REAL newlines, breaking copy-paste of the command;
+    # soft-wrapped output copies clean even when it displays across
+    # multiple rows.
     Console(highlight=False).print(
         Text(f"   {replay}", style=AEGIS_TEAL), soft_wrap=True
     )
@@ -373,79 +352,52 @@ def init_command(
         # type and are never reassigned.
         if not interactive or components_given or services_given:
             selection = blueprint_selection(preset)
-            if not components_given:
-                selected_components = selection.components
-                components_given = True
-            if not services_given:
-                selected_services = selection.services
-                services_given = True
-                apply_service_option_handlers(selection.services)
+            # Through the same checks as typed flags.
+            try:
+                if not components_given:
+                    picked = ",".join(selection.components)
+                    selected_components = check_components(picked) if picked else []
+                    components_given = True
+                if not services_given:
+                    picked = ",".join(selection.services)
+                    selected_services = check_services(picked) if picked else []
+                    services_given = True
+                    apply_service_option_handlers(selected_services)
+            except SelectionError as e:
+                for rule in e.rules:
+                    brand.error(rule, err=True)
+                raise typer.Exit(1) from None
     scheduler_backend = StorageBackends.MEMORY  # Default to in-memory scheduler
 
     # Resolve services to components if services were provided
     # This runs in both interactive and non-interactive modes when --services is specified
     if selected_services:
-        # Check if --components was explicitly provided
-        components_explicitly_provided = components_given
-
-        if components_explicitly_provided:
-            # In non-interactive mode with explicit --components, validate compatibility
-            # Include core components (always present) for validation
-            components_for_validation = list(set(selected_components + CORE_COMPONENTS))
-            errors = ServiceResolver.validate_service_component_compatibility(
-                selected_services, components_for_validation
+        try:
+            # With explicit --components, every component a service needs
+            # must be among them; without, the services bring theirs.
+            stack = stack_components(
+                selected_components if components_given else None, selected_services
             )
-            if errors:
-                brand.error(t("init.compat_errors"), err=True)
-                for error in errors:
-                    typer.echo(f"   • {error}", err=True)
-
-                # Show suggestion
-                missing_components = (
-                    ServiceResolver.get_missing_components_for_services(
-                        selected_services, components_for_validation
-                    )
-                )
-                if missing_components:
-                    typer.echo(
-                        t(
-                            "init.suggestion_add",
-                            components=",".join(
-                                sorted(set(selected_components + missing_components))
-                            ),
-                        ),
-                        err=True,
-                    )
-                    typer.echo(
-                        f"   {t('init.suggestion_remove')}",
-                        err=True,
-                    )
+        except SelectionError as e:
+            brand.error(t("init.compat_errors"), err=True)
+            for rule in e.rules:
+                typer.echo(f"   • {rule}", err=True)
+            if e.missing:
                 typer.echo(
-                    f"   {t('init.suggestion_interactive')}",
+                    t(
+                        "init.suggestion_add",
+                        components=",".join(
+                            sorted(set(selected_components + e.missing))
+                        ),
+                    ),
                     err=True,
                 )
-                raise typer.Exit(1)
-        else:
-            # No --components provided, auto-add required components for services
-            service_components, _ = ServiceResolver.resolve_service_dependencies(
-                selected_services
-            )
-            if service_components:
-                brand.warn(
-                    t(
-                        "init.services_require",
-                        components=", ".join(sorted(service_components)),
-                    )
-                )
-            selected_components = service_components
-
-        # Resolve service dependencies and merge with any explicitly selected components
-        service_components, _ = ServiceResolver.resolve_service_dependencies(
-            selected_services
-        )
-        # Merge service-required components with explicitly selected components
-        all_components = list(set(selected_components + service_components))
-        selected_components = all_components
+                typer.echo(f"   {t('init.suggestion_remove')}", err=True)
+            typer.echo(f"   {t('init.suggestion_interactive')}", err=True)
+            raise typer.Exit(1) from None
+        if not components_given and stack:
+            brand.warn(t("init.services_require", components=", ".join(sorted(stack))))
+        selected_components = stack
 
     # Auto-detect scheduler backend when components are specified
     if selected_components:
@@ -595,25 +547,8 @@ def init_command(
         # Note: Comprehensive setup output is now handled by the post-generation hook
         # which provides better status reporting and automated setup
 
-        # Replay hint: the exact command that recreates this stack without
-        # the prompts.
-        from rich.console import Console
-
-        from ..cli.brand import AEGIS_TEAL
-
-        replay = build_replay_command(
-            project_name, list(selected_components), selected_services
-        )
         typer.echo()
-        brand.muted(t("init.replay_hint"))
-        # Text, not markup interpolation: bracket syntax like worker[taskiq]
-        # would be parsed (and swallowed) as rich markup tags.
-        from rich.text import Text as _RichText
-
-        # soft_wrap: one logical line; see _print_guided_receipt.
-        Console(highlight=False).print(
-            _RichText(f"   {replay}", style=AEGIS_TEAL), soft_wrap=True
-        )
+        _print_replay(project_name, list(selected_components), selected_services)
 
     except Exception as e:
         brand.error(t("init.error", error=e), err=True)

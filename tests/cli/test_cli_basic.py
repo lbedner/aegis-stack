@@ -158,7 +158,7 @@ class TestComponentValidation:
         )
         # Should show auto-added database message (even if command fails for other
         # reasons)
-        assert "Auto-added database[sqlite]" in result.stdout
+        assert "Auto-added dependencies: database[sqlite]" in result.stdout
 
     def test_scheduler_backend_detection_message(self) -> None:
         """Test scheduler backend detection message."""

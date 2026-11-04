@@ -4,7 +4,10 @@ Tests for scheduler backend detection and expansion logic.
 Tests the new functions added to __main__.py for handling scheduler[backend] syntax.
 """
 
-from aegis.cli.utils import detect_scheduler_backend, expand_scheduler_dependencies
+import pytest
+
+from aegis.cli.utils import detect_scheduler_backend
+from aegis.core.selection import SelectionError, check_components
 
 
 class TestSchedulerBackendDetection:
@@ -48,63 +51,35 @@ class TestSchedulerBackendDetection:
 
 
 class TestSchedulerDependencyExpansion:
-    """Test automatic expansion of scheduler[backend] dependencies."""
+    """A persistent scheduler brings the database it keeps its jobs in,
+    and refuses one of another engine."""
 
-    def test_expand_scheduler_sqlite_adds_database(self) -> None:
-        """Test that scheduler[sqlite] adds database[sqlite]."""
-        components = ["scheduler[sqlite]", "redis"]
-        expanded = expand_scheduler_dependencies(components)
+    @pytest.mark.parametrize(
+        ("components", "expected"),
+        [
+            (
+                "scheduler[sqlite],redis",
+                {"scheduler[sqlite]", "database[sqlite]", "redis"},
+            ),
+            ("scheduler[postgres]", {"scheduler[postgres]", "database[postgres]"}),
+            ("scheduler,redis", {"scheduler", "redis"}),
+            # An existing database of the same engine is kept, not doubled.
+            ("scheduler[sqlite],database", {"scheduler[sqlite]", "database"}),
+            (
+                "scheduler[postgres],database[neon]",
+                {"scheduler[postgres]", "database[neon]"},
+            ),
+        ],
+    )
+    def test_a_scheduler_brings_its_database(
+        self, components: str, expected: set[str]
+    ) -> None:
+        assert set(check_components(components)) == expected
 
-        assert "scheduler[sqlite]" in expanded
-        assert "database[sqlite]" in expanded
-        assert "redis" in expanded
-        assert len(expanded) == 3
-
-    def test_expand_scheduler_postgres_adds_database(self) -> None:
-        """Test that scheduler[postgres] adds database[postgres]."""
-        components = ["scheduler[postgres]"]
-        expanded = expand_scheduler_dependencies(components)
-
-        assert "scheduler[postgres]" in expanded
-        assert "database[postgres]" in expanded
-        assert len(expanded) == 2
-
-    def test_expand_memory_scheduler_no_database(self) -> None:
-        """Test that plain scheduler doesn't add database."""
-        components = ["scheduler", "redis"]
-        expanded = expand_scheduler_dependencies(components)
-
-        assert expanded == ["scheduler", "redis"]  # No changes
-
-    def test_expand_with_existing_database(self) -> None:
-        """Test expansion when database already exists."""
-        components = ["scheduler[sqlite]", "database[postgres]", "redis"]
-        expanded = expand_scheduler_dependencies(components)
-
-        # Should not add another database
-        assert "scheduler[sqlite]" in expanded
-        assert "database[postgres]" in expanded  # Existing one preserved
-        assert "redis" in expanded
-        assert len(expanded) == 3
-        assert "database[sqlite]" not in expanded  # Not added
-
-    def test_expand_multiple_scheduler_backends(self) -> None:
-        """Test expansion with multiple scheduler backends (edge case)."""
-        components = ["scheduler[sqlite]", "scheduler[postgres]"]
-        expanded = expand_scheduler_dependencies(components)
-
-        # Should add databases for both backends, but avoid duplicate databases
-        # when both schedulers have same backend
-        assert "scheduler[sqlite]" in expanded
-        assert "scheduler[postgres]" in expanded
-        # At least one database should be added, but logic may prevent duplicates
-        assert any("database[" in comp for comp in expanded)
-        assert len(expanded) >= 3  # At least original 2 + 1 database
-
-    def test_expand_preserves_order(self) -> None:
-        """Test that expansion preserves component order."""
-        components = ["redis", "scheduler[sqlite]", "worker"]
-        expanded = expand_scheduler_dependencies(components)
-
-        # Should preserve original order, with database appended
-        assert expanded == ["redis", "scheduler[sqlite]", "worker", "database[sqlite]"]
+    @pytest.mark.parametrize(
+        "components",
+        ["scheduler[sqlite],database[postgres]", "scheduler[postgres],database"],
+    )
+    def test_a_database_of_another_engine_is_refused(self, components: str) -> None:
+        with pytest.raises(SelectionError, match="scheduler"):
+            check_components(components)

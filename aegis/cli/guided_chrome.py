@@ -92,9 +92,7 @@ def _docs_url(spec: PluginSpec) -> str | None:
     an OSC 8 styled hyperlink — same pattern as the post-init "Docs:" line.
     Styled links proved unreliable across terminals.
     """
-    if not spec.docs_path:
-        return None
-    return f"{DOCS_BASE_URL}{spec.docs_path}/"
+    return spec.docs_url
 
 
 # The postgres provider screen offers Neon by name, so it links the page

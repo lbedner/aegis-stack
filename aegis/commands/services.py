@@ -5,7 +5,8 @@ Services command implementation.
 import typer
 
 from ..cli import brand
-from ..core.services import SERVICE_GROUPS, group_header_key, services_in
+from ..core.menu import menu
+from ..core.services import SERVICE_GROUPS, group_header_key
 from ..i18n import t
 
 
@@ -24,30 +25,32 @@ def services_command() -> None:
 
     # Grouped by each service's category (``PluginSpec.category``), in
     # ``SERVICE_GROUPS`` order.
+    parts = menu()["services"]
     services_found = False
     for category in SERVICE_GROUPS:
-        type_services = services_in(category)
+        type_services = [p for p in parts if p["group"] == category.value]
         if type_services:
             services_found = True
             header = t(group_header_key(category))
             typer.echo(f"\n{header}")
             typer.echo("-" * 40)
 
-            for name, spec in type_services.items():
-                desc = _translated_service_desc(name, spec.description)
-                badge = f" {brand.experimental_badge()}" if spec.experimental else ""
+            for part in type_services:
+                name = part["name"]
+                desc = _translated_service_desc(name, part["description"])
+                badge = f" {brand.experimental_badge()}" if part["experimental"] else ""
                 typer.echo(f"  {name:12} - {desc}{badge}")
-                if spec.required_components:
+                if part["requires"]:
                     typer.echo(
-                        f"               {t('services.requires_components', deps=', '.join(spec.required_components))}"
+                        f"               {t('services.requires_components', deps=', '.join(part['requires']))}"
                     )
-                if spec.recommended_components:
+                if part["recommends"]:
                     typer.echo(
-                        f"               {t('services.recommends_components', deps=', '.join(spec.recommended_components))}"
+                        f"               {t('services.recommends_components', deps=', '.join(part['recommends']))}"
                     )
-                if spec.required_services:
+                if part["requires_services"]:
                     typer.echo(
-                        f"               {t('services.requires_services', deps=', '.join(spec.required_services))}"
+                        f"               {t('services.requires_services', deps=', '.join(part['requires_services']))}"
                     )
 
     if not services_found:

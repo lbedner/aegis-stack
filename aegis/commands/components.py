@@ -5,7 +5,8 @@ Components command implementation.
 import typer
 
 from ..constants import ComponentNames
-from ..core.components import CORE_COMPONENTS, ComponentType, get_components_by_type
+from ..core.components import CORE_COMPONENTS, ComponentType
+from ..core.menu import menu
 from ..i18n import t
 
 
@@ -27,19 +28,24 @@ def components_command() -> None:
         elif component == ComponentNames.FRONTEND:
             typer.echo(t("components.frontend_desc"))
 
+    parts = menu()["components"]
+
     def _print_section(title_key: str, component_type: ComponentType) -> None:
         typer.echo(f"\n{t(title_key)}")
         typer.echo("=" * 40)
-        for name, spec in get_components_by_type(component_type).items():
-            desc = _translated_desc(name, spec.description)
+        for part in parts:
+            if part["group"] != component_type.value:
+                continue
+            name = part["name"]
+            desc = _translated_desc(name, part["description"])
             typer.echo(f"  {name:12} - {desc}")
-            if spec.requires:
+            if part["requires"]:
                 typer.echo(
-                    f"               {t('components.requires', deps=', '.join(spec.requires))}"
+                    f"               {t('components.requires', deps=', '.join(part['requires']))}"
                 )
-            if spec.recommends:
+            if part["recommends"]:
                 typer.echo(
-                    f"               {t('components.recommends', deps=', '.join(spec.recommends))}"
+                    f"               {t('components.recommends', deps=', '.join(part['recommends']))}"
                 )
 
     _print_section("components.infra_title", ComponentType.INFRASTRUCTURE)

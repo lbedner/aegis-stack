@@ -42,6 +42,19 @@ jobs:
           path: dist/
           if-no-files-found: error
 
+      # The generator's menu for this version, beside the wheel on the
+      # GitHub release: a consumer without the package fetches it by tag.
+      # Not in dist/, which the PyPI upload takes whole.
+      - name: Export the generator menu
+        run: mkdir -p menu && uv run aegis menu > menu/menu.json
+
+      - name: Upload the menu
+        uses: actions/upload-artifact@v7
+        with:
+          name: menu
+          path: menu/
+          if-no-files-found: error
+
   publish-testpypi:
     name: Publish to TestPyPI
     needs: build
@@ -59,6 +72,12 @@ jobs:
         with:
           name: dist
           path: dist/
+
+      - name: Download the menu
+        uses: actions/download-artifact@v8
+        with:
+          name: menu
+          path: menu/
 
       - name: Publish to TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1
@@ -89,7 +108,9 @@ jobs:
             git push origin v<version>
             ```
           prerelease: true
-          files: dist/*
+          files: |
+            dist/*
+            menu/menu.json
 
   publish-pypi:
     name: Publish to PyPI
@@ -111,6 +132,12 @@ jobs:
         with:
           name: dist
           path: dist/
+
+      - name: Download the menu
+        uses: actions/download-artifact@v8
+        with:
+          name: menu
+          path: menu/
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
@@ -145,5 +172,7 @@ jobs:
             - [PyPI](https://pypi.org/project/aegis-stack/${{ steps.version.outputs.VERSION }}/)
             - [Documentation](https://docs.aegis-stack.io/)
             - [Changelog](https://github.com/lbedner/aegis-stack/blob/main/CHANGELOG.md)
-          files: dist/*
+          files: |
+            dist/*
+            menu/menu.json
           prerelease: false

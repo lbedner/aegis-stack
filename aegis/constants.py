@@ -368,7 +368,6 @@ class Messages:
 
     # Component/service parsing
     EMPTY_COMPONENT_NAME = "Empty component name is not allowed"
-    EMPTY_SERVICE_NAME = "Empty service name is not allowed"
 
     # Interactive mode
     INTERACTIVE_IGNORES_ARGS = "Warning: --interactive flag ignores component arguments"

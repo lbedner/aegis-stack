@@ -26,6 +26,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from ...constants import DOCS_BASE_URL
 from ..file_manifest import FileManifest
 
 # A Debian package name: what apt accepts, and nothing a shell or a line in
@@ -570,6 +571,13 @@ class PluginSpec:
             queue if isinstance(queue, str) else queue.name
             for queue in self.worker_queues
         ]
+
+    @property
+    def docs_url(self) -> str | None:
+        """Its documentation page, or None when it has no page yet."""
+        if not self.docs_path:
+            return None
+        return f"{DOCS_BASE_URL}{self.docs_path}/"
 
     @property
     def display_title(self) -> str:

@@ -17,6 +17,7 @@ from aegis.cli.interactive import (
     clear_ai_provider_selection,
 )
 from aegis.core.services import SERVICES
+from aegis.i18n import t
 from tests.cli.conftest import GenerationCalls, ProjectFactory
 from tests.cli.test_utils import run_aegis_command, strip_ansi_codes
 
@@ -99,14 +100,11 @@ class TestServicesCommand:
 
     def test_services_command_with_empty_registry(self):
         """Test services command behavior with empty registry."""
-        with mock.patch("aegis.commands.services.services_in") as mock_get_services:
-            # Every category comes back empty
-            mock_get_services.return_value = {}
-
+        with mock.patch("aegis.commands.services.menu", return_value={"services": []}):
             result = run_aegis_command("services")
 
             assert result.returncode == 0
-            # Should show no services message (though this won't actually show due to mock)
+            assert t("services.none_available") in result.stdout
 
 
 class TestServicesOptionIntegration:
@@ -892,7 +890,7 @@ class TestAIServiceDependencyValidation:
 
 
 class TestSplitServiceList:
-    """Test the _split_service_list function for parsing bracket syntax."""
+    """Test the split_services function for parsing bracket syntax."""
 
     def test_mismatched_closing_bracket_handles_gracefully(self) -> None:
         """
@@ -902,40 +900,40 @@ class TestSplitServiceList:
         "ai],auth" has an unmatched ']' character. The function should handle
         this gracefully without going to negative bracket_depth.
         """
-        from aegis.cli.callbacks import _split_service_list
+        from aegis.core.selection import split_services
 
         # Mismatched closing bracket at the start - should not crash
-        result = _split_service_list("ai],auth")
+        result = split_services("ai],auth")
         # The ']' is treated as a literal character since we're not inside brackets
         # Result should split on the comma: ["ai]", "auth"]
         assert result == ["ai]", "auth"]
 
     def test_normal_bracket_syntax_still_works(self) -> None:
         """Test that normal bracket syntax is not affected by the fix."""
-        from aegis.cli.callbacks import _split_service_list
+        from aegis.core.selection import split_services
 
         # Normal case: brackets contain options, comma inside preserved
-        result = _split_service_list("ai[langchain, sqlite],auth")
+        result = split_services("ai[langchain, sqlite],auth")
         assert result == ["ai[langchain, sqlite]", "auth"]
 
     def test_multiple_bracketed_services(self) -> None:
         """Test multiple services with bracket options."""
-        from aegis.cli.callbacks import _split_service_list
+        from aegis.core.selection import split_services
 
-        result = _split_service_list("ai[langchain],scheduler[sqlite]")
+        result = split_services("ai[langchain],scheduler[sqlite]")
         assert result == ["ai[langchain]", "scheduler[sqlite]"]
 
     def test_empty_brackets(self) -> None:
         """Test services with empty brackets."""
-        from aegis.cli.callbacks import _split_service_list
+        from aegis.core.selection import split_services
 
-        result = _split_service_list("ai[],auth")
+        result = split_services("ai[],auth")
         assert result == ["ai[]", "auth"]
 
     def test_nested_brackets_edge_case(self) -> None:
         """Test that multiple bracket levels are handled correctly."""
-        from aegis.cli.callbacks import _split_service_list
+        from aegis.core.selection import split_services
 
         # Nested brackets (unusual but possible)
-        result = _split_service_list("ai[[test]],auth")
+        result = split_services("ai[[test]],auth")
         assert result == ["ai[[test]]", "auth"]

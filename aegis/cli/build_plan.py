@@ -18,6 +18,7 @@ from ..core.component_utils import (
 )
 from ..core.components import COMPONENTS, CORE_COMPONENTS, ComponentType
 from ..core.dependency_resolver import DependencyResolver
+from ..core.selection import merged
 from ..core.service_resolver import ServiceResolver
 from ..core.template_generator import TemplateGenerator
 
@@ -109,14 +110,7 @@ def resolve_build_plan(
         before_merge_bases = {extract_base_component_name(c) for c in components}
         service_components, _ = ServiceResolver.resolve_service_dependencies(services)
 
-        merged = list(components)
-        merged_bases = set(before_merge_bases)
-        for comp in service_components:
-            base = extract_base_component_name(comp)
-            if base not in merged_bases:
-                merged.append(comp)
-                merged_bases.add(base)
-        components = merged
+        components = merged(components, service_components)
 
         service_added = [
             comp

@@ -38,6 +38,8 @@ from app.core.tools import current_owner_user_id, current_subject
 from app.services.ai.domains.voice import realtime_calls
 from app.services.shared.deps import get_optional_owner_user_id
 from app.services.system.models import ComponentStatus
+from app.services.ai.domains.chat.page_actions import page_action
+from tests._pages import LANDING
 from tests._realtime import ENGINE, VOICE, FakeRealtime
 from tests.web.dom import one
 from tests.web.overseer import sign_in, status_with
@@ -386,6 +388,23 @@ class TestABoundCall:
         assert gemini.built["user_id"] == "v1"
         assert ready["engine"] is None
         assert told[-1] == {"type": "saved"}
+
+
+def test_a_call_acts_on_the_page_it_is_on(
+    app: FastAPI,  # the database, set up
+    gemini: FakeRealtime,
+    ended: threading.Event,
+) -> None:
+    """A step she takes on the page reaches it at once, on a page the mount
+    declares (the socket says which, as the stream's body does)."""
+    gemini.live.events.insert(0, lambda: page_action("highlight", "docs"))
+    mount = replace(OVERSEER, pages={"/": LANDING})
+    with _calls(mount).websocket_connect(f"{SOCKET}?page=/") as ws:
+        ws.send_bytes(b"\x10\x20")  # the fake plays once it hears you
+        _, told = _hear(ws, "page")
+        ws.close()
+        assert ended.wait(5)
+    assert told[-1] == {"type": "page", "action": "highlight", "target": "docs"}
 
 
 class TestABoundedCall:

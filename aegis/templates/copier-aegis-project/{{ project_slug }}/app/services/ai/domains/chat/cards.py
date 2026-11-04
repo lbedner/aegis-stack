@@ -24,14 +24,13 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 import re
-from types import UnionType
-from typing import Any, Literal, Union, get_args, get_origin
+from typing import Any, Literal
 
 from pydantic import BaseModel, ValidationError, computed_field, model_validator
 
 from app.core.chat_transcript import card_markers
 from app.core.db import get_async_session
-from app.core.figures import FIGURES
+from app.core.figures import FIGURES, misfit, shape_of
 from app.core.tools import Refused, current_conversation_id, register_tool
 from app.services.ai.domains.chat import path_card
 from app.services.ai.models.chat_card import ChatCard
@@ -243,31 +242,6 @@ register_kind(
 )
 
 
-def shape_of(schema: type[BaseModel], depth: int = 0) -> str:
-    """A schema as the object literal that satisfies it."""
-    fields = [
-        f"{name}: {_type_name(info.annotation, depth)}"
-        for name, info in schema.model_fields.items()
-    ]
-    return "{" + ", ".join(fields) + "}"
-
-
-def _type_name(annotation: Any, depth: int) -> str:
-    origin = get_origin(annotation)
-    if origin is list:
-        (inner,) = get_args(annotation)
-        return f"[{_type_name(inner, depth + 1)}, ...]"
-    if origin in (Union, UnionType):
-        return "|".join(_type_name(arg, depth) for arg in get_args(annotation))
-    if origin is Literal:
-        return "|".join(str(arg) for arg in get_args(annotation))
-    if isinstance(annotation, type) and issubclass(annotation, BaseModel):
-        return shape_of(annotation, depth + 1) if depth < 2 else annotation.__name__
-    if annotation is type(None):
-        return "null"
-    return getattr(annotation, "__name__", str(annotation))
-
-
 def kinds_help() -> str:
     """Every kind and its payload, derived from the schemas: a hand-kept
     list is one a new kind silently falls out of."""
@@ -389,17 +363,7 @@ async def draw_card(kind: str, payload: dict[str, Any]) -> Drawn | Refused:
     try:
         data = declared.schema.model_validate(payload)
     except ValidationError as exc:
-        # Every fault at once, and the shape that fits: one at a time is
-        # how a wrong guess becomes four round trips.
-        faults = "; ".join(
-            f"{'.'.join(str(p) for p in err.get('loc', ())) or 'payload'} "
-            f"{err.get('msg', 'is invalid')}"
-            for err in exc.errors()[:4]
-        )
-        return Refused(
-            error=f"{declared.name} card: {faults}. "
-            f"It takes {shape_of(declared.schema)}."
-        )
+        return Refused(error=f"{declared.name} card: {misfit(exc, declared.schema)}")
     held = len(getattr(data, "rows", None) or [])
     if declared.rows and not held:
         return Refused(

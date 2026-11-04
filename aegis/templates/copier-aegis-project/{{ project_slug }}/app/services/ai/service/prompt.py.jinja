@@ -19,9 +19,8 @@ from app.services.ai.domains.chat.agent_loader import AgentConfig
 from app.services.ai.domains.chat.code_mode import with_sandbox_rules
 from app.services.ai.domains.chat.tools import resolve_tools
 from app.services.ai.domains.chat.prompts import (
-    DEFAULT_SYSTEM_PROMPT,
-    LEGACY_SYSTEM_PROMPT,
     build_system_prompt,
+    meant,
 )
 {% if ai_framework == "pydantic-ai" %}
 from app.services.ai.domains.chat.readings import Reading, format_readings
@@ -89,9 +88,7 @@ class PromptMixin(ContextsMixin):
         head, as the chat-kit runtime has them."""
         if agent_config is None:
             return None
-        persona = agent_config.system_prompt
-        if persona == LEGACY_SYSTEM_PROMPT:
-            persona = DEFAULT_SYSTEM_PROMPT
+        persona = meant(agent_config.system_prompt)
         return with_sandbox_rules(persona, code_mode=agent_config.code_mode)
 
     def _system_prompt_for(

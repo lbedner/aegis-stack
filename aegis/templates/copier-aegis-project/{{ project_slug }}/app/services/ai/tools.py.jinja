@@ -1,5 +1,6 @@
 """The AI service's tools, for ``app.core.tools.load_tools``: what a chat
 agent reads about itself and the user (``readings``, ``self_context``),
+what it does on the page the chat is on (``page_actions``),
 what it knows (``knowledge``, with RAG) and, with a database behind it,
 the cards it draws, the memory it keeps and the model catalog. Each
 registers where it is defined; this names them."""
@@ -7,6 +8,7 @@ registers where it is defined; this names them."""
 {% if ai_rag -%}
 import app.services.ai.domains.chat.knowledge  # noqa: F401
 {% endif -%}
+import app.services.ai.domains.chat.page_actions  # noqa: F401
 import app.services.ai.domains.chat.readings  # noqa: F401
 import app.services.ai.domains.chat.self_context  # noqa: F401
 {%- if ai_backend != "memory" %}

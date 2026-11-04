@@ -44,6 +44,7 @@ from app.core.chat_transcript import trace_label
 from app.core.config import settings
 from app.core.db import get_async_session
 from app.core.log import logger
+from app.core.pages import page_stage
 from app.services.ai.service import (
     LiveEngine,
     live_engines,
@@ -285,100 +286,106 @@ def live_router(
         refusal: Annotated[str | None, Depends(chat.gatekeeper(mount))],
         owner_user_id: Annotated[int | None, Depends(get_optional_owner_user_id)],
         conversation_id: str | None = None,
+        page: str | None = None,
     ) -> None:
-        """A call, for as long as the page holds the socket."""
+        """A call, for as long as the page holds the socket, on the page
+        it names (``ChatSurface.pages``)."""
         await ws.accept()
         if refusal:  # the gate let no call through: nothing to end
             await ws.close(code=1008, reason=refusal)
             return
-        how: CallEnded = "refused"
-        try:
-            if not chat.offers_calls(bound):  # no phone on their page
-                await ws.close(code=1008)
-                return
-            how = "error"
-            engine, info = await _engine_now()
-            if engine is None:
-                await ws.close(code=1008, reason="No live engine is enabled.")
-                return
+        # The page the call is on (the socket says which): her actions
+        # on it go out as they are taken (``page_action``).
+        on_page = bound.page_at(page)
+        with page_stage(on_page, lambda act: _send(ws, {"type": "page", **act})):
+            how: CallEnded = "refused"
             try:
-                conversation, realtime = await call_for(
-                    bound, owner_user_id, conversation_id, engine
-                )
-            except Exception:
-                logger.exception("Opening a live call failed")
-                await ws.close(code=1011)
-                return
-            stopped = asyncio.Event()
-            server_end: CallEnded | None = None
-            # The engine and what the call costs are the operator's figures:
-            # a caller without the controls (a visitor) is shown neither.
-            operator = bound.operator_controls
-
-            async def end(by: CallEnded, reason: str) -> None:
-                """The server ends the call, and tells the page why: an event,
-                not the socket's close reason, which holds 123 bytes and a
-                ``call_check`` reason is the app's own words."""
-                nonlocal server_end
-                if server_end:
+                if not chat.offers_calls(bound):  # no phone on their page
+                    await ws.close(code=1008)
                     return
-                server_end = by
-                logger.info("Live call ended by the server", by=by, reason=reason)
-                await _send(ws, {"type": "ended", "reason": reason})
-                stopped.set()
-
-            async def clock(session: Any, longest: float) -> None:
-                """The mount's longest call: a cue to wrap up, then the end."""
-                wrap = min(WRAP_UP_SECONDS, longest)
-                await asyncio.sleep(longest - wrap)
-                with contextlib.suppress(Exception):  # the limit holds regardless
-                    await session.send(WRAP_UP)
-                await asyncio.sleep(wrap)
-                await end("limit", TIME_UP)
-
-            async def saved(cost: float) -> None:
-                """A turn is kept; the mount's check may end the call there."""
-                await _send(
-                    ws, {"type": "saved"} | ({"cost": cost} if operator else {})
-                )
-                if server_end or not bound.call_check:
+                how = "error"
+                engine, info = await _engine_now()
+                if engine is None:
+                    await ws.close(code=1008, reason="No live engine is enabled.")
                     return
-                if reason := await bound.call_check(bound):
-                    await end("refused", reason)
-
-            longest = bound.longest_call
-            how = await realtime_calls.drive(
-                ai_service,
-                realtime,
-                alongside=lambda session: _carry(
-                    ws,
-                    session,
-                    conversation,
-                    info if operator else None,
-                    stopped,
-                    functools.partial(clock, longest=longest) if longest else None,
-                ),
-                on_event=lambda event: _tell(ws, event),
-                on_saved=saved,
-                on_drawn=lambda card_ids: show_cards(ws, card_ids),
-                conversation_id=conversation.id,
-                model=live_engines.realtime_model(engine),
-                agent_slug=_answers(bound),
-                user_id=bound.user,
-                owner_user_id=owner_user_id,
-                subject=bound.subject,
-                admin=admin,
-            )
-            how = server_end or how
-            try:
-                await ws.close()
-            except Exception:  # already closed by the page
-                return
-        finally:
-            if bound.on_call_end:
                 try:
-                    await bound.on_call_end(bound, how)
+                    conversation, realtime = await call_for(
+                        bound, owner_user_id, conversation_id, engine
+                    )
                 except Exception:
-                    logger.exception("A call's end hook failed")
+                    logger.exception("Opening a live call failed")
+                    await ws.close(code=1011)
+                    return
+                stopped = asyncio.Event()
+                server_end: CallEnded | None = None
+                # The engine and what the call costs are the operator's figures:
+                # a caller without the controls (a visitor) is shown neither.
+                operator = bound.operator_controls
+
+                async def end(by: CallEnded, reason: str) -> None:
+                    """The server ends the call, and tells the page why: an event,
+                    not the socket's close reason, which holds 123 bytes and a
+                    ``call_check`` reason is the app's own words."""
+                    nonlocal server_end
+                    if server_end:
+                        return
+                    server_end = by
+                    logger.info("Live call ended by the server", by=by, reason=reason)
+                    await _send(ws, {"type": "ended", "reason": reason})
+                    stopped.set()
+
+                async def clock(session: Any, longest: float) -> None:
+                    """The mount's longest call: a cue to wrap up, then the end."""
+                    wrap = min(WRAP_UP_SECONDS, longest)
+                    await asyncio.sleep(longest - wrap)
+                    with contextlib.suppress(Exception):  # the limit holds regardless
+                        await session.send(WRAP_UP)
+                    await asyncio.sleep(wrap)
+                    await end("limit", TIME_UP)
+
+                async def saved(cost: float) -> None:
+                    """A turn is kept; the mount's check may end the call there."""
+                    await _send(
+                        ws, {"type": "saved"} | ({"cost": cost} if operator else {})
+                    )
+                    if server_end or not bound.call_check:
+                        return
+                    if reason := await bound.call_check(bound):
+                        await end("refused", reason)
+
+                longest = bound.longest_call
+                how = await realtime_calls.drive(
+                    ai_service,
+                    realtime,
+                    alongside=lambda session: _carry(
+                        ws,
+                        session,
+                        conversation,
+                        info if operator else None,
+                        stopped,
+                        functools.partial(clock, longest=longest) if longest else None,
+                    ),
+                    on_event=lambda event: _tell(ws, event),
+                    on_saved=saved,
+                    on_drawn=lambda card_ids: show_cards(ws, card_ids),
+                    conversation_id=conversation.id,
+                    model=live_engines.realtime_model(engine),
+                    agent_slug=_answers(bound),
+                    user_id=bound.user,
+                    owner_user_id=owner_user_id,
+                    subject=bound.subject,
+                    admin=admin,
+                )
+                how = server_end or how
+                try:
+                    await ws.close()
+                except Exception:  # already closed by the page
+                    return
+            finally:
+                if bound.on_call_end:
+                    try:
+                        await bound.on_call_end(bound, how)
+                    except Exception:
+                        logger.exception("A call's end hook failed")
 
     return router

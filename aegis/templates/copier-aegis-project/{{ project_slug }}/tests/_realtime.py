@@ -5,6 +5,8 @@ first text turn, ``after_text``; or at once), then stays open until
 closed, the way a call waits on the person; or (``ends``) the provider
 ends it once they are played.
 Its voice is one chunk of audio. What it was sent is kept for the test.
+An event that is a coroutine function is awaited where it falls instead
+(a tool the agent runs mid-call).
 """
 
 from __future__ import annotations
@@ -96,6 +98,9 @@ class FakeSession:
             if self.after_text and await self._until("_asked"):
                 return
             for event in self.events:
+                if callable(event):  # a step run mid-call, as a tool is
+                    await event()
+                    continue
                 yield event
             if not self.ends:
                 await self._flag("_closed").wait()

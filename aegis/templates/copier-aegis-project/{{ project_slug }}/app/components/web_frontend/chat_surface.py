@@ -15,8 +15,8 @@ mount it serves. Who a turn is for and what it is about come from the
 mount (``bind``, per request), never from the browser.
 """
 
-from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import dataclass, field
 import importlib
 from importlib.util import find_spec
 import json
@@ -35,6 +35,7 @@ from app.core.chat_transcript import (
     trace_output,
 )
 from app.core.log import logger
+from app.core.pages import Page
 
 from .main import CHANGES
 
@@ -112,6 +113,14 @@ class ChatSurface:
     # hook: a gate that takes something for calls only checks it is one
     # (``HTTPConnection.scope["type"] == "websocket"``).
     on_call_end: Callable[["ChatSurface", str], Awaitable[None]] | None = None
+    # What each page the chat opens on declares (``app.core.pages``), by
+    # its path: the chat says which page it is on, and an agent there may
+    # point at the parts it lists. ``bind`` may give each request its own.
+    pages: Mapping[str, Page] = field(default_factory=dict)
+
+    def page_at(self, path: str | None) -> Page | None:
+        """What the page at ``path`` declares, as the chat names it."""
+        return self.pages.get(path or "")
 
 
 def offers_calls(chat: ChatSurface) -> bool:

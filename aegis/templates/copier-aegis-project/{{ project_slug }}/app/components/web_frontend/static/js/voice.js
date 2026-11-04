@@ -593,6 +593,8 @@
       if (!chatThread()) return; // no chat on screen: the saved turn has it
       if (!call.slot?.isConnected) call.slot = chatThread().appendChild(clone('chat-live-card'));
       htmx.ajax('GET', event.url, { target: call.slot, swap: 'innerHTML' });
+    } else if (event.type === 'page') {
+      pageAction(event); // chat.js: the same as a typed turn's
     } else if (event.type === 'saved') {
       showTurns(call.conversation);
       if (event.cost != null) showCost(event.cost); // an operator's call only
@@ -621,6 +623,7 @@
     const url = new URL(button.dataset.relay, location.href);
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
     if (conversationId()) url.searchParams.set('conversation_id', conversationId());
+    url.searchParams.set('page', chatPage()); // as a typed turn says it
     const ws = new WebSocket(url);
     ws.binaryType = 'arraybuffer';
     call = { ws, stream, sources: [], follows: [], playhead: 0, state: callState.start(voice().idle * 1000) };

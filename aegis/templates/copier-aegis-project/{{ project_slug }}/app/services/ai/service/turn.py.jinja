@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.services.ai.domains.chat.agent_loader import AgentConfig
+from app.services.ai.domains.chat.page_actions import on_page
 {%- if ai_backend != "memory" and ai_framework == "pydantic-ai" %}
 from app.services.ai.domains.chat.module_context import render_context_modules
 from app.services.ai.domains.chat.user_memory import (
@@ -68,6 +69,8 @@ class TurnMixin(PromptMixin):
         a turn reads, as the caller (``owner_user_id``, ``admin``) sees
         them. A typed turn and a live call (``realtime_calls``) both build
         her here, so each can do what the other can."""
+        # On a page that declares its parts, she may point at them.
+        agent_config = on_page(agent_config)
         # What is wrong right now rides the message (``_system_prompt_for``
         # says why), where she may read the app's health: the health tool
         # granted, and no caller known not to be an admin. Read alongside

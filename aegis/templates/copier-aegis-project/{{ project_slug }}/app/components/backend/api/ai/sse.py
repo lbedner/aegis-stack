@@ -2,8 +2,9 @@
 
 The API's ``/chat/stream`` and each chat surface mount's ``/stream`` run
 the same turn (``ai_service.stream_chat``) and speak the same frames:
-``connect``, a ``chunk`` per delta, a ``tool`` as a tool starts, ``final``
-with the stored message's ids and metadata, ``complete``; or ``error``.
+``connect``, a ``chunk`` per delta, a ``tool`` as a tool starts, a
+``page`` for an action on the page it is on, ``final`` with the stored
+message's ids and metadata, ``complete``; or ``error``.
 """
 
 from collections.abc import AsyncIterator
@@ -14,6 +15,7 @@ from fastapi.responses import StreamingResponse
 
 from app.core.chat_transcript import tool_label
 from app.core.log import logger
+from app.core.pages import Page, page_stage
 from app.services.ai.service import (
     AIServiceError,
     ConversationError,
@@ -57,16 +59,31 @@ def _chunk(chunk: StreamingMessage) -> str:
     return event("final" if chunk.is_final else "chunk", data)
 
 
-async def _events(chunks: AsyncIterator[StreamingMessage]) -> AsyncIterator[str]:
+async def _events(
+    chunks: AsyncIterator[StreamingMessage], page: Page | None = None
+) -> AsyncIterator[str]:
+    # What the agent does to the page (``page_action``), sent before the
+    # frame that follows it.
+    acted: list[dict[str, Any]] = []
+
+    async def send(action: dict[str, Any]) -> None:
+        acted.append(action)
+
     try:
-        yield event("connect", {"status": "connected", "message": "Streaming started"})
-        async for chunk in chunks:
-            if (chunk.metadata or {}).get("event") == "tool":
-                yield _tool(chunk)
-                continue
-            yield _chunk(chunk)
-            if chunk.is_final:
-                break
+        with page_stage(page, send):
+            yield event(
+                "connect", {"status": "connected", "message": "Streaming started"}
+            )
+            async for chunk in chunks:
+                for action in acted:
+                    yield event("page", action)
+                acted.clear()
+                if (chunk.metadata or {}).get("event") == "tool":
+                    yield _tool(chunk)
+                    continue
+                yield _chunk(chunk)
+                if chunk.is_final:
+                    break
         yield event("complete", {"status": "completed", "message": "Stream finished"})
     # Subclasses before AIServiceError, or their branches never run. A
     # provider's or the service's text is logged, not sent: it can carry
@@ -85,10 +102,13 @@ async def _events(chunks: AsyncIterator[StreamingMessage]) -> AsyncIterator[str]
         yield event("error", {"error": "Unexpected error"})
 
 
-def turn_stream(chunks: AsyncIterator[StreamingMessage]) -> StreamingResponse:
-    """A turn's chunks (``ai_service.stream_chat``) as the SSE response."""
+def turn_stream(
+    chunks: AsyncIterator[StreamingMessage], page: Page | None = None
+) -> StreamingResponse:
+    """A turn's chunks (``ai_service.stream_chat``) as the SSE response, on
+    the page it is on (``app.core.pages``: none, for the API)."""
     return StreamingResponse(
-        _events(chunks), media_type="text/event-stream", headers=HEADERS
+        _events(chunks, page), media_type="text/event-stream", headers=HEADERS
     )
 
 

@@ -4,7 +4,7 @@
    post appends a user bubble and a streaming bubble carrying the text to
    send; this reads that bubble, POSTs to the mount's SSE route and
    renders the frames into it: `chunk` text through a typewriter, `tool`
-   calls as trail rows, `error` as a line. When the stream completes the
+   calls as trail rows, `page` actions on the page, `error` as a line. When the stream completes the
    stored message is swapped in over the bubble (server-rendered), so the
    client never renders a settled message.
 
@@ -38,6 +38,31 @@ function setConversation(id) {
 }
 function chatComposer() {
   return document.getElementById('chat-composer');
+}
+// The page the chat is on, which the mount's declaration is keyed by: a
+// typed turn and a call each say it.
+function chatPage() {
+  return location.pathname;
+}
+// An agent's action on that page (``page_action``, checked against what
+// the page declares before it is sent). One of the page's own carries its
+// value and goes to the page's code as a `page-action` event on the part;
+// the rest the chat applies: brought into view, and lit as a part named
+// on a card is (``data-lit``, input.css), lit again from the start.
+function pageAction({ action, target, value }) {
+  const part = document.getElementById(target);
+  if (!part) return;
+  if (value !== undefined) {
+    part.dispatchEvent(new CustomEvent('page-action', { bubbles: true, detail: { action, value } }));
+    return;
+  }
+  revealTab(part); // app.js: a part in a tab not showing
+  const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  part.scrollIntoView({ behavior: still ? 'auto' : 'smooth', block: 'start' });
+  if (action !== 'highlight') return;
+  clearTimeout(part.unlit);
+  part.dataset.lit = '';
+  part.unlit = setTimeout(() => delete part.dataset.lit, 4000);
 }
 
 (() => {
@@ -338,6 +363,7 @@ function chatComposer() {
           message: bubble.dataset.text,
           conversation_id: ids.conversation,
           attachments,
+          page: chatPage(), // what it declares is the mount's to say
         }),
       });
       if (!resp.ok || !resp.body) throw new Error(`bad response ${resp.status}`);
@@ -356,6 +382,8 @@ function chatComposer() {
           addTrail(data.label || 'working...');
           writer.reset();
           busy.hidden = false;
+        } else if (event === 'page') {
+          pageAction(data);
         } else if (event === 'final') {
           ids.conversation = data.conversation_id || ids.conversation;
           ids.message = data.message_id;

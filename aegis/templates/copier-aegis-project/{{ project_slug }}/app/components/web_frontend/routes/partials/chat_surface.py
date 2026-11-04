@@ -37,6 +37,13 @@ NOTHING_HEARD = "Didn't catch anything. Try again, a little closer."
 MODELS_TEMPLATE = "partials/chat/models.html"
 
 
+class SurfaceTurn(ChatTurn):
+    """A surface's turn: the API's, and the page the chat is on (its
+    path), for what the mount declares there (``ChatSurface.pages``)."""
+
+    page: str | None = None
+
+
 def _fragment(request: Request, name: str, **context: Any) -> HTMLResponse:
     return templates.TemplateResponse(request=request, name=name, context=context)
 
@@ -120,13 +127,14 @@ def chat_router(mount: ChatSurface, guard: Callable[..., Any]) -> APIRouter:
     @router.post("/stream")
     async def stream(
         bound: Mount,
-        turn: ChatTurn,
+        turn: SurfaceTurn,
         refusal: Annotated[str | None, Depends(chat.gatekeeper(mount))],
         owner_user_id: Annotated[int | None, Depends(get_optional_owner_user_id)],
     ) -> Response:
         """The turn, answered as SSE (``sse.turn_stream``). The client sends
-        only the turn; whose it is and what it is about are the mount's,
-        and a conversation it continues must be the mount's own."""
+        only the turn and the page it is on; whose it is and what it is
+        about are the mount's, as is what that page declares, and a
+        conversation it continues must be the mount's own."""
         if refusal:
             return refused(refusal)
         if turn.conversation_id:
@@ -142,7 +150,8 @@ def chat_router(mount: ChatSurface, guard: Callable[..., Any]) -> APIRouter:
                 surface=bound.surface,
                 attachments=turn.attachments,
                 subject=bound.subject,
-            )
+            ),
+            page=bound.page_at(turn.page),
         )
 
     @router.post("/turns", response_class=HTMLResponse)

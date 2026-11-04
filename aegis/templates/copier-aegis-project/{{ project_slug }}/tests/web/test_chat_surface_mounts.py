@@ -17,6 +17,7 @@ import pytest
 from app.components.backend.api.ai.service import ai_service
 from app.components.web_frontend import chat_surface
 from app.components.web_frontend.chat_surface import ChatSurface
+from app.components.web_frontend.rendering import templates
 from app.components.web_frontend.routes.partials.chat_surface import chat_router
 from app.services.ai.models import (
     AIProvider,
@@ -25,6 +26,8 @@ from app.services.ai.models import (
     MessageRole,
     StreamingMessage,
 )
+from app.services.ai.domains.chat.page_actions import page_action
+from tests._pages import LANDING
 from tests.web.dom import one
 
 MOUNT = ChatSurface(path="/chat", user="", surface="metrics", agent_slug="illiana")
@@ -268,3 +271,47 @@ def test_a_bound_mount_gives_its_operators_the_controls_and_no_one_else(
         assert customer.get("/chat/voices").status_code == 404
         assert 'id="chat-live"' in operator.get("/chat/drawer").text
         assert 'id="chat-live"' not in customer.get("/chat/drawer").text
+
+
+def test_a_turn_acts_on_the_page_the_chat_says_it_is_on(
+    turns: list[dict[str, Any]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """What the agent does to the page reaches it as the turn streams, on
+    a page the mount declares; elsewhere it has no page to act on."""
+
+    async def stream_chat(**kwargs: Any) -> AsyncIterator[StreamingMessage]:
+        await page_action("highlight", "docs")
+        yield StreamingMessage(
+            content="There.",
+            is_final=True,
+            is_delta=False,
+            message_id="a2",
+            conversation_id="mine",
+            timestamp=datetime.now(UTC),
+        )
+
+    monkeypatch.setattr(ai_service, "stream_chat", stream_chat)
+    app = FastAPI()
+    app.include_router(chat_router(replace(MOUNT, pages={"/": LANDING}), allow))
+    client = TestClient(app, headers={"x-user": "7"})
+
+    def turn(page: str) -> str:
+        return client.post("/chat/stream", json={"message": "?", "page": page}).text
+
+    on_it = turn("/")
+    assert 'event: page\ndata: {"action": "highlight", "target": "docs"}' in on_it
+    assert _events(on_it).index("page") < _events(on_it).index("final")
+    assert "event: page" not in turn("/pricing")
+
+
+def test_a_pages_markup_takes_its_targets_from_the_declaration() -> None:
+    source = (
+        '{% from "components/macros/chat.html" import page_target %}'
+        "<section {{ page_target(page, part) }}></section>"
+    )
+    html = templates.env.from_string(source).render(page=LANDING, part="docs")
+    section = one(html, "section")
+    assert section.get("id") == "docs"
+    assert section.get("data-page-target") is not None
+    with pytest.raises(KeyError):
+        templates.env.from_string(source).render(page=LANDING, part="pricing")

@@ -146,6 +146,12 @@ LEGACY_SYSTEM_PROMPT = (
 CODE_EXPERT_PROMPT = DEFAULT_SYSTEM_PROMPT + "\n\n{rag_context}"
 
 
+def meant(persona: str) -> str:
+    """The prompt a row means: the default for one still holding
+    ``LEGACY_SYSTEM_PROMPT``, else its own."""
+    return DEFAULT_SYSTEM_PROMPT if persona == LEGACY_SYSTEM_PROMPT else persona
+
+
 def get_default_system_prompt() -> str:
     """Get the default system prompt (legacy)."""
     return DEFAULT_SYSTEM_PROMPT
@@ -162,6 +168,7 @@ __all__ = [
     "build_system_prompt",
     "DEFAULT_SYSTEM_PROMPT",
     "LEGACY_SYSTEM_PROMPT",
+    "meant",
     "CODE_EXPERT_PROMPT",
     "get_default_system_prompt",
     "get_rag_system_prompt",

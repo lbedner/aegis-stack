@@ -261,3 +261,7 @@ btn btn-outline {{ {"sm": "btn-sm", "xs": "btn-xs"}[size] }} {{ tones.get(tone, 
 {# The attributes for "load ``url`` into the thread", replacing it: a fresh
    thread, a conversation picked from history. #}
 {% macro hx_thread(url) %}hx-get="{{ url }}" hx-target="#chat-thread" hx-swap="innerHTML"{% endmacro %}
+{# A part of the page an agent may point at (``app.core.pages``): its id
+   taken from the page's declaration, so one it does not declare fails the
+   render. On the part's element: <section {{ page_target(page, "build") }}>. #}
+{% macro page_target(page, id) %}id="{{ page.target(id) }}" data-page-target{% endmacro %}

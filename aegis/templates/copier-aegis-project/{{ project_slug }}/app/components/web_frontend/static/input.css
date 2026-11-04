@@ -428,6 +428,8 @@
   /* A part named in the answer (mentions.js): lit on its card, still,
      the rest stepping back; the name itself marked as one to point at. */
   [data-card] [data-node][data-lit] { @apply ring-4 ring-aegis-teal; }
+  /* A part of the page an agent points at (``page_action``, chat.js). */
+  [data-page-target][data-lit] { @apply ring-4 ring-aegis-teal rounded-lg; }
   [data-card] .map-link[data-lit] { @apply opacity-100; stroke-width: 2.5; }
   [data-card]:has([data-lit]) :is([data-node], .map-link):not([data-lit]) { opacity: 0.3; }
   [data-mention] { @apply cursor-pointer underline decoration-dotted decoration-aegis-teal/70 underline-offset-4 hover:text-aegis-teal focus:outline-none focus-visible:text-aegis-teal; }

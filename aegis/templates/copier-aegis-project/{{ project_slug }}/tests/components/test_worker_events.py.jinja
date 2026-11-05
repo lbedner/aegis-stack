@@ -502,6 +502,30 @@ def test_max_jobs_comes_from_the_settings(monkeypatch: pytest.MonkeyPatch) -> No
     finally:
         monkeypatch.undo()
         importlib.reload(system)
+
+
+@pytest.mark.asyncio
+async def test_the_sse_baseline_counts_running_jobs_as_running() -> None:
+    """arq keeps a job in its queue's sorted set until it finishes: the
+    ones with an in-progress key are running, across every process, not
+    waiting (the health key's j_ongoing is one process's, and stale)."""
+    from arq.constants import in_progress_key_prefix
+
+    from app.components.worker.events import read_queue_totals
+    from app.components.worker.registry import get_all_queue_metadata
+
+    queue_type, meta = next(iter(get_all_queue_metadata().items()))
+    running = {f"{in_progress_key_prefix}j1", f"{in_progress_key_prefix}j2"}
+    redis = AsyncMock()
+    redis.zrange.side_effect = lambda name, *_: (
+        ["j1", "j2", "j3"] if name == meta["queue_name"] else []
+    )
+    redis.exists.side_effect = lambda *keys: len(running & set(keys))
+    redis.get.return_value = "Mar-01 17:41:22 j_complete=4 j_failed=0 j_ongoing=1"
+
+    totals = (await read_queue_totals(redis))[queue_type]
+
+    assert (totals["queued"], totals["ongoing"], totals["completed"]) == (1, 2, 4)
 {%- endif %}
 
 

@@ -403,7 +403,6 @@ class Settings(
 
 {% if include_ai %}
     # AI Service Configuration
-    # Primary service settings
     AI_ENABLED: bool = True
     AI_PROVIDER: str = "public"  # Default to public provider
     AI_MODEL: str = "auto"  # Default model (public provider uses available models)
@@ -414,6 +413,7 @@ class Settings(
     # tokens, so "low" cuts spend several-fold on constrained tasks.
     AI_EFFORT: str | None = None
     AI_TIMEOUT_SECONDS: Annotated[float, Field(gt=0), Configurable("service_ai", "Seconds the model has to answer")] = 120.0
+    AI_CHAT_SHOW_CALLS: Annotated[bool, Configurable("service_ai", "Show each step's call in chat, not only what it is doing")] = True
 {% if ai_backend != "memory" %}
     # Batch sentiment scoring of conversations. OFF by default: the job
     # spends model tokens on every unscored conversation.

@@ -460,7 +460,7 @@ MESSAGES: dict[str, str] = {
     "postgen.next_steps": "Next steps:",
     "postgen.next_cd": "   cd {path}",
     "postgen.next_serve": "   make serve",
-    "postgen.next_dashboard": "   Open Overseer: http://localhost:8000/dashboard/",
+    "postgen.next_dashboard": "   Open Overseer: {url}",
     # ── Post-generation: project map ──────────────────────────────────
     "projectmap.title": "Project Structure:",
     "projectmap.components": "Components",
@@ -943,7 +943,7 @@ MESSAGES: dict[str, str] = {
     ),
     "deploy.rolling_complete": "Rolling deploy complete!",
     "deploy.app_running": ("   Application running at: {url}"),
-    "deploy.overseer": ("   Overseer dashboard: {url}/dashboard/"),
+    "deploy.overseer": ("   Overseer dashboard: {url}"),
     "deploy.overseer_allowlist": "   (Traefik admits only private networks to it: add your IP to ADMIN_IP_ALLOWLIST in .env and redeploy to open it)",
     "deploy.record_failed": "   Not recorded on the server (its History): {error}",
     "deploy.view_logs": "   View logs: aegis deploy-logs",

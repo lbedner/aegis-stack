@@ -181,101 +181,10 @@ reads - a person opening the package or a coding agent deciding where a change
 belongs - so it names each domain and what it owns.
 
 !!! tip "The layout is tested, not just described"
-    Behavioural tests cannot see a layout: a service works the same whether it
-    is one flat package or four small ones. Every service is checked against
-    this standard as a pattern: **Overseer > Patterns > Service parts** shows
-    which parts each one has and which rules it breaks, with the file and line
-    that shows it, and `patterns --format json` prints the same report. The
-    enforced rules (reads in queries, every job wired, a health check, other
-    services and its own ways in through its facade) are held
-    by `tests/services/test_service_layout.py`; reads still outside a queries
-    module are recorded there as debt that may only shrink. Those tests hold
-    Aegis's own code and run only in Aegis's CI: a project built on it sees
-    the findings and is never failed by them. To hold your own code to the
-    rules, run `patterns check --update` once, then `patterns check --strict`;
-    the generated CI's `Illiana` job does it on every pull request, failing
-    none until you ask it to
-    ([setting it up](ai/illiana.md#pull-request-review)). A module at a
-    service's top level that the table above does not name is flagged too
-    (**Logic lives in domains**), each loose file listed, and so is a file
-    past the size budget (**Files stay readable**): over 500 lines, 900 for
-    models, schemas and other lists, or the largest file of its package at
-    over 40% of it and 400 lines. On the map, open the Server: a service
-    that breaks a rule says how many places to fix, and hovering it lists
-    each one (the file linked, its size or its line) with what to do. Open
-    the service and each piece says the same about its own files.
-    A service that imports another's `domains/`, `adapters/`, `queries` or
-    `models` is flagged too (**Other services through their facade**), each
-    import's line listed: it depends on how the other is organised, not on
-    what it offers. A service's own ways in are held the same
-    (**Its own ways in through its facade**): its router, a tool or a job,
-    the CLI or a page importing its own `domains/`, `queries` or `models`
-    is flagged, each import's line listed, and opened up on the map that
-    line is drawn red. Running its own adapters (a job syncing a provider)
-    is their work, not a step past it. A facade offers what its
-    `if TYPE_CHECKING:` block imports, each name loaded on first use
-    (`app/services/shared/facade.py`); a `service.py` also offers its own
-    `__all__`, and a facade composed of many modules (AI's and finance's
-    `service/` packages) offers only the block, so it costs nothing to import. `patterns touches` takes a change's files (as arguments,
-    or one per line from `git diff --name-only`) and says, from the app's
-    ontology (the model layer of the [Twin](../overseer/twin.md)), which parts own them, which parts depend on those, and the
-    tables, routes and jobs they define; Markdown for a pull request's job
-    summary, JSON with `--format json`. `ontology export` writes the same
-    model for other tools: `--format markdown` (the docs' *What It Is Made
-    Of* page, `stack.md`, built with the docs), `--format backstage` (a
-    `catalog-info.yaml`) or `--format otel` (a process's resource
-    attributes).
-    `patterns check` lists only the findings that are new: the ones not
-    in `.patterns-baseline.json`, the known debt, which `--update` writes
-    and afterwards only shrinks. A place is known by its rule, its part,
-    its file and the text on its line, so code added above old debt does
-    not make it new. Illiana gives the verdict, last: blocked when a new
-    place breaks a rule that holds a change (an enforced rule, or a gated
-    one, whose known debt stands while new breaches block: the service
-    standard's `takes-session` is gated (a job, a health check and an
-    agent's tool open the one session: nothing calls them with one), and
-    its `returns-model`: a function taking a session, and every registered
-    tool, hands back a typed model, never a `dict[str, Any]` whose keys no
-    type checker holds (a label's counts, `dict[str, int]`, are figures,
-    not a record); so is the async pattern's
-    `off-the-loop`: an async function hands blocking work, such as the
-    system model's build, `time.sleep` or a subprocess, to a thread with
-    `await asyncio.to_thread(...)` rather than calling it on the event
-    loop every request shares; the CLI's commands are exempt), else clear. It always exits 0
-    but under `--strict`, which exits 1 when blocked. Under GitHub Actions
-    each new finding is an annotation on the pull request's diff, an
-    error (red) where it blocks and a warning where it is advisory, titled
-    with her name; with changed files given, what they touch and her
-    verdict, each place marked as blocking or advisory, go in the job
-    summary. The app's `CLAUDE.md` asks a coding agent to run the check
-    before it finishes.
-    `patterns review` is Illiana's write-up of the same new findings, as
-    Markdown for a pull request: her verdict first (blocked or clear, the
-    rules', never hers), every finding listed from the check with her note
-    on it, what the change touches, and anything she would add
-    set apart as opinion, so she can neither invent a finding nor drop
-    one. It is one call, no tools, as its own agent (`pr-reviewer`,
-    seeded with her persona and the reviewing, so its model and how long
-    it writes are set in Agents), spend recorded; nothing new, or the
-    same findings an earlier review covered, no call. With `--pr` it is
-    posted as one comment on each pull request, edited on each push:
-    the latest review on top, each earlier one kept below it, collapsed,
-    by the commit it reviewed.
-    In aegis-stack's own CI, each new finding on a line the pull request
-    changed also gets her own review thread there: the rule, whether it blocks, why and the fix
-    (`scripts/illiana_threads.py`). `patterns check` writes its new places
-    as JSON to the file `PATTERNS_FOUND` names, each with the key the
-    baseline knows it by, and a thread carries that key: on each push she
-    replies "Fixed in" and resolves a thread whose finding is gone, never
-    posts a standing one twice, and reopens a blocking one resolved while it
-    still stands; an advisory thread a person resolved stays resolved. A
-    place no template line has the text of gets no thread, and a check that
-    did not finish touches none. Threads are the conversation, never the
-    verdict: the check still gives that.
-    Finance and documents also carry a `test_*_module_layout.py` stating which
-    module defines what, so folding a domain back together, or dropping a
-    function into whichever file was open, fails a test rather than passing
-    quietly.
+    Every service is checked against this layout: **Overseer > Patterns >
+    Service parts** shows the parts each one has and the rules it breaks,
+    and Illiana [reviews each pull request](ai/illiana.md#pull-request-review)
+    against the same rules.
 
 ### Service Integration Points
 

@@ -98,10 +98,8 @@
 }
 .md-typeset h2.home-headline {
     font-weight: 700;
-    color: #0E8C83;
-}
-[data-md-color-scheme="slate"] .md-typeset h2.home-headline {
-    color: #17CCBF;
+    text-align: center;
+    color: var(--md-accent-fg-color);
 }
 
 /* A setting name is one token: STORAGE_BACKEND broken across two lines
@@ -267,3 +265,26 @@
 .twin-grid .tw-code { fill: rgba(23, 204, 191, 0.18); stroke: #17CCBF; }
 .twin-grid .tw-stack { fill: rgba(139, 124, 246, 0.18); stroke: #8B7CF6; }
 .twin-grid .tw-requests { fill: rgba(242, 122, 98, 0.18); stroke: #F27A62; }
+
+/* README's "What you could build" toggle (``<details class="more">``):
+   a plain line under its table, not an admonition. */
+.md-typeset details.more {
+  border: 0;
+  box-shadow: none;
+  background: none;
+  margin-top: 0;
+}
+.md-typeset details.more > summary {
+  background: none;
+  padding-left: 1.2em;
+  color: var(--md-typeset-a-color);
+  font-weight: 600;
+}
+.md-typeset details.more > summary::before {
+  display: none;
+}
+.md-typeset details.more > summary::after {
+  left: 0;
+  right: auto;
+  background-color: var(--md-typeset-a-color);
+}

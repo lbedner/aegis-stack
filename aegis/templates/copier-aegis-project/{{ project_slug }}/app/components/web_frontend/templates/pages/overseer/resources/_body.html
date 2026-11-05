@@ -1,35 +1,31 @@
-{# The snapshot (ui_resources.overview) below the charts: the containers,
-   what loads inside the webserver and the servers outside Docker; the
-   split above them is ``_totals.html``. #}
-{% from "components/macros/layout.html" import card, progress, ranked_rows %}
-{% from "components/macros/table.html" import data_table %}
-{% macro share(value) -%}
-<span class="inline-flex items-center gap-2"><span class="w-24">{{ progress(value / 100, "ok", "Share of this stack", "h-1.5") }}</span><span class="w-12">{{ value }}%</span></span>
-{%- endmacro %}
+{# The snapshot (ui_resources.overview) below the charts: the containers
+   not well and the servers outside Docker; the
+   split is in the CPU and memory charts' headers (``_split.html``). #}
+{% from "components/macros/layout.html" import card %}
+{% from "pages/overseer/_glance_macros.html" import state %}
+{# The charts draw every running container but cannot say one is stopped
+   or failing (overseer_resources._view: ``unwell``), so it is named here,
+   with what is wrong and the way to its part's page. Nothing shows while
+   every one is well. #}
+{% set unwell = resources.unwell %}
 <div class="space-y-4">
-  {% call card("Containers", id="resources-containers") %}
+  {% if resources.note or unwell %}
+  {% call card("Needs attention" if unwell else "Containers", id="resources-containers") %}
     {% if resources.note %}<p class="text-sm text-aegis-muted">{{ resources.note }}</p>
     {% else %}
-    {{ data_table([
-      {"key": "service", "label": "Part", "kind": "link", "target": "#overseer-main"},
-      {"key": "name", "label": "Container", "kind": "code"},
-      {"key": "status", "label": "State", "kind": "status"},
-      {"key": "cpu", "label": figure_names.cpu, "align": "right"},
-      {"key": "memory_used", "label": figure_names.memory, "align": "right"},
-      {"key": "share", "label": "Of this stack", "render": share, "align": "right"},
-    ], resources.rows, empty="No container is running.", row_id="container") }}
+    <ul class="space-y-2 text-sm">
+      {% for row in unwell %}
+      <li id="container-{{ row.name }}" class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <a href="{{ row.url }}" {{ hx_replace(row.url, "#overseer-main") }} class="text-aegis-text hover:text-aegis-teal">{{ row.title }}</a>
+        <span data-container class="font-mono text-xs text-aegis-muted">{{ row.short }}</span>
+        {% if row.state_status != "healthy" %}{{ state(row) }}
+        {% else %}<span class="text-aegis-amber">{{ row.troubles|join("; ") }}</span>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
     {% endif %}
   {% endcall %}
-  {# Inside the webserver, which Docker sees as one container
-     (ui_resources.load_costs). #}
-  {% call card("Inside the webserver", subtitle="To load each service") %}
-    {% if resources.load %}
-    {{ ranked_rows(resources.load.rows, columns=True) }}
-    <p class="text-xs text-aegis-muted">Each part's own cost: loaded on top of Python and the app's core ({{ resources.load.core }}) and the parts it uses, so a library counts with the first part that needs it. Measured once a day.</p>
-    {% else %}
-    <p data-measuring class="text-sm text-aegis-muted">Measuring what each service costs to load, one at a time.</p>
-    {% endif %}
-  {% endcall %}
+  {% endif %}
   {% if resources.outside %}
   {% call card("Outside Docker") %}
     <ul class="space-y-2 text-sm">
@@ -37,5 +33,4 @@
     </ul>
   {% endcall %}
   {% endif %}
-  <p class="text-xs text-aegis-muted">The host is what Docker runs on: on Docker Desktop, its VM.</p>
 </div>

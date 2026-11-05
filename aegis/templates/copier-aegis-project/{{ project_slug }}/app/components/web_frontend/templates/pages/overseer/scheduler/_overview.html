@@ -22,7 +22,7 @@
 {% set state = (meta.get("scheduler_state") or "unknown").split("_")[0] %}
 <div class="space-y-6">
   <div id="scheduler-clock-view" x-data="schedulerClock()" @click.outside="neutral()" @keydown.escape="neutral()"
-       class="flex flex-col lg:flex-row items-center justify-center gap-10 lg:gap-14 pt-10 pb-4">
+       class="flex flex-col 2xl:flex-row items-center justify-center gap-10 2xl:gap-14 pt-10 pb-4">
     <div id="scheduler-clock" class="clock" :class="{ 'clock--dragging': dragging }" x-ref="dial" @click="clickDial($event)"
          @pointermove="drag($event)" @pointerup="release()" @pointercancel="release()">
       <div class="clock__band{{ ' clock__band--live' if clock.band.continuous }}" aria-hidden="true"></div>

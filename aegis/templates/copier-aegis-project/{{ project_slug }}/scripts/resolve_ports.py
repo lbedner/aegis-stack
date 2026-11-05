@@ -80,17 +80,23 @@ def _remembered(path: Path) -> dict[str, int]:
     return found
 
 
-def _resolve_one(
-    base: int, label: str, scheme: str = "http://", last: int | None = None
-) -> int:
+def _choose(base: int, last: int | None = None) -> int:
     """``last`` (the port the last run had) while it is still free, so a
     restart lands where a saved URL expects it; else the base, or the next
     free one after it."""
     if last is not None and last != base and _is_free(last):
-        print(f">> {label}: {scheme}127.0.0.1:{last} (as last run)", file=sys.stderr)
         return last
-    port = _find_free_port(base)
-    if port == base:
+    return _find_free_port(base)
+
+
+def _resolve_one(
+    base: int, label: str, scheme: str = "http://", last: int | None = None
+) -> int:
+    """The port ``_choose`` picks, said."""
+    port = _choose(base, last)
+    if port == last and port != base:
+        print(f">> {label}: {scheme}127.0.0.1:{port} (as last run)", file=sys.stderr)
+    elif port == base:
         print(f">> {label}: {scheme}127.0.0.1:{port}", file=sys.stderr)
     else:
         print(
@@ -98,6 +104,19 @@ def _resolve_one(
             file=sys.stderr,
         )
     return port
+
+
+def _base_and_last(env: str, base: str, last: int | None) -> tuple[int, int | None]:
+    """A port's base (``env`` when set), and the last run's port unless a
+    base was asked for in the environment, which wins."""
+    return int(os.environ.get(env, base)), None if env in os.environ else last
+
+
+def webserver_port(ports_file: Path | None = None) -> int:
+    """The port ``make serve`` will publish the webserver on, by the same
+    rule and unsaid: what a host-side tool prints a link to."""
+    last = _remembered(ports_file or _DEFAULT_PORTS_FILE).get("WEBSERVER_HOST_PORT")
+    return _choose(*_base_and_last("WEBSERVER_PORT_BASE", "8000", last))
 
 
 def docs_port(base: int | None = None) -> int:
@@ -141,8 +160,8 @@ def resolve_ports(
     last = _remembered(target)
 
     def pick(key: str, env: str, base: str, label: str, scheme: str = "http://") -> int:
-        remembered = None if env in os.environ else last.get(key)
-        return _resolve_one(int(os.environ.get(env, base)), label, scheme, remembered)
+        port, remembered = _base_and_last(env, base, last.get(key))
+        return _resolve_one(port, label, scheme, remembered)
 
     ports: dict[str, int] = {
         "WEBSERVER_HOST_PORT": pick(

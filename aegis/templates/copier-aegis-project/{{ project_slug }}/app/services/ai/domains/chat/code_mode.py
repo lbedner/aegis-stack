@@ -7,7 +7,20 @@ it breaks on ride the setting, not a persona: added to the prompt while
 code mode is on, whatever the agent's own prompt says.
 """
 
+import textwrap
+
 HEADING = "## SANDBOX RULES"
+
+# The one complete script the rules show: what a first script copies, so
+# it must pass the type check a first script is held to, and open with the
+# comment a viewer sees of it (``steps.doing``).
+EXAMPLE = """\
+# Errors by page
+found = await errors()
+by_page = {}
+for issue in found.get("issues", []):
+    by_page[issue["page"]] = by_page.get(issue["page"], 0) + 1
+print(by_page)"""
 
 SANDBOX_RULES = f"""\
 {HEADING}
@@ -19,15 +32,13 @@ genuinely surprises you). Six one-line calls is a defect, not caution.
 
 One complete script looks like:
 
-    found = await errors()
-    by_page = {{}}
-    for issue in found["issues"]:
-        by_page[issue["page"]] = by_page.get(issue["page"], 0) + 1
-    print(by_page)
+{textwrap.indent(EXAMPLE, "    ")}
 
 run_code executes Monty, a strict Python subset. Scripts that break these \
 rules fail:
 
+- Open every script with a `# comment` saying what it is for, in a few \
+plain words: it is what the person watching sees of the step.
 - If a run fails, FIX the script and resubmit it WHOLE - never fall back \
 to line-at-a-time execution.
 
@@ -41,6 +52,11 @@ the tools are millisecond reads, so concurrency saves nothing, and \
 dicts). Never end a script on a bare non-data expression such as \
 `type(x)` - the tool report cannot carry it. `json.dumps` extras like \
 `default=` are unsupported.
+- A tool typed `A | B` returns one of them, picked by its arguments, and \
+the checker rejects `found["node"]` when any of them lacks the key \
+(`Unknown key ... in union type`). Read such a key with `.get` and a \
+default of its kind: `found.get("node", {{}})`, `found.get("edges", [])`. \
+`if "node" in found:` and `isinstance(found, dict)` do not narrow it.
 - The sandbox's checker does not know `hasattr`/`getattr`/`setattr`; \
 use `isinstance(x, dict)` or `.get()` instead. If a script fails with \
 a type error, REWRITE the flagged line - do not resubmit it.

@@ -33,6 +33,7 @@ from ..core.components import (
     CORE_COMPONENTS,
     ComponentType,
 )
+from ..core.post_gen_tasks import next_steps
 from ..core.selection import (
     SelectionError,
     build_replay_command,
@@ -96,9 +97,8 @@ def _print_guided_receipt(plan: BuildPlan, project_path: Path) -> None:
     """
     typer.echo()
     brand.success(t("postgen.ready"), bold=True)
-    typer.echo(t("postgen.next_cd", path=project_path))
-    typer.echo(t("postgen.next_serve"))
-    typer.echo(t("postgen.next_dashboard"))
+    for line in next_steps(project_path):
+        typer.echo(line)
     typer.echo()
     _print_replay(plan.project_name, plan.components, plan.services)
 

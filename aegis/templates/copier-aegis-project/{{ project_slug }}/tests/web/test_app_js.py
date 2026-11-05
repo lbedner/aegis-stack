@@ -426,6 +426,38 @@ def test_the_sidebar_marks_the_page_it_leads_to() -> None:
     assert run(MARK_HARNESS, APP_JS=APP_JS) == [None, "page", None]
 
 
+TOP_HARNESS = (
+    STUBS
+    + """
+const scrolled = [];
+window.scrollTo = (x, y) => scrolled.push(window.location.pathname + window.location.search);
+require(APP_JS);
+const go = (path, search = '', hash = '') => {
+  fire('htmx:beforeHistorySave', {});
+  Object.assign(window.location, { pathname: path, search, hash });
+  fire('htmx:pushedIntoHistory', {});
+};
+window.location.pathname = '/overseer/components/scheduler';
+go('/overseer/components/database');
+go('/overseer/components/database', '?window=7');
+go('/overseer/resources', '', '#disk');
+go('/overseer/components/server');
+console.log(JSON.stringify(scrolled));
+"""
+)
+
+
+def test_a_new_page_opens_at_its_top_and_a_control_on_it_keeps_its_place() -> None:
+    """A link swaps only what is right of the sidebar, so the window kept
+    the last page's scroll: a new page now opens at its top. A pager, a
+    filter or a chart's window changes only the query, and keeps its
+    place; an address naming a place on the page (``#disk``) shows it."""
+    assert run(TOP_HARNESS, APP_JS=APP_JS) == [
+        "/overseer/components/database",
+        "/overseer/components/server",
+    ]
+
+
 RANGE_HARNESS = (
     STUBS
     + """

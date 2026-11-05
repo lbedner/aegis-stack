@@ -150,7 +150,6 @@ class TestOverview:
         }
         assert figures["Routes"] == "3"
         assert figures["Middleware"] == "2"
-        assert "2 GET" in text(one(html, "#card-current-status"))
         # Every route one method: endpoints would repeat the routes.
         assert "Endpoints" not in figures
 
@@ -177,6 +176,8 @@ class TestOverview:
         html = _get(signed_in)
         one(html, f'#runtime-glance [data-glance="{SERVER.name}"]')
         none(html, "#card-resources")
+        # Its state is the glance's.
+        none(html, "#card-current-status")
 
     def test_it_leads_with_its_containers_live_charts(
         self, signed_in: TestClient, monkeypatch: pytest.MonkeyPatch
@@ -202,6 +203,7 @@ class TestOverview:
         html = _get(signed_in)
         one(html, "#card-resources")
         none(html, "#server-charts")
+        assert "2 GET" in text(one(html, "#card-current-status"))
 
 
 class TestRoutes:

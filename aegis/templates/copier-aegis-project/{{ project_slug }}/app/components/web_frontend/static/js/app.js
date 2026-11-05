@@ -300,7 +300,15 @@ function markCurrent(links, path) {
     else link.removeAttribute('aria-current');
   }
 }
+// The window keeps the last page's scroll too, so a new page (a new path)
+// opens at its top: a pager, a filter or a chart's window changes only the
+// query and keeps its place, as does an address naming a place on the page.
+let leftPath = null;
+document.body.addEventListener('htmx:beforeHistorySave', () => {
+  leftPath = window.location.pathname;
+});
 document.body.addEventListener('htmx:pushedIntoHistory', () => {
+  if (leftPath !== window.location.pathname && !window.location.hash) window.scrollTo(0, 0);
   markCurrent(document.querySelectorAll('#overseer-nav a[href]'), window.location.pathname);
   // Overseer > Code swaps only its file: the tree's link is the address.
   markCurrent(document.querySelectorAll('[data-code-tree] a[href]'), window.location.pathname + window.location.search);
@@ -422,6 +430,24 @@ document.body.addEventListener('htmx:afterSwap', (event) => {
     if (drawer && !drawer.open) drawer.show();
   }
 });
+// What the modal holds marked ``data-fit-whole`` (a map opened larger,
+// partials/chat/cards/path.html) shows whole: a map is HTML laid out at its
+// own size, so it is zoomed down to the room the open dialog has, both ways
+// and never up, at any window size or zoom level, again on every resize.
+const fitWhole = () => {
+  const dialog = document.getElementById('dialog');
+  const whole = dialog?.open && dialog.querySelector('[data-fit-whole]');
+  if (!whole) return;
+  whole.style.zoom = 1;
+  // What else the dialog holds (the card's header), and the margin a
+  // modal keeps from the window's edges.
+  const room = window.innerHeight - 40 - (dialog.scrollHeight - whole.offsetHeight);
+  whole.style.zoom = Math.min(1, whole.clientWidth / whole.scrollWidth, room / whole.scrollHeight);
+};
+document.body.addEventListener('htmx:afterSettle', (event) => {
+  if (event.detail.target?.id === 'dialog-body') fitWhole();
+});
+window.addEventListener('resize', fitWhole);
 // The one drawer. A list renders a ``drawer_sync`` marker naming what is
 // open, so the address bar is the state: a row click navigates the list
 // with ``?document=12``, a reload or a shared link opens the same item,

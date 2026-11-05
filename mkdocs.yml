@@ -37,7 +37,6 @@ theme:
         name: Switch to light mode
   features:
     - navigation.tabs
-    - navigation.sections
     - navigation.top
     - search.highlight
     - search.suggest
@@ -205,12 +204,28 @@ nav:
         - Configuration: services/insights/configuration.md
         - Examples: services/insights/examples.md
   - Overseer:
-    - Overview: overseer/index.md
-    - The Story: overseer/story.md
-    - The Twin: overseer/twin.md
-    - Integration: overseer/integration.md
+    - The Story:
+      - Why Overseer: overseer/why.md
+    - What It Is:
+      - Overview: overseer/index.md
+      - The Twin: overseer/twin.md
+      - The Map: overseer/map.md
+      - Health: overseer/health.md
+      - Server: overseer/server.md
+      - Logs and Errors: overseer/logs-and-errors.md
+      - Code: overseer/code.md
+      - Resources: overseer/resources.md
+      - Patterns: overseer/patterns.md
+      - Secrets and Settings: overseer/secrets-and-settings.md
   - Deployment:
-    - Getting Started: deployment/index.md
+    - Overview: deployment/index.md
+    - From Overseer: deployment/overseer.md
+    - Cloud Accounts and Keys: deployment/cloud.md
+    - Backups and Restore: deployment/backups.md
+    - From the CLI: deployment/cli.md
+    - From CI: deployment/ci.md
+    - HTTPS and Domains: deployment/https.md
+    - How It Works and Security: deployment/security.md
   - Plugins:
     - Overview: plugins/index.md
     - Creating a Plugin: plugins/creating.md

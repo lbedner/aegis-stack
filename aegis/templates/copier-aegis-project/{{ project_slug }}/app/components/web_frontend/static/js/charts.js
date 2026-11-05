@@ -222,6 +222,23 @@ function markers(data, series, color) {
   };
 }
 
+// The lines a reader turned off or on in a chart's legend, by chart, kept
+// across its redraws (a range picked, the page loaded again); a ``dashed``
+// line (the host's in use) starts off. Storage that refuses keeps defaults.
+const HIDDEN = 'chart-hidden';
+function hiddenLines() {
+  try { return JSON.parse(localStorage.getItem(HIDDEN)) || {}; } catch (_) { return {}; }
+}
+function remember(id, label, hidden) {
+  const all = hiddenLines();
+  all[id] = { ...all[id], [label]: hidden };
+  try { localStorage.setItem(HIDDEN, JSON.stringify(all)); } catch (_) { /* Defaults next time. */ }
+}
+function withHidden(id, sets, series) {
+  const kept = hiddenLines()[id] || {};
+  return sets.map((set, i) => ({ ...set, hidden: kept[set.label] ?? Boolean(series[i]?.dashed) }));
+}
+
 function drilldownHandler(canvas, data) {
   const base = canvas.dataset.drilldown;
   if (!base || !data.slices) return undefined;
@@ -234,10 +251,36 @@ function drilldownHandler(canvas, data) {
   };
 }
 
+// A chart's lines, and whether ``series`` are the same ones in the same
+// order: else the server sent the chart whole (its lines renamed or added,
+// overseer_container.events), and it is drawn from what was sent.
+function linesOf(chart) {
+  return chart.data.datasets.filter((dataset) => !dataset.guide);
+}
+function sameLines(lines, series) {
+  const names = (list) => list.map((line) => line.label).join('\n');
+  return names(lines) === names(series);
+}
+
+// A live chart drawn again (the theme changed): its data script holds only
+// the newest tick's points (series.since), so each line is drawn from what
+// the chart gathered. A chart sent whole (its lines renamed), or none drawn
+// yet, reads the script.
+function gathered(data, chart) {
+  if (!chart || !timed(data) || !sameLines(linesOf(chart), data.series)) return data;
+  const lines = new Map(linesOf(chart)
+    .map((set) => [set.label, new Map(set.data.map((point) => [point.x, point.y]))]));
+  const labels = [...new Set([...lines.values()].flatMap((line) => [...line.keys()]))].sort((a, b) => a - b);
+  const series = data.series.map((line) => (
+    { ...line, values: labels.map((x) => lines.get(line.label).get(x) ?? null) }));
+  return { ...data, labels, series };
+}
+
 function build(Chart, canvas) {
-  const data = JSON.parse(document.getElementById(canvas.dataset.chartData).textContent);
   const kind = canvas.dataset.chart;
+  const id = canvas.dataset.chartData;
   const existing = Chart.getChart(canvas);
+  const data = gathered(JSON.parse(document.getElementById(id).textContent), existing);
   if (existing) existing.destroy();
   showEmpty(canvas, data);
   const muted = token('--n');
@@ -268,7 +311,7 @@ function build(Chart, canvas) {
   };
   new Chart(canvas, {
     type: kind,
-    data: { labels: timed(data) ? undefined : data.labels, datasets: datasets(kind, data) },
+    data: { labels: timed(data) ? undefined : data.labels, datasets: withHidden(id, datasets(kind, data), data.series) },
     options: {
       responsive: true,
       maintainAspectRatio: false,
@@ -277,11 +320,19 @@ function build(Chart, canvas) {
       // Every value at the hovered spot, from anywhere over the chart, not
       // only on a line's exact pixel.
       interaction: kind === 'doughnut' ? { mode: 'nearest' } : { mode: 'index', intersect: false },
+      indexAxis: data.horizontal ? 'y' : 'x',
       plugins: {
         legend: {
-          display: kind !== 'line' || data.series.length > 1,
+          display: !data.horizontal && (kind !== 'line' || data.series.length > 1),
           position: legendPosition(kind, canvas.clientWidth),
           labels: { color: muted, boxWidth: 10, filter: legendShows },
+          // A doughnut's legend toggles its slices, by Chart.js's own rule.
+          ...(kind === 'doughnut' ? {} : {
+            onClick: (event, item, legend) => {
+              Chart.defaults.plugins.legend.onClick.call(legend, event, item, legend);
+              remember(id, item.text, !legend.chart.isDatasetVisible(item.datasetIndex));
+            },
+          }),
         },
         tooltip: {
           backgroundColor: token('--b2'),
@@ -296,16 +347,22 @@ function build(Chart, canvas) {
           callbacks: {
             title: (items) => (items.length && timed(data) ? clock(items[0].parsed.x) : items[0]?.label ?? ''),
             label: (ctx) => {
-              const value = kind === 'doughnut' ? ctx.parsed : ctx.parsed.y;
+              const value = kind === 'doughnut' ? ctx.parsed : ctx.parsed[data.horizontal ? 'x' : 'y'];
               return `${ctx.dataset.label ? `${ctx.dataset.label}: ` : ''}${formatValue(value, data.format)}`;
             },
           },
         },
       },
-      scales: kind === 'doughnut' ? {} : axes,
+      scales: kind === 'doughnut' ? {} : oriented(data, axes),
       onClick: drilldownHandler(canvas, data),
     },
   });
+}
+
+// ``"horizontal": true`` (a ranked list, a service's load cost): a bar a
+// row, its label on the left, the values' axis along the bottom.
+function oriented(data, axes) {
+  return data.horizontal ? { x: axes.y, y: axes.x } : axes;
 }
 
 // A legend entry, unless it names a guide line. A doughnut's entries are
@@ -348,12 +405,9 @@ function refresh(Chart, script) {
   if (!chart) return false;
   let data = JSON.parse(script.textContent);
   showEmpty(canvas, data);
-  const lines = chart.data.datasets.filter((dataset) => !dataset.guide);
-  // Its lines renamed or added: the server sent it whole (its own rule in
-  // overseer_container.events), so draw it again.
-  const names = (list) => list.map((line) => line.label).join('\n');
-  if (names(lines) !== names(data.series)) {
-    chart.data.datasets = datasets(canvas.dataset.chart, data);
+  const lines = linesOf(chart);
+  if (!sameLines(lines, data.series)) {
+    chart.data.datasets = withHidden(script.id, datasets(canvas.dataset.chart, data), data.series);
   } else if (timed(data)) {
     // A tick sends only the newest points (series.since): each line keeps
     // the rest back to the window's start, and a byte axis steps by
@@ -411,4 +465,4 @@ if (typeof document !== 'undefined') {
   document.addEventListener('theme-changed', () => mount(document));
 }
 
-if (typeof module !== 'undefined') module.exports = { datasets, formatValue, refresh, timeTicks, byteStep, legendShows, legendPosition, fromZero };
+if (typeof module !== 'undefined') module.exports = { datasets, formatValue, refresh, timeTicks, byteStep, legendShows, legendPosition, fromZero, remember, withHidden, oriented, gathered };

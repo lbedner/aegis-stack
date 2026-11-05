@@ -115,7 +115,7 @@
      landing page's. Positions are % of the dial, set inline by the server;
      colours are the theme's teal, so every theme and mode draws it. */
   .clock {
-    @apply relative aspect-square w-full max-w-[470px] shrink-0 cursor-grab select-none rounded-full border border-aegis-teal/20 text-aegis-teal outline-none lg:max-w-[560px];
+    @apply relative aspect-square w-full max-w-[470px] shrink-0 cursor-grab select-none rounded-full border border-aegis-teal/20 text-aegis-teal outline-none 2xl:max-w-[560px];
     touch-action: none; /* drags turn the hand instead of scrolling the page */
     box-shadow: inset 0 0 90px color-mix(in oklab, currentColor 7%, transparent);
   }

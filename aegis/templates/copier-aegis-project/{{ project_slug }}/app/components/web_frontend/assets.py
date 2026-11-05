@@ -73,7 +73,12 @@ def static_url(path: str) -> str:
     built = _get_manifest().get(path)
     if built is not None:
         return f"/static/{built}"
-    return f"/static/{path}"
+    # Unhashed (an image, a clip): versioned by when it last changed, so a
+    # changed file is a new URL rather than a browser's cached old bytes.
+    try:
+        return f"/static/{path}?v={(STATIC_DIR / path).stat().st_mtime_ns}"
+    except OSError:
+        return f"/static/{path}"
 
 
 # ---------------------------------------------------------------------------

@@ -245,6 +245,17 @@ class TestJobs:
         assert cells[0][3] == "Active"
         assert cells[1][1] == "Past due"
 
+    def test_names_and_schedules_wrap_so_status_stays_in_view(
+        self, signed_in: TestClient
+    ) -> None:
+        # In a narrow window (or a zoomed one) the long columns take a
+        # second line rather than push Status out past the card's edge.
+        row = _rows(_get(signed_in, "jobs"))[0]
+        name, _next, schedule, status = row.cssselect("td")[1:]
+        assert "whitespace-normal" in name.get("class")
+        assert "whitespace-normal" in schedule.get("class")
+        assert "whitespace-nowrap" in status.get("class")
+
     def test_past_due_job_is_flagged(self, signed_in: TestClient) -> None:
         badge = one(_rows(_get(signed_in, "jobs"))[1], "[data-tone]")
         assert badge.get("data-tone") == "warn"
@@ -325,6 +336,13 @@ class TestHistory:
         assert "1.5s" in text(row)
         assert one(row, "[data-tone]").get("data-tone") == "error"
         assert "disk full" in text(one(html, "tr[data-detail]"))
+
+    def test_names_wrap_so_status_stays_in_view(self, signed_in: TestClient) -> None:
+        # The same names as the Jobs table, so the same second line.
+        row = _rows(_get(signed_in, "history"))[0]
+        job, _duration, _started, status = row.cssselect("td")[1:]
+        assert "whitespace-normal" in job.get("class")
+        assert "whitespace-nowrap" in status.get("class")
 
     def test_a_run_opens_into_what_it_logged(
         self, signed_in: TestClient, monkeypatch: pytest.MonkeyPatch

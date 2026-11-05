@@ -11,6 +11,9 @@ import re
 from datetime import UTC, datetime
 from typing import Any
 
+{% if worker_backend == "arq" -%}
+from arq.constants import in_progress_key_prefix
+{% endif -%}
 import redis.asyncio as aioredis
 
 from app.core.config import settings
@@ -99,6 +102,36 @@ async def publish_event(
         logger.debug(f"Failed to publish worker event: {e}")
 
 
+{% if worker_backend == "arq" -%}
+async def arq_queue_depth(redis_client: Any, queue_name: str) -> tuple[int, int]:
+    """``(waiting, running)`` on an arq queue, across every process.
+
+    arq keeps a job in its queue's sorted set until it finishes and marks
+    the running ones with an in-progress key, so those are taken off.
+    """
+    # ponytail: reads every id in the set; a worker claims from the front,
+    # so ZCARD plus EXISTS over the first max_jobs x workers ids if a
+    # backlog makes this heavy.
+    job_ids = await redis_client.zrange(queue_name, 0, -1)
+    if not job_ids:
+        return 0, 0
+    running = await redis_client.exists(
+        *(
+            f"{in_progress_key_prefix}{i if isinstance(i, str) else i.decode()}"
+            for i in job_ids
+        )
+    )
+    return len(job_ids) - running, running
+
+
+def arq_health_counts(raw: str | bytes) -> dict[str, int]:
+    """The ``j_*`` counters in an arq ``{queue}:health-check`` value
+    (``Mar-01 17:41:22 j_complete=0 j_failed=0 ...``)."""
+    text = raw if isinstance(raw, str) else raw.decode()
+    return {name: int(n) for name, n in re.findall(r"(j_\w+)=(\d+)", text)}
+
+
+{% endif -%}
 async def read_queue_totals(redis_client: Any) -> dict[str, dict[str, int]]:
     """Read absolute job totals per queue as a baseline for SSE.
 
@@ -147,23 +180,11 @@ async def read_queue_totals(redis_client: Any) -> dict[str, dict[str, int]]:
     for queue_type, queue_name in queue_names.items():
         queued = ongoing = completed = failed = 0
         try:
-            queued = await redis_client.zcard(queue_name) or 0
+            queued, ongoing = await arq_queue_depth(redis_client, queue_name)
             health_data = await redis_client.get(f"{queue_name}:health-check")
-            if health_data:
-                raw = (
-                    health_data
-                    if isinstance(health_data, str)
-                    else health_data.decode()
-                )
-                m = re.search(r"j_complete=(\d+)", raw)
-                if m:
-                    completed = int(m.group(1))
-                m = re.search(r"j_failed=(\d+)", raw)
-                if m:
-                    failed = int(m.group(1))
-                m = re.search(r"j_ongoing=(\d+)", raw)
-                if m:
-                    ongoing = int(m.group(1))
+            counts = arq_health_counts(health_data) if health_data else {}
+            completed = counts.get("j_complete", 0)
+            failed = counts.get("j_failed", 0)
         except Exception:
             pass  # best-effort; counters stay 0
         totals[queue_type] = {

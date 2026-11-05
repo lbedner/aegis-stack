@@ -106,6 +106,30 @@ CHROME_MAC = (
             "Safari 17 · iOS",
         ),
         (
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 26_6_0 like Mac OS X)"
+            " AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/155.0.8059.37"
+            " Mobile/15E148 Safari/604.1",
+            "Chrome 155 · iOS",
+        ),
+        (
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 26_6 like Mac OS X)"
+            " AppleWebKit/605.1.15 (KHTML, like Gecko) FxiOS/150.0"
+            " Mobile/15E148 Safari/605.1.15",
+            "Firefox 150 · iOS",
+        ),
+        (
+            "Mozilla/5.0 (iPad; CPU OS 26_6 like Mac OS X)"
+            " AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0"
+            " EdgiOS/150.0.3 Mobile/15E148 Safari/604.1",
+            "Edge 150 · iOS",
+        ),
+        (
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 26_6 like Mac OS X)"
+            " AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0"
+            " OPT/6.1.0 Mobile/15E148",
+            "Opera 6 · iOS",
+        ),
+        (
             "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36"
             " (KHTML, like Gecko) Chrome/120.0 Mobile Safari/537.36",
             "Chrome 120 · Android",

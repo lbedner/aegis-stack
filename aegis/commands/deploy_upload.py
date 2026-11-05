@@ -31,6 +31,7 @@ from typing import Any
 import typer
 
 from ..cli import brand
+from ..core.deploy_protocol import protocol
 from ..i18n import lazy_t, t
 from .deploy import (
     APP_CLI,
@@ -43,7 +44,7 @@ from .deploy import (
     _run_remote_capture,
     recorded,
 )
-from .deploy_backup import RESTORE, SNAPSHOT, STORAGE_ROOT, is_sqlite
+from .deploy_backup import RESTORE, SNAPSHOT, STORAGE_ROOT, failure_of, is_sqlite
 
 
 def _local(root: Path, command: list[str], out: Path, stdin: bytes = b"") -> bool:
@@ -74,15 +75,20 @@ _PACK = (
 )
 
 
-def server_missing(remote: Callable[..., Any], deploy_path: str) -> list[str] | None:
+def server_missing(remote: Callable[..., Any], deploy_path: str) -> list[str]:
     """The keys the server's rows name and its store lacks (its ``storage
-    check``, through ``remote``); None when the server cannot say (a
-    project from before it)."""
+    check``, through ``remote``); refused, saying why, when it gives no
+    answer: 2 is Click's for a project from before the command, and 1 names
+    keys, so a 1 without any is the call failing (a stopped container) too."""
     done = remote(_exec_command(deploy_path, "webserver", STORAGE_CHECK))
-    if done.returncode not in (0, 1):
-        return None
+    if done.returncode == 2:
+        raise protocol.RefusedError(t("deploy.storage_cannot_check"))
     # stdout is the keys alone; what a person reads goes to stderr.
-    return done.stdout.split()
+    keys = done.stdout.split()
+    if done.returncode == 0 or (done.returncode == 1 and keys):
+        return keys
+    error = failure_of(done)
+    raise protocol.RefusedError(t("deploy.storage_check_failed", error=error))
 
 
 def _pack(root: Path, keys: list[str], out: Path) -> bool:
@@ -101,7 +107,7 @@ def upload_storage(root: Path, server: dict[str, Any]) -> None:
         host, deploy_path = server["host"], server["path"]
         remote = partial(_run_remote_capture, host, server["user"])
         missing = server_missing(remote, deploy_path)
-        brought = len(missing or [])
+        brought = len(missing)
         if missing:
             typer.echo(t("deploy.storage_copying", count=len(missing)))
             with tempfile.TemporaryDirectory() as tmp:
@@ -119,10 +125,6 @@ def upload_storage(root: Path, server: dict[str, Any]) -> None:
                 )
                 raise typer.Exit(1)
             missing = server_missing(remote, deploy_path)
-        if missing is None:
-            brand.warn(t("deploy.storage_cannot_check"))
-            said["summary"] = "The server could not say which stored files it lacks"
-            raise typer.Exit(1)
         if missing:
             said["summary"] = f"{len(missing)} stored files still missing"
             # The count, never the keys: the app's ``storage check`` reads

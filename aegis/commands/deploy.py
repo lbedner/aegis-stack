@@ -38,10 +38,12 @@ from ..i18n import lazy_t, t
 from .deploy_backup import (
     archive_storage,
     backup_config,
+    failure_of,
     is_sqlite,
     list_backups,
     prune_backups,
     restore_data,
+    server_says,
     snapshot_sqlite,
 )
 
@@ -394,7 +396,17 @@ def _tell_app(
     remote = partial(_run_remote_capture, host, user)
     result = app_deploy(project_root, remote, deploy_path, *argv)
     if result is not None and result.returncode != 0:
-        brand.warn(t("deploy.record_failed", error=result.stderr.strip()))
+        brand.warn(t("deploy.record_failed", error=failure_of(result)))
+
+
+@contextmanager
+def _stops_on_refusal() -> Iterator[None]:
+    """A refusal said, and the command stopped."""
+    try:
+        yield
+    except protocol.RefusedError as exc:
+        brand.error(str(exc), err=True)
+        raise typer.Exit(1) from None
 
 
 # Who asked, when the Overseer's deploy agent runs a command (its user);
@@ -414,8 +426,9 @@ def recorded(
     """Record what the command does to the server as a deploy event (the
     app's ``deploy event``, over SSH like ``deploy record``), however it
     ends: the caller fills the ``summary`` and ``detail`` it is handed; an
-    exit with a code, or an error, records it failed. Projects without
-    deploy history have no such command (``_tell_app``)."""
+    exit with a code, or an error, records it failed, a refusal said and
+    recorded as the reason. Projects without deploy history have no such
+    command (``_tell_app``)."""
     said: dict[str, Any] = {"summary": "", "detail": {}}
     started = datetime.now(UTC)
     ok, failed = protocol.EVENT_OK, protocol.EVENT_FAILED
@@ -426,6 +439,10 @@ def recorded(
     except typer.Exit as exc:
         outcome = failed if exc.exit_code else ok
         raise
+    except protocol.RefusedError as exc:
+        brand.error(str(exc), err=True)
+        said["summary"] = str(exc)
+        raise typer.Exit(1) from None
     except Exception as exc:
         said["summary"] = said["summary"] or f"{type(exc).__name__}: {exc}"
         raise
@@ -470,11 +487,14 @@ def app_deploy(
     *argv: str,
 ) -> subprocess.CompletedProcess | None:
     """The app's own ``deploy`` command (its deploy history) in the
-    server's webserver, through ``remote``; None for a project without it."""
+    server's webserver, through ``remote``; None for a project without it,
+    here or on a server not updated yet (2 is Click's for a command it
+    lacks)."""
     if not (project_root / "app" / "cli" / "deploy_cli.py").exists():
         return None
     command = [*APP_CLI, "deploy", *argv]
-    return remote(_exec_command(deploy_path, "webserver", command))
+    done = remote(_exec_command(deploy_path, "webserver", command))
+    return None if done.returncode == 2 else done
 
 
 def _exec_command(deploy_path: str, service: str, argv: list[str]) -> str:
@@ -627,7 +647,7 @@ def _create_backup(
         f"mkdir -p {safe_backup}/files",
         f"rsync -a --exclude backups{skip_live} {safe_path}/ {safe_backup}/files/",
     ]
-    result = _run_remote_capture(host, user, " && ".join(commands))
+    result = run(" && ".join(commands))
     if result.returncode != 0:
         brand.error(t("deploy.backup_failed", error=result.stderr), err=True)
         return None
@@ -637,13 +657,10 @@ def _create_backup(
     # to pg_dump — say so explicitly instead of silently skipping (issue #765).
     if include_db and neon:
         typer.echo(t("deploy.backup_db_neon"))
-    elif include_db:
-        if not sqlite:
-            step(plan, "database")
+    elif include_db and not sqlite:
+        step(plan, "database")
         # Check if postgres service exists and is running
-        pg_check = _run_remote_capture(
-            host, user, f"{compose_prefix} ps postgres --quiet 2>/dev/null"
-        )
+        pg_check = run(f"{compose_prefix} ps postgres --quiet")
         if pg_check.returncode == 0 and pg_check.stdout.strip():
             typer.echo(t("deploy.backup_db"))
             db_cmd = (
@@ -651,9 +668,11 @@ def _create_backup(
                 f" sh -c 'pg_dump -U $POSTGRES_USER $POSTGRES_DB'"
                 f" > {safe_backup}/db_backup.sql"
             )
-            db_result = _run_remote_capture(host, user, db_cmd)
-            if db_result.returncode != 0:
+            if run(db_cmd).returncode != 0:
                 brand.warn(t("deploy.backup_db_failed"))
+        elif "no such service" not in pg_check.stderr:
+            # A stack with postgres whose dump never ran.
+            brand.warn(t("deploy.backup_db_failed"))
     step(plan, "documents")
     archive_storage(run, compose_prefix, backup_dir)
 
@@ -663,12 +682,19 @@ def _create_backup(
         f"source: {deploy_path}\\n"
         f"created: {datetime.now(UTC).isoformat()}"
     )
-    _run_remote_capture(
-        host, user, f"echo -e {shlex.quote(manifest)} > {safe_backup}/manifest.yml"
-    )
+    run(f"echo -e {shlex.quote(manifest)} > {safe_backup}/manifest.yml")
     prune_backups(run, deploy_path, keep_count)
 
     brand.success(t("deploy.backup_created", timestamp=timestamp))
+    return timestamp
+
+
+def _backed_up(*args: Any, **kwargs: Any) -> str:
+    """``_create_backup`` before a deploy, which stops without it: there
+    would be nothing to roll back to (``--no-backup`` is how to mean that)."""
+    timestamp = _create_backup(*args, **kwargs)
+    if timestamp is None:
+        raise typer.Exit(1)
     return timestamp
 
 
@@ -744,9 +770,19 @@ def _rollback_to_backup(
     backup_dir = f"{deploy_path}/backups/{backup_timestamp}"
     safe_backup = shlex.quote(backup_dir)
 
-    # Verify backup exists
-    check = _run_remote_capture(host, user, f"test -d {safe_backup}")
-    if check.returncode != 0:
+    # What the backup holds, asked before anything stops.
+    run = partial(_run_remote_capture, host, user)
+    try:
+        found = server_says(run, f"test -d {safe_backup}")
+        dump = (
+            found
+            and not neon
+            and server_says(run, f"test -f {safe_backup}/db_backup.sql")
+        )
+    except protocol.RefusedError as exc:
+        brand.error(str(exc), err=True)
+        return False
+    if not found:
         brand.error(
             t("deploy.rollback_not_found", timestamp=backup_timestamp), err=True
         )
@@ -759,18 +795,15 @@ def _rollback_to_backup(
 
     typer.echo(t("deploy.rollback_restoring", timestamp=backup_timestamp))
     # An off-box copy comes back without files/: restore its data alone.
-    restore_result = _run_remote_capture(
-        host,
-        user,
+    restore_result = run(
         f"[ ! -d {safe_backup}/files ] || rsync -a --delete --exclude backups"
-        f" {safe_backup}/files/ {safe_path}/",
+        f" {safe_backup}/files/ {safe_path}/"
     )
     if restore_result.returncode != 0:
         brand.error(
             t("deploy.rollback_restore_failed", error=restore_result.stderr), err=True
         )
         return False
-    run = partial(_run_remote_capture, host, user)
     if not restore_data(run, compose_prefix, deploy_path, backup_dir):
         return False
 
@@ -779,33 +812,22 @@ def _rollback_to_backup(
     # silently no-op (issue #765).
     if neon:
         typer.echo(t("deploy.rollback_db_neon"))
-        db_check = None
-    else:
-        db_check = _run_remote_capture(
-            host, user, f"test -f {safe_backup}/db_backup.sql"
-        )
-    if db_check is not None and db_check.returncode == 0:
+    if dump:
         typer.echo(t("deploy.rollback_db"))
         # Start only postgres first
         _run_remote(host, user, f"{compose_prefix} up -d postgres")
         typer.echo(t("deploy.rollback_pg_wait"))
         for _ in range(30):  # 60 seconds max (30 * 2s)
-            ready = _run_remote_capture(
-                host,
-                user,
-                f"{compose_prefix} exec -T postgres pg_isready -U postgres -q",
-            )
+            ready = run(f"{compose_prefix} exec -T postgres pg_isready -U postgres -q")
             if ready.returncode == 0:
                 break
             time.sleep(2)
         else:
             brand.warn(t("deploy.rollback_pg_timeout"))
-        db_restore = _run_remote_capture(
-            host,
-            user,
+        db_restore = run(
             f"cat {safe_backup}/db_backup.sql |"
             f" {compose_prefix} exec -T postgres"
-            f" sh -c 'psql -U $POSTGRES_USER $POSTGRES_DB'",
+            f" sh -c 'psql -U $POSTGRES_USER $POSTGRES_DB'"
         )
         if db_restore.returncode != 0:
             brand.warn(t("deploy.rollback_db_failed"))
@@ -1607,7 +1629,7 @@ def deploy_command(
             drain_timeout=drain_timeout,
             rollout_timeout=rollout_timeout,
             backup=partial(
-                _create_backup,
+                _backed_up,
                 host,
                 user,
                 deploy_path,
@@ -1625,18 +1647,16 @@ def deploy_command(
     brand.accent(t("deploy.deploying", host=host), bold=True)
 
     # Step 1: Create backup before deploying, of a deployment there is
-    existing = (
-        backup
-        and _run_remote_capture(
-            host, user, f"test -f {shlex.quote(deploy_path)}/docker-compose.yml"
-        ).returncode
-        == 0
-    )
+    with _stops_on_refusal():
+        existing = backup and server_says(
+            partial(_run_remote_capture, host, user),
+            f"test -f {shlex.quote(deploy_path)}/docker-compose.yml",
+        )
     plan = _deploy_plan(existing, health_check)
     backup_timestamp: str | None = None
     if existing:
         step(plan, "backup")
-        backup_timestamp = _create_backup(
+        backup_timestamp = _backed_up(
             host,
             user,
             deploy_path,
@@ -1806,7 +1826,8 @@ def deploy_backups_command(
     user = config["server"]["user"]
     deploy_path = config["server"]["path"]
 
-    backups = list_backups(partial(_run_remote_capture, host, user), deploy_path)
+    with _stops_on_refusal():
+        backups = list_backups(partial(_run_remote_capture, host, user), deploy_path)
     if not backups:
         typer.echo(t("deploy.no_backups"))
         return
@@ -1852,14 +1873,14 @@ def deploy_rollback_command(
 
     # Find backup to use
     if not backup:
-        safe_path = shlex.quote(f"{deploy_path}/backups")
-        result = _run_remote_capture(
-            host, user, f"ls -1t {safe_path} 2>/dev/null | head -1"
-        )
-        if result.returncode != 0 or not result.stdout.strip():
+        with _stops_on_refusal():
+            backups = list_backups(
+                partial(_run_remote_capture, host, user), deploy_path
+            )
+        if not backups:
             brand.error(t("deploy.no_backups_available"), err=True)
             raise typer.Exit(1)
-        backup = result.stdout.strip()
+        backup = backups[0]["name"]
 
     brand.warn(t("deploy.rolling_back", backup=backup, host=host), bold=True)
 

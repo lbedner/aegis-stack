@@ -33,9 +33,10 @@ DECLARED_IN: dict[str, type[StrEnum]] = {
     e.__name__: e for e in (ComponentName, ServiceName, Category)
 }
 # Folders never read, nor shown on Overseer > Code: generated, installed or
-# holding data (hidden ones, ``.venv`` among them, never either).
+# holding data, a deploy backup's copy of the app among it (hidden ones,
+# ``.venv`` among them, never either).
 SKIPPED = frozenset(
-    {"__pycache__", "node_modules", "site-packages", "dist", "build", "data", "site"}
+    "__pycache__ node_modules site-packages dist build data site backups".split()
 )
 
 # A name's identity: its module (dotted), and the member it names there;

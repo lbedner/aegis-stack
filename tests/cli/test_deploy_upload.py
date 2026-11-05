@@ -6,18 +6,22 @@ shared with backups and rollbacks) run for real against a stand-in
 from __future__ import annotations
 
 import os
+import re
 import sqlite3
 import subprocess
 import sys
 import tarfile
 from pathlib import Path
+from typing import Any
 
 import pytest
 import typer
 
 from aegis.commands import deploy_upload
 from aegis.commands.deploy_backup import RESTORE, SNAPSHOT, STORAGE_ROOT
-from aegis.commands.deploy_upload import upload_db, upload_storage
+from aegis.commands.deploy_upload import server_missing, upload_db, upload_storage
+from aegis.core.deploy_protocol import protocol
+from aegis.i18n import t
 
 SERVER = {"host": "h", "user": "u", "path": "/opt/app"}
 
@@ -189,9 +193,9 @@ GONE = [f"sha256/{d[:2]}/{d[2:4]}/{d}" for d in ("a" * 64, "b" * 64)]
 
 class _Store(_Server):
     """A server whose ``storage check`` answers in turn from ``checks``
-    (exit code, stdout)."""
+    (exit code, stdout, and any stderr)."""
 
-    def __init__(self, *checks: tuple[int, str]) -> None:
+    def __init__(self, *checks: tuple[Any, ...]) -> None:
         super().__init__()
         self.checks = list(checks)
 
@@ -200,8 +204,7 @@ class _Store(_Server):
     ) -> subprocess.CompletedProcess:
         super().remote(host, user, command, upload)
         if command.endswith("storage check"):
-            code, out = self.checks.pop(0)
-            return subprocess.CompletedProcess([], code, out, "")
+            return subprocess.CompletedProcess([], *self.checks.pop(0))
         return subprocess.CompletedProcess([], 0, "", "")
 
 
@@ -243,17 +246,59 @@ def test_a_file_neither_machine_has_fails_by_name(
     assert GONE[0] in capsys.readouterr().err
 
 
-def test_a_server_that_cannot_check_is_sent_nothing(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+@pytest.mark.parametrize(
+    ("code", "out", "err", "says"),
+    [
+        (0, "", "", []),
+        (0, "a\nb\n", "", ["a", "b"]),
+        (1, "a\n", "2 stored files are missing", ["a"]),
+        (2, "", "No such command 'storage'.", t("deploy.storage_cannot_check")),
+        (255, "", "ssh: connect to host: timed out", "ssh: connect to host: timed out"),
+        (137, "", "", "exit 137"),
+        (1, "", "service webserver is not running", "service webserver is not running"),
+    ],
+)
+def test_the_server_answers_or_says_why_it_could_not(
+    code: int, out: str, err: str, says: list[str] | str
 ) -> None:
-    """A project from before ``storage check``: Click's usage error, 2.
-    Nothing was brought, so it fails (and is recorded failed)."""
-    server = _Store((2, "No such command 'storage'."))
+    """0 and 1-with-keys are its answer; 2 is a project from before the
+    command; anything else, an empty 1 included (the exit a stopped container
+    or a crash gives), is the call failing, and never an empty answer."""
+
+    def remote(command: str) -> subprocess.CompletedProcess:
+        return subprocess.CompletedProcess([], code, out, err)
+
+    if isinstance(says, list):
+        assert server_missing(remote, "/srv/app") == says
+        return
+    with pytest.raises(protocol.RefusedError, match=re.escape(says)):
+        server_missing(remote, "/srv/app")
+
+
+@pytest.mark.parametrize(
+    ("check", "said"),
+    [
+        ((2, "No such command 'storage'."), t("deploy.storage_cannot_check")),
+        ((255, "", "ssh: timed out"), "ssh: timed out"),
+    ],
+)
+def test_a_server_that_cannot_check_is_sent_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture,
+    check: tuple[Any, ...],
+    said: str,
+) -> None:
+    """A project from before ``storage check`` (Click's usage error, 2), or a
+    dropped connection, which Pulse read as the first (aegis-stack#1956).
+    Nothing was brought, so it fails, and is recorded failed."""
+    server = _Store(check)
     packed = _store(monkeypatch, server)
     with pytest.raises(typer.Exit):
         upload_storage(tmp_path, SERVER)
     assert packed == []
     assert len(server.calls) == 1
+    assert said in capsys.readouterr().err
 
 
 def test_the_pack_holds_the_keys_asked_for_that_this_store_has(

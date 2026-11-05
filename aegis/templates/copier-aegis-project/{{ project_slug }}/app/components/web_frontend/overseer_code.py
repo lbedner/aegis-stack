@@ -23,6 +23,7 @@ from markupsafe import Markup, escape
 from app.core import exposure, ownership, source_index
 from app.core.concurrency import background
 from app.core.config import settings
+from app.core.log import logger
 from app.core.parts import Category
 from app.core.source_index import SKIPPED
 from app.services.system import ui_deployments, ui_runtime
@@ -247,17 +248,29 @@ def shown(path: str) -> bool:
     if any(p.startswith(".") for p in parts) or any(p in SKIPPED for p in parts[:-1]):
         return False
     steps = [PROJECT_ROOT.joinpath(*parts[: i + 1]) for i in range(len(parts))]
-    return steps[-1].is_file() and not any(step.is_symlink() for step in steps)
+    # ``os.path``: ``Path`` raises on a folder it cannot enter until 3.14.
+    return os.path.isfile(steps[-1]) and not any(map(os.path.islink, steps))
+
+
+@cache
+def _left_out(why: str) -> None:
+    """Said once a process: the tree is walked on every page."""
+    logger.info("Overseer > Code left out: %s", why)
 
 
 def tree(folder: str = "") -> tuple[Node, ...]:
     """The folders (those with anything shown) then the files, by name;
-    ``folder`` is a path from the project's root ("" for the root)."""
-    with os.scandir(PROJECT_ROOT / folder) as found:
-        entries = sorted(
-            (e for e in found if _shown(e)),
-            key=lambda e: (not e.is_dir(), e.name.lower()),
-        )
+    ``folder`` is a path from the project's root ("" for the root); one
+    that cannot be opened is left out, as if empty."""
+    try:
+        with os.scandir(PROJECT_ROOT / folder) as found:
+            entries = sorted(
+                (e for e in found if _shown(e)),
+                key=lambda e: (not e.is_dir(), e.name.lower()),
+            )
+    except OSError as exc:
+        _left_out(str(exc))
+        return ()
     nodes = []
     for entry in entries:
         path = f"{folder}/{entry.name}" if folder else entry.name

@@ -7,6 +7,7 @@ Covers the two pieces with real logic: ``static()`` asset resolution
 """
 
 import json
+import os
 import re
 from pathlib import Path
 
@@ -19,10 +20,12 @@ from tests.shell import has_site, shell_path
 
 
 @pytest.fixture(autouse=True)
-def _reset_manifest_cache(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Each test starts with an empty, unprimed manifest cache."""
+def _reset_manifest_cache(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Each test starts with an empty, unprimed manifest cache, and an
+    empty static tree (a file in it is versioned by its mtime)."""
     monkeypatch.setattr(web_assets, "_manifest", {})
     monkeypatch.setattr(web_assets, "_manifest_mtime", -1.0)
+    monkeypatch.setattr(web_assets, "STATIC_DIR", tmp_path / "static")
 
 
 def _write_manifest(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, data: dict) -> Path:
@@ -39,6 +42,24 @@ class TestStaticUrl:
         """Dev renders with no build step, so a missing manifest is normal."""
         monkeypatch.setattr(web_assets, "MANIFEST_PATH", tmp_path / "absent.json")
         assert web_assets.static_url("css/app.css") == "/static/css/app.css"
+
+    def test_an_unhashed_file_is_versioned_by_when_it_changed(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """An image or clip the build does not hash keeps its name, so its
+        URL carries a version: a changed file is a new URL, never the old
+        bytes from a browser's cache (a <video>'s media cache outlives a
+        hard reload)."""
+        monkeypatch.setattr(web_assets, "MANIFEST_PATH", tmp_path / "absent.json")
+        clip = tmp_path / "static" / "img" / "clip.mp4"
+        clip.parent.mkdir(parents=True)
+        clip.write_bytes(b"old")
+        os.utime(clip, ns=(1_000_000_000, 1_000_000_000))
+        before = web_assets.static_url("img/clip.mp4")
+        assert before.startswith("/static/img/clip.mp4?v=")
+        clip.write_bytes(b"new")
+        os.utime(clip, ns=(2_000_000_000, 2_000_000_000))
+        assert web_assets.static_url("img/clip.mp4") != before
 
     def test_resolves_hashed_path_from_manifest(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path

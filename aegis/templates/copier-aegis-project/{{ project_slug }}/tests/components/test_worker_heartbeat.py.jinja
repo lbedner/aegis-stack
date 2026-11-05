@@ -100,9 +100,12 @@ async def test_concurrent_jobs_keep_key_until_last_idle() -> None:
     refresh = heartbeat._refresh_task
     assert refresh is not None
 
-    # First job done: key stays, refresh keeps running.
+    # First job done: key stays at the new count (Overseer's Running reads
+    # it now, not at the next refresh), refresh keeps running.
     await mark_idle(redis)
     redis.delete.assert_not_called()
+    # The count changes, its TTL (mark_busy's, kept by the refresh) does not.
+    assert redis.set.call_args == ((busy_key(), "1"), {"keepttl": True})
     assert heartbeat._refresh_task is refresh
     assert not refresh.done()
 
@@ -188,9 +191,11 @@ def test_concurrent_threads_keep_key_until_last_idle_sync() -> None:
     thread = heartbeat._refresh_thread
     assert thread is not None and thread.is_alive()
 
-    # First thread done: key stays, refresh thread keeps running.
+    # First thread done: key stays at the new count, refresh thread keeps
+    # running.
     mark_idle_sync(redis)
     redis.delete.assert_not_called()
+    assert redis.set.call_args == ((busy_key(), "1"), {"keepttl": True})
     assert heartbeat._refresh_thread is thread
     assert thread.is_alive()
 

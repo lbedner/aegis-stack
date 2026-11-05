@@ -18,9 +18,9 @@
 {% endmacro %}
 {% call card("Scheduled jobs", jobs|length ~ " " ~ ("job" if jobs|length == 1 else "jobs")) %}
   {{ data_table([
-    {"key": "name", "label": "Job"},
+    {"key": "name", "label": "Job", "wrap": True},
     {"key": "next_run", "label": "Next run"},
-    {"key": "schedule", "label": "Schedule"},
+    {"key": "schedule", "label": "Schedule", "wrap": True},
     {"key": "state", "label": "Status", "kind": "status"},
   ], jobs, empty="No scheduled jobs", detail=job_detail) }}
 {% endcall %}

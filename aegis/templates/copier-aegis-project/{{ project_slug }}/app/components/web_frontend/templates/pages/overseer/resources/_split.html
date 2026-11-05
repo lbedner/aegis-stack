@@ -1,0 +1,8 @@
+{# One resource's split (ui_resources.overview) in its chart's header: this
+   stack and what is free of the host; the bands draw the stack, the host's
+   in use line the rest. ``event`` wraps it live, for the page (its frames
+   come without). #}
+{% set free = "-" if split.free is none else (split.free / split.total)|pct %}
+{% if event %}<span sse-swap="{{ event }}" hx-target="this">{% endif -%}
+This stack <span data-part="stack" class="text-aegis-teal font-semibold">{{ split.text.stack }}</span> · <span data-part="free">{{ free }}</span> free of {{ split.text.total }}
+{%- if event %}</span>{% endif %}

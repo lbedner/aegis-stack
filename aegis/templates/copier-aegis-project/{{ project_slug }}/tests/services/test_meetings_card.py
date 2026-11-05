@@ -376,6 +376,8 @@ async def test_while_she_works_and_has_said_nothing_keys_tap() -> None:
     """The chat's own key taps (``taps.js``), into her mic: the room hears
     her working instead of her saying what she is looking up. Once she
     speaks, or with the sound off, the keys are quiet."""
+    if not card.TAPS.exists():
+        pytest.skip("no web frontend, so no taps.js: the card goes without")
     async with _card_page(card.Start(name="Illiana", taps=True)) as page:
         assert await page.evaluate("() => window.__meetingCard.typing()") is False
         assert await _typing(page, card.ANSWERING_ITEM, working=True) is True

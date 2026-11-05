@@ -445,7 +445,7 @@ MESSAGES: dict[str, str] = {
     "postgen.next_steps": "Nächste Schritte:",
     "postgen.next_cd": "   cd {path}",
     "postgen.next_serve": "   make serve",
-    "postgen.next_dashboard": "   Overseer öffnen: http://localhost:8000/dashboard/",
+    "postgen.next_dashboard": "   Overseer öffnen: {url}",
     # ── Post-generation: project map ──────────────────────────────────
     "projectmap.title": "Projektstruktur:",
     "projectmap.components": "Komponenten",
@@ -929,7 +929,7 @@ MESSAGES: dict[str, str] = {
     ),
     "deploy.rolling_complete": "Rolling-Deployment abgeschlossen!",
     "deploy.app_running": "   Anwendung läuft unter: {url}",
-    "deploy.overseer": "   Overseer Dashboard: {url}/dashboard/",
+    "deploy.overseer": "   Overseer Dashboard: {url}",
     "deploy.overseer_allowlist": "   (Traefik lässt nur private Netze zu: trage deine IP in ADMIN_IP_ALLOWLIST in .env ein und deploye erneut, um es zu öffnen)",
     "deploy.record_failed": "   Nicht auf dem Server gespeichert (sein Verlauf): {error}",
     "deploy.view_logs": "   Logs anzeigen: aegis deploy-logs",

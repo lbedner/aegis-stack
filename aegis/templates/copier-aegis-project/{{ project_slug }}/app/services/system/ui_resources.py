@@ -68,8 +68,8 @@ async def overview(*, wait: bool = True) -> dict[str, Any]:
     used = _in_use(await health_probes.host_metrics(), size)
     return view | {
         "split": [
-            _split(CPU, "CPU", size.cpus * 100, used, rows, _cores),
-            _split(MEMORY, "Memory", size.memory, used, rows, format_bytes),
+            _split(CPU, size.cpus * 100, used, rows, _cores),
+            _split(MEMORY, size.memory, used, rows, format_bytes),
         ]
     }
 
@@ -97,16 +97,12 @@ def _in_use(checks: dict[str, Any], size: Host) -> dict[str, float]:
 
 def _rows(found: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
     """Every container, running ones by memory, the heaviest first, each
-    with its share of this stack's memory; stopped ones last."""
+    with its page; stopped ones last."""
     rows = [
         row | {"page": page, "title": title_of(page)}
         for page, view in found.items()
         for row in view["rows"]
     ]
-    stack = sum(r["memory_value"] or 0 for r in rows)
-    for row in rows:
-        used = row["memory_value"]
-        row["share"] = round(used / stack * 100, 1) if used and stack else None
     return sorted(rows, key=lambda r: -(r["memory_value"] or -1))
 
 
@@ -119,25 +115,23 @@ def _note(found: dict[str, dict[str, Any]]) -> str | None:
 
 def _split(
     key: str,
-    label: str,
     total: float,
     used: dict[str, float],
     rows: list[dict[str, Any]],
     fmt: Callable[[float], str],
 ) -> dict[str, Any]:
-    """One resource three ways, each part in ``fmt`` too; the host's in use
-    and the containers are read moments apart, so neither the rest nor the
-    free goes below none."""
+    """One resource's total, this stack's share and what is free of the
+    host, each in ``fmt`` too; the host's in use and the containers are
+    read moments apart, so the free never goes below none."""
     stack = sum(r[f"{key}_value"] or 0 for r in rows)
     host = used.get(key)
     parts = {
         "total": total,
         "stack": stack,
-        "rest": None if host is None else max(host - stack, 0),
         "free": None if host is None else max(total - max(host, stack), 0),
     }
     text = {part: "-" if v is None else fmt(v) for part, v in parts.items()}
-    return {"key": key, "label": label, **parts, "text": text}
+    return {"key": key, **parts, "text": text}
 
 
 async def load_costs() -> dict[str, Any] | None:
@@ -162,7 +156,9 @@ async def load_costs() -> dict[str, Any] | None:
 
 
 def _cores(value: float) -> str:
-    return f"{value / 100:.1f} cores"
+    """To a hundredth, so a light stack's tenth of a core is not 0.0, and
+    whole cores without the zeros (16, not 16.00)."""
+    return f"{round(value / 100, 2):g} cores"
 
 
 async def charts(window: int = series.DEFAULT_WINDOW) -> list[dict[str, Any]]:

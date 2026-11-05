@@ -614,7 +614,7 @@ aegis update --force --yes
 
 ## Deployment Commands
 
-Commands for deploying your project to a remote server. See the **[Deployment Guide](deployment/index.md)** for full workflows and examples.
+Commands for deploying your project to a remote server. See **[Deployment](deployment/index.md)** for the workflows and how each step works.
 
 ### aegis deploy-init
 
@@ -642,7 +642,7 @@ aegis deploy-init --host myserver.com --user deploy
 
 ### aegis deploy-setup
 
-Provision a remote server for deployment. Installs Docker, configures firewall, and prepares the server.
+Provision a remote server for deployment. Installs Docker, configures firewall, and prepares the server. What it installs: [From the CLI](deployment/cli.md#first-deployment).
 
 **Usage:**
 ```bash
@@ -651,11 +651,13 @@ aegis deploy-setup [OPTIONS]
 
 **Options:**
 
+- `--public-key PATH`, Public key to install in the deploy user's `authorized_keys` (idempotent), so you skip `ssh-copy-id`
 - `--project-path TEXT`, Path to the project (default: current directory)
 
 **Examples:**
 ```bash
 aegis deploy-setup
+aegis deploy-setup --public-key ~/.ssh/id_ed25519.pub
 ```
 
 ---
@@ -873,14 +875,20 @@ aegis deploy [OPTIONS]
 - `--build / --no-build`, Build images before deploying (default: `--build`)
 - `--backup / --no-backup`, Create backup before deploying (default: `--backup`)
 - `--health-check / --no-health-check`, Run health check after deploying (default: `--health-check`)
+- `--rolling`, Deploy without downtime: back up, bring the database up to the new code, pause the worker queue so in-flight jobs finish, then swap the webserver for a healthy new replica. Additive migrations only
+- `--drain-timeout INTEGER`, Seconds to wait for workers to drain during a rolling deploy (default: `90`)
+- `--rollout-timeout INTEGER`, Hard cap in seconds for the new webserver to become healthy during a rolling deploy (default: `900`)
 - `--project-path TEXT`, Path to the project (default: current directory)
 
 **Examples:**
 ```bash
 aegis deploy
 aegis deploy --no-build
-aegis deploy --no-backup --no-health-check
+aegis deploy --rolling
+aegis deploy --no-backup --no-health-check  # skip both, for a quick redeploy you're sure of
 ```
+
+What each step does: [How it works and security](deployment/security.md#what-a-deploy-does).
 
 ---
 
@@ -943,6 +951,52 @@ aegis deploy-rollback [OPTIONS]
 aegis deploy-rollback
 aegis deploy-rollback --backup 2026-03-11_183045
 ```
+
+---
+
+### aegis deploy-upload-db
+
+Copy this machine's database to the server, replacing the server's. SQLite only. Snapshots the database of the running local stack, backs the server up, then puts the copy in place and restarts the server; a refused copy leaves the server's in place.
+
+**Usage:**
+```bash
+aegis deploy-upload-db [OPTIONS]
+```
+
+**Options:**
+
+- `--project-path TEXT`, Path to the project (default: current directory)
+- `--yes, -y`, Skip the confirmation
+
+---
+
+### aegis deploy-upload-storage
+
+Copy the stored files the server's database names and its store lacks, from this machine's running stack. Adds only, so nothing on the server is replaced; fails naming any file neither machine has. Overseer > Deployments offers it as **Bring missing files**.
+
+**Usage:**
+```bash
+aegis deploy-upload-storage [OPTIONS]
+```
+
+**Options:**
+
+- `--project-path TEXT`, Path to the project (default: current directory)
+
+---
+
+### aegis deploy-restore-drill
+
+Restore the newest off-site copy on this machine and check it: the database is whole, the app starts on it, every stored secret decrypts, every stored file is there. Nothing on the server changes; the drill is recorded there. SQLite only. See [Backups and restore](deployment/backups.md#rehearse-a-restore).
+
+**Usage:**
+```bash
+aegis deploy-restore-drill [OPTIONS]
+```
+
+**Options:**
+
+- `--project-path TEXT`, Path to the project (default: current directory)
 
 ---
 

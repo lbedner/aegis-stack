@@ -29,10 +29,13 @@
     if (choices.sidebar.includes(storedSidebar)) state.sidebar = storedSidebar;
   } catch (_) { /* Storage is optional; in-memory choices still work. */ }
 
+  // ``theme-changed`` only when the colours did: what listens (charts.js)
+  // draws again in them, and the sidebar opening needs no redraw.
   const apply = () => {
     const resolved = state.mode === 'system' ? (media.matches ? 'dark' : 'light') : state.mode;
-    root.dataset.theme = `${state.theme}-${resolved}`;
     root.dataset.overseerSidebar = state.sidebar;
+    if (root.dataset.theme === `${state.theme}-${resolved}`) return;
+    root.dataset.theme = `${state.theme}-${resolved}`;
     document.dispatchEvent(new CustomEvent('theme-changed', { detail: { ...state } }));
   };
   window.appearance = () => ({ ...state });

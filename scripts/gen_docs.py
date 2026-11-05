@@ -5,6 +5,7 @@ This is run automatically by the mkdocs-gen-files plugin.
 """
 
 import re
+from pathlib import Path
 
 import mkdocs_gen_files
 
@@ -33,6 +34,28 @@ with open("README.md") as readme:
     # but the docs root has no ``docs/`` segment.
     for github_path, mkdocs_path in IMAGE_PATH_MAPPINGS.items():
         content = content.replace(github_path, mkdocs_path)
+
+    # GitHub needs an image for each demo (it plays no repo-path video), but
+    # the docs site plays an MP4 beside it at a fraction of the bytes, which
+    # keeps the dev server's live reload responsive.
+    def to_video(match: re.Match[str]) -> str:
+        name, alt, width = match["name"], match["alt"], match["width"]
+        if not Path(f"docs/images/{name}.mp4").exists():
+            return match[0]
+        size = f' width="{width}"' if width else ""
+        return (
+            f'<video src="images/{name}.mp4" aria-label="{alt}"{size} '
+            "autoplay loop muted playsinline></video>"
+        )
+
+    demo = r"docs/images/(?P<name>[\w-]+)\.(?:gif|webp)"
+    content = re.sub(rf"!\[(?P<alt>[^\]]*)\]\({demo}\)(?P<width>)", to_video, content)
+    content = re.sub(
+        rf'<img src="{demo}" alt="(?P<alt>[^"]*)"(?: width="(?P<width>\d+)")?>',
+        to_video,
+        content,
+    )
+
     content = content.replace("](docs/images/", "](images/")
     # Strip the ``docs/`` prefix from any ``<img src="docs/images/...">`` so
     # MkDocs serves them from ``images/...`` (the docs root has no ``docs/``
@@ -76,8 +99,6 @@ with open("README.md") as readme:
 
     # Fix trailing slash links to explicit file references for MkDocs
     # Check if it's a directory (has index.md) or a top-level page
-    from pathlib import Path
-
     docs_dir = Path("docs")
 
     def fix_trailing_slash(match: re.Match[str]) -> str:

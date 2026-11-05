@@ -209,4 +209,7 @@ exclude = [
     "test-*/**",
     "*-test/**",
     "demo-*/**",
+    # Run where their imports are: the hero's take under ``uv --with
+    # playwright``, its seeder inside the stack it fills.
+    "demos/hero/**",
 ]

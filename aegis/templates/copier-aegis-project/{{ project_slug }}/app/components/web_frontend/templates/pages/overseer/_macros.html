@@ -4,7 +4,8 @@
 
 {# A page's live charts (``overseer_live.chart_panel``): the range chips,
    which re-request ``target`` at ``url`` over the new window (its stream
-   follows), then the charts, two across. #}
+   follows), then the charts, two across; a ``call`` block adds a card of
+   its own after them, in the grid (Resources' load costs). #}
 {% macro live_charts(panel, target, url) %}
 {% if panel.charts %}
 {{ range_form(panel.windows, panel.window, url, target, field="window", aria="Chart window", class="mt-4 flex justify-end") }}
@@ -12,6 +13,7 @@
   {% for chart in panel.charts %}
   {{ chart_panel(chart.id, chart.title, "line", chart.data, subtitle=chart.subtitle, live=True, empty=chart.empty) }}
   {% endfor %}
+  {% if caller %}{{ caller() }}{% endif %}
 </div>
 {% endif %}
 {% endmacro %}

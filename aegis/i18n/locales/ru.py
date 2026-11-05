@@ -425,7 +425,7 @@ MESSAGES: dict[str, str] = {
     "postgen.next_steps": "Следующие шаги:",
     "postgen.next_cd": "   cd {path}",
     "postgen.next_serve": "   make serve",
-    "postgen.next_dashboard": "   Открыть Overseer: http://localhost:8000/dashboard/",
+    "postgen.next_dashboard": "   Открыть Overseer: {url}",
     # ── Пост-генерация: карта проекта ──────────────────────────────────
     "projectmap.title": "Структура проекта:",
     "projectmap.components": "Компоненты",
@@ -898,7 +898,7 @@ MESSAGES: dict[str, str] = {
     ),
     "deploy.rolling_complete": "Плавное развёртывание завершено!",
     "deploy.app_running": "   Приложение работает по: {url}",
-    "deploy.overseer": "   Панель Overseer: {url}/dashboard/",
+    "deploy.overseer": "   Панель Overseer: {url}",
     "deploy.overseer_allowlist": "   (Traefik пускает туда только частные сети: добавьте свой IP в ADMIN_IP_ALLOWLIST в .env и разверните заново)",
     "deploy.record_failed": "   Не записано на сервере (его история): {error}",
     "deploy.view_logs": "   Просмотр логов: aegis deploy-logs",

@@ -15,6 +15,7 @@ def row(instance: Instance, stats: Stats | None) -> dict[str, Any]:
     """One instance's row; a stopped one (no stats) has the same keys."""
     return {
         "name": instance.name,
+        "short": _short(instance),
         "id": instance.id,
         **_state(instance),
         # Its parts too, for a view that shows them apart (htmx's cards).
@@ -27,6 +28,13 @@ def row(instance: Instance, stats: Stats | None) -> dict[str, Any]:
         "uptime_seconds": instance.uptime_seconds,
         "image": " ".join(p for p in (instance.image, instance.build) if p) or "-",
     } | _figures(stats)
+
+
+def _short(instance: Instance) -> str:
+    """Its name from its service on (``app-worker-system-1`` is
+    ``worker-system-1``): the project's name says nothing on its own page."""
+    at = instance.name.rfind(f"-{instance.service}-")
+    return instance.name[at + 1 :] if at >= 0 else instance.name
 
 
 def _state(instance: Instance) -> dict[str, str]:

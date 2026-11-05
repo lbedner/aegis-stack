@@ -13,7 +13,7 @@ from typing import Any
 
 from fastapi.responses import StreamingResponse
 
-from app.core.chat_transcript import tool_label
+from app.core.chat_transcript import trail_label
 from app.core.log import logger
 from app.core.pages import Page, page_stage
 from app.services.ai.service import (
@@ -37,12 +37,14 @@ def event(name: str, data: dict[str, Any]) -> str:
 
 def _tool(chunk: StreamingMessage) -> str:
     """A tool-use notice: no content, just which tool started, so the
-    frontend can caption the pause. The trail line is computed here, once:
-    the browser shows this label live and the stored trace renders the
-    same words later (``chat_transcript.trace_label``)."""
+    frontend can caption the pause. Its trail line rides the notice
+    (``trace.tool_notice``) or is read from its arguments here; every chat
+    surface shows this label live, and the stored trace renders the same
+    words later (``chat_transcript.trace_label``)."""
     tool = str(chunk.metadata.get("tool", ""))
     args = str(chunk.metadata.get("args", "") or "")
-    return event("tool", {"tool": tool, "args": args, "label": tool_label(tool, args)})
+    label = str(chunk.metadata.get("label") or trail_label(tool, args))
+    return event("tool", {"tool": tool, "args": args, "label": label})
 
 
 def _chunk(chunk: StreamingMessage) -> str:

@@ -31,17 +31,17 @@ async def overlay(checks: dict[str, ComponentStatus]) -> dict[str, ComponentStat
     """``checks`` (by health component name), each one raised to the worst
     its containers say."""
     tables = await series.latest(ui_runtime.SAMPLER) or {}
-    troubles: dict[str, list[_Trouble]] = {}
+    found: dict[str, list[_Trouble]] = {}
     for page, view in tables.items():
-        troubles.setdefault(component_of(page), []).extend(
-            trouble for row in view["rows"] for trouble in _troubles(row)
+        found.setdefault(component_of(page), []).extend(
+            trouble for row in view["rows"] for trouble in troubles(row)
         )
-    return {
-        name: _worst(check, troubles.get(name, [])) for name, check in checks.items()
-    }
+    return {name: _worst(check, found.get(name, [])) for name, check in checks.items()}
 
 
-def _troubles(row: dict[str, Any]) -> Iterator[_Trouble]:
+def troubles(row: dict[str, Any]) -> Iterator[_Trouble]:
+    """What raises a container's part: Docker's healthcheck failing, or its
+    memory past the alert share (Resources lists it by the same rule)."""
     name = row["name"]
     if row["health"] == "unhealthy":
         yield ComponentStatusType.WARNING, f"Docker's healthcheck fails on {name}"

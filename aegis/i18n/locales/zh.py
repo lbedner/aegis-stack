@@ -351,7 +351,7 @@ MESSAGES: dict[str, str] = {
     "postgen.next_steps": "接下来：",
     "postgen.next_cd": "   cd {path}",
     "postgen.next_serve": "   make serve",
-    "postgen.next_dashboard": "   访问：http://localhost:8000/dashboard/",
+    "postgen.next_dashboard": "   访问：{url}",
     # ── 项目生成后：目录结构 ──────────────────────────────────────────
     "projectmap.title": "项目结构：",
     "projectmap.components": "组件",
@@ -773,7 +773,7 @@ MESSAGES: dict[str, str] = {
     ),
     "deploy.rolling_complete": "滚动部署完成",
     "deploy.app_running": "   访问地址：{url}",
-    "deploy.overseer": "   控制台：{url}/dashboard/",
+    "deploy.overseer": "   控制台：{url}",
     "deploy.overseer_allowlist": "   （Traefik 只允许私有网络访问：在 .env 的 ADMIN_IP_ALLOWLIST 中加入你的 IP 并重新部署）",
     "deploy.record_failed": "   未记录到服务器（其历史）：{error}",
     "deploy.view_logs": "   查看日志：aegis deploy-logs",

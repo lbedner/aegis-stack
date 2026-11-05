@@ -447,7 +447,7 @@ MESSAGES: dict[str, str] = {
     "postgen.next_steps": "Prochaines étapes :",
     "postgen.next_cd": "   cd {path}",
     "postgen.next_serve": "   make serve",
-    "postgen.next_dashboard": "   Ouvrir Overseer : http://localhost:8000/dashboard/",
+    "postgen.next_dashboard": "   Ouvrir Overseer : {url}",
     # ── Post-generation: project map ──────────────────────────────────
     "projectmap.title": "Structure du projet :",
     "projectmap.components": "Composants",
@@ -933,7 +933,7 @@ MESSAGES: dict[str, str] = {
     ),
     "deploy.rolling_complete": "Déploiement continu terminé !",
     "deploy.app_running": "   Application accessible à : {url}",
-    "deploy.overseer": "   Tableau de bord Overseer : {url}/dashboard/",
+    "deploy.overseer": "   Tableau de bord Overseer : {url}",
     "deploy.overseer_allowlist": "   (Traefik n'y admet que les réseaux privés : ajoutez votre IP à ADMIN_IP_ALLOWLIST dans .env et redéployez pour l'ouvrir)",
     "deploy.record_failed": "   Non enregistré sur le serveur (son historique) : {error}",
     "deploy.view_logs": "   Voir les logs : aegis deploy-logs",

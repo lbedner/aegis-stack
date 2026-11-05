@@ -47,6 +47,7 @@ from ..core.option_spec import (
     variant_answers,
     variant_delta,
 )
+from ..core.overseer_url import local_url
 from ..core.post_gen_tasks import stack_holds_sqlite
 from ..core.project_map import render_project_map
 from ..core.selection import split_services
@@ -626,7 +627,7 @@ def add_service_command(
             brand.accent(f"\n{t('add_service.auth_setup')}", bold=True)
             cmd = typer.style(f"{project_slug} auth create-test-users", bold=True)
             typer.echo(t("add_service.auth_create_users", cmd=cmd))
-            url = typer.style("http://localhost:8000/docs", bold=True)
+            url = typer.style(local_url(target_path, "/docs"), bold=True)
             typer.echo(t("add_service.auth_view_routes", url=url))
 
         if AnswerKeys.SERVICE_AI in base_services_added:

@@ -90,6 +90,8 @@ A tool hands back a typed model, never a `dict`: what an agent reads is that mod
 
 `doing` is what a call of it is, as a person watching reads it: a meeting bot's card shows it under the question Illiana is answering (`app.core.steps`). Each call is heard where it runs, so a read inside a code-mode script is a step too. A tool without one shows as its name made readable ("Lookup order"), and code mode's `run_code` as its script's first comment.
 
+Chat shows each step's call under the answer (`run_code: found = await ontology(...)`). With `AI_CHAT_SHOW_CALLS=false` it shows the same `doing` phrase instead, live and in the stored answer, so a viewer reads what the agent is doing rather than its code. The run each line opens is unchanged. Code mode's rules ask every script to open with that comment.
+
 Then grant it to an agent by inserting a `tool` row named `lookup_order` and linking it via `agent_tool`. A row naming a tool with no registered callable is skipped with a warning, never an error: a stale grant degrades that one tool, not the agent.
 
 ### What each part holds: `aggregate`

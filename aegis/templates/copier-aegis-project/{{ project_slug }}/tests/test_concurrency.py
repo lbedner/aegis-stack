@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator
+import os
 import signal
 import time
 
@@ -113,10 +114,9 @@ async def test_it_is_concurrent_at_all() -> None:
 
 
 class TestCpuBound:
-    """CPU work runs in a thread, so the loop keeps serving (a worker's
-    claim keep-alive and heartbeats run on it), and one piece of it at a
-    time per process: the GIL runs one anyway, so more would only look
-    parallel."""
+    """CPU work runs in its own process, so the loop keeps serving (a
+    worker's claim keep-alive and heartbeats run on it), and one piece of
+    it at a time per worker process."""
 
     def test_the_loop_keeps_running_while_cpu_work_does(self) -> None:
         ticks = 0
@@ -131,28 +131,24 @@ class TestCpuBound:
             beat = asyncio.create_task(ticker())
             await concurrency.cpu_bound(
                 time.sleep, 0.2
-            )  # holds its thread, not the loop
+            )  # holds its process, not the loop
             beat.cancel()
 
         asyncio.run(go())
         assert ticks > 5
 
-    def test_one_piece_runs_at_a_time(self) -> None:
-        running = 0
-        most = 0
+    def test_one_piece_runs_at_a_time_off_the_gil(self) -> None:
+        # A thread would share the loop's GIL: pure Python work there makes
+        # every await on the loop wait out the switch interval, which on a
+        # busy arq worker starved its poll loop and lapsed its health key.
+        async def go() -> list[int]:
+            return await asyncio.gather(
+                *(concurrency.cpu_bound(os.getpid) for _ in range(5))
+            )
 
-        def work() -> None:
-            nonlocal running, most
-            running += 1
-            most = max(most, running)
-            time.sleep(0.02)
-            running -= 1
-
-        async def go() -> None:
-            await asyncio.gather(*(concurrency.cpu_bound(work) for _ in range(5)))
-
-        asyncio.run(go())
-        assert most == 1
+        pids = asyncio.run(go())
+        assert len(set(pids)) == 1
+        assert pids[0] != os.getpid()
 
 
 class TestBackground:

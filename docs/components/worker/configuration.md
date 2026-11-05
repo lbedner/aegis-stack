@@ -538,9 +538,11 @@ awaits, so it holds that loop until it finishes, and everything else on it
 waits: the worker's other tasks, its claim keep-alive, its heartbeat.
 
 Run CPU work through `cpu_bound` (`app.core.concurrency`): it runs the
-function in a thread, so the loop stays free, and one at a time per
-process, which is all the GIL runs anyway. The load test's CPU workload
-does.
+function in a process of its own, one at a time per worker process, so the
+loop stays free. A thread is not enough: pure Python work in one shares the
+loop's GIL and slows every await on it, enough to starve a busy worker's
+poll loop. The function and its arguments are pickled across, so pass a
+module-level function. The load test's CPU workload does.
 
 ```python
 from app.core.concurrency import cpu_bound

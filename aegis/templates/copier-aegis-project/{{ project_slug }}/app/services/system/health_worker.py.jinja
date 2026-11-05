@@ -7,6 +7,7 @@ renamed over this file at generation, the way pools and registry work.
 {% if include_worker %}
 from typing import cast
 
+from app.components.worker.events import arq_health_counts, arq_queue_depth
 from app.core.config import settings
 from app.core.constants import ComponentName
 from app.core.log import logger
@@ -65,13 +66,13 @@ async def check_worker_health() -> ComponentStatus:
             queue_name = queue_config["queue_name"]
 
             try:
-                # Get queue length (actual queued jobs) - arq uses sorted sets
-                queue_length_result = redis_client.zcard(queue_name)
-                if hasattr(queue_length_result, '__await__'):
-                    queue_length = await queue_length_result
-                else:
-                    queue_length = queue_length_result
+                # Running is read live, across every process: the health
+                # key's j_ongoing is the last process to write it, and stale.
+                queue_length, j_ongoing = await arq_queue_depth(
+                    redis_client, queue_name
+                )
                 total_queued += queue_length
+                total_ongoing += j_ongoing
 
                 # Look for arq health check key for this queue
                 # arq health check key format: {queue_name}:health-check
@@ -79,7 +80,7 @@ async def check_worker_health() -> ComponentStatus:
                 health_check_data = await redis_client.get(health_check_key)
 
                 # Parse arq health check data if available
-                j_complete = j_failed = j_retried = j_ongoing = 0
+                j_complete = j_failed = j_retried = 0
                 worker_alive = False
                 last_health_check = None
 
@@ -92,24 +93,13 @@ async def check_worker_health() -> ComponentStatus:
                     if timestamp_match:
                         last_health_check = timestamp_match.group(1)
 
-                    # Extract job statistics using regex
-                    j_complete_match = re.search(r"j_complete=(\d+)", health_string)
-                    j_failed_match = re.search(r"j_failed=(\d+)", health_string)
-                    j_retried_match = re.search(r"j_retried=(\d+)", health_string)
-                    j_ongoing_match = re.search(r"j_ongoing=(\d+)", health_string)
-
-                    if j_complete_match:
-                        j_complete = int(j_complete_match.group(1))
-                        total_completed += j_complete
-                    if j_failed_match:
-                        j_failed = int(j_failed_match.group(1))
-                        total_failed += j_failed
-                    if j_retried_match:
-                        j_retried = int(j_retried_match.group(1))
-                        total_retried += j_retried
-                    if j_ongoing_match:
-                        j_ongoing = int(j_ongoing_match.group(1))
-                        total_ongoing += j_ongoing
+                    counts = arq_health_counts(health_string)
+                    j_complete = counts.get("j_complete", 0)
+                    j_failed = counts.get("j_failed", 0)
+                    j_retried = counts.get("j_retried", 0)
+                    total_completed += j_complete
+                    total_failed += j_failed
+                    total_retried += j_retried
 
                     # Worker is alive if we have health check data
                     # arq health checks expire automatically, having data means recent

@@ -155,7 +155,7 @@ class TestComponentIntegration:
         assert entry["command"] == "ZADD k 1 m" and entry["keys"] == []
 {% endif %}
 
-{#- These worker-health tests mock arq queue inspection (zcard on
+{#- These worker-health tests mock arq queue inspection (zrange on
     sorted sets); the dramatiq/taskiq health paths need their own. -#}
 {%- if include_worker and worker_backend == "arq" %}
     @pytest.mark.asyncio
@@ -164,7 +164,7 @@ class TestComponentIntegration:
 
         with patch("redis.asyncio.from_url") as mock_from_url:
             mock_redis = AsyncMock()
-            mock_redis.zcard.side_effect = Exception("Redis connection failed")
+            mock_redis.zrange.side_effect = Exception("Redis connection failed")
             mock_redis.get.side_effect = Exception("Redis connection failed")
             mock_from_url.return_value = mock_redis
 
@@ -190,11 +190,11 @@ class TestComponentIntegration:
         with patch("redis.asyncio.from_url") as mock_from_url:
             mock_redis = AsyncMock()
 
-            # Mock queue lengths
-            def mock_zcard(queue_name: str) -> int:
+            # Mock queue contents, none of it running
+            def mock_zrange(queue_name: str, start: int, end: int) -> list[bytes]:
                 if "load_test" in queue_name:
-                    return 5  # Some queued jobs
-                return 0  # Empty queues for media/system
+                    return [b"j1", b"j2", b"j3", b"j4", b"j5"]  # Some queued jobs
+                return []  # Empty queues for media/system
 
             # Mock health check data
             def mock_get(key: str) -> bytes | None:
@@ -205,7 +205,8 @@ class TestComponentIntegration:
                     )
                 return None  # No health check data for media/system
 
-            mock_redis.zcard.side_effect = mock_zcard
+            mock_redis.zrange.side_effect = mock_zrange
+            mock_redis.exists.return_value = 0
             mock_redis.get.side_effect = mock_get
             mock_from_url.return_value = mock_redis
 
@@ -236,6 +237,32 @@ class TestComponentIntegration:
             assert (
                 queue_sub_components["load_test"].status == ComponentStatusType.HEALTHY
             )
+
+    @pytest.mark.asyncio
+    async def test_running_jobs_are_not_counted_as_waiting(self) -> None:
+        """arq keeps a job in its queue's sorted set until it finishes, and
+        marks the running ones with an in-progress key."""
+        from arq.constants import in_progress_key_prefix
+
+        queued = [b"j1", b"j2", b"j3", b"j4", b"j5"]
+        running = {f"{in_progress_key_prefix}j{n}" for n in (1, 2, 3)}
+
+        with patch("redis.asyncio.from_url") as mock_from_url:
+            mock_redis = AsyncMock()
+            mock_redis.zrange.side_effect = lambda name, start, end: (
+                queued if "load_test" in name else []
+            )
+            mock_redis.exists.side_effect = lambda *keys: len(running & set(keys))
+            # One process's count, up to a refresh old: not what is running.
+            mock_redis.get.return_value = b"Mar-01 17:41:22 j_complete=0 j_ongoing=1"
+            mock_from_url.return_value = mock_redis
+
+            worker_status = await check_worker_health()
+
+        load_test = worker_status.sub_components["queues"].sub_components["load_test"]
+        assert load_test.metadata["queued_jobs"] == 2
+        assert load_test.metadata["jobs_ongoing"] == 3
+        assert "3 processing" in load_test.message
 {% endif %}
 
     @pytest.mark.asyncio

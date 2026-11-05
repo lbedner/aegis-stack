@@ -325,16 +325,20 @@
   /* Worker queues (Overseer > Worker > Overview), read left to right:
      jobs waiting (a pile of blocks), running (a cell per job it can run at
      once, lit while busy), done; then the backlog's line over time. */
-  .worker-flow { @apply grid gap-4 lg:grid-cols-[minmax(0,2fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)] lg:items-start; }
+  /* Stacked below lg: Waiting across the card, Running and Done side by
+     side under it. The cells keep a small size at any width, not the
+     card's width over their count. */
+  .worker-flow { @apply grid gap-4 sm:grid-cols-2 lg:grid-cols-[minmax(0,2fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)] lg:items-start; }
+  .worker-flow > [data-waiting] { @apply sm:col-span-2 lg:col-span-1; }
   .worker-flow__arrow { @apply hidden self-center text-aegis-muted lg:block; }
   .worker-stage { @apply flex min-w-0 flex-col gap-2; }
   .worker-stage__head { @apply flex items-baseline justify-between gap-3 text-xxs caps text-aegis-muted; }
   .worker-stage__head strong { @apply text-2xl font-semibold normal-case tracking-normal tabular-nums text-aegis-text; }
   .worker-stage__note { @apply text-xxs tabular-nums text-aegis-muted; }
-  .worker-pile { @apply grid grid-cols-[repeat(20,minmax(0,1fr))] gap-1; }
+  .worker-pile { @apply grid grid-cols-[repeat(20,minmax(0,1.25rem))] gap-1; }
   .worker-pile > span { @apply aspect-square rounded-sm border border-aegis-border/50 bg-aegis-border/10 transition-colors duration-500; }
   .worker-pile > span[data-lit] { @apply border-aegis-text/40 bg-aegis-text/25; }
-  .worker-slots { @apply grid grid-cols-10 gap-1; }
+  .worker-slots { @apply grid grid-cols-[repeat(10,minmax(0,1.5rem))] gap-1; }
   .worker-slot { @apply aspect-square rounded-sm border border-aegis-border/60 bg-aegis-border/15 transition-colors duration-500; }
   .worker-slot[data-busy="true"] { @apply border-aegis-teal bg-aegis-teal/70 text-aegis-teal; animation: keyspace-live 2.4s ease-in-out infinite; }
   .worker-outcome, .worker-share { @apply flex h-2 w-full overflow-hidden rounded-full bg-aegis-border/30; }

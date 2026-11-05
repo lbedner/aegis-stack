@@ -25,9 +25,9 @@
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org)
 [![Pydantic](https://img.shields.io/badge/Pydantic-E92063?logo=pydantic&logoColor=white)](https://pydantic.dev/docs/)
 
-</div>
-
 ## Full-stack Python apps that know what they are.
+
+</div>
 
 Aegis Stack gives you a complete FastAPI app, wired and running: API, workers, scheduler, database, auth and AI, with plugins for anything else. Alongside it is [the Twin](https://docs.aegis-stack.io/overseer/twin/), a model of that app taken from its code and its live state. [Overseer](https://docs.aegis-stack.io/overseer/) shows it live and lets you operate it, [Illiana](https://docs.aegis-stack.io/services/ai/illiana/) explains it, and CI catches changes that break its rules, whether you wrote them or your agents did.
 
@@ -37,7 +37,7 @@ Aegis Stack gives you a complete FastAPI app, wired and running: API, workers, s
 
 <div markdown>
 
-#### Build :material-arrow-right:
+#### Build →
 
 **An app.** Build from a [blueprint](https://docs.aegis-stack.io/cli-reference/#aegis-blueprints) or pick your pieces. Add or remove them later; your changes are merged, not overwritten.
 
@@ -45,7 +45,7 @@ Aegis Stack gives you a complete FastAPI app, wired and running: API, workers, s
 
 <div markdown>
 
-#### Ship :material-arrow-right:
+#### Ship →
 
 **A server.** One command, or one button in Overseer, [provisions a server](https://docs.aegis-stack.io/deployment/cloud/) in your own Hetzner or DigitalOcean account, adds HTTPS, and deploys. The server, the bill, and the data stay yours.
 
@@ -53,7 +53,7 @@ Aegis Stack gives you a complete FastAPI app, wired and running: API, workers, s
 
 <div markdown>
 
-#### See :material-arrow-right:
+#### See →
 
 **A control plane.** A live map of your system, from the whole stack down to a single function, with errors, deploys, jobs, resources, and cost on the same map. See [Overseer](https://docs.aegis-stack.io/overseer/). The same data is in your app's CLI and, for your agents, over MCP.
 

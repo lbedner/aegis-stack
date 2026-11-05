@@ -33,41 +33,42 @@ Aegis Stack gives you a complete FastAPI app, wired and running: API, workers, s
 
 ![Aegis Stack: a stack made, started, and asked about itself in Overseer](docs/images/aegis-hero.webp)
 
-<div class="grid" markdown>
+<!-- cards -->
+<table>
+<tr>
+<td width="50%" valign="top" markdown>
 
-<div markdown>
-
-#### Build →
+#### Build
 
 **An app.** Build from a [blueprint](https://docs.aegis-stack.io/cli-reference/#aegis-blueprints) or pick your pieces. Add or remove them later; your changes are merged, not overwritten.
 
-</div>
+</td>
+<td width="50%" valign="top" markdown>
 
-<div markdown>
-
-#### Ship →
+#### Ship
 
 **A server.** One command, or one button in Overseer, [provisions a server](https://docs.aegis-stack.io/deployment/cloud/) in your own Hetzner or DigitalOcean account, adds HTTPS, and deploys. The server, the bill, and the data stay yours.
 
-</div>
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top" markdown>
 
-<div markdown>
-
-#### See →
+#### See
 
 **A control plane.** A live map of your system, from the whole stack down to a single function, with errors, deploys, jobs, resources, and cost on the same map. See [Overseer](https://docs.aegis-stack.io/overseer/). The same data is in your app's CLI and, for your agents, over MCP.
 
-</div>
-
-<div markdown>
+</td>
+<td width="50%" valign="top" markdown>
 
 #### Ask
 
 **An operator, if you want one.** Talk to [Illiana](https://docs.aegis-stack.io/services/ai/illiana/) or type. She reads that map, answers with diagrams instead of guesses, and reviews every pull request against the system's rules.
 
-</div>
-
-</div>
+</td>
+</tr>
+</table>
+<!-- /cards -->
 
 ### What you could build
 

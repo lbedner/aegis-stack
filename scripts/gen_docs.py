@@ -94,6 +94,23 @@ with open("README.md") as readme:
     # Use regex to catch all docs/*.md links instead of manually listing each one
     content = re.sub(r"\]\(docs/([^)]+\.md)\)", r"](\1)", content)
 
+    # The README's cards are a table, the one layout GitHub renders side by
+    # side; the docs site draws them as a grid, each pointing to the next.
+    def to_grid(match: re.Match[str]) -> str:
+        cells = re.findall(r"<td[^>]*>(.*?)</td>", match.group(1), re.S)
+        divs = [f"<div markdown>{c}</div>" for c in cells]
+        divs = [
+            re.sub(r"^(#### .+)$", r"\1 :material-arrow-right:", d, count=1, flags=re.M)
+            if i < len(divs) - 1
+            else d
+            for i, d in enumerate(divs)
+        ]
+        return '<div class="grid" markdown>\n\n' + "\n\n".join(divs) + "\n\n</div>"
+
+    content = re.sub(
+        r"<!-- cards -->(.*?)<!-- /cards -->", to_grid, content, flags=re.S
+    )
+
     # Convert absolute docs URLs to relative for MkDocs (works locally and deployed)
     content = content.replace("https://docs.aegis-stack.io/", "")
 

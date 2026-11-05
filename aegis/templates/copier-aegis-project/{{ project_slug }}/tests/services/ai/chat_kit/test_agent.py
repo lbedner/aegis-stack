@@ -8,10 +8,13 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from types import SimpleNamespace
 
 from pydantic_ai import RunContext
 from pydantic_ai.models.test import TestModel
+import pytest
 
+from app.core.config import settings
 from app.services.ai.domains.chat.chat_kit import (
     ChatMessage,
     ChatScope,
@@ -23,6 +26,7 @@ from app.services.ai.domains.chat.chat_kit import (
     compose_context,
     to_model_history,
 )
+from app.services.ai.domains.chat.chat_kit.agent import _tool_frame
 
 
 class _BoomModel(TestModel):
@@ -209,3 +213,15 @@ async def test_history_is_passed_to_the_model() -> None:
         history=[ChatMessage("user", "first"), ChatMessage("assistant", "reply")],
     )
     assert isinstance(frames[-1], DoneFrame)
+
+
+def test_a_step_reads_as_the_chat_trail_does(monkeypatch: pytest.MonkeyPatch) -> None:
+    """With calls hidden (``AI_CHAT_SHOW_CALLS``), the frame says what the
+    step is doing, as the chat's own trail does (``trail_label``)."""
+    monkeypatch.setattr(settings, "AI_CHAT_SHOW_CALLS", False)
+    script = "# The AI service's wiring\nfound = await ontology()"
+    call = SimpleNamespace(
+        part=SimpleNamespace(tool_name="run_code", args={"code": script})
+    )
+
+    assert _tool_frame(call).label == "The AI service's wiring"  # type: ignore[arg-type]

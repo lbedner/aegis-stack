@@ -422,7 +422,7 @@ MESSAGES: dict[str, str] = {
     "postgen.next_steps": "다음 단계:",
     "postgen.next_cd": "   cd {path}",
     "postgen.next_serve": "   make serve",
-    "postgen.next_dashboard": "   Overseer 열기: http://localhost:8000/dashboard/",
+    "postgen.next_dashboard": "   Overseer 열기: {url}",
     # ── Post-generation: project map ──────────────────────────────────
     "projectmap.title": "프로젝트 구조:",
     "projectmap.components": "컴포넌트",
@@ -884,7 +884,7 @@ MESSAGES: dict[str, str] = {
     ),
     "deploy.rolling_complete": "롤링 배포 완료!",
     "deploy.app_running": "   애플리케이션 실행 중: {url}",
-    "deploy.overseer": "   Overseer 대시보드: {url}/dashboard/",
+    "deploy.overseer": "   Overseer 대시보드: {url}",
     "deploy.overseer_allowlist": "   (Traefik은 사설 네트워크만 허용합니다. .env의 ADMIN_IP_ALLOWLIST에 내 IP를 추가하고 다시 배포하세요)",
     "deploy.record_failed": "   서버에 기록하지 못했습니다(기록): {error}",
     "deploy.view_logs": "   로그 확인: aegis deploy-logs",

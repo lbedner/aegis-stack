@@ -16,17 +16,25 @@ from aegis.commands import deploy
 HOST = "203.0.113.7"
 
 
+def _project(tmp_path: Path, *, allowlist: bool = True) -> Path:
+    """A project without the htmx frontend (its Overseer is the dashboard),
+    its shipped env file setting the allowlist or not."""
+    if allowlist:
+        (tmp_path / ".env").write_text("ADMIN_IP_ALLOWLIST=198.51.100.4/32\n")
+    return tmp_path
+
+
 def _urls(text: str) -> list[str]:
     """Every URL in the output, whole: compared exactly, never by substring."""
     return re.findall(r"https?://[^\s)]+", text)
 
 
 def test_the_provisioned_name_wins_over_the_ip(
-    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     config = {"server": {"host": HOST}, "domain": "203-0-113-7.sslip.io"}
 
-    deploy._print_deployed(config, allowlist_set=True)
+    deploy._print_deployed(config, _project(tmp_path))
 
     out = capsys.readouterr().out
     assert _urls(out) == [
@@ -36,17 +44,20 @@ def test_the_provisioned_name_wins_over_the_ip(
     assert HOST not in out
 
 
-def test_without_a_name_the_host_is_used(capsys: pytest.CaptureFixture[str]) -> None:
-    deploy._print_deployed({"server": {"host": HOST}}, allowlist_set=True)
+def test_without_a_name_the_host_is_used(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    deploy._print_deployed({"server": {"host": HOST}}, _project(tmp_path))
 
     assert _urls(capsys.readouterr().out)[0] == f"http://{HOST}"
 
 
 @pytest.mark.parametrize("allowlist_set", [True, False])
 def test_the_allowlist_hint_shows_until_the_allowlist_is_set(
-    allowlist_set: bool, capsys: pytest.CaptureFixture[str]
+    allowlist_set: bool, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    deploy._print_deployed({"server": {"host": HOST}}, allowlist_set=allowlist_set)
+    project = _project(tmp_path, allowlist=allowlist_set)
+    deploy._print_deployed({"server": {"host": HOST}}, project)
 
     assert ("ADMIN_IP_ALLOWLIST" in capsys.readouterr().out) is not allowlist_set
 
@@ -74,10 +85,12 @@ def test_the_allowlist_is_read_from_the_file_a_deploy_ships(
     assert deploy._admin_allowlist_set(tmp_path) is expected
 
 
-def test_with_tls_the_links_are_https(capsys: pytest.CaptureFixture[str]) -> None:
+def test_with_tls_the_links_are_https(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     config = {"server": {"host": HOST}, "domain": "203-0-113-7.sslip.io"}
 
-    deploy._print_deployed(config, allowlist_set=True, tls=True)
+    deploy._print_deployed(config, _project(tmp_path), tls=True)
 
     out = capsys.readouterr().out
     assert _urls(out) == [

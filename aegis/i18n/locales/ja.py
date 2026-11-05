@@ -435,7 +435,7 @@ MESSAGES: dict[str, str] = {
     "postgen.next_steps": "次のステップ：",
     "postgen.next_cd": "   cd {path}",
     "postgen.next_serve": "   make serve",
-    "postgen.next_dashboard": "   Overseer を開く：http://localhost:8000/dashboard/",
+    "postgen.next_dashboard": "   Overseer を開く：{url}",
     # ── 生成後：プロジェクトマップ ─────────────────────────────────────
     "projectmap.title": "プロジェクト構成：",
     "projectmap.components": "コンポーネント",
@@ -914,7 +914,7 @@ MESSAGES: dict[str, str] = {
     ),
     "deploy.rolling_complete": "ローリングデプロイ完了！",
     "deploy.app_running": "   アプリケーション：{url}",
-    "deploy.overseer": "   Overseer ダッシュボード：{url}/dashboard/",
+    "deploy.overseer": "   Overseer ダッシュボード：{url}",
     "deploy.overseer_allowlist": "   （Traefik はプライベートネットワークからのみ許可します。.env の ADMIN_IP_ALLOWLIST に自分の IP を追加して再デプロイしてください）",
     "deploy.record_failed": "   サーバーに記録できませんでした（履歴）：{error}",
     "deploy.view_logs": "   ログ確認：aegis deploy-logs",

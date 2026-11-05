@@ -5,37 +5,108 @@
 *Inspired by the Neverwinter Nights toolset, Project Zero Dawn, and Dr. Wily.*
 
 [![CI](https://github.com/lbedner/aegis-stack/workflows/CI/badge.svg)](https://github.com/lbedner/aegis-stack/actions/workflows/ci.yml)
-[![Documentation](https://github.com/lbedner/aegis-stack/workflows/Deploy%20Documentation/badge.svg)](https://github.com/lbedner/aegis-stack/actions/workflows/docs.yml)
+[![Docs](https://img.shields.io/badge/docs-aegis--stack.io-17CCBF)](https://docs.aegis-stack.io)
+[![PyPI](https://img.shields.io/pypi/v/aegis-stack)](https://pypi.org/project/aegis-stack/)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Copier](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/copier-org/copier/master/img/badge/badge-grayscale-inverted-border-orange.json)](https://github.com/copier-org/copier)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/lbedner/aegis-stack/blob/main/LICENSE)
 <br>
+[![Monthly Downloads](https://img.shields.io/pypi/dm/aegis-stack)](https://pypi.org/project/aegis-stack/)
+[![Total Downloads](https://static.pepy.tech/badge/aegis-stack)](https://pepy.tech/project/aegis-stack)
+[![Commits per Month](https://img.shields.io/github/commit-activity/m/lbedner/aegis-stack)](https://github.com/lbedner/aegis-stack/commits)
+[![Total Commits](https://img.shields.io/github/commit-activity/t/lbedner/aegis-stack)](https://github.com/lbedner/aegis-stack/commits)
+[![Last Commit](https://img.shields.io/github/last-commit/lbedner/aegis-stack)](https://github.com/lbedner/aegis-stack/commits)
+<br>
+[![Astral](https://img.shields.io/badge/Astral-261230?logo=astral&logoColor=D7FF64)](https://astral.sh)
+[![Copier](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/copier-org/copier/master/img/badge/badge-grayscale-inverted-border-orange.json)](https://github.com/copier-org/copier)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![Flet](https://img.shields.io/badge/Flet-24292F?logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHhtbDpzcGFjZT0icHJlc2VydmUiIHdpZHRoPSIzMDdweCIgaGVpZ2h0PSIzMDdweCIgdmVyc2lvbj0iMS4xIiBzaGFwZS1yZW5kZXJpbmc9Imdlb21ldHJpY1ByZWNpc2lvbiIgdGV4dC1yZW5kZXJpbmc9Imdlb21ldHJpY1ByZWNpc2lvbiIgaW1hZ2UtcmVuZGVyaW5nPSJvcHRpbWl6ZVF1YWxpdHkiIGZpbGwtcnVsZT0iZXZlbm9kZCIgY2xpcC1ydWxlPSJldmVub2RkIiB2aWV3Qm94PSIwIDAgMjg1IDI4NSIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiPjxnIGlkPSJMYXllcl94MDAyMF8xIj48cmVjdCBmaWxsPSJub25lIiB3aWR0aD0iMjg1IiBoZWlnaHQ9IjI4NSIgcng9IjkuMDMiIHJ5PSI4LjEyIi8%2BPHBhdGggZmlsbD0iI0VFMzE2NyIgZD0iTTM5LjI4IDE0NC43NGMtMC44NSwtMS41MiAtMC42NiwtMi42MSAwLjEsLTQuMTMgMzEuNDEsLTU4LjM2IDc4LjgxLC05NC4xNSAxMzguNTMsLTExOS43NSAyLjAzLC0wLjg2IDUuMDQsMS41MiA0LjMxLDMuNjUgLTguOSwyNS45MSAtMTUuMTgsNTEuMTMgLTE4LjgyLDc4LjIzIC0zLjMyLDI0Ljk3IC00LjI0LDUwLjc5IC0wLjg3LDc3Ljc3IDMuNTYsMzAuNTkgMTAuODgsNTUuOTkgMTkuNjgsODMuMzYgMC45OCwzLjA1IC0yLjE0LDQuNDMgLTQuNTEsMy4yNiAtNjIuMTksLTMwLjYxIC0xMDkuMzMsLTcwLjY1IC0xMzguNDIsLTEyMi4zOXoiLz48cGF0aCBmaWxsPSIjMDA5OERBIiBmaWxsLW9wYWNpdHk9IjAuNjM5MjE2IiBkPSJNMjI0LjUzIDE5OC41OWMtMzQuMzksLTEwLjc5IC02NS4xNSwtMjkuMDYgLTkyLjQsLTUzLjIgLTEuODIsLTEuNjIgLTEuNjEsLTMuODcgMC4wMywtNS40NCAyNy4wNywtMjUuODggNTcuNzksLTQ2LjE5IDkxLjc0LC02MC41NiAyLjk5LC0xLjI3IDUuNDUsMS4yIDQuNTYsNC42MiAtOS42MiwzNi45MSAtMTEuNzQsNzMuMzkgMC4xMywxMDkuOTUgMC45OCwzLjA1IC0xLjQ3LDUuNDQgLTQuMDYsNC42M3oiLz48cGF0aCBmaWxsPSIjNUFCQUU3IiBkPSJNMjI0LjUzIDE5OC41OWMtMjIuNjQsLTcuMSAtNDMuNzEsLTE3LjQ1IC02My4yNCwtMzAuNTggLTEuMzUsLTIwLjkgLTEuNDcsLTMwLjIgMC43MywtNTMuMjYgMTkuMTksLTE0LjIyIDM5Ljg2LC0yNi4wNCA2MS44OCwtMzUuMzYgMi45OSwtMS4yNyA1LjQ1LDEuMiA0LjU2LDQuNjIgLTkuNjIsMzYuOTEgLTExLjc0LDczLjM5IDAuMTMsMTA5Ljk1IDAuOTgsMy4wNSAtMS40Nyw1LjQ0IC00LjA2LDQuNjN6Ii8%2BPC9nPjwvc3ZnPg%3D%3D)](https://flet.dev)
 [![HTMX](https://img.shields.io/badge/htmx-3366CC?logo=htmx&logoColor=white)](https://htmx.org)
-[![Pydantic](https://img.shields.io/badge/Pydantic-E92063?logo=pydantic&logoColor=white)](https://docs.pydantic.dev)
+[![LangChain](https://img.shields.io/badge/LangChain-1C3C3C?logo=langchain&logoColor=white)](https://www.langchain.com)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org)
-
-</div>
+[![Pydantic](https://img.shields.io/badge/Pydantic-E92063?logo=pydantic&logoColor=white)](https://pydantic.dev/docs/)
 
 ## Full-stack Python apps that know what they are.
 
-Aegis Stack assembles a complete FastAPI system (API, workers, scheduler, database, auth, AI) and builds a typed map from its architecture, code, and live runtime ([the Twin](https://docs.aegis-stack.io/overseer/twin/)). That lets the system draw itself, explain itself, and catch changes that break its rules.
+</div>
 
-Build a [private finance system](https://docs.aegis-stack.io/services/finance/), an [agent that joins your meetings](https://docs.aegis-stack.io/services/meetings/), an [MCP server](https://docs.aegis-stack.io/components/mcp/) for your own tools, a [local AI app on Ollama](https://docs.aegis-stack.io/components/inference/), or a [voice-first](https://docs.aegis-stack.io/services/ai/voice/) internal assistant, and run it all from the same place.
+Aegis Stack gives you a complete FastAPI app, wired and running: API, workers, scheduler, database, auth and AI, with plugins for anything else. Alongside it is [the Twin](https://docs.aegis-stack.io/overseer/twin/), a model of that app taken from its code and its live state. [Overseer](https://docs.aegis-stack.io/overseer/) shows it live and lets you operate it, [Illiana](https://docs.aegis-stack.io/services/ai/illiana/) explains it, and CI catches changes that break its rules, whether you wrote them or your agents did.
+
+![Aegis Stack: a stack made, started, and asked about itself in Overseer](docs/images/aegis-hero.webp)
+
+<!-- cards -->
+<table>
+<tr>
+<td width="50%" valign="top" markdown>
+
+#### Build
 
 **An app.** Build from a [blueprint](https://docs.aegis-stack.io/cli-reference/#aegis-blueprints) or pick your pieces. Add or remove them later; your changes are merged, not overwritten.
 
-**A server.** One command, or one button in Overseer, [provisions a server](https://docs.aegis-stack.io/deployment/#no-server-yet-provision-one) in your own Hetzner or DigitalOcean account, adds HTTPS, and deploys. The server, the bill, and the data stay yours.
+</td>
+<td width="50%" valign="top" markdown>
 
-**A control plane.** A live map of your system, from the whole stack down to a single function, with errors, deploys, jobs, resources, and cost on the same map. See [Overseer](https://docs.aegis-stack.io/overseer/).
+#### Ship
 
-**An operator.** Talk to [Illiana](https://docs.aegis-stack.io/services/ai/illiana/) or type. She reads that map, answers with diagrams instead of guesses, and reviews every pull request against the system's rules.
+**A server.** One command, or one button in Overseer, [provisions a server](https://docs.aegis-stack.io/deployment/cloud/) in your own Hetzner or DigitalOcean account, adds HTTPS, and deploys. The server, the bill, and the data stay yours.
 
-![Aegis Stack Quick Start Demo](docs/images/aegis-demo.gif)
+</td>
+</tr>
+<tr>
+<td width="50%" valign="top" markdown>
+
+#### See
+
+**A control plane.** A live map of your system, from the whole stack down to a single function, with errors, deploys, jobs, resources, and cost on the same map. See [Overseer](https://docs.aegis-stack.io/overseer/). The same data is in your app's CLI and, for your agents, over MCP.
+
+</td>
+<td width="50%" valign="top" markdown>
+
+#### Ask
+
+**An operator, if you want one.** Talk to [Illiana](https://docs.aegis-stack.io/services/ai/illiana/) or type. She reads that map, answers with diagrams instead of guesses, and reviews every pull request against the system's rules.
+
+</td>
+</tr>
+</table>
+<!-- /cards -->
+
+### What you could build
+
+Each is `uvx aegis-stack init my-app` with:
+
+| Build | With |
+|---|---|
+| [A SaaS MVP with billing](https://docs.aegis-stack.io/services/payment/) | `-s auth,payment -c database,htmx,worker` |
+| [A finance app with an MCP server](https://docs.aegis-stack.io/services/finance/) | `-b finance -c database,scheduler,worker,mcp` |
+| [A voice agent for your meetings](https://docs.aegis-stack.io/services/meetings/) | `-s "meetings,ai[sqlite,voice]"` |
+| [A document vault, read by AI](https://docs.aegis-stack.io/services/documents/) | `-s auth,documents,ai -c database,storage,worker` |
+| [A local AI app on Ollama](https://docs.aegis-stack.io/components/inference/) | `-s "ai[ollama]"` |
+
+<details class="more" markdown>
+<summary>5 more</summary>
+
+| Build | With |
+|---|---|
+| [Email, SMS and calls from your app](https://docs.aegis-stack.io/services/comms/) | `-s comms -c worker` |
+| [A Markdown blog with an editor](https://docs.aegis-stack.io/services/blog/) | `-s blog` |
+| [A tracker for posts on your topic](https://docs.aegis-stack.io/services/research/) | `-s research -c database,scheduler` |
+| [Adoption analytics](https://docs.aegis-stack.io/services/insights/) | `-s "insights[github,pypi]"` |
+| [Background jobs at scale](https://docs.aegis-stack.io/components/worker/) | `-c worker,scheduler` |
+
+</details>
+
+### Running on it
+
+| Live | What it is |
+|---|---|
+| **[Aegis Pulse](https://pulse.aegis-stack.io/)** | Package analytics with honest decomposition (total, filtered, human) |
+| **[Sector 7G](https://sector-7g.dev/dashboard/)** | Millions of tasks on a single $5 VPS, zero restarts |
+| **[NWVault Revival](http://167.99.48.44/)** | A searchable archive of the original Neverwinter Vault (2002-2014), built in 24 hours |
 
 ## Quick Start
 
 ```bash
-uvx aegis-stack init my-api
+uvx aegis-stack init my-app
 ```
 
 `init` opens a full-screen guided setup that walks through every component and service with explanations. Prefer the classic one-line prompts? Pass `--quick`.
@@ -45,7 +116,7 @@ uvx aegis-stack init my-api
 
 ```bash
 # Skip the guided setup, use the classic one-line prompts
-uvx aegis-stack init my-api --quick
+uvx aegis-stack init my-app --quick
 
 # Add user authentication out of the box
 uvx aegis-stack init user-app --services auth
@@ -59,17 +130,36 @@ uvx aegis-stack init full-app --services auth,payment,comms --components worker,
 
 </details>
 
-> **CLI in 9 languages:** English, German, Spanish, French, Japanese, Korean, Russian, Simplified Chinese, Traditional Chinese. Run e.g. `uvx aegis-stack --lang zh init my-api`, or set `AEGIS_LANG=zh`.
+> **CLI in 9 languages:** English, German, Spanish, French, Japanese, Korean, Russian, Simplified Chinese, Traditional Chinese. Run e.g. `uvx aegis-stack --lang zh init my-app`, or set `AEGIS_LANG=zh`.
 
 **Installation alternatives:** See the [Installation Guide](https://docs.aegis-stack.io/installation/) for `uv tool install`, `pip install`, and development setup.
 
 ## Customizing Your Stack
 
-![Aegis Stack spinning up a new project](docs/images/aegis-spinup-demo.gif)
+![Aegis Stack spinning up a new project](docs/images/aegis-spinup-demo.webp)
 
 **Components** are infrastructure pieces (database, workers, scheduler, cache). **Services** are business capabilities (auth, AI, payments, comms).
 
 **Don't worry about what you pick today.** Add anything later with a single command and remove what you outgrow. Where a change touches files you've edited, your edits are merged in, and anything that can't merge cleanly is marked for you to review.
+
+```bash
+# Monday: Ship MVP
+aegis init my-app
+
+# Week 3: Add scheduled reports
+aegis add scheduler --project-path ./my-app
+
+# Month 2: Need async workers
+aegis add worker --project-path ./my-app
+
+# Month 6: Scheduler not needed
+aegis remove scheduler --project-path ./my-app
+
+# Stay current with template improvements
+aegis update
+```
+
+See **[Evolving Your Stack](https://docs.aegis-stack.io/evolving-your-stack/)** for the complete guide.
 
 ### Components
 
@@ -121,6 +211,15 @@ What the built-in services don't cover can come from a plugin: a Python package 
 
 [Plugins Docs →](https://docs.aegis-stack.io/plugins/)
 
+## Deploy and back up
+
+- **Provision** a server in your own Hetzner or DigitalOcean account, price shown first, with `aegis deploy-provision` or from Overseer > Deployments. HTTPS comes with it.
+- **Deploy** to any VPS over SSH with `aegis deploy`: rsync and Docker, no PaaS lock-in.
+- **Back up** before every deploy, roll back on a failed health check, keep encrypted nightly copies off the server, and run a drill that proves they restore.
+- **CI** on every push: GitHub Actions for lint, types and tests, CodeQL scanning, and an optional continuous-deploy workflow.
+
+[Deployment Docs →](https://docs.aegis-stack.io/deployment/)
+
 ## Integrations
 
 Aegis Stack is the orchestration layer. Services and components wire into best-in-class tools you already trust, so you keep your vendor choices and your data.
@@ -160,137 +259,12 @@ Aegis Stack is the orchestration layer. Services and components wire into best-i
 </tr>
 </table>
 
-## CI/CD for Your Stack
-
-Every generated project ships with GitHub Actions and developer tooling pre-wired, so the first push to GitHub runs checks automatically, and one command wires up continuous deployment to your server.
-
-<table>
-<thead>
-<tr><th>Capability</th><th>What you get</th><th width="80">Status</th></tr>
-</thead>
-<tbody>
-<tr><td><b>CI Workflow</b></td><td>Lint, type checking, and tests on every push and PR (parallel jobs, cached)</td><td><img src="https://img.shields.io/badge/-available-2ea043" alt="Available" width="64"></td></tr>
-<tr><td><b>Code Scanning</b></td><td>CodeQL static analysis on every PR and on a weekly schedule</td><td><img src="https://img.shields.io/badge/-available-2ea043" alt="Available" width="64"></td></tr>
-<tr><td><b>Pre-commit</b></td><td>Ruff, ruff-format, and type-check hooks (opt-in)</td><td><img src="https://img.shields.io/badge/-optional-blue" alt="Optional" width="64"></td></tr>
-<tr><td><b>Continuous Deploy</b></td><td>Generates a dedicated SSH deploy key, installs it on your server, pushes secrets to GitHub, and scaffolds a deploy workflow (manual trigger by default)</td><td><img src="https://img.shields.io/badge/-optional-blue" alt="Optional" width="64"></td></tr>
-</tbody>
-</table>
-
-## Deploying Your Stack
-
-| Capability | What you get | |
-|---|---|---|
-| **[Provision](https://docs.aegis-stack.io/deployment/#no-server-yet-provision-one)** | `aegis deploy-provision` rents a server on Hetzner or DigitalOcean (price shown first), names it, turns on HTTPS, and deploys. More providers to come | ![Available](https://img.shields.io/badge/-available-2ea043) |
-| **[From Overseer](https://docs.aegis-stack.io/deployment/#from-the-overseer)** | Overseer > Deployments: pick a size and region at its price, see whether the stack fits, then deploy, back up, roll back, or destroy from the page | ![Available](https://img.shields.io/badge/-available-2ea043) |
-| **[Deploy CLI](https://docs.aegis-stack.io/deployment/)** | One-command deploys to any VPS over SSH (rsync + Docker), no PaaS lock-in | ![Available](https://img.shields.io/badge/-available-2ea043) |
-| **[Server Setup](https://docs.aegis-stack.io/deployment/#aegis-deploy-setup)** | `aegis deploy-setup` provisions Ubuntu, Debian, or Fedora boxes (Docker + firewall) | ![Available](https://img.shields.io/badge/-available-2ea043) |
-| **[Backups & Rollback](https://docs.aegis-stack.io/deployment/#backup-and-rollback)** | `pg_dump` before every deploy, retention policy, automatic rollback on failed health checks | ![Available](https://img.shields.io/badge/-available-2ea043) |
-| **[TLS / HTTPS](https://docs.aegis-stack.io/deployment/#tlshttps-with-lets-encrypt)** | Let's Encrypt via the Traefik ingress component, zero config when a domain is set | ![Optional](https://img.shields.io/badge/-optional-blue) |
-
-[Deployment Docs →](https://docs.aegis-stack.io/deployment/)
-
-## Not a Starter Template
-
-**Your choices aren't permanent.** Start with what you need today, add when requirements change, remove what you outgrow.
-
-```bash
-# Monday: Ship MVP
-aegis init my-api
-
-# Week 3: Add scheduled reports
-aegis add scheduler --project-path ./my-api
-
-# Month 2: Need async workers
-aegis add worker --project-path ./my-api
-
-# Month 6: Scheduler not needed
-aegis remove scheduler --project-path ./my-api
-
-# Stay current with template improvements
-aegis update
-```
-
-| Starter | Add Later? | Remove Later? | Git Conflicts? |
-|-----------|------------|---------------|----------------|
-| **Others** | Locked at init | Manual deletion | High risk |
-| **Aegis Stack** | One command | One command | Merged, conflicts marked for review |
-
-<img src="docs/images/aegis-evolution-demo.gif" alt="Component Evolution Demo" width="480">
-
-Most starters lock you in at `init`. Aegis Stack doesn't. See **[Evolving Your Stack](https://docs.aegis-stack.io/evolving-your-stack/)** for the complete guide.
-
-## Overseer - Your Application's Control Plane
-
-<img src="docs/images/overseer-demo.gif" alt="Overseer" width="480">
-
-<sub>[Live Demo: sector-7g.dev/dashboard](https://sector-7g.dev/dashboard/)</sub>
-
-**[Overseer](https://docs.aegis-stack.io/overseer/)** is the embedded control plane that ships with every Aegis Stack project.
-
-- Live health of every component and service in one view
-- Worker queues, scheduled jobs, recent runs
-- Database schema, tables, and migration state
-- AI token usage and conversation history
-- Auth sessions and user activity
-- No external tooling, no vendor integrations, no setup
-
-## CLI - First-Class System Interface
-
-<img src="docs/images/cli-demo.gif" alt="CLI Demo" width="480">
-
-The Aegis CLI is a first-class interface to your running system. Not just a health check, but a full inspection layer.
-
-- Component-aware commands for every running subsystem
-- Inspect worker queues, scheduler runs, database state
-- Query AI usage, auth sessions, service configuration
-- Same data Overseer sees, terminal-native
-- Built into every generated project, no extra installs
-
-## Illiana - Optional System Operator
-
-<img src="docs/images/illiana-demo.gif" alt="Illiana Demo" width="480">
-
-When the AI service is enabled, Aegis exposes an additional interface: **Illiana**, a conversational operator over your running system.
-
-- Ask questions in plain language about live system state
-- Backed by live telemetry from Overseer and the CLI
-- Optional RAG over your codebase for code-aware answers
-- Opt-in: only available when the AI service is on
-- Nothing in the stack depends on her being there
-
-## Powered By Aegis Stack
-
-- **[Aegis Pulse](https://pulse.aegis-stack.io/)** - Package analytics with honest decomposition (Total / Filtered / Human)
-- **[Sector 7G](https://sector-7g.dev/dashboard/)** - Live demo: millions of tasks on a single $5 VPS, zero restarts
-- **[NWVault Revival](https://167.99.48.44/)** - Searchable archive of the original Neverwinter Vault (2002-2014), built in 24 hours
-
-<div align="center" markdown>
-
-[![Monthly Downloads](https://img.shields.io/pypi/dm/aegis-stack)](https://pypi.org/project/aegis-stack/)
-[![Total Downloads](https://static.pepy.tech/badge/aegis-stack)](https://pepy.tech/project/aegis-stack)
-<br>
-[![Commits per Month](https://img.shields.io/github/commit-activity/m/lbedner/aegis-stack)](https://github.com/lbedner/aegis-stack/commits)
-[![Total Commits](https://img.shields.io/github/commit-activity/t/lbedner/aegis-stack)](https://github.com/lbedner/aegis-stack/commits)
-[![Last Commit](https://img.shields.io/github/last-commit/lbedner/aegis-stack)](https://github.com/lbedner/aegis-stack/commits)
-
-</div>
-
-## Learn More
-
-- **[Overseer](https://docs.aegis-stack.io/overseer/)** - Built-in system dashboard
-- **[Deployment](https://docs.aegis-stack.io/deployment/)** - Deploy with backups, rollback, and health checks
-- **[Plugins](https://docs.aegis-stack.io/plugins/)** - Extend a project with third-party packages, or write your own
-- **[CLI Reference](https://docs.aegis-stack.io/cli-reference/)** - Complete command reference
-- **[Evolving Your Stack](https://docs.aegis-stack.io/evolving-your-stack/)** - Add/remove components as needs change
-- **[Technology Stack](https://docs.aegis-stack.io/technology/)** - Battle-tested technology choices
-- **[About](https://docs.aegis-stack.io/about/)** - The philosophy and vision behind Aegis Stack
-
 ## For The Veterans
 
-<img src="docs/images/ron-swanson.gif" alt="Ron Swanson" width="480">
+<img src="docs/images/ron-swanson.webp" alt="Ron Swanson" width="480">
 
-No reinventing the wheel. Just the tools you already know, pre-configured and ready to compose.
+No reinventing the wheel. It's FastAPI, SQLModel, Pydantic and the rest of the tools you already know, wired together and ready to compose.
 
-Aegis Stack respects your expertise. No custom abstractions or proprietary patterns to learn. Pick your components, get a production-ready foundation, and build your way.
+No custom abstractions or proprietary framework to learn. Once your stack is generated, it's your code: build it however you want. The Twin reads the code as it is; it doesn't ask you to write it a special way.
 
 Aegis gets out of your way so you can get started.

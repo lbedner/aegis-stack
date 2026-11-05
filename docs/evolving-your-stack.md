@@ -494,7 +494,7 @@ From Friday afternoon MVP to production HTTPS deployment, all without leaving yo
 
 - **[CLI Reference](cli-reference.md)** - Complete `aegis add` and `aegis remove` documentation
 - **[Component Overview](components/index.md)** - Deep dive into available components
-- **[Deployment Guide](deployment/index.md)** - Full deployment command reference
+- **[Deployment](deployment/index.md)** - Deploy from the CLI, Overseer or CI, with backups and HTTPS
 
 ---
 

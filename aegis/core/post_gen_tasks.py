@@ -27,6 +27,7 @@ from aegis.core.file_manifest import (
     compute_file_mapping,
     iter_cleanup_paths,
 )
+from aegis.core.overseer_url import local_overseer_url
 from aegis.core.project_map import render_project_map
 from aegis.core.services import SERVICE_ANSWER_KEYS, SERVICES
 from aegis.core.template_cleanup import run_resilient
@@ -1457,8 +1458,20 @@ def run_post_generation_tasks(
 
     typer.echo()
     brand.muted(t("postgen.next_steps"), bold=True)
-    typer.echo(t("postgen.next_cd", path=project_path))
-    typer.echo(t("postgen.next_serve"))
-    typer.echo(t("postgen.next_dashboard"))
+    for line in next_steps(project_path):
+        typer.echo(line)
 
     return True
+
+
+def next_steps(project_path: Path) -> list[str]:
+    """How to run what was built: the quick and guided flows' one copy."""
+    here = Path.cwd().resolve()
+    built = project_path.resolve()
+    # As the user would type it: relative, when it is under where they are.
+    shown = built.relative_to(here) if built.is_relative_to(here) else project_path
+    return [
+        t("postgen.next_cd", path=shown),
+        t("postgen.next_serve"),
+        t("postgen.next_dashboard", url=local_overseer_url(project_path)),
+    ]

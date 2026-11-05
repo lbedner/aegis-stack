@@ -6,15 +6,17 @@ while it is open."""
 import asyncio
 from typing import Any
 
+from markupsafe import Markup
+
 from app.core import series
 from app.core.parts import Category
-from app.services.system import ui_resources
+from app.services.system import container_health, ui_resources
 from app.services.system.models import ComponentStatus
 
-from . import overseer_container
+from .filters import health_tone
 from .overseer_live import chart_frames, chart_panel, fragments_events
 from .overseer_nav import NavItem, SectionRequest, runtime_page_url
-from .rendering import fragment, ranked, status_cell
+from .rendering import chart, fragment
 
 SECTIONS = ((None, {"overview": "Overview"}),)
 ITEM = NavItem(
@@ -29,40 +31,66 @@ ITEM = NavItem(
 EVENTS = "/overseer/events/resources"
 EVENT = "resources"
 BODY = "pages/overseer/resources/_body.html"
-# The split above the charts, sent apart from the rest of the snapshot.
-TOTALS_EVENT = "resources-totals"
-TOTALS = "pages/overseer/resources/_totals.html"
+# Each resource's split in its chart's header, sent apart from the rest
+# of the snapshot, an event a resource (``-cpu``).
+SPLIT_EVENT = "resources-split"
+SPLIT = "pages/overseer/resources/_split.html"
+
+
+def _split_event(split: dict[str, Any]) -> str:
+    return f"{SPLIT_EVENT}-{split['key']}"
 
 
 async def section_context(
     section: str, component: ComponentStatus, req: SectionRequest
 ) -> dict[str, Any]:
     window = series.window_of(req.query.get("window"), ui_resources.WINDOWS)
-    charts, view = await asyncio.gather(ui_resources.charts(window), _view(wait=False))
+    charts, view, load = await asyncio.gather(
+        ui_resources.charts(window), _view(wait=False), ui_resources.load_costs()
+    )
+    panel = chart_panel(EVENT, charts, window, EVENTS, ui_resources.WINDOWS)
+    splits = {split["key"]: split for split in view["resources"]["split"]}
+    for drawn in panel["charts"]:
+        if split := splits.get(drawn["key"]):
+            event = _split_event(split)
+            drawn["subtitle"] = Markup(fragment(SPLIT, split=split, event=event))
     return {
         "section_subtitle": "What this stack uses of the host, and what the rest of it does.",
         "resources_event": EVENT,
-        "resources_totals_event": TOTALS_EVENT,
-        "resources_charts": chart_panel(
-            EVENT, charts, window, EVENTS, ui_resources.WINDOWS
-        ),
+        "resources_charts": panel,
+        "resources_load": _load(load),
     } | view
 
 
+def _load(load: dict[str, Any] | None) -> dict[str, Any]:
+    """What each service costs the server to load, a bar a service laid
+    flat so the names read; no bars, and no core, while it is measured."""
+    rows = load["rows"] if load else []
+    data = chart([r["label"] for r in rows], "To load", [r["bytes"] for r in rows])
+    return {
+        "core": load["core"] if load else None,
+        "chart": data | {"format": "bytes", "horizontal": True, "points": len(rows)},
+    }
+
+
 async def _view(*, wait: bool) -> dict[str, Any]:
-    """The overview, each row with its state's tone and the way to its page,
-    as the table's cells want them."""
-    view, load = await asyncio.gather(
-        ui_resources.overview(wait=wait), ui_resources.load_costs()
-    )
-    if load is not None:  # each row's bar, scaled to the largest
-        load = load | {"rows": ranked(load["rows"], by="bytes")}
-    found: dict[str, Any] = overseer_container.toned(view) | {"load": load}
-    for row in found["rows"]:
-        row["id"] = row["name"]
-        row["status"] = status_cell(row["state"], row["tone"])
-        row["service"] = {"label": row["title"], "url": runtime_page_url(row["page"])}
-    return {"resources": found}
+    """The overview, and the containers not well (stopped, starting, or
+    raising their part by ``container_health``'s rule), each with its
+    state's tone, what is wrong and the way to its page."""
+    view = await ui_resources.overview(wait=wait)
+    unwell = [
+        row
+        | {
+            "tone": health_tone(row["state_status"]),
+            "troubles": why,
+            "url": runtime_page_url(row["page"]),
+        }
+        for row in view["rows"]
+        if (why := [reason for _, reason in container_health.troubles(row)])
+        or row["state_status"] != "healthy"
+    ]
+    rest = {key: value for key, value in view.items() if key != "rows"}
+    return {"resources": rest | {"unwell": unwell}}
 
 
 def events(  # noqa: ANN201 - async iterator
@@ -75,10 +103,16 @@ def events(  # noqa: ANN201 - async iterator
     redraw = series.Redraw(window)
 
     async def frame() -> dict[str, str]:
-        view = await _view(wait=True)
-        sent = {EVENT: fragment(BODY, **view), TOTALS_EVENT: fragment(TOTALS, **view)}
-        if not redraw.due():
-            return sent
-        return sent | chart_frames(EVENT, await ui_resources.charts(window), held)
+        if redraw.due():
+            view, drawn = await asyncio.gather(
+                _view(wait=True), ui_resources.charts(window)
+            )
+        else:
+            view, drawn = await _view(wait=True), None
+        sent = {EVENT: fragment(BODY, **view)} | {
+            _split_event(split): fragment(SPLIT, split=split)
+            for split in view["resources"]["split"]
+        }
+        return sent if drawn is None else sent | chart_frames(EVENT, drawn, held)
 
     return fragments_events(frame, series.TICK_SECONDS, max_frames)

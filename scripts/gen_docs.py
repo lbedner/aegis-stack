@@ -5,6 +5,7 @@ This is run automatically by the mkdocs-gen-files plugin.
 """
 
 import re
+from pathlib import Path
 
 import mkdocs_gen_files
 
@@ -33,6 +34,28 @@ with open("README.md") as readme:
     # but the docs root has no ``docs/`` segment.
     for github_path, mkdocs_path in IMAGE_PATH_MAPPINGS.items():
         content = content.replace(github_path, mkdocs_path)
+
+    # GitHub needs an image for each demo (it plays no repo-path video), but
+    # the docs site plays an MP4 beside it at a fraction of the bytes, which
+    # keeps the dev server's live reload responsive.
+    def to_video(match: re.Match[str]) -> str:
+        name, alt, width = match["name"], match["alt"], match["width"]
+        if not Path(f"docs/images/{name}.mp4").exists():
+            return match[0]
+        size = f' width="{width}"' if width else ""
+        return (
+            f'<video src="images/{name}.mp4" aria-label="{alt}"{size} '
+            "autoplay loop muted playsinline></video>"
+        )
+
+    demo = r"docs/images/(?P<name>[\w-]+)\.(?:gif|webp)"
+    content = re.sub(rf"!\[(?P<alt>[^\]]*)\]\({demo}\)(?P<width>)", to_video, content)
+    content = re.sub(
+        rf'<img src="{demo}" alt="(?P<alt>[^"]*)"(?: width="(?P<width>\d+)")?>',
+        to_video,
+        content,
+    )
+
     content = content.replace("](docs/images/", "](images/")
     # Strip the ``docs/`` prefix from any ``<img src="docs/images/...">`` so
     # MkDocs serves them from ``images/...`` (the docs root has no ``docs/``
@@ -71,13 +94,28 @@ with open("README.md") as readme:
     # Use regex to catch all docs/*.md links instead of manually listing each one
     content = re.sub(r"\]\(docs/([^)]+\.md)\)", r"](\1)", content)
 
+    # The README's cards are a table, the one layout GitHub renders side by
+    # side; the docs site draws them as a grid, each pointing to the next.
+    def to_grid(match: re.Match[str]) -> str:
+        cells = re.findall(r"<td[^>]*>(.*?)</td>", match.group(1), re.S)
+        divs = [f"<div markdown>{c}</div>" for c in cells]
+        divs = [
+            re.sub(r"^(#### .+)$", r"\1 :material-arrow-right:", d, count=1, flags=re.M)
+            if i < len(divs) - 1
+            else d
+            for i, d in enumerate(divs)
+        ]
+        return '<div class="grid" markdown>\n\n' + "\n\n".join(divs) + "\n\n</div>"
+
+    content = re.sub(
+        r"<!-- cards -->(.*?)<!-- /cards -->", to_grid, content, flags=re.S
+    )
+
     # Convert absolute docs URLs to relative for MkDocs (works locally and deployed)
     content = content.replace("https://docs.aegis-stack.io/", "")
 
     # Fix trailing slash links to explicit file references for MkDocs
     # Check if it's a directory (has index.md) or a top-level page
-    from pathlib import Path
-
     docs_dir = Path("docs")
 
     def fix_trailing_slash(match: re.Match[str]) -> str:

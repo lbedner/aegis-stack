@@ -55,7 +55,6 @@ from app.services.ai.service.base import (
 from app.services.ai.service.chat import ChatMixin
 {%- if ai_framework == "pydantic-ai" %}
 from app.services.ai.service.trace import (
-    call_args_preview,
     nested_tool_calls,
     record_tool_call,
     record_tool_result,
@@ -63,7 +62,7 @@ from app.services.ai.service.trace import (
 )
 {%- else %}
 from app.services.ai.service import langchain_turn
-from app.services.ai.service.trace import call_args_preview, tool_notice
+from app.services.ai.service.trace import tool_notice
 {%- endif %}
 
 
@@ -264,7 +263,7 @@ class StreamingMixin(ChatMixin):
                             record_tool_call(tool_trace, event)
                             yield tool_notice(
                                 event.part.tool_name,
-                                args=call_args_preview(event.part.args),
+                                args=event.part.args,
                                 message_id=message_id,
                                 conversation_id=conversation.id,
                                 stream_delta=stream_delta,
@@ -346,7 +345,7 @@ class StreamingMixin(ChatMixin):
                     streaming_conv.accumulated_content = ""
                     yield tool_notice(
                         piece.tool,
-                        args=call_args_preview(piece.args),
+                        args=piece.args,
                         message_id=message_id,
                         conversation_id=conversation.id,
                         stream_delta=stream_delta,

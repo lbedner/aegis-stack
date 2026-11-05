@@ -35,7 +35,6 @@ from .stream import (
     StreamAccumulator,
     narration_note,
     strip_attachment_marker,
-    tool_label,
 )
 
 # Render at most this often while streaming; chunks buffer in between.
@@ -357,9 +356,7 @@ class ChatPanel(AttachmentsMixin, HistoryMixin, ModelChipMixin, ft.Container):
                     accumulator.reset_text()
                     if note:
                         reply.add_tool_call(note)
-                    reply.add_tool_call(
-                        tool_label(payload.get("tool", ""), payload.get("args", ""))
-                    )
+                    reply.add_tool_call(payload.get("label", ""))
                     self._scroll_to_latest()
                 elif event == "final":
                     accumulator.add_final(payload)

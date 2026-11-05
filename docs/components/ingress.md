@@ -131,7 +131,7 @@ This configures:
 - `websecure` entrypoint on port 443
 - Certificate storage in a Docker volume
 
-See **[Deployment Guide](../deployment/index.md#tlshttps-with-lets-encrypt)** for the full TLS workflow.
+See **[Deployment Guide](../deployment/https.md)** for the full TLS workflow.
 
 ## Traefik Configuration
 

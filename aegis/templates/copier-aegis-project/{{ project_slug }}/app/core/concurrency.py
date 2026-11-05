@@ -34,7 +34,10 @@ from collections.abc import (
     Iterable,
     Sequence,
 )
+from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
 import contextlib
+import multiprocessing
 import signal
 import threading
 from types import FrameType
@@ -82,7 +85,7 @@ async def fanout(
 
     ``fn`` must be a coroutine function. Wrap blocking I/O in
     ``asyncio.to_thread`` and CPU work in ``cpu_bound`` at the call site,
-    where it is obvious that a thread is involved.
+    where it is obvious that a thread or a process is involved.
     """
     if limit < 1:
         raise ValueError(f"limit must be at least 1, got {limit}")
@@ -103,34 +106,38 @@ async def fanout(
     return list(await asyncio.gather(*(guarded(item) for item in listed)))
 
 
-# One gate per event loop (an asyncio.Semaphore belongs to the loop that
-# first waits on it, and tests run several).
-_cpu_gates: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Semaphore] = (
-    weakref.WeakKeyDictionary()
-)
-
-
-def _cpu_gate() -> asyncio.Semaphore:
-    loop = asyncio.get_running_loop()
-    gate = _cpu_gates.get(loop)
-    if gate is None:
-        gate = _cpu_gates[loop] = asyncio.Semaphore(1)
-    return gate
+# One process per worker process, made on first use, so a process that
+# forks (dramatiq, uvicorn workers) makes its own after the fork. Spawned,
+# never forked: before 3.14 Linux forks by default, unsafe from a process
+# already running threads.
+_cpu_pool: ProcessPoolExecutor | None = None
 
 
 async def cpu_bound(fn: Callable[..., R], *args: object) -> R:
-    """Run CPU-bound ``fn(*args)`` in a thread, one at a time per process.
+    """Run CPU-bound ``fn(*args)`` in a process of its own, one at a time.
 
     A coroutine doing CPU work never awaits, so it holds the event loop
     until it finishes, and everything else on the loop waits: a worker's
     other tasks, its claim keep-alive, its heartbeat and its runtime
-    report. In a thread the loop stays free; the gate keeps the CPU work
-    itself to one at a time, which is all the GIL runs anyway.
+    report. A thread is not enough: pure Python work in it shares the
+    loop's GIL, so every await on the loop waits out the switch interval
+    (a Redis call goes from a fraction of a millisecond to ten or more),
+    which starved arq's poll loop until its health key lapsed. ``fn`` and
+    ``args`` are pickled across, so ``fn`` is a module-level function.
     """
-    # ponytail: a cancelled caller (a job timeout) frees the gate while its
-    # thread runs on; hold the gate until the thread ends if timeouts pile up.
-    async with _cpu_gate():
-        return await asyncio.to_thread(fn, *args)
+    # ponytail: a cancelled caller leaves its piece running in the process,
+    # and later calls wait behind it; terminate the process and drop the
+    # pool on CancelledError if abandoned work starts to hold calls up.
+    global _cpu_pool
+    if _cpu_pool is None:
+        _cpu_pool = ProcessPoolExecutor(
+            1, mp_context=multiprocessing.get_context("spawn")
+        )
+    try:
+        return await asyncio.get_running_loop().run_in_executor(_cpu_pool, fn, *args)
+    except BrokenProcessPool:
+        _cpu_pool = None  # its process died (OOM): the next call makes a new one
+        raise
 
 
 # Work in flight that no one waits for, held so none is collected first.

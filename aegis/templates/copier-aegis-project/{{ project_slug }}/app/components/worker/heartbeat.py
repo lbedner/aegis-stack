@@ -26,9 +26,9 @@ while siblings are still running and let the drain check proceed early.
 
 The key's value is that count, so Overseer can show each process's
 running jobs (``with_busy``) on every backend: arq and taskiq call the
-async helpers, dramatiq the sync ones. A job starting writes it; a job
-ending does not (the next start, or the refresh, does), which keeps job
-ends free of a Redis call.
+async helpers, dramatiq the sync ones. A job starting writes it and so
+does a job ending, so Running falls as jobs finish rather than at the
+next refresh.
 """
 
 from __future__ import annotations
@@ -98,16 +98,24 @@ def busy_key(wid: str | None = None) -> str:
 # ---------------------------------------------------------------------------
 
 
+async def _write_count(
+    redis: aioredis.Redis, count: int, step: str, **expiry: int | bool
+) -> bool:
+    """Write the in-flight count to the busy key; False if Redis failed."""
+    try:
+        await redis.set(busy_key(), str(count), **expiry)
+    except Exception as exc:
+        logger.debug("heartbeat %s failed: %s", step, exc)
+        return False
+    return True
+
+
 async def _refresh_loop(
     redis: aioredis.Redis, ttl_seconds: int, interval: float
 ) -> None:
-    key = busy_key()
     while True:
         await asyncio.sleep(interval)
-        try:
-            await redis.set(key, str(_busy_count), ex=ttl_seconds)
-        except Exception as exc:
-            logger.debug("heartbeat refresh failed: %s", exc)
+        await _write_count(redis, _busy_count, "refresh", ex=ttl_seconds)
 
 
 async def mark_busy(
@@ -125,10 +133,7 @@ async def mark_busy(
     """
     global _refresh_task, _busy_count
     _busy_count += 1
-    try:
-        await redis.set(busy_key(), str(_busy_count), ex=ttl_seconds)
-    except Exception as exc:
-        logger.debug("heartbeat mark_busy failed: %s", exc)
+    if not await _write_count(redis, _busy_count, "mark_busy", ex=ttl_seconds):
         _busy_count -= 1
         return
 
@@ -140,13 +145,15 @@ async def mark_busy(
 async def mark_idle(redis: aioredis.Redis) -> None:
     """Mark this worker as idle (no job in flight).
 
-    Decrements the in-flight count; only the last concurrent job to
-    finish stops the refresh task and deletes the busy key.
+    Decrements the in-flight count and writes it, keeping the key's TTL
+    (the refresh owns that); only the last concurrent job to finish stops
+    the refresh task and deletes the key.
     """
     global _refresh_task, _busy_count
     if _busy_count > 0:
         _busy_count -= 1
     if _busy_count > 0:
+        await _write_count(redis, _busy_count, "mark_idle", keepttl=True)
         return
     if _refresh_task is not None:
         _refresh_task.cancel()
@@ -166,18 +173,26 @@ async def mark_idle(redis: aioredis.Redis) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _write_count_sync(
+    redis: sync_redis.Redis, count: int, step: str, **expiry: int | bool
+) -> bool:
+    """Sync variant of :func:`_write_count`."""
+    try:
+        redis.set(busy_key(), str(count), **expiry)
+    except Exception as exc:
+        logger.debug("heartbeat %s failed: %s", step, exc)
+        return False
+    return True
+
+
 def _refresh_loop_sync(
     redis: sync_redis.Redis,
     ttl_seconds: int,
     interval: float,
     stop: threading.Event,
 ) -> None:
-    key = busy_key()
     while not stop.wait(interval):
-        try:
-            redis.set(key, str(_busy_count_sync), ex=ttl_seconds)
-        except Exception as exc:
-            logger.debug("heartbeat refresh failed: %s", exc)
+        _write_count_sync(redis, _busy_count_sync, "refresh", ex=ttl_seconds)
 
 
 def mark_busy_sync(
@@ -192,10 +207,9 @@ def mark_busy_sync(
     global _refresh_thread, _refresh_stop, _busy_count_sync
     with _busy_lock:
         _busy_count_sync += 1
-        try:
-            redis.set(busy_key(), str(_busy_count_sync), ex=ttl_seconds)
-        except Exception as exc:
-            logger.debug("heartbeat mark_busy_sync failed: %s", exc)
+        if not _write_count_sync(
+            redis, _busy_count_sync, "mark_busy_sync", ex=ttl_seconds
+        ):
             _busy_count_sync -= 1
             return
 
@@ -213,14 +227,16 @@ def mark_busy_sync(
 def mark_idle_sync(redis: sync_redis.Redis) -> None:
     """Sync variant of :func:`mark_idle` for dramatiq middleware.
 
-    Only the last concurrent worker thread to finish stops the refresh
-    thread and deletes the busy key.
+    Writes the new count as :func:`mark_idle` does; only the last
+    concurrent worker thread to finish stops the refresh thread and
+    deletes the busy key.
     """
     global _refresh_thread, _refresh_stop, _busy_count_sync
     with _busy_lock:
         if _busy_count_sync > 0:
             _busy_count_sync -= 1
         if _busy_count_sync > 0:
+            _write_count_sync(redis, _busy_count_sync, "mark_idle_sync", keepttl=True)
             return
         if _refresh_stop is not None:
             _refresh_stop.set()

@@ -5,13 +5,13 @@ auth it is admins only, and tests/web/test_overseer_admin_gate.py walks the
 same routes as a member."""
 
 from importlib.util import find_spec
-from pathlib import Path
 import re
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
 
+from app.components.web_frontend.assets import STATIC_DIR
 from app.services.shared.deps import NO_AUTH_REFUSAL
 from tests.web.dom import none, one, select, text
 from tests.web.overseer import overseer_calls, sign_in, status_with
@@ -88,7 +88,7 @@ def test_the_local_dev_build_keeps_them(
 
 def test_a_read_only_shell_hides_every_write_control() -> None:
     """Anywhere on the page, a dialog or drawer included."""
-    css = Path("app/components/web_frontend/static/input.css").read_text()
+    css = (STATIC_DIR / "input.css").read_text()
     assert re.search(
         r"body:has\(\[data-read-only\]\) \[data-write\]\s*\{\s*display:\s*none",
         css,

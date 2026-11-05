@@ -35,7 +35,7 @@
     {{ action("Refresh", hx_replace(here, "#overseer-main")) }}
   </div>
   {{ data_table([
-    {"key": "job", "label": "Job"},
+    {"key": "job", "label": "Job", "wrap": True},
     {"key": "duration", "label": "Duration", "align": "right"},
     {"key": "started", "label": "Started"},
     {"key": "state", "label": "Status", "kind": "status"},

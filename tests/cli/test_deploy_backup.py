@@ -9,6 +9,7 @@ instead of run, so these pin the shell each step sends.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import shlex
@@ -17,7 +18,11 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import typer
+import yaml
+from typer.testing import CliRunner
 
+from aegis.__main__ import app
 from aegis.commands import deploy as deploy_mod
 from aegis.commands.deploy import _create_backup, _rollback_to_backup
 from aegis.commands.deploy_backup import (
@@ -29,24 +34,32 @@ from aegis.commands.deploy_backup import (
     snapshot_sqlite,
 )
 from aegis.core.deploy_protocol import protocol
+from aegis.i18n import t
 
 TS = "2026-01-01_000000"
+SERVER = {"host": "h", "user": "u", "path": "/srv/app"}
 
 
-def _recorder(calls: list[str], fail: tuple[str, ...] = ()):
-    def _fake(host: str, user: str, command: str) -> subprocess.CompletedProcess:
+def _answering(
+    monkeypatch: pytest.MonkeyPatch, *fail: str, code: int = 1, err: str = ""
+) -> list[str]:
+    """A server every call succeeds on but those naming a ``fail`` marker."""
+    calls: list[str] = []
+
+    def remote(host: str, user: str, command: str) -> subprocess.CompletedProcess:
         calls.append(command)
-        code = 1 if any(marker in command for marker in fail) else 0
-        return subprocess.CompletedProcess([], returncode=code, stdout="", stderr="")
+        answer = (code, err) if any(m in command for m in fail) else (0, "")
+        return subprocess.CompletedProcess([], answer[0], "", answer[1])
 
-    return _fake
+    monkeypatch.setattr(deploy_mod, "_run_remote_capture", remote)
+    monkeypatch.setattr(deploy_mod, "_run_remote", remote)
+    return calls
 
 
 def _backup(
     monkeypatch: pytest.MonkeyPatch, *, sqlite: bool, fail: tuple[str, ...] = ()
 ) -> list[str]:
-    calls: list[str] = []
-    monkeypatch.setattr(deploy_mod, "_run_remote_capture", _recorder(calls, fail))
+    calls = _answering(monkeypatch, *fail)
     assert _create_backup("h", "u", "/srv/app", include_db=True, sqlite=sqlite)
     return calls
 
@@ -163,8 +176,7 @@ class TestSteps:
         deploy's backup, a provision's deploy, would replace its steps with
         ones it does not have."""
         monkeypatch.setenv(protocol.PROTOCOL["progress_env"], outer)
-        calls: list[str] = []
-        monkeypatch.setattr(deploy_mod, "_run_remote_capture", _recorder(calls))
+        _answering(monkeypatch)
         assert _create_backup("h", "u", "/srv/app", sqlite=True)
         assert "::aegis-progress" not in capsys.readouterr().out
 
@@ -211,6 +223,146 @@ def test_the_servers_backups_are_listed_in_one_call(tmp_path: Path) -> None:
     assert list_backups(bash, str(tmp_path / "nothing-yet")) == []
 
 
+def test_a_failed_listing_is_refused_not_an_empty_list() -> None:
+    """A dropped connection is not a server with no backups: the Overseer
+    keeps what this returns for an hour."""
+
+    def down(command: str) -> subprocess.CompletedProcess:
+        return subprocess.CompletedProcess([], 255, "", "ssh: timed out")
+
+    with pytest.raises(protocol.RefusedError, match="ssh: timed out"):
+        list_backups(down, "/srv/app")
+
+
+@pytest.mark.parametrize(
+    ("code", "err", "warned"),
+    [
+        (1, "no such service: postgres", False),
+        (1, "Cannot connect to the Docker daemon", True),
+        (255, "ssh: timed out", True),
+        (0, "", True),
+    ],
+)
+def test_a_postgres_backup_without_its_dump_says_so(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+    code: int,
+    err: str,
+    warned: bool,
+) -> None:
+    """Only compose saying the stack has no postgres is no dump to take: a
+    failed call, or a postgres not running, would otherwise be a backup
+    holding no database, said by nothing."""
+    _answering(monkeypatch, "ps postgres", code=code, err=err)
+    assert _create_backup("h", "u", "/srv/app", include_db=True, sqlite=False)
+    assert (t("deploy.backup_db_failed") in capsys.readouterr().out) is warned
+
+
+def test_a_sqlite_backup_looks_for_no_postgres(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert not any("ps postgres" in c for c in _backup(monkeypatch, sqlite=True))
+
+
+def test_a_deploy_stops_when_its_backup_failed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Going on would leave nothing to roll back to; ``--no-backup`` is how
+    to mean that."""
+    monkeypatch.setattr(deploy_mod, "_create_backup", lambda *a, **k: None)
+    with pytest.raises(typer.Exit):
+        deploy_mod._backed_up("h", "u", "/srv/app")
+
+
+def test_a_deployment_it_cannot_check_is_not_a_first_deploy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A dropped connection read as nothing deployed skips the backup."""
+    (tmp_path / ".aegis").mkdir()
+    (tmp_path / ".aegis" / "deploy.yml").write_text(yaml.safe_dump({"server": SERVER}))
+    (tmp_path / ".env").write_text(
+        f"APP_ENV=prod\nAUTH_ENABLED=true\nSECRET_KEY={'0123456789abcdef' * 4}\n"
+    )
+    monkeypatch.setattr(deploy_mod, "_check_disk_space", lambda *a: None)
+    calls = _answering(monkeypatch, "test -f", code=255, err="ssh: timed out")
+    result = CliRunner().invoke(app, ["deploy", "--project-path", str(tmp_path)])
+    assert result.exit_code == 1
+    assert "ssh: timed out" in result.output
+    assert not any("rsync" in c or " down " in c for c in calls)
+
+
+def test_an_unreadable_backups_folder_is_refused_not_empty(tmp_path: Path) -> None:
+    def run(command: str) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            ["bash", "-c", command], capture_output=True, text=True, cwd=tmp_path
+        )
+
+    assert list_backups(run, str(tmp_path)) == []
+    folder = tmp_path / "backups"
+    folder.mkdir(mode=0)
+    if os.access(folder, os.X_OK):
+        pytest.skip("running as root")
+    try:
+        with pytest.raises(protocol.RefusedError):
+            list_backups(run, str(tmp_path))
+    finally:
+        folder.chmod(0o700)
+
+
+@pytest.mark.parametrize("marker", ["test -d", "test -f"])
+def test_a_rollback_it_cannot_check_stops_before_touching_anything(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture, marker: str
+) -> None:
+    """A dropped connection is neither "no such backup" nor "no dump": the
+    second would restore the files and silently leave the database."""
+    calls = _answering(monkeypatch, marker, code=255, err="ssh: timed out")
+    assert not _rollback_to_backup("h", "u", "/srv/app", TS)
+    assert "ssh: timed out" in capsys.readouterr().err
+    assert not any(" down " in c or "rsync" in c for c in calls)
+
+
+def test_a_failed_lookup_of_the_latest_is_not_no_backups(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
+    _answering(monkeypatch, "ls -1t", code=255, err="ssh: timed out")
+    monkeypatch.setattr(
+        deploy_mod, "_require_deploy_config", lambda _: {"server": SERVER}
+    )
+    with pytest.raises(typer.Exit):
+        deploy_mod.deploy_rollback_command(backup=None, project_path=None)
+    said = capsys.readouterr().err
+    assert "ssh: timed out" in said
+    assert t("deploy.no_backups_available") not in said
+
+
+def test_a_backup_without_a_dump_still_rolls_back(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = _answering(monkeypatch, "test -f")
+    assert _rollback_to_backup("h", "u", "/srv/app", TS)
+    assert not any("psql" in c for c in calls)
+
+
+def test_a_refusal_inside_a_recorded_command_is_said_and_recorded(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    told: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        deploy_mod, "_tell_app", lambda *a: told.append(json.loads(a[-1]))
+    )
+    with (
+        pytest.raises(typer.Exit) as stopped,
+        deploy_mod.recorded(tmp_path, SERVER, "upload-storage"),
+    ):
+        raise protocol.RefusedError("no answer")
+    assert stopped.value.exit_code == 1
+    assert "no answer" in capsys.readouterr().err
+    assert told[0]["summary"] == "no answer"
+    assert told[0]["outcome"] == protocol.EVENT_FAILED
+
+
 class TestStaysOnTheServer:
     def test_a_backup_is_never_pushed_off_the_server(
         self, monkeypatch: pytest.MonkeyPatch
@@ -224,9 +376,7 @@ class TestStaysOnTheServer:
 
 class TestRollback:
     def _rollback(self, monkeypatch: pytest.MonkeyPatch) -> list[str]:
-        calls: list[str] = []
-        monkeypatch.setattr(deploy_mod, "_run_remote_capture", _recorder(calls))
-        monkeypatch.setattr(deploy_mod, "_run_remote", _recorder(calls))
+        calls = _answering(monkeypatch)
         assert _rollback_to_backup("h", "u", "/srv/app", TS)
         return calls
 

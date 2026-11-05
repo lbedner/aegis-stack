@@ -3,11 +3,12 @@ a tree of folders and one file open beside it."""
 
 import asyncio
 import contextlib
+import os
 from pathlib import Path
 
-import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+import pytest
 
 from app.components.web_frontend import overseer_code
 from app.components.web_frontend.rendering import with_query
@@ -32,6 +33,7 @@ FILES = {
     "node_modules/x/index.js": SECRET,
     "data/app.db": SECRET,
     "traefik/acme.json": SECRET,
+    "backups/prod/20261104/files/app/main.py": SECRET,
 }
 
 
@@ -79,6 +81,45 @@ def test_the_tree_is_the_source_and_nothing_else(client: TestClient) -> None:
     assert icons == ["python", "python", "markdown", "docker"]
     folders = [text(s) for s in select(html, "[data-code-tree] summary")]
     assert folders == ["app", "core", "docs"]
+
+
+def test_a_folder_it_cannot_open_is_left_out(
+    client: TestClient, project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A deploy's certificates are the host user's, mode 600: one folder the
+    webserver cannot open is no reason to lose the page, or the index."""
+    write_tree(project, {"locked/inside.py": "x = 1\n"})
+    opened = os.scandir
+
+    def scandir(path: str | os.PathLike[str]) -> object:
+        if Path(path).name == "locked":
+            raise PermissionError(13, "Permission denied", str(path))
+        return opened(path)
+
+    monkeypatch.setattr(overseer_code.os, "scandir", scandir)
+    told: list[tuple[object, ...]] = []
+    monkeypatch.setattr(overseer_code.logger, "info", lambda *a: told.append(a))
+    listed = _tree(page_html(client, PAGE))
+    assert "app/main.py" in listed
+    assert "locked/inside.py" not in listed
+    overseer_code.tree()
+    assert sum("locked" in str(a) for a in told) == 1, "said once a process"
+    overseer_code.warm()
+
+
+@pytest.mark.skipif(
+    not hasattr(os, "geteuid") or os.geteuid() == 0,
+    reason="needs a user a folder's mode can stop",
+)
+def test_a_path_through_a_folder_it_cannot_open_is_not_shown(project: Path) -> None:
+    """Asked for by name, as a stale link would: ``pathlib`` raises on a
+    folder it cannot enter until 3.14."""
+    write_tree(project, {"locked/inside.py": "x = 1\n"})
+    (project / "locked").chmod(0)
+    try:
+        assert not overseer_code.shown("locked/inside.py")
+    finally:
+        (project / "locked").chmod(0o700)
 
 
 def test_a_file_opens_beside_the_tree_numbered_and_highlighted(

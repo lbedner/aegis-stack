@@ -32,6 +32,7 @@ import typer
 
 from ..cli import brand
 from ..constants import AnswerKeys, StorageBackends
+from ..core.deploy_protocol import protocol
 from ..i18n import t
 
 Run = Callable[[str], subprocess.CompletedProcess[str]]
@@ -164,18 +165,35 @@ def restore_data(
     return result.returncode == 0
 
 
+def failure_of(done: subprocess.CompletedProcess) -> str:
+    """Why a remote command failed: its last word on stderr, else its exit."""
+    return (done.stderr.strip().splitlines() or [f"exit {done.returncode}"])[-1]
+
+
+def server_says(run: Run, test: str) -> bool:
+    """A ``test`` on the server: 0 or 1 is its answer, anything else no
+    answer at all (a dropped connection), refused, so nothing goes on to act
+    on a "no" the server never gave."""
+    done = run(test)
+    if done.returncode not in (0, 1):
+        raise protocol.RefusedError(t("deploy.server_unread", error=failure_of(done)))
+    return done.returncode == 0
+
+
 def list_backups(run: Run, deploy_path: str) -> list[dict[str, Any]]:
     """The server's backups, newest first: each one's name (its timestamp),
     size, and whether it holds the database (a SQLite snapshot, a Postgres
     dump, or an older backup's ``data/``). One remote call; none yet, an
-    empty list."""
+    empty list; refused when the call fails, which is not the same."""
     root = shlex.quote(f"{deploy_path}/backups")
     held = f'-f "$b/{DATABASE_FILE}" -o -f "$b/db_backup.sql" -o -d "$b/data"'
     result = run(
-        f"cd {root} 2>/dev/null || exit 0; for b in $(ls -1t); do"
+        f"[ -d {root} ] || exit 0; cd {root} || exit 1; for b in $(ls -1t); do"
         f' printf "%s\\t%s\\t%s\\n" "$b" "$(du -sh "$b" | cut -f1)"'
         f' "$(test {held} && echo y)"; done'
     )
+    if result.returncode != 0:
+        raise protocol.RefusedError(t("deploy.server_unread", error=failure_of(result)))
     backups = []
     for line in result.stdout.splitlines():
         name, size, database = (line.split("\t") + ["", ""])[:3]

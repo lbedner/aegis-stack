@@ -81,6 +81,7 @@ DEFAULT_EXCLUDE_PATTERNS = [
     "**/.env.*",
     "**/dist/**",
     "**/build/**",
+    "**/backups/**",
     "**/*.pyc",
     "**/*.pyo",
     "**/egg-info/**",

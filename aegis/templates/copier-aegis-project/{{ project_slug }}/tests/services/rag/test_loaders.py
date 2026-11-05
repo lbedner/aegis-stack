@@ -6,6 +6,7 @@ import pytest
 from app.services.rag.loaders import (
     LOADER_MAP,
     CodebaseLoader,
+    excluded,
     get_extension_info,
     get_supported_extensions,
 )
@@ -162,3 +163,8 @@ async def test_an_empty_file_loads_as_nothing_a_wrong_one_fails(tmp_path: Path) 
     with pytest.raises(ValueError, match="blob.bin"):
         await loader.load(tmp_path / "blob.bin")
     assert await loader.load(tmp_path) == []  # a folder skips both quietly
+
+
+def test_a_deploy_backup_is_not_source() -> None:
+    """Each one is a whole copy of the app, on the server it runs on."""
+    assert excluded(Path("backups/2026-11-01_020000/files/app/main.py"))

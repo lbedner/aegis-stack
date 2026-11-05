@@ -31,9 +31,11 @@ from typer.testing import CliRunner
 
 from aegis.__main__ import app
 from aegis.commands import deploy_agent as agent
+from aegis.commands.deploy import app_deploy
 from aegis.commands.deploy_backup import BACKUP_TIMESTAMP_RE
 from aegis.core.component_files import PROJECT_SLUG_PLACEHOLDER, get_template_path
 from aegis.core.provision import digitalocean
+from aegis.i18n import t
 from tests.cli.test_utils import strip_ansi_codes
 
 DO_TOKEN = "do-secret-token-5678"
@@ -717,6 +719,52 @@ def test_the_servers_missing_files_are_kept_for_the_overseer(
     assert "exec -T webserver python -m app.cli.main storage check" in command
 
 
+@pytest.mark.parametrize(
+    ("code", "status"), [(2, "done"), (255, "failed"), (1, "failed")]
+)
+def test_events_a_project_lacks_are_none_and_a_failed_call_is_not(
+    project: Path,
+    app_store: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    code: int,
+    status: str,
+) -> None:
+    """2 is a server from before ``deploy events``; anything else would
+    keep an empty log for an hour, hiding what failed."""
+    _server(project)
+    (project / "app" / "cli").mkdir(parents=True)
+    (project / "app" / "cli" / "deploy_cli.py").write_text("")
+
+    def remote(host: str, user: str, command: str) -> subprocess.CompletedProcess:
+        if command.endswith("deploy events"):
+            return subprocess.CompletedProcess([], code, "", "ssh: timed out")
+        return subprocess.CompletedProcess([], 0, "[]\n", "")
+
+    monkeypatch.setattr(agent, "_run_remote_capture", remote)
+    redis = FakeRedis()
+    job_id = _request(redis, app_store, "history", {})
+    _serve(redis, project)
+    assert _job(redis, app_store, job_id).status == status
+
+
+def test_a_failed_storage_check_fails_the_job_with_its_reason(
+    project: Path, app_store: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The connection, not the project: the job says so (aegis-stack#1956)."""
+    _server(project)
+
+    def remote(host: str, user: str, command: str) -> subprocess.CompletedProcess:
+        return subprocess.CompletedProcess([], 255, "", "ssh: timed out")
+
+    monkeypatch.setattr(agent, "_run_remote_capture", remote)
+    redis = FakeRedis()
+    job_id = _request(redis, app_store, "storage", {})
+    _serve(redis, project)
+    job = _job(redis, app_store, job_id)
+    assert job.status == "failed"
+    assert job.error == t("deploy.storage_check_failed", error="ssh: timed out")
+
+
 CHANGED = {"deploy:backups", "deploy:history", "deploy:storage"}
 
 
@@ -1145,3 +1193,11 @@ def test_it_listens_again_wherever_its_redis_comes_back(
     monkeypatch.setattr(agent, "connect", lambda root, stop: next(clients, None))
     agent.listen(project, stop)
     assert stop.is_set() and next(clients, None) is None
+
+
+def test_a_server_older_than_the_command_has_none(tmp_path: Path) -> None:
+    """The project here has ``deploy``; the server's copy may not yet."""
+    (tmp_path / "app" / "cli").mkdir(parents=True)
+    (tmp_path / "app" / "cli" / "deploy_cli.py").touch()
+    lacks = subprocess.CompletedProcess([], 2, "", "No such command 'history'.")
+    assert app_deploy(tmp_path, lambda _: lacks, "/srv/app", "history") is None

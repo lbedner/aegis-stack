@@ -60,7 +60,7 @@ from .deploy import (
     app_deploy,
     last_json,
 )
-from .deploy_backup import list_backups
+from .deploy_backup import failure_of, list_backups
 from .deploy_upload import server_missing
 
 PROTOCOL: dict[str, Any] = _protocol.PROTOCOL
@@ -272,7 +272,7 @@ def _found(
         if action == "backups":
             return {"backups": list_backups(remote, server["path"])}
         if action == "storage":
-            return {"missing": _missing(remote, server["path"])}
+            return {"missing": server_missing(remote, server["path"])}
         return {
             "deploys": _history(root, remote, server["path"]),
             "events": _events(root, remote, server["path"]),
@@ -283,20 +283,15 @@ def _found(
         raise RefusedError(str(exc)) from None
 
 
-def _missing(remote: Any, deploy_path: str) -> list[str]:
-    """The stored files the server's rows name and its store lacks."""
-    missing = server_missing(remote, deploy_path)
-    if missing is None:
-        raise RefusedError(t("deploy.storage_cannot_check"))
-    return missing
-
-
 def _events(root: Path, remote: Any, deploy_path: str) -> list[dict[str, Any]]:
     """Everything else done to the server, newest first: the last line of
-    its ``deploy events``; none from a project without them."""
+    its ``deploy events``; none from a project without them; refused when
+    the call fails."""
     result = app_deploy(root, remote, deploy_path, "events")
-    if result is None or result.returncode != 0:
+    if result is None:
         return []
+    if result.returncode != 0:
+        raise RefusedError(failure_of(result))
     return last_json(result.stdout or "") or []
 
 
@@ -308,7 +303,7 @@ def _history(root: Path, remote: Any, deploy_path: str) -> list[dict[str, Any]]:
         raise RefusedError(t("deploy_agent.no_history"))
     found = last_json(result.stdout) if result.returncode == 0 else None
     if found is None:
-        raise RefusedError(result.stderr.strip() or f"exit {result.returncode}")
+        raise RefusedError(failure_of(result))
     return found
 
 

@@ -43,8 +43,13 @@ def security_level(metadata: dict[str, Any]) -> tuple[str, str, str]:
 
 
 # Browsers by the token their user-agent string names them with, the most
-# specific first: Edge also says Chrome, and Chrome also says Safari.
+# specific first: Edge also says Chrome, and Chrome also says Safari. On iOS
+# each is its own token, and Edge and Opera there also say Safari's.
 _BROWSERS = (
+    ("CriOS/", "Chrome"),
+    ("FxiOS/", "Firefox"),
+    ("EdgiOS/", "Edge"),
+    ("OPT/", "Opera"),
     ("Edg/", "Edge"),
     ("OPR/", "Opera"),
     ("Firefox/", "Firefox"),

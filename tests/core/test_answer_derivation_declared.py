@@ -142,8 +142,13 @@ def test_new_questions_are_recoverable_for_existing_projects(
 
 
 def test_the_at_risk_set_is_actually_computed() -> None:
-    """A guard that silently measures nothing passes forever."""
-    assert _questions_added_since(_anchor_tag()), (
-        "no questions added since the anchor — the computation is broken, "
-        "or the anchor is wrong"
+    """A guard that silently measures nothing passes forever. Measured from
+    ``copier.yml``'s first commit, not the anchor: three minors adding no
+    question is a good run, not a broken guard."""
+    _anchor_tag()  # skips without the release history
+    first = _git("log", "--diff-filter=A", "--format=%H", "--", "copier.yml").split()[
+        -1
+    ]
+    assert _questions_added_since(first), (
+        "no questions added since copier.yml began: the computation is broken"
     )

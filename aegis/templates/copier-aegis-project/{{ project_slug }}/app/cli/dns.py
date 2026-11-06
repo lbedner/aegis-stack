@@ -1,10 +1,5 @@
-"""DNS management commands.
-
-Thin wrapper over the ``RegistrarAdapter`` so operators can manage
-records on the registered ``BASE_DOMAIN`` without leaving the
-terminal. Today this is wired against ``PorkbunAdapter``; when a
-Cloudflare / Route53 adapter lands later, this CLI shouldn't need
-to change.
+"""DNS management commands, on ``app.services.ops.dns`` (the domain, the
+registrar, a record from what was typed), as Overseer > Deployments > DNS.
 
 Three commands:
 
@@ -22,15 +17,12 @@ The default record type is ``A`` and the default IP is read from
 
 from __future__ import annotations
 
-import re
-from pathlib import Path
-
-import typer
-from app.cli import theme
-from app.core.config import settings
-from app.services.ops.adapters.porkbun import PorkbunAdapter
-from app.services.ops.types import DnsRecord, RetrievedRecord
 from rich.table import Table
+import typer
+
+from app.cli import theme
+from app.services.ops import dns
+from app.services.ops.types import RetrievedRecord
 
 app = typer.Typer(
     name="dns",
@@ -49,44 +41,15 @@ def _resolve_domain(override: str | None) -> str:
     """Return the explicit ``--domain`` or fall back to ``BASE_DOMAIN``."""
     if override:
         return override.strip().lower()
-    if not settings.BASE_DOMAIN:
+    apex = dns.domain()
+    if not apex:
         theme.bad(
             "BASE_DOMAIN is not set. Either set it in .env "
             "(e.g. BASE_DOMAIN=example.com) or pass -d/--domain.",
             err=True,
         )
         raise typer.Exit(1)
-    return settings.BASE_DOMAIN.strip().lower()
-
-
-_DEPLOY_HOST_RE = re.compile(r"^\s*host:\s*['\"]?([^'\"#\s]+)", re.MULTILINE)
-
-
-def _resolve_default_ip() -> str | None:
-    """Return ``server.host`` from the nearest ``.aegis/deploy.yml``, or None.
-
-    Walks up from CWD looking for ``.aegis/deploy.yml`` — same project-
-    root convention the rest of the aegis CLI uses.
-    """
-    here = Path.cwd().resolve()
-    for parent in [here, *here.parents]:
-        candidate = parent / ".aegis" / "deploy.yml"
-        if candidate.is_file():
-            try:
-                content = candidate.read_text(encoding="utf-8")
-            except OSError:
-                return None
-            match = _DEPLOY_HOST_RE.search(content)
-            if match:
-                return match.group(1).strip()
-            return None
-    return None
-
-
-def _adapter() -> PorkbunAdapter:
-    """Build the registrar adapter. One concrete class today; this is
-    the seam where a future ``--provider`` switch would live."""
-    return PorkbunAdapter()
+    return apex
 
 
 def _print_records(domain: str, records: list[RetrievedRecord]) -> None:
@@ -104,12 +67,13 @@ def _print_records(domain: str, records: list[RetrievedRecord]) -> None:
     table.add_column("ID", style="dim", width=12)
 
     for r in sorted(records, key=lambda r: (r.host, r.type)):
+        shown = dns.fields(r)
         table.add_row(
-            r.type,
-            r.host or "@",
-            r.value,
-            str(r.ttl) if r.ttl else "-",
-            str(r.priority) if r.priority is not None else "-",
+            shown["type"],
+            shown["host"],
+            shown["value"],
+            shown["ttl"] if r.ttl else "-",
+            shown["priority"] or "-",
             r.provider_id or "-",
         )
     console.print(table)
@@ -153,7 +117,7 @@ async def dns_set(
         ),
     ),
     ttl: int = typer.Option(
-        600,
+        dns.TTL,
         "--ttl",
         help="TTL in seconds (Porkbun clamps to a 600 minimum).",
     ),
@@ -171,48 +135,25 @@ async def dns_set(
 ) -> None:
     """Create (or no-op-confirm) a DNS record. Safe to re-run."""
     apex = _resolve_domain(domain)
-    record_type_norm = record_type.strip().upper()
-    host = "" if subdomain in ("@", "") else subdomain.strip().lower()
-
-    if record_type_norm == "A":
-        value = ip or _resolve_default_ip()
-        if not value:
-            theme.bad(
-                "No IP available. Pass --ip explicitly, or run from a "
-                "project with .aegis/deploy.yml present.",
-                err=True,
-            )
-            raise typer.Exit(1)
-    else:
-        if not content:
-            theme.bad(
-                f"--content is required for {record_type_norm} records.",
-                err=True,
-            )
-            raise typer.Exit(1)
-        value = content
-
-    spec = DnsRecord(
-        host=host,
-        type=record_type_norm,
-        value=value,
-        ttl=ttl,
-        priority=priority,
-    )
+    try:
+        value = ip if record_type.strip().upper() == "A" else content
+        spec = dns.record(subdomain, record_type, value, ttl, priority)
+    except ValueError as exc:
+        theme.bad(str(exc), err=True)
+        raise typer.Exit(1) from None
 
     async def _run() -> None:
-        adapter = _adapter()
+        adapter = dns.registrar()
         results = await adapter.create_dns_records(apex, [spec])
         result = results[0]
-        label = host or "@"
+        said = f"{spec.type} {spec.host or '@'} → {spec.value}"
         if result.provider_id in ("", "(existing)"):
             console.print(
-                f"[{theme.WARNING}]reused[/{theme.WARNING}] {record_type_norm} {label} → {value} "
-                f"(already on {apex})"
+                f"[{theme.WARNING}]reused[/{theme.WARNING}] {said} (already on {apex})"
             )
         else:
             console.print(
-                f"[{theme.ACCENT}]created[/{theme.ACCENT}] {record_type_norm} {label} → {value} "
+                f"[{theme.ACCENT}]created[/{theme.ACCENT}] {said} "
                 f"on {apex} (id={result.provider_id})"
             )
 
@@ -238,7 +179,7 @@ async def dns_list(
     apex = _resolve_domain(domain)
 
     async def _run() -> None:
-        adapter = _adapter()
+        adapter = dns.registrar()
         records = await adapter.list_dns_records(apex)
         if type_filter:
             wanted = type_filter.strip().upper()
@@ -283,11 +224,11 @@ async def dns_delete(
     "no records of that type at that host."
     """
     apex = _resolve_domain(domain)
-    host = "" if subdomain in ("@", "") else subdomain.strip().lower()
+    host = dns.host(subdomain)
     record_type_norm = record_type.strip().upper()
 
     async def _run() -> None:
-        adapter = _adapter()
+        adapter = dns.registrar()
         records = await adapter.list_dns_records(apex)
         matches = [r for r in records if r.host == host and r.type == record_type_norm]
         if not matches:

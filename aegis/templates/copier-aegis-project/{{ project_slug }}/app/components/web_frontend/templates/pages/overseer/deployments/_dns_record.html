@@ -1,0 +1,19 @@
+{# A DNS record's form (dialog body): a new one, or one's edit (``editing``)
+   holding ``values`` (its type, TTL and priority kept as they are); a 422
+   re-renders it with ``errors``. An A record left without a value points
+   at the server this project deploys to. #}
+{% from "components/macros/layout.html" import dialog_title %}
+{% from "components/macros/form.html" import field, form_footer, number_input, select, text_input %}
+{% from "components/macros/feedback.html" import error_banner %}
+{{ dialog_title("Edit record" if editing else "Add a record", domain) }}
+<form data-write {{ hx_dialog_post(action) }} class="space-y-4">
+  {{ error_banner(errors) }}
+  {% call field("Host", hint="@ for " ~ domain ~ " itself") %}{{ text_input("host", values.host, "www", required=True, autofocus=True) }}{% endcall %}
+  {% call field("Type") %}{{ select("type", types, values.type or "A", blank=None, block=True) }}{% endcall %}
+  {% call field("Value", hint=("An A record left empty points at " ~ server_ip) if server_ip else None) %}{{ text_input("value", values.value, server_ip or "") }}{% endcall %}
+  <div class="grid grid-cols-2 gap-4">
+    {% call field("TTL", hint="Seconds; the registrar's floor is " ~ ttl_floor) %}{{ number_input("ttl", values.ttl, min=ttl_floor, required=True) }}{% endcall %}
+    {% call field("Priority", hint=prioritized ~ " only") %}{{ number_input("priority", values.priority, min=0) }}{% endcall %}
+  </div>
+  {{ form_footer("Save" if editing else "Add") }}
+</form>

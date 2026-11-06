@@ -1,11 +1,12 @@
 """Overseer > Deployments' actions (``overseer_deploy_actions``): each asks
 ``aegis deploy-agent`` for one, audited (refused ones too), and answers
-with the job it started, which the card's stream then follows. Mounted by
+with the job it started, which the card's stream then follows; and the
+DNS section's changes, made at the registrar (``ops.dns``). Mounted by
 ``routes/pages.py`` behind Overseer's gate (``overseer_access``)."""
 
-from typing import Any
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
 
 from app.components.backend.api.utils import audit_admin_action
@@ -17,13 +18,16 @@ from app.components.web_frontend import overseer_deployments
 from app.components.web_frontend.overseer_access import overseer_actor
 from app.components.web_frontend.overseer_live import event_stream
 from app.components.web_frontend.rendering import (
+    dialog,
     form_fields,
+    form_number,
     fragment,
     go_to,
     toast_response,
     with_toast,
 )
 from app.core.audit import AuditEmitter, get_audit
+from app.services.ops import dns
 from app.services.shared.deps import Actor
 from app.services.system import hosting, ui_deployments
 
@@ -145,3 +149,174 @@ async def ask(
     if action in actions.CREATING:  # New server follows it, whole
         return go_to(overseer_deployments.NEW_URL, said, "#overseer-main")
     return with_toast(HTMLResponse(await actions.render_job(job_id)), said)
+
+
+RECORD_FORM = "pages/overseer/deployments/_dns_record.html"
+
+
+def _record_form(
+    request: Request,
+    record_id: str | None = None,
+    errors: list[str] | None = None,
+    status_code: int = 200,
+    **values: str,
+) -> Response:
+    """A record's form in the dialog: a new one, or ``record_id``'s edit,
+    holding ``values``; a 422 again with its ``errors``."""
+    url = overseer_deployments.DNS_RECORDS
+    values = {"ttl": str(dns.TTL)} | values
+    types = overseer_deployments.DNS_TYPES
+    if (kind := values.get("type")) and kind not in [t["id"] for t in types]:
+        types = [*types, {"id": kind, "name": kind}]  # a record's own: kept
+    return dialog(
+        request,
+        RECORD_FORM,
+        status_code,
+        action=f"{url}/{record_id}" if record_id else url,
+        editing=record_id is not None,
+        domain=dns.domain(),
+        server_ip=dns.server_ip(),
+        ttl_floor=dns.TTL,
+        prioritized=" and ".join(sorted(dns.PRIORITIZED)),
+        types=types,
+        values=values,
+        errors=errors or [],
+    )
+
+
+@router.get(f"{overseer_deployments.DNS_RECORDS}/new", response_class=HTMLResponse)
+async def new_record(request: Request) -> Response:
+    return _record_form(request)
+
+
+@router.get(
+    f"{overseer_deployments.DNS_RECORDS}/{{record_id}}/edit",
+    response_class=HTMLResponse,
+)
+async def edit_record_form(request: Request, record_id: str) -> Response:
+    r = await _record(record_id)
+    return _record_form(request, record_id, **dns.fields(r))
+
+
+async def _save(
+    request: Request,
+    actor: Actor,
+    audit: AuditEmitter,
+    record_id: str | None,
+    form: dict[str, str],
+) -> Response:
+    """Add a record on the domain (the registrar's add is idempotent), or
+    change ``record_id``'s in place; then show the section again. A
+    refusal brings the form back, saying why."""
+    event = "deploy.dns_edit" if record_id else "deploy.dns_set"
+    apex = dns.domain()
+    try:
+        record = dns.record(
+            form["host"],
+            form["type"],
+            form["value"],
+            form_number(form["ttl"], "TTL") or dns.TTL,
+            form_number(form["priority"], "Priority"),
+        )
+        if record_id:
+            await dns.registrar().edit_dns_record(apex, record_id, record)
+        else:
+            await dns.registrar().create_dns_records(apex, [record])
+    except Exception as exc:  # noqa: BLE001 - the form says why
+        outcome = "refused" if isinstance(exc, ValueError) else "failed"
+        await audit_admin_action(audit, actor, request, event, outcome, str(exc))
+        return _record_form(request, record_id, [str(exc)], 422, **form)
+    verb = "Changed" if record_id else "Added"
+    said = f"{verb} {record.type} {dns.label(record.host, apex)} → {record.value}"
+    await audit_admin_action(audit, actor, request, event, "requested", said)
+    return go_to(overseer_deployments.DNS_URL, said, "#overseer-main")
+
+
+def _record_fields(
+    host: Annotated[str, Form()],
+    type_: Annotated[str, Form(alias="type")] = "A",
+    value: Annotated[str, Form()] = "",
+    ttl: Annotated[str, Form()] = "",
+    priority: Annotated[str, Form()] = "",
+) -> dict[str, str]:
+    """A record's form as typed, for ``_save`` (and to hold on a 422)."""
+    return {
+        "host": host,
+        "type": type_,
+        "value": value,
+        "ttl": ttl,
+        "priority": priority,
+    }
+
+
+@router.post(overseer_deployments.DNS_RECORDS)
+async def add_record(
+    request: Request,
+    form: dict[str, str] = Depends(_record_fields),
+    actor: Actor = Depends(overseer_actor),
+    audit: AuditEmitter = Depends(get_audit),
+) -> Response:
+    return await _save(request, actor, audit, None, form)
+
+
+@router.post(f"{overseer_deployments.DNS_RECORDS}/{{record_id}}")
+async def edit_record(
+    request: Request,
+    record_id: str,
+    form: dict[str, str] = Depends(_record_fields),
+    actor: Actor = Depends(overseer_actor),
+    audit: AuditEmitter = Depends(get_audit),
+) -> Response:
+    await _record(record_id)  # 404 where it is gone
+    return await _save(request, actor, audit, record_id, form)
+
+
+async def _record(record_id: str) -> Any:
+    """The domain's record ``record_id``: 404 where it is gone, 502 with
+    the reason where the registrar did not answer (no keys, say)."""
+    apex = dns.domain()
+    try:
+        found = await dns.registrar().list_dns_records(apex) if apex else []
+    except Exception as exc:  # noqa: BLE001 - the toast says why
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    for r in found:
+        if r.provider_id == record_id:
+            return r
+    raise HTTPException(status_code=404, detail="That record is gone.")
+
+
+@router.get(
+    f"{overseer_deployments.DNS_RECORDS}/{{record_id}}/confirm-delete",
+    response_class=HTMLResponse,
+)
+async def confirm_delete_record(request: Request, record_id: str) -> Response:
+    r = await _record(record_id)
+    return dialog(
+        request,
+        "pages/overseer/_confirm.html",
+        title=f"Delete {r.type} {dns.label(r.host, dns.domain())}?",
+        body=f"It points at {r.value}; names under it stop resolving.",
+        url=f"{overseer_deployments.DNS_RECORDS}/{r.provider_id}",
+        label="Delete",
+        method="delete",
+        done="Record deleted",
+    )
+
+
+@router.delete(f"{overseer_deployments.DNS_RECORDS}/{{record_id}}", status_code=204)
+async def delete_record(
+    request: Request,
+    record_id: str,
+    actor: Actor = Depends(overseer_actor),
+    audit: AuditEmitter = Depends(get_audit),
+) -> Response:
+    r = await _record(record_id)
+    event, apex = "deploy.dns_delete", dns.domain()
+    said = f"Deleted {r.type} {dns.label(r.host, apex)} → {r.value}"
+    try:
+        await dns.registrar().delete_dns_record(apex, r.provider_id)
+    except Exception as exc:  # noqa: BLE001 - the dialog's toast says why
+        await audit_admin_action(audit, actor, request, event, "failed", str(exc))
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    await audit_admin_action(audit, actor, request, event, "requested", said)
+    return Response(status_code=204)

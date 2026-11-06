@@ -9150,6 +9150,7 @@ Marks what is already installed and prints the install steps for the rest.</p>
 <li><code>--target-dir, -d PATH</code> - Where to create it (default: current directory)</li>
 <li><code>--author TEXT</code> - Author for <code>pyproject.toml</code> and the README</li>
 <li><code>--description TEXT</code> - One-line description</li>
+<li><code>--repository URL</code> - The plugin's own repo, written to <code>pyproject.toml</code> so anything resolving the package to GitHub finds it. Left as a commented line to fill in when omitted.</li>
 <li><code>--yes, -y</code> - Skip the confirmation prompt</li>
 </ul>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-69-1"><a id="__codelineno-69-1" name="__codelineno-69-1" href="#__codelineno-69-1"></a>aegis<span class="w"> </span>plugins<span class="w"> </span>create<span class="w"> </span>scraper<span class="w"> </span>--author<span class="w"> </span><span class="s2">&quot;Your Name&quot;</span><span class="w"> </span>--description<span class="w"> </span><span class="s2">&quot;Web scraping&quot;</span>

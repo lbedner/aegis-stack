@@ -7443,12 +7443,12 @@
 <tr>
 <td><code>DOMAIN</code></td>
 <td><code>example.com</code></td>
-<td>Domain for TLS certificate (only with TLS enabled)</td>
+<td>Domain for TLS certificate (only with TLS enabled). Set in <code>.env.deploy</code>, not <code>.env</code>: the app refuses a key it does not declare.</td>
 </tr>
 <tr>
 <td><code>ACME_EMAIL</code></td>
 <td>-</td>
-<td>Email Let's Encrypt registers the certificate to (only with TLS enabled). <code>traefik/traefik.yml</code> holds <code>__ACME_EMAIL__</code>, and the production Traefik fills it in from this when it starts, so no email is committed; it refuses to start without one. <code>aegis ingress-enable</code> and <code>deploy-provision</code> keep it in <code>.aegis/deploy.yml</code>, which each deploy stamps into the server's <code>.env</code>.</td>
+<td>Email Let's Encrypt registers the certificate to (only with TLS enabled). Set in <code>.env.deploy</code>, not <code>.env</code>. <code>traefik/traefik.yml</code> holds <code>__ACME_EMAIL__</code>, and the production Traefik fills it in from this when it starts, so no email is committed; it refuses to start without one. <code>aegis ingress-enable</code> and <code>deploy-provision</code> keep it in <code>.aegis/deploy.yml</code>, which each deploy stamps into the server's <code>.env</code>.</td>
 </tr>
 </tbody>
 </table>

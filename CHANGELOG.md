@@ -7,6 +7,103 @@
 
 ## [Unreleased]
 
+## [0.19.0] - 2026-11-05
+
+### Added
+
+- **`aegis menu`: the generator's menu as JSON.** It prints every
+  component and service, what its brackets take, and what each requires,
+  recommends and conflicts with, read from the specs. Given `--components`
+  and `--services` it answers the `init` command that builds the
+  selection, or the rules that refuse it and the components that would
+  satisfy them (exit 1). The release workflow uploads `menu.json` beside
+  the wheel on each GitHub release. (#1948)
+- **Calls are their own switch.** `ChatSurface.calls` says whether a
+  mount's users may call, on what the install calls with, so a signed-out
+  visitor can call without the model and voice controls. `None` follows
+  `operator_controls`, so existing mounts behave as before. A caller
+  without the controls is not shown the engine or the call's cost. (#1945)
+- **Bounded calls.** For mounts where someone other than the operator
+  pays for the minutes: `longest_call` cues the assistant to wrap up and
+  then ends the call, `idle_seconds` sets the mount's own quiet,
+  `call_check` is asked after each saved turn, and `on_call_end` runs once
+  for every call the gate let through. The page shows the reason under the
+  composer, so the conversation carries on in text. (#1945)
+- **`AI_CHAT_SHOW_CALLS`.** When off, a chat's step trail says what each
+  step is doing, not its raw call, live and on reload, on every surface.
+  (#1955)
+- **Page actions.** A chat mount can declare its pages by path
+  (`ChatSurface.pages`), each with the parts an agent may scroll to,
+  highlight or act on. On a declared page a turn or a call is offered
+  `page_action`, which checks the target, action and value against the
+  declaration. Off one there is no tool and no word of one. No mount
+  declares a page by default. (#1946)
+
+### Changed
+
+- **`aegis init` is stricter.** Its checks now live in one place,
+  `aegis.core.selection`. It refuses brackets it used to pass through
+  (`database[mysql]`, `redis[x]`), reports a malformed name instead of a
+  traceback, and refuses a persistent scheduler on a database of another
+  engine, as `aegis add` already did. (#1948)
+- **A deploy whose backup failed now stops.** It used to carry on with
+  nothing to roll back to. `--no-backup` is the explicit way past. (#1970)
+- **`health probe` can fail.** It used to pass whenever the process was
+  up. It now exits 1 when the API does not answer or a component is
+  unhealthy; a warning still passes. (#1978)
+- **`health status` reads `/health/detailed`.** From a worker or scheduler
+  container in production it now gets a 401 or 404, as `--detailed`
+  already did. (#1978)
+- **The health API's `status` can be `warning` or `info`.** On
+  `/health/detailed` and `/health/dashboard`, and it now covers host
+  metrics, matching `overall_healthy`. (#1978)
+- **Overseer > Resources.** The stack and free split moves into the CPU
+  and memory chart headers, legends remember hidden lines, a needs-attention
+  card replaces the containers table, and a load-cost bar chart joins the
+  grid. (#1955)
+
+### Fixed
+
+- **A fresh SQLite stack creates every table.** `init_database()` imports
+  every model first, so a foreign key finds its target. With AI and the
+  scheduler, the scheduler used to come up unhealthy. (#1978)
+- **`health status` tells a warning from unhealthy.** The tree guides hold
+  at every depth and the label colon comes from the locale. (#1978)
+- **The webserver reaches its own API on loopback.** `API_BASE_URL`
+  defaults to `http://localhost:${PORT:-8000}` in the webserver container,
+  so operator reads pass from inside it. (#1978)
+- **Overseer's section nav fits a phone.** It is one scrolling row with
+  the current section in view. (#1978)
+- **Deploy commands tell a failed call from a no.** `storage check`,
+  `deploy-backups` and the Overseer's backups, history and events refuse
+  with the reason instead of reading a failure as "none". `aegis deploy`
+  no longer skips the backup as a first deploy when the connection drops,
+  and `aegis deploy-rollback` checks the backup before `compose down`. A
+  Postgres backup with no dump warns. (#1970)
+- **Overseer Code leaves out what it cannot open.** An unreadable folder
+  is skipped instead of a 500, and `backups/` is out of the code page, the
+  source index and RAG. (#1970)
+- **Sessions name iOS browsers.** (#1970)
+- **An arq queue no longer reads Offline while it works.** `cpu_bound`
+  runs in a one-process spawn pool instead of a thread, which starved
+  arq's poll loop. Waiting no longer counts running jobs, and Running is
+  counted across every process. (#1965)
+- **Running falls as jobs finish.** It used to drop only at the next
+  refresh, up to 15 seconds later. (#1969)
+- **A changed image or video gets a new URL.** `static()` adds `?v=<mtime>`
+  to a file the asset build does not hash. (#1967)
+- **Worker and Scheduler pages at narrow widths.** The queue card stays
+  compact when it stacks, and the Jobs and History tables wrap so Status
+  stays in view. (#1966, #1968)
+- **The Overseer link is the right port.** `aegis init`, `add-service` and
+  `deploy` print the port `make serve` will publish. (#1955)
+- **Overseer page position.** A new page opens at its top, and a pager,
+  filter or chart window keeps its place. (#1955)
+- **Smaller Overseer fixes.** The Server overview shows its status card
+  only when there are no containers, the Scheduler clock stays in its
+  column below `2xl`, and a wiring map opened larger is zoomed to fit its
+  dialog. (#1955)
+
 ## [0.18.0] - 2026-11-03
 
 ### Added

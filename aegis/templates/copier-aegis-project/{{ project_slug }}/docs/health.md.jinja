@@ -94,7 +94,8 @@ Returns structured JSON for integration with monitoring systems:
 {{ project_slug }} health probe
 ```
 
-Returns simple healthy/unhealthy status for use in scripts and monitoring.
+Exits 1 when the API does not answer or a component is unhealthy; a warning
+still passes. For scripts and monitoring.
 
 ## Using Health Checks in Development
 

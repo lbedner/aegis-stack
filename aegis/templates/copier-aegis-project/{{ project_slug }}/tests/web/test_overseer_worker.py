@@ -151,6 +151,14 @@ def _get(client: TestClient, section: str = "", query: str = "") -> str:
 
 
 class TestSections:
+    def test_on_a_phone_the_sections_are_one_row_that_scrolls(
+        self, signed_in: TestClient
+    ) -> None:
+        """Stacked, they pushed the page below the first screen."""
+        nav = one(one(_get(signed_in), "#overseer-subnav"), "nav")
+        assert {"flex", "overflow-x-auto", "md:block"} <= set(nav.get("class").split())
+        assert all("hidden" in h.get("class").split() for h in select(nav, "h3"))
+
     def test_overview_then_tasks_runtime_and_lifecycle(
         self, signed_in: TestClient
     ) -> None:

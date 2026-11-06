@@ -2,10 +2,7 @@
 
 import re
 
-from app.cli import theme
 from app.i18n import t
-
-console = theme.console()
 
 
 _HEALTH_MSG_EXACT: dict[str, str] = {
@@ -136,7 +133,7 @@ def _translate_health_msg(msg: str) -> str:
             translated_parts.append(translated)
         status = ", ".join(translated_parts)
         if desc_key:
-            return f"{t(desc_key)}：{status}"
+            return t("health.labeled", label=t(desc_key), value=status)
 
     # No translation found — return original
     return msg

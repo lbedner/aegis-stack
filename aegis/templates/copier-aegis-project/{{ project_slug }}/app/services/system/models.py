@@ -104,6 +104,11 @@ class SystemStatus(BaseModel):
         return result
 
     @property
+    def overall_status(self) -> ComponentStatusType:
+        """The root's status: ``overall_healthy`` is False for a warning too."""
+        return self.components["aegis"].status
+
+    @property
     def healthy_components(self) -> list[str]:
         """List of healthy component names (including sub-components)."""
         return [
@@ -205,7 +210,7 @@ class DetailedHealthResponse(BaseModel):
     """Detailed health check API response with system information."""
 
     healthy: bool = Field(..., description="Whether system is healthy")
-    status: str = Field(..., description="Overall status text")
+    status: ComponentStatusType = Field(..., description="Overall status")
     service: str = Field(..., description="Service name")
     version: str = Field(..., description="Service version")
     components: dict[str, ComponentStatus] = Field(

@@ -1133,6 +1133,7 @@ MESSAGES: dict[str, str] = {
     "plugins.help_arg_create_name": "プラグイン名（小文字、ハイフンなし）。Python パッケージ名 aegis_stack_<name> およびインストール名 aegis-stack-<name> として使用されます。",
     "plugins.help_opt_create_target": "ひな型を作成する親ディレクトリ。",
     "plugins.help_opt_create_author": "pyproject.toml と README に記載する作者情報。",
+    "plugins.help_opt_create_repository": "The plugin's own repo URL, for pyproject.toml.",
     "plugins.help_opt_create_description": "プラグインの 1 行説明。",
     "plugins.create_target_missing": "対象ディレクトリが存在しません：{target}",
     "plugins.create_already_exists": "ディレクトリは既に存在します：{output}",

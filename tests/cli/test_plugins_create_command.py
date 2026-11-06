@@ -47,6 +47,18 @@ class TestArgValidation:
 
 
 class TestSuccessFlow:
+    def test_takes_the_repository(self, tmp_path: Path) -> None:
+        url = "https://github.com/someone/aegis-stack-scraper"
+        result = runner.invoke(
+            plugins_app,
+            ["create", "scraper", "--target-dir", str(tmp_path)]
+            + ["--repository", url, "--yes"],
+        )
+
+        assert result.exit_code == 0, result.output
+        pyproject = (tmp_path / "aegis-stack-scraper" / "pyproject.toml").read_text()
+        assert f'Repository = "{url}"' in pyproject
+
     def test_creates_scaffold(self, tmp_path: Path) -> None:
         result = runner.invoke(
             plugins_app,

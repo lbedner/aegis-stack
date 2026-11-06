@@ -40,6 +40,7 @@ from .component_files import (
     get_cross_spec_scope,
     get_shared_scope,
     get_template_path,
+    is_binary_asset,
 )
 from .copier_manager import is_copier_project, load_copier_answers
 from .plugins.composer import PLUGINS_ANSWER_KEY
@@ -490,7 +491,7 @@ class ManualUpdater:
 
             # Some components (like Redis) have no template files - they only
             # configure Docker services and dependencies via shared files
-            rendered_files: dict[Path, str] = {}
+            rendered_files: dict[Path, str | bytes] = {}
 
             if not component_files:
                 verbose_print(
@@ -510,7 +511,7 @@ class ManualUpdater:
                     template_file = f"{PROJECT_SLUG_PLACEHOLDER}/{file_path}"
 
                     # Try with .jinja extension first, then without
-                    content = self._render_template_file(template_file, updated_answers)
+                    content = self._template_content(template_file, updated_answers)
 
                     if content is not None:
                         # Output path in project
@@ -952,7 +953,7 @@ class ManualUpdater:
         """
         return self._run_ruff(src, "", rel_path)
 
-    def _write_rendered(self, output_path: Path, content: str) -> None:
+    def _write_rendered(self, output_path: Path, content: str | bytes) -> None:
         """Write a rendered template file, formatted the way init formats it.
 
         Init runs the project's ruff (check --fix + format) over every
@@ -961,8 +962,11 @@ class ManualUpdater:
         unused import that init stripped reappearing on every regen.
         Rendered content is the template default, never user code, so the
         destructive fix rules are safe. Falls back to the raw render when
-        ruff is unavailable or fails.
+        ruff is unavailable or fails. Bytes go in as they are.
         """
+        if isinstance(content, bytes):
+            output_path.write_bytes(content)
+            return
         if output_path.suffix == ".py":
             # Normalize under the file's real project-relative path so the
             # project's per-file-ignores stay in force (issue #814: a temp
@@ -1233,10 +1237,20 @@ class ManualUpdater:
 
     def _renders(self, rel_path: str, answers: dict[str, Any]) -> bool:
         """Whether ``rel_path``'s template renders anything for ``answers``."""
-        content = self._render_template_file(
+        content = self._template_content(
             f"{PROJECT_SLUG_PLACEHOLDER}/{rel_path}", answers
         )
         return bool(content and content.strip())
+
+    def _template_content(
+        self, template_file: str, answers: dict[str, Any]
+    ) -> str | bytes | None:
+        """What ``template_file`` writes: its render, or the bytes of an image
+        or font, which nothing renders."""
+        if not is_binary_asset(template_file):
+            return self._render_template_file(template_file, answers)
+        raw_path = self.template_path / template_file
+        return raw_path.read_bytes() if raw_path.is_file() else None
 
     def _render_template_file(
         self, template_file: str, context: dict[str, Any]

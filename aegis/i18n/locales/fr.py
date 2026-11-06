@@ -1153,6 +1153,7 @@ MESSAGES: dict[str, str] = {
     "plugins.help_arg_create_name": "Nom du plugin (minuscules, sans tirets). Devient le paquet Python aegis_stack_<name> et le nom d'installation aegis-stack-<name>.",
     "plugins.help_opt_create_target": "Répertoire parent dans lequel générer le squelette.",
     "plugins.help_opt_create_author": "Chaîne auteur pour pyproject.toml et le README.",
+    "plugins.help_opt_create_repository": "The plugin's own repo URL, for pyproject.toml.",
     "plugins.help_opt_create_description": "Description du plugin en une ligne.",
     "plugins.create_target_missing": "Le répertoire cible n'existe pas : {target}",
     "plugins.create_already_exists": "Le répertoire existe déjà : {output}",

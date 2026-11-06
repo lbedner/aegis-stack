@@ -21,7 +21,11 @@ from __future__ import annotations
 
 import pytest
 
-from aegis.core.component_files import get_component_files
+from aegis.core.component_files import (
+    PROJECT_SLUG_PLACEHOLDER,
+    get_component_files,
+    get_template_path,
+)
 from aegis.core.manual_updater import ManualUpdater
 from aegis.core.template_cleanup import ruff_executable, run_ruff_on_text
 from tests.cli.conftest import ProjectFactory
@@ -185,3 +189,42 @@ class TestAuthManifestGating:
         assert not (
             project / "app/components/frontend/dashboard/modals/auth_orgs_tab.py"
         ).exists()
+
+
+class TestAddCopiesBinaryAssets:
+    """A file nothing renders still arrives, byte for byte (#1975)."""
+
+    STATIC = "app/components/web_frontend/static"
+
+    def test_adding_htmx_brings_its_images(
+        self, project_factory: ProjectFactory
+    ) -> None:
+        project = project_factory("base")
+        ManualUpdater(project).add_component("htmx", None, run_post_gen=False)
+
+        template = get_template_path() / PROJECT_SLUG_PLACEHOLDER / self.STATIC
+        images = sorted(template.glob("*.png"))
+        assert images
+        for image in images:
+            added = project / self.STATIC / image.name
+            assert added.read_bytes() == image.read_bytes()
+
+    def test_a_missing_image_can_be_asked_whether_it_renders(
+        self, project_factory: ProjectFactory
+    ) -> None:
+        """An option upgrade asks this of every file gone from the project."""
+        updater = ManualUpdater(project_factory("base"))
+
+        assert updater._renders(f"{self.STATIC}/favicon.png", updater.answers)
+
+    def test_an_image_already_there_is_kept(
+        self, project_factory: ProjectFactory
+    ) -> None:
+        project = project_factory("base")
+        favicon = project / self.STATIC / "favicon.png"
+        favicon.parent.mkdir(parents=True)
+        favicon.write_bytes(b"mine")
+
+        ManualUpdater(project).add_component("htmx", None, run_post_gen=False)
+
+        assert favicon.read_bytes() == b"mine"

@@ -1152,6 +1152,7 @@ MESSAGES: dict[str, str] = {
     "plugins.help_arg_create_name": "Nombre del plugin (minúsculas, sin guiones). Se convertirá en el paquete Python aegis_stack_<name> y en el nombre de instalación aegis-stack-<name>.",
     "plugins.help_opt_create_target": "Directorio padre donde se generará el andamiaje del plugin.",
     "plugins.help_opt_create_author": "Cadena de autor para pyproject.toml y README.",
+    "plugins.help_opt_create_repository": "The plugin's own repo URL, for pyproject.toml.",
     "plugins.help_opt_create_description": "Descripción de una línea del plugin.",
     "plugins.create_target_missing": "El directorio de destino no existe: {target}",
     "plugins.create_already_exists": "El directorio ya existe: {output}",

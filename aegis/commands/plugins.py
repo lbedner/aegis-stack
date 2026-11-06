@@ -669,6 +669,11 @@ def plugins_create_command(
         "--description",
         help=lazy_t("plugins.help_opt_create_description"),
     ),
+    repository: str = typer.Option(
+        "",
+        "--repository",
+        help=lazy_t("plugins.help_opt_create_repository"),
+    ),
     yes: bool = typer.Option(False, "--yes", "-y", help=lazy_t("common.help_yes")),
 ) -> None:
     """Scaffold a new ``aegis-stack-<name>`` Python package.
@@ -724,6 +729,7 @@ def plugins_create_command(
         target,
         author=author,
         description=description,
+        repository=repository,
     )
 
     brand.success(

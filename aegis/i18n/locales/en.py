@@ -1250,6 +1250,7 @@ MESSAGES: dict[str, str] = {
         "Parent directory the plugin scaffold lands inside."
     ),
     "plugins.help_opt_create_author": "Author string for pyproject.toml + README.",
+    "plugins.help_opt_create_repository": "The plugin's own repo URL, for pyproject.toml.",
     "plugins.help_opt_create_description": "One-line plugin description.",
     "plugins.create_target_missing": "Target directory does not exist: {target}",
     "plugins.create_already_exists": "Directory already exists: {output}",

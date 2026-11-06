@@ -9,6 +9,7 @@ errors the CLI surfaces for invalid input.
 
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -118,8 +119,6 @@ class TestScaffoldContent:
         happily resolves an older aegis-stack whose ``PluginSpec`` has no
         field the plugin sets, and the failure lands on the plugin's user
         as an import or validation error nobody can place."""
-        import tomllib
-
         from aegis import __version__
 
         scaffold_plugin("scraper", tmp_path)
@@ -156,8 +155,6 @@ class TestScaffoldContent:
         there, under that project's rules; the plugin repo's own ruff and
         pytest stay out of it (its import order differs, its tests import
         ``app``)."""
-        import tomllib
-
         scaffold_plugin("scraper", tmp_path, author="Demo Dev")
         config = tomllib.loads(
             (tmp_path / "aegis-stack-scraper" / "pyproject.toml").read_text()
@@ -218,8 +215,6 @@ class TestDiscoveryMetadata:
     markers so authors never think about them."""
 
     def test_pyproject_carries_keywords_and_marker_url(self, tmp_path: Path) -> None:
-        import tomllib
-
         scaffold_plugin("scraper", tmp_path, author="Tester")
         project = tomllib.loads(
             (tmp_path / "aegis-stack-scraper" / "pyproject.toml").read_text()
@@ -228,6 +223,27 @@ class TestDiscoveryMetadata:
         assert project["urls"]["Aegis Plugin"] == (
             "https://aegis-stack.io/plugins/aegis-stack-scraper"
         )
+
+    def test_pyproject_names_the_plugins_own_repository(self, tmp_path: Path) -> None:
+        """What resolves a package to its repo takes whatever GitHub link it
+        finds, so the plugin says which one is its own."""
+        url = "https://github.com/someone/aegis-stack-scraper"
+        scaffold_plugin("scraper", tmp_path, author="Tester", repository=url)
+
+        project = tomllib.loads(
+            (tmp_path / "aegis-stack-scraper" / "pyproject.toml").read_text()
+        )["project"]
+
+        assert project["urls"]["Repository"] == url
+
+    def test_a_repository_not_given_is_left_to_fill_in(self, tmp_path: Path) -> None:
+        """A made-up URL would resolve to someone else's repo."""
+        scaffold_plugin("scraper", tmp_path, author="Tester")
+
+        text = (tmp_path / "aegis-stack-scraper" / "pyproject.toml").read_text()
+
+        assert "Repository" not in tomllib.loads(text)["project"]["urls"]
+        assert '# Repository = "https://github.com/' in text
 
     def test_readme_points_at_the_plugin_docs(self, tmp_path: Path) -> None:
         """The README does not repeat how listing works; it links the page

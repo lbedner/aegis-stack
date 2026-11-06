@@ -91,3 +91,33 @@ def test_a_baseline_written_in_full_sql_is_read_by_shape() -> None:
     _queryspy_shape.shape_loaded_baseline(SimpleNamespace(stash=stash))  # type: ignore[arg-type]
 
     assert stash[pytest_plugin._BASELINE] == {shaped(_entry(NARROW))}
+
+
+@pytest.mark.parametrize(
+    ("plain", "qualified"),
+    [
+        (
+            "SELECT t.id FROM t WHERE t.owner_id = :owner_id_1 ORDER BY t.at DESC",
+            "SELECT s.t.id FROM s.t WHERE s.t.owner_id = :owner_id_1 ORDER BY s.t.at DESC",
+        ),
+        (
+            "SELECT t.id FROM t JOIN u ON u.id = t.user_id",
+            "SELECT s.t.id FROM s.t JOIN s.u ON s.u.id = s.t.user_id",
+        ),
+        (
+            "UPDATE t SET name=:name WHERE t.id = :id_1",
+            "UPDATE s.t SET name=:name WHERE s.t.id = :id_1",
+        ),
+        ("INSERT INTO t (id) VALUES (:id)", "INSERT INTO s.t (id) VALUES (:id)"),
+        ('SELECT "user".id FROM "user"', 'SELECT s."user".id FROM s."user"'),
+    ],
+)
+def test_a_schema_is_no_part_of_the_shape(plain: str, qualified: str) -> None:
+    """The engine decides the schema: the shipped baseline is recorded on
+    SQLite, which has none, and a Postgres project renders one."""
+    assert statement_shape(qualified) == statement_shape(plain)
+
+
+def test_a_table_and_its_column_are_not_a_schema() -> None:
+    sql = "SELECT 1 FROM t WHERE t.owner_id = :owner_id_1"
+    assert "t.owner_id" in statement_shape(sql)

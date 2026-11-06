@@ -15,7 +15,9 @@ dependencies = [
 
 [project.urls]
 "Aegis Plugin" = "https://aegis-stack.io/plugins/{{ dist }}"
-
+{% if repository %}Repository = "{{ repository }}"
+{% else %}# Repository = "https://github.com/<owner>/{{ dist }}"
+{% endif %}
 [project.optional-dependencies]
 dev = [
     "pytest>=9.0.0",

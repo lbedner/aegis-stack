@@ -27,15 +27,20 @@ from queryspy._detect import Finding
 # Everything between the first SELECT and its FROM: the selected columns,
 # with DISTINCT kept, since it changes what the statement returns.
 _SELECT_LIST = re.compile(r"^SELECT\b(?P<distinct> DISTINCT\b)?.*?\bFROM\b", re.DOTALL)
+# A schema: on a column (``scheduler.job_execution.job_id``) and on a table.
+_SCHEMA_ON_COLUMN = re.compile(r'\b\w+\.(?="?\w+"?\.["\w])')
+_SCHEMA_ON_TABLE = re.compile(r"\b(?P<keyword>FROM|JOIN|INTO|UPDATE) \w+\.")
 
 
 def statement_shape(sql: str) -> str:
-    """The statement with its selected columns collapsed to ``...``."""
-    return _SELECT_LIST.sub(
+    """The statement with its selected columns collapsed to ``...`` and its
+    schemas dropped: the engine decides those, not the query."""
+    shape = _SELECT_LIST.sub(
         lambda match: f"SELECT{match['distinct'] or ''} ... FROM",
         " ".join(sql.split()),
         count=1,
     )
+    return _SCHEMA_ON_TABLE.sub(r"\g<keyword> ", _SCHEMA_ON_COLUMN.sub("", shape))
 
 
 def shaped(entry: BaselineEntry) -> BaselineEntry:

@@ -1217,6 +1217,7 @@ Scaffold a new `aegis-stack-<name>` package. See
 - `--target-dir, -d PATH` - Where to create it (default: current directory)
 - `--author TEXT` - Author for `pyproject.toml` and the README
 - `--description TEXT` - One-line description
+- `--repository URL` - The plugin's own repo, written to `pyproject.toml` so anything resolving the package to GitHub finds it. Left as a commented line to fill in when omitted.
 - `--yes, -y` - Skip the confirmation prompt
 
 ```bash

@@ -14,6 +14,15 @@ from app.services.scheduler.scheduled_task_manager import ScheduledTaskManager
 _BASE = datetime(2026, 1, 1)
 
 
+def test_a_jobs_last_runs_are_indexed() -> None:
+    """History reads one job's runs newest first, so the pair is the index."""
+    indexed = {
+        tuple(column.name for column in index.columns)
+        for index in JobExecution.__table__.indexes
+    }
+    assert ("job_id", "started_at") in indexed
+
+
 @pytest.fixture
 def manager(
     async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch

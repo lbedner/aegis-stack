@@ -1099,6 +1099,7 @@ MESSAGES: dict[str, str] = {
     "plugins.help_arg_create_name": "플러그인 이름 (소문자, 하이픈 없음). Python 패키지 이름 aegis_stack_<name> 및 설치 이름 aegis-stack-<name>으로 사용됩니다.",
     "plugins.help_opt_create_target": "플러그인 스캐폴드가 생성될 상위 디렉토리.",
     "plugins.help_opt_create_author": "pyproject.toml 및 README에 사용할 작성자 정보.",
+    "plugins.help_opt_create_repository": "The plugin's own repo URL, for pyproject.toml.",
     "plugins.help_opt_create_description": "한 줄짜리 플러그인 설명.",
     "plugins.create_target_missing": "대상 디렉토리가 존재하지 않습니다: {target}",
     "plugins.create_already_exists": "디렉토리가 이미 존재합니다: {output}",

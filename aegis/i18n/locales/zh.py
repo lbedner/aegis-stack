@@ -986,6 +986,7 @@ MESSAGES: dict[str, str] = {
     "plugins.help_arg_create_name": "插件名称（小写，不含连字符）。将作为 Python 包名 aegis_stack_<name> 与安装名 aegis-stack-<name>。",
     "plugins.help_opt_create_target": "脚手架生成目录所在的父目录。",
     "plugins.help_opt_create_author": "用于 pyproject.toml 和 README 的作者信息。",
+    "plugins.help_opt_create_repository": "The plugin's own repo URL, for pyproject.toml.",
     "plugins.help_opt_create_description": "一句话插件描述。",
     "plugins.create_target_missing": "目标目录不存在：{target}",
     "plugins.create_already_exists": "目录已存在：{output}",

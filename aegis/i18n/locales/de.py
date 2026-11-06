@@ -1149,6 +1149,7 @@ MESSAGES: dict[str, str] = {
     "plugins.help_arg_create_name": "Plugin-Name (Kleinbuchstaben, keine Bindestriche). Wird zum Python-Paketnamen aegis_stack_<name> und zum Installationsnamen aegis-stack-<name>.",
     "plugins.help_opt_create_target": "Übergeordnetes Verzeichnis, in dem das Plugin-Gerüst angelegt wird.",
     "plugins.help_opt_create_author": "Autorenangabe für pyproject.toml und README.",
+    "plugins.help_opt_create_repository": "The plugin's own repo URL, for pyproject.toml.",
     "plugins.help_opt_create_description": "Einzeilige Plugin-Beschreibung.",
     "plugins.create_target_missing": "Zielverzeichnis existiert nicht: {target}",
     "plugins.create_already_exists": "Verzeichnis existiert bereits: {output}",

@@ -6,35 +6,45 @@ from pathlib import Path
 
 from aegis.core.component_files import (
     PROJECT_SLUG_PLACEHOLDER,
-    _is_skippable_template_file,
+    _is_tooling_file,
     dependent_files,
     get_component_files,
     get_template_path,
+    is_binary_asset,
 )
 
 
-class TestIsSkippableTemplateFile:
-    """The walk must ignore tooling-cache dirs and binary artefacts."""
+class TestIsToolingFile:
+    """The walk must ignore tooling-cache dirs and compiled files."""
 
     def test_skips_pycache_dir(self) -> None:
-        assert _is_skippable_template_file(
+        assert _is_tooling_file(
             Path("app/components/worker/__pycache__/broker.cpython-313.pyc")
         )
 
     def test_skips_compiled_python_anywhere(self) -> None:
-        assert _is_skippable_template_file(Path("a/b/module.pyc"))
-        assert _is_skippable_template_file(Path("module.pyo"))
+        assert _is_tooling_file(Path("a/b/module.pyc"))
+        assert _is_tooling_file(Path("module.pyo"))
 
-    def test_skips_binary_assets(self) -> None:
-        assert _is_skippable_template_file(Path("assets/logo.png"))
-        assert _is_skippable_template_file(Path("assets/font.WOFF2"))
+    def test_keeps_binary_assets(self) -> None:
+        assert not _is_tooling_file(Path("assets/logo.png"))
+        assert is_binary_asset(Path("assets/font.WOFF2"))
+        assert not is_binary_asset("app/core/config.py.jinja")
 
     def test_keeps_authored_python_and_jinja(self) -> None:
-        assert not _is_skippable_template_file(Path("app/components/worker/broker.py"))
-        assert not _is_skippable_template_file(Path("app/core/config.py.jinja"))
-        assert not _is_skippable_template_file(
-            Path("app/components/worker/__init__.py")
-        )
+        assert not _is_tooling_file(Path("app/components/worker/broker.py"))
+        assert not _is_tooling_file(Path("app/core/config.py.jinja"))
+        assert not _is_tooling_file(Path("app/components/worker/__init__.py"))
+
+
+class TestGetComponentFilesKeepsBinaryAssets:
+    """An image is part of its component: it arrives with an add and goes
+    with a remove, though nothing renders it."""
+
+    def test_htmx_brings_its_images(self) -> None:
+        files = get_component_files("htmx")
+
+        assert "app/components/web_frontend/static/favicon.png" in files
 
 
 class TestGetComponentFilesSkipsStrayArtefacts:

@@ -73,6 +73,7 @@ def scaffold_plugin(
     *,
     author: str = "Plugin Author",
     description: str = "",
+    repository: str = "",
 ) -> list[Path]:
     """Render the plugin scaffold into ``target_dir / aegis-stack-<name>``.
 
@@ -86,6 +87,8 @@ def scaffold_plugin(
             README.
         description: One-line description. Defaults to a generic
             placeholder.
+        repository: The plugin's own repo URL. Left as a commented line
+            to fill in when empty: a guess would name someone else's.
 
     Returns:
         List of files created (absolute paths), in order of writing.
@@ -113,6 +116,7 @@ def scaffold_plugin(
         "dist": dist_name(name),
         "pkg": package_name(name),
         "description": description,
+        "repository": repository,
         # The plugin is written against this aegis-stack's spec surface,
         # so the scaffold pins it as the floor rather than letting a
         # resolver pick an older one that lacks a field the plugin sets.

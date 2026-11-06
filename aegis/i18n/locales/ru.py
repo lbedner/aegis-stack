@@ -1115,6 +1115,7 @@ MESSAGES: dict[str, str] = {
     "plugins.help_arg_create_name": "Имя плагина (нижний регистр, без дефисов). Используется как имя Python-пакета aegis_stack_<name> и имя установки aegis-stack-<name>.",
     "plugins.help_opt_create_target": "Родительский каталог, в котором будет создан каркас плагина.",
     "plugins.help_opt_create_author": "Строка автора для pyproject.toml и README.",
+    "plugins.help_opt_create_repository": "The plugin's own repo URL, for pyproject.toml.",
     "plugins.help_opt_create_description": "Однострочное описание плагина.",
     "plugins.create_target_missing": "Целевой каталог не существует: {target}",
     "plugins.create_already_exists": "Каталог уже существует: {output}",

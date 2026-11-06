@@ -71,7 +71,8 @@ from jinja2 import Environment, FileSystemLoader
 from .component_files import (
     JINJA_EXTENSION,
     PROJECT_SLUG_PLACEHOLDER,
-    _is_skippable_template_file,
+    _is_tooling_file,
+    is_binary_asset,
 )
 from .template_cleanup import (
     normalize_for_compare,
@@ -318,18 +319,18 @@ class RenderDiffEngine:
         stack-dependent file falls through this walk unhandled.
 
         Tooling-cache directories (a stray ``__pycache__`` from importing
-        the template's raw ``.py`` files) and binary assets (images,
-        fonts — never templated, and ``read_text()`` on them raises
-        ``UnicodeDecodeError``) are skipped via the same rule
-        ``get_component_files`` already uses, so the two walks agree on
-        what counts as template content.
+        the template's raw ``.py`` files) are skipped as
+        ``get_component_files`` skips them. Binary assets (images, fonts)
+        are skipped here only: this walk reads text, and ``read_text()``
+        on them raises ``UnicodeDecodeError``. They arrive with their
+        component, in ``ManualUpdater.add_component``.
         """
         slug_dir = self.template_root / PROJECT_SLUG_PLACEHOLDER
         if not slug_dir.is_dir():
             return []
         paths: set[str] = set()
         for path in slug_dir.rglob("*"):
-            if not path.is_file() or _is_skippable_template_file(path):
+            if not path.is_file() or _is_tooling_file(path) or is_binary_asset(path):
                 continue
             rel = path.relative_to(slug_dir)
             if rel.name.endswith(JINJA_EXTENSION):

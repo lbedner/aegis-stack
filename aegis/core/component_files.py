@@ -20,19 +20,16 @@ from ..constants import AnswerKeys, ComponentNames, StorageBackends
 PROJECT_SLUG_PLACEHOLDER = "{{ project_slug }}"
 JINJA_EXTENSION = ".jinja"
 
-# Tooling/cache directories and compiled or binary artefacts that may appear
-# in the template tree locally (e.g. ``__pycache__`` from importing a
-# template's raw ``.py`` files). They are never authored template content,
-# and the downstream renderer reads files as UTF-8 text, so a stray ``.pyc``
-# crashes the walk. Skip them when expanding component directories.
+# Tooling/cache directories and compiled artefacts that may appear in the
+# template tree locally (e.g. ``__pycache__`` from importing a template's raw
+# ``.py`` files). They are never authored template content, and the downstream
+# renderer reads files as UTF-8 text, so a stray ``.pyc`` crashes the walk.
 _SKIP_DIRS = frozenset({"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache"})
-_SKIP_SUFFIXES = frozenset(
+_COMPILED_SUFFIXES = frozenset({".pyc", ".pyo", ".pyd"})
+# Images, fonts and archives: authored, but not UTF-8 text, so they are copied
+# and never rendered.
+_BINARY_SUFFIXES = frozenset(
     {
-        # compiled python
-        ".pyc",
-        ".pyo",
-        ".pyd",
-        # images / fonts / archives that aren't UTF-8 text
         ".png",
         ".jpg",
         ".jpeg",
@@ -51,11 +48,16 @@ _SKIP_SUFFIXES = frozenset(
 )
 
 
-def _is_skippable_template_file(file_path: Path) -> bool:
-    """True for tooling-cache or binary files that aren't template content."""
+def _is_tooling_file(file_path: Path) -> bool:
+    """True for tooling-cache and compiled files: no part of any template."""
     if any(part in _SKIP_DIRS for part in file_path.parts):
         return True
-    return file_path.suffix.lower() in _SKIP_SUFFIXES
+    return file_path.suffix.lower() in _COMPILED_SUFFIXES
+
+
+def is_binary_asset(file_path: Path | str) -> bool:
+    """True for a file that is copied byte for byte, never rendered."""
+    return Path(file_path).suffix.lower() in _BINARY_SUFFIXES
 
 
 def get_template_path() -> Path:
@@ -213,7 +215,7 @@ def _expand_directories_to_files(paths: list[str]) -> list[str]:
         if template_dir.exists() and template_dir.is_dir():
             # Recursively find all files in this directory
             for file_path in template_dir.rglob("*"):
-                if file_path.is_file() and not _is_skippable_template_file(file_path):
+                if file_path.is_file() and not _is_tooling_file(file_path):
                     # Convert back to relative path
                     # /path/to/template/{{ project_slug }}/app/components/scheduler/main.py.jinja
                     # -> app/components/scheduler/main.py.jinja

@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 {%- if scheduler_backend != "memory" %}
-from sqlalchemy import Column, DateTime, Float, LargeBinary, String, Text
+from sqlalchemy import Column, DateTime, Float, Index, LargeBinary, String, Text
 from sqlmodel import Field as SQLField, SQLModel
 {% endif %}
 
@@ -67,9 +67,12 @@ class JobExecution(SQLModel, table=True):
     """
 
     __tablename__ = "job_execution"
+    __table_args__ = (
+        Index("ix_job_execution_job_started", "job_id", "started_at"),
 {%- if database_engine == "postgres" %}
-    __table_args__ = {"schema": "scheduler"}
+        {"schema": "scheduler"},
 {%- endif %}
+    )
 
     id: int | None = SQLField(default=None, primary_key=True)
     job_id: str = SQLField(

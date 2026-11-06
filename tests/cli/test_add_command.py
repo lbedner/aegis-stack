@@ -648,7 +648,7 @@ class TestAddCommand:
         # The revision is derived from the model, so the model is what has to
         # carry the schema; it renders before the database component is added.
         models = (project_path / "app/services/scheduler/models.py").read_text()
-        assert '__table_args__ = {"schema": "scheduler"}' in models
+        assert '{"schema": "scheduler"}' in models
 
         scheduler_migrations = list(
             (project_path / "alembic" / "versions").glob("*_scheduler.py")

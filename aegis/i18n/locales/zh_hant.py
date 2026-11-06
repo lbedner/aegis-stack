@@ -986,6 +986,7 @@ MESSAGES: dict[str, str] = {
     "plugins.help_arg_create_name": "外掛名稱（小寫,不含連字號）。將作為 Python 套件名 aegis_stack_<name> 與安裝名 aegis-stack-<name>。",
     "plugins.help_opt_create_target": "建立外掛骨架的上層目錄。",
     "plugins.help_opt_create_author": "用於 pyproject.toml 與 README 的作者資訊。",
+    "plugins.help_opt_create_repository": "The plugin's own repo URL, for pyproject.toml.",
     "plugins.help_opt_create_description": "外掛的一句話描述。",
     "plugins.create_target_missing": "目標目錄不存在：{target}",
     "plugins.create_already_exists": "目錄已存在：{output}",

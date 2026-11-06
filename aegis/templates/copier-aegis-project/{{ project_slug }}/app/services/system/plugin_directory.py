@@ -12,7 +12,7 @@ import httpx
 from pydantic import BaseModel
 
 from app.core.figures import FIGURES
-from app.core.ontology.parts import answers
+from app.core.ownership import answers, plugins
 from app.core.time import utcnow
 
 # The directory's published contract (aegis's ``plugins.registry``).
@@ -80,8 +80,7 @@ _LISTED = frozenset(ListedPlugin.model_fields) - {"installed", "add", "more"}
 
 
 def installed(given: Mapping[str, Any]) -> tuple[InstalledPlugin, ...]:
-    """The plugins ``given`` (a stack's answers) records; an old string
-    entry says too little to list."""
+    """The plugins ``given`` (a stack's answers) records."""
     return tuple(
         InstalledPlugin(
             name=str(entry["name"]),
@@ -89,8 +88,8 @@ def installed(given: Mapping[str, Any]) -> tuple[InstalledPlugin, ...]:
             verified=bool(entry.get("verified")),
             options=dict(entry.get("options") or {}),
         )
-        for entry in given.get("_plugins") or []
-        if isinstance(entry, dict) and entry.get("name")
+        for entry in plugins(given)
+        if entry.get("name")
     )
 
 

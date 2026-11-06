@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
 
-from app.core import secrets, source_index
+from app.core import ownership, secrets, source_index
 from app.core.cache import CacheService
 from app.core.ontology import (
     SCHEMA_VERSION,
@@ -333,6 +333,30 @@ def test_a_plugin_service_is_a_node_of_its_own(
     )
     plugin = _parts(system_model(app))["service:fake_plugin"]
     assert plugin.category is Category.APP
+
+
+def test_a_plugin_service_is_a_part_where_nothing_has_registered(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Startup registers a plugin's health check, so a shell has to read
+    the plugin from the stack's answers, or its tables have no owner. The
+    name is the one startup registers, and an old string entry says none."""
+    _registered(monkeypatch, webserver=False)
+    monkeypatch.setattr(
+        ownership,
+        "answers",
+        lambda: {
+            "_plugins": [
+                "an-old-entry",
+                {"name": "fake", "wiring": {"health_checks": [{"label": "faked"}]}},
+            ]
+        },
+    )
+
+    assert "service:faked" in _parts(system_model())
+    assert ownership.owner("app/services/faked/tables.py") == ownership.Owner(
+        "service", "faked"
+    )
 
 
 async def test_a_warmed_model_is_built_once_off_the_loop_for_whoever_asks(

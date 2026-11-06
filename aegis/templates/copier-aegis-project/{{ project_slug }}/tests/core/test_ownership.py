@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from app.core import source_index
+from app.core import ownership, source_index
 from app.core.ownership import Owner, owner
 from tests._files import write_tree
 
@@ -117,3 +117,35 @@ def test_the_owner_of(
     index: source_index.Index, where: str, expected: Owner | None
 ) -> None:
     assert owner(where, index) == expected
+
+
+@pytest.mark.parametrize(
+    "written",
+    ["<<<<<<< HEAD\n_plugins: []\n=======\n", "- a list\n"],
+    ids=["conflicted", "not-a-mapping"],
+)
+def test_a_broken_answers_file_reads_as_empty(
+    written: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every log line asks who owns its file, so a file a merge left broken
+    cannot be what stops the app starting."""
+    (tmp_path / ".copier-answers.yml").write_text(written)
+    monkeypatch.setattr(source_index, "ROOT", tmp_path)
+    ownership.answers.cache_clear()
+    try:
+        assert ownership.answers() == {}
+        assert ownership.plugin_services() == []
+    finally:
+        ownership.answers.cache_clear()
+
+
+def test_a_plugin_entry_without_wiring_brings_no_service(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        ownership,
+        "answers",
+        lambda: {"_plugins": [{"name": "fake", "wiring": None}]},
+    )
+
+    assert ownership.plugin_services() == []

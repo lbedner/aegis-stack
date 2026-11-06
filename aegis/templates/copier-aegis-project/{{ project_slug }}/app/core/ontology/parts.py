@@ -8,8 +8,6 @@ from collections.abc import Iterable, Mapping
 from functools import cache
 from typing import Any
 
-import yaml
-
 from app.core import ownership, source_index
 from app.core.ontology.model import Kind, PartNode, PartOption, node_id
 from app.core.parts import PARTS, Category, Part
@@ -45,14 +43,17 @@ def placement(name: str) -> tuple[bool, int, str]:
 
 def on_disk(kind: Kind) -> list[str]:
     """The parts of ``kind`` this stack has, by the path only a stack with
-    one has (``Part.marker``; none: every stack): what is there whether or
-    not a health check registered it."""
-    return [
+    one has (``Part.marker``; none: every stack), and its plugins' services:
+    what is there whether or not a health check registered it."""
+    declared = [
         name
         for name, part in PARTS.items()
         if part.kind == kind.value
         and (not part.marker or (ROOT / part.marker).exists())
     ]
+    if kind is Kind.SERVICE:
+        declared += ownership.plugin_services()
+    return declared
 
 
 class _Packages:
@@ -121,16 +122,8 @@ def _part(
         cli=PARTS[name].cli if name in PARTS else None,
         page=ownership.COMPONENT_PAGES.get(name),
         experimental=PARTS[name].experimental if name in PARTS else False,
-        options=options_of(name, answers()) if parent is None else (),
+        options=options_of(name, ownership.answers()) if parent is None else (),
     )
-
-
-@cache
-def answers() -> dict[str, Any]:
-    """What this stack was generated with (``.copier-answers.yml``); empty
-    where the file is gone."""
-    file = ROOT / ".copier-answers.yml"
-    return (yaml.safe_load(file.read_text()) or {}) if file.is_file() else {}
 
 
 def options_of(name: str, given: Mapping[str, Any]) -> tuple[PartOption, ...]:

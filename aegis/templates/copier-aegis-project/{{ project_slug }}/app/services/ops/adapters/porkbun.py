@@ -192,16 +192,13 @@ class PorkbunAdapter:
         correlate by index.
         """
         existing = await self._retrieve_raw(domain)
-        existing_index = {match_key(r): r for r in existing}
+        existing_index = {match_key(r, domain): r for r in existing}
 
         results: list[CreatedRecord] = []
         for spec in records:
-            match_key = (
-                spec.type.upper(),
-                relative_host(spec.host, domain).lower(),
-                spec.value,
+            existing_record = existing_index.get(
+                match_key(payload(spec, domain), domain)
             )
-            existing_record = existing_index.get(match_key)
             if existing_record:
                 logger.info(
                     "porkbun.adapter: record %s %s already exists; reusing",

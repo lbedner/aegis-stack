@@ -1,9 +1,9 @@
 """Who owns a file or a module: the one service or component it belongs to,
 or the app's shared code, read from where it is and, for a route or a test,
 from what it imports (``source_index``), never from a table. Only a known
-owner counts: a part the aegis CLI declares (``parts.PARTS``) or a
-registered health check names (a plugin's). A folder is not an owner by
-being there.
+owner counts: a part the aegis CLI declares (``parts.PARTS``), a plugin's
+service (``plugin_services``), or one a registered health check names. A
+folder is not an owner by being there.
 
 The rules, in order, for a path under ``app``:
 
@@ -27,13 +27,15 @@ A test (``tests/``) is the owner's whose code it imports: the one service,
 else the one component; importing several, it is shared (None).
 """
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from functools import cache
 from pathlib import PurePosixPath
 import re
 import sys
-from typing import Literal
+from typing import Any, Literal
+
+import yaml
 
 from app.core import source_index
 from app.core.parts import PARTS
@@ -76,13 +78,45 @@ def component_of(page: str) -> str:
     return next((c for c, p in COMPONENT_PAGES.items() if p == page), page)
 
 
+@cache
+def answers() -> dict[str, Any]:
+    """What this stack was generated with (``.copier-answers.yml``); empty
+    where the file is gone or broken. Every log line's owner comes through
+    here, so a broken file goes to stderr: logging it would ask again."""
+    file = source_index.ROOT / ".copier-answers.yml"
+    try:
+        given = yaml.safe_load(file.read_text()) if file.is_file() else {}
+    except (OSError, yaml.YAMLError) as error:
+        sys.stderr.write(f"{file.name} read as empty: {error}\n")
+        return {}
+    return given if isinstance(given, dict) else {}
+
+
+def plugins(given: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """The plugins ``given`` (a stack's answers) records; an old string
+    entry says too little."""
+    return [entry for entry in given.get("_plugins") or [] if isinstance(entry, dict)]
+
+
+def plugin_services() -> list[str]:
+    """The services this stack's plugins bring, as startup registers their
+    health checks: known here whether or not it has, as in a shell."""
+    return [
+        check["label"]
+        for plugin in plugins(answers())
+        for check in (plugin.get("wiring") or {}).get("health_checks") or []
+    ]
+
+
 def installed(kind: Kind, name: object) -> bool:
     """Whether this is a service or component: one the aegis CLI declares,
-    or one a registered health check names (a plugin's), without booting
+    a plugin's, or one a registered health check names, without booting
     the checks."""
     if not isinstance(name, str) or not NAME.fullmatch(name):
         return False
     if (part := PARTS.get(name)) is not None and part.kind == kind:
+        return True
+    if kind == SERVICE and name in plugin_services():
         return True
     health = sys.modules.get("app.services.system.health")
     registry = getattr(health, "registered_health_names", None)

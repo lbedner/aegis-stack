@@ -118,7 +118,7 @@ def system_model(app: Starlette | None = None) -> SystemModel:
     # What is on disk joins what registered: a part with no health check
     # (deploy, the Flet frontend) is there all the same.
     components = [*dict.fromkeys([*names["components"], *on_disk(Kind.COMPONENT)])]
-    services = list(names["services"]) or on_disk(Kind.SERVICE)
+    services = [*dict.fromkeys([*names["services"], *on_disk(Kind.SERVICE)])]
     found = parts(components, services, index)
     ids = {n.id for n in found}
 

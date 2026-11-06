@@ -50,14 +50,15 @@ def relative_host(host: str, registered_domain: str) -> str:
     return h
 
 
-def match_key(record: dict[str, Any]) -> tuple[str, str, str]:
+def match_key(record: dict[str, Any], domain: str) -> tuple[str, str, str]:
     """Stable key for idempotency comparison against Porkbun records.
 
     Match on ``(type, relative-name, value)`` so a record with the same
-    effective spec is treated as the same. Lowercase normalisation on
+    effective spec is treated as the same: Porkbun lists names fully
+    qualified, a payload carries them relative. Lowercase normalisation on
     type and name keeps the comparison case-insensitive.
     """
     rtype = str(record.get("type") or "").upper()
-    name = str(record.get("name") or "").lower()
+    name = relative_host(str(record.get("name") or ""), domain).lower()
     value = str(record.get("content") or "")
     return (rtype, name, value)

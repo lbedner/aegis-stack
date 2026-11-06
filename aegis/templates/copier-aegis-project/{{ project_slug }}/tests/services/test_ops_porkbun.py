@@ -8,6 +8,8 @@ import pytest
 from app.services.ops.adapters.porkbun import PorkbunAdapter
 from app.services.ops.types import DnsRecord
 
+IP = "198.51.100.9"
+
 
 def _posting(
     monkeypatch: pytest.MonkeyPatch, answer: dict[str, Any]
@@ -56,3 +58,26 @@ async def test_a_listed_priority_is_only_where_its_type_has_one(
     monkeypatch.setattr(PorkbunAdapter, "_retrieve_raw", retrieve)
     found = await PorkbunAdapter().list_dns_records("example.com")
     assert [(r.type, r.priority) for r in found] == [("A", None), ("MX", 10)]
+
+
+async def test_a_create_reuses_a_record_already_there(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Porkbun lists names fully qualified; a record matching one by type,
+    host and value is reused, and only the new one is created."""
+
+    async def retrieve(self: PorkbunAdapter, domain: str) -> list[dict[str, Any]]:
+        return [{"id": "7", "name": "www.example.com", "type": "A", "content": IP}]
+
+    monkeypatch.setattr(PorkbunAdapter, "_retrieve_raw", retrieve)
+    sent = _posting(monkeypatch, {"status": "SUCCESS", "id": 99})
+    made = await PorkbunAdapter().create_dns_records(
+        "example.com",
+        [
+            DnsRecord(host="www", type="A", value=IP),
+            DnsRecord(host="overseer", type="A", value=IP),
+        ],
+    )
+    assert [path for path, _ in sent] == ["/dns/create/example.com"]
+    assert sent[0][1]["name"] == "overseer"
+    assert [m.provider_id for m in made] == ["7", "99"]

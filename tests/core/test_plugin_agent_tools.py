@@ -140,6 +140,8 @@ class TestOlderAnswers:
             _plugins=[old],
         )
         suite = render("tests/core/test_tools.py", _plugins=[old])
+        config = render("app/core/config.py", include_mcp=True, _plugins=[old])
 
         assert '"ontology": "read",' in suite
         assert "Traceback" not in agent
+        assert '"ontology"' in config.split("MCP_TOOLS")[1].splitlines()[0]

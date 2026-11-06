@@ -279,9 +279,6 @@ async def _collect_system_status() -> SystemStatus:
         all_statuses.extend(component.sub_components.values())
     overall_healthy = all(status.healthy for status in all_statuses)
 
-    # Create Aegis root structure with components underneath
-    aegis_healthy = all(status.healthy for status in all_statuses)
-
     # Propagate status from all top-level components and services
     component_statuses = [
         getattr(component, 'status', ComponentStatusType.HEALTHY)
@@ -291,11 +288,12 @@ async def _collect_system_status() -> SystemStatus:
         getattr(service, 'status', ComponentStatusType.HEALTHY)
         for service in service_results.values()
     ]
-    all_top_level_statuses = component_statuses + service_statuses
-    aegis_status = propagate_status(all_top_level_statuses)
+
+    # The root answers for what ``overall_healthy`` counts, a host metric too.
+    aegis_status = propagate_status([status.status for status in all_statuses])
 
     aegis_message = (
-        "Aegis Stack application" if aegis_healthy else "Aegis Stack has issues"
+        "Aegis Stack application" if overall_healthy else "Aegis Stack has issues"
     )
 
     # Create aegis sub-components structure with components and services grouped

@@ -7,9 +7,6 @@ when the backend starts up (only when database component is included).
 """
 {% if include_database %}
 
-{% if database_engine == "sqlite" %}
-from pathlib import Path
-{% endif %}
 from typing import Any
 
 from app.components.backend.startup.schema_recovery import (
@@ -314,16 +311,10 @@ async def startup_database_init() -> None:
     """
     try:
 {% if database_engine == "sqlite" %}
-        # Ensure database directory exists
-        from app.core.db import DATABASE_PATH
-        db_path = Path(DATABASE_PATH)
-        db_path.parent.mkdir(parents=True, exist_ok=True)
-
         # Create tables via SQLModel (no Alembic needed for SQLite)
-        from sqlmodel import SQLModel
+        from app.core.db import init_database
 
-        from app.core.db import engine
-        SQLModel.metadata.create_all(engine)
+        init_database()
         logger.info("Database tables created/verified (SQLite)")
 
         # Check for schema mismatches (e.g., after aegis update added new columns)

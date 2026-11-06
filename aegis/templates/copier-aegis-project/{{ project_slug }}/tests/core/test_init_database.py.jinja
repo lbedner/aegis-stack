@@ -1,0 +1,37 @@
+{%- if include_database and database_engine == "sqlite" -%}
+"""init_database builds the whole schema, whichever process asks."""
+
+import os
+from pathlib import Path
+import subprocess
+import sys
+
+
+# Whatever init_database leaves out, seen once every model is imported.
+LEFT_OUT = """
+from sqlalchemy import inspect
+from sqlmodel import SQLModel
+
+from app.core.db import engine, init_database
+from app.core.model_registry import import_all_models
+
+init_database()
+import_all_models()
+print(sorted(set(SQLModel.metadata.tables) - set(inspect(engine).get_table_names())))
+"""
+
+
+def test_a_process_that_imported_little_still_gets_every_table(
+    tmp_path: Path,
+) -> None:
+    """The scheduler reaches here having imported only its jobs' models, and
+    a table left out of them broke the foreign keys of those it had."""
+    done = subprocess.run(
+        [sys.executable, "-c", LEFT_OUT],
+        capture_output=True,
+        text=True,
+        env={**os.environ, "DATABASE_URL": f"sqlite:///{tmp_path / 'app.db'}"},
+    )
+    assert done.returncode == 0, done.stderr
+    assert done.stdout.strip().splitlines()[-1] == "[]"
+{%- endif %}

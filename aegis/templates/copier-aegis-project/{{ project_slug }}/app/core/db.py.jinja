@@ -378,7 +378,11 @@ def init_database() -> None:
         db_path = Path(DATABASE_PATH)
         db_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Create all tables
+        # Create all tables. Every one, not just those this process imported:
+        # a table's foreign key cannot resolve without the table it points at.
+        from app.core.model_registry import import_all_models
+
+        import_all_models()
         SQLModel.metadata.create_all(engine)
 
         if db_path.exists():

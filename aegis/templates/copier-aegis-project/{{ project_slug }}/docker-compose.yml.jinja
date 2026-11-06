@@ -75,12 +75,13 @@ services:
         condition: service_healthy
 {%- endif %}
 {%- endif %}
-{%- if include_redis or include_storage or include_observability %}
     environment:
       # Docker container marker
       - DOCKER_CONTAINER=1
       - WEBSERVER_ENGINE
       - WEBSERVER_LOOP
+      # Its own operator endpoints answer on loopback, not the service name
+      - API_BASE_URL=http://localhost:${PORT:-8000}
 {%- if include_redis %}
       # Redis connection for health checks
       - REDIS_URL=${REDIS_URL:-redis://redis:6379}
@@ -95,7 +96,6 @@ services:
 {%- if include_observability %}
       # Logfire observability token
       - LOGFIRE_TOKEN=${LOGFIRE_TOKEN:-}
-{%- endif %}
 {%- endif %}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${PORT:-8000}/health/"]

@@ -15,37 +15,24 @@ from app.cli.health_display import _display_health_status
 from app.core.config import settings
 from app.core.constants import APIEndpoints, Defaults
 from app.i18n import lazy_t, t
-from app.services.system.models import (
-    DetailedHealthResponse,
-    HealthResponse,
-)
+from app.services.system.models import ComponentStatusType, DetailedHealthResponse
 
 app = typer.Typer(name="health", help=lazy_t("health.help"))
 console = theme.console()
 
-# Pattern-based translation for health API response messages.
-# Maps English substrings/prefixes to i18n keys for display-time translation.
 
-
-async def get_health_data(
-    endpoint: str = APIEndpoints.HEALTH_BASIC,
-) -> HealthResponse | DetailedHealthResponse:
-    """Get health data from the API endpoint with Pydantic validation."""
+async def get_health_data() -> DetailedHealthResponse:
+    """The health report: the detailed endpoint, as ``/health/`` is a liveness
+    probe that lists no components and answers healthy while the process is up."""
     base_url = getattr(settings, "API_BASE_URL", "http://localhost:8000")
-    url = f"{base_url}{endpoint}"
+    url = f"{base_url}{APIEndpoints.HEALTH_DETAILED}"
 
     timeout = httpx.Timeout(Defaults.API_TIMEOUT)
     async with httpx.AsyncClient(timeout=timeout) as client:
         try:
             response = await client.get(url)
             response.raise_for_status()
-            json_data = response.json()
-
-            # Validate response with appropriate Pydantic model
-            if endpoint == APIEndpoints.HEALTH_DETAILED:
-                return DetailedHealthResponse.model_validate(json_data)
-            else:
-                return HealthResponse.model_validate(json_data)
+            return DetailedHealthResponse.model_validate(response.json())
 
         except httpx.ConnectError:
             raise ConnectionError(t("health.connect_error", url=base_url)) from None
@@ -96,10 +83,10 @@ async def get_health_data(
 
 
 async def is_system_healthy() -> bool:
-    """Quick check if system is healthy via API."""
+    """Whether the API answers and nothing is unhealthy; a warning still passes."""
     try:
-        health_data = await get_health_data(APIEndpoints.HEALTH_BASIC)
-        return health_data.healthy
+        health_data = await get_health_data()
+        return health_data.status != ComponentStatusType.UNHEALTHY
     except Exception:
         return False
 
@@ -114,10 +101,7 @@ async def health_status(
     ),
 ) -> None:
     try:
-        endpoint = (
-            APIEndpoints.HEALTH_DETAILED if detailed else APIEndpoints.HEALTH_BASIC
-        )
-        health_data = await get_health_data(endpoint)
+        health_data = await get_health_data()
 
         if json_output:
             print(json.dumps(health_data.model_dump(), indent=2))

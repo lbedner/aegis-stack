@@ -65,20 +65,6 @@ def _in_use(provider: AIProvider) -> bool:
     )
 
 
-# The keys the providers read, for the Secrets page (``app.core.secrets``).
-# Derived from the registry, so a provider added there is declared with it.
-SECRETS = tuple(
-    Secret(
-        spec.env_var,
-        owner="AI",
-        label=f"{provider_label(provider)} API key",
-        needed=partial(_in_use, provider),
-        verify=partial(_check_key, provider) if provider in KEY_CHECKS else None,
-    )
-    for provider, spec in PROVIDERS.items()
-    if spec.env_var in type(settings).model_fields
-)
-
 # Provider to pydantic-ai-slim extras mapping
 # Note: mistral, cohere, ollama, public, and pollinations use the
 # OpenAI-compatible API
@@ -93,6 +79,13 @@ PROVIDER_DEPENDENCIES: dict[str, str] = {
 # The SDK module whose presence proves the dependency is installed.
 PROVIDER_MODULE_CHECKS: dict[str, str] = {
     p.value: spec.module for p, spec in PROVIDERS.items()
+}
+
+# What proves it on LangChain, where the provider has a client of its own.
+PROVIDER_LANGCHAIN_MODULES: dict[str, str] = {
+    p.value: spec.langchain_module
+    for p, spec in PROVIDERS.items()
+    if spec.langchain_module
 }
 
 # Where a person goes to get a key. Absent for the keyless endpoints and
@@ -123,11 +116,18 @@ def get_env_var_name(provider: str) -> str:
         return f"{provider.upper()}_API_KEY"
 
 
-def check_provider_dependency_installed(provider: str) -> bool:
-    """Check if the required pydantic-ai extra is installed for a provider.
+def _importable(module_name: str) -> bool:
+    try:
+        return importlib.util.find_spec(module_name) is not None
+    except (ModuleNotFoundError, ValueError):
+        return False
 
-    Uses importlib to check if the provider's model module can be found,
-    indicating the required dependency is installed.
+
+def check_provider_dependency_installed(provider: str) -> bool:
+    """Check if the required dependency is installed for a provider.
+
+    Uses importlib to check if the provider's SDK module, or its own
+    LangChain client, can be found.
 
     Args:
         provider: Provider name to check
@@ -135,15 +135,25 @@ def check_provider_dependency_installed(provider: str) -> bool:
     Returns:
         True if the provider's dependency is installed, False otherwise
     """
-    module_name = PROVIDER_MODULE_CHECKS.get(provider.lower())
-    if not module_name:
-        return False
+    name = provider.lower()
+    modules = PROVIDER_MODULE_CHECKS.get(name), PROVIDER_LANGCHAIN_MODULES.get(name)
+    return any(_importable(module) for module in modules if module)
 
-    try:
-        spec = importlib.util.find_spec(module_name)
-        return spec is not None
-    except (ModuleNotFoundError, ValueError):
-        return False
+
+# The keys the providers read, for the Secrets page (``app.core.secrets``).
+# Derived from the registry, so a provider added there is declared with it.
+SECRETS = tuple(
+    Secret(
+        spec.env_var,
+        owner="AI",
+        label=f"{provider_label(provider)} API key",
+        needed=partial(_in_use, provider),
+        offered=partial(check_provider_dependency_installed, provider.value),
+        verify=partial(_check_key, provider) if provider in KEY_CHECKS else None,
+    )
+    for provider, spec in PROVIDERS.items()
+    if spec.env_var in type(settings).model_fields
+)
 
 
 def get_missing_dependency(provider: str) -> str | None:

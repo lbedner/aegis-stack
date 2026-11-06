@@ -141,12 +141,17 @@ _KEYED_CHAT_MODELS: dict[AIProvider, tuple[str, str, str, str]] = {
     ),
     AIProvider.GROQ: ("langchain_groq", "ChatGroq", "llama-3.1-70b-versatile", "api_key"),
     AIProvider.MISTRAL: (
-        "langchain_mistralai",
+        PROVIDERS[AIProvider.MISTRAL].langchain_module,
         "ChatMistralAI",
         "mistral-large-latest",
         "api_key",
     ),
-    AIProvider.COHERE: ("langchain_cohere", "ChatCohere", "command-r-plus", "cohere_api_key"),
+    AIProvider.COHERE: (
+        PROVIDERS[AIProvider.COHERE].langchain_module,
+        "ChatCohere",
+        "command-r-plus",
+        "cohere_api_key",
+    ),
 }
 
 

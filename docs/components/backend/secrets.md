@@ -56,6 +56,8 @@ Secret("GROQ_API_KEY", owner="AI", needed=lambda: settings.AI_PROVIDER == "groq"
 
 An unset needed key reads **Missing**; an unset optional one, a provider you could add, reads **Not used**. Leave it `False` for a choice.
 
+`offered` says whether this stack can use the key at all, as a callable: an AI provider's key is offered where its SDK is installed. A key not offered has no row unless it holds a value or is needed, so one saved earlier can still be removed, and the active provider's key can still be set.
+
 ### Choices
 
 `choices` lists values the provider itself has, as `(value, label)` pairs, so the Overseer can offer them instead of a blank field (the Twilio account's numbers, the Resend account's verified domains). It raises like `verify` when the provider cannot answer, and the field then just takes typing. `await secrets.choices(name)` returns the list, or an empty one.

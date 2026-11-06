@@ -174,6 +174,8 @@ class ProviderSpec:
     # installed. Most ride the OpenAI SDK, because most speak its API.
     dependency: str = "pydantic-ai-slim[openai]"
     module: str = "openai"
+    # LangChain's own client for it, where that brings no ``module``.
+    langchain_module: str = ""
     # Where a person goes to get a key; None for the keyless endpoints
     # and for a local server.
     key_url: str | None = None
@@ -225,6 +227,7 @@ PROVIDERS: dict[AIProvider, ProviderSpec] = {
         capabilities=PROVIDER_CAPABILITIES[AIProvider.MISTRAL],
         model=_OPENAI_CHAT,
         base_url="https://api.mistral.ai/v1",
+        langchain_module="langchain_mistralai",
         key_url="https://console.mistral.ai/api-keys/",
     ),
     AIProvider.COHERE: ProviderSpec(
@@ -232,6 +235,7 @@ PROVIDERS: dict[AIProvider, ProviderSpec] = {
         capabilities=PROVIDER_CAPABILITIES[AIProvider.COHERE],
         model=_OPENAI_CHAT,
         base_url="https://api.cohere.ai/v1",
+        langchain_module="langchain_cohere",
         key_url="https://dashboard.cohere.com/api-keys",
     ),
     AIProvider.OLLAMA: ProviderSpec(

@@ -7,6 +7,38 @@
 
 ## [Unreleased]
 
+## [0.19.1] - 2026-11-06
+
+### Fixed
+
+- **`aegis update` no longer stops on an older plugin answer.** A project
+  whose `_plugins` answer predates `agent_tools` failed to render 0.19.0.
+  (#1990)
+- **Secrets offers a key only where this stack can use it.** An AI
+  provider whose SDK is not installed has no row, unless it holds a value,
+  so a saved key can still be removed, or it is the active provider, so
+  its key can still be set. `Secret` gains `offered` for this. (#1986)
+- **Mistral and Cohere read as installed on LangChain.** Their LangChain
+  clients bring no `openai` SDK, so the provider check called a working
+  provider missing. (#1986)
+- **A shell's twin has a plugin's services.** Outside the webserver
+  nothing had registered them, so a plugin's service had no node and no
+  owner. They now come from `.copier-answers.yml`. (#1982)
+- **`job_execution` has its `(job_id, started_at)` index on a project
+  from 0.18.** Updating adds it, and a project that already holds it no
+  longer drifts. (#1973)
+- **`make check-queries` passes on Postgres projects.** The shipped
+  baseline is recorded on SQLite, and query shapes now drop schemas, so
+  the two match. (#1974)
+- **`aegis add htmx` brings the web frontend's images and fonts,** so the
+  favicon no longer returns 404. (#1975)
+- **A `.env` copied from `.env.example` boots with ingress and TLS.**
+  `DOMAIN` and `ACME_EMAIL` left the example: compose reads them from
+  `.env.deploy`, and `Settings` refuses them. (#1977)
+- **`aegis plugins create` takes `--repository`.** Without it,
+  `pyproject.toml` gets a commented Repository line to fill in, rather
+  than a guess at someone else's. (#1980)
+
 ## [0.19.0] - 2026-11-05
 
 ### Added

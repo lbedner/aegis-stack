@@ -79,6 +79,8 @@ class Secret:
     secret: bool = True
     # Whether what is enabled reads it; a callable when config decides.
     needed: bool | Callable[[], bool] = False
+    # False where this stack cannot use it: no row unless held or needed.
+    offered: Callable[[], bool] = lambda: True
     # Raises SecretRejectedError if the provider refuses ``value``, or
     # SecretUncheckedError if it cannot say; returns if it works.
     verify: Callable[[str], Awaitable[None]] | None = None
@@ -241,8 +243,7 @@ def writable() -> bool:
 
 
 def store_name() -> str | None:
-    """The installed store's name (``database``, ``vault``...), or None on
-    ``.env`` alone."""
+    """The installed store's name (``database``...), or None on ``.env`` alone."""
     store = _active_store()
     return store.name if store is not None else None
 
@@ -328,8 +329,7 @@ def _declared(name: str) -> Secret:
 
 
 def writable_store(name: str) -> tuple[Secret, SecretStore]:
-    """The declaration and the store a write to ``name`` goes to, or the
-    reason it cannot."""
+    """The declaration and store a write to ``name`` goes to, or why it cannot."""
     entry = _declared(name)
     if _from_env(name) is not None:
         raise SecretsReadOnlyError(
@@ -477,7 +477,7 @@ def _row(
 
 
 async def status_of(name: str) -> SecretStatus | None:
-    """One declared name's status, a credential's or a setting's."""
+    """One name's row, a credential's or a setting's; None where it has none."""
     rows = await status(setting=is_setting(name))
     return next((row for row in rows if row.name == name), None)
 
@@ -495,6 +495,6 @@ async def status(setting: bool = False) -> list[SecretStatus]:
             rows.append(_row(entry, ENV, _hint(entry, value)))
         elif store is not None and (kept := stored.get(entry.name)) is not None:
             rows.append(_row(entry, store.name, kept.hint, kept))
-        else:
+        elif entry.offered() or entry.is_needed():
             rows.append(_row(entry))
     return rows

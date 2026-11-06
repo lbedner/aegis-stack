@@ -9,6 +9,7 @@ import pytest
 from app.services.ai.domains.llm.provider_management import (
     PROVIDER_API_KEY_URLS,
     PROVIDER_DEPENDENCIES,
+    PROVIDER_LANGCHAIN_MODULES,
     PROVIDER_MODULE_CHECKS,
     check_provider_dependency_installed,
     get_env_var_name,
@@ -78,6 +79,16 @@ class TestCheckProviderDependencyInstalled:
         """Returns False for unknown provider names."""
         assert check_provider_dependency_installed("unknown_provider") is False
         assert check_provider_dependency_installed("") is False
+
+    def test_a_provider_with_its_own_langchain_client_needs_no_openai_sdk(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """On LangChain, Mistral's package brings no OpenAI SDK."""
+        monkeypatch.setitem(PROVIDER_MODULE_CHECKS, "mistral", "no_such_sdk")
+        monkeypatch.setitem(PROVIDER_LANGCHAIN_MODULES, "mistral", "no_such_client")
+        assert check_provider_dependency_installed("mistral") is False
+        monkeypatch.setitem(PROVIDER_LANGCHAIN_MODULES, "mistral", "json")
+        assert check_provider_dependency_installed("mistral") is True
 
 
 class TestGetMissingDependency:

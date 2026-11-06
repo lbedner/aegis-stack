@@ -40,6 +40,17 @@ def test_only_the_active_ai_providers_key_is_needed(
     assert not any(s.is_needed() for s in module.SECRETS)
 
 
+def test_an_ai_key_is_offered_where_its_sdk_is_installed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _owner("app.services.ai.domains.llm.provider_management")
+    entry = _entry(module, "ANTHROPIC_API_KEY")
+    monkeypatch.setitem(module.PROVIDER_MODULE_CHECKS, "anthropic", "no_such_sdk")
+    assert not entry.offered()
+    monkeypatch.setitem(module.PROVIDER_MODULE_CHECKS, "anthropic", "json")
+    assert entry.offered()
+
+
 async def test_an_ai_key_is_checked_against_its_provider(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -3,8 +3,8 @@ build runs (the provider, ``hosting``; the live build, commit, health and
 host, ``ui_deployments``), the server it deploys to and what can be done
 to it. New server is the way to one, step by step; Jobs every deploy
 job, one whole; History joins deploys with their records; Backups the
-database's; Cloud accounts what each connected account runs; Settings the
-keys deploying uses. The actions (a new server, deploy, back up, roll
+database's; DNS the records on the domain (``ops.dns``); Cloud accounts
+what each connected account runs; Settings the keys deploying uses. The actions (a new server, deploy, back up, roll
 back, destroy) are ``overseer_deploy_actions``."""
 
 from collections.abc import Iterable, Set
@@ -13,6 +13,7 @@ from typing import Any
 from app.components.deploy.protocol import record_dns_provider
 from app.core import exposure, secrets
 from app.core.parts import Category
+from app.services.ops import dns
 from app.services.system import hosting, ui_deployments
 from app.services.system.models import ComponentStatus
 
@@ -31,6 +32,7 @@ SECTIONS = (
             "jobs": "Jobs",
             "history": "History",
             "backups": "Backups",
+            "dns": "DNS",
             "accounts": "Cloud accounts",
             "settings": "Settings",
         },
@@ -47,14 +49,19 @@ ITEM = NavItem(
 )
 NEW_URL = f"{ITEM.url}/new"
 SETTINGS_URL = f"{ITEM.url}/settings"
+DNS_URL = f"{ITEM.url}/dns"
+DNS_RECORDS = f"{actions.PARTIALS}/dns/records"
+# The record types the DNS section's form takes; the CLI takes any.
+DNS_TYPES = [{"id": t, "name": t} for t in ("A", "AAAA", "CNAME", "MX", "TXT")]
 BACKUP_COLUMNS = columns(ui_deployments.BACKUP_COLUMNS)
 HISTORY_COLUMNS = columns(ui_deployments.HISTORY_COLUMNS, status=("health",))
 EVENT_COLUMNS = columns(ui_deployments.EVENT_COLUMNS, status=("outcome",))
 # Every key a cloud or DNS provider takes, read in one go.
 KEYED = (*hosting.PROVISIONABLE, *hosting.DNS)
-# The sections a deployed server shows as they are (it reads its own);
-# every other asks the deploy agent, from the dev build only.
-AS_DEPLOYED = {"overview", "history", "backups"}
+# The sections a deployed server shows as they are (it reads its own, and
+# DNS asks the registrar); every other asks the deploy agent, from the dev
+# build only.
+AS_DEPLOYED = {"overview", "history", "backups", "dns"}
 # A deploy's health check, as a status cell's tone.
 HEALTH_TONES = {"passed": "ok", "failed": "error"}
 
@@ -115,6 +122,11 @@ async def section_context(
             "actions": await _settings(),
             "writable": secrets.writable(),
         }
+    if section == "dns":
+        return {
+            "section_subtitle": "The records on your domain, at its registrar.",
+            "dns": await dns_view(),
+        }
     if section == "jobs":
         return {
             "section_subtitle": "What the deploy agent was asked, newest first.",
@@ -142,6 +154,38 @@ async def section_context(
         "host": await ui_deployments.host(),
         "actions": await _deployed(),
         "new_url": NEW_URL,
+    }
+
+
+async def dns_view() -> dict[str, Any]:
+    """The DNS section's context: the domain's records, each with its Edit
+    and Delete, and where a new one is added; or why there are none to
+    show (no domain, no keys, or the registrar's answer)."""
+    apex = dns.domain()
+    view: dict[str, Any] = {
+        "domain": apex,
+        "rows": [],
+        "new_url": f"{DNS_RECORDS}/new",
+        "provider": dns.PROVIDER,
+        "settings_url": SETTINGS_URL,
+    }
+    if not apex:
+        return view | {"reason": "Set BASE_DOMAIN in .env to manage its records."}
+    if not all((await secrets.get_many(*dns.PROVIDER.keys)).values()):
+        return view | {"reason": "keys"}
+    try:
+        found = await dns.registrar().list_dns_records(apex)
+    except Exception as exc:  # noqa: BLE001 - the reason is what the card shows
+        return view | {"reason": f"The registrar did not list {apex}'s records: {exc}"}
+    return view | {
+        "rows": [
+            dns.fields(r)
+            | {
+                "edit_url": f"{DNS_RECORDS}/{r.provider_id}/edit",
+                "delete_url": f"{DNS_RECORDS}/{r.provider_id}/confirm-delete",
+            }
+            for r in found
+        ]
     }
 
 

@@ -7,6 +7,7 @@ with ``apikey`` + ``secretapikey`` fields in the body (no
 
 - ``POST /dns/create/<domain>``               — create a DNS record
 - ``POST /dns/retrieve/<domain>``             — list records (for idempotency)
+- ``POST /dns/edit/<domain>/<id>``            — change a record in place
 - ``POST /dns/delete/<domain>/<id>``          — delete a record
 
 API keys are scoped per-domain via the API ACCESS toggle inside each
@@ -32,6 +33,13 @@ from app.services.ops.types import (
     DnsRecord,
     ForwardingRule,
     RetrievedRecord,
+)
+
+from .porkbun_records import (
+    PORKBUN_PRIORITIZED,
+    match_key,
+    payload,
+    relative_host,
 )
 
 logger = logging.getLogger(__name__)
@@ -184,13 +192,13 @@ class PorkbunAdapter:
         correlate by index.
         """
         existing = await self._retrieve_raw(domain)
-        existing_index = {_dns_match_key(r): r for r in existing}
+        existing_index = {match_key(r): r for r in existing}
 
         results: list[CreatedRecord] = []
         for spec in records:
             match_key = (
                 spec.type.upper(),
-                _split_host_from_domain(spec.host, domain).lower(),
+                relative_host(spec.host, domain).lower(),
                 spec.value,
             )
             existing_record = existing_index.get(match_key)
@@ -209,16 +217,7 @@ class PorkbunAdapter:
                 )
                 continue
 
-            host = _split_host_from_domain(spec.host, domain)
-            payload: dict[str, Any] = {
-                "name": host,
-                "type": spec.type.upper(),
-                "content": spec.value,
-                "ttl": str(max(spec.ttl, 600)),
-            }
-            if spec.priority is not None:
-                payload["prio"] = str(spec.priority)
-            data = await self._post(f"/dns/create/{domain}", payload)
+            data = await self._post(f"/dns/create/{domain}", payload(spec, domain))
             if data.get("status") != "SUCCESS":
                 raise RuntimeError(
                     f"Porkbun rejected DNS create for {spec.type} {spec.host} "
@@ -262,7 +261,8 @@ class PorkbunAdapter:
         Hosts are normalised to the *relative* form Porkbun's create
         endpoint uses (e.g. ``"app"`` for ``app.example.com``, ``""``
         for apex), so the CLI and tests don't need to know the parent
-        domain to compare records.
+        domain to compare records. A priority only where the type has
+        one (``PORKBUN_PRIORITIZED``): Porkbun answers 0 for the rest.
         """
         records = await self._retrieve_raw(domain)
         out: list[RetrievedRecord] = []
@@ -271,7 +271,8 @@ class PorkbunAdapter:
                 ttl_int = int(r.get("ttl") or 0)
             except (TypeError, ValueError):
                 ttl_int = 0
-            prio_raw = r.get("prio")
+            kind = str(r.get("type") or "").upper()
+            prio_raw = r.get("prio") if kind in PORKBUN_PRIORITIZED else None
             try:
                 prio_int: int | None = int(prio_raw) if prio_raw is not None else None
             except (TypeError, ValueError):
@@ -279,14 +280,29 @@ class PorkbunAdapter:
             out.append(
                 RetrievedRecord(
                     provider_id=str(r.get("id") or ""),
-                    host=_split_host_from_domain(str(r.get("name") or ""), domain),
-                    type=str(r.get("type") or "").upper(),
+                    host=relative_host(str(r.get("name") or ""), domain),
+                    type=kind,
                     value=str(r.get("content") or ""),
                     ttl=ttl_int,
                     priority=prio_int,
                 )
             )
         return out
+
+    async def edit_dns_record(
+        self, domain: str, provider_id: str, record: DnsRecord
+    ) -> None:
+        """Replace the fields of the record identified by its Porkbun id
+        (``/dns/edit/<domain>/<id>``): it keeps its id, so a name
+        re-pointed resolves throughout."""
+        data = await self._post(
+            f"/dns/edit/{domain}/{provider_id}", payload(record, domain)
+        )
+        if data.get("status") != "SUCCESS":
+            raise RuntimeError(
+                f"Porkbun rejected DNS edit for {provider_id} on {domain}: "
+                f"{data.get('message') or data}"
+            )
 
     async def delete_dns_record(self, domain: str, provider_id: str) -> None:
         """Remove the record identified by its Porkbun id. Idempotent:
@@ -346,43 +362,3 @@ class PorkbunAdapter:
             f"{local_part}@{domain} -> {target} manually at "
             f"porkbun.com -> {domain} -> Email Forwarding."
         )
-
-
-# ----------------------------------------------------------------------
-# Helpers
-# ----------------------------------------------------------------------
-
-
-def _split_host_from_domain(host: str, registered_domain: str) -> str:
-    """Return the **relative** host Porkbun expects in a `name` field.
-
-    Examples (registered_domain = ``example.com``):
-
-    - ``"send"``                       → ``"send"``        (already relative)
-    - ``"send.app"``                   → ``"send.app"``    (already relative)
-    - ``"send.app.example.com"``       → ``"send.app"``    (trim parent)
-    - ``"example.com"``                → ``""``            (apex)
-    - ``""`` / ``"@"``                 → ``""``            (apex shorthand)
-    """
-    h = (host or "").strip()
-    if not h or h == "@":
-        return ""
-    if h.lower() == registered_domain.lower():
-        return ""
-    suffix = "." + registered_domain.lower()
-    if h.lower().endswith(suffix):
-        return h[: -len(suffix)]
-    return h
-
-
-def _dns_match_key(record: dict[str, Any]) -> tuple[str, str, str]:
-    """Stable key for idempotency comparison against Porkbun records.
-
-    Match on ``(type, relative-name, value)`` so a record with the same
-    effective spec is treated as the same. Lowercase normalisation on
-    type and name keeps the comparison case-insensitive.
-    """
-    rtype = str(record.get("type") or "").upper()
-    name = str(record.get("name") or "").lower()
-    value = str(record.get("content") or "")
-    return (rtype, name, value)

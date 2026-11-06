@@ -1,0 +1,4 @@
+{# The DNS section's header action: a new record, in the dialog
+   (_dns_record.html), where the records can be read. #}
+{% from "components/macros/form.html" import action %}
+{% if not dns.reason %}{{ action("Add record", hx_dialog(dns.new_url, "data-write"), "primary") }}{% endif %}

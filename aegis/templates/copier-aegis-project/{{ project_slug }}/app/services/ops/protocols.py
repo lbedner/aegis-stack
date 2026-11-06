@@ -51,6 +51,13 @@ class RegistrarAdapter(Protocol):
         callers don't need to know the parent domain to compare."""
         ...
 
+    async def edit_dns_record(
+        self, domain: str, provider_id: str, record: DnsRecord
+    ) -> None:
+        """Replace the fields of a record by its registrar-issued id; it
+        keeps that id."""
+        ...
+
     async def delete_dns_record(self, domain: str, provider_id: str) -> None:
         """Remove a single record by its registrar-issued id. No-ops (does
         not raise) if the id is already gone — same idempotency contract

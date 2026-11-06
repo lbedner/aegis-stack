@@ -65,7 +65,7 @@ class SecretValue(BaseModel):
 
 async def _status_of(name: str) -> SecretStatusResponse:
     row = await secrets.status_of(name)
-    if row is None:  # a write refuses an undeclared name before this
+    if row is None:  # a write leaves a row, or refuses an undeclared name
         raise HTTPException(
             status.HTTP_404_NOT_FOUND, detail=f"{name} is not declared."
         )

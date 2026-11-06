@@ -223,6 +223,37 @@ def _declare(env: pytest.MonkeyPatch, *entries: Secret) -> None:
     env.setattr(secrets, "declared", lambda: entries)
 
 
+async def test_a_secret_not_offered_has_a_row_only_while_it_holds_a_value(
+    env: pytest.MonkeyPatch,
+) -> None:
+    """A key this stack cannot use is not asked for, but one saved before
+    stays listed, so it can still be removed."""
+    _declare(env, Secret("OPENAI_API_KEY", owner="AI", offered=lambda: False))
+    assert await secrets.status() == []
+
+    store = FakeStore()
+    store.values["OPENAI_API_KEY"] = KEY
+    secrets.set_store(store)
+    assert [row.name for row in await secrets.status()] == ["OPENAI_API_KEY"]
+
+    await secrets.delete("OPENAI_API_KEY", "admin")
+    assert await secrets.status() == []
+
+    env.setitem(settings.__dict__, "OPENAI_API_KEY", KEY)
+    assert [row.source for row in await secrets.status()] == [secrets.ENV]
+
+
+async def test_a_needed_secret_keeps_its_row_though_not_offered(
+    env: pytest.MonkeyPatch,
+) -> None:
+    """The map and the health check still ask for it, so it needs somewhere
+    to be set: the active provider's key, its SDK missing."""
+    _declare(
+        env, Secret("OPENAI_API_KEY", owner="AI", needed=True, offered=lambda: False)
+    )
+    assert [row.name for row in await secrets.status()] == ["OPENAI_API_KEY"]
+
+
 async def test_needed_is_decided_by_config_not_a_flag(env: pytest.MonkeyPatch) -> None:
     provider = {"active": "openai"}
     _declare(

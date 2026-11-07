@@ -458,8 +458,8 @@ class Settings(
     AI_CONVERSATION_TIMEOUT_HOURS: int = 24  # Auto-cleanup old conversations
 {% endif %}
 
-    # Operations / registrar configuration (always present — the `dns` CLI and the
-    # ops/ adapters ride alongside any component selection).
+    # Web search (app/core/search.py; an agent's web_search tool), unset = off.
+    BRAVE_SEARCH_API_KEY: str | None = None  # https://brave.com/search/api/
     # Porkbun registrar API keys — used by the `dns` CLI and by ``app/services/ops/``
     # to read and write DNS records. Grab them at porkbun.com/account/api. Strongly
     # recommend the per-domain "API ACCESS" toggle inside each domain's detail page

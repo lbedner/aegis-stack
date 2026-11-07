@@ -7528,6 +7528,11 @@
 <td>"Why was that request slow?" "What did the 401 do?"</td>
 </tr>
 <tr>
+<td><strong>The web</strong></td>
+<td>A search of the web (<code>web_search</code>: hits with title, url and snippet, with <code>BRAVE_SEARCH_API_KEY</code> set; off otherwise, and she says so) and a page read as text (<code>read_page</code>: public hosts only, scripts and tags gone, capped). A query names the thing she is researching, never the user.</td>
+<td>"What's the expense ratio of VIMAX, and where did you read it?"</td>
+</tr>
+<tr>
 <td><strong>Storage tool</strong></td>
 <td>What the buckets hold: the buckets, or one level of one (admins)</td>
 <td>"What's in the my-app bucket?"</td>
@@ -7812,6 +7817,7 @@
 </span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="nv">AI_MODEL</span><span class="o">=</span>auto
 </span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="nv">AI_TEMPERATURE</span><span class="o">=</span><span class="m">0</span>.7
 </span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="nv">AI_MAX_TOKENS</span><span class="o">=</span><span class="m">1000</span>
+</span><span id="__span-13-7"><a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a><span class="nv">BRAVE_SEARCH_API_KEY</span><span class="o">=</span>...<span class="w">  </span><span class="c1"># her web_search tool; unset = off</span>
 </span></code></pre></div>
 <p>Switch models at any time:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>my-app<span class="w"> </span>llm<span class="w"> </span>use<span class="w"> </span>gpt-4o

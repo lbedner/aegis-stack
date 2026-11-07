@@ -131,6 +131,9 @@ class Settings(
     # Deployed commit, stamped by ``aegis deploy``; cached payloads are
     # namespaced by it. See ``services/insights/constants.py``.
     BUILD_ID: str = "dev"
+    # The server's own address, stamped by ``aegis deploy``: a server has no
+    # ``.aegis/deploy.yml`` to read it from.
+    SERVER_HOST: str | None = None
 
     # Health monitoring: checks answer on /health/ for any monitor to poll
     HEALTH_CHECK_TIMEOUT_SECONDS: Annotated[float, Configurable("health", "Seconds a health check waits before calling a component down")] = 2.0

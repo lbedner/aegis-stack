@@ -38,6 +38,8 @@ _CACHE_TTL = 90 * 24 * 3600
 _DAY_TTL = 26 * 3600
 # Queries a day may emit: the bound on how much pattern ever leaves.
 # 25 a day keeps any month inside Brave's $5 free credit (~1,000).
+# The most hits one search keeps; a caller's ``limit`` cuts from these.
+MAX_HITS = 10
 DAILY_BUDGET = 25
 
 # Pages that carry an organization's name more prominently than its own
@@ -143,7 +145,8 @@ async def search(query: str, *, limit: int = 5) -> list[SearchHit]:
         return []
     await cache.set(_day_key(), spent + 1, ttl=_DAY_TTL)
     try:
-        hits = await _brave(_spoken(query), key=key, limit=limit)
+        # Every hit the provider gives, so one cache entry serves any limit.
+        hits = await _brave(_spoken(query), key=key, limit=MAX_HITS)
     except Exception as exc:  # a lookup is a convenience, never an outage
         logger.warning("search.failed", provider=PROVIDER, error=str(exc))
         return []

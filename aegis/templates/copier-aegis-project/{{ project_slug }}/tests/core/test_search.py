@@ -36,6 +36,20 @@ def brave(monkeypatch: pytest.MonkeyPatch) -> list[str]:
 
 class TestSearch:
     @pytest.mark.asyncio
+    async def test_one_cached_search_serves_any_limit(
+        self, brave: list[str], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A first ask for 1 hit must not pin the query to 1 hit for 90 days."""
+        cache = CacheService()
+        monkeypatch.setattr(search, "get_cache", lambda: cache)
+
+        first = await search.search("maple nursing", limit=1)
+        second = await search.search("maple nursing", limit=5)
+
+        assert len(first) == 1 and second
+        assert brave == ["maple nursing"]
+
+    @pytest.mark.asyncio
     async def test_no_key_means_off_and_asks_nobody(
         self, brave: list[str], monkeypatch: pytest.MonkeyPatch
     ) -> None:

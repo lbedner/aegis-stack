@@ -30,6 +30,8 @@ import socket
 
 import httpx
 
+from app.core.config import settings
+
 # The most of a body any caller reads. A contact page is tens of KB; a
 # host the model chose can answer with an endless one.
 MAX_BODY_BYTES = 2 * 1024 * 1024
@@ -45,6 +47,17 @@ _NAT64 = ipaddress.ip_network("64:ff9b::/96")
 
 class BlockedAddressError(Exception):
     """The host resolves somewhere this app must not fetch from."""
+
+
+class UnreadableError(Exception):
+    """The page answered, but not with text this app reads."""
+
+
+def user_agent(purpose: str) -> str:
+    """Who is asking, said plainly. Sites block the bare python-httpx
+    agent (a contact page answered 403 to it and 200 to this, 2026-09-23).
+    Never a browser's string: a fetch that disguises itself is a scraper."""
+    return f"{''.join(settings.PROJECT_DISPLAY_NAME.split())}/1.0 ({purpose})"
 
 
 def is_public(address: str) -> bool:
@@ -148,6 +161,35 @@ async def fetch_image(
             return None
         body = await _read_bytes(response, MAX_IMAGE_BYTES + 1)
     return body if len(body) <= MAX_IMAGE_BYTES else None
+
+
+async def fetch_text(
+    url: str,
+    *,
+    purpose: str,
+    timeout: float = 8.0,
+    redirects: int = 3,
+    same_host: str | None = None,
+) -> tuple[str, str]:
+    """The text at a URL somebody else chose, with its content type: a
+    200 whose type names text or JSON, read no further than
+    ``MAX_BODY_BYTES``. Any other answer raises ``UnreadableError`` saying
+    which (a PDF or an image proves nothing to a reader of words), judged
+    before a byte of the body is read; a blocked host raises as
+    ``guarded_get`` does."""
+    headers = {"User-Agent": user_agent(purpose)}
+    async with (
+        httpx.AsyncClient(timeout=timeout, headers=headers) as client,
+        guarded_follow(
+            client, url, redirects=redirects, same_host=same_host
+        ) as response,
+    ):
+        if response.status_code != 200:
+            raise UnreadableError(f"HTTP {response.status_code}")
+        content_type = response.headers.get("content-type", "text/html")
+        if "text" not in content_type and "json" not in content_type:
+            raise UnreadableError(f"not a text page: {content_type}")
+        return content_type, await read_capped(response)
 
 
 async def _read_bytes(response: httpx.Response, limit: int) -> bytes:

@@ -29,7 +29,7 @@ from urllib.parse import quote
 
 from fastapi import FastAPI, Request
 {%- if include_auth %}
-from fastapi import Cookie, Depends, HTTPException, WebSocketException, status
+from fastapi import Depends, HTTPException, WebSocketException, status
 from fastapi.responses import Response
 {%- else %}
 from fastapi import HTTPException, status
@@ -44,7 +44,7 @@ from app.core.db import get_async_db
 {%- if include_auth %}
 from app.core.security import SESSION_COOKIE, verify_token
 from app.models.user import User
-from app.services.auth.deps import get_optional_user, get_user_service, is_admin
+from app.services.auth.deps import get_optional_user, is_admin
 from app.services.auth.service import UserService, session_id_of
 from app.services.shared.deps import Actor, actor_of
 
@@ -135,14 +135,10 @@ def session_expires(request: Request) -> datetime | None:
     return datetime.fromtimestamp(expires, UTC) if isinstance(expires, int) else None
 
 
-async def overseer_socket_gate(
-    session: str | None = Cookie(default=None, alias=SESSION_COOKIE),
-    user_service: UserService = Depends(get_user_service),
-) -> None:
+async def overseer_socket_gate(user: Viewer = Depends(viewer)) -> None:
     """The gate's rule for a socket (a live call): admins only. A socket
-    carries the session cookie, never a bearer header, and has no HTTP
-    request for ``overseer_gate`` to read."""
-    user = await get_optional_user(session, user_service)
+    has no HTTP request for ``overseer_gate`` to read; the session it
+    carries is read once for the call, by the gate and the call alike."""
     if user is None or not is_admin(user):
         raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION)
 

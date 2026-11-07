@@ -17,6 +17,7 @@ Illiana answers from what your system is actually doing right now, not what it c
 | **Catalog tool** | Available models, prices, context windows | "What's the cheapest model with vision?" |
 | **Errors tool** | What broke: errors grouped into issues by where they come from, each with its traceback (admins) | "Which service has the most open errors?" |
 | **Requests tool** | The requests the server answered, each hop by hop at its real timing, named as the dry path names it (admins) | "Why was that request slow?" "What did the 401 do?" |
+| **The web** | A search of the web (`web_search`: hits with title, url and snippet, with `BRAVE_SEARCH_API_KEY` set; off otherwise, and she says so) and a page read as text (`read_page`: public hosts only, scripts and tags gone, capped). A query names the thing she is researching, never the user. | "What's the expense ratio of VIMAX, and where did you read it?" |
 | **Storage tool** | What the buckets hold: the buckets, or one level of one (admins) | "What's in the my-app bucket?" |
 | **Knowledge tool** | What her knowledge bases say: passages from the documents and code indexed for her (the `default` collection, what `rag index` fills), each with its source (with RAG) | "What does our refund policy say?" |
 | **Cards** | A table, bar, pie, before-and-after or trend drawn under her answer, from figures she just read (`draw_card`; with a database) | "Chart my spend by vendor this week." |
@@ -281,6 +282,7 @@ AI_PROVIDER=public      # or openai, anthropic, groq, ollama, etc.
 AI_MODEL=auto
 AI_TEMPERATURE=0.7
 AI_MAX_TOKENS=1000
+BRAVE_SEARCH_API_KEY=...  # her web_search tool; unset = off
 ```
 
 Switch models at any time:

@@ -200,6 +200,20 @@ def test_an_a_record_points_at_the_server_unless_told(
     )
 
 
+def test_a_deployed_server_points_an_a_record_at_itself(
+    registrar: FakeRegistrar, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A server has no ``.aegis/deploy.yml``: its address is the one the
+    deploy stamped (``SERVER_HOST``)."""
+    monkeypatch.setattr(hosting, "deploy_config", lambda *_: {})
+    monkeypatch.setattr(settings, "SERVER_HOST", "198.51.100.4")
+    client = TestClient(app)
+    new = client.get(f"{RECORDS}/new").text
+    assert one(new, "input[name=value]").get("placeholder") == "198.51.100.4"
+    client.post(RECORDS, data={"host": "overseer", "type": "A"})
+    assert registrar.records[-1].value == "198.51.100.4"
+
+
 def test_an_edit_changes_the_record_in_place(
     registrar: FakeRegistrar, app: FastAPI
 ) -> None:

@@ -81,25 +81,29 @@ PAYLOADS: dict[str, dict[str, Any]] = {
 }
 
 
-@pytest.fixture
-async def drawn() -> dict[str, str]:
-    """A conversation whose answer drew one card of each kind. Stored the
-    way the app stores them: through its own session opener, which the
-    card route reads with."""
+async def _store(conversation: str, kind: str, payload: dict[str, Any]) -> str:
+    """One more card on ``conversation``, stored as the app stores them."""
     from app.core.db import get_async_session
 
+    async with get_async_session() as session:
+        card = ChatCard(conversation_id=conversation, kind=kind, payload=payload)
+        session.add(card)
+    return card.id
+
+
+@pytest.fixture
+async def drawn() -> dict[str, str]:
+    """A conversation whose answer drew one card of each kind."""
     conversation = await ai_service.conversation_manager.create_conversation(
         provider=AIProvider.OLLAMA,
         model="gpt-5.6-luna",
         user_id=OVERSEER.user,
         surface=OVERSEER.surface,
     )
-    ids = {}
-    async with get_async_session() as session:
-        for kind, payload in PAYLOADS.items():
-            card = ChatCard(conversation_id=conversation.id, kind=kind, payload=payload)
-            session.add(card)
-            ids[kind] = card.id
+    ids = {
+        kind: await _store(conversation.id, kind, payload)
+        for kind, payload in PAYLOADS.items()
+    }
     conversation.add_message(MessageRole.USER, "Show me")
     reply = conversation.add_message(
         MessageRole.ASSISTANT,
@@ -191,6 +195,41 @@ class TestTheCards:
     ) -> None:
         html = hx.get(f"{CARDS}/{drawn['compare']}").text
         assert text(one(html, "[data-card=compare] [data-change]")) == "-25.0%"
+
+    async def test_a_share_charts_as_a_percent(
+        self, hx: TestClient, drawn: dict[str, str]
+    ) -> None:
+        """A share is a percent to one decimal (the app's own ``percent``
+        format), never a count or dollars."""
+        rows = [
+            {"date": "2026-08-01", "value": 86.1},
+            {"date": "2026-10-01", "value": 39.4},
+        ]
+        trend = {
+            "title": "Bot share",
+            "measure": "Bot share",
+            "unit": "percent",
+            "rows": rows,
+        }
+        card = await _store(drawn["conversation"], "trend", trend)
+        html = hx.get(f"{CARDS}/{card}").text
+        canvas = one(html, "[data-card=trend] canvas[data-chart=line]")
+        data = json.loads(text(one(html, f"#{canvas.get('data-chart-data')}")))
+        assert data["format"] == "percent"
+        assert data["series"][0]["values"] == [86.1, 39.4]
+
+    async def test_a_share_compares_as_a_percent(
+        self, hx: TestClient, drawn: dict[str, str]
+    ) -> None:
+        shares = {"unit": "percent", "before": 55.1, "after": 29.3}
+        card = await _store(
+            drawn["conversation"], "compare", PAYLOADS["compare"] | shares
+        )
+        html = hx.get(f"{CARDS}/{card}").text
+        figures = [text(n) for n in select(html, "[data-card=compare] .tabular-nums")]
+        assert figures[:2] == ["55.1%", "29.3%"]
+        # Two percents differ by points, not by a percent of a percent.
+        assert text(one(html, "[data-card=compare] [data-change]")) == "-25.8 pts"
 
     def test_a_table_heads_every_column(
         self, hx: TestClient, drawn: dict[str, str]

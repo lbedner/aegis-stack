@@ -31,8 +31,10 @@ def registrar() -> PorkbunAdapter:
 
 
 def server_ip() -> str | None:
-    """The server this project deploys to (``.aegis/deploy.yml``), if any."""
-    return (hosting.deploy_config().get("server") or {}).get("host")
+    """The server this project deploys to (``.aegis/deploy.yml``), or on
+    the server itself the address its deploy stamped; None before either."""
+    found = (hosting.deploy_config().get("server") or {}).get("host")
+    return found or settings.SERVER_HOST
 
 
 def host(name: str) -> str:
@@ -74,7 +76,7 @@ def record(
     if not found:
         if kind == "A":
             raise ValueError(
-                "An A record needs its IP: no server in .aegis/deploy.yml."
+                "An A record needs its IP: this project has not deployed yet."
             )
         raise ValueError(f"A {kind} record needs its value.")
     return DnsRecord(

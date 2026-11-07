@@ -80,11 +80,9 @@ class Settings(
     # Port for the web server
     PORT: int = 8000
 
-    # The host port compose actually published. ``make serve`` shifts it
-    # when 8000 is taken and writes the choice to ``.env.ports``; the
-    # container still listens on PORT. Anything running on the host
-    # (every CLI command that calls this app's API) needs this one, not
-    # PORT. None means nothing shifted it.
+    # The host port compose published: ``make serve`` shifts it when 8000 is
+    # taken, writing ``.env.ports``, while the container stays on PORT. A CLI
+    # command on the host calling this app's API needs this one. None if unshifted.
     WEBSERVER_HOST_PORT: int | None = None
 
     # Where this app's own CLI reaches its API. Left empty it follows the
@@ -131,8 +129,7 @@ class Settings(
     # Deployed commit, stamped by ``aegis deploy``; cached payloads are
     # namespaced by it. See ``services/insights/constants.py``.
     BUILD_ID: str = "dev"
-    # The server's own address, stamped by ``aegis deploy``: a server has no
-    # ``.aegis/deploy.yml`` to read it from.
+    # Stamped too: a server has no ``.aegis/deploy.yml`` to read its address from.
     SERVER_HOST: str | None = None
 
     # Health monitoring: checks answer on /health/ for any monitor to poll

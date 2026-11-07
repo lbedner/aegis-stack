@@ -9,6 +9,13 @@
 
 ## [0.19.1] - 2026-11-06
 
+### Added
+
+- **Overseer > Deployments > DNS.** The records on `BASE_DOMAIN`, listed
+  and changed at the registrar (Porkbun). Add, edit in place and delete
+  from the page, each audited. The `dns` CLI and the page now share one
+  module, `app/services/ops/dns.py`. (#1985)
+
 ### Fixed
 
 - **`aegis update` no longer stops on an older plugin answer.** A project

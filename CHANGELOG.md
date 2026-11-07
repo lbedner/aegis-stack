@@ -7,6 +7,13 @@
 
 ## [Unreleased]
 
+### Added
+
+- **`range_chips(..., multiple=True)`.** A row of chips can be ticks instead of
+  one exclusive pick: `days` holds the values ticked and the row is a
+  `data-checklist`, so over a list it narrows the rows with no request
+  (`data-facets`).
+
 ## [0.19.1] - 2026-11-06
 
 ### Added

@@ -230,6 +230,21 @@ class TestRangeChips:
         ]
         assert "sr-only" in radios[0].get("class")  # the pill is the label
 
+    def test_a_multiple_row_is_a_checklist_of_ticks(self) -> None:
+        html = render(
+            '{% from "components/macros/form.html" import range_chips %}'
+            "{{ range_chips(((10, '10'), (9, '9s'), (8, '8s')), [9, 8],"
+            " field='score', aria='Score', multiple=True) }}"
+        )
+        one(html, "fieldset[data-checklist]")
+        none(html, 'input[type="radio"]')
+        boxes = select(html, 'input[type="checkbox"]')
+        assert {b.get("name") for b in boxes} == {"score"}
+        assert [b.get("value") for b in boxes if b.get("checked") is not None] == [
+            "9",
+            "8",
+        ]
+
 
 def _layer(html: str, css: str) -> int:
     """The z-index a Tailwind class gives an element (``z-50``, ``z-[60]``)."""

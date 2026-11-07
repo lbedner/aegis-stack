@@ -388,14 +388,16 @@ bg-aegis-bg border border-aegis-border rounded px-2.5 py-1.5 text-sm text-aegis-
    ``layout.chip``, driven by ``peer-checked`` because a radio rather than
    a link marks the choice. ``ranges`` are ``(value, label)``, or
    ``(value, label, icon)`` for a chip that shows its icon (``icons.html``),
-   its label on hover and to a reader. #}
-{% macro range_chips(ranges, days, field="days", aria="Time window") %}
-<fieldset class="flex flex-wrap items-center gap-1.5" aria-label="{{ aria }}">
+   its label on hover and to a reader. ``multiple`` makes them ticks instead,
+   ``days`` the values ticked, the row a ``data-checklist``: over a list it
+   narrows the rows with no request (``data-facets`` in app.js). #}
+{% macro range_chips(ranges, days, field="days", aria="Time window", multiple=False) %}
+<fieldset class="flex flex-wrap items-center gap-1.5" aria-label="{{ aria }}"{% if multiple %} data-checklist{% endif %}>
   {% for choice in ranges %}
   {% set value, label = choice[0], choice[1] %}
   {% set glyph = choice[2] if choice|length > 2 else none %}
   <label class="cursor-pointer"{% if glyph %} title="{{ label }}"{% endif %}>
-    <input type="radio" name="{{ field }}" value="{{ value }}" class="sr-only peer" {% if value == days %}checked{% endif %}>
+    <input type="{{ 'checkbox' if multiple else 'radio' }}" name="{{ field }}" value="{{ value }}" class="sr-only peer" {% if (value in days if multiple else value == days) %}checked{% endif %}>
     <span class="{{ 'inline-flex px-1.5' if glyph else 'inline-block px-2' }} text-xs py-0.5 rounded border border-aegis-border text-aegis-muted
                  peer-checked:border-aegis-teal peer-checked:text-aegis-text peer-checked:bg-aegis-teal/10 peer-checked:font-semibold
                  peer-focus-visible:ring-2 peer-focus-visible:ring-aegis-teal hover:border-aegis-muted hover:text-aegis-text transition-colors">

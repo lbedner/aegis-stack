@@ -56,13 +56,14 @@ def _verdict(queue: ComponentStatus) -> Any:
         failure_rate=float(meta.get("failure_rate_percent", 0.0) or 0.0),
         oldest_waiting=meta.get("oldest_waiting_seconds"),
         max_wait=meta.get("max_wait_seconds"),
+        last_started=meta.get("last_started_seconds"),
     )
 
 
-def queue_state(queue: ComponentStatus) -> tuple[str, str]:
-    """A queue's state in a word, and its colour."""
-    verdict = _verdict(queue)
-    if verdict.state == "healthy" and (queue.metadata or {}).get("jobs_ongoing", 0):
+def queue_state(verdict: Any, busy: int) -> tuple[str, str]:
+    """A queue's state in a word, and its colour, from its verdict and the
+    running jobs its view shows."""
+    if verdict.state == "healthy" and busy:
         return "Active", "yellow"
     return STATE_LABELS[verdict.state]
 
@@ -95,7 +96,6 @@ def queue_view(
     consumers and the task history's running count stand in.
     """
     meta = queue.metadata or {}
-    label, color = queue_state(queue)
     verdict = _verdict(queue)
     consumers = int(meta.get("consumer_count", 0) or 0)
     configured = int(meta.get("max_concurrency", 0) or 0) * max(consumers, 1)
@@ -105,6 +105,7 @@ def queue_view(
         if procs
         else int(meta.get("jobs_ongoing", 0) or 0)
     )
+    label, color = queue_state(verdict, busy)
     completed = int(meta.get("jobs_completed", 0) or 0)
     failed = int(meta.get("jobs_failed", 0) or 0)
     success = _success(completed, failed) if meta.get("worker_alive") else None
@@ -126,8 +127,8 @@ def queue_view(
         "stream": meta.get("stream_name"),
         "processes": procs or [],
         "oldest_waiting": meta.get("oldest_waiting_seconds"),
-        "detail": verdict.lead if label != "No tasks" else "",
-        "verdict": verdict.state,
+        "detail": verdict.reason if verdict.state != "no_tasks" else "",
+        "lag": verdict.lead if verdict.state == BACKED_UP else "",
     }
 
 
@@ -145,7 +146,7 @@ def backlog(worker: ComponentStatus) -> Backlog:
     found = overview(worker)
     queued = found["queued"]
     message = f"{queued} queued, {found['busy']} running"
-    lags = [q["detail"] for q in found["queues"] if q["verdict"] == BACKED_UP]
+    lags = [q["lag"] for q in found["queues"] if q["lag"]]
     if lags:
         return Backlog(ComponentStatusType.WARNING, f"{message}: {lags[0]}", queued)
     return Backlog(ComponentStatusType.HEALTHY, message, queued)
@@ -191,39 +192,42 @@ def pile(count: int, cells: int = 40) -> dict[str, int]:
 
 # A queue's trend, one point a reading: (seconds, waiting, done).
 TrendPoint = tuple[float, int, int]
-RATE_WINDOW_SECONDS = 30.0
+# Longer than one slow job: a batch that starts together finishes together,
+# and a shorter window between batches sees nothing finish.
+RATE_WINDOW_SECONDS = 120.0
 MIN_RATE_SPAN_SECONDS = 2.0
-# A net rate this close to zero is keeping pace, not draining or growing.
-STEADY_NET_RATE = 0.2
+# A net rate this small a share of the finishing rate, or under one job
+# over the window, is keeping pace.
 STEADY_SHARE = 0.1
 
 
-def rate(
-    samples: list[TrendPoint], window: float = RATE_WINDOW_SECONDS
-) -> float | None:
-    """Jobs finished per second over the last ``window`` seconds, or None
-    until the samples span long enough to say."""
+def _recent(samples: list[TrendPoint]) -> tuple[TrendPoint, ...] | None:
+    """The samples in the last ``RATE_WINDOW_SECONDS``, or None until they
+    span long enough to say."""
     if not samples:
         return None
-    recent = [s for s in samples if s[0] >= samples[-1][0] - window]
-    span = recent[-1][0] - recent[0][0]
-    if span < MIN_RATE_SPAN_SECONDS:
+    recent = tuple(s for s in samples if s[0] >= samples[-1][0] - RATE_WINDOW_SECONDS)
+    if recent[-1][0] - recent[0][0] < MIN_RATE_SPAN_SECONDS:
         return None
-    return round(max(0, recent[-1][2] - recent[0][2]) / span, 1)
+    return recent
 
 
-def net_rate(
-    samples: list[TrendPoint], window: float = RATE_WINDOW_SECONDS
-) -> float | None:
+def rate(samples: list[TrendPoint]) -> float | None:
+    """Jobs finished per second over the window. Step by step: a done count
+    that drops (its records expire) costs that step, not what finished
+    before it."""
+    if (recent := _recent(samples)) is None:
+        return None
+    done = sum(max(0, b[2] - a[2]) for a, b in zip(recent, recent[1:]))
+    return round(done / (recent[-1][0] - recent[0][0]), 2)
+
+
+def net_rate(samples: list[TrendPoint]) -> float | None:
     """How fast the backlog shrinks, in jobs per second: finishing minus
     arriving, read as the change in waiting. Negative while it grows."""
-    if not samples:
+    if (recent := _recent(samples)) is None:
         return None
-    recent = [s for s in samples if s[0] >= samples[-1][0] - window]
-    span = recent[-1][0] - recent[0][0]
-    if span < MIN_RATE_SPAN_SECONDS:
-        return None
-    return round((recent[0][1] - recent[-1][1]) / span, 1)
+    return round((recent[0][1] - recent[-1][1]) / (recent[-1][0] - recent[0][0]), 2)
 
 
 def drain(waiting: int, per_second: float | None, net: float | None) -> str:
@@ -238,7 +242,7 @@ def drain(waiting: int, per_second: float | None, net: float | None) -> str:
         return "measuring"
     if per_second <= 0:
         return "stalled, nothing finishing"
-    if abs(net) < max(STEADY_NET_RATE, per_second * STEADY_SHARE):
+    if abs(net) < max(1 / RATE_WINDOW_SECONDS, per_second * STEADY_SHARE):
         return "steady, keeping pace"
     if net < 0:
         return f"growing by ~{abs(net)} jobs/s"
@@ -269,15 +273,14 @@ async def load_runtime() -> list[dict[str, str]]:
     """What each live worker process reports it is running with, and how
     many jobs it is running now."""
     try:
-        from app.components.worker.heartbeat import with_busy
-        from app.components.worker.runtime import read_runtime
+        from app.components.worker.heartbeat import read_reports
     except ImportError:
         return []
     from app.services.system.redis_keys import redis_client
 
     client = redis_client()
     try:
-        return await with_busy(client, await read_runtime(client))
+        return await read_reports(client)
     finally:
         await client.aclose()
 

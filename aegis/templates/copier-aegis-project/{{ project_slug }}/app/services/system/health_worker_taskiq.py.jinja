@@ -5,7 +5,7 @@ from collections import Counter
 import time
 from typing import Any, cast
 
-from app.components.worker.runtime import read_runtime
+from app.components.worker.heartbeat import read_reports
 from app.core.config import settings
 from app.core.constants import ComponentName
 from app.core.log import logger
@@ -14,8 +14,10 @@ from app.services.system.health import propagate_status
 from app.services.system.health_worker_rules import (
     broken_queue_status,
     last_delivered,
+    last_start,
     live_workers,
     queue_status,
+    reported_busy,
     stream_age,
     taskiq_group_stats,
 )
@@ -61,7 +63,8 @@ async def check_worker_health() -> ComponentStatus:
         total_processed = 0
         total_ongoing = 0
         active_workers = 0
-        reports = Counter(r.get("queue") for r in await read_runtime(redis_client))
+        live = await read_reports(redis_client)
+        reports = Counter(r.get("queue") for r in live)
 
         for queue_type, queue_config in functional_queues.items():
             stream_name = queue_config.get("stream_name", f"taskiq:{queue_type}")
@@ -126,6 +129,9 @@ async def check_worker_health() -> ComponentStatus:
                 if stats["total"] > 0:
                     jobs_completed = stats["completed"]
                     jobs_ongoing = stats["running"]
+                busy = reported_busy(live, queue_type)
+                if busy is not None:
+                    jobs_ongoing = busy
                 total_finished = jobs_completed + jobs_failed
                 failure_rate = (
                     (jobs_failed / total_finished * 100) if total_finished > 0 else 0.0
@@ -143,6 +149,7 @@ async def check_worker_health() -> ComponentStatus:
                 queue_functions = queue_config.get("functions", [])
                 has_functions = len(queue_functions) > 0
                 max_wait = settings_for(queue_type).max_wait_seconds
+                last_started = last_start(consumers)
                 queue_state, lead = queue_status(
                     worker_alive=worker_alive,
                     has_functions=has_functions,
@@ -150,6 +157,7 @@ async def check_worker_health() -> ComponentStatus:
                     failure_rate=failure_rate,
                     oldest_waiting=oldest_waiting,
                     max_wait=max_wait,
+                    last_started=last_started,
                 )
                 status_parts = [lead] if lead else []
                 if worker_alive and has_functions:
@@ -172,6 +180,7 @@ async def check_worker_health() -> ComponentStatus:
                     "queued_jobs": queued_jobs,
                     "oldest_waiting_seconds": oldest_waiting,
                     "max_wait_seconds": max_wait,
+                    "last_started_seconds": last_started,
                     "jobs_ongoing": jobs_ongoing,
                     "jobs_completed": jobs_completed,
                     "jobs_failed": jobs_failed,

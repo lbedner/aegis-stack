@@ -4,6 +4,7 @@
 from collections.abc import Awaitable
 from typing import Any, cast
 
+from app.components.worker.heartbeat import read_reports
 from app.core.config import settings
 from app.core.constants import ComponentName
 from app.core.log import logger
@@ -11,6 +12,7 @@ from app.services.system.health import propagate_status
 from app.services.system.health_worker_rules import (
     broken_queue_status,
     queue_status,
+    reported_busy,
 )
 from app.services.system.models import ComponentStatus, ComponentStatusType
 
@@ -45,6 +47,7 @@ async def check_worker_health() -> ComponentStatus:
         from app.components.worker import queue_discovery
         from app.components.worker.registry import get_all_queue_metadata
         functional_queues = get_all_queue_metadata()
+        live = await read_reports(redis_client)
 
         queue_sub_components = {}
         total_queued = 0
@@ -96,7 +99,8 @@ async def check_worker_health() -> ComponentStatus:
                 from app.components.worker.task_history import get_queue_stats
 
                 stats = await get_queue_stats(redis_client, queue_type)
-                jobs_ongoing = stats["running"]
+                busy = reported_busy(live, queue_type)
+                jobs_ongoing = stats["running"] if busy is None else busy
                 jobs_completed = stats["completed"]
                 jobs_failed = stats["failed"]
                 total_finished = jobs_completed + jobs_failed

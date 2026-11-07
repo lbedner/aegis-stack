@@ -121,6 +121,10 @@ def default_agent_config() -> AgentConfig:
             "storage",
 {%- endif %}
             "plugins",
+            # The web: a search (with BRAVE_SEARCH_API_KEY set) and a
+            # page read as text, public hosts only.
+            "web_search",
+            "read_page",
 {%- if ai_rag %}
             "knowledge",
 {%- endif %}

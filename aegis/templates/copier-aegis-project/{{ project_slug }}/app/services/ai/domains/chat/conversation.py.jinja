@@ -22,6 +22,7 @@ from app.core.log import logger
 
 {% if ai_backend != "memory" %}
 from sqlalchemy import delete
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.core.db import get_async_session, init_database
 from app.core.time import as_stored, utcnow
@@ -64,6 +65,24 @@ def _to_conversation(conv_db: ConversationModel, messages_db: Any) -> Conversati
         ],
         metadata=meta_data,
     )
+
+
+async def delete_conversations(
+    session: AsyncSession, conversation_ids: list[str]
+) -> int:
+    """The conversations named and their messages (first, for the foreign
+    key), in two statements; how many conversations went."""
+    await session.execute(
+        delete(MessageModel).where(
+            MessageModel.conversation_id.in_(conversation_ids)  # type: ignore[union-attr]
+        )
+    )
+    result = await session.execute(
+        delete(ConversationModel).where(
+            ConversationModel.id.in_(conversation_ids)  # type: ignore[union-attr]
+        )
+    )
+    return result.rowcount
 
 
 {% endif %}
@@ -354,20 +373,8 @@ class ConversationManager:
             if not old_conv_ids:
                 return 0
 
-            # Bulk delete messages first (FK constraint), then conversations
-            await session.execute(
-                delete(MessageModel).where(
-                    MessageModel.conversation_id.in_(old_conv_ids)  # type: ignore[union-attr]
-                )
-            )
-            await session.execute(
-                delete(ConversationModel).where(
-                    ConversationModel.id.in_(old_conv_ids)  # type: ignore[union-attr]
-                )
-            )
+            deleted_count = await delete_conversations(session, old_conv_ids)
             await session.commit()
-
-            deleted_count = len(old_conv_ids)
 
         if deleted_count > 0:
             logger.info(f"Cleaned up {deleted_count} old conversations")

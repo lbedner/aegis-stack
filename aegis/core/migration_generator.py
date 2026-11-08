@@ -242,6 +242,11 @@ VOICE_MIGRATION = ServiceMigrationSpec(
     description="AI voice tables (voice profiles and live-call engines)",
 )
 
+EVALS_MIGRATION = ServiceMigrationSpec(
+    service_name="ai_evals",
+    description="AI eval tables (runs, their cases, and each case's scores)",
+)
+
 INSIGHTS_MIGRATION = ServiceMigrationSpec(
     service_name="insights",
     description="Insights service tables (sources, metrics, records, events)",
@@ -956,46 +961,31 @@ def get_services_needing_migrations(context: dict[str, Any]) -> list[str]:
     if (include_auth == "yes" or include_auth is True) and org_enabled:
         services.append("auth_org")
 
-    # AI service (only with persistence backend)
+    # AI tables need a persistence backend: every AI revision rides this.
     include_ai = context.get(AnswerKeys.AI)
     ai_backend = context.get(AnswerKeys.AI_BACKEND, StorageBackends.MEMORY)
-    if (
+    ai_persistent = (
         include_ai == "yes" or include_ai is True
-    ) and ai_backend != StorageBackends.MEMORY:
-        services.append("ai")
+    ) and ai_backend != StorageBackends.MEMORY
 
-    # AI agent registry - rides the exact same gate as the ai catalog
-    # tables: agents are the service's default architecture, and the DB
-    # config source exists whenever there is a persistence backend.
-    if (
-        include_ai == "yes" or include_ai is True
-    ) and ai_backend != StorageBackends.MEMORY:
-        services.append("ai_agents")
+    def ai_flag(key: str) -> bool:
+        value = context.get(key)
+        return ai_persistent and (value == "yes" or value is True)
 
-    # KB metadata (only with AI persistence AND the rag flag)
-    ai_rag = context.get(AnswerKeys.AI_RAG)
-    if (
-        (include_ai == "yes" or include_ai is True)
-        and ai_backend != StorageBackends.MEMORY
-        and (ai_rag == "yes" or ai_rag is True)
-    ):
+    if ai_persistent:
+        # The catalog; the agent registry (agents are the service's default
+        # architecture); and sentiment (its job is settings-gated off).
+        services.extend(["ai", "ai_agents"])
+    # KB metadata (the rag flag)
+    if ai_flag(AnswerKeys.AI_RAG):
         services.append("ai_knowledge")
-
-    # Sentiment analysis (with AI persistence; the conversation table is
-    # its FK target). The job that populates it is settings-gated off.
-    if (
-        include_ai == "yes" or include_ai is True
-    ) and ai_backend != StorageBackends.MEMORY:
+    if ai_persistent:
         services.append("ai_sentiment")
-
-    # AI Voice service (only if AI with persistence and voice enabled)
-    ai_voice = context.get(AnswerKeys.AI_VOICE)
-    if (
-        (include_ai == "yes" or include_ai is True)
-        and ai_backend != StorageBackends.MEMORY
-        and (ai_voice == "yes" or ai_voice is True)
-    ):
+    if ai_flag(AnswerKeys.AI_VOICE):
         services.append("ai_voice")
+    # Eval runs, kept
+    if ai_flag(AnswerKeys.AI_EVALS):
+        services.append("ai_evals")
 
     # Insights service (always needs database)
     include_insights = context.get(AnswerKeys.INSIGHTS)
@@ -1052,10 +1042,7 @@ def get_services_needing_migrations(context: dict[str, Any]) -> list[str]:
     # The propose/approve queue, wherever something can propose: finance, or
     # AI on a persistent backend. After auth (owner key to ``user``) and
     # after finance (it carries finance's old queue rows over).
-    if include_finance_on or (
-        (include_ai == "yes" or include_ai is True)
-        and ai_backend != StorageBackends.MEMORY
-    ):
+    if include_finance_on or ai_persistent:
         services.append("change_queue")
 
     # Scheduler component: its job store and execution-history tables, on

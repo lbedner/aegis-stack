@@ -363,6 +363,26 @@ class TestVoiceMigrationSpec:
         assert "profile" in VOICE_MIGRATION.description.lower()
 
 
+@pytest.mark.parametrize(
+    ("include_ai", "ai_backend", "ai_evals", "needed"),
+    [
+        (True, "sqlite", True, True),
+        ("yes", "postgres", "yes", True),
+        (True, "sqlite", False, False),
+        (True, "memory", True, False),
+        (False, "sqlite", True, False),
+    ],
+)
+def test_ai_evals_gets_its_own_revision_where_it_can_keep_runs(
+    include_ai: bool | str, ai_backend: str, ai_evals: bool | str, needed: bool
+) -> None:
+    """Eval runs are rows: ``ai[evals]`` on a persistent backend gets the
+    ``ai_evals`` revision, whose spec is registered like every other."""
+    assert "ai_evals" in MIGRATION_SPECS
+    context = {"include_ai": include_ai, "ai_backend": ai_backend, "ai_evals": ai_evals}
+    assert ("ai_evals" in get_services_needing_migrations(context)) is needed
+
+
 class TestGetServicesNeedingMigrationsVoice:
     """Test detection of ai_voice service needing migrations."""
 

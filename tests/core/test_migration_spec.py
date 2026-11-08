@@ -132,6 +132,7 @@ class TestInTreeRegistry:
             "ai_knowledge",
             "ai_sentiment",
             "ai_voice",
+            "ai_evals",
             "payment",
             "payment_auth_link",
             "insights",

@@ -92,6 +92,9 @@ def test_adding_evals_brings_the_harness(project_factory: ProjectFactory) -> Non
 
     assert result.success, result.error_message
     assert (project / f"{AI}/domains/evals/runner.py").exists()
+    # The run's tables, and what keeps a run in them, arrive with it.
+    assert (project / f"{AI}/models/evals/run.py").exists()
+    assert (project / f"{AI}/domains/evals/recorder.py").exists()
     assert (project / "evals/starter.yaml").exists()
     assert "evals" in (project / "pyproject.toml").read_text()
 

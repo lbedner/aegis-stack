@@ -1,0 +1,8 @@
+{%- if ai_backend != "memory" -%}
+"""Eval tables (``ai[evals]``): each run of a dataset, its cases and their
+scores. A package of their own, so ``ai_evals`` owns their migration."""
+
+from .run import EvalCase, EvalRun, EvalScore
+
+__all__ = ["EvalCase", "EvalRun", "EvalScore"]
+{%- endif %}

@@ -1,0 +1,129 @@
+{%- if ai_backend != "memory" -%}
+"""Keeping a run: the scored report as an ``eval_run``, a row per case
+(errored ones too) and a row per evaluator's verdict (``models/evals``)."""
+
+from datetime import datetime
+from typing import Any
+
+from pydantic_evals.reporting import EvaluationReport, ReportCase, ReportCaseFailure
+from sqlalchemy import insert
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from app.core.config import settings
+from app.core.time import utcnow
+from app.services.ai.domains.chat.conversation import delete_conversations
+from app.services.ai.models.evals import EvalCase, EvalRun, EvalScore
+
+from .datasets import CaseInput
+from .evaluators import CONVERSATION, COST, MODEL, TRACE
+
+Report = EvaluationReport[CaseInput, str, None]
+
+
+def _passed(case: ReportCase[CaseInput, str, None]) -> bool:
+    """Every assertion held and no evaluator failed to say."""
+    return not case.evaluator_failures and all(
+        r.value is True for r in case.assertions.values()
+    )
+
+
+def _scores(case_id: int, case: ReportCase[CaseInput, str, None]) -> list[dict[str, Any]]:
+    """An assertion as 1 or 0 with its pass; a score as it is."""
+    held = [
+        {
+            "case_id": case_id,
+            "evaluator": name,
+            "value": 1.0 if r.value else 0.0,
+            "passed": r.value is True,
+            "reason": r.reason,
+        }
+        for name, r in case.assertions.items()
+    ]
+    scored = [
+        {
+            "case_id": case_id,
+            "evaluator": name,
+            "value": float(r.value),
+            "passed": None,
+            "reason": r.reason,
+        }
+        for name, r in case.scores.items()
+    ]
+    return held + scored
+
+
+def _row(
+    run_id: int, case: ReportCase[CaseInput, str, None] | ReportCaseFailure[CaseInput, str, None]
+) -> dict[str, Any]:
+    """What a case and a case that errored both keep; nothing run yet."""
+    return {
+        "run_id": run_id,
+        "name": case.name,
+        "inputs": case.inputs.model_dump(mode="json"),
+        "expected": case.expected_output,
+        "output": None,
+        "passed": False,
+        "duration_ms": 0.0,
+        "tool_calls": [],
+        "error": None,
+        "conversation_id": None,
+    }
+
+
+def _case(run_id: int, case: ReportCase[CaseInput, str, None], keep: bool) -> dict[str, Any]:
+    return _row(run_id, case) | {
+        "output": case.output,
+        "passed": _passed(case),
+        "duration_ms": case.task_duration * 1000,
+        "tool_calls": case.attributes.get(TRACE) or [],
+        "conversation_id": case.attributes.get(CONVERSATION) if keep else None,
+    }
+
+
+async def record_run(
+    session: AsyncSession,
+    report: Report,
+    *,
+    started_at: datetime,
+    keep: bool,
+    trigger: str,
+    note: str | None,
+) -> EvalRun:
+    """The run, its cases and their scores, written in three statements
+    (a dataset's case names are unique, so a case's id is found by name).
+    The run's conversations go with it, unless ``keep``."""
+    attributes = [case.attributes for case in report.cases]
+    run = EvalRun(
+        dataset=report.name,
+        model_id=next((a[MODEL] for a in attributes if a.get(MODEL)), None),
+        build=settings.BUILD_ID,
+        started_at=started_at,
+        finished_at=utcnow(),
+        cases=len(report.cases) + len(report.failures),
+        passed=sum(_passed(case) for case in report.cases),
+        total_cost=sum(a.get(COST) or 0.0 for a in attributes),
+        trigger=trigger,
+        note=note,
+    )
+    session.add(run)
+    await session.flush()
+    assert run.id is not None
+    rows = [_case(run.id, case, keep) for case in report.cases] + [
+        _row(run.id, failure) | {"error": failure.error_message} for failure in report.failures
+    ]
+    talks = [a[CONVERSATION] for a in attributes if a.get(CONVERSATION)]
+    if talks and not keep:
+        await delete_conversations(session, talks)
+    if not rows:
+        return run
+    ids = dict(
+        (name, case_id)
+        for case_id, name in await session.execute(
+            insert(EvalCase).returning(EvalCase.id, EvalCase.name), rows
+        )
+    )
+    scores = [s for case in report.cases for s in _scores(ids[case.name], case)]
+    if scores:
+        await session.execute(insert(EvalScore), scores)
+    return run
+{%- endif %}

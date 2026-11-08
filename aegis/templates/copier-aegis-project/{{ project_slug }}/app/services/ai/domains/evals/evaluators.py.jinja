@@ -22,6 +22,10 @@ from .agents import JUDGE, JUDGING
 
 # Where the runner puts the turn's trace on each case (``set_eval_attribute``).
 TRACE = "tool_trace"
+# And beside it, what the reply's metadata says of its turn.
+CONVERSATION = "conversation_id"
+COST = "cost"
+MODEL = "model"
 # Whose an eval run's turns and judging are, so they never mix with a person's.
 EVALS_USER = "evals"
 

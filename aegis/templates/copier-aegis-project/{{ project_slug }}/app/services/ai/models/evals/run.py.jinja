@@ -1,0 +1,79 @@
+{%- if ai_backend != "memory" -%}
+"""One run of a dataset, kept: the run, a row per case with the trace its
+turn kept, and a row per evaluator's score on it. Written once the run is
+scored (``domains/evals/recorder.py``), so no transaction spans a model
+call; a case and its scores go with their run."""
+
+from datetime import datetime
+from typing import Any
+
+from sqlalchemy import JSON, Column, ForeignKey, Integer
+from sqlmodel import Field, SQLModel
+
+from app.core.time import utcnow
+
+
+class EvalRun(SQLModel, table=True):
+    """A dataset run: what it ran on, when, and how it went."""
+
+    __tablename__ = "eval_run"
+
+    id: int | None = Field(default=None, primary_key=True)
+    dataset: str = Field(index=True)
+    model_id: str | None = None
+    # The app's build it ran against (``settings.BUILD_ID``).
+    build: str | None = None
+    started_at: datetime = Field(default_factory=utcnow, index=True)
+    finished_at: datetime = Field(default_factory=utcnow)
+    cases: int = 0
+    passed: int = 0
+    total_cost: float = 0.0
+    # What started it (cli, api, ci), and why.
+    trigger: str = "cli"
+    note: str | None = None
+
+    @property
+    def failed(self) -> int:
+        return self.cases - self.passed
+
+
+class EvalCase(SQLModel, table=True):
+    """One case of a run: what it asked, what came back, and the calls."""
+
+    __tablename__ = "eval_case"
+
+    id: int | None = Field(default=None, primary_key=True)
+    run_id: int = Field(
+        sa_column=Column(
+            Integer, ForeignKey("eval_run.id", ondelete="CASCADE"), nullable=False, index=True
+        )
+    )
+    name: str
+    inputs: dict[str, Any] = Field(default_factory=dict, sa_column=Column(JSON, nullable=False))
+    output: str | None = None
+    expected: Any | None = Field(default=None, sa_column=Column(JSON))
+    passed: bool = False
+    duration_ms: float = 0.0
+    tool_calls: list[Any] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
+    # Why it did not run, where it did not.
+    error: str | None = None
+    # Its conversation, where the run kept it.
+    conversation_id: str | None = None
+
+
+class EvalScore(SQLModel, table=True):
+    """One evaluator's verdict on a case: a pass (1 or 0) or a score."""
+
+    __tablename__ = "eval_score"
+
+    id: int | None = Field(default=None, primary_key=True)
+    case_id: int = Field(
+        sa_column=Column(
+            Integer, ForeignKey("eval_case.id", ondelete="CASCADE"), nullable=False, index=True
+        )
+    )
+    evaluator: str
+    value: float
+    passed: bool | None = None
+    reason: str | None = None
+{%- endif %}

@@ -6,6 +6,8 @@ An eval asks the assistant something and checks what it did. A case is a message
 aegis init my-app --services "ai[sqlite,evals]"
 ```
 
+To add it to an existing project, name the backend it already has, so the brackets don't ask for a different one: `aegis add-service "ai[sqlite,evals]"`.
+
 Evals need Pydantic AI. On LangChain the option ships nothing, because LangChain's turns record no tool calls to score.
 
 ## A dataset
@@ -58,6 +60,34 @@ report = await run_dataset("starter", scripted=True)
 report.print()
 ```
 
-An eval run's conversations belong to the user `evals`, so they never mix with a person's.
+An eval run's turns belong to the user `evals`, so they never mix with a person's.
+
+## Kept runs
+
+On a database-backed stack, a run is kept in three tables by `record_run`, in a session of its own (a run is minutes of model calls, so it never holds one open): `eval_run` (the dataset, model, build, counts, cost, what started it and a `note` on why), `eval_case` (what each case asked, what came back, the tool calls its turn made, or the error that stopped it) and `eval_score` (each evaluator's verdict on a case: 1 or 0 for a pass, or the score itself).
+
+```python
+from app.core.db import get_async_session
+from app.core.time import utcnow
+from app.services.ai.domains.evals import queries
+from app.services.ai.domains.evals.recorder import record_run
+
+started = utcnow()
+report = await run_dataset("starter")
+
+async with get_async_session() as session:
+    await record_run(
+        session, report, started_at=started, keep=False, trigger="cli",
+        note="after the prompt change",
+    )
+    after, before = await queries.runs(session, "starter", limit=2)
+    compared = await queries.compare(session, before.id, after.id)
+    for case in compared.flipped:
+        print(case.name, case.before, "->", case.after)
+```
+
+Keeping a run deletes its conversations; with `keep=True` they stay, and each case names its own.
+
+`compare` lines up the cases two runs share by name, with each evaluator's score in both, and `flipped` holds the ones whose pass or fail changed. Runs are small and nothing deletes them. On the memory backend a run is scored but not kept.
 
 With the observability component and `LOGFIRE_TOKEN` set, a run reports to Logfire as the `evals` process, where each run shows as an evals table. Without a token, it reports nothing.

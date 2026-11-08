@@ -3691,6 +3691,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#kept-runs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Kept runs
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -7116,6 +7127,17 @@
   
 </li>
       
+        <li class="md-nav__item">
+  <a href="#kept-runs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Kept runs
+      
+    </span>
+  </a>
+  
+</li>
+      
     </ul>
   
 </nav>
@@ -7141,6 +7163,7 @@
 <p>An eval asks the assistant something and checks what it did. A case is a message and the assertions you wish you'd had when you found a regression by reading logs. A case scores the <strong>tools</strong> the turn called first, and the prose second.</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>aegis<span class="w"> </span>init<span class="w"> </span>my-app<span class="w"> </span>--services<span class="w"> </span><span class="s2">&quot;ai[sqlite,evals]&quot;</span>
 </span></code></pre></div>
+<p>To add it to an existing project, name the backend it already has, so the brackets don't ask for a different one: <code>aegis add-service "ai[sqlite,evals]"</code>.</p>
 <p>Evals need Pydantic AI. On LangChain the option ships nothing, because LangChain's turns record no tool calls to score.</p>
 <h2 id="a-dataset">A dataset</h2>
 <p>Datasets live in <code>evals/&lt;name&gt;.yaml</code>. A new project gets <code>evals/starter.yaml</code>:</p>
@@ -7197,7 +7220,29 @@
 </span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="n">report</span> <span class="o">=</span> <span class="k">await</span> <span class="n">run_dataset</span><span class="p">(</span><span class="s2">&quot;starter&quot;</span><span class="p">,</span> <span class="n">scripted</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 </span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="n">report</span><span class="o">.</span><span class="n">print</span><span class="p">()</span>
 </span></code></pre></div>
-<p>An eval run's conversations belong to the user <code>evals</code>, so they never mix with a person's.</p>
+<p>An eval run's turns belong to the user <code>evals</code>, so they never mix with a person's.</p>
+<h2 id="kept-runs">Kept runs</h2>
+<p>On a database-backed stack, a run is kept in three tables by <code>record_run</code>, in a session of its own (a run is minutes of model calls, so it never holds one open): <code>eval_run</code> (the dataset, model, build, counts, cost, what started it and a <code>note</code> on why), <code>eval_case</code> (what each case asked, what came back, the tool calls its turn made, or the error that stopped it) and <code>eval_score</code> (each evaluator's verdict on a case: 1 or 0 for a pass, or the score itself).</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.core.db</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_async_session</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.core.time</span><span class="w"> </span><span class="kn">import</span> <span class="n">utcnow</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.ai.domains.evals</span><span class="w"> </span><span class="kn">import</span> <span class="n">queries</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="kn">from</span><span class="w"> </span><span class="nn">app.services.ai.domains.evals.recorder</span><span class="w"> </span><span class="kn">import</span> <span class="n">record_run</span>
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="n">started</span> <span class="o">=</span> <span class="n">utcnow</span><span class="p">()</span>
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="n">report</span> <span class="o">=</span> <span class="k">await</span> <span class="n">run_dataset</span><span class="p">(</span><span class="s2">&quot;starter&quot;</span><span class="p">)</span>
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>
+</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="k">async</span> <span class="k">with</span> <span class="n">get_async_session</span><span class="p">()</span> <span class="k">as</span> <span class="n">session</span><span class="p">:</span>
+</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>    <span class="k">await</span> <span class="n">record_run</span><span class="p">(</span>
+</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a>        <span class="n">session</span><span class="p">,</span> <span class="n">report</span><span class="p">,</span> <span class="n">started_at</span><span class="o">=</span><span class="n">started</span><span class="p">,</span> <span class="n">keep</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">trigger</span><span class="o">=</span><span class="s2">&quot;cli&quot;</span><span class="p">,</span>
+</span><span id="__span-3-12"><a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>        <span class="n">note</span><span class="o">=</span><span class="s2">&quot;after the prompt change&quot;</span><span class="p">,</span>
+</span><span id="__span-3-13"><a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>    <span class="p">)</span>
+</span><span id="__span-3-14"><a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>    <span class="n">after</span><span class="p">,</span> <span class="n">before</span> <span class="o">=</span> <span class="k">await</span> <span class="n">queries</span><span class="o">.</span><span class="n">runs</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="s2">&quot;starter&quot;</span><span class="p">,</span> <span class="n">limit</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+</span><span id="__span-3-15"><a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>    <span class="n">compared</span> <span class="o">=</span> <span class="k">await</span> <span class="n">queries</span><span class="o">.</span><span class="n">compare</span><span class="p">(</span><span class="n">session</span><span class="p">,</span> <span class="n">before</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">after</span><span class="o">.</span><span class="n">id</span><span class="p">)</span>
+</span><span id="__span-3-16"><a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a>    <span class="k">for</span> <span class="n">case</span> <span class="ow">in</span> <span class="n">compared</span><span class="o">.</span><span class="n">flipped</span><span class="p">:</span>
+</span><span id="__span-3-17"><a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>        <span class="nb">print</span><span class="p">(</span><span class="n">case</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">case</span><span class="o">.</span><span class="n">before</span><span class="p">,</span> <span class="s2">&quot;-&gt;&quot;</span><span class="p">,</span> <span class="n">case</span><span class="o">.</span><span class="n">after</span><span class="p">)</span>
+</span></code></pre></div>
+<p>Keeping a run deletes its conversations; with <code>keep=True</code> they stay, and each case names its own.</p>
+<p><code>compare</code> lines up the cases two runs share by name, with each evaluator's score in both, and <code>flipped</code> holds the ones whose pass or fail changed. Runs are small and nothing deletes them. On the memory backend a run is scored but not kept.</p>
 <p>With the observability component and <code>LOGFIRE_TOKEN</code> set, a run reports to Logfire as the <code>evals</code> process, where each run shows as an evals table. Without a token, it reports nothing.</p>
 
 

@@ -9,42 +9,73 @@ from tests._fake_runtime import queue_status as _queue
 from tests._fake_runtime import worker_status as _worker
 
 
+def _state(queue: ComponentStatus) -> tuple[str, str]:
+    view = ui_worker.queue_view(queue)
+    return view["state"], view["color"]
+
+
 class TestQueueState:
     def test_offline_without_a_consumer(self) -> None:
-        assert ui_worker.queue_state(_queue("q", worker_alive=False)) == (
-            "Offline",
-            "red",
-        )
+        assert _state(_queue("q", worker_alive=False)) == ("Offline", "red")
 
     def test_a_queue_with_no_tasks_is_grey(self) -> None:
         queue = _queue("q", "q: configured - no functions defined", worker_alive=False)
-        assert ui_worker.queue_state(queue) == ("No tasks", "grey")
+        assert _state(queue) == ("No tasks", "grey")
+        assert ui_worker.queue_view(queue)["detail"] == ""
 
     def test_failures_degrade_then_fail(self) -> None:
         # The health check's thresholds: one rule for every view.
-        assert (
-            ui_worker.queue_state(_queue("q", failure_rate_percent=15))[0] == "Degraded"
-        )
-        assert (
-            ui_worker.queue_state(_queue("q", failure_rate_percent=30))[0] == "Failing"
-        )
+        assert _state(_queue("q", failure_rate_percent=15))[0] == "Degraded"
+        assert _state(_queue("q", failure_rate_percent=30))[0] == "Failing"
 
     def test_a_backed_up_queue_says_so_and_why(self) -> None:
         queue = _queue(
             "q", queued_jobs=40, oldest_waiting_seconds=720, max_wait_seconds=300
         )
-        assert ui_worker.queue_state(queue) == ("Backed up", "yellow")
-        assert "12m" in ui_worker.queue_view(queue)["detail"]
+        assert _state(queue) == ("Backed up", "yellow")
+        assert ui_worker.queue_view(queue)["detail"] == "oldest waiting 12m"
+
+    def test_the_badge_does_not_name_its_state_twice(self) -> None:
+        """The panel showed "Backed up · backed up, oldest waiting 5m 13s"
+        (2026-11-07)."""
+        queue = _queue(
+            "q",
+            queued_jobs=8,
+            oldest_waiting_seconds=720,
+            max_wait_seconds=300,
+            last_started_seconds=400,
+        )
+        assert ui_worker.queue_view(queue)["detail"] == (
+            "oldest waiting 12m, nothing started for 6m 40s"
+        )
+
+    def test_a_queue_still_starting_jobs_is_active_not_backed_up(self) -> None:
+        queue = _queue(
+            "q",
+            queued_jobs=8,
+            jobs_ongoing=6,
+            oldest_waiting_seconds=313,
+            max_wait_seconds=300,
+            last_started_seconds=40,
+        )
+        assert _state(queue) == ("Active", "yellow")
+
+    def test_active_reads_the_running_jobs_the_view_shows(self) -> None:
+        """Task history kept five "running" records from jobs a worker
+        reload dropped; the panel said Active over 0 running (2026-11-07)."""
+        idle = [{"worker": "w", "slots": 6, "busy": 0}]
+        view = ui_worker.queue_view(_queue("q", jobs_ongoing=5), idle)
+        assert (view["busy"], view["state"]) == (0, "Online")
 
     def test_a_healthy_queue_has_no_detail(self) -> None:
         assert ui_worker.queue_view(_queue("q"))["detail"] == ""
 
     def test_busy_then_idle(self) -> None:
-        assert ui_worker.queue_state(_queue("q", jobs_ongoing=2)) == (
+        assert _state(_queue("q", jobs_ongoing=2)) == (
             "Active",
             "yellow",
         )
-        assert ui_worker.queue_state(_queue("q")) == ("Online", "green")
+        assert _state(_queue("q")) == ("Online", "green")
 
 
 class TestFullness:
@@ -129,6 +160,16 @@ class TestTrend:
         samples = [(0.0, 300, 100), (10.0, 280, 124), (20.0, 250, 148)]
         assert ui_worker.rate(samples) == 2.4
 
+    def test_rate_spans_a_batch_of_slow_jobs(self) -> None:
+        """Six jobs that start together finish together; a window shorter
+        than one job saw none finish between batches and said "stalled"."""
+        samples = [(float(t), 40, 100 + 6 * (t // 45)) for t in range(0, 121, 3)]
+        assert ui_worker.rate(samples) == 0.1
+
+    def test_a_restart_dropping_done_does_not_erase_what_finished(self) -> None:
+        samples = [(0.0, 20, 910), (10.0, 18, 914), (20.0, 17, 912), (30.0, 15, 915)]
+        assert ui_worker.rate(samples) == 0.23
+
     def test_rate_needs_enough_time_between_samples(self) -> None:
         assert ui_worker.rate([(0.0, 5, 1), (0.5, 4, 2)]) is None
 
@@ -148,6 +189,15 @@ class TestTrend:
     def test_arrivals_keeping_pace_is_steady_not_draining(self) -> None:
         """Jobs arriving about as fast as they finish: it never drains."""
         assert ui_worker.drain(22, 2.6, net=0.1) == "steady, keeping pace"
+
+    def test_a_slow_steady_drain_is_draining_not_steady(self) -> None:
+        """42 waiting fell to 8 in five minutes, about 0.1 a second, and the
+        panel said "steady, keeping pace" (2026-11-07)."""
+        assert ui_worker.drain(8, 0.13, net=0.1) == "drains in ~1 min"
+
+    def test_one_job_either_way_over_the_window_is_steady(self) -> None:
+        """Below a job per window the net rate is one arrival's noise."""
+        assert ui_worker.drain(8, 0.05, net=0.006) == "steady, keeping pace"
 
     def test_arrivals_outpacing_the_workers_is_growing(self) -> None:
         assert ui_worker.drain(90, 2.4, net=-1.5) == "growing by ~1.5 jobs/s"

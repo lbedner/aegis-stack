@@ -253,6 +253,13 @@ def mark_idle_sync(redis: sync_redis.Redis) -> None:
         logger.debug("heartbeat mark_idle_sync failed: %s", exc)
 
 
+async def read_reports(redis: aioredis.Redis) -> list[dict[str, str]]:
+    """Every live worker's runtime report, with ``busy``."""
+    from app.components.worker.runtime import read_runtime
+
+    return await with_busy(redis, await read_runtime(redis))
+
+
 async def with_busy(
     redis: aioredis.Redis, reports: list[dict[str, str]]
 ) -> list[dict[str, str]]:

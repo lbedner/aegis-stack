@@ -103,6 +103,34 @@ def test_the_oldest_waiting_job_is_the_first_entry_past_the_last_delivered() -> 
     assert stream_age(b"1790528194881-3", now_ms=1790528204881) == 10.0
 
 
+def test_running_is_what_the_workers_report() -> None:
+    """Task history keeps a "running" record for each job a worker reload
+    dropped; the workers' own busy counts do not (2026-11-07)."""
+    from app.services.system.health_worker_rules import reported_busy
+
+    reports = [
+        {"queue": "system", "busy": "2"},
+        {"queue": "system", "busy": "1"},
+        {"queue": "system"},
+        {"queue": "other", "busy": "4"},
+    ]
+    assert reported_busy(reports, "system") == 3
+    assert reported_busy(reports, "absent") is None
+
+
+def test_the_last_start_is_the_latest_read_by_any_consumer() -> None:
+    """``inactive`` is how long since a consumer last got entries, so the
+    smallest is how long since the queue handed out a job. Redis says -1
+    for a consumer that never got one, and older Redis has no field."""
+    from app.services.system.health_worker_rules import last_start
+
+    consumers = [{"inactive": 2_272_802}, {"inactive": 174_953}, {"inactive": -1}]
+    assert last_start(consumers) == 175.0
+    assert last_start([{"inactive": 0}]) == 0.0
+    assert last_start([{"idle": 100}]) is None
+    assert last_start([]) is None
+
+
 class TestBrokenQueues:
     """A queue file that exists but cannot import is broken, not absent:
     a missing broker library must not read as a healthy worker with no
@@ -167,6 +195,40 @@ class TestBackedUp:
         assert verdict.status == ComponentStatusType.WARNING
         assert verdict.state == "backed_up"
         assert "12m" in verdict.lead
+
+    def test_a_queue_still_starting_jobs_is_not_backed_up(self) -> None:
+        """A batch of 49 on 6 slots keeps its last job waiting for minutes
+        while every slot works; it is busy, not backed up (2026-11-07)."""
+        from app.services.system.health_worker_rules import queue_verdict
+
+        verdict = queue_verdict(
+            worker_alive=True,
+            has_functions=True,
+            waiting=8,
+            oldest_waiting=313,
+            max_wait=300,
+            last_started=40,
+        )
+        assert verdict.state == "healthy"
+
+    def test_nothing_started_lately_backs_it_up_and_says_so(self) -> None:
+        """A view shows the reason beside its "Backed up" label; the health
+        message leads with the state too."""
+        from app.services.system.health_worker_rules import queue_verdict
+
+        verdict = queue_verdict(
+            worker_alive=True,
+            has_functions=True,
+            waiting=8,
+            oldest_waiting=720,
+            max_wait=300,
+            last_started=400,
+        )
+        assert verdict.state == "backed_up"
+        assert verdict.lead == (
+            "backed up, oldest waiting 12m, nothing started for 6m 40s"
+        )
+        assert verdict.reason == "oldest waiting 12m, nothing started for 6m 40s"
 
     def test_within_the_limit_is_healthy(self) -> None:
         from app.services.system.health_worker_rules import queue_verdict
